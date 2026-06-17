@@ -129,6 +129,8 @@ export class WorkflowTaskPaymentBridge {
     input: PaymentWorkflowTaskBridgeInput,
     payment: PaymentRecord,
   ) {
+    const ledgerSource = getLedgerSource(payment);
+
     return {
       tenant_id: input.task.tenant_id,
       project_id: input.task.instance.subject_id,
@@ -136,8 +138,8 @@ export class WorkflowTaskPaymentBridge {
       entry_type: "project_payment" as const,
       amount: Number(payment.amount),
       occurred_at: payment.pay_date ?? new Date().toISOString(),
-      source_type: "workflow_task",
-      source_id: input.task.id,
+      source_type: ledgerSource.sourceType,
+      source_id: ledgerSource.sourceId,
       workflow_task_id: input.task.id,
       payment_id: payment.id,
       handled_by: input.authContext.employeeId,
@@ -208,6 +210,27 @@ function getPaymentType(snapshot: Record<string, unknown>): PaymentCollectionTyp
     PAYMENT_COLLECTION_TYPES.includes(paymentType as PaymentCollectionType)
     ? paymentType as PaymentCollectionType
     : "deposit";
+}
+
+function getLedgerSource(payment: PaymentRecord) {
+  const sourceType = normalizeSourceValue(payment.source_type);
+  const sourceId = normalizeSourceValue(payment.source_id);
+
+  if (sourceType && sourceId) {
+    return {
+      sourceType,
+      sourceId,
+    };
+  }
+
+  return {
+    sourceType: "payment",
+    sourceId: payment.id,
+  };
+}
+
+function normalizeSourceValue(value: string | null | undefined) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

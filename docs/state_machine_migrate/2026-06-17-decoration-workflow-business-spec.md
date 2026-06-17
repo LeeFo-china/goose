@@ -455,6 +455,19 @@ payment_collection task -> 财务输入金额和凭证 -> complete task -> 创�
 payment_collection task -> 创建微信支付订单 -> 支付回调确认 -> 创建 payment 和 ledger -> 自动或半自动 complete task -> workflow 放行
 ```
 
+payment 与 ledger 的幂等来源规则：
+
+- 人工确认收款由 workflow task 创建 payment 时，payment 和 ledger 使用
+  `source_type = workflow_task`、`source_id = taskId`。
+- 如果 workflow task 已有关联的 confirmed payment，后端复用这条 payment，不再要求
+  手工金额和凭证 output；ledger 优先沿用 payment 自己的
+  `source_type/source_id`。
+- 如果历史 confirmed payment 没有 `source_type/source_id`，ledger 使用
+  `source_type = payment`、`source_id = payment.id`，保持和 finance phase1
+  migration 的历史回填规则一致，避免同一笔 payment 形成第二条台账。
+- 后续微信支付回调应先写入带 provider/source 信息的 confirmed payment；workflow
+  bridge 只判断该 payment 已 confirmed，再按 payment 来源幂等写 ledger 并推进流程。
+
 微信支付配置需要另行确定：
 
 - 平台统一商户号。
@@ -957,7 +970,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 项目动作必填 output 后端兜底 | `workflow-task-project-bridge.test.ts` 覆盖签约金额、开工日期、工程负责人缺失时报错 | 已完成 |
 | 财务节点确认金额和凭证 | `workflow-task-action-metadata.ts` 输出 `payment_collection` 字段，payment bridge 创建确认流水 | 已完成 |
 | Admin 项目详情不形成第二条收款入口 | `project-status-action-dialog.test.ts` 和 `project-workflow-payment-gate.test.ts` 覆盖项目状态弹窗只校验已确认入账，不录入金额或凭证，未入账时提示去待办中心确认收款 | 已完成 |
-| 微信支付后续兼容 | workflow 只绑定 `payment_collection` 语义，不绑定支付渠道；`workflow-task-payment-bridge.test.ts` 覆盖已有 `workflow_task_id` 且 `confirmed` 的入账记录无需人工金额/凭证 output 即可推进，未确认入账不能放行 | 设计已完成 |
+| 微信支付后续兼容 | workflow 只绑定 `payment_collection` 语义，不绑定支付渠道；`workflow-task-payment-bridge.test.ts` 覆盖已有 `workflow_task_id` 且 `confirmed` 的入账记录无需人工金额/凭证 output 即可推进、历史 payment 缺 source 字段时按 `payment/payment.id` 幂等写 ledger，未确认入账不能放行 | 设计已完成 |
 | 旧实例不被 migration 改写 | migration 内容测试确认不 `delete/update workflow_instances/tasks` | 已完成 |
 | 旧实例识别与分类 | `decoration-workflow-business-audit.ts` 和 `decoration-workflow-legacy-instance-review.ts` | 已完成 |
 | 旧实例处置命令生成 | `decoration-workflow-legacy-instance-review.ts` 输出 `action_commands`，Runbook 直接复用 | 已完成 |

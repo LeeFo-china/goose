@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { PaymentRecord } from "@/repositories/payments";
 import type { AuthContext } from "@/services/authorization";
 import { WorkflowTaskPaymentBridge } from "./workflow-task-payment-bridge";
 
@@ -19,10 +20,10 @@ const confirmedPayment = {
   remark: "中期款已入账",
   payment_channel: "manual",
   created_at: "2026-06-16T10:00:00.000Z",
-};
+} satisfies PaymentRecord;
 
 const findByWorkflowTaskId = mock(
-  async (): Promise<typeof confirmedPayment | null> => null,
+  async (): Promise<PaymentRecord | null> => null,
 );
 const createPayment = mock(async () => {
   callOrder.push("payment");
@@ -223,6 +224,35 @@ describe("workflowTaskPaymentBridge", () => {
         source_type: "workflow_task",
         source_id: "task-1",
         payment_id: "payment-1",
+      }),
+    );
+    expect(callOrder).toEqual(["ledger", "workflow"]);
+  });
+
+  test("keys ledger by payment for legacy confirmed payment without source fields", async () => {
+    const legacyPayment = {
+      ...confirmedPayment,
+      id: "550e8400-e29b-41d4-a716-446655440011",
+      source_type: null,
+      source_id: null,
+    };
+    findByWorkflowTaskId.mockImplementation(async () => legacyPayment);
+    const workflowTaskPaymentBridge = createBridge();
+
+    await workflowTaskPaymentBridge.complete({
+      authContext,
+      task: bridgeTask,
+      action: "complete",
+      output: {},
+    });
+
+    expect(createPayment).not.toHaveBeenCalled();
+    expect(createProjectPaymentLedger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source_type: "payment",
+        source_id: "550e8400-e29b-41d4-a716-446655440011",
+        workflow_task_id: "task-1",
+        payment_id: "550e8400-e29b-41d4-a716-446655440011",
       }),
     );
     expect(callOrder).toEqual(["ledger", "workflow"]);

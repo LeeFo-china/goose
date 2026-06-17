@@ -250,7 +250,10 @@ Content-Type: application/json
 3. 校验 `evidence_images.length >= 1`。
 4. 按 `workflow_task_id` 查询是否已有 payment。
 5. 如果没有 payment，创建 `payments.status = confirmed`。
-6. 写入 `finance_ledger_entries`，来源为 `source_type = workflow_task`、`source_id = taskId`。
+6. 写入 `finance_ledger_entries`。小程序人工确认新建 payment 时，来源为
+   `source_type = workflow_task`、`source_id = taskId`；如果后端复用已有
+   confirmed payment，则 ledger 优先沿用 payment 自己的 `source_type/source_id`，
+   历史 payment 缺来源字段时使用 `source_type = payment`、`source_id = payment.id`。
 7. 调用 workflow runtime complete。
 8. 同步项目 workflow state。
 

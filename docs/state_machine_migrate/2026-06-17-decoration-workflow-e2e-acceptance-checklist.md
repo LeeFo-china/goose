@@ -141,6 +141,7 @@
 | action 识别 | `business_domain = payment_collection` 或 `output_fields.type = payment_collection` | 待填写 |
 | 凭证上传 | 上传带 `projectId`，direct-init 带 `scene=project_payment` 和 `project_id` | 待填写 |
 | 后端入账 | complete 创建 confirmed payment 和 ledger | 待填写 |
+| 入账幂等 | 重试同一 task 不重复创建 payment/ledger；已有 confirmed payment 缺 source 时 ledger 使用 `payment/payment.id` | 待填写 |
 | workflow 推进 | 收款 task 消失，流程进入下一节点 | 待填写 |
 | Admin 可见 | Admin 财务台账出现对应 project_payment 入账流水 | 待填写 |
 
