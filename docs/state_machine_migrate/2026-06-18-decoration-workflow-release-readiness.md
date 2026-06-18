@@ -124,6 +124,74 @@ supabase migration list
 - 首次未加载 `.env.local` 直接执行时，CLI 因缺少当前 shell 的
   `SUPABASE_DB_PASSWORD` 连接失败；加载 `.env.local` 后检查通过。
 
+## 发布前技术验证执行记录
+
+执行时间：2026-06-18T16:40+08:00
+
+### build/type/file-size
+
+命令：
+
+```bash
+bun run api:check
+bun run admin:check
+bun run check:file-size
+```
+
+结果：
+
+- `api:check` 通过：
+  - `tsc -p apps/api/tsconfig.json --noEmit` 通过
+  - `bun build apps/api/src/app.ts --outdir dist --target node` 通过
+  - API file size check 通过，唯一超限文件为生成文件
+    `apps/api/src/types/database.ts`
+- `admin:check` 通过：
+  - Admin file size check 通过，`492` 个 TS/TSX 文件均不超过 `500` 行
+  - `tsc -p apps/admin/tsconfig.json --noEmit` 通过
+- 根目录 `check:file-size` 通过
+
+### API smoke
+
+环境：
+
+- API：`http://127.0.0.1:3000`
+- 执行账号：`18800005001` / 小龙女
+
+检查结果：
+
+| 接口 | 结果 |
+| --- | --- |
+| `POST /admin/auth/login` | `200`，返回员工 token |
+| `GET /admin/auth/me` | `200`，tenant 为 `3eebca47-961f-4899-b976-a3d3208d326b`，employee 为小龙女 |
+| `GET /workflow-tasks?page=1&pageSize=5&status=pending` | `200`，`pagination.total = 8`，响应结构为 `data.list + data.pagination`，sample task 含 `actions[].key = complete` |
+| `GET /finance/ledger?page=1&pageSize=20&project_id=54f11aa5-09a8-4410-a9c5-604a7fe9e09c` | `200`，可见 ledger `9fc924b7-b5db-4356-a91e-d83dacecbbce` |
+
+### Admin smoke
+
+环境：
+
+- Admin：`http://127.0.0.1:3010`
+- 登录方式：通过 Admin 自身 `/api/auth/login` 设置 `gooes_admin_token`
+  cookie 后访问页面
+
+检查结果：
+
+| 页面 | 结果 |
+| --- | --- |
+| `/projects/54f11aa5-09a8-4410-a9c5-604a7fe9e09c` | 页面可打开，显示 `项目档案`、`张学友·固始县蓼都廉租房 4单元201` 和 `施工中` |
+| `/finance/ledger?page=1` | 页面可打开，显示 `财务台账`、`项目收款入账` 和金额 `10,000.00` |
+
+说明：
+
+- 本轮 Admin smoke 不保存新截图；UI 可见性截图已在
+  `docs/state_machine_migrate/evidence/2026-06-18-admin-project-workflow-visibility.png`
+  和
+  `docs/state_machine_migrate/evidence/2026-06-18-admin-finance-ledger-visibility.png`
+  中留档。
+- Headless 表单点击登录没有完成 URL 跳转，因此本轮页面 smoke 使用 Admin
+  代理登录接口设置 cookie 后验证受保护页面。代理登录本身返回 `200` 且设置
+  `gooes_admin_token`。
+
 ## 已关闭的主线验收
 
 | 场景 | 状态 | 证据 |
