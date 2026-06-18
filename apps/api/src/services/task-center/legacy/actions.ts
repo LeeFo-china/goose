@@ -2,6 +2,7 @@ import { buildProjectAcceptanceTodos } from "./builders-acceptance";
 import { buildCustomerFollowUpTodos, buildProjectLogTodos } from "./builders-basic";
 import { buildExpenseRequestTodos } from "./builders-expense";
 import { buildCustomerServiceTicketTodos } from "./builders-ticket";
+import { buildWorkflowTaskTodos } from "./builders-workflow";
 import {
   TASK_CENTER_SUMMARY_CACHE_TTL_MS,
   buildSummaryCacheKey,
@@ -18,12 +19,14 @@ async function buildTodos(authContext: AuthContext) {
     expenseRequests,
     projectAcceptances,
     customerServiceTickets,
+    workflowTasks,
   ] = await Promise.all([
     buildCustomerFollowUpTodos(authContext),
     buildProjectLogTodos(authContext),
     buildExpenseRequestTodos(authContext),
     buildProjectAcceptanceTodos(authContext),
     buildCustomerServiceTicketTodos(authContext),
+    buildWorkflowTaskTodos(authContext),
   ]);
 
   return sortTodos([
@@ -32,6 +35,7 @@ async function buildTodos(authContext: AuthContext) {
     ...expenseRequests,
     ...projectAcceptances,
     ...customerServiceTickets,
+    ...workflowTasks,
   ]);
 }
 

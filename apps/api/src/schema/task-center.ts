@@ -27,6 +27,8 @@ function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
 export const TaskCenterTodoTypeSchema = z.enum([
   "customer_followup",
   "project_log",
+  "project_payment",
+  "project_workflow",
   "expense_request",
   "project_acceptance",
   "customer_service_ticket",
