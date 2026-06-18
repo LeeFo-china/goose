@@ -170,3 +170,23 @@ orange 回填的执行链路：
 结论：`project_signing_workflow` 已通过；后续如果继续施工 workflow
 smoke，必须从施工实例 `a7d4bc13-f8c6-4afe-9376-a6284b96e5e3` 的
 task `f68e9aaa-6020-4bdc-85a5-8c889f31cb1e` 开始，并先确认本轮验收范围。
+
+## Orange 关闭回执
+
+orange 已确认 `project_signing_workflow` 按后端只读复核结果关闭，通过证据已落
+orange 文档并提交。
+
+回执要点：
+
+- 不再复测旧 task `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f`
+- 不重复执行本次已完成的 signing task chain：
+  `bb156359 -> ac5bda62 -> efb9fec5 -> 8c03662d -> 56e92dba`
+- 后续如继续施工 workflow smoke，先确认本轮验收范围
+- 施工 workflow 后续以当前 pending task
+  `f68e9aaa-6020-4bdc-85a5-8c889f31cb1e` 为准
+- 后续起点为 `started` / `确认开工`
+
+剩余重点：
+
+- Admin 可见性如需 UI 截图再补
+- 后续施工 workflow smoke 范围确认

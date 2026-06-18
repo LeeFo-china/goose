@@ -349,6 +349,17 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 - 后端只读核验：project signing instance 已 `completed/end`，上述 5 个
   task 均 `completed`；施工 workflow instance `running/started`
 
+orange 关闭回执：
+
+- `project_signing_workflow` 已按后端只读复核结果关闭，通过证据已落
+  orange 文档并提交
+- 不再复测旧 task `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f`
+- 不重复执行本次已完成的 signing task chain
+- 后续施工 workflow smoke 需先确认本轮验收范围
+- 若继续执行，使用后端当前施工 workflow pending task
+  `f68e9aaa-6020-4bdc-85a5-8c889f31cb1e`
+- 后续起点为 `started` / `确认开工`
+
 ## 字段映射
 
 | 后端字段 | 小程序用途 |

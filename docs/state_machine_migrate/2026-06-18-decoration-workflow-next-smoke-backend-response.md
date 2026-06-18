@@ -280,6 +280,20 @@ orange 请求日志：
 后续如果继续施工 workflow smoke，请先确认验收范围，再从 task
 `f68e9aaa-6020-4bdc-85a5-8c889f31cb1e` 开始。
 
+### orange 关闭回执
+
+orange 已确认 `project_signing_workflow` 按后端只读复核结果关闭，通过证据已落
+orange 文档并提交。
+
+后续约定：
+
+- 旧 task `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f` 不再复测
+- 本次已完成的 signing task chain 不重复执行
+- 如继续施工 workflow smoke，先确认本轮验收范围
+- 施工 workflow 以后端当前 pending task
+  `f68e9aaa-6020-4bdc-85a5-8c889f31cb1e` 为准
+- 后续起点为 `started` / `确认开工`
+
 ## 3. Admin 可见性取证口径
 
 建议和 `payment_stage_2` 新样本一起验收。
@@ -359,7 +373,20 @@ GET /finance/ledger?page=1&pageSize=20&project_id=54f11aa5-09a8-4410-a9c5-604a7f
 可以直接回复：
 
 ```text
-收到，后端已只读复核 payment_stage_2 smoke 结果，和 orange 回填一致。
+收到，project_signing_workflow 关闭回执已收到，后端侧文档和 manual gates 已同步记录。
+
+后端确认当前口径：
+- 不再复测旧 task aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f。
+- 不重复执行已完成的 signing task chain。
+- 后续如果继续施工 workflow smoke，先确认本轮验收范围，再从当前施工 pending task
+  f68e9aaa-6020-4bdc-85a5-8c889f31cb1e 开始。
+- 起点节点为 started / 确认开工。
+
+当前剩余重点一致：
+- Admin 可见性如最终需要 UI 截图，再补项目详情 workflow 状态和财务台账页面截图。
+- 后续施工 workflow smoke 范围另行确认。
+
+同时，后端此前已只读复核 payment_stage_2 smoke 结果，和 orange 回填一致。
 
 本次 payment_stage_2 已通过：
 - project ID: 54f11aa5-09a8-4410-a9c5-604a7fe9e09c

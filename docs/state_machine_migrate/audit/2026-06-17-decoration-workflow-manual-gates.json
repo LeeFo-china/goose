@@ -193,7 +193,20 @@
         "construction_current_task_id": "f68e9aaa-6020-4bdc-85a5-8c889f31cb1e",
         "construction_current_action_key": "complete",
         "request_log": "/tmp/orange-project-signing-workflow-smoke-1781769027232-sanitized.json",
-        "note": "旧 task aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f 未复用；rebuild 后的新 project_signing 实例已完成，并已切换到施工 workflow started 节点。"
+        "orange_close_acknowledgement": {
+          "closed": true,
+          "docs_committed_by_orange": true,
+          "repeat_old_task_required": false,
+          "repeat_completed_signing_chain_required": false,
+          "next_construction_smoke_requires_scope_confirmation": true,
+          "next_construction_task_id": "f68e9aaa-6020-4bdc-85a5-8c889f31cb1e",
+          "next_construction_node": "started / 确认开工",
+          "remaining_focus": [
+            "Admin UI visibility screenshots if required",
+            "construction workflow smoke scope confirmation"
+          ]
+        },
+        "note": "旧 task aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f 未复用且不再复测；rebuild 后的新 project_signing 实例已完成，并已切换到施工 workflow started 节点。orange 已确认 project_signing_workflow 关闭。"
       },
       {
         "key": "payment_collection_workflow",
