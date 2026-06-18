@@ -122,26 +122,52 @@ POST /workflow-tasks/03f6bce9-8d48-4753-8c15-dd36e8aa65a9/complete
 
 ## 5. orange 验收回填
 
-小程序团队完成真实点击验收后，请把结果回填到 orange handoff 文档，并同步给后端：
+小程序团队已完成本次收款 workflow smoke，并把结果回填到 orange handoff 文档：
+`/Users/leefo/Public/work/orange/docs/2026-06-18-decoration-finance-payment-workflow-smoke-handoff.md`。
 
 | 字段 | 回填值 |
 | --- | --- |
 | project ID | `d382cd45-9141-476e-a7a5-5bf88d0a3255` |
 | task ID | `03f6bce9-8d48-4753-8c15-dd36e8aa65a9` |
-| payment ID | 待回填 |
-| ledger ID | 待回填 |
-| 凭证 object key | 待回填 |
-| complete 请求日志 | 待回填 |
-| complete 响应日志 | 待回填 |
-| 项目详情/任务中心截图 | 待回填 |
+| payment ID | `5859aec7-a8a8-474b-83d8-ba420bf1555d` |
+| ledger ID | `aeaa8344-b5aa-4494-868d-1268520ae58f` |
+| payment type | `stage_2` |
+| amount | `10000` |
+| payment status | `confirmed` |
+| ledger entry type | `project_payment` |
+| ledger direction | `in` |
+| handled by | `bbab0193-43ae-4b7a-a7f3-24314e0f2e0d` / 小龙女 |
+| 凭证 object key | `tenants/3eebca47-961f-4899-b976-a3d3208d326b/project-payment/projects/d382cd45-9141-476e-a7a5-5bf88d0a3255/2026/06/18/3fb915cf-13d5-4ef2-928d-3806c9d3fa6c.jpg` |
+| complete status | `200` |
+| 原 task 状态 | `completed` |
+| workflow 当前节点 | `procedure_tiling` |
+| workflow 当前业务类型 | `procedure_template` |
+| 新 pending task | `234af5ce-f66e-451c-bdcc-89bc9be5ce0a` / 瓦工 |
 
-验收通过标准：
+后端只读核验结果：
 
-- 财务账号能在小程序 workflow 待办入口看到 `project_payment/payment_collection`。
-- 进入项目详情后能识别 `workflowTaskId` 和 `action=confirm_payment`。
-- 上传凭证时 direct-init 带 `scene=project_payment` 与上述 `project_id`。
-- complete task 返回成功。
-- task 从 pending 列表消失。
-- 后端生成 `payments.status = confirmed`。
-- 后端生成 `finance_ledger_entries.entry_type = project_payment`。
-- workflow 推进到 `procedure_tiling`。
+- `workflow_tasks.status = completed`
+- `payments.status = confirmed`
+- `payments.workflow_task_id = 03f6bce9-8d48-4753-8c15-dd36e8aa65a9`
+- `finance_ledger_entries.entry_type = project_payment`
+- `finance_ledger_entries.direction = in`
+- `finance_ledger_entries.payment_id = 5859aec7-a8a8-474b-83d8-ba420bf1555d`
+- workflow 当前节点已推进到 `procedure_tiling`
+
+本次未以 `/task-center/todos` count 作为阻塞条件，按后端说明只走
+`/workflow-tasks?status=pending`。
+
+## 6. 给小程序团队的回复口径
+
+可以回复：
+
+> 后端已收到并核验本次收款 workflow smoke 回填。`project_payment`
+> direct upload 已携带 `scene=project_payment` 和 `project_id`，
+> `POST /workflow-tasks/:taskId/complete` 返回 200，原收款 task 已完成，
+> 后端已生成 confirmed payment 和 project_payment 入账流水，workflow 已推进到
+> `procedure_tiling`。本次验收按 `/workflow-tasks?status=pending` 口径通过，
+> 不再以旧 `/task-center/todos` count 作为阻塞项。
+
+后续如果要把收款待办重新纳入小程序统一任务中心入口，需要后端先把
+`/task-center/todos` 聚合扩展到通用 `workflow_tasks`，否则小程序继续以
+`/workflow-tasks` 作为 workflow 待办源。
