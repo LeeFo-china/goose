@@ -120,16 +120,25 @@ dry-run 工具已经落地。当前不能继续自动收口的内容都需要外
 
 ## 需要 orange 回填的联调结果
 
-小程序团队完成真实联调后，请回填：
+2026-06-18 已完成并回填财务收款节点 smoke：
+
+- project ID：`d382cd45-9141-476e-a7a5-5bf88d0a3255`
+- task ID：`03f6bce9-8d48-4753-8c15-dd36e8aa65a9`
+- payment ID：`5859aec7-a8a8-474b-83d8-ba420bf1555d`
+- ledger ID：`aeaa8344-b5aa-4494-868d-1268520ae58f`
+- workflow 当前节点：`procedure_tiling`
+- orange 回填文档：
+  `/Users/leefo/Public/work/orange/docs/2026-06-18-decoration-finance-payment-workflow-smoke-handoff.md`
+
+仍需小程序团队或现场继续回填：
 
 1. 小程序版本或 commit。
-2. 验收账号和租户。
-3. 客户设计 workflow smoke 结果。
-4. 项目签约 workflow smoke 结果。
-5. 财务收款节点 smoke 结果。
-6. 施工工序日志 smoke 结果。
-7. 阶段验收联动 smoke 结果。
-8. 失败项、截图或接口日志。
+2. 客户设计 workflow smoke 结果。
+3. 项目签约 workflow smoke 结果。
+4. 施工工序日志 smoke 结果。
+5. 阶段验收联动 smoke 结果。
+6. Admin 项目详情、财务台账和 workflow 可见性结果。
+7. 失败项、截图或接口日志。
 
 回填位置：
 

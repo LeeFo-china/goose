@@ -30,11 +30,11 @@
 | --- | --- |
 | API 环境 | 待填写 |
 | Admin 环境 | 待填写 |
-| 小程序版本 / commit | 待填写 |
-| 验收租户 | 待填写 |
-| 验收账号 | 待填写 |
-| 验收时间 | 待填写 |
-| 验收人 | 待填写 |
+| 小程序版本 / commit | 收款 workflow smoke 由 orange 团队按当前小程序侧实现完成；commit 未在 gooes 侧回填 |
+| 验收租户 | `3eebca47-961f-4899-b976-a3d3208d326b` |
+| 验收账号 | 财务账号 `18800005001` / 小龙女 / `bbab0193-43ae-4b7a-a7f3-24314e0f2e0d` |
+| 验收时间 | 2026-06-18 |
+| 验收人 | orange 小程序团队；gooes 后端只读复核 |
 
 ## 基础检查
 
@@ -138,20 +138,22 @@
 
 | 检查项 | 期望 | 结果 |
 | --- | --- | --- |
-| action 识别 | `business_domain = payment_collection` 或 `output_fields.type = payment_collection` | 待填写 |
-| 凭证上传 | 上传带 `projectId`，direct-init 带 `scene=project_payment` 和 `project_id` | 待填写 |
-| 后端入账 | complete 创建 confirmed payment 和 ledger | 待填写 |
-| 入账幂等 | 重试同一 task 不重复创建 payment/ledger；已有 confirmed payment 缺 source 时 ledger 使用 `payment/payment.id` | 待填写 |
-| workflow 推进 | 收款 task 消失，流程进入下一节点 | 待填写 |
-| Admin 可见 | Admin 财务台账出现对应 project_payment 入账流水 | 待填写 |
+| action 识别 | `business_domain = payment_collection` 或 `output_fields.type = payment_collection` | 通过：小程序按 `/workflow-tasks?status=pending` 识别 `project_payment/payment_collection` 待办 |
+| 凭证上传 | 上传带 `projectId`，direct-init 带 `scene=project_payment` 和 `project_id` | 通过：direct upload 携带 `scene=project_payment` 和 `project_id` |
+| 后端入账 | complete 创建 confirmed payment 和 ledger | 通过：生成 confirmed payment 和 `project_payment` 入账流水 |
+| 入账幂等 | 重试同一 task 不重复创建 payment/ledger；已有 confirmed payment 缺 source 时 ledger 使用 `payment/payment.id` | 未在本次 orange smoke 覆盖；已有后端自动化覆盖 |
+| workflow 推进 | 收款 task 消失，流程进入下一节点 | 通过：`payment_stage_2` 推进到 `procedure_tiling` |
+| Admin 可见 | Admin 财务台账出现对应 project_payment 入账流水 | 通过：后端只读核验 ledger 已生成；本次未补 UI 截图 |
 
 证据记录：
 
-- 项目 ID：待填写
-- payment ID：待填写
-- ledger ID：待填写
-- task ID：待填写
-- 凭证 object key：待填写
+- 项目 ID：`d382cd45-9141-476e-a7a5-5bf88d0a3255`
+- payment ID：`5859aec7-a8a8-474b-83d8-ba420bf1555d`
+- ledger ID：`aeaa8344-b5aa-4494-868d-1268520ae58f`
+- task ID：`03f6bce9-8d48-4753-8c15-dd36e8aa65a9`
+- 凭证 object key：`tenants/3eebca47-961f-4899-b976-a3d3208d326b/project-payment/projects/d382cd45-9141-476e-a7a5-5bf88d0a3255/2026/06/18/3fb915cf-13d5-4ef2-928d-3806c9d3fa6c.jpg`
+- orange 回填文档：`/Users/leefo/Public/work/orange/docs/2026-06-18-decoration-finance-payment-workflow-smoke-handoff.md`
+- gooes 后端回传文档：`docs/decoration-finance/2026-06-18-payment-workflow-smoke-backend-handoff.md`
 
 ## 施工工序与日志验收
 
@@ -245,15 +247,16 @@
 | --- | --- |
 | 客户设计 workflow | 待填写 |
 | 项目签约 workflow | 待填写 |
-| 财务收款门禁 | 待填写 |
+| 财务收款门禁 | 通过：2026-06-18 orange 已完成收款 workflow smoke |
 | 施工工序日志 | 待填写 |
 | 阶段验收联动 | 待填写 |
 | Admin 模板与发布校验 | 待填写 |
 | 旧实例处置 | 待填写 |
-| orange 小程序真实联调 | 待填写 |
+| orange 小程序真实联调 | 部分通过：财务收款节点通过，其余场景待验收 |
 
 最终结论：
 
 ```text
-待填写：通过 / 不通过；如不通过，列出阻塞项、负责人和下一次验收时间。
+部分通过：财务收款 workflow smoke 已通过；客户设计、项目签约、
+施工工序日志、阶段验收联动、Admin 可见性和旧实例处置仍需继续验收或确认。
 ```

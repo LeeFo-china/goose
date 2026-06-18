@@ -965,7 +965,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 新设计项目进入项目签约 workflow | `project-workflow-runtime.ts` 与测试覆盖 `project_signing` 启动 | 已完成 |
 | 确认开工后启动施工 workflow | `project-workflow-runtime.test.ts` 覆盖签约完成后启动 `construction_main` | 已完成 |
 | 客户设计 workflow 不再承担签约 | 模板和发布校验禁止客户轨道包含项目签约节点 | 已完成 |
-| 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖 | 本仓库已完成，orange 需按文档联调 |
+| 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖；2026-06-18 orange 已按 `/workflow-tasks?status=pending` 完成收款 workflow smoke | 本仓库已完成；orange 财务收款节点已验收，其余端到端场景待验收 |
 | 只能完成当前 pending task | `workflow-tasks.test.ts` 覆盖 stale pending task 在进入业务 bridge 前返回 `WORKFLOW_NODE_NOT_CURRENT`，避免非当前节点产生业务副作用 | 已完成 |
 | 项目动作必填 output 后端兜底 | `workflow-task-project-bridge.test.ts` 覆盖签约金额、开工日期、工程负责人缺失时报错 | 已完成 |
 | 财务节点确认金额和凭证 | `workflow-task-action-metadata.ts` 输出 `payment_collection` 字段，payment bridge 创建确认流水 | 已完成 |
@@ -982,9 +982,9 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 
 - 截至 2026-06-17 23:37，`running_instances_on_legacy_snapshots = 10`
   仍存在，其中 1 条可受控重建、2 条可受控取消、1 条需人工恢复点。
-- orange 真实联调验收需由小程序团队在 orange 仓库完成，本仓库仅提供 API、文档和对接约束；
-  验收结果应回填到
-  `docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md`。
+- orange 财务收款 workflow smoke 已由小程序团队在 2026-06-18 完成并回填，
+  后端只读核验确认 payment、ledger 和 workflow 推进结果一致；客户设计、项目签约、
+  施工工序日志、阶段验收联动和 Admin 可见性仍需继续验收。
 - 旧实例写入、施工后段项目恢复策略和 orange 端到端验收的机读门禁状态应同步回填到
   `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
   写入项即使已业务确认，也必须在最新只读审计满足 `needs_migration = false` 且

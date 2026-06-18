@@ -12,7 +12,7 @@
     ]
   },
   "latest_read_only_review": {
-    "reviewed_at": "2026-06-17T23:37:00+08:00",
+    "reviewed_at": "2026-06-18T10:03:32+08:00",
     "commands": [
       "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-business-audit.ts --sample-limit 100",
       "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instance-review.ts --sample-limit 100"
@@ -24,7 +24,7 @@
     "rebuild_candidate": 1,
     "manual_restore_required": 3,
     "unknown_review_required": 0,
-    "evidence": "docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2337.md"
+    "evidence": "docs/state_machine_migrate/audit/2026-06-18-decoration-workflow-readonly-review-payment-sync.md"
   },
   "legacy_instance_apply_gates": {
     "project_signing_rebuild": {
@@ -117,7 +117,14 @@
       },
       {
         "key": "payment_collection_workflow",
-        "status": "pending"
+        "status": "passed",
+        "evidence": "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md#财务收款节点验收",
+        "external_evidence": "/Users/leefo/Public/work/orange/docs/2026-06-18-decoration-finance-payment-workflow-smoke-handoff.md",
+        "project_id": "d382cd45-9141-476e-a7a5-5bf88d0a3255",
+        "task_id": "03f6bce9-8d48-4753-8c15-dd36e8aa65a9",
+        "payment_id": "5859aec7-a8a8-474b-83d8-ba420bf1555d",
+        "ledger_id": "aeaa8344-b5aa-4494-868d-1268520ae58f",
+        "completed_at": "2026-06-18"
       },
       {
         "key": "construction_procedure_log",
@@ -136,6 +143,6 @@
   "closeout_rules": {
     "can_run_legacy_apply": false,
     "can_close_prd_without_followup": false,
-    "reason": "Legacy instance apply confirmations, manual restore decision, and orange real E2E acceptance are still pending."
+    "reason": "Legacy instance apply confirmations, manual restore decision, and non-payment orange E2E scenarios are still pending. Payment collection workflow smoke passed on 2026-06-18."
   }
 }
