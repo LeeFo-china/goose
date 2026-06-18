@@ -282,6 +282,10 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 - 后端对接文档：
   `docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-backend-handoff.md`
 - 结论：`stage_acceptance_transition` 已通过；后续由收款节点继续推进到瓦工
+- orange 回执：小程序侧已按后端回执更新文档记录；后续不再对
+  `acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992` 重复执行
+  `customer-confirm`，当前项目继续等待 `payment_stage_2` 收款 workflow 完成后由
+  后端推进到 `procedure_tiling`
 
 ## 字段映射
 

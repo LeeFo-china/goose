@@ -187,6 +187,12 @@
             "payment_stage_2": "current"
           }
         },
+        "orange_acknowledgement": {
+          "docs_updated": true,
+          "stage_acceptance_transition_marked_passed": true,
+          "repeat_customer_confirm_required": false,
+          "next_step": "wait for payment_stage_2 workflow completion, then backend advances to procedure_tiling"
+        },
         "acceptance_action": {
           "type": "edit",
           "enabled": true

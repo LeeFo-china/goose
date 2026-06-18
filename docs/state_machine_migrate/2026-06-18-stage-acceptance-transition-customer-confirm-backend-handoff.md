@@ -93,16 +93,27 @@ orange 已按修复后的新契约使用当前样本复测通过：
 complete 已完成工序节点，workflow 继续停留 `payment_stage_2`，后续仍由收款
 workflow 推进到 `tiling`。
 
+## Orange 回执确认
+
+orange 小程序侧已按后端回执更新文档记录，并确认：
+
+1. `stage_acceptance_transition` 已标记通过。
+2. 后续不再对
+   `acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992`
+   重复执行 `customer-confirm`。
+3. 当前项目 workflow 继续停留 `payment_stage_2`，等待收款 workflow 完成后由后端
+   推进到 `procedure_tiling`。
+
 ## 回复小程序端
 
 ```text
-后端已收到并记录 acceptance_id=2e3779f7-8b51-4b05-9b7b-e1f3e18f1992
-按新契约重新 smoke 通过。
+后端已收到 orange 回执，并已记录 stage_acceptance_transition 通过。
 
 本次结果符合后端契约：customer-confirm 返回 200，验收单变为 customer_confirmed，
 construction-stages 中 plumbing_electrical 变为 accepted；workflow 继续停留
 payment_stage_2，timeline 中 procedure_plumbing_electrical=done、payment_stage_2=current。
 
-stage_acceptance_transition 可以标记为通过。后续不用再为该验收单重复 customer-confirm；
-下一步由收款 workflow 完成 payment_stage_2 后推进到 tiling。
+后续不用再对 acceptance_id=2e3779f7-8b51-4b05-9b7b-e1f3e18f1992 重复执行
+customer-confirm；下一步保持当前契约，等待收款 workflow 完成 payment_stage_2，
+再由后端推进到 procedure_tiling。
 ```
