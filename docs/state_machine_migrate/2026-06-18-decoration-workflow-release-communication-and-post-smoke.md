@@ -260,7 +260,45 @@ Admin 侧已完成发布后只读 smoke，未在 Admin 端执行任何 workflow 
 Admin 侧本轮只读 smoke 通过，页面“看得到、对得上”。
 ```
 
+## 小程序发布后只读 smoke 回填
+
+回填时间：2026-06-18
+
+orange 侧已完成发布后只读 smoke，并已回填小程序联调文档。
+
+执行信息：
+
+| 项 | 值 |
+| --- | --- |
+| orange commit | `b568d9f` |
+| 验证账号 | `18800005001` / 小龙女 |
+| 操作边界 | 只读 smoke，未执行任何 workflow 推进 |
+
+核验结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 员工登录 | 通过 |
+| `/workflow-tasks?status=pending` | 通过 |
+| `actions[].key` | 通过，正常可见 |
+| 项目详情 `workflow_state` | 通过，正常可读取 |
+| 财务待办展示 | 当前无 `project_payment` / `payment_collection` 收款待办，因此只验证待办展示口径 |
+
+明确未执行：
+
+- 未执行 `complete`
+- 未推进旧 task
+- 未重复 customer-confirm
+- 未重复 signing chain
+- 未推进新的施工 workflow
+
+结论：
+
+```text
+orange 侧发布后只读 smoke 通过；当前无收款待办，不作为阻塞。
+```
+
 ## 当前结论
 
-本轮 release communication 和 post-release smoke 清单已准备完成。发布执行后，
-只按本文件执行只读 smoke；任何会推进 workflow 的动作都必须另行确认。
+本轮 release communication、Admin 发布后只读 smoke 和 orange 发布后只读
+smoke 均已完成。后续进入观察期；任何会推进 workflow 的动作都必须另行确认。
