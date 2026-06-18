@@ -175,6 +175,44 @@ describe("buildDecorationWorkflowManualGateCheckReport", () => {
     }
   });
 
+  test("rejects passed orange scenarios without scenario evidence", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gooes-decoration-gates-"));
+    const path = join(dir, "decoration-gates.json");
+    try {
+      const evidence = buildCompleteEvidence();
+      const orangeGate: {
+        confirmed: boolean;
+        required_scenarios: Array<{
+          key: string;
+          status: string;
+          evidence?: string;
+        }>;
+      } = evidence.orange_e2e_acceptance_gate;
+      orangeGate.confirmed = false;
+      orangeGate.required_scenarios = [
+        { key: "payment_collection_workflow", status: "passed" },
+        { key: "customer_design_workflow", status: "pending" },
+      ];
+
+      await writeFile(path, JSON.stringify(evidence), "utf8");
+
+      const report = await buildDecorationWorkflowManualGateCheckReport(
+        path,
+        generatedAt,
+      );
+
+      expect(report.ok).toBe(false);
+      expect(report.checks[0]).toEqual({
+        name: "decoration_manual_gate_evidence",
+        ok: false,
+        detail:
+          `evidence_file=${path}; missing=orange_e2e_acceptance_gate.required_scenarios[0].evidence`,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("keeps closeout blocked when manual restore decision still needs follow-up", async () => {
     const dir = await mkdtemp(join(tmpdir(), "gooes-decoration-gates-"));
     const path = join(dir, "decoration-gates.json");
@@ -335,12 +373,42 @@ function buildCompleteEvidence() {
       evidence:
         "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
       required_scenarios: [
-        { key: "customer_design_workflow", status: "passed" },
-        { key: "project_signing_workflow", status: "passed" },
-        { key: "payment_collection_workflow", status: "passed" },
-        { key: "construction_procedure_log", status: "passed" },
-        { key: "stage_acceptance_transition", status: "passed" },
-        { key: "admin_finance_and_workflow_visibility", status: "passed" },
+        {
+          key: "customer_design_workflow",
+          status: "passed",
+          evidence:
+            "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+        },
+        {
+          key: "project_signing_workflow",
+          status: "passed",
+          evidence:
+            "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+        },
+        {
+          key: "payment_collection_workflow",
+          status: "passed",
+          evidence:
+            "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+        },
+        {
+          key: "construction_procedure_log",
+          status: "passed",
+          evidence:
+            "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+        },
+        {
+          key: "stage_acceptance_transition",
+          status: "passed",
+          evidence:
+            "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+        },
+        {
+          key: "admin_finance_and_workflow_visibility",
+          status: "passed",
+          evidence:
+            "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+        },
       ],
     },
     closeout_rules: {

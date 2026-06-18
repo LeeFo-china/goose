@@ -209,12 +209,22 @@ function validateOrangeGate(
   referenceTime: Date,
 ): void {
   const prefix = "orange_e2e_acceptance_gate";
+  const scenarios = arrayOfRecords(get(evidence, `${prefix}.required_scenarios`));
+  scenarios.forEach((scenario, index) => {
+    if (scenario.status !== "passed") return;
+    validateEvidenceReference(
+      `${prefix}.required_scenarios[${index}].evidence`,
+      scenario.evidence,
+      problems,
+    );
+  });
+
   if (get(evidence, `${prefix}.confirmed`) !== true) return;
   validateConfirmedGate(evidence, prefix, problems, referenceTime);
   for (const field of ["mini_program_version_or_commit", "tenant", "accounts"]) {
     requireString(`${prefix}.${field}`, get(evidence, `${prefix}.${field}`), problems);
   }
-  if (arrayOfRecords(get(evidence, `${prefix}.required_scenarios`)).length === 0) {
+  if (scenarios.length === 0) {
     problems.missing.push(`${prefix}.required_scenarios`);
   }
 }
