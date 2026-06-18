@@ -228,11 +228,11 @@
 
 | 检查项 | 期望 | 结果 |
 | --- | --- | --- |
-| 不本地推断 | 小程序不在 complete 成功后直接构造验收单 | 待填写 |
-| 刷新后入口 | 以后端返回的 `acceptance_action` 决定按钮 | 部分通过：工序 complete 后刷新 `/projects/:projectId/construction-stages`，`acceptance_action.type = edit`、`enabled = true` |
-| 不重复创建 | 已有验收单时进入已有 `acceptance_id` | 部分通过：返回 `acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992`，应进入已有验收单 |
-| 验收状态 | 复核、客户确认后阶段状态正确刷新 | 部分通过：submit `draft -> submitted`、主管复核 `submitted -> leader_approved`、open-ticket verify 成功；客户确认曾被后端 guard 阻断，后端已修复，待 orange 复测 |
-| 竣工门禁 | 未完成必需工序时不能进入竣工验收 | 待填写 |
+| 不本地推断 | 小程序不在 complete 成功后直接构造验收单 | 通过：小程序未本地推进 workflow，仅调用后端验收接口并刷新后端状态 |
+| 刷新后入口 | 以后端返回的 `acceptance_action` 决定按钮 | 通过：工序 complete 后刷新 `/projects/:projectId/construction-stages`，`acceptance_action.type = edit`、`enabled = true` |
+| 不重复创建 | 已有验收单时进入已有 `acceptance_id` | 通过：使用已有 `acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992` |
+| 验收状态 | 复核、客户确认后阶段状态正确刷新 | 通过：submit、主管复核、客户 open-ticket verify、customer-confirm 全链路通过 |
+| 竣工门禁 | 未完成必需工序时不能进入竣工验收 | 未覆盖本样本；保留为竣工专项验收 |
 
 证据记录：
 
@@ -247,15 +247,23 @@
 - 客户确认阻塞：修复前返回
   `409 WORKFLOW_ACCEPTANCE_NOT_AVAILABLE`，message 为
   `当前流程在中期进度款，不能操作水电`
+- 客户确认复测：通过，`POST /project-acceptances/:id/customer-confirm`
+  返回 `200 success`
+- 客户确认时间：`2026-06-18T06:36:27.3+00:00`
+- 验收单最终状态：`acceptance.status = customer_confirmed`
+- 施工阶段最终状态：`plumbing_electrical.status = accepted`，
+  `plumbing_electrical.acceptance_status = customer_confirmed`
+- workflow 状态：`payment_stage_2` 仍为 current；
+  `procedure_plumbing_electrical = done`，`payment_stage_2 = current`
 - 截图 / 日志：
   `/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md`
 - 阻塞交接：
   `/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-blocker-handoff.md`
 - 后端对接口径：
   `docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-backend-handoff.md`
-- 当前边界：后端已按“收款门禁下允许客户确认上一工序验收”修复；仍需 orange 重新
-  执行 customer-confirm，确认 `customer_confirmed` 和阶段 `accepted` 后，
-  `stage_acceptance_transition` 才能计为完整通过。
+- 当前结论：`stage_acceptance_transition` 已通过。客户确认上一工序验收后，
+  后端不重复 complete 已完成工序节点，workflow 继续停留 `payment_stage_2`，
+  后续由收款 workflow 推进到 `tiling`。
 
 ## Admin 验收
 
@@ -296,14 +304,14 @@
 | 项目签约 workflow | 待填写 |
 | 财务收款门禁 | 通过：2026-06-18 orange 已完成收款 workflow smoke |
 | 施工工序日志 | 通过：2026-06-18 后端修复后 orange 复测通过 |
-| 阶段验收联动 | 部分通过：已验证工序 complete 后刷新到可用 `acceptance_action`，验收单提交/复核/客户确认待验收 |
+| 阶段验收联动 | 通过：已验证工序 complete 后刷新验收入口、submit、主管复核、客户确认和阶段 accepted |
 | Admin 模板与发布校验 | 待填写 |
 | 旧实例处置 | 待填写 |
-| orange 小程序真实联调 | 部分通过：客户设计、财务收款、施工工序日志通过；项目签约、阶段验收完整流、Admin 可见性待验收 |
+| orange 小程序真实联调 | 部分通过：客户设计、财务收款、施工工序日志、阶段验收完整流通过；项目签约、Admin 可见性待验收 |
 
 最终结论：
 
 ```text
-部分通过：客户设计、财务收款和施工工序日志已通过；项目签约、
-阶段验收完整流、Admin 可见性和旧实例处置仍需继续验收或确认。
+部分通过：客户设计、财务收款、施工工序日志和阶段验收完整流已通过；
+项目签约、Admin 可见性和旧实例处置仍需继续验收或确认。
 ```

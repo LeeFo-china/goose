@@ -14,7 +14,8 @@
 | acceptance ID | `2e3779f7-8b51-4b05-9b7b-e1f3e18f1992` |
 | stage_code | `plumbing_electrical` |
 | workflow current | `payment_stage_2` |
-| acceptance status | `leader_approved` |
+| acceptance status | `customer_confirmed` |
+| customer_confirmed_at | `2026-06-18T06:36:27.3+00:00` |
 | orange handoff | `/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-blocker-handoff.md` |
 | orange execution | `/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md` |
 
@@ -74,29 +75,34 @@ procedure_plumbing_electrical -> payment_stage_2 -> procedure_tiling
 
 ## 小程序复测路径
 
-请 orange 继续用当前样本或后端准备的新样本复测：
+orange 已按修复后的新契约使用当前样本复测通过：
 
 1. 使用客户 open-ticket 调用客户确认接口。
-2. 期望 `POST /project-acceptances/:id/customer-confirm` 返回 200。
-3. 刷新验收详情，期望 `acceptance.status = customer_confirmed`。
-4. 刷新 `GET /projects/:projectId/construction-stages`：
+2. `POST /project-acceptances/:id/customer-confirm` 返回 `200 success`。
+3. 刷新验收详情，`acceptance.status = customer_confirmed`。
+4. `customer_confirmed_at = 2026-06-18T06:36:27.3+00:00`。
+5. 刷新 `GET /projects/:projectId/construction-stages`：
    - `plumbing_electrical.status = accepted`
-   - `acceptance_status = customer_confirmed`
-   - workflow 仍可停留在 `payment_stage_2`，这是预期。
-5. 不要本地推进 workflow；`payment_stage_2 -> procedure_tiling` 仍必须由收款节点完成后推进。
+   - `plumbing_electrical.acceptance_status = customer_confirmed`
+6. 刷新 employee detail bootstrap：
+   - workflow current 仍为 `payment_stage_2`
+   - timeline 中 `procedure_plumbing_electrical = done`
+   - timeline 中 `payment_stage_2 = current`
+
+结论：`stage_acceptance_transition` 已通过。客户确认上一工序验收后，后端不重复
+complete 已完成工序节点，workflow 继续停留 `payment_stage_2`，后续仍由收款
+workflow 推进到 `tiling`。
 
 ## 回复小程序端
 
 ```text
-后端确认这不是小程序本地推进问题。当前契约调整为：水电工序 complete 后允许
-workflow 先进入 payment_stage_2，同时仍允许客户确认上一工序水电验收。
+后端已收到并记录 acceptance_id=2e3779f7-8b51-4b05-9b7b-e1f3e18f1992
+按新契约重新 smoke 通过。
 
-后端已修复 guard：payment_collection 当前节点下，可对其阻塞的下一工序的上一工序
-执行 create_stage_acceptance / customer_confirm_acceptance；客户确认时不会重复 complete
-已完成的工序节点，workflow 会继续停留在 payment_stage_2，等待财务收款推进。
+本次结果符合后端契约：customer-confirm 返回 200，验收单变为 customer_confirmed，
+construction-stages 中 plumbing_electrical 变为 accepted；workflow 继续停留
+payment_stage_2，timeline 中 procedure_plumbing_electrical=done、payment_stage_2=current。
 
-请用 acceptance ID 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992 重新执行
-customer-confirm smoke。期望 customer-confirm 返回 200，验收单变为 customer_confirmed，
-construction-stages 中 plumbing_electrical 变为 accepted；payment_stage_2 仍是当前节点
-属于预期，后续由收款 workflow 推进到 tiling。
+stage_acceptance_transition 可以标记为通过。后续不用再为该验收单重复 customer-confirm；
+下一步由收款 workflow 完成 payment_stage_2 后推进到 tiling。
 ```

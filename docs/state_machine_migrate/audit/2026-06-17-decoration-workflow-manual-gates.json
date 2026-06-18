@@ -154,8 +154,8 @@
       },
       {
         "key": "stage_acceptance_transition",
-        "status": "pending",
-        "partial_evidence": "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+        "status": "passed",
+        "evidence": "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
         "backend_handoff": "docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-backend-handoff.md",
         "external_evidence": "/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md",
         "external_blocker_handoff": "/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-blocker-handoff.md",
@@ -172,13 +172,27 @@
           "code": "WORKFLOW_ACCEPTANCE_NOT_AVAILABLE",
           "message": "当前流程在中期进度款，不能操作水电"
         },
-        "backend_fix_status": "implemented_pending_orange_resmoke",
+        "backend_fix_status": "resmoked_passed",
         "backend_contract": "Allow customer confirmation for the previous procedure acceptance while the current workflow node is the payment_collection gate before the next procedure.",
+        "customer_confirm_result": {
+          "status_code": 200,
+          "response": "success",
+          "customer_confirmed_at": "2026-06-18T06:36:27.3+00:00",
+          "acceptance_status": "customer_confirmed",
+          "stage_status": "accepted",
+          "stage_acceptance_status": "customer_confirmed",
+          "workflow_current_node": "payment_stage_2",
+          "timeline": {
+            "procedure_plumbing_electrical": "done",
+            "payment_stage_2": "current"
+          }
+        },
         "acceptance_action": {
           "type": "edit",
           "enabled": true
         },
-        "note": "已验证工序 complete 后刷新到可用验收入口，submit、主管复核和客户 open-ticket verify 通过；客户确认曾被后端 workflow guard 阻断，后端已修复，等待 orange 重新执行 customer-confirm。"
+        "completed_at": "2026-06-18",
+        "note": "已验证工序 complete 后刷新到可用验收入口，submit、主管复核、客户 open-ticket verify 和 customer-confirm 全链路通过；客户确认上一工序验收后 workflow 继续停留 payment_stage_2，等待收款节点推进。"
       },
       {
         "key": "admin_finance_and_workflow_visibility",
@@ -189,6 +203,6 @@
   "closeout_rules": {
     "can_run_legacy_apply": false,
     "can_close_prd_without_followup": false,
-    "reason": "Legacy instance apply confirmations, manual restore decision, and project signing / stage acceptance / admin visibility orange E2E scenarios are still pending. Payment collection, customer design, and construction procedure log workflow passed on 2026-06-18."
+    "reason": "Legacy instance apply confirmations, manual restore decision, and project signing / admin visibility orange E2E scenarios are still pending. Payment collection, customer design, construction procedure log, and stage acceptance transition workflow passed on 2026-06-18."
   }
 }
