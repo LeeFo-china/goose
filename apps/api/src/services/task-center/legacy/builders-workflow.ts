@@ -145,7 +145,7 @@ function buildWorkflowTodoSubtitle(
 }
 
 function getWorkflowTodoActionLabel(action: WorkflowTaskActionPayload) {
-  return isPaymentCollectionAction(action) ? "确认收款" : "去处理";
+  return isPaymentCollectionAction(action) ? "确认收款" : action.label || "去处理";
 }
 
 function buildWorkflowTodoTargetUrl(input: {

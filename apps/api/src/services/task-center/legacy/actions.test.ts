@@ -76,6 +76,33 @@ const projectWorkflowTask = {
   },
 };
 
+const customerWorkflowTask = {
+  ...projectPaymentTask,
+  id: "task-customer-1",
+  instance_id: "instance-customer-1",
+  instance_node_id: "instance-node-customer-1",
+  node_id: "node-customer-1",
+  node_key: "potential",
+  node_type: "business",
+  title: "客户线索",
+  assignee_employee_id: "sales-1",
+  assignee_permission_code: null,
+  due_at: null,
+  instance: {
+    id: "instance-customer-1",
+    subject_type: "customer",
+    subject_id: "customer-1",
+    status: "running",
+    current_node_key: "potential",
+    current_node_snapshot: {
+      node_key: "potential",
+      business_kind: "customer_status",
+      title: "客户线索",
+      config: {},
+    },
+  },
+};
+
 const listAccessibleTasks = mock(async (input: { subjectType?: string }) => {
   if (input.subjectType === "project") {
     return {
@@ -84,6 +111,18 @@ const listAccessibleTasks = mock(async (input: { subjectType?: string }) => {
         page: 1,
         pageSize: 100,
         total: 2,
+        totalPages: 1,
+      },
+    };
+  }
+
+  if (input.subjectType === "customer") {
+    return {
+      list: [customerWorkflowTask],
+      pagination: {
+        page: 1,
+        pageSize: 100,
+        total: 1,
         totalPages: 1,
       },
     };
@@ -224,7 +263,7 @@ describe("taskCenterService workflow todos", () => {
       id: "workflow_task:task-workflow-1",
       type: "project_workflow",
       title: "排期开工",
-      action_label: "去处理",
+      action_label: "排期开工",
       target_type: "project",
       target_id: "project-2",
       target_url: "/packageProjects/pages/detail/index?id=project-2",
@@ -234,6 +273,35 @@ describe("taskCenterService workflow todos", () => {
         workflow_node_key: "design_finalized",
         workflow_business_domain: "workflow_project",
         workflow_business_action: "design_finalized",
+      },
+    });
+  });
+
+  test("maps customer workflow tasks to customer follow-up todos with action metadata", async () => {
+    const { taskCenterService } = await import("../../task-center");
+
+    const result = await taskCenterService.listTodos(authContext, {
+      page: 1,
+      pageSize: 20,
+      status: "pending",
+      type: "customer_followup",
+    });
+
+    expect(result.list).toHaveLength(1);
+    expect(result.list[0]).toMatchObject({
+      id: "workflow_task:task-customer-1",
+      type: "customer_followup",
+      title: "客户线索",
+      action_label: "开始跟进",
+      target_type: "customer",
+      target_id: "customer-1",
+      target_url: "/packageCustomers/pages/customerDetail/index?id=customer-1",
+      metadata: {
+        workflow_task_id: "task-customer-1",
+        workflow_instance_id: "instance-customer-1",
+        workflow_node_key: "potential",
+        workflow_business_domain: "customer_status",
+        workflow_business_action: "start_following",
       },
     });
   });
