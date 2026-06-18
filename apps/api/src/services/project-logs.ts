@@ -19,11 +19,17 @@ import { constructionStageStatusService } from "@/services/construction-stage-st
 import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
 import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
-import { isProjectLogStageCode } from "@gooes/domain";
+import {
+  isProjectConstructionStageCode,
+  isProjectLogStageCode,
+} from "@gooes/domain";
 import { ProjectLogCalendarCache } from "./project-logs/calendar-cache";
 import { ProjectLogProjectListCache } from "./project-logs/project-list-cache";
-
-type ProjectLogCreateTimingSteps = Record<string, number>;
+import {
+  createWorkflowApprovedConstructionLog,
+  measureProjectLogCreateStep,
+  type ProjectLogCreateTimingSteps,
+} from "./project-logs/workflow-approved-create";
 
 function buildPagination(page: number, pageSize: number, total: number) {
   return {
@@ -32,23 +38,6 @@ function buildPagination(page: number, pageSize: number, total: number) {
     total,
     totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
   };
-}
-
-async function measureProjectLogCreateStep<T>(
-  timings: ProjectLogCreateTimingSteps | undefined,
-  step: string,
-  operation: () => Promise<T>,
-) {
-  if (!timings) {
-    return operation();
-  }
-
-  const startedAt = Date.now();
-  try {
-    return await operation();
-  } finally {
-    timings[step] = Date.now() - startedAt;
-  }
 }
 
 class ProjectLogService {
@@ -130,20 +119,28 @@ class ProjectLogService {
       );
     }
 
-    const row = await measureProjectLogCreateStep(
-      timings,
-      "create_rpc_ms",
-      () => projectLogRepository.createFast({
+    const row = stageCode && isProjectConstructionStageCode(stageCode)
+      ? await createWorkflowApprovedConstructionLog({
+        authContext: input.authContext,
         tenantId,
-        employeeId: input.authContext.employeeId!,
-        tenantDepartmentId: input.authContext.tenantDepartmentId,
-        projectLogScope: accessPolicyService.getScope(
-          input.authContext,
-          "project_log.create",
-        ),
+        project,
         payload: input.payload,
-      }),
-    );
+        timings,
+      })
+      : await measureProjectLogCreateStep(
+        timings,
+        "create_rpc_ms",
+        () => projectLogRepository.createFast({
+          tenantId,
+          employeeId: input.authContext.employeeId!,
+          tenantDepartmentId: input.authContext.tenantDepartmentId,
+          projectLogScope: accessPolicyService.getScope(
+            input.authContext,
+            "project_log.create",
+          ),
+          payload: input.payload,
+        }),
+      );
     projectSer.invalidatePublicProjectLogsCache(input.payload.project_id);
     this.projectLogCalendarCache.updateAfterCreate({
       tenantId,
