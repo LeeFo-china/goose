@@ -9,6 +9,7 @@
 - `docs/state_machine_migrate/miniprogram-payment-collection-node-integration.md`
 - `docs/state_machine_migrate/miniprogram-procedure-construction-log-integration.md`
 - `docs/state_machine_migrate/miniprogram-procedure-stage-acceptance-integration.md`
+- `docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-handoff.md`
 - `docs/state_machine_migrate/2026-06-17-decoration-workflow-legacy-apply-checklist.md`
 
 ## 使用边界
