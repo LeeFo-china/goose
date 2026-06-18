@@ -87,6 +87,130 @@ Content-Type: application/json
 `metadata.workflow_actions[].key`，不能使用本地旧状态动作或 `business_action`
 替代。
 
+## 本地 smoke 鉴权和租户上下文
+
+`/workflow-tasks`、`/workflow-subjects`、项目详情、客户详情等业务接口的租户
+上下文来自服务端员工身份绑定，不来自 `X-Tenant-Id` 请求头。
+
+后端实际链路：
+
+```text
+Authorization Bearer token -> JWT sub -> employees.user_id -> employee.tenant_id
+```
+
+因此，小程序本地 smoke 必须使用已绑定员工身份的 token。即使 token claim 中带有
+`tenant_id`，业务接口仍会按 `sub` 反查员工和租户；从 claim 取 `tenant_id` 后追加
+`X-Tenant-Id` 不能修复 `TENANT_CONTEXT_REQUIRED`。
+
+### 推荐本地 curl 登录
+
+本地 gooes `.env.local` 已开启：
+
+```bash
+AUTH_PHONE_LOGIN_WITHOUT_CODE=true
+```
+
+可用员工手机号直接换取本地 smoke token。示例：
+
+```bash
+BASE_URL=http://192.168.1.4:3000
+
+TOKEN=$(
+  curl -sS -X POST "$BASE_URL/admin/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d '{"phone":"18800005001","code":""}' \
+  | jq -r '.data.token'
+)
+```
+
+请求业务接口只需要传：
+
+```http
+Authorization: Bearer <employee-token>
+Content-Type: application/json
+```
+
+不要依赖 `X-Tenant-Id`。后端当前不会用该 header 为 workflow 业务接口构造租户
+上下文。
+
+### token 自检
+
+先验证当前 token 是否是员工租户 token：
+
+```bash
+curl -sS "$BASE_URL/admin/auth/me" \
+  -H "Authorization: Bearer $TOKEN" \
+| jq '.data | {user_id, tenant, employee, roles, permissions}'
+```
+
+通过条件：
+
+- `.data.tenant.id` 有值。
+- `.data.employee.id` 有值。
+- 员工状态可用。
+
+再验证 workflow 待办：
+
+```bash
+curl -sS "$BASE_URL/workflow-tasks?page=1&pageSize=5&status=pending" \
+  -H "Authorization: Bearer $TOKEN" \
+| jq '.data | {pagination, list}'
+```
+
+### 小程序真机 token 要求
+
+小程序侧继续走自身员工登录链路，关键是最后用于 workflow 请求的 token 必须是
+`/auth/verify-role` 返回的员工 token：
+
+```http
+POST /auth/verify-role
+Authorization: Bearer <current-auth-or-visitor-token>
+Content-Type: application/json
+
+{
+  "phone": "18800005001",
+  "target_role": "employee",
+  "code": ""
+}
+```
+
+取响应中的 `data.token` 调 `/workflow-tasks`、`/workflow-subjects`、项目详情和
+complete 接口。
+
+### 403 排查口径
+
+| 现象 | 含义 | 小程序处理 |
+| --- | --- | --- |
+| `403 TENANT_CONTEXT_REQUIRED` | 当前 token 的 `sub` 没有反查到员工租户上下文 | 重新走员工登录或改用 `/admin/auth/login` 本地 smoke token，不追加 `X-Tenant-Id` 兜底 |
+| `403 FORBIDDEN` 或普通无权限 | 已有租户上下文，但账号无权限或 task 不可见 | 换对应负责人/财务/经理账号，或让后端检查待办分配 |
+| `200` 且 `list=[]` | 鉴权正常，但当前账号没有 pending 待办 | 继续准备测试数据或让后端回传当前待办负责人 |
+| `401 TOKEN_INVALID` / `TOKEN_EXPIRED` | token 无效或过期 | 重新登录获取 token |
+
+本轮 orange 报告中的 `GET /workflow-tasks?...` 返回
+`TENANT_CONTEXT_REQUIRED`，按上述链路判断为临时 token 未绑定员工租户上下文，不是
+`status=pending`、分页参数或 `X-Tenant-Id` 参数问题。
+
+### 2026-06-18 鉴权 smoke 回传
+
+orange 已按上述口径重新 smoke：
+
+- `POST /admin/auth/login`，`phone = 18800005001`，返回 `200` 并拿到员工登录
+  token。
+- `GET /admin/auth/me` 返回 `200`，确认
+  `tenant.id = 3eebca47-961f-4899-b976-a3d3208d326b`、
+  `employee.id = bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`、
+  `employee.name = 小龙女`。
+- `GET /workflow-tasks?page=1&pageSize=5&status=pending` 返回 `200`，
+  `pagination.total = 8`，本页 `5` 条 pending task，且任务包含
+  `actions[].key`。
+
+结论：员工登录 token 下 workflow 接口租户上下文正常，前端可以继续按
+`actions[].key` 执行后续 5 个场景联调。
+
+注意：本次只完成鉴权和待办列表 smoke，仍未执行
+`POST /workflow-tasks/:taskId/complete`，没有推进真实业务数据，不能计入 5 个
+业务场景验收通过证据。
+
 ## 字段映射
 
 | 后端字段 | 小程序用途 |
