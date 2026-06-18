@@ -943,7 +943,8 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 - 装修 workflow 专用门禁状态见
   `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
 - 人工恢复决策必须显式回填 `followup_required`；选择继续旧验收自然结束时，
-  该值应为 `true`，不能作为“无后续动作关闭 PRD”的证据。
+  执行前该值应为 `true`，完成并只读核验旧实例已到 `end/completed` 后才可改为
+  `false`，作为“无后续动作关闭 PRD”的证据。
 
 ### 当前验收矩阵
 
@@ -965,7 +966,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 新设计项目进入项目签约 workflow | `project-workflow-runtime.ts` 与测试覆盖 `project_signing` 启动 | 已完成 |
 | 确认开工后启动施工 workflow | `project-workflow-runtime.test.ts` 覆盖签约完成后启动 `construction_main` | 已完成 |
 | 客户设计 workflow 不再承担签约 | 模板和发布校验禁止客户轨道包含项目签约节点 | 已完成 |
-| 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖；`task-center/legacy/actions.test.ts` 覆盖旧 `/task-center/todos` 兼容 `customer_followup`、`project_payment`、`project_workflow` 并保留 action 文案；`phase5-workflow-smoke.test.ts` 覆盖客户 `/workflow-tasks?subject_type=customer`、客户 `/task-center/todos?type=customer_followup` 和项目 `/task-center/todos?type=project_payment/project_workflow` smoke 检查，并要求 `workflow_task:*` 待办带 `action_label`、`workflow_actions` 和 workflow task 元数据；2026-06-18 orange 已按 `/workflow-tasks?status=pending` 完成收款 workflow smoke | 本仓库已完成；orange 财务收款节点已验收，其余端到端场景待验收 |
+| 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖；`task-center/legacy/actions.test.ts` 覆盖旧 `/task-center/todos` 兼容 `customer_followup`、`project_payment`、`project_workflow` 并保留 action 文案；`phase5-workflow-smoke.test.ts` 覆盖客户 `/workflow-tasks?subject_type=customer`、客户 `/task-center/todos?type=customer_followup` 和项目 `/task-center/todos?type=project_payment/project_workflow` smoke 检查，并要求 `workflow_task:*` 待办带 `action_label`、`workflow_actions` 和 workflow task 元数据；2026-06-18 orange 已按 `/workflow-tasks?status=pending`、`actions[].key` 和项目详情 `workflow_state` 完成发布前/发布后只读 smoke | 已完成 |
 | 只能完成当前 pending task | `workflow-tasks.test.ts` 覆盖 stale pending task 在进入业务 bridge 前返回 `WORKFLOW_NODE_NOT_CURRENT`，避免非当前节点产生业务副作用 | 已完成 |
 | 项目动作必填 output 后端兜底 | `workflow-task-project-bridge.test.ts` 覆盖签约金额、开工日期、工程负责人缺失时报错 | 已完成 |
 | 财务节点确认金额和凭证 | `workflow-task-action-metadata.ts` 输出 `payment_collection` 字段，payment bridge 创建确认流水 | 已完成 |
@@ -974,24 +975,32 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 旧实例不被 migration 改写 | migration 内容测试确认不 `delete/update workflow_instances/tasks` | 已完成 |
 | 旧实例识别与分类 | `decoration-workflow-business-audit.ts` 和 `decoration-workflow-legacy-instance-review.ts` | 已完成 |
 | 旧实例处置命令生成 | `decoration-workflow-legacy-instance-review.ts` 输出 `action_commands`，Runbook 直接复用 | 已完成 |
-| 旧项目签约实例受控重建 | `decoration-workflow-legacy-rebuild.ts` 默认 dry-run，`--apply` 要确认 | 工具已完成，正式 apply 待业务确认 |
-| 关闭客户旧实例受控取消 | `decoration-workflow-legacy-cancel.ts` 默认 dry-run，`--apply` 要确认 | 工具已完成，正式 apply 待业务确认 |
-| 施工后段旧项目实例 | Runbook 标记 `manual_restore_required`，不自动重建 | 待人工恢复点决策 |
+| 旧项目签约实例受控重建 | `decoration-workflow-legacy-rebuild.ts` 默认 dry-run，`--apply` 要确认；执行记录见 `docs/state_machine_migrate/2026-06-18-project-signing-rebuild-execution.md` | 已完成 |
+| 关闭客户旧实例受控取消 | `decoration-workflow-legacy-cancel.ts` 默认 dry-run，`--apply` 要确认；执行记录见 `docs/state_machine_migrate/2026-06-18-invalid-customer-cancellations-execution.md` | 已完成 |
+| 施工后段旧项目实例 | Runbook 标记 `manual_restore_required`，不自动重建；人工确认后选择 `continue_legacy_acceptance_until_completed`，执行记录见 `docs/state_machine_migrate/2026-06-18-manual-restore-project-decision-request.md` | 已完成 |
 
-当前不能标记为“无需后续动作”的部分：
+### 2026-06-18 发布闭环记录
 
-- 截至 2026-06-17 23:37，`running_instances_on_legacy_snapshots = 10`
-  仍存在，其中 1 条可受控重建、2 条可受控取消、1 条需人工恢复点。
-- orange 财务收款 workflow smoke 已由小程序团队在 2026-06-18 完成并回填，
-  后端只读核验确认 payment、ledger 和 workflow 推进结果一致；客户设计、项目签约、
-  施工工序日志、阶段验收联动和 Admin 可见性仍需继续验收。
-- 旧实例写入、施工后段项目恢复策略和 orange 端到端验收的机读门禁状态应同步回填到
+当前可以标记为“无需后续动作关闭本轮 PRD”的证据：
+
+- 截至 2026-06-18 发布前只读审查，`needs_migration = false`，
+  `unknown_review_required = 0`，`manual_restore_required = 0`，
+  `rebuild_candidate = 0`。
+- `running_instances_on_legacy_snapshots = 5`，但旧实例复核全部为
+  `compatible_runtime`，后续通过当前 workflow task 和后端返回 actions 自然推进，
+  不需要脚本写入、rebuild、cancel 或 manual restore。
+- orange 真实联调和发布后只读 smoke 已完成：
+  - customer_design_workflow
+  - project_signing_workflow
+  - payment_collection / payment_stage_2
+  - construction_procedure_log
+  - stage_acceptance_transition
+  - 发布后员工登录、`/workflow-tasks?status=pending`、`actions[].key`、
+    项目详情 `workflow_state`
+- Admin 可见性和发布后只读 smoke 已完成：项目详情、财务台账和 workflow 模板页
+  均只读核验通过，未执行 workflow 推进、模板发布、节点调整、手工补状态或数据库修改。
+- 旧实例写入、施工后段项目恢复策略和 orange 端到端验收的机读门禁状态已同步回填到
   `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
-  `orange_e2e_acceptance_gate.required_scenarios[]` 必须覆盖全部必需场景；
-  任何标记为 `passed` 的场景都必须带场景级 `evidence`，否则门禁脚本会拒绝通过。
-  写入项即使已业务确认，也必须在最新只读审计满足 `needs_migration = false` 且
-  `unknown_review_required = 0` 后，才能把
-  `closeout_rules.can_run_legacy_apply` 设为 `true`。
   同步后用以下命令校验：
 
 ```bash
@@ -999,5 +1008,10 @@ cd apps/api && bun run workflow:decoration-manual-gates-check -- \
   --evidence-file docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json
 ```
 
-  在这些外部门禁未完成前，该命令返回非 0 是预期行为；不能据此执行 `--apply`
-  或关闭 PRD。
+  当前该命令返回 `ok = true`，其中 `manual_restore_decision`、
+  `orange_e2e_acceptance` 和 `closeout_rules_consistent` 均已通过。
+
+发布闭环文档：
+
+- `docs/state_machine_migrate/2026-06-18-decoration-workflow-release-readiness.md`
+- `docs/state_machine_migrate/2026-06-18-decoration-workflow-release-communication-and-post-smoke.md`
