@@ -273,7 +273,10 @@ export async function customerConfirmAcceptance(this: any,
           customerId: customer.id,
           comment: input.comment,
         });
-      if (runtimeMetadata.status !== "advanced") {
+      if (
+        runtimeMetadata.status !== "advanced" &&
+        runtimeMetadata.status !== "already_advanced"
+      ) {
         throw Errors.business(
           409,
           "验收已确认，但流程运行态推进失败",

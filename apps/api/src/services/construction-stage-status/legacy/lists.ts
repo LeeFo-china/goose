@@ -296,6 +296,14 @@ function resolveWorkflowStageBlockedReason(input: {
 
   const paymentGate = progress.current_gate;
   const blockedStage = normalizeStageCode(paymentGate?.blocked_stage_code);
+  if (
+    paymentGate &&
+    blockedStage &&
+    getPreviousProjectConstructionStage(blockedStage) === input.stageCode
+  ) {
+    return null;
+  }
+
   if (paymentGate && blockedStage === input.stageCode) {
     return `请先完成${paymentGate.payment_label}`;
   }

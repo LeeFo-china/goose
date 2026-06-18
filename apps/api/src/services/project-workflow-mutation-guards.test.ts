@@ -70,6 +70,38 @@ describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
     ).toThrow("当前流程在水电，不能操作瓦工");
   });
 
+  test("allows acceptance mutations for the procedure immediately before a payment gate", () => {
+    const progress = workflowProgress({
+      current_node_key: "payment_stage_2",
+      current_node_title: "中期进度款",
+      current_node_type: "confirmation",
+      current_business_kind: "payment_collection",
+      current_stage_code: null,
+      current_gate: {
+        type: "payment_collection",
+        payment_type: "stage_2",
+        payment_label: "中期进度款",
+        blocked_stage_code: "tiling",
+        blocked_stage_label: "瓦工",
+      },
+    });
+
+    expect(() =>
+      assertProjectWorkflowStageMutationAllowedFromProgress({
+        workflowProgress: progress,
+        mutation: "create_stage_acceptance",
+        stageCode: "plumbing_electrical",
+      })
+    ).not.toThrow();
+    expect(() =>
+      assertProjectWorkflowStageMutationAllowedFromProgress({
+        workflowProgress: progress,
+        mutation: "customer_confirm_acceptance",
+        stageCode: "plumbing_electrical",
+      })
+    ).not.toThrow();
+  });
+
   test("reports workflow progress conflict when runtime is unavailable", () => {
     expect(() =>
       assertProjectWorkflowStageMutationAllowedFromProgress({

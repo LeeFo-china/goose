@@ -69,6 +69,45 @@ function workflowProgress(
 }
 
 describe("buildProjectConstructionStagesFromRows", () => {
+  test("allows creating acceptance for the procedure immediately before a payment gate", async () => {
+    const result = await buildProjectConstructionStagesFromRows({
+      project,
+      acceptanceRows: [
+        confirmedAcceptance("demolition"),
+      ],
+      logRows: [{ stage_code: "plumbing_electrical" }],
+      latestLogRows: [],
+      canCreateAcceptance: true,
+      workflowProgress: workflowProgress({
+        current_node_key: "payment_stage_2",
+        current_node_title: "中期进度款",
+        current_node_type: "confirmation",
+        current_business_kind: "payment_collection",
+        current_stage_code: null,
+        current_gate: {
+          type: "payment_collection",
+          payment_type: "stage_2",
+          payment_label: "中期进度款",
+          blocked_stage_code: "tiling",
+          blocked_stage_label: "瓦工",
+        },
+      }),
+      sourceMode: "workflow_runtime",
+    });
+
+    const plumbing = result.stages.find((item) =>
+      item.stage_code === "plumbing_electrical"
+    );
+
+    expect(plumbing?.blocked_reason).toBeNull();
+    expect(plumbing?.acceptance_action).toEqual({
+      type: "create",
+      label: "发起验收",
+      enabled: true,
+      reason: null,
+    });
+  });
+
   test("locks the next procedure stage when workflow runtime is at a payment gate", async () => {
     const result = await buildProjectConstructionStagesFromRows({
       project,

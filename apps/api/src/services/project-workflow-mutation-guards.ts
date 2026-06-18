@@ -6,6 +6,7 @@ import {
 } from "@/services/project-workflow-progress";
 import {
   PROJECT_LOG_STAGE_CONFIG,
+  getPreviousProjectConstructionStage,
   isProjectConstructionStageCode,
   type ProjectLogStageCode,
 } from "@gooes/domain";
@@ -40,6 +41,10 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
     return;
   }
 
+  if (isAcceptanceMutationAllowedAfterPaymentGate(input)) {
+    return;
+  }
+
   throw Errors.business(
     409,
     `当前流程在${getCurrentNodeLabel(input.workflowProgress)}，不能操作${
@@ -53,6 +58,23 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
       current_node_title: input.workflowProgress.current_node_title,
     },
   );
+}
+
+function isAcceptanceMutationAllowedAfterPaymentGate(input: {
+  workflowProgress: ProjectWorkflowProgress;
+  mutation: ProjectWorkflowStageMutation;
+  stageCode: ProjectLogStageCode;
+}) {
+  if (input.mutation === "create_project_log") {
+    return false;
+  }
+
+  const blockedStageCode = input.workflowProgress.current_gate?.blocked_stage_code;
+  if (!isProjectConstructionStageCode(blockedStageCode)) {
+    return false;
+  }
+
+  return getPreviousProjectConstructionStage(blockedStageCode) === input.stageCode;
 }
 
 export async function assertProjectWorkflowStageMutationAllowed(input: {

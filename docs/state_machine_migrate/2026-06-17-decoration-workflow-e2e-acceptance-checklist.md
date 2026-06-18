@@ -231,7 +231,7 @@
 | 不本地推断 | 小程序不在 complete 成功后直接构造验收单 | 待填写 |
 | 刷新后入口 | 以后端返回的 `acceptance_action` 决定按钮 | 部分通过：工序 complete 后刷新 `/projects/:projectId/construction-stages`，`acceptance_action.type = edit`、`enabled = true` |
 | 不重复创建 | 已有验收单时进入已有 `acceptance_id` | 部分通过：返回 `acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992`，应进入已有验收单 |
-| 验收状态 | 复核、客户确认后阶段状态正确刷新 | 待填写 |
+| 验收状态 | 复核、客户确认后阶段状态正确刷新 | 部分通过：submit `draft -> submitted`、主管复核 `submitted -> leader_approved`、open-ticket verify 成功；客户确认曾被后端 guard 阻断，后端已修复，待 orange 复测 |
 | 竣工门禁 | 未完成必需工序时不能进入竣工验收 | 待填写 |
 
 证据记录：
@@ -240,10 +240,22 @@
 - stage_code：`plumbing_electrical`
 - acceptance_action：`type = edit`，`enabled = true`
 - 施工阶段返回状态：`status = locked`
+- 验收提交：通过，`draft -> submitted`
+- 主管复核：通过，`submitted -> leader_approved`，账号 `18800003001` /
+  欧阳锋
+- 客户 open-ticket verify：通过，`valid = true`
+- 客户确认阻塞：修复前返回
+  `409 WORKFLOW_ACCEPTANCE_NOT_AVAILABLE`，message 为
+  `当前流程在中期进度款，不能操作水电`
 - 截图 / 日志：
   `/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md`
-- 当前边界：本轮只验证到工序 complete 后刷新到可用验收入口；尚未继续执行验收单
-  提交、主管复核、客户确认，因此 `stage_acceptance_transition` 仍不计为完整通过。
+- 阻塞交接：
+  `/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-blocker-handoff.md`
+- 后端对接口径：
+  `docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-backend-handoff.md`
+- 当前边界：后端已按“收款门禁下允许客户确认上一工序验收”修复；仍需 orange 重新
+  执行 customer-confirm，确认 `customer_confirmed` 和阶段 `accepted` 后，
+  `stage_acceptance_transition` 才能计为完整通过。
 
 ## Admin 验收
 

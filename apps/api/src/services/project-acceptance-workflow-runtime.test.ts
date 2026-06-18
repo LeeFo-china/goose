@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const definition = {
   id: "definition-1",
@@ -59,9 +59,100 @@ const nextInstance = {
   },
 };
 
+const paymentGateInstance = {
+  ...installationInstance,
+  current_node_id: "node-payment",
+  current_node_key: "payment_stage_2",
+  current_node_snapshot: {
+    node_key: "payment_stage_2",
+    node_type: "confirmation",
+    business_kind: "payment_collection",
+    title: "中期进度款",
+    config: {
+      payment_type: "stage_2",
+    },
+  },
+};
+
+const paymentGateGraph = {
+  definition,
+  version: null,
+  nodes: [
+    {
+      id: "node-plumbing",
+      tenant_id: "tenant-1",
+      definition_id: "definition-1",
+      node_key: "procedure_plumbing_electrical",
+      node_type: "procedure",
+      business_kind: "procedure_template",
+      title: "水电",
+      description: null,
+      position: { x: 0, y: 0 },
+      config: {
+        stage_key: "plumbing_electrical",
+      },
+      sort_order: 40,
+      created_at: "2026-06-16T00:00:00.000Z",
+      updated_at: "2026-06-16T00:00:00.000Z",
+    },
+    {
+      id: "node-payment",
+      tenant_id: "tenant-1",
+      definition_id: "definition-1",
+      node_key: "payment_stage_2",
+      node_type: "confirmation",
+      business_kind: "payment_collection",
+      title: "中期进度款",
+      description: null,
+      position: { x: 0, y: 0 },
+      config: {
+        payment_type: "stage_2",
+      },
+      sort_order: 50,
+      created_at: "2026-06-16T00:00:00.000Z",
+      updated_at: "2026-06-16T00:00:00.000Z",
+    },
+    {
+      id: "node-tiling",
+      tenant_id: "tenant-1",
+      definition_id: "definition-1",
+      node_key: "procedure_tiling",
+      node_type: "procedure",
+      business_kind: "procedure_template",
+      title: "瓦工",
+      description: null,
+      position: { x: 0, y: 0 },
+      config: {
+        stage_key: "tiling",
+      },
+      sort_order: 60,
+      created_at: "2026-06-16T00:00:00.000Z",
+      updated_at: "2026-06-16T00:00:00.000Z",
+    },
+  ],
+  edges: [
+    {
+      id: "edge-payment-tiling",
+      tenant_id: "tenant-1",
+      definition_id: "definition-1",
+      source_node_id: "node-payment",
+      target_node_id: "node-tiling",
+      label: "瓦工",
+      condition: { operator: "always" },
+      priority: 50,
+      created_at: "2026-06-16T00:00:00.000Z",
+      updated_at: "2026-06-16T00:00:00.000Z",
+    },
+  ],
+};
+
+let runningInstance: typeof installationInstance | typeof paymentGateInstance =
+  installationInstance;
+let graphResult: typeof paymentGateGraph | null = null;
+
 const findDefinitionByKey = mock(async () => null);
 const findDefinitionById = mock(async () => definition);
-const findLatestRunningRuntimeInstance = mock(async () => installationInstance);
+const findLatestRunningRuntimeInstance = mock(async () => runningInstance);
 const completeRuntimeNode = mock(async () => ({
   ok: true,
   instance: nextInstance,
@@ -70,6 +161,7 @@ const completeRuntimeNode = mock(async () => ({
   task: null,
 }));
 const syncFromRuntimeInstance = mock(async () => null);
+const getGraph = mock(async () => graphResult);
 const getRuntimeInstanceById = mock(async () => ({
   status: "completed",
   current_node_key: "procedure_installation",
@@ -83,6 +175,7 @@ mock.module("@/repositories/workflows", () => ({
     findDefinitionById,
     findLatestRunningRuntimeInstance,
     completeRuntimeNode,
+    getGraph,
   },
 }));
 
@@ -93,6 +186,50 @@ mock.module("@/services/workflow-subject-state", () => ({
 }));
 
 describe("projectAcceptanceWorkflowRuntimeService", () => {
+  beforeEach(() => {
+    runningInstance = installationInstance;
+    graphResult = null;
+    completeRuntimeNode.mockClear();
+    syncFromRuntimeInstance.mockClear();
+    getGraph.mockClear();
+  });
+
+  test("skips workflow completion when customer confirms the procedure before a payment gate", async () => {
+    runningInstance = paymentGateInstance;
+    graphResult = paymentGateGraph;
+
+    const { projectAcceptanceWorkflowRuntimeService } = await import(
+      "./project-acceptance-workflow-runtime"
+    );
+
+    const result = await projectAcceptanceWorkflowRuntimeService
+      .syncCustomerConfirmAcceptance({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+        acceptanceId: "acceptance-1",
+        stageCode: "plumbing_electrical",
+        customerId: "customer-1",
+        comment: "已确认",
+      });
+
+    expect(result).toMatchObject({
+      status: "already_advanced",
+      workflow_key: "construction_main",
+      definition_id: "definition-1",
+      instance_id: "instance-1",
+      current_node_key: "payment_stage_2",
+      reason: "current_payment_gate_after_stage",
+    });
+    expect(completeRuntimeNode).not.toHaveBeenCalled();
+    expect(syncFromRuntimeInstance).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      subjectType: "project",
+      subjectId: "project-1",
+      definitionId: "definition-1",
+      instanceId: "instance-1",
+    });
+  });
+
   test("uses the project running workflow instance even when workflow key is dynamic", async () => {
     const { projectAcceptanceWorkflowRuntimeService } = await import(
       "./project-acceptance-workflow-runtime"

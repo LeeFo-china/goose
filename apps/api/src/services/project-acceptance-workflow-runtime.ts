@@ -2,18 +2,23 @@ import {
   workflowRepository,
   type JsonObject,
   type WorkflowDefinitionRow,
+  type WorkflowGraphResult,
   type WorkflowInstanceRow,
+  type WorkflowNodeRow,
   type WorkflowRuntimeCompleteNodeResult,
 } from "@/repositories/workflows";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import {
+  getPreviousProjectConstructionStage,
   isProjectConstructionStageCode,
+  type ProjectConstructionStageCode,
   type ProjectLogStageCode,
 } from "@gooes/domain";
 
 type ProjectAcceptanceWorkflowRuntimeStatus =
   | "advanced"
+  | "already_advanced"
   | "skipped"
   | "failed";
 
@@ -84,6 +89,25 @@ class ProjectAcceptanceWorkflowRuntimeService {
     }
 
     if (this.getCurrentStageCode(instance) !== input.stageCode) {
+      if (await this.isCurrentPaymentGateAfterStage(input, instance)) {
+        await workflowSubjectStateService.syncFromRuntimeInstance({
+          tenantId: input.tenantId,
+          subjectType: "project",
+          subjectId: input.projectId,
+          definitionId: definition.id,
+          instanceId: instance.id,
+        });
+
+        return {
+          status: "already_advanced",
+          workflow_key: definition.workflow_key,
+          definition_id: definition.id,
+          instance_id: instance.id,
+          current_node_key: nodeKey,
+          reason: "current_payment_gate_after_stage",
+        };
+      }
+
       return {
         status: "failed",
         workflow_key: definition.workflow_key,
@@ -171,6 +195,94 @@ class ProjectAcceptanceWorkflowRuntimeService {
     const config = snapshot.config;
     if (!this.isRecord(config)) return null;
     return typeof config.stage_key === "string" ? config.stage_key : null;
+  }
+
+  private async isCurrentPaymentGateAfterStage(
+    input: SyncCustomerConfirmAcceptanceInput,
+    instance: WorkflowInstanceRow,
+  ): Promise<boolean> {
+    if (!instance.current_node_id || !instance.version_id) {
+      return false;
+    }
+
+    const graph = await workflowRepository.getGraph({
+      tenantId: input.tenantId,
+      definitionId: instance.definition_id,
+      versionId: instance.version_id,
+    });
+    if (!graph) {
+      return false;
+    }
+
+    const currentNode = graph.nodes.find((node) =>
+      node.id === instance.current_node_id
+    ) ?? null;
+    if (
+      !this.isPaymentCollectionNode(currentNode) &&
+      !this.isPaymentCollectionSnapshot(instance.current_node_snapshot)
+    ) {
+      return false;
+    }
+
+    const nextStageCode = this.getNextProcedureStageCode(graph, currentNode);
+    if (!nextStageCode) {
+      return false;
+    }
+
+    return getPreviousProjectConstructionStage(nextStageCode) === input.stageCode;
+  }
+
+  private getNextProcedureStageCode(
+    graph: WorkflowGraphResult,
+    currentNode: WorkflowNodeRow | null,
+  ): ProjectConstructionStageCode | null {
+    if (!currentNode) {
+      return null;
+    }
+
+    const nextEdge = graph.edges
+      .filter((edge) => edge.source_node_id === currentNode.id)
+      .sort((left, right) => {
+        if (left.priority !== right.priority) {
+          return left.priority - right.priority;
+        }
+        return left.created_at.localeCompare(right.created_at);
+      })[0];
+    if (!nextEdge) {
+      return null;
+    }
+
+    const nextNode = graph.nodes.find((node) =>
+      node.id === nextEdge.target_node_id
+    ) ?? null;
+    return this.getProcedureStageCode(nextNode);
+  }
+
+  private getProcedureStageCode(
+    node: WorkflowNodeRow | JsonObject | null,
+  ): ProjectConstructionStageCode | null {
+    if (!node || node.node_type !== "procedure") {
+      return null;
+    }
+
+    const config = node.config;
+    if (!this.isRecord(config)) {
+      return null;
+    }
+
+    const stageKey = config.stage_key;
+    return typeof stageKey === "string" && isProjectConstructionStageCode(stageKey)
+      ? stageKey
+      : null;
+  }
+
+  private isPaymentCollectionNode(node: WorkflowNodeRow | null): boolean {
+    return node?.business_kind === "payment_collection";
+  }
+
+  private isPaymentCollectionSnapshot(snapshot: unknown): boolean {
+    return this.isRecord(snapshot) &&
+      snapshot.business_kind === "payment_collection";
   }
 
   private buildOutput(input: SyncCustomerConfirmAcceptanceInput): JsonObject {

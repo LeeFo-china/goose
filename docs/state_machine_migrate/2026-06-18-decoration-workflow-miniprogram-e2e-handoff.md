@@ -238,7 +238,7 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 | --- | --- | --- |
 | `project_signing_workflow` | 项目 `1a8589fb-8f3f-4900-a759-6d15438ffcc2` complete 返回 `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED` | 该项目仍在旧 `construction_main/designing` running 实例；dry-run 已确认可重建到 `project_signing/designing`，正式 apply 前必须先完成业务确认门禁 |
 | `construction_procedure_log` | 已重新 smoke 通过 | 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 已创建水电施工日志并 complete 工序 task，流程推进到 `payment_stage_2` |
-| `stage_acceptance_transition` | 已验证到验收入口可用，完整提交流程未执行 | 工序 complete 后刷新 `/projects/:projectId/construction-stages` 返回 `acceptance_action.type = edit`、`enabled = true`、`acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992`；仍需继续验收单提交/复核/客户确认 |
+| `stage_acceptance_transition` | submit、主管复核、open-ticket verify 已通过；客户确认修复前被后端 guard 阻断 | 后端已确认契约：允许工序 complete 后进入 `payment_stage_2`，同时允许客户确认上一工序水电验收；已修复 guard 和 runtime 同步，等待 orange 重新执行 customer-confirm |
 
 施工日志复测通过样本：
 
@@ -255,6 +255,27 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 补充：瓦工项目 `d382cd45-9141-476e-a7a5-5bf88d0a3255` 用 `18800003002`
 创建日志返回 `403 PROJECT_LOG_PERMISSION_DENIED`，该项目 `members` 为空，本轮
 不作为施工日志验收样本。
+
+阶段验收客户确认阻塞与修复口径：
+
+- project ID：`54f11aa5-09a8-4410-a9c5-604a7fe9e09c`
+- acceptance ID：`2e3779f7-8b51-4b05-9b7b-e1f3e18f1992`
+- stage_code：`plumbing_electrical`
+- 已验证：submit `draft -> submitted`，主管复核
+  `submitted -> leader_approved`，客户 open-ticket verify `valid = true`
+- 修复前阻塞：`POST /project-acceptances/:id/customer-confirm` 返回
+  `409 WORKFLOW_ACCEPTANCE_NOT_AVAILABLE`，message 为
+  `当前流程在中期进度款，不能操作水电`
+- 后端结论：这不是小程序本地推进问题；水电工序 complete 后 workflow 当前节点为
+  `payment_stage_2` 是合法状态，客户仍应能确认上一工序水电验收
+- 后端修复：payment gate 下允许对其阻塞的下一工序的上一工序执行
+  `create_stage_acceptance` / `customer_confirm_acceptance`；客户确认时返回
+  runtime `already_advanced`，不重复 complete 已完成工序节点
+- 后端对接文档：
+  `docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-backend-handoff.md`
+- 小程序下一步：重新执行 customer-confirm，期望验收单变为
+  `customer_confirmed`，`plumbing_electrical` 阶段变为 `accepted`；
+  workflow 仍停留 `payment_stage_2` 属于预期，后续由收款节点推进到瓦工
 
 ## 字段映射
 
