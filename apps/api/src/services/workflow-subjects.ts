@@ -7,16 +7,42 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import {
-  type WorkflowTaskActionMetadata,
-} from "@/services/workflow-task-action-metadata";
 import { buildWorkflowTimelineNodes } from "@/services/project-workflow-progress";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
 import { workflowRepository } from "@/repositories/workflows";
 import type { WorkflowTimelineNode } from "@/services/project-workflow-progress";
-import { buildWorkflowTaskActionPayloads } from "@/services/workflow-task-actions";
+import {
+  buildWorkflowTaskActionPayloads,
+  type WorkflowTaskActionPayload,
+} from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
+
+export function attachWorkflowActionsToTimelineNodes(
+  nodes: WorkflowTimelineNode[],
+  actions: WorkflowTaskActionPayload[],
+): WorkflowTimelineNode[] {
+  if (actions.length === 0) return nodes;
+
+  const actionsByNodeKey = new Map<string, WorkflowTaskActionPayload[]>();
+  for (const action of actions) {
+    const existingActions = actionsByNodeKey.get(action.node_key) ?? [];
+    actionsByNodeKey.set(action.node_key, [...existingActions, action]);
+  }
+
+  return nodes.map((node) => {
+    const nodeActions = actionsByNodeKey.get(node.node_key) ?? [];
+    if (nodeActions.length === 0) return node;
+
+    return {
+      ...node,
+      actions: [
+        ...node.actions,
+        ...nodeActions,
+      ],
+    };
+  });
+}
 
 class WorkflowSubjectsService {
   async getState(
@@ -57,16 +83,17 @@ class WorkflowSubjectsService {
         subjectId: params.subjectId.trim(),
       }),
     ]);
+    const actions = await buildWorkflowTaskActionPayloads({
+      tenantId,
+      subjectType: params.subjectType,
+      tasks: tasks.list,
+    });
 
     return {
       workflow_state: this.serializeState(
         state,
-        await buildWorkflowTaskActionPayloads({
-          tenantId,
-          subjectType: params.subjectType,
-          tasks: tasks.list,
-        }),
-        timelineNodes,
+        actions,
+        attachWorkflowActionsToTimelineNodes(timelineNodes, actions),
       ),
     };
   }
@@ -105,12 +132,7 @@ class WorkflowSubjectsService {
 
   private serializeState(
     state: WorkflowSubjectStateRow | null,
-    actions: Array<WorkflowTaskActionMetadata & {
-      task_id: string;
-      node_key: string;
-      node_type: string;
-      disabled: boolean;
-    }>,
+    actions: WorkflowTaskActionPayload[],
     timelineNodes: WorkflowTimelineNode[],
   ) {
     if (!state) {
