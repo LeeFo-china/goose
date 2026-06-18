@@ -1,6 +1,8 @@
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
   buildUnavailableProjectWorkflowProgress,
+  enrichProjectWorkflowProgressWithConstructionStages,
+  enrichWorkflowTimelineNodesWithConstructionStages,
   projectWorkflowProgressService,
 } from "@/services/project-workflow-progress";
 import {
@@ -46,6 +48,30 @@ export type EmployeeProjectDetailBootstrapResult = {
   partial_errors: PartialError[];
   timings: EmployeeProjectDetailBootstrapTimings;
 };
+
+export function enrichWorkflowOutputsForBootstrap(input: {
+  workflowProgress: WorkflowProgressResult;
+  workflowState: ProjectWorkflowState;
+  constructionStages: ConstructionStagesResult;
+}) {
+  const workflowProgress = enrichProjectWorkflowProgressWithConstructionStages(
+    input.workflowProgress,
+    input.constructionStages,
+  );
+  const workflowState = input.workflowState
+    ? {
+      ...input.workflowState,
+      timeline_nodes: enrichWorkflowTimelineNodesWithConstructionStages(
+        Array.isArray(input.workflowState.timeline_nodes)
+          ? input.workflowState.timeline_nodes
+          : [],
+        input.constructionStages,
+      ),
+    }
+    : input.workflowState;
+
+  return { workflowProgress, workflowState };
+}
 
 export async function getBootstrap(this: any, input: {
   authContext: AuthContext;
@@ -147,6 +173,11 @@ export async function getBootstrap(this: any, input: {
     },
   );
   const workflowState = workflowStateResult.workflow_state;
+  const enrichedWorkflowOutputs = enrichWorkflowOutputsForBootstrap({
+    workflowProgress,
+    workflowState,
+    constructionStages,
+  });
   const workflowBlockingReason = this.buildWorkflowBlockingReason(workflowState);
   const nextAction = this.buildNextAction({
     constructionStages,
@@ -157,8 +188,8 @@ export async function getBootstrap(this: any, input: {
     project,
     permissions,
     members,
-    workflow_state: workflowState,
-    workflow_progress: workflowProgress,
+    workflow_state: enrichedWorkflowOutputs.workflowState,
+    workflow_progress: enrichedWorkflowOutputs.workflowProgress,
     construction_stages: constructionStages,
     log_entry: this.buildProjectLogEntry({
       project,

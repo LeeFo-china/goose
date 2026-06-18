@@ -4,6 +4,9 @@ import {
   buildProjectLogEntryNextAction,
 } from "./log-entry";
 import {
+  enrichWorkflowOutputsForBootstrap,
+} from "./orchestration";
+import {
   buildAcceptanceNextActionDescription,
   buildAcceptanceNextActionTitle,
   buildNextAction,
@@ -11,6 +14,10 @@ import {
   getAcceptanceActionPriority,
   selectNextAcceptanceActionStage,
 } from "./next-action";
+import type {
+  ProjectWorkflowState,
+  WorkflowProgressResult,
+} from "./shared";
 
 const service = {
   buildAcceptanceNextActionDescription,
@@ -21,6 +28,7 @@ const service = {
   getAcceptanceActionLabel,
   getAcceptanceActionPriority,
   selectNextAcceptanceActionStage,
+  enrichWorkflowOutputsForBootstrap,
 };
 
 const permissions = {
@@ -111,6 +119,88 @@ describe("employee project detail workflow gates", () => {
         label: "请先完成中期进度款",
         action: "refresh",
       },
+    });
+  });
+
+  test("enriches workflow progress and state timeline nodes from construction stages", () => {
+    const workflowProgress: WorkflowProgressResult = {
+      source: "workflow_runtime",
+      instance_id: "instance-1",
+      instance_status: "running",
+      current_node_key: "procedure_tiling",
+      current_node_title: "瓦工",
+      current_node_type: "procedure",
+      current_business_kind: "procedure_template",
+      current_stage_code: "tiling",
+      current_gate: null,
+      pending_task_count: 1,
+      actions: [],
+      warnings: [],
+      timeline_nodes: [{
+        node_key: "procedure_plumbing_electrical",
+        node_title: "水电",
+        node_type: "procedure",
+        business_kind: "procedure_template",
+        status: "done",
+        display: {
+          label: "水电",
+          status_label: "已完成",
+          status_variant: "success",
+        },
+        attributes: {
+          stage_code: "plumbing_electrical",
+          acceptance_enabled: true,
+          acceptance_required: true,
+        },
+        actions: [],
+      }],
+    };
+    const workflowState: ProjectWorkflowState = {
+      subject_type: "project",
+      subject_id: "project-1",
+      instance_id: "instance-1",
+      instance_status: "running",
+      current_node_key: "procedure_tiling",
+      current_node_title: "瓦工",
+      current_business_kind: "procedure_template",
+      pending_task_count: 1,
+      actions: [],
+      timeline_nodes: workflowProgress.timeline_nodes,
+    };
+    const result = enrichWorkflowOutputsForBootstrap({
+      workflowProgress: workflowProgress as never,
+      workflowState,
+      constructionStages: {
+        ...constructionStages,
+        stages: [{
+          ...constructionStages.stages[0],
+          stage_code: "plumbing_electrical",
+          stage_label: "水电",
+          acceptance_action: {
+            type: "create",
+            label: "发起验收",
+            enabled: true,
+            reason: null,
+          },
+        }],
+      } as never,
+    });
+
+    expect(result.workflowProgress.timeline_nodes[0]).toMatchObject({
+      status: "blocked",
+      display: {
+        status_label: "待验收",
+      },
+      actions: [{
+        key: "create_acceptance",
+        business_action: "create",
+      }],
+    });
+    expect(result.workflowState?.timeline_nodes?.[0]).toMatchObject({
+      status: "blocked",
+      actions: [{
+        key: "create_acceptance",
+      }],
     });
   });
 });

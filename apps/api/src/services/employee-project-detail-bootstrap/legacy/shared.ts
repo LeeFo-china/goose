@@ -1,6 +1,9 @@
 import type { EmployeeProjectDetailBootstrapQuery } from "@/schema/projects";
 import type { ProjectConstructionStagesResult } from "@/services/construction-stage-status/legacy/lists";
-import type { ProjectWorkflowProgress } from "@/services/project-workflow-progress";
+import type {
+  ProjectWorkflowProgress,
+  WorkflowTimelineNode,
+} from "@/services/project-workflow-progress";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext, EffectivePermission } from "@/services/authorization";
 import { projectLogService } from "@/services/project-logs";
@@ -42,6 +45,7 @@ export type ProjectWorkflowState = {
   current_business_kind?: string | null;
   pending_task_count?: number | null;
   actions: Array<Record<string, unknown>>;
+  timeline_nodes?: WorkflowTimelineNode[];
 } | null;
 
 export type WorkflowProgressResult = ProjectWorkflowProgress;
