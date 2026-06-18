@@ -81,6 +81,8 @@ Admin 端应以 action metadata 直接驱动按钮和表单：
 Admin 项目状态面板仍可以在 UI 上展示“项目签约”“排期开工”等业务文案，
 但映射来源必须是 workflow 节点，而不是旧状态动作接口。
 
+项目签约 workflow 主线：
+
 | workflow `node_key` | complete 后端 effect | Admin 表单 |
 | --- | --- | --- |
 | `designing` | `confirm_proposal` | 直接确认 |
@@ -88,9 +90,19 @@ Admin 项目状态面板仍可以在 UI 上展示“项目签约”“排期开�
 | `signed` | `finalize_design` | 直接确认 |
 | `design_finalized` | `schedule_construction` | `start_date`、`construction_manager_employee_id` |
 | `pending_start` | `start_project` | 直接确认 |
+
+施工 workflow 主线：
+
+| workflow `node_key` | complete 后端 effect | Admin 表单 |
+| --- | --- | --- |
 | `started` | `start_construction` | 直接确认 |
-| `constructing` | `start_acceptance` | 受工序完成情况阻塞 |
-| `on_hold` | `resume_project` | 直接确认 |
+| `procedure_*` | workflow runtime complete | 施工日志/图片字段，见 action `output_fields` |
+| `final_acceptance` | `start_acceptance` | 受工序完成情况阻塞 |
+| `handover` | workflow runtime complete | 交房确认字段，见 action `output_fields` |
+
+`pause_project`、`resume_project`、`mark_invalid` 是异常动作，不属于标准模板主线。
+Admin 模板设计器不得把 `on_hold`、`invalid` 当成主流程节点发布；异常入口应独立于
+模板主线处理并记录原因、操作者和恢复来源。
 
 提交示例：
 
@@ -177,4 +189,3 @@ Admin 端点击确认时提交：
 ```bash
 pnpm --dir apps/admin check
 ```
-
