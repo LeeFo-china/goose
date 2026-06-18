@@ -19,6 +19,11 @@ type ParsePhase5SmokeConfigResult =
 type EnvLike = Record<string, string | undefined>;
 
 const MAX_PAGE_SIZE = 100;
+const TASK_CENTER_TODO_CHECK_NAMES = new Set([
+  "task center todos",
+  "task center project payment todos",
+  "task center project workflow todos",
+]);
 
 export function parsePhase5SmokeConfig(
   env: EnvLike = process.env,
@@ -55,6 +60,16 @@ export function buildPhase5SmokeChecks(
     {
       name: "task center todos",
       url: `${config.baseUrl}/task-center/todos?page=1&pageSize=20`,
+      token: config.employeeToken,
+    },
+    {
+      name: "task center project payment todos",
+      url: `${config.baseUrl}/task-center/todos?page=1&pageSize=20&type=project_payment&status=pending`,
+      token: config.employeeToken,
+    },
+    {
+      name: "task center project workflow todos",
+      url: `${config.baseUrl}/task-center/todos?page=1&pageSize=20&type=project_workflow&status=pending`,
       token: config.employeeToken,
     },
   ];
@@ -108,7 +123,7 @@ export function assertPhase5SmokePayload(
     return;
   }
 
-  if (checkName === "task center todos") {
+  if (TASK_CENTER_TODO_CHECK_NAMES.has(checkName)) {
     assertPaginatedList(checkName, data);
     return;
   }

@@ -57,6 +57,16 @@ describe("buildPhase5SmokeChecks", () => {
         "employee-token",
       ],
       [
+        "task center project payment todos",
+        "https://api.example.com/task-center/todos?page=1&pageSize=20&type=project_payment&status=pending",
+        "employee-token",
+      ],
+      [
+        "task center project workflow todos",
+        "https://api.example.com/task-center/todos?page=1&pageSize=20&type=project_workflow&status=pending",
+        "employee-token",
+      ],
+      [
         "customer bootstrap",
         "https://api.example.com/customer/bootstrap?page=1&pageSize=20",
         "customer-token",
@@ -110,6 +120,36 @@ describe("assertPhase5SmokePayload", () => {
         },
       })
     ).not.toThrow();
+  });
+
+  test("accepts task center workflow filter payloads as paginated lists", () => {
+    expect(() =>
+      assertPhase5SmokePayload("task center project payment todos", {
+        data: {
+          list: [],
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        },
+      })
+    ).not.toThrow();
+
+    expect(() =>
+      assertPhase5SmokePayload("task center project workflow todos", {
+        data: {
+          list: [],
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        },
+      })
+    ).not.toThrow();
+  });
+
+  test("rejects task center workflow filter payloads without paginated lists", () => {
+    expect(() =>
+      assertPhase5SmokePayload("task center project payment todos", {
+        data: {
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        },
+      })
+    ).toThrow("task center project payment todos data.list must be an array");
   });
 
   test("rejects workflow task actions without output field metadata", () => {
