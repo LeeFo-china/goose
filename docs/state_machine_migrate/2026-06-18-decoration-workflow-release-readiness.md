@@ -228,6 +228,12 @@ bun run check:file-size
 
 ## 发布前建议口径
 
+详细转发话术和发布后只读 smoke 清单见：
+
+```text
+docs/state_machine_migrate/2026-06-18-decoration-workflow-release-communication-and-post-smoke.md
+```
+
 发给小程序端：
 
 ```text
