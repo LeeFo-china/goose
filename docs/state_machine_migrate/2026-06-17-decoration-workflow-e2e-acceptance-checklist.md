@@ -44,8 +44,8 @@
 | API health / 登录 | 员工账号可登录，接口返回租户上下文 | 待填写 |
 | Admin 登录 | 能进入 workflow 模板和项目/客户详情 | 待填写 |
 | 小程序登录 | 财务、业务员、施工人员账号均能进入对应待办 | 待填写 |
-| 任务列表分页 | `/workflow-tasks?page=1&pageSize=20&status=pending` 正常返回 | 待填写 |
-| actions 来源 | 页面按钮只来自 `workflow_state.actions` 或 `/workflow-tasks` | 待填写 |
+| 任务列表分页 | `/workflow-tasks?page=1&pageSize=20&status=pending` 正常返回 | 通过：`18800005001` 员工 token 下 `/workflow-tasks?page=1&pageSize=5&status=pending` 返回 `200`，`pagination.total = 8` |
+| actions 来源 | 页面按钮只来自 `workflow_state.actions` 或 `/workflow-tasks` | 通过：orange 回填确认详情页按钮只走 `workflow_state.actions`，待办主入口走 `/workflow-tasks?status=pending` |
 
 ## 客户设计 workflow 验收
 
@@ -71,15 +71,19 @@
 | 分配后待办 | 业务员任务中心出现客户 workflow pending task | 待填写 |
 | 写跟进记录 | 跟进记录保存后客户详情可见 | 待填写 |
 | actions 存在 | 客户详情 `workflow_state.actions[]` 有当前节点动作 | 待填写 |
-| 按 task complete 推进 | 不再使用旧状态按钮或本地推导动作 | 待填写 |
-| 客户设计结束 | 客户 workflow 不进入项目签约节点 | 待填写 |
+| 按 task complete 推进 | 不再使用旧状态按钮或本地推导动作 | 通过：orange 按 `actions[].key` 完成 `following -> arrived -> designing` 后继续完成旧快照残留 generic action |
+| 客户设计结束 | 客户 workflow 不进入项目签约节点 | 通过：只读核验 workflow instance `c6a97a55-94fb-40e7-91c5-f9b7b9edab55` 已 `completed`，当前 `end`，pending task 为 `0` |
 
 证据记录：
 
-- 客户 ID：待填写
-- workflow instance ID：待填写
-- task ID：待填写
-- 截图 / 日志：待填写
+- 客户 ID：`016eccf5-a22c-4c18-a4c1-974647b4d6d3`
+- workflow instance ID：`c6a97a55-94fb-40e7-91c5-f9b7b9edab55`
+- 执行账号：`18800001002` / 珠珠
+- 状态说明：完成后 `GET /customers/:id/detail` 的 `customer.status` 仍为
+  `designing`，这是新版客户设计主线预期；客户签约不再由 `customer_main` 推进，
+  后续项目签约必须进入 `project_signing`。
+- task ID：详见 orange 外部执行文档
+- 截图 / 日志：`/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md`
 
 ## 项目签约 workflow 验收
 
@@ -118,11 +122,16 @@
 
 证据记录：
 
-- 项目 ID：待填写
+- 项目 ID：`1a8589fb-8f3f-4900-a759-6d15438ffcc2`
 - `project_signing` instance ID：待填写
 - 收款 task ID：待填写
 - 施工 workflow instance ID：待填写
 - 截图 / 日志：待填写
+- 当前阻塞：该项目仍有旧 `construction_main/designing` running 实例
+  `b58acf8e-4f18-4b40-b5c7-919600e5e636`，complete 返回
+  `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED`。2026-06-18 dry-run 已确认可受控重建到
+  `project_signing/designing`，但正式 apply 仍需先完成
+  `legacy_instance_apply_gates.project_signing_rebuild` 的业务确认。
 
 ## 财务收款节点验收
 
@@ -171,7 +180,7 @@
 | 检查项 | 期望 | 结果 |
 | --- | --- | --- |
 | 工序 action | `node_type = procedure`，存在 `project_log` output field | 待填写 |
-| 日志接口 | 创建日志使用 `/project-logs`，不调用旧 snake_case 路径 | 待填写 |
+| 日志接口 | 创建日志使用 `/project-logs`，不调用旧 snake_case 路径 | 阻塞已定位并修复：旧 `create_project_log_fast` RPC 仍按验收阶段表拦截，后端改为 workflow guard 放行后 direct insert |
 | 图片门禁 | 图片不足时后端返回 `WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED` | 待填写 |
 | complete output | 包含 `project_log_id` 和 `image_count` 或 `images` | 待填写 |
 | workflow 推进 | 工序 task 消失，当前节点进入下一主状态或门禁 | 待填写 |
@@ -183,6 +192,17 @@
 - project_log ID：待填写
 - task ID：待填写
 - 图片数量：待填写
+- 当前阻塞记录：
+  - 项目 `d382cd45-9141-476e-a7a5-5bf88d0a3255` 当前 workflow 为
+    `procedure_tiling`，但旧 RPC 返回
+    `PROJECT_LOG_STAGE_BLOCKED: 请先完成水电后再进入瓦工`。
+  - 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 当前 workflow 为
+    `procedure_plumbing_electrical`，但旧 RPC 返回
+    `PROJECT_LOG_STAGE_BLOCKED: 当前水电阶段待验收，完成验收后再补充施工日志`。
+  - 根因是 `/project-logs` 已通过 workflow runtime 判断当前工序可写，但仓储层旧
+    RPC 仍按 `project_acceptances` 前置/待验收状态二次拦截。后端已改为施工主阶段在
+    workflow guard 放行后使用 direct insert，保留项目状态和 `project_log.create`
+    权限校验。
 
 ## 阶段验收联动验收
 
@@ -200,7 +220,7 @@
 | 检查项 | 期望 | 结果 |
 | --- | --- | --- |
 | 不本地推断 | 小程序不在 complete 成功后直接构造验收单 | 待填写 |
-| 刷新后入口 | 以后端返回的 `acceptance_action` 决定按钮 | 待填写 |
+| 刷新后入口 | 以后端返回的 `acceptance_action` 决定按钮 | 待重新验收：前置施工日志创建被旧 RPC 阻塞，后端修复后需重新执行 |
 | 不重复创建 | 已有验收单时进入已有 `acceptance_id` | 待填写 |
 | 验收状态 | 复核、客户确认后阶段状态正确刷新 | 待填写 |
 | 竣工门禁 | 未完成必需工序时不能进入竣工验收 | 待填写 |

@@ -211,6 +211,36 @@ orange 已按上述口径重新 smoke：
 `POST /workflow-tasks/:taskId/complete`，没有推进真实业务数据，不能计入 5 个
 业务场景验收通过证据。
 
+### 2026-06-18 真实 complete 回传
+
+orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文档：
+
+```text
+/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md
+```
+
+已通过：
+
+- `customer_design_workflow`
+- customer ID：`016eccf5-a22c-4c18-a4c1-974647b4d6d3`
+- workflow instance ID：`c6a97a55-94fb-40e7-91c5-f9b7b9edab55`
+- 执行账号：`18800001002` / 珠珠
+- 后端只读核验：workflow instance 已 `completed`，当前 `end`，pending task 为
+  `0`。
+
+`GET /customers/:id/detail` 的 `customer.status` 仍为 `designing` 是预期结果：
+新版客户设计 workflow 的业务终点是设计完成，客户签约不再由 `customer_main`
+推进；项目签约必须进入独立 `project_signing` workflow。
+
+当前阻塞：
+
+| 场景 | 现象 | 后端结论 |
+| --- | --- | --- |
+| `project_signing_workflow` | 项目 `1a8589fb-8f3f-4900-a759-6d15438ffcc2` complete 返回 `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED` | 该项目仍在旧 `construction_main/designing` running 实例；dry-run 已确认可重建到 `project_signing/designing`，正式 apply 前必须先完成业务确认门禁 |
+| `construction_procedure_log` | 项目 `d382cd45-9141-476e-a7a5-5bf88d0a3255` 当前 `procedure_tiling`，但 `/project-logs` 返回旧阶段门禁 `请先完成水电后再进入瓦工` | 后端已定位为旧 `create_project_log_fast` RPC 与 workflow source-of-truth 冲突；已改为 workflow guard 放行后 direct insert |
+| `construction_procedure_log` | 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 当前 `procedure_plumbing_electrical`，但 `/project-logs` 返回旧阶段门禁 `当前水电阶段待验收` | 同上，修复后需小程序重新 smoke |
+| `stage_acceptance_transition` | 因施工日志创建被阻塞，未进入 complete 后刷新 `acceptance_action` 阶段 | 依赖施工日志场景重新 smoke |
+
 ## 字段映射
 
 | 后端字段 | 小程序用途 |
