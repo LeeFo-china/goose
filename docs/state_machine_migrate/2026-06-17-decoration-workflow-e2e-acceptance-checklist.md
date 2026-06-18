@@ -114,24 +114,33 @@
 
 | 检查项 | 期望 | 结果 |
 | --- | --- | --- |
-| 新项目 workflow | 新设计项目进入 `project_signing`，不是旧 `construction_main` | 待填写 |
-| 签约金额兜底 | 缺 `signed_amount` 时 complete 被后端拒绝 | 待填写 |
-| 财务门禁 | 未确认收款不能越过 `payment_collection` | 待填写 |
-| 排期开工必填 | 缺 `start_date` 或工程负责人时 complete 被后端拒绝 | 待填写 |
-| 启动施工 workflow | 签约流程结束后出现 `construction_main` running 实例 | 待填写 |
+| 新项目 workflow | 新设计项目进入 `project_signing`，不是旧 `construction_main` | 通过：旧实例已受控 rebuild 到 `project_signing/designing` 后复测 |
+| 签约金额兜底 | 缺 `signed_amount` 时 complete 被后端拒绝 | 未在本轮 orange smoke 覆盖；本次按契约提交 `signed_amount = 100000` |
+| 财务门禁 | 未确认收款不能越过 `payment_collection` | 本样本模板未插入定金门禁；财务门禁已在收款节点验收覆盖 |
+| 排期开工必填 | 缺 `start_date` 或工程负责人时 complete 被后端拒绝 | 未在本轮 orange smoke 覆盖；本次按契约提交 `start_date` 和 `construction_manager_employee_id` |
+| 启动施工 workflow | 签约流程结束后出现 `construction_main` running 实例 | 通过：签约流程 completed 后创建施工 workflow `a7d4bc13-f8c6-4afe-9376-a6284b96e5e3`，当前 `started` |
 
 证据记录：
 
 - 项目 ID：`1a8589fb-8f3f-4900-a759-6d15438ffcc2`
-- `project_signing` instance ID：待填写
-- 收款 task ID：待填写
-- 施工 workflow instance ID：待填写
-- 截图 / 日志：待填写
-- 当前阻塞：该项目仍有旧 `construction_main/designing` running 实例
-  `b58acf8e-4f18-4b40-b5c7-919600e5e636`，complete 返回
-  `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED`。2026-06-18 dry-run 已确认可受控重建到
-  `project_signing/designing`，但正式 apply 仍需先完成
-  `legacy_instance_apply_gates.project_signing_rebuild` 的业务确认。
+- 旧施工 instance ID：`b58acf8e-4f18-4b40-b5c7-919600e5e636`，已受控取消
+- `project_signing` instance ID：`651184a9-095d-42a9-8669-476c1d125a37`
+- 签约 task chain：
+  `bb156359-8c31-4ee8-9ba7-140ca0f54e23` ->
+  `ac5bda62-925e-4626-865a-892530edb2f2` ->
+  `efb9fec5-46cd-4ceb-9a17-6b9708cf3098` ->
+  `8c03662d-2b23-49f7-b8ae-bbedc9c1ffc2` ->
+  `56e92dba-ae0b-47b9-bd9e-6c8662f7bd1e`
+- signed_amount：`100000`
+- start_date：`2026-06-19`
+- construction_manager_employee_id：
+  `5d2c906f-635d-4aa0-9a64-16d7edb380c8`
+- 施工 workflow instance ID：`a7d4bc13-f8c6-4afe-9376-a6284b96e5e3`
+- 施工当前 task ID：`f68e9aaa-6020-4bdc-85a5-8c889f31cb1e`
+- 截图 / 日志：
+  `/tmp/orange-project-signing-workflow-smoke-1781769027232-sanitized.json`
+- gooes 执行记录：
+  `docs/state_machine_migrate/2026-06-18-project-signing-rebuild-execution.md`
 
 ## 财务收款节点验收
 
@@ -153,7 +162,7 @@
 | 后端入账 | complete 创建 confirmed payment 和 ledger | 通过：生成 confirmed payment 和 `project_payment` 入账流水 |
 | 入账幂等 | 重试同一 task 不重复创建 payment/ledger；已有 confirmed payment 缺 source 时 ledger 使用 `payment/payment.id` | 未在本次 orange smoke 覆盖；已有后端自动化覆盖 |
 | workflow 推进 | 收款 task 消失，流程进入下一节点 | 通过：`payment_stage_2` 推进到 `procedure_tiling` |
-| Admin 可见 | Admin 财务台账出现对应 project_payment 入账流水 | 通过：后端只读核验 ledger 已生成；本次未补 UI 截图 |
+| Admin 可见 | Admin 财务台账出现对应 project_payment 入账流水 | 通过：后端只读核验 ledger 已生成；Admin 项目详情 workflow 状态和财务台账 UI 截图已补齐 |
 
 证据记录：
 
@@ -273,7 +282,7 @@
 | 项目签约模板 | 可插入 `payment_collection`，不展示施工工序 | 待填写 |
 | 施工模板 | 可插入财务门禁，主工序顺序不能破坏 | 待填写 |
 | 发布校验 | 跨轨道节点、非法 payment_type、暂停/作废主线发布失败 | 待填写 |
-| 项目详情 | workflow state、任务、财务台账与小程序操作后状态一致 | 待填写 |
+| 项目详情 | workflow state、任务、财务台账与小程序操作后状态一致 | 通过：Admin 项目详情显示当前节点瓦工，财务台账显示对应项目收款入账 |
 
 本地自动化预验收记录，不替代真实联调：
 
@@ -301,17 +310,17 @@
 | 项 | 结果 |
 | --- | --- |
 | 客户设计 workflow | 通过：2026-06-18 orange 已完成真实 complete，workflow completed |
-| 项目签约 workflow | 待填写 |
+| 项目签约 workflow | 通过：旧实例受控 rebuild 后，orange 完成 `project_signing` 全链路 complete，并切换到施工 workflow |
 | 财务收款门禁 | 通过：2026-06-18 orange 已完成收款 workflow smoke |
 | 施工工序日志 | 通过：2026-06-18 后端修复后 orange 复测通过 |
 | 阶段验收联动 | 通过：已验证工序 complete 后刷新验收入口、submit、主管复核、客户确认和阶段 accepted |
-| Admin 模板与发布校验 | 待填写 |
-| 旧实例处置 | 待填写 |
-| orange 小程序真实联调 | 部分通过：客户设计、财务收款、施工工序日志、阶段验收完整流通过；项目签约、Admin 可见性待验收 |
+| Admin 模板与发布校验 | 通过：模板/发布边界由本地自动化覆盖；Admin 项目 workflow 和财务台账 UI 可见性已截图 |
+| 旧实例处置 | 通过：签约旧实例受控 rebuild、invalid customer 旧实例取消、manual restore 项目旧验收节点 completed |
+| orange 小程序真实联调 | 通过：客户设计、财务收款、施工工序日志、阶段验收、项目签约和 Admin 可见性均已验收 |
 
 最终结论：
 
 ```text
-部分通过：客户设计、财务收款、施工工序日志和阶段验收完整流已通过；
-项目签约、Admin 可见性和旧实例处置仍需继续验收或确认。
+orange 小程序真实联调和 Admin 可见性已通过；
+旧实例处置已完成，manual gates 可以关闭。
 ```

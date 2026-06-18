@@ -12,19 +12,19 @@
     ]
   },
   "latest_read_only_review": {
-    "reviewed_at": "2026-06-18T10:03:32+08:00",
+    "reviewed_at": "2026-06-18T16:28:17+08:00",
     "commands": [
       "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-business-audit.ts --sample-limit 100",
       "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instance-review.ts --sample-limit 100"
     ],
     "needs_migration": false,
     "needs_instance_review": true,
-    "running_instances_on_legacy_snapshots": 10,
-    "compatible_runtime": 6,
-    "rebuild_candidate": 1,
-    "manual_restore_required": 3,
+    "running_instances_on_legacy_snapshots": 5,
+    "compatible_runtime": 5,
+    "rebuild_candidate": 0,
+    "manual_restore_required": 0,
     "unknown_review_required": 0,
-    "evidence": "docs/state_machine_migrate/audit/2026-06-18-decoration-workflow-readonly-review-payment-sync.md"
+    "evidence": "docs/state_machine_migrate/2026-06-18-manual-restore-project-decision-request.md"
   },
   "legacy_instance_apply_gates": {
     "project_signing_rebuild": {
@@ -51,10 +51,10 @@
       "apply_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-rebuild.ts --apply --confirm-rebuild 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --subject-type project --subject-id 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --workflow-key project_signing"
     },
     "invalid_customer_cancellations": {
-      "confirmed": false,
-      "confirmed_by": "",
-      "confirmed_at": "",
-      "evidence": "",
+      "confirmed": true,
+      "confirmed_by": "leefo via Codex instruction",
+      "confirmed_at": "2026-06-18T16:17:15+08:00",
+      "evidence": "docs/state_machine_migrate/2026-06-18-invalid-customer-cancellations-execution.md",
       "items": [
         {
           "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
@@ -64,6 +64,9 @@
           "node_key": "potential",
           "customer_status": "invalid",
           "latest_dry_run_ok": true,
+          "latest_apply_ok": true,
+          "applied_at": "2026-06-18T08:18:35.497476+00:00",
+          "final_instance_status": "canceled",
           "confirmation_text": "确认客户 aa55b76c-a6a1-498a-9e36-fde8b974a248 保持 invalid 状态，并取消旧 running workflow 实例 41f7772d-c472-41e6-a913-c6e641be3dd2。",
           "dry_run_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel.ts --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --instance-id 41f7772d-c472-41e6-a913-c6e641be3dd2",
           "apply_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel.ts --apply --confirm-cancel 41f7772d-c472-41e6-a913-c6e641be3dd2 --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --instance-id 41f7772d-c472-41e6-a913-c6e641be3dd2"
@@ -76,6 +79,9 @@
           "node_key": "potential",
           "customer_status": "invalid",
           "latest_dry_run_ok": true,
+          "latest_apply_ok": true,
+          "applied_at": "2026-06-18T08:18:44.072827+00:00",
+          "final_instance_status": "canceled",
           "confirmation_text": "确认客户 2cc20642-03d9-4bc6-a68a-f7236ab8e3ea 保持 invalid 状态，并取消旧 running workflow 实例 1a6dc44b-19b9-4516-8d3f-9e2f4125b842。",
           "dry_run_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel.ts --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --instance-id 1a6dc44b-19b9-4516-8d3f-9e2f4125b842",
           "apply_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel.ts --apply --confirm-cancel 1a6dc44b-19b9-4516-8d3f-9e2f4125b842 --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --instance-id 1a6dc44b-19b9-4516-8d3f-9e2f4125b842"
@@ -83,33 +89,51 @@
       ]
     },
     "manual_restore_project": {
-      "decision_confirmed": false,
-      "confirmed_by": "",
-      "confirmed_at": "",
-      "evidence": "",
+      "decision_confirmed": true,
+      "confirmed_by": "leefo via Codex instruction",
+      "confirmed_at": "2026-06-18T16:27:02+08:00",
+      "evidence": "docs/state_machine_migrate/2026-06-18-manual-restore-project-decision-request.md",
       "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
       "project_id": "634ff402-ff84-4541-aa7c-3cdcd4fd5460",
       "legacy_instance_id": "c435b9e9-0e22-49e7-9352-446259f9b57c",
       "workflow_key": "construction_main",
       "node_key": "acceptance",
       "project_status": "acceptance",
+      "workflow_task_id": "13133174-8de6-4ef1-b1ac-e69b7c1d2f2c",
       "allowed_decision_options": [
         "continue_legacy_acceptance_until_completed",
         "define_new_construction_restore_point_and_script",
         "confirm_project_exception_closure_plan"
       ],
-      "selected_option": "",
-      "followup_required": true,
-      "notes": "This object must not be rebuilt to the construction start node and must not be handled by the invalid-customer cancel script."
+      "selected_option": "continue_legacy_acceptance_until_completed",
+      "planned_complete_payload": {
+        "action": "complete",
+        "reason": null,
+        "output": {}
+      },
+      "execution_result": {
+        "status_code": 200,
+        "executed_by": "18800003002 / 欧阳克 / 5d2c906f-635d-4aa0-9a64-16d7edb380c8",
+        "completed_at": "2026-06-18T08:28:00.782778+00:00",
+        "legacy_instance_status": "completed",
+        "legacy_instance_current_node_key": "end",
+        "task_status": "completed",
+        "project_status_after": "acceptance",
+        "workflow_subject_state_pending_task_count": 0,
+        "project_workflow_instance_count": 1,
+        "new_workflow_created": false
+      },
+      "followup_required": false,
+      "notes": "Confirmed and executed option A. The legacy acceptance node was completed to workflow end; the project was not rebuilt, was not canceled, and remains status=acceptance."
     }
   },
   "orange_e2e_acceptance_gate": {
-    "confirmed": false,
-    "confirmed_by": "",
-    "confirmed_at": "",
-    "mini_program_version_or_commit": "",
-    "tenant": "",
-    "accounts": "",
+    "confirmed": true,
+    "confirmed_by": "leefo via Codex admin UI evidence",
+    "confirmed_at": "2026-06-18T16:14:29+08:00",
+    "mini_program_version_or_commit": "orange 5f79083 docs: update workflow signing smoke results",
+    "tenant": "3eebca47-961f-4899-b976-a3d3208d326b / 固始晴天装饰工程有限公司",
+    "accounts": "18800001002 / 珠珠; 18800003001 / 欧阳锋; 18800003002 / 欧阳克; 18800005001 / 小龙女",
     "evidence": "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
     "required_scenarios": [
       {
@@ -302,7 +326,7 @@
       },
       {
         "key": "admin_finance_and_workflow_visibility",
-        "status": "interface_evidence_passed_ui_screenshot_pending",
+        "status": "passed",
         "evidence": "docs/state_machine_migrate/2026-06-18-decoration-workflow-next-smoke-backend-response.md",
         "external_evidence": "/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md",
         "project_id": "54f11aa5-09a8-4410-a9c5-604a7fe9e09c",
@@ -310,25 +334,27 @@
         "task_id": "8cb1b3ac-69e5-42e5-8496-787e3897878c",
         "payment_id": "b5356f22-ed67-4e29-9afc-94ecccba146d",
         "ledger_id": "9fc924b7-b5db-4356-a91e-d83dacecbbce",
-        "admin_project_workflow_evidence": "workflow state API shows current_node_key=procedure_tiling and timeline payment_stage_2=done, procedure_tiling=current",
-        "admin_finance_ledger_evidence": "/finance/ledger shows entry_type=project_payment, direction=in, ledger_id=9fc924b7-b5db-4356-a91e-d83dacecbbce",
-        "ui_screenshot_required": true,
+        "admin_project_workflow_evidence": "workflow state API shows current_node_key=procedure_tiling and timeline payment_stage_2=done, procedure_tiling=current; UI screenshot docs/state_machine_migrate/evidence/2026-06-18-admin-project-workflow-visibility.png shows Workflow 状态 current node 瓦工",
+        "admin_finance_ledger_evidence": "/finance/ledger shows entry_type=project_payment, direction=in, ledger_id=9fc924b7-b5db-4356-a91e-d83dacecbbce; UI screenshot docs/state_machine_migrate/evidence/2026-06-18-admin-finance-ledger-visibility.png shows 项目收款入账 ¥10,000.00",
+        "admin_project_workflow_screenshot": "docs/state_machine_migrate/evidence/2026-06-18-admin-project-workflow-visibility.png",
+        "admin_finance_ledger_screenshot": "docs/state_machine_migrate/evidence/2026-06-18-admin-finance-ledger-visibility.png",
+        "ui_screenshot_required": false,
         "orange_acknowledgement": {
           "docs_updated": true,
           "backend_read_only_review_recorded": true,
           "admin_interface_evidence_recorded": true,
-          "ui_screenshot_followup": "only if final manual gates require Admin project workflow and finance ledger page screenshots",
+          "ui_screenshot_followup": "completed on 2026-06-18 with Admin project workflow and finance ledger page screenshots",
           "project_signing_retry_required": false,
           "project_signing_next_step": "project_signing_workflow passed; continue construction workflow from task f68e9aaa-6020-4bdc-85a5-8c889f31cb1e only after confirming smoke scope"
         },
         "completed_at": "2026-06-18",
-        "note": "接口证据已通过；如最终业务门禁要求页面级证据，需要继续补 Admin 项目详情 workflow 状态和财务台账页面截图。project_signing_workflow 已通过，不再作为全链路关闭阻塞。"
+        "note": "接口证据和 Admin UI 截图均已通过；项目详情显示 Workflow 状态当前节点为瓦工，财务台账显示该项目 project_payment 入账流水。project_signing_workflow 已通过，不再作为全链路关闭阻塞。"
       }
     ]
   },
   "closeout_rules": {
-    "can_run_legacy_apply": false,
-    "can_close_prd_without_followup": false,
-    "reason": "Invalid customer apply confirmation, manual restore decision, and Admin UI screenshot evidence are still pending. Project signing controlled rebuild and orange smoke passed on 2026-06-18; payment collection, payment_stage_2 after acceptance, customer design, construction procedure log, and stage acceptance transition workflow passed or have interface evidence."
+    "can_run_legacy_apply": true,
+    "can_close_prd_without_followup": true,
+    "reason": "Legacy apply gates are confirmed and applied; manual restore project was completed to workflow end; orange E2E acceptance including Admin UI visibility passed on 2026-06-18."
   }
 }

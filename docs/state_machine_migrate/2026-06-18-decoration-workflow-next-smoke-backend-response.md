@@ -159,8 +159,10 @@ orange 后续回执：
 - orange 已记录后端只读复核结果，确认本次 `payment_stage_2` smoke 与后端复核一致。
 - Admin 可见性接口证据已记录：`/finance/ledger` 可见 `project_payment`
   入账流水，workflow state 已推进到 `procedure_tiling`。
-- 如最终 manual gates 要求 UI 截图，orange 再补 Admin 项目详情 workflow
-  状态和财务台账页面截图。
+- Admin UI 截图已补齐：
+  `docs/state_machine_migrate/evidence/2026-06-18-admin-project-workflow-visibility.png`
+  和
+  `docs/state_machine_migrate/evidence/2026-06-18-admin-finance-ledger-visibility.png`。
 - `project_signing_workflow` 已按 rebuild 后的新实例复测通过，旧 task
   `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f` 不再复测。
 
@@ -344,6 +346,12 @@ GET /finance/ledger?page=1&pageSize=20&project_id=54f11aa5-09a8-4410-a9c5-604a7f
 
 重点截图：项目 workflow 状态面板显示已从“中期进度款”推进到“瓦工”。
 
+已补截图：
+
+```text
+docs/state_machine_migrate/evidence/2026-06-18-admin-project-workflow-visibility.png
+```
+
 2. 财务台账：
 
 ```text
@@ -351,6 +359,12 @@ GET /finance/ledger?page=1&pageSize=20&project_id=54f11aa5-09a8-4410-a9c5-604a7f
 ```
 
 重点截图：能看到该项目对应的 `project_payment` 入账流水。
+
+已补截图：
+
+```text
+docs/state_machine_migrate/evidence/2026-06-18-admin-finance-ledger-visibility.png
+```
 
 ### manual gate 回填字段
 
@@ -382,9 +396,11 @@ GET /finance/ledger?page=1&pageSize=20&project_id=54f11aa5-09a8-4410-a9c5-604a7f
   f68e9aaa-6020-4bdc-85a5-8c889f31cb1e 开始。
 - 起点节点为 started / 确认开工。
 
-当前剩余重点一致：
-- Admin 可见性如最终需要 UI 截图，再补项目详情 workflow 状态和财务台账页面截图。
-- 后续施工 workflow smoke 范围另行确认。
+当前 Admin 可见性 UI 证据也已补齐：
+- docs/state_machine_migrate/evidence/2026-06-18-admin-project-workflow-visibility.png
+- docs/state_machine_migrate/evidence/2026-06-18-admin-finance-ledger-visibility.png
+
+后续施工 workflow smoke 范围另行确认。
 
 同时，后端此前已只读复核 payment_stage_2 smoke 结果，和 orange 回填一致。
 
@@ -399,7 +415,7 @@ GET /finance/ledger?page=1&pageSize=20&project_id=54f11aa5-09a8-4410-a9c5-604a7f
 
 Admin 可见性接口证据也已收到：
 /finance/ledger 可见 project_payment 入账流水，workflow state 已推进到 procedure_tiling。
-如果最终门禁需要 UI 截图，可以再补 Admin 项目详情和财务台账页面截图。
+Admin 项目详情和财务台账页面截图已补齐，orange E2E 总门禁可以关闭。
 
 project_signing_workflow 也已只读复核通过：
 - project ID: 1a8589fb-8f3f-4900-a759-6d15438ffcc2

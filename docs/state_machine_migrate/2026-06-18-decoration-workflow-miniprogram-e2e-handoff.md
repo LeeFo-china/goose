@@ -305,8 +305,9 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 - 后端只读核验：旧 task 已 `completed`，payment 为
   `confirmed/stage_2/10000`，ledger 为 `project_payment/in/10000`
 - Admin 可见性：接口证据通过，`/finance/ledger` 可见对应
-  `project_payment` 入账流水；如最终门禁需要 UI 证据，可继续补 Admin
-  项目详情和财务台账页面截图
+  `project_payment` 入账流水；Admin 项目详情和财务台账页面截图已补齐：
+  `docs/state_machine_migrate/evidence/2026-06-18-admin-project-workflow-visibility.png`、
+  `docs/state_machine_migrate/evidence/2026-06-18-admin-finance-ledger-visibility.png`
 - orange 回执：小程序侧已记录后端只读复核结果；`project_signing_workflow`
   旧 task 不再复测；后端已回传新 instance/task/payload，orange 已完成复测
 
@@ -567,7 +568,9 @@ bun run workflow:decoration-manual-gates-check -- \
 ```
 
 在业务确认旧实例 apply、人工恢复决策和全部 orange E2E 证据完成前，该命令失败是
-预期行为。
+预期行为。2026-06-18T16:30:40+08:00 已重新执行，结果为 `ok = true`，
+其中 `manual_restore_decision`、`orange_e2e_acceptance` 和
+`closeout_rules_consistent` 均通过。
 
 ## 关联文档
 
