@@ -965,7 +965,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 新设计项目进入项目签约 workflow | `project-workflow-runtime.ts` 与测试覆盖 `project_signing` 启动 | 已完成 |
 | 确认开工后启动施工 workflow | `project-workflow-runtime.test.ts` 覆盖签约完成后启动 `construction_main` | 已完成 |
 | 客户设计 workflow 不再承担签约 | 模板和发布校验禁止客户轨道包含项目签约节点 | 已完成 |
-| 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖；`task-center/legacy/actions.test.ts` 覆盖旧 `/task-center/todos` 兼容 `project_payment`、`project_workflow`；`phase5-workflow-smoke.test.ts` 覆盖 `/task-center/todos?type=project_payment/project_workflow` smoke 检查；2026-06-18 orange 已按 `/workflow-tasks?status=pending` 完成收款 workflow smoke | 本仓库已完成；orange 财务收款节点已验收，其余端到端场景待验收 |
+| 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖；`task-center/legacy/actions.test.ts` 覆盖旧 `/task-center/todos` 兼容 `project_payment`、`project_workflow`；`phase5-workflow-smoke.test.ts` 覆盖客户 `/workflow-tasks?subject_type=customer`、客户 `/task-center/todos?type=customer_followup` 和项目 `/task-center/todos?type=project_payment/project_workflow` smoke 检查；2026-06-18 orange 已按 `/workflow-tasks?status=pending` 完成收款 workflow smoke | 本仓库已完成；orange 财务收款节点已验收，其余端到端场景待验收 |
 | 只能完成当前 pending task | `workflow-tasks.test.ts` 覆盖 stale pending task 在进入业务 bridge 前返回 `WORKFLOW_NODE_NOT_CURRENT`，避免非当前节点产生业务副作用 | 已完成 |
 | 项目动作必填 output 后端兜底 | `workflow-task-project-bridge.test.ts` 覆盖签约金额、开工日期、工程负责人缺失时报错 | 已完成 |
 | 财务节点确认金额和凭证 | `workflow-task-action-metadata.ts` 输出 `payment_collection` 字段，payment bridge 创建确认流水 | 已完成 |

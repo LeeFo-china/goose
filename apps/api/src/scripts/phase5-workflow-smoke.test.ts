@@ -52,8 +52,18 @@ describe("buildPhase5SmokeChecks", () => {
         "employee-token",
       ],
       [
+        "customer workflow tasks",
+        "https://api.example.com/workflow-tasks?page=1&pageSize=20&status=pending&subject_type=customer",
+        "employee-token",
+      ],
+      [
         "task center todos",
         "https://api.example.com/task-center/todos?page=1&pageSize=20",
+        "employee-token",
+      ],
+      [
+        "task center customer followup todos",
+        "https://api.example.com/task-center/todos?page=1&pageSize=20&type=customer_followup&status=pending",
         "employee-token",
       ],
       [
@@ -124,6 +134,24 @@ describe("assertPhase5SmokePayload", () => {
 
   test("accepts task center workflow filter payloads as paginated lists", () => {
     expect(() =>
+      assertPhase5SmokePayload("customer workflow tasks", {
+        data: {
+          list: [],
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        },
+      })
+    ).not.toThrow();
+
+    expect(() =>
+      assertPhase5SmokePayload("task center customer followup todos", {
+        data: {
+          list: [],
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        },
+      })
+    ).not.toThrow();
+
+    expect(() =>
       assertPhase5SmokePayload("task center project payment todos", {
         data: {
           list: [],
@@ -143,6 +171,14 @@ describe("assertPhase5SmokePayload", () => {
   });
 
   test("rejects task center workflow filter payloads without paginated lists", () => {
+    expect(() =>
+      assertPhase5SmokePayload("customer workflow tasks", {
+        data: {
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        },
+      })
+    ).toThrow("customer workflow tasks data.list must be an array");
+
     expect(() =>
       assertPhase5SmokePayload("task center project payment todos", {
         data: {

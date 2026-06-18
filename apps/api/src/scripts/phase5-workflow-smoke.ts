@@ -19,8 +19,13 @@ type ParsePhase5SmokeConfigResult =
 type EnvLike = Record<string, string | undefined>;
 
 const MAX_PAGE_SIZE = 100;
+const WORKFLOW_TASK_CHECK_NAMES = new Set([
+  "workflow tasks",
+  "customer workflow tasks",
+]);
 const TASK_CENTER_TODO_CHECK_NAMES = new Set([
   "task center todos",
+  "task center customer followup todos",
   "task center project payment todos",
   "task center project workflow todos",
 ]);
@@ -58,8 +63,18 @@ export function buildPhase5SmokeChecks(
       token: config.employeeToken,
     },
     {
+      name: "customer workflow tasks",
+      url: `${config.baseUrl}/workflow-tasks?page=1&pageSize=20&status=pending&subject_type=customer`,
+      token: config.employeeToken,
+    },
+    {
       name: "task center todos",
       url: `${config.baseUrl}/task-center/todos?page=1&pageSize=20`,
+      token: config.employeeToken,
+    },
+    {
+      name: "task center customer followup todos",
+      url: `${config.baseUrl}/task-center/todos?page=1&pageSize=20&type=customer_followup&status=pending`,
       token: config.employeeToken,
     },
     {
@@ -107,7 +122,7 @@ export function assertPhase5SmokePayload(
 ): void {
   const data = unwrapApiData(payload);
 
-  if (checkName === "workflow tasks") {
+  if (WORKFLOW_TASK_CHECK_NAMES.has(checkName)) {
     assertPaginatedList(checkName, data);
     const list = getRecord(data).list as unknown[];
     list.forEach((item, itemIndex) => {
