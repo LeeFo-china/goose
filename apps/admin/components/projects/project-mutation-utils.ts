@@ -3,7 +3,6 @@ import {
   isCustomerStatus,
   ProjectStatusConfig,
 } from "@gooes/domain";
-import { ProjectWorkflowActionConfig } from "@/components/workflows/workflow-business-actions";
 import type {
   CustomerRelation,
   Option,
@@ -125,70 +124,11 @@ export function projectDisplayStatusBadgeVariant(project: ProjectRecord) {
   return projectStatusBadgeVariant(project.display_status || project.status);
 }
 
-export function projectActionLabel(action: string) {
-  return action in ProjectWorkflowActionConfig
-    ? ProjectWorkflowActionConfig[action as keyof typeof ProjectWorkflowActionConfig].label
-    : action;
-}
-
-export function blockedProjectActions(currentStatus: string | null | undefined) {
-  if (currentStatus === "designing") {
-    return [
-      {
-        action: "sign_contract",
-        label: "项目签约",
-        reason: "需先确认方案",
-      },
-    ];
-  }
-
-  return [];
-}
-
-export function isProjectStatusActionVisible(
-  actions: ProjectStatusActionItem[],
-  action: string,
-) {
-  return actions.some((item) => item.action === action);
-}
-
 export type ProjectStatusActionView =
-  | { kind: "enabled"; action: ProjectStatusActionItem }
-  | {
-    kind: "blocked";
-    action: {
-      action: string;
-      label: string;
-      reason: string;
-    };
-  };
+  | { kind: "enabled"; action: ProjectStatusActionItem };
 
-export function buildProjectActionViews(
-  actions: ProjectStatusActionItem[],
-  blockedActions: ReturnType<typeof blockedProjectActions>,
-) {
-  const blockedByAction = new Map(
-    blockedActions.map((item) => [item.action, item]),
-  );
-  const views: ProjectStatusActionView[] = [];
-
-  for (const action of actions) {
-    views.push({ kind: "enabled", action });
-
-    if (action.action === "confirm_proposal") {
-      const nextAction = blockedByAction.get("sign_contract");
-      if (nextAction) {
-        views.push({ kind: "blocked", action: nextAction });
-        blockedByAction.delete("sign_contract");
-      }
-    }
-  }
-
-  for (const action of blockedByAction.values()) {
-    views.push({ kind: "blocked", action });
-  }
-
-  return views;
+export function buildProjectActionViews(actions: ProjectStatusActionItem[]) {
+  return actions.map((action): ProjectStatusActionView => ({ kind: "enabled", action }));
 }
 
 export function getPayloadMessage(payload: unknown, fallback: string) {

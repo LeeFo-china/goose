@@ -103,7 +103,7 @@ export function ProcedureConfigFields({
       <CheckboxField
         checked={procedureConfig.trigger_acceptance === true}
         disabled={disabled}
-        label="完成后触发阶段验收"
+        label="完成后触发阶段验收（acceptance_enabled）"
         onCheckedChange={(checked) =>
           onChangeConfig({ trigger_acceptance: checked })
         }

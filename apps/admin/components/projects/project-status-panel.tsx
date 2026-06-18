@@ -5,7 +5,6 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProjectStatusActionDialog } from "@/components/projects/project-status-action-dialog";
 import { useProjectStatusPanel } from "@/components/projects/project-status-panel-state";
 import { WorkflowSubjectStatePanel } from "@/components/workflows/workflow-subject-state-panel";
@@ -70,20 +69,11 @@ export function ProjectStatusPanel({
                 动作加载中
               </Badge>
             ) : null}
-            {panel.constructionStagesLoading ? (
-              <Badge variant="secondary">
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-                工序同步中
-              </Badge>
-            ) : null}
           </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 p-5">
         {panel.error ? <StatusAlert>{panel.error}</StatusAlert> : null}
-        {!panel.error && panel.startAcceptanceBlockedReason ? (
-          <StatusAlert>{panel.startAcceptanceBlockedReason}</StatusAlert>
-        ) : null}
         <WorkflowSubjectStatePanel
           subjectType="project"
           subjectId={project.id}
@@ -145,73 +135,29 @@ export function ProjectStatusPanel({
                 只展示当前可执行的推进动作。
               </p>
             </div>
-            <TooltipProvider>
-              <div className="flex flex-wrap items-center gap-2">
-                {panel.actionViews.map((item) => {
-                  const actionBlockedReason =
-                    item.action.action === "start_acceptance"
-                      ? panel.startAcceptanceBlockedReason
-                      : "";
-                  if (item.kind === "enabled" && !actionBlockedReason) {
-                    return (
-                      <Button
-                        key={item.action.action}
-                        type="button"
-                        size="sm"
-                        variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
-                        disabled={panel.actionsLoading || panel.pending}
-                        onClick={() => panel.openActionDialog(item.action)}
-                      >
-                        {item.action.label}
-                      </Button>
-                    );
-                  }
-
-                  const tooltipReason = actionBlockedReason ||
-                    (item.kind === "blocked" ? item.action.reason : "当前不能执行该动作");
-
-                  return (
-                    <Tooltip key={item.action.action}>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled
-                          >
-                            {item.action.label}
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {tooltipReason}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-                {!panel.actionsLoading && panel.actions.length === 0 ? (
-                  <Badge variant="outline">暂无可执行动作</Badge>
-                ) : null}
-              </div>
-            </TooltipProvider>
+            <div className="flex flex-wrap items-center gap-2">
+              {panel.actionViews.map((item) => (
+                <Button
+                  key={item.action.action}
+                  type="button"
+                  size="sm"
+                  variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
+                  disabled={panel.actionsLoading || panel.pending}
+                  onClick={() => panel.openActionDialog(item.action)}
+                >
+                  {item.action.label}
+                </Button>
+              ))}
+              {!panel.actionsLoading && panel.actions.length === 0 ? (
+                <Badge variant="outline">暂无可执行动作</Badge>
+              ) : null}
+            </div>
           </div>
         </section>
       </CardContent>
       <ProjectStatusActionDialog
         selectedAction={panel.selectedAction}
         pending={panel.pending}
-        signedAmount={panel.signedAmount}
-        setSignedAmount={panel.setSignedAmount}
-        constructionStartDate={panel.constructionStartDate}
-        setConstructionStartDate={panel.setConstructionStartDate}
-        constructionManagerKeyword={panel.constructionManagerKeyword}
-        setConstructionManagerKeyword={panel.setConstructionManagerKeyword}
-        constructionManagerLoading={panel.constructionManagerLoading}
-        constructionManagerCandidates={panel.constructionManagerCandidates}
-        constructionManagerEmployeeId={panel.constructionManagerEmployeeId}
-        setConstructionManagerEmployeeId={panel.setConstructionManagerEmployeeId}
-        constructionManagerEmployee={panel.constructionManagerEmployee}
         reason={panel.reason}
         setReason={panel.setReason}
         closeActionDialog={panel.closeActionDialog}

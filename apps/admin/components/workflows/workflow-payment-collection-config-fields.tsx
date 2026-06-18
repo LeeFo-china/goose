@@ -133,7 +133,7 @@ export function WorkflowPaymentCollectionConfigFields({
         </Select>
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="workflow-node-payment-requirement-mode">放行规则</Label>
+        <Label htmlFor="workflow-node-payment-requirement-mode">收款要求</Label>
         <Select
           disabled={disabled}
           value={requirementMode}
@@ -161,7 +161,7 @@ export function WorkflowPaymentCollectionConfigFields({
       {requirementMode === "signed_amount_percentage" ? (
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-payment-required-percentage">
-            签约金额比例
+            金额/比例规则
           </Label>
           <Input
             id="workflow-node-payment-required-percentage"
@@ -265,7 +265,7 @@ function PaymentFinanceReviewerSelect({
 
   return (
     <div className="grid gap-2">
-      <Label>财务审核人</Label>
+      <Label>财务负责人</Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button

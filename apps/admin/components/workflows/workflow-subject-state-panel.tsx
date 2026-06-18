@@ -37,6 +37,18 @@ export type WorkflowSubjectAction = {
   }>;
 };
 
+export type WorkflowSubjectTimelineNode = {
+  node_key: string;
+  node_title?: string | null;
+  title?: string | null;
+  status?: string | null;
+  display?: {
+    status_label?: string | null;
+    [key: string]: unknown;
+  } | null;
+  attributes?: Record<string, unknown> | null;
+};
+
 export type WorkflowSubjectState = {
   subject_type: WorkflowSubjectType;
   subject_id: string;
@@ -47,6 +59,7 @@ export type WorkflowSubjectState = {
   current_business_kind: string | null;
   pending_task_count: number;
   actions: WorkflowSubjectAction[];
+  timeline_nodes?: WorkflowSubjectTimelineNode[];
 };
 
 export type WorkflowSubjectTimelineItem = {
@@ -79,6 +92,42 @@ function statusLabel(status: string | null) {
   return status ? labels[status] || status : "未启动";
 }
 
+function timelineNodeTitle(node: WorkflowSubjectTimelineNode) {
+  return node.node_title || node.title || node.node_key || "-";
+}
+
+function timelineNodeStatusLabel(node: WorkflowSubjectTimelineNode) {
+  return node.display?.status_label || node.status || "待处理";
+}
+
+function timelineNodeStatusVariant(node: WorkflowSubjectTimelineNode) {
+  const status = node.status || "";
+  if (status === "current" || status === "running") return "default" as const;
+  if (status === "done" || status === "completed") return "success" as const;
+  if (status === "blocked" || status === "failed") return "danger" as const;
+  if (status === "pending" || status === "waiting") return "secondary" as const;
+  return "outline" as const;
+}
+
+function formatAttributeValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (Array.isArray(value)) {
+    return value
+      .map(formatAttributeValue)
+      .filter(Boolean)
+      .join("、");
+  }
+  if (typeof value === "object") return "";
+  return String(value);
+}
+
+function timelineNodeAttributes(node: WorkflowSubjectTimelineNode) {
+  return Object.entries(node.attributes || {})
+    .map(([key, value]) => ({ key, value: formatAttributeValue(value) }))
+    .filter((item) => item.value);
+}
+
 export function WorkflowSubjectStatePanel({
   onStateChange,
   subjectId,
@@ -90,6 +139,7 @@ export function WorkflowSubjectStatePanel({
 }) {
   const [state, setState] = useState<WorkflowSubjectState | null>(null);
   const [loading, setLoading] = useState(false);
+  const timelineNodes = state?.timeline_nodes || [];
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +200,46 @@ export function WorkflowSubjectStatePanel({
           {state?.actions?.length ?? 0}
         </div>
       </div>
+      {timelineNodes.length > 0 ? (
+        <div className="mt-3 grid gap-2">
+          {timelineNodes.map((node, index) => {
+            const attributes = timelineNodeAttributes(node);
+            return (
+              <article
+                key={`${node.node_key}-${index}`}
+                className="rounded-md border bg-background px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {index + 1}. {timelineNodeTitle(node)}
+                    </div>
+                    <div className="mt-0.5 break-all text-xs text-muted-foreground">
+                      {node.node_key}
+                    </div>
+                  </div>
+                  <Badge variant={timelineNodeStatusVariant(node)}>
+                    {timelineNodeStatusLabel(node)}
+                  </Badge>
+                </div>
+                {attributes.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {attributes.map((item) => (
+                      <Badge key={item.key} variant="outline">
+                        {item.key}: {item.value}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-md border bg-background p-3 text-xs text-muted-foreground">
+          后端未返回完整 workflow 节点序列，仅展示当前节点摘要。
+        </div>
+      )}
     </section>
   );
 }

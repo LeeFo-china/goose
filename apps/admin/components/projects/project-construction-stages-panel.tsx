@@ -217,8 +217,6 @@ export function ProjectConstructionStagesPanel({
   const visibleStages = compact ? stages.slice(0, 6) : stages;
   const progressTitle = workflowProgressTitle(workflowProgress);
   const progressBadge = workflowProgressBadge(workflowProgress);
-  const currentLabel = progressTitle ||
-    (data?.required_completed ? "施工阶段已完成" : "等待前置阶段");
   const currentStageCode = workflowProgress?.source === "workflow_runtime"
     ? workflowProgress.current_stage_code
     : null;
@@ -232,9 +230,10 @@ export function ProjectConstructionStagesPanel({
       <CardHeader className="gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <CardTitle>施工阶段</CardTitle>
+            <CardTitle>施工阶段明细</CardTitle>
             <CardDescription className="mt-2">
-              当前：{currentLabel}
+              workflow 当前节点以 Workflow 状态为准。
+              {progressTitle ? ` 参考节点：${progressTitle}` : ""}
               {data?.required_completed
                 ? " · 必需工序已完成"
                 : data?.missing_required_stages?.length
@@ -245,10 +244,8 @@ export function ProjectConstructionStagesPanel({
           <div className="flex flex-wrap items-center gap-2">
             {progressBadge ? (
               <Badge variant={progressBadge.variant}>{progressBadge.label}</Badge>
-            ) : data?.required_completed ? (
-              <Badge variant="success">可进入竣工验收</Badge>
             ) : (
-              <Badge variant="secondary">施工推进中</Badge>
+              <Badge variant="secondary">阶段明细</Badge>
             )}
             <Button
               type="button"

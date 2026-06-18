@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Activity, Loader2, RefreshCw, RotateCcw } from "lucide-react";
+import { Activity, Loader2, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,27 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import {
   fetchWorkflowDefinitions,
   fetchWorkflowRuntimeInstances,
-  rebuildWorkflowRuntimeInstance,
-  startWorkflowRuntimeInstance,
 } from "@/components/workflows/workflow-requests";
 import {
   getWorkflowPaymentGate,
@@ -46,11 +26,6 @@ import type {
 } from "@/components/workflows/workflow-types";
 import type { ProjectRecord } from "@/components/projects/project-mutation-types";
 import { formatDateTime } from "@/components/projects/project-mutation-utils";
-import {
-  PROJECT_STATUS_VALUES,
-  ProjectStatusConfig,
-  type ProjectStatus,
-} from "@gooes/domain";
 
 const statusLabels: Record<WorkflowRuntimeInstance["status"], string> = {
   running: "运行中",
@@ -69,8 +44,6 @@ const statusVariants: Record<
   failed: "danger",
 };
 
-const PROJECT_STATUS_UNCHANGED = "__unchanged__";
-
 function pickProjectWorkflow(workflows: WorkflowDefinition[]) {
   return workflows.find((workflow) => workflow.category === "construction") ||
     workflows.find((workflow) => workflow.category === "main") ||
@@ -85,128 +58,6 @@ function currentNodeTitle(instance: WorkflowRuntimeInstance | null) {
   return title || instance?.current_node_key || "-";
 }
 
-function ProjectWorkflowRebuildDialog({
-  open,
-  onOpenChange,
-  pending,
-  project,
-  onSubmit,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  pending: boolean;
-  project: ProjectRecord;
-  onSubmit: (input: {
-    reason: string;
-    projectStatus: ProjectStatus | null;
-    deleteCompletedInstances: boolean;
-  }) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [projectStatus, setProjectStatus] = useState<string>(PROJECT_STATUS_UNCHANGED);
-  const [deleteCompletedInstances, setDeleteCompletedInstances] = useState(false);
-  const trimmedReason = reason.trim();
-
-  function reset() {
-    setReason("");
-    setProjectStatus(PROJECT_STATUS_UNCHANGED);
-    setDeleteCompletedInstances(false);
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) reset();
-        onOpenChange(nextOpen);
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>重建流程实例</DialogTitle>
-          <DialogDescription>
-            将取消当前运行实例，并按当前已发布版本重新启动。业务收款、日志、验收等数据不会被删除。
-          </DialogDescription>
-        </DialogHeader>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="workflow-rebuild-reason">重建原因</FieldLabel>
-            <Textarea
-              id="workflow-rebuild-reason"
-              value={reason}
-              placeholder="说明为什么需要重建实例"
-              disabled={pending}
-              aria-invalid={!trimmedReason ? true : undefined}
-              className="min-h-24"
-              onChange={(event) => setReason(event.target.value)}
-            />
-            <FieldDescription>原因会写入新实例上下文和取消日志。</FieldDescription>
-          </Field>
-          <Field>
-            <FieldLabel>项目状态校正</FieldLabel>
-            <Select
-              value={projectStatus}
-              disabled={pending}
-              onValueChange={setProjectStatus}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="不调整项目状态" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={PROJECT_STATUS_UNCHANGED}>不调整</SelectItem>
-                {PROJECT_STATUS_VALUES.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {ProjectStatusConfig[status].label}
-                    {project.status === status ? "（当前）" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FieldDescription>
-              如果新流程起点和项目业务状态不一致，需要同步校正。
-            </FieldDescription>
-          </Field>
-          <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-            <Checkbox
-              checked={deleteCompletedInstances}
-              disabled={pending}
-              onCheckedChange={(checked) => setDeleteCompletedInstances(checked === true)}
-            />
-            <span className="grid gap-1">
-              <span className="font-medium">删除已完成历史实例</span>
-              <span className="text-xs text-muted-foreground">
-                默认仅取消运行中实例并保留历史记录。
-              </span>
-            </span>
-          </label>
-        </FieldGroup>
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
-            取消
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={pending || !trimmedReason}
-            onClick={() =>
-              onSubmit({
-                reason: trimmedReason,
-                projectStatus: projectStatus === PROJECT_STATUS_UNCHANGED
-                  ? null
-                  : projectStatus as ProjectStatus,
-                deleteCompletedInstances,
-              })
-            }
-          >
-            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-            重建实例
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function ProjectWorkflowRuntimePanel({
   active = true,
   project,
@@ -219,15 +70,9 @@ export function ProjectWorkflowRuntimePanel({
   const [totalInstances, setTotalInstances] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
-  const [rebuildOpen, setRebuildOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const paymentGate = useMemo(() => getWorkflowPaymentGate(instance), [instance]);
-
-  const actionLabel = useMemo(() => {
-    if (!instance) return "启动项目流程";
-    return "重新加载";
-  }, [instance]);
 
   function loadRuntime() {
     startTransition(async () => {
@@ -275,58 +120,6 @@ export function ProjectWorkflowRuntimePanel({
     });
   }
 
-  function startRuntime() {
-    if (!workflow) return;
-    startTransition(async () => {
-      try {
-        setError("");
-        await startWorkflowRuntimeInstance(workflow.id, {
-          subject_type: "project",
-          subject_id: project.id,
-          context: {
-            project_id: project.id,
-            project_name: project.name,
-            project_status: project.status,
-            customer_id: project.customer_id ?? null,
-          },
-        });
-        loadRuntime();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "启动项目流程失败");
-      }
-    });
-  }
-
-  function rebuildRuntime(input: {
-    reason: string;
-    projectStatus: ProjectStatus | null;
-    deleteCompletedInstances: boolean;
-  }) {
-    if (!workflow) return;
-    startTransition(async () => {
-      try {
-        setError("");
-        await rebuildWorkflowRuntimeInstance(workflow.id, {
-          subject_type: "project",
-          subject_id: project.id,
-          reason: input.reason,
-          project_status: input.projectStatus,
-          delete_completed_instances: input.deleteCompletedInstances,
-          context: {
-            project_id: project.id,
-            project_name: project.name,
-            project_status: project.status,
-            customer_id: project.customer_id ?? null,
-          },
-        });
-        setRebuildOpen(false);
-        loadRuntime();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "重建项目流程失败");
-      }
-    });
-  }
-
   useEffect(() => {
     if (!active) return;
     loadRuntime();
@@ -344,7 +137,7 @@ export function ProjectWorkflowRuntimePanel({
             <div>
               <CardTitle>项目流程</CardTitle>
               <CardDescription className="mt-2">
-                按已发布的项目主流程启动和推进当前项目。
+                只读展示当前项目的 workflow runtime，推进操作以待办 actions 为准。
               </CardDescription>
             </div>
           </div>
@@ -414,28 +207,13 @@ export function ProjectWorkflowRuntimePanel({
               />
             ) : null}
             <div className="flex flex-wrap items-center gap-2">
-              {!instance ? (
-                <Button type="button" size="sm" disabled={pending} onClick={startRuntime}>
-                  {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-                  {actionLabel}
-                </Button>
-              ) : instance.status === "running" ? (
-                <Badge variant="outline">请通过项目下一步或任务中心处理待办</Badge>
+              {instance?.status === "running" ? (
+                <Badge variant="outline">请通过后端返回的待办 actions 处理</Badge>
+              ) : !instance ? (
+                <Badge variant="outline">暂无运行实例</Badge>
               ) : (
-                <Button type="button" size="sm" variant="outline" disabled={pending} onClick={loadRuntime}>
-                  {actionLabel}
-                </Button>
+                <Badge variant="outline">实例已结束</Badge>
               )}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={pending || !workflow}
-                onClick={() => setRebuildOpen(true)}
-              >
-                <RotateCcw data-icon="inline-start" />
-                重建实例
-              </Button>
               {instance?.id ? (
                 <span className="text-xs text-muted-foreground">
                   实例 {instance.id.slice(0, 8)}
@@ -444,13 +222,6 @@ export function ProjectWorkflowRuntimePanel({
             </div>
           </>
         )}
-        <ProjectWorkflowRebuildDialog
-          open={rebuildOpen}
-          pending={pending}
-          project={project}
-          onOpenChange={setRebuildOpen}
-          onSubmit={rebuildRuntime}
-        />
       </CardContent>
     </Card>
   );
