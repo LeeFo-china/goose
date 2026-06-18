@@ -249,6 +249,94 @@ describe("buildProjectWorkflowProgressProjection", () => {
     ]);
   });
 
+  test("does not expose disconnected nodes in workflow timeline", () => {
+    const disconnectedGraph = {
+      nodes: [
+        {
+          id: "node-start",
+          node_key: "start",
+          title: "开始",
+          node_type: "start",
+          business_kind: null,
+          config: {},
+        },
+        {
+          id: "node-plumbing",
+          node_key: "procedure_plumbing_electrical",
+          title: "水电",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          config: { stage_key: "plumbing_electrical" },
+        },
+        {
+          id: "node-tiling",
+          node_key: "procedure_tiling",
+          title: "瓦工",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          config: { stage_key: "tiling" },
+        },
+        {
+          id: "node-end",
+          node_key: "end",
+          title: "结束",
+          node_type: "end",
+          business_kind: null,
+          config: {},
+        },
+        {
+          id: "node-payment",
+          node_key: "water_electricity_payment",
+          title: "中期进度款",
+          node_type: "confirmation",
+          business_kind: "payment_collection",
+          config: { payment_type: "stage_2" },
+        },
+      ],
+      edges: [
+        {
+          source_node_id: "node-start",
+          target_node_id: "node-plumbing",
+        },
+        {
+          source_node_id: "node-plumbing",
+          target_node_id: "node-tiling",
+        },
+        {
+          source_node_id: "node-tiling",
+          target_node_id: "node-end",
+        },
+        {
+          source_node_id: "node-payment",
+          target_node_id: "node-tiling",
+        },
+      ],
+    };
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "procedure_plumbing_electrical",
+        current_node_title: "水电",
+        current_business_kind: "procedure_template",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "procedure_plumbing_electrical",
+        current_node_snapshot: disconnectedGraph.nodes[1],
+      },
+      graph: disconnectedGraph,
+      pendingActions: [],
+    });
+
+    expect(progress.timeline_nodes.map((node) => node.node_key)).toEqual([
+      "procedure_plumbing_electrical",
+      "procedure_tiling",
+    ]);
+  });
+
   test("builds an unavailable progress object without guessing stage state", () => {
     expect(buildUnavailableProjectWorkflowProgress()).toMatchObject({
       source: "unavailable",
