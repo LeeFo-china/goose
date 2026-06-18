@@ -161,30 +161,35 @@ orange 后续回执：
   入账流水，workflow state 已推进到 `procedure_tiling`。
 - 如最终 manual gates 要求 UI 截图，orange 再补 Admin 项目详情 workflow
   状态和财务台账页面截图。
-- `project_signing_workflow` 暂不复测旧 task，继续等待后端受控 rebuild 后回传新的
+- `project_signing_workflow` 旧 task 不再复测；后端已完成受控 rebuild，并回传新的
   instance/task/payload。
 
 ## 2. `project_signing_workflow`
 
-当前不要执行旧 task，也不要让 orange 重试旧 complete。
+当前不要执行旧 task，也不要让 orange 重试旧 complete。后端已完成受控
+rebuild，orange 可以使用新 task 继续复测。
 
-后端只读核对结果：
+旧实例核对结果：
 
 | 字段 | 当前值 |
 | --- | --- |
 | project/customer ID | `1a8589fb-8f3f-4900-a759-6d15438ffcc2` |
-| current instance ID | `b58acf8e-4f18-4b40-b5c7-919600e5e636` |
-| current workflow | `construction_main` / `项目施工主流程` |
-| current node | `designing` / `设计中` |
+| legacy instance ID | `b58acf8e-4f18-4b40-b5c7-919600e5e636` |
+| legacy workflow | `construction_main` / `项目施工主流程` |
+| legacy node | `designing` / `设计中` |
+| legacy instance status | `canceled` |
 | old pending task ID | `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f` |
 | old task action key | `complete` |
 
-该实例仍是旧 `construction_main` running 实例。正式重建仍受
-`docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`
-中的 `legacy_instance_apply_gates.project_signing_rebuild.confirmed=false`
-控制，后端本次未执行 `--apply`。
+受控 rebuild 执行记录：
 
-目标模板已存在：
+- 文档：`docs/state_machine_migrate/2026-06-18-project-signing-rebuild-execution.md`
+- apply 时间：`2026-06-18T15:38:33+08:00`
+- apply 结果：`ok = true`
+- canceled instance count：`1`
+- deleted instance count：`0`
+
+新实例和新 task：
 
 | 字段 | 值 |
 | --- | --- |
@@ -192,15 +197,25 @@ orange 后续回执：
 | target workflow name | `项目签约主流程` |
 | target definition ID | `dd559d20-58b2-4d38-996e-34d82cbe68ea` |
 | target active version ID | `ea45f1fb-45f0-4ea0-8d22-a0149aabe903` |
-| expected rebuild node | `designing` |
+| workflow instance ID | `651184a9-095d-42a9-8669-476c1d125a37` |
+| current node | `designing` / `设计中` |
+| pending task ID | `bb156359-8c31-4ee8-9ba7-140ca0f54e23` |
+| task status | `pending` |
+| task assignee | `assignee_permission_code = project.update` |
+| actions[].key | `complete` |
+| business domain | `workflow_project` |
+| business action | `designing` |
+| output fields | `[]` |
 
-受控 rebuild 完成后，后端需要重新查询并回传新的：
+当前节点 complete payload：
 
-- workflow instance ID
-- pending task ID
-- current node
-- `actions[].key`
-- complete payload 要求
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {}
+}
+```
 
 预期推进路径为：
 
@@ -217,8 +232,8 @@ designing -> proposal_confirmed -> signed -> design_finalized -> pending_start -
   `output.construction_manager_employee_id` 必填
 - `pending_start`：`action=complete`，`output={}`
 
-orange 在后端明确“rebuild 已完成”前，不应重复提交旧 task
-`aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f`。
+orange 后续应使用新 task `bb156359-8c31-4ee8-9ba7-140ca0f54e23`
+继续复测，不应重复提交旧 task `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f`。
 
 ## 3. Admin 可见性取证口径
 
@@ -314,9 +329,22 @@ Admin 可见性接口证据也已收到：
 /finance/ledger 可见 project_payment 入账流水，workflow state 已推进到 procedure_tiling。
 如果最终门禁需要 UI 截图，可以再补 Admin 项目详情和财务台账页面截图。
 
-project_signing_workflow 当前仍不要复测旧 task。
-项目 1a8589fb-8f3f-4900-a759-6d15438ffcc2 仍在旧 construction_main/designing
-实例，旧 task aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f 不要重复 complete。后端还未
-执行受控 rebuild，因为 manual gate 里的 project_signing_rebuild.confirmed 仍为
-false。rebuild 完成后，后端会重新回传新的 instance ID、task ID、当前节点和 payload。
+project_signing_workflow 受控 rebuild 已完成，请不要复测旧 task
+aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f。
+
+请用新实例和新 task 继续复测：
+- project ID: 1a8589fb-8f3f-4900-a759-6d15438ffcc2
+- workflow instance ID: 651184a9-095d-42a9-8669-476c1d125a37
+- pending task ID: bb156359-8c31-4ee8-9ba7-140ca0f54e23
+- current node: designing / 设计中
+- actions[].key: complete
+- assignee_permission_code: project.update
+- 当前 payload: {"action":"complete","reason":null,"output":{}}
+
+后续路径仍按：
+designing -> proposal_confirmed -> signed -> design_finalized -> pending_start -> end
+
+后续节点 payload：
+- proposal_confirmed: output.signed_amount 必填
+- design_finalized: output.start_date 和 output.construction_manager_employee_id 必填
 ```

@@ -50,28 +50,75 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-rebuil
 
 ## Apply
 
-计划命令：
+命令：
 
 ```bash
 bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-rebuild.ts --apply --confirm-rebuild 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --subject-type project --subject-id 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --workflow-key project_signing
 ```
 
-执行 apply 前必须满足：
+执行时间：`2026-06-18T15:38:33+08:00`
 
-- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`
-  中 `legacy_instance_apply_gates.project_signing_rebuild.confirmed = true`
-- `confirmed_by`、`confirmed_at`、`evidence` 均已填写
-- dry-run 结果为 `ok = true`
+结果：通过。
+
+关键结果：
+
+- `ok = true`
+- `mode = apply`
+- legacy instance `b58acf8e-4f18-4b40-b5c7-919600e5e636` 已取消
+- new instance ID：`651184a9-095d-42a9-8669-476c1d125a37`
+- new pending task ID：`bb156359-8c31-4ee8-9ba7-140ca0f54e23`
+- current node：`designing` / `设计中`
+- `subject_state.current_node_key = designing`
+- `subject_state.pending_task_count = 1`
+- `canceled_instance_count = 1`
+- `deleted_instance_count = 0`
+
+后端只读核验：
+
+- 旧实例 `b58acf8e-4f18-4b40-b5c7-919600e5e636`：
+  `status = canceled`
+- 新实例 `651184a9-095d-42a9-8669-476c1d125a37`：
+  `status = running`，`workflow_key = project_signing`，
+  `current_node_key = designing`
+- 新 task `bb156359-8c31-4ee8-9ba7-140ca0f54e23`：
+  `status = pending`，`node_key = designing`，
+  `assignee_permission_code = project.update`
+- action metadata：
+  `actions[].key = complete`，`business_domain = workflow_project`，
+  `business_action = designing`，`output_fields = []`
 
 ## Apply 后需要回传给 orange
 
-- project/customer ID
-- workflow instance ID
-- pending task ID
-- 当前节点
-- `actions[].key`
-- complete payload 要求
-- 期望推进路径
+- project/customer ID：`1a8589fb-8f3f-4900-a759-6d15438ffcc2`
+- workflow instance ID：`651184a9-095d-42a9-8669-476c1d125a37`
+- pending task ID：`bb156359-8c31-4ee8-9ba7-140ca0f54e23`
+- 当前节点：`designing` / `设计中`
+- `actions[].key`：`complete`
+- 当前 complete payload：
 
-orange 在收到新 instance/task/payload 前，不复测旧 task
-`aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f`。
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {}
+}
+```
+
+- 期望推进路径：
+
+```text
+designing -> proposal_confirmed -> signed -> design_finalized -> pending_start -> end
+```
+
+后续节点 payload 规则：
+
+- `designing`：`output = {}`
+- `proposal_confirmed`：`output.signed_amount` 必填
+- `signed`：`output = {}`
+- `design_finalized`：`output.start_date` 与
+  `output.construction_manager_employee_id` 必填
+- `pending_start`：`output = {}`
+
+orange 后续使用新 task `bb156359-8c31-4ee8-9ba7-140ca0f54e23`
+继续复测；旧 task `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f`
+不再提交。

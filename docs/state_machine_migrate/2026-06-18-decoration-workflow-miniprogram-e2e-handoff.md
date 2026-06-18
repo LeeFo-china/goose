@@ -236,7 +236,7 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 
 | 场景 | 现象 | 后端结论 |
 | --- | --- | --- |
-| `project_signing_workflow` | 项目 `1a8589fb-8f3f-4900-a759-6d15438ffcc2` complete 返回 `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED` | 该项目仍在旧 `construction_main/designing` running 实例；dry-run 已确认可重建到 `project_signing/designing`，正式 apply 前必须先完成业务确认门禁 |
+| `project_signing_workflow` | 旧 task 返回 `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED`，后端已完成受控 rebuild | 旧 `construction_main` 实例已取消，新 `project_signing/designing` 实例和 pending task 已生成，等待 orange 复测 |
 | `construction_procedure_log` | 已重新 smoke 通过 | 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 已创建水电施工日志并 complete 工序 task，流程推进到 `payment_stage_2` |
 | `stage_acceptance_transition` | 已重新 smoke 通过 | customer-confirm 返回 200，验收单变为 `customer_confirmed`，水电阶段变为 `accepted`；workflow 继续停留 `payment_stage_2` 属于新契约预期 |
 | `payment_stage_2` | 已重新 smoke 通过 | 财务账号 `18800005001 / 小龙女` 完成收款 task，后端创建 confirmed payment 和 ledger，workflow 已推进到 `procedure_tiling` |
@@ -307,8 +307,22 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
   `project_payment` 入账流水；如最终门禁需要 UI 证据，可继续补 Admin
   项目详情和财务台账页面截图
 - orange 回执：小程序侧已记录后端只读复核结果；`project_signing_workflow`
-  暂不复测旧 task，继续等待后端受控 rebuild 后回传新的
-  instance/task/payload
+  旧 task 不再复测，等待后端回传新 instance/task/payload 后继续
+
+`project_signing_workflow` 受控 rebuild 结果：
+
+- project ID：`1a8589fb-8f3f-4900-a759-6d15438ffcc2`
+- legacy instance ID：`b58acf8e-4f18-4b40-b5c7-919600e5e636`
+- legacy instance status：`canceled`
+- new workflow instance ID：`651184a9-095d-42a9-8669-476c1d125a37`
+- new pending task ID：`bb156359-8c31-4ee8-9ba7-140ca0f54e23`
+- current node：`designing` / `设计中`
+- `actions[].key`：`complete`
+- current complete payload：`{"action":"complete","reason":null,"output":{}}`
+- task assignee：`assignee_permission_code = project.update`
+- orange 可继续用之前复测账号 `18800005001 / 小龙女` 先执行新 task
+- 后端执行记录：
+  `docs/state_machine_migrate/2026-06-18-project-signing-rebuild-execution.md`
 
 ## 字段映射
 

@@ -41,6 +41,11 @@
       "target_workflow_key": "project_signing",
       "target_node_key": "designing",
       "latest_dry_run_ok": true,
+      "latest_apply_ok": true,
+      "applied_at": "2026-06-18T15:38:33+08:00",
+      "new_instance_id": "651184a9-095d-42a9-8669-476c1d125a37",
+      "new_task_id": "bb156359-8c31-4ee8-9ba7-140ca0f54e23",
+      "new_current_node_key": "designing",
       "confirmation_text": "确认允许将项目 1a8589fb-8f3f-4900-a759-6d15438ffcc2 的旧 construction_main running 实例取消，并重建到 project_signing designing 节点。",
       "dry_run_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-rebuild.ts --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --subject-type project --subject-id 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --workflow-key project_signing",
       "apply_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-rebuild.ts --apply --confirm-rebuild 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --subject-type project --subject-id 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --workflow-key project_signing"
@@ -124,7 +129,23 @@
       },
       {
         "key": "project_signing_workflow",
-        "status": "pending"
+        "status": "rebuild_completed_pending_orange_smoke",
+        "evidence": "docs/state_machine_migrate/2026-06-18-project-signing-rebuild-execution.md",
+        "external_evidence": "/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md",
+        "project_id": "1a8589fb-8f3f-4900-a759-6d15438ffcc2",
+        "legacy_instance_id": "b58acf8e-4f18-4b40-b5c7-919600e5e636",
+        "legacy_instance_status": "canceled",
+        "workflow_instance_id": "651184a9-095d-42a9-8669-476c1d125a37",
+        "task_id": "bb156359-8c31-4ee8-9ba7-140ca0f54e23",
+        "current_node_key": "designing",
+        "action_key": "complete",
+        "complete_payload": {
+          "action": "complete",
+          "reason": null,
+          "output": {}
+        },
+        "assignee_permission_code": "project.update",
+        "next_step": "orange smoke should complete new task and continue project_signing workflow path"
       },
       {
         "key": "payment_collection_workflow",
@@ -247,6 +268,6 @@
   "closeout_rules": {
     "can_run_legacy_apply": false,
     "can_close_prd_without_followup": false,
-    "reason": "Legacy instance apply confirmations, manual restore decision, project signing rebuild, and Admin UI screenshot evidence are still pending. Payment collection, payment_stage_2 after acceptance, customer design, construction procedure log, and stage acceptance transition workflow passed or have interface evidence on 2026-06-18."
+    "reason": "Invalid customer apply confirmation, manual restore decision, project signing orange smoke, and Admin UI screenshot evidence are still pending. Project signing controlled rebuild completed on 2026-06-18; payment collection, payment_stage_2 after acceptance, customer design, construction procedure log, and stage acceptance transition workflow passed or have interface evidence."
   }
 }
