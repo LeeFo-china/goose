@@ -4,6 +4,7 @@ import {
   getWorkflowCapabilityOptionsForTrack,
   getWorkflowFinanceKindOptionsForTrack,
   getWorkflowNodePresetsForTrack,
+  getWorkflowRuntimeIntegrationHint,
   getWorkflowTrack,
 } from "./workflow-business-track";
 
@@ -70,5 +71,21 @@ describe("workflow business track options", () => {
       "notification",
       "end",
     ]);
+  });
+
+  test("provides runtime integration hints for business workflows", () => {
+    expect(getWorkflowRuntimeIntegrationHint({ workflow_key: "customer_main" })?.badge).toBe(
+      "客户状态已接入",
+    );
+    expect(getWorkflowRuntimeIntegrationHint({ workflow_key: "project_signing" })?.badge).toBe(
+      "项目状态已接入",
+    );
+    expect(getWorkflowRuntimeIntegrationHint({ workflow_key: "construction_main" })?.badge).toBe(
+      "施工状态已接入",
+    );
+    expect(getWorkflowRuntimeIntegrationHint({ workflow_key: "expense_approval" })?.badge).toBe(
+      "费用审批已接入",
+    );
+    expect(getWorkflowRuntimeIntegrationHint({ workflow_key: "manual_custom" })).toBeNull();
   });
 });
