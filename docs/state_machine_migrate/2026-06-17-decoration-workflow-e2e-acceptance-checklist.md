@@ -229,6 +229,7 @@
 | Admin 发布前轨道校验 | `apps/admin/components/workflows/workflow-business-track-validation.test.ts` 覆盖模板派生 key、异常动作主线拦截、施工工序主状态重复 | 已覆盖 |
 | API 发布轨道校验 | `apps/api/src/services/workflow-business-track-validation.test.ts` 覆盖同一套服务端发布校验边界 | 已覆盖 |
 | task complete 当前节点 guard | `apps/api/src/services/workflow-tasks.test.ts` 覆盖 stale pending task 在进入业务 bridge 前返回 `WORKFLOW_NODE_NOT_CURRENT` | 已覆盖 |
+| 小程序任务中心 workflow 契约 | `apps/api/src/scripts/phase5-workflow-smoke.test.ts` 覆盖 `/task-center/todos` 中 `workflow_task:*` 待办必须保留 `action_label`、`workflow_actions` 和 workflow task 元数据 | 已覆盖 |
 | 项目详情收款入口边界 | `apps/admin/components/projects/project-status-action-dialog.test.ts` 和 `project-workflow-payment-gate.test.ts` 覆盖项目状态弹窗不录入金额或凭证，只校验已确认入账 | 已覆盖 |
 
 ## 失败处理

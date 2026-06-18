@@ -140,6 +140,13 @@ export function assertPhase5SmokePayload(
 
   if (TASK_CENTER_TODO_CHECK_NAMES.has(checkName)) {
     assertPaginatedList(checkName, data);
+    const list = getRecord(data).list as unknown[];
+    list.forEach((item, itemIndex) => {
+      assertTaskCenterWorkflowTodo(
+        `${checkName} item[${itemIndex}]`,
+        item,
+      );
+    });
     return;
   }
 
@@ -235,6 +242,53 @@ function assertWorkflowActionMetadata(
   }
 }
 
+function assertTaskCenterWorkflowTodo(label: string, item: unknown): void {
+  const record = getRecord(item, label);
+  const metadata = getOptionalRecord(record.metadata);
+  const isWorkflowTodo =
+    (typeof record.id === "string" && record.id.startsWith("workflow_task:")) ||
+    Boolean(metadata?.workflow_task_id || metadata?.workflow_actions);
+
+  if (!isWorkflowTodo) return;
+
+  if (!metadata) {
+    throw new Error(`${label} missing metadata`);
+  }
+
+  if (typeof record.action_label !== "string" || !record.action_label.trim()) {
+    throw new Error(`${label} missing action_label`);
+  }
+
+  for (const key of [
+    "workflow_task_id",
+    "workflow_instance_id",
+    "workflow_node_key",
+    "workflow_action_key",
+  ] as const) {
+    if (!(key in metadata)) {
+      throw new Error(`${label} metadata missing ${key}`);
+    }
+  }
+
+  if (!("workflow_business_domain" in metadata)) {
+    throw new Error(`${label} metadata missing workflow_business_domain`);
+  }
+  if (!("workflow_business_action" in metadata)) {
+    throw new Error(`${label} metadata missing workflow_business_action`);
+  }
+
+  if (!Array.isArray(metadata.workflow_actions)) {
+    throw new Error(`${label} metadata missing workflow_actions`);
+  }
+
+  metadata.workflow_actions.forEach((action, actionIndex) => {
+    assertWorkflowActionMetadata(
+      `${label} metadata workflow_actions[${actionIndex}]`,
+      action,
+    );
+  });
+}
+
 function unwrapApiData(payload: unknown): unknown {
   const record = getRecord(payload, "response");
   if (!("data" in record)) {
@@ -248,6 +302,12 @@ function getRecord(value: unknown, label = "value"): Record<string, unknown> {
     throw new Error(`${label} must be an object`);
   }
   return value as Record<string, unknown>;
+}
+
+function getOptionalRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function trimOptional(value: string | undefined): string | undefined {

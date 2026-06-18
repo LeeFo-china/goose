@@ -170,6 +170,75 @@ describe("assertPhase5SmokePayload", () => {
     ).not.toThrow();
   });
 
+  test("accepts task center workflow todos with workflow action metadata", () => {
+    expect(() =>
+      assertPhase5SmokePayload("task center project workflow todos", {
+        data: {
+          list: [
+            {
+              id: "workflow_task:task-1",
+              type: "project_workflow",
+              title: "排期开工",
+              action_label: "排期开工",
+              target_type: "project",
+              target_id: "project-1",
+              target_url: "/packageProjects/pages/detail/index?id=project-1",
+              metadata: {
+                workflow_task_id: "task-1",
+                workflow_instance_id: "instance-1",
+                workflow_node_key: "design_finalized",
+                workflow_node_type: "business",
+                workflow_action_key: "complete",
+                workflow_business_domain: "workflow_project",
+                workflow_business_action: "design_finalized",
+                workflow_actions: [
+                  {
+                    key: "complete",
+                    label: "排期开工",
+                    task_id: "task-1",
+                    node_key: "design_finalized",
+                    node_type: "business",
+                    business_domain: "workflow_project",
+                    business_action: "design_finalized",
+                    requires_reason: false,
+                    disabled: false,
+                    output_fields: [
+                      {
+                        name: "start_date",
+                        label: "开工日期",
+                        type: "date",
+                        required: true,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        },
+      })
+    ).not.toThrow();
+  });
+
+  test("rejects task center workflow todos without workflow metadata", () => {
+    expect(() =>
+      assertPhase5SmokePayload("task center customer followup todos", {
+        data: {
+          list: [
+            {
+              id: "workflow_task:task-1",
+              type: "customer_followup",
+              title: "客户线索",
+              action_label: "开始跟进",
+            },
+          ],
+          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        },
+      })
+    ).toThrow("task center customer followup todos item[0] missing metadata");
+  });
+
   test("rejects task center workflow filter payloads without paginated lists", () => {
     expect(() =>
       assertPhase5SmokePayload("customer workflow tasks", {
