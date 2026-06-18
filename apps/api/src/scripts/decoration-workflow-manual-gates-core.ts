@@ -30,6 +30,15 @@ const APPLY_GATES = [
   "invalid_customer_cancellations",
 ] as const;
 
+const REQUIRED_ORANGE_E2E_SCENARIOS = [
+  "customer_design_workflow",
+  "project_signing_workflow",
+  "payment_collection_workflow",
+  "construction_procedure_log",
+  "stage_acceptance_transition",
+  "admin_finance_and_workflow_visibility",
+] as const;
+
 export async function buildDecorationWorkflowManualGateCheckReport(
   evidenceFile: string | null,
   generatedAt = new Date().toISOString(),
@@ -322,9 +331,12 @@ function summarizeOrangeE2eAcceptance(evidence: Evidence): Check {
   const scenarios = arrayOfRecords(
     get(evidence, "orange_e2e_acceptance_gate.required_scenarios"),
   );
-  const pending = scenarios
-    .filter((scenario) => scenario.status !== "passed")
-    .map((scenario) => String(scenario.key));
+  const scenarioByKey = new Map(
+    scenarios.map((scenario) => [String(scenario.key), scenario]),
+  );
+  const pending = REQUIRED_ORANGE_E2E_SCENARIOS.filter((key) =>
+    scenarioByKey.get(key)?.status !== "passed"
+  );
   const confirmed = get(evidence, "orange_e2e_acceptance_gate.confirmed") === true;
   if (!confirmed || pending.length > 0) {
     return {
@@ -336,7 +348,7 @@ function summarizeOrangeE2eAcceptance(evidence: Evidence): Check {
   return {
     name: "orange_e2e_acceptance",
     ok: true,
-    detail: `passed=${scenarios.map((scenario) => String(scenario.key)).join(", ")}`,
+    detail: `passed=${REQUIRED_ORANGE_E2E_SCENARIOS.join(", ")}`,
   };
 }
 

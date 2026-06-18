@@ -213,6 +213,34 @@ describe("buildDecorationWorkflowManualGateCheckReport", () => {
     }
   });
 
+  test("keeps orange e2e blocked when a required scenario is missing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gooes-decoration-gates-"));
+    const path = join(dir, "decoration-gates.json");
+    try {
+      const evidence = buildCompleteEvidence();
+      evidence.orange_e2e_acceptance_gate.required_scenarios =
+        evidence.orange_e2e_acceptance_gate.required_scenarios.filter(
+          (scenario) => scenario.key !== "stage_acceptance_transition",
+        );
+
+      await writeFile(path, JSON.stringify(evidence), "utf8");
+
+      const report = await buildDecorationWorkflowManualGateCheckReport(
+        path,
+        generatedAt,
+      );
+
+      expect(report.ok).toBe(false);
+      expect(report.checks).toContainEqual({
+        name: "orange_e2e_acceptance",
+        ok: false,
+        detail: "pending=stage_acceptance_transition",
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("keeps closeout blocked when manual restore decision still needs follow-up", async () => {
     const dir = await mkdtemp(join(tmpdir(), "gooes-decoration-gates-"));
     const path = join(dir, "decoration-gates.json");
