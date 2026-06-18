@@ -231,6 +231,14 @@
         "admin_project_workflow_evidence": "workflow state API shows current_node_key=procedure_tiling and timeline payment_stage_2=done, procedure_tiling=current",
         "admin_finance_ledger_evidence": "/finance/ledger shows entry_type=project_payment, direction=in, ledger_id=9fc924b7-b5db-4356-a91e-d83dacecbbce",
         "ui_screenshot_required": true,
+        "orange_acknowledgement": {
+          "docs_updated": true,
+          "backend_read_only_review_recorded": true,
+          "admin_interface_evidence_recorded": true,
+          "ui_screenshot_followup": "only if final manual gates require Admin project workflow and finance ledger page screenshots",
+          "project_signing_retry_required": false,
+          "project_signing_next_step": "wait for backend controlled rebuild, then return new instance/task/payload"
+        },
         "completed_at": "2026-06-18",
         "note": "接口证据已通过；如最终业务门禁要求页面级证据，需要继续补 Admin 项目详情 workflow 状态和财务台账页面截图。project_signing_workflow 仍等待受控 rebuild，不能计入全链路关闭。"
       }

@@ -306,6 +306,9 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 - Admin 可见性：接口证据通过，`/finance/ledger` 可见对应
   `project_payment` 入账流水；如最终门禁需要 UI 证据，可继续补 Admin
   项目详情和财务台账页面截图
+- orange 回执：小程序侧已记录后端只读复核结果；`project_signing_workflow`
+  暂不复测旧 task，继续等待后端受控 rebuild 后回传新的
+  instance/task/payload
 
 ## 字段映射
 

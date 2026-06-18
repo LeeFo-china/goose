@@ -154,6 +154,16 @@ orange 请求日志：
 - `/tmp/orange-payment-stage2-smoke-1781767305119-sanitized.json`
 - `/tmp/orange-payment-stage2-admin-visibility-1781767376188-sanitized.json`
 
+orange 后续回执：
+
+- orange 已记录后端只读复核结果，确认本次 `payment_stage_2` smoke 与后端复核一致。
+- Admin 可见性接口证据已记录：`/finance/ledger` 可见 `project_payment`
+  入账流水，workflow state 已推进到 `procedure_tiling`。
+- 如最终 manual gates 要求 UI 截图，orange 再补 Admin 项目详情 workflow
+  状态和财务台账页面截图。
+- `project_signing_workflow` 暂不复测旧 task，继续等待后端受控 rebuild 后回传新的
+  instance/task/payload。
+
 ## 2. `project_signing_workflow`
 
 当前不要执行旧 task，也不要让 orange 重试旧 complete。
