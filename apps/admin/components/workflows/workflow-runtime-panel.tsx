@@ -15,6 +15,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchWorkflowRuntimeInstances } from "./workflow-requests";
+import {
+  getWorkflowRuntimeVersionState,
+  WORKFLOW_VERSION_EFFECT_COPY,
+} from "./workflow-version-semantics";
 import type {
   WorkflowRuntimeInstance,
   WorkflowRuntimeInstanceListData,
@@ -59,9 +63,11 @@ function formatDateTime(value: string | null | undefined) {
 
 export function WorkflowRuntimePanel({
   workflowId,
+  activeVersionId,
   className,
 }: {
   workflowId: string;
+  activeVersionId?: string | null;
   className?: string;
 }) {
   const [data, setData] = useState<WorkflowRuntimeInstanceListData | null>(null);
@@ -105,7 +111,7 @@ export function WorkflowRuntimePanel({
           <div>
             <h2 className="text-base font-semibold tracking-normal">运行实例</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              最近 5 条已发布流程运行记录。
+              {WORKFLOW_VERSION_EFFECT_COPY.runtimeDescription}
             </p>
           </div>
         </div>
@@ -137,6 +143,7 @@ export function WorkflowRuntimePanel({
             <TableRow>
               <TableHead>对象</TableHead>
               <TableHead>状态</TableHead>
+              <TableHead>实例版本</TableHead>
               <TableHead>当前节点</TableHead>
               <TableHead>开始时间</TableHead>
               <TableHead>完成时间</TableHead>
@@ -144,36 +151,55 @@ export function WorkflowRuntimePanel({
           </TableHeader>
           <TableBody>
             {instances.length > 0 ? (
-              instances.map((instance) => (
-                <TableRow key={instance.id}>
-                  <TableCell>
-                    <div className="font-medium">
-                      {subjectLabels[instance.subject_type]}
-                    </div>
-                    <div className="max-w-[240px] truncate text-xs text-muted-foreground">
-                      {instance.subject_id}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusVariants[instance.status]}>
-                      {statusLabels[instance.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {instance.current_node_key || "-"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {formatDateTime(instance.started_at)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {formatDateTime(instance.completed_at)}
-                  </TableCell>
-                </TableRow>
-              ))
+              instances.map((instance) => {
+                const versionState = getWorkflowRuntimeVersionState({
+                  activeVersionId,
+                  instanceVersionId: instance.version_id,
+                  status: instance.status,
+                });
+                return (
+                  <TableRow key={instance.id}>
+                    <TableCell>
+                      <div className="font-medium">
+                        {subjectLabels[instance.subject_type]}
+                      </div>
+                      <div className="max-w-[240px] truncate text-xs text-muted-foreground">
+                        {instance.subject_id}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusVariants[instance.status]}>
+                        {statusLabels[instance.status]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant={versionState.variant} className="w-fit">
+                          {versionState.label}
+                        </Badge>
+                        {versionState.stale ? (
+                          <span className="text-xs text-muted-foreground">
+                            需受控重建后使用最新模板
+                          </span>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {instance.current_node_key || "-"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {formatDateTime(instance.started_at)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {formatDateTime(instance.completed_at)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
                   暂无运行实例

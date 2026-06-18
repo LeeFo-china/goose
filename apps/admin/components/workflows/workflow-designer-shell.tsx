@@ -15,6 +15,7 @@ import {
   Save,
   ShieldCheck,
 } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas";
 import type { WorkflowValidationResult } from "@/components/workflows/workflow-designer-types";
@@ -29,7 +30,10 @@ import { createWorkflowConnectionEdge } from "@/components/workflows/workflow-co
 import {
   type WorkflowConnectionSource,
 } from "@/components/workflows/workflow-branch-projection";
-import { getWorkflowTrack } from "@/components/workflows/workflow-business-track";
+import {
+  getWorkflowRuntimeIntegrationHint,
+  getWorkflowTrack,
+} from "@/components/workflows/workflow-business-track";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import { WorkflowPropertyPanel } from "@/components/workflows/workflow-property-panel";
@@ -37,6 +41,8 @@ import {
   publishWorkflowDefinition,
   saveWorkflowGraph,
 } from "@/components/workflows/workflow-requests";
+import { WorkflowVersionEffectNotice } from "@/components/workflows/workflow-version-effect-notice";
+import { WORKFLOW_VERSION_EFFECT_COPY } from "@/components/workflows/workflow-version-semantics";
 import { WorkflowValidationPanel } from "@/components/workflows/workflow-validation-panel";
 import { useWorkflowValidationPlayback } from "@/components/workflows/workflow-validation-playback";
 import type {
@@ -74,6 +80,7 @@ export function WorkflowDesignerShell({
   const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<WorkflowValidationResult | null>(null);
   const [mobilePanel, setMobilePanel] = useState<DesignerPanel>("canvas");
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const { playback, playValidationPlayback } = useWorkflowValidationPlayback(graph);
   const selectedNode = useMemo(
@@ -240,6 +247,11 @@ export function WorkflowDesignerShell({
       return;
     }
 
+    setPublishConfirmOpen(true);
+  }
+
+  function confirmPublish() {
+    if (!graph) return;
     startTransition(async () => {
       try {
         const result = await publishWorkflowDefinition(workflowId);
@@ -249,6 +261,7 @@ export function WorkflowDesignerShell({
           edges: result.graph.edges,
         });
         setDirty(false);
+        setPublishConfirmOpen(false);
         toast.success("流程已发布");
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "发布流程失败");
@@ -273,8 +286,8 @@ export function WorkflowDesignerShell({
     : publishValidation.valid
       ? "发布当前已保存流程"
       : "本地校验通过后才能发布";
-  const customerMainWorkflow = graph.definition.workflow_key === "customer_main";
   const workflowTrack = getWorkflowTrack(graph.definition);
+  const integrationHint = getWorkflowRuntimeIntegrationHint(graph.definition);
   const readiness = publishValidation.valid
     ? { label: "可发布", icon: CheckCircle2, badge: "success" as const }
     : { label: `${publishValidation.issues.length} 项待处理`, icon: CircleAlert, badge: "warning" as const };
@@ -313,9 +326,7 @@ export function WorkflowDesignerShell({
                 <span className="tabular-nums">节点 {graph.nodes.length}</span>
                 <span className="tabular-nums">连线 {graph.edges.length}</span>
                 <span className="hidden min-w-0 md:inline">
-                  {customerMainWorkflow
-                    ? "关键节点同步客户状态"
-                    : "租户业务、施工、工序和审批流程编排"}
+                  {integrationHint?.headerSummary || "租户业务、施工、工序和审批流程编排"}
                 </span>
               </div>
             </div>
@@ -371,19 +382,7 @@ export function WorkflowDesignerShell({
           </div>
         </header>
 
-        {customerMainWorkflow ? (
-          <div className="shrink-0 border-b bg-secondary/45 px-3 py-2 md:px-4">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <Badge variant="secondary" className="bg-card">客户主流程</Badge>
-              <span className="font-medium text-secondary-foreground">
-                状态自动推进
-              </span>
-              <span className="text-muted-foreground">
-                跟进、到店、设计节点会同步到客户详情。
-              </span>
-            </div>
-          </div>
-        ) : null}
+        <WorkflowVersionEffectNotice integrationHint={integrationHint} />
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="grid grid-cols-3 gap-2 border-b bg-background p-2 lg:hidden">
@@ -473,6 +472,15 @@ export function WorkflowDesignerShell({
           <WorkflowValidationPanel validation={validation} />
         </div>
       </div>
+      <ConfirmActionDialog
+        open={publishConfirmOpen}
+        onOpenChange={setPublishConfirmOpen}
+        title="发布新流程版本"
+        description={WORKFLOW_VERSION_EFFECT_COPY.publishConfirm}
+        confirmLabel="确认发布"
+        pending={pending}
+        onConfirm={confirmPublish}
+      />
     </div>
   );
 }

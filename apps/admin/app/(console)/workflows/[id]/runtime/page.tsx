@@ -48,7 +48,11 @@ export default async function WorkflowRuntimePage({
         </Button>
       </div>
 
-      <WorkflowRuntimePanel className="min-h-0 flex-1 shadow-none" workflowId={id} />
+      <WorkflowRuntimePanel
+        activeVersionId={detail.definition.active_version_id}
+        className="min-h-0 flex-1 shadow-none"
+        workflowId={id}
+      />
     </div>
   );
 }
