@@ -56,9 +56,23 @@ GET /workflow-tasks?page=1&pageSize=20&subject_type=project&subject_id=d382cd45-
 - `project.update`，scope = `all`
 - `task_center.read`，scope = `self`
 
-当前本仓库的 `/task-center/todos` 仍是旧聚合待办口径，未纳入通用
-`workflow_tasks`。本次收款 smoke 不应以 `/task-center/todos` 的数量作为阻塞条件；
-小程序任务中心应按 orange 当前实现使用 `/workflow-tasks?status=pending`。
+准备本次收款 smoke 时，`/task-center/todos` 仍按旧聚合待办口径验收，因此本次
+收款 smoke 不以 `/task-center/todos` 的数量作为阻塞条件；orange 当时按
+`/workflow-tasks?status=pending` 完成验收。
+
+后续 gooes 已补齐旧任务中心兼容：
+
+- `/task-center/todos?type=project_payment&status=pending` 可返回
+  `payment_collection` workflow 待办。
+- `/task-center/todos?type=project_workflow&status=pending` 可返回项目签约/施工
+  workflow 待办。
+- `/task-center/todos?type=customer_followup&status=pending` 可返回客户 workflow
+  待办。
+- `workflow_task:*` 待办会保留 `action_label`、`metadata.workflow_actions`、
+  `workflow_task_id`、`workflow_instance_id` 和当前节点业务语义。
+
+新一轮联调可以继续以 `/workflow-tasks` 作为 workflow-only 主入口；如小程序要走
+旧任务中心入口，也必须按上述 `workflow_task:*` metadata 契约验收。
 
 ## 3. 预期 action contract
 
@@ -154,8 +168,10 @@ POST /workflow-tasks/03f6bce9-8d48-4753-8c15-dd36e8aa65a9/complete
 - `finance_ledger_entries.payment_id = 5859aec7-a8a8-474b-83d8-ba420bf1555d`
 - workflow 当前节点已推进到 `procedure_tiling`
 
-本次未以 `/task-center/todos` count 作为阻塞条件，按后端说明只走
-`/workflow-tasks?status=pending`。
+本次收款 smoke 当时未以 `/task-center/todos` count 作为阻塞条件，按
+`/workflow-tasks?status=pending` 口径通过。后续 gooes 已补齐 `/task-center/todos`
+对 workflow 待办的兼容和 smoke 契约校验，后续非收款场景可把旧任务中心入口纳入
+附加验收。
 
 ## 6. 给小程序团队的回复口径
 
@@ -165,9 +181,7 @@ POST /workflow-tasks/03f6bce9-8d48-4753-8c15-dd36e8aa65a9/complete
 > direct upload 已携带 `scene=project_payment` 和 `project_id`，
 > `POST /workflow-tasks/:taskId/complete` 返回 200，原收款 task 已完成，
 > 后端已生成 confirmed payment 和 project_payment 入账流水，workflow 已推进到
-> `procedure_tiling`。本次验收按 `/workflow-tasks?status=pending` 口径通过，
-> 不再以旧 `/task-center/todos` count 作为阻塞项。
-
-后续如果要把收款待办重新纳入小程序统一任务中心入口，需要后端先把
-`/task-center/todos` 聚合扩展到通用 `workflow_tasks`，否则小程序继续以
-`/workflow-tasks` 作为 workflow 待办源。
+> `procedure_tiling`。本次验收按 `/workflow-tasks?status=pending` 口径通过。
+> 后续 gooes 已补齐 `/task-center/todos` 对 workflow 待办的兼容，小程序如果要走
+> 统一任务中心入口，需要校验返回项为 `workflow_task:*` 且携带 `action_label`、
+> `workflow_actions` 和 workflow task 元数据。
