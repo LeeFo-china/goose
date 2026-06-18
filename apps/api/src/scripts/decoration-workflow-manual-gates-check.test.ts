@@ -7,7 +7,7 @@ import {
   parseDecorationWorkflowManualGateCheckArgs,
 } from "./decoration-workflow-manual-gates-check";
 
-const generatedAt = "2026-06-17T23:30:00.000+08:00";
+const generatedAt = "2026-06-18T10:30:00.000+08:00";
 
 describe("parseDecorationWorkflowManualGateCheckArgs", () => {
   test("parses decoration manual gate evidence file path", () => {
@@ -78,7 +78,7 @@ describe("buildDecorationWorkflowManualGateCheckReport", () => {
         name: "orange_e2e_acceptance",
         ok: false,
         detail:
-          "pending=customer_design_workflow, project_signing_workflow, payment_collection_workflow, construction_procedure_log, stage_acceptance_transition, admin_finance_and_workflow_visibility",
+          "pending=customer_design_workflow, project_signing_workflow, construction_procedure_log, stage_acceptance_transition, admin_finance_and_workflow_visibility",
       },
       {
         name: "closeout_rules_consistent",
