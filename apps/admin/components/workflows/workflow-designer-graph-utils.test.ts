@@ -89,6 +89,54 @@ describe("validateGraph business tracks", () => {
     expect(result.valid).toBe(true);
   });
 
+  test("rejects construction workflow with a disconnected payment gate", () => {
+    const nodes = [
+      node("start", "start"),
+      node("started", "construction_stage", "construction_start"),
+      procedureNode("procedure_demolition", "demolition"),
+      procedureNode("procedure_plumbing_electrical", "plumbing_electrical"),
+      paymentNode("water_electricity_payment", "stage_2"),
+      procedureNode("procedure_tiling", "tiling"),
+      procedureNode("procedure_woodwork", "woodwork"),
+      procedureNode("procedure_painting", "painting"),
+      procedureNode("procedure_installation", "installation"),
+      node("final_acceptance", "construction_stage", "final_acceptance"),
+      node("handover", "confirmation", "final_acceptance"),
+      node("end", "end"),
+    ];
+    const nodeByKey = new Map(nodes.map((item) => [item.node_key, item]));
+    const mustNode = (nodeKey: string) => {
+      const matchedNode = nodeByKey.get(nodeKey);
+      if (!matchedNode) {
+        throw new Error(`Missing node ${nodeKey}`);
+      }
+      return matchedNode;
+    };
+    const mainlineWithoutPayment = nodes.filter((item) =>
+      item.node_key !== "water_electricity_payment"
+    );
+
+    const result = validateGraph({
+      definition: definition("construction_main", "construction"),
+      nodes,
+      edges: [
+        ...linearEdges(mainlineWithoutPayment),
+        edge(
+          mustNode("water_electricity_payment"),
+          mustNode("procedure_tiling"),
+        ),
+      ],
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.map((issue) => issue.message)).toContain(
+      "非开始节点需要至少一条入边",
+    );
+    expect(result.issues.find((issue) =>
+      issue.code === "node_incoming_required"
+    )?.nodeKey).toBe("water_electricity_payment");
+  });
+
   test("rejects construction workflow with duplicate construction start status semantics", () => {
     const nodes = [
       node("start", "start"),
@@ -190,17 +238,21 @@ function linearEdges(nodes: WorkflowNode[]): WorkflowEdge[] {
     if (!target) {
       throw new Error(`Missing target node after ${source.node_key}`);
     }
-    return {
-      id: `edge-${source.node_key}-${target.node_key}`,
-      tenant_id: "tenant-1",
-      definition_id: "definition-1",
-      source_node_id: source.id,
-      target_node_id: target.id,
-      label: null,
-      condition: { operator: "always" },
-      priority: 100,
-      created_at: NOW,
-      updated_at: NOW,
-    };
+    return edge(source, target);
   });
+}
+
+function edge(source: WorkflowNode, target: WorkflowNode): WorkflowEdge {
+  return {
+    id: `edge-${source.node_key}-${target.node_key}`,
+    tenant_id: "tenant-1",
+    definition_id: "definition-1",
+    source_node_id: source.id,
+    target_node_id: target.id,
+    label: null,
+    condition: { operator: "always" },
+    priority: 100,
+    created_at: NOW,
+    updated_at: NOW,
+  };
 }

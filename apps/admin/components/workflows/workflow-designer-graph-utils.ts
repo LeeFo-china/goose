@@ -143,6 +143,8 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
   const allNodeKeys = new Set(graph.nodes.map((node) => node.node_key));
   const nodeIds = new Set(graph.nodes.map((node) => node.id));
   const outgoingNodeIds = new Set(graph.edges.map((edge) => edge.source_node_id));
+  const incomingNodeIds = new Set<string>();
+  const outgoingTargetIdsBySourceId = new Map<string, string[]>();
   const outgoingEdgesBySourceId = new Map<string, WorkflowEdge[]>();
 
   graph.nodes.forEach((node) => {
@@ -289,14 +291,27 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
       ...(outgoingEdgesBySourceId.get(edge.source_node_id) || []),
       edge,
     ]);
-    if (!nodeIds.has(edge.source_node_id)) {
+    const sourceExists = nodeIds.has(edge.source_node_id);
+    const targetExists = nodeIds.has(edge.target_node_id);
+    if (!sourceExists) {
       issues.push({ code: "edge_source_missing", message: "连线来源节点不存在" });
     }
-    if (!nodeIds.has(edge.target_node_id)) {
+    if (!targetExists) {
       issues.push({ code: "edge_target_missing", message: "连线目标节点不存在" });
     }
     if (edge.source_node_id === edge.target_node_id) {
       issues.push({ code: "edge_self_loop", message: "连线不能指向自身" });
+    }
+    if (
+      sourceExists &&
+      targetExists &&
+      edge.source_node_id !== edge.target_node_id
+    ) {
+      incomingNodeIds.add(edge.target_node_id);
+      outgoingTargetIdsBySourceId.set(edge.source_node_id, [
+        ...(outgoingTargetIdsBySourceId.get(edge.source_node_id) ?? []),
+        edge.target_node_id,
+      ]);
     }
   });
   outgoingEdgesBySourceId.forEach((sourceEdges, sourceNodeId) => {
@@ -340,8 +355,61 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
         nodeKey: node.node_key,
       });
     }
+    if (node.node_type !== "start" && !incomingNodeIds.has(node.id)) {
+      issues.push({
+        code: "node_incoming_required",
+        message: "非开始节点需要至少一条入边",
+        nodeKey: node.node_key,
+      });
+    }
   });
+  const startNode = graph.nodes.find((node) => node.node_type === "start") ?? null;
+  if (startNode) {
+    const reachableNodeIds = findReachableNodeIds(
+      startNode.id,
+      outgoingTargetIdsBySourceId,
+    );
+    graph.nodes.forEach((node) => {
+      if (reachableNodeIds.has(node.id)) return;
+      issues.push({
+        code: "node_unreachable_from_start",
+        message: "节点必须能从开始节点到达",
+        nodeKey: node.node_key,
+      });
+    });
+    const endReachable = graph.nodes.some((node) =>
+      node.node_type === "end" && reachableNodeIds.has(node.id)
+    );
+    if (!endReachable) {
+      issues.push({
+        code: "end_unreachable_from_start",
+        message: "开始节点必须能连到结束节点",
+      });
+    }
+  }
   issues.push(...findWorkflowBusinessTrackIssues(graph));
 
   return { valid: issues.length === 0, issues };
+}
+
+function findReachableNodeIds(
+  startNodeId: string,
+  outgoingTargetIdsBySourceId: Map<string, string[]>,
+) {
+  const reachableNodeIds = new Set<string>();
+  const pendingNodeIds = [startNodeId];
+
+  while (pendingNodeIds.length > 0) {
+    const nodeId = pendingNodeIds.pop();
+    if (!nodeId || reachableNodeIds.has(nodeId)) continue;
+    reachableNodeIds.add(nodeId);
+
+    for (const targetNodeId of outgoingTargetIdsBySourceId.get(nodeId) ?? []) {
+      if (!reachableNodeIds.has(targetNodeId)) {
+        pendingNodeIds.push(targetNodeId);
+      }
+    }
+  }
+
+  return reachableNodeIds;
 }

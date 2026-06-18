@@ -71,17 +71,32 @@ export function validateWorkflowPublishGraph(
   const invalidNodeIds = new Set<string>();
   const selfLoopNodeIds = new Set<string>();
   const sourceNodeIds = new Set<string>();
+  const incomingNodeIds = new Set<string>();
+  const outgoingTargetIdsBySourceId = new Map<string, string[]>();
 
   for (const edge of edges) {
     sourceNodeIds.add(edge.source_node_id);
-    if (!nodeIds.has(edge.source_node_id)) {
+    const sourceExists = nodeIds.has(edge.source_node_id);
+    const targetExists = nodeIds.has(edge.target_node_id);
+    if (!sourceExists) {
       invalidNodeIds.add(edge.source_node_id);
     }
-    if (!nodeIds.has(edge.target_node_id)) {
+    if (!targetExists) {
       invalidNodeIds.add(edge.target_node_id);
     }
     if (edge.source_node_id === edge.target_node_id) {
       selfLoopNodeIds.add(edge.source_node_id);
+    }
+    if (
+      sourceExists &&
+      targetExists &&
+      edge.source_node_id !== edge.target_node_id
+    ) {
+      incomingNodeIds.add(edge.target_node_id);
+      outgoingTargetIdsBySourceId.set(edge.source_node_id, [
+        ...(outgoingTargetIdsBySourceId.get(edge.source_node_id) ?? []),
+        edge.target_node_id,
+      ]);
     }
   }
 
@@ -111,6 +126,39 @@ export function validateWorkflowPublishGraph(
         deadEndNodes.map((node) => node.node_key).join("、")
       }`,
     );
+  }
+
+  const missingIncomingNodes = nodes.filter((node) =>
+    node.node_type !== "start" && !incomingNodeIds.has(node.id)
+  );
+  if (missingIncomingNodes.length > 0) {
+    throw Errors.badRequest(
+      `非开始节点必须至少有一条入边: ${
+        missingIncomingNodes.map((node) => node.node_key).join("、")
+      }`,
+    );
+  }
+
+  const startNode = nodes.find((node) => node.node_type === "start") ?? null;
+  if (startNode) {
+    const reachableNodeIds = findReachableNodeIds(
+      startNode.id,
+      outgoingTargetIdsBySourceId,
+    );
+    const unreachableNodes = nodes.filter((node) => !reachableNodeIds.has(node.id));
+    if (unreachableNodes.length > 0) {
+      throw Errors.badRequest(
+        `节点必须能从开始节点到达: ${
+          unreachableNodes.map((node) => node.node_key).join("、")
+        }`,
+      );
+    }
+    const endReachable = nodes.some((node) =>
+      node.node_type === "end" && reachableNodeIds.has(node.id)
+    );
+    if (!endReachable) {
+      throw Errors.badRequest("开始节点必须能连到结束节点");
+    }
   }
 
   const invalidConfigRefs = findInvalidConfigReferences(nodes, nodeKeys);
@@ -195,4 +243,26 @@ function findInvalidConfigReferences(
   }
 
   return Array.from(invalidRefs);
+}
+
+function findReachableNodeIds(
+  startNodeId: string,
+  outgoingTargetIdsBySourceId: Map<string, string[]>,
+) {
+  const reachableNodeIds = new Set<string>();
+  const pendingNodeIds = [startNodeId];
+
+  while (pendingNodeIds.length > 0) {
+    const nodeId = pendingNodeIds.pop();
+    if (!nodeId || reachableNodeIds.has(nodeId)) continue;
+    reachableNodeIds.add(nodeId);
+
+    for (const targetNodeId of outgoingTargetIdsBySourceId.get(nodeId) ?? []) {
+      if (!reachableNodeIds.has(targetNodeId)) {
+        pendingNodeIds.push(targetNodeId);
+      }
+    }
+  }
+
+  return reachableNodeIds;
 }
