@@ -135,7 +135,25 @@
         "task_id": "03f6bce9-8d48-4753-8c15-dd36e8aa65a9",
         "payment_id": "5859aec7-a8a8-474b-83d8-ba420bf1555d",
         "ledger_id": "aeaa8344-b5aa-4494-868d-1268520ae58f",
-        "completed_at": "2026-06-18"
+        "completed_at": "2026-06-18",
+        "additional_samples": [
+          {
+            "key": "payment_stage_2_after_acceptance",
+            "evidence": "docs/state_machine_migrate/2026-06-18-decoration-workflow-next-smoke-backend-response.md",
+            "external_evidence": "/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-next-smoke-backend-handoff.md",
+            "project_id": "54f11aa5-09a8-4410-a9c5-604a7fe9e09c",
+            "workflow_instance_id": "0b2a033f-504a-49d6-b196-fe9200761adf",
+            "task_id": "8cb1b3ac-69e5-42e5-8496-787e3897878c",
+            "payment_id": "b5356f22-ed67-4e29-9afc-94ecccba146d",
+            "ledger_id": "9fc924b7-b5db-4356-a91e-d83dacecbbce",
+            "evidence_object_key": "tenants/3eebca47-961f-4899-b976-a3d3208d326b/project-payment/projects/54f11aa5-09a8-4410-a9c5-604a7fe9e09c/2026/06/18/f67e886c-2648-434f-89cf-7397a650f0d4.jpg",
+            "actor": "18800005001 / 小龙女 / bbab0193-43ae-4b7a-a7f3-24314e0f2e0d",
+            "workflow_transition": "payment_stage_2 -> procedure_tiling",
+            "new_pending_task_id": "f3f75f56-4180-40c1-b953-459a832ef146",
+            "admin_finance_ledger_evidence": "/finance/ledger project_payment entry visible",
+            "completed_at": "2026-06-18"
+          }
+        ]
       },
       {
         "key": "construction_procedure_log",
@@ -191,24 +209,36 @@
           "docs_updated": true,
           "stage_acceptance_transition_marked_passed": true,
           "repeat_customer_confirm_required": false,
-          "next_step": "wait for payment_stage_2 workflow completion, then backend advances to procedure_tiling"
+          "next_step": "payment_stage_2 workflow completed later; backend advanced to procedure_tiling"
         },
         "acceptance_action": {
           "type": "edit",
           "enabled": true
         },
         "completed_at": "2026-06-18",
-        "note": "已验证工序 complete 后刷新到可用验收入口，submit、主管复核、客户 open-ticket verify 和 customer-confirm 全链路通过；客户确认上一工序验收后 workflow 继续停留 payment_stage_2，等待收款节点推进。"
+        "note": "已验证工序 complete 后刷新到可用验收入口，submit、主管复核、客户 open-ticket verify 和 customer-confirm 全链路通过；客户确认上一工序验收后 workflow 当时继续停留 payment_stage_2，后续已通过 payment_stage_2 smoke 推进到 procedure_tiling。"
       },
       {
         "key": "admin_finance_and_workflow_visibility",
-        "status": "pending"
+        "status": "interface_evidence_passed_ui_screenshot_pending",
+        "evidence": "docs/state_machine_migrate/2026-06-18-decoration-workflow-next-smoke-backend-response.md",
+        "external_evidence": "/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md",
+        "project_id": "54f11aa5-09a8-4410-a9c5-604a7fe9e09c",
+        "workflow_instance_id": "0b2a033f-504a-49d6-b196-fe9200761adf",
+        "task_id": "8cb1b3ac-69e5-42e5-8496-787e3897878c",
+        "payment_id": "b5356f22-ed67-4e29-9afc-94ecccba146d",
+        "ledger_id": "9fc924b7-b5db-4356-a91e-d83dacecbbce",
+        "admin_project_workflow_evidence": "workflow state API shows current_node_key=procedure_tiling and timeline payment_stage_2=done, procedure_tiling=current",
+        "admin_finance_ledger_evidence": "/finance/ledger shows entry_type=project_payment, direction=in, ledger_id=9fc924b7-b5db-4356-a91e-d83dacecbbce",
+        "ui_screenshot_required": true,
+        "completed_at": "2026-06-18",
+        "note": "接口证据已通过；如最终业务门禁要求页面级证据，需要继续补 Admin 项目详情 workflow 状态和财务台账页面截图。project_signing_workflow 仍等待受控 rebuild，不能计入全链路关闭。"
       }
     ]
   },
   "closeout_rules": {
     "can_run_legacy_apply": false,
     "can_close_prd_without_followup": false,
-    "reason": "Legacy instance apply confirmations, manual restore decision, and project signing / admin visibility orange E2E scenarios are still pending. Payment collection, customer design, construction procedure log, and stage acceptance transition workflow passed on 2026-06-18."
+    "reason": "Legacy instance apply confirmations, manual restore decision, project signing rebuild, and Admin UI screenshot evidence are still pending. Payment collection, payment_stage_2 after acceptance, customer design, construction procedure log, and stage acceptance transition workflow passed or have interface evidence on 2026-06-18."
   }
 }

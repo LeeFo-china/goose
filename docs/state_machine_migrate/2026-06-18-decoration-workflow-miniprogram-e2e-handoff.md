@@ -232,13 +232,14 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 新版客户设计 workflow 的业务终点是设计完成，客户签约不再由 `customer_main`
 推进；项目签约必须进入独立 `project_signing` workflow。
 
-当前阻塞：
+当前状态：
 
 | 场景 | 现象 | 后端结论 |
 | --- | --- | --- |
 | `project_signing_workflow` | 项目 `1a8589fb-8f3f-4900-a759-6d15438ffcc2` complete 返回 `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED` | 该项目仍在旧 `construction_main/designing` running 实例；dry-run 已确认可重建到 `project_signing/designing`，正式 apply 前必须先完成业务确认门禁 |
 | `construction_procedure_log` | 已重新 smoke 通过 | 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 已创建水电施工日志并 complete 工序 task，流程推进到 `payment_stage_2` |
 | `stage_acceptance_transition` | 已重新 smoke 通过 | customer-confirm 返回 200，验收单变为 `customer_confirmed`，水电阶段变为 `accepted`；workflow 继续停留 `payment_stage_2` 属于新契约预期 |
+| `payment_stage_2` | 已重新 smoke 通过 | 财务账号 `18800005001 / 小龙女` 完成收款 task，后端创建 confirmed payment 和 ledger，workflow 已推进到 `procedure_tiling` |
 
 施工日志复测通过样本：
 
@@ -281,11 +282,30 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
   `payment_stage_2 = current`
 - 后端对接文档：
   `docs/state_machine_migrate/2026-06-18-stage-acceptance-transition-customer-confirm-backend-handoff.md`
-- 结论：`stage_acceptance_transition` 已通过；后续由收款节点继续推进到瓦工
+- 结论：`stage_acceptance_transition` 已通过；后续已由收款节点推进到瓦工
 - orange 回执：小程序侧已按后端回执更新文档记录；后续不再对
   `acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992` 重复执行
-  `customer-confirm`，当前项目继续等待 `payment_stage_2` 收款 workflow 完成后由
-  后端推进到 `procedure_tiling`
+  `customer-confirm`
+
+`payment_stage_2` 收款推进通过样本：
+
+- 执行账号：`18800005001` / 小龙女 /
+  `bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`
+- project ID：`54f11aa5-09a8-4410-a9c5-604a7fe9e09c`
+- workflow instance ID：`0b2a033f-504a-49d6-b196-fe9200761adf`
+- task ID：`8cb1b3ac-69e5-42e5-8496-787e3897878c`
+- payment ID：`b5356f22-ed67-4e29-9afc-94ecccba146d`
+- ledger ID：`9fc924b7-b5db-4356-a91e-d83dacecbbce`
+- 凭证 object key：
+  `tenants/3eebca47-961f-4899-b976-a3d3208d326b/project-payment/projects/54f11aa5-09a8-4410-a9c5-604a7fe9e09c/2026/06/18/f67e886c-2648-434f-89cf-7397a650f0d4.jpg`
+- complete 后状态：`payment_stage_2 = done`，
+  `procedure_tiling = current`
+- 新 pending task：`f3f75f56-4180-40c1-b953-459a832ef146`
+- 后端只读核验：旧 task 已 `completed`，payment 为
+  `confirmed/stage_2/10000`，ledger 为 `project_payment/in/10000`
+- Admin 可见性：接口证据通过，`/finance/ledger` 可见对应
+  `project_payment` 入账流水；如最终门禁需要 UI 证据，可继续补 Admin
+  项目详情和财务台账页面截图
 
 ## 字段映射
 

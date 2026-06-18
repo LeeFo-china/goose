@@ -10,7 +10,9 @@ complete，不执行 legacy rebuild apply，也不修改 orange 仓库。
 
 ## 1. `payment_stage_2` 收款节点
 
-当前可以继续 smoke。后端只读核对时间：`2026-06-18T15:10:33+08:00`。
+orange 已完成本节点 smoke。后端首次回传核对时间：
+`2026-06-18T15:10:33+08:00`；完成后只读复核时间：
+`2026-06-18T15:21:19+08:00`。
 
 | 字段 | 值 |
 | --- | --- |
@@ -115,6 +117,42 @@ POST /workflow-tasks/8cb1b3ac-69e5-42e5-8496-787e3897878c/complete
 - `procedure_tiling = current`
 - task `8cb1b3ac-69e5-42e5-8496-787e3897878c` 从 pending 列表消失
 - Admin 财务台账出现 `entry_type=project_payment`、`direction=in` 的入账流水
+
+### orange 回填结果
+
+本次 smoke 结果：通过。
+
+| 字段 | 值 |
+| --- | --- |
+| payment ID | `b5356f22-ed67-4e29-9afc-94ecccba146d` |
+| ledger ID | `9fc924b7-b5db-4356-a91e-d83dacecbbce` |
+| complete task status | `completed` |
+| workflow current node | `procedure_tiling` / `瓦工` |
+| new pending task ID | `f3f75f56-4180-40c1-b953-459a832ef146` |
+| new pending node | `procedure_tiling` |
+
+凭证 object key：
+
+```text
+tenants/3eebca47-961f-4899-b976-a3d3208d326b/project-payment/projects/54f11aa5-09a8-4410-a9c5-604a7fe9e09c/2026/06/18/f67e886c-2648-434f-89cf-7397a650f0d4.jpg
+```
+
+后端只读复核：
+
+- payment `b5356f22-ed67-4e29-9afc-94ecccba146d`：
+  `status=confirmed`，`type=stage_2`，`amount=10000`，
+  `workflow_task_id=8cb1b3ac-69e5-42e5-8496-787e3897878c`
+- ledger `9fc924b7-b5db-4356-a91e-d83dacecbbce`：
+  `entry_type=project_payment`，`direction=in`，`amount=10000`，
+  `payment_id=b5356f22-ed67-4e29-9afc-94ecccba146d`
+- workflow transition log：
+  `payment_stage_2 -> procedure_tiling`，`action=complete`，
+  actor 为 `bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`
+
+orange 请求日志：
+
+- `/tmp/orange-payment-stage2-smoke-1781767305119-sanitized.json`
+- `/tmp/orange-payment-stage2-admin-visibility-1781767376188-sanitized.json`
 
 ## 2. `project_signing_workflow`
 
@@ -251,36 +289,24 @@ GET /finance/ledger?page=1&pageSize=20&project_id=54f11aa5-09a8-4410-a9c5-604a7f
 可以直接回复：
 
 ```text
-后端已重新核对实时数据。
+收到，后端已只读复核 payment_stage_2 smoke 结果，和 orange 回填一致。
 
-payment_stage_2 可以继续 smoke：
+本次 payment_stage_2 已通过：
 - project ID: 54f11aa5-09a8-4410-a9c5-604a7fe9e09c
 - workflow instance ID: 0b2a033f-504a-49d6-b196-fe9200761adf
-- current node: payment_stage_2 / 中期进度款
-- pending task ID: 8cb1b3ac-69e5-42e5-8496-787e3897878c
-- actions[].key: complete
-- 财务账号: 18800005001 / 小龙女
-- employee ID: bbab0193-43ae-4b7a-a7f3-24314e0f2e0d
+- completed task ID: 8cb1b3ac-69e5-42e5-8496-787e3897878c
+- payment ID: b5356f22-ed67-4e29-9afc-94ecccba146d
+- ledger ID: 9fc924b7-b5db-4356-a91e-d83dacecbbce
+- workflow current: procedure_tiling
+- new pending task: f3f75f56-4180-40c1-b953-459a832ef146
 
-凭证 direct upload 继续使用：
-scene=project_payment
-project_id=54f11aa5-09a8-4410-a9c5-604a7fe9e09c
+Admin 可见性接口证据也已收到：
+/finance/ledger 可见 project_payment 入账流水，workflow state 已推进到 procedure_tiling。
+如果最终门禁需要 UI 截图，可以再补 Admin 项目详情和财务台账页面截图。
 
-complete 仍只调用：
-POST /workflow-tasks/8cb1b3ac-69e5-42e5-8496-787e3897878c/complete
-
-output 需要携带 amount、paid_at、evidence_images，至少 1 张凭证。
-完成后预期 payment_stage_2=done，procedure_tiling=current，并生成 payment ID 和
-ledger ID。
-
-project_signing_workflow 当前不要复测旧 task。
+project_signing_workflow 当前仍不要复测旧 task。
 项目 1a8589fb-8f3f-4900-a759-6d15438ffcc2 仍在旧 construction_main/designing
 实例，旧 task aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f 不要重复 complete。后端还未
 执行受控 rebuild，因为 manual gate 里的 project_signing_rebuild.confirmed 仍为
 false。rebuild 完成后，后端会重新回传新的 instance ID、task ID、当前节点和 payload。
-
-Admin 可见性请和本次 payment_stage_2 smoke 一起回填：
-- workflow state 或项目详情截图
-- /finance/ledger 接口结果或财务台账截图
-- payment ID、ledger ID、凭证 object key、complete 请求/响应
 ```
