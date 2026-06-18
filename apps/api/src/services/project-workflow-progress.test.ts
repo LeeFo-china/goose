@@ -103,7 +103,7 @@ describe("buildProjectWorkflowProgressProjection", () => {
         blocked_stage_label: "瓦工",
       },
     });
-    expect(progress.timeline_nodes).toEqual([
+    expect(progress.timeline_nodes).toMatchObject([
       {
         node_key: "procedure_plumbing_electrical",
         node_title: "水电",
@@ -375,7 +375,10 @@ describe("buildProjectWorkflowProgressProjection", () => {
       }],
     });
 
-    expect(toCustomerProjectWorkflowProgress(progress)).toEqual({
+    const customerProgress = toCustomerProjectWorkflowProgress(progress);
+    expect("actions" in customerProgress).toBe(false);
+    expect("warnings" in customerProgress).toBe(false);
+    expect(customerProgress).toMatchObject({
       source: "workflow_runtime",
       instance_id: "instance-1",
       instance_status: "running",
