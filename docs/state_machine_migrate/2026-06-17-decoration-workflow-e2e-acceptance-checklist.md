@@ -179,30 +179,39 @@
 
 | 检查项 | 期望 | 结果 |
 | --- | --- | --- |
-| 工序 action | `node_type = procedure`，存在 `project_log` output field | 待填写 |
-| 日志接口 | 创建日志使用 `/project-logs`，不调用旧 snake_case 路径 | 阻塞已定位并修复：旧 `create_project_log_fast` RPC 仍按验收阶段表拦截，后端改为 workflow guard 放行后 direct insert |
-| 图片门禁 | 图片不足时后端返回 `WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED` | 待填写 |
-| complete output | 包含 `project_log_id` 和 `image_count` 或 `images` | 待填写 |
-| workflow 推进 | 工序 task 消失，当前节点进入下一主状态或门禁 | 待填写 |
+| 工序 action | `node_type = procedure`，存在 `project_log` output field | 通过：`procedure_plumbing_electrical` 返回 `actions[].key = complete`，`output_fields.type = project_log`，`min_image_count = 3` |
+| 日志接口 | 创建日志使用 `/project-logs`，不调用旧 snake_case 路径 | 通过：`POST /project-logs` 返回 `200`，生成 `project_log_id = 4fbb4eef-40e7-4c41-8bbd-1645b05a3cbf` |
+| 图片门禁 | 图片不足时后端返回 `WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED` | 未在本轮复测覆盖；本次按 `min_image_count = 3` 上传 3 张图片 |
+| complete output | 包含 `project_log_id` 和 `image_count` 或 `images` | 通过：complete output 包含 `project_log_id`、`image_count = 3` 和 `images[]` |
+| workflow 推进 | 工序 task 消失，当前节点进入下一主状态或门禁 | 通过：`procedure_plumbing_electrical = done`，`payment_stage_2 = current` |
 
 证据记录：
 
-- 项目 ID：待填写
-- 工序 node_key：待填写
-- project_log ID：待填写
-- task ID：待填写
-- 图片数量：待填写
+- 项目 ID：`54f11aa5-09a8-4410-a9c5-604a7fe9e09c`
+- workflow instance ID：`0b2a033f-504a-49d6-b196-fe9200761adf`
+- 工序 node_key：`procedure_plumbing_electrical`
+- stage_code：`plumbing_electrical`
+- project_log ID：`4fbb4eef-40e7-4c41-8bbd-1645b05a3cbf`
+- task ID：`f2b9191e-8f8f-464f-9025-adb2374c89d9`
+- 图片数量：`3`
+- 执行账号：`18800003002` / 欧阳克 /
+  `5d2c906f-635d-4aa0-9a64-16d7edb380c8`
+- orange 回填文档：
+  `/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md`
 - 当前阻塞记录：
-  - 项目 `d382cd45-9141-476e-a7a5-5bf88d0a3255` 当前 workflow 为
+  - 已解决：项目 `d382cd45-9141-476e-a7a5-5bf88d0a3255` 当前 workflow 为
     `procedure_tiling`，但旧 RPC 返回
     `PROJECT_LOG_STAGE_BLOCKED: 请先完成水电后再进入瓦工`。
-  - 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 当前 workflow 为
+  - 已解决：项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 当前 workflow 为
     `procedure_plumbing_electrical`，但旧 RPC 返回
     `PROJECT_LOG_STAGE_BLOCKED: 当前水电阶段待验收，完成验收后再补充施工日志`。
   - 根因是 `/project-logs` 已通过 workflow runtime 判断当前工序可写，但仓储层旧
     RPC 仍按 `project_acceptances` 前置/待验收状态二次拦截。后端已改为施工主阶段在
     workflow guard 放行后使用 direct insert，保留项目状态和 `project_log.create`
     权限校验。
+  - 补充：瓦工项目 `d382cd45-9141-476e-a7a5-5bf88d0a3255` 用
+    `18800003002` 创建日志返回 `403 PROJECT_LOG_PERMISSION_DENIED`，该项目
+    `members` 为空，本轮不作为施工日志验收样本。
 
 ## 阶段验收联动验收
 
@@ -220,17 +229,21 @@
 | 检查项 | 期望 | 结果 |
 | --- | --- | --- |
 | 不本地推断 | 小程序不在 complete 成功后直接构造验收单 | 待填写 |
-| 刷新后入口 | 以后端返回的 `acceptance_action` 决定按钮 | 待重新验收：前置施工日志创建被旧 RPC 阻塞，后端修复后需重新执行 |
-| 不重复创建 | 已有验收单时进入已有 `acceptance_id` | 待填写 |
+| 刷新后入口 | 以后端返回的 `acceptance_action` 决定按钮 | 部分通过：工序 complete 后刷新 `/projects/:projectId/construction-stages`，`acceptance_action.type = edit`、`enabled = true` |
+| 不重复创建 | 已有验收单时进入已有 `acceptance_id` | 部分通过：返回 `acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992`，应进入已有验收单 |
 | 验收状态 | 复核、客户确认后阶段状态正确刷新 | 待填写 |
 | 竣工门禁 | 未完成必需工序时不能进入竣工验收 | 待填写 |
 
 证据记录：
 
-- project_acceptance ID：待填写
-- stage_code：待填写
-- acceptance_action：待填写
-- 截图 / 日志：待填写
+- project_acceptance ID：`2e3779f7-8b51-4b05-9b7b-e1f3e18f1992`
+- stage_code：`plumbing_electrical`
+- acceptance_action：`type = edit`，`enabled = true`
+- 施工阶段返回状态：`status = locked`
+- 截图 / 日志：
+  `/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md`
+- 当前边界：本轮只验证到工序 complete 后刷新到可用验收入口；尚未继续执行验收单
+  提交、主管复核、客户确认，因此 `stage_acceptance_transition` 仍不计为完整通过。
 
 ## Admin 验收
 
@@ -267,18 +280,18 @@
 
 | 项 | 结果 |
 | --- | --- |
-| 客户设计 workflow | 待填写 |
+| 客户设计 workflow | 通过：2026-06-18 orange 已完成真实 complete，workflow completed |
 | 项目签约 workflow | 待填写 |
 | 财务收款门禁 | 通过：2026-06-18 orange 已完成收款 workflow smoke |
-| 施工工序日志 | 待填写 |
-| 阶段验收联动 | 待填写 |
+| 施工工序日志 | 通过：2026-06-18 后端修复后 orange 复测通过 |
+| 阶段验收联动 | 部分通过：已验证工序 complete 后刷新到可用 `acceptance_action`，验收单提交/复核/客户确认待验收 |
 | Admin 模板与发布校验 | 待填写 |
 | 旧实例处置 | 待填写 |
-| orange 小程序真实联调 | 部分通过：财务收款节点通过，其余场景待验收 |
+| orange 小程序真实联调 | 部分通过：客户设计、财务收款、施工工序日志通过；项目签约、阶段验收完整流、Admin 可见性待验收 |
 
 最终结论：
 
 ```text
-部分通过：财务收款 workflow smoke 已通过；客户设计、项目签约、
-施工工序日志、阶段验收联动、Admin 可见性和旧实例处置仍需继续验收或确认。
+部分通过：客户设计、财务收款和施工工序日志已通过；项目签约、
+阶段验收完整流、Admin 可见性和旧实例处置仍需继续验收或确认。
 ```

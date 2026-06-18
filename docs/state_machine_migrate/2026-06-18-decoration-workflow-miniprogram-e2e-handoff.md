@@ -237,9 +237,24 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 | 场景 | 现象 | 后端结论 |
 | --- | --- | --- |
 | `project_signing_workflow` | 项目 `1a8589fb-8f3f-4900-a759-6d15438ffcc2` complete 返回 `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED` | 该项目仍在旧 `construction_main/designing` running 实例；dry-run 已确认可重建到 `project_signing/designing`，正式 apply 前必须先完成业务确认门禁 |
-| `construction_procedure_log` | 项目 `d382cd45-9141-476e-a7a5-5bf88d0a3255` 当前 `procedure_tiling`，但 `/project-logs` 返回旧阶段门禁 `请先完成水电后再进入瓦工` | 后端已定位为旧 `create_project_log_fast` RPC 与 workflow source-of-truth 冲突；已改为 workflow guard 放行后 direct insert |
-| `construction_procedure_log` | 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 当前 `procedure_plumbing_electrical`，但 `/project-logs` 返回旧阶段门禁 `当前水电阶段待验收` | 同上，修复后需小程序重新 smoke |
-| `stage_acceptance_transition` | 因施工日志创建被阻塞，未进入 complete 后刷新 `acceptance_action` 阶段 | 依赖施工日志场景重新 smoke |
+| `construction_procedure_log` | 已重新 smoke 通过 | 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 已创建水电施工日志并 complete 工序 task，流程推进到 `payment_stage_2` |
+| `stage_acceptance_transition` | 已验证到验收入口可用，完整提交流程未执行 | 工序 complete 后刷新 `/projects/:projectId/construction-stages` 返回 `acceptance_action.type = edit`、`enabled = true`、`acceptance_id = 2e3779f7-8b51-4b05-9b7b-e1f3e18f1992`；仍需继续验收单提交/复核/客户确认 |
+
+施工日志复测通过样本：
+
+- 执行账号：`18800003002` / 欧阳克 /
+  `5d2c906f-635d-4aa0-9a64-16d7edb380c8`
+- project ID：`54f11aa5-09a8-4410-a9c5-604a7fe9e09c`
+- workflow instance ID：`0b2a033f-504a-49d6-b196-fe9200761adf`
+- task ID：`f2b9191e-8f8f-464f-9025-adb2374c89d9`
+- stage_code：`plumbing_electrical`
+- project_log ID：`4fbb4eef-40e7-4c41-8bbd-1645b05a3cbf`
+- complete 后状态：`procedure_plumbing_electrical = done`，
+  `payment_stage_2 = current`
+
+补充：瓦工项目 `d382cd45-9141-476e-a7a5-5bf88d0a3255` 用 `18800003002`
+创建日志返回 `403 PROJECT_LOG_PERMISSION_DENIED`，该项目 `members` 为空，本轮
+不作为施工日志验收样本。
 
 ## 字段映射
 
