@@ -42,6 +42,91 @@ const procedureGraph = {
 };
 
 describe("project workflow node contract", () => {
+  test("stops workflow timeline at a reachable payment node without outgoing edge", () => {
+    const paymentWithoutOutgoingEdgeGraph = {
+      nodes: [
+        {
+          id: "node-start",
+          node_key: "start",
+          title: "开始",
+          node_type: "start",
+          business_kind: null,
+          config: {},
+        },
+        {
+          id: "node-plumbing",
+          node_key: "procedure_plumbing_electrical",
+          title: "水电",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          config: { stage_key: "plumbing_electrical" },
+        },
+        {
+          id: "node-payment",
+          node_key: "payment_stage_2",
+          title: "中期收款",
+          node_type: "confirmation",
+          business_kind: "payment_collection",
+          config: { payment_type: "stage_2" },
+        },
+        {
+          id: "node-tiling",
+          node_key: "procedure_tiling",
+          title: "瓦工",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          config: { stage_key: "tiling" },
+        },
+        {
+          id: "node-end",
+          node_key: "end",
+          title: "结束",
+          node_type: "end",
+          business_kind: null,
+          config: {},
+        },
+      ],
+      edges: [
+        {
+          source_node_id: "node-start",
+          target_node_id: "node-plumbing",
+        },
+        {
+          source_node_id: "node-plumbing",
+          target_node_id: "node-payment",
+        },
+        {
+          source_node_id: "node-tiling",
+          target_node_id: "node-end",
+        },
+      ],
+    };
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_title: "中期收款",
+        current_business_kind: "payment_collection",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_snapshot: paymentWithoutOutgoingEdgeGraph.nodes[2],
+      },
+      graph: paymentWithoutOutgoingEdgeGraph,
+      completedNodeKeys: ["procedure_plumbing_electrical"],
+      pendingActions: [],
+    });
+
+    expect(progress.timeline_nodes.map((node) => node.node_key)).toEqual([
+      "procedure_plumbing_electrical",
+      "payment_stage_2",
+    ]);
+  });
+
   test("adds display attributes and actions to workflow timeline nodes", () => {
     const progress = buildProjectWorkflowProgressProjection({
       subjectState: {

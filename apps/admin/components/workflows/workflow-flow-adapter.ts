@@ -1,5 +1,6 @@
 import type { Connection } from "@xyflow/react";
 import {
+  getDefaultWorkflowBranchOutcome,
   getWorkflowBranchOutcomeByEdge,
   getWorkflowBranchSourceKind,
   type WorkflowBranchOutcomeKey,
@@ -51,8 +52,12 @@ type WorkflowFlowEdgeAdapterInput = Pick<
 
 export function toWorkflowFlowEdges(input: WorkflowFlowEdgeAdapterInput): WorkflowFlowEdge[] {
   const flowNodeKeyById = new Map(input.nodes.map((node) => [node.id, node.node_key]));
+  const flowNodeById = new Map(input.nodes.map((node) => [node.id, node]));
   return input.edges.map((edge) => {
-    const branchOutcome = getWorkflowBranchOutcomeByEdge(edge);
+    const sourceNode = flowNodeById.get(edge.source_node_id);
+    const sourceBranchKind = sourceNode ? getWorkflowBranchSourceKind(sourceNode) : null;
+    const branchOutcome = getWorkflowBranchOutcomeByEdge(edge) ??
+      (sourceBranchKind ? getDefaultWorkflowBranchOutcome(sourceBranchKind) : null);
     const pathSourceKey = flowNodeKeyById.get(edge.source_node_id) || edge.source_node_id;
     const pathTargetKey = flowNodeKeyById.get(edge.target_node_id) || edge.target_node_id;
     return {
