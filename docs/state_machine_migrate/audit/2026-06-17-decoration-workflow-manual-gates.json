@@ -28,10 +28,10 @@
   },
   "legacy_instance_apply_gates": {
     "project_signing_rebuild": {
-      "confirmed": false,
-      "confirmed_by": "",
-      "confirmed_at": "",
-      "evidence": "",
+      "confirmed": true,
+      "confirmed_by": "leefo via Codex instruction",
+      "confirmed_at": "2026-06-18T15:37:15+08:00",
+      "evidence": "docs/state_machine_migrate/2026-06-18-project-signing-rebuild-execution.md",
       "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
       "subject_type": "project",
       "project_id": "1a8589fb-8f3f-4900-a759-6d15438ffcc2",
