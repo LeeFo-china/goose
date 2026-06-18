@@ -143,6 +143,20 @@ Authorization: Bearer <token>
 响应包含 `list` 和 `pagination`。待办中心翻页只递增 `page`，`pageSize` 建议保持
 `10` 或 `20`，不得超过后端最大值 `100`。
 
+兼容入口：
+
+```http
+GET /task-center/todos?page=1&pageSize=20&type=customer_followup&status=pending
+GET /task-center/todos?page=1&pageSize=20&type=project_workflow&status=pending
+GET /task-center/todos?page=1&pageSize=20&type=project_payment&status=pending
+```
+
+`/workflow-tasks` 仍是 workflow-only 主入口；如果小程序任务中心继续走
+`/task-center/todos`，返回的 workflow 待办会使用 `id = workflow_task:<taskId>`，
+并在 `metadata.workflow_actions[]` 保留与 `/workflow-tasks` 一致的 action
+metadata。端上应优先使用 `metadata.workflow_actions[0].key` 和
+`metadata.workflow_task_id` 完成任务，不要从 `action_label` 反推业务动作。
+
 ### 完成待办
 
 ```http
@@ -182,7 +196,10 @@ Content-Type: application/json
 
 ## 项目流程节点
 
-普通项目节点按 `node_key` 识别业务动作：
+项目标准主线按 workflow 模板顺序推进。小程序只展示后端返回的 action，不本地拼接
+下一节点。
+
+项目签约 workflow 标准主线：
 
 | `node_key` | 端上动作 | `output` |
 | --- | --- | --- |
@@ -191,9 +208,28 @@ Content-Type: application/json
 | `signed` | 设计定稿 | `{}` |
 | `design_finalized` | 排期开工 | `{ "start_date": "2026-06-30", "construction_manager_employee_id": "uuid" }` |
 | `pending_start` | 项目开工 | `{}` |
-| `started` | 开始施工 | `{}` |
-| `constructing` | 发起验收 | `{}` |
-| `on_hold` | 恢复项目 | `{}` |
+
+施工 workflow 标准主线：
+
+| `node_key` | 端上动作 | `output` |
+| --- | --- | --- |
+| `started` | 确认开工 | `{}` |
+| `procedure_demolition` | 完成拆改工序 | 施工日志/图片字段，见 action `output_fields` |
+| `procedure_plumbing_electrical` | 完成水电工序 | 施工日志/图片字段，见 action `output_fields` |
+| `procedure_tiling` | 完成瓦工工序 | 施工日志/图片字段，见 action `output_fields` |
+| `procedure_woodwork` | 完成木工工序 | 施工日志/图片字段，见 action `output_fields` |
+| `procedure_painting` | 完成油工工序 | 施工日志/图片字段，见 action `output_fields` |
+| `procedure_installation` | 完成安装工序 | 施工日志/图片字段，见 action `output_fields` |
+| `final_acceptance` | 竣工验收 | `{}` |
+| `handover` | 交房 | `{}` |
+
+`payment_collection` 财务门禁可以插在项目签约或施工主线之间。它不是项目主状态节点，
+端上应按 action 的 `business_domain = payment_collection` 和 `output_fields`
+展示收款确认。
+
+`pause_project`、`resume_project`、`mark_invalid` 属于异常动作，不是标准模板主线
+节点。小程序不要把 `on_hold`、`invalid` 渲染成主流程下一步；如后端后续提供异常
+动作入口，应按单独的异常动作接口/权限处理，并保留原因和恢复来源。
 
 如果 `actions[].disabled = true` 或缺少 `task_id`，端上不能显示可提交按钮，也不能
 fallback 到旧状态机接口。
