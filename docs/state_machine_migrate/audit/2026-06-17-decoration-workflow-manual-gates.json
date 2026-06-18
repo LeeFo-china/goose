@@ -129,23 +129,71 @@
       },
       {
         "key": "project_signing_workflow",
-        "status": "rebuild_completed_pending_orange_smoke",
+        "status": "passed",
         "evidence": "docs/state_machine_migrate/2026-06-18-project-signing-rebuild-execution.md",
         "external_evidence": "/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-miniprogram-e2e-execution.md",
+        "external_handoff": "/Users/leefo/Public/work/orange/docs/state_machine_migrate/2026-06-18-decoration-workflow-next-smoke-backend-handoff.md",
         "project_id": "1a8589fb-8f3f-4900-a759-6d15438ffcc2",
+        "actor": "18800003001 / 欧阳锋",
         "legacy_instance_id": "b58acf8e-4f18-4b40-b5c7-919600e5e636",
         "legacy_instance_status": "canceled",
         "workflow_instance_id": "651184a9-095d-42a9-8669-476c1d125a37",
-        "task_id": "bb156359-8c31-4ee8-9ba7-140ca0f54e23",
-        "current_node_key": "designing",
-        "action_key": "complete",
-        "complete_payload": {
-          "action": "complete",
-          "reason": null,
-          "output": {}
-        },
-        "assignee_permission_code": "project.update",
-        "next_step": "orange smoke should complete new task and continue project_signing workflow path"
+        "workflow_status": "completed",
+        "current_node_key": "end",
+        "completed_at": "2026-06-18",
+        "task_chain": [
+          {
+            "node_key": "designing",
+            "task_id": "bb156359-8c31-4ee8-9ba7-140ca0f54e23",
+            "action": "confirm_proposal",
+            "output": {},
+            "result": "proposal_confirmed"
+          },
+          {
+            "node_key": "proposal_confirmed",
+            "task_id": "ac5bda62-925e-4626-865a-892530edb2f2",
+            "action": "sign_contract",
+            "output": {
+              "signed_amount": 100000
+            },
+            "result": "signed"
+          },
+          {
+            "node_key": "signed",
+            "task_id": "efb9fec5-46cd-4ceb-9a17-6b9708cf3098",
+            "action": "finalize_design",
+            "output": {},
+            "result": "design_finalized"
+          },
+          {
+            "node_key": "design_finalized",
+            "task_id": "8c03662d-2b23-49f7-b8ae-bbedc9c1ffc2",
+            "action": "schedule_construction",
+            "output": {
+              "start_date": "2026-06-19",
+              "construction_manager_employee_id": "5d2c906f-635d-4aa0-9a64-16d7edb380c8"
+            },
+            "result": "pending_start"
+          },
+          {
+            "node_key": "pending_start",
+            "task_id": "56e92dba-ae0b-47b9-bd9e-6c8662f7bd1e",
+            "action": "start_project",
+            "output": {},
+            "result": "started"
+          }
+        ],
+        "signed_amount": 100000,
+        "start_date": "2026-06-19",
+        "construction_manager_employee_id": "5d2c906f-635d-4aa0-9a64-16d7edb380c8",
+        "final_project_status": "started",
+        "construction_workflow_instance_id": "a7d4bc13-f8c6-4afe-9376-a6284b96e5e3",
+        "construction_workflow_status": "running",
+        "construction_current_node_key": "started",
+        "construction_current_task_id": "f68e9aaa-6020-4bdc-85a5-8c889f31cb1e",
+        "construction_current_action_key": "complete",
+        "request_log": "/tmp/orange-project-signing-workflow-smoke-1781769027232-sanitized.json",
+        "note": "旧 task aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f 未复用；rebuild 后的新 project_signing 实例已完成，并已切换到施工 workflow started 节点。"
       },
       {
         "key": "payment_collection_workflow",
@@ -258,16 +306,16 @@
           "admin_interface_evidence_recorded": true,
           "ui_screenshot_followup": "only if final manual gates require Admin project workflow and finance ledger page screenshots",
           "project_signing_retry_required": false,
-          "project_signing_next_step": "wait for backend controlled rebuild, then return new instance/task/payload"
+          "project_signing_next_step": "project_signing_workflow passed; continue construction workflow from task f68e9aaa-6020-4bdc-85a5-8c889f31cb1e only after confirming smoke scope"
         },
         "completed_at": "2026-06-18",
-        "note": "接口证据已通过；如最终业务门禁要求页面级证据，需要继续补 Admin 项目详情 workflow 状态和财务台账页面截图。project_signing_workflow 仍等待受控 rebuild，不能计入全链路关闭。"
+        "note": "接口证据已通过；如最终业务门禁要求页面级证据，需要继续补 Admin 项目详情 workflow 状态和财务台账页面截图。project_signing_workflow 已通过，不再作为全链路关闭阻塞。"
       }
     ]
   },
   "closeout_rules": {
     "can_run_legacy_apply": false,
     "can_close_prd_without_followup": false,
-    "reason": "Invalid customer apply confirmation, manual restore decision, project signing orange smoke, and Admin UI screenshot evidence are still pending. Project signing controlled rebuild completed on 2026-06-18; payment collection, payment_stage_2 after acceptance, customer design, construction procedure log, and stage acceptance transition workflow passed or have interface evidence."
+    "reason": "Invalid customer apply confirmation, manual restore decision, and Admin UI screenshot evidence are still pending. Project signing controlled rebuild and orange smoke passed on 2026-06-18; payment collection, payment_stage_2 after acceptance, customer design, construction procedure log, and stage acceptance transition workflow passed or have interface evidence."
   }
 }

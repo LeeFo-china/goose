@@ -161,13 +161,13 @@ orange 后续回执：
   入账流水，workflow state 已推进到 `procedure_tiling`。
 - 如最终 manual gates 要求 UI 截图，orange 再补 Admin 项目详情 workflow
   状态和财务台账页面截图。
-- `project_signing_workflow` 旧 task 不再复测；后端已完成受控 rebuild，并回传新的
-  instance/task/payload。
+- `project_signing_workflow` 已按 rebuild 后的新实例复测通过，旧 task
+  `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f` 不再复测。
 
 ## 2. `project_signing_workflow`
 
 当前不要执行旧 task，也不要让 orange 重试旧 complete。后端已完成受控
-rebuild，orange 可以使用新 task 继续复测。
+rebuild，orange 已使用新实例完成 `project_signing_workflow` 复测。
 
 旧实例核对结果：
 
@@ -189,7 +189,7 @@ rebuild，orange 可以使用新 task 继续复测。
 - canceled instance count：`1`
 - deleted instance count：`0`
 
-新实例和新 task：
+受控 rebuild 后的初始新实例和新 task：
 
 | 字段 | 值 |
 | --- | --- |
@@ -198,8 +198,8 @@ rebuild，orange 可以使用新 task 继续复测。
 | target definition ID | `dd559d20-58b2-4d38-996e-34d82cbe68ea` |
 | target active version ID | `ea45f1fb-45f0-4ea0-8d22-a0149aabe903` |
 | workflow instance ID | `651184a9-095d-42a9-8669-476c1d125a37` |
-| current node | `designing` / `设计中` |
-| pending task ID | `bb156359-8c31-4ee8-9ba7-140ca0f54e23` |
+| rebuild initial node | `designing` / `设计中` |
+| rebuild initial pending task ID | `bb156359-8c31-4ee8-9ba7-140ca0f54e23` |
 | task status | `pending` |
 | task assignee | `assignee_permission_code = project.update` |
 | actions[].key | `complete` |
@@ -207,7 +207,7 @@ rebuild，orange 可以使用新 task 继续复测。
 | business action | `designing` |
 | output fields | `[]` |
 
-当前节点 complete payload：
+rebuild 初始节点 complete payload：
 
 ```json
 {
@@ -217,7 +217,7 @@ rebuild，orange 可以使用新 task 继续复测。
 }
 ```
 
-预期推进路径为：
+复测推进路径为：
 
 ```text
 designing -> proposal_confirmed -> signed -> design_finalized -> pending_start -> end
@@ -232,8 +232,53 @@ designing -> proposal_confirmed -> signed -> design_finalized -> pending_start -
   `output.construction_manager_employee_id` 必填
 - `pending_start`：`action=complete`，`output={}`
 
-orange 后续应使用新 task `bb156359-8c31-4ee8-9ba7-140ca0f54e23`
-继续复测，不应重复提交旧 task `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f`。
+orange 已使用新 task `bb156359-8c31-4ee8-9ba7-140ca0f54e23`
+完成复测，不应重复提交旧 task `aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f`。
+
+### orange 回填结果
+
+本次 smoke 结果：通过。
+
+| 字段 | 值 |
+| --- | --- |
+| 执行账号 | `18800003001` / 欧阳锋 |
+| project ID | `1a8589fb-8f3f-4900-a759-6d15438ffcc2` |
+| project signing instance ID | `651184a9-095d-42a9-8669-476c1d125a37` |
+| final project status | `started` |
+| construction workflow instance ID | `a7d4bc13-f8c6-4afe-9376-a6284b96e5e3` |
+| construction current node | `started` / `确认开工` |
+| construction pending task ID | `f68e9aaa-6020-4bdc-85a5-8c889f31cb1e` |
+
+执行链路：
+
+| 节点 | task ID | action | output | 后端结果 |
+| --- | --- | --- | --- | --- |
+| `designing` | `bb156359-8c31-4ee8-9ba7-140ca0f54e23` | `confirm_proposal` | `{}` | `proposal_confirmed` |
+| `proposal_confirmed` | `ac5bda62-925e-4626-865a-892530edb2f2` | `sign_contract` | `{ "signed_amount": 100000 }` | `signed` |
+| `signed` | `efb9fec5-46cd-4ceb-9a17-6b9708cf3098` | `finalize_design` | `{}` | `design_finalized` |
+| `design_finalized` | `8c03662d-2b23-49f7-b8ae-bbedc9c1ffc2` | `schedule_construction` | `{ "start_date": "2026-06-19", "construction_manager_employee_id": "5d2c906f-635d-4aa0-9a64-16d7edb380c8" }` | `pending_start` |
+| `pending_start` | `56e92dba-ae0b-47b9-bd9e-6c8662f7bd1e` | `start_project` | `{}` | `started` |
+
+后端只读复核：
+
+- project `1a8589fb-8f3f-4900-a759-6d15438ffcc2`：
+  `status=started`，`signed_amount=100000`，
+  `start_date=2026-06-19T00:00:00+00:00`
+- project signing instance `651184a9-095d-42a9-8669-476c1d125a37`：
+  `status=completed`，`current_node_key=end`
+- 新施工 workflow instance
+  `a7d4bc13-f8c6-4afe-9376-a6284b96e5e3`：
+  `status=running`，`current_node_key=started`
+- 当前施工 pending task `f68e9aaa-6020-4bdc-85a5-8c889f31cb1e`：
+  `actions[].key=complete`，`business_domain=workflow_project`，
+  `business_action=started`
+
+orange 请求日志：
+
+- `/tmp/orange-project-signing-workflow-smoke-1781769027232-sanitized.json`
+
+后续如果继续施工 workflow smoke，请先确认验收范围，再从 task
+`f68e9aaa-6020-4bdc-85a5-8c889f31cb1e` 开始。
 
 ## 3. Admin 可见性取证口径
 
@@ -329,22 +374,20 @@ Admin 可见性接口证据也已收到：
 /finance/ledger 可见 project_payment 入账流水，workflow state 已推进到 procedure_tiling。
 如果最终门禁需要 UI 截图，可以再补 Admin 项目详情和财务台账页面截图。
 
-project_signing_workflow 受控 rebuild 已完成，请不要复测旧 task
-aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f。
-
-请用新实例和新 task 继续复测：
+project_signing_workflow 也已只读复核通过：
 - project ID: 1a8589fb-8f3f-4900-a759-6d15438ffcc2
-- workflow instance ID: 651184a9-095d-42a9-8669-476c1d125a37
-- pending task ID: bb156359-8c31-4ee8-9ba7-140ca0f54e23
-- current node: designing / 设计中
-- actions[].key: complete
-- assignee_permission_code: project.update
-- 当前 payload: {"action":"complete","reason":null,"output":{}}
+- project signing instance ID: 651184a9-095d-42a9-8669-476c1d125a37
+- completed task chain:
+  bb156359 -> ac5bda62 -> efb9fec5 -> 8c03662d -> 56e92dba
+- signed_amount: 100000
+- start_date: 2026-06-19
+- construction_manager_employee_id: 5d2c906f-635d-4aa0-9a64-16d7edb380c8
+- final project status: started
+- new construction workflow instance: a7d4bc13-f8c6-4afe-9376-a6284b96e5e3
+- construction current node: started / 确认开工
+- current pending task: f68e9aaa-6020-4bdc-85a5-8c889f31cb1e
 
-后续路径仍按：
-designing -> proposal_confirmed -> signed -> design_finalized -> pending_start -> end
-
-后续节点 payload：
-- proposal_confirmed: output.signed_amount 必填
-- design_finalized: output.start_date 和 output.construction_manager_employee_id 必填
+旧 task aa6d93f8-f825-4f9a-bd04-f346ba3e2d5f 不需要、也不应该再复测。
+如果继续施工 workflow smoke，请先确认本轮范围，再从新的施工 task
+f68e9aaa-6020-4bdc-85a5-8c889f31cb1e 开始。
 ```

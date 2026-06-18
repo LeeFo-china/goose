@@ -17,19 +17,20 @@ orange 代码。
 已通过：
 
 - 财务收款 workflow smoke 已由 orange 完成并回填。
+- 客户设计 workflow 已完成真实 complete 验收。
+- 项目签约 workflow 已按 rebuild 后的新实例复测通过。
+- 施工工序日志 workflow 已完成真实日志创建和 complete 验收。
+- 阶段验收联动已完成 submit、主管复核、客户确认验收。
+- `payment_stage_2` 收款节点已完成真实收款 complete，workflow 已推进到瓦工。
 - `/workflow-tasks?status=pending` 可作为 workflow 待办主入口。
 - `/task-center/todos` 已兼容 `customer_followup`、`project_payment`、
   `project_workflow` 三类 workflow 待办。
 - `workflow_task:*` 待办会带 `action_label`、`metadata.workflow_actions[]`、
   `workflow_task_id`、`workflow_instance_id` 和当前节点业务语义。
 
-仍需 orange 联调验收：
+仍需补充的收口证据：
 
-- 客户设计 workflow。
-- 项目签约 workflow。
-- 施工工序日志 workflow。
-- 阶段验收联动。
-- Admin 财务台账与 workflow 可见性。
+- Admin 项目详情 workflow 状态和财务台账页面截图，如最终 manual gates 要求页面级证据。
 
 门禁状态以
 `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`
@@ -236,7 +237,7 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 
 | 场景 | 现象 | 后端结论 |
 | --- | --- | --- |
-| `project_signing_workflow` | 旧 task 返回 `409 WORKFLOW_INSTANCE_REBUILD_REQUIRED`，后端已完成受控 rebuild | 旧 `construction_main` 实例已取消，新 `project_signing/designing` 实例和 pending task 已生成，等待 orange 复测 |
+| `project_signing_workflow` | 已按 rebuild 后的新实例复测通过 | 旧 `construction_main` 实例已取消，新 `project_signing` 实例已完成到 `end`，并自动切换到施工 workflow `started` |
 | `construction_procedure_log` | 已重新 smoke 通过 | 项目 `54f11aa5-09a8-4410-a9c5-604a7fe9e09c` 已创建水电施工日志并 complete 工序 task，流程推进到 `payment_stage_2` |
 | `stage_acceptance_transition` | 已重新 smoke 通过 | customer-confirm 返回 200，验收单变为 `customer_confirmed`，水电阶段变为 `accepted`；workflow 继续停留 `payment_stage_2` 属于新契约预期 |
 | `payment_stage_2` | 已重新 smoke 通过 | 财务账号 `18800005001 / 小龙女` 完成收款 task，后端创建 confirmed payment 和 ledger，workflow 已推进到 `procedure_tiling` |
@@ -307,7 +308,7 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
   `project_payment` 入账流水；如最终门禁需要 UI 证据，可继续补 Admin
   项目详情和财务台账页面截图
 - orange 回执：小程序侧已记录后端只读复核结果；`project_signing_workflow`
-  旧 task 不再复测，等待后端回传新 instance/task/payload 后继续
+  旧 task 不再复测；后端已回传新 instance/task/payload，orange 已完成复测
 
 `project_signing_workflow` 受控 rebuild 结果：
 
@@ -315,14 +316,38 @@ orange 已继续按 `actions[].key` 执行真实 complete，并回填外部文�
 - legacy instance ID：`b58acf8e-4f18-4b40-b5c7-919600e5e636`
 - legacy instance status：`canceled`
 - new workflow instance ID：`651184a9-095d-42a9-8669-476c1d125a37`
-- new pending task ID：`bb156359-8c31-4ee8-9ba7-140ca0f54e23`
-- current node：`designing` / `设计中`
+- rebuild 初始 pending task ID：`bb156359-8c31-4ee8-9ba7-140ca0f54e23`
+- rebuild 初始节点：`designing` / `设计中`
 - `actions[].key`：`complete`
-- current complete payload：`{"action":"complete","reason":null,"output":{}}`
+- rebuild 初始 complete payload：`{"action":"complete","reason":null,"output":{}}`
 - task assignee：`assignee_permission_code = project.update`
-- orange 可继续用之前复测账号 `18800005001 / 小龙女` 先执行新 task
+- orange 已使用账号 `18800003001 / 欧阳锋` 完成新实例复测
 - 后端执行记录：
   `docs/state_machine_migrate/2026-06-18-project-signing-rebuild-execution.md`
+
+`project_signing_workflow` 复测通过样本：
+
+- project ID：`1a8589fb-8f3f-4900-a759-6d15438ffcc2`
+- project signing instance ID：`651184a9-095d-42a9-8669-476c1d125a37`
+- 执行账号：`18800003001` / 欧阳锋
+- 请求日志：
+  `/tmp/orange-project-signing-workflow-smoke-1781769027232-sanitized.json`
+- 执行链路：
+  `designing -> proposal_confirmed -> signed -> design_finalized -> pending_start -> end`
+- task 链路：
+  `bb156359-8c31-4ee8-9ba7-140ca0f54e23 -> ac5bda62-925e-4626-865a-892530edb2f2 -> efb9fec5-46cd-4ceb-9a17-6b9708cf3098 -> 8c03662d-2b23-49f7-b8ae-bbedc9c1ffc2 -> 56e92dba-ae0b-47b9-bd9e-6c8662f7bd1e`
+- 签约金额：`100000`
+- 开工日期：`2026-06-19`
+- 工程负责人：
+  `5d2c906f-635d-4aa0-9a64-16d7edb380c8`
+- 完成后 project status：`started`
+- 后端已切换到施工 workflow instance：
+  `a7d4bc13-f8c6-4afe-9376-a6284b96e5e3`
+- 当前施工节点：`started` / `确认开工`
+- 当前施工 pending task：
+  `f68e9aaa-6020-4bdc-85a5-8c889f31cb1e`
+- 后端只读核验：project signing instance 已 `completed/end`，上述 5 个
+  task 均 `completed`；施工 workflow instance `running/started`
 
 ## 字段映射
 
