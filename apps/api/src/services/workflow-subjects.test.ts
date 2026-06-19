@@ -33,19 +33,13 @@ describe("workflow subject state timeline contract", () => {
       key: "complete",
       label: "瓦工施工",
       business_domain: "workflow_project",
-      business_action: "complete",
+      business_action: "complete_procedure",
       requires_reason: false,
       task_id: "task-1",
       node_key: "procedure_tiling",
       node_type: "procedure",
       disabled: false,
-      output_fields: [{
-        name: "project_log_id",
-        label: "施工日志",
-        type: "project_log",
-        required: true,
-        stage_code: "tiling",
-      }],
+      output_fields: [],
     }]);
 
     expect(result[0]?.actions).toEqual([]);
@@ -53,9 +47,8 @@ describe("workflow subject state timeline contract", () => {
       key: "complete",
       task_id: "task-1",
       node_key: "procedure_tiling",
-      output_fields: [{
-        stage_code: "tiling",
-      }],
+      business_action: "complete_procedure",
+      output_fields: [],
     }]);
     expect(nodes[1]?.actions).toEqual([]);
   });

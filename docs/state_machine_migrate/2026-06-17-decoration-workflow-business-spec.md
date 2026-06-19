@@ -258,10 +258,11 @@ PRD 落地前，代码与目标规范存在这些差异：
 
 施工工序节点还必须遵守节点配置里的运行时门禁：
 
-- 当 `config.require_log = true` 时，complete output 必须包含 `project_log_id`
-  或 `log_id`，也可以由后端业务桥接确认后传 `require_log_verified = true`。
-- 当 `config.min_image_count > 0` 时，complete output 必须通过 `image_count`、
-  `images` 或 `image_urls` 证明图片数量满足节点要求。
+- 当 `config.require_log = true` 时，施工日志必须先通过 `POST /project-logs`
+  独立创建；complete 时后端按当前项目、当前工序查询真实施工日志证据，不接受
+  前端用 `project_log_id/log_id/require_log_verified` 直接证明。
+- 当 `config.min_image_count > 0` 时，后端按当前工序已创建施工日志的图片总数
+  校验，不接受前端用 `image_count/images/image_urls` 直接证明。
 - 校验失败时后端返回 `WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED`，前端应保留已填内容，
   刷新任务和 workflow state 后让施工人员补齐资料再提交。
 
@@ -400,30 +401,14 @@ Content-Type: application/json
 - 当前节点 `business_kind = procedure_template`
 - `output_fields` 或节点配置中存在施工日志、施工图片要求
 
-提交 `POST /workflow-tasks/:taskId/complete` 前，小程序需要先完成施工日志和图片上传，
-再把已保存的日志 ID 和图片数量放入 `output`：
+提交 `POST /workflow-tasks/:taskId/complete` 前，小程序需要先完成施工日志和图片上传。
+complete 请求不再提交日志 ID 或图片数量，后端会按当前项目和当前工序查询真实日志证据：
 
 ```json
 {
   "action": "complete",
   "reason": null,
-  "output": {
-    "project_log_id": "log-uuid",
-    "image_count": 3
-  }
-}
-```
-
-如果节点要求图片明细，也可以传：
-
-```json
-{
-  "action": "complete",
-  "reason": null,
-  "output": {
-    "log_id": "log-uuid",
-    "image_urls": ["https://..."]
-  }
+  "output": {}
 }
 ```
 

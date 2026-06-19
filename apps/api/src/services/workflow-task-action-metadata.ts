@@ -4,7 +4,6 @@ import {
 import {
   ExpenseApprovalActionConfig,
   PaymentTypeConfig,
-  PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
   type CustomerStatusAction,
   type ExpenseApprovalAction,
   type PaymentType,
@@ -214,38 +213,14 @@ function buildProcedureActions(
     return [];
   }
 
-  const stageCode = getProcedureStageCode(config.stage_key);
-  const minImageCount = getMinImageCount(config.min_image_count);
-  const outputFields: WorkflowTaskActionMetadata["output_fields"] = [];
-
-  if (config.require_log === true) {
-    outputFields.push({
-      name: "project_log_id",
-      label: "施工日志",
-      type: "project_log",
-      required: true,
-      ...(stageCode ? { stage_code: stageCode } : {}),
-      ...(minImageCount > 0 ? { min_image_count: minImageCount } : {}),
-    });
-  } else if (minImageCount > 0) {
-    outputFields.push({
-      name: "images",
-      label: "施工图片",
-      type: "image_list",
-      required: true,
-      ...(stageCode ? { stage_code: stageCode } : {}),
-      min_image_count: minImageCount,
-    });
-  }
-
   return [
     {
       key: "complete",
       label: input.taskTitle,
-      business_domain: null,
-      business_action: null,
+      business_domain: "workflow_project",
+      business_action: "complete_procedure",
       requires_reason: false,
-      output_fields: outputFields,
+      output_fields: [],
     },
   ];
 }
@@ -405,23 +380,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
-}
-
-function getProcedureStageCode(
-  value: unknown,
-): ProjectConstructionStageCode | undefined {
-  return typeof value === "string" &&
-      PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.includes(
-        value as ProjectConstructionStageCode,
-      )
-    ? value as ProjectConstructionStageCode
-    : undefined;
-}
-
-function getMinImageCount(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, value)
-    : 0;
 }
 
 function getPaymentCollectionType(value: unknown): WorkflowPaymentCollectionType {

@@ -150,18 +150,11 @@ describe("project workflow node contract", () => {
         label: "水电施工",
         node_key: "procedure_plumbing_electrical",
         node_type: "procedure",
-        business_domain: null,
-        business_action: null,
+        business_domain: "workflow_project",
+        business_action: "complete_procedure",
         requires_reason: false,
         disabled: false,
-        output_fields: [{
-          name: "project_log_id",
-          label: "施工日志",
-          type: "project_log",
-          required: true,
-          stage_code: "plumbing_electrical",
-          min_image_count: 3,
-        }],
+        output_fields: [],
       }],
     });
 

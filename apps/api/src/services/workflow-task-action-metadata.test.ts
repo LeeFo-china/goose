@@ -283,7 +283,7 @@ describe("buildWorkflowTaskActions", () => {
     ]);
   });
 
-  test("describes procedure node construction log requirements", () => {
+  test("describes procedure node manual completion without embedding construction log creation", () => {
     expect(buildWorkflowTaskActions({
       subjectType: "procedure",
       nodeKey: "plumbing",
@@ -301,19 +301,10 @@ describe("buildWorkflowTaskActions", () => {
       {
         key: "complete",
         label: "水电施工",
-        business_domain: null,
-        business_action: null,
+        business_domain: "workflow_project",
+        business_action: "complete_procedure",
         requires_reason: false,
-        output_fields: [
-          {
-            name: "project_log_id",
-            label: "施工日志",
-            type: "project_log",
-            required: true,
-            stage_code: "plumbing_electrical",
-            min_image_count: 2,
-          },
-        ],
+        output_fields: [],
       },
     ]);
   });

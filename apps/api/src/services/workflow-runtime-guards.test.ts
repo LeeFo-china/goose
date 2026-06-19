@@ -133,12 +133,27 @@ mock.module("@/repositories/workflows", () => ({
   },
 }));
 
+const listStageLogEvidence = mock(async () => [] as Array<{
+  id: string;
+  stage_code: string | null;
+  images: unknown;
+  created_at: string | null;
+}>);
+
+mock.module("@/repositories/project-log-evidence", () => ({
+  projectLogEvidenceRepository: {
+    listStageLogEvidence,
+  },
+}));
+
 describe("assertRuntimeNodeCompletionAllowed", () => {
   beforeEach(() => {
     getRuntimeInstanceById.mockClear();
     getRuntimeInstanceById.mockImplementation(async () => paymentInstance());
     getGraph.mockClear();
     getGraph.mockImplementation(async () => paymentGraph());
+    listStageLogEvidence.mockClear();
+    listStageLogEvidence.mockImplementation(async () => []);
   });
 
   test("allows assigned finance to confirm payment collection without existing payment", async () => {
@@ -172,17 +187,19 @@ describe("assertRuntimeNodeCompletionAllowed", () => {
     })).rejects.toMatchObject({
       statusCode: 409,
       code: "WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED",
-      message: "工序节点要求未满足：需要关联施工日志，至少需要 2 张施工图片",
+      message: "工序节点要求未满足：需要施工日志，至少需要 2 张施工图片",
       details: {
         node_key: "procedure_plumbing_electrical",
+        stage_code: "plumbing_electrical",
         require_log: true,
         min_image_count: 2,
+        log_count: 0,
         image_count: 0,
       },
     });
   });
 
-  test("rejects construction procedure completion when image count is below the node requirement", async () => {
+  test("rejects construction procedure completion when output references a log but no stage log exists", async () => {
     getRuntimeInstanceById.mockImplementationOnce(async () => procedureInstance());
     getGraph.mockImplementationOnce(async () => constructionProcedureGraph());
 
@@ -202,19 +219,29 @@ describe("assertRuntimeNodeCompletionAllowed", () => {
     })).rejects.toMatchObject({
       statusCode: 409,
       code: "WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED",
-      message: "工序节点要求未满足：至少需要 2 张施工图片",
+      message: "工序节点要求未满足：需要施工日志，至少需要 2 张施工图片",
       details: {
         node_key: "procedure_plumbing_electrical",
+        stage_code: "plumbing_electrical",
         require_log: true,
         min_image_count: 2,
-        image_count: 1,
+        log_count: 0,
+        image_count: 0,
       },
     });
   });
 
-  test("allows construction procedure completion when required log and images are provided", async () => {
+  test("rejects construction procedure completion when existing stage log images are below the node requirement", async () => {
     getRuntimeInstanceById.mockImplementationOnce(async () => procedureInstance());
     getGraph.mockImplementationOnce(async () => constructionProcedureGraph());
+    listStageLogEvidence.mockImplementationOnce(async () => [
+      {
+        id: "log-1",
+        stage_code: "plumbing_electrical",
+        images: ["image-1"],
+        created_at: NOW,
+      },
+    ]);
 
     const { assertRuntimeNodeCompletionAllowed } = await import(
       "./workflow-runtime-guards"
@@ -225,10 +252,50 @@ describe("assertRuntimeNodeCompletionAllowed", () => {
       definitionId: "definition-1",
       instanceId: "instance-1",
       nodeKey: "procedure_plumbing_electrical",
-      output: {
-        project_log_id: "log-1",
-        image_count: 2,
+      output: {},
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED",
+      message: "工序节点要求未满足：至少需要 2 张施工图片",
+      details: {
+        node_key: "procedure_plumbing_electrical",
+        stage_code: "plumbing_electrical",
+        require_log: true,
+        min_image_count: 2,
+        log_count: 1,
+        image_count: 1,
       },
+    });
+  });
+
+  test("allows construction procedure completion when required stage log evidence exists", async () => {
+    getRuntimeInstanceById.mockImplementationOnce(async () => procedureInstance());
+    getGraph.mockImplementationOnce(async () => constructionProcedureGraph());
+    listStageLogEvidence.mockImplementationOnce(async () => [
+      {
+        id: "log-1",
+        stage_code: "plumbing_electrical",
+        images: ["image-1"],
+        created_at: NOW,
+      },
+      {
+        id: "log-2",
+        stage_code: "plumbing_electrical",
+        images: ["image-2"],
+        created_at: NOW,
+      },
+    ]);
+
+    const { assertRuntimeNodeCompletionAllowed } = await import(
+      "./workflow-runtime-guards"
+    );
+
+    await expect(assertRuntimeNodeCompletionAllowed({
+      tenantId: "tenant-1",
+      definitionId: "definition-1",
+      instanceId: "instance-1",
+      nodeKey: "procedure_plumbing_electrical",
+      output: {},
     })).resolves.toBeUndefined();
   });
 });

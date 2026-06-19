@@ -103,7 +103,7 @@
 | `employee` | 员工选择 |
 | `image_list` | 图片上传数组 |
 | `payment_collection` | 收款节点确认，端上提交 `output.payment_status = "success"` |
-| `project_log` | 工序施工日志创建/选择，创建成功后向 `output.project_log_id` 写入日志 ID |
+| `project_log` | 旧工序日志字段，已被 workflow node contract v2 替代；当前按节点 `attributes` 展示日志入口 |
 | `settlement_method` | 结算方式选择 |
 
 工序节点施工日志的专门对接要求见
@@ -426,36 +426,33 @@ workflow action 接入雏形。gooes 侧不能修改 orange 源码，以下由�
 
 ## 工序节点施工日志
 
-当 action 的 `output_fields` 包含：
+当前工序节点施工日志入口来自 `timeline_nodes[].attributes`：
 
 ```json
 {
-  "name": "project_log_id",
-  "type": "project_log",
-  "required": true,
   "stage_code": "masonry",
+  "require_log": true,
   "min_image_count": 1
 }
 ```
 
 小程序必须：
 
-1. 按 `stage_code` 展示施工日志表单。
+1. 按 `attributes.stage_code` 展示施工日志表单。
 2. 满足 `min_image_count` 后调用 `POST /project-logs` 创建日志。
-3. 取创建结果 `data.id`。
-4. 调用 `POST /workflow-tasks/:taskId/complete`：
+3. 需要推进节点时，从 `actions[]` 获取 `task_id/key`。
+4. 调用 `POST /workflow-tasks/:taskId/complete`，不提交日志 ID 或图片数量：
 
 ```json
 {
   "action": "complete",
   "reason": null,
-  "output": {
-    "project_log_id": "created-project-log-id"
-  }
+  "output": {}
 }
 ```
 
 施工日志创建失败时，不允许调用 workflow complete。
+workflow complete 时后端会按当前项目、当前工序查询真实施工日志和图片证据。
 
 ## 收款节点
 
@@ -551,3 +548,4 @@ Phase 6 破坏性清理前，Orange/小程序侧必须把下面的 API 契约验
 | 2026-06-13 | Procedure construction log contract | 工序节点 action metadata 支持 `type = project_log`，并通过 `stage_code`、`min_image_count` 指示小程序先创建施工日志再完成 workflow task；施工日志 HTTP 路径统一使用 `/project-logs` | 项目详情、工地详情、首页待办、任务中心按 `project_log` 字段渲染施工日志表单；所有施工日志接口切到 `/project-logs` |
 | 2026-06-13 | Project workflow native actions | 项目 workflow action 不再下发 `business_domain = project_status` 的旧项目状态动作；项目业务节点使用 `workflow_project`，收款节点使用 `payment_collection` | 小程序项目按钮不能再按旧 `ProjectStatusAction` 白名单过滤，需要识别 `workflow_project` 和 `payment_collection` |
 | 2026-06-13 | Project status action compatibility removed | 项目详情 bootstrap 不再返回 `status_actions`；项目 PATCH 带 `status` 会被拒绝；项目推进只能通过 `/workflow-tasks/:taskId/complete` | 删除 orange 项目详情里的 `status_actions`、`ProjectStatusActionItem`、`/projects/:id/status-transitions` 依赖 |
+| 2026-06-19 | Procedure log/runtime contract v2 | 施工日志改为独立过程记录；工序 action 不再返回 `project_log` output field；complete 时后端查当前工序真实日志证据 | 小程序按 `timeline_nodes[].attributes` 展示日志入口，按 `actions[]` 显式完成工序，不再提交 `project_log_id/image_count` |

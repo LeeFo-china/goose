@@ -15,7 +15,7 @@
 - `construction_stages.stages[].acceptance_action`：施工阶段验收入口兼容字段。
 
 问题是这些字段仍分散表达同一件事。小程序需要同时读 workflow 节点、施工阶段、
-验收 action 和本地规则，容易出现“日志 complete 后节点已 done，但验收还没闭环”
+验收 action 和本地规则，容易出现“施工日志创建后节点已 done，但验收还没闭环”
 的误展示。
 
 ## Contract
@@ -79,11 +79,13 @@ type WorkflowTimelineNode = {
 
 - `acceptance_enabled=false`
   - 小程序不展示发起验收入口。
-  - 工序日志 complete 后节点 `done` 并进入下一节点是正确结果。
+  - 施工日志只是过程记录，可以创建多条，创建日志不推进 workflow。
+  - 员工显式执行 `complete` / `complete_procedure` action 后，后端按当前工序
+    真实施工日志和图片数校验；通过后节点 `done` 并进入下一节点。
   - 即使旧 `construction_stages` 有兼容字段，小程序也不得据此反推 workflow 动作。
 
 - `acceptance_enabled=true`
-  - 工序日志 complete 不等于验收闭环。
+  - 工序节点 complete 不等于验收闭环。
   - 如果该工序已有日志或 runtime 节点已完成，但验收未 `customer_confirmed`，
     后端应把节点展示为待验收或验收中，而不是业务已完成。
   - 节点应返回验收动作，例如 `create_acceptance`、`edit_acceptance`、

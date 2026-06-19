@@ -2,35 +2,48 @@
 
 ## 目标
 
-工序节点要求施工日志时，小程序必须先创建施工日志，再完成 workflow
-待办。端上不能再使用 snake_case 旧路径，施工日志相关接口统一使用
-`/project-logs`。
+工序节点要求施工日志时，小程序通过 `/project-logs` 独立创建施工日志。
+施工日志只是过程记录，可以创建多条；创建日志本身不推进 workflow。
+
+推进工序必须使用后端返回的 workflow action，例如 `complete` /
+`complete_procedure`。后端在 complete 时按当前项目、当前工序真实施工日志和图片数
+做校验，不再接受前端通过 `output.project_log_id` 或 `output.image_count`
+证明节点要求。
+
+端上不能再使用 snake_case 旧路径，施工日志相关接口统一使用 `/project-logs`。
 
 ## 后端动作元数据
 
 小程序从项目详情的 `workflow_state.actions` 或
-`GET /workflow-tasks?page=1&pageSize=20` 读取可操作动作。工序节点如果配置了
-`config.require_log = true`，对应 action 会返回 `project_log` 类型字段：
+`GET /workflow-tasks?page=1&pageSize=20` 读取可操作动作。工序节点的日志要求来自
+`timeline_nodes[].attributes`，完成工序动作来自 `actions[]`：
 
 ```json
 {
-  "key": "complete",
-  "label": "水电施工",
-  "task_id": "uuid",
-  "node_key": "plumbing",
+  "node_key": "procedure_plumbing_electrical",
   "node_type": "procedure",
-  "business_domain": null,
-  "business_action": null,
-  "requires_reason": false,
-  "disabled": false,
-  "output_fields": [
+  "display": {
+    "label": "水电",
+    "status_label": "当前"
+  },
+  "attributes": {
+    "stage_code": "plumbing_electrical",
+    "require_log": true,
+    "min_image_count": 2,
+    "acceptance_enabled": false
+  },
+  "actions": [
     {
-      "name": "project_log_id",
-      "label": "施工日志",
-      "type": "project_log",
-      "required": true,
-      "stage_code": "plumbing_electrical",
-      "min_image_count": 2
+      "key": "complete",
+      "label": "水电施工",
+      "task_id": "uuid",
+      "node_key": "procedure_plumbing_electrical",
+      "node_type": "procedure",
+      "business_domain": "workflow_project",
+      "business_action": "complete_procedure",
+      "requires_reason": false,
+      "disabled": false,
+      "output_fields": []
     }
   ]
 }
@@ -40,10 +53,11 @@
 
 | 字段 | 说明 |
 | --- | --- |
-| `type = project_log` | 端上渲染“添加施工日志”表单，不是普通文本输入 |
-| `stage_code` | 创建施工日志时必须写入的施工阶段 |
-| `min_image_count` | 工序要求的最少施工图片数；没有返回时按 `0` 处理 |
-| `project_log_id` | 创建施工日志成功后，放入 workflow complete 的 `output.project_log_id` |
+| `attributes.stage_code` | 创建施工日志时必须写入的施工阶段 |
+| `attributes.require_log` | 是否要求该工序至少存在施工日志 |
+| `attributes.min_image_count` | 该工序要求的施工日志图片总数；没有返回时按 `0` 处理 |
+| `actions[].business_action = complete_procedure` | 显式完成工序动作 |
+| `actions[].output_fields = []` | 工序 complete 不再提交日志 ID 或图片数量 |
 
 ## 施工日志接口
 
@@ -92,12 +106,12 @@ GET /project-logs/projects/calendar?project_id=<project_id>
 
 ## 小程序提交流程
 
-1. 从 `workflow_state.actions` 或 `/workflow-tasks` 找到 `node_type =
-   procedure` 且 `output_fields` 包含 `type = project_log` 的 action。
-2. 使用 `stage_code` 锁定施工阶段，展示“添加施工日志”表单。
+1. 从 `timeline_nodes[].attributes` 找到当前工序的 `stage_code`、
+   `require_log`、`min_image_count`。
+2. 使用 `stage_code` 锁定施工阶段，展示“添加施工日志”入口。
 3. 如需要图片，先走现有图片上传流程，创建日志时提交稳定 object key。
-4. 调用 `POST /project-logs` 创建施工日志。
-5. 创建成功后取返回的 `data.id`。
+4. 调用 `POST /project-logs` 创建施工日志；同一工序可以创建多条日志。
+5. 需要推进工序时，从 `actions[]` 取 `task_id/key`。
 6. 调用 `POST /workflow-tasks/:taskId/complete` 完成工序节点。
 
 完成待办请求体：
@@ -106,14 +120,7 @@ GET /project-logs/projects/calendar?project_id=<project_id>
 {
   "action": "complete",
   "reason": null,
-  "output": {
-    "project_log_id": "created-project-log-id",
-    "image_count": 2,
-    "images": [
-      "project-log/tenant/project/2026/06/13/a.jpg",
-      "project-log/tenant/project/2026/06/13/b.jpg"
-    ]
-  }
+  "output": {}
 }
 ```
 
@@ -122,7 +129,7 @@ GET /project-logs/projects/calendar?project_id=<project_id>
 - 施工日志创建失败时，不允许调用 workflow complete。
 - workflow complete 返回 `WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED` 时，保持节点
   未完成，并提示用户补齐施工日志或图片。
-- 创建日志和完成节点期间禁用提交按钮，避免重复创建日志。
+- 创建日志和完成节点期间禁用对应提交按钮，避免重复提交。
 - 如果 action 没有 `task_id`，端上不能 fallback 到旧状态机接口推进节点。
 - snake_case 旧路径已废弃，小程序不得继续调用。
 
@@ -130,8 +137,8 @@ GET /project-logs/projects/calendar?project_id=<project_id>
 
 | 模块 | 改造要求 |
 | --- | --- |
-| 项目详情/工地详情 | 读取 `workflow_state.actions`，识别 `type = project_log` 并展示施工日志表单 |
-| 首页待办/任务中心 | `/workflow-tasks` 返回同样 action 时按相同逻辑处理 |
+| 项目详情/工地详情 | 读取 `timeline_nodes[].attributes` 展示施工日志入口，读取 `actions[]` 展示完成工序 |
+| 首页待办/任务中心 | `/workflow-tasks` 返回 action 时只按 `actions[].key/task_id` complete |
 | 施工日志服务 | 创建、列表、日历接口统一切到 `/project-logs` |
 | 图片上传 | 继续复用现有施工日志图片上传能力，提交日志时传稳定 object key |
 | 错误处理 | 日志创建失败不推进 workflow；节点完成失败时展示后端错误 |
@@ -140,9 +147,10 @@ GET /project-logs/projects/calendar?project_id=<project_id>
 
 | 场景 | 期望 |
 | --- | --- |
-| 工序 action 返回 `project_log` 字段 | 小程序显示“添加施工日志”入口 |
+| 工序 attributes 返回 `require_log/stage_code/min_image_count` | 小程序显示“添加施工日志”入口 |
 | 日志内容为空 | 前端阻止提交；强行提交时后端返回校验错误 |
-| 图片数少于 `min_image_count` | 不允许完成节点 |
-| `POST /project-logs` 成功，workflow complete 成功 | 项目日志列表出现新日志，workflow 节点推进 |
+| 当前工序真实日志图片数少于 `min_image_count` | complete 返回 `WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED` |
+| `POST /project-logs` 成功 | 项目日志列表出现新日志，workflow 节点不自动推进 |
+| workflow complete 成功 | workflow 节点推进到下一节点 |
 | `POST /project-logs` 失败 | workflow 节点保持未完成 |
 | 调用 snake_case 旧路径 | 视为错误调用，端上必须移除 |

@@ -1,6 +1,10 @@
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import {
+  projectLogEvidenceRepository,
+  type ProjectLogStageEvidenceRow,
+} from "@/repositories/project-log-evidence";
+import {
   workflowRepository,
   type JsonObject,
   type WorkflowGraphResult,
@@ -57,7 +61,11 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
     return;
   }
 
-  assertProcedureNodeRequirements(currentNode, input.output);
+  await assertProcedureNodeRequirements({
+    tenantId: input.tenantId,
+    projectId: instance.subject_id,
+    node: currentNode,
+  });
 
   const nextNode = getNextWorkflowNode(graph, instance.current_node_id);
   if (!isFinalAcceptanceNode(currentNode) && !isFinalAcceptanceNode(nextNode)) {
@@ -153,24 +161,51 @@ function getProcedureStageCode(
   return stageKey;
 }
 
-function assertProcedureNodeRequirements(
-  node: WorkflowNodeRow | null | undefined,
-  output: JsonObject,
-) {
+async function assertProcedureNodeRequirements(input: {
+  tenantId: string;
+  projectId: string;
+  node: WorkflowNodeRow | null | undefined;
+}) {
+  const node = input.node;
   if (node?.node_type !== "procedure") {
     return;
   }
 
   const requireLog = node.config.require_log === true;
   const minImageCount = getMinImageCount(node.config.min_image_count);
-  const imageCount = getOutputImageCount(output);
-  const hasLog = isNonEmptyString(output.project_log_id) ||
-    isNonEmptyString(output.log_id) ||
-    output.require_log_verified === true;
+  if (!requireLog && minImageCount === 0) {
+    return;
+  }
+
+  const stageCode = getProcedureStageCode(node);
+  if (!stageCode) {
+    throw Errors.business(
+      409,
+      "工序节点要求未满足：需要有效工序阶段",
+      ErrorCodes.WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED,
+      {
+        node_key: node.node_key,
+        stage_code: null,
+        require_log: requireLog,
+        min_image_count: minImageCount,
+        log_count: 0,
+        image_count: 0,
+      },
+    );
+  }
+
+  const stageLogs = await projectLogEvidenceRepository.listStageLogEvidence({
+    tenantId: input.tenantId,
+    projectId: input.projectId,
+    stageCode,
+    limit: 100,
+  });
+  const logCount = stageLogs.length;
+  const imageCount = getStageLogImageCount(stageLogs);
   const messages: string[] = [];
 
-  if (requireLog && !hasLog) {
-    messages.push("需要关联施工日志");
+  if (requireLog && logCount === 0) {
+    messages.push("需要施工日志");
   }
   if (minImageCount > 0 && imageCount < minImageCount) {
     messages.push(`至少需要 ${minImageCount} 张施工图片`);
@@ -185,8 +220,10 @@ function assertProcedureNodeRequirements(
     ErrorCodes.WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED,
     {
       node_key: node.node_key,
+      stage_code: stageCode,
       require_log: requireLog,
       min_image_count: minImageCount,
+      log_count: logCount,
       image_count: imageCount,
     },
   );
@@ -230,21 +267,24 @@ function getMinImageCount(value: unknown) {
     : 0;
 }
 
-function getOutputImageCount(output: JsonObject) {
-  if (typeof output.image_count === "number" && Number.isFinite(output.image_count)) {
-    return output.image_count;
-  }
-  if (Array.isArray(output.images)) {
-    return output.images.length;
-  }
-  if (Array.isArray(output.image_urls)) {
-    return output.image_urls.length;
-  }
-  return 0;
+function getStageLogImageCount(logs: ProjectLogStageEvidenceRow[]) {
+  return logs.reduce((total, log) => total + getImageListCount(log.images), 0);
 }
 
-function isNonEmptyString(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0;
+function getImageListCount(value: unknown): number {
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

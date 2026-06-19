@@ -158,15 +158,19 @@ Content-Type: application/json
 
 ### `acceptance_enabled=false`
 
-小程序不展示“发起验收”。工序日志 complete 成功后，节点变为 `done` 并进入下一
-节点是正确结果。
+小程序不展示“发起验收”。施工日志只是过程记录，可以在同一工序下创建多条，
+创建日志本身不推进 workflow。
+
+如果该工序节点还要求 `require_log/min_image_count`，后端在员工显式点击
+`complete`/`complete_procedure` 时，按当前项目、当前工序真实施工日志和图片数
+做校验；校验通过后节点变为 `done` 并进入下一节点。
 
 即使旧 `construction_stages.stages[].acceptance_action` 有兼容数据，也不能据此在
 workflow 抽屉或下一步处理里合成本地验收动作。
 
 ### `acceptance_enabled=true`
 
-工序日志 complete 不等于验收闭环。
+工序节点 complete 不等于验收闭环。
 
 后端会在 timeline 节点上返回验收状态和验收动作：
 
@@ -180,6 +184,22 @@ workflow 抽屉或下一步处理里合成本地验收动作。
 因此小程序完成工序日志后必须刷新项目详情或 subject state，再按刷新后的
 `timeline_nodes[].actions` 展示验收入口。
 
+## 模板版本与运行实例
+
+workflow 实例绑定创建时使用的发布版本和节点快照。Admin 在流程编排页修改并重新
+发布模板后，只影响后续新建实例；已运行实例不会静默同步最新模板里的
+`acceptance_enabled`、`require_log`、`min_image_count` 等节点属性。
+
+如果业务上需要让已运行实例使用新节点属性，必须走受控迁移/重建/补丁流程：
+
+- 先列出受影响的运行实例数量和对象 ID。
+- 对比旧版本节点和新版本节点，确认当前节点能否安全映射。
+- 记录操作人、原因、迁移前后版本和节点。
+- 迁移后刷新 subject state，再由小程序/Admin 按 runtime 返回的
+  `timeline_nodes/display/attributes/actions` 展示。
+
+端侧不要假设“模板最新配置”会自动覆盖正在运行的实例。
+
 ## 小程序改造要求
 
 | 模块 | 要求 |
@@ -187,7 +207,7 @@ workflow 抽屉或下一步处理里合成本地验收动作。
 | 项目详情 bootstrap | 保存并透传 `workflow_progress.timeline_nodes` 和 `workflow_state.timeline_nodes` |
 | 流程抽屉/时间线 | 节点顺序、文案、状态全部按 `timeline_nodes[].display/status` |
 | 下一步处理 | 优先取当前或受阻节点的 enabled action，不再读旧阶段 current/next 推动作 |
-| 施工日志入口 | 从节点 `attributes.require_log/min_image_count/stage_code` 和 action `output_fields` 判断 |
+| 施工日志入口 | 从节点 `attributes.require_log/min_image_count/stage_code` 判断；日志创建不等于推进 |
 | 阶段验收入口 | 从节点 `attributes.acceptance_enabled` 和 `actions[]` 判断 |
 | 收款入口 | 从 `payment_collection` action 的 `output_fields` 判断金额、凭证、收款类型 |
 | 任务中心 | 继续走 `/workflow-tasks?status=pending`，按 `actions[].key` complete |
@@ -245,9 +265,9 @@ workflow 抽屉或下一步处理里合成本地验收动作。
 
 | 场景 | 期望 |
 | --- | --- |
-| `acceptance_enabled=false` 工序 | 不展示发起验收；日志 complete 后节点 `done` 并进入下一节点 |
+| `acceptance_enabled=false` 工序 | 不展示发起验收；创建施工日志不推进；显式完成工序 action 成功后进入下一节点 |
 | `acceptance_enabled=true` 未验收 | 节点不展示为纯已完成；返回待验收状态和验收 action |
-| 工序节点要求日志 | action 或 attributes 带 `stage_code/min_image_count`，日志创建成功后才 complete |
+| 工序节点要求日志 | attributes 带 `stage_code/min_image_count`；complete 时后端查真实日志证据 |
 | 收款节点 | 金额和凭证按 `output_fields` 提交，complete 后 workflow 进入下一节点 |
 | 无 actions | 页面只读或提示刷新，不展示旧状态按钮 |
 | `/workflow-tasks` 待办 | `actions[].key/task_id/node_key` 正常可用 |
@@ -269,9 +289,15 @@ timeline_nodes 返回。
    或 action_label 反推业务规则。
 
 阶段验收规则也已统一：
-- acceptance_enabled=false：不展示发起验收；日志 complete 后节点 done 并进入下一节点。
-- acceptance_enabled=true：日志 complete 不等于验收闭环；刷新后按后端返回的
+- acceptance_enabled=false：不展示发起验收；施工日志只是过程记录，不自动推进；
+  员工点击后端返回的 complete/complete_procedure action 后，后端按真实日志证据校验并推进。
+- acceptance_enabled=true：工序节点 complete 不等于验收闭环；刷新后按后端返回的
   create_acceptance/edit_acceptance/view_acceptance 处理验收。
+
+版本规则：
+- 已运行实例绑定创建时的发布版本和节点快照。
+- Admin 后续修改并重新发布模板只影响新实例，不会静默改变已运行实例。
+- 如需让旧实例应用新属性，必须由后端/Admin 走受控迁移或重建。
 
 对接文档在 gooes：
 docs/state_machine_migrate/2026-06-18-workflow-node-contract-v2-miniprogram-handoff.md

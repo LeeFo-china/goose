@@ -1,5 +1,12 @@
 # 小程序工序完成后触发阶段验收对接说明
 
+> 2026-06-19 更新：本文保留早期联调背景。当前工序节点以
+> `docs/state_machine_migrate/2026-06-18-workflow-node-contract-v2-miniprogram-handoff.md`
+> 为准：施工日志是独立过程记录，日志创建不推进 workflow；工序 complete action
+> 不再通过 `output_fields[].type = project_log` 或 `output.project_log_id`
+> 传递日志证据。小程序应读取 `timeline_nodes[].attributes` 展示日志/验收能力，
+> 读取 `actions[]` 执行 workflow 动作。
+
 ## 目标
 
 工程施工 workflow 中，工序节点完成后，小程序端需要让用户进入对应阶段验收。
@@ -357,4 +364,3 @@ Content-Type: application/json
 - [小程序收款节点对接说明](./miniprogram-payment-collection-node-integration.md)
 - [Orange Workflow 对接文档](./orange-workflow-handoff.md)
 - [Orange 施工阶段 current_stage 对接文档](./orange-construction-current-stage-handoff.md)
-
