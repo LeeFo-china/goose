@@ -95,6 +95,10 @@ describe("attachProjectWorkflowSummaries", () => {
       current_node_key: "procedure_plumbing_electrical",
       current_node_title: "水电",
     });
+    expect(item).not.toHaveProperty("current_stage");
+    expect(item).not.toHaveProperty("current_stage_label");
+    expect(item).not.toHaveProperty("stage_code");
+    expect(item).not.toHaveProperty("stage_label");
     expect(
       (item.workflow_progress as { timeline_nodes: Array<Record<string, unknown>> })
         .timeline_nodes,

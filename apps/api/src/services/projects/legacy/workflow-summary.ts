@@ -49,7 +49,7 @@ export async function attachProjectWorkflowSummaries(input: {
       .filter((id): id is string => Boolean(id)),
   );
   if (projectIds.length === 0) {
-    return input.rows;
+    return input.rows.map(stripLegacyStageFields);
   }
 
   const [subjectStates, runtimeInstances, accessibleTasks] = await Promise.all([
@@ -107,7 +107,7 @@ export async function attachProjectWorkflowSummaries(input: {
 
   return input.rows.map((row) => {
     const projectId = readProjectId(row);
-    if (!projectId) return row;
+    if (!projectId) return stripLegacyStageFields(row);
 
     const runtimeInstance = runtimeInstanceByProjectId.get(projectId) ?? null;
     const subjectState = subjectStateByProjectId.get(projectId) ?? null;
@@ -126,7 +126,7 @@ export async function attachProjectWorkflowSummaries(input: {
     });
 
     return {
-      ...row,
+      ...stripLegacyStageFields(row),
       workflow_progress: progress,
       workflow_state: buildWorkflowStateSummary({
         projectId,
@@ -135,6 +135,18 @@ export async function attachProjectWorkflowSummaries(input: {
       }),
     };
   });
+}
+
+function stripLegacyStageFields(row: Record<string, unknown>): Record<string, unknown> {
+  const {
+    current_stage: _currentStage,
+    current_stage_label: _currentStageLabel,
+    stage_code: _stageCode,
+    stage_label: _stageLabel,
+    ...rest
+  } = row;
+
+  return rest;
 }
 
 async function loadGraphsByRuntimeKey(input: {
