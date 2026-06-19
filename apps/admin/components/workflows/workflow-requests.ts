@@ -16,6 +16,8 @@ import type {
   WorkflowRuntimeRebuildResult,
   WorkflowRuntimeStartResult,
   WorkflowTemplateCreateInput,
+  WorkflowVersionListData,
+  WorkflowVersionListQuery,
 } from "./workflow-types";
 
 function buildWorkflowListQuery(query: WorkflowDefinitionListQuery = {}) {
@@ -40,6 +42,16 @@ function buildWorkflowRuntimeListQuery(
   if (query.status) params.set("status", query.status);
   if (query.subject_type) params.set("subject_type", query.subject_type);
   if (query.subject_id?.trim()) params.set("subject_id", query.subject_id.trim());
+
+  return params.toString();
+}
+
+function buildWorkflowVersionListQuery(
+  query: WorkflowVersionListQuery = {},
+) {
+  const params = new URLSearchParams();
+  params.set("page", String(query.page ?? 1));
+  params.set("pageSize", String(query.pageSize ?? 20));
 
   return params.toString();
 }
@@ -132,6 +144,20 @@ export async function publishWorkflowDefinition(id: string) {
     {
       method: "POST",
       fallbackMessage: "发布流程失败",
+    },
+  );
+}
+
+export async function fetchWorkflowVersions(
+  id: string,
+  query: WorkflowVersionListQuery = {},
+) {
+  const params = buildWorkflowVersionListQuery(query);
+  return requestBackendJson<WorkflowVersionListData>(
+    `/workflows/${encodeURIComponent(id)}/versions?${params}`,
+    {
+      cache: "no-store",
+      fallbackMessage: "流程版本列表加载失败",
     },
   );
 }

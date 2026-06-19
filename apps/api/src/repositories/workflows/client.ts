@@ -13,6 +13,7 @@ export type WorkflowTableName =
 export type WorkflowRpcName =
   | "replace_workflow_draft_graph"
   | "publish_workflow_definition"
+  | "get_workflow_version_running_instance_counts"
   | "start_workflow_instance"
   | "complete_workflow_instance_node"
   | "cancel_workflow_instance"

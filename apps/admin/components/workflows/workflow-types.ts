@@ -45,6 +45,11 @@ export type WorkflowVersion = {
   created_at: string;
 };
 
+export type WorkflowVersionSummary = WorkflowVersion & {
+  is_active: boolean;
+  running_instance_count: number;
+};
+
 export type WorkflowNodePosition = {
   x: number;
   y: number;
@@ -184,6 +189,16 @@ export type WorkflowDefinitionListQuery = {
   status?: WorkflowDefinitionStatus;
   category?: WorkflowCategory;
   keyword?: string;
+};
+
+export type WorkflowVersionListData = {
+  list: WorkflowVersionSummary[];
+  pagination: WorkflowPagination;
+};
+
+export type WorkflowVersionListQuery = {
+  page?: number;
+  pageSize?: number;
 };
 
 export type WorkflowDefinitionCreateInput = {

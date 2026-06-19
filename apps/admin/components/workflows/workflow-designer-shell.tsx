@@ -42,6 +42,7 @@ import {
   saveWorkflowGraph,
 } from "@/components/workflows/workflow-requests";
 import { WorkflowVersionEffectNotice } from "@/components/workflows/workflow-version-effect-notice";
+import { WorkflowVersionListPanel } from "@/components/workflows/workflow-version-list-panel";
 import { WORKFLOW_VERSION_EFFECT_COPY } from "@/components/workflows/workflow-version-semantics";
 import { WorkflowValidationPanel } from "@/components/workflows/workflow-validation-panel";
 import { useWorkflowValidationPlayback } from "@/components/workflows/workflow-validation-playback";
@@ -383,6 +384,11 @@ export function WorkflowDesignerShell({
         </header>
 
         <WorkflowVersionEffectNotice integrationHint={integrationHint} />
+        <WorkflowVersionListPanel
+          activeVersionId={graph.definition.active_version_id}
+          workflowId={workflowId}
+          className="shrink-0 rounded-none border-x-0 border-t-0 shadow-none"
+        />
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="grid grid-cols-3 gap-2 border-b bg-background p-2 lg:hidden">

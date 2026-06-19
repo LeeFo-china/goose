@@ -14,6 +14,7 @@ import type {
   WorkflowRuntimeRebuildResult,
   WorkflowRuntimeStartInput,
   WorkflowRuntimeStartResult,
+  WorkflowVersionRunningInstanceCountsInput,
   WorkflowTaskRow,
 } from "./types";
 
@@ -25,6 +26,11 @@ type WorkflowRuntimeCancelFailure =
   Extract<WorkflowRuntimeCancelResult, { ok: false }>;
 type WorkflowRuntimeRebuildFailure =
   Extract<WorkflowRuntimeRebuildResult, { ok: false }>;
+
+type WorkflowVersionRunningInstanceCountRpcRow = {
+  version_id: string;
+  running_instance_count: number;
+};
 
 export async function listRuntimeInstances(
   input: WorkflowRuntimeInstanceListInput,
@@ -61,6 +67,35 @@ export async function listRuntimeInstances(
       totalPages: total ? Math.ceil(total / pageSize) : 0,
     },
   };
+}
+
+export async function listRunningInstanceCountsByVersion(
+  input: WorkflowVersionRunningInstanceCountsInput,
+): Promise<Map<string, number>> {
+  if (input.versionIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await workflowRpc(
+    "get_workflow_version_running_instance_counts",
+    {
+      p_tenant_id: input.tenantId,
+      p_definition_id: input.definitionId,
+      p_version_ids: input.versionIds,
+    },
+  );
+
+  if (error) {
+    throw Errors.dbError("查询流程版本运行实例数量失败", error);
+  }
+
+  const rows = Array.isArray(data)
+    ? data as WorkflowVersionRunningInstanceCountRpcRow[]
+    : [];
+
+  return new Map(
+    rows.map((row) => [row.version_id, row.running_instance_count]),
+  );
 }
 
 export async function getRuntimeInstanceById(input: {

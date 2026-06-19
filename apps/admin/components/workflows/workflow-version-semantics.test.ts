@@ -33,10 +33,18 @@ describe("workflow version semantics", () => {
       new URL("./workflow-designer-shell.tsx", import.meta.url),
       "utf8",
     );
+    const requestsSource = readFileSync(
+      new URL("./workflow-requests.ts", import.meta.url),
+      "utf8",
+    );
 
     expect(WORKFLOW_VERSION_EFFECT_COPY.publishConfirm).toContain("只影响新创建或受控重建的实例");
+    expect(WORKFLOW_VERSION_EFFECT_COPY.versionPanelDescription).toContain("运行中的实例数量");
     expect(designerSource).toContain("WorkflowVersionEffectNotice");
+    expect(designerSource).toContain("WorkflowVersionListPanel");
     expect(designerSource).toContain("ConfirmActionDialog");
     expect(designerSource).toContain("WORKFLOW_VERSION_EFFECT_COPY.publishConfirm");
+    expect(requestsSource).toContain("fetchWorkflowVersions");
+    expect(requestsSource).toContain("/versions?");
   });
 });

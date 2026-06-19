@@ -85,6 +85,8 @@ export const WorkflowGraphQuerySchema = z.object({
   version_id: optionalQueryValue(z.uuid("无效的流程版本 ID")),
 });
 
+export const WorkflowVersionListQuerySchema = PaginationQuerySchema;
+
 export const WorkflowRuntimeInstanceIdParamsSchema = z.object({
   id: z.uuid("无效的流程 ID"),
   instanceId: z.uuid("无效的流程实例 ID"),
@@ -299,6 +301,7 @@ export type WorkflowListQuery = z.infer<typeof WorkflowListQuerySchema>;
 export type WorkflowDefinitionCreateInput = z.infer<typeof WorkflowDefinitionCreateSchema>;
 export type WorkflowDefinitionUpdateInput = z.infer<typeof WorkflowDefinitionUpdateSchema>;
 export type WorkflowGraphSaveInput = z.infer<typeof WorkflowGraphSaveSchema>;
+export type WorkflowVersionListQuery = z.infer<typeof WorkflowVersionListQuerySchema>;
 export type WorkflowTemplateCreateInput = z.infer<typeof WorkflowTemplateCreateSchema>;
 export type WorkflowSimulationInput = z.infer<typeof WorkflowSimulationSchema>;
 export type WorkflowRuntimeInstanceListQuery = z.infer<typeof WorkflowRuntimeInstanceListQuerySchema>;

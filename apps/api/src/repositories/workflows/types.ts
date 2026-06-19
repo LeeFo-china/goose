@@ -45,6 +45,23 @@ export type WorkflowVersionRow = {
   created_at: string;
 };
 
+export type WorkflowVersionListInput = {
+  tenantId: string;
+  definitionId: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type WorkflowVersionListResult = {
+  list: WorkflowVersionRow[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 export type WorkflowNodePosition = {
   x: number;
   y: number;
@@ -287,6 +304,12 @@ export type WorkflowRuntimeInstanceListResult = {
     total: number;
     totalPages: number;
   };
+};
+
+export type WorkflowVersionRunningInstanceCountsInput = {
+  tenantId: string;
+  definitionId: string;
+  versionIds: string[];
 };
 
 export type WorkflowRuntimeStartInput = {

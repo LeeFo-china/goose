@@ -17,6 +17,7 @@ import {
   getLatestVersion,
   getNextVersionNumber,
   getVersionById,
+  listVersions,
   publishDefinition,
 } from "./workflows/versions";
 import {
@@ -25,6 +26,7 @@ import {
   findLatestRunningRuntimeInstance,
   getRuntimeInstanceById,
   listCompletedRuntimeProcedureNodes,
+  listRunningInstanceCountsByVersion,
   listRuntimeInstanceNodes,
   listRuntimeInstances,
   rebuildRuntimeInstance,
@@ -45,6 +47,7 @@ class WorkflowRepository {
   replaceDraftGraph = replaceDraftGraph;
   getLatestVersion = getLatestVersion;
   getVersionById = getVersionById;
+  listVersions = listVersions;
   getNextVersionNumber = getNextVersionNumber;
   createVersion = createVersion;
   publishDefinition = publishDefinition;
@@ -53,6 +56,7 @@ class WorkflowRepository {
   getRuntimeInstanceById = getRuntimeInstanceById;
   findLatestRunningRuntimeInstance = findLatestRunningRuntimeInstance;
   listCompletedRuntimeProcedureNodes = listCompletedRuntimeProcedureNodes;
+  listRunningInstanceCountsByVersion = listRunningInstanceCountsByVersion;
   listRuntimeInstanceNodes = listRuntimeInstanceNodes;
   startRuntimeInstance = startRuntimeInstance;
   completeRuntimeNode = completeRuntimeNode;

@@ -17,6 +17,7 @@ import type {
   WorkflowRuntimeInstanceListQuery,
   WorkflowRuntimeRebuildInput,
   WorkflowRuntimeInstanceStartInput,
+  WorkflowVersionListQuery,
 } from "@/schema/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
@@ -125,6 +126,36 @@ class WorkflowService {
     }
 
     return graph;
+  }
+
+  async listVersions(
+    authContext: AuthContext,
+    definitionId: string,
+    query: WorkflowVersionListQuery,
+  ) {
+    const tenantId = this.assertManagePermission(authContext);
+    const definition = await this.getRequiredDefinition(tenantId, definitionId);
+    const versions = await workflowRepository.listVersions({
+      tenantId,
+      definitionId,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+    const versionIds = versions.list.map((version) => version.id);
+    const runningCounts = await workflowRepository.listRunningInstanceCountsByVersion({
+      tenantId,
+      definitionId,
+      versionIds,
+    });
+
+    return {
+      list: versions.list.map((version) => ({
+        ...version,
+        is_active: version.id === definition.active_version_id,
+        running_instance_count: runningCounts.get(version.id) ?? 0,
+      })),
+      pagination: versions.pagination,
+    };
   }
 
   async saveDraftGraph(

@@ -6,8 +6,41 @@ import type {
   WorkflowDefinitionPublishResult,
   WorkflowDefinitionRow,
   WorkflowVersionCreateInput,
+  WorkflowVersionListInput,
+  WorkflowVersionListResult,
   WorkflowVersionRow,
 } from "./types";
+
+export async function listVersions(
+  input: WorkflowVersionListInput,
+): Promise<WorkflowVersionListResult> {
+  const page = input.page ?? 1;
+  const pageSize = Math.min(input.pageSize ?? 20, 100);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, error, count } = await workflowTable("workflow_versions")
+    .select(WORKFLOW_VERSION_SELECT, { count: "exact" })
+    .eq("tenant_id", input.tenantId)
+    .eq("definition_id", input.definitionId)
+    .order("version_number", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    throw Errors.dbError("查询流程版本列表失败", error);
+  }
+
+  const total = count ?? 0;
+  return {
+    list: (data ?? []) as WorkflowVersionRow[],
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: total ? Math.ceil(total / pageSize) : 0,
+    },
+  };
+}
 
 export async function getLatestVersion(
   definitionId: string,

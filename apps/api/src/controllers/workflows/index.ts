@@ -13,6 +13,7 @@ import {
   WorkflowRuntimeRebuildSchema,
   WorkflowRuntimeInstanceStartSchema,
   WorkflowTemplateCreateSchema,
+  WorkflowVersionListQuerySchema,
 } from "@/schema/workflows";
 import { workflowTemplateService } from "@/services/workflow-templates";
 import { workflowService } from "@/services/workflows";
@@ -129,6 +130,23 @@ class WorkflowController extends TenantBaseController<
     const data = await workflowService.publishDefinition(
       authContext,
       paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/workflows/:id/versions")
+  async listVersions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowDefinitionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const queryResult = WorkflowVersionListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await workflowService.listVersions(
+      authContext,
+      paramsResult.data.id,
+      queryResult.data,
     );
     return ResponseHandler.success(data);
   }
