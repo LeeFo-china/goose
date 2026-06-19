@@ -33,6 +33,10 @@ describe("workflow version semantics", () => {
       new URL("./workflow-designer-shell.tsx", import.meta.url),
       "utf8",
     );
+    const tableSource = readFileSync(
+      new URL("./workflow-table.tsx", import.meta.url),
+      "utf8",
+    );
     const requestsSource = readFileSync(
       new URL("./workflow-requests.ts", import.meta.url),
       "utf8",
@@ -42,6 +46,8 @@ describe("workflow version semantics", () => {
     expect(WORKFLOW_VERSION_EFFECT_COPY.versionPanelDescription).toContain("运行中的实例数量");
     expect(designerSource).toContain("WorkflowVersionEffectNotice");
     expect(designerSource).toContain("WorkflowVersionListPanel");
+    expect(tableSource).toContain("WorkflowVersionInlineList");
+    expect(tableSource).toContain("expandedWorkflowId");
     expect(designerSource).toContain("ConfirmActionDialog");
     expect(designerSource).toContain("WORKFLOW_VERSION_EFFECT_COPY.publishConfirm");
     expect(requestsSource).toContain("fetchWorkflowVersions");

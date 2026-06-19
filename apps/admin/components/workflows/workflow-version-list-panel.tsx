@@ -55,12 +55,14 @@ export function WorkflowVersionListPanel({
   workflowId,
   activeVersionId,
   className,
+  defaultOpen = false,
 }: {
   workflowId: string;
   activeVersionId?: string | null;
   className?: string;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<WorkflowVersionListData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +94,15 @@ export function WorkflowVersionListPanel({
   }
 
   useEffect(() => {
-    setOpen(false);
+    setOpen(defaultOpen);
     setPage(1);
     setData(null);
     setError(null);
-  }, [workflowId]);
+    if (defaultOpen) {
+      loadVersions(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowId, defaultOpen]);
 
   const versions = data?.list ?? [];
   const totalPages = data?.pagination.totalPages ?? 0;
@@ -259,5 +265,24 @@ export function WorkflowVersionListPanel({
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+export function WorkflowVersionInlineList({
+  workflowId,
+  activeVersionId,
+  className,
+}: {
+  workflowId: string;
+  activeVersionId?: string | null;
+  className?: string;
+}) {
+  return (
+    <WorkflowVersionListPanel
+      activeVersionId={activeVersionId}
+      defaultOpen
+      workflowId={workflowId}
+      className={cn("rounded-md shadow-none", className)}
+    />
   );
 }

@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, FileText } from "lucide-react";
+import { Fragment, useState } from "react";
+import { ArrowRight, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import {
   formatWorkflowDate,
   workflowCategoryLabel,
   workflowStatusLabel,
   workflowStatusVariant,
 } from "@/components/workflows/workflow-labels";
+import { WorkflowVersionInlineList } from "@/components/workflows/workflow-version-list-panel";
 import type { WorkflowDefinition } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,9 +82,11 @@ export function WorkflowTable({
 }: {
   workflows: WorkflowDefinition[];
 }) {
+  const [expandedWorkflowId, setExpandedWorkflowId] = useState<string | null>(null);
+
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1120px] table-fixed text-sm">
+      <table className="w-full min-w-[1190px] table-fixed text-sm">
         <colgroup>
           <col className="w-[270px]" />
           <col className="w-[120px]" />
@@ -90,7 +94,7 @@ export function WorkflowTable({
           <col className="w-[130px]" />
           <col className="w-[170px]" />
           <col className="w-[240px]" />
-          <col className="w-[120px]" />
+          <col className="w-[190px]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-card text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]">
           <tr>
@@ -107,44 +111,74 @@ export function WorkflowTable({
         </thead>
         <tbody>
           {workflows.length > 0 ? (
-            workflows.map((workflow) => (
-              <tr
-                key={workflow.id}
-                className="group border-t transition-colors hover:bg-muted/40"
-              >
-                <td className="px-4 py-4">
-                  <WorkflowIdentityCell workflow={workflow} />
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
-                  {workflowCategoryLabel(workflow.category)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-4">
-                  <Badge
-                    className="whitespace-nowrap"
-                    variant={workflowStatusVariant(workflow.status)}
-                  >
-                    {workflowStatusLabel(workflow.status)}
-                  </Badge>
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
-                  {workflow.active_version_id ? "已绑定" : "未发布"}
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 tabular-nums text-muted-foreground">
-                  {formatWorkflowDate(workflow.updated_at)}
-                </td>
-                <td className="px-4 py-4">
-                  <WorkflowDescription value={workflow.description} />
-                </td>
-                <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted/40">
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`/workflows/${workflow.id}`}>
-                      打开
-                      <ArrowRight data-icon="inline-end" />
-                    </Link>
-                  </Button>
-                </td>
-              </tr>
-            ))
+            workflows.map((workflow) => {
+              const expanded = expandedWorkflowId === workflow.id;
+              const canExpandVersions = Boolean(workflow.active_version_id);
+              return (
+                <Fragment key={workflow.id}>
+                  <tr className="group border-t transition-colors hover:bg-muted/40">
+                    <td className="px-4 py-4">
+                      <WorkflowIdentityCell workflow={workflow} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
+                      {workflowCategoryLabel(workflow.category)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <Badge
+                        className="whitespace-nowrap"
+                        variant={workflowStatusVariant(workflow.status)}
+                      >
+                        {workflowStatusLabel(workflow.status)}
+                      </Badge>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
+                      {workflow.active_version_id ? "已绑定" : "未发布"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 tabular-nums text-muted-foreground">
+                      {formatWorkflowDate(workflow.updated_at)}
+                    </td>
+                    <td className="px-4 py-4">
+                      <WorkflowDescription value={workflow.description} />
+                    </td>
+                    <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted/40">
+                      <div className="flex justify-end gap-2">
+                        {canExpandVersions ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setExpandedWorkflowId(expanded ? null : workflow.id)}
+                          >
+                            {expanded ? (
+                              <ChevronDown data-icon="inline-start" />
+                            ) : (
+                              <ChevronRight data-icon="inline-start" />
+                            )}
+                            版本
+                          </Button>
+                        ) : null}
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/workflows/${workflow.id}`}>
+                            打开
+                            <ArrowRight data-icon="inline-end" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expanded ? (
+                    <tr className="border-t bg-muted/20">
+                      <td colSpan={7} className="px-4 py-4">
+                        <WorkflowVersionInlineList
+                          activeVersionId={workflow.active_version_id}
+                          workflowId={workflow.id}
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              );
+            })
           ) : (
             <tr>
               <td className="px-5 py-12 text-center text-muted-foreground" colSpan={7}>
