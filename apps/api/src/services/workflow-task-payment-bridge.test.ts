@@ -199,6 +199,33 @@ describe("workflowTaskPaymentBridge", () => {
     });
   });
 
+  test("requires a friendly payment remark when confirming payment manually", async () => {
+    const workflowTaskPaymentBridge = createBridge();
+
+    await expect(
+      workflowTaskPaymentBridge.complete({
+        authContext,
+        task: bridgeTask,
+        action: "complete",
+        output: {
+          payment_status: "success",
+          amount: 10000,
+          paid_at: "2026-06-16T10:00:00.000Z",
+          evidence_images: [{ url: "https://example.com/payment.jpg" }],
+          remark: null,
+        },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+      message: "请填写收款备注",
+    });
+
+    expect(createPayment).not.toHaveBeenCalled();
+    expect(createProjectPaymentLedger).not.toHaveBeenCalled();
+    expect(completeRuntimeNode).not.toHaveBeenCalled();
+  });
+
   test("reuses existing workflow payment for idempotent retry", async () => {
     findByWorkflowTaskId.mockImplementation(async () => confirmedPayment);
     const workflowTaskPaymentBridge = createBridge();

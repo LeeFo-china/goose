@@ -199,7 +199,7 @@ function buildPaymentCollectionActions(
           name: "remark",
           label: "收款备注",
           type: "string",
-          required: false,
+          required: true,
         },
       ],
     },

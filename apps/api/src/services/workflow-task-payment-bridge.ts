@@ -23,7 +23,10 @@ const PaymentCollectionOutputSchema = z.object({
   amount: z.coerce.number("入账金额必须是数字").positive("入账金额必须大于 0"),
   paid_at: z.string().datetime("无效的入账时间").optional(),
   evidence_images: z.array(z.unknown()).min(1, "请上传收款凭证"),
-  remark: z.string().trim().max(500, "收款备注不能超过 500 个字符").optional(),
+  remark: z.string("请填写收款备注")
+    .trim()
+    .min(1, "请填写收款备注")
+    .max(500, "收款备注不能超过 500 个字符"),
 });
 
 type PaymentCollectionType = (typeof PAYMENT_COLLECTION_TYPES)[number];
@@ -158,7 +161,7 @@ export class WorkflowTaskPaymentBridge {
   ) {
     const parsed = PaymentCollectionOutputSchema.safeParse(input.output);
     if (!parsed.success) {
-      throw Errors.fromZod(parsed.error);
+      throw buildPaymentCollectionValidationError(parsed.error);
     }
 
     return this.dependencies.paymentRepository.create({
@@ -201,6 +204,15 @@ export class WorkflowTaskPaymentBridge {
         throw Errors.badRequest("当前节点没有匹配的分支条件");
     }
   }
+}
+
+function buildPaymentCollectionValidationError(error: z.ZodError) {
+  const firstIssue = error.issues[0];
+  if (firstIssue?.path.join(".") === "remark") {
+    return Errors.badRequest(firstIssue.message);
+  }
+
+  return Errors.fromZod(error);
 }
 
 function getPaymentType(snapshot: Record<string, unknown>): PaymentCollectionType {

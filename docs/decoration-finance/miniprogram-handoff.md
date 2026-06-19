@@ -128,7 +128,7 @@ Authorization: Bearer <token>
                 "name": "remark",
                 "label": "收款备注",
                 "type": "string",
-                "required": false
+                "required": true
               }
             ]
           }
@@ -216,7 +216,7 @@ Content-Type: application/json
 | `output.amount` | 是 | 入账金额，必须大于 0。 |
 | `output.paid_at` | 否 | ISO 时间字符串；不传时后端使用当前时间。 |
 | `output.evidence_images` | 是 | 收款凭证，至少 1 张；建议传上传后的对象存储路径或 URL 字符串。 |
-| `output.remark` | 否 | 收款备注，最多 500 字。 |
+| `output.remark` | 是 | 收款备注，不能为空，最多 500 字。 |
 
 成功响应：
 
