@@ -122,7 +122,7 @@ describe("attachProjectWorkflowSummaries", () => {
           acceptance_enabled: true,
           min_image_count: 3,
         },
-        actions: [{ key: "complete", task_id: "task-1" }],
+        actions: [],
       },
     ]);
     expect(listBySubjectIds).toHaveBeenCalledWith({

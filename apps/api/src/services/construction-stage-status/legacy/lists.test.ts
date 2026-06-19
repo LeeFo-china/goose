@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ProjectWorkflowProgress } from "@/services/project-workflow-progress";
+import type { WorkflowTimelineNode } from "@/services/project-workflow-timeline-contract";
 import {
   buildProjectConstructionStagesFromRows,
 } from "./lists";
@@ -68,7 +69,100 @@ function workflowProgress(
   };
 }
 
+function procedureTimelineNode(input: {
+  stageCode: ProjectLogStageCode;
+  title: string;
+  status?: WorkflowTimelineNode["status"];
+  acceptanceEnabled?: boolean;
+}): WorkflowTimelineNode {
+  return {
+    node_key: `procedure_${input.stageCode}`,
+    node_title: input.title,
+    node_type: "procedure",
+    business_kind: "procedure_template",
+    status: input.status ?? "pending",
+    display: {
+      label: input.title,
+      status_label: input.status === "done"
+        ? "已完成"
+        : input.status === "current"
+          ? "当前"
+          : "待处理",
+      status_variant: input.status === "done"
+        ? "success"
+        : input.status === "current"
+          ? "default"
+          : "secondary",
+    },
+    attributes: {
+      stage_code: input.stageCode,
+      acceptance_enabled: input.acceptanceEnabled ?? false,
+      acceptance_required: input.acceptanceEnabled ?? false,
+    },
+    actions: [],
+  };
+}
+
 describe("buildProjectConstructionStagesFromRows", () => {
+  test("uses workflow node acceptance attributes instead of requiring every previous stage acceptance", async () => {
+    const result = await buildProjectConstructionStagesFromRows({
+      project,
+      acceptanceRows: [],
+      logRows: [{ stage_code: "plumbing_electrical" }],
+      latestLogRows: [],
+      canReadAcceptance: true,
+      canCreateAcceptance: true,
+      workflowProgress: workflowProgress({
+        current_node_key: "procedure_plumbing_electrical",
+        current_node_title: "水电",
+        current_node_type: "procedure",
+        current_business_kind: "procedure_template",
+        current_stage_code: "plumbing_electrical",
+        current_gate: null,
+        timeline_nodes: [
+          procedureTimelineNode({
+            stageCode: "demolition",
+            title: "拆改",
+            status: "done",
+            acceptanceEnabled: false,
+          }),
+          procedureTimelineNode({
+            stageCode: "plumbing_electrical",
+            title: "水电",
+            status: "current",
+            acceptanceEnabled: true,
+          }),
+        ],
+      }),
+      sourceMode: "workflow_runtime",
+    });
+
+    const demolition = result.stages.find((item) =>
+      item.stage_code === "demolition"
+    );
+    const plumbing = result.stages.find((item) =>
+      item.stage_code === "plumbing_electrical"
+    );
+
+    expect(demolition?.acceptance_action.type).toBe("none");
+    expect(demolition?.can_create_acceptance).toBe(false);
+    expect(plumbing?.blocked_reason).toBeNull();
+    expect(plumbing?.acceptance_action).toEqual({
+      type: "create",
+      label: "发起验收",
+      enabled: true,
+      reason: null,
+    });
+    expect(result.missing_required_stages).not.toContainEqual({
+      stage_code: "demolition",
+      stage_label: "拆改",
+    });
+    expect(result.missing_required_stages).toContainEqual({
+      stage_code: "plumbing_electrical",
+      stage_label: "水电",
+    });
+  });
+
   test("allows creating acceptance for the procedure immediately before a payment gate", async () => {
     const result = await buildProjectConstructionStagesFromRows({
       project,
@@ -91,6 +185,14 @@ describe("buildProjectConstructionStagesFromRows", () => {
           blocked_stage_code: "tiling",
           blocked_stage_label: "瓦工",
         },
+        timeline_nodes: [
+          procedureTimelineNode({
+            stageCode: "plumbing_electrical",
+            title: "水电",
+            status: "done",
+            acceptanceEnabled: true,
+          }),
+        ],
       }),
       sourceMode: "workflow_runtime",
     });

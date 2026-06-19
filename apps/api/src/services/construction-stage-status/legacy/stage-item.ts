@@ -17,6 +17,7 @@ export function buildStageItem(input: {
   blockedReason: string | null;
   projectStatus?: string | null;
   canCreateAcceptanceByPermission: boolean;
+  canCreateAcceptanceByWorkflow?: boolean;
   canCreateCompletionAcceptanceByWorkflow?: boolean;
   canHandleExistingAcceptance: boolean;
 }) {
@@ -46,6 +47,7 @@ export function buildStageItem(input: {
   const canCreateAcceptance = !input.blockedReason &&
     !acceptance &&
     input.canCreateAcceptanceByPermission &&
+    input.canCreateAcceptanceByWorkflow !== false &&
     status !== "accepted" &&
     status !== "pending_acceptance" &&
     (isCompletion

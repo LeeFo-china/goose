@@ -27,7 +27,7 @@ import {
 export type ProjectConstructionStagesResult = {
   project_id: string;
   project_status: string | null;
-  required_stage_codes: typeof PROJECT_CONSTRUCTION_STAGE_CODE_VALUES;
+  required_stage_codes: ProjectLogStageCode[];
   required_completed: boolean;
   current_stage: ProjectLogStageCode | null;
   next_stage: ProjectConstructionStageItem | null;
@@ -184,6 +184,14 @@ export async function buildProjectConstructionStagesFromRows(input: {
       input.canManageAcceptance,
     )
     : null;
+  const workflowAcceptanceStageCodes = sourceMode === "workflow_runtime"
+    ? resolveWorkflowAcceptanceStageCodes(workflowProgress)
+    : null;
+  const requiredStageCodes = workflowAcceptanceStageCodes
+    ? PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.filter((stageCode) =>
+      workflowAcceptanceStageCodes.required.has(stageCode)
+    )
+    : [...PROJECT_CONSTRUCTION_STAGE_CODE_VALUES];
 
   const stages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.map((stageCode) => {
     const previousStage = getPreviousProjectConstructionStage(stageCode);
@@ -207,12 +215,15 @@ export async function buildProjectConstructionStagesFromRows(input: {
       blockedReason,
       projectStatus: project.status,
       canCreateAcceptanceByPermission: input.canCreateAcceptance ?? true,
+      canCreateAcceptanceByWorkflow: workflowAcceptanceStageCodes
+        ? workflowAcceptanceStageCodes.enabled.has(stageCode)
+        : true,
       canHandleExistingAcceptance: acceptanceWritableMap
         ? acceptanceWritableMap.get(stageCode) ?? false
         : true,
     });
   });
-  const missingRequiredStages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.filter(
+  const missingRequiredStages = requiredStageCodes.filter(
     (stageCode) => !acceptedStages.has(stageCode),
   );
   const isWorkflowFinalAcceptanceCurrent =
@@ -262,7 +273,7 @@ export async function buildProjectConstructionStagesFromRows(input: {
   return {
     project_id: project.id,
     project_status: project.status,
-    required_stage_codes: PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
+    required_stage_codes: requiredStageCodes,
     required_completed: missingRequiredStages.length === 0,
     current_stage: currentStage,
     next_stage: nextStage,
@@ -321,6 +332,35 @@ function resolveWorkflowStageBlockedReason(input: {
   return progress.current_node_title
     ? `当前流程在${progress.current_node_title}，暂不可推进${getStageLabel(input.stageCode)}`
     : "当前流程未到此阶段";
+}
+
+function resolveWorkflowAcceptanceStageCodes(
+  workflowProgress: ProjectWorkflowProgress | null,
+) {
+  if (!workflowProgress || workflowProgress.source !== "workflow_runtime") {
+    return null;
+  }
+
+  const enabled = new Set<ProjectLogStageCode>();
+  const required = new Set<ProjectLogStageCode>();
+
+  for (const node of workflowProgress.timeline_nodes) {
+    const stageCode = normalizeStageCode(node.attributes.stage_code);
+    if (!stageCode) continue;
+
+    if (
+      node.attributes.acceptance_enabled === true ||
+      node.attributes.acceptance_required === true
+    ) {
+      enabled.add(stageCode);
+    }
+
+    if (node.attributes.acceptance_required === true) {
+      required.add(stageCode);
+    }
+  }
+
+  return { enabled, required };
 }
 
 function resolveWorkflowCompletionBlockedReason(input: {

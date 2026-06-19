@@ -317,4 +317,22 @@ describe("buildWorkflowTaskActions", () => {
       },
     ]);
   });
+
+  test("does not expose generic complete action for procedure nodes that require manual acceptance", () => {
+    expect(buildWorkflowTaskActions({
+      subjectType: "procedure",
+      nodeKey: "plumbing",
+      nodeType: "procedure",
+      taskTitle: "水电施工",
+      currentNodeSnapshot: {
+        node_key: "plumbing",
+        config: {
+          stage_key: "plumbing_electrical",
+          require_log: true,
+          trigger_acceptance: true,
+          min_image_count: 2,
+        },
+      },
+    })).toEqual([]);
+  });
 });

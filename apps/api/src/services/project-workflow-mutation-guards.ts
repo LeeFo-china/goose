@@ -38,10 +38,12 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
   }
 
   if (input.workflowProgress.current_stage_code === input.stageCode) {
+    assertAcceptanceEnabledIfNeeded(input);
     return;
   }
 
   if (isAcceptanceMutationAllowedAfterPaymentGate(input)) {
+    assertAcceptanceEnabledIfNeeded(input);
     return;
   }
 
@@ -75,6 +77,37 @@ function isAcceptanceMutationAllowedAfterPaymentGate(input: {
   }
 
   return getPreviousProjectConstructionStage(blockedStageCode) === input.stageCode;
+}
+
+function assertAcceptanceEnabledIfNeeded(input: {
+  workflowProgress: ProjectWorkflowProgress;
+  mutation: ProjectWorkflowStageMutation;
+  stageCode: ProjectLogStageCode;
+}) {
+  if (input.mutation !== "create_stage_acceptance") {
+    return;
+  }
+
+  const timelineNode = input.workflowProgress.timeline_nodes.find((node) =>
+    node.attributes.stage_code === input.stageCode
+  );
+  if (
+    timelineNode?.attributes.acceptance_enabled === true ||
+    timelineNode?.attributes.acceptance_required === true
+  ) {
+    return;
+  }
+
+  throw Errors.business(
+    409,
+    `${getStageLabel(input.stageCode)}工序未开启阶段验收`,
+    ErrorCodes.WORKFLOW_ACCEPTANCE_NOT_AVAILABLE,
+    {
+      stage_code: input.stageCode,
+      current_node_key: input.workflowProgress.current_node_key,
+      current_node_title: input.workflowProgress.current_node_title,
+    },
+  );
 }
 
 export async function assertProjectWorkflowStageMutationAllowed(input: {

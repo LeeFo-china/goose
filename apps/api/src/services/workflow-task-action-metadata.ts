@@ -210,6 +210,10 @@ function buildProcedureActions(
   input: BuildWorkflowTaskActionsInput,
 ): WorkflowTaskActionMetadata[] {
   const config = getCurrentNodeConfig(input);
+  if (config.trigger_acceptance === true) {
+    return [];
+  }
+
   const stageCode = getProcedureStageCode(config.stage_key);
   const minImageCount = getMinImageCount(config.min_image_count);
   const outputFields: WorkflowTaskActionMetadata["output_fields"] = [];

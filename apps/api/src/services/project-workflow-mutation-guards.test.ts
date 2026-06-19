@@ -4,6 +4,33 @@ import {
   assertProjectWorkflowStageMutationAllowedFromProgress,
 } from "./project-workflow-mutation-guards";
 import type { ProjectWorkflowProgress } from "./project-workflow-progress";
+import type { WorkflowTimelineNode } from "./project-workflow-timeline-contract";
+
+function procedureTimelineNode(input: {
+  stageCode: string;
+  title: string;
+  status?: WorkflowTimelineNode["status"];
+  acceptanceEnabled?: boolean;
+}): WorkflowTimelineNode {
+  return {
+    node_key: `procedure_${input.stageCode}`,
+    node_title: input.title,
+    node_type: "procedure",
+    business_kind: "procedure_template",
+    status: input.status ?? "current",
+    display: {
+      label: input.title,
+      status_label: input.status === "done" ? "已完成" : "当前",
+      status_variant: input.status === "done" ? "success" : "default",
+    },
+    attributes: {
+      stage_code: input.stageCode,
+      acceptance_enabled: input.acceptanceEnabled ?? true,
+      acceptance_required: input.acceptanceEnabled ?? true,
+    },
+    actions: [],
+  };
+}
 
 function workflowProgress(
   override: Partial<ProjectWorkflowProgress>,
@@ -70,6 +97,24 @@ describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
     ).toThrow("当前流程在水电，不能操作瓦工");
   });
 
+  test("blocks creating stage acceptance when workflow node does not enable acceptance", () => {
+    expect(() =>
+      assertProjectWorkflowStageMutationAllowedFromProgress({
+        workflowProgress: workflowProgress({
+          timeline_nodes: [
+            procedureTimelineNode({
+              stageCode: "plumbing_electrical",
+              title: "水电",
+              acceptanceEnabled: false,
+            }),
+          ],
+        }),
+        mutation: "create_stage_acceptance",
+        stageCode: "plumbing_electrical",
+      })
+    ).toThrow("水电工序未开启阶段验收");
+  });
+
   test("allows acceptance mutations for the procedure immediately before a payment gate", () => {
     const progress = workflowProgress({
       current_node_key: "payment_stage_2",
@@ -84,6 +129,14 @@ describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
         blocked_stage_code: "tiling",
         blocked_stage_label: "瓦工",
       },
+      timeline_nodes: [
+        procedureTimelineNode({
+          stageCode: "plumbing_electrical",
+          title: "水电",
+          status: "done",
+          acceptanceEnabled: true,
+        }),
+      ],
     });
 
     expect(() =>
