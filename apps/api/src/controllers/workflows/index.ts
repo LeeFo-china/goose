@@ -6,6 +6,7 @@ import {
   WorkflowDefinitionUpdateSchema,
   WorkflowGraphQuerySchema,
   WorkflowGraphSaveSchema,
+  WorkflowRuntimeArchiveSchema,
   WorkflowListQuerySchema,
   WorkflowRuntimeCompleteNodeSchema,
   WorkflowRuntimeInstanceIdParamsSchema,
@@ -13,6 +14,7 @@ import {
   WorkflowRuntimeRebuildSchema,
   WorkflowRuntimeInstanceStartSchema,
   WorkflowTemplateCreateSchema,
+  WorkflowVersionIdParamsSchema,
   WorkflowVersionListQuerySchema,
 } from "@/schema/workflows";
 import { workflowTemplateService } from "@/services/workflow-templates";
@@ -151,6 +153,20 @@ class WorkflowController extends TenantBaseController<
     return ResponseHandler.success(data);
   }
 
+  @Post("/workflows/:id/versions/:versionId/archive")
+  async archiveVersion(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowVersionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await workflowService.archiveVersion(
+      authContext,
+      paramsResult.data.id,
+      paramsResult.data.versionId,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Post("/workflows/:id/archive")
   async archive(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);
@@ -221,6 +237,24 @@ class WorkflowController extends TenantBaseController<
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await workflowService.completeRuntimeNode(
+      authContext,
+      paramsResult.data.id,
+      paramsResult.data.instanceId,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/workflows/:id/runtime/instances/:instanceId/archive")
+  async archiveRuntimeInstance(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowRuntimeInstanceIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = WorkflowRuntimeArchiveSchema.safeParse(request.body ?? {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await workflowService.archiveRuntimeInstance(
       authContext,
       paramsResult.data.id,
       paramsResult.data.instanceId,

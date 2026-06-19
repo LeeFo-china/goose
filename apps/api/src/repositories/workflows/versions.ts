@@ -9,6 +9,7 @@ import type {
   WorkflowVersionListInput,
   WorkflowVersionListResult,
   WorkflowVersionRow,
+  WorkflowVersionStatusUpdateInput,
 } from "./types";
 
 export async function listVersions(
@@ -109,6 +110,27 @@ export async function createVersion(
   }
   if (!data) {
     throw Errors.badRequest("创建流程版本失败");
+  }
+
+  return data as WorkflowVersionRow;
+}
+
+export async function updateVersionStatus(
+  input: WorkflowVersionStatusUpdateInput,
+): Promise<WorkflowVersionRow> {
+  const { data, error } = await workflowTable("workflow_versions")
+    .update({ status: input.status })
+    .eq("id", input.id)
+    .eq("definition_id", input.definitionId)
+    .eq("tenant_id", input.tenantId)
+    .select(WORKFLOW_VERSION_SELECT)
+    .single();
+
+  if (error) {
+    throw Errors.dbError("更新流程版本状态失败", error);
+  }
+  if (!data) {
+    throw Errors.notFound("流程版本不存在");
   }
 
   return data as WorkflowVersionRow;

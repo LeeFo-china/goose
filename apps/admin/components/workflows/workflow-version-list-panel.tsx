@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react";
 import {
+  Archive,
   ChevronDown,
   ChevronRight,
   History,
   Loader2,
   RefreshCw,
 } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +27,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchWorkflowVersions } from "./workflow-requests";
+import {
+  archiveWorkflowVersion,
+  fetchWorkflowVersions,
+} from "./workflow-requests";
 import { WORKFLOW_VERSION_EFFECT_COPY } from "./workflow-version-semantics";
 import type {
   WorkflowVersionListData,
@@ -66,6 +71,7 @@ export function WorkflowVersionListPanel({
   const [page, setPage] = useState(1);
   const [data, setData] = useState<WorkflowVersionListData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<WorkflowVersionSummary | null>(null);
   const [pending, startTransition] = useTransition();
 
   function loadVersions(nextPage = page) {
@@ -91,6 +97,26 @@ export function WorkflowVersionListPanel({
     if (nextOpen && !data && !pending) {
       loadVersions(1);
     }
+  }
+
+  function confirmArchiveVersion() {
+    if (!archiveTarget) return;
+    startTransition(async () => {
+      try {
+        setError(null);
+        await archiveWorkflowVersion(workflowId, archiveTarget.id);
+        const result = await fetchWorkflowVersions(workflowId, {
+          page,
+          pageSize: PAGE_SIZE,
+        });
+        setData(result);
+        setArchiveTarget(null);
+      } catch (archiveError) {
+        setError(archiveError instanceof Error
+          ? archiveError.message
+          : "流程版本归档失败");
+      }
+    });
   }
 
   useEffect(() => {
@@ -180,12 +206,18 @@ export function WorkflowVersionListPanel({
                   <TableHead>状态</TableHead>
                   <TableHead>运行中实例</TableHead>
                   <TableHead>发布时间</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {versions.length > 0 ? (
                   versions.map((version) => {
                     const isActive = version.is_active || version.id === activeVersionId;
+                    const isArchived = version.status === "deprecated";
+                    const archiveDisabled = pending ||
+                      isActive ||
+                      isArchived ||
+                      version.running_instance_count > 0;
                     return (
                       <TableRow key={version.id}>
                         <TableCell>
@@ -220,13 +252,25 @@ export function WorkflowVersionListPanel({
                         <TableCell className="whitespace-nowrap">
                           {formatDateTime(version.published_at)}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={archiveDisabled}
+                            onClick={() => setArchiveTarget(version)}
+                          >
+                            <Archive data-icon="inline-start" />
+                            {isArchived ? "已归档" : "归档版本"}
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     );
                   })
                 ) : (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={5}
                       className="h-24 text-center text-sm text-muted-foreground"
                     >
                       暂无发布版本
@@ -264,6 +308,17 @@ export function WorkflowVersionListPanel({
           </div>
         </div>
       </CollapsibleContent>
+      <ConfirmActionDialog
+        open={Boolean(archiveTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setArchiveTarget(null);
+        }}
+        title="归档流程版本"
+        description="归档后该历史版本不再作为可用发布版本展示，但已绑定的实例审计记录会保留。"
+        confirmLabel="确认归档"
+        pending={pending}
+        onConfirm={confirmArchiveVersion}
+      />
     </Collapsible>
   );
 }

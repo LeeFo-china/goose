@@ -42,6 +42,7 @@ function buildWorkflowRuntimeListQuery(
   if (query.status) params.set("status", query.status);
   if (query.subject_type) params.set("subject_type", query.subject_type);
   if (query.subject_id?.trim()) params.set("subject_id", query.subject_id.trim());
+  if (query.archived) params.set("archived", query.archived);
 
   return params.toString();
 }
@@ -172,6 +173,16 @@ export async function archiveWorkflowDefinition(id: string) {
   );
 }
 
+export async function archiveWorkflowVersion(id: string, versionId: string) {
+  return requestBackendJson<WorkflowVersionListData["list"][number]>(
+    `/workflows/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/archive`,
+    {
+      method: "POST",
+      fallbackMessage: "归档流程版本失败",
+    },
+  );
+}
+
 export async function fetchWorkflowRuntimeInstances(
   id: string,
   query: WorkflowRuntimeInstanceListQuery = {},
@@ -219,6 +230,21 @@ export async function completeWorkflowRuntimeNode(
       method: "POST",
       body: JSON.stringify(input),
       fallbackMessage: "完成流程节点失败",
+    },
+  );
+}
+
+export async function archiveWorkflowRuntimeInstance(
+  id: string,
+  instanceId: string,
+  input: { reason?: string | null } = {},
+) {
+  return requestBackendJson<WorkflowRuntimeInstanceListData["list"][number]>(
+    `/workflows/${encodeURIComponent(id)}/runtime/instances/${encodeURIComponent(instanceId)}/archive`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+      fallbackMessage: "归档流程实例失败",
     },
   );
 }

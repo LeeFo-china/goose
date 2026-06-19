@@ -19,8 +19,10 @@ import {
   getVersionById,
   listVersions,
   publishDefinition,
+  updateVersionStatus,
 } from "./workflows/versions";
 import {
+  archiveRuntimeInstance,
   cancelRuntimeInstance,
   completeRuntimeNode,
   findLatestRunningRuntimeInstance,
@@ -51,6 +53,7 @@ class WorkflowRepository {
   getNextVersionNumber = getNextVersionNumber;
   createVersion = createVersion;
   publishDefinition = publishDefinition;
+  updateVersionStatus = updateVersionStatus;
   updateActiveVersion = updateActiveVersion;
   listRuntimeInstances = listRuntimeInstances;
   getRuntimeInstanceById = getRuntimeInstanceById;
@@ -61,6 +64,7 @@ class WorkflowRepository {
   startRuntimeInstance = startRuntimeInstance;
   completeRuntimeNode = completeRuntimeNode;
   cancelRuntimeInstance = cancelRuntimeInstance;
+  archiveRuntimeInstance = archiveRuntimeInstance;
   rebuildRuntimeInstance = rebuildRuntimeInstance;
 }
 

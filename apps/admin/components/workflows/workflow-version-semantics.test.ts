@@ -37,6 +37,14 @@ describe("workflow version semantics", () => {
       new URL("./workflow-table.tsx", import.meta.url),
       "utf8",
     );
+    const versionPanelSource = readFileSync(
+      new URL("./workflow-version-list-panel.tsx", import.meta.url),
+      "utf8",
+    );
+    const runtimePanelSource = readFileSync(
+      new URL("./workflow-runtime-panel.tsx", import.meta.url),
+      "utf8",
+    );
     const requestsSource = readFileSync(
       new URL("./workflow-requests.ts", import.meta.url),
       "utf8",
@@ -52,5 +60,9 @@ describe("workflow version semantics", () => {
     expect(designerSource).toContain("WORKFLOW_VERSION_EFFECT_COPY.publishConfirm");
     expect(requestsSource).toContain("fetchWorkflowVersions");
     expect(requestsSource).toContain("/versions?");
+    expect(requestsSource).toContain("archiveWorkflowVersion");
+    expect(requestsSource).toContain("archiveWorkflowRuntimeInstance");
+    expect(versionPanelSource).toContain("归档版本");
+    expect(runtimePanelSource).toContain("归档实例");
   });
 });

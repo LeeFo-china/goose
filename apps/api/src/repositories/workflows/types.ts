@@ -239,6 +239,9 @@ export type WorkflowInstanceRow = {
   completed_by: string | null;
   started_at: string;
   completed_at: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
+  archive_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -294,6 +297,14 @@ export type WorkflowRuntimeInstanceListInput = {
   status?: WorkflowInstanceStatus;
   subjectType?: WorkflowSubjectType;
   subjectId?: string;
+  archived?: "without" | "only" | "all";
+};
+
+export type WorkflowVersionStatusUpdateInput = {
+  id: string;
+  definitionId: string;
+  tenantId: string;
+  status: WorkflowVersionStatus;
 };
 
 export type WorkflowRuntimeInstanceListResult = {
@@ -329,6 +340,14 @@ export type WorkflowRuntimeCompleteNodeInput = {
   action: string;
   output: JsonObject;
   actorEmployeeId?: string | null;
+};
+
+export type WorkflowRuntimeArchiveInput = {
+  tenantId: string;
+  definitionId: string;
+  instanceId: string;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
 };
 
 export type WorkflowRuntimeCancelInput = {

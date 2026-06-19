@@ -273,6 +273,9 @@ export type WorkflowRuntimeInstance = {
   completed_by: string | null;
   started_at: string;
   completed_at: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
+  archive_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -309,6 +312,7 @@ export type WorkflowRuntimeInstanceListQuery = {
   status?: WorkflowInstanceStatus;
   subject_type?: WorkflowSubjectType;
   subject_id?: string;
+  archived?: "without" | "only" | "all";
 };
 
 export type WorkflowRuntimeStartResult = {

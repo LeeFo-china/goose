@@ -6,6 +6,7 @@ import type {
   WorkflowInstanceNodeRow,
   WorkflowRuntimeCancelInput,
   WorkflowRuntimeCancelResult,
+  WorkflowRuntimeArchiveInput,
   WorkflowRuntimeCompleteNodeInput,
   WorkflowRuntimeCompleteNodeResult,
   WorkflowRuntimeInstanceListInput,
@@ -48,6 +49,11 @@ export async function listRuntimeInstances(
   if (input.status) request = request.eq("status", input.status);
   if (input.subjectType) request = request.eq("subject_type", input.subjectType);
   if (input.subjectId) request = request.eq("subject_id", input.subjectId);
+  if (input.archived === "only") {
+    request = request.not("archived_at", "is", null);
+  } else if (input.archived !== "all") {
+    request = request.is("archived_at", null);
+  }
 
   const { data, error, count } = await request
     .order("updated_at", { ascending: false })
@@ -278,6 +284,31 @@ export async function cancelRuntimeInstance(
   }
 
   return normalizeCancelResult(data);
+}
+
+export async function archiveRuntimeInstance(
+  input: WorkflowRuntimeArchiveInput,
+): Promise<WorkflowInstanceRow> {
+  const { data, error } = await workflowTable("workflow_instances")
+    .update({
+      archived_at: new Date().toISOString(),
+      archived_by: input.archivedBy ?? null,
+      archive_reason: input.archiveReason ?? null,
+    })
+    .eq("tenant_id", input.tenantId)
+    .eq("definition_id", input.definitionId)
+    .eq("id", input.instanceId)
+    .select(WORKFLOW_INSTANCE_SELECT)
+    .single();
+
+  if (error) {
+    throw Errors.dbError("归档流程运行实例失败", error);
+  }
+  if (!data) {
+    throw Errors.notFound("流程实例不存在");
+  }
+
+  return data as WorkflowInstanceRow;
 }
 
 export async function rebuildRuntimeInstance(

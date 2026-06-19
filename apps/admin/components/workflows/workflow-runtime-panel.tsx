@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Activity, Loader2, RefreshCw } from "lucide-react";
+import { Activity, Archive, Loader2, RefreshCw } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchWorkflowRuntimeInstances } from "./workflow-requests";
+import {
+  archiveWorkflowRuntimeInstance,
+  fetchWorkflowRuntimeInstances,
+} from "./workflow-requests";
 import {
   getWorkflowRuntimeVersionState,
   WORKFLOW_VERSION_EFFECT_COPY,
@@ -72,6 +76,8 @@ export function WorkflowRuntimePanel({
 }) {
   const [data, setData] = useState<WorkflowRuntimeInstanceListData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<WorkflowRuntimeInstance | null>(null);
   const [pending, startTransition] = useTransition();
 
   function loadInstances() {
@@ -81,6 +87,7 @@ export function WorkflowRuntimePanel({
         const result = await fetchWorkflowRuntimeInstances(workflowId, {
           page: 1,
           pageSize: 5,
+          archived: showArchived ? "all" : "without",
         });
         setData(result);
       } catch (loadError) {
@@ -94,7 +101,30 @@ export function WorkflowRuntimePanel({
   useEffect(() => {
     loadInstances();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflowId]);
+  }, [workflowId, showArchived]);
+
+  function confirmArchiveInstance() {
+    if (!archiveTarget) return;
+    startTransition(async () => {
+      try {
+        setError(null);
+        await archiveWorkflowRuntimeInstance(workflowId, archiveTarget.id, {
+          reason: "Admin 手动归档",
+        });
+        const result = await fetchWorkflowRuntimeInstances(workflowId, {
+          page: 1,
+          pageSize: 5,
+          archived: showArchived ? "all" : "without",
+        });
+        setData(result);
+        setArchiveTarget(null);
+      } catch (archiveError) {
+        setError(archiveError instanceof Error
+          ? archiveError.message
+          : "流程实例归档失败");
+      }
+    });
+  }
 
   const instances = data?.list ?? [];
 
@@ -115,20 +145,31 @@ export function WorkflowRuntimePanel({
             </p>
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={loadInstances}
-        >
-          {pending ? (
-            <Loader2 className="animate-spin" data-icon="inline-start" />
-          ) : (
-            <RefreshCw data-icon="inline-start" />
-          )}
-          刷新
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => setShowArchived((current) => !current)}
+          >
+            {showArchived ? "隐藏归档" : "含归档"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={loadInstances}
+          >
+            {pending ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <RefreshCw data-icon="inline-start" />
+            )}
+            刷新
+          </Button>
+        </div>
       </div>
 
       {error ? (
@@ -147,6 +188,8 @@ export function WorkflowRuntimePanel({
               <TableHead>当前节点</TableHead>
               <TableHead>开始时间</TableHead>
               <TableHead>完成时间</TableHead>
+              <TableHead>归档</TableHead>
+              <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -193,13 +236,34 @@ export function WorkflowRuntimePanel({
                     <TableCell className="whitespace-nowrap">
                       {formatDateTime(instance.completed_at)}
                     </TableCell>
+                    <TableCell>
+                      {instance.archived_at ? (
+                        <Badge variant="outline">已归档</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pending ||
+                          instance.status !== "completed" ||
+                          Boolean(instance.archived_at)}
+                        onClick={() => setArchiveTarget(instance)}
+                      >
+                        <Archive data-icon="inline-start" />
+                        {instance.archived_at ? "已归档" : "归档实例"}
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 );
               })
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={8}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
                   暂无运行实例
@@ -211,8 +275,19 @@ export function WorkflowRuntimePanel({
       </div>
 
       <div className="shrink-0 border-t bg-muted/10 px-4 py-3 text-sm text-muted-foreground">
-        共 {data?.pagination.total ?? 0} 条，仅展示最近 5 条。
+        共 {data?.pagination.total ?? 0} 条，仅展示最近 5 条，已归档实例默认隐藏。
       </div>
+      <ConfirmActionDialog
+        open={Boolean(archiveTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setArchiveTarget(null);
+        }}
+        title="归档流程实例"
+        description="归档只会从默认运行实例列表隐藏该已完成实例，不会删除流程审计、节点日志或业务关联记录。"
+        confirmLabel="确认归档"
+        pending={pending}
+        onConfirm={confirmArchiveInstance}
+      />
     </section>
   );
 }

@@ -7451,6 +7451,9 @@ export type Database = {
       }
       workflow_instances: {
         Row: {
+          archive_reason: string | null
+          archived_at: string | null
+          archived_by: string | null
           completed_at: string | null
           completed_by: string | null
           context: Json
@@ -7470,6 +7473,9 @@ export type Database = {
           version_id: string
         }
         Insert: {
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           completed_at?: string | null
           completed_by?: string | null
           context?: Json
@@ -7489,6 +7495,9 @@ export type Database = {
           version_id: string
         }
         Update: {
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           completed_at?: string | null
           completed_by?: string | null
           context?: Json
@@ -7508,6 +7517,13 @@ export type Database = {
           version_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workflow_instances_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "workflow_instances_completed_by_fkey"
             columns: ["completed_by"]

@@ -13,6 +13,7 @@ import type {
   WorkflowDefinitionUpdateInput,
   WorkflowGraphSaveInput,
   WorkflowListQuery,
+  WorkflowRuntimeArchiveInput,
   WorkflowRuntimeCompleteNodeInput,
   WorkflowRuntimeInstanceListQuery,
   WorkflowRuntimeRebuildInput,
@@ -23,6 +24,10 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { resolveWorkflowKey } from "@/services/workflow-key";
+import {
+  archiveWorkflowRuntimeInstance,
+  archiveWorkflowVersion,
+} from "@/services/workflows/archive";
 import {
   buildWorkflowSnapshot,
   validateWorkflowPublishGraph,
@@ -243,6 +248,14 @@ class WorkflowService {
     });
   }
 
+  async archiveVersion(
+    authContext: AuthContext,
+    definitionId: string,
+    versionId: string,
+  ) {
+    return archiveWorkflowVersion(authContext, definitionId, versionId);
+  }
+
   async listRuntimeInstances(
     authContext: AuthContext,
     definitionId: string,
@@ -259,7 +272,22 @@ class WorkflowService {
       status: query.status,
       subjectType: query.subject_type,
       subjectId: query.subject_id?.trim() || undefined,
+      archived: query.archived,
     });
+  }
+
+  async archiveRuntimeInstance(
+    authContext: AuthContext,
+    definitionId: string,
+    instanceId: string,
+    input: WorkflowRuntimeArchiveInput,
+  ) {
+    return archiveWorkflowRuntimeInstance(
+      authContext,
+      definitionId,
+      instanceId,
+      input,
+    );
   }
 
   async startRuntimeInstance(

@@ -87,6 +87,11 @@ export const WorkflowGraphQuerySchema = z.object({
 
 export const WorkflowVersionListQuerySchema = PaginationQuerySchema;
 
+export const WorkflowVersionIdParamsSchema = z.object({
+  id: z.uuid("无效的流程 ID"),
+  versionId: z.uuid("无效的流程版本 ID"),
+});
+
 export const WorkflowRuntimeInstanceIdParamsSchema = z.object({
   id: z.uuid("无效的流程 ID"),
   instanceId: z.uuid("无效的流程实例 ID"),
@@ -271,6 +276,9 @@ export const WorkflowRuntimeInstanceListQuerySchema = PaginationQuerySchema.exte
   status: optionalQueryValue(WorkflowInstanceStatusSchema),
   subject_type: optionalQueryValue(WorkflowSubjectTypeSchema),
   subject_id: optionalQueryValue(textField("流程对象 ID 格式无效").max(200, "流程对象 ID 过长")),
+  archived: optionalQueryValue(z.enum(["without", "only", "all"], {
+    message: "无效的归档筛选",
+  })).default("without"),
 });
 
 export const WorkflowRuntimeInstanceStartSchema = z.object({
@@ -283,6 +291,10 @@ export const WorkflowRuntimeCompleteNodeSchema = z.object({
   node_key: textField("节点编码不能为空").min(1, "节点编码不能为空").max(100, "节点编码过长"),
   action: textField("操作不能为空").min(1, "操作不能为空").max(100, "操作过长").default("complete"),
   output: z.object({}, { error: "节点输出必须是对象" }).catchall(z.unknown()).default({}),
+});
+
+export const WorkflowRuntimeArchiveSchema = z.object({
+  reason: textField("归档原因格式无效").max(500, "归档原因过长").nullable().optional(),
 });
 
 export const WorkflowRuntimeRebuildSchema = z.object({
@@ -307,4 +319,5 @@ export type WorkflowSimulationInput = z.infer<typeof WorkflowSimulationSchema>;
 export type WorkflowRuntimeInstanceListQuery = z.infer<typeof WorkflowRuntimeInstanceListQuerySchema>;
 export type WorkflowRuntimeInstanceStartInput = z.infer<typeof WorkflowRuntimeInstanceStartSchema>;
 export type WorkflowRuntimeCompleteNodeInput = z.infer<typeof WorkflowRuntimeCompleteNodeSchema>;
+export type WorkflowRuntimeArchiveInput = z.infer<typeof WorkflowRuntimeArchiveSchema>;
 export type WorkflowRuntimeRebuildInput = z.infer<typeof WorkflowRuntimeRebuildSchema>;

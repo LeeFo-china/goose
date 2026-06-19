@@ -77,6 +77,9 @@ export const WORKFLOW_INSTANCE_SELECT = [
   "completed_by",
   "started_at",
   "completed_at",
+  "archived_at",
+  "archived_by",
+  "archive_reason",
   "created_at",
   "updated_at",
 ].join(", ");

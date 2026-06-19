@@ -30,6 +30,9 @@ function paymentInstance(): WorkflowInstanceRow {
     completed_by: null,
     started_at: NOW,
     completed_at: null,
+    archived_at: null,
+    archived_by: null,
+    archive_reason: null,
     created_at: NOW,
     updated_at: NOW,
   };
