@@ -72,6 +72,10 @@ describe("attachProjectWorkflowSummaries", () => {
       current_stage_label: "拆改",
       stage_code: "demolition",
       stage_label: "拆改",
+      current_construction_stage: {
+        stage_code: "demolition",
+        stage_label: "拆改",
+      },
     }];
 
     const result = await attachProjectWorkflowSummaries({
@@ -99,6 +103,7 @@ describe("attachProjectWorkflowSummaries", () => {
     expect(item).not.toHaveProperty("current_stage_label");
     expect(item).not.toHaveProperty("stage_code");
     expect(item).not.toHaveProperty("stage_label");
+    expect(item).not.toHaveProperty("current_construction_stage");
     expect(
       (item.workflow_progress as { timeline_nodes: Array<Record<string, unknown>> })
         .timeline_nodes,

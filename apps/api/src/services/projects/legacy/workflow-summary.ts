@@ -143,6 +143,7 @@ function stripLegacyStageFields(row: Record<string, unknown>): Record<string, un
     current_stage_label: _currentStageLabel,
     stage_code: _stageCode,
     stage_label: _stageLabel,
+    current_construction_stage: _currentConstructionStage,
     ...rest
   } = row;
 
