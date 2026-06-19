@@ -228,6 +228,30 @@ export async function listRuntimeInstanceNodes(input: {
   return (data ?? []) as WorkflowInstanceNodeRow[];
 }
 
+export async function listRuntimeInstanceNodesByInstanceIds(input: {
+  tenantId: string;
+  instanceIds: string[];
+  limit?: number;
+}): Promise<WorkflowInstanceNodeRow[]> {
+  const instanceIds = Array.from(new Set(input.instanceIds));
+  if (instanceIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await workflowTable("workflow_instance_nodes")
+    .select("id, tenant_id, instance_id, definition_id, version_id, node_id, node_key, node_type, node_snapshot, status, input, output, started_by, completed_by, started_at, completed_at, created_at, updated_at")
+    .eq("tenant_id", input.tenantId)
+    .in("instance_id", instanceIds)
+    .order("created_at", { ascending: true })
+    .limit(input.limit ?? Math.min(instanceIds.length * 200, 20_000));
+
+  if (error) {
+    throw Errors.dbError("批量查询流程实例节点失败", error);
+  }
+
+  return (data ?? []) as WorkflowInstanceNodeRow[];
+}
+
 export async function startRuntimeInstance(
   input: WorkflowRuntimeStartInput,
 ): Promise<WorkflowRuntimeStartResult> {

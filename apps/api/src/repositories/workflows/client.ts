@@ -25,6 +25,7 @@ export type UntypedTable = {
   update: (...args: unknown[]) => UntypedTable;
   delete: () => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
+  in: (...args: unknown[]) => UntypedTable;
   is: (...args: unknown[]) => UntypedTable;
   not: (...args: unknown[]) => UntypedTable;
   or: (...args: unknown[]) => UntypedTable;

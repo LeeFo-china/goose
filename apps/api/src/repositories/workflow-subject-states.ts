@@ -202,6 +202,35 @@ class WorkflowSubjectStateRepository {
     return data as WorkflowRuntimeProjectionRow | null;
   }
 
+  async listLatestRuntimeInstancesBySubjectIds(input: {
+    tenantId: string;
+    subjectType: WorkflowSubjectType;
+    subjectIds: string[];
+  }): Promise<WorkflowRuntimeProjectionRow[]> {
+    const subjectIds = Array.from(new Set(input.subjectIds));
+    if (subjectIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await table("workflow_instances")
+      .select(WORKFLOW_RUNTIME_PROJECTION_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("subject_type", input.subjectType)
+      .in("subject_id", subjectIds)
+      .eq("status", "running")
+      .order("started_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(Math.min(subjectIds.length * 5, 500));
+
+    if (error) {
+      throw Errors.dbError("批量查询流程运行实例失败", error);
+    }
+
+    return (data ?? []) as WorkflowRuntimeProjectionRow[];
+  }
+
   async countPendingTasks(input: {
     tenantId: string;
     instanceId: string;

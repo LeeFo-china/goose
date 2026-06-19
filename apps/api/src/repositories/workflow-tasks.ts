@@ -210,6 +210,38 @@ class WorkflowTaskRepository {
     return (data ?? []) as WorkflowTaskWithInstanceRow[];
   }
 
+  async listAccessiblePendingByProjectIds(input: {
+    tenantId: string;
+    employeeId?: string | null;
+    roleCodes?: string[];
+    permissionCodes?: string[];
+    projectIds: string[];
+    limit?: number;
+  }): Promise<WorkflowTaskWithInstanceRow[]> {
+    const projectIds = Array.from(new Set(input.projectIds));
+    const assigneeFilter = this.buildAssigneeFilter(input);
+    if (projectIds.length === 0 || !assigneeFilter) {
+      return [];
+    }
+
+    const limit = Math.min(input.limit ?? projectIds.length * 100, 10_000);
+    const { data, error } = await workflowTable("workflow_tasks")
+      .select(WORKFLOW_TASK_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("status", "pending")
+      .eq("instance.subject_type", "project")
+      .in("instance.subject_id", projectIds)
+      .or(assigneeFilter)
+      .order("created_at", { ascending: true })
+      .limit(limit);
+
+    if (error) {
+      throw Errors.dbError("批量查询项目流程待办失败", error);
+    }
+
+    return (data ?? []) as WorkflowTaskWithInstanceRow[];
+  }
+
   async assignPendingTask(input: {
     tenantId: string;
     instanceId: string;

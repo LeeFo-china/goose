@@ -31,6 +31,7 @@ import {
 } from "./shared";
 import { attachCurrentConstructionStages } from "./current-stage";
 import { attachProjectDisplayStatuses } from "./display-status";
+import { attachProjectWorkflowSummaries } from "./workflow-summary";
 
 export async function listProjects(this: any, input: {
     authContext: AuthContext;
@@ -40,23 +41,33 @@ export async function listProjects(this: any, input: {
     const cacheKey = this.projectListCacheKey(input.authContext, input.query);
     const cached = this.getProjectListCache(cacheKey);
     if (cached) {
-        return {
-            ...cached,
-            debugTimings: {
-                cache: "hit",
+        return attachLiveWorkflowSummaries({
+            result: {
+                ...cached,
+                debugTimings: {
+                    cache: "hit",
+                },
             },
-        };
+            tenantId,
+            authContext: input.authContext,
+        });
     }
 
     const inFlight = this.projectListInFlight.get(cacheKey);
     if (inFlight) {
-        return inFlight.then((result: ProjectListResult) => ({
-            ...result,
-            debugTimings: {
-                ...result.debugTimings,
-                cache: "in_flight",
-            },
-        }));
+        return inFlight.then((result: ProjectListResult) =>
+            attachLiveWorkflowSummaries({
+                result: {
+                    ...result,
+                    debugTimings: {
+                        ...result.debugTimings,
+                        cache: "in_flight",
+                    },
+                },
+                tenantId,
+                authContext: input.authContext,
+            })
+        );
     }
 
     const request = this.loadProjects({ tenantId, ...input })
@@ -70,7 +81,35 @@ export async function listProjects(this: any, input: {
             }
         });
     this.projectListInFlight.set(cacheKey, request);
-    return request;
+    return request.then((result: ProjectListResult) =>
+        attachLiveWorkflowSummaries({
+            result,
+            tenantId,
+            authContext: input.authContext,
+        })
+    );
+}
+
+async function attachLiveWorkflowSummaries(input: {
+    result: ProjectListResult;
+    tenantId: string;
+    authContext: AuthContext;
+}): Promise<ProjectListResult> {
+    const startedAt = Date.now();
+    const rows = await attachProjectWorkflowSummaries({
+        rows: input.result.rows,
+        tenantId: input.tenantId,
+        authContext: input.authContext,
+    });
+
+    return {
+        ...input.result,
+        rows,
+        debugTimings: {
+            ...input.result.debugTimings,
+            workflowSummaryMs: Date.now() - startedAt,
+        },
+    };
 }
 
 export function projectListCacheKey(this: any, authContext: AuthContext, query: ProjectListQuery): string {
