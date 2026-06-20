@@ -142,6 +142,8 @@ export function buildProjectWorkflowProgressProjection(
   const warnings = buildWarnings(input.subjectState, input.runtimeInstance);
   const currentBusinessKind = currentNode.business_kind ??
     input.subjectState?.current_business_kind ?? null;
+  const currentNodeTitle = getWorkflowNodeDisplayTitle(currentNode) ??
+    input.subjectState?.current_node_title ?? null;
   const currentGateBlockedReason = currentNodeKey
     ? input.pendingActions
       .filter((action) => readString(action.node_key) === currentNodeKey)
@@ -156,7 +158,7 @@ export function buildProjectWorkflowProgressProjection(
     instance_id: input.runtimeInstance.id,
     instance_status: input.runtimeInstance.status,
     current_node_key: currentNodeKey,
-    current_node_title: currentNode.title ?? input.subjectState?.current_node_title ?? null,
+    current_node_title: currentNodeTitle,
     current_node_type: currentNode.node_type,
     current_business_kind: currentBusinessKind,
     current_stage_code: currentNode.node_type === "procedure"
@@ -361,7 +363,7 @@ export function buildWorkflowTimelineNodes(input: {
     .map((node) => {
       const assignee = assigneesByNodeKey.get(node.node_key);
       return buildWorkflowTimelineNodeContract({
-        node,
+        node: withWorkflowNodeDisplayTitle(node),
         status: resolveTimelineNodeStatus({
           nodeKey: node.node_key,
           currentNodeKey: input.currentNodeKey,
@@ -394,6 +396,26 @@ function resolveCurrentNode(
   };
 }
 
+function withWorkflowNodeDisplayTitle(
+  node: WorkflowProgressGraphNode,
+): WorkflowProgressGraphNode {
+  const displayTitle = getWorkflowNodeDisplayTitle(node);
+  return displayTitle && displayTitle !== node.title
+    ? { ...node, title: displayTitle }
+    : node;
+}
+
+function getWorkflowNodeDisplayTitle(
+  node: WorkflowProgressGraphNode,
+): string | null {
+  if (node.business_kind !== "payment_collection") {
+    return node.title || null;
+  }
+
+  const paymentType = readString(node.config.payment_type);
+  return paymentType ? PAYMENT_LABELS[paymentType] ?? node.title : node.title;
+}
+
 function buildPaymentGate(
   currentNode: WorkflowProgressGraphNode,
   graph: WorkflowProgressGraph | null,
@@ -411,7 +433,7 @@ function buildPaymentGate(
   return {
     type: "payment_collection",
     payment_type: paymentType,
-    payment_label: PAYMENT_LABELS[paymentType] ?? currentNode.title,
+    payment_label: getWorkflowNodeDisplayTitle(currentNode) ?? currentNode.title,
     blocked_stage_code: blockedStageCode,
     blocked_stage_label: blockedStageCode
       ? STAGE_LABELS[blockedStageCode] ?? blockedStageCode

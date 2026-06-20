@@ -128,6 +128,73 @@ describe("buildProjectWorkflowProgressProjection", () => {
     ]);
   });
 
+  test("uses payment type label for payment node title and timeline display", () => {
+    const paymentGraph = {
+      nodes: [
+        {
+          id: "node-woodwork",
+          node_key: "procedure_woodwork",
+          title: "木工",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          config: { stage_key: "woodwork" },
+        },
+        {
+          id: "node-payment",
+          node_key: "payment_stage_3",
+          title: "中期收款",
+          node_type: "confirmation",
+          business_kind: "payment_collection",
+          config: { payment_type: "stage_3" },
+        },
+        {
+          id: "node-painting",
+          node_key: "procedure_painting",
+          title: "油工",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          config: { stage_key: "painting" },
+        },
+      ],
+      edges: [
+        {
+          source_node_id: "node-payment",
+          target_node_id: "node-painting",
+        },
+      ],
+    };
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "payment_stage_3",
+        current_node_title: "中期收款",
+        current_business_kind: "payment_collection",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "payment_stage_3",
+        current_node_snapshot: paymentGraph.nodes[1],
+      },
+      graph: paymentGraph,
+      pendingActions: [],
+    });
+
+    expect(progress.current_node_title).toBe("工程尾款");
+    expect(progress.current_gate).toMatchObject({
+      payment_type: "stage_3",
+      payment_label: "工程尾款",
+    });
+    expect(progress.timeline_nodes.find((node) =>
+      node.node_key === "payment_stage_3"
+    )).toMatchObject({
+      node_title: "工程尾款",
+      display: { label: "工程尾款" },
+    });
+  });
+
   test("adds payment task assignee to the current payment timeline node", () => {
     const progress = buildProjectWorkflowProgressProjection({
       subjectState: {

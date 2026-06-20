@@ -138,6 +138,9 @@ class WorkflowSubjectsService {
     if (!state) {
       return null;
     }
+    const currentTimelineNode = timelineNodes.find((node) =>
+      node.node_key === state.current_node_key
+    );
 
     return {
       subject_type: state.subject_type,
@@ -145,7 +148,8 @@ class WorkflowSubjectsService {
       instance_id: state.instance_id,
       instance_status: state.instance_status,
       current_node_key: state.current_node_key,
-      current_node_title: state.current_node_title,
+      current_node_title: currentTimelineNode?.display.label ??
+        currentTimelineNode?.node_title ?? state.current_node_title,
       current_business_kind: state.current_business_kind,
       pending_task_count: state.pending_task_count,
       actions,

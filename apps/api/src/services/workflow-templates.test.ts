@@ -87,6 +87,22 @@ describe("workflowTemplateService construction_main", () => {
       },
     });
     expect(
+      template.graph.nodes.find((node) => node.node_key === "payment_stage_3"),
+    ).toMatchObject({
+      title: "工程尾款",
+      node_type: "confirmation",
+      business_kind: "payment_collection",
+      config: {
+        payment_type: "stage_3",
+        required_permissions: ["finance.payment.confirm"],
+      },
+    });
+    expect(template.graph.edges.map((edge) => [
+      edge.source_node_key,
+      edge.target_node_key,
+      edge.label,
+    ])).toContainEqual(["procedure_woodwork", "payment_stage_3", "工程尾款"]);
+    expect(
       template.graph.nodes.find((node) => node.node_key === "procedure_woodwork"),
     ).toMatchObject({
       node_type: "procedure",
