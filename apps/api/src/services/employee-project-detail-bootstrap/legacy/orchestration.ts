@@ -116,7 +116,6 @@ export async function getBootstrap(this: any, input: {
           ? await projectWorkflowProgressService.getProjectProgress({
             tenantId,
             projectId,
-            authContext: input.authContext,
           })
           : buildUnavailableProjectWorkflowProgress();
       } catch (error) {

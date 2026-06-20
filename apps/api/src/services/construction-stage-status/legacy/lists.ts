@@ -121,7 +121,6 @@ export async function listProjectConstructionStagesForProject(input: {
         ? await projectWorkflowProgressService.getProjectProgress({
           tenantId: input.tenantId,
           projectId: input.projectId,
-          authContext: input.authContext,
         })
         : null)
     : input.workflowProgress ?? null;

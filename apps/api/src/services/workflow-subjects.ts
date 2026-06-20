@@ -7,7 +7,10 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { enrichWorkflowGraphWithFinanceReviewersForTenant } from "@/services/project-workflow-finance-reviewer";
+import {
+  buildFinanceConfirmationActorsForTenant,
+  enrichWorkflowGraphWithFinanceReviewersForTenant,
+} from "@/services/project-workflow-finance-reviewer";
 import { buildWorkflowTimelineNodes } from "@/services/project-workflow-progress";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
@@ -201,6 +204,10 @@ class WorkflowSubjectsService {
       tenantId: input.tenantId,
       graph: workflowGraph,
     });
+    const completedNodeActors = await buildFinanceConfirmationActorsForTenant({
+      tenantId: input.tenantId,
+      runtimeNodes,
+    });
 
     return buildWorkflowTimelineNodes({
       graph: enrichedGraph,
@@ -208,6 +215,7 @@ class WorkflowSubjectsService {
       completedNodeKeys: runtimeNodes
         .filter((node) => node.status === "completed")
         .map((node) => node.node_key),
+      completedNodeActors,
       assignees: pendingTasks.map((task) => ({
         node_key: task.node_key,
         ...buildWorkflowTaskAssigneeMetadata(task),

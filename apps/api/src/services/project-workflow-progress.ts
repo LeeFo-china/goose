@@ -1,7 +1,8 @@
-import type { AuthContext } from "@/services/authorization";
 import {
+  buildFinanceConfirmationActorsForTenant,
   enrichWorkflowGraphWithFinanceReviewersForTenant,
   type WorkflowFinanceReviewerGraph,
+  type WorkflowFinanceReviewerGraphNode,
 } from "@/services/project-workflow-finance-reviewer";
 import { buildWorkflowTaskActionPayloads } from "@/services/workflow-task-actions";
 import {
@@ -14,6 +15,7 @@ import {
   orderWorkflowTimelineGraphNodes,
   type ConstructionStagesForWorkflowTimeline,
   type WorkflowTimelineNode,
+  type WorkflowTimelineNodeCompletion,
 } from "@/services/project-workflow-timeline-contract";
 import type { WorkflowBusinessKind, WorkflowInstanceStatus } from "@gooes/domain";
 
@@ -83,20 +85,7 @@ type RuntimeInstanceInput = {
   current_node_snapshot: unknown;
 };
 
-type WorkflowProgressGraphNode = {
-  id: string;
-  node_key: string;
-  title: string;
-  node_type: string | null;
-  business_kind: WorkflowBusinessKind | string | null;
-  config: JsonObject;
-};
-
-type WorkflowProgressGraphEdge = {
-  source_node_id: string;
-  target_node_id: string;
-};
-
+type WorkflowProgressGraphNode = WorkflowFinanceReviewerGraphNode;
 type WorkflowProgressGraph = WorkflowFinanceReviewerGraph;
 
 type BuildProjectWorkflowProgressProjectionInput = {
@@ -104,13 +93,13 @@ type BuildProjectWorkflowProgressProjectionInput = {
   runtimeInstance: RuntimeInstanceInput | null;
   graph: WorkflowProgressGraph | null;
   completedNodeKeys?: string[];
+  completedNodeActors?: WorkflowTimelineNodeCompletion[];
   pendingActions: Array<Record<string, unknown>>;
 };
 
 type GetProjectProgressInput = {
   tenantId: string;
   projectId: string;
-  authContext?: AuthContext;
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -172,6 +161,7 @@ export function buildProjectWorkflowProgressProjection(
       graph: input.graph,
       currentNodeKey,
       completedNodeKeys: input.completedNodeKeys ?? [],
+      completedNodeActors: input.completedNodeActors ?? [],
       actions: input.pendingActions,
       assignees: input.pendingActions
         .map((action) => ({
@@ -254,6 +244,10 @@ class ProjectWorkflowProgressService {
       tenantId: input.tenantId,
       graph: workflowGraph,
     });
+    const completedNodeActors = await buildFinanceConfirmationActorsForTenant({
+      tenantId: input.tenantId,
+      runtimeNodes,
+    });
 
     return buildProjectWorkflowProgressProjection({
       subjectState,
@@ -262,6 +256,7 @@ class ProjectWorkflowProgressService {
       completedNodeKeys: runtimeNodes
         .filter((node) => node.status === "completed")
         .map((node) => node.node_key),
+      completedNodeActors,
       pendingActions,
     });
   }
@@ -340,6 +335,7 @@ export function buildWorkflowTimelineNodes(input: {
   graph: WorkflowProgressGraph | null;
   currentNodeKey: string | null;
   completedNodeKeys?: string[];
+  completedNodeActors?: WorkflowTimelineNodeCompletion[];
   actions?: Array<Record<string, unknown>>;
   assignees?: Array<{
     node_key: string;
@@ -351,6 +347,13 @@ export function buildWorkflowTimelineNodes(input: {
   if (!input.graph) return [];
 
   const completedNodeKeys = new Set(input.completedNodeKeys ?? []);
+  const completionsByNodeKey = new Map(
+    (input.completedNodeActors ?? [])
+      .filter((completion) =>
+        completion.node_key && completion.completed_by_employee_id
+      )
+      .map((completion) => [completion.node_key, completion]),
+  );
   const assigneesByNodeKey = new Map(
     (input.assignees ?? [])
       .filter((assignee) => assignee.node_key && assignee.assignee_employee_id)
@@ -369,6 +372,7 @@ export function buildWorkflowTimelineNodes(input: {
     .filter((node) => node.node_type !== "start" && node.node_type !== "end")
     .map((node) => {
       const assignee = assigneesByNodeKey.get(node.node_key);
+      const completion = completionsByNodeKey.get(node.node_key);
       return buildWorkflowTimelineNodeContract({
         node: withWorkflowNodeDisplayTitle(node),
         status: resolveTimelineNodeStatus({
@@ -377,6 +381,7 @@ export function buildWorkflowTimelineNodes(input: {
           completedNodeKeys,
         }),
         assignee,
+        completion,
         actions: actionsByNodeKey.get(node.node_key) ?? [],
       });
     });
@@ -490,5 +495,4 @@ function asRecord(value: unknown): JsonObject {
     : {};
 }
 
-export const projectWorkflowProgressService =
-  new ProjectWorkflowProgressService();
+export const projectWorkflowProgressService = new ProjectWorkflowProgressService();

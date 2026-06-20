@@ -23,6 +23,21 @@ export type WorkflowFinanceReviewerEmployee = {
   avatar: string | null;
 };
 
+export type WorkflowFinanceConfirmationRuntimeNode = {
+  node_key: string;
+  status: string | null;
+  node_snapshot: unknown;
+  completed_by: string | null;
+  completed_at: string | null;
+};
+
+export type WorkflowFinanceConfirmationActor = {
+  node_key: string;
+  completed_by_employee_id: string;
+  completed_by_employee_name: string | null;
+  completed_at: string | null;
+};
+
 export async function enrichWorkflowGraphWithFinanceReviewersForTenant(input: {
   tenantId: string;
   graph: WorkflowFinanceReviewerGraph | null;
@@ -42,6 +57,48 @@ export async function enrichWorkflowGraphWithFinanceReviewersForTenant(input: {
     graph: input.graph,
     employees,
   });
+}
+
+export async function buildFinanceConfirmationActorsForTenant(input: {
+  tenantId: string;
+  runtimeNodes: WorkflowFinanceConfirmationRuntimeNode[];
+}): Promise<WorkflowFinanceConfirmationActor[]> {
+  const employeeIds = getFinanceConfirmationEmployeeIds(input.runtimeNodes);
+  if (employeeIds.length === 0) return [];
+
+  const { employeeCoreRepository } = await import("@/repositories/employee-core");
+  const employees = await employeeCoreRepository.listLiteByIds({
+    tenantId: input.tenantId,
+    employeeIds,
+  });
+
+  return buildFinanceConfirmationActors({
+    runtimeNodes: input.runtimeNodes,
+    employees,
+  });
+}
+
+export function buildFinanceConfirmationActors(input: {
+  runtimeNodes: WorkflowFinanceConfirmationRuntimeNode[];
+  employees: WorkflowFinanceReviewerEmployee[];
+}): WorkflowFinanceConfirmationActor[] {
+  const employeeById = new Map(input.employees.map((employee) => [
+    employee.id,
+    employee,
+  ]));
+
+  return input.runtimeNodes
+    .filter(isCompletedPaymentRuntimeNode)
+    .map((node) => {
+      const employee = employeeById.get(node.completed_by || "");
+      return {
+        node_key: node.node_key,
+        completed_by_employee_id: node.completed_by || "",
+        completed_by_employee_name: employee?.name ?? null,
+        completed_at: node.completed_at ?? null,
+      };
+    })
+    .filter((actor) => Boolean(actor.completed_by_employee_id));
 }
 
 export function enrichWorkflowGraphWithFinanceReviewerEmployees(input: {
@@ -90,6 +147,36 @@ function getFinanceReviewerEmployeeIds(
   }
 
   return [...ids];
+}
+
+function getFinanceConfirmationEmployeeIds(
+  runtimeNodes: WorkflowFinanceConfirmationRuntimeNode[],
+): string[] {
+  const ids = new Set<string>();
+  for (const node of runtimeNodes) {
+    if (!isCompletedPaymentRuntimeNode(node)) continue;
+    if (node.completed_by) ids.add(node.completed_by);
+  }
+
+  return [...ids];
+}
+
+function isCompletedPaymentRuntimeNode(
+  node: WorkflowFinanceConfirmationRuntimeNode,
+) {
+  return node.status === "completed" &&
+    Boolean(node.completed_by) &&
+    isPaymentNodeSnapshot(node.node_snapshot);
+}
+
+function isPaymentNodeSnapshot(value: unknown) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      "business_kind" in value &&
+      value.business_kind === "payment_collection",
+  );
 }
 
 function readString(value: unknown) {

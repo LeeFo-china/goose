@@ -26,6 +26,9 @@ export type WorkflowTimelineNodeAttributes = {
   payment_type?: string | null;
   finance_reviewer_employee_id?: string | null;
   finance_reviewer_employee_name?: string | null;
+  finance_confirmed_by_employee_id?: string | null;
+  finance_confirmed_by_employee_name?: string | null;
+  finance_confirmed_at?: string | null;
   assignee_employee_id?: string | null;
   assignee_employee_name?: string | null;
 };
@@ -77,6 +80,13 @@ export type WorkflowTimelineNodeAssignee = {
   assignee_employee?: WorkflowAssigneeEmployee;
 };
 
+export type WorkflowTimelineNodeCompletion = {
+  node_key: string;
+  completed_by_employee_id?: string | null;
+  completed_by_employee_name?: string | null;
+  completed_at?: string | null;
+};
+
 export type ConstructionStagesForWorkflowTimeline = {
   stages?: Array<{
     stage_code?: unknown;
@@ -96,12 +106,17 @@ export function buildWorkflowTimelineNodeContract(input: {
   node: WorkflowTimelineGraphNodeProjection;
   status: WorkflowTimelineNodeStatus;
   assignee?: WorkflowTimelineNodeAssignee;
+  completion?: WorkflowTimelineNodeCompletion;
   actions?: Array<Record<string, unknown>>;
 }): WorkflowTimelineNode {
   const actions = (input.actions ?? [])
     .map(normalizeTimelineAction)
     .filter((action): action is WorkflowTimelineNodeAction => Boolean(action));
-  const attributes = buildTimelineNodeAttributes(input.node, input.assignee);
+  const attributes = buildTimelineNodeAttributes({
+    node: input.node,
+    assignee: input.assignee,
+    completion: input.completion,
+  });
 
   return {
     node_key: input.node.node_key,
@@ -234,10 +249,12 @@ export function enrichWorkflowTimelineNodesWithConstructionStages(
   });
 }
 
-function buildTimelineNodeAttributes(
-  node: WorkflowTimelineGraphNodeProjection,
-  assignee?: WorkflowTimelineNodeAssignee,
-): WorkflowTimelineNodeAttributes {
+function buildTimelineNodeAttributes(input: {
+  node: WorkflowTimelineGraphNodeProjection;
+  assignee?: WorkflowTimelineNodeAssignee;
+  completion?: WorkflowTimelineNodeCompletion;
+}): WorkflowTimelineNodeAttributes {
+  const { node, assignee, completion } = input;
   const stageCode = readString(node.config.stage_key);
   const paymentType = readString(node.config.payment_type);
   const financeReviewerEmployeeId = readString(
@@ -246,6 +263,13 @@ function buildTimelineNodeAttributes(
   const financeReviewerEmployeeName = readString(
     node.config.finance_reviewer_employee_name,
   );
+  const financeConfirmedByEmployeeId = readString(
+    completion?.completed_by_employee_id,
+  );
+  const financeConfirmedByEmployeeName = readString(
+    completion?.completed_by_employee_name,
+  );
+  const financeConfirmedAt = readString(completion?.completed_at);
   const minImageCount = readNonNegativeNumber(node.config.min_image_count) ?? 0;
   const acceptanceEnabled = node.node_type === "procedure" &&
     node.config.trigger_acceptance === true;
@@ -267,6 +291,13 @@ function buildTimelineNodeAttributes(
       ? {
         finance_reviewer_employee_id: financeReviewerEmployeeId,
         finance_reviewer_employee_name: financeReviewerEmployeeName,
+      }
+      : {}),
+    ...(node.business_kind === "payment_collection" && financeConfirmedByEmployeeId
+      ? {
+        finance_confirmed_by_employee_id: financeConfirmedByEmployeeId,
+        finance_confirmed_by_employee_name: financeConfirmedByEmployeeName,
+        finance_confirmed_at: financeConfirmedAt,
       }
       : {}),
     ...(assignee?.assignee_employee_id

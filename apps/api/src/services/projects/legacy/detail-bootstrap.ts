@@ -435,7 +435,6 @@ export async function buildProjectConstructionStagesForBootstrapData(this: any, 
         ? await projectWorkflowProgressService.getProjectProgress({
             tenantId,
             projectId,
-            authContext: input.authContext,
         })
         : null);
 
