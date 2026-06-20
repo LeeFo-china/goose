@@ -24,6 +24,8 @@ export type WorkflowTimelineNodeAttributes = {
   acceptance_id?: string | null;
   acceptance_status?: string | null;
   payment_type?: string | null;
+  finance_reviewer_employee_id?: string | null;
+  finance_reviewer_employee_name?: string | null;
   assignee_employee_id?: string | null;
   assignee_employee_name?: string | null;
 };
@@ -238,6 +240,12 @@ function buildTimelineNodeAttributes(
 ): WorkflowTimelineNodeAttributes {
   const stageCode = readString(node.config.stage_key);
   const paymentType = readString(node.config.payment_type);
+  const financeReviewerEmployeeId = readString(
+    node.config.finance_reviewer_employee_id,
+  );
+  const financeReviewerEmployeeName = readString(
+    node.config.finance_reviewer_employee_name,
+  );
   const minImageCount = readNonNegativeNumber(node.config.min_image_count) ?? 0;
   const acceptanceEnabled = node.node_type === "procedure" &&
     node.config.trigger_acceptance === true;
@@ -255,6 +263,12 @@ function buildTimelineNodeAttributes(
       }
       : {}),
     ...(paymentType ? { payment_type: paymentType } : {}),
+    ...(node.business_kind === "payment_collection" && financeReviewerEmployeeId
+      ? {
+        finance_reviewer_employee_id: financeReviewerEmployeeId,
+        finance_reviewer_employee_name: financeReviewerEmployeeName,
+      }
+      : {}),
     ...(assignee?.assignee_employee_id
       ? {
         assignee_employee_id: assignee.assignee_employee_id,

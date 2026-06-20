@@ -48,6 +48,12 @@ export type EmployeeCoreRow = EmployeeCoreAccessRow & {
   roles?: EmployeeRoleSummary[];
 };
 
+export type EmployeeCoreLiteRow = {
+  id: string;
+  name: string | null;
+  avatar: string | null;
+};
+
 export type EmployeeLoginBindingRow = {
   employee_id: string;
   auth_user_id: string | null;
@@ -206,6 +212,23 @@ class EmployeeCoreRepository {
     }
 
     return roleMap;
+  }
+
+  async listLiteByIds(input: { tenantId: string; employeeIds: string[] }) {
+    const employeeIds = [...new Set(input.employeeIds.filter(Boolean))];
+    if (employeeIds.length === 0) return [] as EmployeeCoreLiteRow[];
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("employees")
+      .select("id, name, avatar")
+      .eq("tenant_id", input.tenantId)
+      .in("id", employeeIds);
+
+    if (error) {
+      throw Errors.dbError("查询员工失败", error);
+    }
+
+    return (data || []) as unknown as EmployeeCoreLiteRow[];
   }
 
   async create(payload: Record<string, unknown>) {

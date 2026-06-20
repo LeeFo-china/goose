@@ -1,4 +1,8 @@
 import type { AuthContext } from "@/services/authorization";
+import {
+  enrichWorkflowGraphWithFinanceReviewersForTenant,
+  type WorkflowFinanceReviewerGraph,
+} from "@/services/project-workflow-finance-reviewer";
 import { buildWorkflowTaskActionPayloads } from "@/services/workflow-task-actions";
 import {
   buildWorkflowTaskAssigneeMetadataFromRecord,
@@ -93,10 +97,7 @@ type WorkflowProgressGraphEdge = {
   target_node_id: string;
 };
 
-type WorkflowProgressGraph = {
-  nodes: WorkflowProgressGraphNode[];
-  edges: WorkflowProgressGraphEdge[];
-};
+type WorkflowProgressGraph = WorkflowFinanceReviewerGraph;
 
 type BuildProjectWorkflowProgressProjectionInput = {
   subjectState: SubjectStateInput | null;
@@ -243,15 +244,21 @@ class ProjectWorkflowProgressService {
       tasks: pendingTasks,
     });
 
+    const workflowGraph = graph
+      ? {
+        nodes: graph.nodes,
+        edges: graph.edges,
+      }
+      : null;
+    const enrichedGraph = await enrichWorkflowGraphWithFinanceReviewersForTenant({
+      tenantId: input.tenantId,
+      graph: workflowGraph,
+    });
+
     return buildProjectWorkflowProgressProjection({
       subjectState,
       runtimeInstance,
-      graph: graph
-        ? {
-          nodes: graph.nodes,
-          edges: graph.edges,
-        }
-        : null,
+      graph: enrichedGraph,
       completedNodeKeys: runtimeNodes
         .filter((node) => node.status === "completed")
         .map((node) => node.node_key),

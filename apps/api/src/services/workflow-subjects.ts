@@ -7,6 +7,7 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { enrichWorkflowGraphWithFinanceReviewersForTenant } from "@/services/project-workflow-finance-reviewer";
 import { buildWorkflowTimelineNodes } from "@/services/project-workflow-progress";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
@@ -190,13 +191,19 @@ class WorkflowSubjectsService {
       }),
     ]);
 
+    const workflowGraph = graph
+      ? {
+        nodes: graph.nodes,
+        edges: graph.edges,
+      }
+      : null;
+    const enrichedGraph = await enrichWorkflowGraphWithFinanceReviewersForTenant({
+      tenantId: input.tenantId,
+      graph: workflowGraph,
+    });
+
     return buildWorkflowTimelineNodes({
-      graph: graph
-        ? {
-          nodes: graph.nodes,
-          edges: graph.edges,
-        }
-        : null,
+      graph: enrichedGraph,
       currentNodeKey: runtimeInstance.current_node_key,
       completedNodeKeys: runtimeNodes
         .filter((node) => node.status === "completed")
