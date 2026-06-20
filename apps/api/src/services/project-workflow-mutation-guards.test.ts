@@ -54,7 +54,7 @@ function workflowProgress(
 }
 
 describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
-  test("blocks construction log creation when stage is not the workflow current procedure", () => {
+  test("allows construction log creation without workflow current procedure matching", () => {
     expect(() =>
       assertProjectWorkflowStageMutationAllowedFromProgress({
         workflowProgress: workflowProgress({
@@ -74,15 +74,15 @@ describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
         mutation: "create_project_log",
         stageCode: "tiling",
       })
-    ).toThrow("当前流程在中期进度款，不能操作瓦工");
+    ).not.toThrow();
   });
 
-  test("allows ordinary non-construction logs without workflow stage matching", () => {
+  test("allows project log creation when workflow runtime is unavailable", () => {
     expect(() =>
       assertProjectWorkflowStageMutationAllowedFromProgress({
         workflowProgress: buildUnavailableProjectWorkflowProgress(),
         mutation: "create_project_log",
-        stageCode: "measure",
+        stageCode: "plumbing_electrical",
       })
     ).not.toThrow();
   });

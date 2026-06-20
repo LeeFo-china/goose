@@ -25,6 +25,10 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
     return;
   }
 
+  if (input.mutation === "create_project_log") {
+    return;
+  }
+
   if (input.workflowProgress.source !== "workflow_runtime") {
     throw Errors.business(
       409,

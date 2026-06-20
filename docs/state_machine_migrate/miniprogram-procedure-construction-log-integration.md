@@ -114,6 +114,12 @@ GET /project-logs/projects/calendar?project_id=<project_id>
 5. 需要推进工序时，从 `actions[]` 取 `task_id/key`。
 6. 调用 `POST /workflow-tasks/:taskId/complete` 完成工序节点。
 
+日志编辑页不得再要求 URL 或页面上下文中必须存在 `workflowTaskId` /
+`workflowAction`。这两个字段只用于显式完成 workflow task，不是创建施工日志的前置条件。
+只要项目详情返回 `log_entry.can_create = true` 且有 `writable_stage.stage_code`，
+或当前 `timeline_nodes[].attributes.stage_code` 可用，小程序就可以进入日志编辑并调用
+`POST /project-logs`。
+
 完成待办请求体：
 
 ```json
