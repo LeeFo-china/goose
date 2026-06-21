@@ -10,6 +10,7 @@ import type {
   ConstructionStageItem,
   ProjectAcceptance,
 } from "@/components/projects/project-acceptance-types";
+import type { WorkflowSubjectState } from "@/components/workflows/workflow-subject-state-panel";
 import {
   approveProjectAcceptance,
   createFinalProjectAcceptance,
@@ -57,6 +58,7 @@ export function useProjectAcceptancesPanel(
   const [error, setError] = useState("");
   const [acceptances, setAcceptances] = useState<ProjectAcceptance[]>([]);
   const [constructionStages, setConstructionStages] = useState<ConstructionStageItem[]>([]);
+  const [workflowState, setWorkflowState] = useState<WorkflowSubjectState | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const selectedIdRef = useRef("");
   const lastEmittedSelectedIdRef = useRef("");
@@ -102,8 +104,9 @@ export function useProjectAcceptancesPanel(
       selectedId,
       stageCode,
       projectStatus: project.status,
+      workflowTimelineNodes: workflowState?.timeline_nodes || [],
     }),
-    [acceptances, constructionStages, project.status, selectedId, stageCode],
+    [acceptances, constructionStages, project.status, selectedId, stageCode, workflowState],
   );
   const {
     uploadingItemId,
@@ -160,12 +163,13 @@ export function useProjectAcceptancesPanel(
     setLoading(true);
     setError("");
     try {
-      const [data, stageData] = await loadProjectAcceptanceData(projectId);
+      const [data, stageData, workflowStateData] = await loadProjectAcceptanceData(projectId);
       if (!isCurrentRequest()) return;
       const list = data.list || [];
       acceptancesProjectIdRef.current = projectId;
       setAcceptances(list);
       setConstructionStages(stageData.stages || []);
+      setWorkflowState(workflowStateData || null);
       const pendingPreferredId = localPreferredSelectedIdRef.current;
       if (pendingPreferredId && !hasAcceptance(list, pendingPreferredId)) {
         return;
@@ -191,6 +195,7 @@ export function useProjectAcceptancesPanel(
       setError(err instanceof Error ? err.message : "验收列表加载失败");
       setAcceptances([]);
       setConstructionStages([]);
+      setWorkflowState(null);
       acceptancesProjectIdRef.current = "";
       localPreferredSelectedIdRef.current = "";
       selectAcceptanceId("", { emit: false });
@@ -303,10 +308,18 @@ export function useProjectAcceptancesPanel(
       if (!canCreateAcceptance) {
         throw new Error("当前无可发起的工序验收");
       }
+      const selectedCreatableStage = selectableStageOptions.find((item) =>
+        item.value === stageCode && item.createAction && !item.createAction.disabled
+      );
       const effectiveStageCode = targetStageCode ||
-        (stageCode && !selectedStageBlocked ? stageCode : firstAvailableStage?.value);
+        selectedCreatableStage?.value ||
+        firstAvailableStage?.value;
       if (!effectiveStageCode) {
         throw new Error("当前无可发起的工序验收");
+      }
+      const targetStage = selectableStageOptions.find((item) => item.value === effectiveStageCode);
+      if (!targetStage?.createAction || targetStage.createAction.disabled) {
+        throw new Error(targetStage?.blockedReason || "当前 workflow 节点不可发起验收");
       }
       const created = await createStageAcceptance({
         projectId: project.id,

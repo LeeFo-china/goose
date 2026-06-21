@@ -3,6 +3,7 @@ import {
   type ProjectLogStageCode,
 } from "@gooes/domain";
 import type { ConstructionStageItem, ProjectAcceptance } from "@/components/projects/project-acceptance-types";
+import type { WorkflowSubjectAction, WorkflowSubjectTimelineNode } from "@/components/workflows/workflow-subject-state-panel";
 import {
   getAcceptanceDisplaySections,
   getAcceptanceItemStats,
@@ -12,12 +13,86 @@ import {
   stageOptions,
 } from "@/components/projects/project-acceptance-utils";
 
+const stageOptionMap: ReadonlyMap<
+  ProjectLogStageCode,
+  { value: ProjectLogStageCode; label: string }
+> = new Map(stageOptions.map((item) => [item.value, item]));
+const workflowAcceptanceActionKeys = new Set([
+  "create_acceptance",
+  "edit_acceptance",
+  "view_acceptance",
+]);
+
+type WorkflowAcceptanceAction = WorkflowSubjectAction & {
+  stage_code?: string | null;
+  acceptance_id?: string | null;
+  acceptance_status?: string | null;
+};
+
+function isProjectLogStageCode(value: unknown): value is ProjectLogStageCode {
+  return typeof value === "string" && stageOptionMap.has(value as ProjectLogStageCode);
+}
+
+function getNodeStageCode(node: WorkflowSubjectTimelineNode): ProjectLogStageCode | null {
+  const stageCode = node.attributes?.stage_code;
+  return isProjectLogStageCode(stageCode) ? stageCode : null;
+}
+
+function getWorkflowAcceptanceActions(node: WorkflowSubjectTimelineNode) {
+  return (node.actions || [])
+    .filter((action): action is WorkflowAcceptanceAction =>
+      workflowAcceptanceActionKeys.has(action.key)
+    );
+}
+
+function getStageLabel(stageCode: ProjectLogStageCode, node: WorkflowSubjectTimelineNode) {
+  return stageOptionMap.get(stageCode)?.label
+    || node.display?.label
+    || node.node_title
+    || node.title
+    || stageCode;
+}
+
+function getWorkflowAcceptanceState(input: {
+  node: WorkflowSubjectTimelineNode;
+  acceptance: ProjectAcceptance | undefined;
+  createAction: WorkflowAcceptanceAction | undefined;
+  workflowAction: WorkflowAcceptanceAction | undefined;
+}) {
+  if (input.acceptance) {
+    return {
+      disabled: true,
+      stateLabel: input.acceptance.status_label,
+      blockedReason: "该工序已有进行中的验收单",
+    };
+  }
+
+  if (input.createAction) {
+    return {
+      disabled: input.createAction.disabled,
+      stateLabel: input.createAction.disabled
+        ? input.createAction.disabled_reason || "不可发起"
+        : "可发起",
+      blockedReason: input.createAction.disabled
+        ? input.createAction.disabled_reason || "当前 workflow 节点不可发起验收"
+        : "",
+    };
+  }
+
+  return {
+    disabled: true,
+    stateLabel: input.workflowAction?.label || input.node.display?.status_label || "只读",
+    blockedReason: "当前 workflow 节点没有发起验收动作",
+  };
+}
+
 export function getProjectAcceptancesPanelDerived(input: {
   acceptances: ProjectAcceptance[];
   constructionStages: ConstructionStageItem[];
   selectedId: string;
   stageCode: ProjectLogStageCode;
   projectStatus: string | null | undefined;
+  workflowTimelineNodes?: WorkflowSubjectTimelineNode[];
 }) {
   const selected = input.acceptances.find((item) => item.id === input.selectedId) || null;
   const occupiedStages = new Map(
@@ -29,24 +104,43 @@ export function getProjectAcceptancesPanelDerived(input: {
   const openFinalAcceptance = input.acceptances.find((item) =>
     item.acceptance_type === "final" && openAcceptanceStatuses.has(item.status)
   ) || null;
-  const constructionStageMap = new Map(
-    input.constructionStages.map((item) => [item.stage_code, item]),
-  );
-  const selectableStageOptions = stageOptions.map((item) => ({
-    ...item,
-    acceptance: occupiedStages.get(item.value),
-    constructionStage: constructionStageMap.get(item.value),
-  }));
+  const constructionStageMap = new Map(input.constructionStages.map((item) => [item.stage_code, item]));
+  const selectableStageOptions = (input.workflowTimelineNodes || [])
+    .filter((node) => node.attributes?.acceptance_enabled === true)
+    .map((node) => {
+      const stageCode = getNodeStageCode(node);
+      if (!stageCode) return null;
+      const acceptanceActions = getWorkflowAcceptanceActions(node);
+      const createAction = acceptanceActions.find((action) => action.key === "create_acceptance");
+      const workflowAction = acceptanceActions[0];
+      const acceptance = occupiedStages.get(stageCode);
+      const workflowState = getWorkflowAcceptanceState({
+        node,
+        acceptance,
+        createAction,
+        workflowAction,
+      });
+
+      return {
+        value: stageCode,
+        label: getStageLabel(stageCode, node),
+        acceptance,
+        constructionStage: constructionStageMap.get(stageCode),
+        workflowNode: node,
+        workflowAction,
+        createAction,
+        ...workflowState,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const firstAvailableStage = selectableStageOptions.find((item) =>
-    !item.acceptance && !item.constructionStage?.blocked_reason
+    !item.acceptance && item.createAction && !item.createAction.disabled
   );
-  const selectedStageBlockedReason = occupiedStages.get(input.stageCode)
-    ? "该工序已有进行中的验收单"
-    : constructionStageMap.get(input.stageCode)?.blocked_reason || "";
+  const selectedStageOption = selectableStageOptions.find((item) => item.value === input.stageCode);
+  const selectedStageBlockedReason = selectedStageOption?.blockedReason || "";
   const selectedStageBlocked = Boolean(selectedStageBlockedReason);
-  const canCreateByProjectStatus =
-    input.projectStatus === "constructing" || input.projectStatus === "acceptance";
-  const canCreateAcceptance = canCreateByProjectStatus && Boolean(firstAvailableStage);
+  const canCreateByProjectStatus = true;
+  const canCreateAcceptance = Boolean(firstAvailableStage);
   const canCreateFinalAcceptance = input.projectStatus === "constructing" &&
     !openFinalAcceptance &&
     input.constructionStages.length > 0 &&

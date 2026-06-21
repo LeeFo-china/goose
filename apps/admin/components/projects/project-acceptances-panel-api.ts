@@ -12,6 +12,7 @@ import type {
   NotifyCustomerResult,
   ProjectAcceptance,
 } from "@/components/projects/project-acceptance-types";
+import type { WorkflowSubjectState } from "@/components/workflows/workflow-subject-state-panel";
 import { requestBackend } from "@/components/projects/project-acceptance-utils";
 
 export async function loadProjectAcceptanceData(projectId: string) {
@@ -21,6 +22,9 @@ export async function loadProjectAcceptanceData(projectId: string) {
     ),
     requestBackend<ConstructionStagePayload>(
       `/projects/${projectId}/construction-stages`,
+    ),
+    requestBackend<WorkflowSubjectState>(
+      `/workflow-subjects/project/${projectId}/state`,
     ),
   ]);
 }

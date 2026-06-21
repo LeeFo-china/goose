@@ -22,6 +22,8 @@ type ProjectAcceptanceSidebarProps = {
     label: string;
     acceptance?: ProjectAcceptance;
     constructionStage?: ConstructionStageItem;
+    disabled: boolean;
+    stateLabel: string;
   }>;
   finalAcceptanceBlockedReason: string;
   canCreateFinalAcceptance: boolean;
@@ -130,13 +132,9 @@ export function ProjectAcceptanceSidebar({
                         <SelectItem
                           key={item.value}
                           value={item.value}
-                          disabled={Boolean(item.acceptance || item.constructionStage?.blocked_reason)}
+                          disabled={item.disabled}
                         >
-                          {item.acceptance
-                            ? `${item.label}（${item.acceptance.status_label}）`
-                            : item.constructionStage?.blocked_reason
-                              ? `${item.label}（未解锁）`
-                            : item.label}
+                          {item.disabled ? `${item.label}（${item.stateLabel}）` : item.label}
                         </SelectItem>
                       ))}
                     </SelectContent>

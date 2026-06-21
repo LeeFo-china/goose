@@ -16,12 +16,16 @@ export type WorkflowSubjectAction = {
   business_domain:
     | "customer_status"
     | "workflow_project"
+    | "project_acceptance"
     | "payment_collection"
     | "expense_request"
     | null;
   business_action: string | null;
   requires_reason: boolean;
   disabled: boolean;
+  stage_code?: string | null;
+  acceptance_id?: string | null;
+  acceptance_status?: string | null;
   output_fields: Array<{
     name: string;
     label: string;

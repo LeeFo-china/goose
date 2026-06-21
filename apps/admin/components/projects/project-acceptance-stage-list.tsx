@@ -114,38 +114,27 @@ export function ProjectAcceptanceStageList({
           </p>
         ) : null}
         <div className="mt-3 grid grid-cols-2 gap-1.5">
-          {panel.selectableStageOptions.map((item) => {
-            const disabled = Boolean(
-              item.acceptance || item.constructionStage?.blocked_reason,
-            );
-            const stateLabel = item.acceptance
-              ? item.acceptance.status_label
-              : item.constructionStage?.blocked_reason
-                ? "未解锁"
-                : "可发起";
-
-            return (
-              <button
-                key={item.value}
-                type="button"
-                disabled={panel.actionLoading || disabled}
-                onClick={() => panel.createAcceptanceForStage(item.value)}
-                className={cn(
-                  "min-w-0 rounded-md border px-2 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  disabled
-                    ? "cursor-not-allowed bg-muted/40 text-muted-foreground"
-                    : "bg-background hover:bg-accent",
-                )}
-              >
-                <span className="block truncate text-xs font-medium">
-                  {item.label}
-                </span>
-                <span className="mt-1 block truncate text-[11px] text-muted-foreground">
-                  {stateLabel}
-                </span>
-              </button>
-            );
-          })}
+          {panel.selectableStageOptions.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              disabled={panel.actionLoading || item.disabled}
+              onClick={() => panel.createAcceptanceForStage(item.value)}
+              className={cn(
+                "min-w-0 rounded-md border px-2 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                item.disabled
+                  ? "cursor-not-allowed bg-muted/40 text-muted-foreground"
+                  : "bg-background hover:bg-accent",
+              )}
+            >
+              <span className="block truncate text-xs font-medium">
+                {item.label}
+              </span>
+              <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+                {item.stateLabel}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
