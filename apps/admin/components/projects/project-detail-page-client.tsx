@@ -115,18 +115,25 @@ export function ProjectDetailPageClient({
   }
 
   const property = relationOne(currentProject.property);
+  const isAcceptanceTab = activeTab === "acceptances";
 
   return (
-    <div className="grid min-h-[calc(100vh-4rem)] gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+    <div
+      data-testid="project-detail-workspace"
+      className="flex h-[calc(100dvh-6.5625rem)] min-h-0 flex-col overflow-hidden rounded-md border bg-card [contain:layout_paint] lg:grid lg:grid-cols-[280px_minmax(0,1fr)]"
+    >
       <ProjectDetailSideRail
         project={currentProject}
         activeTab={activeTab}
         onNavigate={navigate}
       />
 
-      <main className="min-w-0 p-4 lg:p-6">
-        <div className="flex min-w-0 flex-col gap-4">
-          <div className="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
+      <main
+        data-testid="project-detail-content"
+        className="flex min-h-0 min-w-0 flex-1 flex-col bg-background lg:h-full"
+      >
+        <div className="shrink-0 border-b bg-card px-4 py-3 lg:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-semibold tracking-normal">{title}</h2>
@@ -154,80 +161,89 @@ export function ProjectDetailPageClient({
               刷新
             </Button>
           </div>
+        </div>
 
-          {error ? <StatusAlert>{error}</StatusAlert> : null}
+        <div
+          data-testid="project-detail-scroll-region"
+          className={isAcceptanceTab
+            ? "min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-gutter:stable] lg:overflow-hidden lg:p-5"
+            : "min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-gutter:stable] lg:p-5"}
+        >
+          <div className="flex h-full min-h-0 min-w-0 flex-col gap-4">
+            {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-          {activeTab === "acceptances" ? (
-            <ProjectAcceptanceWorkbench
-              project={currentProject}
-              active={activeTab === "acceptances"}
-              acceptanceId={acceptanceId}
-              onAcceptanceIdChange={(id) => {
-                if (latestActiveTabRef.current !== "acceptances") return;
-                setAcceptanceId(id);
-                router.replace(
-                  projectDetailHref(currentProject.id, "acceptances", id),
-                  { scroll: false },
-                );
-              }}
-            />
-          ) : activeTab === "logs" ? (
-            <div className="flex flex-col gap-5">
-              <ProjectConstructionStagesPanel
-                key={`logs-${currentProject.id}-${refreshVersion}`}
-                projectId={currentProject.id}
-                active={activeTab === "logs"}
-                compact
-              />
-              <ProjectLogsPanel project={currentProject} active={activeTab === "logs"} />
-            </div>
-          ) : activeTab === "members" ? (
-            <div className="flex flex-col gap-5">
-              <ProjectMembersPanel
+            {isAcceptanceTab ? (
+              <ProjectAcceptanceWorkbench
                 project={currentProject}
-                refreshing={refreshing}
-                onChanged={refreshProject}
+                active={activeTab === "acceptances"}
+                acceptanceId={acceptanceId}
+                onAcceptanceIdChange={(id) => {
+                  if (latestActiveTabRef.current !== "acceptances") return;
+                  setAcceptanceId(id);
+                  router.replace(
+                    projectDetailHref(currentProject.id, "acceptances", id),
+                    { scroll: false },
+                  );
+                }}
               />
-              <ProjectStatusPanel project={currentProject} />
-              <ProjectWorkflowRuntimePanel
-                project={currentProject}
-                active={activeTab === "members"}
-                onChanged={refreshProject}
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col gap-5">
-              <section className="rounded-lg border bg-card p-4">
-                <h3 className="text-base font-semibold">房产位置</h3>
-                {property?.id ? (
-                  <div className="mt-3 rounded-md border bg-background p-3">
-                    <div className="font-medium">{propertyLabel(property)}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {[property.layout, property.area != null ? `${property.area}㎡` : null]
-                        .filter(Boolean)
-                        .join(" · ") || currentProject.address || "-"}
+            ) : activeTab === "logs" ? (
+              <div className="flex flex-col gap-5">
+                <ProjectConstructionStagesPanel
+                  key={`logs-${currentProject.id}-${refreshVersion}`}
+                  projectId={currentProject.id}
+                  active={activeTab === "logs"}
+                  compact
+                />
+                <ProjectLogsPanel project={currentProject} active={activeTab === "logs"} />
+              </div>
+            ) : activeTab === "members" ? (
+              <div className="flex flex-col gap-5">
+                <ProjectMembersPanel
+                  project={currentProject}
+                  refreshing={refreshing}
+                  onChanged={refreshProject}
+                />
+                <ProjectStatusPanel project={currentProject} />
+                <ProjectWorkflowRuntimePanel
+                  project={currentProject}
+                  active={activeTab === "members"}
+                  onChanged={refreshProject}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <section className="rounded-lg border bg-card p-4">
+                  <h3 className="text-base font-semibold">房产位置</h3>
+                  {property?.id ? (
+                    <div className="mt-3 rounded-md border bg-background p-3">
+                      <div className="font-medium">{propertyLabel(property)}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {[property.layout, property.area != null ? `${property.area}㎡` : null]
+                          .filter(Boolean)
+                          .join(" · ") || currentProject.address || "-"}
+                      </div>
+                      <div className="mt-3">
+                        <PropertyLocationStatus
+                          property={{ ...property, id: property.id }}
+                          onConfirmed={refreshProject}
+                        />
+                      </div>
                     </div>
-                    <div className="mt-3">
-                      <PropertyLocationStatus
-                        property={{ ...property, id: property.id }}
-                        onConfirmed={refreshProject}
-                      />
+                  ) : (
+                    <div className="mt-3 rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                      当前项目未关联房产，位置待补全。
                     </div>
-                  </div>
-                ) : (
-                  <div className="mt-3 rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                    当前项目未关联房产，位置待补全。
-                  </div>
-                )}
-              </section>
-              <ProjectStatusPanel project={currentProject} />
-              <ProjectWorkflowRuntimePanel
-                project={currentProject}
-                active={activeTab === "overview"}
-                onChanged={refreshProject}
-              />
-            </div>
-          )}
+                  )}
+                </section>
+                <ProjectStatusPanel project={currentProject} />
+                <ProjectWorkflowRuntimePanel
+                  project={currentProject}
+                  active={activeTab === "overview"}
+                  onChanged={refreshProject}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>

@@ -20,7 +20,7 @@ export function ProjectAcceptanceStageList({
   panel: AcceptancePanelState;
 }) {
   return (
-    <aside className="flex min-h-0 min-w-0 flex-col rounded-md border bg-card">
+    <aside className="flex h-full min-h-0 min-w-0 flex-col rounded-md border bg-card">
       <div className="border-b px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>

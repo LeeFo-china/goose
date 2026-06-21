@@ -29,7 +29,7 @@ export function ProjectAcceptanceWorkbench({
   });
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4">
       {panel.loading ? (
         <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
           <div className="min-w-0 rounded-md border bg-card p-4">

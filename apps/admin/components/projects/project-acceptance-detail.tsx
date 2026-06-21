@@ -70,7 +70,7 @@ export function ProjectAcceptanceDetail({
 }: ProjectAcceptanceDetailProps) {
   if (!selected) {
     return (
-      <section className="flex min-h-0 items-center justify-center rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
+      <section className="flex h-full min-h-0 items-center justify-center rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
         从左侧发起工序验收或竣工交付验收后，在这里填写验收内容。
       </section>
     );
@@ -79,7 +79,7 @@ export function ProjectAcceptanceDetail({
   const editableNow = canEdit(selected.status);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border bg-card">
+    <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md border bg-card">
       <header className="shrink-0 border-b px-4 py-3">
         <div className="flex flex-col gap-3 min-[1700px]:flex-row min-[1700px]:items-start min-[1700px]:justify-between">
           <div className="min-w-0">

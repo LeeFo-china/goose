@@ -45,7 +45,11 @@ export function ProjectDetailSideRail({
   const memberCount = project.members?.length ?? 0;
 
   return (
-    <aside className="flex min-w-0 flex-col gap-4 border-b bg-card p-4 lg:sticky lg:top-20 lg:self-start lg:rounded-md lg:border">
+    <aside
+      data-testid="project-detail-side-rail"
+      className="flex max-h-[42%] min-h-0 min-w-0 shrink-0 flex-col border-b bg-card lg:h-full lg:max-h-none lg:border-b-0 lg:border-r"
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 [scrollbar-gutter:stable]">
         <div className="flex items-center justify-between gap-3">
           <Button asChild variant="ghost" size="sm" className="shrink-0">
             <Link href="/projects">
@@ -123,6 +127,7 @@ export function ProjectDetailSideRail({
             );
           })}
         </nav>
+      </div>
     </aside>
   );
 }
