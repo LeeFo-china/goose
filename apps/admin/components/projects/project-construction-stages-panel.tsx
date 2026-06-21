@@ -232,7 +232,7 @@ export function ProjectConstructionStagesPanel({
           <div>
             <CardTitle>施工阶段明细</CardTitle>
             <CardDescription className="mt-2">
-              workflow 当前节点以 Workflow 状态为准。
+              当前节点以流程状态为准。
               {progressTitle ? ` 参考节点：${progressTitle}` : ""}
               {data?.required_completed
                 ? " · 必需工序已完成"

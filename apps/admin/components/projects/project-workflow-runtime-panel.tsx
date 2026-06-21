@@ -151,7 +151,7 @@ export function ProjectWorkflowRuntimePanel({
               <Workflow className="size-4" />
             </span>
             <div className="min-w-0">
-              <CardTitle>Workflow 管理</CardTitle>
+              <CardTitle>流程管理</CardTitle>
               <CardDescription className="mt-2">
                 以项目运行态为准展示节点、属性和动作；施工阶段明细不参与推导当前节点。
               </CardDescription>
@@ -164,7 +164,7 @@ export function ProjectWorkflowRuntimePanel({
             className="size-8"
             onClick={loadRuntime}
             disabled={refreshing || submitting}
-            aria-label="刷新项目 Workflow"
+            aria-label="刷新项目流程"
           >
             <RefreshCw className={refreshing ? "animate-spin" : ""} />
           </Button>
@@ -175,11 +175,11 @@ export function ProjectWorkflowRuntimePanel({
         {!loaded && refreshing ? (
           <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
             <Loader2 className="mr-2 inline size-4 animate-spin" />
-            Workflow 加载中
+            流程加载中
           </div>
         ) : !state ? (
           <div className="rounded-md border border-dashed bg-background p-4 text-sm text-muted-foreground">
-            当前项目暂无 workflow 运行态投影。
+            当前项目暂无流程运行数据。
           </div>
         ) : (
           <>
@@ -206,7 +206,7 @@ export function ProjectWorkflowRuntimePanel({
               </div>
             </section>
             <WorkflowTimeline nodes={timelineNodes} />
-            <WorkflowTransitionList transitions={transitions} />
+            <WorkflowTransitionList nodes={timelineNodes} transitions={transitions} />
           </>
         )}
       </CardContent>
@@ -245,7 +245,7 @@ function CurrentNodeSummary({
         {currentNode ? timelineNodeTitle(currentNode) : state.current_node_title || "-"}
       </h3>
       <div className="mt-1 break-all text-xs text-muted-foreground">
-        {state.current_node_key || "未定位当前节点"}
+        {currentNode ? "节点来自流程运行数据" : "未定位当前节点"}
       </div>
       {currentNodeInsight ? (
         <p className="mt-3 max-w-3xl text-sm text-muted-foreground">{currentNodeInsight}</p>
@@ -294,7 +294,7 @@ function CurrentNodeActions({
                   {submitting && selectedAction?.workflow_task_id === action.task_id ? (
                     <Loader2 className="animate-spin" data-icon="inline-start" />
                   ) : null}
-                  {action.label || action.key}
+                  {action.label || "执行动作"}
                 </Button>
                 {disabledReason ? (
                   <div className="text-xs text-muted-foreground">{disabledReason}</div>
