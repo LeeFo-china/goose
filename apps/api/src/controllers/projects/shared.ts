@@ -110,6 +110,16 @@ export type ProjectCreateEmployeeOption = {
   post_name: string | null;
 };
 
+export type ProjectCreateConstructionWorkflowOption = {
+  id: string;
+  name: string;
+  workflow_key: string;
+  description: string | null;
+  active_version_id: string;
+  is_default: boolean;
+  updated_at: string;
+};
+
 export type ProjectMemberEmployeeSummary = {
   id: string;
   name: string | null;

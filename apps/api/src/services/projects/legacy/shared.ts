@@ -7,6 +7,7 @@ import type {
     ProjectCreateSelectCustomerQueryType,
     ProjectCreateSelectEmployeeQueryType,
     ProjectCreateSelectEmployeeScene,
+    ProjectCreateConstructionWorkflowQueryType,
     ProjectCreateSelectPropertyQueryType,
     ProjectMemberCandidateQueryType,
 } from "@/schema/project-create-select";
@@ -16,6 +17,10 @@ import {
     projectRepository,
     type EmployeeProjectBootstrapBundle,
 } from "@/repositories/projects";
+import {
+    workflowRepository,
+    type WorkflowDefinitionRow,
+} from "@/repositories/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
@@ -96,6 +101,7 @@ export {
     constructionStageStatusService,
     projectMemberService,
     projectStatusService,
+    workflowRepository,
 };
 
 export type {
@@ -107,10 +113,12 @@ export type {
     ProjectCreateSelectCustomerQueryType,
     ProjectCreateSelectEmployeeQueryType,
     ProjectCreateSelectEmployeeScene,
+    ProjectCreateConstructionWorkflowQueryType,
     ProjectCreateSelectPropertyQueryType,
     ProjectMemberCandidateQueryType,
     EmployeeProjectBootstrapBundle,
     ProjectPrimaryAssignee,
     DepartmentCode,
     ProjectMemberRoleCode,
+    WorkflowDefinitionRow,
 };

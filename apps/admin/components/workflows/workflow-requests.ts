@@ -201,6 +201,19 @@ export async function activateWorkflowVersion(id: string, versionId: string) {
   );
 }
 
+export async function setProjectConstructionDefaultWorkflow(id: string) {
+  return requestBackendJson<{
+    definition: WorkflowDefinition;
+    binding: NonNullable<WorkflowDefinition["project_construction_binding"]>;
+  }>(
+    `/workflows/${encodeURIComponent(id)}/project-construction-default`,
+    {
+      method: "POST",
+      fallbackMessage: "设置默认施工流程失败",
+    },
+  );
+}
+
 export async function fetchWorkflowRuntimeInstances(
   id: string,
   query: WorkflowRuntimeInstanceListQuery = {},

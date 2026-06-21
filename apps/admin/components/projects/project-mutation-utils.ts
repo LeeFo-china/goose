@@ -230,6 +230,8 @@ export function buildDefaults(project?: ProjectRecord): ProjectFormState {
     new_property_layout: "",
     designer_employee_id: relationOne(project?.designer)?.id || "",
     supervisor_employee_id: relationOne(project?.supervisor)?.id || "",
+    construction_workflow_definition_id:
+      project?.construction_workflow_definition_id || "",
     budget: project?.budget != null ? String(project.budget) : "",
     start_date: project?.start_date ? project.start_date.slice(0, 10) : "",
     address: project?.address || "",

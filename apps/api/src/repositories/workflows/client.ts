@@ -8,7 +8,8 @@ export type WorkflowTableName =
   | "workflow_instances"
   | "workflow_instance_nodes"
   | "workflow_tasks"
-  | "workflow_transition_logs";
+  | "workflow_transition_logs"
+  | "workflow_definition_bindings";
 
 export type WorkflowRpcName =
   | "replace_workflow_draft_graph"
@@ -22,6 +23,7 @@ export type WorkflowRpcName =
 export type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   insert: (...args: unknown[]) => UntypedTable;
+  upsert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   delete: () => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;

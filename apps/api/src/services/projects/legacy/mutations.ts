@@ -2,6 +2,7 @@ import {
     Errors,
     ErrorCodes,
     projectRepository,
+    workflowRepository,
     accessPolicyService,
     constructionStageStatusService,
     projectMemberService,
@@ -29,6 +30,7 @@ import {
     type ProjectPrimaryAssignee,
     type ProjectWorkflowEffectInput,
     type UpdateProjectInput,
+    type WorkflowDefinitionRow,
 } from "./shared";
 
 export async function createProject(this: any, input: {
@@ -38,6 +40,12 @@ export async function createProject(this: any, input: {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     accessPolicyService.assertPermission(input.authContext, "project.create");
     await this.assertProjectRelationsInTenant(input.payload, tenantId);
+    const constructionWorkflowDefinitionId =
+        await resolveConstructionWorkflowDefinitionId({
+            tenantId,
+            requestedDefinitionId:
+                input.payload.construction_workflow_definition_id ?? null,
+        });
 
     if (input.payload.customer_id && input.payload.property_id) {
         const existingProject = await projectRepository.findActiveByCustomerProperty({
@@ -52,6 +60,7 @@ export async function createProject(this: any, input: {
 
     const project = await projectRepository.create({
         ...input.payload,
+        construction_workflow_definition_id: constructionWorkflowDefinitionId,
         tenant_id: tenantId,
     });
     this.invalidatePublicProjectsCache();
@@ -113,6 +122,12 @@ export async function updateProjectForTenant(this: any, input: {
     )) {
         throw Errors.badRequest("项目状态必须通过 workflow 节点推进");
     }
+    if (Object.prototype.hasOwnProperty.call(
+        input.payload,
+        "construction_workflow_definition_id",
+    )) {
+        throw Errors.badRequest("施工流程只能在项目创建时选择");
+    }
 
     const project = await this.updateProject(
         input.projectId,
@@ -124,6 +139,68 @@ export async function updateProjectForTenant(this: any, input: {
     this.invalidatePublicProjectMembersCache(input.projectId);
 
     return project;
+}
+
+async function resolveConstructionWorkflowDefinitionId(input: {
+    tenantId: string;
+    requestedDefinitionId: string | null;
+}) {
+    if (input.requestedDefinitionId) {
+        const definition = await workflowRepository.getDefinitionById(
+            input.requestedDefinitionId,
+            input.tenantId,
+        );
+        assertUsableProjectConstructionWorkflow(definition);
+        return definition.id;
+    }
+
+    const defaultDefinition =
+        await workflowRepository.findDefaultProjectConstructionWorkflow(
+            input.tenantId,
+        );
+    if (defaultDefinition) {
+        return defaultDefinition.id;
+    }
+
+    const legacyDefinition = await workflowRepository.findDefinitionByKey(
+        input.tenantId,
+        "construction_main",
+    );
+    if (
+        legacyDefinition?.status === "active" &&
+        legacyDefinition.category === "construction" &&
+        legacyDefinition.active_version_id
+    ) {
+        return legacyDefinition.id;
+    }
+
+    throw Errors.business(
+        409,
+        "请先在流程编排中设置默认施工流程",
+        "PROJECT_CONSTRUCTION_WORKFLOW_DEFAULT_REQUIRED",
+    );
+}
+
+function assertUsableProjectConstructionWorkflow(
+    definition: WorkflowDefinitionRow | null,
+): asserts definition is WorkflowDefinitionRow {
+    if (!definition) {
+        throw Errors.badRequest("施工流程不存在");
+    }
+    if (definition.category !== "construction") {
+        throw Errors.business(
+            400,
+            "请选择施工分类下的流程",
+            "PROJECT_CONSTRUCTION_WORKFLOW_CATEGORY_INVALID",
+        );
+    }
+    if (definition.status !== "active" || !definition.active_version_id) {
+        throw Errors.business(
+            409,
+            "施工流程尚未发布，不能用于新建项目",
+            "PROJECT_CONSTRUCTION_WORKFLOW_NOT_ACTIVE",
+        );
+    }
 }
 
 export async function applyProjectWorkflowEffectForTenant(this: any, input: {

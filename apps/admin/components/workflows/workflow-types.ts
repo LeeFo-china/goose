@@ -30,6 +30,17 @@ export type WorkflowDefinition = {
   updated_by: string | null;
   created_at: string;
   updated_at: string;
+  project_construction_binding?: {
+    id: string;
+    tenant_id: string;
+    subject_type: "project";
+    workflow_purpose: "construction";
+    definition_id: string;
+    selectable: boolean;
+    is_default: boolean;
+    created_at: string;
+    updated_at: string;
+  } | null;
 };
 
 export type WorkflowVersion = {

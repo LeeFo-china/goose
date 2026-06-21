@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type {
+  ConstructionWorkflowOption,
   Option,
   ProjectRecord,
   PropertyOption,
@@ -51,6 +52,16 @@ type PropertyOptionRow = {
   location_confirmed_at?: string | null;
 };
 
+type ConstructionWorkflowOptionRow = {
+  id: string;
+  name: string;
+  workflow_key: string;
+  description?: string | null;
+  active_version_id: string;
+  is_default: boolean;
+  updated_at?: string | null;
+};
+
 export function useSelectOptions(
   open: boolean,
   project: ProjectRecord | undefined,
@@ -59,6 +70,9 @@ export function useSelectOptions(
   const [customers, setCustomers] = useState<Option[]>([]);
   const [designers, setDesigners] = useState<Option[]>([]);
   const [supervisors, setSupervisors] = useState<Option[]>([]);
+  const [constructionWorkflows, setConstructionWorkflows] = useState<
+    ConstructionWorkflowOption[]
+  >([]);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
@@ -80,8 +94,11 @@ export function useSelectOptions(
       requestProject<ProjectCreateListResponse<EmployeeOptionRow>>({
         path: "/projects/create/employees?scene=project_supervisor&page=1&pageSize=80",
       }),
+      requestProject<ProjectCreateListResponse<ConstructionWorkflowOptionRow>>({
+        path: "/projects/create/construction-workflows?page=1&pageSize=80",
+      }),
     ])
-      .then(([customerData, designerData, supervisorData]) => {
+      .then(([customerData, designerData, supervisorData, workflowData]) => {
         if (cancelled) return;
         setCustomers((customerData?.list || []).map((item) => ({
           id: item.id,
@@ -97,6 +114,18 @@ export function useSelectOptions(
           id: item.id,
           label: item.name || item.phone || item.id,
           description: item.post_name || item.department_name || null,
+        })));
+        setConstructionWorkflows((workflowData?.list || []).map((item) => ({
+          id: item.id,
+          label: item.name || item.workflow_key || item.id,
+          description: [
+            item.is_default ? "默认" : null,
+            item.workflow_key,
+          ].filter(Boolean).join(" · ") || null,
+          workflow_key: item.workflow_key,
+          active_version_id: item.active_version_id,
+          is_default: item.is_default,
+          updated_at: item.updated_at ?? null,
         })));
       })
       .catch((err) => {
@@ -193,6 +222,7 @@ export function useSelectOptions(
     customers: mergeFallback(customers, customerFallback),
     designers: mergeFallback(designers, designerFallback),
     supervisors: mergeFallback(supervisors, supervisorFallback),
+    constructionWorkflows,
     properties: mergeFallback(properties, propertyFallback),
   };
 }

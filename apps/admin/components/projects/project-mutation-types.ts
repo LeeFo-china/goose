@@ -46,6 +46,7 @@ export type ProjectRecord = {
   current_stage_label?: string | null;
   stage_code?: string | null;
   stage_label?: string | null;
+  construction_workflow_definition_id?: string | null;
   budget: number | null;
   signed_amount?: number | null;
   start_date: string | null;
@@ -92,6 +93,13 @@ export type PropertyOption = Option & {
   location_source?: string | null;
   location_confidence?: number | null;
   location_confirmed_at?: string | null;
+};
+
+export type ConstructionWorkflowOption = Option & {
+  workflow_key: string;
+  active_version_id: string;
+  is_default: boolean;
+  updated_at?: string | null;
 };
 
 export type EmployeeOption = {
@@ -168,6 +176,7 @@ export type ProjectFormState = {
   new_property_layout: string;
   designer_employee_id: string;
   supervisor_employee_id: string;
+  construction_workflow_definition_id: string;
   budget: string;
   start_date: string;
   address: string;

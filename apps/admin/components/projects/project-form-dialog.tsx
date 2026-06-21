@@ -23,6 +23,19 @@ import { useSelectOptions } from "@/components/projects/use-project-select-optio
 import { OptionSelect } from "@/components/projects/project-option-select";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
+function getConstructionWorkflowPlaceholder(options: {
+  loading: boolean;
+  constructionWorkflows: Array<{ label: string; is_default?: boolean }>;
+}) {
+  if (options.loading) return "施工流程加载中";
+  const defaultWorkflow = options.constructionWorkflows.find((item) =>
+    item.is_default
+  );
+  return defaultWorkflow
+    ? `默认：${defaultWorkflow.label}`
+    : "使用默认施工流程";
+}
+
 export function ProjectDialog({
   mode,
   project,
@@ -75,6 +88,7 @@ export function ProjectDialog({
       address: string | null;
       visibility_status: string;
       style_tags: string[];
+      construction_workflow_definition_id?: string | null;
     } = {
       name: formState.name.trim(),
       customer_id: formState.customer_id || null,
@@ -87,6 +101,10 @@ export function ProjectDialog({
     };
     if (mode === "create") {
       payload.status = "designing";
+      if (formState.construction_workflow_definition_id) {
+        payload.construction_workflow_definition_id =
+          formState.construction_workflow_definition_id;
+      }
     }
 
     setError("");
@@ -189,6 +207,22 @@ export function ProjectDialog({
                 }))}
               />
             </div>
+            {mode === "create" ? (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${mode}-construction-workflow`}>施工流程</Label>
+                <OptionSelect
+                  id={`${mode}-construction-workflow`}
+                  value={formState.construction_workflow_definition_id}
+                  options={options.constructionWorkflows}
+                  disabled={pending || options.loading}
+                  placeholder={getConstructionWorkflowPlaceholder(options)}
+                  onChange={(value) => setFormState((current) => ({
+                    ...current,
+                    construction_workflow_definition_id: value,
+                  }))}
+                />
+              </div>
+            ) : null}
             <div className="flex flex-col gap-2 md:col-span-2">
               <Label htmlFor={`${mode}-project-customer`}>客户</Label>
               <OptionSelect

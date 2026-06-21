@@ -104,6 +104,10 @@ export const ProjectBaseSchema = z.object({
 
   // 项目状态：建议使用枚举约束
   status: ProjectStatusSchema,
+  construction_workflow_definition_id: z
+    .uuid("请选择有效的施工流程")
+    .nullable()
+    .optional(),
   // 创建时间
   created_at: z.iso.datetime("无效的时间格式").nullable().optional(),
 }).strict();

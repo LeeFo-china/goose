@@ -2,6 +2,7 @@ import {
     Errors,
     ErrorCodes,
     projectRepository,
+    workflowRepository,
     accessPolicyService,
     constructionStageStatusService,
     projectMemberService,
@@ -22,6 +23,7 @@ import {
     type EmployeeProjectBootstrapBundle,
     type ProjectCreateSelectCustomerQueryType,
     type ProjectCreateSelectEmployeeQueryType,
+    type ProjectCreateConstructionWorkflowQueryType,
     type ProjectCreateSelectPropertyQueryType,
     type ProjectDetailMembers,
     type ProjectListQuery,
@@ -101,6 +103,25 @@ export async function listProjectCreateEmployees(this: any, input: {
         tenantId,
         query: input.query,
     });
+}
+
+export async function listProjectCreateConstructionWorkflows(this: any, input: {
+    authContext: AuthContext;
+    query: ProjectCreateConstructionWorkflowQueryType;
+}): Promise<ProjectSelectResult> {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    accessPolicyService.assertPermission(input.authContext, "project.create");
+    const result = await workflowRepository.listProjectConstructionWorkflowOptions({
+        tenantId,
+        page: input.query.page,
+        pageSize: input.query.pageSize,
+        keyword: input.query.keyword,
+    });
+
+    return {
+        rows: result.list,
+        pagination: result.pagination,
+    };
 }
 
 export async function listProjectMemberCandidates(this: any, input: {

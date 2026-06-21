@@ -32,6 +32,39 @@ export type WorkflowDefinitionRow = {
   updated_at: string;
 };
 
+export type WorkflowDefinitionBindingRow = {
+  id: string;
+  tenant_id: string;
+  subject_type: "project";
+  workflow_purpose: "construction";
+  definition_id: string;
+  selectable: boolean;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectConstructionWorkflowOptionRow = WorkflowDefinitionRow & {
+  project_construction_binding: WorkflowDefinitionBindingRow | null;
+};
+
+export type ProjectConstructionWorkflowListInput = {
+  tenantId: string;
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+};
+
+export type ProjectConstructionWorkflowListResult = {
+  list: ProjectConstructionWorkflowOptionRow[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 export type WorkflowVersionRow = {
   id: string;
   tenant_id: string;

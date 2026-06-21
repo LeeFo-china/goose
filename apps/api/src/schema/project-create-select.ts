@@ -26,6 +26,10 @@ export const ProjectCreateSelectEmployeeQuerySchema = PaginationQuerySchema.exte
   scene: ProjectCreateSelectEmployeeSceneSchema,
 });
 
+export const ProjectCreateConstructionWorkflowQuerySchema = PaginationQuerySchema.extend({
+  keyword: z.string().trim().optional(),
+});
+
 export const ProjectMemberCandidateQuerySchema = PaginationQuerySchema.extend({
   keyword: z.string().trim().optional(),
   role_code: z.enum(PROJECT_MEMBER_ROLE_CODE_VALUES, {
@@ -41,6 +45,9 @@ export type ProjectCreateSelectPropertyQueryType = z.infer<
 >;
 export type ProjectCreateSelectEmployeeQueryType = z.infer<
   typeof ProjectCreateSelectEmployeeQuerySchema
+>;
+export type ProjectCreateConstructionWorkflowQueryType = z.infer<
+  typeof ProjectCreateConstructionWorkflowQuerySchema
 >;
 export type ProjectMemberCandidateQueryType = z.infer<
   typeof ProjectMemberCandidateQuerySchema

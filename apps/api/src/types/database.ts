@@ -4938,6 +4938,7 @@ export type Database = {
         Row: {
           address: string | null
           budget: number | null
+          construction_workflow_definition_id: string | null
           created_at: string | null
           customer_id: string | null
           id: string
@@ -4954,6 +4955,7 @@ export type Database = {
         Insert: {
           address?: string | null
           budget?: number | null
+          construction_workflow_definition_id?: string | null
           created_at?: string | null
           customer_id?: string | null
           id?: string
@@ -4970,6 +4972,7 @@ export type Database = {
         Update: {
           address?: string | null
           budget?: number | null
+          construction_workflow_definition_id?: string | null
           created_at?: string | null
           customer_id?: string | null
           id?: string
@@ -4984,6 +4987,13 @@ export type Database = {
           visibility_status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "projects_construction_workflow_definition_id_fkey"
+            columns: ["construction_workflow_definition_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_definitions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "projects_customer_id_fkey"
             columns: ["customer_id"]

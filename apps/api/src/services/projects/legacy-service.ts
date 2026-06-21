@@ -41,6 +41,7 @@ import {
 } from "./legacy/public-cache";
 import {
     listProjectCreateCustomers,
+    listProjectCreateConstructionWorkflows,
     listProjectCreateEmployees,
     listProjectCreateProperties,
     listProjectMemberCandidates,
@@ -135,6 +136,7 @@ class ProjectService {
     listPublicProjectMembers = listPublicProjectMembers;
     prewarmPublicProjectDetailData = prewarmPublicProjectDetailData;
     listProjectCreateCustomers = listProjectCreateCustomers;
+    listProjectCreateConstructionWorkflows = listProjectCreateConstructionWorkflows;
     listProjectCreateProperties = listProjectCreateProperties;
     listProjectCreateEmployees = listProjectCreateEmployees;
     listProjectMemberCandidates = listProjectMemberCandidates;

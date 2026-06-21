@@ -3,6 +3,7 @@ import { Errors } from "@/errors/error-factory";
 import { ProjectListQuerySchema } from "@/schema/projects";
 import {
   ProjectCreateSelectCustomerQuerySchema,
+  ProjectCreateConstructionWorkflowQuerySchema,
   ProjectCreateSelectEmployeeQuerySchema,
   ProjectCreateSelectPropertyQuerySchema,
   ProjectMemberCandidateQuerySchema,
@@ -14,6 +15,7 @@ import { ResponseHandler } from "@/utils/response";
 import { serializeProjectListItem } from "./list-serializer";
 import {
   ProjectBaseController,
+  type ProjectCreateConstructionWorkflowOption,
   type ProjectCreateCustomerOption,
   type ProjectCreateEmployeeOption,
   type ProjectCreatePropertyOption,
@@ -75,6 +77,25 @@ function serializePropertyOption(item: ProjectCreateSelectPropertyRow): ProjectC
     location_source: item.location_source,
     location_confidence: item.location_confidence,
     location_confirmed_at: item.location_confirmed_at,
+  };
+}
+
+function serializeConstructionWorkflowOption(
+  item: Record<string, unknown>,
+): ProjectCreateConstructionWorkflowOption {
+  const binding = item.project_construction_binding &&
+      typeof item.project_construction_binding === "object"
+    ? item.project_construction_binding as Record<string, unknown>
+    : null;
+
+  return {
+    id: String(item.id),
+    name: String(item.name ?? ""),
+    workflow_key: String(item.workflow_key ?? ""),
+    description: typeof item.description === "string" ? item.description : null,
+    active_version_id: String(item.active_version_id ?? ""),
+    is_default: binding?.is_default === true,
+    updated_at: String(item.updated_at ?? ""),
   };
 }
 
@@ -219,6 +240,26 @@ class ProjectCreateSelectController extends ProjectBaseController {
     return ResponseHandler.success({
       list: (result.rows as unknown as ProjectCreateSelectPropertyRow[])
         .map(serializePropertyOption),
+      pagination: result.pagination,
+    });
+  }
+
+  @Get("/projects/create/construction-workflows")
+  async getProjectCreateConstructionWorkflows(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+
+    const queryResult = ProjectCreateConstructionWorkflowQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectSer.listProjectCreateConstructionWorkflows({
+      authContext,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success({
+      list: result.rows.map(serializeConstructionWorkflowOption),
       pagination: result.pagination,
     });
   }

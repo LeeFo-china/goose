@@ -31,6 +31,12 @@ import {
   archiveWorkflowVersion,
 } from "@/services/workflows/archive";
 import {
+  listWorkflowDefinitions,
+} from "@/services/workflows/definition-list";
+import {
+  setProjectConstructionDefaultWorkflow,
+} from "@/services/workflows/project-construction-default";
+import {
   buildWorkflowSnapshot,
   validateWorkflowPublishGraph,
 } from "@/services/workflow-publish-graph";
@@ -55,15 +61,7 @@ type WorkflowPublishResult = {
 
 class WorkflowService {
   async listDefinitions(authContext: AuthContext, query: WorkflowListQuery) {
-    const tenantId = this.assertManagePermission(authContext);
-    return workflowRepository.listDefinitions({
-      tenantId,
-      page: query.page,
-      pageSize: query.pageSize,
-      status: query.status,
-      category: query.category,
-      keyword: query.keyword?.trim() || undefined,
-    });
+    return listWorkflowDefinitions(authContext, query);
   }
 
   async getDefinition(
@@ -241,6 +239,13 @@ class WorkflowService {
         edges: draftGraph.edges,
       },
     };
+  }
+
+  async setProjectConstructionDefault(
+    authContext: AuthContext,
+    definitionId: string,
+  ) {
+    return setProjectConstructionDefaultWorkflow(authContext, definitionId);
   }
 
   async archiveDefinition(authContext: AuthContext, id: string) {

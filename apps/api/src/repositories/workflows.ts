@@ -8,6 +8,12 @@ import {
   updateDefinition,
 } from "./workflows/definitions";
 import {
+  findDefaultProjectConstructionWorkflow,
+  listProjectConstructionBindingsByDefinitionIds,
+  listProjectConstructionWorkflowOptions,
+  setDefaultProjectConstructionWorkflow,
+} from "./workflows/definition-bindings";
+import {
   getDraftGraph,
   getGraph,
   replaceDraftGraph,
@@ -56,6 +62,10 @@ class WorkflowRepository {
   publishDefinition = publishDefinition;
   updateVersionStatus = updateVersionStatus;
   updateActiveVersion = updateActiveVersion;
+  listProjectConstructionWorkflowOptions = listProjectConstructionWorkflowOptions;
+  findDefaultProjectConstructionWorkflow = findDefaultProjectConstructionWorkflow;
+  listProjectConstructionBindingsByDefinitionIds = listProjectConstructionBindingsByDefinitionIds;
+  setDefaultProjectConstructionWorkflow = setDefaultProjectConstructionWorkflow;
   listRuntimeInstances = listRuntimeInstances;
   getRuntimeInstanceById = getRuntimeInstanceById;
   findLatestRunningRuntimeInstance = findLatestRunningRuntimeInstance;

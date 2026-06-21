@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useState } from "react";
-import { ArrowRight, ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { Fragment, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, ChevronDown, ChevronRight, FileText, Loader2, Star } from "lucide-react";
+import { toast } from "sonner";
 import {
   formatWorkflowDate,
   workflowCategoryLabel,
   workflowStatusLabel,
   workflowStatusVariant,
 } from "@/components/workflows/workflow-labels";
+import { setProjectConstructionDefaultWorkflow } from "@/components/workflows/workflow-requests";
 import { WorkflowVersionInlineList } from "@/components/workflows/workflow-version-list-panel";
 import type { WorkflowDefinition } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +25,8 @@ import { getWorkflowRuntimeIntegrationHint } from "@/components/workflows/workfl
 
 function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
   const integrationHint = getWorkflowRuntimeIntegrationHint(workflow);
+  const isProjectConstructionDefault =
+    workflow.project_construction_binding?.is_default === true;
 
   return (
     <Tooltip>
@@ -38,6 +43,11 @@ function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
         {integrationHint ? (
           <Badge variant="secondary" className="mt-1 w-fit">
             {integrationHint.badge}
+          </Badge>
+        ) : null}
+        {isProjectConstructionDefault ? (
+          <Badge variant="outline" className="mt-1 w-fit">
+            默认施工
           </Badge>
         ) : null}
       </TooltipTrigger>
@@ -77,6 +87,53 @@ function WorkflowDescription({ value }: { value: string | null }) {
   );
 }
 
+function ProjectConstructionDefaultAction({ workflow }: { workflow: WorkflowDefinition }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const isDefault = workflow.project_construction_binding?.is_default === true;
+  const canSetDefault = workflow.category === "construction" &&
+    workflow.status === "active" &&
+    Boolean(workflow.active_version_id);
+
+  if (!canSetDefault) return null;
+
+  if (isDefault) {
+    return (
+      <Badge variant="secondary" className="h-8 whitespace-nowrap px-2">
+        <Star data-icon="inline-start" />
+        默认施工
+      </Badge>
+    );
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      onClick={() => {
+        startTransition(async () => {
+          try {
+            await setProjectConstructionDefaultWorkflow(workflow.id);
+            toast.success("已设置默认施工流程");
+            router.refresh();
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "设置默认施工流程失败");
+          }
+        });
+      }}
+    >
+      {pending ? (
+        <Loader2 className="animate-spin" data-icon="inline-start" />
+      ) : (
+        <Star data-icon="inline-start" />
+      )}
+      设默认
+    </Button>
+  );
+}
+
 export function WorkflowTable({
   workflows,
 }: {
@@ -86,7 +143,7 @@ export function WorkflowTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1190px] table-fixed text-sm">
+      <table className="w-full min-w-[1270px] table-fixed text-sm">
         <colgroup>
           <col className="w-[270px]" />
           <col className="w-[120px]" />
@@ -94,7 +151,7 @@ export function WorkflowTable({
           <col className="w-[130px]" />
           <col className="w-[170px]" />
           <col className="w-[240px]" />
-          <col className="w-[190px]" />
+          <col className="w-[270px]" />
         </colgroup>
         <thead className="sticky top-0 z-10 bg-card text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]">
           <tr>
@@ -142,6 +199,7 @@ export function WorkflowTable({
                     </td>
                     <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted/40">
                       <div className="flex justify-end gap-2">
+                        <ProjectConstructionDefaultAction workflow={workflow} />
                         {canExpandVersions ? (
                           <Button
                             type="button"

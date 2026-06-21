@@ -5,6 +5,9 @@ import {
   type WorkflowInstanceRow,
 } from "@/repositories/workflows";
 import type { AuthContext } from "@/services/authorization";
+import {
+  resolveProjectConstructionWorkflowDefinition,
+} from "@/services/project-construction-workflow-selection";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import type { ProjectStatus, ProjectStatusAction } from "@gooes/domain";
@@ -393,10 +396,10 @@ class ProjectWorkflowRuntimeService {
   private async startConstructionWorkflow(
     input: ApplyProjectWorkflowEffectInput,
   ): Promise<ProjectWorkflowRuntimeMetadata> {
-    const definition = await this.findActiveProjectWorkflow(
-      input.tenantId,
-      PROJECT_CONSTRUCTION_WORKFLOW_KEYS,
-    );
+    const definition = await resolveProjectConstructionWorkflowDefinition({
+      tenantId: input.tenantId,
+      projectId: input.projectId,
+    });
     if (!definition) {
       return {
         status: "skipped",
