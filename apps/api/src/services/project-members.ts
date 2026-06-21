@@ -69,7 +69,7 @@ type ProjectRoleValidationErrorInput = {
 export type ProjectPrimaryAssignee = {
   project_id: string;
   employee_id: string;
-  role_code: "designer" | "supervisor";
+  role_code: "designer" | "supervisor" | "construction_manager";
   employee: {
     id: string;
     name: string | null;
@@ -269,12 +269,12 @@ class ProjectMemberService {
   async listPrimaryAssigneesByProjectIds(projectIds: string[]) {
     const rows = await projectMemberRepository.listPrimaryAssigneesByProjectIds(
       projectIds,
-      ["designer", "supervisor"],
+      ["designer", "supervisor", "construction_manager"],
     );
 
     return rows
       .map((row): ProjectPrimaryAssignee | null => {
-        if (row.role_code !== "designer" && row.role_code !== "supervisor") {
+        if (row.role_code !== "designer" && row.role_code !== "supervisor" && row.role_code !== "construction_manager") {
           return null;
         }
 

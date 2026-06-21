@@ -70,12 +70,26 @@ export function normalizeRelation<T extends Record<string, unknown>>(this: any,
     return fallback;
 }
 
+type ProjectAssigneeIndexRole = "designer" | "supervisor";
+
+function getProjectAssigneeIndexRole(
+    roleCode: ProjectPrimaryAssignee["role_code"],
+): ProjectAssigneeIndexRole {
+    return roleCode === "designer" ? "designer" : "supervisor";
+}
+
 export function buildAssigneeIndex(this: any, assignees: ProjectPrimaryAssignee[]) {
-    const index = new Map<string, Partial<Record<"designer" | "supervisor", ProjectPrimaryAssignee>>>();
+    const index = new Map<string, Partial<Record<ProjectAssigneeIndexRole, ProjectPrimaryAssignee>>>();
     for (const assignee of assignees) {
         const item = index.get(assignee.project_id) || {};
-        if (!item[assignee.role_code]) {
-            item[assignee.role_code] = assignee;
+        const indexRole = getProjectAssigneeIndexRole(assignee.role_code);
+        if (
+            !item[indexRole] ||
+            (indexRole === "supervisor" &&
+                item[indexRole]?.role_code === "construction_manager" &&
+                assignee.role_code === "supervisor")
+        ) {
+            item[indexRole] = assignee;
             index.set(assignee.project_id, item);
         }
     }

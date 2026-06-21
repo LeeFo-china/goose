@@ -62,7 +62,7 @@ export async function getProjectDetail(this: any, input: {
         tenantId,
     });
 
-    return projectWithDisplayStatus ?? project;
+    return this.attachPrimaryAssigneesToProject(projectWithDisplayStatus ?? project);
 }
 
 export async function getProjectDetailForEmployeeBootstrap(this: any, input: {
