@@ -12,6 +12,7 @@ import { ProjectAcceptancesPanel } from "@/components/projects/project-acceptanc
 import { ProjectConstructionStagesPanel } from "@/components/projects/project-construction-stages-panel";
 import { AddProjectMemberDialog } from "@/components/projects/project-member-dialog";
 import { ProjectStatusPanel } from "@/components/projects/project-status-panel";
+import { ProjectWorkflowRuntimePanel } from "@/components/projects/project-workflow-runtime-panel";
 import type { ProjectDetailTab, ProjectRecord } from "@/components/projects/project-mutation-types";
 import { customerName, customerStatus, customerStatusLabel, getEmployeeMeta, personName, propertyLabel, relationOne, requestProject } from "@/components/projects/project-mutation-utils";
 import { PropertyLocationStatus } from "@/components/properties/property-location-status";
@@ -160,7 +161,12 @@ export function ProjectDetailDialog({
                 projectId={currentProject.id}
                 active={activeTab === "overview"}
               />
-              <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
+              <ProjectStatusPanel project={currentProject} />
+              <ProjectWorkflowRuntimePanel
+                project={currentProject}
+                active={activeTab === "overview"}
+                onChanged={refreshProject}
+              />
             </TabsContent>
             <TabsContent value="members">
               <section className="flex flex-col gap-3">

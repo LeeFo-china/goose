@@ -11,5 +11,7 @@ describe("WorkflowSubjectStatePanel timeline contract", () => {
     expect(source).toContain("timeline_nodes");
     expect(source).toContain("status_label");
     expect(source).toContain("attributes");
+    expect(source).toContain("actions?");
+    expect(source).toContain("display?.label");
   });
 });

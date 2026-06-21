@@ -1,18 +1,12 @@
 "use client";
 
-import { ArrowRight, History, Loader2 } from "lucide-react";
-import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ProjectStatusActionDialog } from "@/components/projects/project-status-action-dialog";
-import { useProjectStatusPanel } from "@/components/projects/project-status-panel-state";
-import { WorkflowSubjectStatePanel } from "@/components/workflows/workflow-subject-state-panel";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ProjectRecord } from "@/components/projects/project-mutation-types";
 import {
   customerName,
   formatDate,
-  formatDateTime,
+  formatMoney,
   personName,
   projectDisplayStatusBadgeVariant,
   projectDisplayStatusLabel,
@@ -21,25 +15,14 @@ import {
 
 export function ProjectStatusPanel({
   project,
-  onChanged,
 }: {
   project: ProjectRecord;
-  onChanged: () => Promise<void>;
 }) {
-  const panel = useProjectStatusPanel(project, onChanged);
-  const headerSummaryRows = [
-    [
-      ["客户", customerName(project.customer)],
-      ["房产", propertyLabel(project.property)],
-      ["金额", panel.amountSummary],
-    ],
-    [
-      ["设计", personName(project.designer)],
-      ["工程", personName(project.supervisor)],
-      ["开工", formatDate(project.start_date)],
-      ...(project.address ? [["地址", project.address]] : []),
-    ],
-  ];
+  const amountSummary = project.signed_amount
+    ? `签约 ¥${formatMoney(project.signed_amount)}`
+    : project.budget
+      ? `预算 ¥${formatMoney(project.budget)}`
+      : "-";
 
   return (
     <Card className="overflow-hidden">
@@ -47,122 +30,44 @@ export function ProjectStatusPanel({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <CardTitle className="truncate">{project.name || "项目概览"}</CardTitle>
-            <CardDescription className="mt-3 flex flex-col gap-1.5">
-              {headerSummaryRows.map((row, rowIndex) => (
-                <span key={rowIndex} className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
-                  {row.map(([label, value]) => (
-                    <span key={label} className="min-w-0 truncate">
-                      {label}：{value}
-                    </span>
-                  ))}
-                </span>
-              ))}
-            </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={projectDisplayStatusBadgeVariant(project)}>
               {projectDisplayStatusLabel(project)}
             </Badge>
-            {panel.actionsLoading ? (
-              <Badge variant="secondary">
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-                动作加载中
-              </Badge>
-            ) : null}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4 p-5">
-        {panel.error ? <StatusAlert>{panel.error}</StatusAlert> : null}
-        <WorkflowSubjectStatePanel
-          subjectType="project"
-          subjectId={project.id}
-          onStateChange={panel.setWorkflowState}
+      <CardContent className="grid gap-3 p-5 text-sm sm:grid-cols-2 xl:grid-cols-4">
+        <InfoItem label="客户" value={customerName(project.customer)} />
+        <InfoItem label="房产" value={propertyLabel(project.property)} />
+        <InfoItem label="设计负责人" value={personName(project.designer)} />
+        <InfoItem label="工程负责人" value={personName(project.supervisor)} />
+        <InfoItem label="开工日期" value={formatDate(project.start_date)} />
+        <InfoItem label="金额" value={amountSummary} />
+        <InfoItem
+          className="sm:col-span-2"
+          label="地址"
+          value={project.address || "-"}
         />
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <History className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">最近流转</h3>
-            </div>
-            {panel.transitions.length > panel.latestTransitions.length ? (
-              <Badge variant="outline">显示最近 {panel.latestTransitions.length} 条</Badge>
-            ) : panel.transitionsLoading ? (
-              <Badge variant="secondary">
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-                加载中
-              </Badge>
-            ) : null}
-          </div>
-          {!panel.transitionsLoaded ? (
-            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
-              最近流转正在后台同步。
-            </div>
-          ) : panel.latestTransitions.length > 0 ? (
-            <div className="flex flex-col divide-y rounded-md border bg-background">
-              {panel.latestTransitions.map((item) => (
-                <div key={item.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium">{item.action || "complete"}</span>
-                    <Badge variant="outline">
-                      {item.source_node_key || "开始"}
-                    </Badge>
-                    <ArrowRight className="size-4 text-muted-foreground" />
-                    <Badge variant="outline">
-                      {item.target_node_key || "结束"}
-                    </Badge>
-                  </div>
-                  <time
-                    dateTime={item.created_at}
-                    className="shrink-0 text-xs tabular-nums text-muted-foreground"
-                  >
-                    {formatDateTime(item.created_at)}
-                  </time>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
-              暂无状态流转记录。
-            </div>
-          )}
-        </section>
-        <section className="flex flex-col gap-3 rounded-md border bg-muted/20 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold">下一步</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                只展示当前可执行的推进动作。
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {panel.actionViews.map((item) => (
-                <Button
-                  key={item.action.action}
-                  type="button"
-                  size="sm"
-                  variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
-                  disabled={panel.actionsLoading || panel.pending}
-                  onClick={() => panel.openActionDialog(item.action)}
-                >
-                  {item.action.label}
-                </Button>
-              ))}
-              {!panel.actionsLoading && panel.actions.length === 0 ? (
-                <Badge variant="outline">暂无可执行动作</Badge>
-              ) : null}
-            </div>
-          </div>
-        </section>
       </CardContent>
-      <ProjectStatusActionDialog
-        selectedAction={panel.selectedAction}
-        pending={panel.pending}
-        reason={panel.reason}
-        setReason={panel.setReason}
-        closeActionDialog={panel.closeActionDialog}
-        submitAction={panel.submitAction}
-      />
     </Card>
+  );
+}
+
+function InfoItem({
+  className = "",
+  label,
+  value,
+}: {
+  className?: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 min-w-0 truncate font-medium">{value}</div>
+    </div>
   );
 }

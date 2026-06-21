@@ -10,7 +10,7 @@ type WorkflowSubjectType = "customer" | "project" | "expense_request" | "procedu
 export type WorkflowSubjectAction = {
   key: string;
   label: string;
-  task_id: string;
+  task_id?: string;
   node_key: string;
   node_type: string;
   business_domain:
@@ -35,18 +35,26 @@ export type WorkflowSubjectAction = {
     required_percentage?: number;
     min_amount?: number;
   }>;
+  disabled_reason?: string | null;
 };
 
 export type WorkflowSubjectTimelineNode = {
   node_key: string;
   node_title?: string | null;
   title?: string | null;
+  node_type?: string | null;
+  business_kind?: string | null;
   status?: string | null;
   display?: {
+    label?: string | null;
     status_label?: string | null;
+    status_variant?: string | null;
     [key: string]: unknown;
   } | null;
   attributes?: Record<string, unknown> | null;
+  actions?: WorkflowSubjectAction[];
+  assignee_employee_id?: string | null;
+  assignee_employee_name?: string | null;
 };
 
 export type WorkflowSubjectState = {
@@ -93,7 +101,7 @@ function statusLabel(status: string | null) {
 }
 
 function timelineNodeTitle(node: WorkflowSubjectTimelineNode) {
-  return node.node_title || node.title || node.node_key || "-";
+  return node.display?.label || node.node_title || node.title || node.node_key || "-";
 }
 
 function timelineNodeStatusLabel(node: WorkflowSubjectTimelineNode) {

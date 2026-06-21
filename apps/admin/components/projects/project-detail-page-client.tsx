@@ -188,10 +188,11 @@ export function ProjectDetailPageClient({
                 refreshing={refreshing}
                 onChanged={refreshProject}
               />
-              <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
+              <ProjectStatusPanel project={currentProject} />
               <ProjectWorkflowRuntimePanel
                 project={currentProject}
                 active={activeTab === "members"}
+                onChanged={refreshProject}
               />
             </div>
           ) : (
@@ -219,15 +220,11 @@ export function ProjectDetailPageClient({
                   </div>
                 )}
               </section>
-              <ProjectConstructionStagesPanel
-                key={`overview-${currentProject.id}-${refreshVersion}`}
-                projectId={currentProject.id}
-                active={activeTab === "overview"}
-              />
-              <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
+              <ProjectStatusPanel project={currentProject} />
               <ProjectWorkflowRuntimePanel
                 project={currentProject}
                 active={activeTab === "overview"}
+                onChanged={refreshProject}
               />
             </div>
           )}
