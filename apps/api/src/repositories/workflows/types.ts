@@ -37,6 +37,7 @@ export type WorkflowVersionRow = {
   tenant_id: string;
   definition_id: string;
   version_number: number;
+  version_label: string | null;
   status: WorkflowVersionStatus;
   snapshot: JsonObject;
   validation_result: JsonObject;
@@ -192,6 +193,7 @@ export type WorkflowVersionCreateInput = {
   validationResult?: JsonObject;
   status?: WorkflowVersionStatus;
   publishedBy?: string | null;
+  versionLabel?: string | null;
 };
 
 export type WorkflowActiveVersionUpdateInput = {
@@ -210,6 +212,7 @@ export type WorkflowDefinitionPublishInput = {
   validationResult: JsonObject;
   publishedBy?: string | null;
   updatedBy?: string | null;
+  versionLabel?: string | null;
 };
 
 export type WorkflowDefinitionPublishResult =

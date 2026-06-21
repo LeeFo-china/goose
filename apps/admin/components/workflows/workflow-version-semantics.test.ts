@@ -41,6 +41,10 @@ describe("workflow version semantics", () => {
       new URL("./workflow-version-list-panel.tsx", import.meta.url),
       "utf8",
     );
+    const publishDialogSource = readFileSync(
+      new URL("./workflow-publish-confirm-dialog.tsx", import.meta.url),
+      "utf8",
+    );
     const runtimePanelSource = readFileSync(
       new URL("./workflow-runtime-panel.tsx", import.meta.url),
       "utf8",
@@ -54,15 +58,20 @@ describe("workflow version semantics", () => {
     expect(WORKFLOW_VERSION_EFFECT_COPY.versionPanelDescription).toContain("运行中的实例数量");
     expect(designerSource).toContain("WorkflowVersionEffectNotice");
     expect(designerSource).toContain("WorkflowVersionListPanel");
+    expect(designerSource).toContain("WorkflowPublishConfirmDialog");
     expect(tableSource).toContain("WorkflowVersionInlineList");
     expect(tableSource).toContain("expandedWorkflowId");
-    expect(designerSource).toContain("ConfirmActionDialog");
-    expect(designerSource).toContain("WORKFLOW_VERSION_EFFECT_COPY.publishConfirm");
+    expect(publishDialogSource).toContain("ConfirmActionDialog");
+    expect(publishDialogSource).toContain("WORKFLOW_VERSION_EFFECT_COPY.publishConfirm");
+    expect(publishDialogSource).toContain("版本标签");
+    expect(publishDialogSource).toContain("versionLabel");
     expect(requestsSource).toContain("fetchWorkflowVersions");
     expect(requestsSource).toContain("/versions?");
+    expect(requestsSource).toContain("version_label");
     expect(requestsSource).toContain("archiveWorkflowVersion");
     expect(requestsSource).toContain("archiveWorkflowRuntimeInstance");
     expect(versionPanelSource).toContain("归档版本");
+    expect(versionPanelSource).toContain("version.version_label");
     expect(runtimePanelSource).toContain("归档实例");
   });
 });

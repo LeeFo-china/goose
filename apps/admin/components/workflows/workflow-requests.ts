@@ -9,6 +9,7 @@ import type {
   WorkflowGraph,
   WorkflowGraphSaveInput,
   WorkflowGraphSaveResult,
+  WorkflowPublishInput,
   WorkflowPublishResult,
   WorkflowRuntimeCompleteNodeResult,
   WorkflowRuntimeInstanceListData,
@@ -139,11 +140,18 @@ export async function saveWorkflowGraph(
   );
 }
 
-export async function publishWorkflowDefinition(id: string) {
+export async function publishWorkflowDefinition(
+  id: string,
+  input: WorkflowPublishInput = {},
+) {
+  const versionLabel = input.version_label?.trim();
   return requestBackendJson<WorkflowPublishResult>(
     `/workflows/${encodeURIComponent(id)}/publish`,
     {
       method: "POST",
+      body: JSON.stringify({
+        version_label: versionLabel || null,
+      }),
       fallbackMessage: "发布流程失败",
     },
   );

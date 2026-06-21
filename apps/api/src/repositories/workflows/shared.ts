@@ -24,6 +24,7 @@ export const WORKFLOW_VERSION_SELECT = [
   "tenant_id",
   "definition_id",
   "version_number",
+  "version_label",
   "status",
   "snapshot",
   "validation_result",

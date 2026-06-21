@@ -98,6 +98,7 @@ export async function createVersion(
       definition_id: input.definitionId,
       version_number: input.versionNumber,
       status: input.status ?? "published",
+      version_label: input.versionLabel ?? null,
       snapshot: input.snapshot,
       validation_result: input.validationResult ?? {},
       published_by: input.publishedBy ?? null,
@@ -147,6 +148,7 @@ export async function publishDefinition(
     p_published_by: input.publishedBy ?? null,
     p_updated_by: input.updatedBy ?? input.publishedBy ?? null,
     p_expected_updated_at: input.expectedUpdatedAt,
+    p_version_label: input.versionLabel ?? null,
   });
 
   if (error) {

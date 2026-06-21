@@ -13,6 +13,7 @@ import type {
   WorkflowDefinitionUpdateInput,
   WorkflowGraphSaveInput,
   WorkflowListQuery,
+  WorkflowPublishInput,
   WorkflowRuntimeArchiveInput,
   WorkflowRuntimeCompleteNodeInput,
   WorkflowRuntimeInstanceListQuery,
@@ -187,6 +188,7 @@ class WorkflowService {
   async publishDefinition(
     authContext: AuthContext,
     definitionId: string,
+    input: WorkflowPublishInput = {},
   ): Promise<WorkflowPublishResult> {
     const tenantId = this.assertManagePermission(authContext);
     const definition = await this.getRequiredDefinition(tenantId, definitionId);
@@ -208,6 +210,7 @@ class WorkflowService {
       edges: draftGraph.edges,
       publishedAt,
     });
+    const versionLabel = input.version_label?.trim() || null;
 
     const publishResult = await workflowRepository.publishDefinition({
       tenantId,
@@ -217,6 +220,7 @@ class WorkflowService {
       validationResult,
       publishedBy: authContext.employeeId,
       updatedBy: authContext.employeeId,
+      versionLabel,
     });
 
     if (!publishResult.ok) {

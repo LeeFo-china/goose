@@ -11,6 +11,20 @@ const assertTenantId = mock((_authContext: AuthContext) => "tenant-1");
 const assertPermission = mock((_authContext: AuthContext, _permission: string) => undefined);
 
 const getDefinitionById = mock(async () => definition());
+const getDraftGraph = mock(async () => draftGraph());
+const publishDefinition = mock(async (input: {
+  versionLabel?: string | null;
+}) => ({
+  ok: true as const,
+  version: {
+    ...version("version-4", 4),
+    version_label: input.versionLabel ?? null,
+  },
+  definition: {
+    ...definition(),
+    active_version_id: "version-4",
+  },
+}));
 const listVersions = mock(async () => ({
   list: [
     version("version-3", 3),
@@ -71,6 +85,8 @@ mock.module("@/services/access-policy", () => ({
 mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
     getDefinitionById,
+    getDraftGraph,
+    publishDefinition,
     getRuntimeInstanceById,
     getVersionById,
     archiveRuntimeInstance,
@@ -86,6 +102,22 @@ describe("workflowService.listVersions", () => {
     assertPermission.mockClear();
     getDefinitionById.mockClear();
     getDefinitionById.mockImplementation(async () => definition());
+    getDraftGraph.mockClear();
+    getDraftGraph.mockImplementation(async () => draftGraph());
+    publishDefinition.mockClear();
+    publishDefinition.mockImplementation(async (input: {
+      versionLabel?: string | null;
+    }) => ({
+      ok: true as const,
+      version: {
+        ...version("version-4", 4),
+        version_label: input.versionLabel ?? null,
+      },
+      definition: {
+        ...definition(),
+        active_version_id: "version-4",
+      },
+    }));
     listVersions.mockClear();
     listVersions.mockImplementation(async () => ({
       list: [
@@ -265,6 +297,25 @@ describe("workflowService.listVersions", () => {
   });
 });
 
+describe("workflowService.publishDefinition", () => {
+  test("passes a trimmed version label into the published workflow version", async () => {
+    const { workflowService } = await import("./workflows");
+
+    const result = await workflowService.publishDefinition(
+      authContext(),
+      "definition-1",
+      { version_label: "  开启水电验收  " },
+    );
+
+    expect(publishDefinition).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-1",
+      definitionId: "definition-1",
+      versionLabel: "开启水电验收",
+    }));
+    expect(result.version.version_label).toBe("开启水电验收");
+  });
+});
+
 function authContext(): AuthContext {
   return {
     tenantId: "tenant-1",
@@ -277,7 +328,7 @@ function definition(): WorkflowDefinitionRow {
   return {
     id: "definition-1",
     tenant_id: "tenant-1",
-    workflow_key: "construction_main",
+    workflow_key: "custom_workflow",
     name: "项目施工主流程",
     description: null,
     category: "construction",
@@ -296,12 +347,95 @@ function version(id: string, versionNumber: number): WorkflowVersionRow {
     tenant_id: "tenant-1",
     definition_id: "definition-1",
     version_number: versionNumber,
+    version_label: null,
     status: "published",
     snapshot: {},
     validation_result: {},
     published_by: null,
     published_at: NOW,
     created_at: NOW,
+  };
+}
+
+function draftGraph() {
+  return {
+    nodes: [
+      {
+        id: "node-start",
+        tenant_id: "tenant-1",
+        definition_id: "definition-1",
+        node_key: "start",
+        node_type: "start",
+        business_kind: null,
+        title: "开始",
+        description: null,
+        config: {},
+        position: { x: 0, y: 0 },
+        sort_order: 1,
+        created_at: NOW,
+        updated_at: NOW,
+      },
+      {
+        id: "node-procedure-demolition",
+        tenant_id: "tenant-1",
+        definition_id: "definition-1",
+        node_key: "procedure_demolition",
+        node_type: "procedure",
+        business_kind: "procedure",
+        title: "拆改",
+        description: null,
+        config: {
+          stage_key: "demolition",
+          require_log: true,
+          min_image_count: 1,
+        },
+        position: { x: 200, y: 0 },
+        sort_order: 2,
+        created_at: NOW,
+        updated_at: NOW,
+      },
+      {
+        id: "node-end",
+        tenant_id: "tenant-1",
+        definition_id: "definition-1",
+        node_key: "end",
+        node_type: "end",
+        business_kind: null,
+        title: "结束",
+        description: null,
+        config: {},
+        position: { x: 400, y: 0 },
+        sort_order: 3,
+        created_at: NOW,
+        updated_at: NOW,
+      },
+    ],
+    edges: [
+      {
+        id: "edge-start-procedure",
+        tenant_id: "tenant-1",
+        definition_id: "definition-1",
+        source_node_id: "node-start",
+        target_node_id: "node-procedure-demolition",
+        label: null,
+        condition: { operator: "always" },
+        priority: 1,
+        created_at: NOW,
+        updated_at: NOW,
+      },
+      {
+        id: "edge-procedure-end",
+        tenant_id: "tenant-1",
+        definition_id: "definition-1",
+        source_node_id: "node-procedure-demolition",
+        target_node_id: "node-end",
+        label: null,
+        condition: { operator: "always" },
+        priority: 2,
+        created_at: NOW,
+        updated_at: NOW,
+      },
+    ],
   };
 }
 

@@ -281,6 +281,7 @@ function graph(): WorkflowGraphResult {
       tenant_id: "tenant-1",
       definition_id: "definition-1",
       version_number: 1,
+      version_label: null,
       status: "published",
       snapshot: {},
       validation_result: {},

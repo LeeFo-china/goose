@@ -7880,6 +7880,7 @@ export type Database = {
           status: string
           tenant_id: string
           validation_result: Json
+          version_label: string | null
           version_number: number
         }
         Insert: {
@@ -7892,6 +7893,7 @@ export type Database = {
           status?: string
           tenant_id: string
           validation_result?: Json
+          version_label?: string | null
           version_number: number
         }
         Update: {
@@ -7904,6 +7906,7 @@ export type Database = {
           status?: string
           tenant_id?: string
           validation_result?: Json
+          version_label?: string | null
           version_number?: number
         }
         Relationships: [

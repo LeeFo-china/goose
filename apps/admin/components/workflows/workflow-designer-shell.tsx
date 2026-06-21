@@ -15,7 +15,6 @@ import {
   Save,
   ShieldCheck,
 } from "lucide-react";
-import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas";
 import type { WorkflowValidationResult } from "@/components/workflows/workflow-designer-types";
@@ -36,6 +35,7 @@ import {
 } from "@/components/workflows/workflow-business-track";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
+import { WorkflowPublishConfirmDialog } from "@/components/workflows/workflow-publish-confirm-dialog";
 import { WorkflowPropertyPanel } from "@/components/workflows/workflow-property-panel";
 import {
   publishWorkflowDefinition,
@@ -43,7 +43,6 @@ import {
 } from "@/components/workflows/workflow-requests";
 import { WorkflowVersionEffectNotice } from "@/components/workflows/workflow-version-effect-notice";
 import { WorkflowVersionListPanel } from "@/components/workflows/workflow-version-list-panel";
-import { WORKFLOW_VERSION_EFFECT_COPY } from "@/components/workflows/workflow-version-semantics";
 import { WorkflowValidationPanel } from "@/components/workflows/workflow-validation-panel";
 import { useWorkflowValidationPlayback } from "@/components/workflows/workflow-validation-playback";
 import type {
@@ -251,11 +250,13 @@ export function WorkflowDesignerShell({
     setPublishConfirmOpen(true);
   }
 
-  function confirmPublish() {
+  function confirmPublish(versionLabel: string) {
     if (!graph) return;
     startTransition(async () => {
       try {
-        const result = await publishWorkflowDefinition(workflowId);
+        const result = await publishWorkflowDefinition(workflowId, {
+          version_label: versionLabel || null,
+        });
         setGraph({
           definition: result.definition,
           nodes: result.graph.nodes,
@@ -263,7 +264,7 @@ export function WorkflowDesignerShell({
         });
         setDirty(false);
         setPublishConfirmOpen(false);
-        toast.success("流程已发布");
+        toast.success(versionLabel ? `流程已发布：${versionLabel}` : "流程已发布");
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "发布流程失败");
       }
@@ -478,12 +479,9 @@ export function WorkflowDesignerShell({
           <WorkflowValidationPanel validation={validation} />
         </div>
       </div>
-      <ConfirmActionDialog
+      <WorkflowPublishConfirmDialog
         open={publishConfirmOpen}
         onOpenChange={setPublishConfirmOpen}
-        title="发布新流程版本"
-        description={WORKFLOW_VERSION_EFFECT_COPY.publishConfirm}
-        confirmLabel="确认发布"
         pending={pending}
         onConfirm={confirmPublish}
       />

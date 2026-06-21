@@ -214,6 +214,7 @@ export function WorkflowVersionListPanel({
                   versions.map((version) => {
                     const isActive = version.is_active || version.id === activeVersionId;
                     const isArchived = version.status === "deprecated";
+                    const versionLabel = version.version_label?.trim();
                     const archiveDisabled = pending ||
                       isActive ||
                       isArchived ||
@@ -225,6 +226,15 @@ export function WorkflowVersionListPanel({
                             <div className="font-medium">
                               v{version.version_number}
                             </div>
+                            {versionLabel ? (
+                              <div className="max-w-[220px] truncate text-sm text-foreground">
+                                {versionLabel}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-muted-foreground">
+                                未填写版本标签
+                              </div>
+                            )}
                             <div className="max-w-[220px] truncate text-xs text-muted-foreground">
                               {version.id}
                             </div>
@@ -233,7 +243,7 @@ export function WorkflowVersionListPanel({
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
                             <Badge variant={isActive ? "success" : "outline"}>
-                              {isActive ? "active" : "历史版本"}
+                              {isActive ? "当前版本" : "历史版本"}
                             </Badge>
                             <Badge variant="secondary">
                               {versionStatusLabels[version.status] || version.status}

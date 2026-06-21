@@ -37,6 +37,7 @@ export type WorkflowVersion = {
   tenant_id: string;
   definition_id: string;
   version_number: number;
+  version_label: string | null;
   status: WorkflowVersionStatus;
   snapshot: Record<string, unknown>;
   validation_result: Record<string, unknown>;
@@ -249,6 +250,10 @@ export type WorkflowGraphSaveResult = {
   ok: true;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+};
+
+export type WorkflowPublishInput = {
+  version_label?: string | null;
 };
 
 export type WorkflowPublishResult = {

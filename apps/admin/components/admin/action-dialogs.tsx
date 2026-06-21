@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import {
   AlertDialog,
@@ -34,6 +34,7 @@ type ConfirmActionDialogProps = {
   cancelLabel?: string;
   pending?: boolean;
   destructive?: boolean;
+  children?: ReactNode;
   onConfirm: () => void;
 };
 
@@ -46,6 +47,7 @@ export function ConfirmActionDialog({
   cancelLabel = "取消",
   pending = false,
   destructive = false,
+  children,
   onConfirm,
 }: ConfirmActionDialogProps) {
   return (
@@ -55,6 +57,7 @@ export function ConfirmActionDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction

@@ -8,6 +8,7 @@ import {
   WorkflowGraphSaveSchema,
   WorkflowRuntimeArchiveSchema,
   WorkflowListQuerySchema,
+  WorkflowPublishSchema,
   WorkflowRuntimeCompleteNodeSchema,
   WorkflowRuntimeInstanceIdParamsSchema,
   WorkflowRuntimeInstanceListQuerySchema,
@@ -129,9 +130,13 @@ class WorkflowController extends TenantBaseController<
     const paramsResult = WorkflowDefinitionIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
+    const bodyResult = WorkflowPublishSchema.safeParse(request.body ?? {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
     const data = await workflowService.publishDefinition(
       authContext,
       paramsResult.data.id,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }
