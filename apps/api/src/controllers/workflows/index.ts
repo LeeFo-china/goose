@@ -172,6 +172,20 @@ class WorkflowController extends TenantBaseController<
     return ResponseHandler.success(data);
   }
 
+  @Post("/workflows/:id/versions/:versionId/activate")
+  async activateVersion(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowVersionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await workflowService.activateVersion(
+      authContext,
+      paramsResult.data.id,
+      paramsResult.data.versionId,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Post("/workflows/:id/archive")
   async archive(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);

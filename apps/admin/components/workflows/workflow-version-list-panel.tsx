@@ -5,6 +5,7 @@ import {
   Archive,
   ChevronDown,
   ChevronRight,
+  CheckCircle2,
   History,
   Loader2,
   RefreshCw,
@@ -28,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  activateWorkflowVersion,
   archiveWorkflowVersion,
   fetchWorkflowVersions,
 } from "./workflow-requests";
@@ -72,6 +74,7 @@ export function WorkflowVersionListPanel({
   const [data, setData] = useState<WorkflowVersionListData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<WorkflowVersionSummary | null>(null);
+  const [activateTarget, setActivateTarget] = useState<WorkflowVersionSummary | null>(null);
   const [pending, startTransition] = useTransition();
 
   function loadVersions(nextPage = page) {
@@ -119,6 +122,26 @@ export function WorkflowVersionListPanel({
     });
   }
 
+  function confirmActivateVersion() {
+    if (!activateTarget) return;
+    startTransition(async () => {
+      try {
+        setError(null);
+        await activateWorkflowVersion(workflowId, activateTarget.id);
+        const result = await fetchWorkflowVersions(workflowId, {
+          page,
+          pageSize: PAGE_SIZE,
+        });
+        setData(result);
+        setActivateTarget(null);
+      } catch (activateError) {
+        setError(activateError instanceof Error
+          ? activateError.message
+          : "设置当前版本失败");
+      }
+    });
+  }
+
   useEffect(() => {
     setOpen(defaultOpen);
     setPage(1);
@@ -131,6 +154,9 @@ export function WorkflowVersionListPanel({
   }, [workflowId, defaultOpen]);
 
   const versions = data?.list ?? [];
+  const activeVersionIdFromData = versions.find((version) => version.is_active)?.id ??
+    activeVersionId ??
+    null;
   const totalPages = data?.pagination.totalPages ?? 0;
   const hasPreviousPage = page > 1;
   const hasNextPage = totalPages > 0 && page < totalPages;
@@ -212,9 +238,10 @@ export function WorkflowVersionListPanel({
               <TableBody>
                 {versions.length > 0 ? (
                   versions.map((version) => {
-                    const isActive = version.is_active || version.id === activeVersionId;
+                    const isActive = version.id === activeVersionIdFromData;
                     const isArchived = version.status === "deprecated";
                     const versionLabel = version.version_label?.trim();
+                    const activateDisabled = pending || isActive || isArchived;
                     const archiveDisabled = pending ||
                       isActive ||
                       isArchived ||
@@ -262,17 +289,29 @@ export function WorkflowVersionListPanel({
                         <TableCell className="whitespace-nowrap">
                           {formatDateTime(version.published_at)}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={archiveDisabled}
-                            onClick={() => setArchiveTarget(version)}
-                          >
-                            <Archive data-icon="inline-start" />
-                            {isArchived ? "已归档" : "归档版本"}
-                          </Button>
+                        <TableCell>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={activateDisabled}
+                              onClick={() => setActivateTarget(version)}
+                            >
+                              <CheckCircle2 data-icon="inline-start" />
+                              {isActive ? "当前版本" : "设为当前版本"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={archiveDisabled}
+                              onClick={() => setArchiveTarget(version)}
+                            >
+                              <Archive data-icon="inline-start" />
+                              {isArchived ? "已归档" : "归档版本"}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -318,6 +357,17 @@ export function WorkflowVersionListPanel({
           </div>
         </div>
       </CollapsibleContent>
+      <ConfirmActionDialog
+        open={Boolean(activateTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setActivateTarget(null);
+        }}
+        title="设为当前版本"
+        description="设为当前版本后，只影响后续新建或受控重建的实例；运行中的实例仍绑定原版本。"
+        confirmLabel="确认设置"
+        pending={pending}
+        onConfirm={confirmActivateVersion}
+      />
       <ConfirmActionDialog
         open={Boolean(archiveTarget)}
         onOpenChange={(nextOpen) => {

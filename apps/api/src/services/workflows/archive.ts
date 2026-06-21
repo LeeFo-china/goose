@@ -56,6 +56,42 @@ export async function archiveWorkflowVersion(
   });
 }
 
+export async function activateWorkflowVersion(
+  authContext: AuthContext,
+  definitionId: string,
+  versionId: string,
+) {
+  const tenantId = assertManagePermission(authContext);
+  const definition = await getRequiredDefinition(tenantId, definitionId);
+  const version = await workflowRepository.getVersionById(
+    versionId,
+    definitionId,
+    tenantId,
+  );
+
+  if (!version) {
+    throw Errors.notFound("流程版本不存在");
+  }
+  if (version.status === "deprecated") {
+    throw Errors.business(
+      409,
+      "已归档的流程版本不能设为当前版本",
+      "WORKFLOW_VERSION_ACTIVATE_FORBIDDEN",
+    );
+  }
+  if (version.id === definition.active_version_id) {
+    return definition;
+  }
+
+  return workflowRepository.updateActiveVersion({
+    tenantId,
+    definitionId,
+    versionId,
+    status: "active",
+    updatedBy: authContext.employeeId,
+  });
+}
+
 export async function archiveWorkflowRuntimeInstance(
   authContext: AuthContext,
   definitionId: string,

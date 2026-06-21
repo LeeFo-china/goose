@@ -26,6 +26,7 @@ import type { AuthContext } from "@/services/authorization";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { resolveWorkflowKey } from "@/services/workflow-key";
 import {
+  activateWorkflowVersion,
   archiveWorkflowRuntimeInstance,
   archiveWorkflowVersion,
 } from "@/services/workflows/archive";
@@ -258,6 +259,14 @@ class WorkflowService {
     versionId: string,
   ) {
     return archiveWorkflowVersion(authContext, definitionId, versionId);
+  }
+
+  async activateVersion(
+    authContext: AuthContext,
+    definitionId: string,
+    versionId: string,
+  ) {
+    return activateWorkflowVersion(authContext, definitionId, versionId);
   }
 
   async listRuntimeInstances(

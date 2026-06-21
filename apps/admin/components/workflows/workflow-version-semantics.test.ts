@@ -70,7 +70,9 @@ describe("workflow version semantics", () => {
     expect(requestsSource).toContain("version_label");
     expect(requestsSource).toContain("archiveWorkflowVersion");
     expect(requestsSource).toContain("archiveWorkflowRuntimeInstance");
+    expect(requestsSource).toContain("activateWorkflowVersion");
     expect(versionPanelSource).toContain("归档版本");
+    expect(versionPanelSource).toContain("设为当前版本");
     expect(versionPanelSource).toContain("version.version_label");
     expect(runtimePanelSource).toContain("归档实例");
   });

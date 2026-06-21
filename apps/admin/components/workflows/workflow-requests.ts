@@ -191,6 +191,16 @@ export async function archiveWorkflowVersion(id: string, versionId: string) {
   );
 }
 
+export async function activateWorkflowVersion(id: string, versionId: string) {
+  return requestBackendJson<WorkflowDefinition>(
+    `/workflows/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/activate`,
+    {
+      method: "POST",
+      fallbackMessage: "设置当前版本失败",
+    },
+  );
+}
+
 export async function fetchWorkflowRuntimeInstances(
   id: string,
   query: WorkflowRuntimeInstanceListQuery = {},
