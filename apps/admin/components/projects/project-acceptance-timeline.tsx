@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent } from "react";
+import { Clock3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { AcceptanceAction, EditableItem, EditableState, ProjectAcceptance } from "@/components/projects/project-acceptance-types";
 import { formatDateTime, getActionLabel, getActionOperator, getActionVariant, getRectificationItemsForAction, hasRectificationContent, isRejectAction } from "@/components/projects/project-acceptance-utils";
@@ -48,12 +49,15 @@ export function AcceptanceTimeline({
     );
 
   return (
-    <div className="rounded-md border bg-background p-4">
+    <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="font-medium">流程记录</div>
-        <Badge variant="secondary">最新在前 · {actions.length} 条</Badge>
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Clock3 data-icon="inline-start" />
+          流程记录
+        </div>
+        <Badge variant="secondary">{actions.length} 条</Badge>
       </div>
-      <div className="mt-4 flex flex-col gap-3">
+      <ol className="relative border-l pl-4">
         {orderedActions.map((action, index) => {
           const isLatest = index === 0;
           const referencedImages = action.referenced_images || [];
@@ -74,12 +78,15 @@ export function AcceptanceTimeline({
             hasRectificationContent(rectificationItems);
 
           return (
-            <div
+            <li
               key={action.id}
-              className={`rounded-md border p-3 ${
-                isLatest ? "bg-muted/40" : "bg-card"
-              }`}
+              className="relative pb-4 last:pb-0"
             >
+              <span
+                className={`absolute -left-[21px] top-1 size-2.5 rounded-full border bg-background ${
+                  isLatest ? "border-primary bg-primary" : "border-border"
+                }`}
+              />
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-col gap-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -98,7 +105,7 @@ export function AcceptanceTimeline({
               </div>
 
               {action.comment ? (
-                <div className="mt-3 rounded-md bg-muted/40 p-3 text-sm">
+                <div className="mt-3 rounded-md bg-background p-3 text-sm">
                   {action.comment}
                 </div>
               ) : null}
@@ -132,10 +139,10 @@ export function AcceptanceTimeline({
               {showRectificationSummary ? (
                 <RectificationSummaryPanel items={rectificationItems} />
               ) : null}
-            </div>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ol>
+    </section>
   );
 }

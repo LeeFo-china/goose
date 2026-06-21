@@ -20,8 +20,8 @@ export function ProjectAcceptanceStageList({
   panel: AcceptancePanelState;
 }) {
   return (
-    <aside className="flex min-h-0 min-w-0 flex-col rounded-lg border bg-card">
-      <div className="border-b p-4">
+    <aside className="flex min-h-0 min-w-0 flex-col rounded-md border bg-card">
+      <div className="border-b px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold">验收记录</h3>
@@ -44,45 +44,43 @@ export function ProjectAcceptanceStageList({
         </div>
       </div>
 
-      <div className="border-b p-3">
-        <div className="rounded-md border bg-background p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">竣工交付验收</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {panel.finalAcceptanceBlockedReason || "施工阶段全部完成后可发起"}
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={panel.createFinalAcceptance}
-                disabled={panel.actionLoading || !panel.canCreateFinalAcceptance}
-              >
-                {panel.actionLoading ? (
-                  <Loader2 className="animate-spin" data-icon="inline-start" />
-                ) : (
-                  <Plus data-icon="inline-start" />
-                )}
-                发起
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={panel.openTemplateDialog}
-                disabled={panel.templateLoading}
-              >
-                <FileText data-icon="inline-start" />
-                模板
-              </Button>
-            </div>
+      <div className="border-b px-3 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">竣工交付验收</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {panel.finalAcceptanceBlockedReason || "施工阶段全部完成后可发起"}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={panel.createFinalAcceptance}
+              disabled={panel.actionLoading || !panel.canCreateFinalAcceptance}
+            >
+              {panel.actionLoading ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Plus data-icon="inline-start" />
+              )}
+              发起
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={panel.openTemplateDialog}
+              disabled={panel.templateLoading}
+            >
+              <FileText data-icon="inline-start" />
+              模板
+            </Button>
           </div>
         </div>
       </div>
 
-      <div className="border-b p-3">
+      <div className="border-b px-3 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-medium text-muted-foreground">工序验收</p>
@@ -103,7 +101,7 @@ export function ProjectAcceptanceStageList({
             ) : (
               <Plus data-icon="inline-start" />
             )}
-            发起验收
+            发起{panel.firstAvailableStage ? panel.firstAvailableStage.label : "验收"}
           </Button>
         </div>
         {!panel.canCreateByProjectStatus ? (
@@ -115,6 +113,40 @@ export function ProjectAcceptanceStageList({
             {panel.selectedStageBlockedReason}
           </p>
         ) : null}
+        <div className="mt-3 grid grid-cols-2 gap-1.5">
+          {panel.selectableStageOptions.map((item) => {
+            const disabled = Boolean(
+              item.acceptance || item.constructionStage?.blocked_reason,
+            );
+            const stateLabel = item.acceptance
+              ? item.acceptance.status_label
+              : item.constructionStage?.blocked_reason
+                ? "未解锁"
+                : "可发起";
+
+            return (
+              <button
+                key={item.value}
+                type="button"
+                disabled={panel.actionLoading || disabled}
+                onClick={() => panel.createAcceptanceForStage(item.value)}
+                className={cn(
+                  "min-w-0 rounded-md border px-2 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  disabled
+                    ? "cursor-not-allowed bg-muted/40 text-muted-foreground"
+                    : "bg-background hover:bg-accent",
+                )}
+              >
+                <span className="block truncate text-xs font-medium">
+                  {item.label}
+                </span>
+                <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+                  {stateLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2 [scrollbar-gutter:stable]">

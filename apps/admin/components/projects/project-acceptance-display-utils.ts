@@ -9,6 +9,13 @@ import type {
 } from "@/components/projects/project-acceptance-types";
 import { getPreviewImageSrc } from "@/components/projects/project-acceptance-io";
 
+export type AcceptanceEvidenceSummary = {
+  acceptanceImages: AcceptanceImageItem[];
+  rectificationImages: AcceptanceImageItem[];
+  actionImages: AcceptanceImageItem[];
+  total: number;
+};
+
 export function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -92,6 +99,71 @@ export function getAcceptanceDisplaySections(acceptance: ProjectAcceptance) {
     sort_order: 0,
     items: acceptance.items || [],
   }];
+}
+
+function imageItemsFromPaths(input: {
+  paths: string[];
+  source: AcceptanceImageItem["source"];
+  itemId?: string | null;
+  itemTitle?: string | null;
+}): AcceptanceImageItem[] {
+  return input.paths.map((path) => ({
+    item_id: input.itemId ?? null,
+    item_title: input.itemTitle ?? null,
+    path,
+    url: path,
+    thumb_url: path,
+    source: input.source,
+  }));
+}
+
+export function getAcceptanceEvidenceSummary(
+  acceptance: ProjectAcceptance | null,
+): AcceptanceEvidenceSummary {
+  if (!acceptance) {
+    return {
+      acceptanceImages: [],
+      rectificationImages: [],
+      actionImages: [],
+      total: 0,
+    };
+  }
+
+  const acceptanceImages = acceptance.items.flatMap((item) =>
+    item.image_items?.length
+      ? item.image_items
+      : imageItemsFromPaths({
+        paths: item.images || [],
+        source: "acceptance_item",
+        itemId: item.id,
+        itemTitle: item.title,
+      })
+  );
+  const rectificationImages = acceptance.items.flatMap((item) =>
+    item.rectification_image_items?.length
+      ? item.rectification_image_items
+      : imageItemsFromPaths({
+        paths: item.rectification_images || [],
+        source: "rectification_item",
+        itemId: item.id,
+        itemTitle: item.title,
+      })
+  );
+  const actionImages = (acceptance.actions || []).flatMap((action) =>
+    action.image_items?.length
+      ? action.image_items
+      : imageItemsFromPaths({
+        paths: action.images || [],
+        source: action.action,
+      })
+  );
+
+  return {
+    acceptanceImages,
+    rectificationImages,
+    actionImages,
+    total: acceptanceImages.length + rectificationImages.length + actionImages.length,
+  };
 }
 
 export function notificationVariant(notification: AcceptanceNotification | null | undefined) {

@@ -5,6 +5,8 @@ import { Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { getPreviewImageSrc } from "@/components/projects/project-acceptance-utils";
+import { HoverImagePreview } from "@/components/projects/project-acceptance-image-preview";
+import { cn } from "@/lib/utils";
 
 export function ImageUploadBlock({
   label,
@@ -13,6 +15,7 @@ export function ImageUploadBlock({
   uploading,
   onUpload,
   onRemove,
+  variant = "panel",
 }: {
   label: string;
   images: string[];
@@ -20,12 +23,18 @@ export function ImageUploadBlock({
   uploading: boolean;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemove: (index: number) => void;
+  variant?: "panel" | "inline";
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="min-w-0 rounded-md border bg-background p-3">
+    <div
+      className={cn(
+        "min-w-0",
+        variant === "panel" ? "rounded-md border bg-background p-3" : "",
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor={inputId}>{label}</Label>
         <input
@@ -46,31 +55,54 @@ export function ImageUploadBlock({
           disabled={disabled || uploading}
           onClick={() => inputRef.current?.click()}
         >
-          {uploading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Upload data-icon="inline-start" />}
+          {uploading ? (
+            <Loader2 className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <Upload data-icon="inline-start" />
+          )}
           上传
         </Button>
       </div>
       {images.length > 0 ? (
         <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(64px,64px))] gap-2">
-          {images.map((image, index) => (
-            <div
-              key={`${image}-${index}`}
-              className="group relative size-16 overflow-hidden rounded-md border bg-muted"
-            >
-              <img src={getPreviewImageSrc(image)} alt={label} className="size-full object-cover" />
-              {!disabled ? (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  className="absolute inset-x-1 bottom-1 h-6 px-2 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={() => onRemove(index)}
+          {images.map((image, index) => {
+            const src = getPreviewImageSrc(image);
+            return (
+              <div key={`${image}-${index}`} className="group relative size-16">
+                <HoverImagePreview
+                  src={src}
+                  href={src}
+                  alt={`${label} ${index + 1}`}
+                  caption={`${label} ${index + 1}`}
                 >
-                  删除
-                </Button>
-              ) : null}
-            </div>
-          ))}
+                  <a
+                    href={src}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block size-16 overflow-hidden rounded-md border bg-muted transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`查看${label} ${index + 1}`}
+                  >
+                    <img
+                      src={src}
+                      alt={`${label} ${index + 1}`}
+                      className="size-full object-cover"
+                    />
+                  </a>
+                </HoverImagePreview>
+                {!disabled ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="absolute inset-x-1 bottom-1 h-6 px-2 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
+                    onClick={() => onRemove(index)}
+                  >
+                    删除
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="mt-3 rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
