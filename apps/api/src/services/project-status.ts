@@ -191,7 +191,7 @@ class ProjectStatusService {
       patch.start_date = nextStartDate.trim();
     }
     if (input.payload.action === "start_acceptance") {
-      await constructionStageStatusService.assertProjectReadyForAcceptance({
+      await this.assertProjectReadyForWorkflowAcceptance({
         projectId: input.projectId,
         tenantId,
       });
@@ -290,6 +290,30 @@ class ProjectStatusService {
     }
 
     return value;
+  }
+
+  private async assertProjectReadyForWorkflowAcceptance(input: {
+    projectId: string;
+    tenantId: string;
+  }) {
+    const stages = await constructionStageStatusService
+      .listProjectConstructionStagesForProject({
+        projectId: input.projectId,
+        tenantId: input.tenantId,
+        canReadAcceptance: true,
+        canCreateAcceptance: false,
+      });
+
+    if (stages.required_completed) {
+      return;
+    }
+
+    throw Errors.business(
+      400,
+      "施工阶段未全部完成",
+      ErrorCodes.FINAL_ACCEPTANCE_STAGE_INCOMPLETE,
+      { missing_required_stages: stages.missing_required_stages },
+    );
   }
 
   private async getSignContractCustomer(input: {
