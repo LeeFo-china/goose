@@ -4,6 +4,7 @@ import {
   buildProjectLogEntryNextAction,
 } from "./log-entry";
 import {
+  attachWorkflowOutputsToBootstrapProject,
   enrichWorkflowOutputsForBootstrap,
 } from "./orchestration";
 import {
@@ -28,6 +29,7 @@ const service = {
   getAcceptanceActionLabel,
   getAcceptanceActionPriority,
   selectNextAcceptanceActionStage,
+  attachWorkflowOutputsToBootstrapProject,
   enrichWorkflowOutputsForBootstrap,
 };
 
@@ -202,5 +204,78 @@ describe("employee project detail workflow gates", () => {
         key: "create_acceptance",
       }],
     });
+  });
+
+  test("embeds enriched workflow outputs into bootstrap project payload", () => {
+    const workflowProgress: WorkflowProgressResult = {
+      source: "workflow_runtime",
+      instance_id: "instance-1",
+      instance_status: "completed",
+      current_node_key: "end",
+      current_node_title: "结束",
+      current_node_type: "end",
+      current_business_kind: null,
+      current_stage_code: null,
+      current_gate: null,
+      pending_task_count: 0,
+      actions: [],
+      warnings: [],
+      timeline_nodes: [
+        {
+          node_key: "procedure_demolition",
+          node_title: "拆改",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          status: "done",
+          display: {
+            label: "拆改",
+            status_label: "已完成",
+            status_variant: "success",
+          },
+          attributes: {},
+          actions: [],
+        },
+        {
+          node_key: "end",
+          node_title: "结束",
+          node_type: "end",
+          business_kind: null,
+          status: "done",
+          display: {
+            label: "结束",
+            status_label: "已完成",
+            status_variant: "success",
+          },
+          attributes: {},
+          actions: [],
+        },
+      ],
+    };
+    const workflowState: ProjectWorkflowState = {
+      subject_type: "project",
+      subject_id: "project-1",
+      instance_id: "instance-1",
+      instance_status: "completed",
+      current_node_key: "end",
+      current_node_title: "结束",
+      current_business_kind: null,
+      pending_task_count: 0,
+      actions: [],
+      timeline_nodes: workflowProgress.timeline_nodes,
+    };
+
+    const result = service.attachWorkflowOutputsToBootstrapProject({
+      project: {
+        id: "project-1",
+        status: "completed",
+      },
+      workflowState,
+      workflowProgress,
+    });
+
+    expect(result.workflow_state?.timeline_nodes).toHaveLength(2);
+    expect(result.workflow_progress.timeline_nodes).toHaveLength(2);
+    expect(result.workflow_state).toBe(workflowState);
+    expect(result.workflow_progress).toBe(workflowProgress);
   });
 });

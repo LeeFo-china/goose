@@ -30,7 +30,10 @@ import type {
 export type EmployeeProjectDetailBootstrapResult = {
   project: Awaited<
     ReturnType<typeof projectSer.getEmployeeProjectBootstrapBundle>
-  >["project"];
+  >["project"] & {
+    workflow_state: ProjectWorkflowState;
+    workflow_progress: WorkflowProgressResult;
+  };
   permissions: BootstrapPermissions;
   members: ProjectMembersResult;
   workflow_state: ProjectWorkflowState;
@@ -71,6 +74,20 @@ export function enrichWorkflowOutputsForBootstrap(input: {
     : input.workflowState;
 
   return { workflowProgress, workflowState };
+}
+
+export function attachWorkflowOutputsToBootstrapProject<
+  T extends Record<string, unknown>,
+>(input: {
+  project: T;
+  workflowState: ProjectWorkflowState;
+  workflowProgress: WorkflowProgressResult;
+}) {
+  return {
+    ...input.project,
+    workflow_state: input.workflowState,
+    workflow_progress: input.workflowProgress,
+  };
 }
 
 export async function getBootstrap(this: any, input: {
@@ -184,7 +201,11 @@ export async function getBootstrap(this: any, input: {
   });
 
   return {
-    project,
+    project: attachWorkflowOutputsToBootstrapProject({
+      project,
+      workflowState: enrichedWorkflowOutputs.workflowState,
+      workflowProgress: enrichedWorkflowOutputs.workflowProgress,
+    }),
     permissions,
     members,
     workflow_state: enrichedWorkflowOutputs.workflowState,
