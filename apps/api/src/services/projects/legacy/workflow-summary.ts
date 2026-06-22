@@ -32,6 +32,9 @@ type ProjectWorkflowStateSummary = {
   instance_status: ProjectWorkflowProgress["instance_status"];
   current_node_key: string | null;
   current_node_title: string | null;
+  current_group_key: string | null;
+  current_group_label: string | null;
+  current_group_order: number | null;
   current_business_kind: ProjectWorkflowProgress["current_business_kind"];
   pending_task_count: number;
   actions: ProjectWorkflowProgress["actions"];
@@ -153,7 +156,9 @@ function stripLegacyStageFields(row: Record<string, unknown>): Record<string, un
 async function loadGraphsByRuntimeKey(input: {
   tenantId: string;
   runtimeInstances: WorkflowRuntimeProjectionRow[];
-}): Promise<Map<string, Pick<WorkflowGraphResult, "nodes" | "edges"> | null>> {
+}): Promise<
+  Map<string, Pick<WorkflowGraphResult, "definition" | "nodes" | "edges"> | null>
+> {
   const runtimeByKey = new Map<string, WorkflowRuntimeProjectionRow>();
   for (const runtimeInstance of input.runtimeInstances) {
     runtimeByKey.set(runtimeKey(runtimeInstance), runtimeInstance);
@@ -169,7 +174,9 @@ async function loadGraphsByRuntimeKey(input: {
 
       return [
         key,
-        graph ? { nodes: graph.nodes, edges: graph.edges } : null,
+        graph
+          ? { definition: graph.definition, nodes: graph.nodes, edges: graph.edges }
+          : null,
       ] as const;
     }),
   );
@@ -252,6 +259,9 @@ function buildWorkflowStateSummary(input: {
       input.subjectState?.current_node_key ?? null,
     current_node_title: input.progress.current_node_title ??
       input.subjectState?.current_node_title ?? null,
+    current_group_key: input.progress.current_group_key,
+    current_group_label: input.progress.current_group_label,
+    current_group_order: input.progress.current_group_order,
     current_business_kind: input.progress.current_business_kind ??
       input.subjectState?.current_business_kind ?? null,
     pending_task_count: input.subjectState?.pending_task_count ??

@@ -10,12 +10,19 @@ import {
   type WorkflowAssigneeEmployee,
 } from "@/services/workflow-task-assignee";
 import {
+  buildProjectWorkflowPaymentGate,
+  getWorkflowNodeDisplayTitle,
+  type ProjectWorkflowProgressGate,
+} from "@/services/project-workflow-progress-labels";
+import {
   buildWorkflowTimelineNodeContract,
+  buildWorkflowTimelineNodeGroup,
   enrichWorkflowTimelineNodesWithConstructionStages,
   orderWorkflowTimelineGraphNodes,
   type ConstructionStagesForWorkflowTimeline,
   type WorkflowTimelineNode,
   type WorkflowTimelineNodeCompletion,
+  type WorkflowTimelineNodeGroup,
 } from "@/services/project-workflow-timeline-contract";
 import type { WorkflowBusinessKind, WorkflowInstanceStatus } from "@gooes/domain";
 
@@ -25,15 +32,6 @@ export type WorkflowProgressSource =
   | "workflow_runtime"
   | "missing_runtime"
   | "unavailable";
-
-export type ProjectWorkflowProgressGate = {
-  type: "payment_collection";
-  payment_type: string;
-  payment_label: string;
-  blocked_stage_code: string | null;
-  blocked_stage_label: string | null;
-  blocked_reason?: string;
-};
 
 export type ProjectWorkflowProgressWarning = {
   code: "STALE_SUBJECT_STATE";
@@ -54,6 +52,9 @@ export type ProjectWorkflowProgress = {
   instance_status: WorkflowInstanceStatus | null;
   current_node_key: string | null;
   current_node_title: string | null;
+  current_group_key: string | null;
+  current_group_label: string | null;
+  current_group_order: number | null;
   current_node_type: string | null;
   current_business_kind: WorkflowBusinessKind | string | null;
   current_stage_code: string | null;
@@ -102,24 +103,6 @@ type GetProjectProgressInput = {
   projectId: string;
 };
 
-const PAYMENT_LABELS: Record<string, string> = {
-  deposit: "意向定金",
-  stage_1: "开工首付款",
-  stage_2: "中期进度款",
-  stage_3: "工程尾款",
-  add_on: "后期增项款",
-};
-
-const STAGE_LABELS: Record<string, string> = {
-  demolition: "拆改",
-  plumbing_electrical: "水电",
-  tiling: "瓦工",
-  woodwork: "木工",
-  painting: "油工",
-  installation: "安装",
-  completion: "竣工",
-};
-
 export function buildProjectWorkflowProgressProjection(
   input: BuildProjectWorkflowProgressProjectionInput,
 ): ProjectWorkflowProgress {
@@ -134,6 +117,24 @@ export function buildProjectWorkflowProgressProjection(
     input.subjectState?.current_business_kind ?? null;
   const currentNodeTitle = getWorkflowNodeDisplayTitle(currentNode) ??
     input.subjectState?.current_node_title ?? null;
+  const timelineNodes = buildWorkflowTimelineNodes({
+    graph: input.graph,
+    currentNodeKey,
+    completedNodeKeys: input.completedNodeKeys ?? [],
+    completedNodeActors: input.completedNodeActors ?? [],
+    actions: input.pendingActions,
+    assignees: input.pendingActions
+      .map((action) => ({
+        node_key: readString(action.node_key) ?? "",
+        ...buildWorkflowTaskAssigneeMetadataFromRecord(action),
+      }))
+      .filter((assignee) => assignee.node_key && assignee.assignee_employee_id),
+  });
+  const currentGroup = resolveCurrentTimelineNodeGroup({
+    graph: input.graph,
+    timelineNodes,
+    currentNodeKey,
+  });
   const currentGateBlockedReason = currentNodeKey
     ? input.pendingActions
       .filter((action) => readString(action.node_key) === currentNodeKey)
@@ -149,27 +150,22 @@ export function buildProjectWorkflowProgressProjection(
     instance_status: input.runtimeInstance.status,
     current_node_key: currentNodeKey,
     current_node_title: currentNodeTitle,
+    current_group_key: currentGroup?.key ?? null,
+    current_group_label: currentGroup?.label ?? null,
+    current_group_order: currentGroup?.order ?? null,
     current_node_type: currentNode.node_type,
     current_business_kind: currentBusinessKind,
     current_stage_code: currentNode.node_type === "procedure"
       ? readString(currentNode.config.stage_key)
       : null,
     current_gate: currentBusinessKind === "payment_collection"
-      ? buildPaymentGate(currentNode, input.graph, currentGateBlockedReason)
+      ? buildProjectWorkflowPaymentGate(
+        currentNode,
+        input.graph,
+        currentGateBlockedReason,
+      )
       : null,
-    timeline_nodes: buildWorkflowTimelineNodes({
-      graph: input.graph,
-      currentNodeKey,
-      completedNodeKeys: input.completedNodeKeys ?? [],
-      completedNodeActors: input.completedNodeActors ?? [],
-      actions: input.pendingActions,
-      assignees: input.pendingActions
-        .map((action) => ({
-          node_key: readString(action.node_key) ?? "",
-          ...buildWorkflowTaskAssigneeMetadataFromRecord(action),
-        }))
-        .filter((assignee) => assignee.node_key && assignee.assignee_employee_id),
-    }),
+    timeline_nodes: timelineNodes,
     pending_task_count: input.subjectState?.pending_task_count ??
       input.pendingActions.length,
     actions: input.pendingActions,
@@ -238,6 +234,7 @@ class ProjectWorkflowProgressService {
       ? {
         nodes: graph.nodes,
         edges: graph.edges,
+        definition: graph.definition,
       }
       : null;
     const enrichedGraph = await enrichWorkflowGraphWithFinanceReviewersForTenant({
@@ -271,6 +268,9 @@ function missingRuntimeProgress(
     instance_status: null,
     current_node_key: null,
     current_node_title: null,
+    current_group_key: null,
+    current_group_label: null,
+    current_group_order: null,
     current_node_type: null,
     current_business_kind: null,
     current_stage_code: null,
@@ -289,6 +289,9 @@ export function buildUnavailableProjectWorkflowProgress(): ProjectWorkflowProgre
     instance_status: null,
     current_node_key: null,
     current_node_title: null,
+    current_group_key: null,
+    current_group_label: null,
+    current_group_order: null,
     current_node_type: null,
     current_business_kind: null,
     current_stage_code: null,
@@ -309,6 +312,9 @@ export function toCustomerProjectWorkflowProgress(
     instance_status: progress.instance_status,
     current_node_key: progress.current_node_key,
     current_node_title: progress.current_node_title,
+    current_group_key: progress.current_group_key,
+    current_group_label: progress.current_group_label,
+    current_group_order: progress.current_group_order,
     current_node_type: progress.current_node_type,
     current_business_kind: progress.current_business_kind,
     current_stage_code: progress.current_stage_code,
@@ -346,6 +352,7 @@ export function buildWorkflowTimelineNodes(input: {
 }): WorkflowTimelineNode[] {
   if (!input.graph) return [];
 
+  const group = resolveWorkflowGraphGroup(input.graph);
   const completedNodeKeys = new Set(input.completedNodeKeys ?? []);
   const completionsByNodeKey = new Map(
     (input.completedNodeActors ?? [])
@@ -380,6 +387,7 @@ export function buildWorkflowTimelineNodes(input: {
           currentNodeKey: input.currentNodeKey,
           completedNodeKeys,
         }),
+        group,
         assignee,
         completion,
         actions: actionsByNodeKey.get(node.node_key) ?? [],
@@ -417,41 +425,25 @@ function withWorkflowNodeDisplayTitle(
     : node;
 }
 
-function getWorkflowNodeDisplayTitle(
-  node: WorkflowProgressGraphNode,
-): string | null {
-  if (node.business_kind !== "payment_collection") {
-    return node.title || null;
+function resolveCurrentTimelineNodeGroup(input: {
+  graph: WorkflowProgressGraph | null;
+  timelineNodes: WorkflowTimelineNode[];
+  currentNodeKey: string | null;
+}): WorkflowTimelineNodeGroup | null {
+  if (input.currentNodeKey) {
+    const currentTimelineNode = input.timelineNodes.find((node) =>
+      node.node_key === input.currentNodeKey
+    );
+    if (currentTimelineNode) return currentTimelineNode.group;
   }
 
-  const paymentType = readString(node.config.payment_type);
-  return paymentType ? PAYMENT_LABELS[paymentType] ?? node.title : node.title;
+  return input.graph ? resolveWorkflowGraphGroup(input.graph) : null;
 }
 
-function buildPaymentGate(
-  currentNode: WorkflowProgressGraphNode,
-  graph: WorkflowProgressGraph | null,
-  blockedReason?: string,
-): ProjectWorkflowProgressGate {
-  const paymentType = readString(currentNode.config.payment_type) ?? "deposit";
-  const nextNode = graph?.edges
-    .filter((edge) => edge.source_node_id === currentNode.id)
-    .map((edge) =>
-      graph.nodes.find((node) => node.id === edge.target_node_id) ?? null
-    )
-    .find((node): node is WorkflowProgressGraphNode => Boolean(node)) ?? null;
-  const blockedStageCode = readString(nextNode?.config.stage_key);
-
-  return {
-    type: "payment_collection",
-    payment_type: paymentType,
-    payment_label: getWorkflowNodeDisplayTitle(currentNode) ?? currentNode.title,
-    blocked_stage_code: blockedStageCode,
-    blocked_stage_label: blockedStageCode
-      ? STAGE_LABELS[blockedStageCode] ?? blockedStageCode
-      : null,
-    ...(blockedReason ? { blocked_reason: blockedReason } : {}),
-  };
+function resolveWorkflowGraphGroup(
+  graph: WorkflowProgressGraph,
+): WorkflowTimelineNodeGroup {
+  return buildWorkflowTimelineNodeGroup(graph.definition?.category ?? null);
 }
 
 function resolveTimelineNodeStatus(input: {

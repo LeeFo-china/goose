@@ -6,6 +6,11 @@ const baseNode = {
   node_title: "节点",
   node_type: "procedure",
   business_kind: "procedure_template",
+  group: {
+    key: "construction",
+    label: "施工阶段",
+    order: 20,
+  },
   status: "pending",
   display: {
     label: "节点",

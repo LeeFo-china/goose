@@ -32,6 +32,7 @@ import {
 import { attachCurrentConstructionStages } from "./current-stage";
 import { attachProjectDisplayStatuses } from "./display-status";
 import { attachProjectWorkflowSummaries } from "./workflow-summary";
+import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
 
 export async function listProjects(this: any, input: {
     authContext: AuthContext;
@@ -128,6 +129,9 @@ export function projectListCacheKey(this: any, authContext: AuthContext, query: 
         keyword: query.keyword?.trim() ?? null,
         ownership: query.ownership ?? null,
         work_scope: query.work_scope ?? null,
+        workflow_group_key: query.workflow_group_key ?? null,
+        workflow_node_key: query.workflow_node_key ?? null,
+        workflow_instance_status: query.workflow_instance_status ?? null,
         mode: query.mode ?? null,
         roleCodes,
         permissions,
@@ -176,11 +180,24 @@ export async function loadProjects(this: any, input: {
 }): Promise<ProjectListResult> {
     const startedAt = Date.now();
     const tenantId = input.tenantId;
-    const { page, pageSize, status, keyword, work_scope: workScope, mode } = input.query;
+    const {
+        page,
+        pageSize,
+        status,
+        keyword,
+        work_scope: workScope,
+        mode,
+        workflow_group_key: workflowGroupKey,
+        workflow_node_key: workflowNodeKey,
+        workflow_instance_status: workflowInstanceStatus,
+    } = input.query;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     const scopeStartedAt = Date.now();
-    const [visibleProjectIds, todayProjectIds] = await Promise.all([
+    const hasWorkflowFilters = Boolean(
+        workflowGroupKey || workflowNodeKey || workflowInstanceStatus,
+    );
+    const [visibleProjectIds, todayProjectIds, workflowProjectIds] = await Promise.all([
         accessPolicyService.getVisibleProjectIdsByOwnership(
             input.authContext,
             "project.read",
@@ -189,6 +206,14 @@ export async function loadProjects(this: any, input: {
         workScope === "today"
             ? projectRepository.listTodayWorkProjectIds(tenantId)
             : Promise.resolve(null),
+        hasWorkflowFilters
+            ? workflowSubjectStateRepository.listProjectIdsByWorkflowFilters({
+                tenantId,
+                workflowGroupKey,
+                workflowNodeKey,
+                workflowInstanceStatus,
+            })
+            : Promise.resolve(null),
     ]);
     const scopeDurationMs = Date.now() - scopeStartedAt;
     const filters = {
@@ -196,7 +221,7 @@ export async function loadProjects(this: any, input: {
         visibleProjectIds,
         status,
         keyword: keyword?.trim(),
-        projectIds: todayProjectIds,
+        projectIds: intersectProjectIdFilters(todayProjectIds, workflowProjectIds),
     };
     if (mode === "home") {
         const rowsStartedAt = Date.now();
@@ -244,6 +269,7 @@ export async function loadProjects(this: any, input: {
                 totalMs: Date.now() - startedAt,
                 visibleProjectCount: visibleProjectIds?.length ?? null,
                 todayProjectCount: todayProjectIds?.length ?? null,
+                workflowProjectCount: workflowProjectIds?.length ?? null,
                 rowCount: rows.length,
                 hasMore: hasMore ? 1 : 0,
             },
@@ -278,4 +304,15 @@ export async function loadProjects(this: any, input: {
 }
 
 export async function searchProjectsByName(this: any): Promise<void> {
+}
+
+function intersectProjectIdFilters(
+    left: string[] | null,
+    right: string[] | null,
+): string[] | null {
+    if (left === null) return right;
+    if (right === null) return left;
+
+    const rightIds = new Set(right);
+    return left.filter((id) => rightIds.has(id));
 }

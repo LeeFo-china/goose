@@ -20,6 +20,12 @@ const project: ProjectAcceptanceProjectRow = {
   status: "constructing",
 };
 
+const workflowGroup = {
+  key: "construction",
+  label: "施工阶段",
+  order: 20,
+};
+
 function confirmedAcceptance(stageCode: ProjectLogStageCode): ProjectAcceptanceRow {
   return {
     id: `acceptance-${stageCode}`,
@@ -57,6 +63,9 @@ function workflowProgress(
     instance_status: "running",
     current_node_key: "procedure_plumbing_electrical",
     current_node_title: "水电",
+    current_group_key: "construction",
+    current_group_label: "施工阶段",
+    current_group_order: 20,
     current_node_type: "procedure",
     current_business_kind: "procedure_template",
     current_stage_code: "plumbing_electrical",
@@ -80,6 +89,7 @@ function procedureTimelineNode(input: {
     node_title: input.title,
     node_type: "procedure",
     business_kind: "procedure_template",
+    group: workflowGroup,
     status: input.status ?? "pending",
     display: {
       label: input.title,

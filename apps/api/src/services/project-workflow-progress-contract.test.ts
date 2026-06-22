@@ -5,6 +5,10 @@ import {
 } from "./project-workflow-progress";
 
 const procedureGraph = {
+  definition: {
+    workflow_key: "construction_main",
+    category: "construction",
+  },
   nodes: [
     {
       id: "node-plumbing",
@@ -159,6 +163,11 @@ describe("project workflow node contract", () => {
     });
 
     expect(progress.timeline_nodes[0]).toMatchObject({
+      group: {
+        key: "construction",
+        label: "施工阶段",
+        order: 20,
+      },
       display: {
         label: "水电",
         status_label: "当前",
@@ -176,6 +185,11 @@ describe("project workflow node contract", () => {
         label: "水电施工",
         task_id: "task-1",
       }],
+    });
+    expect(progress).toMatchObject({
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
+      current_group_order: 20,
     });
   });
 

@@ -154,6 +154,9 @@ class WorkflowSubjectsService {
       current_node_key: state.current_node_key,
       current_node_title: currentTimelineNode?.display.label ??
         currentTimelineNode?.node_title ?? state.current_node_title,
+      current_group_key: currentTimelineNode?.group.key ?? null,
+      current_group_label: currentTimelineNode?.group.label ?? null,
+      current_group_order: currentTimelineNode?.group.order ?? null,
       current_business_kind: state.current_business_kind,
       pending_task_count: state.pending_task_count,
       actions,
@@ -196,6 +199,7 @@ class WorkflowSubjectsService {
 
     const workflowGraph = graph
       ? {
+        definition: graph.definition,
         nodes: graph.nodes,
         edges: graph.edges,
       }

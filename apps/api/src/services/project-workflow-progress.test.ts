@@ -6,6 +6,10 @@ import {
 } from "./project-workflow-progress";
 
 const graph = {
+  definition: {
+    workflow_key: "construction_main",
+    category: "construction",
+  },
   nodes: [
     {
       id: "node-plumbing",
@@ -250,6 +254,9 @@ describe("buildProjectWorkflowProgressProjection", () => {
       instance_status: null,
       current_node_key: null,
       current_node_title: null,
+      current_group_key: null,
+      current_group_label: null,
+      current_group_order: null,
       current_node_type: null,
       current_business_kind: null,
       current_stage_code: null,

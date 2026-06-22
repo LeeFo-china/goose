@@ -6,6 +6,12 @@ import {
 import type { ProjectWorkflowProgress } from "./project-workflow-progress";
 import type { WorkflowTimelineNode } from "./project-workflow-timeline-contract";
 
+const workflowGroup = {
+  key: "construction",
+  label: "施工阶段",
+  order: 20,
+};
+
 function procedureTimelineNode(input: {
   stageCode: string;
   title: string;
@@ -17,6 +23,7 @@ function procedureTimelineNode(input: {
     node_title: input.title,
     node_type: "procedure",
     business_kind: "procedure_template",
+    group: workflowGroup,
     status: input.status ?? "current",
     display: {
       label: input.title,
@@ -41,6 +48,9 @@ function workflowProgress(
     instance_status: "running",
     current_node_key: "procedure_plumbing_electrical",
     current_node_title: "水电",
+    current_group_key: "construction",
+    current_group_label: "施工阶段",
+    current_group_order: 20,
     current_node_type: "procedure",
     current_business_kind: "procedure_template",
     current_stage_code: "plumbing_electrical",

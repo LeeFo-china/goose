@@ -33,6 +33,12 @@ const service = {
   enrichWorkflowOutputsForBootstrap,
 };
 
+const workflowGroup = {
+  key: "construction",
+  label: "施工阶段",
+  order: 20,
+};
+
 const permissions = {
   employee_id: "employee-1",
   can_read_project: true,
@@ -131,6 +137,9 @@ describe("employee project detail workflow gates", () => {
       instance_status: "running",
       current_node_key: "procedure_tiling",
       current_node_title: "瓦工",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
+      current_group_order: 20,
       current_node_type: "procedure",
       current_business_kind: "procedure_template",
       current_stage_code: "tiling",
@@ -143,6 +152,7 @@ describe("employee project detail workflow gates", () => {
         node_title: "水电",
         node_type: "procedure",
         business_kind: "procedure_template",
+        group: workflowGroup,
         status: "done",
         display: {
           label: "水电",
@@ -164,6 +174,9 @@ describe("employee project detail workflow gates", () => {
       instance_status: "running",
       current_node_key: "procedure_tiling",
       current_node_title: "瓦工",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
+      current_group_order: 20,
       current_business_kind: "procedure_template",
       pending_task_count: 1,
       actions: [],
@@ -213,6 +226,9 @@ describe("employee project detail workflow gates", () => {
       instance_status: "completed",
       current_node_key: "end",
       current_node_title: "结束",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
+      current_group_order: 20,
       current_node_type: "end",
       current_business_kind: null,
       current_stage_code: null,
@@ -226,6 +242,7 @@ describe("employee project detail workflow gates", () => {
           node_title: "拆改",
           node_type: "procedure",
           business_kind: "procedure_template",
+          group: workflowGroup,
           status: "done",
           display: {
             label: "拆改",
@@ -240,6 +257,7 @@ describe("employee project detail workflow gates", () => {
           node_title: "结束",
           node_type: "end",
           business_kind: null,
+          group: workflowGroup,
           status: "done",
           display: {
             label: "结束",
@@ -258,6 +276,9 @@ describe("employee project detail workflow gates", () => {
       instance_status: "completed",
       current_node_key: "end",
       current_node_title: "结束",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
+      current_group_order: 20,
       current_business_kind: null,
       pending_task_count: 0,
       actions: [],

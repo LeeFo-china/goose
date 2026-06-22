@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   WorkflowBusinessKind,
+  WorkflowCategory,
   WorkflowInstanceStatus,
   WorkflowSubjectType,
 } from "@gooes/domain";
@@ -13,6 +14,7 @@ type UntypedTable = {
   in: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
   limit: (...args: unknown[]) => UntypedTable;
+  range: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
   single: () => Promise<{ data: unknown; error: unknown }>;
   then: Promise<{
@@ -100,6 +102,13 @@ const WORKFLOW_RUNTIME_PROJECTION_SELECT = [
   "created_at",
   "updated_at",
 ].join(", ");
+
+const WORKFLOW_PROJECT_FILTER_SELECT = [
+  "subject_id",
+  "definition:workflow_definitions!inner(category)",
+].join(", ");
+
+const WORKFLOW_PROJECT_FILTER_PAGE_SIZE = 1000;
 
 function table(name: string) {
   return (SupabaseDB.getAdminClient() as unknown as UntypedSupabaseClient)
@@ -244,6 +253,62 @@ class WorkflowSubjectStateRepository {
       ...runningInstances,
       ...completedInstances,
     ]);
+  }
+
+  async listProjectIdsByWorkflowFilters(input: {
+    tenantId: string;
+    workflowGroupKey?: WorkflowCategory;
+    workflowNodeKey?: string;
+    workflowInstanceStatus?: WorkflowInstanceStatus;
+  }): Promise<string[]> {
+    const subjectIds: string[] = [];
+    let from = 0;
+    let total: number | null = null;
+
+    do {
+      const to = from + WORKFLOW_PROJECT_FILTER_PAGE_SIZE - 1;
+      const { data, error, count } = await this
+        .buildProjectWorkflowFilterQuery(input)
+        .range(from, to);
+
+      if (error) {
+        throw Errors.dbError("查询项目流程筛选范围失败", error);
+      }
+
+      if (total === null) total = count ?? 0;
+      subjectIds.push(
+        ...((data ?? []) as Array<{ subject_id?: string | null }>)
+          .map((item) => item.subject_id)
+          .filter((id): id is string => Boolean(id)),
+      );
+      from += WORKFLOW_PROJECT_FILTER_PAGE_SIZE;
+    } while (total !== null && from < total);
+
+    return Array.from(new Set(subjectIds));
+  }
+
+  private buildProjectWorkflowFilterQuery(input: {
+    tenantId: string;
+    workflowGroupKey?: WorkflowCategory;
+    workflowNodeKey?: string;
+    workflowInstanceStatus?: WorkflowInstanceStatus;
+  }): UntypedTable {
+    let query = table("workflow_subject_states")
+      .select(WORKFLOW_PROJECT_FILTER_SELECT, { count: "exact" })
+      .eq("tenant_id", input.tenantId)
+      .eq("subject_type", "project");
+
+    if (input.workflowGroupKey) {
+      query = query.eq("definition.category", input.workflowGroupKey);
+    }
+    if (input.workflowNodeKey) {
+      query = query.eq("current_node_key", input.workflowNodeKey);
+    }
+    if (input.workflowInstanceStatus) {
+      query = query.eq("instance_status", input.workflowInstanceStatus);
+    }
+
+    return query.order("updated_at", { ascending: false });
   }
 
   private async listLatestRuntimeInstancesBySubjectIdsAndStatus(input: {

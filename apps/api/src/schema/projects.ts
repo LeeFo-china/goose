@@ -7,6 +7,8 @@ import {
   PROJECT_REFERRAL_RATE_BPS_MAX,
   PROJECT_REFERRAL_RATE_BPS_MIN,
   PROJECT_VISIBILITY_STATUS_VALUES,
+  WORKFLOW_CATEGORY_VALUES,
+  WORKFLOW_INSTANCE_STATUS_VALUES,
 } from "@gooes/domain";
 
 function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
@@ -171,6 +173,17 @@ export const ProjectListQuerySchema = PaginationQuerySchema.extend({
   work_scope: optionalQueryValue(z.enum(["all", "today"], {
     message: "work_scope must be one of: all, today",
   })),
+  workflow_group_key: optionalQueryValue(z.enum(WORKFLOW_CATEGORY_VALUES, {
+    message: "无效的流程阶段筛选",
+  })),
+  workflow_node_key: optionalQueryValue(
+    z.string().trim().min(1, "流程节点不能为空").max(120, "流程节点过长"),
+  ),
+  workflow_instance_status: optionalQueryValue(
+    z.enum(WORKFLOW_INSTANCE_STATUS_VALUES, {
+      message: "无效的流程实例状态",
+    }),
+  ),
   mode: optionalQueryValue(z.enum(["home"], {
     message: "mode must be one of: home",
   })),

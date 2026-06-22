@@ -1,4 +1,8 @@
-import type { WorkflowBusinessKind } from "@gooes/domain";
+import {
+  WorkflowCategoryConfig,
+  type WorkflowBusinessKind,
+  type WorkflowCategory,
+} from "@gooes/domain";
 import type { WorkflowAssigneeEmployee } from "@/services/workflow-task-assignee";
 
 type JsonObject = Record<string, unknown>;
@@ -33,6 +37,12 @@ export type WorkflowTimelineNodeAttributes = {
   assignee_employee_name?: string | null;
 };
 
+export type WorkflowTimelineNodeGroup = {
+  key: string;
+  label: string;
+  order: number;
+};
+
 export type WorkflowTimelineNodeAction = {
   key: string;
   label: string;
@@ -55,6 +65,7 @@ export type WorkflowTimelineNode = {
   node_title: string;
   node_type: string | null;
   business_kind: WorkflowBusinessKind | string | null;
+  group: WorkflowTimelineNodeGroup;
   status: WorkflowTimelineNodeStatus;
   display: WorkflowTimelineNodeDisplay;
   attributes: WorkflowTimelineNodeAttributes;
@@ -105,6 +116,7 @@ export type ConstructionStagesForWorkflowTimeline = {
 export function buildWorkflowTimelineNodeContract(input: {
   node: WorkflowTimelineGraphNodeProjection;
   status: WorkflowTimelineNodeStatus;
+  group?: WorkflowTimelineNodeGroup;
   assignee?: WorkflowTimelineNodeAssignee;
   completion?: WorkflowTimelineNodeCompletion;
   actions?: Array<Record<string, unknown>>;
@@ -123,6 +135,7 @@ export function buildWorkflowTimelineNodeContract(input: {
     node_title: input.node.title,
     node_type: input.node.node_type,
     business_kind: input.node.business_kind,
+    group: input.group ?? buildWorkflowTimelineNodeGroup(null),
     status: input.status,
     display: buildTimelineNodeDisplay(input.node.title, input.status),
     attributes,
@@ -136,6 +149,24 @@ export function buildWorkflowTimelineNodeContract(input: {
           : {}),
       }
       : {}),
+  };
+}
+
+export function buildWorkflowTimelineNodeGroup(
+  category: string | null | undefined,
+): WorkflowTimelineNodeGroup {
+  if (isWorkflowCategory(category)) {
+    return {
+      key: category,
+      label: WorkflowCategoryConfig[category].label,
+      order: WORKFLOW_GROUP_ORDER[category] ?? 100,
+    };
+  }
+
+  return {
+    key: "workflow",
+    label: "流程阶段",
+    order: 100,
   };
 }
 
@@ -404,4 +435,18 @@ function readNonNegativeNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : null;
+}
+
+const WORKFLOW_GROUP_ORDER: Record<WorkflowCategory, number> = {
+  main: 0,
+  sales: 0,
+  signing: 10,
+  construction: 20,
+  procedure: 20,
+  approval: 30,
+  acceptance: 40,
+};
+
+function isWorkflowCategory(value: unknown): value is WorkflowCategory {
+  return typeof value === "string" && value in WorkflowCategoryConfig;
 }

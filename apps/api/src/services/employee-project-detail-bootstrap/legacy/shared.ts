@@ -42,6 +42,9 @@ export type ProjectWorkflowState = {
   instance_status?: string | null;
   current_node_key?: string | null;
   current_node_title?: string | null;
+  current_group_key?: string | null;
+  current_group_label?: string | null;
+  current_group_order?: number | null;
   current_business_kind?: string | null;
   pending_task_count?: number | null;
   actions: Array<Record<string, unknown>>;

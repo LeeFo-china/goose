@@ -88,6 +88,8 @@ describe("attachProjectWorkflowSummaries", () => {
     expect(item.workflow_progress).toMatchObject({
       source: "workflow_runtime",
       instance_id: "instance-1",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
       current_node_key: "procedure_plumbing_electrical",
       current_node_title: "水电",
       current_stage_code: "plumbing_electrical",
@@ -96,6 +98,8 @@ describe("attachProjectWorkflowSummaries", () => {
       subject_type: "project",
       subject_id: "project-1",
       instance_id: "instance-1",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
       current_node_key: "procedure_plumbing_electrical",
       current_node_title: "水电",
     });
@@ -110,11 +114,13 @@ describe("attachProjectWorkflowSummaries", () => {
     ).toMatchObject([
       {
         node_key: "procedure_demolition",
+        group: { key: "construction", label: "施工阶段", order: 20 },
         display: { label: "拆改", status_label: "已完成" },
         attributes: { stage_code: "demolition", acceptance_enabled: false },
       },
       {
         node_key: "procedure_plumbing_electrical",
+        group: { key: "construction", label: "施工阶段", order: 20 },
         status: "current",
         display: { label: "水电", status_label: "当前" },
         attributes: {

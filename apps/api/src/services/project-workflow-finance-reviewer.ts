@@ -1,5 +1,10 @@
 type JsonObject = Record<string, unknown>;
 
+export type WorkflowFinanceReviewerGraphDefinition = {
+  workflow_key?: string | null;
+  category?: string | null;
+};
+
 export type WorkflowFinanceReviewerGraphNode = {
   id: string;
   node_key: string;
@@ -10,6 +15,7 @@ export type WorkflowFinanceReviewerGraphNode = {
 };
 
 export type WorkflowFinanceReviewerGraph = {
+  definition?: WorkflowFinanceReviewerGraphDefinition | null;
   nodes: WorkflowFinanceReviewerGraphNode[];
   edges: Array<{
     source_node_id: string;
