@@ -60,6 +60,13 @@ export type ProjectRecord = {
   property?: PropertyRelation | PropertyRelation[] | null;
   designer?: RelationPerson | RelationPerson[] | null;
   supervisor?: RelationPerson | RelationPerson[] | null;
+  workflow_progress?: {
+    instance_status?: string | null;
+    current_group_key?: string | null;
+    current_group_label?: string | null;
+    current_node_key?: string | null;
+    current_node_title?: string | null;
+  } | null;
   members?: Array<{
     id: string;
     employee_id: string;

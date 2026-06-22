@@ -1,6 +1,10 @@
 import { type ProjectRecord } from "@/components/projects/project-mutations";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { ProjectsClientShell } from "@/components/projects/projects-client-shell";
+import {
+  emptyWorkflowFilters,
+  type ProjectWorkflowFiltersData,
+} from "@/components/projects/project-list-filter-utils";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -18,9 +22,11 @@ type ProjectListData = {
 
 type ProjectPageSearchParams = {
   page?: string;
-  status?: string;
   ownership?: string;
   keyword?: string;
+  workflow_group_key?: string;
+  workflow_node_key?: string;
+  workflow_instance_status?: string;
 };
 
 function normalizePage(value: string | undefined) {
@@ -39,16 +45,22 @@ async function getProjects(params: ProjectPageSearchParams) {
   }
 
   const page = normalizePage(params.page);
-  const status = params.status?.trim() || "";
   const ownership = params.ownership?.trim() || "";
   const keyword = params.keyword?.trim() || "";
+  const workflowGroupKey = params.workflow_group_key?.trim() || "";
+  const workflowNodeKey = params.workflow_node_key?.trim() || "";
+  const workflowInstanceStatus = params.workflow_instance_status?.trim() || "";
   const query = new URLSearchParams({
     page: String(page),
     pageSize: "20",
   });
-  if (status) query.set("status", status);
   if (ownership) query.set("ownership", ownership);
   if (keyword) query.set("keyword", keyword);
+  if (workflowGroupKey) query.set("workflow_group_key", workflowGroupKey);
+  if (workflowNodeKey) query.set("workflow_node_key", workflowNodeKey);
+  if (workflowInstanceStatus) {
+    query.set("workflow_instance_status", workflowInstanceStatus);
+  }
 
   try {
     const response = await fetch(buildBackendUrl(`/projects?${query}`), {
@@ -74,6 +86,49 @@ async function getProjects(params: ProjectPageSearchParams) {
   }
 }
 
+async function getProjectWorkflowFilters(
+  params: Pick<ProjectPageSearchParams, "ownership">,
+) {
+  const token = await getAdminToken();
+  if (!token) {
+    return {
+      filters: emptyWorkflowFilters(),
+      error: "缺少登录凭证",
+    };
+  }
+
+  const query = new URLSearchParams();
+  const ownership = params.ownership?.trim() || "";
+  if (ownership) query.set("ownership", ownership);
+  const queryString = query.toString();
+
+  try {
+    const response = await fetch(
+      buildBackendUrl(
+        queryString
+          ? `/projects/workflow-filters?${queryString}`
+          : "/projects/workflow-filters",
+      ),
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      },
+    );
+    const payload = await parseBackendJson<ProjectWorkflowFiltersData>(response);
+    return {
+      filters: payload.data || emptyWorkflowFilters(),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      filters: emptyWorkflowFilters(),
+      error: error instanceof Error ? error.message : "项目流程筛选项加载失败",
+    };
+  }
+}
+
 export default async function ProjectsPage({
   searchParams,
 }: {
@@ -83,20 +138,31 @@ export default async function ProjectsPage({
   if (accessDenied) return accessDenied;
 
   const params = await searchParams;
-  const status = params.status?.trim() || "";
   const ownership = params.ownership?.trim() || "";
   const keyword = params.keyword?.trim() || "";
-  const { list, pagination, error } = await getProjects(params);
+  const workflowGroupKey = params.workflow_group_key?.trim() || "";
+  const workflowNodeKey = params.workflow_node_key?.trim() || "";
+  const workflowInstanceStatus = params.workflow_instance_status?.trim() || "";
+  const [
+    { list, pagination, error: listError },
+    { filters: workflowFilters, error: filtersError },
+  ] = await Promise.all([
+    getProjects(params),
+    getProjectWorkflowFilters(params),
+  ]);
 
   return (
     <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
       <ProjectsClientShell
         projects={list}
         pagination={pagination}
-        status={status}
         ownership={ownership}
         keyword={keyword}
-        error={error}
+        workflowGroupKey={workflowGroupKey}
+        workflowNodeKey={workflowNodeKey}
+        workflowInstanceStatus={workflowInstanceStatus}
+        workflowFilters={workflowFilters}
+        error={listError ?? filtersError}
       />
     </div>
   );

@@ -15,6 +15,7 @@ import {
   ProjectRowActions,
   type ProjectRecord,
 } from "@/components/projects/project-mutations";
+import { projectWorkflowSummary } from "@/components/projects/project-list-workflow-display";
 
 const statusMeta: Record<string, {
   label: string;
@@ -184,6 +185,31 @@ export function ProjectsTable({
       },
     },
     {
+      id: "workflow",
+      header: "流程",
+      cell: ({ row }) => {
+        const summary = projectWorkflowSummary(row.original);
+        return (
+          <div className="flex min-w-[140px] flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <Badge variant="outline" className="whitespace-nowrap">
+                {summary.groupLabel}
+              </Badge>
+              <span className="truncate text-sm font-medium">
+                {summary.nodeLabel}
+              </span>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {summary.statusLabel}
+            </span>
+          </div>
+        );
+      },
+      meta: {
+        cellClassName: "min-w-[180px]",
+      },
+    },
+    {
       id: "budget",
       header: "预算",
       cell: ({ row }) => (
@@ -239,7 +265,7 @@ export function ProjectsTable({
       columns={columns}
       data={projects}
       emptyText="没有符合条件的项目"
-      minWidth="min-w-[1180px]"
+      minWidth="min-w-[1320px]"
       tableClassName="border-t-0"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
     />

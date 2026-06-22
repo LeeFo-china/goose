@@ -1,12 +1,15 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import {
-  PROJECT_STATUS_VALUES,
-  ProjectStatusConfig,
-} from "@gooes/domain";
 import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
+import {
+  buildProjectsHref,
+  workflowGroupOptions,
+  workflowInstanceStatusOptions,
+  workflowNodeOptionsForGroup,
+  type ProjectWorkflowFiltersData,
+} from "@/components/projects/project-list-filter-utils";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -24,14 +27,6 @@ type Pagination = {
 
 type Navigate = (href: string) => void;
 
-const statusOptions = [
-  ["", "全部状态"],
-  ...PROJECT_STATUS_VALUES.map((value) => [
-    value,
-    ProjectStatusConfig[value].label,
-  ] as const),
-] as const;
-
 const ownershipOptions = [
   ["", "默认可见"],
   ["self", "只看自己"],
@@ -40,84 +35,151 @@ const ownershipOptions = [
 
 const flatControlClassName = "bg-card shadow-none";
 
-function buildProjectsHref(input: {
-  page?: number;
-  status?: string;
-  ownership?: string;
-  keyword?: string;
-}) {
-  const params = new URLSearchParams();
-  if (input.page && input.page > 1) params.set("page", String(input.page));
-  if (input.status) params.set("status", input.status);
-  if (input.ownership) params.set("ownership", input.ownership);
-  if (input.keyword) params.set("keyword", input.keyword);
-  const query = params.toString();
-  return query ? `/projects?${query}` : "/projects";
-}
-
 export function ProjectFilters({
-  status,
   ownership,
   keyword,
+  workflowGroupKey,
+  workflowNodeKey,
+  workflowInstanceStatus,
+  workflowFilters,
   pending,
   onNavigate,
 }: {
-  status: string;
   ownership: string;
   keyword: string;
+  workflowGroupKey: string;
+  workflowNodeKey: string;
+  workflowInstanceStatus: string;
+  workflowFilters: ProjectWorkflowFiltersData;
   pending: boolean;
   onNavigate: Navigate;
 }) {
-  const [selectedStatus, setSelectedStatus] = useState(status);
   const [selectedOwnership, setSelectedOwnership] = useState(ownership);
   const [selectedKeyword, setSelectedKeyword] = useState(keyword);
+  const [selectedWorkflowGroupKey, setSelectedWorkflowGroupKey] =
+    useState(workflowGroupKey);
+  const [selectedWorkflowNodeKey, setSelectedWorkflowNodeKey] =
+    useState(workflowNodeKey);
+  const [selectedWorkflowInstanceStatus, setSelectedWorkflowInstanceStatus] =
+    useState(workflowInstanceStatus);
+  const groupOptions = workflowGroupOptions(workflowFilters);
+  const nodeOptions = workflowNodeOptionsForGroup(
+    workflowFilters,
+    selectedWorkflowGroupKey,
+  );
+  const instanceStatusOptions = workflowInstanceStatusOptions(workflowFilters);
 
   useEffect(() => {
-    setSelectedStatus(status);
     setSelectedOwnership(ownership);
     setSelectedKeyword(keyword);
-  }, [keyword, ownership, status]);
+    setSelectedWorkflowGroupKey(workflowGroupKey);
+    setSelectedWorkflowNodeKey(workflowNodeKey);
+    setSelectedWorkflowInstanceStatus(workflowInstanceStatus);
+  }, [
+    keyword,
+    ownership,
+    workflowGroupKey,
+    workflowInstanceStatus,
+    workflowNodeKey,
+  ]);
 
   function applySelectFilters(input: {
-    status?: string;
     ownership?: string;
+    workflowGroupKey?: string;
+    workflowNodeKey?: string;
+    workflowInstanceStatus?: string;
   }) {
     onNavigate(buildProjectsHref({
-      status: input.status ?? status,
       ownership: input.ownership ?? ownership,
       keyword,
+      workflowGroupKey: input.workflowGroupKey ?? workflowGroupKey,
+      workflowNodeKey: input.workflowNodeKey ?? workflowNodeKey,
+      workflowInstanceStatus: input.workflowInstanceStatus ??
+        workflowInstanceStatus,
     }));
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onNavigate(buildProjectsHref({
-      status: selectedStatus,
       ownership: selectedOwnership,
       keyword: selectedKeyword.trim(),
+      workflowGroupKey: selectedWorkflowGroupKey,
+      workflowNodeKey: selectedWorkflowNodeKey,
+      workflowInstanceStatus: selectedWorkflowInstanceStatus,
     }));
   }
 
   return (
     <form
       onSubmit={submit}
-      className="grid gap-2 md:grid-cols-2 xl:grid-cols-[150px_150px_minmax(260px,1fr)_72px]"
+      className="grid gap-2 md:grid-cols-2 xl:grid-cols-[150px_170px_150px_150px_minmax(220px,1fr)_72px]"
     >
-      <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="ownership" value={selectedOwnership} />
+      <input
+        type="hidden"
+        name="workflow_group_key"
+        value={selectedWorkflowGroupKey}
+      />
+      <input
+        type="hidden"
+        name="workflow_node_key"
+        value={selectedWorkflowNodeKey}
+      />
+      <input
+        type="hidden"
+        name="workflow_instance_status"
+        value={selectedWorkflowInstanceStatus}
+      />
       <FormSelect
-        id="project-status-filter"
-        value={selectedStatus || "__all"}
+        id="project-workflow-group-filter"
+        value={selectedWorkflowGroupKey || "__all"}
         disabled={pending}
         triggerClassName={flatControlClassName}
-        options={statusOptions.map(([value, label]) => ({
-          value: value || "__all",
-          label,
-        }))}
+        options={[
+          { value: "__all", label: "全部流程阶段" },
+          ...groupOptions,
+        ]}
         onChange={(value) => {
-          const nextStatus = value === "__all" ? "" : value;
-          setSelectedStatus(nextStatus);
-          applySelectFilters({ status: nextStatus });
+          const nextWorkflowGroupKey = value === "__all" ? "" : value;
+          setSelectedWorkflowGroupKey(nextWorkflowGroupKey);
+          setSelectedWorkflowNodeKey("");
+          applySelectFilters({
+            workflowGroupKey: nextWorkflowGroupKey,
+            workflowNodeKey: "",
+          });
+        }}
+      />
+      <FormSelect
+        id="project-workflow-node-filter"
+        value={selectedWorkflowNodeKey || "__all"}
+        disabled={pending}
+        triggerClassName={flatControlClassName}
+        options={[
+          { value: "__all", label: "全部当前节点" },
+          ...nodeOptions,
+        ]}
+        onChange={(value) => {
+          const nextWorkflowNodeKey = value === "__all" ? "" : value;
+          setSelectedWorkflowNodeKey(nextWorkflowNodeKey);
+          applySelectFilters({ workflowNodeKey: nextWorkflowNodeKey });
+        }}
+      />
+      <FormSelect
+        id="project-workflow-instance-status-filter"
+        value={selectedWorkflowInstanceStatus || "__all"}
+        disabled={pending}
+        triggerClassName={flatControlClassName}
+        options={[
+          { value: "__all", label: "全部流程状态" },
+          ...instanceStatusOptions,
+        ]}
+        onChange={(value) => {
+          const nextWorkflowInstanceStatus = value === "__all" ? "" : value;
+          setSelectedWorkflowInstanceStatus(nextWorkflowInstanceStatus);
+          applySelectFilters({
+            workflowInstanceStatus: nextWorkflowInstanceStatus,
+          });
         }}
       />
       <FormSelect
@@ -169,16 +231,20 @@ export function ProjectFilters({
 
 export function ProjectsPagination({
   pagination,
-  status,
   ownership,
   keyword,
+  workflowGroupKey,
+  workflowNodeKey,
+  workflowInstanceStatus,
   pending,
   onNavigate,
 }: {
   pagination: Pagination;
-  status: string;
   ownership: string;
   keyword: string;
+  workflowGroupKey: string;
+  workflowNodeKey: string;
+  workflowInstanceStatus: string;
   pending: boolean;
   onNavigate: Navigate;
 }) {
@@ -193,9 +259,11 @@ export function ProjectsPagination({
         disabled={previousDisabled}
         onClick={() => onNavigate(buildProjectsHref({
           page: Math.max(1, pagination.page - 1),
-          status,
           ownership,
           keyword,
+          workflowGroupKey,
+          workflowNodeKey,
+          workflowInstanceStatus,
         }))}
       >
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
@@ -207,9 +275,11 @@ export function ProjectsPagination({
         disabled={nextDisabled}
         onClick={() => onNavigate(buildProjectsHref({
           page: pagination.page + 1,
-          status,
           ownership,
           keyword,
+          workflowGroupKey,
+          workflowNodeKey,
+          workflowInstanceStatus,
         }))}
       >
         下一页

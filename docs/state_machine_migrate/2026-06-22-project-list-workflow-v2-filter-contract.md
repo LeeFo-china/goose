@@ -141,3 +141,16 @@ bun --env-file=../../.env.local -e '... projectSer.listProjectWorkflowFilters({ 
 - `groups`: `signing / 签约阶段 / count=1`，`construction / 施工阶段 / count=5`
 - `instance_statuses`: `running / count=4`，`completed / count=1`
 - `nodes` 返回当前可见项目的 workflow 当前节点，包含 `key`、`label`、`group_key`、`order`、`count`
+
+## Admin 对接记录
+
+日期：2026-06-22
+
+Admin 项目列表已对接 workflow v2 筛选：
+
+- 页面加载时请求 `GET /projects/workflow-filters`
+- 筛选栏使用后端返回的 `groups[]`、`nodes[]`、`instance_statuses[]`
+- 项目列表请求 `/projects` 时透传 `workflow_group_key`、`workflow_node_key`、`workflow_instance_status`
+- 分页跳转保留 workflow v2 筛选参数
+- 表格新增“流程”列，展示 `workflow_progress.current_group_label`、`workflow_progress.current_node_title`、`workflow_progress.instance_status`
+- 表格展示不再从旧 `project.status` 推导当前流程阶段；旧项目状态仍保留为业务状态列

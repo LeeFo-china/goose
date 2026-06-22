@@ -8,6 +8,7 @@ import {
   ProjectFilters,
   ProjectsPagination,
 } from "@/components/projects/project-list-actions";
+import type { ProjectWorkflowFiltersData } from "@/components/projects/project-list-filter-utils";
 import {
   CreateProjectButton,
   type ProjectRecord,
@@ -26,16 +27,22 @@ type Pagination = {
 export function ProjectsClientShell({
   projects,
   pagination,
-  status,
   ownership,
   keyword,
+  workflowGroupKey,
+  workflowNodeKey,
+  workflowInstanceStatus,
+  workflowFilters,
   error,
 }: {
   projects: ProjectRecord[];
   pagination: Pagination;
-  status: string;
   ownership: string;
   keyword: string;
+  workflowGroupKey: string;
+  workflowNodeKey: string;
+  workflowInstanceStatus: string;
+  workflowFilters: ProjectWorkflowFiltersData;
   error: string | null;
 }) {
   const router = useRouter();
@@ -101,9 +108,12 @@ export function ProjectsClientShell({
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
           <ProjectFilters
-            status={status}
             ownership={ownership}
             keyword={keyword}
+            workflowGroupKey={workflowGroupKey}
+            workflowNodeKey={workflowNodeKey}
+            workflowInstanceStatus={workflowInstanceStatus}
+            workflowFilters={workflowFilters}
             pending={pending}
             onNavigate={navigate}
           />
@@ -138,9 +148,11 @@ export function ProjectsClientShell({
             </div>
             <ProjectsPagination
               pagination={pagination}
-              status={status}
               ownership={ownership}
               keyword={keyword}
+              workflowGroupKey={workflowGroupKey}
+              workflowNodeKey={workflowNodeKey}
+              workflowInstanceStatus={workflowInstanceStatus}
               pending={pending}
               onNavigate={navigate}
             />
