@@ -3,6 +3,7 @@ import {
   type WorkflowDefinitionRow,
 } from "@/repositories/workflows";
 import { projectRepository } from "@/repositories/projects";
+import { getWorkflowDefinitionBusinessTrack } from "@gooes/domain";
 
 const PROJECT_CONSTRUCTION_WORKFLOW_KEYS = ["construction_main"] as const;
 
@@ -61,11 +62,13 @@ function getProjectConstructionWorkflowDefinitionId(
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function isUsableConstructionWorkflowDefinition(
+export function isUsableConstructionWorkflowDefinition(
   definition: WorkflowDefinitionRow | null,
 ): definition is WorkflowDefinitionRow {
   return Boolean(
     definition &&
+      getWorkflowDefinitionBusinessTrack(definition.workflow_key) ===
+        "construction" &&
       definition.category === "construction" &&
       definition.status === "active" &&
       definition.active_version_id,

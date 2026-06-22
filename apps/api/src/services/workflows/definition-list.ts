@@ -2,6 +2,7 @@ import { workflowRepository } from "@/repositories/workflows";
 import type { WorkflowListQuery } from "@/schema/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { getWorkflowDefinitionBusinessTrack } from "@gooes/domain";
 
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
 
@@ -19,8 +20,13 @@ export async function listWorkflowDefinitions(
     keyword: query.keyword?.trim() || undefined,
   });
   const constructionDefinitionIds = result.list
-    .filter((definition) => definition.category === "construction")
+    .filter((definition) =>
+      definition.category === "construction" &&
+      getWorkflowDefinitionBusinessTrack(definition.workflow_key) ===
+        "construction"
+    )
     .map((definition) => definition.id);
+  const constructionDefinitionIdSet = new Set(constructionDefinitionIds);
   const bindings = await workflowRepository.listProjectConstructionBindingsByDefinitionIds({
     tenantId,
     definitionIds: constructionDefinitionIds,
@@ -34,7 +40,7 @@ export async function listWorkflowDefinitions(
     ...result,
     list: result.list.map((definition) => ({
       ...definition,
-      project_construction_binding: definition.category === "construction"
+      project_construction_binding: constructionDefinitionIdSet.has(definition.id)
         ? bindingMap.get(definition.id) ?? null
         : null,
     })),

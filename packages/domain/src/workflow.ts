@@ -48,6 +48,7 @@ export type WorkflowSubjectType =
 export const WORKFLOW_CATEGORY_VALUES = [
   'main',
   'sales',
+  'signing',
   'construction',
   'procedure',
   'approval',
@@ -115,6 +116,7 @@ export type WorkflowEdgeConditionOperator =
 export const WorkflowCategoryConfig: Record<WorkflowCategory, { label: string }> = {
   main: { label: '主流程' },
   sales: { label: '销售流转' },
+  signing: { label: '签约阶段' },
   construction: { label: '施工阶段' },
   procedure: { label: '工序模板' },
   approval: { label: '审批流程' },

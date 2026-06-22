@@ -11,7 +11,7 @@ type WorkflowTemplateDefinition = {
   workflow_key: string;
   name: string;
   description: string;
-  category: "sales" | "construction" | "procedure" | "approval" | "main" | "acceptance";
+  category: "sales" | "signing" | "construction" | "procedure" | "approval" | "main" | "acceptance";
   graph: WorkflowGraphSaveInput;
 };
 
@@ -149,7 +149,7 @@ class WorkflowTemplateService {
       workflow_key: "project_signing",
       name: name?.trim() || "项目签约主流程",
       description: "项目从设计、方案确认、签约、设计定稿到排期开工的标准主流程模板。",
-      category: "construction",
+      category: "signing",
       graph: {
         nodes,
         edges: [

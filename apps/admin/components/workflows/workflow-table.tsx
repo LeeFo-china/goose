@@ -22,6 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getWorkflowRuntimeIntegrationHint } from "@/components/workflows/workflow-business-track";
+import { canSetProjectConstructionDefaultWorkflow } from "@/components/workflows/workflow-project-construction-default";
 
 function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
   const integrationHint = getWorkflowRuntimeIntegrationHint(workflow);
@@ -91,9 +92,7 @@ function ProjectConstructionDefaultAction({ workflow }: { workflow: WorkflowDefi
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const isDefault = workflow.project_construction_binding?.is_default === true;
-  const canSetDefault = workflow.category === "construction" &&
-    workflow.status === "active" &&
-    Boolean(workflow.active_version_id);
+  const canSetDefault = canSetProjectConstructionDefaultWorkflow(workflow);
 
   if (!canSetDefault) return null;
 

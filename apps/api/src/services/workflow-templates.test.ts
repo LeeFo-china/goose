@@ -30,6 +30,7 @@ describe("workflowTemplateService project_signing", () => {
     });
 
     expect(template.workflow_key).toBe("project_signing");
+    expect(template.category).toBe("signing");
     expect(template.graph.nodes.map((node) => node.node_key)).toEqual([
       "start",
       "designing",

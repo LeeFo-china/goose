@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import { workflowRepository } from "@/repositories/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { getWorkflowDefinitionBusinessTrack } from "@gooes/domain";
 
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
 
@@ -17,10 +18,13 @@ export async function setProjectConstructionDefaultWorkflow(
   if (!definition) {
     throw Errors.notFound("流程定义不存在");
   }
-  if (definition.category !== "construction") {
+  if (
+    definition.category !== "construction" ||
+    getWorkflowDefinitionBusinessTrack(definition.workflow_key) !== "construction"
+  ) {
     throw Errors.business(
       400,
-      "只有施工分类流程可以设为项目默认施工流程",
+      "只有施工主流程可以设为项目默认施工流程",
       "WORKFLOW_PROJECT_CONSTRUCTION_DEFAULT_CATEGORY_INVALID",
     );
   }

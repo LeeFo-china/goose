@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { getWorkflowDefinitionBusinessTrack } from "@gooes/domain";
 import { workflowTable } from "./client";
 import {
   WORKFLOW_DEFINITION_SELECT,
@@ -40,7 +41,8 @@ export async function listProjectConstructionWorkflowOptions(
     .eq("tenant_id", input.tenantId)
     .eq("status", "active")
     .eq("category", "construction")
-    .not("active_version_id", "is", null);
+    .not("active_version_id", "is", null)
+    .or("workflow_key.eq.construction_main,workflow_key.ilike.construction_main_%");
 
   const keyword = input.keyword?.trim();
   if (keyword) {
@@ -61,13 +63,17 @@ export async function listProjectConstructionWorkflowOptions(
   }
 
   const definitions = (data ?? []) as WorkflowDefinitionRow[];
+  const constructionDefinitions = definitions.filter((definition) =>
+    getWorkflowDefinitionBusinessTrack(definition.workflow_key) ===
+      "construction"
+  );
   const bindings = await listProjectConstructionBindingsByDefinitionIds({
     tenantId: input.tenantId,
-    definitionIds: definitions.map((item) => item.id),
+    definitionIds: constructionDefinitions.map((item) => item.id),
   });
   const bindingMap = new Map(bindings.map((item) => [item.definition_id, item]));
 
-  const list = definitions
+  const list = constructionDefinitions
     .map((definition): ProjectConstructionWorkflowOptionRow => ({
       ...definition,
       project_construction_binding: bindingMap.get(definition.id) ?? null,
