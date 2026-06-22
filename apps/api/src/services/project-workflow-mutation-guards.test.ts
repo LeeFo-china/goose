@@ -64,37 +64,42 @@ function workflowProgress(
 }
 
 describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
-  test("allows construction log creation without workflow current procedure matching", () => {
+  test("blocks construction log creation when stage differs from current workflow procedure", () => {
     expect(() =>
       assertProjectWorkflowStageMutationAllowedFromProgress({
         workflowProgress: workflowProgress({
-          current_node_key: "payment_stage_2",
-          current_node_title: "中期进度款",
-          current_node_type: "confirmation",
-          current_business_kind: "payment_collection",
-          current_stage_code: null,
-          current_gate: {
-            type: "payment_collection",
-            payment_type: "stage_2",
-            payment_label: "中期进度款",
-            blocked_stage_code: "tiling",
-            blocked_stage_label: "瓦工",
-          },
+          current_node_key: "procedure_woodwork",
+          current_node_title: "木工",
+          current_stage_code: "woodwork",
         }),
         mutation: "create_project_log",
         stageCode: "tiling",
       })
+    ).toThrow("当前流程在木工，不能操作瓦工");
+  });
+
+  test("allows construction log creation for current workflow procedure", () => {
+    expect(() =>
+      assertProjectWorkflowStageMutationAllowedFromProgress({
+        workflowProgress: workflowProgress({
+          current_node_key: "procedure_woodwork",
+          current_node_title: "木工",
+          current_stage_code: "woodwork",
+        }),
+        mutation: "create_project_log",
+        stageCode: "woodwork",
+      })
     ).not.toThrow();
   });
 
-  test("allows project log creation when workflow runtime is unavailable", () => {
+  test("blocks project log creation when workflow runtime is unavailable", () => {
     expect(() =>
       assertProjectWorkflowStageMutationAllowedFromProgress({
         workflowProgress: buildUnavailableProjectWorkflowProgress(),
         mutation: "create_project_log",
         stageCode: "plumbing_electrical",
       })
-    ).not.toThrow();
+    ).toThrow("流程运行态不可用，不能操作水电");
   });
 
   test("blocks stage acceptance when stage is ahead of workflow runtime", () => {

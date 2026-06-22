@@ -7,6 +7,15 @@ const findProjectById = mock(async () => ({
   tenant_id: "tenant-1",
   status: "constructing",
 }));
+const findById = mock(async () => ({
+  id: "log-1",
+  project_id: "550e8400-e29b-41d4-a716-446655440001",
+  tenant_id: "tenant-1",
+  employee_id: "employee-1",
+  stage_code: "tiling",
+  content: "木工节点施工日志",
+  images: [],
+}));
 const createFast = mock(async () => {
   throw new AppError(
     400,
@@ -23,12 +32,24 @@ const create = mock(async (payload: Record<string, unknown>) => ({
     avatar: null,
   },
 }));
+const update = mock(async (input: { payload: Record<string, unknown> }) => ({
+  id: "log-1",
+  project_id: "550e8400-e29b-41d4-a716-446655440001",
+  tenant_id: "tenant-1",
+  employee_id: "employee-1",
+  content: "木工节点施工日志",
+  images: [],
+  ...input.payload,
+}));
+const assertProjectWorkflowStageMutationAllowed = mock(async () => undefined);
 
 mock.module("@/repositories/project-logs", () => ({
   projectLogRepository: {
     findProjectById,
+    findById,
     createFast,
     create,
+    update,
   },
 }));
 
@@ -40,12 +61,13 @@ mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
     assertTenantContext: mock(() => "tenant-1"),
     canWriteProjectLogForProject: mock(async () => true),
+    canWriteProjectLog: mock(async () => true),
     getScope: mock(() => "self"),
   },
 }));
 
 mock.module("@/services/project-workflow-mutation-guards", () => ({
-  assertProjectWorkflowStageMutationAllowed: mock(async () => undefined),
+  assertProjectWorkflowStageMutationAllowed,
 }));
 
 mock.module("@/services/project-status", () => ({
@@ -110,5 +132,35 @@ describe("projectLogService", () => {
       stage_code: "tiling",
     }));
     expect(createFast).not.toHaveBeenCalled();
+  });
+
+  test("uses workflow runtime guard when updating a construction log stage", async () => {
+    const { projectLogService } = await import("./project-logs");
+
+    const result = await projectLogService.updateProjectLog({
+      authContext,
+      id: "log-1",
+      payload: {
+        stage_code: "woodwork",
+      },
+    });
+
+    expect(assertProjectWorkflowStageMutationAllowed).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "550e8400-e29b-41d4-a716-446655440001",
+      stageCode: "woodwork",
+      mutation: "create_project_log",
+    });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      id: "log-1",
+      tenantId: "tenant-1",
+      payload: expect.objectContaining({
+        stage_code: "woodwork",
+      }),
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      id: "log-1",
+      stage_code: "woodwork",
+    }));
   });
 });

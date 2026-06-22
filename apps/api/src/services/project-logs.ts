@@ -15,7 +15,6 @@ import type {
 } from "@/schema/project-logs";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
 import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
@@ -267,10 +266,11 @@ class ProjectLogService {
         tenantId,
       });
       projectStatusService.assertCanCreateProjectLog(targetProject);
-      await constructionStageStatusService.assertCanCreateProjectLog({
-        projectId: targetProject.id,
+      await assertProjectWorkflowStageMutationAllowed({
         tenantId,
+        projectId: targetProject.id,
         stageCode: targetStageCode,
+        mutation: "create_project_log",
       });
     }
 
