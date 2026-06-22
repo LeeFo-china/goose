@@ -52,6 +52,58 @@
 
 筛选在后端执行，返回的 `pagination.total` 是筛选后的真实总数。小程序端不要对当前页结果做本地过滤来计算总数。
 
+## 筛选项接口
+
+`GET /projects/workflow-filters`
+
+认证：员工登录态，使用租户上下文。接口会按当前员工的 `project.read` 可见范围聚合，不返回无权限项目的筛选计数。
+
+Query：
+
+- `ownership=self | all`：可选，和项目列表归属筛选口径一致
+
+响应：
+
+```json
+{
+  "groups": [
+    {
+      "key": "construction",
+      "label": "施工阶段",
+      "order": 20,
+      "count": 5
+    }
+  ],
+  "nodes": [
+    {
+      "key": "procedure_plumbing_electrical",
+      "label": "水电",
+      "group_key": "construction",
+      "group_label": "施工阶段",
+      "group_order": 20,
+      "order": 0,
+      "count": 2
+    }
+  ],
+  "instance_statuses": [
+    {
+      "key": "running",
+      "label": "进行中",
+      "order": 10,
+      "count": 4
+    }
+  ]
+}
+```
+
+小程序列表筛选建议：
+
+- 一级筛选渲染 `groups[]`，提交 `workflow_group_key`
+- 二级筛选渲染对应 `nodes[]`，提交 `workflow_node_key`
+- 实例状态筛选渲染 `instance_statuses[]`，提交 `workflow_instance_status`
+- `nodes[].count` 是当前员工可见范围内处于该节点的项目数量
+- `nodes[].order` 是后端提供的组内稳定顺序，前端不要用节点名或 key 自行排序
+
 ## 小程序对接口径
 
 - 第一层筛选使用 `workflow_group_key`。
@@ -70,5 +122,22 @@
 - `workflow_progress` 返回当前 group 摘要
 - `workflow_state` 返回当前 group 摘要
 - `/projects/status` 支持 `workflow_group_key`、`workflow_node_key`、`workflow_instance_status` 后端筛选
+- `/projects/workflow-filters` 返回 groups、nodes、instance_statuses 及可见范围 count
 
-筛选项元数据接口（例如 groups/nodes/count）可后续单独增加，当前小程序可先用固定请求参数或现有页面配置联调筛选行为。
+## 后端只读 Smoke
+
+日期：2026-06-22
+
+账号上下文：`18800000001 / 风清扬` 对应员工 `d8ecc522-e6a1-49d6-b7b7-aaa0f3084826`，租户 `3eebca47-961f-4899-b976-a3d3208d326b`。
+
+执行：
+
+```bash
+bun --env-file=../../.env.local -e '... projectSer.listProjectWorkflowFilters({ authContext, query: {} }) ...'
+```
+
+结果摘要：
+
+- `groups`: `signing / 签约阶段 / count=1`，`construction / 施工阶段 / count=5`
+- `instance_statuses`: `running / count=4`，`completed / count=1`
+- `nodes` 返回当前可见项目的 workflow 当前节点，包含 `key`、`label`、`group_key`、`order`、`count`

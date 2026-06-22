@@ -192,6 +192,14 @@ export const ProjectListQuerySchema = PaginationQuerySchema.extend({
 
 export type ProjectListQuery = z.infer<typeof ProjectListQuerySchema>;
 
+export const ProjectWorkflowFiltersQuerySchema = z.object({
+  ownership: ProjectOwnershipFilterSchema,
+});
+
+export type ProjectWorkflowFiltersQuery = z.infer<
+  typeof ProjectWorkflowFiltersQuerySchema
+>;
+
 export const ProjectResourceListQuerySchema = PaginationQuerySchema.extend({
   id: z.uuid("无效的项目 ID").optional(),
 });

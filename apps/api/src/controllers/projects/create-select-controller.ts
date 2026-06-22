@@ -1,6 +1,9 @@
 import type { FastifyRequest } from "fastify";
 import { Errors } from "@/errors/error-factory";
-import { ProjectListQuerySchema } from "@/schema/projects";
+import {
+  ProjectListQuerySchema,
+  ProjectWorkflowFiltersQuerySchema,
+} from "@/schema/projects";
 import {
   ProjectCreateSelectCustomerQuerySchema,
   ProjectCreateConstructionWorkflowQuerySchema,
@@ -121,6 +124,22 @@ function buildProjectListDebugTiming(input: {
 }
 
 class ProjectCreateSelectController extends ProjectBaseController {
+  @Get("/projects/workflow-filters")
+  async getProjectWorkflowFilters(request: FastifyRequest) {
+    const queryResult = ProjectWorkflowFiltersQuerySchema.safeParse(
+      request.query || {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const authContext = await this.getRequiredTenantContext(request);
+    const result = await projectSer.listProjectWorkflowFilters({
+      authContext,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
   @Get("/projects/status")
   async getProjectsBystatus(request: FastifyRequest) {
     const requestStartedAt = Date.now();

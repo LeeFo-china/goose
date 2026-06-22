@@ -72,6 +72,18 @@ export type WorkflowRuntimeProjectionRow = {
   updated_at: string;
 };
 
+export type WorkflowProjectFilterRow = {
+  subject_id: string | null;
+  current_node_key: string | null;
+  current_node_title: string | null;
+  instance_status: WorkflowInstanceStatus | null;
+  definition: {
+    category?: WorkflowCategory | string | null;
+  } | Array<{
+    category?: WorkflowCategory | string | null;
+  }> | null;
+};
+
 const WORKFLOW_SUBJECT_STATE_SELECT = [
   "id",
   "tenant_id",
@@ -105,10 +117,14 @@ const WORKFLOW_RUNTIME_PROJECTION_SELECT = [
 
 const WORKFLOW_PROJECT_FILTER_SELECT = [
   "subject_id",
+  "current_node_key",
+  "current_node_title",
+  "instance_status",
   "definition:workflow_definitions!inner(category)",
 ].join(", ");
 
 const WORKFLOW_PROJECT_FILTER_PAGE_SIZE = 1000;
+const WORKFLOW_PROJECT_FILTER_ID_CHUNK_SIZE = 500;
 
 function table(name: string) {
   return (SupabaseDB.getAdminClient() as unknown as UntypedSupabaseClient)
@@ -287,6 +303,68 @@ class WorkflowSubjectStateRepository {
     return Array.from(new Set(subjectIds));
   }
 
+  async listProjectWorkflowFilterRows(input: {
+    tenantId: string;
+    projectIds: string[] | null;
+  }): Promise<WorkflowProjectFilterRow[]> {
+    if (input.projectIds?.length === 0) {
+      return [];
+    }
+
+    if (input.projectIds === null) {
+      return this.listProjectWorkflowFilterRowsPage({
+        tenantId: input.tenantId,
+        projectIds: null,
+      });
+    }
+
+    const rows = await Promise.all(
+      chunk(input.projectIds, WORKFLOW_PROJECT_FILTER_ID_CHUNK_SIZE)
+        .map((projectIds) =>
+          this.listProjectWorkflowFilterRowsPage({
+            tenantId: input.tenantId,
+            projectIds,
+          })
+        ),
+    );
+
+    return rows.flat();
+  }
+
+  private async listProjectWorkflowFilterRowsPage(input: {
+    tenantId: string;
+    projectIds: string[] | null;
+  }): Promise<WorkflowProjectFilterRow[]> {
+    const rows: WorkflowProjectFilterRow[] = [];
+    let from = 0;
+    let total: number | null = null;
+
+    do {
+      const to = from + WORKFLOW_PROJECT_FILTER_PAGE_SIZE - 1;
+      let query = table("workflow_subject_states")
+        .select(WORKFLOW_PROJECT_FILTER_SELECT, { count: "exact" })
+        .eq("tenant_id", input.tenantId)
+        .eq("subject_type", "project")
+        .order("updated_at", { ascending: false });
+
+      if (input.projectIds) {
+        query = query.in("subject_id", input.projectIds);
+      }
+
+      const { data, error, count } = await query.range(from, to);
+
+      if (error) {
+        throw Errors.dbError("查询项目流程筛选项失败", error);
+      }
+
+      if (total === null) total = count ?? 0;
+      rows.push(...((data ?? []) as WorkflowProjectFilterRow[]));
+      from += WORKFLOW_PROJECT_FILTER_PAGE_SIZE;
+    } while (total !== null && from < total);
+
+    return rows;
+  }
+
   private buildProjectWorkflowFilterQuery(input: {
     tenantId: string;
     workflowGroupKey?: WorkflowCategory;
@@ -356,6 +434,14 @@ class WorkflowSubjectStateRepository {
 
 export const workflowSubjectStateRepository =
   new WorkflowSubjectStateRepository();
+
+function chunk<T>(values: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
 
 function pickLatestRuntimeInstancePerSubject(
   instances: WorkflowRuntimeProjectionRow[],

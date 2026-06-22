@@ -22,6 +22,9 @@ import {
     searchProjectsByName,
 } from "./legacy/lists";
 import {
+    listProjectWorkflowFilters,
+} from "./legacy/workflow-filters";
+import {
     listPublicProjects,
     invalidatePublicProjectsCache,
     getCachedValue,
@@ -119,6 +122,7 @@ class ProjectService {
     private setProjectListCache = setProjectListCache;
     private loadProjects = loadProjects;
     searchProjectsByName = searchProjectsByName;
+    listProjectWorkflowFilters = listProjectWorkflowFilters;
     listPublicProjects = listPublicProjects;
     private invalidatePublicProjectsCache = invalidatePublicProjectsCache;
     private getCachedValue = getCachedValue;
