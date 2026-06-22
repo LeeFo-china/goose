@@ -345,6 +345,7 @@ class WorkflowService {
       definitionId,
       instanceId,
       nodeKey: input.node_key.trim(),
+      action: input.action.trim(),
       output: input.output as JsonObject,
     });
 

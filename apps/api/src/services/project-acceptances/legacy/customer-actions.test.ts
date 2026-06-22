@@ -190,4 +190,52 @@ describe("customerConfirmAcceptance", () => {
       comment: "竣工确认通过",
     });
   });
+
+  test("resyncs workflow runtime when a previous customer confirm already updated acceptance status", async () => {
+    syncCustomerConfirmAcceptance.mockImplementationOnce(async () => ({
+      status: "advanced",
+      workflow_key: "construction_main",
+      definition_id: "definition-1",
+      instance_id: "instance-1",
+      node_key: "procedure_plumbing_electrical",
+      current_node_key: "payment_stage_2",
+      next_node_key: "payment_stage_2",
+    }));
+
+    const { customerConfirmAcceptance } = await import("./customer-actions");
+    const recordAction = mock(async () => undefined);
+    const serviceContext = {
+      getRequiredAcceptance: mock(async () => confirmedAcceptanceRow),
+      resolveCustomerActor: mock(async () => ({ id: "customer-1" })),
+      recordAction,
+      invalidateAcceptanceRelatedCaches: mock(() => undefined),
+      buildDetail: mock((row: typeof confirmedAcceptanceRow) => row),
+    };
+
+    const result = await customerConfirmAcceptance.call(
+      serviceContext,
+      null,
+      confirmedAcceptanceRow.id,
+      {
+        comment: "重复确认后补偿推进",
+        project_id: confirmedAcceptanceRow.project_id,
+      },
+      {
+        tenantId: confirmedAcceptanceRow.tenant_id,
+        customerId: confirmedAcceptanceRow.customer_id,
+      },
+    );
+
+    expect(result.status).toBe("customer_confirmed");
+    expect(updateAcceptance).not.toHaveBeenCalled();
+    expect(recordAction).not.toHaveBeenCalled();
+    expect(syncCustomerConfirmAcceptance).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+      acceptanceId: "acceptance-1",
+      stageCode: "plumbing_electrical",
+      customerId: "customer-1",
+      comment: "重复确认后补偿推进",
+    });
+  });
 });

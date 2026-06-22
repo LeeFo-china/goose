@@ -211,6 +211,7 @@ class CustomerWorkflowRuntimeService {
       definitionId: definition.id,
       instanceId: instance.id,
       nodeKey,
+      action: input.action,
       output,
     });
 

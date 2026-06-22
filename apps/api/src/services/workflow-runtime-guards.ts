@@ -21,6 +21,7 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
   definitionId: string;
   instanceId: string;
   nodeKey: string;
+  action?: string | null;
   output: JsonObject;
 }) {
   const instance = await workflowRepository.getRuntimeInstanceById({
@@ -61,11 +62,13 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
     return;
   }
 
-  await assertProcedureNodeRequirements({
-    tenantId: input.tenantId,
-    projectId: instance.subject_id,
-    node: currentNode,
-  });
+  if (input.action?.trim() !== "customer_confirm_acceptance") {
+    await assertProcedureNodeRequirements({
+      tenantId: input.tenantId,
+      projectId: instance.subject_id,
+      node: currentNode,
+    });
+  }
 
   const nextNode = getNextWorkflowNode(graph, instance.current_node_id);
   if (!isFinalAcceptanceNode(currentNode) && !isFinalAcceptanceNode(nextNode)) {

@@ -125,6 +125,7 @@ class ProjectAcceptanceWorkflowRuntimeService {
       definitionId: definition.id,
       instanceId: instance.id,
       nodeKey,
+      action: "customer_confirm_acceptance",
       output,
     });
 

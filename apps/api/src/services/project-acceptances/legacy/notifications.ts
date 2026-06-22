@@ -468,7 +468,7 @@ export async function verifyOpenTicketRow(this: any, input: VerifyProjectAccepta
       return { valid: false as const, reason: "customer_mismatch" as const };
     }
 
-    if (row.status !== "leader_approved") {
+    if (row.status !== "leader_approved" && row.status !== "customer_confirmed") {
       return { valid: false as const, reason: "not_reviewable" as const };
     }
 

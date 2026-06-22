@@ -264,12 +264,12 @@ class ProjectWorkflowRuntimeService {
     nodeKey: string,
   ): Promise<ProjectWorkflowRuntimeMetadata> {
     const output = this.buildRuntimeContext(input);
-
     await assertRuntimeNodeCompletionAllowed({
       tenantId: input.tenantId,
       definitionId: definition.id,
       instanceId: instance.id,
       nodeKey,
+      action: input.action,
       output,
     });
 

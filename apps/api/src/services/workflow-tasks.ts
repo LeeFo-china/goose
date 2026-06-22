@@ -164,6 +164,7 @@ class WorkflowTaskService {
       definitionId: task.definition_id,
       instanceId: task.instance_id,
       nodeKey: task.node_key,
+      action: input.action.trim(),
       output,
     });
 

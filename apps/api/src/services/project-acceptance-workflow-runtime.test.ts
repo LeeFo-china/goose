@@ -102,6 +102,24 @@ const paymentGateInstance = {
   },
 };
 
+const plumbingInstanceWithRequirements = {
+  ...installationInstance,
+  current_node_id: "node-plumbing",
+  current_node_key: "procedure_plumbing_electrical",
+  current_node_snapshot: {
+    node_key: "procedure_plumbing_electrical",
+    node_type: "procedure",
+    business_kind: "procedure_template",
+    title: "水电",
+    config: {
+      stage_key: "plumbing_electrical",
+      require_log: true,
+      min_image_count: 1,
+      trigger_acceptance: true,
+    },
+  },
+};
+
 const paymentGateGraph = {
   definition,
   version: null,
@@ -118,6 +136,9 @@ const paymentGateGraph = {
       position: { x: 0, y: 0 },
       config: {
         stage_key: "plumbing_electrical",
+        require_log: true,
+        min_image_count: 1,
+        trigger_acceptance: true,
       },
       sort_order: 40,
       created_at: "2026-06-16T00:00:00.000Z",
@@ -177,6 +198,7 @@ const paymentGateGraph = {
 let runningInstance:
   | typeof installationInstance
   | typeof paymentGateInstance
+  | typeof plumbingInstanceWithRequirements
   | typeof finalAcceptanceInstance = installationInstance;
 let graphResult: typeof paymentGateGraph | null = null;
 
@@ -205,6 +227,7 @@ const getRuntimeInstanceById = mock(async () => ({
   current_node_key: "procedure_installation",
   current_node_id: "node-1",
 }));
+const listStageLogEvidence = mock(async () => []);
 
 mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
@@ -214,6 +237,12 @@ mock.module("@/repositories/workflows", () => ({
     findLatestRunningRuntimeInstance,
     completeRuntimeNode,
     getGraph,
+  },
+}));
+
+mock.module("@/repositories/project-log-evidence", () => ({
+  projectLogEvidenceRepository: {
+    listStageLogEvidence,
   },
 }));
 
@@ -230,6 +259,14 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
     completeRuntimeNode.mockClear();
     syncFromRuntimeInstance.mockClear();
     getGraph.mockClear();
+    getRuntimeInstanceById.mockClear();
+    getRuntimeInstanceById.mockImplementation(async () => ({
+      status: "completed",
+      current_node_key: "procedure_installation",
+      current_node_id: "node-1",
+    }));
+    listStageLogEvidence.mockClear();
+    listStageLogEvidence.mockImplementation(async () => []);
   });
 
   test("skips workflow completion when customer confirms the procedure before a payment gate", async () => {
@@ -346,6 +383,45 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
       subjectId: "project-1",
       definitionId: "definition-1",
       instanceId: "instance-1",
+    });
+  });
+
+  test("does not re-check procedure log requirements when customer confirms acceptance", async () => {
+    runningInstance = plumbingInstanceWithRequirements;
+    graphResult = paymentGateGraph;
+    getRuntimeInstanceById.mockImplementationOnce(async () => plumbingInstanceWithRequirements);
+
+    const { projectAcceptanceWorkflowRuntimeService } = await import(
+      "./project-acceptance-workflow-runtime"
+    );
+
+    const result = await projectAcceptanceWorkflowRuntimeService
+      .syncCustomerConfirmAcceptance({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+        acceptanceId: "acceptance-plumbing",
+        stageCode: "plumbing_electrical",
+        customerId: "customer-1",
+        comment: "水电验收确认",
+      });
+
+    expect(result.status).toBe("advanced");
+    expect(listStageLogEvidence).not.toHaveBeenCalled();
+    expect(completeRuntimeNode).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      definitionId: "definition-1",
+      instanceId: "instance-1",
+      nodeKey: "procedure_plumbing_electrical",
+      action: "customer_confirm_acceptance",
+      actorEmployeeId: null,
+      output: {
+        source: "project_acceptance_customer_confirm",
+        project_id: "project-1",
+        acceptance_id: "acceptance-plumbing",
+        stage_code: "plumbing_electrical",
+        customer_id: "customer-1",
+        comment: "水电验收确认",
+      },
     });
   });
 

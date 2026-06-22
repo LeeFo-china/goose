@@ -32,7 +32,7 @@ import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import { projectStatusService } from "@/services/project-status";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
-import { projectAcceptanceWorkflowRuntimeService } from "@/services/project-acceptance-workflow-runtime";
+import { syncConfirmedAcceptanceRuntime } from "./customer-confirm-runtime";
 import { projectSer } from "@/services/projects";
 import type {
   ProjectAcceptanceActionRow,
@@ -215,6 +215,21 @@ export async function customerConfirmAcceptance(this: any,
       ticket: input.ticket,
       projectId: input.project_id,
     });
+    if (
+      row.status === "customer_confirmed" &&
+      isWorkflowAcceptanceStageCode(row.stage_code)
+    ) {
+      await syncConfirmedAcceptanceRuntime({
+        row,
+        stageCode: row.stage_code,
+        tenantId: row.tenant_id ?? scope?.tenantId ?? null,
+        customerId: customer.id,
+        comment: input.comment,
+      });
+      this.invalidateAcceptanceRelatedCaches(row.project_id);
+      return this.buildDetail(row);
+    }
+
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
       action: "customer_confirm",
@@ -255,40 +270,13 @@ export async function customerConfirmAcceptance(this: any,
     });
 
     if (isWorkflowAcceptanceStageCode(row.stage_code)) {
-      const tenantId = nextRow.tenant_id ?? row.tenant_id ?? scope?.tenantId ?? null;
-      if (!tenantId) {
-        throw Errors.business(
-          409,
-          "流程运行态不可用，不能推进验收流程",
-          ErrorCodes.WORKFLOW_PROGRESS_CONFLICT,
-          { acceptance_id: nextRow.id, project_id: nextRow.project_id },
-        );
-      }
-      const runtimeMetadata = await projectAcceptanceWorkflowRuntimeService
-        .syncCustomerConfirmAcceptance({
-          tenantId,
-          projectId: nextRow.project_id,
-          acceptanceId: nextRow.id,
-          stageCode: row.stage_code,
-          customerId: customer.id,
-          comment: input.comment,
-        });
-      if (
-        runtimeMetadata.status !== "advanced" &&
-        runtimeMetadata.status !== "already_advanced"
-      ) {
-        throw Errors.business(
-          409,
-          "验收已确认，但流程运行态推进失败",
-          ErrorCodes.WORKFLOW_PROGRESS_CONFLICT,
-          {
-            acceptance_id: nextRow.id,
-            project_id: nextRow.project_id,
-            stage_code: row.stage_code,
-            workflow_runtime: runtimeMetadata,
-          },
-        );
-      }
+      await syncConfirmedAcceptanceRuntime({
+        row: nextRow,
+        stageCode: row.stage_code,
+        tenantId: nextRow.tenant_id ?? row.tenant_id ?? scope?.tenantId ?? null,
+        customerId: customer.id,
+        comment: input.comment,
+      });
     }
 
     this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
