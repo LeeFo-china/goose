@@ -1,6 +1,24 @@
 import { describe, expect, mock, test } from "bun:test";
 
-const latestRuntimeInstance = {
+type RuntimeProjectionFixture = {
+  id: string;
+  tenant_id: string;
+  definition_id: string;
+  version_id: string;
+  subject_type: "project";
+  subject_id: string;
+  status: "running" | "completed";
+  current_node_key: string;
+  current_node_snapshot: {
+    title: string;
+    business_kind: string | null;
+  };
+  started_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+const latestRuntimeInstance: RuntimeProjectionFixture = {
   id: "instance-new",
   tenant_id: "tenant-1",
   definition_id: "definition-new",
@@ -16,7 +34,18 @@ const latestRuntimeInstance = {
   started_at: "2026-06-14T11:20:53.492Z",
   created_at: "2026-06-14T11:20:53.492Z",
   updated_at: "2026-06-15T16:20:04.646Z",
-} as const;
+};
+
+const completedRuntimeInstance: RuntimeProjectionFixture = {
+  ...latestRuntimeInstance,
+  id: "instance-completed",
+  status: "completed",
+  current_node_key: "end",
+  current_node_snapshot: {
+    title: "结束",
+    business_kind: null,
+  },
+};
 
 const find = mock(async () => ({
   id: "state-1",
@@ -91,6 +120,44 @@ describe("workflowSubjectStateService", () => {
       currentNodeTitle: "竣工验收",
       currentBusinessKind: "final_acceptance",
       pendingTaskCount: 1,
+    });
+  });
+
+  test("keeps completed runtime projection for read-only workflow display", async () => {
+    find.mockClear();
+    findLatestRuntimeInstance.mockClear();
+    findLatestRuntimeInstance.mockImplementationOnce(async () =>
+      completedRuntimeInstance
+    ).mockImplementationOnce(async () => completedRuntimeInstance);
+    countPendingTasks.mockClear();
+    countPendingTasks.mockImplementationOnce(async () => 0);
+    upsert.mockClear();
+
+    const { workflowSubjectStateService } = await import(
+      "./workflow-subject-state"
+    );
+
+    const state = await workflowSubjectStateService.getSubjectState({
+      tenantId: "tenant-1",
+      subjectType: "project",
+      subjectId: "project-1",
+    });
+
+    expect(state?.instance_id).toBe("instance-completed");
+    expect(state?.instance_status).toBe("completed");
+    expect(state?.current_node_key).toBe("end");
+    expect(state?.pending_task_count).toBe(0);
+    expect(upsert).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      subjectType: "project",
+      subjectId: "project-1",
+      definitionId: "definition-new",
+      instanceId: "instance-completed",
+      instanceStatus: "completed",
+      currentNodeKey: "end",
+      currentNodeTitle: "结束",
+      currentBusinessKind: null,
+      pendingTaskCount: 0,
     });
   });
 });

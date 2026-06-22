@@ -59,6 +59,34 @@ const nextInstance = {
   },
 };
 
+const finalAcceptanceInstance = {
+  ...installationInstance,
+  current_node_id: "node-final-acceptance",
+  current_node_key: "final_acceptance",
+  current_node_snapshot: {
+    node_key: "final_acceptance",
+    node_type: "construction_stage",
+    business_kind: "final_acceptance",
+    title: "竣工验收",
+    config: {
+      stage_type: "final_acceptance",
+    },
+  },
+};
+
+const handoverInstance = {
+  ...installationInstance,
+  current_node_id: "node-handover",
+  current_node_key: "handover",
+  current_node_snapshot: {
+    node_key: "handover",
+    node_type: "confirmation",
+    business_kind: null,
+    title: "交房",
+    config: {},
+  },
+};
+
 const paymentGateInstance = {
   ...installationInstance,
   current_node_id: "node-payment",
@@ -146,14 +174,24 @@ const paymentGateGraph = {
   ],
 };
 
-let runningInstance: typeof installationInstance | typeof paymentGateInstance =
-  installationInstance;
+let runningInstance:
+  | typeof installationInstance
+  | typeof paymentGateInstance
+  | typeof finalAcceptanceInstance = installationInstance;
 let graphResult: typeof paymentGateGraph | null = null;
+
+type CompleteRuntimeNodeResultFixture = {
+  ok: boolean;
+  instance: typeof installationInstance | typeof nextInstance | typeof handoverInstance;
+  completedNode: unknown;
+  nextNode: unknown;
+  task: null;
+};
 
 const findDefinitionByKey = mock(async () => null);
 const findDefinitionById = mock(async () => definition);
 const findLatestRunningRuntimeInstance = mock(async () => runningInstance);
-const completeRuntimeNode = mock(async () => ({
+const completeRuntimeNode = mock(async (): Promise<CompleteRuntimeNodeResultFixture> => ({
   ok: true,
   instance: nextInstance,
   completedNode: installationInstance.current_node_snapshot,
@@ -301,6 +339,64 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
       tenantId: "tenant-1",
       definitionId: "definition-1",
       instanceId: "instance-1",
+    });
+    expect(syncFromRuntimeInstance).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      subjectType: "project",
+      subjectId: "project-1",
+      definitionId: "definition-1",
+      instanceId: "instance-1",
+    });
+  });
+
+  test("advances final acceptance to handover after customer confirms completion acceptance", async () => {
+    runningInstance = finalAcceptanceInstance;
+    completeRuntimeNode.mockImplementationOnce(async () => ({
+      ok: true,
+      instance: handoverInstance,
+      completedNode: finalAcceptanceInstance.current_node_snapshot,
+      nextNode: handoverInstance.current_node_snapshot,
+      task: null,
+    }));
+
+    const { projectAcceptanceWorkflowRuntimeService } = await import(
+      "./project-acceptance-workflow-runtime"
+    );
+
+    const result = await projectAcceptanceWorkflowRuntimeService
+      .syncCustomerConfirmAcceptance({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+        acceptanceId: "acceptance-final",
+        stageCode: "completion",
+        customerId: "customer-1",
+        comment: "竣工确认通过",
+      });
+
+    expect(result).toMatchObject({
+      status: "advanced",
+      workflow_key: "construction_main",
+      definition_id: "definition-1",
+      instance_id: "instance-1",
+      node_key: "final_acceptance",
+      current_node_key: "handover",
+      next_node_key: "handover",
+    });
+    expect(completeRuntimeNode).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      definitionId: "definition-1",
+      instanceId: "instance-1",
+      nodeKey: "final_acceptance",
+      action: "customer_confirm_acceptance",
+      actorEmployeeId: null,
+      output: {
+        source: "project_acceptance_customer_confirm",
+        project_id: "project-1",
+        acceptance_id: "acceptance-final",
+        stage_code: "completion",
+        customer_id: "customer-1",
+        comment: "竣工确认通过",
+      },
     });
     expect(syncFromRuntimeInstance).toHaveBeenCalledWith({
       tenantId: "tenant-1",

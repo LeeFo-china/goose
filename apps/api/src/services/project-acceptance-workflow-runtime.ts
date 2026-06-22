@@ -10,6 +10,7 @@ import {
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import {
+  PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
   getPreviousProjectConstructionStage,
   isProjectConstructionStageCode,
   type ProjectConstructionStageCode,
@@ -46,7 +47,7 @@ class ProjectAcceptanceWorkflowRuntimeService {
   async syncCustomerConfirmAcceptance(
     input: SyncCustomerConfirmAcceptanceInput,
   ): Promise<ProjectAcceptanceWorkflowRuntimeMetadata> {
-    if (!isProjectConstructionStageCode(input.stageCode)) {
+    if (!this.isWorkflowAcceptanceStageCode(input.stageCode)) {
       return { status: "skipped", reason: "stage_not_construction" };
     }
 
@@ -188,13 +189,10 @@ class ProjectAcceptanceWorkflowRuntimeService {
     });
   }
 
-  private getCurrentStageCode(instance: WorkflowInstanceRow): string | null {
-    const snapshot = instance.current_node_snapshot;
-    if (!this.isRecord(snapshot)) return null;
-    if (snapshot.node_type !== "procedure") return null;
-    const config = snapshot.config;
-    if (!this.isRecord(config)) return null;
-    return typeof config.stage_key === "string" ? config.stage_key : null;
+  private getCurrentStageCode(
+    instance: WorkflowInstanceRow,
+  ): ProjectLogStageCode | null {
+    return this.getWorkflowStageCode(instance.current_node_snapshot);
   }
 
   private async isCurrentPaymentGateAfterStage(
@@ -274,6 +272,35 @@ class ProjectAcceptanceWorkflowRuntimeService {
     return typeof stageKey === "string" && isProjectConstructionStageCode(stageKey)
       ? stageKey
       : null;
+  }
+
+  private getWorkflowStageCode(
+    node: WorkflowNodeRow | JsonObject | null,
+  ): ProjectLogStageCode | null {
+    const procedureStageCode = this.getProcedureStageCode(node);
+    if (procedureStageCode) {
+      return procedureStageCode;
+    }
+    return this.isFinalAcceptanceNode(node)
+      ? PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE
+      : null;
+  }
+
+  private isWorkflowAcceptanceStageCode(
+    stageCode: ProjectLogStageCode,
+  ): boolean {
+    return isProjectConstructionStageCode(stageCode) ||
+      stageCode === PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE;
+  }
+
+  private isFinalAcceptanceNode(
+    node: WorkflowNodeRow | JsonObject | null,
+  ): boolean {
+    if (!node) return false;
+    const config = this.isRecord(node.config) ? node.config : null;
+    return node.business_kind === "final_acceptance" ||
+      node.node_key === "final_acceptance" ||
+      config?.stage_type === "final_acceptance";
   }
 
   private isPaymentCollectionNode(node: WorkflowNodeRow | null): boolean {

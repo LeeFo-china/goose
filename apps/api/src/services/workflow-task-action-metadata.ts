@@ -82,6 +82,10 @@ const WORKFLOW_PROJECT_ACTION_NODE_KEYS = new Set([
   "acceptance",
 ]);
 
+const WORKFLOW_PROJECT_GENERIC_COMPLETE_NODE_KEYS = new Set([
+  "handover",
+]);
+
 const WORKFLOW_PAYMENT_COLLECTION_TYPES = [
   "deposit",
   "stage_1",
@@ -125,16 +129,7 @@ export function buildWorkflowTaskActions(
     return buildExpenseActions(input.nodeKey);
   }
 
-  return [
-    {
-      key: "complete",
-      label: input.taskTitle,
-      business_domain: null,
-      business_action: null,
-      requires_reason: false,
-      output_fields: [],
-    },
-  ];
+  return [buildGenericCompleteAction(input.taskTitle)];
 }
 
 function buildPaymentCollectionActions(
@@ -262,6 +257,10 @@ function buildCustomerActions(nodeKey: string): WorkflowTaskActionMetadata[] {
 function buildProjectActions(
   input: BuildWorkflowTaskActionsInput,
 ): WorkflowTaskActionMetadata[] {
+  if (WORKFLOW_PROJECT_GENERIC_COMPLETE_NODE_KEYS.has(input.nodeKey)) {
+    return [buildGenericCompleteAction(input.taskTitle)];
+  }
+
   if (!WORKFLOW_PROJECT_ACTION_NODE_KEYS.has(input.nodeKey)) {
     return [];
   }
@@ -276,6 +275,17 @@ function buildProjectActions(
       output_fields: getProjectOutputFields(input.nodeKey),
     },
   ];
+}
+
+function buildGenericCompleteAction(label: string): WorkflowTaskActionMetadata {
+  return {
+    key: "complete",
+    label,
+    business_domain: null,
+    business_action: null,
+    requires_reason: false,
+    output_fields: [],
+  };
 }
 
 function buildExpenseActions(nodeKey: string): WorkflowTaskActionMetadata[] {

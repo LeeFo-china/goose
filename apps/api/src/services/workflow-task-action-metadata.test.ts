@@ -162,6 +162,24 @@ describe("buildWorkflowTaskActions", () => {
     });
   });
 
+  test("describes handover as a generic project workflow completion action", () => {
+    expect(buildWorkflowTaskActions({
+      subjectType: "project",
+      nodeKey: "handover",
+      nodeType: "confirmation",
+      taskTitle: "交房",
+    })).toEqual([
+      {
+        key: "complete",
+        label: "交房",
+        business_domain: null,
+        business_action: null,
+        requires_reason: false,
+        output_fields: [],
+      },
+    ]);
+  });
+
   test("describes payment collection gate actions", () => {
     const action = buildWorkflowTaskActions({
       subjectType: "project",

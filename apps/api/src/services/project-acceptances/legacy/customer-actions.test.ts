@@ -34,8 +34,35 @@ const confirmedAcceptanceRow = {
   updated_at: "2026-06-18T00:20:00.000Z",
 };
 
+const finalAcceptanceRow = {
+  ...acceptanceRow,
+  id: "acceptance-final",
+  acceptance_type: "final",
+  stage_code: "completion",
+  title: "竣工交付验收",
+};
+
+const confirmedFinalAcceptanceRow = {
+  ...finalAcceptanceRow,
+  status: "customer_confirmed",
+  customer_confirmed_at: "2026-06-18T00:20:00.000Z",
+  completed_at: "2026-06-18T00:20:00.000Z",
+  updated_at: "2026-06-18T00:20:00.000Z",
+};
+
+type RuntimeMetadataFixture = {
+  status: string;
+  workflow_key: string;
+  definition_id: string;
+  instance_id: string;
+  current_node_key: string;
+  reason?: string;
+  node_key?: string;
+  next_node_key?: string;
+};
+
 const updateAcceptance = mock(async () => confirmedAcceptanceRow);
-const syncCustomerConfirmAcceptance = mock(async () => ({
+const syncCustomerConfirmAcceptance = mock(async (): Promise<RuntimeMetadataFixture> => ({
   status: "already_advanced",
   workflow_key: "construction_main",
   definition_id: "definition-1",
@@ -116,5 +143,51 @@ describe("customerConfirmAcceptance", () => {
       operatorId: "customer-1",
     }));
     expect(invalidateAcceptanceRelatedCaches).toHaveBeenCalledWith("project-1");
+  });
+
+  test("syncs workflow runtime when customer confirms final completion acceptance", async () => {
+    updateAcceptance.mockImplementationOnce(async () => confirmedFinalAcceptanceRow);
+    syncCustomerConfirmAcceptance.mockImplementationOnce(async () => ({
+      status: "advanced",
+      workflow_key: "construction_main",
+      definition_id: "definition-1",
+      instance_id: "instance-1",
+      node_key: "final_acceptance",
+      current_node_key: "handover",
+      next_node_key: "handover",
+    }));
+
+    const { customerConfirmAcceptance } = await import("./customer-actions");
+    const serviceContext = {
+      getRequiredAcceptance: mock(async () => finalAcceptanceRow),
+      resolveCustomerActor: mock(async () => ({ id: "customer-1" })),
+      recordAction: mock(async () => undefined),
+      invalidateAcceptanceRelatedCaches: mock(() => undefined),
+      buildDetail: mock((row: typeof confirmedFinalAcceptanceRow) => row),
+    };
+
+    const result = await customerConfirmAcceptance.call(
+      serviceContext,
+      null,
+      finalAcceptanceRow.id,
+      {
+        comment: "竣工确认通过",
+        project_id: finalAcceptanceRow.project_id,
+      },
+      {
+        tenantId: finalAcceptanceRow.tenant_id,
+        customerId: finalAcceptanceRow.customer_id,
+      },
+    );
+
+    expect(result.status).toBe("customer_confirmed");
+    expect(syncCustomerConfirmAcceptance).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+      acceptanceId: "acceptance-final",
+      stageCode: "completion",
+      customerId: "customer-1",
+      comment: "竣工确认通过",
+    });
   });
 });

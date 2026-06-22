@@ -182,12 +182,27 @@ class WorkflowSubjectStateRepository {
     subjectType: WorkflowSubjectType;
     subjectId: string;
   }): Promise<WorkflowRuntimeProjectionRow | null> {
+    return await this.findLatestRuntimeInstanceByStatus({
+      ...input,
+      status: "running",
+    }) ?? await this.findLatestRuntimeInstanceByStatus({
+      ...input,
+      status: "completed",
+    });
+  }
+
+  private async findLatestRuntimeInstanceByStatus(input: {
+    tenantId: string;
+    subjectType: WorkflowSubjectType;
+    subjectId: string;
+    status: WorkflowInstanceStatus;
+  }): Promise<WorkflowRuntimeProjectionRow | null> {
     const { data, error } = await table("workflow_instances")
       .select(WORKFLOW_RUNTIME_PROJECTION_SELECT)
       .eq("tenant_id", input.tenantId)
       .eq("subject_type", input.subjectType)
       .eq("subject_id", input.subjectId)
-      .eq("status", "running")
+      .eq("status", input.status)
       .order("started_at", { ascending: false })
       .order("created_at", { ascending: false })
       .order("updated_at", { ascending: false })
@@ -212,17 +227,42 @@ class WorkflowSubjectStateRepository {
       return [];
     }
 
+    const [runningInstances, completedInstances] = await Promise.all([
+      this.listLatestRuntimeInstancesBySubjectIdsAndStatus({
+        ...input,
+        subjectIds,
+        status: "running",
+      }),
+      this.listLatestRuntimeInstancesBySubjectIdsAndStatus({
+        ...input,
+        subjectIds,
+        status: "completed",
+      }),
+    ]);
+
+    return pickLatestRuntimeInstancePerSubject([
+      ...runningInstances,
+      ...completedInstances,
+    ]);
+  }
+
+  private async listLatestRuntimeInstancesBySubjectIdsAndStatus(input: {
+    tenantId: string;
+    subjectType: WorkflowSubjectType;
+    subjectIds: string[];
+    status: WorkflowInstanceStatus;
+  }): Promise<WorkflowRuntimeProjectionRow[]> {
     const { data, error } = await table("workflow_instances")
       .select(WORKFLOW_RUNTIME_PROJECTION_SELECT)
       .eq("tenant_id", input.tenantId)
       .eq("subject_type", input.subjectType)
-      .in("subject_id", subjectIds)
-      .eq("status", "running")
+      .in("subject_id", input.subjectIds)
+      .eq("status", input.status)
       .order("started_at", { ascending: false })
       .order("created_at", { ascending: false })
       .order("updated_at", { ascending: false })
       .order("id", { ascending: false })
-      .limit(Math.min(subjectIds.length * 5, 500));
+      .limit(Math.min(input.subjectIds.length * 5, 500));
 
     if (error) {
       throw Errors.dbError("批量查询流程运行实例失败", error);
@@ -251,3 +291,14 @@ class WorkflowSubjectStateRepository {
 
 export const workflowSubjectStateRepository =
   new WorkflowSubjectStateRepository();
+
+function pickLatestRuntimeInstancePerSubject(
+  instances: WorkflowRuntimeProjectionRow[],
+): WorkflowRuntimeProjectionRow[] {
+  const result = new Map<string, WorkflowRuntimeProjectionRow>();
+  for (const instance of instances) {
+    if (result.has(instance.subject_id)) continue;
+    result.set(instance.subject_id, instance);
+  }
+  return Array.from(result.values());
+}

@@ -254,7 +254,7 @@ export async function customerConfirmAcceptance(this: any,
       comment: input.comment,
     });
 
-    if (isProjectConstructionStageCode(row.stage_code)) {
+    if (isWorkflowAcceptanceStageCode(row.stage_code)) {
       const tenantId = nextRow.tenant_id ?? row.tenant_id ?? scope?.tenantId ?? null;
       if (!tenantId) {
         throw Errors.business(
@@ -294,6 +294,13 @@ export async function customerConfirmAcceptance(this: any,
     this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
     return this.buildDetail(nextRow);
   }
+
+function isWorkflowAcceptanceStageCode(
+  stageCode: string | null | undefined,
+): stageCode is ProjectLogStageCode {
+  return isProjectConstructionStageCode(stageCode) ||
+    stageCode === PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE;
+}
 
 export async function customerDisputeAcceptance(this: any, 
     authUserId: string | null | undefined,
