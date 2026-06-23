@@ -9,12 +9,10 @@ import {
   type ProjectLogCommentCountRow,
   type ProjectLogCommentSummaryRow,
 } from "@/repositories/project-log-comments";
-import type {
-  CreateProjectLogInput,
-  UpdateProjectLogInput,
-} from "@/schema/project-logs";
+import type { CreateProjectLogInput, UpdateProjectLogInput } from "@/schema/project-logs";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { projectProcedureAssignmentService } from "@/services/project-procedure-assignments";
 import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
 import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
@@ -116,6 +114,12 @@ class ProjectLogService {
           mutation: "create_project_log",
         }),
       );
+      await measureProjectLogCreateStep(timings, "assignment_guard_ms", () =>
+        projectProcedureAssignmentService.assertCanCreateProjectLog({
+          authContext: input.authContext,
+          projectId: project.id,
+          stageCode,
+        }));
     }
 
     const row = stageCode && isProjectConstructionStageCode(stageCode)

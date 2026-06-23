@@ -130,6 +130,58 @@ describe("employee project detail workflow gates", () => {
     });
   });
 
+  test("uses workflow assignment stage for project log entry instead of legacy stages", () => {
+    const workflowProgress: WorkflowProgressResult = {
+      source: "workflow_runtime",
+      instance_id: "instance-1",
+      instance_status: "running",
+      current_node_key: "procedure_installation",
+      current_node_title: "安装",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
+      current_group_order: 20,
+      current_node_type: "procedure",
+      current_business_kind: "procedure_template",
+      current_stage_code: "installation",
+      current_gate: null,
+      pending_task_count: 1,
+      actions: [],
+      warnings: [],
+      timeline_nodes: [{
+        node_key: "procedure_installation",
+        node_title: "安装",
+        node_type: "procedure",
+        business_kind: "procedure_template",
+        group: workflowGroup,
+        status: "current",
+        display: {
+          label: "安装",
+          status_label: "当前",
+          status_variant: "default",
+        },
+        attributes: {
+          stage_code: "installation",
+          procedure_assignment_status: "in_progress",
+        },
+        actions: [],
+      }],
+    };
+
+    expect(service.buildProjectLogEntry({
+      project: { id: "project-1", status: "constructing" },
+      permissions,
+      constructionStages,
+      workflowProgress,
+      nextAction: null,
+    } as never)).toMatchObject({
+      can_create: true,
+      writable_stage: {
+        stage_code: "installation",
+        stage_label: "安装",
+      },
+    });
+  });
+
   test("enriches workflow progress and state timeline nodes from construction stages", () => {
     const workflowProgress: WorkflowProgressResult = {
       source: "workflow_runtime",

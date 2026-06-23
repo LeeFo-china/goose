@@ -42,6 +42,7 @@ const update = mock(async (input: { payload: Record<string, unknown> }) => ({
   ...input.payload,
 }));
 const assertProjectWorkflowStageMutationAllowed = mock(async () => undefined);
+const assertCanCreateProjectLog = mock(async () => undefined);
 
 mock.module("@/repositories/project-logs", () => ({
   projectLogRepository: {
@@ -60,6 +61,8 @@ mock.module("@/repositories/project-log-comments", () => ({
 mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
     assertTenantContext: mock(() => "tenant-1"),
+    assertTenantId: mock(() => "tenant-1"),
+    assertPermission: mock(() => "all"),
     canWriteProjectLogForProject: mock(async () => true),
     canWriteProjectLog: mock(async () => true),
     getScope: mock(() => "self"),
@@ -68,6 +71,12 @@ mock.module("@/services/access-policy", () => ({
 
 mock.module("@/services/project-workflow-mutation-guards", () => ({
   assertProjectWorkflowStageMutationAllowed,
+}));
+
+mock.module("@/services/project-procedure-assignments", () => ({
+  projectProcedureAssignmentService: {
+    assertCanCreateProjectLog,
+  },
 }));
 
 mock.module("@/services/project-status", () => ({
@@ -131,6 +140,11 @@ describe("projectLogService", () => {
       employee_id: "employee-1",
       stage_code: "tiling",
     }));
+    expect(assertCanCreateProjectLog).toHaveBeenCalledWith({
+      authContext,
+      projectId: "550e8400-e29b-41d4-a716-446655440001",
+      stageCode: "tiling",
+    });
     expect(createFast).not.toHaveBeenCalled();
   });
 

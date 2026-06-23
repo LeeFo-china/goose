@@ -6,8 +6,14 @@ import type {
   ProjectLogCommentSummaryMap,
   ProjectLogEntrySummary,
   ProjectLogListResult,
+  WorkflowProgressResult,
   projectSer,
 } from "./shared";
+import {
+  PROJECT_LOG_STAGE_CONFIG,
+  isProjectConstructionStageCode,
+  type ProjectLogStageCode,
+} from "@gooes/domain";
 
 export function buildLogsFromBundle(this: any, 
   bundle: Awaited<ReturnType<typeof projectSer.getEmployeeProjectBootstrapBundle>>,
@@ -56,6 +62,7 @@ export function buildProjectLogEntry(this: any, input: {
   project: Record<string, unknown>;
   permissions: BootstrapPermissions;
   constructionStages: ConstructionStagesResult | null;
+  workflowProgress?: WorkflowProgressResult | null;
   nextAction: ProjectDetailNextAction | null;
   workflowBlockingReason?: string | null;
 }): ProjectLogEntrySummary {
@@ -64,6 +71,33 @@ export function buildProjectLogEntry(this: any, input: {
       can_create: false,
       writable_stage: null,
       blocked_reason: input.workflowBlockingReason,
+      next_action: this.buildProjectLogEntryNextAction(input),
+    };
+  }
+
+  if (input.workflowProgress?.source === "workflow_runtime") {
+    const workflowWritableStage = resolveWorkflowWritableLogStage(
+      input.workflowProgress,
+    );
+    if (
+      input.permissions.can_create_project_log &&
+      workflowWritableStage?.canCreate === true
+    ) {
+      return {
+        can_create: true,
+        writable_stage: {
+          stage_code: workflowWritableStage.stageCode,
+          stage_label: workflowWritableStage.stageLabel,
+        },
+        blocked_reason: null,
+        next_action: null,
+      };
+    }
+
+    return {
+      can_create: false,
+      writable_stage: null,
+      blocked_reason: this.buildProjectLogEntryBlockedReason(input),
       next_action: this.buildProjectLogEntryNextAction(input),
     };
   }
@@ -104,6 +138,7 @@ export function buildProjectLogEntryBlockedReason(this: any, input: {
   project: Record<string, unknown>;
   permissions: BootstrapPermissions;
   constructionStages: ConstructionStagesResult | null;
+  workflowProgress?: WorkflowProgressResult | null;
   workflowBlockingReason?: string | null;
 }) {
   if (input.workflowBlockingReason) {
@@ -112,6 +147,13 @@ export function buildProjectLogEntryBlockedReason(this: any, input: {
 
   if (!input.permissions.scopes.project_log_create) {
     return "当前员工无施工日志创建权限";
+  }
+
+  if (input.workflowProgress?.source === "workflow_runtime") {
+    const workflowWritableStage = resolveWorkflowWritableLogStage(
+      input.workflowProgress,
+    );
+    return workflowWritableStage?.blockedReason ?? "当前暂无可写施工工序";
   }
 
   const status = typeof input.project.status === "string"
@@ -148,6 +190,55 @@ export function buildProjectLogEntryBlockedReason(this: any, input: {
   }
 
   return "当前暂无可写施工阶段";
+}
+
+function resolveWorkflowWritableLogStage(
+  workflowProgress: WorkflowProgressResult,
+): {
+  canCreate: boolean;
+  stageCode: ProjectLogStageCode;
+  stageLabel: string;
+  blockedReason: string | null;
+} | null {
+  const currentNode = workflowProgress.timeline_nodes.find((node) =>
+    node.status === "current" ||
+    node.node_key === workflowProgress.current_node_key
+  );
+  const stageCode = typeof currentNode?.attributes.stage_code === "string"
+    ? currentNode.attributes.stage_code
+    : null;
+  if (!isProjectConstructionStageCode(stageCode)) {
+    return null;
+  }
+
+  const stageLabel = PROJECT_LOG_STAGE_CONFIG[stageCode]?.label || stageCode;
+  const assignmentStatus = currentNode?.attributes.procedure_assignment_status;
+  if (assignmentStatus === "in_progress") {
+    return { canCreate: true, stageCode, stageLabel, blockedReason: null };
+  }
+  if (assignmentStatus === "planned") {
+    return {
+      canCreate: false,
+      stageCode,
+      stageLabel,
+      blockedReason: `当前${stageLabel}工序尚未开工，不能新增施工日志`,
+    };
+  }
+  if (assignmentStatus === "completed" || assignmentStatus === "canceled") {
+    return {
+      canCreate: false,
+      stageCode,
+      stageLabel,
+      blockedReason: `当前${stageLabel}工序已结束，不能继续新增施工日志`,
+    };
+  }
+
+  return {
+    canCreate: false,
+    stageCode,
+    stageLabel,
+    blockedReason: `请先开始${stageLabel}工序派工`,
+  };
 }
 
 export function buildProjectLogEntryNextAction(this: any, input: {

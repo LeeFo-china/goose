@@ -121,6 +121,29 @@ class ProjectProcedureAssignmentRepository {
     return data as unknown as ProcedureAssignmentRow | null;
   }
 
+  async findActiveByProjectStage(input: {
+    tenantId: string;
+    projectId: string;
+    stageCode: string;
+  }): Promise<ProcedureAssignmentRow | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_procedure_assignments")
+      .select(ASSIGNMENT_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("project_id", input.projectId)
+      .eq("stage_code", input.stageCode)
+      .in("status", ["planned", "in_progress"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询工序派工失败", error);
+    }
+
+    return data as unknown as ProcedureAssignmentRow | null;
+  }
+
   async listActiveForProject(input: {
     tenantId: string;
     projectId: string;

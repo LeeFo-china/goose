@@ -11,6 +11,7 @@ import {
   calculatePlannedEndDate,
   getEffectiveAssignmentStatus,
 } from "./status";
+import { assertAssignmentCanCreateProjectLog } from "./log-gate";
 import {
   readCandidateDepartmentCodes,
   serializeProcedureCandidate,
@@ -20,6 +21,7 @@ import type { ProcedureAssignmentRow } from "./types";
 type AssignmentRepositoryLike = Pick<
   typeof projectProcedureAssignmentRepository,
   | "findActiveByNode"
+  | "findActiveByProjectStage"
   | "listActiveForProject"
   | "listTenantDepartmentIdsByCodes"
   | "listCandidateEmployees"
@@ -266,6 +268,23 @@ export class ProjectProcedureAssignmentService {
     workflowInstanceId: string;
   }): Promise<ProcedureAssignmentRow[]> {
     return this.repository.listActiveForProject(input);
+  }
+
+  async assertCanCreateProjectLog(input: {
+    authContext: AuthContext;
+    projectId: string;
+    stageCode: string;
+  }): Promise<void> {
+    const tenantId = this.assertTenantId(input.authContext);
+    const active = await this.repository.findActiveByProjectStage({
+      tenantId,
+      projectId: input.projectId,
+      stageCode: input.stageCode,
+    });
+    assertAssignmentCanCreateProjectLog({
+      assignment: active,
+      tenantToday: this.getToday(),
+    });
   }
 
   async listCandidates(input: {

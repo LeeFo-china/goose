@@ -215,6 +215,7 @@ export async function getBootstrap(this: any, input: {
       project,
       permissions,
       constructionStages,
+      workflowProgress: enrichedWorkflowOutputs.workflowProgress,
       nextAction,
       workflowBlockingReason,
     }),
