@@ -417,3 +417,76 @@ complete 返回：
 Task 6 完整 E2E 已通过。
 
 本轮验证证明：开启应收计划的 `payment_collection` 节点可以在 task/action 读取时生成应收上下文，财务 complete 后可以创建 confirmed payment、核销 receivable plan、写入 finance ledger，并推进 workflow 到结束节点。
+
+## 小程序端 complete smoke 回填
+
+时间：`2026-06-23`
+
+执行端：`/Users/leefo/Public/work/orange-finance-receivables-phase2`
+
+小程序侧记录：
+
+- `/Users/leefo/Public/work/orange-finance-receivables-phase2/docs/decoration-finance/2026-06-23-phase2-receivables-miniprogram-smoke.md`
+
+执行环境：
+
+- API：`http://192.168.1.15:3000`
+- 执行账号：`18800005001` / 小龙女
+- employee ID：`bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`
+
+本次使用后端重新准备的 pending 应收收款样本：
+
+- project ID：`b95f6b51-6b9c-4970-948e-b369106545d8`
+- workflow instance ID：`887d9829-0026-4e76-93ad-41f2b474823a`
+- task ID：`aa326b7e-89f4-4e11-b7a0-f11ec806f91e`
+- receivable plan ID：`48c191ff-022e-4fd7-812b-30632f8d3c7a`
+- payment ID：`cc671175-5526-4340-9d1e-0c6bd1998ab0`
+- ledger ID：`35efd903-8965-4ecc-bccc-f362d5b48754`
+- complete 后 workflow current node：`end`
+- receivable plan 状态：`paid`
+
+小程序 complete 请求只提交：
+
+- `amount`
+- `paid_at`
+- `evidence_images`
+- `remark`
+
+小程序未回传 readonly `receivable_context`，符合契约。
+
+complete 响应摘要：
+
+- `result.ok=true`
+- `bridged=true`
+- `operation=confirm_payment`
+- `payment.status=confirmed`
+
+小程序读取确认：
+
+- `/workflow-tasks` action `output_fields` 中可读取 readonly `receivable_context`。
+- `/projects/:projectId/employee-detail-bootstrap` current node `attributes` 中可读取应收信息。
+- 小程序侧可正常展示应收摘要。
+
+后端只读复核：
+
+- `GET /projects/:projectId/receivables?page=1&pageSize=20`
+  - `contract_amount=50000`
+  - `receivable_amount=10000`
+  - `paid_amount=10000`
+  - `remaining_amount=0`
+  - plan `status=paid`
+- `GET /finance/ledger?page=1&pageSize=20&project_id=:projectId`
+  - `pagination.total=1`
+  - ledger `entry_type=project_payment`
+  - ledger `payment_id=cc671175-5526-4340-9d1e-0c6bd1998ab0`
+  - ledger `workflow_task_id=aa326b7e-89f4-4e11-b7a0-f11ec806f91e`
+- `GET /workflow-subjects/project/:projectId/state`
+  - `instance_status=completed`
+  - `current_node_key=end`
+  - `actions=[]`
+
+关于 allocation ID：
+
+小程序侧当前可读 API 未返回 allocation ID。`POST /workflow-tasks/:taskId/complete`、`GET /finance/receivables`、`GET /projects/:projectId/receivables`、`GET /finance/ledger` 均不暴露 allocation，allocation 相关只读 GET 路由当前也不存在。
+
+因此本轮小程序 smoke 不强制要求回填 allocation ID。若后续验收必须由小程序回填 allocation ID，需要后端在 complete 响应中返回，或提供受权限保护的只读查询接口。

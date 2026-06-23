@@ -244,11 +244,13 @@ GET /projects/:projectId/receivables?page=1&pageSize=20
 - task ID
 - receivable plan ID
 - payment ID
-- allocation ID
+- allocation ID，如后端 complete 响应或只读查询接口返回
 - ledger ID
 - complete 请求/响应
 - complete 后 workflow current node
 - `receivable_context` 截图或请求日志
+
+说明：当前小程序可读 API 不暴露 allocation ID。若后续验收必须由小程序回填 allocation ID，需要后端在 `POST /workflow-tasks/:taskId/complete` 响应中返回，或提供受权限保护的只读查询接口。
 
 ## 后端 smoke 辅助脚本
 
