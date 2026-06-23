@@ -13,9 +13,9 @@
 原因：
 
 - 本轮完成的是 Admin/API 侧费用审批与支出付款闭环。
-- 费用申请创建、审批、财务付款和财务台账可见性当前仍以 Admin 为主。
-- 小程序现有项目 workflow、收款、施工节点契约不受影响。
-- 本轮没有要求小程序新增费用申请、费用审批或费用打款入口。
+- 本轮不新增、不调整小程序现有费用中心、费用申请详情和打款页面入口。
+- orange 已有费用入口的推进口径已按 workflow v2/actions 运行，本轮不需要配合代码改动。
+- 小程序现有项目 workflow、收款、施工节点和费用审批入口契约不受影响。
 
 orange 仓库保持只读，本次没有修改 `/Users/leefo/Public/work/orange`。
 
@@ -60,9 +60,9 @@ orange 仓库保持只读，本次没有修改 `/Users/leefo/Public/work/orange`
 - 支出台账不重复写入。
 - 有权限码但没有业务范围时，后端会返回 `403 FORBIDDEN`。
 
-## 如果后续小程序要接费用审批
+## 如果后续小程序要新增或调整费用审批能力
 
-建议分三类入口，不要一次性把 Admin 全部搬到小程序。
+建议继续按现有入口分层演进，不要一次性把 Admin 全部搬到小程序。
 
 ### 1. 员工费用申请
 
@@ -160,8 +160,8 @@ orange 仓库保持只读，本次没有修改 `/Users/leefo/Public/work/orange`
 
 可以这样同步：
 
-> 本轮 gooes 完成的是 Admin/API 侧费用审批与支出付款闭环，小程序当前不需要改代码。
+> 本轮 gooes 完成的是 Admin/API 侧费用审批与支出付款闭环，小程序当前不需要改代码，也不需要新增或调整现有费用中心、费用申请详情和打款页面入口。
 >
-> 后端已经验证费用申请从提交、主管审批、财务审批到登记打款都可以通过 workflow task/action 推进，付款后会写入 settlement 和支出方向 finance ledger，重复 complete 不会重复入账。
+> 后端已经验证费用申请从提交、主管审批、财务审批到登记打款都可以通过 workflow task/action 推进，付款后会写入 settlement 和支出方向 finance ledger，重复 complete 不会重复入账。orange 现有审批、驳回、撤回、打款动作继续从 workflow_state.actions 取 action key，并统一走 `POST /workflow-tasks/:taskId/complete` 即可。
 >
-> 如果后续要让小程序承载费用申请、审批或财务付款，我们会按 workflow v2 单独开 handoff。届时小程序仍只消费 `/workflow-tasks`、`workflow_state.timeline_nodes`、`node.display`、`node.attributes`、`actions[]`，所有审批和付款推进只调用 `POST /workflow-tasks/:taskId/complete`，凭证上传使用 `scene=expense_request`，不在小程序本地推导审批节点、付款权限或台账规则。
+> 如果后续要新增或调整小程序费用能力，我们会按 workflow v2 单独开 handoff。届时小程序仍只消费 `/workflow-tasks`、`workflow_state.timeline_nodes`、`node.display`、`node.attributes`、`actions[]`，所有审批和付款推进只调用 `POST /workflow-tasks/:taskId/complete`，凭证上传使用 `scene=expense_request`，不在小程序本地推导审批节点、付款权限或台账规则。
