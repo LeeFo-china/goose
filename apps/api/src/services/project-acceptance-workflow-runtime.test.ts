@@ -221,6 +221,7 @@ const completeRuntimeNode = mock(async (): Promise<CompleteRuntimeNodeResultFixt
   task: null,
 }));
 const syncFromRuntimeInstance = mock(async () => null);
+const markProcedureCompletedByStage = mock(async () => null);
 const getGraph = mock(async () => graphResult);
 const getRuntimeInstanceById = mock(async () => ({
   status: "completed",
@@ -252,12 +253,19 @@ mock.module("@/services/workflow-subject-state", () => ({
   },
 }));
 
+mock.module("@/services/project-procedure-assignments/completion-sync", () => ({
+  projectProcedureAssignmentCompletionSyncService: {
+    markProcedureCompletedByStage,
+  },
+}));
+
 describe("projectAcceptanceWorkflowRuntimeService", () => {
   beforeEach(() => {
     runningInstance = installationInstance;
     graphResult = null;
     completeRuntimeNode.mockClear();
     syncFromRuntimeInstance.mockClear();
+    markProcedureCompletedByStage.mockClear();
     getGraph.mockClear();
     getRuntimeInstanceById.mockClear();
     getRuntimeInstanceById.mockImplementation(async () => ({
@@ -296,6 +304,7 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
       reason: "current_payment_gate_after_stage",
     });
     expect(completeRuntimeNode).not.toHaveBeenCalled();
+    expect(markProcedureCompletedByStage).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1", stageCode: "plumbing_electrical", operatorEmployeeId: null });
     expect(syncFromRuntimeInstance).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       subjectType: "project",
@@ -407,6 +416,7 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
 
     expect(result.status).toBe("advanced");
     expect(listStageLogEvidence).not.toHaveBeenCalled();
+    expect(markProcedureCompletedByStage).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1", stageCode: "plumbing_electrical", operatorEmployeeId: null });
     expect(completeRuntimeNode).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       definitionId: "definition-1",

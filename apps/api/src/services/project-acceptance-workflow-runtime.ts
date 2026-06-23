@@ -10,6 +10,9 @@ import {
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import {
+  projectProcedureAssignmentCompletionSyncService,
+} from "@/services/project-procedure-assignments/completion-sync";
+import {
   PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
   getPreviousProjectConstructionStage,
   isProjectConstructionStageCode,
@@ -91,6 +94,7 @@ class ProjectAcceptanceWorkflowRuntimeService {
 
     if (this.getCurrentStageCode(instance) !== input.stageCode) {
       if (await this.isCurrentPaymentGateAfterStage(input, instance)) {
+        await this.markProcedureAssignmentCompleted(input);
         await workflowSubjectStateService.syncFromRuntimeInstance({
           tenantId: input.tenantId,
           subjectType: "project",
@@ -161,6 +165,7 @@ class ProjectAcceptanceWorkflowRuntimeService {
       };
     }
 
+    await this.markProcedureAssignmentCompleted(input);
     await workflowSubjectStateService.syncFromRuntimeInstance({
       tenantId: input.tenantId,
       subjectType: "project",
@@ -188,6 +193,18 @@ class ProjectAcceptanceWorkflowRuntimeService {
       subjectType: "project",
       subjectId: input.projectId,
     });
+  }
+
+  private markProcedureAssignmentCompleted(
+    input: SyncCustomerConfirmAcceptanceInput,
+  ) {
+    return projectProcedureAssignmentCompletionSyncService
+      .markProcedureCompletedByStage({
+        tenantId: input.tenantId,
+        projectId: input.projectId,
+        stageCode: input.stageCode,
+        operatorEmployeeId: null,
+      });
   }
 
   private getCurrentStageCode(
