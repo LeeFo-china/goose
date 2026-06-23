@@ -193,6 +193,90 @@ describe("project workflow node contract", () => {
     });
   });
 
+  test("projects payment receivable context to timeline node attributes", () => {
+    const graph = {
+      definition: {
+        workflow_key: "construction_main",
+        category: "construction",
+      },
+      nodes: [
+        {
+          id: "node-payment",
+          node_key: "payment_stage_2",
+          title: "中期收款",
+          node_type: "confirmation",
+          business_kind: "payment_collection",
+          config: { payment_type: "stage_2" },
+        },
+      ],
+      edges: [],
+    };
+
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_title: "中期收款",
+        current_business_kind: "payment_collection",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_snapshot: graph.nodes[0],
+      },
+      graph,
+      pendingActions: [{
+        task_id: "task-1",
+        key: "complete",
+        label: "中期收款",
+        node_key: "payment_stage_2",
+        node_type: "confirmation",
+        business_domain: "payment_collection",
+        business_action: "confirm_payment",
+        requires_reason: false,
+        disabled: false,
+        output_fields: [{
+          name: "receivable_context",
+          label: "应收信息",
+          type: "receivable_summary",
+          required: false,
+          readonly: true,
+          receivable_plan_id: "plan-1",
+          receivable_title: "中期进度款",
+          receivable_amount: 10000,
+          receivable_paid_amount: 3000,
+          receivable_remaining_amount: 7000,
+          receivable_due_date: "2026-06-30",
+          receivable_status: "partially_paid",
+          receivable_overdue_days: 0,
+        }],
+      }],
+    });
+
+    expect(progress.timeline_nodes[0]).toMatchObject({
+      attributes: {
+        payment_type: "stage_2",
+        receivable_plan_id: "plan-1",
+        receivable_title: "中期进度款",
+        receivable_amount: 10000,
+        receivable_paid_amount: 3000,
+        receivable_remaining_amount: 7000,
+        receivable_due_date: "2026-06-30",
+        receivable_status: "partially_paid",
+        receivable_overdue_days: 0,
+      },
+      actions: [{
+        output_fields: [expect.objectContaining({
+          name: "receivable_context",
+          type: "receivable_summary",
+        })],
+      }],
+    });
+  });
+
   test("projects procedure assignment attributes and runtime actions", () => {
     const progress = buildProjectWorkflowProgressProjection({
       subjectState: {

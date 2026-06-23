@@ -47,6 +47,31 @@ class ProjectReceivableAllocationRepository {
 
     return data;
   }
+
+  async sumAllocatedAmount(input: {
+    tenantId: string;
+    receivablePlanId: string;
+  }): Promise<number> {
+    // A single receivable plan is expected to have a small number of payment
+    // allocations. If online payments introduce high-frequency partial
+    // allocations later, replace this with an aggregate RPC.
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_receivable_allocations")
+      .select("amount")
+      .eq("tenant_id", input.tenantId)
+      .eq("receivable_plan_id", input.receivablePlanId)
+      .limit(100);
+
+    if (error) {
+      throw Errors.dbError("统计应收核销金额失败", error);
+    }
+
+    return ((data as Array<{ amount: number | string | null }> | null) || [])
+      .reduce((sum, item) => {
+        const amount = Number(item.amount ?? 0);
+        return Number.isFinite(amount) ? sum + amount : sum;
+      }, 0);
+  }
 }
 
 export const projectReceivableAllocationRepository =

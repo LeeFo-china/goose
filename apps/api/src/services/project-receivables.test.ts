@@ -23,12 +23,21 @@ const findProjectTenant = mock(async () => ({
   tenant_id: "tenant-1",
 }));
 const canAccessProject = mock(async () => true);
+const createAllocation = mock(async () => ({ id: "allocation-1" }));
+const sumAllocatedAmount = mock(async () => 10000);
 
 mock.module("@/repositories/project-receivable-plans", () => ({
   projectReceivablePlanRepository: {
     list: listReceivables,
     summarizeProject,
     findProjectTenant,
+  },
+}));
+
+mock.module("@/repositories/project-receivable-allocations", () => ({
+  projectReceivableAllocationRepository: {
+    createIdempotent: createAllocation,
+    sumAllocatedAmount,
   },
 }));
 
@@ -95,6 +104,42 @@ function createService() {
         list: listReceivables,
         summarizeProject,
         findProjectTenant,
+        findProjectSignedAmount: mock(async () => 100000),
+        findByWorkflowNodeSource: mock(async () => null),
+        createWorkflowNodePlan: mock(async () => ({
+          id: "plan-1",
+          tenant_id: "tenant-1",
+          project_id: "project-1",
+          workflow_instance_id: "instance-1",
+          workflow_node_key: "payment_stage_2",
+          source_type: "workflow_node",
+          source_id: "node-1",
+          payment_type: "stage_2",
+          title: "中期进度款",
+          amount: 10000,
+          due_date: "2026-06-16",
+          paid_amount: 0,
+          status: "pending" as const,
+        })),
+        updatePaidAmount: mock(async () => ({
+          id: "plan-1",
+          tenant_id: "tenant-1",
+          project_id: "project-1",
+          workflow_instance_id: "instance-1",
+          workflow_node_key: "payment_stage_2",
+          source_type: "workflow_node",
+          source_id: "node-1",
+          payment_type: "stage_2",
+          title: "中期进度款",
+          amount: 10000,
+          due_date: "2026-06-16",
+          paid_amount: 10000,
+          status: "paid" as const,
+        })),
+      },
+      allocationRepository: {
+        createIdempotent: createAllocation,
+        sumAllocatedAmount,
       },
       accessPolicyService,
     })
@@ -166,6 +211,40 @@ describe("projectReceivablesService", () => {
       tenantId: "tenant-1",
       projectId: "project-1",
       tenantToday: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
+  });
+
+  test("ensures workflow receivable context from enabled payment node config", async () => {
+    const service = await createService();
+
+    const context = await service.ensureWorkflowPaymentReceivableContext({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+      workflowInstanceId: "instance-1",
+      workflowInstanceNodeId: "node-run-1",
+      workflowNodeKey: "payment_stage_2",
+      taskCreatedAt: "2026-06-16T09:00:00.000Z",
+      nodeSnapshot: {
+        node_key: "payment_stage_2",
+        business_kind: "payment_collection",
+        title: "中期进度款",
+        config: {
+          payment_type: "stage_2",
+          receivable_plan_enabled: true,
+          receivable_amount_mode: "fixed_amount",
+          receivable_fixed_amount: 10000,
+          receivable_due_offset_days: 0,
+        },
+      },
+    });
+
+    expect(context).toMatchObject({
+      receivable_plan_id: "plan-1",
+      receivable_title: "中期进度款",
+      receivable_amount: 10000,
+      receivable_paid_amount: 0,
+      receivable_remaining_amount: 10000,
+      receivable_due_date: "2026-06-16",
     });
   });
 });

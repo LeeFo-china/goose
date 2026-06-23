@@ -116,6 +116,8 @@ class WorkflowTaskService {
           tenant_id: task.tenant_id,
           definition_id: task.definition_id,
           instance_id: task.instance_id,
+          instance_node_id: task.instance_node_id,
+          created_at: task.created_at,
           node_key: task.node_key,
           instance: {
             subject_id: task.instance.subject_id,

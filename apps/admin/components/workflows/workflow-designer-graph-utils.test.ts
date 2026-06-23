@@ -89,6 +89,31 @@ describe("validateGraph business tracks", () => {
     expect(result.valid).toBe(true);
   });
 
+  test("rejects enabled receivable plan without a valid amount rule", () => {
+    const nodes = [
+      node("start", "start"),
+      node("started", "construction_stage", "construction_start"),
+      paymentNode("water_electricity_payment", "stage_2", {
+        receivable_plan_enabled: true,
+        receivable_amount_mode: "signed_amount_percentage",
+        receivable_percentage: null,
+      }),
+      node("end", "end"),
+    ];
+
+    const result = validateGraph({
+      definition: definition("construction_main", "construction"),
+      nodes,
+      edges: linearEdges(nodes),
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: "payment_collection_receivable_percentage_invalid",
+      nodeKey: "water_electricity_payment",
+    }));
+  });
+
   test("rejects construction workflow with a disconnected payment gate", () => {
     const nodes = [
       node("start", "start"),
@@ -221,7 +246,11 @@ function procedureNode(nodeKey: string, stageKey: string) {
   });
 }
 
-function paymentNode(nodeKey: string, paymentType: string) {
+function paymentNode(
+  nodeKey: string,
+  paymentType: string,
+  config: Partial<WorkflowNodeConfig> = {},
+) {
   return node(nodeKey, "confirmation", "payment_collection", {
     required_permissions: ["finance.payment.confirm"],
     finance_type: "payment_collection",
@@ -229,6 +258,14 @@ function paymentNode(nodeKey: string, paymentType: string) {
     requirement_mode: "any_confirmed",
     required_percentage: null,
     finance_reviewer_employee_id: null,
+    receivable_plan_enabled: false,
+    receivable_amount_mode: "signed_amount_percentage",
+    receivable_fixed_amount: null,
+    receivable_percentage: null,
+    receivable_due_offset_days: 0,
+    receivable_due_date_rule: "node_entered_at",
+    receivable_title: null,
+    ...config,
   });
 }
 

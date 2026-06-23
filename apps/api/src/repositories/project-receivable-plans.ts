@@ -64,6 +64,22 @@ export type ProjectReceivableSummary = {
   overdue_count: number;
 };
 
+export type ProjectReceivablePlanRecord = {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  workflow_instance_id: string | null;
+  workflow_node_key: string | null;
+  source_type: string;
+  source_id: string | null;
+  payment_type: string;
+  title: string;
+  amount: number;
+  due_date: string;
+  paid_amount: number;
+  status: ProjectReceivableStatus;
+};
+
 type ProjectReceivableListInput = {
   tenantId: string;
   query: FinanceReceivableListQuery;
@@ -111,6 +127,114 @@ class ProjectReceivablePlanRepository {
     }
 
     return data as { id: string; tenant_id: string | null } | null;
+  }
+
+  async findProjectSignedAmount(projectId: string): Promise<number | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("signed_amount")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目签约金额失败", error);
+    }
+
+    const signedAmount = normalizeMoney(
+      (data as { signed_amount: number | string | null } | null)?.signed_amount,
+    );
+    return signedAmount > 0 ? signedAmount : null;
+  }
+
+  async findByWorkflowNodeSource(input: {
+    tenantId: string;
+    sourceId: string;
+    paymentType: string;
+  }): Promise<ProjectReceivablePlanRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_receivable_plans")
+      .select("id, tenant_id, project_id, workflow_instance_id, workflow_node_key, source_type, source_id, payment_type, title, amount, due_date, paid_amount, status")
+      .eq("tenant_id", input.tenantId)
+      .eq("source_type", "workflow_node")
+      .eq("source_id", input.sourceId)
+      .eq("payment_type", input.paymentType)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询应收计划失败", error);
+    }
+
+    return data
+      ? normalizeReceivablePlanRecord(data as unknown as ProjectReceivablePlanRow)
+      : null;
+  }
+
+  async createWorkflowNodePlan(input: {
+    tenant_id: string;
+    project_id: string;
+    workflow_instance_id: string;
+    workflow_node_key: string;
+    source_id: string;
+    payment_type: string;
+    title: string;
+    amount: number;
+    due_date: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<ProjectReceivablePlanRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_receivable_plans")
+      .upsert({
+        tenant_id: input.tenant_id,
+        project_id: input.project_id,
+        workflow_instance_id: input.workflow_instance_id,
+        workflow_node_key: input.workflow_node_key,
+        source_type: "workflow_node",
+        source_id: input.source_id,
+        payment_type: input.payment_type,
+        title: input.title,
+        amount: input.amount,
+        due_date: input.due_date,
+        metadata: input.metadata ?? {},
+      }, {
+        onConflict: "tenant_id,source_type,source_id,payment_type",
+        ignoreDuplicates: false,
+      })
+      .select("id, tenant_id, project_id, workflow_instance_id, workflow_node_key, source_type, source_id, payment_type, title, amount, due_date, paid_amount, status")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("创建应收计划失败", error);
+    }
+
+    return normalizeReceivablePlanRecord(
+      data as unknown as ProjectReceivablePlanRow,
+    );
+  }
+
+  async updatePaidAmount(input: {
+    tenantId: string;
+    planId: string;
+    paidAmount: number;
+    status: ProjectReceivableStatus;
+  }): Promise<ProjectReceivablePlanRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_receivable_plans")
+      .update({
+        paid_amount: input.paidAmount,
+        status: input.status,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.planId)
+      .select("id, tenant_id, project_id, workflow_instance_id, workflow_node_key, source_type, source_id, payment_type, title, amount, due_date, paid_amount, status")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新应收计划已收金额失败", error);
+    }
+
+    return normalizeReceivablePlanRecord(
+      data as unknown as ProjectReceivablePlanRow,
+    );
   }
 
   async list(input: ProjectReceivableListInput) {
@@ -185,6 +309,34 @@ class ProjectReceivablePlanRepository {
       data as ProjectReceivableSummaryRpcRow | null,
     );
   }
+}
+
+function normalizeReceivablePlanRecord(
+  row: ProjectReceivablePlanRow,
+): ProjectReceivablePlanRecord {
+  const amount = normalizeMoney(row.amount);
+  const paidAmount = normalizeMoney(row.paid_amount);
+
+  return {
+    id: row.id,
+    tenant_id: row.tenant_id,
+    project_id: row.project_id,
+    workflow_instance_id: row.workflow_instance_id,
+    workflow_node_key: row.workflow_node_key,
+    source_type: row.source_type,
+    source_id: row.source_id,
+    payment_type: row.payment_type,
+    title: row.title,
+    amount,
+    due_date: row.due_date,
+    paid_amount: paidAmount,
+    status: deriveReceivableStatus({
+      status: row.status,
+      paidAmount,
+      remainingAmount: Math.max(amount - paidAmount, 0),
+      overdueDays: 0,
+    }),
+  };
 }
 
 function normalizeReceivablePlanRow(

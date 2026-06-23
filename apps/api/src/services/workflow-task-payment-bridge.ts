@@ -8,6 +8,7 @@ import {
 } from "@/repositories/workflows";
 import type { AuthContext } from "@/services/authorization";
 import { financeLedgerService } from "@/services/finance-ledger";
+import { projectReceivablesService } from "@/services/project-receivables";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 
 const PAYMENT_COLLECTION_TYPES = [
@@ -41,6 +42,14 @@ type WorkflowTaskPaymentBridgeDependencies = {
       input: Parameters<typeof financeLedgerService.createProjectPaymentLedger>[0],
     ) => Promise<unknown>;
   };
+  projectReceivablesService: {
+    prepareWorkflowPaymentReceivable: (
+      input: Parameters<typeof projectReceivablesService.prepareWorkflowPaymentReceivable>[0],
+    ) => Promise<{ plan_id: string; remaining_amount: number } | null>;
+    allocateWorkflowPayment: (
+      input: Parameters<typeof projectReceivablesService.allocateWorkflowPayment>[0],
+    ) => Promise<unknown>;
+  };
   workflowRepository: {
     completeRuntimeNode: (
       input: Parameters<typeof workflowRepository.completeRuntimeNode>[0],
@@ -60,6 +69,8 @@ export type PaymentWorkflowTaskBridgeInput = {
     tenant_id: string;
     definition_id: string;
     instance_id: string;
+    instance_node_id: string | null;
+    created_at: string | null;
     node_key: string;
     instance: {
       subject_id: string;
@@ -75,6 +86,7 @@ export class WorkflowTaskPaymentBridge {
     private readonly dependencies: WorkflowTaskPaymentBridgeDependencies = {
       paymentRepository,
       financeLedgerService,
+      projectReceivablesService,
       workflowRepository,
       workflowSubjectStateService,
     },
@@ -95,7 +107,27 @@ export class WorkflowTaskPaymentBridge {
     if (existing && existing.status !== "confirmed") {
       throw Errors.badRequest("收款记录尚未确认，不能推进收款节点");
     }
+    const receivablePlan = await this.prepareReceivablePlan({
+      input,
+      snapshot,
+      existingPayment: existing,
+    });
     const payment = existing ?? await this.createManualPayment(input, snapshot);
+
+    if (receivablePlan) {
+      await this.dependencies.projectReceivablesService.allocateWorkflowPayment({
+        tenantId: input.task.tenant_id,
+        projectId: input.task.instance.subject_id,
+        planId: receivablePlan.plan_id,
+        paymentId: payment.id,
+        paymentAmount: Math.min(
+          Number(payment.amount ?? 0),
+          receivablePlan.remaining_amount,
+        ),
+        workflowTaskId: input.task.id,
+        allocatedBy: input.authContext.employeeId,
+      });
+    }
 
     await this.dependencies.financeLedgerService.createProjectPaymentLedger(
       this.buildLedgerInput(input, payment),
@@ -178,6 +210,36 @@ export class WorkflowTaskPaymentBridge {
       remark: parsed.data.remark ?? null,
       payment_channel: "manual",
     });
+  }
+
+  private async prepareReceivablePlan(input: {
+    input: PaymentWorkflowTaskBridgeInput;
+    snapshot: Record<string, unknown>;
+    existingPayment: PaymentRecord | null;
+  }) {
+    const paymentAmount = input.existingPayment
+      ? Number(input.existingPayment.amount ?? 0)
+      : this.parseManualPaymentOutput(input.input.output).amount;
+
+    return this.dependencies.projectReceivablesService
+      .prepareWorkflowPaymentReceivable({
+        tenantId: input.input.task.tenant_id,
+        projectId: input.input.task.instance.subject_id,
+        workflowInstanceId: input.input.task.instance_id,
+        workflowInstanceNodeId: input.input.task.instance_node_id,
+        workflowNodeKey: input.input.task.node_key,
+        taskCreatedAt: input.input.task.created_at,
+        nodeSnapshot: input.snapshot,
+        paymentAmount,
+      });
+  }
+
+  private parseManualPaymentOutput(output: Record<string, unknown>) {
+    const parsed = PaymentCollectionOutputSchema.safeParse(output);
+    if (!parsed.success) {
+      throw buildPaymentCollectionValidationError(parsed.error);
+    }
+    return parsed.data;
   }
 
   private throwRuntimeCompleteError(result: RuntimeCompleteResultForBridge) {
