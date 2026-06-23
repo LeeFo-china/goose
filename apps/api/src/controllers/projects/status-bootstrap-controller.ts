@@ -1,10 +1,12 @@
 import type { FastifyRequest } from "fastify";
 import { Errors } from "@/errors/error-factory";
+import { ProjectReceivableListQuerySchema } from "@/schema/finance-receivables";
 import {
   EmployeeProjectDetailBootstrapQuerySchema,
 } from "@/schema/projects";
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import { employeeProjectDetailBootstrapService } from "@/services/employee-project-detail-bootstrap";
+import { projectReceivablesService } from "@/services/project-receivables";
 import { projectSer } from "@/services/projects";
 import { Delete, Get } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -34,6 +36,24 @@ class ProjectStatusBootstrapController extends ProjectBaseController {
       authContext,
       projectId: idVerify.data.id,
     });
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/projects/:id/receivables")
+  async listProjectReceivables(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const queryResult = ProjectReceivableListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await projectReceivablesService.listProjectReceivables(
+      authContext,
+      idVerify.data.id,
+      queryResult.data,
+    );
 
     return ResponseHandler.success(data);
   }
