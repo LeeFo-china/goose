@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AuthContext } from "@/services/authorization";
 
 const completeRuntimeNode = mock(async () => ({
   ok: true,
@@ -10,6 +11,9 @@ const completeRuntimeNode = mock(async () => ({
 const completePaymentBridge = mock(async (): Promise<unknown> => null);
 const completeProjectBridge = mock(async () => null);
 const completeExpenseBridge = mock(async () => null);
+const shouldRequireAssignmentForTask = mock(() => false);
+const markProcedureCompleted = mock(async () => null);
+const canAccessProject = mock(async () => true);
 const shouldRequireProjectWorkflowRebuild = mock((input: {
   workflowKey?: string | null;
   nodeKey: string;
@@ -25,8 +29,6 @@ const paymentTask = {
   instance_id: "instance-1",
   instance_node_id: "instance-node-1",
   definition_id: "definition-1",
-  version_id: "version-1",
-  node_id: "node-1",
   node_key: "payment_stage_2",
   node_type: "confirmation",
   title: "中期进度款",
@@ -34,12 +36,6 @@ const paymentTask = {
   assignee_employee_id: "finance-employee-1",
   assignee_role_code: null,
   assignee_permission_code: "finance.payment.confirm",
-  assignee_employee: null,
-  due_at: null,
-  completed_by: null,
-  completed_at: null,
-  created_at: "2026-06-15T00:00:00.000Z",
-  updated_at: "2026-06-15T00:00:00.000Z",
   instance: {
     id: "instance-1",
     subject_type: "project",
@@ -50,10 +46,7 @@ const paymentTask = {
       node_key: "payment_stage_2",
       business_kind: "payment_collection",
       title: "中期进度款",
-      config: {
-        payment_type: "stage_2",
-        block_message: "请先确认中期进度款已入账后再进入瓦工",
-      },
+      config: { payment_type: "stage_2", block_message: "请先确认中期进度款已入账后再进入瓦工" },
     },
   },
 };
@@ -68,9 +61,7 @@ const stalePaymentTask = {
       node_key: "procedure_tiling",
       business_kind: "procedure_template",
       title: "瓦工施工",
-      config: {
-        stage_key: "tiling",
-      },
+      config: { stage_key: "tiling" },
     },
   },
 };
@@ -119,25 +110,55 @@ const legacyProjectDesigningTask = {
   },
 };
 
+const procedureTask = {
+  ...paymentTask,
+  id: "task-procedure-demolition",
+  node_key: "procedure_demolition",
+  node_type: "procedure",
+  title: "拆改",
+  assignee_employee_id: null,
+  assignee_permission_code: "project.update",
+  instance: {
+    ...paymentTask.instance,
+    subject_type: "project",
+    subject_id: "project-1",
+    current_node_key: "procedure_demolition",
+    current_node_snapshot: {
+      node_key: "procedure_demolition",
+      node_type: "procedure",
+      business_kind: "procedure_template",
+      title: "拆改",
+      config: { stage_key: "demolition", require_procedure_assignment: true },
+    },
+  },
+};
+
 const findById = mock(async () => paymentTask);
 const getDefinitionById = mock(async () => ({
-  id: "definition-1",
-  workflow_key: "project_signing",
+  id: "definition-1", workflow_key: "project_signing",
 }));
 const listAccessibleTasks = mock(async () => ({
   list: [paymentTask],
-  pagination: {
-    page: 1,
-    pageSize: 20,
-    total: 1,
-    totalPages: 1,
-  },
+  pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
 }));
 const getRuntimeInstanceById = mock(async () => ({
-  status: "completed",
-  current_node_key: "designing",
-  current_node_id: "node-1",
+  status: "completed", current_node_key: "designing", current_node_id: "node-1",
 }));
+
+function authContext(overrides: Partial<AuthContext> = {}): AuthContext {
+  return {
+    authUserId: "auth-1", employeeId: "employee-1", tenantId: "tenant-1",
+    tenantStatus: "active",
+    isPlatformAdmin: false,
+    employeeName: "员工",
+    employeeStatus: "active",
+    roleCodes: [], roles: [], permissions: [],
+    tenantName: null, tenantSlug: null, departmentId: null, tenantDepartmentId: null,
+    departmentCode: null, departmentName: null, postId: null, postName: null,
+    avatar: null,
+    ...overrides,
+  };
+}
 
 mock.module("@/repositories/workflow-tasks", () => ({
   workflowTaskRepository: {
@@ -170,6 +191,7 @@ mock.module("@/services/access-policy", () => ({
         permission.code === permissionCode
       )?.scope ?? null
     ),
+    canAccessProject,
   },
 }));
 
@@ -198,32 +220,24 @@ mock.module("@/services/workflow-task-payment-bridge", () => ({
   },
 }));
 
+mock.module("@/services/project-procedure-assignments", () => ({
+  projectProcedureAssignmentService: {
+    shouldRequireAssignmentForTask,
+    markProcedureCompleted,
+  },
+}));
+
 describe("workflowTaskService", () => {
   test("keeps payment collection action executable for assigned finance", async () => {
     const { workflowTaskService } = await import("./workflow-tasks");
 
     const tasks = await workflowTaskService.listTasks(
-      {
-        authUserId: "auth-1",
+      authContext({
         employeeId: "finance-employee-1",
-        tenantId: "tenant-1",
-        tenantName: null,
-        tenantSlug: null,
-        tenantStatus: "active",
-        isPlatformAdmin: false,
         employeeName: "小龙女",
-        employeeStatus: "active",
-        departmentId: null,
-        tenantDepartmentId: null,
         departmentCode: "FINANCE",
         departmentName: "财务部",
-        postId: null,
-        postName: null,
-        avatar: null,
-        roleCodes: [],
-        roles: [],
-        permissions: [],
-      },
+      }),
       { page: 1, pageSize: 20, status: "pending" },
     );
 
@@ -240,31 +254,76 @@ describe("workflowTaskService", () => {
 
     await expect(
       workflowTaskService.completeTask(
-        {
-          authUserId: "auth-1",
+        authContext({
           employeeId: "other-employee",
-          tenantId: "tenant-1",
-          tenantName: null,
-          tenantSlug: null,
-          tenantStatus: "active",
-          isPlatformAdmin: false,
           employeeName: "非指定财务",
-          employeeStatus: "active",
-          departmentId: null,
-          tenantDepartmentId: null,
-          departmentCode: null,
-          departmentName: null,
-          postId: null,
-          postName: null,
-          avatar: null,
-          roleCodes: [],
-          roles: [],
           permissions: [{ code: "finance.payment.confirm", scope: "all" }],
-        },
+        }),
         "task-1",
         { action: "complete", reason: null, output: {} },
       ),
     ).rejects.toMatchObject({
+      statusCode: 403,
+      code: "FORBIDDEN",
+    });
+
+    expect(completeRuntimeNode).not.toHaveBeenCalled();
+  });
+
+  test("allows procedure completion permission to advance procedure tasks", async () => {
+    const { workflowTaskService } = await import("./workflow-tasks");
+    findById.mockImplementationOnce(async () =>
+      procedureTask as unknown as typeof paymentTask
+    );
+    completePaymentBridge.mockImplementationOnce(async () => null);
+    completeProjectBridge.mockImplementationOnce(async () => null);
+    completeRuntimeNode.mockClear();
+
+    const result = await workflowTaskService.completeTask(
+      authContext({
+        employeeId: "construction-manager-1",
+        employeeName: "工程监理",
+        departmentCode: "PROJECT",
+        departmentName: "工程部",
+        permissions: [{ code: "project_procedure.complete", scope: "self" }],
+      }),
+      "task-procedure-demolition",
+      { action: "complete_procedure", reason: null, output: {} },
+    );
+
+    expect(result).toMatchObject({
+      result: { ok: true },
+    });
+    expect(completeRuntimeNode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        definitionId: "definition-1",
+        instanceId: "instance-1",
+        nodeKey: "procedure_demolition",
+        action: "complete_procedure",
+      }),
+    );
+  });
+
+  test("denies procedure completion when project scope is not visible", async () => {
+    const { workflowTaskService } = await import("./workflow-tasks");
+    findById.mockImplementationOnce(async () =>
+      procedureTask as unknown as typeof paymentTask
+    );
+    canAccessProject.mockImplementationOnce(async () => false);
+    completeRuntimeNode.mockClear();
+
+    await expect(workflowTaskService.completeTask(
+      authContext({
+        employeeId: "construction-manager-1",
+        employeeName: "工程监理",
+        departmentCode: "PROJECT",
+        departmentName: "工程部",
+        permissions: [{ code: "project_procedure.complete", scope: "self" }],
+      }),
+      "task-procedure-demolition",
+      { action: "complete_procedure", reason: null, output: {} },
+    )).rejects.toMatchObject({
       statusCode: 403,
       code: "FORBIDDEN",
     });
@@ -282,27 +341,13 @@ describe("workflowTaskService", () => {
 
     await expect(
       workflowTaskService.completeTask(
-        {
-          authUserId: "auth-1",
+        authContext({
           employeeId: "finance-employee-1",
-          tenantId: "tenant-1",
-          tenantName: null,
-          tenantSlug: null,
-          tenantStatus: "active",
-          isPlatformAdmin: false,
           employeeName: "财务",
-          employeeStatus: "active",
-          departmentId: null,
-          tenantDepartmentId: null,
           departmentCode: "FINANCE",
           departmentName: "财务部",
-          postId: null,
-          postName: null,
-          avatar: null,
-          roleCodes: [],
-          roles: [],
           permissions: [{ code: "finance.payment.confirm", scope: "all" }],
-        },
+        }),
         "task-stale-payment",
         {
           action: "complete",
@@ -335,27 +380,13 @@ describe("workflowTaskService", () => {
     }));
 
     const result = await workflowTaskService.completeTask(
-      {
-        authUserId: "auth-1",
+      authContext({
         employeeId: "finance-employee-1",
-        tenantId: "tenant-1",
-        tenantName: null,
-        tenantSlug: null,
-        tenantStatus: "active",
-        isPlatformAdmin: false,
         employeeName: "财务",
-        employeeStatus: "active",
-        departmentId: null,
-        tenantDepartmentId: null,
         departmentCode: "FINANCE",
         departmentName: "财务部",
-        postId: null,
-        postName: null,
-        avatar: null,
-        roleCodes: [],
-        roles: [],
         permissions: [{ code: "finance.payment.confirm", scope: "all" }],
-      },
+      }),
       "task-1",
       {
         action: "complete",
@@ -409,27 +440,10 @@ describe("workflowTaskService", () => {
     completeRuntimeNode.mockClear();
 
     const result = await workflowTaskService.completeTask(
-      {
-        authUserId: "auth-1",
+      authContext({
         employeeId: "employee-1",
-        tenantId: "tenant-1",
-        tenantName: null,
-        tenantSlug: null,
-        tenantStatus: "active",
-        isPlatformAdmin: false,
         employeeName: "设计师",
-        employeeStatus: "active",
-        departmentId: null,
-        tenantDepartmentId: null,
-        departmentCode: null,
-        departmentName: null,
-        postId: null,
-        postName: null,
-        avatar: null,
-        roleCodes: [],
-        roles: [],
-        permissions: [],
-      },
+      }),
       "task-customer-designing",
       { action: "complete", reason: null, output: {} },
     );
@@ -463,27 +477,10 @@ describe("workflowTaskService", () => {
 
     await expect(
       workflowTaskService.completeTask(
-        {
-          authUserId: "auth-1",
+        authContext({
           employeeId: "employee-1",
-          tenantId: "tenant-1",
-          tenantName: null,
-          tenantSlug: null,
-          tenantStatus: "active",
-          isPlatformAdmin: false,
           employeeName: "设计师",
-          employeeStatus: "active",
-          departmentId: null,
-          tenantDepartmentId: null,
-          departmentCode: null,
-          departmentName: null,
-          postId: null,
-          postName: null,
-          avatar: null,
-          roleCodes: [],
-          roles: [],
-          permissions: [],
-        },
+        }),
         "task-legacy-project-designing",
         { action: "complete", reason: null, output: {} },
       )

@@ -32,6 +32,7 @@ type AssignmentRepositoryLike = Pick<
 >;
 
 type WorkflowTaskRepositoryLike = Pick<typeof workflowTaskRepository, "findById">;
+type ProjectLogAccessPolicyLike = Pick<typeof accessPolicyService, "canWriteProjectLog">;
 
 type ProcedureWorkflowTask = {
   id: string;
@@ -59,6 +60,7 @@ export class ProjectProcedureAssignmentService {
     private readonly repository: AssignmentRepositoryLike =
       projectProcedureAssignmentRepository,
     private readonly tasks: WorkflowTaskRepositoryLike = workflowTaskRepository,
+    private readonly projectLogAccess: ProjectLogAccessPolicyLike = accessPolicyService,
   ) {}
 
   async handleWorkflowTaskAction(input: {
@@ -281,10 +283,12 @@ export class ProjectProcedureAssignmentService {
       projectId: input.projectId,
       stageCode: input.stageCode,
     });
+    const canWriteByProjectAccess = await this.projectLogAccess.canWriteProjectLog(input.authContext, input.projectId);
     assertEmployeeCanCreateAssignmentProjectLog({
       authContext: input.authContext,
       assignment: active,
       tenantToday: this.getToday(),
+      canWriteByProjectAccess,
     });
   }
 

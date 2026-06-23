@@ -35,6 +35,7 @@ export function assertEmployeeCanCreateAssignmentProjectLog(input: {
   authContext: AuthContext;
   assignment: ProcedureAssignmentRow | null;
   tenantToday: string;
+  canWriteByProjectAccess?: boolean;
 }): void {
   const scope = accessPolicyService.assertPermission(
     input.authContext,
@@ -55,7 +56,8 @@ export function assertEmployeeCanCreateAssignmentProjectLog(input: {
 
   if (
     scope !== "all" &&
-    input.assignment?.assignee_employee_id !== input.authContext.employeeId
+    input.assignment?.assignee_employee_id !== input.authContext.employeeId &&
+    input.canWriteByProjectAccess !== true
   ) {
     throw Errors.business(
       403,

@@ -23,6 +23,12 @@ import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
 
+const PROJECT_PROCEDURE_PERMISSION_BY_ACTION: Record<string, string> = {
+  start_procedure: "project_procedure.assign",
+  adjust_procedure_schedule: "project_procedure.adjust",
+  complete_procedure: "project_procedure.complete",
+};
+
 class WorkflowTaskService {
   async listTasks(authContext: AuthContext, query: WorkflowTaskListQuery) {
     const tenantId = this.assertTenantId(authContext);
@@ -63,7 +69,7 @@ class WorkflowTaskService {
     if (!task) {
       throw Errors.notFound("流程待办不存在");
     }
-    if (!this.isTaskAccessible(authContext, task)) {
+    if (!await this.isTaskAccessible(authContext, task, input.action)) {
       throw Errors.forbidden();
     }
     if (task.status !== "pending") {
@@ -231,29 +237,81 @@ class WorkflowTaskService {
     return tenantId;
   }
 
-  private isTaskAccessible(
+  private async isTaskAccessible(
     authContext: AuthContext,
     task: {
+      node_type?: string | null;
       assignee_employee_id: string | null;
       assignee_role_code: string | null;
       assignee_permission_code: string | null;
+      instance?: {
+        subject_type?: string | null;
+        subject_id?: string | null;
+        current_node_snapshot?: unknown;
+      } | null;
     },
+    action: string,
   ) {
     if (task.assignee_employee_id) {
       return task.assignee_employee_id === authContext.employeeId;
-    }
-
-    if (task.assignee_permission_code) {
-      return authContext.permissions.some((permission) =>
-        permission.code === task.assignee_permission_code
-      );
     }
 
     if (task.assignee_role_code) {
       return authContext.roleCodes.includes(task.assignee_role_code);
     }
 
-    return !task.assignee_employee_id;
+    if (
+      task.assignee_permission_code &&
+      authContext.permissions.some((permission) =>
+        permission.code === task.assignee_permission_code
+      )
+    ) {
+      return true;
+    }
+
+    const procedurePermissionCode = this.resolveProjectProcedurePermissionCode(
+      task,
+      action,
+    );
+    if (procedurePermissionCode) {
+      return accessPolicyService.canAccessProject(
+        authContext,
+        task.instance?.subject_id ?? "",
+        procedurePermissionCode,
+      );
+    }
+
+    return !task.assignee_employee_id && !task.assignee_permission_code;
+  }
+
+  private resolveProjectProcedurePermissionCode(
+    task: {
+      node_type?: string | null;
+      instance?: {
+        subject_type?: string | null;
+        current_node_snapshot?: unknown;
+      } | null;
+    },
+    action: string,
+  ) {
+    const permissionCode = PROJECT_PROCEDURE_PERMISSION_BY_ACTION[action.trim()];
+    if (!permissionCode) return null;
+    if (task.instance?.subject_type !== "project") return null;
+    if (!this.isProcedureTask(task)) return null;
+    if (!task.instance) return null;
+
+    return permissionCode;
+  }
+
+  private isProcedureTask(task: {
+    node_type?: string | null;
+    instance?: { current_node_snapshot?: unknown } | null;
+  }) {
+    if (task.node_type === "procedure") return true;
+
+    const snapshot = asRecord(task.instance?.current_node_snapshot);
+    return snapshot?.node_type === "procedure" ||
+      snapshot?.business_kind === "procedure_template";
   }
 
   private throwRuntimeCompleteError(
@@ -281,3 +339,9 @@ class WorkflowTaskService {
 }
 
 export const workflowTaskService = new WorkflowTaskService();
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
