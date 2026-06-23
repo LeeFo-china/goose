@@ -19,6 +19,7 @@ export type WorkflowTaskOutputFieldType =
   | "employee"
   | "image_list"
   | "payment_collection"
+  | "procedure_candidate"
   | "project_log"
   | "settlement_method";
 
@@ -28,6 +29,7 @@ export type WorkflowTaskActionMetadata = {
   business_domain:
     | "customer_status"
     | "workflow_project"
+    | "project_procedure"
     | "payment_collection"
     | "expense_request"
     | null;
@@ -45,6 +47,10 @@ export type WorkflowTaskActionMetadata = {
     requirement_mode?: "any_confirmed" | "signed_amount_percentage";
     required_percentage?: number;
     min_amount?: number;
+    source?: "procedure_candidate";
+    default_value?: string | number | boolean | null;
+    min?: number;
+    max?: number;
   }>;
 };
 
@@ -204,15 +210,57 @@ function buildProcedureActions(
   input: BuildWorkflowTaskActionsInput,
 ): WorkflowTaskActionMetadata[] {
   const config = getCurrentNodeConfig(input);
+  const requireAssignment = config.require_procedure_assignment !== false;
+  const stageCode = typeof config.stage_key === "string" ? config.stage_key : null;
+  const defaultDurationDays = getPositiveNumber(config.default_duration_days) ?? 1;
+
+  if (requireAssignment) {
+    return [
+      {
+        key: "start_procedure",
+        label: `开始${input.taskTitle}`,
+        business_domain: "project_procedure",
+        business_action: "start_procedure",
+        requires_reason: false,
+        output_fields: [
+          {
+            name: "assignee_employee_id",
+            label: "施工人员",
+            type: "employee",
+            required: true,
+            source: "procedure_candidate",
+            ...(stageCode
+              ? { stage_code: stageCode as ProjectConstructionStageCode }
+              : {}),
+          },
+          {
+            name: "planned_start_date",
+            label: "开工时间",
+            type: "date",
+            required: true,
+          },
+          {
+            name: "planned_duration_days",
+            label: "工期天数",
+            type: "number",
+            required: true,
+            default_value: defaultDurationDays,
+            min: 1,
+          },
+        ],
+      },
+    ];
+  }
+
   if (config.trigger_acceptance === true) {
     return [];
   }
 
   return [
     {
-      key: "complete",
+      key: "complete_procedure",
       label: input.taskTitle,
-      business_domain: "workflow_project",
+      business_domain: "project_procedure",
       business_action: "complete_procedure",
       requires_reason: false,
       output_fields: [],

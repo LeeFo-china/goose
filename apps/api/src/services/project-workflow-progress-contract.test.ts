@@ -150,11 +150,11 @@ describe("project workflow node contract", () => {
       graph: procedureGraph,
       pendingActions: [{
         task_id: "task-1",
-        key: "complete",
+        key: "complete_procedure",
         label: "水电施工",
         node_key: "procedure_plumbing_electrical",
         node_type: "procedure",
-        business_domain: "workflow_project",
+        business_domain: "project_procedure",
         business_action: "complete_procedure",
         requires_reason: false,
         disabled: false,
@@ -181,7 +181,7 @@ describe("project workflow node contract", () => {
         acceptance_required: true,
       },
       actions: [{
-        key: "complete",
+        key: "complete_procedure",
         label: "水电施工",
         task_id: "task-1",
       }],

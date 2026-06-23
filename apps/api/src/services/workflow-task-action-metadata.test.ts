@@ -322,7 +322,7 @@ describe("buildWorkflowTaskActions", () => {
     ]);
   });
 
-  test("describes procedure node manual completion without embedding construction log creation", () => {
+  test("describes procedure node start action with assignment schedule fields", () => {
     expect(buildWorkflowTaskActions({
       subjectType: "procedure",
       nodeKey: "plumbing",
@@ -334,13 +334,55 @@ describe("buildWorkflowTaskActions", () => {
           stage_key: "plumbing_electrical",
           require_log: true,
           min_image_count: 2,
+          require_procedure_assignment: true,
+          default_duration_days: 3,
+          allow_duration_override: true,
         },
       },
     })).toEqual([
       {
-        key: "complete",
+        key: "start_procedure",
+        label: "开始水电施工",
+        business_domain: "project_procedure",
+        business_action: "start_procedure",
+        requires_reason: false,
+        output_fields: expect.arrayContaining([
+          expect.objectContaining({
+            name: "assignee_employee_id",
+            source: "procedure_candidate",
+            stage_code: "plumbing_electrical",
+          }),
+          expect.objectContaining({
+            name: "planned_start_date",
+            type: "date",
+          }),
+          expect.objectContaining({
+            name: "planned_duration_days",
+            default_value: 3,
+          }),
+        ]),
+      },
+    ]);
+  });
+
+  test("describes procedure completion action when assignment is disabled", () => {
+    expect(buildWorkflowTaskActions({
+      subjectType: "procedure",
+      nodeKey: "plumbing",
+      nodeType: "procedure",
+      taskTitle: "水电施工",
+      currentNodeSnapshot: {
+        node_key: "plumbing",
+        config: {
+          stage_key: "plumbing_electrical",
+          require_procedure_assignment: false,
+        },
+      },
+    })).toEqual([
+      {
+        key: "complete_procedure",
         label: "水电施工",
-        business_domain: "workflow_project",
+        business_domain: "project_procedure",
         business_action: "complete_procedure",
         requires_reason: false,
         output_fields: [],
@@ -358,6 +400,7 @@ describe("buildWorkflowTaskActions", () => {
         node_key: "plumbing",
         config: {
           stage_key: "plumbing_electrical",
+          require_procedure_assignment: false,
           require_log: true,
           trigger_acceptance: true,
           min_image_count: 2,

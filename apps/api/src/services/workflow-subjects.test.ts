@@ -35,9 +35,9 @@ describe("workflow subject state timeline contract", () => {
     ];
 
     const result = attachWorkflowActionsToTimelineNodes(nodes, [{
-      key: "complete",
+      key: "complete_procedure",
       label: "瓦工施工",
-      business_domain: "workflow_project",
+      business_domain: "project_procedure",
       business_action: "complete_procedure",
       requires_reason: false,
       task_id: "task-1",
@@ -49,7 +49,7 @@ describe("workflow subject state timeline contract", () => {
 
     expect(result[0]?.actions).toEqual([]);
     expect(result[1]?.actions).toMatchObject([{
-      key: "complete",
+      key: "complete_procedure",
       task_id: "task-1",
       node_key: "procedure_tiling",
       business_action: "complete_procedure",
