@@ -8,6 +8,16 @@ export function formatFinanceMoney(value: number | string | null | undefined) {
   })}`;
 }
 
+export function formatFinancePercent(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return "-";
+  const ratio = Number(value);
+  if (!Number.isFinite(ratio)) return "-";
+  return `${(ratio * 100).toLocaleString("zh-CN", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`;
+}
+
 export function financeDirectionMeta(direction: "in" | "out" | string | null | undefined): {
   label: string;
   variant: BadgeVariant;

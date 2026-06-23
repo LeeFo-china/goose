@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ProjectAcceptanceWorkbench } from "@/components/projects/project-acceptance-workbench";
 import { ProjectConstructionStagesPanel } from "@/components/projects/project-construction-stages-panel";
 import { ProjectDetailSideRail } from "@/components/projects/project-detail-side-rail";
+import { ProjectFinanceOperatingSummaryPanel } from "@/components/projects/project-finance-operating-summary-panel";
 import { ProjectFinanceReceivableSummaryPanel } from "@/components/projects/project-finance-receivable-summary-panel";
 import {
   projectDetailHref,
@@ -213,6 +214,10 @@ export function ProjectDetailPageClient({
               </div>
             ) : (
               <div className="flex flex-col gap-5">
+                <ProjectFinanceOperatingSummaryPanel
+                  projectId={currentProject.id}
+                  refreshVersion={refreshVersion}
+                />
                 <ProjectFinanceReceivableSummaryPanel projectId={currentProject.id} />
                 <section className="rounded-lg border bg-card p-4">
                   <h3 className="text-base font-semibold">房产位置</h3>

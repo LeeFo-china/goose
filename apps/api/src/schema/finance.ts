@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { PaginationQuerySchema } from "@/schema/request";
 
+function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => {
+    if (value == null) return undefined;
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      return normalized || undefined;
+    }
+    return value;
+  }, schema.optional());
+}
+
 export const FinanceLedgerListQuerySchema = PaginationQuerySchema.extend({
   project_id: z.uuid("请选择有效的项目").optional(),
   direction: z.enum(["in", "out"], { message: "无效的流水方向" }).optional(),
@@ -17,3 +28,11 @@ export const FinanceLedgerListQuerySchema = PaginationQuerySchema.extend({
 });
 
 export type FinanceLedgerListQuery = z.infer<typeof FinanceLedgerListQuerySchema>;
+
+export const FinanceProjectSummaryListQuerySchema = PaginationQuerySchema.extend({
+  keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+  status: optionalQueryValue(z.string().trim().max(50, "项目状态过长")),
+});
+
+export type FinanceProjectSummaryListQuery =
+  z.infer<typeof FinanceProjectSummaryListQuerySchema>;

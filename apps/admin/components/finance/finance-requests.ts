@@ -77,6 +77,52 @@ export type FinanceReceivableResult = FinanceReceivableListData & {
 
 const FINANCE_LEDGER_PAGE_SIZE = 20;
 const FINANCE_RECEIVABLE_PAGE_SIZE = 20;
+const FINANCE_PROJECT_SUMMARY_PAGE_SIZE = 20;
+
+export type FinanceProjectOperatingSummary = {
+  project_id: string;
+  project_name: string | null;
+  project_status: string | null;
+  contract_amount: number;
+  receivable_amount: number;
+  received_amount: number;
+  receivable_remaining_amount: number;
+  overdue_amount: number;
+  overdue_count: number;
+  expense_paid_amount: number;
+  actual_profit_amount: number;
+  projected_profit_amount: number;
+  net_cash_flow_amount: number;
+  actual_gross_margin: number | null;
+  projected_gross_margin: number | null;
+  ledger_entry_count: number;
+};
+
+export type FinanceProjectOperatingSummaryTotals = {
+  project_count: number;
+  contract_amount: number;
+  receivable_amount: number;
+  received_amount: number;
+  receivable_remaining_amount: number;
+  overdue_amount: number;
+  overdue_count: number;
+  expense_paid_amount: number;
+  actual_profit_amount: number;
+  projected_profit_amount: number;
+  net_cash_flow_amount: number;
+  actual_gross_margin: number | null;
+  projected_gross_margin: number | null;
+};
+
+export type FinanceProjectSummaryListData = {
+  list: FinanceProjectOperatingSummary[];
+  pagination: FinanceLedgerListData["pagination"];
+  summary: FinanceProjectOperatingSummaryTotals;
+};
+
+export type FinanceProjectSummaryResult = FinanceProjectSummaryListData & {
+  error: string | null;
+};
 
 export function emptyFinanceLedger(page = 1): FinanceLedgerResult {
   return {
@@ -100,6 +146,22 @@ export function emptyFinanceReceivables(page = 1): FinanceReceivableResult {
       total: 0,
       totalPages: 0,
     },
+    error: null,
+  };
+}
+
+export function emptyFinanceProjectSummary(
+  page = 1,
+): FinanceProjectSummaryResult {
+  return {
+    list: [],
+    pagination: {
+      page,
+      pageSize: FINANCE_PROJECT_SUMMARY_PAGE_SIZE,
+      total: 0,
+      totalPages: 0,
+    },
+    summary: emptyFinanceProjectSummaryTotals(),
     error: null,
   };
 }
@@ -221,6 +283,77 @@ export async function fetchFinanceReceivables(query: {
       error: error instanceof Error ? error.message : "应收计划加载失败",
     };
   }
+}
+
+export async function fetchFinanceProjectSummaries(query: {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  status?: string;
+}): Promise<FinanceProjectSummaryResult> {
+  const token = await getAdminToken();
+  const page = normalizeFinanceLedgerPage(query.page);
+  const pageSize = normalizeFinanceLedgerPageSize(
+    query.pageSize ?? FINANCE_PROJECT_SUMMARY_PAGE_SIZE,
+  );
+
+  if (!token) {
+    return {
+      ...emptyFinanceProjectSummary(page),
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
+      error: "缺少登录凭证",
+    };
+  }
+
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  appendOptionalParam(params, "keyword", query.keyword);
+  appendOptionalParam(params, "status", query.status);
+
+  try {
+    const response = await fetch(buildBackendUrl(`/finance/project-summary?${params}`), {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<FinanceProjectSummaryListData>(response);
+    return {
+      ...(payload.data || {
+        list: [],
+        pagination: { page, pageSize, total: 0, totalPages: 0 },
+        summary: emptyFinanceProjectSummaryTotals(),
+      }),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      list: [],
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
+      summary: emptyFinanceProjectSummaryTotals(),
+      error: error instanceof Error ? error.message : "项目经营汇总加载失败",
+    };
+  }
+}
+
+function emptyFinanceProjectSummaryTotals(): FinanceProjectOperatingSummaryTotals {
+  return {
+    project_count: 0,
+    contract_amount: 0,
+    receivable_amount: 0,
+    received_amount: 0,
+    receivable_remaining_amount: 0,
+    overdue_amount: 0,
+    overdue_count: 0,
+    expense_paid_amount: 0,
+    actual_profit_amount: 0,
+    projected_profit_amount: 0,
+    net_cash_flow_amount: 0,
+    actual_gross_margin: null,
+    projected_gross_margin: null,
+  };
 }
 
 function normalizeFinanceLedgerPage(value: number | undefined) {
