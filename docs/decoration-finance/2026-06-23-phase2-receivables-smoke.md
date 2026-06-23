@@ -503,3 +503,77 @@ complete 响应摘要：
 小程序侧当前可读 API 未返回 allocation ID。`POST /workflow-tasks/:taskId/complete`、`GET /finance/receivables`、`GET /projects/:projectId/receivables`、`GET /finance/ledger` 均不暴露 allocation，allocation 相关只读 GET 路由当前也不存在。
 
 因此本轮小程序 smoke 不强制要求回填 allocation ID。若后续验收必须由小程序回填 allocation ID，需要后端在 complete 响应中返回，或提供受权限保护的只读查询接口。
+
+## Admin 发布后只读 smoke
+
+时间：`2026-06-23`
+
+执行环境：
+
+- Admin：`http://localhost:3010`
+- API：`http://192.168.1.15:3000`
+- 登录账号：`18800000001` / 风清扬
+- employee ID：`d8ecc522-e6a1-49d6-b7b7-aaa0f3084826`
+- 租户：`固始晴天装饰工程有限公司`
+
+只读页面核验：
+
+- `/dashboard`
+  - 员工后台登录成功，登录后跳转正常。
+- `/finance/receivables?project_id=b95f6b51-6b9c-4970-948e-b369106545d8`
+  - 页面标题：`应收计划`
+  - 可见项目：`应收小程序联调 Smoke项目 20260623125051`
+  - 可见应收事项：`中期进度款`
+  - 可见状态：`已收`
+  - 可见金额：`¥10,000.00`
+- `/finance/ledger?page=1`
+  - 页面标题：`财务台账`
+  - 可见类型：`项目收款入账`
+  - 可见金额：`¥10,000.00`
+- `/projects/b95f6b51-6b9c-4970-948e-b369106545d8?tab=overview`
+  - 可见项目：`应收小程序联调 Smoke项目 20260623125051`
+  - 可见流程面板：`流程管理`
+  - 运行状态：`已完成`
+  - 当前节点：`结束`
+  - 待办：`0 个`
+  - 动作：`0/0 可执行`
+  - 当前账号暂无可执行动作。
+
+UI smoke 结果：
+
+- 未执行任何 workflow 推进。
+- 未发布或修改 workflow 模板。
+- 未手工补状态。
+- 未修改数据库。
+- 未发现接口 `4xx/5xx`。
+- 未发现前端 console error。
+
+后端接口复核：
+
+- `GET /admin/auth/me`
+  - employee：`风清扬`
+  - tenant：`固始晴天装饰工程有限公司`
+- `GET /projects/:projectId/receivables?page=1&pageSize=20`
+  - `contract_amount=50000`
+  - `receivable_amount=10000`
+  - `paid_amount=10000`
+  - `remaining_amount=0`
+  - plan `status=paid`
+  - plan `workflow_node_key=payment_stage_2`
+- `GET /finance/ledger?page=1&pageSize=20&project_id=:projectId`
+  - `pagination.total=1`
+  - ledger ID：`35efd903-8965-4ecc-bccc-f362d5b48754`
+  - `entry_type=project_payment`
+  - `direction=in`
+  - `amount=10000`
+  - payment ID：`cc671175-5526-4340-9d1e-0c6bd1998ab0`
+  - workflow task ID：`aa326b7e-89f4-4e11-b7a0-f11ec806f91e`
+- `GET /workflow-subjects/project/:projectId/state`
+  - instance ID：`887d9829-0026-4e76-93ad-41f2b474823a`
+  - `instance_status=completed`
+  - `current_node_key=end`
+  - `current_node_title=结束`
+  - `pending_task_count=0`
+  - `actions_count=0`
+
+结论：Admin 侧只读 smoke 通过，应收计划、财务台账和项目 workflow 状态可见且一致。
