@@ -30,3 +30,14 @@ export function formatFinanceDateTime(value: string | null | undefined) {
     minute: "2-digit",
   });
 }
+
+export function formatFinanceDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}

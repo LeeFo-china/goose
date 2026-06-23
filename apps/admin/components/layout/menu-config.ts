@@ -5,6 +5,7 @@ import {
   Building2,
   BriefcaseBusiness,
   Camera,
+  CalendarClock,
   ClipboardCheck,
   CircleDollarSign,
   Clapperboard,
@@ -122,6 +123,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "财务台账",
         icon: ScrollText,
         permission: "finance.ledger.view",
+      },
+      {
+        href: "/finance/receivables",
+        label: "应收计划",
+        icon: CalendarClock,
+        permission: "finance.receivable.view",
       },
       {
         href: "/expenses",

@@ -145,11 +145,13 @@ export async function requestProject<T = any>(input: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   payload?: unknown;
+  signal?: AbortSignal;
 }) {
   return requestBackendJson<T>(input.path, {
     method: input.method || "GET",
     body: input.payload ? JSON.stringify(input.payload) : undefined,
     cache: "no-store",
+    signal: input.signal,
   });
 }
 
