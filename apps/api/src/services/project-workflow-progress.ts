@@ -9,6 +9,7 @@ import {
   buildWorkflowTaskAssigneeMetadataFromRecord,
   type WorkflowAssigneeEmployee,
 } from "@/services/workflow-task-assignee";
+import type { ProcedureAssignmentRow } from "@/services/project-procedure-assignments";
 import {
   buildProjectWorkflowPaymentGate,
   getWorkflowNodeDisplayTitle,
@@ -24,7 +25,13 @@ import {
   type WorkflowTimelineNodeCompletion,
   type WorkflowTimelineNodeGroup,
 } from "@/services/project-workflow-timeline-contract";
+import { buildMissingProjectWorkflowProgress } from "@/services/project-workflow-progress-empty";
 import type { WorkflowBusinessKind, WorkflowInstanceStatus } from "@gooes/domain";
+
+export {
+  buildUnavailableProjectWorkflowProgress,
+  toCustomerProjectWorkflowProgress,
+} from "@/services/project-workflow-progress-empty";
 
 type JsonObject = Record<string, unknown>;
 
@@ -95,6 +102,8 @@ type BuildProjectWorkflowProgressProjectionInput = {
   graph: WorkflowProgressGraph | null;
   completedNodeKeys?: string[];
   completedNodeActors?: WorkflowTimelineNodeCompletion[];
+  procedureAssignments?: ProcedureAssignmentRow[];
+  tenantToday?: string;
   pendingActions: Array<Record<string, unknown>>;
 };
 
@@ -107,7 +116,7 @@ export function buildProjectWorkflowProgressProjection(
   input: BuildProjectWorkflowProgressProjectionInput,
 ): ProjectWorkflowProgress {
   if (!input.runtimeInstance) {
-    return missingRuntimeProgress(input.pendingActions);
+    return buildMissingProjectWorkflowProgress(input.pendingActions);
   }
 
   const currentNode = resolveCurrentNode(input.runtimeInstance, input.graph);
@@ -123,6 +132,8 @@ export function buildProjectWorkflowProgressProjection(
     completedNodeKeys: input.completedNodeKeys ?? [],
     completedNodeActors: input.completedNodeActors ?? [],
     actions: input.pendingActions,
+    procedureAssignments: input.procedureAssignments,
+    tenantToday: input.tenantToday,
     assignees: input.pendingActions
       .map((action) => ({
         node_key: readString(action.node_key) ?? "",
@@ -185,6 +196,9 @@ class ProjectWorkflowProgressService {
     );
     const { workflowRepository } = await import("@/repositories/workflows");
     const { workflowTaskRepository } = await import("@/repositories/workflow-tasks");
+    const { projectProcedureAssignmentService } = await import(
+      "@/services/project-procedure-assignments"
+    );
 
     const [subjectState, runtimeInstance] = await Promise.all([
       workflowSubjectStateService.getSubjectState({
@@ -208,7 +222,7 @@ class ProjectWorkflowProgressService {
       });
     }
 
-    const [graph, pendingTasks, runtimeNodes] = await Promise.all([
+    const [graph, pendingTasks, runtimeNodes, procedureAssignments] = await Promise.all([
       workflowRepository.getGraph({
         tenantId: input.tenantId,
         definitionId: runtimeInstance.definition_id,
@@ -222,6 +236,11 @@ class ProjectWorkflowProgressService {
         tenantId: input.tenantId,
         definitionId: runtimeInstance.definition_id,
         instanceId: runtimeInstance.id,
+      }),
+      projectProcedureAssignmentService.listProjectAssignmentsForRuntime({
+        tenantId: input.tenantId,
+        projectId: input.projectId,
+        workflowInstanceId: runtimeInstance.id,
       }),
     ]);
     const pendingActions = await buildWorkflowTaskActionPayloads({
@@ -254,74 +273,10 @@ class ProjectWorkflowProgressService {
         .filter((node) => node.status === "completed")
         .map((node) => node.node_key),
       completedNodeActors,
+      procedureAssignments,
       pendingActions,
     });
   }
-}
-
-function missingRuntimeProgress(
-  actions: Array<Record<string, unknown>>,
-): ProjectWorkflowProgress {
-  return {
-    source: "missing_runtime",
-    instance_id: null,
-    instance_status: null,
-    current_node_key: null,
-    current_node_title: null,
-    current_group_key: null,
-    current_group_label: null,
-    current_group_order: null,
-    current_node_type: null,
-    current_business_kind: null,
-    current_stage_code: null,
-    current_gate: null,
-    timeline_nodes: [],
-    pending_task_count: 0,
-    actions,
-    warnings: [],
-  };
-}
-
-export function buildUnavailableProjectWorkflowProgress(): ProjectWorkflowProgress {
-  return {
-    source: "unavailable",
-    instance_id: null,
-    instance_status: null,
-    current_node_key: null,
-    current_node_title: null,
-    current_group_key: null,
-    current_group_label: null,
-    current_group_order: null,
-    current_node_type: null,
-    current_business_kind: null,
-    current_stage_code: null,
-    current_gate: null,
-    timeline_nodes: [],
-    pending_task_count: 0,
-    actions: [],
-    warnings: [],
-  };
-}
-
-export function toCustomerProjectWorkflowProgress(
-  progress: ProjectWorkflowProgress,
-): CustomerProjectWorkflowProgress {
-  return {
-    source: progress.source,
-    instance_id: progress.instance_id,
-    instance_status: progress.instance_status,
-    current_node_key: progress.current_node_key,
-    current_node_title: progress.current_node_title,
-    current_group_key: progress.current_group_key,
-    current_group_label: progress.current_group_label,
-    current_group_order: progress.current_group_order,
-    current_node_type: progress.current_node_type,
-    current_business_kind: progress.current_business_kind,
-    current_stage_code: progress.current_stage_code,
-    current_gate: progress.current_gate,
-    timeline_nodes: progress.timeline_nodes,
-    pending_task_count: progress.pending_task_count,
-  };
 }
 
 export function enrichProjectWorkflowProgressWithConstructionStages(
@@ -343,6 +298,8 @@ export function buildWorkflowTimelineNodes(input: {
   completedNodeKeys?: string[];
   completedNodeActors?: WorkflowTimelineNodeCompletion[];
   actions?: Array<Record<string, unknown>>;
+  procedureAssignments?: ProcedureAssignmentRow[];
+  tenantToday?: string;
   assignees?: Array<{
     node_key: string;
     assignee_employee_id?: string;
@@ -365,6 +322,11 @@ export function buildWorkflowTimelineNodes(input: {
     (input.assignees ?? [])
       .filter((assignee) => assignee.node_key && assignee.assignee_employee_id)
       .map((assignee) => [assignee.node_key, assignee]),
+  );
+  const procedureAssignmentsByNodeKey = new Map(
+    (input.procedureAssignments ?? [])
+      .filter((assignment) => assignment.node_key)
+      .map((assignment) => [assignment.node_key, assignment]),
   );
   const actionsByNodeKey = new Map<string, Array<Record<string, unknown>>>();
   for (const action of input.actions ?? []) {
@@ -390,6 +352,8 @@ export function buildWorkflowTimelineNodes(input: {
         group,
         assignee,
         completion,
+        procedureAssignment: procedureAssignmentsByNodeKey.get(node.node_key),
+        tenantToday: input.tenantToday,
         actions: actionsByNodeKey.get(node.node_key) ?? [],
       });
     });

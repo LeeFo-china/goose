@@ -9,6 +9,7 @@ import type { ProcedureAssignmentRow } from "./types";
 type AssignmentRepositoryLike = Pick<
   typeof projectProcedureAssignmentRepository,
   | "findActiveByNode"
+  | "listActiveForProject"
   | "createAssignment"
   | "updateAssignmentSchedule"
   | "markAssignmentCompleted"
@@ -240,6 +241,14 @@ export class ProjectProcedureAssignmentService {
     });
 
     return { assignment };
+  }
+
+  async listProjectAssignmentsForRuntime(input: {
+    tenantId: string;
+    projectId: string;
+    workflowInstanceId: string;
+  }): Promise<ProcedureAssignmentRow[]> {
+    return this.repository.listActiveForProject(input);
   }
 
   private async findActiveByNode(input: {

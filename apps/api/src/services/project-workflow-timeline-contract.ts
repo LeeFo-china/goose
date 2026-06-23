@@ -4,6 +4,11 @@ import {
   type WorkflowCategory,
 } from "@gooes/domain";
 import type { WorkflowAssigneeEmployee } from "@/services/workflow-task-assignee";
+import {
+  buildProcedureAssignmentTimelineActions,
+  buildProcedureAssignmentTimelineAttributes,
+} from "@/services/project-workflow-procedure-assignment-contract";
+import type { ProcedureAssignmentRow } from "@/services/project-procedure-assignments";
 
 type JsonObject = Record<string, unknown>;
 
@@ -35,6 +40,15 @@ export type WorkflowTimelineNodeAttributes = {
   finance_confirmed_at?: string | null;
   assignee_employee_id?: string | null;
   assignee_employee_name?: string | null;
+  procedure_assignment_id?: string | null;
+  procedure_assignment_status?: string | null;
+  procedure_assignee_employee_id?: string | null;
+  procedure_assignee_employee_name?: string | null;
+  planned_start_date?: string | null;
+  planned_duration_days?: number | null;
+  planned_end_date?: string | null;
+  remaining_days?: number | null;
+  schedule_status?: string | null;
 };
 
 export type WorkflowTimelineNodeGroup = {
@@ -120,14 +134,24 @@ export function buildWorkflowTimelineNodeContract(input: {
   assignee?: WorkflowTimelineNodeAssignee;
   completion?: WorkflowTimelineNodeCompletion;
   actions?: Array<Record<string, unknown>>;
+  procedureAssignment?: ProcedureAssignmentRow | null;
+  tenantToday?: string;
 }): WorkflowTimelineNode {
-  const actions = (input.actions ?? [])
+  const normalizedActions = (input.actions ?? [])
     .map(normalizeTimelineAction)
     .filter((action): action is WorkflowTimelineNodeAction => Boolean(action));
   const attributes = buildTimelineNodeAttributes({
     node: input.node,
     assignee: input.assignee,
     completion: input.completion,
+    procedureAssignment: input.procedureAssignment,
+    tenantToday: input.tenantToday,
+  });
+  const actions = buildProcedureAssignmentTimelineActions({
+    node: input.node,
+    actions: normalizedActions,
+    procedureAssignment: input.procedureAssignment,
+    tenantToday: input.tenantToday,
   });
 
   return {
@@ -284,8 +308,10 @@ function buildTimelineNodeAttributes(input: {
   node: WorkflowTimelineGraphNodeProjection;
   assignee?: WorkflowTimelineNodeAssignee;
   completion?: WorkflowTimelineNodeCompletion;
+  procedureAssignment?: ProcedureAssignmentRow | null;
+  tenantToday?: string;
 }): WorkflowTimelineNodeAttributes {
-  const { node, assignee, completion } = input;
+  const { node, assignee, completion, procedureAssignment } = input;
   const stageCode = readString(node.config.stage_key);
   const paymentType = readString(node.config.payment_type);
   const financeReviewerEmployeeId = readString(
@@ -304,6 +330,12 @@ function buildTimelineNodeAttributes(input: {
   const minImageCount = readNonNegativeNumber(node.config.min_image_count) ?? 0;
   const acceptanceEnabled = node.node_type === "procedure" &&
     node.config.trigger_acceptance === true;
+  const procedureAssignmentAttributes = procedureAssignment
+    ? buildProcedureAssignmentTimelineAttributes({
+      assignment: procedureAssignment,
+      tenantToday: input.tenantToday,
+    })
+    : {};
 
   return {
     ...(stageCode ? { stage_code: stageCode } : {}),
@@ -337,6 +369,7 @@ function buildTimelineNodeAttributes(input: {
         assignee_employee_name: assignee.assignee_employee_name ?? null,
       }
       : {}),
+    ...procedureAssignmentAttributes,
   };
 }
 

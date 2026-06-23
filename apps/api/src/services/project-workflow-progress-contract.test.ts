@@ -193,6 +193,93 @@ describe("project workflow node contract", () => {
     });
   });
 
+  test("projects procedure assignment attributes and runtime actions", () => {
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "procedure_plumbing_electrical",
+        current_node_title: "水电",
+        current_business_kind: "procedure_template",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "procedure_plumbing_electrical",
+        current_node_snapshot: procedureGraph.nodes[0],
+      },
+      graph: procedureGraph,
+      tenantToday: "2026-06-24",
+      procedureAssignments: [{
+        id: "assignment-1",
+        tenant_id: "tenant-1",
+        project_id: "project-1",
+        workflow_instance_id: "instance-1",
+        workflow_instance_node_id: "node-run-1",
+        node_key: "procedure_plumbing_electrical",
+        stage_code: "plumbing_electrical",
+        assignee_employee_id: "employee-1",
+        planned_start_date: "2026-06-24",
+        planned_duration_days: 3,
+        planned_end_date: "2026-06-26",
+        status: "planned",
+        started_by_employee_id: "manager-1",
+        started_at: "2026-06-23T00:00:00.000Z",
+        completed_by_employee_id: null,
+        completed_at: null,
+        adjusted_by_employee_id: null,
+        adjusted_at: null,
+        adjust_reason: null,
+        created_at: "2026-06-23T00:00:00.000Z",
+        updated_at: "2026-06-23T00:00:00.000Z",
+        assignee_employee: {
+          id: "employee-1",
+          name: "张三",
+          avatar: null,
+        },
+      }],
+      pendingActions: [{
+        task_id: "task-1",
+        key: "start_procedure",
+        label: "开始水电施工",
+        node_key: "procedure_plumbing_electrical",
+        node_type: "procedure",
+        business_domain: "project_procedure",
+        business_action: "start_procedure",
+        requires_reason: false,
+        disabled: false,
+        output_fields: [],
+      }],
+    });
+
+    const plumbingNode = progress.timeline_nodes[0];
+    expect(plumbingNode?.attributes).toMatchObject({
+      procedure_assignment_id: "assignment-1",
+      procedure_assignment_status: "in_progress",
+      procedure_assignee_employee_id: "employee-1",
+      procedure_assignee_employee_name: "张三",
+      planned_start_date: "2026-06-24",
+      planned_duration_days: 3,
+      planned_end_date: "2026-06-26",
+      remaining_days: 2,
+      schedule_status: "on_track",
+    });
+    expect(plumbingNode?.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "adjust_procedure_schedule",
+          task_id: "task-1",
+        }),
+        expect.objectContaining({
+          key: "complete_procedure",
+          task_id: "task-1",
+          disabled: false,
+        }),
+      ]),
+    );
+  });
+
   test("marks completed acceptance-enabled procedure as pending acceptance", () => {
     const progress = buildProjectWorkflowProgressProjection({
       subjectState: {

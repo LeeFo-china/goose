@@ -128,7 +128,14 @@ describe("attachProjectWorkflowSummaries", () => {
           acceptance_enabled: true,
           min_image_count: 3,
         },
-        actions: [],
+        actions: [
+          expect.objectContaining({
+            key: "start_procedure",
+            business_domain: "project_procedure",
+            business_action: "start_procedure",
+            task_id: "task-1",
+          }),
+        ],
       },
     ]);
     expect(listBySubjectIds).toHaveBeenCalledWith({
