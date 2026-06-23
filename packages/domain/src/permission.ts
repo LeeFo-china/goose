@@ -45,6 +45,10 @@ export const PERMISSION_CODE_VALUES = [
   'project_acceptance.reject',
   'project_acceptance.manage',
   'project_log.create',
+  'project_procedure.read',
+  'project_procedure.assign',
+  'project_procedure.adjust',
+  'project_procedure.complete',
   'employee.read',
   'employee.create',
   'employee.update',
@@ -189,6 +193,22 @@ export const PermissionCodeConfig: Record<
   'project_log.create': {
     label: '新建施工日志',
     module: 'project_log',
+  },
+  'project_procedure.read': {
+    label: '查看工序派工',
+    module: 'project_procedure',
+  },
+  'project_procedure.assign': {
+    label: '开始工序派工',
+    module: 'project_procedure',
+  },
+  'project_procedure.adjust': {
+    label: '调整工序派工',
+    module: 'project_procedure',
+  },
+  'project_procedure.complete': {
+    label: '完成工序',
+    module: 'project_procedure',
   },
   'employee.read': { label: '查看员工', module: 'employee' },
   'employee.create': { label: '新建员工', module: 'employee' },

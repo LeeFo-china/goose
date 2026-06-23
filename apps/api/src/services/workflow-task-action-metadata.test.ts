@@ -1,7 +1,28 @@
 import { describe, expect, test } from "bun:test";
+import { PERMISSION_CODE_VALUES, PermissionCodeConfig } from "@gooes/domain";
+import { ErrorCodes } from "../errors/error-codes";
 import { buildWorkflowTaskActions } from "./workflow-task-action-metadata";
 
 describe("buildWorkflowTaskActions", () => {
+  test("declares procedure assignment permissions and stale action errors", () => {
+    expect(PERMISSION_CODE_VALUES).toEqual(
+      expect.arrayContaining([
+        "project_procedure.read",
+        "project_procedure.assign",
+        "project_procedure.adjust",
+        "project_procedure.complete",
+      ]),
+    );
+    expect(PermissionCodeConfig["project_procedure.assign"]).toMatchObject({
+      module: "project_procedure",
+      label: "开始工序派工",
+    });
+    expect(ErrorCodes.WORKFLOW_ACTION_STALE).toBe("WORKFLOW_ACTION_STALE");
+    expect(ErrorCodes.PROCEDURE_ASSIGNMENT_REQUIRED).toBe(
+      "PROCEDURE_ASSIGNMENT_REQUIRED",
+    );
+  });
+
   test("builds start_following action for customer potential node", () => {
     const actions = buildWorkflowTaskActions({
       subjectType: "customer",
