@@ -12,7 +12,11 @@ import {
   listEmployeesForApprovalCandidates,
   listEmployeePermissionContexts,
 } from "./legacy/approvals";
-import { createSettlement, hasSettlement } from "./legacy/settlements";
+import {
+  createSettlement,
+  findSettlementByExpenseRequest,
+  hasSettlement,
+} from "./legacy/settlements";
 import { list, listStatsRows } from "./legacy/lists";
 
 export type {
@@ -105,6 +109,7 @@ class ExpenseRequestRepository {
   listEmployeesForApprovalCandidates = listEmployeesForApprovalCandidates;
   listEmployeePermissionContexts = listEmployeePermissionContexts;
   createSettlement = createSettlement;
+  findSettlementByExpenseRequest = findSettlementByExpenseRequest;
   hasSettlement = hasSettlement;
   list = list;
   listStatsRows = listStatsRows;

@@ -25,6 +25,10 @@ class FinanceLedgerService {
   async createProjectPaymentLedger(input: FinanceLedgerEntryInput) {
     return financeLedgerRepository.createIdempotent(input);
   }
+
+  async createExpenseSettlementLedger(input: FinanceLedgerEntryInput) {
+    return financeLedgerRepository.createIdempotent(input);
+  }
 }
 
 export const financeLedgerService = new FinanceLedgerService();

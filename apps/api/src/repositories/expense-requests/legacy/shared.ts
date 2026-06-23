@@ -91,6 +91,13 @@ export type ExpenseRequestSettlementPayload = {
   remark?: string | null;
 };
 
+export type ExpenseRequestSettlementRow = ExpenseRequestSettlementPayload & {
+  id: string;
+  tenant_id: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type ExpenseApprovalCandidateEmployee = {
   id: string;
   name: string | null;

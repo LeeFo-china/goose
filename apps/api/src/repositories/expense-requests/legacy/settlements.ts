@@ -1,8 +1,14 @@
 import { Errors, SupabaseDB } from "./shared";
-import type { ExpenseRequestSettlementPayload } from "./shared";
+import type {
+  ExpenseRequestSettlementPayload,
+  ExpenseRequestSettlementRow,
+} from "./shared";
 
-export async function createSettlement(this: any, payload: ExpenseRequestSettlementPayload) {
-  const { error } = await SupabaseDB.getAdminClient()
+export async function createSettlement(
+  this: any,
+  payload: ExpenseRequestSettlementPayload,
+): Promise<ExpenseRequestSettlementRow> {
+  const { data, error } = await SupabaseDB.getAdminClient()
     .from("expense_request_settlements")
     .insert({
       tenant_id: payload.tenant_id ?? null,
@@ -17,11 +23,14 @@ export async function createSettlement(this: any, payload: ExpenseRequestSettlem
       evidence_images: payload.evidence_images,
       remark: payload.remark ?? null,
     })
-    .select("id");
+    .select("*")
+    .single();
 
   if (error) {
     throw Errors.dbError("登记费用打款失败", error);
   }
+
+  return data as ExpenseRequestSettlementRow;
 }
 
 export async function hasSettlement(this: any, expenseRequestId: string, tenantId?: string | null) {
@@ -41,4 +50,27 @@ export async function hasSettlement(this: any, expenseRequestId: string, tenantI
   }
 
   return !!data?.id;
+}
+
+export async function findSettlementByExpenseRequest(
+  this: any,
+  expenseRequestId: string,
+  tenantId?: string | null,
+): Promise<ExpenseRequestSettlementRow | null> {
+  let query = SupabaseDB.getAdminClient()
+    .from("expense_request_settlements")
+    .select("*")
+    .eq("expense_request_id", expenseRequestId);
+
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    throw Errors.dbError("查询费用打款记录失败", error);
+  }
+
+  return (data as ExpenseRequestSettlementRow | null) ?? null;
 }
