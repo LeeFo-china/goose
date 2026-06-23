@@ -268,6 +268,49 @@ describe("buildWorkflowTaskActions", () => {
     );
   });
 
+  test("adds readonly receivable context for payment collection actions", () => {
+    const action = buildWorkflowTaskActions({
+      subjectType: "project",
+      nodeKey: "middle_payment",
+      nodeType: "confirmation",
+      taskTitle: "中期进度款",
+      currentNodeSnapshot: {
+        node_key: "middle_payment",
+        business_kind: "payment_collection",
+        config: {
+          payment_type: "stage_2",
+          requirement_mode: "any_confirmed",
+        },
+      },
+      receivableContext: {
+        receivable_plan_id: "plan-1",
+        receivable_title: "中期进度款",
+        receivable_amount: 10000,
+        receivable_paid_amount: 3000,
+        receivable_remaining_amount: 7000,
+        receivable_due_date: "2026-06-30",
+        receivable_status: "partially_paid",
+        receivable_overdue_days: 0,
+      },
+    })[0];
+
+    expect(action?.output_fields[0]).toEqual({
+      name: "receivable_context",
+      label: "应收信息",
+      type: "receivable_summary",
+      required: false,
+      readonly: true,
+      receivable_plan_id: "plan-1",
+      receivable_title: "中期进度款",
+      receivable_amount: 10000,
+      receivable_paid_amount: 3000,
+      receivable_remaining_amount: 7000,
+      receivable_due_date: "2026-06-30",
+      receivable_status: "partially_paid",
+      receivable_overdue_days: 0,
+    });
+  });
+
   test("describes expense approval and payment actions", () => {
     expect(buildWorkflowTaskActions({
       subjectType: "expense_request",

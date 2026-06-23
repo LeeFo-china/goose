@@ -10,6 +10,7 @@ import type {
   WorkflowPaymentCollectionNodeConfig,
 } from "@/components/workflows/workflow-types";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -45,6 +46,14 @@ const WORKFLOW_PAYMENT_REQUIREMENT_OPTIONS = [
   label: string;
 }>;
 
+const WORKFLOW_RECEIVABLE_AMOUNT_MODE_OPTIONS = [
+  { value: "signed_amount_percentage", label: "按签约金额比例" },
+  { value: "fixed_amount", label: "固定金额" },
+] as const satisfies Array<{
+  value: NonNullable<WorkflowPaymentCollectionNodeConfig["receivable_amount_mode"]>;
+  label: string;
+}>;
+
 export function getWorkflowPaymentCollectionLabel(
   paymentType: string | null | undefined,
 ) {
@@ -58,6 +67,19 @@ function parseOptionalPercentage(value: string) {
   if (normalized === "") return null;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseOptionalPositiveNumber(value: string) {
+  const normalized = value.trim();
+  if (normalized === "") return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseDueOffsetDays(value: string) {
+  const parsed = Number(value.trim() || 0);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.min(Math.floor(parsed), 3650);
 }
 
 type WorkflowEmployeeListData = {
@@ -106,6 +128,9 @@ export function WorkflowPaymentCollectionConfigFields({
 }) {
   const paymentConfig = config as WorkflowPaymentCollectionNodeConfig;
   const requirementMode = paymentConfig.requirement_mode || "any_confirmed";
+  const receivablePlanEnabled = paymentConfig.receivable_plan_enabled === true;
+  const receivableAmountMode = paymentConfig.receivable_amount_mode ||
+    "signed_amount_percentage";
 
   return (
     <section className="space-y-3">
@@ -187,6 +212,149 @@ export function WorkflowPaymentCollectionConfigFields({
           onChangeConfig({ finance_reviewer_employee_id: value })
         }
       />
+      <div className="space-y-3 rounded-md border bg-background p-3">
+        <div className="flex items-start gap-3">
+          <Checkbox
+            id="workflow-node-receivable-plan-enabled"
+            checked={receivablePlanEnabled}
+            disabled={disabled}
+            onCheckedChange={(checked) =>
+              onChangeConfig({
+                receivable_plan_enabled: checked === true,
+                receivable_amount_mode: paymentConfig.receivable_amount_mode ||
+                  "signed_amount_percentage",
+                receivable_due_offset_days: paymentConfig.receivable_due_offset_days ?? 0,
+                receivable_due_date_rule: "node_entered_at",
+              })
+            }
+          />
+          <div className="grid gap-1">
+            <Label htmlFor="workflow-node-receivable-plan-enabled">
+              生成应收计划
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              启用后，流程进入该收款节点时生成应收计划，确认收款后自动核销。
+            </p>
+          </div>
+        </div>
+        {receivablePlanEnabled ? (
+          <div className="grid gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="workflow-node-receivable-amount-mode">应收金额模式</Label>
+              <Select
+                disabled={disabled}
+                value={receivableAmountMode}
+                onValueChange={(value) =>
+                  onChangeConfig({
+                    receivable_amount_mode:
+                      value as WorkflowPaymentCollectionNodeConfig["receivable_amount_mode"],
+                    receivable_fixed_amount: value === "fixed_amount"
+                      ? paymentConfig.receivable_fixed_amount ?? null
+                      : null,
+                    receivable_percentage: value === "signed_amount_percentage"
+                      ? paymentConfig.receivable_percentage ?? null
+                      : null,
+                  })
+                }
+              >
+                <SelectTrigger id="workflow-node-receivable-amount-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_RECEIVABLE_AMOUNT_MODE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {receivableAmountMode === "fixed_amount" ? (
+              <div className="grid gap-2">
+                <Label htmlFor="workflow-node-receivable-fixed-amount">
+                  固定应收金额
+                </Label>
+                <Input
+                  id="workflow-node-receivable-fixed-amount"
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  value={paymentConfig.receivable_fixed_amount ?? ""}
+                  disabled={disabled}
+                  placeholder="例如 10000"
+                  onChange={(event) =>
+                    onChangeConfig({
+                      receivable_fixed_amount: parseOptionalPositiveNumber(
+                        event.target.value,
+                      ),
+                    })
+                  }
+                />
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label htmlFor="workflow-node-receivable-percentage">
+                  签约金额比例
+                </Label>
+                <Input
+                  id="workflow-node-receivable-percentage"
+                  type="number"
+                  min={0.01}
+                  max={100}
+                  step={0.01}
+                  value={paymentConfig.receivable_percentage ?? ""}
+                  disabled={disabled}
+                  placeholder="例如 30"
+                  onChange={(event) =>
+                    onChangeConfig({
+                      receivable_percentage: parseOptionalPercentage(
+                        event.target.value,
+                      ),
+                    })
+                  }
+                />
+              </div>
+            )}
+            <div className="grid gap-2">
+              <Label htmlFor="workflow-node-receivable-due-offset">
+                应收日期偏移天数
+              </Label>
+              <Input
+                id="workflow-node-receivable-due-offset"
+                type="number"
+                min={0}
+                max={3650}
+                step={1}
+                value={paymentConfig.receivable_due_offset_days ?? 0}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChangeConfig({
+                    receivable_due_offset_days: parseDueOffsetDays(
+                      event.target.value,
+                    ),
+                    receivable_due_date_rule: "node_entered_at",
+                  })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="workflow-node-receivable-title">应收标题</Label>
+              <Input
+                id="workflow-node-receivable-title"
+                value={paymentConfig.receivable_title || ""}
+                disabled={disabled}
+                maxLength={100}
+                placeholder="默认使用节点标题"
+                onChange={(event) =>
+                  onChangeConfig({
+                    receivable_title: event.target.value.trim() || null,
+                  })
+                }
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-payment-block-message">阻塞提示</Label>
         <Input

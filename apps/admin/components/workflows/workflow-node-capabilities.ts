@@ -339,6 +339,13 @@ export function applyWorkflowFinanceKind(input: {
       payment_type: "deposit" as const,
       requirement_mode: "any_confirmed" as const,
       required_percentage: null,
+      receivable_plan_enabled: false,
+      receivable_amount_mode: "signed_amount_percentage" as const,
+      receivable_fixed_amount: null,
+      receivable_percentage: null,
+      receivable_due_offset_days: 0,
+      receivable_due_date_rule: "node_entered_at" as const,
+      receivable_title: null,
       block_message: null,
       finance_reviewer_employee_id: null,
     }

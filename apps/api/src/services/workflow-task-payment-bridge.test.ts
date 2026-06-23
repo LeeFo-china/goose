@@ -33,6 +33,16 @@ const createProjectPaymentLedger = mock(async () => {
   callOrder.push("ledger");
   return { id: "ledger-1" };
 });
+const prepareWorkflowPaymentReceivable = mock(
+  async (): Promise<{ plan_id: string; remaining_amount: number } | null> => {
+  callOrder.push("receivable_prepare");
+  return { plan_id: "plan-1", remaining_amount: 10000 };
+},
+);
+const allocateWorkflowPayment = mock(async () => {
+  callOrder.push("receivable");
+  return { allocation_id: "allocation-1" };
+});
 const completeRuntimeNode = mock(async (): Promise<{ ok: true }> => {
   callOrder.push("workflow");
   return { ok: true };
@@ -66,6 +76,8 @@ const bridgeTask = {
   tenant_id: "tenant-1",
   definition_id: "definition-1",
   instance_id: "instance-1",
+  instance_node_id: "11111111-1111-4111-8111-111111111111",
+  created_at: "2026-06-16T09:00:00.000Z",
   node_key: "payment_stage_2",
   instance: {
     subject_id: "project-1",
@@ -97,6 +109,10 @@ function createBridge() {
     financeLedgerService: {
       createProjectPaymentLedger,
     },
+    projectReceivablesService: {
+      prepareWorkflowPaymentReceivable,
+      allocateWorkflowPayment,
+    },
     workflowRepository: {
       completeRuntimeNode,
     },
@@ -113,6 +129,9 @@ describe("workflowTaskPaymentBridge", () => {
     findByWorkflowTaskId.mockImplementation(async () => null);
     createPayment.mockClear();
     createProjectPaymentLedger.mockClear();
+    prepareWorkflowPaymentReceivable.mockClear();
+    prepareWorkflowPaymentReceivable.mockImplementation(async () => null);
+    allocateWorkflowPayment.mockClear();
     completeRuntimeNode.mockClear();
     syncFromRuntimeInstance.mockClear();
   });
@@ -177,6 +196,66 @@ describe("workflowTaskPaymentBridge", () => {
       }),
     );
     expect(callOrder).toEqual(["payment", "ledger", "workflow"]);
+  });
+
+  test("allocates enabled receivable plan before writing ledger and completing workflow", async () => {
+    prepareWorkflowPaymentReceivable.mockImplementation(async () => {
+      callOrder.push("receivable_prepare");
+      return { plan_id: "plan-1", remaining_amount: 10000 };
+    });
+    const workflowTaskPaymentBridge = createBridge();
+
+    await workflowTaskPaymentBridge.complete({
+      authContext,
+      task: {
+        ...bridgeTask,
+        instance: {
+          ...bridgeTask.instance,
+          current_node_snapshot: {
+            ...bridgeTask.instance.current_node_snapshot,
+            config: {
+              payment_type: "stage_2",
+              receivable_plan_enabled: true,
+              receivable_amount_mode: "fixed_amount",
+              receivable_fixed_amount: 10000,
+              receivable_due_offset_days: 0,
+            },
+          },
+        },
+      },
+      action: "complete",
+      output,
+    });
+
+    expect(prepareWorkflowPaymentReceivable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+        workflowInstanceId: "instance-1",
+        workflowInstanceNodeId: "11111111-1111-4111-8111-111111111111",
+        workflowNodeKey: "payment_stage_2",
+        taskCreatedAt: "2026-06-16T09:00:00.000Z",
+        paymentAmount: 10000,
+      }),
+    );
+    expect(allocateWorkflowPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+        planId: "plan-1",
+        paymentId: "payment-1",
+        paymentAmount: 10000,
+        workflowTaskId: "task-1",
+        allocatedBy: "employee-1",
+      }),
+    );
+    expect(callOrder).toEqual([
+      "receivable_prepare",
+      "payment",
+      "receivable",
+      "ledger",
+      "workflow",
+    ]);
   });
 
   test("requires amount and evidence images", async () => {

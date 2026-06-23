@@ -196,6 +196,32 @@ const PaymentCollectionNodeConfigSchema = BaseNodeConfigSchema.extend({
     .nonnegative("最低收款金额不能为负数")
     .nullable()
     .optional(),
+  receivable_plan_enabled: booleanField("是否生成应收计划格式无效")
+    .default(false),
+  receivable_amount_mode: z.enum(["fixed_amount", "signed_amount_percentage"], {
+    message: "请选择有效的应收金额模式",
+  }).default("signed_amount_percentage"),
+  receivable_fixed_amount: numericField("应收固定金额必须为数字")
+    .positive("应收固定金额必须大于 0")
+    .nullable()
+    .optional(),
+  receivable_percentage: numericField("应收签约金额比例必须为数字")
+    .positive("应收签约金额比例必须大于 0")
+    .max(100, "应收签约金额比例不能超过 100")
+    .nullable()
+    .optional(),
+  receivable_due_offset_days: numericField("应收日期偏移天数必须为数字")
+    .int("应收日期偏移天数必须为整数")
+    .min(0, "应收日期偏移天数不能为负数")
+    .max(3650, "应收日期偏移天数不能超过 3650")
+    .default(0),
+  receivable_due_date_rule: z.enum(["node_entered_at"], {
+    message: "请选择有效的应收日期规则",
+  }).default("node_entered_at"),
+  receivable_title: textField("应收标题格式无效")
+    .max(100, "应收标题不能超过 100 字")
+    .nullable()
+    .optional(),
   block_message: textField("阻塞提示格式无效")
     .max(200, "阻塞提示不能超过 200 字")
     .nullable()

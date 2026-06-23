@@ -21,7 +21,19 @@ export type WorkflowTaskOutputFieldType =
   | "payment_collection"
   | "procedure_candidate"
   | "project_log"
+  | "receivable_summary"
   | "settlement_method";
+
+export type WorkflowReceivableActionContext = {
+  receivable_plan_id: string;
+  receivable_title: string;
+  receivable_amount: number;
+  receivable_paid_amount: number;
+  receivable_remaining_amount: number;
+  receivable_due_date: string;
+  receivable_status: string;
+  receivable_overdue_days: number;
+};
 
 export type WorkflowTaskActionMetadata = {
   key: string;
@@ -51,6 +63,15 @@ export type WorkflowTaskActionMetadata = {
     default_value?: string | number | boolean | null;
     min?: number;
     max?: number;
+    readonly?: boolean;
+    receivable_plan_id?: string;
+    receivable_title?: string;
+    receivable_amount?: number;
+    receivable_paid_amount?: number;
+    receivable_remaining_amount?: number;
+    receivable_due_date?: string;
+    receivable_status?: string;
+    receivable_overdue_days?: number;
   }>;
 };
 
@@ -60,6 +81,7 @@ type BuildWorkflowTaskActionsInput = {
   nodeType?: string | null;
   taskTitle: string;
   currentNodeSnapshot?: unknown;
+  receivableContext?: WorkflowReceivableActionContext | null;
 };
 
 export const CUSTOMER_LINEAR_ACTION_BY_NODE: Partial<Record<string, CustomerStatusAction>> = {
@@ -147,6 +169,16 @@ function buildPaymentCollectionActions(
   const requirementMode = getPaymentRequirementMode(config.requirement_mode);
   const requiredPercentage = getPositiveNumber(config.required_percentage);
   const minAmount = getPositiveNumber(config.min_amount);
+  const receivableContextField = input.receivableContext
+    ? [{
+      name: "receivable_context",
+      label: "应收信息",
+      type: "receivable_summary" as const,
+      required: false,
+      readonly: true,
+      ...input.receivableContext,
+    }]
+    : [];
 
   return [
     {
@@ -156,6 +188,7 @@ function buildPaymentCollectionActions(
       business_action: "confirm_payment",
       requires_reason: false,
       output_fields: [
+        ...receivableContextField,
         {
           name: "payment_status",
           label: paymentLabel,

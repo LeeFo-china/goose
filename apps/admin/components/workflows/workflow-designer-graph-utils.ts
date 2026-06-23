@@ -40,6 +40,13 @@ function defaultConfig(
       required_percentage: null,
       block_message: null,
       finance_reviewer_employee_id: null,
+      receivable_plan_enabled: false,
+      receivable_amount_mode: "signed_amount_percentage",
+      receivable_fixed_amount: null,
+      receivable_percentage: null,
+      receivable_due_offset_days: 0,
+      receivable_due_date_rule: "node_entered_at",
+      receivable_title: null,
     };
   }
   if (nodeType === "procedure") {
@@ -260,6 +267,74 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
           message: "收款节点必须选择财务审核人或配置财务确认权限",
           nodeKey: node.node_key,
         });
+      }
+      const receivablePlanEnabled = "receivable_plan_enabled" in node.config
+        ? node.config.receivable_plan_enabled
+        : false;
+      if (receivablePlanEnabled === true) {
+        const amountMode = "receivable_amount_mode" in node.config
+          ? node.config.receivable_amount_mode
+          : null;
+        if (
+          amountMode !== "fixed_amount" &&
+          amountMode !== "signed_amount_percentage"
+        ) {
+          issues.push({
+            code: "payment_collection_receivable_amount_mode_invalid",
+            message: "启用应收计划时，必须选择有效的应收金额模式",
+            nodeKey: node.node_key,
+          });
+        }
+        const fixedAmount = "receivable_fixed_amount" in node.config
+          ? node.config.receivable_fixed_amount
+          : null;
+        if (
+          amountMode === "fixed_amount" &&
+          (
+            typeof fixedAmount !== "number" ||
+            fixedAmount <= 0
+          )
+        ) {
+          issues.push({
+            code: "payment_collection_receivable_fixed_amount_invalid",
+            message: "应收固定金额必须大于 0",
+            nodeKey: node.node_key,
+          });
+        }
+        const percentage = "receivable_percentage" in node.config
+          ? node.config.receivable_percentage
+          : null;
+        if (
+          amountMode === "signed_amount_percentage" &&
+          (
+            typeof percentage !== "number" ||
+            percentage <= 0 ||
+            percentage > 100
+          )
+        ) {
+          issues.push({
+            code: "payment_collection_receivable_percentage_invalid",
+            message: "应收签约金额比例必须大于 0 且不超过 100",
+            nodeKey: node.node_key,
+          });
+        }
+        const dueOffsetDays = "receivable_due_offset_days" in node.config
+          ? node.config.receivable_due_offset_days
+          : null;
+        if (
+          typeof dueOffsetDays === "number" &&
+          (
+            !Number.isInteger(dueOffsetDays) ||
+            dueOffsetDays < 0 ||
+            dueOffsetDays > 3650
+          )
+        ) {
+          issues.push({
+            code: "payment_collection_receivable_due_offset_invalid",
+            message: "应收日期偏移天数必须是 0 到 3650 之间的整数",
+            nodeKey: node.node_key,
+          });
+        }
       }
     }
     const configReferences = [

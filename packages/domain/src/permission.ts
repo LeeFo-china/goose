@@ -65,6 +65,8 @@ export const PERMISSION_CODE_VALUES = [
   'finance.expense.review',
   'finance.expense.pay',
   'finance.ledger.view',
+  'finance.receivable.view',
+  'finance.receivable.manage',
   'finance.dashboard.view',
   'project_referral.read',
   'project_referral.manage',
@@ -244,6 +246,8 @@ export const PermissionCodeConfig: Record<
   'finance.expense.review': { label: '财务审核费用', module: 'finance' },
   'finance.expense.pay': { label: '登记费用打款', module: 'finance' },
   'finance.ledger.view': { label: '查看财务台账', module: 'finance' },
+  'finance.receivable.view': { label: '查看应收计划', module: 'finance' },
+  'finance.receivable.manage': { label: '管理应收计划', module: 'finance' },
   'finance.dashboard.view': { label: '查看财务看板', module: 'finance' },
   'project_referral.read': {
     label: '查看介绍费',

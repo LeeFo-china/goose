@@ -57,6 +57,47 @@ describe("WorkflowGraphSaveSchema", () => {
 
     expect(result.success).toBe(true);
   });
+
+  test("keeps payment collection receivable plan config", () => {
+    const result = WorkflowGraphSaveSchema.safeParse({
+      nodes: [
+        {
+          node_key: "middle_payment",
+          node_type: "confirmation",
+          business_kind: "payment_collection",
+          title: "中期收款",
+          description: null,
+          position: { x: 100, y: 100 },
+          config: {
+            required_permissions: ["finance.payment.confirm"],
+            finance_type: "payment_collection",
+            payment_type: "stage_2",
+            requirement_mode: "any_confirmed",
+            receivable_plan_enabled: true,
+            receivable_amount_mode: "signed_amount_percentage",
+            receivable_fixed_amount: null,
+            receivable_percentage: 30,
+            receivable_due_offset_days: 3,
+            receivable_due_date_rule: "node_entered_at",
+            receivable_title: "中期进度款",
+          },
+          sort_order: 110,
+        },
+      ],
+      edges: [],
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.nodes[0]?.config).toMatchObject({
+      receivable_plan_enabled: true,
+      receivable_amount_mode: "signed_amount_percentage",
+      receivable_percentage: 30,
+      receivable_due_offset_days: 3,
+      receivable_due_date_rule: "node_entered_at",
+      receivable_title: "中期进度款",
+    });
+  });
 });
 
 describe("WorkflowRuntimeRebuildSchema", () => {

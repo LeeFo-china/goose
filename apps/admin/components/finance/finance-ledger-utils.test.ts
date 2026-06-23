@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   financeDirectionMeta,
+  formatFinanceDate,
   formatFinanceDateTime,
   formatFinanceMoney,
 } from "./finance-ledger-utils";
@@ -27,5 +28,11 @@ describe("finance ledger display helpers", () => {
     expect(formatFinanceDateTime("2026-06-16T09:30:00.000Z")).toContain("2026");
     expect(formatFinanceDateTime("")).toBe("-");
     expect(formatFinanceDateTime(null)).toBe("-");
+  });
+
+  test("formats receivable due date and hides invalid date", () => {
+    expect(formatFinanceDate("2026-06-30")).toContain("2026");
+    expect(formatFinanceDate("")).toBe("-");
+    expect(formatFinanceDate(null)).toBe("-");
   });
 });

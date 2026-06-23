@@ -8,6 +8,7 @@ import {
   buildProcedureAssignmentTimelineActions,
   buildProcedureAssignmentTimelineAttributes,
 } from "@/services/project-workflow-procedure-assignment-contract";
+import { buildReceivableTimelineAttributes } from "@/services/workflow-timeline-receivables";
 import type { ProcedureAssignmentRow } from "@/services/project-procedure-assignments";
 
 type JsonObject = Record<string, unknown>;
@@ -33,6 +34,14 @@ export type WorkflowTimelineNodeAttributes = {
   acceptance_id?: string | null;
   acceptance_status?: string | null;
   payment_type?: string | null;
+  receivable_plan_id?: string | null;
+  receivable_title?: string | null;
+  receivable_amount?: number | null;
+  receivable_paid_amount?: number | null;
+  receivable_remaining_amount?: number | null;
+  receivable_due_date?: string | null;
+  receivable_status?: string | null;
+  receivable_overdue_days?: number | null;
   finance_reviewer_employee_id?: string | null;
   finance_reviewer_employee_name?: string | null;
   finance_confirmed_by_employee_id?: string | null;
@@ -140,13 +149,16 @@ export function buildWorkflowTimelineNodeContract(input: {
   const normalizedActions = (input.actions ?? [])
     .map(normalizeTimelineAction)
     .filter((action): action is WorkflowTimelineNodeAction => Boolean(action));
-  const attributes = buildTimelineNodeAttributes({
-    node: input.node,
-    assignee: input.assignee,
-    completion: input.completion,
-    procedureAssignment: input.procedureAssignment,
-    tenantToday: input.tenantToday,
-  });
+  const attributes = {
+    ...buildTimelineNodeAttributes({
+      node: input.node,
+      assignee: input.assignee,
+      completion: input.completion,
+      procedureAssignment: input.procedureAssignment,
+      tenantToday: input.tenantToday,
+    }),
+    ...buildReceivableTimelineAttributes(normalizedActions),
+  };
   const actions = buildProcedureAssignmentTimelineActions({
     node: input.node,
     actions: normalizedActions,

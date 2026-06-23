@@ -109,6 +109,13 @@ export type WorkflowPaymentCollectionNodeConfig = WorkflowBaseNodeConfig & {
   required_percentage?: number | null;
   /** Legacy published snapshots may still carry a fixed amount. New nodes use requirement_mode. */
   min_amount?: number | null;
+  receivable_plan_enabled?: boolean;
+  receivable_amount_mode?: "fixed_amount" | "signed_amount_percentage";
+  receivable_fixed_amount?: number | null;
+  receivable_percentage?: number | null;
+  receivable_due_offset_days?: number;
+  receivable_due_date_rule?: "node_entered_at";
+  receivable_title?: string | null;
   block_message?: string | null;
   finance_reviewer_employee_id?: string | null;
 };

@@ -21,6 +21,7 @@
     "project-acceptance:images:backfill": "bun src/scripts/project-acceptance-images-backfill.ts",
     "customer:perf-smoke": "bun src/scripts/customer-performance-smoke.ts",
     "workflow:phase5-smoke": "bun src/scripts/phase5-workflow-smoke.ts",
+    "finance:receivables-phase2-smoke": "bun src/scripts/finance-receivables-phase2-smoke.ts",
     "workflow:cleanup-readiness": "bun src/scripts/workflow-cleanup-readiness.ts",
     "workflow:runtime-consistency-check": "bun src/scripts/workflow-runtime-consistency-check.ts",
     "workflow:subject-states-rebuild": "bun src/scripts/workflow-subject-states-rebuild.ts",
