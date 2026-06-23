@@ -9,6 +9,7 @@
 - [2026-06-16-prd.md](./2026-06-16-prd.md)：装修公司财务系统 PRD，包含 workflow、Admin、小程序、权限和微信支付配置原则。
 - [implementation-plan.md](./implementation-plan.md)：第一阶段实施计划，聚焦人工确认收款、workflow 推进、财务台账、Admin 和小程序交接。
 - [2026-06-23-phase2-receivables-implementation-plan.md](./2026-06-23-phase2-receivables-implementation-plan.md)：第二阶段应收计划和逾期管理实施计划。
+- [2026-06-23-phase2-receivables-miniprogram-handoff.md](./2026-06-23-phase2-receivables-miniprogram-handoff.md)：第二阶段应收计划小程序对接说明，包含 workflow v2 字段、complete payload 和 smoke 清单。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
