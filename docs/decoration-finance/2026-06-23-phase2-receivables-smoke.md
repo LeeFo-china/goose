@@ -16,14 +16,14 @@ worktree：`/Users/leefo/Public/work/gooes/.worktrees/finance-phase2-receivables
 - 员工登录和租户上下文正常。
 - 项目应收摘要接口可访问。
 - workflow pending 任务接口可访问。
-- 只读探针确认当前库中没有可执行完整应收核销链路的样本。
-
-未执行内容：
-
-- 未执行 `POST /workflow-tasks/:taskId/complete`。
-- 未创建新的 payment / ledger / receivable allocation。
-- 未推进任何已有 workflow task。
-- 未修改数据库业务数据。
+- 已准备受控 smoke workflow 和新建测试项目。
+- 已执行 `POST /workflow-tasks/:taskId/complete`。
+- 已创建 confirmed payment。
+- 已生成并核销 receivable plan。
+- 已写入 receivable allocation。
+- 已写入 finance ledger。
+- 已推进 workflow 到 `end`。
+- smoke runtime 和 workflow definition 已归档。
 
 ## 服务
 
@@ -161,7 +161,7 @@ worktree：`/Users/leefo/Public/work/gooes/.worktrees/finance-phase2-receivables
 }
 ```
 
-结论：当前数据库里没有 `receivable_plan_enabled=true` 的收款节点运行样本，也没有已发布版本样本。因此本轮不能执行完整的“收款节点 complete -> 自动生成应收计划 -> 创建/复用收款 -> 核销应收 -> 写财务台账 -> 推进 workflow”链路。
+初始只读探针结论：当时数据库里没有 `receivable_plan_enabled=true` 的收款节点运行样本，也没有已发布版本样本，因此先补充了可重复 smoke 脚本，再通过 Admin/API 创建受控样本执行完整链路。
 
 ## 可重复 smoke 脚本
 
@@ -229,9 +229,9 @@ POST /workflow-tasks/:taskId/complete
 }
 ```
 
-## 完整 E2E 继续条件
+## 完整 E2E 样本条件
 
-需要先准备一个受控测试样本：
+完整写入 smoke 需要准备一个受控测试样本：
 
 - 项目有有效 `signed_amount`。
 - 项目 workflow 当前节点为 `payment_collection`。
@@ -255,8 +255,165 @@ POST /workflow-tasks/:taskId/complete
 - Admin `/finance/receivables` 和项目详情应收摘要可见。
 - 小程序只读 `workflow v2` 的 `timeline_nodes[].attributes` 和 `actions[].output_fields`，不本地推导应收状态。
 
+## 完整 E2E 执行记录
+
+本轮通过 Admin/API 创建了独立 smoke workflow 和新测试项目，没有改动正式施工主流程，也没有设为默认施工流程。
+
+测试 workflow：
+
+- definition ID：`64575a74-e932-458c-ba9f-3278d8575491`
+- workflow key：`finance_receivable_smoke_20260623173439`
+- version ID：`6c6abeeb-a81b-47d8-b373-331ed77cb92a`
+- version label：`应收计划二阶段 smoke`
+- 图结构：`start -> payment_stage_2 -> end`
+- 收款节点配置：
+  - `business_kind=payment_collection`
+  - `payment_type=stage_2`
+  - `receivable_plan_enabled=true`
+  - `receivable_amount_mode=fixed_amount`
+  - `receivable_fixed_amount=10000`
+  - `receivable_due_offset_days=0`
+
+测试项目：
+
+- project ID：`407537b4-2adc-4a0f-ac83-bdaecf70e559`
+- 项目名：`应收计划二阶段Smoke项目 20260623173439`
+- signed_amount：`50000`
+
+runtime：
+
+- workflow instance ID：`93f16262-038f-4890-bbfc-afe7d1badb05`
+- task ID：`a0e5d055-4a6d-4f7e-87aa-f46e35d46561`
+- 初始 current node：`payment_stage_2`
+- complete 后 current node：`end`
+- complete 后 instance status：`completed`
+
+只读脚本在 complete 前已找到候选 task：
+
+```json
+{
+  "taskId": "a0e5d055-4a6d-4f7e-87aa-f46e35d46561",
+  "projectId": "407537b4-2adc-4a0f-ac83-bdaecf70e559",
+  "actionKey": "complete",
+  "nodeKey": "payment_stage_2",
+  "receivablePlanId": "6f46c08d-cb31-4a52-a970-82751b29723b",
+  "receivableAmount": 10000,
+  "receivableRemainingAmount": 10000,
+  "receivableStatus": "pending"
+}
+```
+
+complete 请求：
+
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {
+    "amount": 10000,
+    "paid_at": "2026-06-23T09:45:00.000Z",
+    "evidence_images": [
+      "project_payment/407537b4-2adc-4a0f-ac83-bdaecf70e559/finance-receivables-phase2-smoke.jpg"
+    ],
+    "remark": "应收计划二阶段 smoke 收款确认"
+  }
+}
+```
+
+complete 返回：
+
+```json
+{
+  "result": {
+    "ok": true,
+    "bridged": true,
+    "operation": "confirm_payment"
+  },
+  "payment": {
+    "id": "ccded302-396b-4b8e-801c-080098293725",
+    "project_id": "407537b4-2adc-4a0f-ac83-bdaecf70e559",
+    "amount": 10000,
+    "type": "stage_2",
+    "status": "confirmed",
+    "workflow_task_id": "a0e5d055-4a6d-4f7e-87aa-f46e35d46561",
+    "source_type": "workflow_task",
+    "source_id": "a0e5d055-4a6d-4f7e-87aa-f46e35d46561",
+    "payment_channel": "manual"
+  },
+  "workflow_state": {
+    "instance_id": "93f16262-038f-4890-bbfc-afe7d1badb05",
+    "instance_status": "completed",
+    "current_node_key": "end",
+    "pending_task_count": 0
+  }
+}
+```
+
+应收计划结果：
+
+```json
+{
+  "id": "6f46c08d-cb31-4a52-a970-82751b29723b",
+  "status": "paid",
+  "amount": 10000,
+  "paid_amount": 10000,
+  "project_id": "407537b4-2adc-4a0f-ac83-bdaecf70e559",
+  "workflow_instance_id": "93f16262-038f-4890-bbfc-afe7d1badb05",
+  "workflow_node_key": "payment_stage_2"
+}
+```
+
+核销记录：
+
+```json
+{
+  "id": "6d9adc7a-3276-4157-99ec-6bcd1ed22961",
+  "amount": 10000,
+  "receivable_plan_id": "6f46c08d-cb31-4a52-a970-82751b29723b",
+  "payment_id": "ccded302-396b-4b8e-801c-080098293725",
+  "source_type": "workflow_task",
+  "source_id": "a0e5d055-4a6d-4f7e-87aa-f46e35d46561"
+}
+```
+
+财务台账：
+
+```json
+{
+  "id": "1d03b717-a42f-425c-a116-9d5fc429eeaa",
+  "entry_type": "project_payment",
+  "direction": "in",
+  "amount": 10000,
+  "source_type": "workflow_task",
+  "source_id": "a0e5d055-4a6d-4f7e-87aa-f46e35d46561",
+  "payment_id": "ccded302-396b-4b8e-801c-080098293725",
+  "workflow_task_id": "a0e5d055-4a6d-4f7e-87aa-f46e35d46561"
+}
+```
+
+接口可见性：
+
+- `GET /projects/:projectId/receivables?page=1&pageSize=20`
+  - `contract_amount=50000`
+  - `receivable_amount=10000`
+  - `paid_amount=10000`
+  - `remaining_amount=0`
+  - plan `status=paid`
+- `GET /finance/receivables?page=1&pageSize=20&project_id=:projectId`
+  - `pagination.total=1`
+  - plan `status=paid`
+- `GET /finance/ledger?page=1&pageSize=20&project_id=:projectId`
+  - `pagination.total=1`
+  - ledger `entry_type=project_payment`
+
+清理：
+
+- runtime 已归档：`archived_at=2026-06-23T09:39:00.991+00:00`
+- workflow definition 已归档：`status=archived`
+- 未删除 payment、receivable plan、allocation、ledger，保留验收证据。
+
 ## 本轮结论
 
-Task 6 已完成只读 smoke 和验收记录。
+Task 6 完整 E2E 已通过。
 
-完整 E2E 推进未执行，阻塞原因是当前没有启用应收计划的收款节点样本。该阻塞不是接口错误，也不是小程序对接问题；需要先由 Admin 发布带 `receivable_plan_enabled=true` 的收款节点版本，并准备一个进入该节点的测试项目。
+本轮验证证明：开启应收计划的 `payment_collection` 节点可以在 task/action 读取时生成应收上下文，财务 complete 后可以创建 confirmed payment、核销 receivable plan、写入 finance ledger，并推进 workflow 到结束节点。

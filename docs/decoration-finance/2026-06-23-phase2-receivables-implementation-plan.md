@@ -421,11 +421,11 @@ workflow 面板继续只读 runtime/timeline，不从 construction stages 或本
 
 ### Task 1: Migration 和权限
 
-- [ ] 新增 `project_receivable_plans`。
-- [ ] 新增 `project_receivable_allocations`。
-- [ ] 新增 `finance.receivable.view`、`finance.receivable.manage` 权限。
-- [ ] 增加必要索引和约束。
-- [ ] 应用 migration 后执行 `supabase migration list --linked` 验证 Local/Remote 对齐。
+- [x] 新增 `project_receivable_plans`。
+- [x] 新增 `project_receivable_allocations`。
+- [x] 新增 `finance.receivable.view`、`finance.receivable.manage` 权限。
+- [x] 增加必要索引和约束。
+- [x] 应用 migration 后执行 `supabase migration list --linked` 验证 Local/Remote 对齐。
 
 验证：
 
@@ -435,12 +435,12 @@ workflow 面板继续只读 runtime/timeline，不从 construction stages 或本
 
 ### Task 2: API 应收服务
 
-- [ ] 新增 finance receivable schema。
-- [ ] 新增 receivable plan repository。
-- [ ] 新增 allocation repository。
-- [ ] 新增 receivable service。
-- [ ] 新增 `GET /finance/receivables`。
-- [ ] 新增或接入项目 receivable summary。
+- [x] 新增 finance receivable schema。
+- [x] 新增 receivable plan repository。
+- [x] 新增 allocation repository。
+- [x] 新增 receivable service。
+- [x] 新增 `GET /finance/receivables`。
+- [x] 新增或接入项目 receivable summary。
 
 验证：
 
@@ -451,13 +451,13 @@ workflow 面板继续只读 runtime/timeline，不从 construction stages 或本
 
 ### Task 3: workflow 计划生成和核销
 
-- [ ] 扩展 workflow payment collection config schema。
-- [ ] 扩展 Admin workflow config 类型。
-- [ ] 发布校验补充应收计划字段。
-- [ ] runtime 进入 payment collection 节点时幂等创建计划。
-- [ ] `workflow-task-payment-bridge` 完成 confirmed payment 后核销应收计划。
-- [ ] task action metadata 返回 receivable context。
-- [ ] timeline node attributes 返回 `receivable_*`。
+- [x] 扩展 workflow payment collection config schema。
+- [x] 扩展 Admin workflow config 类型。
+- [x] 发布校验补充应收计划字段。
+- [x] runtime 进入 payment collection 节点时幂等创建计划。
+- [x] `workflow-task-payment-bridge` 完成 confirmed payment 后核销应收计划。
+- [x] task action metadata 返回 receivable context。
+- [x] timeline node attributes 返回 `receivable_*`。
 
 验证：
 
@@ -468,10 +468,10 @@ workflow 面板继续只读 runtime/timeline，不从 construction stages 或本
 
 ### Task 4: Admin UI
 
-- [ ] 收款节点配置增加应收计划设置区。
-- [ ] 新增 `/finance/receivables` 页面。
-- [ ] 财务菜单增加“应收计划”。
-- [ ] 项目详情展示 receivable summary。
+- [x] 收款节点配置增加应收计划设置区。
+- [x] 新增 `/finance/receivables` 页面。
+- [x] 财务菜单增加“应收计划”。
+- [x] 项目详情展示 receivable summary。
 
 验证：
 
@@ -481,10 +481,10 @@ workflow 面板继续只读 runtime/timeline，不从 construction stages 或本
 
 ### Task 5: 小程序交接文档
 
-- [ ] 在 `docs/decoration-finance/` 落小程序二阶段对接说明。
-- [ ] 明确小程序只读 summary/attributes/actions。
-- [ ] 明确 complete payload 不变。
-- [ ] 明确小程序不做核销和逾期计算。
+- [x] 在 `docs/decoration-finance/` 落小程序二阶段对接说明。
+- [x] 明确小程序只读 summary/attributes/actions。
+- [x] 明确 complete payload 不变。
+- [x] 明确小程序不做核销和逾期计算。
 
 验证：
 
@@ -495,15 +495,15 @@ workflow 面板继续只读 runtime/timeline，不从 construction stages 或本
 
 建议准备一个测试项目和一个开启应收计划的 `payment_collection` 节点：
 
-1. 项目签约金额存在。
-2. workflow 进入收款节点。
-3. 后端生成 receivable plan。
-4. 小程序或 curl 完成收款 task。
-5. 后端创建 confirmed payment。
-6. 后端核销 receivable plan。
-7. 后端写 finance ledger。
-8. workflow 推进到下一节点。
-9. Admin `/finance/receivables` 和 `/finance/ledger` 可见一致数据。
+1. [x] 项目签约金额存在。
+2. [x] workflow 进入收款节点。
+3. [x] 后端生成 receivable plan。
+4. [x] 小程序或 curl 完成收款 task。
+5. [x] 后端创建 confirmed payment。
+6. [x] 后端核销 receivable plan。
+7. [x] 后端写 finance ledger。
+8. [x] workflow 推进到下一节点。
+9. [x] Admin `/finance/receivables` 和 `/finance/ledger` 可见一致数据。
 
 回填证据：
 
@@ -517,6 +517,10 @@ workflow 面板继续只读 runtime/timeline，不从 construction stages 或本
 - complete 请求/响应
 - workflow current node
 - Admin 页面或接口结果
+
+执行证据见：
+
+- [2026-06-23-phase2-receivables-smoke.md](./2026-06-23-phase2-receivables-smoke.md)
 
 ## 验收标准
 
