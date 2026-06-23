@@ -32,6 +32,9 @@ export type EmployeeListFilters = {
   visibility: EmployeeVisibilityFilter;
   status?: string;
   keyword?: string;
+  tenantDepartmentId?: string;
+  postId?: string;
+  roleEmployeeIds?: string[];
 };
 
 export type EmployeeCoreAccessRow = {
@@ -124,6 +127,23 @@ class EmployeeCoreRepository {
       filteredQuery = filteredQuery.eq("status", filters.status);
     }
 
+    if (filters.tenantDepartmentId) {
+      filteredQuery = filteredQuery.eq(
+        "tenant_department_id",
+        filters.tenantDepartmentId,
+      );
+    }
+
+    if (filters.postId) {
+      filteredQuery = filteredQuery.eq("post_id", filters.postId);
+    }
+
+    if (filters.roleEmployeeIds) {
+      filteredQuery = filters.roleEmployeeIds.length > 0
+        ? filteredQuery.in("id", filters.roleEmployeeIds)
+        : filteredQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+    }
+
     if (filters.keyword) {
       const escapedKeyword = escapeSupabaseOrValue(filters.keyword);
       filteredQuery = filteredQuery.or(
@@ -212,6 +232,30 @@ class EmployeeCoreRepository {
     }
 
     return roleMap;
+  }
+
+  async listEmployeeIdsByRoleId(input: { tenantId: string; roleId: string }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("employee_roles")
+      .select(`
+        employee_id,
+        employee:employees!employee_roles_employee_id_fkey!inner(
+          id,
+          tenant_id
+        )
+      `)
+      .eq("role_id", input.roleId)
+      .eq("employee.tenant_id", input.tenantId);
+
+    if (error) {
+      throw Errors.dbError("查询角色关联员工失败", error);
+    }
+
+    return Array.from(new Set(((data || []) as Array<{
+      employee_id: string | null;
+    }>)
+      .map((item) => item.employee_id)
+      .filter((employeeId): employeeId is string => Boolean(employeeId))));
   }
 
   async listLiteByIds(input: { tenantId: string; employeeIds: string[] }) {

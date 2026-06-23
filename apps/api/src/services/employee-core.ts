@@ -45,14 +45,31 @@ class EmployeeCoreService {
       input.authContext,
       "employee.read",
     );
-    const { page, pageSize, status, keyword } = input.query;
+    const {
+      page,
+      pageSize,
+      status,
+      keyword,
+      tenant_department_id,
+      post_id,
+      role_id,
+    } = input.query;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
+    const roleEmployeeIds = role_id
+      ? await employeeCoreRepository.listEmployeeIdsByRoleId({
+        tenantId,
+        roleId: role_id,
+      })
+      : undefined;
     const filters = {
       tenantId,
       visibility: this.buildVisibilityFilter(scope, input.authContext),
       status,
       keyword: keyword?.trim(),
+      tenantDepartmentId: tenant_department_id,
+      postId: post_id,
+      roleEmployeeIds,
     };
     const total = await employeeCoreRepository.count(filters);
     const rows = from >= total

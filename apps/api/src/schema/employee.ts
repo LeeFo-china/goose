@@ -128,6 +128,11 @@ export const EmployeeListQuerySchema = PaginationQuerySchema.extend({
     message: "请选择有效的员工状态",
   })),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+  tenant_department_id: optionalQueryValue(
+    z.string().uuid("无效的租户部门 ID"),
+  ),
+  post_id: optionalQueryValue(z.string().uuid("无效的职位 ID")),
+  role_id: optionalQueryValue(z.string().uuid("无效的角色 ID")),
 });
 
 export type EmployeeListQueryType = z.infer<typeof EmployeeListQuerySchema>;

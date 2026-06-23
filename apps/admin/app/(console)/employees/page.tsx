@@ -41,6 +41,14 @@ type EmployeeRoleSummary = {
   status: string;
 };
 
+type RoleOption = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  status: string;
+};
+
 type EmployeeDepartmentOption = {
   id: string;
   tenant_department_id?: string | null;
@@ -74,10 +82,18 @@ type EmployeeListData = {
   pagination: Pagination;
 };
 
+type RoleListData = {
+  list: RoleOption[];
+  pagination: Pagination;
+};
+
 type EmployeePageSearchParams = {
   page?: string;
   status?: string;
   keyword?: string;
+  tenant_department_id?: string;
+  post_id?: string;
+  role_id?: string;
 };
 
 const statusOptions: Array<{
@@ -109,12 +125,18 @@ async function getEmployees(params: EmployeePageSearchParams) {
   const page = normalizePage(params.page);
   const keyword = params.keyword?.trim() || "";
   const status = params.status?.trim() || "";
+  const tenantDepartmentId = params.tenant_department_id?.trim() || "";
+  const postId = params.post_id?.trim() || "";
+  const roleId = params.role_id?.trim() || "";
   const query = new URLSearchParams({
     page: String(page),
     pageSize: "20",
   });
   if (keyword) query.set("keyword", keyword);
   if (status) query.set("status", status);
+  if (tenantDepartmentId) query.set("tenant_department_id", tenantDepartmentId);
+  if (postId) query.set("post_id", postId);
+  if (roleId) query.set("role_id", roleId);
 
   try {
     const response = await fetch(buildBackendUrl(`/employees?${query}`), {
@@ -172,6 +194,38 @@ async function getDepartmentPostRuleConfig() {
   }
 }
 
+async function getRoleOptions() {
+  const token = await getAdminToken();
+  if (!token) {
+    return {
+      roles: [],
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const response = await fetch(
+      buildBackendUrl("/roles?page=1&pageSize=100&status=active"),
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      },
+    );
+    const payload = await parseBackendJson<RoleListData>(response);
+    return {
+      roles: payload.data?.list || [],
+      error: null,
+    };
+  } catch (error) {
+    return {
+      roles: [],
+      error: error instanceof Error ? error.message : "角色列表加载失败",
+    };
+  }
+}
+
 export default async function EmployeesPage({
   searchParams,
 }: {
@@ -183,9 +237,13 @@ export default async function EmployeesPage({
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const keyword = params.keyword?.trim() || "";
-  const [employeeData, departmentPostConfig] = await Promise.all([
+  const tenantDepartmentId = params.tenant_department_id?.trim() || "";
+  const postId = params.post_id?.trim() || "";
+  const roleId = params.role_id?.trim() || "";
+  const [employeeData, departmentPostConfig, roleOptions] = await Promise.all([
     getEmployees(params),
     getDepartmentPostRuleConfig(),
+    getRoleOptions(),
   ]);
   const { list, pagination, error } = employeeData;
 
@@ -214,10 +272,14 @@ export default async function EmployeesPage({
         pagination={pagination}
         status={status}
         keyword={keyword}
-        error={error || departmentPostConfig.error}
+        tenantDepartmentId={tenantDepartmentId}
+        postId={postId}
+        roleId={roleId}
+        error={error || departmentPostConfig.error || roleOptions.error}
         statusOptions={statusOptions}
         departments={departmentPostConfig.departments}
         posts={departmentPostConfig.post_options}
+        roles={roleOptions.roles}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   EmployeeSearchForm,
   EmployeesPagination,
   EmployeesStatusFilters,
+  EmployeesStructuredFilters,
 } from "@/components/employees/employee-list-actions";
 import {
   EmployeesTable,
@@ -18,6 +19,7 @@ import type {
   EmployeeDepartmentOption,
   EmployeePostOption,
 } from "@/components/employees/employee-mutations";
+import type { RoleOption } from "@/components/employees/employee-mutation-shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
@@ -38,19 +40,27 @@ export function EmployeesClientShell({
   pagination,
   status,
   keyword,
+  tenantDepartmentId,
+  postId,
+  roleId,
   error,
   statusOptions,
   departments,
   posts,
+  roles,
 }: {
   employees: EmployeeRecord[];
   pagination: Pagination;
   status: string;
   keyword: string;
+  tenantDepartmentId: string;
+  postId: string;
+  roleId: string;
   error: string | null;
   statusOptions: StatusOption[];
   departments: EmployeeDepartmentOption[];
   posts: EmployeePostOption[];
+  roles: RoleOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -81,16 +91,34 @@ export function EmployeesClientShell({
               options={statusOptions}
               currentStatus={status}
               keyword={keyword}
+              tenantDepartmentId={tenantDepartmentId}
+              postId={postId}
+              roleId={roleId}
               pending={pending}
               onNavigate={navigate}
             />
             <EmployeeSearchForm
               status={status}
               keyword={keyword}
+              tenantDepartmentId={tenantDepartmentId}
+              postId={postId}
+              roleId={roleId}
               pending={pending}
               onNavigate={navigate}
             />
           </div>
+          <EmployeesStructuredFilters
+            status={status}
+            keyword={keyword}
+            tenantDepartmentId={tenantDepartmentId}
+            postId={postId}
+            roleId={roleId}
+            departments={departments}
+            posts={posts}
+            roles={roles}
+            pending={pending}
+            onNavigate={navigate}
+          />
         </CardHeader>
         <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
           <div className="min-h-0 flex-1 overflow-auto">
@@ -129,6 +157,9 @@ export function EmployeesClientShell({
               pagination={pagination}
               status={status}
               keyword={keyword}
+              tenantDepartmentId={tenantDepartmentId}
+              postId={postId}
+              roleId={roleId}
               pending={pending}
               onNavigate={navigate}
             />
