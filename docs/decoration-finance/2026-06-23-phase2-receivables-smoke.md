@@ -485,6 +485,19 @@ complete 响应摘要：
   - `current_node_key=end`
   - `actions=[]`
 
+归档：
+
+- workflow definition 已归档：
+  - definition ID：`b13e7f1b-0f85-41e6-835c-fb20d6f61510`
+  - workflow key：`finance_receivable_miniprogram_smoke_20260623125051`
+  - status：`archived`
+- runtime 已归档：
+  - instance ID：`887d9829-0026-4e76-93ad-41f2b474823a`
+  - archived_at：`2026-06-23T13:15:20.921+00:00`
+  - archived_by：`d8ecc522-e6a1-49d6-b7b7-aaa0f3084826`
+  - archive_reason：`小程序应收计划二阶段 complete smoke 已通过，归档临时测试实例`
+- 未删除项目、payment、receivable plan、ledger，保留验收证据。
+
 关于 allocation ID：
 
 小程序侧当前可读 API 未返回 allocation ID。`POST /workflow-tasks/:taskId/complete`、`GET /finance/receivables`、`GET /projects/:projectId/receivables`、`GET /finance/ledger` 均不暴露 allocation，allocation 相关只读 GET 路由当前也不存在。
