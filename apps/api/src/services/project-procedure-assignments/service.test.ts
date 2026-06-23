@@ -113,4 +113,92 @@ describe("ProjectProcedureAssignmentService", () => {
     })).resolves.toBeNull();
     expect(queried).toBe(false);
   });
+
+  test("lists candidates with busy assignment metadata", async () => {
+    const service = new ProjectProcedureAssignmentService({
+      listTenantDepartmentIdsByCodes: async () => ["department-1"],
+      listCandidateEmployees: async () => ({
+        list: [{
+          id: "employee-1",
+          name: "张三",
+          avatar: null,
+          status: "active",
+          tenant_department_id: "department-1",
+          post_id: "post-1",
+          tenant_department: {
+            id: "department-1",
+            alias_name: "工程部",
+            code: "engineering",
+          },
+          post: { name: "水电工", code: "electrician" },
+        }],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+        },
+      }),
+      listOverlappingAssignments: async () => [{
+        id: "assignment-busy",
+        project_id: "project-busy",
+        node_key: "procedure_tiling",
+        stage_code: "tiling",
+        assignee_employee_id: "employee-1",
+        planned_start_date: "2026-06-23",
+        planned_duration_days: 5,
+        planned_end_date: "2026-06-27",
+        status: "in_progress",
+        project: { id: "project-busy", name: "测试项目" },
+      }],
+    } as never, {
+      findById: async () => ({
+        instance: {
+          subject_id: "11111111-1111-4111-8111-111111111111",
+          current_node_snapshot: {
+            config: {
+              stage_key: "plumbing_electrical",
+              candidate_department_codes: ["engineering"],
+            },
+          },
+        },
+      }),
+    } as never);
+
+    const result = await service.listCandidates({
+      authContext: {
+        tenantId: "tenant-1",
+        employeeId: "manager-1",
+        roleCodes: [],
+        permissions: [{ code: "project_procedure.assign", scope: "all" }],
+      } as never,
+      projectId: "11111111-1111-4111-8111-111111111111",
+      query: {
+        task_id: "22222222-2222-4222-8222-222222222222",
+        planned_start_date: "2026-06-24",
+        planned_duration_days: 3,
+        page: 1,
+        pageSize: 20,
+      },
+    });
+
+    expect(result).toMatchObject({
+      list: [{
+        id: "employee-1",
+        name: "张三",
+        department: { code: "engineering", name: "工程部" },
+        busy: true,
+        busy_assignment: {
+          assignment_id: "assignment-busy",
+          project_name: "测试项目",
+          stage_code: "tiling",
+        },
+      }],
+      pagination: { total: 1 },
+      meta: {
+        planned_end_date: "2026-06-26",
+        candidate_department_codes: ["engineering"],
+      },
+    });
+  });
 });

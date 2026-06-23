@@ -23,6 +23,7 @@ import GetProjectCreatePageDataController from "@/controllers/common/rpc/get_pro
 import PropertyControlle from "@/controllers/properties";
 import ProjectLogController from "@/controllers/project-logs";
 import ProjectLogCommentsController from "@/controllers/project-log-comments";
+import ProjectProceduresController from "@/controllers/project-procedures";
 import AiController from "@/controllers/ai";
 import AiConfigController from "@/controllers/ai-config";
 import UploadController from "@/controllers/uploads";
@@ -141,6 +142,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   AiController.registerExtraRoutes(app);
   UploadController.registerExtraRoutes(app);
   ProjectLogCommentsController.registerExtraRoutes(app);
+  ProjectProceduresController.registerExtraRoutes(app);
   EmployeePermissionsController.registerExtraRoutes(app);
   EmployeeSelfServiceController.registerExtraRoutes(app);
   EmployeePersonalizationController.registerExtraRoutes(app);

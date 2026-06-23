@@ -1,19 +1,35 @@
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
-import { projectProcedureAssignmentRepository } from "@/repositories/project-procedure-assignments";
+import {
+  projectProcedureAssignmentRepository,
+} from "@/repositories/project-procedure-assignments";
+import { workflowTaskRepository } from "@/repositories/workflow-tasks";
+import type { ProjectProcedureCandidatesQuery } from "@/schema/project-procedure-assignments";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
-import { getEffectiveAssignmentStatus } from "./status";
+import {
+  calculatePlannedEndDate,
+  getEffectiveAssignmentStatus,
+} from "./status";
+import {
+  readCandidateDepartmentCodes,
+  serializeProcedureCandidate,
+} from "./candidates";
 import type { ProcedureAssignmentRow } from "./types";
 
 type AssignmentRepositoryLike = Pick<
   typeof projectProcedureAssignmentRepository,
   | "findActiveByNode"
   | "listActiveForProject"
+  | "listTenantDepartmentIdsByCodes"
+  | "listCandidateEmployees"
+  | "listOverlappingAssignments"
   | "createAssignment"
   | "updateAssignmentSchedule"
   | "markAssignmentCompleted"
 >;
+
+type WorkflowTaskRepositoryLike = Pick<typeof workflowTaskRepository, "findById">;
 
 type ProcedureWorkflowTask = {
   id: string;
@@ -40,6 +56,7 @@ export class ProjectProcedureAssignmentService {
   constructor(
     private readonly repository: AssignmentRepositoryLike =
       projectProcedureAssignmentRepository,
+    private readonly tasks: WorkflowTaskRepositoryLike = workflowTaskRepository,
   ) {}
 
   async handleWorkflowTaskAction(input: {
@@ -251,6 +268,78 @@ export class ProjectProcedureAssignmentService {
     return this.repository.listActiveForProject(input);
   }
 
+  async listCandidates(input: {
+    authContext: AuthContext;
+    projectId: string;
+    query: ProjectProcedureCandidatesQuery;
+  }) {
+    const tenantId = this.assertTenantId(input.authContext);
+    accessPolicyService.assertPermission(
+      input.authContext,
+      "project_procedure.assign",
+    );
+
+    const task = await this.tasks.findById({
+      tenantId,
+      taskId: input.query.task_id,
+    });
+    if (!task?.instance || task.instance.subject_id !== input.projectId) {
+      throw Errors.business(
+        409,
+        "当前工序待办已变化，请刷新后重试",
+        ErrorCodes.WORKFLOW_ACTION_STALE,
+      );
+    }
+
+    const config = this.readNodeConfig(task.instance.current_node_snapshot);
+    const departmentCodes = readCandidateDepartmentCodes(
+      config.candidate_department_codes,
+    );
+    const tenantDepartmentIds = departmentCodes.length > 0
+      ? await this.repository.listTenantDepartmentIdsByCodes({
+        tenantId,
+        departmentCodes,
+      })
+      : undefined;
+    const plannedEndDate = calculatePlannedEndDate(
+      input.query.planned_start_date,
+      input.query.planned_duration_days,
+    );
+    const candidates = await this.repository.listCandidateEmployees({
+      tenantId,
+      tenantDepartmentIds,
+      keyword: input.query.keyword,
+      page: input.query.page,
+      pageSize: input.query.pageSize,
+    });
+    const overlaps = await this.repository.listOverlappingAssignments({
+      tenantId,
+      assigneeEmployeeIds: candidates.list.map((employee) => employee.id),
+      plannedStartDate: input.query.planned_start_date,
+      plannedEndDate,
+    });
+    const overlapByEmployeeId = new Map(
+      overlaps.map((overlap) => [overlap.assignee_employee_id, overlap]),
+    );
+
+    return {
+      list: candidates.list.map((employee) =>
+        serializeProcedureCandidate({
+          employee,
+          overlap: overlapByEmployeeId.get(employee.id) ?? null,
+          tenantToday: this.getToday(),
+        })
+      ),
+      pagination: candidates.pagination,
+      meta: {
+        planned_start_date: input.query.planned_start_date,
+        planned_duration_days: input.query.planned_duration_days,
+        planned_end_date: plannedEndDate,
+        candidate_department_codes: departmentCodes,
+      },
+    };
+  }
+
   private async findActiveByNode(input: {
     tenantId: string;
     projectId: string;
@@ -317,8 +406,7 @@ export class ProjectProcedureAssignmentService {
   }
 
   private readStageCode(task: ProcedureWorkflowTask): string {
-    const snapshot = asRecord(task.instance.current_node_snapshot);
-    const config = asRecord(snapshot?.config);
+    const config = this.readNodeConfig(task.instance.current_node_snapshot);
     const stageCode = config?.stage_key;
     if (typeof stageCode === "string" && stageCode.trim()) {
       return stageCode.trim();
@@ -333,6 +421,11 @@ export class ProjectProcedureAssignmentService {
 
   private resolveInitialStatus(plannedStartDate: string): "planned" | "in_progress" {
     return plannedStartDate <= this.getToday() ? "in_progress" : "planned";
+  }
+
+  private readNodeConfig(currentNodeSnapshot: unknown): Record<string, unknown> {
+    const snapshot = asRecord(currentNodeSnapshot);
+    return asRecord(snapshot?.config) ?? {};
   }
 
   private getToday(): string {
