@@ -72,15 +72,6 @@ export function buildProcedureAssignmentTimelineActions(input: {
   return [
     {
       ...baseAction,
-      key: "adjust_procedure_schedule",
-      label: "调整派工",
-      business_domain: "project_procedure",
-      business_action: "adjust_procedure_schedule",
-      disabled: false,
-      output_fields: scheduleFields,
-    },
-    {
-      ...baseAction,
       key: "complete_procedure",
       label: input.node.title,
       business_domain: "project_procedure",
@@ -90,6 +81,15 @@ export function buildProcedureAssignmentTimelineActions(input: {
         ? { disabled_reason: "当前工序尚未到开工时间" }
         : {}),
       output_fields: [],
+    },
+    {
+      ...baseAction,
+      key: "adjust_procedure_schedule",
+      label: "调整派工",
+      business_domain: "project_procedure",
+      business_action: "adjust_procedure_schedule",
+      disabled: false,
+      output_fields: scheduleFields,
     },
   ];
 }

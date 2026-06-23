@@ -265,19 +265,17 @@ describe("project workflow node contract", () => {
       remaining_days: 2,
       schedule_status: "on_track",
     });
-    expect(plumbingNode?.actions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "adjust_procedure_schedule",
-          task_id: "task-1",
-        }),
-        expect.objectContaining({
-          key: "complete_procedure",
-          task_id: "task-1",
-          disabled: false,
-        }),
-      ]),
-    );
+    expect(plumbingNode?.actions).toMatchObject([
+      {
+        key: "complete_procedure",
+        task_id: "task-1",
+        disabled: false,
+      },
+      {
+        key: "adjust_procedure_schedule",
+        task_id: "task-1",
+      },
+    ]);
   });
 
   test("marks completed acceptance-enabled procedure as pending acceptance", () => {
