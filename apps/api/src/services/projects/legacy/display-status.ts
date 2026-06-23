@@ -10,6 +10,10 @@ type ProjectListRow = Record<string, unknown>;
 
 const FINAL_ACCEPTANCE_COMPLETED_STATUS = "final_acceptance_completed";
 const FINAL_ACCEPTANCE_COMPLETED_LABEL = "已完成";
+const FINAL_ACCEPTANCE_DISPLAY_SOURCE_STATUSES = new Set([
+    "constructing",
+    "acceptance",
+]);
 
 export async function attachProjectDisplayStatuses(input: {
     rows: ProjectListRow[];
@@ -21,7 +25,8 @@ export async function attachProjectDisplayStatuses(input: {
 
     const acceptanceProjectIds = input.rows
         .filter((row) =>
-            row.status === "acceptance" &&
+            typeof row.status === "string" &&
+            FINAL_ACCEPTANCE_DISPLAY_SOURCE_STATUSES.has(row.status) &&
             row.display_status !== FINAL_ACCEPTANCE_COMPLETED_STATUS
         )
         .map((row) => getProjectId(row))
@@ -72,7 +77,7 @@ function appendProjectDisplayStatus(
     const projectId = getProjectId(row);
     const isFinalAcceptanceCompleted =
         row.display_status === FINAL_ACCEPTANCE_COMPLETED_STATUS ||
-        (status === "acceptance" &&
+        (Boolean(status && FINAL_ACCEPTANCE_DISPLAY_SOURCE_STATUSES.has(status)) &&
             Boolean(projectId && completedProjectIds.has(projectId)));
 
     return {
