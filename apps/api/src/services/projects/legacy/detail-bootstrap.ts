@@ -34,6 +34,9 @@ import {
     projectWorkflowProgressService,
     type ProjectWorkflowProgress,
 } from "@/services/project-workflow-progress";
+import {
+    canAccessProjectByProcedureAssignment,
+} from "@/services/project-procedure-assignments/project-access";
 
 export async function getProjectDetail(this: any, input: {
     authContext: AuthContext;
@@ -147,11 +150,20 @@ export async function getEmployeeProjectBootstrapBundle(this: any, input: {
             members: bundle.members,
             permissionCode: "project.read",
         });
-        const hasAccess = localAccess ?? await accessPolicyService.canAccessProject(
-            input.authContext,
-            input.projectId,
-            "project.read",
-        );
+        const hasProcedureAssignmentAccess =
+            await canAccessProjectByProcedureAssignment({
+                authContext: input.authContext,
+                projectId: input.projectId,
+            });
+        const hasAccess = Boolean(localAccess) ||
+            hasProcedureAssignmentAccess ||
+            (localAccess === null
+                ? await accessPolicyService.canAccessProject(
+                    input.authContext,
+                    input.projectId,
+                    "project.read",
+                )
+                : false);
         if (!hasAccess) {
             throw Errors.business(
                 403,

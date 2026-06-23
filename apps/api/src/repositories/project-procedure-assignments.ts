@@ -166,6 +166,27 @@ class ProjectProcedureAssignmentRepository {
     return (data ?? []) as unknown as ProcedureAssignmentRow[];
   }
 
+  async hasActiveProjectAssignmentForEmployee(input: {
+    tenantId: string;
+    projectId: string;
+    employeeId: string;
+  }): Promise<boolean> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_procedure_assignments")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .eq("project_id", input.projectId)
+      .eq("assignee_employee_id", input.employeeId)
+      .in("status", ["planned", "in_progress"])
+      .limit(1);
+
+    if (error) {
+      throw Errors.dbError("查询员工项目工序派工失败", error);
+    }
+
+    return (data?.length ?? 0) > 0;
+  }
+
   async createAssignment(input: {
     tenantId: string;
     projectId: string;

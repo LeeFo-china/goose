@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { WorkflowTimelineNode } from "@/services/project-workflow-progress";
 import { attachWorkflowActionsToTimelineNodes } from "./workflow-subjects";
 
@@ -56,5 +57,17 @@ describe("workflow subject state timeline contract", () => {
       output_fields: [],
     }]);
     expect(nodes[1]?.actions).toEqual([]);
+  });
+
+  test("loads procedure assignment projections for project timeline nodes", () => {
+    const source = readFileSync(
+      new URL("./workflow-subjects.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("listProjectAssignmentsForRuntime");
+    expect(source).toContain("procedureAssignments");
+    expect(source).toContain("actions: input.actions");
+    expect(source).toContain("actions: currentTimelineNode?.actions ?? actions");
   });
 });

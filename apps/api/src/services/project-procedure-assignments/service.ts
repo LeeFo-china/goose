@@ -11,7 +11,7 @@ import {
   calculatePlannedEndDate,
   getEffectiveAssignmentStatus,
 } from "./status";
-import { assertAssignmentCanCreateProjectLog } from "./log-gate";
+import { assertEmployeeCanCreateAssignmentProjectLog } from "./log-gate";
 import {
   readCandidateDepartmentCodes,
   serializeProcedureCandidate,
@@ -281,7 +281,8 @@ export class ProjectProcedureAssignmentService {
       projectId: input.projectId,
       stageCode: input.stageCode,
     });
-    assertAssignmentCanCreateProjectLog({
+    assertEmployeeCanCreateAssignmentProjectLog({
+      authContext: input.authContext,
       assignment: active,
       tenantToday: this.getToday(),
     });

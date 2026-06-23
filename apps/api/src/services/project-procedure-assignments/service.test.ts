@@ -114,6 +114,50 @@ describe("ProjectProcedureAssignmentService", () => {
     expect(queried).toBe(false);
   });
 
+  test("allows the assigned employee to create project logs for the active procedure", async () => {
+    const service = new ProjectProcedureAssignmentService({
+      findActiveByProjectStage: async () => ({
+        ...baseAssignment,
+        planned_start_date: "2026-01-01",
+        status: "in_progress",
+      }),
+    } as never);
+
+    await expect(service.assertCanCreateProjectLog({
+      authContext: {
+        tenantId: "tenant-1",
+        employeeId: "11111111-1111-4111-8111-111111111111",
+        permissions: [{ code: "project_log.create", scope: "self" }],
+        roleCodes: [],
+      } as never,
+      projectId: "project-1",
+      stageCode: "demolition",
+    })).resolves.toBeUndefined();
+  });
+
+  test("rejects non-assigned employees when creating project logs for a procedure", async () => {
+    const service = new ProjectProcedureAssignmentService({
+      findActiveByProjectStage: async () => ({
+        ...baseAssignment,
+        planned_start_date: "2026-01-01",
+        status: "in_progress",
+      }),
+    } as never);
+
+    await expect(service.assertCanCreateProjectLog({
+      authContext: {
+        tenantId: "tenant-1",
+        employeeId: "22222222-2222-4222-8222-222222222222",
+        permissions: [{ code: "project_log.create", scope: "self" }],
+        roleCodes: [],
+      } as never,
+      projectId: "project-1",
+      stageCode: "demolition",
+    })).rejects.toMatchObject({
+      code: ErrorCodes.PROJECT_LOG_PERMISSION_DENIED,
+    });
+  });
+
   test("lists candidates with busy assignment metadata", async () => {
     const service = new ProjectProcedureAssignmentService({
       listTenantDepartmentIdsByCodes: async () => ["department-1"],

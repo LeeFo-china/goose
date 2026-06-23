@@ -31,14 +31,10 @@ export async function createWorkflowApprovedConstructionLog(input: {
   payload: CreateProjectLogInput;
   timings?: ProjectLogCreateTimingSteps;
 }): Promise<Record<string, unknown>> {
-  const canWrite = await measureProjectLogCreateStep(
-    input.timings,
-    "permission_ms",
-    () => accessPolicyService.canWriteProjectLogForProject(
-      input.authContext,
-      input.project,
-    ),
-  );
+  const canWrite =
+    Boolean(input.authContext.employeeId) &&
+    accessPolicyService.hasPermission(input.authContext, "project_log.create") &&
+    accessPolicyService.matchesTenant(input.authContext, input.project);
   if (!canWrite) {
     throw Errors.business(
       403,

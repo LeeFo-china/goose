@@ -11,6 +11,7 @@ import {
   buildFinanceConfirmationActorsForTenant,
   enrichWorkflowGraphWithFinanceReviewersForTenant,
 } from "@/services/project-workflow-finance-reviewer";
+import { projectProcedureAssignmentService } from "@/services/project-procedure-assignments";
 import { buildWorkflowTimelineNodes } from "@/services/project-workflow-progress";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
@@ -66,38 +67,37 @@ class WorkflowSubjectsService {
       };
     }
 
-    const [tasks, timelineNodes] = await Promise.all([
-      workflowTaskRepository.listAccessibleTasks({
-        tenantId,
-        employeeId: authContext.employeeId,
-        roleCodes: authContext.roleCodes,
-        permissionCodes: authContext.permissions.map((permission) =>
-          permission.code
-        ),
-        status: "pending",
-        subjectType: params.subjectType,
-        subjectId: params.subjectId.trim(),
-        instanceId: state.instance_id,
-        page: 1,
-        pageSize: 100,
-      }),
-      this.loadProjectTimelineNodes({
-        tenantId,
-        subjectType: params.subjectType,
-        subjectId: params.subjectId.trim(),
-      }),
-    ]);
+    const tasks = await workflowTaskRepository.listAccessibleTasks({
+      tenantId,
+      employeeId: authContext.employeeId,
+      roleCodes: authContext.roleCodes,
+      permissionCodes: authContext.permissions.map((permission) =>
+        permission.code
+      ),
+      status: "pending",
+      subjectType: params.subjectType,
+      subjectId: params.subjectId.trim(),
+      instanceId: state.instance_id,
+      page: 1,
+      pageSize: 100,
+    });
     const actions = await buildWorkflowTaskActionPayloads({
       tenantId,
       subjectType: params.subjectType,
       tasks: tasks.list,
+    });
+    const timelineNodes = await this.loadProjectTimelineNodes({
+      tenantId,
+      subjectType: params.subjectType,
+      subjectId: params.subjectId.trim(),
+      actions,
     });
 
     return {
       workflow_state: this.serializeState(
         state,
         actions,
-        attachWorkflowActionsToTimelineNodes(timelineNodes, actions),
+        timelineNodes,
       ),
     };
   }
@@ -159,7 +159,7 @@ class WorkflowSubjectsService {
       current_group_order: currentTimelineNode?.group.order ?? null,
       current_business_kind: state.current_business_kind,
       pending_task_count: state.pending_task_count,
-      actions,
+      actions: currentTimelineNode?.actions ?? actions,
       timeline_nodes: timelineNodes,
     };
   }
@@ -168,6 +168,7 @@ class WorkflowSubjectsService {
     tenantId: string;
     subjectType: string;
     subjectId: string;
+    actions: WorkflowTaskActionPayload[];
   }): Promise<WorkflowTimelineNode[]> {
     if (input.subjectType !== "project") return [];
 
@@ -180,7 +181,7 @@ class WorkflowSubjectsService {
 
     if (!runtimeInstance) return [];
 
-    const [graph, runtimeNodes, pendingTasks] = await Promise.all([
+    const [graph, runtimeNodes, pendingTasks, procedureAssignments] = await Promise.all([
       workflowRepository.getGraph({
         tenantId: input.tenantId,
         definitionId: runtimeInstance.definition_id,
@@ -194,6 +195,11 @@ class WorkflowSubjectsService {
       workflowTaskRepository.listPendingByInstance({
         tenantId: input.tenantId,
         instanceId: runtimeInstance.id,
+      }),
+      projectProcedureAssignmentService.listProjectAssignmentsForRuntime({
+        tenantId: input.tenantId,
+        projectId: input.subjectId,
+        workflowInstanceId: runtimeInstance.id,
       }),
     ]);
 
@@ -220,6 +226,8 @@ class WorkflowSubjectsService {
         .filter((node) => node.status === "completed")
         .map((node) => node.node_key),
       completedNodeActors,
+      procedureAssignments,
+      actions: input.actions,
       assignees: pendingTasks.map((task) => ({
         node_key: task.node_key,
         ...buildWorkflowTaskAssigneeMetadata(task),

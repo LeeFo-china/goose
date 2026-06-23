@@ -80,7 +80,7 @@ export function buildProjectLogEntry(this: any, input: {
       input.workflowProgress,
     );
     if (
-      input.permissions.can_create_project_log &&
+      canCreateWorkflowProjectLog(input.permissions, workflowWritableStage) &&
       workflowWritableStage?.canCreate === true
     ) {
       return {
@@ -153,6 +153,14 @@ export function buildProjectLogEntryBlockedReason(this: any, input: {
     const workflowWritableStage = resolveWorkflowWritableLogStage(
       input.workflowProgress,
     );
+    if (
+      workflowWritableStage?.canCreate === true &&
+      input.permissions.scopes.project_log_create &&
+      !canCreateWorkflowProjectLog(input.permissions, workflowWritableStage)
+    ) {
+      return "当前员工不是当前工序施工人员，不能新增施工日志";
+    }
+
     return workflowWritableStage?.blockedReason ?? "当前暂无可写施工工序";
   }
 
@@ -198,6 +206,7 @@ function resolveWorkflowWritableLogStage(
   canCreate: boolean;
   stageCode: ProjectLogStageCode;
   stageLabel: string;
+  assigneeEmployeeId: string | null;
   blockedReason: string | null;
 } | null {
   const currentNode = workflowProgress.timeline_nodes.find((node) =>
@@ -212,15 +221,26 @@ function resolveWorkflowWritableLogStage(
   }
 
   const stageLabel = PROJECT_LOG_STAGE_CONFIG[stageCode]?.label || stageCode;
+  const assigneeEmployeeId =
+    typeof currentNode?.attributes.procedure_assignee_employee_id === "string"
+      ? currentNode.attributes.procedure_assignee_employee_id
+      : null;
   const assignmentStatus = currentNode?.attributes.procedure_assignment_status;
   if (assignmentStatus === "in_progress") {
-    return { canCreate: true, stageCode, stageLabel, blockedReason: null };
+    return {
+      canCreate: true,
+      stageCode,
+      stageLabel,
+      assigneeEmployeeId,
+      blockedReason: null,
+    };
   }
   if (assignmentStatus === "planned") {
     return {
       canCreate: false,
       stageCode,
       stageLabel,
+      assigneeEmployeeId,
       blockedReason: `当前${stageLabel}工序尚未开工，不能新增施工日志`,
     };
   }
@@ -229,6 +249,7 @@ function resolveWorkflowWritableLogStage(
       canCreate: false,
       stageCode,
       stageLabel,
+      assigneeEmployeeId,
       blockedReason: `当前${stageLabel}工序已结束，不能继续新增施工日志`,
     };
   }
@@ -237,8 +258,29 @@ function resolveWorkflowWritableLogStage(
     canCreate: false,
     stageCode,
     stageLabel,
+    assigneeEmployeeId,
     blockedReason: `请先开始${stageLabel}工序派工`,
   };
+}
+
+function canCreateWorkflowProjectLog(
+  permissions: BootstrapPermissions,
+  workflowWritableStage: ReturnType<typeof resolveWorkflowWritableLogStage>,
+) {
+  if (!workflowWritableStage?.canCreate) {
+    return false;
+  }
+  if (!permissions.scopes.project_log_create) {
+    return false;
+  }
+  if (permissions.can_create_project_log) {
+    return true;
+  }
+
+  return Boolean(
+    workflowWritableStage.assigneeEmployeeId &&
+      permissions.employee_id === workflowWritableStage.assigneeEmployeeId,
+  );
 }
 
 export function buildProjectLogEntryNextAction(this: any, input: {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildProjectLogEntry,
+  buildProjectLogEntryBlockedReason,
   buildProjectLogEntryNextAction,
 } from "./log-entry";
 import {
@@ -26,6 +27,7 @@ const service = {
   buildNextAction,
   buildProjectLogEntryNextAction,
   buildProjectLogEntry,
+  buildProjectLogEntryBlockedReason,
   getAcceptanceActionLabel,
   getAcceptanceActionPriority,
   selectNextAcceptanceActionStage,
@@ -179,6 +181,115 @@ describe("employee project detail workflow gates", () => {
         stage_code: "installation",
         stage_label: "安装",
       },
+    });
+  });
+
+  test("lets assigned procedure employee create logs even when old project membership denies writes", () => {
+    const workflowProgress: WorkflowProgressResult = {
+      source: "workflow_runtime",
+      instance_id: "instance-1",
+      instance_status: "running",
+      current_node_key: "procedure_tiling",
+      current_node_title: "瓦工",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
+      current_group_order: 20,
+      current_node_type: "procedure",
+      current_business_kind: "procedure_template",
+      current_stage_code: "tiling",
+      current_gate: null,
+      pending_task_count: 1,
+      actions: [],
+      warnings: [],
+      timeline_nodes: [{
+        node_key: "procedure_tiling",
+        node_title: "瓦工",
+        node_type: "procedure",
+        business_kind: "procedure_template",
+        group: workflowGroup,
+        status: "current",
+        display: {
+          label: "瓦工",
+          status_label: "当前",
+          status_variant: "default",
+        },
+        attributes: {
+          stage_code: "tiling",
+          procedure_assignment_status: "in_progress",
+          procedure_assignee_employee_id: "employee-1",
+        },
+        actions: [],
+      }],
+    };
+
+    expect(service.buildProjectLogEntry({
+      project: { id: "project-1", status: "constructing" },
+      permissions: {
+        ...permissions,
+        can_create_project_log: false,
+      },
+      constructionStages,
+      workflowProgress,
+      nextAction: null,
+    } as never)).toMatchObject({
+      can_create: true,
+      writable_stage: {
+        stage_code: "tiling",
+        stage_label: "瓦工",
+      },
+    });
+  });
+
+  test("blocks non-assigned employee from workflow procedure log entry", () => {
+    const workflowProgress: WorkflowProgressResult = {
+      source: "workflow_runtime",
+      instance_id: "instance-1",
+      instance_status: "running",
+      current_node_key: "procedure_tiling",
+      current_node_title: "瓦工",
+      current_group_key: "construction",
+      current_group_label: "施工阶段",
+      current_group_order: 20,
+      current_node_type: "procedure",
+      current_business_kind: "procedure_template",
+      current_stage_code: "tiling",
+      current_gate: null,
+      pending_task_count: 1,
+      actions: [],
+      warnings: [],
+      timeline_nodes: [{
+        node_key: "procedure_tiling",
+        node_title: "瓦工",
+        node_type: "procedure",
+        business_kind: "procedure_template",
+        group: workflowGroup,
+        status: "current",
+        display: {
+          label: "瓦工",
+          status_label: "当前",
+          status_variant: "default",
+        },
+        attributes: {
+          stage_code: "tiling",
+          procedure_assignment_status: "in_progress",
+          procedure_assignee_employee_id: "employee-2",
+        },
+        actions: [],
+      }],
+    };
+
+    expect(service.buildProjectLogEntry({
+      project: { id: "project-1", status: "constructing" },
+      permissions: {
+        ...permissions,
+        can_create_project_log: false,
+      },
+      constructionStages,
+      workflowProgress,
+      nextAction: null,
+    } as never)).toMatchObject({
+      can_create: false,
+      blocked_reason: "当前员工不是当前工序施工人员，不能新增施工日志",
     });
   });
 

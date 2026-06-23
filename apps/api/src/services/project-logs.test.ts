@@ -62,7 +62,14 @@ mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
     assertTenantContext: mock(() => "tenant-1"),
     assertTenantId: mock(() => "tenant-1"),
-    assertPermission: mock(() => "all"),
+    assertPermission: mock((authContext: AuthContext, permissionCode: string) =>
+      authContext.permissions.find((item) => item.code === permissionCode)
+        ?.scope ?? "all"
+    ),
+    hasPermission: mock((authContext: AuthContext, permissionCode: string) =>
+      authContext.permissions.some((item) => item.code === permissionCode)
+    ),
+    matchesTenant: mock(() => true),
     canWriteProjectLogForProject: mock(async () => true),
     canWriteProjectLog: mock(async () => true),
     getScope: mock(() => "self"),
@@ -110,7 +117,7 @@ const authContext = {
   avatar: null,
   roleCodes: [],
   roles: [],
-  permissions: [],
+  permissions: [{ code: "project_log.create", scope: "self" }],
 } satisfies AuthContext;
 
 describe("projectLogService", () => {
