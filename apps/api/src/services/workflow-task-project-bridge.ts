@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import type { AuthContext } from "@/services/authorization";
+import { projectProcedureAssignmentService } from "@/services/project-procedure-assignments";
 import { projectSer } from "@/services/projects";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import { PROJECT_STATUS_ACTION_VALUES } from "@gooes/domain";
@@ -37,9 +38,14 @@ type ResolveProjectWorkflowTaskOperationInput = {
 type ProjectWorkflowTaskBridgeInput = {
   authContext: AuthContext;
   task: {
+    id: string;
+    tenant_id: string;
+    instance_id: string;
+    instance_node_id: string | null;
     node_key: string;
     instance: {
       subject_id: string;
+      current_node_snapshot?: unknown;
     };
   };
   action: string;
@@ -70,6 +76,12 @@ const PROJECT_SIGNING_NODE_KEYS = new Set([
   "signed",
   "design_finalized",
   "pending_start",
+]);
+
+const PROJECT_PROCEDURE_ACTIONS = new Set([
+  "start_procedure",
+  "adjust_procedure_schedule",
+  "complete_procedure",
 ]);
 
 const ProjectWorkflowEffectSchema = z.object({
@@ -149,9 +161,20 @@ export function shouldRequireProjectWorkflowRebuild(input: {
 
 class WorkflowTaskProjectBridge {
   async complete(input: ProjectWorkflowTaskBridgeInput) {
+    const trimmedAction = input.action.trim();
+    if (PROJECT_PROCEDURE_ACTIONS.has(trimmedAction)) {
+      return projectProcedureAssignmentService.handleWorkflowTaskAction({
+        authContext: input.authContext,
+        task: input.task,
+        action: trimmedAction,
+        reason: input.reason,
+        output: input.output,
+      });
+    }
+
     const operation = resolveProjectWorkflowTaskOperation({
       nodeKey: input.task.node_key,
-      action: input.action.trim(),
+      action: trimmedAction,
       reason: input.reason,
       output: input.output,
     });

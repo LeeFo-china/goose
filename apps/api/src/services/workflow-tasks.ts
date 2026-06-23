@@ -11,6 +11,7 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { projectProcedureAssignmentService } from "@/services/project-procedure-assignments";
 import { workflowTaskCustomerBridge } from "@/services/workflow-task-customer-bridge";
 import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-bridge";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
@@ -149,8 +150,15 @@ class WorkflowTaskService {
       const bridged = await workflowTaskProjectBridge.complete({
         authContext,
         task: {
+          id: task.id,
+          tenant_id: task.tenant_id,
+          instance_id: task.instance_id,
+          instance_node_id: task.instance_node_id,
           node_key: task.node_key,
-          instance: { subject_id: task.instance.subject_id },
+          instance: {
+            subject_id: task.instance.subject_id,
+            current_node_snapshot: task.instance.current_node_snapshot,
+          },
         },
         action: input.action,
         reason: input.reason ?? null,
@@ -180,6 +188,24 @@ class WorkflowTaskService {
 
     if (!result.ok) {
       this.throwRuntimeCompleteError(result);
+    }
+
+    if (
+      task.instance.subject_type === "project" &&
+      input.action.trim() === "complete_procedure" &&
+      projectProcedureAssignmentService.shouldRequireAssignmentForTask({
+        instance: {
+          current_node_snapshot: task.instance.current_node_snapshot,
+        },
+      })
+    ) {
+      await projectProcedureAssignmentService.markProcedureCompleted({
+        tenantId,
+        projectId: task.instance.subject_id,
+        workflowInstanceId: task.instance_id,
+        nodeKey: task.node_key,
+        operatorEmployeeId: authContext.employeeId,
+      });
     }
 
     const workflowState = await workflowSubjectStateService.syncFromRuntimeInstance({
