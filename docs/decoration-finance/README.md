@@ -15,6 +15,7 @@
 - [2026-06-23-expense-approval-payment-task0-baseline.md](./2026-06-23-expense-approval-payment-task0-baseline.md)：费用审批与支出付款 Task 0 基线核查记录，包含 active workflow、测试账号、Admin 只读 smoke 和后续受控样本建议。
 - [2026-06-23-expense-approval-payment-task1-5-smoke.md](./2026-06-23-expense-approval-payment-task1-5-smoke.md)：费用审批与支出付款 Task 1-5 修复、E2E smoke、Admin 可见性和台账幂等验收记录。
 - [2026-06-23-expense-approval-payment-miniprogram-handoff.md](./2026-06-23-expense-approval-payment-miniprogram-handoff.md)：费用审批与支出付款的小程序影响说明，明确当前无需改代码及未来接入 workflow v2 契约。
+- [2026-06-23-phase3-project-operating-summary.md](./2026-06-23-phase3-project-operating-summary.md)：第三阶段项目经营汇总和利润看板，包含后端接口、Admin 对接、小程序影响和 smoke 记录。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
