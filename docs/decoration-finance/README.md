@@ -11,6 +11,7 @@
 - [2026-06-23-phase2-receivables-implementation-plan.md](./2026-06-23-phase2-receivables-implementation-plan.md)：第二阶段应收计划和逾期管理实施计划。
 - [2026-06-23-phase2-receivables-miniprogram-handoff.md](./2026-06-23-phase2-receivables-miniprogram-handoff.md)：第二阶段应收计划小程序对接说明，包含 workflow v2 字段、complete payload 和 smoke 清单。
 - [2026-06-23-phase2-receivables-smoke.md](./2026-06-23-phase2-receivables-smoke.md)：第二阶段应收计划 Task 6 smoke 记录，包含只读接口验收、样本缺失阻塞原因和完整 E2E 继续条件。
+- [2026-06-23-expense-approval-payment-phase-plan.md](./2026-06-23-expense-approval-payment-phase-plan.md)：下一阶段费用审批与支出付款计划，包含 Admin 闭环、小程序影响评估和 smoke 验收口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
