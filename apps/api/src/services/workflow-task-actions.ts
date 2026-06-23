@@ -1,6 +1,12 @@
 import type {
   WorkflowTaskWithInstanceRow,
 } from "@/repositories/workflow-tasks";
+import type { ProcedureAssignmentRow } from "@/services/project-procedure-assignments";
+import { buildProcedureAssignmentTimelineActions } from "@/services/project-workflow-procedure-assignment-contract";
+import type {
+  WorkflowTimelineGraphNodeProjection,
+  WorkflowTimelineNodeAction,
+} from "@/services/project-workflow-timeline-contract";
 import {
   buildWorkflowTaskActions,
   type WorkflowTaskActionMetadata,
@@ -53,6 +59,7 @@ export async function buildWorkflowTaskActionsForTask(input: {
   subjectType: WorkflowSubjectType;
   task: WorkflowTaskWithInstanceRow;
   receivablesService?: WorkflowReceivableContextProvider;
+  procedureAssignment?: ProcedureAssignmentRow | null;
 }): Promise<WorkflowTaskActionPayload[]> {
   const receivableContext = await buildReceivableContextForTask(input);
   const actions = buildWorkflowTaskActions({
@@ -70,11 +77,17 @@ export async function buildWorkflowTaskActionsForTask(input: {
     ...buildWorkflowTaskAssigneeMetadata(input.task),
   };
 
-  return actions.map((action) => ({
+  const payloadActions = actions.map((action) => ({
     ...action,
     ...basePayload,
     disabled: false,
   }));
+
+  return applyProcedureAssignmentActions({
+    task: input.task,
+    actions: payloadActions,
+    procedureAssignment: input.procedureAssignment,
+  });
 }
 
 async function buildReceivableContextForTask(input: {
@@ -115,4 +128,73 @@ function isPaymentCollectionSnapshot(value: unknown) {
   }
   return (value as { business_kind?: unknown }).business_kind ===
     "payment_collection";
+}
+
+function applyProcedureAssignmentActions(input: {
+  task: WorkflowTaskWithInstanceRow;
+  actions: WorkflowTaskActionPayload[];
+  procedureAssignment?: ProcedureAssignmentRow | null;
+}): WorkflowTaskActionPayload[] {
+  if (!input.procedureAssignment) return input.actions;
+  if (input.task.instance?.subject_type !== "project") return input.actions;
+  if (input.task.node_type !== "procedure") return input.actions;
+
+  const snapshot = asRecord(input.task.instance.current_node_snapshot);
+  const node: WorkflowTimelineGraphNodeProjection = {
+    id: input.task.node_id,
+    node_key: input.task.node_key,
+    title: input.task.title,
+    node_type: input.task.node_type,
+    business_kind: readString(snapshot?.business_kind),
+    config: asRecord(snapshot?.config) ?? {},
+  };
+  const timelineActions = input.actions as WorkflowTimelineNodeAction[];
+  const enrichedActions = buildProcedureAssignmentTimelineActions({
+    node,
+    actions: timelineActions,
+    procedureAssignment: input.procedureAssignment,
+  });
+
+  return enrichedActions.map((action): WorkflowTaskActionPayload => ({
+    ...action,
+    key: readString(action.key) ?? "complete",
+    label: readString(action.label) ?? input.task.title,
+    business_domain: readWorkflowTaskBusinessDomain(action.business_domain),
+    business_action: readString(action.business_action),
+    task_id: input.task.id,
+    node_key: input.task.node_key,
+    node_type: input.task.node_type,
+    requires_reason: action.requires_reason === true,
+    output_fields: Array.isArray(action.output_fields)
+      ? action.output_fields as WorkflowTaskActionPayload["output_fields"]
+      : [],
+    disabled: action.disabled === true,
+    disabled_reason: readString(action.disabled_reason) ?? undefined,
+  }));
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readWorkflowTaskBusinessDomain(
+  value: unknown,
+): WorkflowTaskActionPayload["business_domain"] {
+  if (
+    value === "customer_status" ||
+    value === "workflow_project" ||
+    value === "project_procedure" ||
+    value === "payment_collection" ||
+    value === "expense_request"
+  ) {
+    return value;
+  }
+
+  return null;
 }

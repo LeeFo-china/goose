@@ -11,7 +11,10 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { projectProcedureAssignmentService } from "@/services/project-procedure-assignments";
+import {
+  projectProcedureAssignmentService,
+  type ProcedureAssignmentRow,
+} from "@/services/project-procedure-assignments";
 import { workflowTaskCustomerBridge } from "@/services/workflow-task-customer-bridge";
 import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-bridge";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
@@ -43,6 +46,10 @@ class WorkflowTaskService {
       subjectType: query.subject_type,
       subjectId: query.subject_id?.trim() || undefined,
     });
+    const procedureAssignments = await this.loadProcedureAssignmentsForTasks(
+      tenantId,
+      tasks.list,
+    );
 
     return {
       ...tasks,
@@ -53,6 +60,9 @@ class WorkflowTaskService {
             tenantId,
             subjectType: task.instance.subject_type,
             task,
+            procedureAssignment: procedureAssignments.get(
+              this.procedureAssignmentTaskKey(task.instance_id, task.node_key),
+            ),
           })
           : [],
       }))),
@@ -314,6 +324,75 @@ class WorkflowTaskService {
     const snapshot = asRecord(task.instance?.current_node_snapshot);
     return snapshot?.node_type === "procedure" ||
       snapshot?.business_kind === "procedure_template";
+  }
+
+  private async loadProcedureAssignmentsForTasks(
+    tenantId: string,
+    tasks: Array<{
+      instance_id: string;
+      node_key: string;
+      node_type?: string | null;
+      instance?: {
+        subject_type?: string | null;
+        subject_id?: string | null;
+      } | null;
+    }>,
+  ): Promise<Map<string, ProcedureAssignmentRow>> {
+    const contexts = new Map<string, {
+      projectId: string;
+      workflowInstanceId: string;
+    }>();
+
+    for (const task of tasks) {
+      if (task.instance?.subject_type !== "project") continue;
+      if (task.node_type !== "procedure") continue;
+      const projectId = task.instance.subject_id;
+      if (!projectId) continue;
+      contexts.set(`${projectId}:${task.instance_id}`, {
+        projectId,
+        workflowInstanceId: task.instance_id,
+      });
+    }
+
+    const assignments = await Promise.all(
+      Array.from(contexts.values()).map((context) =>
+        projectProcedureAssignmentService.listProjectAssignmentsForRuntime({
+          tenantId,
+          projectId: context.projectId,
+          workflowInstanceId: context.workflowInstanceId,
+        })
+      ),
+    );
+    const result = new Map<string, ProcedureAssignmentRow>();
+
+    for (const assignment of assignments.flat()) {
+      const key = this.procedureAssignmentTaskKey(
+        assignment.workflow_instance_id,
+        assignment.node_key,
+      );
+      const current = result.get(key);
+      if (!current || this.isPreferredProcedureAssignment(assignment, current)) {
+        result.set(key, assignment);
+      }
+    }
+
+    return result;
+  }
+
+  private procedureAssignmentTaskKey(instanceId: string, nodeKey: string) {
+    return `${instanceId}:${nodeKey}`;
+  }
+
+  private isPreferredProcedureAssignment(
+    candidate: ProcedureAssignmentRow,
+    current: ProcedureAssignmentRow,
+  ) {
+    const candidateActive = candidate.status === "planned" ||
+      candidate.status === "in_progress";
+    const currentActive = current.status === "planned" ||
+      current.status === "in_progress";
+
+    return candidateActive && !currentActive;
   }
 
   private throwRuntimeCompleteError(
