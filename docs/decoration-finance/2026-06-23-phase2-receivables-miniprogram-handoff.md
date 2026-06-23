@@ -250,6 +250,24 @@ GET /projects/:projectId/receivables?page=1&pageSize=20
 - complete 后 workflow current node
 - `receivable_context` 截图或请求日志
 
+## 后端 smoke 辅助脚本
+
+gooes 已提供只读/写入双模式脚本，供后端准备样本后复核契约：
+
+```bash
+pnpm --dir apps/api run finance:receivables-phase2-smoke
+```
+
+只读模式只检查接口和 pending task 是否包含 `receivable_context`，不会推进 workflow。
+
+写入模式必须显式传：
+
+- `FINANCE_RECEIVABLES_SMOKE_TASK_ID`
+- `FINANCE_RECEIVABLES_SMOKE_ALLOW_WRITE=true`
+- `FINANCE_RECEIVABLES_SMOKE_COMPLETE_OUTPUT_JSON`
+
+小程序团队仍按上面的 smoke 清单执行真实端到端验证；后端脚本只用于后端侧确认样本和契约，不替代小程序联调。
+
 ## 后端/小程序边界
 
 gooes 负责：

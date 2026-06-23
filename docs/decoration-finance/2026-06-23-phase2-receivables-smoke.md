@@ -163,6 +163,72 @@ worktree：`/Users/leefo/Public/work/gooes/.worktrees/finance-phase2-receivables
 
 结论：当前数据库里没有 `receivable_plan_enabled=true` 的收款节点运行样本，也没有已发布版本样本。因此本轮不能执行完整的“收款节点 complete -> 自动生成应收计划 -> 创建/复用收款 -> 核销应收 -> 写财务台账 -> 推进 workflow”链路。
 
+## 可重复 smoke 脚本
+
+已补充 API 脚本：
+
+```bash
+pnpm --dir apps/api run finance:receivables-phase2-smoke
+```
+
+默认只读模式需要：
+
+```bash
+GOOES_API_BASE_URL=http://127.0.0.1:3300
+FINANCE_RECEIVABLES_SMOKE_EMPLOYEE_TOKEN=<employee token>
+```
+
+可选指定项目：
+
+```bash
+FINANCE_RECEIVABLES_SMOKE_PROJECT_ID=<project id>
+```
+
+只读模式会检查：
+
+- `GET /finance/receivables?page=1&pageSize=20`
+- `GET /projects/:projectId/receivables?page=1&pageSize=20`，仅在传入项目时执行。
+- `GET /workflow-tasks?page=1&pageSize=20&status=pending&subject_type=project`
+- pending task 的 action 是否包含 `receivable_context`。
+
+如果当前没有启用应收计划的收款 task，脚本返回 `status=sample_missing`，不会写业务数据。
+
+写入模式只允许在受控测试 task 上使用，需要同时传入：
+
+```bash
+FINANCE_RECEIVABLES_SMOKE_TASK_ID=<task id>
+FINANCE_RECEIVABLES_SMOKE_ALLOW_WRITE=true
+FINANCE_RECEIVABLES_SMOKE_COMPLETE_OUTPUT_JSON='{"amount":10000,"paid_at":"2026-06-23T10:00:00.000Z","evidence_images":["<object key>"],"remark":"应收计划二阶段 smoke"}'
+```
+
+写入模式会调用：
+
+```http
+POST /workflow-tasks/:taskId/complete
+```
+
+未传 `FINANCE_RECEIVABLES_SMOKE_ALLOW_WRITE=true` 时，即使传了 `FINANCE_RECEIVABLES_SMOKE_TASK_ID`，脚本也会拒绝执行 complete。
+
+本轮已用 `http://127.0.0.1:3300` 和员工账号 `18800005001` 跑过只读模式，指定项目：
+
+- `54f11aa5-09a8-4410-a9c5-604a7fe9e09c`
+
+脚本返回：
+
+```json
+{
+  "ok": true,
+  "mode": "read_only",
+  "candidate": null,
+  "checks": [
+    { "name": "finance receivables", "ok": true },
+    { "name": "project receivables", "ok": true },
+    { "name": "workflow tasks", "ok": true }
+  ],
+  "status": "sample_missing"
+}
+```
+
 ## 完整 E2E 继续条件
 
 需要先准备一个受控测试样本：
