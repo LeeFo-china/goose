@@ -143,7 +143,7 @@ export function EmployeeSearchForm({
   }
 
   return (
-    <form className="flex w-full gap-2 xl:w-[360px]" onSubmit={submit}>
+    <form className="flex w-full gap-2 xl:w-[320px] 2xl:w-[360px]" onSubmit={submit}>
       <InputGroup className="h-9 flex-1 bg-card">
         <InputGroupAddon>
           <Search aria-hidden="true" />
@@ -215,8 +215,8 @@ export function EmployeesStructuredFilters({
   }
 
   return (
-    <div className="grid gap-2 md:grid-cols-3 xl:flex xl:items-center">
-      <div className="min-w-0 xl:w-[190px]">
+    <div className="grid gap-2 md:grid-cols-3 xl:flex xl:flex-wrap xl:items-center">
+      <div className="min-w-0 xl:w-[170px] 2xl:w-[190px]">
         <Select
           value={tenantDepartmentId || ALL_SELECT_VALUE}
           disabled={pending}
@@ -240,7 +240,7 @@ export function EmployeesStructuredFilters({
           </SelectContent>
         </Select>
       </div>
-      <div className="min-w-0 xl:w-[190px]">
+      <div className="min-w-0 xl:w-[170px] 2xl:w-[190px]">
         <Select
           value={postId || ALL_SELECT_VALUE}
           disabled={pending}
@@ -261,7 +261,7 @@ export function EmployeesStructuredFilters({
           </SelectContent>
         </Select>
       </div>
-      <div className="min-w-0 xl:w-[190px]">
+      <div className="min-w-0 xl:w-[170px] 2xl:w-[190px]">
         <Select
           value={roleId || ALL_SELECT_VALUE}
           disabled={pending}

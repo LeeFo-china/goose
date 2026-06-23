@@ -86,17 +86,31 @@ export function EmployeesClientShell({
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <EmployeesStatusFilters
-              options={statusOptions}
-              currentStatus={status}
-              keyword={keyword}
-              tenantDepartmentId={tenantDepartmentId}
-              postId={postId}
-              roleId={roleId}
-              pending={pending}
-              onNavigate={navigate}
-            />
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-2 xl:flex-row xl:flex-wrap xl:items-center">
+              <EmployeesStatusFilters
+                options={statusOptions}
+                currentStatus={status}
+                keyword={keyword}
+                tenantDepartmentId={tenantDepartmentId}
+                postId={postId}
+                roleId={roleId}
+                pending={pending}
+                onNavigate={navigate}
+              />
+              <EmployeesStructuredFilters
+                status={status}
+                keyword={keyword}
+                tenantDepartmentId={tenantDepartmentId}
+                postId={postId}
+                roleId={roleId}
+                departments={departments}
+                posts={posts}
+                roles={roles}
+                pending={pending}
+                onNavigate={navigate}
+              />
+            </div>
             <EmployeeSearchForm
               status={status}
               keyword={keyword}
@@ -107,18 +121,6 @@ export function EmployeesClientShell({
               onNavigate={navigate}
             />
           </div>
-          <EmployeesStructuredFilters
-            status={status}
-            keyword={keyword}
-            tenantDepartmentId={tenantDepartmentId}
-            postId={postId}
-            roleId={roleId}
-            departments={departments}
-            posts={posts}
-            roles={roles}
-            pending={pending}
-            onNavigate={navigate}
-          />
         </CardHeader>
         <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
           <div className="min-h-0 flex-1 overflow-auto">
