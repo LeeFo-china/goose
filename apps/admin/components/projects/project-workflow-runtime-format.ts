@@ -87,6 +87,8 @@ const businessKindLabels: Record<string, string> = {
 
 const workflowActionLabels: Record<string, string> = {
   complete: "完成",
+  start_procedure: "开始工序",
+  adjust_procedure_schedule: "调整派工",
   complete_procedure: "完成工序",
   create: "创建",
   update: "更新",
@@ -124,22 +126,52 @@ const attributeLabels: Record<string, string> = {
   finance_reviewer_employee_name: "财务确认人",
   min_image_count: "最少照片",
   payment_type: "收款类型",
+  planned_duration_days: "工期",
+  planned_end_date: "计划完工",
+  planned_start_date: "计划开工",
+  procedure_assignment_status: "派工状态",
+  procedure_assignee_employee_name: "施工人员",
   require_log: "施工日志",
+  remaining_days: "剩余工期",
+  schedule_status: "排期状态",
   stage_code: "工序",
 };
 
 const attributeOrder: Record<string, number> = {
   stage_code: 10,
-  acceptance_status: 20,
-  acceptance_enabled: 30,
-  acceptance_required: 40,
-  require_log: 50,
-  min_image_count: 60,
-  payment_type: 70,
-  finance_reviewer_employee_name: 80,
-  finance_confirmed_by_employee_name: 90,
-  finance_confirmed_at: 100,
-  assignee_employee_name: 110,
+  procedure_assignment_status: 20,
+  procedure_assignee_employee_name: 30,
+  planned_start_date: 40,
+  planned_duration_days: 50,
+  planned_end_date: 60,
+  remaining_days: 70,
+  schedule_status: 80,
+  acceptance_status: 90,
+  acceptance_enabled: 100,
+  acceptance_required: 110,
+  require_log: 120,
+  min_image_count: 130,
+  payment_type: 140,
+  finance_reviewer_employee_name: 150,
+  finance_confirmed_by_employee_name: 160,
+  finance_confirmed_at: 170,
+  assignee_employee_name: 180,
+};
+
+const procedureAssignmentStatusLabels: Record<string, string> = {
+  planned: "待开工",
+  in_progress: "施工中",
+  completed: "已完成",
+  canceled: "已取消",
+};
+
+const scheduleStatusLabels: Record<string, string> = {
+  not_started: "未开始",
+  on_track: "正常",
+  due_today: "今日到期",
+  overdue: "已逾期",
+  completed: "已完成",
+  canceled: "已取消",
 };
 
 export function instanceStatusLabel(status: string | null | undefined) {
@@ -190,6 +222,15 @@ export function formatAttributeValue(key: string, value: unknown): string {
 
   const stringValue = String(value);
   if (key.endsWith("_at")) return formatDateTime(stringValue);
+  if (key === "planned_start_date" || key === "planned_end_date") return stringValue;
+  if (key === "planned_duration_days") return `${stringValue} 天`;
+  if (key === "remaining_days") return `${stringValue} 天`;
+  if (key === "procedure_assignment_status") {
+    return procedureAssignmentStatusLabels[stringValue] || stringValue;
+  }
+  if (key === "schedule_status") {
+    return scheduleStatusLabels[stringValue] || stringValue;
+  }
   if (key === "stage_code" && isProjectLogStageCode(stringValue)) {
     return PROJECT_LOG_STAGE_CONFIG[stringValue].label;
   }

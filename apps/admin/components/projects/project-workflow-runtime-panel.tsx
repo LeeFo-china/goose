@@ -13,9 +13,11 @@ import { requestBackendJson } from "@/lib/backend-client";
 import {
   buildActionOutput,
   buildNodeInsight,
+  createActionOutputDefaults,
   dedupeActions,
   findCurrentNode,
   getActionDisabledReason,
+  getMissingRequiredActionOutputLabel,
   mapWorkflowAction,
   nodeStatusLabel,
   nodeStatusVariant,
@@ -45,6 +47,7 @@ export function ProjectWorkflowRuntimePanel({
   const [error, setError] = useState("");
   const [selectedAction, setSelectedAction] = useState<ProjectStatusActionItem | null>(null);
   const [reason, setReason] = useState("");
+  const [actionOutputValues, setActionOutputValues] = useState<Record<string, string>>({});
   const [refreshing, startRefreshTransition] = useTransition();
   const [submitting, startSubmitTransition] = useTransition();
 
@@ -94,6 +97,7 @@ export function ProjectWorkflowRuntimePanel({
     if (submitting) return;
     setSelectedAction(null);
     setReason("");
+    setActionOutputValues({});
   }
 
   function openActionDialog(action: WorkflowSubjectAction) {
@@ -104,7 +108,9 @@ export function ProjectWorkflowRuntimePanel({
     }
     setError("");
     setReason("");
-    setSelectedAction(mapWorkflowAction(action, project.status));
+    const mappedAction = mapWorkflowAction(action, project.status);
+    setActionOutputValues(createActionOutputDefaults(mappedAction));
+    setSelectedAction(mappedAction);
   }
 
   function submitAction() {
@@ -112,6 +118,14 @@ export function ProjectWorkflowRuntimePanel({
     const normalizedReason = reason.trim();
     if (selectedAction.requires_reason && !normalizedReason) {
       setError("该流程动作必须填写原因");
+      return;
+    }
+    const missingOutputLabel = getMissingRequiredActionOutputLabel(
+      selectedAction,
+      actionOutputValues,
+    );
+    if (missingOutputLabel) {
+      setError(`请填写${missingOutputLabel}`);
       return;
     }
 
@@ -123,7 +137,7 @@ export function ProjectWorkflowRuntimePanel({
           body: JSON.stringify({
             action: selectedAction.workflow_action_key || "complete",
             reason: normalizedReason || null,
-            output: buildActionOutput(selectedAction),
+            output: buildActionOutput(selectedAction, actionOutputValues),
           }),
           fallbackMessage: "流程动作执行失败",
         });
@@ -211,10 +225,13 @@ export function ProjectWorkflowRuntimePanel({
         )}
       </CardContent>
       <ProjectStatusActionDialog
+        projectId={project.id}
         selectedAction={selectedAction}
         pending={submitting}
         reason={reason}
         setReason={setReason}
+        outputValues={actionOutputValues}
+        setOutputValues={setActionOutputValues}
         closeActionDialog={closeActionDialog}
         submitAction={submitAction}
       />

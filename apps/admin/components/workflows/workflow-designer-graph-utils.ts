@@ -47,6 +47,10 @@ function defaultConfig(
       stage_key: "",
       require_log: false,
       min_image_count: 0,
+      require_procedure_assignment: true,
+      default_duration_days: 1,
+      allow_duration_override: true,
+      candidate_department_codes: [],
       trigger_acceptance: false,
       customer_visible: false,
     };

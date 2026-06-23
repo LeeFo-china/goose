@@ -143,6 +143,11 @@ export type ProjectStatusActionItem = {
     requirement_mode?: string;
     required_percentage?: number;
     min_amount?: number;
+    source?: string;
+    default_value?: string | number | boolean | null;
+    min?: number;
+    max?: number;
+    stage_code?: string;
   }>;
 };
 

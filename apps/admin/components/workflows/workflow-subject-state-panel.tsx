@@ -18,6 +18,7 @@ export type WorkflowSubjectAction = {
     | "workflow_project"
     | "project_acceptance"
     | "payment_collection"
+    | "project_procedure"
     | "expense_request"
     | null;
   business_action: string | null;
@@ -38,6 +39,10 @@ export type WorkflowSubjectAction = {
     requirement_mode?: string;
     required_percentage?: number;
     min_amount?: number;
+    source?: string;
+    default_value?: string | number | boolean | null;
+    min?: number;
+    max?: number;
   }>;
   disabled_reason?: string | null;
 };

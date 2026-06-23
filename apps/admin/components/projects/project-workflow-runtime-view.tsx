@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 const hiddenAttributeKeys = new Set([
   "acceptance_id", "assignee_employee_id", "finance_confirmed_by_employee_id", "finance_reviewer_employee_id",
+  "procedure_assignment_id", "procedure_assignee_employee_id",
 ]);
 
 export function WorkflowRuntimeSummary({ actionCount, executableActionCount, state }: {
@@ -215,6 +216,7 @@ export function timelineNodeAttributes(node: WorkflowSubjectTimelineNode) {
 export function buildNodeInsight(node: WorkflowSubjectTimelineNode) {
   const attributes = node.attributes || {};
   const assigneeName = readString(node.assignee_employee_name) ||
+    readString(attributes.procedure_assignee_employee_name) ||
     readString(attributes.assignee_employee_name);
 
   if (node.business_kind === "payment_collection" || attributes.payment_type) {
@@ -229,6 +231,21 @@ export function buildNodeInsight(node: WorkflowSubjectTimelineNode) {
 
   if (node.node_type === "procedure" || attributes.stage_code) {
     const parts: string[] = [];
+    const plannedStartDate = readString(attributes.planned_start_date);
+    const plannedDurationDays = typeof attributes.planned_duration_days === "number"
+      ? attributes.planned_duration_days
+      : null;
+    const plannedEndDate = readString(attributes.planned_end_date);
+    const remainingDays = typeof attributes.remaining_days === "number"
+      ? attributes.remaining_days
+      : null;
+    if (assigneeName) parts.push(`施工人员 ${assigneeName}`);
+    if (plannedStartDate) {
+      parts.push(`计划 ${plannedStartDate} 开工`);
+    }
+    if (plannedDurationDays) parts.push(`工期 ${plannedDurationDays} 天`);
+    if (plannedEndDate) parts.push(`计划 ${plannedEndDate} 完成`);
+    if (remainingDays !== null) parts.push(`剩余 ${remainingDays} 天`);
     if (attributes.require_log === true) {
       const minImageCount = typeof attributes.min_image_count === "number"
         ? attributes.min_image_count
@@ -243,7 +260,6 @@ export function buildNodeInsight(node: WorkflowSubjectTimelineNode) {
     } else if (attributes.acceptance_enabled === false) {
       parts.push("阶段验收未开启");
     }
-    if (assigneeName) parts.push(`负责人 ${assigneeName}`);
     return parts.join("；");
   }
 
@@ -272,6 +288,7 @@ export function getActionDisabledReason(action: WorkflowSubjectAction) {
   if (fieldTypes.includes("project_log")) return "请在施工日志入口处理";
   if (fieldTypes.includes("acceptance")) return "请在工序验收入口处理";
   if (fieldTypes.includes("project_payment")) return "请在财务收款待办处理";
+  if (action.business_domain === "project_procedure") return "";
   return "该动作需要业务表单输入";
 }
 
@@ -294,11 +311,66 @@ export function mapWorkflowAction(
   };
 }
 
-export function buildActionOutput(action: ProjectStatusActionItem) {
+export function createActionOutputDefaults(action: ProjectStatusActionItem) {
+  const defaults: Record<string, string> = {};
+  for (const field of action.workflow_output_fields || []) {
+    if (field.default_value !== null && field.default_value !== undefined) {
+      defaults[field.name] = String(field.default_value);
+      continue;
+    }
+    if (field.type === "date" && field.required) {
+      defaults[field.name] = new Date().toISOString().slice(0, 10);
+      continue;
+    }
+    if (field.name === "planned_duration_days" && field.required) {
+      defaults[field.name] = String(field.min || 1);
+    }
+  }
+  return defaults;
+}
+
+export function getMissingRequiredActionOutputLabel(
+  action: ProjectStatusActionItem,
+  outputValues: Record<string, string>,
+) {
+  const missingField = (action.workflow_output_fields || []).find((field) =>
+    field.required && normalizeActionOutputValue(field, outputValues[field.name]) === undefined
+  );
+  return missingField?.label || "";
+}
+
+export function buildActionOutput(
+  action: ProjectStatusActionItem,
+  outputValues: Record<string, string> = {},
+) {
   if (action.workflow_business_domain === "payment_collection") {
     return { payment_status: "success" };
   }
+  if (action.workflow_business_domain === "project_procedure") {
+    return Object.fromEntries(
+      (action.workflow_output_fields || [])
+        .map((field) => [
+          field.name,
+          normalizeActionOutputValue(field, outputValues[field.name]),
+        ] as const)
+        .filter(([, value]) => value !== undefined),
+    );
+  }
   return {};
+}
+
+function normalizeActionOutputValue(
+  field: NonNullable<ProjectStatusActionItem["workflow_output_fields"]>[number],
+  value: string | undefined,
+) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) return undefined;
+  if (field.type === "number") {
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  if (field.type === "boolean") return normalized === "true";
+  return normalized;
 }
 
 function readString(value: unknown) {

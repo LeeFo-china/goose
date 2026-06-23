@@ -95,6 +95,10 @@ export type WorkflowProcedureNodeConfig = WorkflowBaseNodeConfig & {
   work_instructions?: string | null;
   require_log?: boolean;
   min_image_count?: number;
+  require_procedure_assignment?: boolean;
+  default_duration_days?: number | null;
+  allow_duration_override?: boolean;
+  candidate_department_codes?: string[];
   trigger_acceptance?: boolean;
   customer_visible?: boolean;
 };

@@ -15,6 +15,10 @@ describe("workflow node config contract labels", () => {
     expect(procedureSource).toContain("require_log");
     expect(procedureSource).toContain("min_image_count");
     expect(procedureSource).toContain("acceptance_enabled");
+    expect(procedureSource).toContain("require_procedure_assignment");
+    expect(procedureSource).toContain("default_duration_days");
+    expect(procedureSource).toContain("allow_duration_override");
+    expect(procedureSource).toContain("candidate_department_codes");
     expect(paymentSource).toContain("收款要求");
     expect(paymentSource).toContain("金额/比例规则");
     expect(paymentSource).toContain("财务负责人");

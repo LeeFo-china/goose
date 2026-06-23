@@ -101,6 +101,57 @@ export function ProcedureConfigFields({
         onCheckedChange={(checked) => onChangeConfig({ require_log: checked })}
       />
       <CheckboxField
+        checked={procedureConfig.require_procedure_assignment !== false}
+        disabled={disabled}
+        label="必须派工后开工（require_procedure_assignment）"
+        onCheckedChange={(checked) =>
+          onChangeConfig({ require_procedure_assignment: checked })
+        }
+      />
+      <div className="grid gap-2">
+        <Label htmlFor="workflow-node-default-duration-days">
+          默认工期天数（default_duration_days）
+        </Label>
+        <Input
+          id="workflow-node-default-duration-days"
+          type="number"
+          min={1}
+          max={365}
+          value={formatOptionalNumber(procedureConfig.default_duration_days)}
+          disabled={disabled}
+          placeholder="例如 3"
+          onChange={(event) =>
+            onChangeConfig({
+              default_duration_days: parseOptionalNumber(event.target.value),
+            })
+          }
+        />
+      </div>
+      <CheckboxField
+        checked={procedureConfig.allow_duration_override !== false}
+        disabled={disabled}
+        label="开工时允许调整工期（allow_duration_override）"
+        onCheckedChange={(checked) =>
+          onChangeConfig({ allow_duration_override: checked })
+        }
+      />
+      <div className="grid gap-2">
+        <Label htmlFor="workflow-node-candidate-department-codes">
+          候选部门编码（candidate_department_codes）
+        </Label>
+        <Input
+          id="workflow-node-candidate-department-codes"
+          value={(procedureConfig.candidate_department_codes || []).join(", ")}
+          disabled={disabled}
+          placeholder="例如 PROJECT, INSTALLATION"
+          onChange={(event) =>
+            onChangeConfig({
+              candidate_department_codes: parseCodeList(event.target.value),
+            })
+          }
+        />
+      </div>
+      <CheckboxField
         checked={procedureConfig.trigger_acceptance === true}
         disabled={disabled}
         label="完成后触发阶段验收（acceptance_enabled）"
@@ -149,4 +200,11 @@ function parseOptionalNumber(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCodeList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
