@@ -12,8 +12,22 @@ import { getAdminSession } from "@/lib/auth";
 
 type FinanceLedgerPageSearchParams = {
   page?: string;
+  project_id?: string;
+  direction?: string;
   cost_category_id?: string;
+  unallocated_only?: string;
 };
+
+const DIRECTION_OPTIONS = [
+  { value: "", label: "全部方向" },
+  { value: "in", label: "收入" },
+  { value: "out", label: "支出" },
+];
+
+const UNALLOCATED_OPTIONS = [
+  { value: "", label: "全部归集状态" },
+  { value: "true", label: "仅未归集" },
+];
 
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);
@@ -27,9 +41,16 @@ function clean(value: string | undefined) {
 
 function ledgerPageHref(page: number, filters: FinanceLedgerPageSearchParams) {
   const params = new URLSearchParams({ page: String(page) });
-  const costCategoryId = clean(filters.cost_category_id);
-  if (costCategoryId) params.set("cost_category_id", costCategoryId);
+  append(params, "project_id", filters.project_id);
+  append(params, "direction", filters.direction);
+  append(params, "cost_category_id", filters.cost_category_id);
+  append(params, "unallocated_only", filters.unallocated_only);
   return `/finance/ledger?${params}`;
+}
+
+function append(params: URLSearchParams, key: string, value: string | undefined) {
+  const normalized = clean(value);
+  if (normalized) params.set(key, normalized);
 }
 
 function hasPermission(
@@ -51,12 +72,18 @@ export default async function FinanceLedgerPage({
 
   const params = await searchParams;
   const page = normalizePage(params.page);
+  const projectId = clean(params.project_id);
+  const direction = clean(params.direction);
   const costCategoryId = clean(params.cost_category_id);
+  const unallocatedOnly = clean(params.unallocated_only);
   const [data, categories, session] = await Promise.all([
     fetchFinanceLedger({
       page,
       pageSize: 20,
+      project_id: projectId,
+      direction,
       cost_category_id: costCategoryId,
+      unallocated_only: unallocatedOnly,
     }),
     fetchFinanceCostCategories({ page: 1, pageSize: 100, status: "active" }),
     getAdminSession(),
@@ -92,8 +119,25 @@ export default async function FinanceLedgerPage({
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance/ledger"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-[minmax(12rem,18rem)_auto] md:items-end"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[10rem_12rem_minmax(12rem,18rem)_auto] xl:items-end"
           >
+            {projectId ? (
+              <input type="hidden" name="project_id" value={projectId} />
+            ) : null}
+            <LedgerFilterSelect
+              id="ledger-direction-filter"
+              name="direction"
+              label="方向"
+              value={direction}
+              options={DIRECTION_OPTIONS}
+            />
+            <LedgerFilterSelect
+              id="ledger-unallocated-filter"
+              name="unallocated_only"
+              label="归集状态"
+              value={unallocatedOnly}
+              options={UNALLOCATED_OPTIONS}
+            />
             <div className="grid gap-1.5">
               <label
                 className="text-xs font-medium text-muted-foreground"
@@ -115,7 +159,7 @@ export default async function FinanceLedgerPage({
                 ))}
               </select>
             </div>
-            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <Button type="submit" size="sm">筛选</Button>
               <Button asChild type="button" variant="outline" size="sm">
                 <Link href="/finance/ledger">重置</Link>
@@ -179,6 +223,40 @@ export default async function FinanceLedgerPage({
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function LedgerFilterSelect({
+  id,
+  name,
+  label,
+  value,
+  options,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  value?: string;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <label className="text-xs font-medium text-muted-foreground" htmlFor={id}>
+        {label}
+      </label>
+      <select
+        id={id}
+        name={name}
+        defaultValue={value || ""}
+        className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      >
+        {options.map((option) => (
+          <option key={option.value || "all"} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
