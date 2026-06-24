@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LineChart } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import type {
-  FinanceProjectOperatingSummary,
-  FinanceProjectRiskFlag,
-  FinanceProjectRiskLevel,
-} from "@/components/finance/finance-requests";
+import type { FinanceProjectOperatingSummary } from "@/components/finance/finance-requests";
 import {
   formatFinanceMoney,
   formatFinancePercent,
 } from "@/components/finance/finance-ledger-utils";
+import {
+  financeRiskActionHref,
+  financeRiskLabel,
+  financeRiskVariant,
+} from "@/components/finance/finance-risk-display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requestProject } from "@/components/projects/project-mutation-utils";
@@ -54,8 +55,7 @@ export function ProjectFinanceOperatingSummaryPanel({
   const overdueText = summary.overdue_count > 0
     ? `${formatFinanceMoney(summary.overdue_amount)} / ${summary.overdue_count} 笔`
     : "无逾期";
-  const risk = riskLevel(summary);
-  const riskText = riskFlagText(summary);
+  const risk = summary.risk_level || "normal";
 
   return (
     <section className="rounded-lg border bg-card p-4">
@@ -68,8 +68,8 @@ export function ProjectFinanceOperatingSummaryPanel({
           <Badge variant="outline" className="tabular-nums">
             {summary.ledger_entry_count} 条流水
           </Badge>
-          <Badge variant={riskVariant(risk)}>
-            {loading ? "加载中" : riskLabel(risk)}
+          <Badge variant={financeRiskVariant(risk)}>
+            {loading ? "加载中" : financeRiskLabel(risk)}
           </Badge>
           <Button asChild type="button" variant="outline" size="sm">
             <Link href={`/finance/receivables?project_id=${projectId}`}>
@@ -103,6 +103,12 @@ export function ProjectFinanceOperatingSummaryPanel({
         <Metric
           label="已付支出"
           value={loading ? "加载中..." : formatFinanceMoney(summary.expense_paid_amount)}
+        />
+        <Metric
+          label="未归集成本"
+          value={loading
+            ? "加载中..."
+            : formatFinanceMoney(summary.unallocated_expense_amount)}
         />
         <Metric
           label="实际利润"
@@ -140,9 +146,36 @@ export function ProjectFinanceOperatingSummaryPanel({
             : budgetText(summary, "projected_budget_profit_amount")}
         />
       </dl>
-      {!loading && riskText ? (
-        <div className="mt-3 rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
-          风险提示：{riskText}
+      {!loading && summary.risk_reasons.length ? (
+        <div className="mt-3 grid gap-2">
+          {summary.risk_reasons.map((reason) => {
+            const href = financeRiskActionHref(reason.action);
+            return (
+              <div
+                key={reason.code}
+                className="rounded-md border bg-background px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Badge variant={financeRiskVariant(reason.level)}>
+                      {financeRiskLabel(reason.level)}
+                    </Badge>
+                    <span className="truncate text-sm font-medium">
+                      {reason.title}
+                    </span>
+                  </div>
+                  {href ? (
+                    <Button asChild type="button" variant="outline" size="sm">
+                      <Link href={href}>{reason.action?.label || "处理"}</Link>
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {reason.description}
+                </p>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </section>
@@ -180,11 +213,13 @@ function emptySummary(projectId: string): FinanceProjectOperatingSummary {
     budget_cost_amount: 0,
     budget_remaining_amount: 0,
     budget_usage_ratio: null,
+    unallocated_expense_amount: 0,
     projected_budget_profit_amount: 0,
     profit_variance_amount: 0,
     projected_budget_gross_margin: null,
     risk_level: "normal",
     risk_flags: [],
+    risk_reasons: [],
   };
 }
 
@@ -199,35 +234,4 @@ function budgetText(
 ) {
   if (!summary.budget_configured) return "未配置";
   return formatFinanceMoney(summary[key]);
-}
-
-function riskLevel(summary: FinanceProjectOperatingSummary): FinanceProjectRiskLevel {
-  return summary.risk_level || "normal";
-}
-
-function riskLabel(level: FinanceProjectRiskLevel) {
-  if (level === "danger") return "超预算";
-  if (level === "warning") return "预警";
-  if (level === "info") return "待配置预算";
-  return "正常";
-}
-
-function riskVariant(level: FinanceProjectRiskLevel) {
-  if (level === "danger") return "danger" as const;
-  if (level === "warning") return "warning" as const;
-  if (level === "info") return "secondary" as const;
-  return "success" as const;
-}
-
-const RISK_FLAG_LABELS: Record<FinanceProjectRiskFlag, string> = {
-  budget_missing: "未配置成本预算",
-  category_over_budget: "成本分类达到预警",
-  project_over_budget: "项目整体超预算",
-  low_projected_margin: "预算毛利率偏低",
-  receivable_overdue: "存在逾期应收",
-};
-
-function riskFlagText(summary: FinanceProjectOperatingSummary) {
-  const flags = Array.isArray(summary.risk_flags) ? summary.risk_flags : [];
-  return flags.map((flag) => RISK_FLAG_LABELS[flag]).filter(Boolean).join("、");
 }

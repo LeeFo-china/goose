@@ -90,10 +90,28 @@ export type FinanceProjectRiskLevel = "normal" | "info" | "warning" | "danger";
 
 export type FinanceProjectRiskFlag =
   | "budget_missing"
+  | "unallocated_expense"
   | "category_over_budget"
   | "project_over_budget"
   | "low_projected_margin"
-  | "receivable_overdue";
+  | "receivable_overdue"
+  | "negative_actual_profit"
+  | "negative_projected_profit";
+
+export type FinanceProjectRiskReason = {
+  code: FinanceProjectRiskFlag;
+  level: FinanceProjectRiskLevel;
+  title: string;
+  description: string;
+  current_value: number | null;
+  threshold_value: number | null;
+  unit: "money" | "ratio" | "count" | "boolean";
+  action: {
+    key: string;
+    label: string;
+    target: string;
+  } | null;
+};
 
 export type FinanceProjectOperatingSummary = {
   project_id: string;
@@ -116,11 +134,13 @@ export type FinanceProjectOperatingSummary = {
   budget_cost_amount: number;
   budget_remaining_amount: number;
   budget_usage_ratio: number | null;
+  unallocated_expense_amount: number;
   projected_budget_profit_amount: number;
   profit_variance_amount: number;
   projected_budget_gross_margin: number | null;
   risk_level: FinanceProjectRiskLevel;
   risk_flags: FinanceProjectRiskFlag[];
+  risk_reasons: FinanceProjectRiskReason[];
 };
 
 export type FinanceProjectOperatingSummaryTotals = {
@@ -141,11 +161,14 @@ export type FinanceProjectOperatingSummaryTotals = {
   budget_cost_amount: number;
   budget_remaining_amount: number;
   budget_usage_ratio: number | null;
+  unallocated_expense_amount: number;
   projected_budget_profit_amount: number;
   profit_variance_amount: number;
   projected_budget_gross_margin: number | null;
   risk_count: number;
   risk_level: FinanceProjectRiskLevel;
+  risk_counts: Record<FinanceProjectRiskLevel, number>;
+  risk_flag_counts: Record<FinanceProjectRiskFlag, number>;
 };
 
 export type FinanceProjectSummaryListData = {
@@ -203,7 +226,10 @@ export function emptyFinanceProjectSummary(
 export async function fetchFinanceLedger(query: {
   page?: number;
   pageSize?: number;
+  project_id?: string;
+  direction?: string;
   cost_category_id?: string;
+  unallocated_only?: string;
 }): Promise<FinanceLedgerResult> {
   const token = await getAdminToken();
   const page = normalizeFinanceLedgerPage(query.page);
@@ -226,7 +252,10 @@ export async function fetchFinanceLedger(query: {
     page: String(page),
     pageSize: String(pageSize),
   });
+  appendOptionalParam(params, "project_id", query.project_id);
+  appendOptionalParam(params, "direction", query.direction);
   appendOptionalParam(params, "cost_category_id", query.cost_category_id);
+  appendOptionalParam(params, "unallocated_only", query.unallocated_only);
 
   try {
     const response = await fetch(buildBackendUrl(`/finance/ledger?${params}`), {
@@ -326,6 +355,13 @@ export async function fetchFinanceProjectSummaries(query: {
   pageSize?: number;
   keyword?: string;
   status?: string;
+  risk_level?: string;
+  risk_flag?: string;
+  budget_configured?: string;
+  has_unallocated_expense?: string;
+  overdue?: string;
+  min_budget_usage_ratio?: string;
+  max_projected_budget_gross_margin?: string;
 }): Promise<FinanceProjectSummaryResult> {
   const token = await getAdminToken();
   const page = normalizeFinanceLedgerPage(query.page);
@@ -347,6 +383,25 @@ export async function fetchFinanceProjectSummaries(query: {
   });
   appendOptionalParam(params, "keyword", query.keyword);
   appendOptionalParam(params, "status", query.status);
+  appendOptionalParam(params, "risk_level", query.risk_level);
+  appendOptionalParam(params, "risk_flag", query.risk_flag);
+  appendOptionalParam(params, "budget_configured", query.budget_configured);
+  appendOptionalParam(
+    params,
+    "has_unallocated_expense",
+    query.has_unallocated_expense,
+  );
+  appendOptionalParam(params, "overdue", query.overdue);
+  appendOptionalParam(
+    params,
+    "min_budget_usage_ratio",
+    query.min_budget_usage_ratio,
+  );
+  appendOptionalParam(
+    params,
+    "max_projected_budget_gross_margin",
+    query.max_projected_budget_gross_margin,
+  );
 
   try {
     const response = await fetch(buildBackendUrl(`/finance/project-summary?${params}`), {
@@ -393,11 +448,23 @@ function emptyFinanceProjectSummaryTotals(): FinanceProjectOperatingSummaryTotal
     budget_cost_amount: 0,
     budget_remaining_amount: 0,
     budget_usage_ratio: null,
+    unallocated_expense_amount: 0,
     projected_budget_profit_amount: 0,
     profit_variance_amount: 0,
     projected_budget_gross_margin: null,
     risk_count: 0,
     risk_level: "normal",
+    risk_counts: { normal: 0, info: 0, warning: 0, danger: 0 },
+    risk_flag_counts: {
+      budget_missing: 0,
+      unallocated_expense: 0,
+      category_over_budget: 0,
+      project_over_budget: 0,
+      low_projected_margin: 0,
+      receivable_overdue: 0,
+      negative_actual_profit: 0,
+      negative_projected_profit: 0,
+    },
   };
 }
 

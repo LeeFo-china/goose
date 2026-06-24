@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { FinanceProjectSummaryListQuerySchema } from "@/schema/finance";
 import type { AuthContext } from "@/services/authorization";
 
 const listProjects = mock(async () => ({
@@ -26,10 +27,29 @@ const findProject = mock(async () => ({
   signed_amount: 100000,
   budget: 90000,
 }));
+const searchProjectIdsByRisk = mock(async () => ({
+  projectIds: ["project-1"],
+  pagination: {
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+  },
+}));
+const listProjectsByIds = mock(async () => [
+  {
+    id: "project-1",
+    name: "阶段五风险项目",
+    status: "constructing",
+    signed_amount: 100000,
+    budget: 90000,
+  },
+]);
 const listLedgerTotals = mock(async () => new Map([
   ["project-1", {
     income_amount: 50000,
     expense_amount: 12000,
+    unallocated_expense_amount: 0,
     ledger_entry_count: 3,
     expense_by_category: new Map([
       ["category-1", 12000],
@@ -66,6 +86,8 @@ mock.module("@/repositories/finance-project-summary", () => ({
   financeProjectSummaryRepository: {
     listProjects,
     findProject,
+    searchProjectIdsByRisk,
+    listProjectsByIds,
     listLedgerTotals,
     listReceivableTotals,
     listBudgetTotals,
@@ -116,11 +138,39 @@ describe("financeProjectSummaryService", () => {
   beforeEach(() => {
     listProjects.mockClear();
     findProject.mockClear();
+    searchProjectIdsByRisk.mockClear();
+    listProjectsByIds.mockClear();
     listLedgerTotals.mockClear();
     listReceivableTotals.mockClear();
     listBudgetTotals.mockClear();
     canAccessProject.mockClear();
     canAccessProject.mockImplementation(async () => true);
+  });
+
+  test("parses finance project risk filter query", () => {
+    const parsed = FinanceProjectSummaryListQuerySchema.parse({
+      page: "2",
+      pageSize: "50",
+      risk_level: "warning",
+      risk_flag: "unallocated_expense",
+      budget_configured: "false",
+      has_unallocated_expense: "true",
+      overdue: "true",
+      min_budget_usage_ratio: "0.8",
+      max_projected_budget_gross_margin: "0.2",
+    });
+
+    expect(parsed).toMatchObject({
+      page: 2,
+      pageSize: 50,
+      risk_level: "warning",
+      risk_flag: "unallocated_expense",
+      budget_configured: false,
+      has_unallocated_expense: true,
+      overdue: true,
+      min_budget_usage_ratio: 0.8,
+      max_projected_budget_gross_margin: 0.2,
+    });
   });
 
   test("lists project operating summaries for finance viewers", async () => {
@@ -175,11 +225,64 @@ describe("financeProjectSummaryService", () => {
     });
   });
 
+  test("uses risk search path when risk filters are provided", async () => {
+    const { financeProjectSummaryService } =
+      await import("./finance-project-summary");
+
+    const result = await financeProjectSummaryService.listProjectSummaries(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      { page: 1, pageSize: 20, risk_level: "warning" },
+    );
+
+    expect(searchProjectIdsByRisk).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      query: { page: 1, pageSize: 20, risk_level: "warning" },
+    });
+    expect(listProjects).not.toHaveBeenCalled();
+    expect(listProjectsByIds).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectIds: ["project-1"],
+    });
+    expect(result.pagination.total).toBe(1);
+  });
+
+  test("returns unallocated expense risk reason", async () => {
+    listLedgerTotals.mockImplementationOnce(async () => new Map([
+      ["project-1", {
+        income_amount: 50000,
+        expense_amount: 12000,
+        unallocated_expense_amount: 1200,
+        ledger_entry_count: 3,
+        expense_by_category: new Map([
+          ["category-1", 10800],
+        ]),
+      }],
+    ]));
+
+    const { financeProjectSummaryService } =
+      await import("./finance-project-summary");
+
+    const result = await financeProjectSummaryService.listProjectSummaries(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      { page: 1, pageSize: 20 },
+    );
+
+    expect(result.list[0]?.unallocated_expense_amount).toBe(1200);
+    expect(result.list[0]?.risk_flags).toContain("unallocated_expense");
+    expect(result.list[0]?.risk_reasons).toContainEqual(
+      expect.objectContaining({
+        code: "unallocated_expense",
+        action: expect.objectContaining({ key: "open_unallocated_ledger" }),
+      }),
+    );
+  });
+
   test("marks over-budget projects as danger", async () => {
     listLedgerTotals.mockImplementationOnce(async () => new Map([
       ["project-1", {
         income_amount: 50000,
         expense_amount: 90000,
+        unallocated_expense_amount: 0,
         ledger_entry_count: 4,
         expense_by_category: new Map([
           ["category-1", 40000],

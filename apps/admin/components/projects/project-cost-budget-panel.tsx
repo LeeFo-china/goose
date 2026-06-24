@@ -353,10 +353,15 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
                   <span className="text-right text-muted-foreground tabular-nums">
                     {formatFinancePercent(row.usage_ratio)}
                   </span>
-                  <span>
+                  <span className="min-w-0">
                     <Badge variant={riskVariant(row.risk_level)}>
                       {riskLabel(row.risk_level)}
                     </Badge>
+                    {row.risk_reasons?.[0]?.title ? (
+                      <div className="mt-1 truncate text-xs text-muted-foreground">
+                        {row.risk_reasons[0].title}
+                      </div>
+                    ) : null}
                   </span>
                   <span className="truncate text-muted-foreground">
                     {row.remark || "-"}
