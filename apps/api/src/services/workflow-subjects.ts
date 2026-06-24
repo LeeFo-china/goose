@@ -63,6 +63,27 @@ export function attachWorkflowActionsToTimelineNodes(
   });
 }
 
+export function fillMissingWorkflowActionsToTimelineNodes(
+  nodes: WorkflowTimelineNode[],
+  actions: WorkflowTaskActionPayload[],
+): WorkflowTimelineNode[] {
+  if (actions.length === 0) return nodes;
+
+  const actionsByNodeKey = new Map<string, WorkflowTaskActionPayload[]>();
+  for (const action of actions) {
+    actionsByNodeKey.set(action.node_key, [
+      ...(actionsByNodeKey.get(action.node_key) ?? []),
+      action,
+    ]);
+  }
+
+  return nodes.map((node) => {
+    if (node.actions.length > 0) return node;
+    const nodeActions = actionsByNodeKey.get(node.node_key) ?? [];
+    return nodeActions.length > 0 ? { ...node, actions: nodeActions } : node;
+  });
+}
+
 class WorkflowSubjectsService {
   async getState(
     authContext: AuthContext,
@@ -99,8 +120,8 @@ class WorkflowSubjectsService {
         instanceId: state.instance_id,
       }));
     const timelineNodes = preloadedState && options.workflowProgress
-      ? attachWorkflowActionsToTimelineNodes(
-        this.clearTimelineNodeActions(options.workflowProgress.timeline_nodes),
+      ? fillMissingWorkflowActionsToTimelineNodes(
+        options.workflowProgress.timeline_nodes,
         actions,
       )
       : await this.loadProjectTimelineNodes({

@@ -249,4 +249,95 @@ describe("workflowSubjectsService state performance", () => {
     expect(listRuntimeInstanceNodes).not.toHaveBeenCalled();
     expect(listPendingByInstance).not.toHaveBeenCalled();
   });
+
+  test("prefers preloaded workflow progress node actions over stale supplied top-level actions", async () => {
+    const { workflowSubjectsService } = await import("./workflow-subjects");
+
+    const result = await workflowSubjectsService.getState(
+      authContext as never,
+      {
+        subjectType: "project",
+        subjectId: "project-1",
+      },
+      {
+        workflowProgress: {
+          source: "workflow_runtime",
+          instance_id: "instance-1",
+          instance_status: "running",
+          current_node_key: "procedure_woodwork",
+          current_node_title: "木工",
+          current_group_key: "construction",
+          current_group_label: "施工阶段",
+          current_group_order: 20,
+          current_node_type: "procedure",
+          current_business_kind: "procedure_template",
+          current_stage_code: "woodwork",
+          current_gate: null,
+          timeline_nodes: [{
+            ...progressTimelineNode,
+            actions: [{
+              key: "complete_procedure",
+              label: "完成木工",
+              business_domain: "project_procedure",
+              business_action: "complete_procedure",
+              requires_reason: false,
+              task_id: "task-1",
+              node_key: "procedure_woodwork",
+              node_type: "procedure",
+              disabled: false,
+              output_fields: [],
+            }, {
+              key: "adjust_procedure_schedule",
+              label: "调整派工",
+              business_domain: "project_procedure",
+              business_action: "adjust_procedure_schedule",
+              requires_reason: false,
+              task_id: "task-1",
+              node_key: "procedure_woodwork",
+              node_type: "procedure",
+              disabled: false,
+              output_fields: [],
+            }],
+          }],
+          pending_task_count: 1,
+          actions: [{
+            key: "complete_procedure",
+            label: "完成木工",
+            business_domain: "project_procedure",
+            business_action: "complete_procedure",
+            requires_reason: false,
+            task_id: "task-1",
+            node_key: "procedure_woodwork",
+            node_type: "procedure",
+            disabled: false,
+            output_fields: [],
+          }],
+          warnings: [],
+        },
+        actionsPromise: Promise.resolve([{
+          key: "start_procedure",
+          label: "开始木工",
+          business_domain: "project_procedure",
+          business_action: "start_procedure",
+          requires_reason: false,
+          task_id: "task-1",
+          node_key: "procedure_woodwork",
+          node_type: "procedure",
+          disabled: false,
+          output_fields: [],
+        }]),
+      },
+    );
+
+    expect(result.workflow_state?.actions.map((action) => action.key)).toEqual([
+      "complete_procedure",
+      "adjust_procedure_schedule",
+    ]);
+    expect(result.workflow_state?.timeline_nodes[0]?.actions.map((action) =>
+      action.key
+    )).toEqual([
+      "complete_procedure",
+      "adjust_procedure_schedule",
+    ]);
+  });
 });

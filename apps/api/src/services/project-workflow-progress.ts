@@ -141,6 +141,9 @@ export function buildProjectWorkflowProgressProjection(
       }))
       .filter((assignee) => assignee.node_key && assignee.assignee_employee_id),
   });
+  const currentTimelineActions = currentNodeKey
+    ? timelineNodes.find((node) => node.node_key === currentNodeKey)?.actions
+    : undefined;
   const currentGroup = resolveCurrentTimelineNodeGroup({
     graph: input.graph,
     timelineNodes,
@@ -179,7 +182,7 @@ export function buildProjectWorkflowProgressProjection(
     timeline_nodes: timelineNodes,
     pending_task_count: input.subjectState?.pending_task_count ??
       input.pendingActions.length,
-    actions: input.pendingActions,
+    actions: currentTimelineActions ?? input.pendingActions,
     warnings,
   };
 }
