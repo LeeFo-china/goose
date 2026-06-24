@@ -14,6 +14,7 @@ export type FinanceProjectLedgerTotals = {
   income_amount: number;
   expense_amount: number;
   ledger_entry_count: number;
+  expense_by_category: Map<string, number>;
 };
 
 export type FinanceProjectReceivableTotals = {
@@ -24,12 +25,29 @@ export type FinanceProjectReceivableTotals = {
   overdue_count: number;
 };
 
+export type FinanceProjectBudgetCategoryTotals = {
+  budget_amount: number;
+  warning_threshold_percent: number;
+};
+
+export type FinanceProjectBudgetTotals = {
+  budget_amount: number;
+  category_budgets: Map<string, FinanceProjectBudgetCategoryTotals>;
+};
+
 type FinanceProjectReceivableRow = {
   project_id: string | null;
   amount: number | string | null;
   paid_amount: number | string | null;
   due_date: string | null;
   status: string | null;
+};
+
+type FinanceProjectBudgetRow = {
+  project_id: string | null;
+  cost_category_id: string | null;
+  budget_amount: number | string | null;
+  warning_threshold_percent: number | string | null;
 };
 
 class FinanceProjectSummaryRepository {
@@ -107,7 +125,7 @@ class FinanceProjectSummaryRepository {
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("finance_ledger_entries")
-      .select("project_id, direction, amount")
+      .select("project_id, direction, amount, cost_category_id")
       .eq("tenant_id", input.tenantId)
       .in("project_id", input.projectIds);
 
@@ -120,18 +138,27 @@ class FinanceProjectSummaryRepository {
       project_id: string | null;
       direction: string | null;
       amount: number | string | null;
+      cost_category_id: string | null;
     }>) {
       if (!row.project_id) continue;
       const current = totals.get(row.project_id) || {
         income_amount: 0,
         expense_amount: 0,
         ledger_entry_count: 0,
+        expense_by_category: new Map<string, number>(),
       };
       const amount = normalizeMoney(row.amount);
       if (row.direction === "in") {
         current.income_amount += amount;
       } else if (row.direction === "out") {
         current.expense_amount += amount;
+        if (row.cost_category_id) {
+          current.expense_by_category.set(
+            row.cost_category_id,
+            (current.expense_by_category.get(row.cost_category_id) ?? 0) +
+              amount,
+          );
+        }
       }
       current.ledger_entry_count += 1;
       totals.set(row.project_id, current);
@@ -184,6 +211,47 @@ class FinanceProjectSummaryRepository {
 
     return totals;
   }
+
+  async listBudgetTotals(input: {
+    tenantId: string;
+    projectIds: string[];
+  }): Promise<Map<string, FinanceProjectBudgetTotals>> {
+    if (input.projectIds.length === 0) {
+      return new Map();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_cost_budgets")
+      .select("project_id, cost_category_id, budget_amount, warning_threshold_percent")
+      .eq("tenant_id", input.tenantId)
+      .eq("status", "active")
+      .in("project_id", input.projectIds);
+
+    if (error) {
+      throw Errors.dbError("查询项目成本预算汇总失败", error);
+    }
+
+    const totals = new Map<string, FinanceProjectBudgetTotals>();
+    for (const row of ((data as FinanceProjectBudgetRow[] | null) || [])) {
+      if (!row.project_id || !row.cost_category_id) continue;
+      const current = totals.get(row.project_id) || {
+        budget_amount: 0,
+        category_budgets: new Map<string, FinanceProjectBudgetCategoryTotals>(),
+      };
+      const budgetAmount = normalizeMoney(row.budget_amount);
+      current.budget_amount += budgetAmount;
+      current.category_budgets.set(row.cost_category_id, {
+        budget_amount: budgetAmount,
+        warning_threshold_percent: normalizeNumber(
+          row.warning_threshold_percent,
+          100,
+        ),
+      });
+      totals.set(row.project_id, current);
+    }
+
+    return totals;
+  }
 }
 
 function isOverdueReceivable(
@@ -202,6 +270,11 @@ function isOverdueReceivable(
 function normalizeMoney(value: unknown) {
   const amount = Number(value ?? 0);
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function normalizeNumber(value: unknown, fallback: number) {
+  const numberValue = Number(value ?? fallback);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
 }
 
 function isUuid(value: string) {

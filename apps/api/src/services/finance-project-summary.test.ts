@@ -31,6 +31,9 @@ const listLedgerTotals = mock(async () => new Map([
     income_amount: 50000,
     expense_amount: 12000,
     ledger_entry_count: 3,
+    expense_by_category: new Map([
+      ["category-1", 12000],
+    ]),
   }],
 ]));
 const listReceivableTotals = mock(async () => new Map([
@@ -38,8 +41,23 @@ const listReceivableTotals = mock(async () => new Map([
     receivable_amount: 80000,
     receivable_paid_amount: 50000,
     receivable_remaining_amount: 30000,
-    overdue_amount: 10000,
-    overdue_count: 1,
+    overdue_amount: 0,
+    overdue_count: 0,
+  }],
+]));
+const listBudgetTotals = mock(async () => new Map([
+  ["project-1", {
+    budget_amount: 80000,
+    category_budgets: new Map([
+      ["category-1", {
+        budget_amount: 30000,
+        warning_threshold_percent: 100,
+      }],
+      ["category-2", {
+        budget_amount: 50000,
+        warning_threshold_percent: 100,
+      }],
+    ]),
   }],
 ]));
 const canAccessProject = mock(async () => true);
@@ -50,6 +68,7 @@ mock.module("@/repositories/finance-project-summary", () => ({
     findProject,
     listLedgerTotals,
     listReceivableTotals,
+    listBudgetTotals,
   },
 }));
 
@@ -99,6 +118,7 @@ describe("financeProjectSummaryService", () => {
     findProject.mockClear();
     listLedgerTotals.mockClear();
     listReceivableTotals.mockClear();
+    listBudgetTotals.mockClear();
     canAccessProject.mockClear();
     canAccessProject.mockImplementation(async () => true);
   });
@@ -125,18 +145,121 @@ describe("financeProjectSummaryService", () => {
       expense_paid_amount: 12000,
       actual_profit_amount: 38000,
       projected_profit_amount: 88000,
-      overdue_amount: 10000,
-      overdue_count: 1,
+      overdue_amount: 0,
+      overdue_count: 0,
+      budget_configured: true,
+      budget_cost_amount: 80000,
+      budget_remaining_amount: 68000,
+      budget_usage_ratio: 0.15,
+      projected_budget_profit_amount: 20000,
+      profit_variance_amount: 18000,
+      projected_budget_gross_margin: 0.2,
+      risk_level: "normal",
+      risk_flags: [],
     });
     expect(first.actual_gross_margin).toBe(0.76);
     expect(first.projected_gross_margin).toBe(0.88);
+    expect(listBudgetTotals).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectIds: ["project-1"],
+    });
     expect(result.summary).toMatchObject({
       project_count: 1,
       contract_amount: 100000,
       received_amount: 50000,
       expense_paid_amount: 12000,
       actual_profit_amount: 38000,
+      budget_cost_amount: 80000,
+      projected_budget_profit_amount: 20000,
+      risk_count: 0,
     });
+  });
+
+  test("marks over-budget projects as danger", async () => {
+    listLedgerTotals.mockImplementationOnce(async () => new Map([
+      ["project-1", {
+        income_amount: 50000,
+        expense_amount: 90000,
+        ledger_entry_count: 4,
+        expense_by_category: new Map([
+          ["category-1", 40000],
+          ["category-2", 50000],
+        ]),
+      }],
+    ]));
+
+    const { financeProjectSummaryService } =
+      await import("./finance-project-summary");
+
+    const result = await financeProjectSummaryService.listProjectSummaries(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      { page: 1, pageSize: 20 },
+    );
+    const overBudget = result.list[0];
+    expect(overBudget).toBeDefined();
+    if (!overBudget) throw new Error("expected project summary");
+
+    expect(overBudget.risk_level).toBe("danger");
+    expect(overBudget.risk_flags).toContain("project_over_budget");
+    expect(overBudget.risk_flags).toContain("category_over_budget");
+  });
+
+  test("marks missing budgets as info", async () => {
+    listBudgetTotals.mockImplementationOnce(async () => new Map());
+
+    const { financeProjectSummaryService } =
+      await import("./finance-project-summary");
+
+    const result = await financeProjectSummaryService.listProjectSummaries(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      { page: 1, pageSize: 20 },
+    );
+    const item = result.list[0];
+    expect(item).toBeDefined();
+    if (!item) throw new Error("expected project summary");
+
+    expect(item.budget_configured).toBe(false);
+    expect(item.risk_level).toBe("info");
+    expect(item.risk_flags).toContain("budget_missing");
+  });
+
+  test("marks low projected margin and overdue receivables as warning", async () => {
+    listReceivableTotals.mockImplementationOnce(async () => new Map([
+      ["project-1", {
+        receivable_amount: 80000,
+        receivable_paid_amount: 50000,
+        receivable_remaining_amount: 30000,
+        overdue_amount: 10000,
+        overdue_count: 1,
+      }],
+    ]));
+    listBudgetTotals.mockImplementationOnce(async () => new Map([
+      ["project-1", {
+        budget_amount: 90000,
+        category_budgets: new Map([
+          ["category-1", {
+            budget_amount: 90000,
+            warning_threshold_percent: 100,
+          }],
+        ]),
+      }],
+    ]));
+
+    const { financeProjectSummaryService } =
+      await import("./finance-project-summary");
+
+    const result = await financeProjectSummaryService.listProjectSummaries(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      { page: 1, pageSize: 20 },
+    );
+    const item = result.list[0];
+    expect(item).toBeDefined();
+    if (!item) throw new Error("expected project summary");
+
+    expect(item.projected_budget_gross_margin).toBe(0.1);
+    expect(item.risk_level).toBe("warning");
+    expect(item.risk_flags).toContain("low_projected_margin");
+    expect(item.risk_flags).toContain("receivable_overdue");
   });
 
   test("returns one project summary for readable project users", async () => {
