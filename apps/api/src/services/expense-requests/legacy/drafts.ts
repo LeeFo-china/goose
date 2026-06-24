@@ -1,4 +1,5 @@
 import { expenseWorkflowRuntimeService } from "@/services/expense-workflow-runtime";
+import { projectCostBudgetRepository } from "@/repositories/project-cost-budgets";
 import {
   Errors,
   expenseRequestRepository,
@@ -52,6 +53,11 @@ export async function createExpenseRequest(this: any, authContext: AuthContext, 
     this.ensureCurrentEmployee(authContext, input.employee_id, "expense_request.create");
     await this.assertEmployeeExists(input.employee_id, tenantId);
     await this.assertCanLinkProject(authContext, input.project_id);
+    await assertExpenseCostCategoryAvailable({
+      tenantId,
+      projectId: input.project_id,
+      costCategoryId: input.cost_category_id,
+    });
 
     const items = await this.resolveItems(input.items || [], tenantId);
     const totalAmount = calculateTotalAmount(items);
@@ -62,6 +68,7 @@ export async function createExpenseRequest(this: any, authContext: AuthContext, 
         tenant_id: tenantId ?? null,
         employee_id: input.employee_id,
         project_id: input.project_id ?? null,
+        cost_category_id: input.cost_category_id ?? null,
         mode: input.mode,
         title,
         request_no: generateExpenseRequestNo(),
@@ -110,6 +117,15 @@ export async function updateExpenseRequest(this: any,
     if (input.project_id !== undefined) {
       await this.assertCanLinkProject(authContext, input.project_id);
     }
+    if (input.cost_category_id !== undefined) {
+      await assertExpenseCostCategoryAvailable({
+        tenantId,
+        projectId: input.project_id !== undefined
+          ? input.project_id
+          : existing.project_id,
+        costCategoryId: input.cost_category_id,
+      });
+    }
 
     const items = input.items
       ? await this.resolveItems(input.items, tenantId)
@@ -123,6 +139,9 @@ export async function updateExpenseRequest(this: any,
         project_id: input.project_id !== undefined
           ? input.project_id
           : existing.project_id,
+        cost_category_id: input.cost_category_id !== undefined
+          ? input.cost_category_id
+          : existing.cost_category_id,
         mode: input.mode ?? existing.mode,
         title,
         total_amount: totalAmount,
@@ -137,6 +156,27 @@ export async function updateExpenseRequest(this: any,
 
     return this.serializeExpenseRequest(updated);
   }
+
+async function assertExpenseCostCategoryAvailable(input: {
+  tenantId: string;
+  projectId?: string | null;
+  costCategoryId?: string | null;
+}) {
+  if (!input.costCategoryId) {
+    return;
+  }
+  if (!input.projectId) {
+    throw Errors.badRequest("选择成本分类前请先选择项目");
+  }
+
+  const categories = await projectCostBudgetRepository.listActiveCategoriesByIds({
+    tenantId: input.tenantId,
+    categoryIds: [input.costCategoryId],
+  });
+  if (categories.length !== 1) {
+    throw Errors.badRequest("成本分类不存在或已停用");
+  }
+}
 
 export async function submitExpenseRequest(this: any, 
     authContext: AuthContext,

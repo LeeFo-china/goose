@@ -91,3 +91,10 @@ export const SaveProjectCostBudgetsSchema = z.object({
 
 export type SaveProjectCostBudgetsInput =
   z.infer<typeof SaveProjectCostBudgetsSchema>;
+
+export const UpdateFinanceLedgerCostCategorySchema = z.object({
+  cost_category_id: z.uuid("请选择有效的成本分类").nullable(),
+});
+
+export type UpdateFinanceLedgerCostCategoryInput =
+  z.infer<typeof UpdateFinanceLedgerCostCategorySchema>;

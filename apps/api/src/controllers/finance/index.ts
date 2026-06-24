@@ -3,6 +3,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   CreateFinanceCostCategorySchema,
   FinanceCostCategoryListQuerySchema,
+  UpdateFinanceLedgerCostCategorySchema,
   SaveProjectCostBudgetsSchema,
   UpdateFinanceCostCategorySchema,
 } from "@/schema/finance-costs";
@@ -36,6 +37,27 @@ class FinanceController extends TenantBaseController {
     const data = await financeLedgerService.listLedger(
       authContext,
       queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Patch("/finance/ledger/:id/cost-category")
+  async updateLedgerCostCategory(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = UpdateFinanceLedgerCostCategorySchema.safeParse(
+      request.body,
+    );
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeLedgerService.updateCostCategory(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }

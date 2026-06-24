@@ -31,6 +31,7 @@ class ExpenseRequestRepository {
     *,
     employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
     project:projects(id, name, status, signed_amount, customer_id),
+    cost_category:finance_cost_categories!expense_requests_cost_category_id_fkey(id, code, name, status),
     assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
     settlement:expense_request_settlements(
       id,
@@ -45,6 +46,7 @@ class ExpenseRequestRepository {
     *,
     employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
     project:projects(id, name, status, signed_amount, customer_id),
+    cost_category:finance_cost_categories!expense_requests_cost_category_id_fkey(id, code, name, status),
     assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
     items:expense_request_items(
       id,

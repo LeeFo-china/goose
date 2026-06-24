@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
 const existingExpense = {
   id: "expense-1",
   tenant_id: "tenant-1",
   employee_id: "employee-applicant",
   project_id: "project-1",
+  cost_category_id: "category-1",
   status: "approved",
   total_amount: 1000,
   assignee_id: "finance-1",
@@ -47,9 +52,9 @@ mock.module("@/repositories/expense-requests", () => ({
   },
 }));
 
-mock.module("@/services/finance-ledger", () => ({
-  financeLedgerService: {
-    createExpenseSettlementLedger: createExpenseLedger,
+mock.module("@/repositories/finance-ledger", () => ({
+  financeLedgerRepository: {
+    createIdempotent: createExpenseLedger,
   },
 }));
 
@@ -151,6 +156,7 @@ describe("payExpenseRequest", () => {
       source_id: "settlement-1",
       expense_request_id: "expense-1",
       expense_settlement_id: "settlement-1",
+      cost_category_id: "category-1",
       handled_by: "finance-1",
       summary: "费用付款：供应商",
       metadata: {
@@ -193,6 +199,7 @@ describe("payExpenseRequest", () => {
         source_id: "settlement-1",
         expense_request_id: "expense-1",
         expense_settlement_id: "settlement-1",
+        cost_category_id: "category-1",
       }),
     );
   });

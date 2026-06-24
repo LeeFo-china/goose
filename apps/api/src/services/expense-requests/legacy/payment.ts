@@ -65,11 +65,13 @@ async function writeExpenseSettlementLedger(input: {
   tenantId: string;
   expenseRequestId: string;
   projectId?: string | null;
+  costCategoryId?: string | null;
   settlement: ExpenseSettlementLedgerSource;
 }) {
   await financeLedgerService.createExpenseSettlementLedger({
     tenant_id: input.tenantId,
     project_id: input.projectId ?? null,
+    cost_category_id: input.costCategoryId ?? null,
     direction: "out",
     entry_type: "expense_settlement",
     amount: input.settlement.paid_amount,
@@ -120,6 +122,7 @@ export async function payExpenseRequest(this: any,
           tenantId,
           expenseRequestId: id,
           projectId: existing.project_id,
+          costCategoryId: existing.cost_category_id,
           settlement,
         });
       }
@@ -165,6 +168,7 @@ export async function payExpenseRequest(this: any,
       tenantId,
       expenseRequestId: id,
       projectId: existing.project_id,
+      costCategoryId: existing.cost_category_id,
       settlement,
     });
 

@@ -24,6 +24,7 @@ export type ExpenseRequestRecord = {
   request_no: string | null;
   employee_id: string;
   project_id: string | null;
+  cost_category_id: string | null;
   mode: string;
   title: string | null;
   total_amount: number;
@@ -39,6 +40,7 @@ export type ExpenseRequestRecord = {
   updated_at: string | null;
   employee?: unknown;
   project?: unknown;
+  cost_category?: unknown;
   assignee?: unknown;
   items?: unknown;
   approvals?: unknown;
@@ -49,6 +51,7 @@ export type ExpenseRequestMutationPayload = {
   tenant_id?: string | null;
   employee_id?: string;
   project_id?: string | null;
+  cost_category_id?: string | null;
   mode?: string;
   title?: string | null;
   request_no?: string;

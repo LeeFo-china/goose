@@ -5,6 +5,7 @@ import { SupabaseDB } from "@/utils/supabase/index";
 export type FinanceLedgerEntryInput = {
   tenant_id: string;
   project_id?: string | null;
+  cost_category_id?: string | null;
   direction: "in" | "out";
   entry_type: "project_payment" | "expense_settlement" | "refund" | "adjustment";
   amount: number;
@@ -24,6 +25,7 @@ class FinanceLedgerRepository {
   private select = `
     *,
     project:projects(id, name, status),
+    cost_category:finance_cost_categories!finance_ledger_entries_cost_category_id_fkey(id, code, name, status),
     handler:employees!finance_ledger_entries_handled_by_fkey(id, name, phone)
   `;
 
@@ -83,6 +85,53 @@ class FinanceLedgerRepository {
 
     if (error) {
       throw Errors.dbError("写入财务台账失败", error);
+    }
+
+    return data;
+  }
+
+  async findActiveCostCategory(input: {
+    tenantId: string;
+    costCategoryId: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("finance_cost_categories")
+      .select("id, tenant_id, status")
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.costCategoryId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询成本分类失败", error);
+    }
+
+    return data;
+  }
+
+  async updateCostCategory(input: {
+    tenantId: string;
+    ledgerId: string;
+    costCategoryId: string | null;
+    employeeId: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("finance_ledger_entries")
+      .update({
+        cost_category_id: input.costCategoryId,
+        cost_category_updated_by: input.employeeId,
+        cost_category_updated_at: new Date().toISOString(),
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.ledgerId)
+      .select(this.select)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("更新财务台账成本分类失败", error);
+    }
+    if (!data) {
+      throw Errors.business(404, "财务台账不存在", "FINANCE_LEDGER_NOT_FOUND");
     }
 
     return data;

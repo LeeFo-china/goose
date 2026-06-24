@@ -110,6 +110,7 @@ export const ExpenseRequestItemSchema = z.object({
 export const CreateExpenseRequestSchema = z.object({
   employee_id: z.uuid("无效的员工 ID"),
   project_id: z.uuid("无效的项目 ID").nullable().optional(),
+  cost_category_id: z.uuid("无效的成本分类 ID").nullable().optional(),
   mode: ExpenseModeSchema,
   title: z.string().trim().max(200, "申请标题过长").nullable().optional(),
   items: z.array(ExpenseRequestItemSchema).max(100, "费用明细不能超过 100 条")
@@ -118,6 +119,7 @@ export const CreateExpenseRequestSchema = z.object({
 
 export const UpdateExpenseRequestSchema = z.object({
   project_id: z.uuid("无效的项目 ID").nullable().optional(),
+  cost_category_id: z.uuid("无效的成本分类 ID").nullable().optional(),
   mode: ExpenseModeSchema.optional(),
   title: z.string().trim().max(200, "申请标题过长").nullable().optional(),
   items: z.array(ExpenseRequestItemSchema).max(100, "费用明细不能超过 100 条")
