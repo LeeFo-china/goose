@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ScrollText } from "lucide-react";
+import { FinanceFilterSelectField } from "@/components/finance/finance-filter-controls";
 import { fetchFinanceCostCategories } from "@/components/finance/finance-cost-budget-requests";
 import { FinanceLedgerTable } from "@/components/finance/finance-ledger-table";
 import { fetchFinanceLedger } from "@/components/finance/finance-requests";
@@ -124,41 +125,33 @@ export default async function FinanceLedgerPage({
             {projectId ? (
               <input type="hidden" name="project_id" value={projectId} />
             ) : null}
-            <LedgerFilterSelect
+            <FinanceFilterSelectField
               id="ledger-direction-filter"
               name="direction"
               label="方向"
               value={direction}
               options={DIRECTION_OPTIONS}
             />
-            <LedgerFilterSelect
+            <FinanceFilterSelectField
               id="ledger-unallocated-filter"
               name="unallocated_only"
               label="归集状态"
               value={unallocatedOnly}
               options={UNALLOCATED_OPTIONS}
             />
-            <div className="grid gap-1.5">
-              <label
-                className="text-xs font-medium text-muted-foreground"
-                htmlFor="ledger-cost-category-filter"
-              >
-                成本分类
-              </label>
-              <select
-                id="ledger-cost-category-filter"
-                name="cost_category_id"
-                defaultValue={costCategoryId || ""}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="">全部成本分类</option>
-                {categories.list.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name || category.code}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <FinanceFilterSelectField
+              id="ledger-cost-category-filter"
+              name="cost_category_id"
+              label="成本分类"
+              value={costCategoryId}
+              options={[
+                { value: "", label: "全部成本分类" },
+                ...categories.list.map((category) => ({
+                  value: category.id,
+                  label: category.name || category.code,
+                })),
+              ]}
+            />
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <Button type="submit" size="sm">筛选</Button>
               <Button asChild type="button" variant="outline" size="sm">
@@ -223,40 +216,6 @@ export default async function FinanceLedgerPage({
           </div>
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function LedgerFilterSelect({
-  id,
-  name,
-  label,
-  value,
-  options,
-}: {
-  id: string;
-  name: string;
-  label: string;
-  value?: string;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground" htmlFor={id}>
-        {label}
-      </label>
-      <select
-        id={id}
-        name={name}
-        defaultValue={value || ""}
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-      >
-        {options.map((option) => (
-          <option key={option.value || "all"} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }

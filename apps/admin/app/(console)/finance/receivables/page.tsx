@@ -2,6 +2,10 @@ import Link from "next/link";
 import { PaymentTypeConfig } from "@gooes/domain";
 import { CalendarClock } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import {
+  FinanceCheckboxField,
+  FinanceFilterSelectField,
+} from "@/components/finance/finance-filter-controls";
 import { FinanceReceivablesTable } from "@/components/finance/finance-receivables-table";
 import { fetchFinanceReceivables } from "@/components/finance/finance-requests";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -114,40 +118,20 @@ export default async function FinanceReceivablesPage({
             action="/finance/receivables"
             className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-[minmax(9rem,12rem)_minmax(9rem,12rem)_minmax(12rem,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_auto] md:items-end"
           >
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-status">
-                状态
-              </label>
-              <select
-                id="receivable-status"
-                name="status"
-                defaultValue={params.status || ""}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {RECEIVABLE_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value || "all"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-payment-type">
-                收款类型
-              </label>
-              <select
-                id="receivable-payment-type"
-                name="payment_type"
-                defaultValue={params.payment_type || ""}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {PAYMENT_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value || "all"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <FinanceFilterSelectField
+              id="receivable-status"
+              name="status"
+              label="状态"
+              value={params.status}
+              options={RECEIVABLE_STATUS_OPTIONS}
+            />
+            <FinanceFilterSelectField
+              id="receivable-payment-type"
+              name="payment_type"
+              label="收款类型"
+              value={params.payment_type}
+              options={PAYMENT_TYPE_OPTIONS}
+            />
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-project-id">
                 项目 ID
@@ -185,16 +169,13 @@ export default async function FinanceReceivablesPage({
               />
             </div>
             <div className="flex flex-wrap items-center gap-2 md:justify-end">
-              <label className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
-                <input
-                  type="checkbox"
-                  name="overdue_only"
-                  value="true"
-                  defaultChecked={params.overdue_only === "true"}
-                  className="size-4 rounded border-input"
-                />
-                只看逾期
-              </label>
+              <FinanceCheckboxField
+                id="receivable-overdue-only"
+                name="overdue_only"
+                value="true"
+                checked={params.overdue_only === "true"}
+                label="只看逾期"
+              />
               <Button type="submit" size="sm">筛选</Button>
               <Button asChild type="button" variant="outline" size="sm">
                 <Link href="/finance/receivables">重置</Link>

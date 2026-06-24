@@ -9,6 +9,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { FinanceFilterSelectField } from "@/components/finance/finance-filter-controls";
 import { FinanceProjectSummaryTable } from "@/components/finance/finance-project-summary-table";
 import { fetchFinanceProjectSummaries } from "@/components/finance/finance-requests";
 import {
@@ -246,52 +247,42 @@ export default async function FinancePage({
                 className="h-9"
               />
             </div>
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="finance-status">
-                状态
-              </label>
-              <select
-                id="finance-status"
-                name="status"
-                defaultValue={params.status || ""}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {PROJECT_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value || "all"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <FinanceFilterSelect
+            <FinanceFilterSelectField
+              id="finance-status"
+              name="status"
+              label="状态"
+              value={params.status}
+              options={PROJECT_STATUS_OPTIONS}
+            />
+            <FinanceFilterSelectField
               id="finance-risk-level"
               name="risk_level"
               label="风险"
               value={params.risk_level}
               options={RISK_LEVEL_OPTIONS}
             />
-            <FinanceFilterSelect
+            <FinanceFilterSelectField
               id="finance-risk-flag"
               name="risk_flag"
               label="原因"
               value={params.risk_flag}
               options={RISK_FLAG_OPTIONS}
             />
-            <FinanceFilterSelect
+            <FinanceFilterSelectField
               id="finance-budget-configured"
               name="budget_configured"
               label="已配预算"
               value={params.budget_configured}
               options={BOOLEAN_FILTER_OPTIONS}
             />
-            <FinanceFilterSelect
+            <FinanceFilterSelectField
               id="finance-has-unallocated-expense"
               name="has_unallocated_expense"
               label="未归集"
               value={params.has_unallocated_expense}
               options={BOOLEAN_FILTER_OPTIONS}
             />
-            <FinanceFilterSelect
+            <FinanceFilterSelectField
               id="finance-overdue"
               name="overdue"
               label="逾期"
@@ -391,39 +382,5 @@ function FinanceMetricCard({
         ) : null}
       </CardContent>
     </Card>
-  );
-}
-
-function FinanceFilterSelect({
-  id,
-  name,
-  label,
-  value,
-  options,
-}: {
-  id: string;
-  name: string;
-  label: string;
-  value?: string;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground" htmlFor={id}>
-        {label}
-      </label>
-      <select
-        id={id}
-        name={name}
-        defaultValue={value || ""}
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-      >
-        {options.map((option) => (
-          <option key={option.value || "all"} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }
