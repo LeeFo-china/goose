@@ -32,6 +32,7 @@ export type AdminMenuItem = {
   label: string;
   icon: LucideIcon;
   permission?: string | null;
+  activeMatch?: "exact" | "prefix";
 };
 
 export type AdminMenuGroup = {
@@ -117,6 +118,7 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "财务总览",
         icon: CircleDollarSign,
         permission: "finance.dashboard.view",
+        activeMatch: "exact",
       },
       {
         href: "/finance/ledger",

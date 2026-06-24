@@ -7,13 +7,10 @@ import {
   tenantNavGroups,
   type AdminMenuGroup,
 } from "@/components/layout/menu-config";
+import { isActivePath } from "@/components/layout/admin-nav-utils";
 import type { AdminSession } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
 import { cn } from "@/lib/utils";
-
-function isActivePath(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 function hasPermission(session: AdminSession, permission: string) {
   return session.permissions.some((item) => item.code === permission);
@@ -51,7 +48,9 @@ export function AdminNav({
             {group.label}
           </div>
           {group.items.map((item) => {
-            const active = isActivePath(pathname, item.href);
+            const active = isActivePath(pathname, item.href, {
+              exact: item.activeMatch === "exact",
+            });
             const Icon = item.icon;
 
             return (
