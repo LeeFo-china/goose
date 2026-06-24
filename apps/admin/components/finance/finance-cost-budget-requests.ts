@@ -1,6 +1,9 @@
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
-import type { FinanceLedgerListData } from "@/components/finance/finance-requests";
+import type {
+  FinanceLedgerListData,
+  FinanceProjectRiskReason,
+} from "@/components/finance/finance-requests";
 
 const FINANCE_COST_CATEGORY_PAGE_SIZE = 100;
 
@@ -39,6 +42,7 @@ export type ProjectCostBudgetListItem = {
   usage_ratio: number | null;
   warning_threshold_percent: number;
   risk_level: ProjectCostBudgetRiskLevel;
+  risk_reasons?: FinanceProjectRiskReason[];
   remark: string | null;
   status: string | null;
 };

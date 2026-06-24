@@ -31,6 +31,7 @@ export function summarizeFinanceRiskReasons(
 
 export function financeRiskActionHref(action: {
   key: string;
+  label?: string;
   target: string;
 } | null | undefined): string | null {
   if (!action) return null;
