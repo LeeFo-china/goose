@@ -19,6 +19,7 @@
 - [2026-06-24-phase4-cost-budget-profit-prd.md](./2026-06-24-phase4-cost-budget-profit-prd.md)：第四阶段项目成本预算与利润偏差 PRD，定义成本分类、预算、归集、利润口径和预警规则。
 - [2026-06-24-phase4-cost-budget-profit-implementation-plan.md](./2026-06-24-phase4-cost-budget-profit-implementation-plan.md)：第四阶段项目成本预算与利润偏差实施计划，拆分 migration、后端、Admin、小程序 handoff 和 smoke 任务。
 - [2026-06-24-phase4-cost-budget-profit-smoke.md](./2026-06-24-phase4-cost-budget-profit-smoke.md)：第四阶段成本预算与利润偏差 smoke 记录，包含 API、Admin 页面、预算编辑和风险字段验收。
+- [2026-06-24-phase4-post-release-acceptance.md](./2026-06-24-phase4-post-release-acceptance.md)：第四阶段合入 main 后的发布后验收记录，包含 3000/3010 smoke、migration 对齐、小程序和 Admin 观察结论。
 - [2026-06-24-phase4-cost-budget-profit-miniprogram-handoff.md](./2026-06-24-phase4-cost-budget-profit-miniprogram-handoff.md)：第四阶段小程序对接说明，明确当前无需改代码及后续费用申请成本分类接入口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
