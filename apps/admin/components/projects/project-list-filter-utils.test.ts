@@ -29,6 +29,24 @@ const filters: ProjectWorkflowFiltersData = {
       order: 0,
       count: 2,
     },
+    {
+      key: "end",
+      label: "结束",
+      group_key: "signing",
+      group_label: "签约阶段",
+      group_order: 10,
+      order: 1,
+      count: 1,
+    },
+    {
+      key: "end",
+      label: "结束",
+      group_key: "construction",
+      group_label: "施工阶段",
+      group_order: 20,
+      order: 1,
+      count: 2,
+    },
   ],
   instance_statuses: [
     { key: "running", label: "进行中", order: 10, count: 3 },
@@ -55,11 +73,19 @@ describe("project list workflow filters", () => {
         value: "procedure_plumbing_electrical",
         label: "水电 (2)",
       },
+      {
+        value: "end",
+        label: "结束 (2)",
+      },
     ]);
     expect(workflowNodeOptionsForGroup(filters, "")).toEqual([
       {
         value: "designing",
         label: "签约阶段 / 设计中 (1)",
+      },
+      {
+        value: "end",
+        label: "结束 (3)",
       },
       {
         value: "procedure_plumbing_electrical",

@@ -79,16 +79,24 @@ export function workflowNodeOptionsForGroup(
   filters: ProjectWorkflowFiltersData,
   groupKey: string,
 ): SelectOption[] {
-  return filters.nodes
+  const nodes = filters.nodes
     .filter((item) => !groupKey || item.group_key === groupKey)
     .slice()
-    .sort(compareNodeOptions)
-    .map((item) => ({
+    .sort(compareNodeOptions);
+
+  if (groupKey) {
+    return nodes.map((item) => ({
       value: item.key,
-      label: groupKey
-        ? `${item.label} (${item.count})`
-        : `${item.group_label} / ${item.label} (${item.count})`,
+      label: `${item.label} (${item.count})`,
     }));
+  }
+
+  return mergeNodesByKey(nodes).map(({ groups, item }) => ({
+    value: item.key,
+    label: groups.size > 1
+      ? `${item.label} (${item.count})`
+      : `${item.group_label} / ${item.label} (${item.count})`,
+  }));
 }
 
 export function emptyWorkflowFilters(): ProjectWorkflowFiltersData {
@@ -113,4 +121,27 @@ function compareNodeOptions(
   return left.group_order - right.group_order ||
     left.order - right.order ||
     left.label.localeCompare(right.label);
+}
+
+function mergeNodesByKey(nodes: ProjectWorkflowNodeFilterOption[]) {
+  const nodesByKey = new Map<
+    string,
+    { item: ProjectWorkflowNodeFilterOption; groups: Set<string> }
+  >();
+
+  for (const node of nodes) {
+    const existing = nodesByKey.get(node.key);
+    if (!existing) {
+      nodesByKey.set(node.key, {
+        item: { ...node },
+        groups: new Set([node.group_key]),
+      });
+      continue;
+    }
+
+    existing.item.count += node.count;
+    existing.groups.add(node.group_key);
+  }
+
+  return Array.from(nodesByKey.values());
 }
