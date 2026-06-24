@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       _backup_departments_20260527: {
@@ -1967,6 +1992,7 @@ export type Database = {
           cancelled_at: string | null
           category: string | null
           completed_at: string | null
+          cost_category_id: string | null
           created_at: string | null
           employee_id: string
           evidence_images: Json | null
@@ -1993,6 +2019,7 @@ export type Database = {
           cancelled_at?: string | null
           category?: string | null
           completed_at?: string | null
+          cost_category_id?: string | null
           created_at?: string | null
           employee_id: string
           evidence_images?: Json | null
@@ -2019,6 +2046,7 @@ export type Database = {
           cancelled_at?: string | null
           category?: string | null
           completed_at?: string | null
+          cost_category_id?: string | null
           created_at?: string | null
           employee_id?: string
           evidence_images?: Json | null
@@ -2043,6 +2071,13 @@ export type Database = {
             columns: ["assignee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_requests_cost_category_id_fkey"
+            columns: ["cost_category_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
             referencedColumns: ["id"]
           },
           {
@@ -2152,9 +2187,79 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_cost_categories: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_system: boolean
+          metadata: Json
+          name: string
+          sort_order: number
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_system?: boolean
+          metadata?: Json
+          name: string
+          sort_order?: number
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_system?: boolean
+          metadata?: Json
+          name?: string
+          sort_order?: number
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_cost_categories_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_cost_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_cost_categories_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_ledger_entries: {
         Row: {
           amount: number
+          cost_category_id: string | null
+          cost_category_updated_at: string | null
+          cost_category_updated_by: string | null
           created_at: string
           currency: string
           direction: string
@@ -2176,6 +2281,9 @@ export type Database = {
         }
         Insert: {
           amount: number
+          cost_category_id?: string | null
+          cost_category_updated_at?: string | null
+          cost_category_updated_by?: string | null
           created_at?: string
           currency?: string
           direction: string
@@ -2197,6 +2305,9 @@ export type Database = {
         }
         Update: {
           amount?: number
+          cost_category_id?: string | null
+          cost_category_updated_at?: string | null
+          cost_category_updated_by?: string | null
           created_at?: string
           currency?: string
           direction?: string
@@ -2217,6 +2328,20 @@ export type Database = {
           workflow_task_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "finance_ledger_entries_cost_category_id_fkey"
+            columns: ["cost_category_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_cost_category_updated_by_fkey"
+            columns: ["cost_category_updated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "finance_ledger_entries_expense_request_id_fkey"
             columns: ["expense_request_id"]
@@ -4541,6 +4666,90 @@ export type Database = {
           },
         ]
       }
+      project_cost_budgets: {
+        Row: {
+          budget_amount: number
+          cost_category_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata: Json
+          project_id: string
+          remark: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+          warning_threshold_percent: number
+        }
+        Insert: {
+          budget_amount?: number
+          cost_category_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          project_id: string
+          remark?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+          warning_threshold_percent?: number
+        }
+        Update: {
+          budget_amount?: number
+          cost_category_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          project_id?: string
+          remark?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          warning_threshold_percent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_cost_budgets_cost_category_id_fkey"
+            columns: ["cost_category_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_log_comments: {
         Row: {
           author_id: string
@@ -4757,6 +4966,396 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_procedure_assignment_logs: {
+        Row: {
+          action: string
+          after_snapshot: Json
+          assignment_id: string
+          before_snapshot: Json | null
+          created_at: string
+          id: string
+          operator_employee_id: string | null
+          project_id: string
+          reason: string | null
+          tenant_id: string
+          workflow_instance_id: string
+          workflow_instance_node_id: string | null
+        }
+        Insert: {
+          action: string
+          after_snapshot: Json
+          assignment_id: string
+          before_snapshot?: Json | null
+          created_at?: string
+          id?: string
+          operator_employee_id?: string | null
+          project_id: string
+          reason?: string | null
+          tenant_id: string
+          workflow_instance_id: string
+          workflow_instance_node_id?: string | null
+        }
+        Update: {
+          action?: string
+          after_snapshot?: Json
+          assignment_id?: string
+          before_snapshot?: Json | null
+          created_at?: string
+          id?: string
+          operator_employee_id?: string | null
+          project_id?: string
+          reason?: string | null
+          tenant_id?: string
+          workflow_instance_id?: string
+          workflow_instance_node_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_procedure_assignment_log_workflow_instance_node_id_fkey"
+            columns: ["workflow_instance_node_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instance_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignment_logs_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "project_procedure_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignment_logs_operator_employee_id_fkey"
+            columns: ["operator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignment_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignment_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignment_logs_workflow_instance_id_fkey"
+            columns: ["workflow_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_procedure_assignments: {
+        Row: {
+          adjust_reason: string | null
+          adjusted_at: string | null
+          adjusted_by_employee_id: string | null
+          assignee_employee_id: string
+          completed_at: string | null
+          completed_by_employee_id: string | null
+          created_at: string
+          id: string
+          node_key: string
+          planned_duration_days: number
+          planned_end_date: string | null
+          planned_start_date: string
+          project_id: string
+          stage_code: string
+          started_at: string
+          started_by_employee_id: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          workflow_instance_id: string
+          workflow_instance_node_id: string | null
+        }
+        Insert: {
+          adjust_reason?: string | null
+          adjusted_at?: string | null
+          adjusted_by_employee_id?: string | null
+          assignee_employee_id: string
+          completed_at?: string | null
+          completed_by_employee_id?: string | null
+          created_at?: string
+          id?: string
+          node_key: string
+          planned_duration_days: number
+          planned_end_date?: string | null
+          planned_start_date: string
+          project_id: string
+          stage_code: string
+          started_at?: string
+          started_by_employee_id?: string | null
+          status: string
+          tenant_id: string
+          updated_at?: string
+          workflow_instance_id: string
+          workflow_instance_node_id?: string | null
+        }
+        Update: {
+          adjust_reason?: string | null
+          adjusted_at?: string | null
+          adjusted_by_employee_id?: string | null
+          assignee_employee_id?: string
+          completed_at?: string | null
+          completed_by_employee_id?: string | null
+          created_at?: string
+          id?: string
+          node_key?: string
+          planned_duration_days?: number
+          planned_end_date?: string | null
+          planned_start_date?: string
+          project_id?: string
+          stage_code?: string
+          started_at?: string
+          started_by_employee_id?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          workflow_instance_id?: string
+          workflow_instance_node_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_procedure_assignments_adjusted_by_employee_id_fkey"
+            columns: ["adjusted_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignments_assignee_employee_id_fkey"
+            columns: ["assignee_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignments_completed_by_employee_id_fkey"
+            columns: ["completed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignments_started_by_employee_id_fkey"
+            columns: ["started_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignments_workflow_instance_id_fkey"
+            columns: ["workflow_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignments_workflow_instance_node_id_fkey"
+            columns: ["workflow_instance_node_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instance_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_receivable_allocations: {
+        Row: {
+          allocated_at: string
+          allocated_by: string | null
+          amount: number
+          created_at: string
+          id: string
+          metadata: Json
+          payment_id: string
+          project_id: string
+          receivable_plan_id: string
+          source_id: string | null
+          source_type: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          allocated_at?: string
+          allocated_by?: string | null
+          amount: number
+          created_at?: string
+          id?: string
+          metadata?: Json
+          payment_id: string
+          project_id: string
+          receivable_plan_id: string
+          source_id?: string | null
+          source_type: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          allocated_at?: string
+          allocated_by?: string | null
+          amount?: number
+          created_at?: string
+          id?: string
+          metadata?: Json
+          payment_id?: string
+          project_id?: string
+          receivable_plan_id?: string
+          source_id?: string | null
+          source_type?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_receivable_allocations_allocated_by_fkey"
+            columns: ["allocated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_allocations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_allocations_receivable_plan_id_fkey"
+            columns: ["receivable_plan_id"]
+            isOneToOne: false
+            referencedRelation: "project_receivable_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_allocations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_receivable_plans: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          due_date: string
+          id: string
+          metadata: Json
+          paid_amount: number
+          payment_type: string
+          project_id: string
+          source_id: string | null
+          source_type: string
+          status: string
+          tenant_id: string
+          title: string
+          updated_at: string
+          workflow_instance_id: string | null
+          workflow_node_key: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          due_date: string
+          id?: string
+          metadata?: Json
+          paid_amount?: number
+          payment_type: string
+          project_id: string
+          source_id?: string | null
+          source_type: string
+          status?: string
+          tenant_id: string
+          title: string
+          updated_at?: string
+          workflow_instance_id?: string | null
+          workflow_node_key?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          due_date?: string
+          id?: string
+          metadata?: Json
+          paid_amount?: number
+          payment_type?: string
+          project_id?: string
+          source_id?: string | null
+          source_type?: string
+          status?: string
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+          workflow_instance_id?: string | null
+          workflow_node_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_receivable_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_plans_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_plans_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_plans_workflow_instance_id_fkey"
+            columns: ["workflow_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instances"
             referencedColumns: ["id"]
           },
         ]
@@ -7225,6 +7824,57 @@ export type Database = {
           },
         ]
       }
+      workflow_definition_bindings: {
+        Row: {
+          created_at: string
+          definition_id: string
+          id: string
+          is_default: boolean
+          selectable: boolean
+          subject_type: string
+          tenant_id: string
+          updated_at: string
+          workflow_purpose: string
+        }
+        Insert: {
+          created_at?: string
+          definition_id: string
+          id?: string
+          is_default?: boolean
+          selectable?: boolean
+          subject_type: string
+          tenant_id: string
+          updated_at?: string
+          workflow_purpose: string
+        }
+        Update: {
+          created_at?: string
+          definition_id?: string
+          id?: string
+          is_default?: boolean
+          selectable?: boolean
+          subject_type?: string
+          tenant_id?: string
+          updated_at?: string
+          workflow_purpose?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_definition_bindings_definition_tenant_fkey"
+            columns: ["definition_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_definitions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_definition_bindings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workflow_definitions: {
         Row: {
           active_version_id: string | null
@@ -8285,6 +8935,17 @@ export type Database = {
           stage_code: string
         }[]
       }
+      get_project_receivable_summary: {
+        Args: { p_project_id: string; p_tenant_id: string; p_today?: string }
+        Returns: {
+          contract_amount: number
+          overdue_amount: number
+          overdue_count: number
+          paid_amount: number
+          receivable_amount: number
+          remaining_amount: number
+        }[]
+      }
       get_visitor_picture_asset_navigation: {
         Args: {
           p_asset_id: string
@@ -8296,6 +8957,17 @@ export type Database = {
           asset: Json
           context: Json
           nav_position: string
+        }[]
+      }
+      get_workflow_version_running_instance_counts: {
+        Args: {
+          p_definition_id: string
+          p_tenant_id: string
+          p_version_ids: string[]
+        }
+        Returns: {
+          running_instance_count: number
+          version_id: string
         }[]
       }
       list_customer_home_projects: {
@@ -8466,6 +9138,19 @@ export type Database = {
               p_tenant_id: string
               p_updated_by: string
               p_validation_result: Json
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_definition_id: string
+              p_expected_updated_at: string
+              p_published_by: string
+              p_snapshot: Json
+              p_tenant_id: string
+              p_updated_by: string
+              p_validation_result: Json
+              p_version_label: string
             }
             Returns: Json
           }
@@ -8732,6 +9417,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
