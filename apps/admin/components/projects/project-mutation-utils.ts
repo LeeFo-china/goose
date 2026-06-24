@@ -143,7 +143,7 @@ type ProjectAssigneeRoleCode = "designer" | "supervisor";
 
 export async function requestProject<T = any>(input: {
   path: string;
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   payload?: unknown;
   signal?: AbortSignal;
 }) {

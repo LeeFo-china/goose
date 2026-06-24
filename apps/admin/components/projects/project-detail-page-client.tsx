@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProjectAcceptanceWorkbench } from "@/components/projects/project-acceptance-workbench";
 import { ProjectConstructionStagesPanel } from "@/components/projects/project-construction-stages-panel";
+import { ProjectCostBudgetPanel } from "@/components/projects/project-cost-budget-panel";
 import { ProjectDetailSideRail } from "@/components/projects/project-detail-side-rail";
 import { ProjectFinanceOperatingSummaryPanel } from "@/components/projects/project-finance-operating-summary-panel";
 import { ProjectFinanceReceivableSummaryPanel } from "@/components/projects/project-finance-receivable-summary-panel";
@@ -218,6 +219,7 @@ export function ProjectDetailPageClient({
                   projectId={currentProject.id}
                   refreshVersion={refreshVersion}
                 />
+                <ProjectCostBudgetPanel projectId={currentProject.id} />
                 <ProjectFinanceReceivableSummaryPanel projectId={currentProject.id} />
                 <section className="rounded-lg border bg-card p-4">
                   <h3 className="text-base font-semibold">房产位置</h3>

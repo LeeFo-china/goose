@@ -78,6 +78,8 @@ export default async function FinancePage({
     status: clean(params.status),
   });
   const summary = data.summary;
+  const budgetConfiguredCount = Number(summary.budget_configured_count || 0);
+  const riskCount = Number(summary.risk_count || 0);
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
     data.pagination.page < data.pagination.totalPages;
@@ -109,7 +111,7 @@ export default async function FinancePage({
         </div>
       </div>
 
-      <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
         <FinanceMetricCard
           icon={<WalletCards aria-hidden="true" className="size-4" />}
           label="当前页合同额"
@@ -126,16 +128,34 @@ export default async function FinancePage({
           value={formatFinanceMoney(summary.expense_paid_amount)}
         />
         <FinanceMetricCard
+          icon={<ReceiptText aria-hidden="true" className="size-4" />}
+          label="当前页预算成本"
+          value={formatFinanceMoney(summary.budget_cost_amount)}
+          helper={`${budgetConfiguredCount} 个项目已配置`}
+        />
+        <FinanceMetricCard
           icon={<LineChart aria-hidden="true" className="size-4" />}
           label="当前页实际利润"
           value={formatFinanceMoney(summary.actual_profit_amount)}
           helper={`毛利率 ${formatFinancePercent(summary.actual_gross_margin)}`}
         />
         <FinanceMetricCard
+          icon={<LineChart aria-hidden="true" className="size-4" />}
+          label="当前页预算利润"
+          value={formatFinanceMoney(summary.projected_budget_profit_amount)}
+          helper={`偏差 ${formatFinanceMoney(summary.profit_variance_amount)}`}
+        />
+        <FinanceMetricCard
           icon={<AlertTriangle aria-hidden="true" className="size-4" />}
           label="当前页逾期"
           value={formatFinanceMoney(summary.overdue_amount)}
           helper={`${summary.overdue_count} 笔`}
+        />
+        <FinanceMetricCard
+          icon={<AlertTriangle aria-hidden="true" className="size-4" />}
+          label="当前页风险"
+          value={`${riskCount} 个项目`}
+          helper={`预算使用 ${formatFinancePercent(summary.budget_usage_ratio)}`}
         />
       </div>
 

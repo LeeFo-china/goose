@@ -79,6 +79,15 @@ const FINANCE_LEDGER_PAGE_SIZE = 20;
 const FINANCE_RECEIVABLE_PAGE_SIZE = 20;
 const FINANCE_PROJECT_SUMMARY_PAGE_SIZE = 20;
 
+export type FinanceProjectRiskLevel = "normal" | "info" | "warning" | "danger";
+
+export type FinanceProjectRiskFlag =
+  | "budget_missing"
+  | "category_over_budget"
+  | "project_over_budget"
+  | "low_projected_margin"
+  | "receivable_overdue";
+
 export type FinanceProjectOperatingSummary = {
   project_id: string;
   project_name: string | null;
@@ -96,6 +105,15 @@ export type FinanceProjectOperatingSummary = {
   actual_gross_margin: number | null;
   projected_gross_margin: number | null;
   ledger_entry_count: number;
+  budget_configured: boolean;
+  budget_cost_amount: number;
+  budget_remaining_amount: number;
+  budget_usage_ratio: number | null;
+  projected_budget_profit_amount: number;
+  profit_variance_amount: number;
+  projected_budget_gross_margin: number | null;
+  risk_level: FinanceProjectRiskLevel;
+  risk_flags: FinanceProjectRiskFlag[];
 };
 
 export type FinanceProjectOperatingSummaryTotals = {
@@ -112,6 +130,15 @@ export type FinanceProjectOperatingSummaryTotals = {
   net_cash_flow_amount: number;
   actual_gross_margin: number | null;
   projected_gross_margin: number | null;
+  budget_configured_count: number;
+  budget_cost_amount: number;
+  budget_remaining_amount: number;
+  budget_usage_ratio: number | null;
+  projected_budget_profit_amount: number;
+  profit_variance_amount: number;
+  projected_budget_gross_margin: number | null;
+  risk_count: number;
+  risk_level: FinanceProjectRiskLevel;
 };
 
 export type FinanceProjectSummaryListData = {
@@ -353,6 +380,15 @@ function emptyFinanceProjectSummaryTotals(): FinanceProjectOperatingSummaryTotal
     net_cash_flow_amount: 0,
     actual_gross_margin: null,
     projected_gross_margin: null,
+    budget_configured_count: 0,
+    budget_cost_amount: 0,
+    budget_remaining_amount: 0,
+    budget_usage_ratio: null,
+    projected_budget_profit_amount: 0,
+    profit_variance_amount: 0,
+    projected_budget_gross_margin: null,
+    risk_count: 0,
+    risk_level: "normal",
   };
 }
 
