@@ -9,6 +9,12 @@ import {
 import type { FinanceProjectSummaryListQuery } from "@/schema/finance";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  buildFinanceProjectRisk,
+  type FinanceProjectRiskFlag,
+  type FinanceProjectRiskLevel,
+  type FinanceProjectRiskReason,
+} from "@/services/finance-project-risk";
 
 export type FinanceProjectOperatingSummary = {
   project_id: string;
@@ -31,21 +37,14 @@ export type FinanceProjectOperatingSummary = {
   budget_cost_amount: number;
   budget_remaining_amount: number;
   budget_usage_ratio: number | null;
+  unallocated_expense_amount: number;
   projected_budget_profit_amount: number;
   profit_variance_amount: number;
   projected_budget_gross_margin: number | null;
   risk_level: FinanceProjectRiskLevel;
   risk_flags: FinanceProjectRiskFlag[];
+  risk_reasons: FinanceProjectRiskReason[];
 };
-
-export type FinanceProjectRiskLevel = "normal" | "info" | "warning" | "danger";
-
-export type FinanceProjectRiskFlag =
-  | "budget_missing"
-  | "category_over_budget"
-  | "project_over_budget"
-  | "low_projected_margin"
-  | "receivable_overdue";
 
 export type FinanceProjectOperatingSummaryTotals = {
   project_count: number;
@@ -65,17 +64,22 @@ export type FinanceProjectOperatingSummaryTotals = {
   budget_cost_amount: number;
   budget_remaining_amount: number;
   budget_usage_ratio: number | null;
+  unallocated_expense_amount: number;
   projected_budget_profit_amount: number;
   profit_variance_amount: number;
   projected_budget_gross_margin: number | null;
   risk_count: number;
   risk_level: FinanceProjectRiskLevel;
+  risk_counts: Record<FinanceProjectRiskLevel, number>;
+  risk_flag_counts: Record<FinanceProjectRiskFlag, number>;
 };
 
 type FinanceProjectSummaryServiceDependencies = {
   repository: {
     listProjects: typeof financeProjectSummaryRepository.listProjects;
     findProject: typeof financeProjectSummaryRepository.findProject;
+    searchProjectIdsByRisk: typeof financeProjectSummaryRepository.searchProjectIdsByRisk;
+    listProjectsByIds: typeof financeProjectSummaryRepository.listProjectsByIds;
     listLedgerTotals: typeof financeProjectSummaryRepository.listLedgerTotals;
     listReceivableTotals: typeof financeProjectSummaryRepository.listReceivableTotals;
     listBudgetTotals: typeof financeProjectSummaryRepository.listBudgetTotals;
@@ -102,10 +106,9 @@ export class FinanceProjectSummaryService {
       .assertTenantContext(authContext);
     this.assertCanViewFinanceProjectSummary(authContext);
 
-    const projects = await this.dependencies.repository.listProjects(
-      tenantId,
-      query,
-    );
+    const projects = hasRiskFilters(query)
+      ? await this.listRiskFilteredProjects({ tenantId, query })
+      : await this.dependencies.repository.listProjects(tenantId, query);
     const list = await this.buildSummaries({
       tenantId,
       projects: projects.list,
@@ -142,6 +145,21 @@ export class FinanceProjectSummaryService {
       projects: [project],
     });
     return summary;
+  }
+
+  private async listRiskFilteredProjects(input: {
+    tenantId: string;
+    query: FinanceProjectSummaryListQuery;
+  }) {
+    const search = await this.dependencies.repository.searchProjectIdsByRisk(input);
+    const projects = await this.dependencies.repository.listProjectsByIds({
+      tenantId: input.tenantId,
+      projectIds: search.projectIds,
+    });
+    return {
+      list: projects,
+      pagination: search.pagination,
+    };
   }
 
   private async buildSummaries(input: {
@@ -221,6 +239,9 @@ function buildProjectOperatingSummary(input: {
   const budgetUsageRatio = budgetConfigured && budgetCostAmount > 0
     ? roundRatio(expensePaidAmount / budgetCostAmount)
     : null;
+  const unallocatedExpenseAmount = roundMoney(
+    input.ledgerTotals?.unallocated_expense_amount ?? 0,
+  );
   const projectedBudgetProfitAmount = budgetConfigured
     ? roundMoney(contractAmount - budgetCostAmount)
     : 0;
@@ -230,14 +251,24 @@ function buildProjectOperatingSummary(input: {
   const projectedBudgetGrossMargin = budgetConfigured && contractAmount > 0
     ? roundRatio(projectedBudgetProfitAmount / contractAmount)
     : null;
-  const riskFlags = resolveRiskFlags({
+  const overdueAmount = roundMoney(input.receivableTotals?.overdue_amount ?? 0);
+  const overdueCount = input.receivableTotals?.overdue_count ?? 0;
+  const risk = buildFinanceProjectRisk({
+    projectId: input.project.id,
+    contractAmount,
+    receivedAmount,
+    expensePaidAmount,
     budgetConfigured,
     budgetCostAmount,
-    expensePaidAmount,
+    budgetUsageRatio,
     projectedBudgetGrossMargin,
-    overdueCount: input.receivableTotals?.overdue_count ?? 0,
-    budgetTotals: input.budgetTotals,
-    expenseByCategory: input.ledgerTotals?.expense_by_category,
+    overdueCount,
+    overdueAmount,
+    unallocatedExpenseAmount,
+    hasCategoryOverBudget: hasCategoryOverBudget({
+      budgetTotals: input.budgetTotals,
+      expenseByCategory: input.ledgerTotals?.expense_by_category,
+    }),
   });
 
   return {
@@ -250,8 +281,8 @@ function buildProjectOperatingSummary(input: {
     receivable_remaining_amount: roundMoney(
       input.receivableTotals?.receivable_remaining_amount ?? 0,
     ),
-    overdue_amount: roundMoney(input.receivableTotals?.overdue_amount ?? 0),
-    overdue_count: input.receivableTotals?.overdue_count ?? 0,
+    overdue_amount: overdueAmount,
+    overdue_count: overdueCount,
     expense_paid_amount: expensePaidAmount,
     actual_profit_amount: actualProfitAmount,
     projected_profit_amount: projectedProfitAmount,
@@ -267,11 +298,13 @@ function buildProjectOperatingSummary(input: {
     budget_cost_amount: budgetCostAmount,
     budget_remaining_amount: budgetRemainingAmount,
     budget_usage_ratio: budgetUsageRatio,
+    unallocated_expense_amount: unallocatedExpenseAmount,
     projected_budget_profit_amount: projectedBudgetProfitAmount,
     profit_variance_amount: profitVarianceAmount,
     projected_budget_gross_margin: projectedBudgetGrossMargin,
-    risk_level: resolveRiskLevel(riskFlags),
-    risk_flags: riskFlags,
+    risk_level: risk.risk_level,
+    risk_flags: risk.risk_flags,
+    risk_reasons: risk.risk_reasons,
   };
 }
 
@@ -295,8 +328,13 @@ function summarizeList(
     }
     acc.budget_cost_amount += item.budget_cost_amount;
     acc.budget_remaining_amount += item.budget_remaining_amount;
+    acc.unallocated_expense_amount += item.unallocated_expense_amount;
     acc.projected_budget_profit_amount += item.projected_budget_profit_amount;
     acc.profit_variance_amount += item.profit_variance_amount;
+    acc.risk_counts[item.risk_level] += 1;
+    for (const flag of item.risk_flags) {
+      acc.risk_flag_counts[flag] += 1;
+    }
     if (item.risk_level !== "normal") {
       acc.risk_count += 1;
       acc.risk_level = maxRiskLevel(acc.risk_level, item.risk_level);
@@ -320,11 +358,23 @@ function summarizeList(
     budget_cost_amount: 0,
     budget_remaining_amount: 0,
     budget_usage_ratio: null,
+    unallocated_expense_amount: 0,
     projected_budget_profit_amount: 0,
     profit_variance_amount: 0,
     projected_budget_gross_margin: null,
     risk_count: 0,
     risk_level: "normal",
+    risk_counts: { normal: 0, info: 0, warning: 0, danger: 0 },
+    risk_flag_counts: {
+      budget_missing: 0,
+      unallocated_expense: 0,
+      category_over_budget: 0,
+      project_over_budget: 0,
+      low_projected_margin: 0,
+      receivable_overdue: 0,
+      negative_actual_profit: 0,
+      negative_projected_profit: 0,
+    },
   });
 
   totals.contract_amount = roundMoney(totals.contract_amount);
@@ -340,6 +390,9 @@ function summarizeList(
   totals.net_cash_flow_amount = roundMoney(totals.net_cash_flow_amount);
   totals.budget_cost_amount = roundMoney(totals.budget_cost_amount);
   totals.budget_remaining_amount = roundMoney(totals.budget_remaining_amount);
+  totals.unallocated_expense_amount = roundMoney(
+    totals.unallocated_expense_amount,
+  );
   totals.projected_budget_profit_amount = roundMoney(
     totals.projected_budget_profit_amount,
   );
@@ -359,44 +412,6 @@ function summarizeList(
     : null;
 
   return totals;
-}
-
-function resolveRiskFlags(input: {
-  budgetConfigured: boolean;
-  budgetCostAmount: number;
-  expensePaidAmount: number;
-  projectedBudgetGrossMargin: number | null;
-  overdueCount: number;
-  budgetTotals?: FinanceProjectBudgetTotals;
-  expenseByCategory?: Map<string, number>;
-}): FinanceProjectRiskFlag[] {
-  const flags: FinanceProjectRiskFlag[] = [];
-  if (!input.budgetConfigured) {
-    flags.push("budget_missing");
-  }
-  if (
-    input.budgetConfigured &&
-    input.expensePaidAmount > input.budgetCostAmount
-  ) {
-    flags.push("project_over_budget");
-  }
-  if (hasCategoryOverBudget({
-    budgetTotals: input.budgetTotals,
-    expenseByCategory: input.expenseByCategory,
-  })) {
-    flags.push("category_over_budget");
-  }
-  if (
-    input.projectedBudgetGrossMargin !== null &&
-    input.projectedBudgetGrossMargin < 0.2
-  ) {
-    flags.push("low_projected_margin");
-  }
-  if (input.overdueCount > 0) {
-    flags.push("receivable_overdue");
-  }
-
-  return flags;
 }
 
 function hasCategoryOverBudget(input: {
@@ -419,23 +434,6 @@ function hasCategoryOverBudget(input: {
   return false;
 }
 
-function resolveRiskLevel(flags: FinanceProjectRiskFlag[]): FinanceProjectRiskLevel {
-  if (flags.includes("project_over_budget")) {
-    return "danger";
-  }
-  if (
-    flags.includes("category_over_budget") ||
-    flags.includes("low_projected_margin") ||
-    flags.includes("receivable_overdue")
-  ) {
-    return "warning";
-  }
-  if (flags.includes("budget_missing")) {
-    return "info";
-  }
-  return "normal";
-}
-
 function maxRiskLevel(
   left: FinanceProjectRiskLevel,
   right: FinanceProjectRiskLevel,
@@ -447,6 +445,18 @@ function maxRiskLevel(
     danger: 3,
   };
   return order[right] > order[left] ? right : left;
+}
+
+function hasRiskFilters(query: FinanceProjectSummaryListQuery) {
+  return Boolean(
+    query.risk_level ||
+      query.risk_flag ||
+      query.budget_configured !== undefined ||
+      query.has_unallocated_expense !== undefined ||
+      query.overdue !== undefined ||
+      query.min_budget_usage_ratio !== undefined ||
+      query.max_projected_budget_gross_margin !== undefined
+  );
 }
 
 function resolveContractAmount(project: FinanceProjectSummaryProjectRow) {
