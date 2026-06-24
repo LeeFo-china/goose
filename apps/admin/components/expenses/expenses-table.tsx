@@ -18,6 +18,7 @@ import {
   ExpenseRowActions,
   type ExpenseRecord,
 } from "@/components/expenses/expense-mutations";
+import { expenseCostCategoryLabel } from "@/components/expenses/expense-mutation-shared";
 
 type ExpenseUpdatedHandler = (expense: ExpenseRecord) => void;
 
@@ -166,6 +167,14 @@ export function ExpensesTable({
       },
     },
     {
+      id: "cost_category",
+      header: "成本归集",
+      cell: ({ row }) => expenseCostCategoryLabel(row.original),
+      meta: {
+        cellClassName: "whitespace-nowrap text-muted-foreground",
+      },
+    },
+    {
       accessorKey: "total_amount",
       header: "金额",
       cell: ({ row }) => `¥${formatMoney(row.original.total_amount)}`,
@@ -241,7 +250,7 @@ export function ExpensesTable({
       columns={columns}
       data={expenses}
       emptyText="没有符合条件的费用申请"
-      minWidth="min-w-[1360px]"
+      minWidth="min-w-[1480px]"
       tableMeta={{ onExpenseUpdated }}
     />
   );

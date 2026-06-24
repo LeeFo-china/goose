@@ -79,7 +79,8 @@ export class FinanceCostCategoryService {
       this.hasPermission(authContext, "finance.budget.view") ||
       this.hasPermission(authContext, "finance.budget.manage") ||
       this.hasPermission(authContext, "finance.cost-category.view") ||
-      this.hasPermission(authContext, "finance.cost-category.manage")
+      this.hasPermission(authContext, "finance.cost-category.manage") ||
+      this.hasPermission(authContext, "expense_request.create")
     ) {
       return;
     }

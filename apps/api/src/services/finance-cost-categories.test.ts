@@ -121,6 +121,24 @@ describe("financeCostCategoryService", () => {
     expect(result.pagination.total).toBe(1);
   });
 
+  test("lists active cost categories for expense creators", async () => {
+    const { financeCostCategoryService } =
+      await import("./finance-cost-categories");
+
+    await financeCostCategoryService.list(
+      authContextWithPermissions([
+        { code: "expense_request.create", scope: "all" },
+      ]),
+      { page: 1, pageSize: 20, status: "active" },
+    );
+
+    expect(listCostCategories).toHaveBeenCalledWith("tenant-1", {
+      page: 1,
+      pageSize: 20,
+      status: "active",
+    });
+  });
+
   test("creates custom cost categories for category managers", async () => {
     const { financeCostCategoryService } =
       await import("./finance-cost-categories");

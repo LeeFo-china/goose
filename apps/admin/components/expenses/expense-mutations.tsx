@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, Eye, Loader2, MoreHorizontal, RotateCcw, SendHorizontal, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, MoreHorizontal, Pencil, RotateCcw, SendHorizontal, XCircle } from "lucide-react";
 import { TextActionDialog } from "@/components/admin/action-dialogs";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ExpenseCostCategoryDialog } from "@/components/expenses/expense-cost-category-dialog";
 import { DetailDialog } from "@/components/expenses/expense-detail-dialog";
 import { PayDialog } from "@/components/expenses/expense-pay-dialog";
 import type { ApprovalRecord, ExpenseItem, ExpenseRecord, ExpenseWorkflowAction } from "@/components/expenses/expense-mutation-types";
@@ -25,6 +26,8 @@ export function ExpenseRowActions({
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<ExpenseRecord | null>(null);
   const [payExpense, setPayExpense] = useState<ExpenseRecord | null>(null);
+  const [costCategoryExpense, setCostCategoryExpense] =
+    useState<ExpenseRecord | null>(null);
   const [approvalDialog, setApprovalDialog] = useState<"approve" | "reject" | "cancel" | null>(null);
   const currentWorkflowNodeKey = expense.workflow_state?.current_node_key || null;
   const canApprove = Boolean(expense.workflow_state?.pending_task_count) &&
@@ -34,6 +37,9 @@ export function ExpenseRowActions({
   const canPay = currentWorkflowNodeKey === "payment" &&
     Boolean(expense.workflow_state?.pending_task_count) &&
     Boolean(currentEmployeeId);
+  const canEditCostCategory = Boolean(expense.project_id) &&
+    ["draft", "rejected"].includes(expense.status) &&
+    currentEmployeeId === expense.employee_id;
 
   function normalizeWorkflowTaskResult(data: unknown): ExpenseRecord {
     const payload = data && typeof data === "object" && !Array.isArray(data)
@@ -219,6 +225,15 @@ export function ExpenseRowActions({
                 撤回
               </DropdownMenuItem>
             ) : null}
+            {canEditCostCategory ? (
+              <DropdownMenuItem
+                disabled={pending}
+                onSelect={() => setCostCategoryExpense(expense)}
+              >
+                <Pencil />
+                成本归集
+              </DropdownMenuItem>
+            ) : null}
             {canPay ? (
               <DropdownMenuItem disabled={pending} onSelect={openPay}>
                 <SendHorizontal />
@@ -229,6 +244,16 @@ export function ExpenseRowActions({
         </DropdownMenuContent>
       </DropdownMenu>
       {detail ? <DetailDialog expense={detail} onClose={() => setDetail(null)} /> : null}
+      {costCategoryExpense ? (
+        <ExpenseCostCategoryDialog
+          expense={costCategoryExpense}
+          onClose={() => setCostCategoryExpense(null)}
+          onSaved={(updatedExpense) => {
+            setCostCategoryExpense(null);
+            onExpenseUpdated?.(updatedExpense);
+          }}
+        />
+      ) : null}
       {payExpense && currentEmployeeId ? (
         <PayDialog
           expense={payExpense}

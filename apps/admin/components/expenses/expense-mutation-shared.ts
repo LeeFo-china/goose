@@ -8,6 +8,7 @@ import {
   ExpenseSettlementMethodConfig,
 } from "@gooes/domain";
 import type {
+  CostCategory,
   ExpenseItem,
   ExpenseRecord,
   Person,
@@ -87,6 +88,17 @@ export function projectName(value: Project | Project[] | null | undefined) {
   return item?.name || "-";
 }
 
+export function costCategoryName(
+  value: CostCategory | CostCategory[] | null | undefined,
+) {
+  const item = relationOne(value);
+  return item?.name || item?.code || "";
+}
+
+export function expenseCostCategoryLabel(expense: ExpenseRecord) {
+  return costCategoryName(expense.cost_category) || "待归集";
+}
+
 export function getExpensePayeeName(expense: ExpenseRecord) {
   const directPayee = expense.mode === "direct"
     ? (expense.items || []).map((item) => item.vendor_name?.trim()).find(Boolean)
@@ -145,7 +157,7 @@ export function getPayloadMessage(payload: unknown, fallback: string) {
 
 export async function requestExpense<T = unknown>(input: {
   path: string;
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH";
   payload?: unknown;
 }): Promise<T> {
   return requestBackendJson<T>(input.path, {

@@ -10,6 +10,7 @@ import type { ExpenseRecord } from "@/components/expenses/expense-mutation-types
 import {
   formatApprovalAction,
   formatDateTime,
+  expenseCostCategoryLabel,
   formatExpenseCategory,
   formatMoney,
   formatSettlementMethod,
@@ -59,6 +60,7 @@ export function DetailDialog({
               { label: "金额", value: `¥${formatMoney(expense.total_amount)}` },
               { label: "模式", value: modeLabel[expense.mode] || expense.mode },
               { label: "项目", value: projectName(expense.project) },
+              { label: "成本归集", value: expenseCostCategoryLabel(expense) },
               { label: "创建时间", value: formatDateTime(expense.created_at) },
             ]}
           />

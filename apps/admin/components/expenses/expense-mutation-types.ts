@@ -11,6 +11,13 @@ export type Project = {
   status?: string | null;
 };
 
+export type CostCategory = {
+  id?: string | null;
+  code?: string | null;
+  name?: string | null;
+  status?: string | null;
+};
+
 export type ExpenseItem = {
   id: string;
   occurred_at: string | null;
@@ -84,6 +91,7 @@ export type ExpenseRecord = {
   request_no: string | null;
   employee_id: string;
   project_id: string | null;
+  cost_category_id: string | null;
   mode: string;
   title: string | null;
   total_amount: number;
@@ -99,6 +107,7 @@ export type ExpenseRecord = {
   updated_at: string | null;
   employee?: Person | Person[] | null;
   project?: Project | Project[] | null;
+  cost_category?: CostCategory | CostCategory[] | null;
   assignee?: Person | Person[] | null;
   items?: ExpenseItem[];
   approvals?: ApprovalRecord[];

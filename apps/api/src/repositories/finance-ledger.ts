@@ -44,6 +44,9 @@ class FinanceLedgerRepository {
     if (query.project_id) {
       request = request.eq("project_id", query.project_id);
     }
+    if (query.cost_category_id) {
+      request = request.eq("cost_category_id", query.cost_category_id);
+    }
     if (query.direction) {
       request = request.eq("direction", query.direction);
     }

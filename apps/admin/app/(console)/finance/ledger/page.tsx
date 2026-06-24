@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ScrollText } from "lucide-react";
+import { fetchFinanceCostCategories } from "@/components/finance/finance-cost-budget-requests";
 import { FinanceLedgerTable } from "@/components/finance/finance-ledger-table";
 import { fetchFinanceLedger } from "@/components/finance/finance-requests";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -7,9 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
+import { getAdminSession } from "@/lib/auth";
 
 type FinanceLedgerPageSearchParams = {
   page?: string;
+  cost_category_id?: string;
 };
 
 function normalizePage(value: string | undefined) {
@@ -17,8 +20,25 @@ function normalizePage(value: string | undefined) {
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
-function ledgerPageHref(page: number) {
-  return `/finance/ledger?page=${page}`;
+function clean(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized || undefined;
+}
+
+function ledgerPageHref(page: number, filters: FinanceLedgerPageSearchParams) {
+  const params = new URLSearchParams({ page: String(page) });
+  const costCategoryId = clean(filters.cost_category_id);
+  if (costCategoryId) params.set("cost_category_id", costCategoryId);
+  return `/finance/ledger?${params}`;
+}
+
+function hasPermission(
+  session: Awaited<ReturnType<typeof getAdminSession>>,
+  permissionCode: string,
+) {
+  return Boolean(
+    session?.permissions.some((permission) => permission.code === permissionCode),
+  );
 }
 
 export default async function FinanceLedgerPage({
@@ -31,7 +51,20 @@ export default async function FinanceLedgerPage({
 
   const params = await searchParams;
   const page = normalizePage(params.page);
-  const data = await fetchFinanceLedger({ page, pageSize: 20 });
+  const costCategoryId = clean(params.cost_category_id);
+  const [data, categories, session] = await Promise.all([
+    fetchFinanceLedger({
+      page,
+      pageSize: 20,
+      cost_category_id: costCategoryId,
+    }),
+    fetchFinanceCostCategories({ page: 1, pageSize: 100, status: "active" }),
+    getAdminSession(),
+  ]);
+  const canManageAllocation = hasPermission(
+    session,
+    "finance.cost-allocation.manage",
+  );
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
     data.pagination.page < data.pagination.totalPages;
@@ -57,13 +90,54 @@ export default async function FinanceLedgerPage({
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">
+          <form
+            action="/finance/ledger"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-[minmax(12rem,18rem)_auto] md:items-end"
+          >
+            <div className="grid gap-1.5">
+              <label
+                className="text-xs font-medium text-muted-foreground"
+                htmlFor="ledger-cost-category-filter"
+              >
+                成本分类
+              </label>
+              <select
+                id="ledger-cost-category-filter"
+                name="cost_category_id"
+                defaultValue={costCategoryId || ""}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">全部成本分类</option>
+                {categories.list.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name || category.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              <Button type="submit" size="sm">筛选</Button>
+              <Button asChild type="button" variant="outline" size="sm">
+                <Link href="/finance/ledger">重置</Link>
+              </Button>
+            </div>
+          </form>
+          {categories.error ? (
+            <div className="shrink-0 border-b p-4">
+              <StatusAlert tone="warning">{categories.error}</StatusAlert>
+            </div>
+          ) : null}
           {data.error ? (
             <div className="shrink-0 border-b p-4">
               <StatusAlert>{data.error}</StatusAlert>
             </div>
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
-            <FinanceLedgerTable rows={data.list} />
+            <FinanceLedgerTable
+              rows={data.list}
+              costCategories={categories.list}
+              canManageAllocation={canManageAllocation}
+            />
           </div>
           <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -80,7 +154,9 @@ export default async function FinanceLedgerPage({
                 asChild={canGoPrev}
               >
                 {canGoPrev ? (
-                  <Link href={ledgerPageHref(data.pagination.page - 1)}>上一页</Link>
+                  <Link href={ledgerPageHref(data.pagination.page - 1, params)}>
+                    上一页
+                  </Link>
                 ) : (
                   <span>上一页</span>
                 )}
@@ -92,7 +168,9 @@ export default async function FinanceLedgerPage({
                 asChild={canGoNext}
               >
                 {canGoNext ? (
-                  <Link href={ledgerPageHref(data.pagination.page + 1)}>下一页</Link>
+                  <Link href={ledgerPageHref(data.pagination.page + 1, params)}>
+                    下一页
+                  </Link>
                 ) : (
                   <span>下一页</span>
                 )}

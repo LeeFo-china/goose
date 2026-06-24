@@ -5,12 +5,19 @@ export type FinanceLedgerRecord = {
   id: string;
   tenant_id: string;
   project_id: string | null;
+  cost_category_id?: string | null;
   direction: "in" | "out";
   entry_type: string;
   amount: number | string | null;
   occurred_at: string | null;
   summary: string | null;
   project?: { id: string; name: string | null; status: string | null } | null;
+  cost_category?: {
+    id: string;
+    code: string | null;
+    name: string | null;
+    status: string | null;
+  } | null;
   handler?: { id: string; name: string | null; phone: string | null } | null;
 };
 
@@ -196,6 +203,7 @@ export function emptyFinanceProjectSummary(
 export async function fetchFinanceLedger(query: {
   page?: number;
   pageSize?: number;
+  cost_category_id?: string;
 }): Promise<FinanceLedgerResult> {
   const token = await getAdminToken();
   const page = normalizeFinanceLedgerPage(query.page);
@@ -218,6 +226,7 @@ export async function fetchFinanceLedger(query: {
     page: String(page),
     pageSize: String(pageSize),
   });
+  appendOptionalParam(params, "cost_category_id", query.cost_category_id);
 
   try {
     const response = await fetch(buildBackendUrl(`/finance/ledger?${params}`), {
