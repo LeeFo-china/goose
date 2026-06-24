@@ -3,6 +3,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   CreateFinanceCostCategorySchema,
   FinanceCostCategoryListQuerySchema,
+  SaveProjectCostBudgetsSchema,
   UpdateFinanceCostCategorySchema,
 } from "@/schema/finance-costs";
 import {
@@ -13,8 +14,9 @@ import { FinanceReceivableListQuerySchema } from "@/schema/finance-receivables";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
 import { financeLedgerService } from "@/services/finance-ledger";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
+import { projectCostBudgetService } from "@/services/project-cost-budgets";
 import { projectReceivablesService } from "@/services/project-receivables";
-import { Get, Patch, Post } from "@/utils/decorators/route";
+import { Get, Patch, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -114,6 +116,38 @@ class FinanceController extends TenantBaseController {
     }
 
     const data = await financeCostCategoryService.update(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/projects/:id/cost-budgets")
+  async listProjectCostBudgets(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await projectCostBudgetService.listProjectBudgets(
+      authContext,
+      idVerify.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Put("/projects/:id/cost-budgets")
+  async saveProjectCostBudgets(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = SaveProjectCostBudgetsSchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await projectCostBudgetService.saveProjectBudgets(
       authContext,
       idVerify.data.id,
       bodyResult.data,

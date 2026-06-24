@@ -66,3 +66,28 @@ export const UpdateFinanceCostCategorySchema = z.object({
 
 export type UpdateFinanceCostCategoryInput =
   z.infer<typeof UpdateFinanceCostCategorySchema>;
+
+export const SaveProjectCostBudgetsSchema = z.object({
+  items: z.array(z.object({
+    cost_category_id: z.uuid("请选择有效的成本分类"),
+    budget_amount: z.coerce.number()
+      .min(0, "预算金额不能小于 0")
+      .max(99_999_999.99, "预算金额过大"),
+    warning_threshold_percent: z.coerce.number()
+      .min(0.01, "预警阈值必须大于 0")
+      .max(10_000, "预警阈值过大")
+      .optional()
+      .default(100),
+    remark: z.preprocess((value) => {
+      if (value == null) return null;
+      if (typeof value === "string") {
+        const normalized = value.trim();
+        return normalized || null;
+      }
+      return value;
+    }, z.string().max(200, "备注不能超过 200 个字符").nullable().optional()),
+  })).max(100, "一次最多保存 100 个预算项"),
+});
+
+export type SaveProjectCostBudgetsInput =
+  z.infer<typeof SaveProjectCostBudgetsSchema>;
