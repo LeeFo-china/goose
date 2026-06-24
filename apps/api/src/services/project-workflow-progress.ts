@@ -234,12 +234,6 @@ class ProjectWorkflowProgressService {
         workflowInstanceId: runtimeInstance.id,
       }),
     ]);
-    const pendingActions = await buildWorkflowTaskActionPayloads({
-      tenantId: input.tenantId,
-      subjectType: "project",
-      tasks: pendingTasks,
-    });
-
     const workflowGraph = graph
       ? {
         nodes: graph.nodes,
@@ -247,14 +241,22 @@ class ProjectWorkflowProgressService {
         definition: graph.definition,
       }
       : null;
-    const enrichedGraph = await enrichWorkflowGraphWithFinanceReviewersForTenant({
-      tenantId: input.tenantId,
-      graph: workflowGraph,
-    });
-    const completedNodeActors = await buildFinanceConfirmationActorsForTenant({
-      tenantId: input.tenantId,
-      runtimeNodes,
-    });
+    const [pendingActions, enrichedGraph, completedNodeActors] =
+      await Promise.all([
+        buildWorkflowTaskActionPayloads({
+          tenantId: input.tenantId,
+          subjectType: "project",
+          tasks: pendingTasks,
+        }),
+        enrichWorkflowGraphWithFinanceReviewersForTenant({
+          tenantId: input.tenantId,
+          graph: workflowGraph,
+        }),
+        buildFinanceConfirmationActorsForTenant({
+          tenantId: input.tenantId,
+          runtimeNodes,
+        }),
+      ]);
 
     return buildProjectWorkflowProgressProjection({
       subjectState,

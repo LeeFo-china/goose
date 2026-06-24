@@ -30,6 +30,8 @@ export function createEmptyTimings(this: any, ): EmployeeProjectDetailBootstrapT
     permissions_ms: 0,
     members_ms: 0,
     workflow_progress_ms: 0,
+    workflow_actions_ms: 0,
+    workflow_state_ms: 0,
     construction_stages_ms: 0,
     logs_ms: 0,
     calendar_ms: 0,

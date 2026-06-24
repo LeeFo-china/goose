@@ -16,12 +16,26 @@ import { buildWorkflowTimelineNodes } from "@/services/project-workflow-progress
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
 import { workflowRepository } from "@/repositories/workflows";
-import type { WorkflowTimelineNode } from "@/services/project-workflow-progress";
+import type {
+  ProjectWorkflowProgress,
+  WorkflowTimelineNode,
+} from "@/services/project-workflow-progress";
 import {
   buildWorkflowTaskActionPayloads,
   type WorkflowTaskActionPayload,
 } from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
+import type { WorkflowRuntimeProjectionRow } from "@/repositories/workflow-subject-states";
+
+type WorkflowSubjectStateView =
+  Omit<WorkflowSubjectStateRow, "current_business_kind"> & {
+    current_business_kind: string | null;
+  };
+
+type WorkflowSubjectStateOptions = {
+  workflowProgress?: ProjectWorkflowProgress | null;
+  actionsPromise?: Promise<WorkflowTaskActionPayload[]>;
+};
 
 export function attachWorkflowActionsToTimelineNodes(
   nodes: WorkflowTimelineNode[],
@@ -53,13 +67,24 @@ class WorkflowSubjectsService {
   async getState(
     authContext: AuthContext,
     params: WorkflowSubjectStateParams,
+    options: WorkflowSubjectStateOptions = {},
   ) {
     const tenantId = this.assertTenantId(authContext);
-    const state = await workflowSubjectStateService.getSubjectState({
+    const subjectId = params.subjectId.trim();
+    const preloadedState = this.buildStateFromWorkflowProgress({
       tenantId,
       subjectType: params.subjectType,
-      subjectId: params.subjectId.trim(),
+      subjectId,
+      workflowProgress: options.workflowProgress ?? null,
     });
+    const stateResult = preloadedState
+      ? { subjectState: preloadedState, runtimeInstance: null }
+      : await workflowSubjectStateService.getSubjectStateWithRuntime({
+        tenantId,
+        subjectType: params.subjectType,
+        subjectId,
+      });
+    const state = stateResult.subjectState;
 
     if (!state?.instance_id) {
       return {
@@ -67,6 +92,40 @@ class WorkflowSubjectsService {
       };
     }
 
+    const actions = await (options.actionsPromise ??
+      this.loadAccessibleActions(authContext, {
+        subjectType: params.subjectType,
+        subjectId,
+        instanceId: state.instance_id,
+      }));
+    const timelineNodes = preloadedState && options.workflowProgress
+      ? attachWorkflowActionsToTimelineNodes(
+        this.clearTimelineNodeActions(options.workflowProgress.timeline_nodes),
+        actions,
+      )
+      : await this.loadProjectTimelineNodes({
+        tenantId,
+        subjectType: params.subjectType,
+        subjectId,
+        actions,
+        runtimeInstance: stateResult.runtimeInstance,
+      });
+
+    return {
+      workflow_state: this.serializeState(
+        state,
+        actions,
+        timelineNodes,
+      ),
+    };
+  }
+
+  async loadAccessibleActions(
+    authContext: AuthContext,
+    params: WorkflowSubjectStateParams & { instanceId?: string | null },
+  ): Promise<WorkflowTaskActionPayload[]> {
+    const tenantId = this.assertTenantId(authContext);
+    const subjectId = params.subjectId.trim();
     const tasks = await workflowTaskRepository.listAccessibleTasks({
       tenantId,
       employeeId: authContext.employeeId,
@@ -76,30 +135,17 @@ class WorkflowSubjectsService {
       ),
       status: "pending",
       subjectType: params.subjectType,
-      subjectId: params.subjectId.trim(),
-      instanceId: state.instance_id,
+      subjectId,
+      ...(params.instanceId ? { instanceId: params.instanceId } : {}),
       page: 1,
       pageSize: 100,
     });
-    const actions = await buildWorkflowTaskActionPayloads({
+
+    return buildWorkflowTaskActionPayloads({
       tenantId,
       subjectType: params.subjectType,
       tasks: tasks.list,
     });
-    const timelineNodes = await this.loadProjectTimelineNodes({
-      tenantId,
-      subjectType: params.subjectType,
-      subjectId: params.subjectId.trim(),
-      actions,
-    });
-
-    return {
-      workflow_state: this.serializeState(
-        state,
-        actions,
-        timelineNodes,
-      ),
-    };
   }
 
   async listTimeline(
@@ -135,7 +181,7 @@ class WorkflowSubjectsService {
   }
 
   private serializeState(
-    state: WorkflowSubjectStateRow | null,
+    state: WorkflowSubjectStateView | null,
     actions: WorkflowTaskActionPayload[],
     timelineNodes: WorkflowTimelineNode[],
   ) {
@@ -164,16 +210,59 @@ class WorkflowSubjectsService {
     };
   }
 
+  private buildStateFromWorkflowProgress(input: {
+    tenantId: string;
+    subjectType: string;
+    subjectId: string;
+    workflowProgress: ProjectWorkflowProgress | null;
+  }): WorkflowSubjectStateView | null {
+    const progress = input.workflowProgress;
+    if (
+      input.subjectType !== "project" ||
+      !progress ||
+      progress.source !== "workflow_runtime" ||
+      !progress.instance_id
+    ) {
+      return null;
+    }
+
+    return {
+      id: progress.instance_id,
+      tenant_id: input.tenantId,
+      subject_type: "project",
+      subject_id: input.subjectId,
+      definition_id: null,
+      instance_id: progress.instance_id,
+      instance_status: progress.instance_status,
+      current_node_key: progress.current_node_key,
+      current_node_title: progress.current_node_title,
+      current_business_kind: progress.current_business_kind,
+      pending_task_count: progress.pending_task_count,
+      created_at: "",
+      updated_at: "",
+    };
+  }
+
+  private clearTimelineNodeActions(
+    timelineNodes: WorkflowTimelineNode[],
+  ): WorkflowTimelineNode[] {
+    return timelineNodes.map((node) => ({
+      ...node,
+      actions: [],
+    }));
+  }
+
   private async loadProjectTimelineNodes(input: {
     tenantId: string;
     subjectType: string;
     subjectId: string;
     actions: WorkflowTaskActionPayload[];
+    runtimeInstance?: WorkflowRuntimeProjectionRow | null;
   }): Promise<WorkflowTimelineNode[]> {
     if (input.subjectType !== "project") return [];
 
-    const runtimeInstance = await workflowSubjectStateRepository
-      .findLatestRuntimeInstance({
+    const runtimeInstance = input.runtimeInstance ??
+      await workflowSubjectStateRepository.findLatestRuntimeInstance({
         tenantId: input.tenantId,
         subjectType: "project",
         subjectId: input.subjectId,

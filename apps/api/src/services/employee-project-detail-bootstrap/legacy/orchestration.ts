@@ -97,6 +97,31 @@ export async function getBootstrap(this: any, input: {
 }): Promise<EmployeeProjectDetailBootstrapResult> {
   const partialErrors: PartialError[] = [];
   const timings = this.createEmptyTimings();
+  const workflowProgressPromise = this.measure(
+    "workflow_progress_ms",
+    timings,
+    async () => {
+      try {
+        return input.authContext.tenantId
+          ? await projectWorkflowProgressService.getProjectProgress({
+            tenantId: input.authContext.tenantId,
+            projectId: input.projectId,
+          })
+          : buildUnavailableProjectWorkflowProgress();
+      } catch (error) {
+        partialErrors.push(this.toPartialError("workflow_progress", error));
+        return buildUnavailableProjectWorkflowProgress();
+      }
+    },
+  );
+  const workflowActionsPromise = this.measure(
+    "workflow_actions_ms",
+    timings,
+    () => workflowSubjectsService.loadAccessibleActions(input.authContext, {
+      subjectType: "project",
+      subjectId: input.projectId,
+    }),
+  );
   const bundle = await this.measure("bootstrap_data_ms", timings, () =>
     projectSer.getEmployeeProjectBootstrapBundle({
       authContext: input.authContext,
@@ -124,23 +149,7 @@ export async function getBootstrap(this: any, input: {
   const tenantId = typeof project.tenant_id === "string"
     ? project.tenant_id
     : input.authContext.tenantId;
-  const workflowProgress = await this.measure(
-    "workflow_progress_ms",
-    timings,
-    async () => {
-      try {
-        return tenantId
-          ? await projectWorkflowProgressService.getProjectProgress({
-            tenantId,
-            projectId,
-          })
-          : buildUnavailableProjectWorkflowProgress();
-      } catch (error) {
-        partialErrors.push(this.toPartialError("workflow_progress", error));
-        return buildUnavailableProjectWorkflowProgress();
-      }
-    },
-  );
+  const workflowProgress = await workflowProgressPromise;
 
   const [constructionStages, logs, calendar] =
     await Promise.all([
@@ -181,12 +190,17 @@ export async function getBootstrap(this: any, input: {
     this.toPublicPermissions(basePermissions),
     constructionStages,
   );
-  const workflowStateResult = await workflowSubjectsService.getState(
-    input.authContext,
-    {
-      subjectType: "project",
-      subjectId: typeof project.id === "string" ? project.id : input.projectId,
-    },
+  const workflowStateResult = await this.measure(
+    "workflow_state_ms",
+    timings,
+    () => workflowSubjectsService.getState(
+      input.authContext,
+      {
+        subjectType: "project",
+        subjectId: typeof project.id === "string" ? project.id : input.projectId,
+      },
+      { workflowProgress, actionsPromise: workflowActionsPromise },
+    ),
   );
   const workflowState = workflowStateResult.workflow_state;
   const enrichedWorkflowOutputs = enrichWorkflowOutputsForBootstrap({

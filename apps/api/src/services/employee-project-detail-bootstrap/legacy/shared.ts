@@ -26,6 +26,8 @@ export type BootstrapTimingStep =
   | "permissions_ms"
   | "members_ms"
   | "workflow_progress_ms"
+  | "workflow_actions_ms"
+  | "workflow_state_ms"
   | "construction_stages_ms"
   | "logs_ms"
   | "calendar_ms";
