@@ -183,7 +183,7 @@ function buildPaymentCollectionActions(
   return [
     {
       key: "complete",
-      label: input.taskTitle || paymentLabel,
+      label: paymentLabel || input.taskTitle,
       business_domain: "payment_collection",
       business_action: "confirm_payment",
       requires_reason: false,

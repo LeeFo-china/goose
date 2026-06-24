@@ -57,10 +57,6 @@ export function enrichWorkflowOutputsForBootstrap(input: {
   workflowState: ProjectWorkflowState;
   constructionStages: ConstructionStagesResult;
 }) {
-  const workflowProgress = enrichProjectWorkflowProgressWithConstructionStages(
-    input.workflowProgress,
-    input.constructionStages,
-  );
   const workflowState = input.workflowState
     ? {
       ...input.workflowState,
@@ -72,8 +68,69 @@ export function enrichWorkflowOutputsForBootstrap(input: {
       ),
     }
     : input.workflowState;
+  const workflowProgress = alignWorkflowProgressActionsWithState(
+    enrichProjectWorkflowProgressWithConstructionStages(
+      input.workflowProgress,
+      input.constructionStages,
+    ),
+    workflowState,
+  );
 
   return { workflowProgress, workflowState };
+}
+
+function alignWorkflowProgressActionsWithState(
+  workflowProgress: WorkflowProgressResult,
+  workflowState: ProjectWorkflowState,
+): WorkflowProgressResult {
+  if (!workflowState) return workflowProgress;
+
+  const stateTimelineNodes = Array.isArray(workflowState.timeline_nodes)
+    ? workflowState.timeline_nodes
+    : [];
+  const stateActionsByNodeKey = new Map(
+    stateTimelineNodes.map((node) => [node.node_key, node.actions]),
+  );
+  const timelineNodes = workflowProgress.timeline_nodes.map((node) =>
+    stateActionsByNodeKey.has(node.node_key)
+      ? {
+        ...node,
+        actions: mergeWorkflowTaskActions(
+          node.actions,
+          stateActionsByNodeKey.get(node.node_key) ?? [],
+        ),
+      }
+      : node
+  );
+  const currentNodeKey = workflowProgress.current_node_key ??
+    workflowState.current_node_key ??
+    null;
+  const currentActions = currentNodeKey
+    ? stateActionsByNodeKey.get(currentNodeKey)
+    : undefined;
+
+  return {
+    ...workflowProgress,
+    timeline_nodes: timelineNodes,
+    actions: mergeWorkflowTaskActions(
+      workflowProgress.actions,
+      currentActions ?? workflowState.actions ?? [],
+    ),
+  };
+}
+
+function mergeWorkflowTaskActions<T extends Record<string, unknown>>(
+  originalActions: T[],
+  stateActions: T[],
+): T[] {
+  return [
+    ...originalActions.filter((action) => !hasWorkflowTaskId(action)),
+    ...stateActions.filter(hasWorkflowTaskId),
+  ];
+}
+
+function hasWorkflowTaskId(action: Record<string, unknown>) {
+  return typeof action.task_id === "string" && action.task_id.trim().length > 0;
 }
 
 export function attachWorkflowOutputsToBootstrapProject<

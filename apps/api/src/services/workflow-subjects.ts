@@ -67,8 +67,6 @@ export function fillMissingWorkflowActionsToTimelineNodes(
   nodes: WorkflowTimelineNode[],
   actions: WorkflowTaskActionPayload[],
 ): WorkflowTimelineNode[] {
-  if (actions.length === 0) return nodes;
-
   const actionsByNodeKey = new Map<string, WorkflowTaskActionPayload[]>();
   for (const action of actions) {
     actionsByNodeKey.set(action.node_key, [
@@ -78,9 +76,11 @@ export function fillMissingWorkflowActionsToTimelineNodes(
   }
 
   return nodes.map((node) => {
-    if (node.actions.length > 0) return node;
+    if (node.node_type === "procedure" && node.actions.length > 0) {
+      return node;
+    }
     const nodeActions = actionsByNodeKey.get(node.node_key) ?? [];
-    return nodeActions.length > 0 ? { ...node, actions: nodeActions } : node;
+    return { ...node, actions: nodeActions };
   });
 }
 

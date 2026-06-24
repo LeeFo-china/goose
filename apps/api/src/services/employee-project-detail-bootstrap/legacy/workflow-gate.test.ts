@@ -462,4 +462,5 @@ describe("employee project detail workflow gates", () => {
     expect(result.workflow_state).toBe(workflowState);
     expect(result.workflow_progress).toBe(workflowProgress);
   });
+
 });

@@ -311,6 +311,30 @@ describe("buildWorkflowTaskActions", () => {
     });
   });
 
+  test("uses payment type label instead of stale payment task title", () => {
+    const action = buildWorkflowTaskActions({
+      subjectType: "project",
+      nodeKey: "payment_stage_3",
+      nodeType: "confirmation",
+      taskTitle: "中期收款",
+      currentNodeSnapshot: {
+        node_key: "payment_stage_3",
+        business_kind: "payment_collection",
+        config: {
+          payment_type: "stage_3",
+          requirement_mode: "any_confirmed",
+        },
+      },
+    })[0];
+
+    expect(action).toMatchObject({
+      key: "complete",
+      label: "工程尾款",
+      business_domain: "payment_collection",
+      business_action: "confirm_payment",
+    });
+  });
+
   test("describes expense approval and payment actions", () => {
     expect(buildWorkflowTaskActions({
       subjectType: "expense_request",

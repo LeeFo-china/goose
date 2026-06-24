@@ -340,4 +340,80 @@ describe("workflowSubjectsService state performance", () => {
       "adjust_procedure_schedule",
     ]);
   });
+
+  test("uses accessible actions as authority for preloaded payment nodes", async () => {
+    const { workflowSubjectsService } = await import("./workflow-subjects");
+
+    const result = await workflowSubjectsService.getState(
+      authContext as never,
+      {
+        subjectType: "project",
+        subjectId: "project-1",
+      },
+      {
+        workflowProgress: {
+          source: "workflow_runtime",
+          instance_id: "instance-1",
+          instance_status: "running",
+          current_node_key: "payment_stage_3",
+          current_node_title: "工程尾款",
+          current_group_key: "construction",
+          current_group_label: "施工阶段",
+          current_group_order: 20,
+          current_node_type: "confirmation",
+          current_business_kind: "payment_collection",
+          current_stage_code: null,
+          current_gate: {
+            type: "payment_collection",
+            payment_type: "stage_3",
+            payment_label: "工程尾款",
+            blocked_stage_code: null,
+            blocked_stage_label: null,
+          },
+          timeline_nodes: [{
+            ...progressTimelineNode,
+            node_key: "payment_stage_3",
+            node_title: "工程尾款",
+            node_type: "confirmation",
+            business_kind: "payment_collection",
+            display: {
+              label: "工程尾款",
+              status_label: "当前",
+              status_variant: "default" as const,
+            },
+            actions: [{
+              key: "complete",
+              label: "中期收款",
+              business_domain: "payment_collection",
+              business_action: "confirm_payment",
+              requires_reason: false,
+              task_id: "task-payment",
+              node_key: "payment_stage_3",
+              node_type: "confirmation",
+              disabled: false,
+              output_fields: [],
+            }],
+          }],
+          pending_task_count: 1,
+          actions: [{
+            key: "complete",
+            label: "中期收款",
+            business_domain: "payment_collection",
+            business_action: "confirm_payment",
+            requires_reason: false,
+            task_id: "task-payment",
+            node_key: "payment_stage_3",
+            node_type: "confirmation",
+            disabled: false,
+            output_fields: [],
+          }],
+          warnings: [],
+        },
+        actionsPromise: Promise.resolve([]),
+      },
+    );
+
+    expect(result.workflow_state?.actions).toEqual([]);
+    expect(result.workflow_state?.timeline_nodes[0]?.actions).toEqual([]);
+  });
 });
