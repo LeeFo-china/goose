@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { FinanceLedgerListQuerySchema } from "@/schema/finance";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -93,6 +94,31 @@ describe("financeLedgerService", () => {
     expect(listLedger).toHaveBeenCalledWith("tenant-1", {
       page: 1,
       pageSize: 20,
+    });
+  });
+
+  test("parses and forwards unallocated ledger filter", async () => {
+    const parsed = FinanceLedgerListQuerySchema.parse({
+      page: "1",
+      pageSize: "20",
+      project_id: "11111111-1111-4111-8111-111111111111",
+      direction: "out",
+      unallocated_only: "true",
+    });
+    const { financeLedgerService } = await import("./finance-ledger");
+
+    await financeLedgerService.listLedger(
+      authContextWithPermissions([{ code: "finance.ledger.view", scope: "all" }]),
+      parsed,
+    );
+
+    expect(parsed.unallocated_only).toBe(true);
+    expect(listLedger).toHaveBeenCalledWith("tenant-1", {
+      page: 1,
+      pageSize: 20,
+      project_id: "11111111-1111-4111-8111-111111111111",
+      direction: "out",
+      unallocated_only: true,
     });
   });
 

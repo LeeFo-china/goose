@@ -47,6 +47,7 @@ export const FinanceLedgerListQuerySchema = PaginationQuerySchema.extend({
   project_id: z.uuid("请选择有效的项目").optional(),
   cost_category_id: optionalQueryValue(z.uuid("请选择有效的成本分类")),
   direction: z.enum(["in", "out"], { message: "无效的流水方向" }).optional(),
+  unallocated_only: OptionalBooleanQuerySchema,
   entry_type: z.enum(
     ["project_payment", "expense_settlement", "refund", "adjustment"],
     { message: "无效的流水类型" },

@@ -50,6 +50,11 @@ class FinanceLedgerRepository {
     if (query.direction) {
       request = request.eq("direction", query.direction);
     }
+    if (query.unallocated_only) {
+      request = request
+        .eq("direction", "out")
+        .is("cost_category_id", null);
+    }
     if (query.entry_type) {
       request = request.eq("entry_type", query.entry_type);
     }
