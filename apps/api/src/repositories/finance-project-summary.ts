@@ -13,6 +13,7 @@ export type FinanceProjectSummaryProjectRow = {
 export type FinanceProjectLedgerTotals = {
   income_amount: number;
   expense_amount: number;
+  unallocated_expense_amount: number;
   ledger_entry_count: number;
   expense_by_category: Map<string, number>;
 };
@@ -35,6 +36,16 @@ export type FinanceProjectBudgetTotals = {
   category_budgets: Map<string, FinanceProjectBudgetCategoryTotals>;
 };
 
+export type FinanceProjectRiskSearchResult = {
+  projectIds: string[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 type FinanceProjectReceivableRow = {
   project_id: string | null;
   amount: number | string | null;
@@ -48,6 +59,11 @@ type FinanceProjectBudgetRow = {
   cost_category_id: string | null;
   budget_amount: number | string | null;
   warning_threshold_percent: number | string | null;
+};
+
+type FinanceProjectRiskSearchRow = {
+  project_id: string;
+  total_count: number | string | null;
 };
 
 class FinanceProjectSummaryRepository {
@@ -115,6 +131,77 @@ class FinanceProjectSummaryRepository {
     return project;
   }
 
+  async searchProjectIdsByRisk(input: {
+    tenantId: string;
+    query: FinanceProjectSummaryListQuery;
+  }): Promise<FinanceProjectRiskSearchResult> {
+    const page = input.query.page ?? 1;
+    const pageSize = Math.min(input.query.pageSize ?? 20, 100);
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "search_finance_project_risk_ids",
+      {
+        p_tenant_id: input.tenantId,
+        p_page: page,
+        p_page_size: pageSize,
+        p_keyword: input.query.keyword ?? null,
+        p_status: input.query.status ?? null,
+        p_risk_level: input.query.risk_level ?? null,
+        p_risk_flag: input.query.risk_flag ?? null,
+        p_budget_configured: input.query.budget_configured ?? null,
+        p_has_unallocated_expense:
+          input.query.has_unallocated_expense ?? null,
+        p_overdue: input.query.overdue ?? null,
+        p_min_budget_usage_ratio:
+          input.query.min_budget_usage_ratio ?? null,
+        p_max_projected_budget_gross_margin:
+          input.query.max_projected_budget_gross_margin ?? null,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("查询项目经营风险筛选失败", error);
+    }
+
+    const rows = ((data as FinanceProjectRiskSearchRow[] | null) || []);
+    const total = Number(rows[0]?.total_count ?? 0);
+    return {
+      projectIds: rows.map((row) => row.project_id).filter(Boolean),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: total ? Math.ceil(total / pageSize) : 0,
+      },
+    };
+  }
+
+  async listProjectsByIds(input: {
+    tenantId: string;
+    projectIds: string[];
+  }): Promise<FinanceProjectSummaryProjectRow[]> {
+    if (input.projectIds.length === 0) return [];
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, name, status, signed_amount, budget")
+      .eq("tenant_id", input.tenantId)
+      .in("id", input.projectIds);
+
+    if (error) {
+      throw Errors.dbError("查询项目经营汇总失败", error);
+    }
+
+    const byId = new Map(
+      ((data as FinanceProjectSummaryProjectRow[] | null) || [])
+        .map((project) => [project.id, project]),
+    );
+    return input.projectIds
+      .map((projectId) => byId.get(projectId))
+      .filter((project): project is FinanceProjectSummaryProjectRow =>
+        Boolean(project)
+      );
+  }
+
   async listLedgerTotals(input: {
     tenantId: string;
     projectIds: string[];
@@ -144,6 +231,7 @@ class FinanceProjectSummaryRepository {
       const current = totals.get(row.project_id) || {
         income_amount: 0,
         expense_amount: 0,
+        unallocated_expense_amount: 0,
         ledger_entry_count: 0,
         expense_by_category: new Map<string, number>(),
       };
@@ -152,6 +240,9 @@ class FinanceProjectSummaryRepository {
         current.income_amount += amount;
       } else if (row.direction === "out") {
         current.expense_amount += amount;
+        if (!row.cost_category_id) {
+          current.unallocated_expense_amount += amount;
+        }
         if (row.cost_category_id) {
           current.expense_by_category.set(
             row.cost_category_id,
