@@ -25,6 +25,11 @@ type FinancePageSearchParams = {
   page?: string;
   keyword?: string;
   status?: string;
+  risk_level?: string;
+  risk_flag?: string;
+  budget_configured?: string;
+  has_unallocated_expense?: string;
+  overdue?: string;
 };
 
 const PROJECT_STATUS_OPTIONS = [
@@ -33,6 +38,32 @@ const PROJECT_STATUS_OPTIONS = [
     value,
     label: config.label,
   })),
+];
+
+const RISK_LEVEL_OPTIONS = [
+  { value: "", label: "全部风险" },
+  { value: "normal", label: "正常" },
+  { value: "info", label: "待处理" },
+  { value: "warning", label: "预警" },
+  { value: "danger", label: "高风险" },
+];
+
+const RISK_FLAG_OPTIONS = [
+  { value: "", label: "全部原因" },
+  { value: "budget_missing", label: "未配置预算" },
+  { value: "unallocated_expense", label: "未归集成本" },
+  { value: "category_over_budget", label: "分类超预算" },
+  { value: "project_over_budget", label: "项目超预算" },
+  { value: "low_projected_margin", label: "预算毛利偏低" },
+  { value: "receivable_overdue", label: "应收逾期" },
+  { value: "negative_actual_profit", label: "实际利润为负" },
+  { value: "negative_projected_profit", label: "预算利润为负" },
+];
+
+const BOOLEAN_FILTER_OPTIONS = [
+  { value: "", label: "全部" },
+  { value: "true", label: "是" },
+  { value: "false", label: "否" },
 ];
 
 function normalizePage(value: string | undefined) {
@@ -53,6 +84,15 @@ function buildFinanceSummaryHref(input: {
   params.set("page", String(input.page));
   append(params, "keyword", input.filters.keyword);
   append(params, "status", input.filters.status);
+  append(params, "risk_level", input.filters.risk_level);
+  append(params, "risk_flag", input.filters.risk_flag);
+  append(params, "budget_configured", input.filters.budget_configured);
+  append(
+    params,
+    "has_unallocated_expense",
+    input.filters.has_unallocated_expense,
+  );
+  append(params, "overdue", input.filters.overdue);
   return `/finance?${params}`;
 }
 
@@ -76,10 +116,21 @@ export default async function FinancePage({
     pageSize: 20,
     keyword: clean(params.keyword),
     status: clean(params.status),
+    risk_level: clean(params.risk_level),
+    risk_flag: clean(params.risk_flag),
+    budget_configured: clean(params.budget_configured),
+    has_unallocated_expense: clean(params.has_unallocated_expense),
+    overdue: clean(params.overdue),
   });
   const summary = data.summary;
   const budgetConfiguredCount = Number(summary.budget_configured_count || 0);
-  const riskCount = Number(summary.risk_count || 0);
+  const riskCounts = summary.risk_counts || {
+    normal: 0,
+    info: 0,
+    warning: 0,
+    danger: 0,
+  };
+  const flagCounts = summary.risk_flag_counts || {};
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
     data.pagination.page < data.pagination.totalPages;
@@ -147,15 +198,33 @@ export default async function FinancePage({
         />
         <FinanceMetricCard
           icon={<AlertTriangle aria-hidden="true" className="size-4" />}
-          label="当前页逾期"
-          value={formatFinanceMoney(summary.overdue_amount)}
-          helper={`${summary.overdue_count} 笔`}
+          label="高风险项目"
+          value={`${riskCounts.danger || 0} 个`}
+          helper={`项目超预算 ${flagCounts.project_over_budget || 0} 个`}
         />
         <FinanceMetricCard
           icon={<AlertTriangle aria-hidden="true" className="size-4" />}
-          label="当前页风险"
-          value={`${riskCount} 个项目`}
+          label="预警项目"
+          value={`${riskCounts.warning || 0} 个`}
+          helper={`预算毛利偏低 ${flagCounts.low_projected_margin || 0} 个`}
+        />
+        <FinanceMetricCard
+          icon={<AlertTriangle aria-hidden="true" className="size-4" />}
+          label="未配置预算"
+          value={`${flagCounts.budget_missing || 0} 个`}
           helper={`预算使用 ${formatFinancePercent(summary.budget_usage_ratio)}`}
+        />
+        <FinanceMetricCard
+          icon={<ReceiptText aria-hidden="true" className="size-4" />}
+          label="未归集成本"
+          value={formatFinanceMoney(summary.unallocated_expense_amount)}
+          helper={`${flagCounts.unallocated_expense || 0} 个项目`}
+        />
+        <FinanceMetricCard
+          icon={<AlertTriangle aria-hidden="true" className="size-4" />}
+          label="当前页逾期"
+          value={formatFinanceMoney(summary.overdue_amount)}
+          helper={`${summary.overdue_count} 笔 / ${flagCounts.receivable_overdue || 0} 个项目`}
         />
       </div>
 
@@ -163,7 +232,7 @@ export default async function FinancePage({
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(9rem,12rem)_auto] md:items-end"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_12rem_11rem_12rem_10rem_10rem_10rem_auto] xl:items-end"
           >
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="finance-keyword">
@@ -194,7 +263,42 @@ export default async function FinancePage({
                 ))}
               </select>
             </div>
-            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <FinanceFilterSelect
+              id="finance-risk-level"
+              name="risk_level"
+              label="风险"
+              value={params.risk_level}
+              options={RISK_LEVEL_OPTIONS}
+            />
+            <FinanceFilterSelect
+              id="finance-risk-flag"
+              name="risk_flag"
+              label="原因"
+              value={params.risk_flag}
+              options={RISK_FLAG_OPTIONS}
+            />
+            <FinanceFilterSelect
+              id="finance-budget-configured"
+              name="budget_configured"
+              label="已配预算"
+              value={params.budget_configured}
+              options={BOOLEAN_FILTER_OPTIONS}
+            />
+            <FinanceFilterSelect
+              id="finance-has-unallocated-expense"
+              name="has_unallocated_expense"
+              label="未归集"
+              value={params.has_unallocated_expense}
+              options={BOOLEAN_FILTER_OPTIONS}
+            />
+            <FinanceFilterSelect
+              id="finance-overdue"
+              name="overdue"
+              label="逾期"
+              value={params.overdue}
+              options={BOOLEAN_FILTER_OPTIONS}
+            />
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <Button type="submit" size="sm">筛选</Button>
               <Button asChild type="button" variant="outline" size="sm">
                 <Link href="/finance">重置</Link>
@@ -287,5 +391,39 @@ function FinanceMetricCard({
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function FinanceFilterSelect({
+  id,
+  name,
+  label,
+  value,
+  options,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  value?: string;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <label className="text-xs font-medium text-muted-foreground" htmlFor={id}>
+        {label}
+      </label>
+      <select
+        id={id}
+        name={name}
+        defaultValue={value || ""}
+        className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      >
+        {options.map((option) => (
+          <option key={option.value || "all"} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }

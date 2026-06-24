@@ -8,13 +8,18 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
 import type {
   FinanceProjectOperatingSummary,
-  FinanceProjectRiskFlag,
   FinanceProjectRiskLevel,
 } from "@/components/finance/finance-requests";
 import {
   formatFinanceMoney,
   formatFinancePercent,
 } from "@/components/finance/finance-ledger-utils";
+import {
+  financeRiskActionHref,
+  financeRiskLabel,
+  financeRiskVariant,
+  summarizeFinanceRiskReasons,
+} from "@/components/finance/finance-risk-display";
 import {
   projectStatusLabel,
   projectStatusBadgeVariant,
@@ -48,33 +53,6 @@ function budgetRatio(row: FinanceProjectOperatingSummary) {
 
 function riskLevel(row: FinanceProjectOperatingSummary): FinanceProjectRiskLevel {
   return row.risk_level || "normal";
-}
-
-function riskLabel(level: FinanceProjectRiskLevel) {
-  if (level === "danger") return "超预算";
-  if (level === "warning") return "预警";
-  if (level === "info") return "待配置";
-  return "正常";
-}
-
-function riskVariant(level: FinanceProjectRiskLevel) {
-  if (level === "danger") return "danger" as const;
-  if (level === "warning") return "warning" as const;
-  if (level === "info") return "secondary" as const;
-  return "success" as const;
-}
-
-const RISK_FLAG_LABELS: Record<FinanceProjectRiskFlag, string> = {
-  budget_missing: "未配置预算",
-  category_over_budget: "分类预警",
-  project_over_budget: "项目超预算",
-  low_projected_margin: "预算毛利偏低",
-  receivable_overdue: "应收逾期",
-};
-
-function riskFlagText(row: FinanceProjectOperatingSummary) {
-  const flags = Array.isArray(row.risk_flags) ? row.risk_flags : [];
-  return flags.map((flag) => RISK_FLAG_LABELS[flag]).filter(Boolean).join("、");
 }
 
 export function FinanceProjectSummaryTable({
@@ -181,6 +159,18 @@ export function FinanceProjectSummaryTable({
       },
     },
     {
+      accessorKey: "unallocated_expense_amount",
+      header: "未归集",
+      cell: ({ row }) => row.original.unallocated_expense_amount > 0
+        ? formatFinanceMoney(row.original.unallocated_expense_amount)
+        : "-",
+      meta: {
+        headerClassName: "text-right",
+        cellClassName:
+          "whitespace-nowrap text-right tabular-nums text-muted-foreground",
+      },
+    },
+    {
       accessorKey: "projected_budget_profit_amount",
       header: "预算利润",
       cell: ({ row }) => budgetConfigured(row.original) ? (
@@ -234,13 +224,17 @@ export function FinanceProjectSummaryTable({
       header: "风险",
       cell: ({ row }) => {
         const level = riskLevel(row.original);
-        const flagText = riskFlagText(row.original);
+        const reasonText = summarizeFinanceRiskReasons(
+          row.original.risk_reasons || [],
+        );
         return (
-          <div className="max-w-[10rem]">
-            <Badge variant={riskVariant(level)}>{riskLabel(level)}</Badge>
-            {flagText ? (
+          <div className="max-w-[12rem]">
+            <Badge variant={financeRiskVariant(level)}>
+              {financeRiskLabel(level)}
+            </Badge>
+            {reasonText ? (
               <div className="mt-1 truncate text-xs text-muted-foreground">
-                {flagText}
+                {reasonText}
               </div>
             ) : null}
           </div>
@@ -253,14 +247,27 @@ export function FinanceProjectSummaryTable({
     {
       id: "action",
       header: "",
-      cell: ({ row }) => (
-        <Button asChild variant="ghost" size="sm" className="h-8 px-2">
-          <Link href={`/projects/${row.original.project_id}`}>
-            查看项目
-            <ArrowUpRight data-icon="inline-end" />
-          </Link>
-        </Button>
-      ),
+      cell: ({ row }) => {
+        const action = row.original.risk_reasons
+          ?.map((reason) => reason.action)
+          .find((item) => financeRiskActionHref(item));
+        const href = financeRiskActionHref(action);
+        return (
+          <div className="flex justify-end gap-1">
+            {href ? (
+              <Button asChild variant="outline" size="sm" className="h-8 px-2">
+                <Link href={href}>{action?.label || "处理"}</Link>
+              </Button>
+            ) : null}
+            <Button asChild variant="ghost" size="sm" className="h-8 px-2">
+              <Link href={`/projects/${row.original.project_id}`}>
+                查看项目
+                <ArrowUpRight data-icon="inline-end" />
+              </Link>
+            </Button>
+          </div>
+        );
+      },
       meta: {
         cellClassName: "whitespace-nowrap text-right",
       },
@@ -272,7 +279,7 @@ export function FinanceProjectSummaryTable({
       columns={columns}
       data={rows}
       emptyText="暂无项目经营数据"
-      minWidth="min-w-[1720px]"
+      minWidth="min-w-[1800px]"
     />
   );
 }
