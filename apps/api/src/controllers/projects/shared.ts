@@ -315,6 +315,10 @@ export abstract class ProjectBaseController extends TenantBaseController<
   }
 
   protected async getProjectMembersForDetail(project: Record<string, unknown>) {
+    if (Array.isArray(project.__detail_members)) {
+      return project.__detail_members.map((item) => this.serializeProjectMember(item));
+    }
+
     const members = await projectSer.listProjectMembersForDetail(project);
     return members.map((item) => this.serializeProjectMember(item));
   }
@@ -376,6 +380,8 @@ export abstract class ProjectBaseController extends TenantBaseController<
     phonePrivacyContext?: CustomerPhonePrivacyContext,
     members?: ProjectMemberSummary[],
   ) {
+    const responseRow = { ...row };
+    delete responseRow.__detail_members;
     const normalizedCustomer = this.normalizeRelation(row.customer, {
       id: null,
       name: null,
@@ -402,7 +408,7 @@ export abstract class ProjectBaseController extends TenantBaseController<
         );
 
     return {
-      ...row,
+      ...responseRow,
       customer: {
         ...normalizedCustomer,
         ...customerPhoneFields,

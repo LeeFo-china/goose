@@ -29,7 +29,11 @@ import {
     type ProjectPrimaryAssignee,
     type UpdateProjectInput,
 } from "./shared";
-import { attachProjectDisplayStatuses } from "./display-status";
+import {
+    appendProjectDisplayStatus,
+    attachProjectDisplayStatuses,
+    listFinalAcceptanceCompletedProjectIds,
+} from "./display-status";
 import {
     projectWorkflowProgressService,
     type ProjectWorkflowProgress,
@@ -52,20 +56,39 @@ export async function getProjectDetail(this: any, input: {
         throw Errors.forbidden();
     }
 
-    const project = await projectRepository.findDetailById(
+    const projectPromise = projectRepository.findDetailById(
         input.projectId,
         tenantId,
     );
+    const primaryAssigneesPromise = projectMemberService.listPrimaryAssigneesByProjectIds([
+        input.projectId,
+    ]);
+    const storedMembersPromise = this.listProjectStoredMembers(input.projectId);
+    const completedProjectIdsPromise = listFinalAcceptanceCompletedProjectIds({
+        tenantId,
+        projectIds: [input.projectId],
+    });
+    const project = await projectPromise;
     if (!project) {
         throw Errors.dbError("查询记录不存在");
     }
 
-    const [projectWithDisplayStatus] = await attachProjectDisplayStatuses({
-        rows: [project],
-        tenantId,
-    });
-
-    return this.attachPrimaryAssigneesToProject(projectWithDisplayStatus ?? project);
+    const primaryAssignees = await primaryAssigneesPromise;
+    const assigneeIndex = this.buildAssigneeIndex(primaryAssignees);
+    const assignees = assigneeIndex.get(input.projectId) || {};
+    const projectWithDisplayStatus = appendProjectDisplayStatus(
+        project,
+        await completedProjectIdsPromise,
+    );
+    const detail = {
+        ...projectWithDisplayStatus,
+        designer: this.serializeAssignee(assignees.designer),
+        supervisor: this.serializeAssignee(assignees.supervisor),
+    };
+    return {
+        ...detail,
+        __detail_members: this.buildProjectMembersForDetail(detail, await storedMembersPromise),
+    };
 }
 
 export async function getProjectDetailForEmployeeBootstrap(this: any, input: {

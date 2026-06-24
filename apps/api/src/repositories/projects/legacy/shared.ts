@@ -66,7 +66,21 @@ export const PROJECT_LIST_SELECT = `
 `;
 
 export const PROJECT_DETAIL_SELECT = `
-  *,
+  id,
+  tenant_id,
+  customer_id,
+  property_id,
+  name,
+  status,
+  budget,
+  signed_amount,
+  construction_workflow_definition_id,
+  start_date,
+  created_at,
+  updated_at,
+  address,
+  style_tags,
+  visibility_status,
   customer:customers!projects_customer_id_fkey(
     id,
     name,

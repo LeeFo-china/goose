@@ -260,6 +260,16 @@ class AccessPolicyService {
     projectId: string,
     permissionCode = "project.read",
   ) {
+    const scope = this.assertPermission(authContext, permissionCode);
+    if (!scope || !authContext.employeeId) return false;
+
+    if (authContext.tenantId) {
+      const directAccess = await permissionRepository.canAccessProjectByScope({
+        projectId, tenantId: authContext.tenantId, scope,
+        employeeId: authContext.employeeId, tenantDepartmentId: authContext.tenantDepartmentId,
+      });
+      if (directAccess !== null) return directAccess;
+    }
     const visibleProjectIds = await this.getVisibleProjectIds(
       authContext,
       permissionCode,

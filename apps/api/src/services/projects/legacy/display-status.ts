@@ -43,7 +43,7 @@ export async function attachProjectDisplayStatuses(input: {
     );
 }
 
-async function listFinalAcceptanceCompletedProjectIds(input: {
+export async function listFinalAcceptanceCompletedProjectIds(input: {
     tenantId: string;
     projectIds: string[];
 }) {
@@ -66,7 +66,7 @@ async function listFinalAcceptanceCompletedProjectIds(input: {
     );
 }
 
-function appendProjectDisplayStatus(
+export function appendProjectDisplayStatus(
     row: ProjectListRow,
     completedProjectIds: Set<string>,
 ) {

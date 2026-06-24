@@ -8,11 +8,20 @@ const listEmployeeIdsByDepartmentId = mock(async () => [
 const listTenantSystemAdminEmployeeIds = mock(async () => [
   "system-admin-employee",
 ]);
+const canAccessProjectByScope = mock(async () => null as boolean | null);
+const listVisibleProjectIds = mock(async () => ["project-1"]);
+const findProjectTenantById = mock(async () => ({
+  id: "project-1",
+  tenant_id: "tenant-1",
+}));
 
 mock.module("@/repositories/permissions", () => ({
   permissionRepository: {
     listEmployeeIdsByDepartmentId,
     listTenantSystemAdminEmployeeIds,
+    canAccessProjectByScope,
+    listVisibleProjectIds,
+    findProjectTenantById,
   },
 }));
 
@@ -88,5 +97,51 @@ describe("accessPolicyService customer visibility", () => {
         tenant_id: "tenant-1",
       }),
     ).resolves.toBe(true);
+  });
+});
+
+describe("accessPolicyService project access", () => {
+  test("uses direct project scope check without listing visible project ids", async () => {
+    const { accessPolicyService } = await import("./access-policy");
+    const authContext = buildAuthContext({
+      employeeId: "sales-employee",
+      tenantDepartmentId: "marketing-department",
+      permissions: [{ code: "project.read", scope: "self" }],
+    });
+    canAccessProjectByScope.mockResolvedValueOnce(true);
+
+    await expect(
+      accessPolicyService.canAccessProject(authContext, "project-1", "project.read"),
+    ).resolves.toBe(true);
+
+    expect(canAccessProjectByScope).toHaveBeenCalledWith({
+      projectId: "project-1",
+      tenantId: "tenant-1",
+      scope: "self",
+      employeeId: "sales-employee",
+      tenantDepartmentId: "marketing-department",
+    });
+    expect(listVisibleProjectIds).not.toHaveBeenCalled();
+  });
+
+  test("falls back to visible project ids when direct project scope check is unavailable", async () => {
+    const { accessPolicyService } = await import("./access-policy");
+    const authContext = buildAuthContext({
+      employeeId: "sales-employee",
+      tenantDepartmentId: "marketing-department",
+      permissions: [{ code: "project.read", scope: "self" }],
+    });
+    canAccessProjectByScope.mockResolvedValueOnce(null);
+
+    await expect(
+      accessPolicyService.canAccessProject(authContext, "project-1", "project.read"),
+    ).resolves.toBe(true);
+
+    expect(listVisibleProjectIds).toHaveBeenCalledWith({
+      scope: "self",
+      employeeId: "sales-employee",
+      tenantDepartmentId: "marketing-department",
+      tenantId: "tenant-1",
+    });
   });
 });

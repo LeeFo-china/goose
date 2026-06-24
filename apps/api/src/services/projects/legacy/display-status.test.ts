@@ -1,8 +1,24 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
-const acceptanceRows: Array<{ project_id: string | null }> = [];
-const eqCalls: Array<readonly [string, unknown]> = [];
-const inCalls: Array<readonly [string, unknown[]]> = [];
+type DisplayStatusStore = {
+  acceptanceRows: Array<{ project_id: string | null }>;
+  eqCalls: Array<readonly [string, unknown]>;
+  inCalls: Array<readonly [string, unknown[]]>;
+  fromCalls: string[];
+};
+
+function getDisplayStatusStore(): DisplayStatusStore {
+  const source = globalThis as typeof globalThis & {
+    __projectDisplayStatusStore?: DisplayStatusStore;
+  };
+  source.__projectDisplayStatusStore ??= {
+    acceptanceRows: [],
+    eqCalls: [],
+    inCalls: [],
+    fromCalls: [],
+  };
+  return source.__projectDisplayStatusStore;
+}
 
 class ProjectAcceptancesQuery {
   select() {
@@ -10,26 +26,29 @@ class ProjectAcceptancesQuery {
   }
 
   eq(column: string, value: unknown) {
-    eqCalls.push([column, value]);
+    getDisplayStatusStore().eqCalls.push([column, value]);
     return this;
   }
 
   in(column: string, values: unknown[]) {
-    inCalls.push([column, values]);
+    getDisplayStatusStore().inCalls.push([column, values]);
     return this;
   }
 
   then<TResult1 = {
-    data: typeof acceptanceRows;
+    data: Array<{ project_id: string | null }>;
     error: null;
   }, TResult2 = never>(
     onfulfilled?: ((value: {
-      data: typeof acceptanceRows;
+      data: Array<{ project_id: string | null }>;
       error: null;
     }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
-    return Promise.resolve({ data: acceptanceRows, error: null }).then(
+    return Promise.resolve({
+      data: getDisplayStatusStore().acceptanceRows,
+      error: null,
+    }).then(
       onfulfilled,
       onrejected,
     );
@@ -39,20 +58,26 @@ class ProjectAcceptancesQuery {
 mock.module("@/utils/supabase", () => ({
   SupabaseDB: {
     getAdminClient: () => ({
-      from: () => new ProjectAcceptancesQuery(),
+      from: (table: string) => {
+        getDisplayStatusStore().fromCalls.push(table);
+        return new ProjectAcceptancesQuery();
+      },
     }),
   },
 }));
 
 describe("attachProjectDisplayStatuses", () => {
   beforeEach(() => {
-    acceptanceRows.length = 0;
-    eqCalls.length = 0;
-    inCalls.length = 0;
+    const store = getDisplayStatusStore();
+    store.acceptanceRows.length = 0;
+    store.eqCalls.length = 0;
+    store.inCalls.length = 0;
+    store.fromCalls.length = 0;
   });
 
   test("marks final-accepted construction projects as completed even when legacy status is stale", async () => {
-    acceptanceRows.push({ project_id: "project-1" });
+    const store = getDisplayStatusStore();
+    store.acceptanceRows.push({ project_id: "project-1" });
     const { attachProjectDisplayStatuses } = await import("./display-status");
 
     const [project] = await attachProjectDisplayStatuses({
@@ -63,7 +88,7 @@ describe("attachProjectDisplayStatuses", () => {
       }],
     });
 
-    expect(inCalls).toContainEqual(["project_id", ["project-1"]]);
+    expect(store.inCalls).toContainEqual(["project_id", ["project-1"]]);
     expect(project).toMatchObject({
       status: "constructing",
       status_label: "施工中",
