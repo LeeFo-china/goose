@@ -35,3 +35,22 @@
 - 费用申请入口仍正常。
 - 收款 workflow task 仍正常。
 - 不执行 workflow complete。
+
+## 发布后只读 Smoke 回填
+
+orange 已按本 handoff 完成发布后只读 smoke。
+
+验证账号：`18800005001 / 小龙女`。
+
+结果：
+
+- 员工登录、`/admin/auth/me`、`/employee/bootstrap` 正常。
+- 项目详情 `workflow_state` 正常，当前施工节点为 `tile_work / 瓦工`，存在 1 个可用 action。
+- 施工待办可读，返回 `tile_work` task，action key 为 `start_procedure`。
+- 费用待办和费用申请列表可读。
+- 应收计划只读接口可读，样本项目应收计划为 `paid`。
+- 未执行 `POST /workflow-tasks/:taskId/complete`。
+- 未新增本地风险计算，也未请求预算/利润接口做业务判断。
+
+结论：Phase 5 对小程序现有登录、项目 workflow、施工、费用、收款只读入口无破坏影响；
+当前阶段 orange 无必改。

@@ -55,6 +55,59 @@
 - [x] 本阶段无必改。
 - [x] 只读 smoke 不推进 workflow。
 
+## 小程序发布后只读 Smoke
+
+执行方：orange
+
+执行环境：
+
+- API：`http://192.168.1.3:3000`
+- 账号：`18800005001 / 小龙女`
+- employee ID：`bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`
+
+检查结果：
+
+- [x] 员工登录正常。
+  - `POST /admin/auth/login` 返回 200。
+  - `GET /admin/auth/me` 返回 200。
+  - `GET /employee/bootstrap` 返回 200。
+- [x] 项目详情 workflow 正常。
+  - 项目 ID：`00000000-0000-4000-8000-202606160006`
+  - `GET /projects/:projectId/employee-detail-bootstrap` 返回 200。
+  - `instance_status=running`
+  - `current_node_key=tile_work`
+  - `timeline_nodes_count=3`
+  - `actions_count=1`
+  - 当前节点：瓦工，当前节点 `actions_count=1`。
+- [x] 施工入口正常。
+  - `GET /workflow-tasks?status=pending&subject_type=project` 返回 200。
+  - 当前返回施工 task：`tile_work`。
+  - action key：`start_procedure`。
+  - 未执行 complete。
+- [x] 费用入口正常。
+  - `GET /workflow-tasks?status=pending&subject_type=expense_request` 返回 200。
+  - 当前无 pending 费用 task。
+  - `GET /expense-requests?page=1&pageSize=5` 返回 200。
+  - 返回 2 条费用申请，均可读。
+- [x] 收款相关只读正常。
+  - 当前账号无 pending 收款 task。
+  - 已用项目 `b95f6b51-6b9c-4970-948e-b369106545d8` 验证：
+    `GET /projects/:projectId/receivables` 返回 200。
+  - 应收计划 `status=paid`，`paid_amount=10000`，`remaining_amount=0`。
+- [x] 安全约束符合预期。
+  - 未调用 `POST /workflow-tasks/:taskId/complete`。
+  - 未新增本地风险计算。
+  - 未请求预算/利润接口做业务判断。
+  - orange `src` 中未发现 `risk_level`、`risk_reasons`、`budget_usage_ratio`、
+    `unallocated_expense_amount` 的业务使用。
+
+结论：Phase 5 对小程序现有登录、项目 workflow、施工、费用、收款只读入口无破坏影响；
+当前阶段 orange 无必改。
+
+补充：orange 侧只读查看了 gooes
+`docs/decoration-finance/2026-06-24-phase5-finance-analysis-warning-miniprogram-handoff.md`。
+本轮未修改 gooes 后端代码，orange 本轮无业务改动。
+
 ## 结果
 
 通过。
