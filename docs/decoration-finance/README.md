@@ -21,6 +21,7 @@
 - [2026-06-24-phase4-cost-budget-profit-smoke.md](./2026-06-24-phase4-cost-budget-profit-smoke.md)：第四阶段成本预算与利润偏差 smoke 记录，包含 API、Admin 页面、预算编辑和风险字段验收。
 - [2026-06-24-phase4-post-release-acceptance.md](./2026-06-24-phase4-post-release-acceptance.md)：第四阶段合入 main 后的发布后验收记录，包含 3000/3010 smoke、migration 对齐、小程序和 Admin 观察结论。
 - [2026-06-24-phase4-cost-budget-profit-miniprogram-handoff.md](./2026-06-24-phase4-cost-budget-profit-miniprogram-handoff.md)：第四阶段小程序对接说明，明确当前无需改代码及后续费用申请成本分类接入口径。
+- [2026-06-24-phase5-finance-analysis-warning-prd.md](./2026-06-24-phase5-finance-analysis-warning-prd.md)：第五阶段经营分析与预算预警闭环 PRD，定义风险筛选、风险原因、Admin 处理入口和小程序边界。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
