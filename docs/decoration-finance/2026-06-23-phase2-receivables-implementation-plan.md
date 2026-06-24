@@ -512,7 +512,7 @@ workflow 面板继续只读 runtime/timeline，不从 construction stages 或本
 - task ID
 - receivable plan ID
 - payment ID
-- allocation ID
+- allocation ID，Phase 2.1 后从 complete 响应 `receivable_allocation.id` 回填
 - ledger ID
 - complete 请求/响应
 - workflow current node

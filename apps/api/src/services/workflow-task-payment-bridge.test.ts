@@ -41,7 +41,38 @@ const prepareWorkflowPaymentReceivable = mock(
 );
 const allocateWorkflowPayment = mock(async () => {
   callOrder.push("receivable");
-  return { allocation_id: "allocation-1" };
+  return {
+    allocation: {
+      id: "allocation-1",
+      tenant_id: "tenant-1",
+      project_id: "project-1",
+      receivable_plan_id: "plan-1",
+      payment_id: "payment-1",
+      amount: 10000,
+      allocated_by: "employee-1",
+      allocated_at: "2026-06-16T10:00:00.000Z",
+      source_type: "workflow_task" as const,
+      source_id: "task-1",
+      metadata: { workflow_task_id: "task-1" },
+      created_at: "2026-06-16T10:00:00.000Z",
+      updated_at: "2026-06-16T10:00:00.000Z",
+    },
+    receivable_plan: {
+      id: "plan-1",
+      tenant_id: "tenant-1",
+      project_id: "project-1",
+      workflow_instance_id: "instance-1",
+      workflow_node_key: "payment_stage_2",
+      source_type: "workflow_node",
+      source_id: "11111111-1111-4111-8111-111111111111",
+      payment_type: "stage_2",
+      title: "中期进度款",
+      amount: 10000,
+      due_date: "2026-06-16",
+      paid_amount: 10000,
+      status: "paid" as const,
+    },
+  };
 });
 const completeRuntimeNode = mock(async (): Promise<{ ok: true }> => {
   callOrder.push("workflow");
@@ -205,7 +236,7 @@ describe("workflowTaskPaymentBridge", () => {
     });
     const workflowTaskPaymentBridge = createBridge();
 
-    await workflowTaskPaymentBridge.complete({
+    const result = await workflowTaskPaymentBridge.complete({
       authContext,
       task: {
         ...bridgeTask,
@@ -227,6 +258,14 @@ describe("workflowTaskPaymentBridge", () => {
       output,
     });
 
+    expect(result).toMatchObject({
+      receivable_allocation: {
+        id: "allocation-1",
+        receivable_plan_id: "plan-1",
+        payment_id: "payment-1",
+        amount: 10000,
+      },
+    });
     expect(prepareWorkflowPaymentReceivable).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant-1",

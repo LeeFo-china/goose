@@ -34,6 +34,9 @@ type PaymentCollectionType = (typeof PAYMENT_COLLECTION_TYPES)[number];
 type RuntimeCompleteResultForBridge =
   | { ok: true }
   | Extract<WorkflowRuntimeCompleteNodeResult, { ok: false }>;
+type WorkflowPaymentAllocationResult = Awaited<
+  ReturnType<typeof projectReceivablesService.allocateWorkflowPayment>
+>;
 
 type WorkflowTaskPaymentBridgeDependencies = {
   paymentRepository: Pick<typeof paymentRepository, "findByWorkflowTaskId" | "create">;
@@ -48,7 +51,7 @@ type WorkflowTaskPaymentBridgeDependencies = {
     ) => Promise<{ plan_id: string; remaining_amount: number } | null>;
     allocateWorkflowPayment: (
       input: Parameters<typeof projectReceivablesService.allocateWorkflowPayment>[0],
-    ) => Promise<unknown>;
+    ) => Promise<WorkflowPaymentAllocationResult>;
   };
   workflowRepository: {
     completeRuntimeNode: (
@@ -114,19 +117,23 @@ export class WorkflowTaskPaymentBridge {
     });
     const payment = existing ?? await this.createManualPayment(input, snapshot);
 
+    let receivableAllocation:
+      WorkflowPaymentAllocationResult["allocation"] | null = null;
     if (receivablePlan) {
-      await this.dependencies.projectReceivablesService.allocateWorkflowPayment({
-        tenantId: input.task.tenant_id,
-        projectId: input.task.instance.subject_id,
-        planId: receivablePlan.plan_id,
-        paymentId: payment.id,
-        paymentAmount: Math.min(
-          Number(payment.amount ?? 0),
-          receivablePlan.remaining_amount,
-        ),
-        workflowTaskId: input.task.id,
-        allocatedBy: input.authContext.employeeId,
-      });
+      const allocationResult = await this.dependencies.projectReceivablesService
+        .allocateWorkflowPayment({
+          tenantId: input.task.tenant_id,
+          projectId: input.task.instance.subject_id,
+          planId: receivablePlan.plan_id,
+          paymentId: payment.id,
+          paymentAmount: Math.min(
+            Number(payment.amount ?? 0),
+            receivablePlan.remaining_amount,
+          ),
+          workflowTaskId: input.task.id,
+          allocatedBy: input.authContext.employeeId,
+        });
+      receivableAllocation = allocationResult.allocation;
     }
 
     await this.dependencies.financeLedgerService.createProjectPaymentLedger(
@@ -156,6 +163,13 @@ export class WorkflowTaskPaymentBridge {
     return {
       result: { ok: true, bridged: true, operation: "confirm_payment" },
       payment,
+      ...(receivableAllocation
+        ? {
+            receivable_allocation: buildReceivableAllocationResponse(
+              receivableAllocation,
+            ),
+          }
+        : {}),
       workflow_state: workflowState,
     };
   }
@@ -309,6 +323,17 @@ function normalizeSourceValue(value: string | null | undefined) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function buildReceivableAllocationResponse(
+  allocation: WorkflowPaymentAllocationResult["allocation"],
+) {
+  return {
+    id: allocation.id,
+    receivable_plan_id: allocation.receivable_plan_id,
+    payment_id: allocation.payment_id,
+    amount: Number(allocation.amount),
+  };
 }
 
 export const workflowTaskPaymentBridge = new WorkflowTaskPaymentBridge();

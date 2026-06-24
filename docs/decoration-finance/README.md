@@ -11,6 +11,7 @@
 - [2026-06-23-phase2-receivables-implementation-plan.md](./2026-06-23-phase2-receivables-implementation-plan.md)：第二阶段应收计划和逾期管理实施计划。
 - [2026-06-23-phase2-receivables-miniprogram-handoff.md](./2026-06-23-phase2-receivables-miniprogram-handoff.md)：第二阶段应收计划小程序对接说明，包含 workflow v2 字段、complete payload 和 smoke 清单。
 - [2026-06-23-phase2-receivables-smoke.md](./2026-06-23-phase2-receivables-smoke.md)：第二阶段应收计划 Task 6 smoke 记录，包含只读接口验收、样本缺失阻塞原因和完整 E2E 继续条件。
+- [2026-06-24-phase2-1-receivable-allocation-response.md](./2026-06-24-phase2-1-receivable-allocation-response.md)：第二阶段补丁，说明收款 complete 响应返回 `receivable_allocation` 只读验收字段。
 - [2026-06-23-expense-approval-payment-phase-plan.md](./2026-06-23-expense-approval-payment-phase-plan.md)：下一阶段费用审批与支出付款计划，包含 Admin 闭环、小程序影响评估和 smoke 验收口径。
 - [2026-06-23-expense-approval-payment-task0-baseline.md](./2026-06-23-expense-approval-payment-task0-baseline.md)：费用审批与支出付款 Task 0 基线核查记录，包含 active workflow、测试账号、Admin 只读 smoke 和后续受控样本建议。
 - [2026-06-23-expense-approval-payment-task1-5-smoke.md](./2026-06-23-expense-approval-payment-task1-5-smoke.md)：费用审批与支出付款 Task 1-5 修复、E2E smoke、Admin 可见性和台账幂等验收记录。

@@ -23,7 +23,22 @@ const findProjectTenant = mock(async () => ({
   tenant_id: "tenant-1",
 }));
 const canAccessProject = mock(async () => true);
-const createAllocation = mock(async () => ({ id: "allocation-1" }));
+const allocationRecord = {
+  id: "allocation-1",
+  tenant_id: "tenant-1",
+  project_id: "project-1",
+  receivable_plan_id: "plan-1",
+  payment_id: "payment-1",
+  amount: 10000,
+  allocated_by: "employee-1",
+  allocated_at: "2026-06-16T10:00:00.000Z",
+  source_type: "workflow_task" as const,
+  source_id: "task-1",
+  metadata: { workflow_task_id: "task-1" },
+  created_at: "2026-06-16T10:00:00.000Z",
+  updated_at: "2026-06-16T10:00:00.000Z",
+};
+const createAllocation = mock(async () => allocationRecord);
 const sumAllocatedAmount = mock(async () => 10000);
 
 mock.module("@/repositories/project-receivable-plans", () => ({
@@ -151,6 +166,8 @@ describe("projectReceivablesService", () => {
     listReceivables.mockClear();
     summarizeProject.mockClear();
     findProjectTenant.mockClear();
+    createAllocation.mockClear();
+    sumAllocatedAmount.mockClear();
     canAccessProject.mockClear();
     canAccessProject.mockImplementation(async () => true);
   });
@@ -246,5 +263,44 @@ describe("projectReceivablesService", () => {
       receivable_remaining_amount: 10000,
       receivable_due_date: "2026-06-16",
     });
+  });
+
+  test("returns allocation record when allocating workflow payment", async () => {
+    const service = await createService();
+
+    const result = await service.allocateWorkflowPayment({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+      planId: "plan-1",
+      paymentId: "payment-1",
+      paymentAmount: 10000,
+      workflowTaskId: "task-1",
+      allocatedBy: "employee-1",
+    });
+
+    expect(result).toMatchObject({
+      allocation: {
+        id: "allocation-1",
+        receivable_plan_id: "plan-1",
+        payment_id: "payment-1",
+        amount: 10000,
+      },
+      receivable_plan: {
+        id: "plan-1",
+        paid_amount: 10000,
+        status: "paid",
+      },
+    });
+    expect(createAllocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: "tenant-1",
+        project_id: "project-1",
+        receivable_plan_id: "plan-1",
+        payment_id: "payment-1",
+        amount: 10000,
+        source_type: "workflow_task",
+        source_id: "task-1",
+      }),
+    );
   });
 });

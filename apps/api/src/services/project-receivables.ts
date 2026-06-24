@@ -38,7 +38,7 @@ type ProjectReceivablesServiceDependencies = {
   allocationRepository: {
     createIdempotent: (
       input: ProjectReceivableAllocationInput,
-    ) => Promise<unknown>;
+    ) => ReturnType<typeof projectReceivableAllocationRepository.createIdempotent>;
     sumAllocatedAmount: typeof projectReceivableAllocationRepository.sumAllocatedAmount;
   };
   accessPolicyService: Pick<
@@ -216,7 +216,7 @@ export class ProjectReceivablesService {
       throw Errors.badRequest("核销金额必须大于 0");
     }
 
-    await this.dependencies.allocationRepository.createIdempotent({
+    const allocation = await this.dependencies.allocationRepository.createIdempotent({
       tenant_id: input.tenantId,
       project_id: input.projectId,
       receivable_plan_id: input.planId,
@@ -235,12 +235,16 @@ export class ProjectReceivablesService {
         receivablePlanId: input.planId,
       });
 
-    return this.dependencies.planRepository.updatePaidAmount({
+    const receivablePlan = await this.dependencies.planRepository.updatePaidAmount({
       tenantId: input.tenantId,
       planId: input.planId,
       paidAmount,
       status: deriveStoredReceivableStatus(paidAmount),
     });
+    return {
+      allocation,
+      receivable_plan: receivablePlan,
+    };
   }
 
   private assertFinanceReceivableView(authContext: AuthContext) {

@@ -14,6 +14,22 @@ export type ProjectReceivableAllocationInput = {
   metadata?: Record<string, unknown>;
 };
 
+export type ProjectReceivableAllocationRecord = {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  receivable_plan_id: string;
+  payment_id: string;
+  amount: number | string;
+  allocated_by: string | null;
+  allocated_at: string | null;
+  source_type: "workflow_task" | "manual" | "wechat_pay_callback";
+  source_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 class ProjectReceivableAllocationRepository {
   private select = `
     id,
@@ -31,7 +47,9 @@ class ProjectReceivableAllocationRepository {
     updated_at
   `;
 
-  async createIdempotent(input: ProjectReceivableAllocationInput) {
+  async createIdempotent(
+    input: ProjectReceivableAllocationInput,
+  ): Promise<ProjectReceivableAllocationRecord> {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_receivable_allocations")
       .upsert(input, {
@@ -45,7 +63,7 @@ class ProjectReceivableAllocationRepository {
       throw Errors.dbError("写入应收核销记录失败", error);
     }
 
-    return data;
+    return data as unknown as ProjectReceivableAllocationRecord;
   }
 
   async sumAllocatedAmount(input: {

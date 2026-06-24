@@ -500,9 +500,12 @@ complete 响应摘要：
 
 关于 allocation ID：
 
-小程序侧当前可读 API 未返回 allocation ID。`POST /workflow-tasks/:taskId/complete`、`GET /finance/receivables`、`GET /projects/:projectId/receivables`、`GET /finance/ledger` 均不暴露 allocation，allocation 相关只读 GET 路由当前也不存在。
+原始 smoke 时，小程序侧可读 API 未返回 allocation ID。`POST /workflow-tasks/:taskId/complete`、`GET /finance/receivables`、`GET /projects/:projectId/receivables`、`GET /finance/ledger` 均不暴露 allocation，allocation 相关只读 GET 路由当时也不存在。
 
-因此本轮小程序 smoke 不强制要求回填 allocation ID。若后续验收必须由小程序回填 allocation ID，需要后端在 complete 响应中返回，或提供受权限保护的只读查询接口。
+Phase 2.1 已补齐：开启应收计划的收款节点 complete 成功后，后端在响应中返回
+`receivable_allocation.id`、`receivable_plan_id`、`payment_id` 和 `amount`。
+后续小程序 smoke 可以从 complete 响应回填 allocation ID。小程序不需要提交 allocation ID，
+也不需要调用核销接口。
 
 ## Admin 发布后只读 smoke
 
