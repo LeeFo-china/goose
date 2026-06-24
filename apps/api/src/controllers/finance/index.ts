@@ -1,14 +1,20 @@
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  CreateFinanceCostCategorySchema,
+  FinanceCostCategoryListQuerySchema,
+  UpdateFinanceCostCategorySchema,
+} from "@/schema/finance-costs";
+import {
   FinanceLedgerListQuerySchema,
   FinanceProjectSummaryListQuerySchema,
 } from "@/schema/finance";
 import { FinanceReceivableListQuerySchema } from "@/schema/finance-receivables";
+import { financeCostCategoryService } from "@/services/finance-cost-categories";
 import { financeLedgerService } from "@/services/finance-ledger";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
 import { projectReceivablesService } from "@/services/project-receivables";
-import { Get } from "@/utils/decorators/route";
+import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -60,6 +66,57 @@ class FinanceController extends TenantBaseController {
     const data = await financeProjectSummaryService.listProjectSummaries(
       authContext,
       queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/cost-categories")
+  async listCostCategories(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceCostCategoryListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeCostCategoryService.list(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/cost-categories")
+  async createCostCategory(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const bodyResult = CreateFinanceCostCategorySchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeCostCategoryService.create(
+      authContext,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Patch("/finance/cost-categories/:id")
+  async updateCostCategory(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = UpdateFinanceCostCategorySchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeCostCategoryService.update(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }
