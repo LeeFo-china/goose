@@ -191,27 +191,18 @@ class ProjectWorkflowProgressService {
     const { workflowSubjectStateService } = await import(
       "@/services/workflow-subject-state"
     );
-    const { workflowSubjectStateRepository } = await import(
-      "@/repositories/workflow-subject-states"
-    );
     const { workflowRepository } = await import("@/repositories/workflows");
     const { workflowTaskRepository } = await import("@/repositories/workflow-tasks");
     const { projectProcedureAssignmentService } = await import(
       "@/services/project-procedure-assignments"
     );
 
-    const [subjectState, runtimeInstance] = await Promise.all([
-      workflowSubjectStateService.getSubjectState({
+    const { subjectState, runtimeInstance } =
+      await workflowSubjectStateService.getSubjectStateWithRuntime({
         tenantId: input.tenantId,
         subjectType: "project",
         subjectId: input.projectId,
-      }),
-      workflowSubjectStateRepository.findLatestRuntimeInstance({
-        tenantId: input.tenantId,
-        subjectType: "project",
-        subjectId: input.projectId,
-      }),
-    ]);
+      });
 
     if (!runtimeInstance) {
       return buildProjectWorkflowProgressProjection({

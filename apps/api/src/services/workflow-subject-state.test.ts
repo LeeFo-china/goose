@@ -91,6 +91,47 @@ mock.module("@/repositories/workflow-subject-states", () => ({
 }));
 
 describe("workflowSubjectStateService", () => {
+  test("returns matching subject state with runtime without re-querying latest runtime", async () => {
+    find.mockClear();
+    find.mockImplementationOnce(async () => ({
+      id: "state-1",
+      tenant_id: "tenant-1",
+      subject_type: "project",
+      subject_id: "project-1",
+      definition_id: "definition-new",
+      instance_id: "instance-new",
+      instance_status: "running",
+      current_node_key: "final_acceptance",
+      current_node_title: "竣工验收",
+      current_business_kind: "final_acceptance",
+      pending_task_count: 1,
+      created_at: "2026-06-13T13:49:45.894Z",
+      updated_at: "2026-06-16T03:32:42.281Z",
+    }));
+    findLatestRuntimeInstance.mockClear();
+    findLatestRuntimeInstance.mockImplementationOnce(async () =>
+      latestRuntimeInstance
+    );
+    countPendingTasks.mockClear();
+    upsert.mockClear();
+
+    const { workflowSubjectStateService } = await import(
+      "./workflow-subject-state"
+    );
+
+    const result = await workflowSubjectStateService.getSubjectStateWithRuntime({
+      tenantId: "tenant-1",
+      subjectType: "project",
+      subjectId: "project-1",
+    });
+
+    expect(result.subjectState?.instance_id).toBe("instance-new");
+    expect(result.runtimeInstance?.id).toBe("instance-new");
+    expect(findLatestRuntimeInstance).toHaveBeenCalledTimes(1);
+    expect(countPendingTasks).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   test("refreshes an existing stale subject projection from the authoritative runtime instance", async () => {
     find.mockClear();
     findLatestRuntimeInstance.mockClear();

@@ -24,6 +24,11 @@ type WorkflowSubjectStateInput = {
   subjectId: string;
 };
 
+type WorkflowSubjectStateWithRuntimeResult = {
+  subjectState: WorkflowSubjectStateRow | null;
+  runtimeInstance: WorkflowRuntimeProjectionRow | null;
+};
+
 type WorkflowSubjectStateListInput = {
   tenantId: string;
   subjectType: WorkflowSubjectType;
@@ -35,6 +40,70 @@ class WorkflowSubjectStateService {
     input: SyncWorkflowSubjectStateInput,
   ): Promise<WorkflowSubjectStateRow | null> {
     const instance = await this.findRuntimeInstance(input);
+    return this.syncFromRuntimeProjection(input, instance);
+  }
+
+  async getSubjectState(
+    input: WorkflowSubjectStateInput,
+  ): Promise<WorkflowSubjectStateRow | null> {
+    const { subjectState } = await this.getSubjectStateWithRuntime(input);
+    return subjectState;
+  }
+
+  async getSubjectStateWithRuntime(
+    input: WorkflowSubjectStateInput,
+  ): Promise<WorkflowSubjectStateWithRuntimeResult> {
+    const [existing, latestRuntimeInstance] = await Promise.all([
+      workflowSubjectStateRepository.find(input),
+      workflowSubjectStateRepository.findLatestRuntimeInstance(input),
+    ]);
+
+    if (
+      existing &&
+      this.matchesRuntimeProjection(existing, latestRuntimeInstance)
+    ) {
+      return { subjectState: existing, runtimeInstance: latestRuntimeInstance };
+    }
+
+    return {
+      subjectState: await this.syncFromRuntimeProjection(
+        input,
+        latestRuntimeInstance,
+      ),
+      runtimeInstance: latestRuntimeInstance,
+    };
+  }
+
+  async listSubjectStates(
+    input: WorkflowSubjectStateListInput,
+  ): Promise<WorkflowSubjectStateRow[]> {
+    return workflowSubjectStateRepository.listBySubjectIds(input);
+  }
+
+  private async findRuntimeInstance(input: SyncWorkflowSubjectStateInput) {
+    if (input.instanceId && input.definitionId) {
+      const instance = await workflowSubjectStateRepository.findLatestRuntimeInstance({
+        tenantId: input.tenantId,
+        subjectType: input.subjectType,
+        subjectId: input.subjectId,
+      });
+
+      if (instance?.id === input.instanceId) {
+        return instance;
+      }
+    }
+
+    return workflowSubjectStateRepository.findLatestRuntimeInstance({
+      tenantId: input.tenantId,
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
+    });
+  }
+
+  private async syncFromRuntimeProjection(
+    input: SyncWorkflowSubjectStateInput,
+    instance: WorkflowRuntimeProjectionRow | null,
+  ): Promise<WorkflowSubjectStateRow | null> {
     if (!instance) {
       return workflowSubjectStateRepository.upsert({
         tenantId: input.tenantId,
@@ -67,46 +136,6 @@ class WorkflowSubjectStateService {
       currentNodeTitle: this.getString(snapshot, "title"),
       currentBusinessKind: this.getBusinessKind(snapshot),
       pendingTaskCount,
-    });
-  }
-
-  async getSubjectState(
-    input: WorkflowSubjectStateInput,
-  ): Promise<WorkflowSubjectStateRow | null> {
-    const existing = await workflowSubjectStateRepository.find(input);
-    const latestRuntimeInstance = await workflowSubjectStateRepository
-      .findLatestRuntimeInstance(input);
-
-    if (existing && this.matchesRuntimeProjection(existing, latestRuntimeInstance)) {
-      return existing;
-    }
-
-    return this.syncFromRuntimeInstance(input);
-  }
-
-  async listSubjectStates(
-    input: WorkflowSubjectStateListInput,
-  ): Promise<WorkflowSubjectStateRow[]> {
-    return workflowSubjectStateRepository.listBySubjectIds(input);
-  }
-
-  private async findRuntimeInstance(input: SyncWorkflowSubjectStateInput) {
-    if (input.instanceId && input.definitionId) {
-      const instance = await workflowSubjectStateRepository.findLatestRuntimeInstance({
-        tenantId: input.tenantId,
-        subjectType: input.subjectType,
-        subjectId: input.subjectId,
-      });
-
-      if (instance?.id === input.instanceId) {
-        return instance;
-      }
-    }
-
-    return workflowSubjectStateRepository.findLatestRuntimeInstance({
-      tenantId: input.tenantId,
-      subjectType: input.subjectType,
-      subjectId: input.subjectId,
     });
   }
 
