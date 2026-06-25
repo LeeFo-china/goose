@@ -3,6 +3,7 @@ import { Errors } from "@/errors/error-factory";
 import type { AuthContext } from "@/services/authorization";
 import { projectProcedureAssignmentService } from "@/services/project-procedure-assignments";
 import { projectSer } from "@/services/projects";
+import { isFinalAcceptanceReportWorkflowNode } from "@/services/project-final-acceptance-workflow";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import { PROJECT_STATUS_ACTION_VALUES } from "@gooes/domain";
 
@@ -33,6 +34,7 @@ type ResolveProjectWorkflowTaskOperationInput = {
   action: string;
   reason: string | null;
   output: Record<string, unknown>;
+  currentNodeSnapshot?: unknown;
 };
 
 type ProjectWorkflowTaskBridgeInput = {
@@ -108,6 +110,7 @@ export function resolveProjectWorkflowTaskOperation(
   input: ResolveProjectWorkflowTaskOperationInput,
 ): ProjectWorkflowTaskOperation | null {
   if (input.action.trim() !== "complete") return null;
+  if (isFinalAcceptanceReportNode(input)) return null;
 
   const action = PROJECT_NODE_EFFECTS[input.nodeKey];
   if (!action) return null;
@@ -177,6 +180,7 @@ class WorkflowTaskProjectBridge {
       action: trimmedAction,
       reason: input.reason,
       output: input.output,
+      currentNodeSnapshot: input.task.instance.current_node_snapshot,
     });
     if (!operation) return null;
 
@@ -213,3 +217,12 @@ class WorkflowTaskProjectBridge {
 }
 
 export const workflowTaskProjectBridge = new WorkflowTaskProjectBridge();
+
+function isFinalAcceptanceReportNode(
+  input: ResolveProjectWorkflowTaskOperationInput,
+) {
+  if (input.nodeKey !== "final_acceptance") return false;
+  return isFinalAcceptanceReportWorkflowNode(
+    input.currentNodeSnapshot as { node_key?: unknown } | null,
+  );
+}

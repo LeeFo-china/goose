@@ -12,6 +12,11 @@ import {
 } from "@/repositories/workflows";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
 import {
+  FINAL_ACCEPTANCE_STAGE_CODE,
+  isFinalAcceptanceReportWorkflowNode,
+  isFinalAcceptanceWorkflowNode,
+} from "@/services/project-final-acceptance-workflow";
+import {
   isProjectConstructionStageCode,
   type ProjectConstructionStageCode,
 } from "@gooes/domain";
@@ -61,6 +66,11 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
   if (graph.definition.category !== "construction") {
     return;
   }
+
+  assertFinalAcceptanceReportGate({
+    node: currentNode,
+    action: input.action,
+  });
 
   if (input.action?.trim() !== "customer_confirm_acceptance") {
     await assertProcedureNodeRequirements({
@@ -253,15 +263,33 @@ function getNextWorkflowNode(
 }
 
 function isFinalAcceptanceNode(node: WorkflowNodeRow | null | undefined) {
-  const configStageType = isRecord(node?.config)
-    ? node.config.stage_type
-    : null;
+  return isFinalAcceptanceWorkflowNode(node);
+}
 
-  return (
-    node?.business_kind === "final_acceptance" ||
-    node?.node_key === "final_acceptance" ||
-    configStageType === "final_acceptance"
+function assertFinalAcceptanceReportGate(input: {
+  node: WorkflowNodeRow | null | undefined;
+  action?: string | null;
+}) {
+  if (input.action?.trim() !== "complete") {
+    return;
+  }
+  if (!isFinalAcceptanceReportNode(input.node)) {
+    return;
+  }
+
+  throw Errors.business(
+    409,
+    "请先完成竣工验收报告后再推进流程",
+    ErrorCodes.WORKFLOW_ACCEPTANCE_NOT_AVAILABLE,
+    {
+      node_key: input.node?.node_key ?? null,
+    stage_code: FINAL_ACCEPTANCE_STAGE_CODE,
+    },
   );
+}
+
+function isFinalAcceptanceReportNode(node: WorkflowNodeRow | null | undefined) {
+  return isFinalAcceptanceReportWorkflowNode(node);
 }
 
 function getMinImageCount(value: unknown) {

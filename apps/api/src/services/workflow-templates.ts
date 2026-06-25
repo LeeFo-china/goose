@@ -176,7 +176,21 @@ class WorkflowTemplateService {
       this.paymentCollectionNode("payment_stage_3", "stage_3", "工程尾款", "木工完成后确认工程尾款。", 1600, 220, 80),
       this.procedureNode("procedure_painting", "painting", "油工", "油工工序完成后放行。", 1820, 220, 90),
       this.procedureNode("procedure_installation", "installation", "安装", "安装工序完成后放行。", 2040, 220, 100),
-      this.node("final_acceptance", "construction_stage", "final_acceptance", "竣工验收", "对应项目状态：竣工验收。", 2260, 220, 110),
+      this.node(
+        "final_acceptance",
+        "construction_stage",
+        "final_acceptance",
+        "竣工验收",
+        "对应项目状态：竣工验收。",
+        2260,
+        220,
+        110,
+        ["project.update"],
+        {
+          stage_type: "final_acceptance",
+          final_acceptance_report_enabled: true,
+        },
+      ),
       this.node("handover", "confirmation", null, "交房", "竣工验收后完成交房确认。", 2480, 220, 120),
       this.node("end", "end", null, "结束", "项目施工主流程结束。", 2700, 220, 130),
     ];
@@ -259,6 +273,7 @@ class WorkflowTemplateService {
     y: number,
     sortOrder: number,
     requiredPermissions: string[] = ["project.update"],
+    config: Record<string, unknown> = {},
   ): WorkflowGraphSaveInput["nodes"][number] {
     return {
       node_key: nodeKey,
@@ -271,6 +286,7 @@ class WorkflowTemplateService {
         required_permissions: nodeType === "start" || nodeType === "end"
           ? []
           : requiredPermissions,
+        ...config,
       },
       sort_order: sortOrder,
     };

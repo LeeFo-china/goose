@@ -102,7 +102,11 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
     nodeType: "construction_stage",
     businessKind: "construction_start",
     nodeKeyBase: "started",
-    config: { required_permissions: [], stage_type: "construction_start" },
+    config: {
+      required_permissions: [],
+      stage_type: "construction_start",
+      final_acceptance_report_enabled: false,
+    },
   },
   procedure: {
     label: "工序节点",
@@ -418,7 +422,11 @@ export function applyWorkflowConstructionStageKind(input: {
     title: option.label,
     description: option.description,
     config: mergeWithCommonConfig(
-      { required_permissions: [], stage_type: option.value },
+      {
+        required_permissions: [],
+        stage_type: option.value,
+        final_acceptance_report_enabled: option.value === "final_acceptance",
+      },
       input.node.config,
     ),
   };

@@ -26,6 +26,10 @@ import {
   type WorkflowTimelineNodeGroup,
 } from "@/services/project-workflow-timeline-contract";
 import { buildMissingProjectWorkflowProgress } from "@/services/project-workflow-progress-empty";
+import {
+  FINAL_ACCEPTANCE_STAGE_CODE,
+  isFinalAcceptanceReportWorkflowNode,
+} from "@/services/project-final-acceptance-workflow";
 import type { WorkflowBusinessKind, WorkflowInstanceStatus } from "@gooes/domain";
 
 export {
@@ -169,9 +173,7 @@ export function buildProjectWorkflowProgressProjection(
     current_group_order: currentGroup?.order ?? null,
     current_node_type: currentNode.node_type,
     current_business_kind: currentBusinessKind,
-    current_stage_code: currentNode.node_type === "procedure"
-      ? readString(currentNode.config.stage_key)
-      : null,
+    current_stage_code: resolveCurrentStageCode(currentNode),
     current_gate: currentBusinessKind === "payment_collection"
       ? buildProjectWorkflowPaymentGate(
         currentNode,
@@ -279,12 +281,19 @@ export function enrichProjectWorkflowProgressWithConstructionStages(
   progress: ProjectWorkflowProgress,
   constructionStages: ConstructionStagesForWorkflowTimeline | null | undefined,
 ): ProjectWorkflowProgress {
+  const timelineNodes = enrichWorkflowTimelineNodesWithConstructionStages(
+    progress.timeline_nodes,
+    constructionStages,
+  );
+  const currentTimelineActions = progress.current_node_key
+    ? timelineNodes.find((node) => node.node_key === progress.current_node_key)
+      ?.actions
+    : undefined;
+
   return {
     ...progress,
-    timeline_nodes: enrichWorkflowTimelineNodesWithConstructionStages(
-      progress.timeline_nodes,
-      constructionStages,
-    ),
+    timeline_nodes: timelineNodes,
+    actions: currentTimelineActions ?? progress.actions,
   };
 }
 
@@ -439,6 +448,18 @@ function buildWarnings(
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolveCurrentStageCode(node: WorkflowProgressGraphNode) {
+  if (node.node_type === "procedure") {
+    return readString(node.config.stage_key);
+  }
+
+  if (isFinalAcceptanceReportWorkflowNode(node)) {
+    return FINAL_ACCEPTANCE_STAGE_CODE;
+  }
+
+  return null;
 }
 
 function asRecord(value: unknown): JsonObject {

@@ -75,6 +75,7 @@ export type WorkflowBaseNodeConfig = {
 
 export type WorkflowConstructionStageNodeConfig = WorkflowBaseNodeConfig & {
   stage_type?: "construction_start" | "final_acceptance";
+  final_acceptance_report_enabled?: boolean;
 };
 
 export type WorkflowFinanceNodeConfig = WorkflowBaseNodeConfig & {

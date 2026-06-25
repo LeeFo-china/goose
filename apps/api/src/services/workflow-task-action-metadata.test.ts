@@ -183,6 +183,24 @@ describe("buildWorkflowTaskActions", () => {
     });
   });
 
+  test("hides generic final acceptance completion when report is enabled", () => {
+    expect(buildWorkflowTaskActions({
+      subjectType: "project",
+      nodeKey: "final_acceptance",
+      nodeType: "construction_stage",
+      taskTitle: "竣工验收",
+      currentNodeSnapshot: {
+        node_key: "final_acceptance",
+        node_type: "construction_stage",
+        business_kind: "final_acceptance",
+        config: {
+          stage_type: "final_acceptance",
+          final_acceptance_report_enabled: true,
+        },
+      },
+    })).toEqual([]);
+  });
+
   test("describes handover as a generic project workflow completion action", () => {
     expect(buildWorkflowTaskActions({
       subjectType: "project",

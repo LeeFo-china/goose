@@ -47,6 +47,15 @@ function procedureInstance(): WorkflowInstanceRow {
   };
 }
 
+function finalAcceptanceInstance(): WorkflowInstanceRow {
+  return {
+    ...paymentInstance(),
+    current_node_id: "node-final-acceptance",
+    current_node_key: "final_acceptance",
+    current_node_snapshot: finalAcceptanceNode(),
+  };
+}
+
 function definition(category: WorkflowDefinitionRow["category"]): WorkflowDefinitionRow {
   return {
     id: "definition-1",
@@ -104,6 +113,27 @@ function procedureNode(): WorkflowNodeRow {
   };
 }
 
+function finalAcceptanceNode(): WorkflowNodeRow {
+  return {
+    id: "node-final-acceptance",
+    tenant_id: "tenant-1",
+    definition_id: "definition-1",
+    node_key: "final_acceptance",
+    node_type: "construction_stage",
+    business_kind: "final_acceptance",
+    title: "竣工验收",
+    description: null,
+    position: { x: 0, y: 0 },
+    config: {
+      stage_type: "final_acceptance",
+      final_acceptance_report_enabled: true,
+    },
+    sort_order: 1,
+    created_at: NOW,
+    updated_at: NOW,
+  };
+}
+
 function paymentGraph(): WorkflowGraphResult {
   return {
     definition: definition("main"),
@@ -118,6 +148,15 @@ function constructionProcedureGraph(): WorkflowGraphResult {
     definition: definition("construction"),
     version: null,
     nodes: [procedureNode()],
+    edges: [],
+  };
+}
+
+function finalAcceptanceGraph(): WorkflowGraphResult {
+  return {
+    definition: definition("construction"),
+    version: null,
+    nodes: [finalAcceptanceNode()],
     edges: [],
   };
 }
@@ -297,5 +336,33 @@ describe("assertRuntimeNodeCompletionAllowed", () => {
       nodeKey: "procedure_plumbing_electrical",
       output: {},
     })).resolves.toBeUndefined();
+  });
+
+  test("blocks generic final acceptance completion when report is enabled", async () => {
+    getRuntimeInstanceById.mockImplementationOnce(async () =>
+      finalAcceptanceInstance()
+    );
+    getGraph.mockImplementationOnce(async () => finalAcceptanceGraph());
+
+    const { assertRuntimeNodeCompletionAllowed } = await import(
+      "./workflow-runtime-guards"
+    );
+
+    await expect(assertRuntimeNodeCompletionAllowed({
+      tenantId: "tenant-1",
+      definitionId: "definition-1",
+      instanceId: "instance-1",
+      nodeKey: "final_acceptance",
+      action: "complete",
+      output: {},
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WORKFLOW_ACCEPTANCE_NOT_AVAILABLE",
+      message: "请先完成竣工验收报告后再推进流程",
+      details: {
+        node_key: "final_acceptance",
+        stage_code: "completion",
+      },
+    });
   });
 });

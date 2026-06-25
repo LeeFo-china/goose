@@ -142,6 +142,8 @@ const ConstructionStageNodeConfigSchema = BaseNodeConfigSchema.extend({
   stage_type: z.enum(["construction_start", "final_acceptance"], {
     message: "无效的施工阶段类型",
   }).optional(),
+  final_acceptance_report_enabled: booleanField("是否启用竣工验收报告格式无效")
+    .default(false),
 });
 
 const WORKFLOW_PAYMENT_COLLECTION_TYPE_VALUES = [

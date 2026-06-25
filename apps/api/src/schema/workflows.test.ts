@@ -28,6 +28,35 @@ describe("WorkflowGraphSaveSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  test("accepts final acceptance report switch config", () => {
+    const result = WorkflowGraphSaveSchema.safeParse({
+      nodes: [
+        {
+          node_key: "final_acceptance",
+          node_type: "construction_stage",
+          business_kind: "final_acceptance",
+          title: "竣工验收",
+          description: null,
+          position: { x: 100, y: 100 },
+          config: {
+            required_permissions: ["project.update"],
+            stage_type: "final_acceptance",
+            final_acceptance_report_enabled: true,
+          },
+          sort_order: 110,
+        },
+      ],
+      edges: [],
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.nodes[0]?.config).toMatchObject({
+      stage_type: "final_acceptance",
+      final_acceptance_report_enabled: true,
+    });
+  });
+
   test("accepts admin payment collection node config", () => {
     const result = WorkflowGraphSaveSchema.safeParse({
       nodes: [

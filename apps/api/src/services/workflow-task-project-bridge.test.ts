@@ -54,6 +54,23 @@ describe("resolveProjectWorkflowTaskOperation", () => {
     });
   });
 
+  test("does not bridge final acceptance complete when report is enabled", () => {
+    expect(resolveProjectWorkflowTaskOperation({
+      nodeKey: "final_acceptance",
+      action: "complete",
+      reason: null,
+      output: {},
+      currentNodeSnapshot: {
+        node_key: "final_acceptance",
+        business_kind: "final_acceptance",
+        config: {
+          stage_type: "final_acceptance",
+          final_acceptance_report_enabled: true,
+        },
+      },
+    })).toBeNull();
+  });
+
   test("requires signed amount before signing project from workflow task", () => {
     expect(() =>
       resolveProjectWorkflowTaskOperation({

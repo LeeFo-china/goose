@@ -3,6 +3,14 @@ import {
   type WorkflowBusinessKind,
   type WorkflowCategory,
 } from "@gooes/domain";
+import {
+  FINAL_ACCEPTANCE_STAGE_CODE,
+  isFinalAcceptanceReportWorkflowNode,
+} from "@/services/project-final-acceptance-workflow";
+import {
+  buildAcceptanceTimelineAction,
+  getAcceptanceStatusLabel,
+} from "@/services/project-workflow-acceptance-timeline";
 import type { WorkflowAssigneeEmployee } from "@/services/workflow-task-assignee";
 import {
   buildProcedureAssignmentTimelineActions,
@@ -33,6 +41,7 @@ export type WorkflowTimelineNodeAttributes = {
   acceptance_required?: boolean;
   acceptance_id?: string | null;
   acceptance_status?: string | null;
+  acceptance_type?: "stage" | "final" | null;
   payment_type?: string | null;
   receivable_plan_id?: string | null;
   receivable_title?: string | null;
@@ -79,6 +88,7 @@ export type WorkflowTimelineNodeAction = {
   stage_code?: string | null;
   acceptance_id?: string | null;
   acceptance_status?: string | null;
+  acceptance_type?: "stage" | "final" | null;
   output_fields?: unknown[];
   [key: string]: unknown;
 };
@@ -325,6 +335,10 @@ function buildTimelineNodeAttributes(input: {
 }): WorkflowTimelineNodeAttributes {
   const { node, assignee, completion, procedureAssignment } = input;
   const stageCode = readString(node.config.stage_key);
+  const finalAcceptanceReportEnabled = isFinalAcceptanceReportWorkflowNode(node);
+  const effectiveStageCode = finalAcceptanceReportEnabled
+    ? FINAL_ACCEPTANCE_STAGE_CODE
+    : stageCode;
   const paymentType = readString(node.config.payment_type);
   const financeReviewerEmployeeId = readString(
     node.config.finance_reviewer_employee_id,
@@ -350,13 +364,23 @@ function buildTimelineNodeAttributes(input: {
     : {};
 
   return {
-    ...(stageCode ? { stage_code: stageCode } : {}),
+    ...(effectiveStageCode ? { stage_code: effectiveStageCode } : {}),
+    ...(finalAcceptanceReportEnabled
+      ? {
+        acceptance_enabled: true,
+        acceptance_required: true,
+        acceptance_type: "final" as const,
+        acceptance_id: null,
+        acceptance_status: null,
+      }
+      : {}),
     ...(node.node_type === "procedure"
       ? {
         require_log: node.config.require_log === true,
         min_image_count: minImageCount,
         acceptance_enabled: acceptanceEnabled,
         acceptance_required: acceptanceEnabled,
+        acceptance_type: "stage" as const,
         acceptance_id: null,
         acceptance_status: null,
       }
@@ -401,32 +425,6 @@ function buildTimelineNodeDisplay(
   return { label, status_label: "待处理", status_variant: "secondary" };
 }
 
-function buildAcceptanceTimelineAction(input: {
-  stage: NonNullable<ConstructionStagesForWorkflowTimeline["stages"]>[number];
-  stageCode: string;
-  acceptanceStatus: string | null;
-}): WorkflowTimelineNodeAction | null {
-  const action = input.stage.acceptance_action;
-  const actionType = readString(action?.type);
-  if (!action || !actionType || actionType === "none") return null;
-  if (actionType !== "create" && actionType !== "edit" && actionType !== "view") {
-    return null;
-  }
-
-  const reason = readString(action.reason);
-  return {
-    key: `${actionType}_acceptance`,
-    label: readString(action.label) ?? "处理验收",
-    business_domain: "project_acceptance",
-    business_action: actionType,
-    disabled: action.enabled !== true,
-    ...(reason ? { disabled_reason: reason } : {}),
-    stage_code: input.stageCode,
-    acceptance_id: readString(input.stage.acceptance_id),
-    acceptance_status: input.acceptanceStatus,
-  };
-}
-
 function normalizeTimelineAction(
   action: Record<string, unknown>,
 ): WorkflowTimelineNodeAction | null {
@@ -463,13 +461,6 @@ function normalizeTimelineAction(
       ? { output_fields: action.output_fields }
       : {}),
   };
-}
-
-function getAcceptanceStatusLabel(status: string | null) {
-  if (status === "submitted") return "待复核";
-  if (status === "leader_approved") return "待业主确认";
-  if (status === "rejected") return "需整改";
-  return "待验收";
 }
 
 function readString(value: unknown) {
