@@ -87,6 +87,37 @@ describe("WorkflowGraphSaveSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  test("accepts applicant department manager approval assignee rule", () => {
+    const result = WorkflowGraphSaveSchema.safeParse({
+      nodes: [
+        {
+          node_key: "manager_review",
+          node_type: "approval",
+          business_kind: "expense_approval",
+          title: "部门经理审批",
+          description: null,
+          position: { x: 100, y: 100 },
+          config: {
+            required_permissions: ["expense_request.approve_manager"],
+            approval_type: "expense_approval",
+            assignee_rule: "applicant_department_manager",
+            assignee_id: null,
+            approve_mode: "any",
+          },
+          sort_order: 30,
+        },
+      ],
+      edges: [],
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.nodes[0]?.config).toMatchObject({
+      assignee_rule: "applicant_department_manager",
+      assignee_id: null,
+    });
+  });
+
   test("keeps payment collection receivable plan config", () => {
     const result = WorkflowGraphSaveSchema.safeParse({
       nodes: [

@@ -155,7 +155,10 @@ const WORKFLOW_PAYMENT_COLLECTION_TYPE_VALUES = [
 ] as const satisfies ReadonlyArray<(typeof PAYMENT_TYPE_VALUES)[number]>;
 
 const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
-  assignee_rule: z.enum(["employee", "department", "role"], {
+  approval_type: z.enum(["expense_approval", "workflow_approval"], {
+    message: "无效的审批类型",
+  }).optional(),
+  assignee_rule: z.enum(["employee", "department", "role", "applicant_department_manager"], {
     message: "无效的审批人规则",
   }).default("role"),
   assignee_id: textField("审批人 ID 格式无效").max(100, "审批人 ID 过长").nullable().optional(),

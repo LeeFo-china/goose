@@ -3,10 +3,12 @@
 import type {
   WorkflowApprovalNodeConfig,
   WorkflowBaseNodeConfig,
+  WorkflowConstructionStageNodeConfig,
   WorkflowNode,
   WorkflowNodeConfig,
   WorkflowNotificationNodeConfig,
 } from "@/components/workflows/workflow-types";
+import { WorkflowApprovalAssigneeSelect } from "@/components/workflows/workflow-approval-assignee-select";
 import { getWorkflowFinanceKind } from "@/components/workflows/workflow-finance-node-options";
 import { getWorkflowNodeCapability } from "@/components/workflows/workflow-node-capabilities";
 import { WorkflowPaymentCollectionConfigFields } from "@/components/workflows/workflow-payment-collection-config-fields";
@@ -32,8 +34,9 @@ const NODE_CHANNEL_OPTIONS = [
 ] as const;
 
 const ASSIGNEE_RULE_OPTIONS = [
+  { value: "applicant_department_manager", label: "申请人部门经理" },
   { value: "employee", label: "指定员工" },
-  { value: "department", label: "指定部门" },
+  { value: "department", label: "指定部门（暂未支持）", disabled: true },
   { value: "role", label: "指定角色" },
 ] as const;
 
@@ -86,6 +89,13 @@ export function WorkflowNodeConfigFields({
           config={node.config}
           disabled={disabled}
           usedStageKeys={usedProcedureStageKeys ?? []}
+          onChangeConfig={updateConfig}
+        />
+      ) : null}
+      {capability === "construction" ? (
+        <ConstructionStageConfigFields
+          config={node.config}
+          disabled={disabled}
           onChangeConfig={updateConfig}
         />
       ) : null}
@@ -177,6 +187,34 @@ function CommonConfigFields({
   );
 }
 
+function ConstructionStageConfigFields({
+  config,
+  disabled,
+  onChangeConfig,
+}: {
+  config: WorkflowNodeConfig;
+  disabled?: boolean;
+  onChangeConfig: (patch: Partial<WorkflowConstructionStageNodeConfig>) => void;
+}) {
+  const constructionConfig = config as WorkflowConstructionStageNodeConfig;
+  if (constructionConfig.stage_type !== "final_acceptance") {
+    return null;
+  }
+
+  return (
+    <section className="space-y-3">
+      <CheckboxField
+        checked={constructionConfig.final_acceptance_report_enabled === true}
+        disabled={disabled}
+        label="启用竣工验收报告"
+        onCheckedChange={(checked) =>
+          onChangeConfig({ final_acceptance_report_enabled: checked })
+        }
+      />
+    </section>
+  );
+}
+
 function ApprovalConfigFields({
   config,
   disabled,
@@ -187,6 +225,7 @@ function ApprovalConfigFields({
   onChangeConfig: (patch: Partial<WorkflowApprovalNodeConfig>) => void;
 }) {
   const approvalConfig = config as WorkflowApprovalNodeConfig;
+  const assigneeRule = approvalConfig.assignee_rule || "role";
 
   return (
     <section className="space-y-3">
@@ -195,19 +234,25 @@ function ApprovalConfigFields({
           <Label htmlFor="workflow-node-assignee-rule">审批人规则</Label>
           <Select
             disabled={disabled}
-            value={approvalConfig.assignee_rule || "employee"}
-            onValueChange={(value) =>
+            value={assigneeRule}
+            onValueChange={(value) => {
+              const nextRule = value as WorkflowApprovalNodeConfig["assignee_rule"];
               onChangeConfig({
-                assignee_rule: value as WorkflowApprovalNodeConfig["assignee_rule"],
-              })
-            }
+                assignee_rule: nextRule,
+                assignee_id: null,
+              });
+            }}
           >
             <SelectTrigger id="workflow-node-assignee-rule">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {ASSIGNEE_RULE_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  disabled={"disabled" in option ? option.disabled : false}
+                >
                   {option.label}
                 </SelectItem>
               ))}
@@ -238,18 +283,12 @@ function ApprovalConfigFields({
           </Select>
         </div>
       </div>
-      <div className="grid gap-2">
-        <Label htmlFor="workflow-node-assignee-id">审批对象编码</Label>
-        <Input
-          id="workflow-node-assignee-id"
-          value={approvalConfig.assignee_id || ""}
-          disabled={disabled}
-          placeholder="员工 ID、部门 ID 或角色编码"
-          onChange={(event) =>
-            onChangeConfig({ assignee_id: event.target.value.trim() || null })
-          }
-        />
-      </div>
+      <WorkflowApprovalAssigneeSelect
+        rule={assigneeRule}
+        value={approvalConfig.assignee_id || null}
+        disabled={disabled}
+        onChange={(value) => onChangeConfig({ assignee_id: value })}
+      />
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-amount-threshold">金额阈值</Label>
