@@ -28,7 +28,7 @@ async function expectFinanceAdvancedFilterInline(page: Page) {
   const toolbar = page.locator("form[action='/finance']").first();
   const positions = await toolbar.evaluate((form) => {
     const risk = form.querySelector("#finance-risk-level")?.getBoundingClientRect();
-    const more = Array.from(form.querySelectorAll("summary"))
+    const more = Array.from(form.querySelectorAll("button"))
       .find((item) => item.textContent?.includes("更多筛选"))
       ?.getBoundingClientRect();
     const submit = form.querySelector("button[type='submit']")?.getBoundingClientRect();
@@ -56,9 +56,131 @@ async function expectFinanceAdvancedFilterInline(page: Page) {
   expect(positions!.yDelta).toBeLessThanOrEqual(4);
 }
 
+async function expectFinanceAdvancedFiltersExpandedLayout(page: Page) {
+  const toolbar = page.locator("form[action='/finance']").first();
+  await toolbar.getByText("更多筛选").click();
+
+  const positions = await toolbar.evaluate((form) => {
+    const search = form.querySelector("#finance-keyword")?.getBoundingClientRect();
+    const status = form.querySelector("#finance-status")?.getBoundingClientRect();
+    const risk = form.querySelector("#finance-risk-level")?.getBoundingClientRect();
+    const more = Array.from(form.querySelectorAll("button"))
+      .find((item) => item.textContent?.includes("更多筛选"))
+      ?.getBoundingClientRect();
+    const submit = form.querySelector("button[type='submit']")?.getBoundingClientRect();
+    const reset = Array.from(form.querySelectorAll("a"))
+      .find((item) => item.textContent?.trim() === "重置")
+      ?.getBoundingClientRect();
+    const advanced = form.querySelector("#finance-risk-flag")?.getBoundingClientRect();
+
+    return search && status && risk && more && submit && reset && advanced
+      ? {
+          searchLeft: search.left,
+          searchRight: search.right,
+          searchBottom: search.bottom,
+          statusLeft: status.left,
+          riskLeft: risk.left,
+          moreLeft: more.left,
+          submitLeft: submit.left,
+          resetLeft: reset.left,
+          advancedTop: advanced.top,
+          topRowDelta: Math.max(
+            search.top,
+            status.top,
+            risk.top,
+            more.top,
+            submit.top,
+            reset.top,
+          ) -
+            Math.min(
+              search.top,
+              status.top,
+              risk.top,
+              more.top,
+              submit.top,
+              reset.top,
+            ),
+        }
+      : null;
+  });
+
+  expect(positions).not.toBeNull();
+  expect(positions!.statusLeft).toBeGreaterThanOrEqual(positions!.searchRight - 1);
+  expect(positions!.riskLeft).toBeGreaterThanOrEqual(positions!.statusLeft);
+  expect(positions!.moreLeft).toBeGreaterThanOrEqual(positions!.riskLeft);
+  expect(positions!.submitLeft).toBeGreaterThanOrEqual(positions!.moreLeft);
+  expect(positions!.resetLeft).toBeGreaterThanOrEqual(positions!.submitLeft);
+  expect(positions!.topRowDelta).toBeLessThanOrEqual(4);
+  expect(positions!.advancedTop).toBeGreaterThan(positions!.searchBottom + 4);
+  await expectNoDocumentScroll(page);
+}
+
 async function expectFinanceProjectTablePageSize(page: Page) {
-  await expect(page.getByText("每页 3 个")).toBeVisible();
+  const footer = page.getByTestId("finance-project-summary-footer");
+  await expect(footer.getByText(/第 1 \/ \d+ 页/)).toBeVisible();
+  await expect(footer.getByText("每页 3 个")).toBeVisible();
   await expect(page.getByText(/当前显示 3 个项目，共 \d+ 个/)).toBeVisible();
+}
+
+async function expectFinancePaginationSpinner(page: Page) {
+  const nextLink = page.getByRole("link", { name: "下一页" });
+  const nextControl = await nextLink.count()
+    ? nextLink
+    : page.getByRole("button", { name: "下一页" });
+
+  await nextControl.dispatchEvent("pointerdown");
+  await expect(page.getByTestId("finance-pagination-next-spinner")).toBeVisible();
+  await nextControl.click({ noWaitAfter: true });
+  await expect(page).toHaveURL(/\/finance\?page=2/, { timeout: 15_000 });
+}
+
+async function expectFinanceDiagnosticsBottomDataVisible(page: Page) {
+  await expect(page.getByRole("heading", { name: "重点项目" })).toBeVisible();
+
+  const initialState = await page.evaluate(() => {
+    const heading = Array.from(document.querySelectorAll("h3"))
+      .find((item) => item.textContent?.includes("重点项目"));
+    const scrollContainer = heading?.closest("[class*='overflow-auto']");
+    const list = heading?.parentElement?.querySelector(".mt-2");
+
+    if (!scrollContainer || !list) return null;
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    return {
+      containerBottom: containerRect.bottom,
+      viewportBottom: window.innerHeight,
+      rowCount: list.children.length,
+    };
+  });
+
+  expect(initialState).not.toBeNull();
+  expect(initialState!.rowCount).toBeGreaterThan(0);
+  expect(initialState!.containerBottom).toBeLessThanOrEqual(
+    initialState!.viewportBottom + 1,
+  );
+
+  const scrolledState = await page.evaluate(() => {
+    const heading = Array.from(document.querySelectorAll("h3"))
+      .find((item) => item.textContent?.includes("重点项目"));
+    const scrollContainer = heading?.closest("[class*='overflow-auto']") as HTMLElement | null;
+    const list = heading?.parentElement?.querySelector(".mt-2");
+    const lastRow = list?.lastElementChild;
+
+    if (!scrollContainer || !lastRow) return null;
+
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const lastRowRect = lastRow.getBoundingClientRect();
+    return {
+      containerBottom: containerRect.bottom,
+      lastRowBottom: lastRowRect.bottom,
+    };
+  });
+
+  expect(scrolledState).not.toBeNull();
+  expect(scrolledState!.lastRowBottom).toBeLessThanOrEqual(
+    scrolledState!.containerBottom + 1,
+  );
 }
 
 test.describe("finance workspace", () => {
@@ -86,7 +208,9 @@ test.describe("finance workspace", () => {
     await expect(page.getByRole("heading", { name: "风险分布" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "30天现金流" })).toBeVisible();
     await expectFinanceAdvancedFilterInline(page);
+    await expectFinanceAdvancedFiltersExpandedLayout(page);
     await expectFinanceProjectTablePageSize(page);
+    await expectFinancePaginationSpinner(page);
     await expectNoDocumentScroll(page);
 
     await financeNav.getByRole("link", { name: "财务诊断" }).click();
@@ -98,6 +222,7 @@ test.describe("finance workspace", () => {
     await expect(page.getByRole("link", { name: "全部" }))
       .toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: "重点项目" })).toBeVisible();
+    await expectFinanceDiagnosticsBottomDataVisible(page);
     await page.getByRole("link", { name: "待补数据" }).click();
     await expect(page).toHaveURL(/\/finance\/diagnostics\?view=data/);
     await expect(page.getByRole("link", { name: "待补数据" }))

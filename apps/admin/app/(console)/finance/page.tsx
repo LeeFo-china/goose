@@ -1,20 +1,19 @@
-import Link from "next/link";
 import { ProjectStatusConfig } from "@gooes/domain";
 import {
   AlertTriangle,
   CircleDollarSign,
   LineChart,
-  Search,
   WalletCards,
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { FinanceFilterSelectField } from "@/components/finance/finance-filter-controls";
 import {
   FinanceMetricCard,
   formatCollectionRate,
 } from "@/components/finance/finance-overview-cards";
 import { FinanceOverviewCharts } from "@/components/finance/finance-overview-charts";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
+import { FinanceProjectSummaryFilterForm } from "@/components/finance/finance-project-summary-filter-form";
+import { FinanceProjectSummaryPagination } from "@/components/finance/finance-project-summary-pagination";
 import { FinanceProjectSummaryTable } from "@/components/finance/finance-project-summary-table";
 import {
   FinanceProjectSummaryViewTabs,
@@ -27,9 +26,7 @@ import {
 } from "@/components/finance/finance-ledger-utils";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 
 type FinancePageSearchParams = {
   page?: string;
@@ -234,97 +231,20 @@ export default async function FinancePage({
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">
-          <form
-            action="/finance"
-            className="shrink-0 space-y-1.5 border-b bg-card p-2.5"
-          >
-            <div className="flex flex-wrap items-center gap-1">
-              <div className="order-1 grid min-w-0 flex-1 gap-0">
-                <label className="sr-only" htmlFor="finance-keyword">
-                  项目搜索
-                </label>
-                <div className="relative">
-                  <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="finance-keyword"
-                    name="keyword"
-                    defaultValue={params.keyword || ""}
-                    placeholder="搜索项目名称 / 客户 / 小区"
-                    className="h-9 pl-9"
-                  />
-                </div>
-              </div>
-              <div className="order-2 w-[104px] shrink-0">
-                <FinanceFilterSelectField
-                  id="finance-status"
-                  name="status"
-                  label="状态"
-                  value={params.status}
-                  options={PROJECT_STATUS_OPTIONS}
-                  compact
-                />
-              </div>
-              <div className="order-3 w-[104px] shrink-0">
-                <FinanceFilterSelectField
-                  id="finance-risk-level"
-                  name="risk_level"
-                  label="风险"
-                  value={params.risk_level}
-                  options={RISK_LEVEL_OPTIONS}
-                  compact
-                />
-              </div>
-              <details
-                className="contents group"
-                open={advancedFilterCount > 0}
-              >
-                <summary className="order-4 flex h-9 cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-md border px-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-                  <span>更多筛选</span>
-                  {advancedFilterCount > 0 ? (
-                    <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">
-                      已选 {advancedFilterCount}
-                    </Badge>
-                  ) : null}
-                </summary>
-                <div className="order-7 mt-2 grid basis-full gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <FinanceFilterSelectField
-                    id="finance-risk-flag"
-                    name="risk_flag"
-                    label="原因"
-                    value={params.risk_flag}
-                    options={RISK_FLAG_OPTIONS}
-                  />
-                  <FinanceFilterSelectField
-                    id="finance-budget-configured"
-                    name="budget_configured"
-                    label="已配预算"
-                    value={params.budget_configured}
-                    options={BOOLEAN_FILTER_OPTIONS}
-                  />
-                  <FinanceFilterSelectField
-                    id="finance-has-unallocated-expense"
-                    name="has_unallocated_expense"
-                    label="未归集"
-                    value={params.has_unallocated_expense}
-                    options={BOOLEAN_FILTER_OPTIONS}
-                  />
-                  <FinanceFilterSelectField
-                    id="finance-overdue"
-                    name="overdue"
-                    label="逾期"
-                    value={params.overdue}
-                    options={BOOLEAN_FILTER_OPTIONS}
-                  />
-                </div>
-              </details>
-              <div className="order-5 flex shrink-0 flex-nowrap items-center gap-1">
-                <Button type="submit" size="sm" className="h-9">筛选</Button>
-                <Button asChild type="button" variant="ghost" size="sm" className="h-9 px-1.5">
-                  <Link href="/finance">重置</Link>
-                </Button>
-              </div>
-            </div>
-          </form>
+          <FinanceProjectSummaryFilterForm
+            keyword={params.keyword}
+            status={params.status}
+            riskLevel={params.risk_level}
+            riskFlag={params.risk_flag}
+            budgetConfigured={params.budget_configured}
+            hasUnallocatedExpense={params.has_unallocated_expense}
+            overdue={params.overdue}
+            advancedFilterCount={advancedFilterCount}
+            projectStatusOptions={PROJECT_STATUS_OPTIONS}
+            riskLevelOptions={RISK_LEVEL_OPTIONS}
+            riskFlagOptions={RISK_FLAG_OPTIONS}
+            booleanFilterOptions={BOOLEAN_FILTER_OPTIONS}
+          />
           {data.error ? (
             <div className="shrink-0 border-b p-4">
               <StatusAlert>{data.error}</StatusAlert>
@@ -346,53 +266,33 @@ export default async function FinancePage({
           <div className="min-h-0 flex-1 overflow-auto">
             <FinanceProjectSummaryTable rows={data.list} />
           </div>
-          <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div
+            className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between"
+            data-testid="finance-project-summary-footer"
+          >
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="outline" className="tabular-nums">
+                第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
+              </Badge>
               <span>当前显示 {data.list.length} 个项目，共 {data.pagination.total} 个</span>
               <Badge variant="outline" className="tabular-nums">
                 每页 {data.pagination.pageSize} 个
               </Badge>
             </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canGoPrev}
-                asChild={canGoPrev}
-              >
-                {canGoPrev ? (
-                  <Link
-                    href={buildFinanceSummaryHref({
-                      page: data.pagination.page - 1,
-                      filters: params,
-                    })}
-                  >
-                    上一页
-                  </Link>
-                ) : (
-                  <span>上一页</span>
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canGoNext}
-                asChild={canGoNext}
-              >
-                {canGoNext ? (
-                  <Link
-                    href={buildFinanceSummaryHref({
-                      page: data.pagination.page + 1,
-                      filters: params,
-                    })}
-                  >
-                    下一页
-                  </Link>
-                ) : (
-                  <span>下一页</span>
-                )}
-              </Button>
-            </div>
+            <FinanceProjectSummaryPagination
+              previousHref={canGoPrev
+                ? buildFinanceSummaryHref({
+                  page: data.pagination.page - 1,
+                  filters: params,
+                })
+                : null}
+              nextHref={canGoNext
+                ? buildFinanceSummaryHref({
+                  page: data.pagination.page + 1,
+                  filters: params,
+                })
+                : null}
+            />
           </div>
         </CardContent>
       </Card>

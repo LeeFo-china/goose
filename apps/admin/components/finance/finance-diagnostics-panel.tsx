@@ -114,7 +114,7 @@ export function FinanceDiagnosticsPanel({
           ].map((item) => {
             const active = item.value === activeView;
             return (
-              <Link
+              <a
                 key={item.value}
                 href={item.value === "all" ? "/finance/diagnostics" : `/finance/diagnostics?view=${item.value}`}
                 aria-current={active ? "page" : undefined}
@@ -124,7 +124,7 @@ export function FinanceDiagnosticsPanel({
                 )}
               >
                 {item.label}
-              </Link>
+              </a>
             );
           })}
         </div>
@@ -165,7 +165,7 @@ export function FinanceDiagnosticsPanel({
         />
       </div>
 
-      <Card className="min-h-0 flex-1 overflow-hidden shadow-none">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 border-b p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-start gap-3">
@@ -197,7 +197,7 @@ export function FinanceDiagnosticsPanel({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="min-h-0 overflow-auto p-0">
+        <CardContent className="min-h-0 flex-1 overflow-auto p-0">
           <div className="grid border-b bg-muted/30 px-4 py-3 text-sm text-muted-foreground lg:grid-cols-4">
             <span>高风险 {highRiskCount} 个 / 预警 {warningRiskCount} 个</span>
             <span>实际支出 {formatFinanceMoney(summary.expense_paid_amount)}</span>
