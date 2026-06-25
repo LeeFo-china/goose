@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ScrollText } from "lucide-react";
 import { FinanceFilterSelectField } from "@/components/finance/finance-filter-controls";
+import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { fetchFinanceCostCategories } from "@/components/finance/finance-cost-budget-requests";
 import { FinanceLedgerTable } from "@/components/finance/finance-ledger-table";
 import { fetchFinanceLedger } from "@/components/finance/finance-requests";
@@ -115,6 +116,8 @@ export default async function FinanceLedgerPage({
           第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
         </Badge>
       </div>
+
+      <FinanceModuleTabs activeTab="ledger" />
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">

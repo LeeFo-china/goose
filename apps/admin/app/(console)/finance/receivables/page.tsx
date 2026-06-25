@@ -6,6 +6,7 @@ import {
   FinanceCheckboxField,
   FinanceFilterSelectField,
 } from "@/components/finance/finance-filter-controls";
+import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { FinanceReceivablesTable } from "@/components/finance/finance-receivables-table";
 import { fetchFinanceReceivables } from "@/components/finance/finance-requests";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -111,6 +112,8 @@ export default async function FinanceReceivablesPage({
           第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
         </Badge>
       </div>
+
+      <FinanceModuleTabs activeTab="receivables" />
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">

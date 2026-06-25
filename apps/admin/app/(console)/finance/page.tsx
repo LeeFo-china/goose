@@ -16,7 +16,12 @@ import {
   formatCollectionRate,
   formatCompactMoney,
 } from "@/components/finance/finance-overview-cards";
+import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { FinanceProjectSummaryTable } from "@/components/finance/finance-project-summary-table";
+import {
+  FinanceProjectSummaryViewTabs,
+  type FinanceProjectSummaryView,
+} from "@/components/finance/finance-project-summary-view-tabs";
 import { fetchFinanceProjectSummaries } from "@/components/finance/finance-requests";
 import {
   formatFinanceMoney,
@@ -103,6 +108,30 @@ function buildFinanceSummaryHref(input: {
   return `/finance?${params}`;
 }
 
+function resolveProjectSummaryView(
+  filters: FinancePageSearchParams,
+): FinanceProjectSummaryView {
+  if (filters.risk_level === "danger") return "danger";
+  if (filters.risk_level === "info") return "info";
+  return "all";
+}
+
+function buildProjectSummaryViewHref(
+  view: FinanceProjectSummaryView,
+  filters: FinancePageSearchParams,
+) {
+  const baseFilters: FinancePageSearchParams = {
+    keyword: filters.keyword,
+    status: filters.status,
+    risk_level: view === "all" ? undefined : view,
+  };
+
+  return buildFinanceSummaryHref({
+    page: 1,
+    filters: baseFilters,
+  });
+}
+
 function append(params: URLSearchParams, key: string, value: string | undefined) {
   const normalized = clean(value);
   if (normalized) params.set(key, normalized);
@@ -144,17 +173,16 @@ export default async function FinancePage({
   const warningRiskCount = Number(riskCounts.warning || 0);
   const overdueProjectCount = Number(flagCounts.receivable_overdue || 0);
   const actualGrossMargin = Number(summary.actual_gross_margin);
-  const hasAbnormalGrossMargin = Number.isFinite(actualGrossMargin) &&
-    actualGrossMargin > 0.6;
+  const hasAbnormalGrossMargin = Number.isFinite(actualGrossMargin) && actualGrossMargin > 0.6;
   const advancedFilterCount = [
     params.risk_flag,
     params.budget_configured,
     params.has_unallocated_expense,
     params.overdue,
   ].filter(Boolean).length;
+  const summaryView = resolveProjectSummaryView(params);
   const canGoPrev = data.pagination.page > 1;
-  const canGoNext = data.pagination.totalPages > 0 &&
-    data.pagination.page < data.pagination.totalPages;
+  const canGoNext = data.pagination.totalPages > 0 && data.pagination.page < data.pagination.totalPages;
 
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-visible lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden">
@@ -170,18 +198,14 @@ export default async function FinancePage({
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-          <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground">
-            <Link href="/finance/receivables">应收计划</Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground">
-            <Link href="/finance/ledger">财务台账</Link>
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="w-fit tabular-nums">
             第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
           </Badge>
         </div>
       </div>
+
+      <FinanceModuleTabs activeTab="overview" />
 
       <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <FinanceMetricCard
@@ -400,8 +424,18 @@ export default async function FinancePage({
               <StatusAlert>{data.error}</StatusAlert>
             </div>
           ) : null}
-          <div className="shrink-0 border-b bg-card px-4 py-2">
-            <h2 className="text-sm font-semibold">项目财务明细表</h2>
+          <div className="shrink-0 flex flex-col gap-2 border-b bg-card px-4 py-0 md:flex-row md:items-center md:justify-between">
+            <div className="py-2">
+              <h2 className="text-sm font-semibold">项目财务明细表</h2>
+            </div>
+            <FinanceProjectSummaryViewTabs
+              activeView={summaryView}
+              hrefs={{
+                all: buildProjectSummaryViewHref("all", params),
+                danger: buildProjectSummaryViewHref("danger", params),
+                info: buildProjectSummaryViewHref("info", params),
+              }}
+            />
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             <FinanceProjectSummaryTable rows={data.list} />
