@@ -87,6 +87,9 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
   const validationSuccess = data.validationState === "success";
   const selected = data.selected;
   const isTerminalControlNode = node.node_type === "start" || node.node_type === "end";
+  const terminalHint = node.node_type === "end" && node.node_key === "rejected"
+    ? "申请人可修改后重新提交"
+    : null;
   const nodeWidth = isDecisionNode ? WORKFLOW_FLOW_DECISION_NODE_WIDTH : WORKFLOW_FLOW_NODE_WIDTH;
   const nodeHeight = isDecisionNode ? WORKFLOW_FLOW_DECISION_NODE_HEIGHT : WORKFLOW_FLOW_NODE_HEIGHT;
   const activeBorderRadius = isTerminalControlNode ? (nodeHeight - 3) / 2 : 8;
@@ -295,6 +298,11 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
             {displayLabels.specificLabel}
           </span>
         )}
+        {terminalHint && !data.editingTitle ? (
+          <span className="block max-w-full truncate text-xs leading-4 text-muted-foreground">
+            {terminalHint}
+          </span>
+        ) : null}
       </div>
       {selected ? (
         <span

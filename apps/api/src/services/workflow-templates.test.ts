@@ -139,5 +139,18 @@ describe("workflowTemplateService expense_approval", () => {
     expect(
       template.graph.nodes.find((node) => node.node_key === "payment"),
     ).toMatchObject({ title: "出纳打款" });
+    expect(
+      template.graph.nodes.find((node) => node.node_key === "rejected"),
+    ).toMatchObject({
+      title: "已驳回",
+      node_type: "end",
+      description: "费用审批驳回后流程结束，申请人可修改后重新提交。",
+    });
+    expect(template.graph.edges).not.toContainEqual(
+      expect.objectContaining({
+        source_node_key: "rejected",
+        target_node_key: "start",
+      }),
+    );
   });
 });

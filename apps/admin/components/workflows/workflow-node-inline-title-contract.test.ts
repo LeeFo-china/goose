@@ -34,4 +34,14 @@ describe("workflow node inline title editing contract", () => {
     expect(panelSource).toContain("节点名称");
     expect(panelSource).toContain("节点名称不能为空");
   });
+
+  test("shows rejected terminal resubmit hint without adding a runtime edge", () => {
+    const flowNodeSource = readFileSync(
+      new URL("./workflow-flow-node.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(flowNodeSource).toContain("申请人可修改后重新提交");
+    expect(flowNodeSource).not.toContain("rejected -> start");
+  });
 });

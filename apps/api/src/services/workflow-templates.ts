@@ -236,7 +236,7 @@ class WorkflowTemplateService {
           }),
           this.node("finance_review", "approval", "expense_approval", "财务审批", "对应费用当前步骤：财务审批。", 520, 180, 30, ["expense_request.approve_finance"]),
           this.node("payment", "approval", "expense_approval", "出纳打款", "对应费用当前步骤：待打款。", 740, 180, 40, ["expense_request.pay"]),
-          this.node("rejected", "end", null, "已驳回", "费用审批驳回后流程结束。", 520, 380, 50, []),
+          this.node("rejected", "end", null, "已驳回", "费用审批驳回后流程结束，申请人可修改后重新提交。", 520, 380, 50, []),
           this.node("done", "end", null, "已完成", "费用完成打款后流程结束。", 960, 180, 60, []),
         ],
         edges: [
