@@ -1,15 +1,35 @@
 import { LineChart } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { FinanceDiagnosticsPanel } from "@/components/finance/finance-diagnostics-panel";
+import {
+  FinanceDiagnosticsPanel,
+  type FinanceDiagnosticView,
+} from "@/components/finance/finance-diagnostics-panel";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { fetchFinanceProjectSummaries } from "@/components/finance/finance-requests";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { Badge } from "@/components/ui/badge";
 
-export default async function FinanceDiagnosticsPage() {
+type FinanceDiagnosticsSearchParams = {
+  view?: string;
+};
+
+function resolveDiagnosticView(value: string | undefined): FinanceDiagnosticView {
+  if (value === "danger" || value === "data" || value === "receivables") {
+    return value;
+  }
+  return "all";
+}
+
+export default async function FinanceDiagnosticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<FinanceDiagnosticsSearchParams>;
+}) {
   const accessDenied = await getTenantBusinessAccessDenied();
   if (accessDenied) return accessDenied;
 
+  const params = await searchParams;
+  const activeView = resolveDiagnosticView(params.view);
   const data = await fetchFinanceProjectSummaries({
     page: 1,
     pageSize: 20,
@@ -42,7 +62,11 @@ export default async function FinanceDiagnosticsPage() {
         </div>
       ) : null}
 
-      <FinanceDiagnosticsPanel summary={data.summary} />
+      <FinanceDiagnosticsPanel
+        summary={data.summary}
+        analytics={data.analytics}
+        activeView={activeView}
+      />
     </div>
   );
 }

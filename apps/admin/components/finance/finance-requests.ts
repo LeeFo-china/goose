@@ -1,5 +1,24 @@
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+import {
+  emptyFinanceProjectSummaryAnalytics,
+  emptyFinanceProjectSummaryTotals,
+  type FinanceProjectSummaryListData,
+  type FinanceProjectSummaryResult,
+} from "./finance-project-summary-types";
+
+export type {
+  FinanceProjectOperatingSummary,
+  FinanceProjectOperatingSummaryTotals,
+  FinanceProjectRiskFlag,
+  FinanceProjectRiskLevel,
+  FinanceProjectRiskReason,
+  FinanceProjectSummaryAnalytics,
+  FinanceProjectSummaryListData,
+  FinanceProjectSummaryRankingItem,
+  FinanceProjectSummaryResult,
+  FinanceProjectSummaryTrendPoint,
+} from "./finance-project-summary-types";
 
 export type FinanceLedgerRecord = {
   id: string;
@@ -86,101 +105,6 @@ const FINANCE_LEDGER_PAGE_SIZE = 20;
 const FINANCE_RECEIVABLE_PAGE_SIZE = 20;
 const FINANCE_PROJECT_SUMMARY_PAGE_SIZE = 20;
 
-export type FinanceProjectRiskLevel = "normal" | "info" | "warning" | "danger";
-
-export type FinanceProjectRiskFlag =
-  | "budget_missing"
-  | "unallocated_expense"
-  | "category_over_budget"
-  | "project_over_budget"
-  | "low_projected_margin"
-  | "receivable_overdue"
-  | "negative_actual_profit"
-  | "negative_projected_profit";
-
-export type FinanceProjectRiskReason = {
-  code: FinanceProjectRiskFlag;
-  level: FinanceProjectRiskLevel;
-  title: string;
-  description: string;
-  current_value: number | null;
-  threshold_value: number | null;
-  unit: "money" | "ratio" | "count" | "boolean";
-  action: {
-    key: string;
-    label: string;
-    target: string;
-  } | null;
-};
-
-export type FinanceProjectOperatingSummary = {
-  project_id: string;
-  project_name: string | null;
-  project_status: string | null;
-  contract_amount: number;
-  receivable_amount: number;
-  received_amount: number;
-  receivable_remaining_amount: number;
-  overdue_amount: number;
-  overdue_count: number;
-  expense_paid_amount: number;
-  actual_profit_amount: number;
-  projected_profit_amount: number;
-  net_cash_flow_amount: number;
-  actual_gross_margin: number | null;
-  projected_gross_margin: number | null;
-  ledger_entry_count: number;
-  budget_configured: boolean;
-  budget_cost_amount: number;
-  budget_remaining_amount: number;
-  budget_usage_ratio: number | null;
-  unallocated_expense_amount: number;
-  projected_budget_profit_amount: number;
-  profit_variance_amount: number;
-  projected_budget_gross_margin: number | null;
-  risk_level: FinanceProjectRiskLevel;
-  risk_flags: FinanceProjectRiskFlag[];
-  risk_reasons: FinanceProjectRiskReason[];
-};
-
-export type FinanceProjectOperatingSummaryTotals = {
-  project_count: number;
-  contract_amount: number;
-  receivable_amount: number;
-  received_amount: number;
-  receivable_remaining_amount: number;
-  overdue_amount: number;
-  overdue_count: number;
-  expense_paid_amount: number;
-  actual_profit_amount: number;
-  projected_profit_amount: number;
-  net_cash_flow_amount: number;
-  actual_gross_margin: number | null;
-  projected_gross_margin: number | null;
-  budget_configured_count: number;
-  budget_cost_amount: number;
-  budget_remaining_amount: number;
-  budget_usage_ratio: number | null;
-  unallocated_expense_amount: number;
-  projected_budget_profit_amount: number;
-  profit_variance_amount: number;
-  projected_budget_gross_margin: number | null;
-  risk_count: number;
-  risk_level: FinanceProjectRiskLevel;
-  risk_counts: Record<FinanceProjectRiskLevel, number>;
-  risk_flag_counts: Record<FinanceProjectRiskFlag, number>;
-};
-
-export type FinanceProjectSummaryListData = {
-  list: FinanceProjectOperatingSummary[];
-  pagination: FinanceLedgerListData["pagination"];
-  summary: FinanceProjectOperatingSummaryTotals;
-};
-
-export type FinanceProjectSummaryResult = FinanceProjectSummaryListData & {
-  error: string | null;
-};
-
 export function emptyFinanceLedger(page = 1): FinanceLedgerResult {
   return {
     list: [],
@@ -219,6 +143,7 @@ export function emptyFinanceProjectSummary(
       totalPages: 0,
     },
     summary: emptyFinanceProjectSummaryTotals(),
+    analytics: emptyFinanceProjectSummaryAnalytics(),
     error: null,
   };
 }
@@ -411,12 +336,15 @@ export async function fetchFinanceProjectSummaries(query: {
       cache: "no-store",
     });
     const payload = await parseBackendJson<FinanceProjectSummaryListData>(response);
+    const data = payload.data || {
+      list: [],
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
+      summary: emptyFinanceProjectSummaryTotals(),
+      analytics: emptyFinanceProjectSummaryAnalytics(),
+    };
     return {
-      ...(payload.data || {
-        list: [],
-        pagination: { page, pageSize, total: 0, totalPages: 0 },
-        summary: emptyFinanceProjectSummaryTotals(),
-      }),
+      ...data,
+      analytics: data.analytics || emptyFinanceProjectSummaryAnalytics(),
       error: null,
     };
   } catch (error) {
@@ -424,48 +352,10 @@ export async function fetchFinanceProjectSummaries(query: {
       list: [],
       pagination: { page, pageSize, total: 0, totalPages: 0 },
       summary: emptyFinanceProjectSummaryTotals(),
+      analytics: emptyFinanceProjectSummaryAnalytics(),
       error: error instanceof Error ? error.message : "项目经营汇总加载失败",
     };
   }
-}
-
-function emptyFinanceProjectSummaryTotals(): FinanceProjectOperatingSummaryTotals {
-  return {
-    project_count: 0,
-    contract_amount: 0,
-    receivable_amount: 0,
-    received_amount: 0,
-    receivable_remaining_amount: 0,
-    overdue_amount: 0,
-    overdue_count: 0,
-    expense_paid_amount: 0,
-    actual_profit_amount: 0,
-    projected_profit_amount: 0,
-    net_cash_flow_amount: 0,
-    actual_gross_margin: null,
-    projected_gross_margin: null,
-    budget_configured_count: 0,
-    budget_cost_amount: 0,
-    budget_remaining_amount: 0,
-    budget_usage_ratio: null,
-    unallocated_expense_amount: 0,
-    projected_budget_profit_amount: 0,
-    profit_variance_amount: 0,
-    projected_budget_gross_margin: null,
-    risk_count: 0,
-    risk_level: "normal",
-    risk_counts: { normal: 0, info: 0, warning: 0, danger: 0 },
-    risk_flag_counts: {
-      budget_missing: 0,
-      unallocated_expense: 0,
-      category_over_budget: 0,
-      project_over_budget: 0,
-      low_projected_margin: 0,
-      receivable_overdue: 0,
-      negative_actual_profit: 0,
-      negative_projected_profit: 0,
-    },
-  };
 }
 
 function normalizeFinanceLedgerPage(value: number | undefined) {

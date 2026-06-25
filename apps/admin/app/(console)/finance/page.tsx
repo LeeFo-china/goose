@@ -230,7 +230,7 @@ export default async function FinancePage({
         />
       </div>
 
-      <FinanceOverviewCharts summary={summary} />
+      <FinanceOverviewCharts summary={summary} analytics={data.analytics} />
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">

@@ -13,6 +13,17 @@ async function loginAsTenantAdmin(page: Page) {
   expect(loginResponse.ok()).toBe(true);
 }
 
+async function expectNoDocumentScroll(page: Page) {
+  const state = await page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    clientHeight: document.documentElement.clientHeight,
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(state.scrollHeight).toBeLessThanOrEqual(state.clientHeight + 1);
+  expect(state.scrollWidth).toBeLessThanOrEqual(state.clientWidth + 1);
+}
+
 test.describe("finance workspace", () => {
   test.beforeEach(async ({ page }) => {
     await loginAsTenantAdmin(page);
@@ -30,6 +41,8 @@ test.describe("finance workspace", () => {
     await expect(page.getByRole("heading", { name: "回款结构" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "利润结构" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "风险分布" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "30天现金流" })).toBeVisible();
+    await expectNoDocumentScroll(page);
 
     await financeNav.getByRole("link", { name: "财务诊断" }).click();
     await expect(page).toHaveURL(/\/finance\/diagnostics/);
@@ -37,5 +50,13 @@ test.describe("finance workspace", () => {
       .toBeVisible();
     await expect(financeNav.getByRole("link", { name: "财务诊断" }))
       .toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("link", { name: "全部" }))
+      .toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("heading", { name: "重点项目" })).toBeVisible();
+    await page.getByRole("link", { name: "待补数据" }).click();
+    await expect(page).toHaveURL(/\/finance\/diagnostics\?view=data/);
+    await expect(page.getByRole("link", { name: "待补数据" }))
+      .toHaveAttribute("aria-current", "page");
+    await expectNoDocumentScroll(page);
   });
 });

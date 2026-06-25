@@ -4,12 +4,17 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { FinanceProjectOperatingSummaryTotals } from "@/components/finance/finance-requests";
+import type {
+  FinanceProjectOperatingSummaryTotals,
+  FinanceProjectSummaryAnalytics,
+} from "@/components/finance/finance-requests";
 import { formatFinanceMoney } from "@/components/finance/finance-ledger-utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -94,10 +99,53 @@ function FinanceBarChart({
   );
 }
 
+function EmptyChart() {
+  return (
+    <div className="flex h-[125px] items-center justify-center text-xs text-muted-foreground">
+      暂无图表数据
+    </div>
+  );
+}
+
+function FinanceTrendChart({
+  data,
+}: {
+  data: FinanceProjectSummaryAnalytics["trends"];
+}) {
+  if (data.length === 0) return <EmptyChart />;
+
+  return (
+    <div className="h-[125px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ left: -16, right: 8, top: 8, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={(value: string) => value.slice(5)} tickLine={false} axisLine={false} />
+          <YAxis tickFormatter={moneyTick} tickLine={false} axisLine={false} />
+          <Tooltip content={<ChartTooltip unit="money" />} />
+          <Line
+            type="monotone"
+            dataKey="net_cash_flow_amount"
+            name="净现金流"
+            stroke="hsl(var(--primary))"
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function hasPositiveData(data: ChartItem[]) {
+  return data.some((item) => item.value > 0);
+}
+
 export function FinanceOverviewCharts({
   summary,
+  analytics,
 }: {
   summary: FinanceProjectOperatingSummaryTotals;
+  analytics: FinanceProjectSummaryAnalytics;
 }) {
   const riskCounts = summary.risk_counts || {
     normal: 0,
@@ -124,17 +172,19 @@ export function FinanceOverviewCharts({
   ];
 
   return (
-    <div className="grid shrink-0 gap-2 xl:grid-cols-3">
+    <div className="grid shrink-0 gap-2 md:grid-cols-2 xl:grid-cols-4">
       <Card className="shadow-none">
         <CardHeader className="p-2.5 pb-1">
           <CardTitle className="text-sm">回款结构</CardTitle>
         </CardHeader>
         <CardContent className="p-2.5 pt-0">
-          <FinanceBarChart
-            data={collectionData}
-            fill="hsl(var(--primary))"
-            unit="money"
-          />
+          {hasPositiveData(collectionData) ? (
+            <FinanceBarChart
+              data={collectionData}
+              fill="hsl(var(--primary))"
+              unit="money"
+            />
+          ) : <EmptyChart />}
         </CardContent>
       </Card>
       <Card className="shadow-none">
@@ -142,11 +192,13 @@ export function FinanceOverviewCharts({
           <CardTitle className="text-sm">利润结构</CardTitle>
         </CardHeader>
         <CardContent className="p-2.5 pt-0">
-          <FinanceBarChart
-            data={profitData}
-            fill="hsl(var(--secondary-foreground))"
-            unit="money"
-          />
+          {hasPositiveData(profitData) ? (
+            <FinanceBarChart
+              data={profitData}
+              fill="hsl(var(--secondary-foreground))"
+              unit="money"
+            />
+          ) : <EmptyChart />}
         </CardContent>
       </Card>
       <Card className="shadow-none">
@@ -154,11 +206,21 @@ export function FinanceOverviewCharts({
           <CardTitle className="text-sm">风险分布</CardTitle>
         </CardHeader>
         <CardContent className="p-2.5 pt-0">
-          <FinanceBarChart
-            data={riskData}
-            fill="hsl(var(--warning))"
-            unit="count"
-          />
+          {hasPositiveData(riskData) ? (
+            <FinanceBarChart
+              data={riskData}
+              fill="hsl(var(--warning))"
+              unit="count"
+            />
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+      <Card className="shadow-none">
+        <CardHeader className="p-2.5 pb-1">
+          <CardTitle className="text-sm">30天现金流</CardTitle>
+        </CardHeader>
+        <CardContent className="p-2.5 pt-0">
+          <FinanceTrendChart data={analytics.trends} />
         </CardContent>
       </Card>
     </div>
