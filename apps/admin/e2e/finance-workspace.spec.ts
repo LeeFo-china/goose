@@ -137,6 +137,11 @@ async function expectUnallocatedProjectSummaryPopover(page: Page) {
   expect(popoverBox).not.toBeNull();
   await page.mouse.move(popoverBox!.x + popoverBox!.width / 2, popoverBox!.y + 8);
   await expect(popover).toBeHidden();
+
+  await unallocatedBadge.hover();
+  await expect(popover).toBeVisible();
+  await page.mouse.move(24, 24);
+  await expect(popover).toBeHidden();
 }
 
 async function expectFinancePaginationSpinner(page: Page) {

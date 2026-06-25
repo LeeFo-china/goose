@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
@@ -144,38 +144,50 @@ function FinanceUnallocatedProjectPopover({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const closeTimerRef = useRef<number | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const reason = unallocatedRiskReason(row);
 
-  function clearCloseTimer() {
-    if (closeTimerRef.current === null) return;
-    window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = null;
-  }
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerMove(event: PointerEvent) {
+      const trigger = triggerRef.current;
+      if (!trigger) {
+        setOpen(false);
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      const isInsideTrigger =
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom;
+
+      if (!isInsideTrigger) setOpen(false);
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+    };
+  }, [open]);
 
   function openPopover() {
-    clearCloseTimer();
     setOpen(true);
-  }
-
-  function scheduleClose() {
-    clearCloseTimer();
-    closeTimerRef.current = window.setTimeout(() => {
-      setOpen(false);
-      closeTimerRef.current = null;
-    }, 120);
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           className="block w-full max-w-[18rem] cursor-default rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onBlur={scheduleClose}
+          onBlur={() => setOpen(false)}
           onFocus={openPopover}
           onMouseEnter={openPopover}
-          onMouseLeave={scheduleClose}
+          onMouseLeave={() => setOpen(false)}
         >
           {children}
         </button>
