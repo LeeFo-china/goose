@@ -26,21 +26,21 @@ export function FinanceMetricCard({
 }) {
   return (
     <Card className={financeToneCardClass(tone)}>
-      <CardContent className="flex h-full flex-col gap-1.5 p-3">
+      <CardContent className="flex h-full flex-col gap-1 p-2.5">
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs font-medium text-muted-foreground">{label}</span>
           <span className={tone === "normal" ? "text-muted-foreground" : financeToneTextClass(tone)}>
             {icon}
           </span>
         </div>
-        <div className={`truncate text-2xl font-semibold tabular-nums ${financeToneTextClass(tone)}`}>
+        <div className={`truncate text-xl font-semibold tabular-nums ${financeToneTextClass(tone)}`}>
           {value}
         </div>
         {helper ? (
           <div className="truncate text-xs text-muted-foreground">{helper}</div>
         ) : null}
         {alert ? (
-          <div className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-medium leading-4 text-amber-800">
+          <div className="truncate rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-medium leading-4 text-amber-800">
             {alert}
           </div>
         ) : null}
@@ -66,13 +66,13 @@ export function FinanceTodoCard({
 }) {
   return (
     <Card className={financeToneCardClass(tone)}>
-      <CardContent className="flex h-full items-center justify-between gap-3 p-2.5">
+      <CardContent className="flex h-full items-center justify-between gap-2 p-2">
         <div className="min-w-0">
           <div className="text-xs font-medium text-muted-foreground">{title}</div>
-          <div className={`mt-1 truncate text-lg font-semibold tabular-nums ${financeToneTextClass(tone)}`}>
+          <div className={`mt-0.5 truncate text-base font-semibold tabular-nums ${financeToneTextClass(tone)}`}>
             {value}
           </div>
-          <div className="mt-1 text-xs leading-4 text-muted-foreground">
+          <div className="mt-0.5 truncate text-xs leading-4 text-muted-foreground">
             {helper}
           </div>
         </div>
@@ -80,7 +80,7 @@ export function FinanceTodoCard({
           asChild
           variant={tone === "normal" ? "outline" : "secondary"}
           size="sm"
-          className="h-8 shrink-0 px-2"
+          className="h-7 shrink-0 px-2"
         >
           <Link href={href}>{actionLabel}</Link>
         </Button>

@@ -27,21 +27,23 @@ export function FinanceFilterSelectField({
   label,
   value,
   options,
+  compact = false,
 }: {
   id: string;
   name: string;
   label: string;
   value?: string;
   options: readonly FinanceFilterOption[];
+  compact?: boolean;
 }) {
   const [selectedValue, setSelectedValue] = useState(
     normalizeFilterSelectValue(value),
   );
 
   return (
-    <Field className="gap-1.5">
+    <Field className={compact ? "gap-0" : "gap-1.5"}>
       <FieldLabel
-        className="text-xs font-medium text-muted-foreground"
+        className={compact ? "sr-only" : "text-xs font-medium text-muted-foreground"}
         htmlFor={id}
       >
         {label}

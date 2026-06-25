@@ -307,6 +307,7 @@ export function FinanceProjectSummaryTable({
       data={rows}
       emptyText="暂无项目经营数据"
       minWidth="min-w-[1280px]"
+      tableClassName="[&_td]:py-2"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
       rowClassName={rowToneClass}
     />

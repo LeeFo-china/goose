@@ -185,8 +185,8 @@ export default async function FinancePage({
   const canGoNext = data.pagination.totalPages > 0 && data.pagination.page < data.pagination.totalPages;
 
   return (
-    <div className="flex min-h-0 flex-col gap-3 overflow-visible lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden">
-      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+    <div className="flex min-h-0 flex-col gap-2 overflow-visible lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-2 md:flex-row md:items-end">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
             <LineChart aria-hidden="true" className="size-4" />
@@ -207,7 +207,7 @@ export default async function FinancePage({
 
       <FinanceModuleTabs activeTab="overview" />
 
-      <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid shrink-0 gap-2 md:grid-cols-2 xl:grid-cols-4">
         <FinanceMetricCard
           icon={<WalletCards aria-hidden="true" className="size-4" />}
           label="合同总额"
@@ -236,14 +236,14 @@ export default async function FinancePage({
         />
       </div>
 
-      <section className="shrink-0 space-y-2">
-        <div className="flex items-center justify-between gap-3">
+      <section className="shrink-0 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">财务待办</h2>
           <span className="text-xs text-muted-foreground">
             优先补齐影响利润准确性的基础数据
           </span>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           <FinanceTodoCard
             title="未配置预算"
             value={`${budgetMissingCount} 个`}
@@ -285,32 +285,21 @@ export default async function FinancePage({
         </div>
       </section>
 
-      <Card className="shrink-0 border-amber-200 bg-amber-50/80 shadow-none">
-        <CardContent className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 gap-3">
-            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700">
+      <div className="shrink-0 rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-1.5">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700">
               <ListChecks aria-hidden="true" className="size-4" />
             </span>
             <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-amber-950">财务诊断</h2>
-              <div className="mt-1 grid max-w-5xl gap-2 text-xs leading-5 text-amber-950/80 xl:grid-cols-3">
-                <p>
-                  当前共筛选 {projectCount} 个项目，合同总额 {formatCompactMoney(summary.contract_amount)}，已收 {formatCompactMoney(summary.received_amount)}，整体回款率约 {formatCollectionRate(summary.received_amount, summary.contract_amount)}。
-                </p>
-                <p>
-                  当前实际支出 {formatFinanceMoney(summary.expense_paid_amount)}，实际毛利率 {formatFinancePercent(summary.actual_gross_margin)}
-                  {hasAbnormalGrossMargin
-                    ? "，该数据明显偏高，可能存在成本未完整归集的情况。"
-                    : "，请结合预算和成本归集情况判断利润准确性。"}
-                </p>
-                <p>
-                  当前有 {budgetMissingCount} 个项目未配置预算，{unallocatedProjectCount} 个项目存在未归集成本，建议优先补齐预算与成本数据，否则利润分析可能不准确。
-                </p>
-              </div>
+              <h2 className="text-xs font-semibold text-amber-950">财务诊断</h2>
+              <p className="max-w-5xl text-xs leading-5 text-amber-950/80 lg:truncate">
+                筛选 {projectCount} 个项目，合同 {formatCompactMoney(summary.contract_amount)}，已收 {formatCompactMoney(summary.received_amount)}，回款率 {formatCollectionRate(summary.received_amount, summary.contract_amount)}；实际支出 {formatFinanceMoney(summary.expense_paid_amount)}，实际毛利率 {formatFinancePercent(summary.actual_gross_margin)}。当前 {budgetMissingCount} 个项目未配预算，{unallocatedProjectCount} 个项目有未归集成本。
+              </p>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
-            <Button asChild variant="outline" size="sm" className="bg-background/80">
+            <Button asChild variant="outline" size="sm" className="h-8 bg-background/80">
               <Link href={buildFinanceSummaryHref({
                 page: 1,
                 filters: { ...params, risk_level: "danger" },
@@ -318,7 +307,7 @@ export default async function FinancePage({
                 查看高风险项目
               </Link>
             </Button>
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="h-8">
               <Link href={buildFinanceSummaryHref({
                 page: 1,
                 filters: budgetMissingCount > 0
@@ -329,18 +318,18 @@ export default async function FinancePage({
               </Link>
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance"
-            className="shrink-0 space-y-2 border-b bg-card p-3"
+            className="shrink-0 space-y-1.5 border-b bg-card p-2.5"
           >
-            <div className="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_12rem_11rem_auto] lg:items-end">
-              <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="finance-keyword">
+            <div className="grid gap-2 lg:grid-cols-[minmax(16rem,1fr)_11rem_10rem_auto] lg:items-center">
+              <div className="grid gap-0">
+                <label className="sr-only" htmlFor="finance-keyword">
                   项目搜索
                 </label>
                 <div className="relative">
@@ -360,6 +349,7 @@ export default async function FinancePage({
                 label="状态"
                 value={params.status}
                 options={PROJECT_STATUS_OPTIONS}
+                compact
               />
               <FinanceFilterSelectField
                 id="finance-risk-level"
@@ -367,6 +357,7 @@ export default async function FinancePage({
                 label="风险"
                 value={params.risk_level}
                 options={RISK_LEVEL_OPTIONS}
+                compact
               />
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                 <Button type="submit" size="sm" className="h-9">筛选</Button>
@@ -379,7 +370,7 @@ export default async function FinancePage({
               className="group"
               open={advancedFilterCount > 0}
             >
-              <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+              <summary className="flex h-6 cursor-pointer list-none items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
                 <span>更多筛选</span>
                 {advancedFilterCount > 0 ? (
                   <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">
