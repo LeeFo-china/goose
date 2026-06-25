@@ -1,19 +1,42 @@
 "use client";
 
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { isEmployeeStatus, type EmployeeStatus } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { Loader2, UserRound } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   EmployeeAvatarField,
   EmployeeBaseFields,
   EmployeeDialogFields,
   EmployeeOrgFields,
+  EmployeeRoleFields,
 } from "@/components/employees/employee-dialog-fields";
-import { EMPTY_SELECT_VALUE, getDepartmentOptionValue, mutateEmployee, uploadEmployeeAvatar, type MutationMode } from "@/components/employees/employee-mutation-shared";
+import {
+  EMPTY_SELECT_VALUE,
+  getDepartmentOptionValue,
+  mutateEmployee,
+  uploadEmployeeAvatar,
+  type MutationMode,
+  type RoleOption,
+} from "@/components/employees/employee-mutation-shared";
 import type {
   EmployeeDepartmentOption,
   EmployeeMutationRecord,
@@ -26,6 +49,7 @@ export function EmployeeDialog({
   employee,
   departments,
   posts,
+  roles = [],
   open,
   onOpenChange,
   onSaved,
@@ -34,6 +58,7 @@ export function EmployeeDialog({
   employee?: EmployeeMutationRecord;
   departments: EmployeeDepartmentOption[];
   posts: EmployeePostOption[];
+  roles?: RoleOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
@@ -58,6 +83,7 @@ export function EmployeeDialog({
   const [avatarDirty, setAvatarDirty] = useState(false);
   const [tenantDepartmentId, setTenantDepartmentId] = useState(defaults.tenantDepartmentId);
   const [postId, setPostId] = useState(defaults.postId);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -106,9 +132,10 @@ export function EmployeeDialog({
     setAvatarDirty(false);
     setTenantDepartmentId(defaults.tenantDepartmentId);
     setPostId(defaults.postId);
+    setSelectedRoleIds(mode === "create" ? [] : (employee?.roles || []).map((role) => role.id));
     setUploadingAvatar(false);
     setAvatarLoadFailed(false);
-  }, [defaults.avatar, defaults.postId, defaults.status, defaults.tenantDepartmentId, open]);
+  }, [defaults.avatar, defaults.postId, defaults.status, defaults.tenantDepartmentId, employee?.roles, mode, open]);
 
   function close() {
     if (pending || uploadingAvatar) return;
@@ -155,6 +182,13 @@ export function EmployeeDialog({
     }
   }
 
+  function toggleRole(roleId: string, checked: boolean) {
+    setSelectedRoleIds((current) => {
+      if (checked) return Array.from(new Set([...current, roleId]));
+      return current.filter((id) => id !== roleId);
+    });
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -169,6 +203,7 @@ export function EmployeeDialog({
       status: string;
       tenant_department_id: string | null;
       post_id: string | null;
+      role_ids?: string[];
     } = {
       name,
       phone: phone || null,
@@ -176,6 +211,9 @@ export function EmployeeDialog({
       tenant_department_id: tenantDepartmentId || null,
       post_id: postId || null,
     };
+    if (mode === "create") {
+      payload.role_ids = selectedRoleIds;
+    }
     if (mode === "create" || avatarDirty) {
       payload.avatar = avatar || null;
     }
@@ -202,8 +240,8 @@ export function EmployeeDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
-      <DialogContent className="max-w-[560px]">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[86vh] max-w-[620px] flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
               <UserRound className="size-4" />
@@ -216,8 +254,8 @@ export function EmployeeDialog({
             </div>
           </div>
         </DialogHeader>
-        <form className="flex flex-col gap-4" onSubmit={submit}>
-          <EmployeeDialogFields>
+        <form className="flex min-h-0 flex-col gap-4" onSubmit={submit}>
+          <EmployeeDialogFields className="min-h-0 overflow-y-auto pr-1">
             <EmployeeAvatarField
               mode={mode}
               name={defaults.name}
@@ -255,11 +293,20 @@ export function EmployeeDialog({
               changeDepartment={changeDepartment}
               setPostId={setPostId}
             />
+            {mode === "create" ? (
+              <EmployeeRoleFields
+                mode={mode}
+                roles={roles}
+                selectedRoleIds={selectedRoleIds}
+                pending={pending}
+                toggleRole={toggleRole}
+              />
+            ) : null}
           </EmployeeDialogFields>
           {error ? (
             <StatusAlert>{error}</StatusAlert>
           ) : null}
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button type="button" variant="outline" onClick={close} disabled={pending || uploadingAvatar}>
               取消
             </Button>

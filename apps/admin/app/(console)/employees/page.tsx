@@ -264,6 +264,7 @@ export default async function EmployeesPage({
         <CreateEmployeeButton
           departments={departmentPostConfig.departments}
           posts={departmentPostConfig.post_options}
+          roles={roleOptions.roles}
         />
       </div>
 

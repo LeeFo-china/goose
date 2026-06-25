@@ -1,13 +1,33 @@
 "use client";
 
-import type { ChangeEvent, ReactNode, RefObject } from "react";
-import type { EmployeeStatus } from "@gooes/domain";
-import { Loader2, Upload, UserRound, X } from "lucide-react";
+import { type ChangeEvent, type ReactNode, type RefObject, useState } from "react";
+import { RoleStatusConfig, type EmployeeStatus } from "@gooes/domain";
+import { ChevronsUpDown, Loader2, Upload, UserRound, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { employeeStatusSelectOptions, EMPTY_SELECT_VALUE } from "@/components/employees/employee-mutation-shared";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  employeeStatusSelectOptions,
+  EMPTY_SELECT_VALUE,
+  type RoleOption,
+} from "@/components/employees/employee-mutation-shared";
 
 export function EmployeeAvatarField({
   mode,
@@ -203,6 +223,154 @@ export function EmployeeOrgFields({
   );
 }
 
-export function EmployeeDialogFields({ children }: { children: ReactNode }) {
-  return <FieldGroup>{children}</FieldGroup>;
+export function EmployeeRoleFields({
+  mode,
+  roles,
+  selectedRoleIds,
+  pending,
+  toggleRole,
+}: {
+  mode: "create" | "edit";
+  roles: RoleOption[];
+  selectedRoleIds: string[];
+  pending: boolean;
+  toggleRole: (roleId: string, checked: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedRoleIdSet = new Set(selectedRoleIds);
+  const selectedRoles = roles.filter((role) => selectedRoleIdSet.has(role.id));
+  const visibleSelectedRoles = selectedRoles.slice(0, 2);
+  const hiddenSelectedCount = selectedRoles.length - visibleSelectedRoles.length;
+
+  function clearRoles() {
+    for (const roleId of selectedRoleIds) {
+      toggleRole(roleId, false);
+    }
+  }
+
+  return (
+    <Field>
+      <FieldLabel id={`${mode}-employee-roles-label`}>角色</FieldLabel>
+      <FieldDescription>
+        创建后立即分配角色；不选择则员工暂无角色权限。
+      </FieldDescription>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            aria-labelledby={`${mode}-employee-roles-label`}
+            disabled={pending || roles.length === 0}
+            className="min-h-10 w-full justify-between px-3 font-normal"
+          >
+            <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+              {selectedRoles.length === 0 ? (
+                <span className="text-muted-foreground">
+                  {roles.length === 0 ? "暂无可分配角色" : "选择角色"}
+                </span>
+              ) : (
+                <>
+                  {visibleSelectedRoles.map((role) => (
+                    <Badge
+                      key={role.id}
+                      variant="secondary"
+                      className="max-w-[150px] truncate"
+                    >
+                      {role.name || role.code}
+                    </Badge>
+                  ))}
+                  {hiddenSelectedCount > 0 ? (
+                    <Badge variant="outline">
+                      +{hiddenSelectedCount}
+                    </Badge>
+                  ) : null}
+                </>
+              )}
+            </span>
+            <ChevronsUpDown data-icon="inline-end" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="搜索角色名称或编码" />
+            <CommandList className="max-h-[260px]">
+              <CommandEmpty>没有匹配的角色</CommandEmpty>
+              <CommandGroup>
+                {roles.map((role) => {
+                  const checked = selectedRoleIdSet.has(role.id);
+                  const statusMeta = role.status === "active"
+                    ? { label: RoleStatusConfig.active.label, variant: "success" as const }
+                    : { label: RoleStatusConfig.inactive.label, variant: "secondary" as const };
+
+                  return (
+                    <CommandItem
+                      key={role.id}
+                      value={`${role.name} ${role.code} ${role.description || ""}`}
+                      onSelect={() => toggleRole(role.id, !checked)}
+                      className={checked ? "bg-accent/40" : undefined}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        aria-label={role.name || role.code}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-medium">
+                            {role.name || role.code}
+                          </span>
+                          <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                        </span>
+                        <span className="mt-0.5 block break-all text-xs text-muted-foreground">
+                          {role.code}
+                        </span>
+                        {role.description ? (
+                          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                            {role.description}
+                          </span>
+                        ) : null}
+                      </span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+          {selectedRoleIds.length > 0 ? (
+            <div className="flex items-center justify-between border-t px-3 py-2">
+              <span className="text-xs text-muted-foreground">
+                已选择 {selectedRoleIds.length} 个角色
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={pending}
+                onClick={clearRoles}
+              >
+                <X data-icon="inline-start" />
+                清空
+              </Button>
+            </div>
+          ) : null}
+        </PopoverContent>
+      </Popover>
+      {roles.length === 0 ? (
+        <div className="rounded-md border bg-muted/30 px-3 py-2.5 text-sm text-muted-foreground">
+          暂无可分配角色，请先到角色管理页面创建或启用角色。
+        </div>
+      ) : null}
+    </Field>
+  );
+}
+
+export function EmployeeDialogFields({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <FieldGroup className={className}>{children}</FieldGroup>;
 }

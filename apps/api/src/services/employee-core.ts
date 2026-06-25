@@ -7,6 +7,7 @@ import {
   type EmployeeScope,
   type EmployeeVisibilityFilter,
 } from "@/repositories/employee-core";
+import { permissionRepository } from "@/repositories/permissions";
 import type {
   CreateEmployeeInput,
   EmployeeListQueryType,
@@ -96,22 +97,45 @@ class EmployeeCoreService {
   }) {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     accessPolicyService.assertPermission(input.authContext, "employee.create");
+    const { role_ids, ...employeePayload } = input.payload;
+    const roleIds = Array.from(new Set(role_ids || []));
+    if (roleIds.length > 0) {
+      accessPolicyService.assertPermission(
+        input.authContext,
+        "employee.permission_manage",
+      );
+    }
+
     const department = await this.normalizeDepartmentForWrite({
       tenantId,
-      tenantDepartmentId: input.payload.tenant_department_id,
+      tenantDepartmentId: employeePayload.tenant_department_id,
     });
 
     await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
       departmentId: department.tenantDepartmentId,
-      postId: input.payload.post_id,
+      postId: employeePayload.post_id,
       tenantId,
     });
 
-    return employeeCoreRepository.create({
-      ...input.payload,
+    if (roleIds.length > 0) {
+      const roles = await permissionRepository.listRolesByIds(roleIds, tenantId);
+      if (roles.length !== roleIds.length) {
+        throw Errors.badRequest("存在无效的角色 ID");
+      }
+    }
+
+    const employee = await employeeCoreRepository.create({
+      ...employeePayload,
       tenant_department_id: department.tenantDepartmentId,
       tenant_id: tenantId,
     });
+    if (roleIds.length > 0) {
+      await permissionRepository.replaceEmployeeRoles(employee.id, {
+        role_ids: roleIds,
+      });
+    }
+
+    return employee;
   }
 
   async updateEmployee(input: {

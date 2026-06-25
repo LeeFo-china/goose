@@ -107,16 +107,22 @@ export const EmployeeBaseSchema = z.object({
  * 创建员工时的校验 (POST)
  * 继承基础 Schema，确保必要字段存在
  */
-export const CreateEmployeeSchema = EmployeeBaseSchema.omit({
+const EmployeeWriteSchema = EmployeeBaseSchema.omit({
   id: true,
   created_at: true,
+});
+
+export const CreateEmployeeSchema = EmployeeWriteSchema.extend({
+  role_ids: z.array(z.uuid("无效的角色 ID"))
+    .max(20, "角色数量不能超过 20")
+    .default([]),
 });
 
 /**
  * 更新员工时的校验 (PATCH)
  * 所有字段变为可选，但如果传了，必须符合格式
  */
-export const UpdateEmployeeSchema = CreateEmployeeSchema.partial();
+export const UpdateEmployeeSchema = EmployeeWriteSchema.partial();
 
 // 导出类型供 TypeScript 使用
 export type EmployeeType = z.infer<typeof EmployeeBaseSchema>;

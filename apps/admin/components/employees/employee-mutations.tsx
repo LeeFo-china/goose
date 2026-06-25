@@ -6,7 +6,10 @@ import { Edit3, Loader2, Plus, Trash2 } from "lucide-react";
 import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { Button } from "@/components/ui/button";
 import { EmployeeDialog } from "@/components/employees/employee-dialog";
-import { mutateEmployee } from "@/components/employees/employee-mutation-shared";
+import {
+  mutateEmployee,
+  type RoleOption,
+} from "@/components/employees/employee-mutation-shared";
 import { ManageEmployeeRolesButton } from "@/components/employees/employee-roles-dialog";
 import type {
   EmployeeDepartmentOption,
@@ -23,9 +26,11 @@ export type {
 export function CreateEmployeeButton({
   departments,
   posts,
+  roles,
 }: {
   departments: EmployeeDepartmentOption[];
   posts: EmployeePostOption[];
+  roles: RoleOption[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -39,6 +44,7 @@ export function CreateEmployeeButton({
         mode="create"
         departments={departments}
         posts={posts}
+        roles={roles}
         open={open}
         onOpenChange={setOpen}
       />

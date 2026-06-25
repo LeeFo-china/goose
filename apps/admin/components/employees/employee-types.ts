@@ -10,6 +10,14 @@ export type EmployeeMutationRecord = {
   department_code?: string | null;
   post_id: string | null;
   avatar: string | null;
+  roles?: EmployeeRoleSummary[];
+};
+
+export type EmployeeRoleSummary = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
 };
 
 export type EmployeeDepartmentOption = {
