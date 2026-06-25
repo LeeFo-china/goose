@@ -145,7 +145,6 @@ function FinanceUnallocatedProjectPopover({
 }) {
   const [open, setOpen] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
-  const actionHref = unallocatedActionHref(row);
   const reason = unallocatedRiskReason(row);
 
   function clearCloseTimer() {
@@ -184,11 +183,7 @@ function FinanceUnallocatedProjectPopover({
       <PopoverContent
         align="start"
         aria-label="未归集费用摘要"
-        className="w-80 p-0"
-        onBlur={scheduleClose}
-        onFocus={openPopover}
-        onMouseEnter={openPopover}
-        onMouseLeave={scheduleClose}
+        className="pointer-events-none w-80 p-0"
         side="right"
       >
         <div className="flex flex-col gap-3 p-3">
@@ -221,11 +216,6 @@ function FinanceUnallocatedProjectPopover({
             {reason?.description ||
               "该项目存在未归集成本，实际利润和毛利率可能偏高。"}
           </p>
-          {actionHref ? (
-            <Button asChild variant="outline" size="sm" className="w-full">
-              <Link href={actionHref}>归集成本</Link>
-            </Button>
-          ) : null}
         </div>
       </PopoverContent>
     </Popover>

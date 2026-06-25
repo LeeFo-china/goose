@@ -132,7 +132,11 @@ async function expectUnallocatedProjectSummaryPopover(page: Page) {
   await expect(popover).toBeVisible();
   await expect(popover.getByText("未归集金额")).toBeVisible();
   await expect(popover.getByText("流水数量")).toBeVisible();
-  await expect(popover.getByRole("link", { name: "归集成本" })).toBeVisible();
+
+  const popoverBox = await popover.boundingBox();
+  expect(popoverBox).not.toBeNull();
+  await page.mouse.move(popoverBox!.x + popoverBox!.width / 2, popoverBox!.y + 8);
+  await expect(popover).toBeHidden();
 }
 
 async function expectFinancePaginationSpinner(page: Page) {
