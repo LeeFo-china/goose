@@ -124,6 +124,7 @@ describe("workflowTemplateService expense_approval", () => {
     expect(
       template.graph.nodes.find((node) => node.node_key === "manager_review"),
     ).toMatchObject({
+      title: "经理审批",
       node_type: "approval",
       business_kind: "expense_approval",
       config: {
@@ -132,5 +133,11 @@ describe("workflowTemplateService expense_approval", () => {
         required_permissions: ["expense_request.approve_manager"],
       },
     });
+    expect(
+      template.graph.nodes.find((node) => node.node_key === "finance_review"),
+    ).toMatchObject({ title: "财务审批" });
+    expect(
+      template.graph.nodes.find((node) => node.node_key === "payment"),
+    ).toMatchObject({ title: "出纳打款" });
   });
 });

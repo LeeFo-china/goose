@@ -229,13 +229,13 @@ class WorkflowTemplateService {
       graph: {
         nodes: [
           this.node("start", "start", null, "开始", "费用申请提交审批。", 80, 180, 10, []),
-          this.node("manager_review", "approval", "expense_approval", "主管审批", "对应费用当前步骤：主管审批。", 300, 180, 20, ["expense_request.approve_manager"], {
+          this.node("manager_review", "approval", "expense_approval", "经理审批", "对应费用当前步骤：经理审批。", 300, 180, 20, ["expense_request.approve_manager"], {
             approval_type: "expense_approval",
             assignee_rule: "applicant_department_manager",
             approve_mode: "any",
           }),
           this.node("finance_review", "approval", "expense_approval", "财务审批", "对应费用当前步骤：财务审批。", 520, 180, 30, ["expense_request.approve_finance"]),
-          this.node("payment", "approval", "expense_approval", "登记打款", "对应费用当前步骤：待打款。", 740, 180, 40, ["expense_request.pay"]),
+          this.node("payment", "approval", "expense_approval", "出纳打款", "对应费用当前步骤：待打款。", 740, 180, 40, ["expense_request.pay"]),
           this.node("rejected", "end", null, "已驳回", "费用审批驳回后流程结束。", 520, 380, 50, []),
           this.node("done", "end", null, "已完成", "费用完成打款后流程结束。", 960, 180, 60, []),
         ],
