@@ -28,6 +28,35 @@ describe("toWorkflowFlowEdges", () => {
 
     expect(edge?.sourceHandle).toBe("payment_success");
   });
+
+  test("uses the rejected handle for approval decision rejected edges", () => {
+    const approval = workflowNode({
+      id: "node-manager-review",
+      node_key: "manager_review",
+      node_type: "approval",
+      business_kind: "expense_approval",
+    });
+    const rejected = workflowNode({
+      id: "node-rejected",
+      node_key: "rejected",
+      node_type: "end",
+      business_kind: null,
+    });
+
+    const [edge] = toWorkflowFlowEdges({
+      activeValidationEdgeIds: new Set(),
+      edges: [
+        {
+          ...workflowEdge(approval, rejected),
+          condition: { operator: "eq", field: "decision", value: "rejected" },
+        },
+      ],
+      nodes: [approval, rejected],
+      onDeleteEdge: () => undefined,
+    });
+
+    expect(edge?.sourceHandle).toBe("approval_rejected");
+  });
 });
 
 function workflowNode(input: {

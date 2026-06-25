@@ -37,13 +37,13 @@ export const WORKFLOW_EDGE_CONDITION_OPTIONS = [
     value: "approval_approved",
     label: "审批通过",
     edgeLabel: "审批通过",
-    condition: { operator: "eq", field: "approval_result", value: "approved" },
+    condition: { operator: "eq", field: "decision", value: "approved" },
   },
   {
     value: "approval_rejected",
     label: "审批拒绝",
     edgeLabel: "审批拒绝",
-    condition: { operator: "eq", field: "approval_result", value: "rejected" },
+    condition: { operator: "eq", field: "decision", value: "rejected" },
   },
 ] as const satisfies ReadonlyArray<WorkflowEdgeConditionOption>;
 
