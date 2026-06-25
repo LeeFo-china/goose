@@ -238,8 +238,8 @@ export default async function FinancePage({
             action="/finance"
             className="shrink-0 space-y-1.5 border-b bg-card p-2.5"
           >
-            <div className="grid gap-2 lg:grid-cols-[minmax(16rem,1fr)_11rem_10rem_auto] lg:items-center">
-              <div className="grid gap-0">
+            <div className="flex flex-wrap items-center gap-1">
+              <div className="order-1 grid min-w-0 flex-1 gap-0">
                 <label className="sr-only" htmlFor="finance-keyword">
                   项目搜索
                 </label>
@@ -254,72 +254,76 @@ export default async function FinancePage({
                   />
                 </div>
               </div>
-              <FinanceFilterSelectField
-                id="finance-status"
-                name="status"
-                label="状态"
-                value={params.status}
-                options={PROJECT_STATUS_OPTIONS}
-                compact
-              />
-              <FinanceFilterSelectField
-                id="finance-risk-level"
-                name="risk_level"
-                label="风险"
-                value={params.risk_level}
-                options={RISK_LEVEL_OPTIONS}
-                compact
-              />
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <div className="order-2 w-[104px] shrink-0">
+                <FinanceFilterSelectField
+                  id="finance-status"
+                  name="status"
+                  label="状态"
+                  value={params.status}
+                  options={PROJECT_STATUS_OPTIONS}
+                  compact
+                />
+              </div>
+              <div className="order-3 w-[104px] shrink-0">
+                <FinanceFilterSelectField
+                  id="finance-risk-level"
+                  name="risk_level"
+                  label="风险"
+                  value={params.risk_level}
+                  options={RISK_LEVEL_OPTIONS}
+                  compact
+                />
+              </div>
+              <details
+                className="contents group"
+                open={advancedFilterCount > 0}
+              >
+                <summary className="order-4 flex h-9 cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-md border px-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                  <span>更多筛选</span>
+                  {advancedFilterCount > 0 ? (
+                    <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">
+                      已选 {advancedFilterCount}
+                    </Badge>
+                  ) : null}
+                </summary>
+                <div className="order-7 mt-2 grid basis-full gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <FinanceFilterSelectField
+                    id="finance-risk-flag"
+                    name="risk_flag"
+                    label="原因"
+                    value={params.risk_flag}
+                    options={RISK_FLAG_OPTIONS}
+                  />
+                  <FinanceFilterSelectField
+                    id="finance-budget-configured"
+                    name="budget_configured"
+                    label="已配预算"
+                    value={params.budget_configured}
+                    options={BOOLEAN_FILTER_OPTIONS}
+                  />
+                  <FinanceFilterSelectField
+                    id="finance-has-unallocated-expense"
+                    name="has_unallocated_expense"
+                    label="未归集"
+                    value={params.has_unallocated_expense}
+                    options={BOOLEAN_FILTER_OPTIONS}
+                  />
+                  <FinanceFilterSelectField
+                    id="finance-overdue"
+                    name="overdue"
+                    label="逾期"
+                    value={params.overdue}
+                    options={BOOLEAN_FILTER_OPTIONS}
+                  />
+                </div>
+              </details>
+              <div className="order-5 flex shrink-0 flex-nowrap items-center gap-1">
                 <Button type="submit" size="sm" className="h-9">筛选</Button>
-                <Button asChild type="button" variant="outline" size="sm" className="h-9">
+                <Button asChild type="button" variant="ghost" size="sm" className="h-9 px-1.5">
                   <Link href="/finance">重置</Link>
                 </Button>
               </div>
             </div>
-            <details
-              className="group"
-              open={advancedFilterCount > 0}
-            >
-              <summary className="flex h-6 cursor-pointer list-none items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-                <span>更多筛选</span>
-                {advancedFilterCount > 0 ? (
-                  <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">
-                    已选 {advancedFilterCount}
-                  </Badge>
-                ) : null}
-              </summary>
-              <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <FinanceFilterSelectField
-                  id="finance-risk-flag"
-                  name="risk_flag"
-                  label="原因"
-                  value={params.risk_flag}
-                  options={RISK_FLAG_OPTIONS}
-                />
-                <FinanceFilterSelectField
-                  id="finance-budget-configured"
-                  name="budget_configured"
-                  label="已配预算"
-                  value={params.budget_configured}
-                  options={BOOLEAN_FILTER_OPTIONS}
-                />
-                <FinanceFilterSelectField
-                  id="finance-has-unallocated-expense"
-                  name="has_unallocated_expense"
-                  label="未归集"
-                  value={params.has_unallocated_expense}
-                  options={BOOLEAN_FILTER_OPTIONS}
-                />
-                <FinanceFilterSelectField
-                  id="finance-overdue"
-                  name="overdue"
-                  label="逾期"
-                  value={params.overdue}
-                  options={BOOLEAN_FILTER_OPTIONS}
-                />
-              </div>
-            </details>
           </form>
           {data.error ? (
             <div className="shrink-0 border-b p-4">

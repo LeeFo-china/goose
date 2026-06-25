@@ -24,6 +24,38 @@ async function expectNoDocumentScroll(page: Page) {
   expect(state.scrollWidth).toBeLessThanOrEqual(state.clientWidth + 1);
 }
 
+async function expectFinanceAdvancedFilterInline(page: Page) {
+  const toolbar = page.locator("form[action='/finance']").first();
+  const positions = await toolbar.evaluate((form) => {
+    const risk = form.querySelector("#finance-risk-level")?.getBoundingClientRect();
+    const more = Array.from(form.querySelectorAll("summary"))
+      .find((item) => item.textContent?.includes("更多筛选"))
+      ?.getBoundingClientRect();
+    const submit = form.querySelector("button[type='submit']")?.getBoundingClientRect();
+    const reset = Array.from(form.querySelectorAll("a"))
+      .find((item) => item.textContent?.trim() === "重置")
+      ?.getBoundingClientRect();
+    return risk && more && submit && reset
+      ? {
+          riskRight: risk.right,
+          moreLeft: more.left,
+          moreRight: more.right,
+          submitLeft: submit.left,
+          submitRight: submit.right,
+          resetLeft: reset.left,
+          yDelta: Math.max(risk.top, more.top, submit.top, reset.top) -
+            Math.min(risk.top, more.top, submit.top, reset.top),
+        }
+      : null;
+  });
+
+  expect(positions).not.toBeNull();
+  expect(positions!.moreLeft).toBeGreaterThanOrEqual(positions!.riskRight - 1);
+  expect(positions!.submitLeft).toBeGreaterThanOrEqual(positions!.moreRight - 1);
+  expect(positions!.resetLeft).toBeGreaterThanOrEqual(positions!.submitRight - 1);
+  expect(positions!.yDelta).toBeLessThanOrEqual(4);
+}
+
 test.describe("finance workspace", () => {
   test.beforeEach(async ({ page }) => {
     await loginAsTenantAdmin(page);
@@ -48,6 +80,7 @@ test.describe("finance workspace", () => {
     await expect(profitBreakdown.getByText("实际利润")).toBeVisible();
     await expect(page.getByRole("heading", { name: "风险分布" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "30天现金流" })).toBeVisible();
+    await expectFinanceAdvancedFilterInline(page);
     await expectNoDocumentScroll(page);
 
     await financeNav.getByRole("link", { name: "财务诊断" }).click();
