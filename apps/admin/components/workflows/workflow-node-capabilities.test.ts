@@ -3,6 +3,7 @@ import type { WorkflowNode } from "@/components/workflows/workflow-types";
 import {
   applyWorkflowConstructionStageKind,
   applyWorkflowNodeCapability,
+  getWorkflowNodeDisplayLabels,
 } from "./workflow-node-capabilities";
 
 const NOW = "2026-06-17T00:00:00.000Z";
@@ -67,6 +68,23 @@ describe("applyWorkflowNodeCapability", () => {
       approval_type: "expense_approval",
       assignee_rule: "applicant_department_manager",
     });
+  });
+});
+
+describe("getWorkflowNodeDisplayLabels", () => {
+  test("uses the configured node title as approval node label", () => {
+    expect(
+      getWorkflowNodeDisplayLabels({
+        ...baseNode(),
+        node_type: "approval",
+        business_kind: "expense_approval",
+        title: "经理审批",
+        config: {
+          required_permissions: ["expense_request.approve_manager"],
+          approval_type: "expense_approval",
+        },
+      }).specificLabel,
+    ).toBe("经理审批");
   });
 });
 

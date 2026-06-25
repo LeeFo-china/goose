@@ -51,6 +51,7 @@ import type {
 } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -194,6 +195,25 @@ export function WorkflowPropertyPanel({
         className="min-h-0 flex-1 overflow-auto"
       >
         <PropertyPanelSection title="节点类型">
+          <div className="grid gap-2">
+            <Label htmlFor="workflow-node-title">节点名称</Label>
+            <Input
+              id="workflow-node-title"
+              value={selectedNode.title}
+              disabled={disabled}
+              maxLength={80}
+              placeholder="输入节点名称"
+              onChange={(event) =>
+                onChangeNode({
+                  ...selectedNode,
+                  title: event.target.value,
+                })
+              }
+            />
+            {!selectedNode.title.trim() ? (
+              <p className="text-xs text-destructive">节点名称不能为空</p>
+            ) : null}
+          </div>
           <div className="grid gap-2">
             <Label htmlFor="workflow-node-capability">
               {isControlNode ? "控制节点" : "节点能力"}

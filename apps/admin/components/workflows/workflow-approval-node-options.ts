@@ -39,7 +39,8 @@ export function getWorkflowApprovalKind(node: WorkflowNode): WorkflowApprovalKin
 }
 
 export function getWorkflowApprovalSpecificLabel(node: WorkflowNode) {
-  return getWorkflowApprovalKindOption(getWorkflowApprovalKind(node))?.label ||
-    node.title ||
+  const title = node.title?.trim();
+  return title ||
+    getWorkflowApprovalKindOption(getWorkflowApprovalKind(node))?.label ||
     "审批";
 }

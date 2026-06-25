@@ -2,6 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { Settings } from "lucide-react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   getWorkflowBranchOutcomes,
   getWorkflowBranchSourceKind,
@@ -72,6 +73,8 @@ const WORKFLOW_NODE_VISUAL_STYLES: Record<WorkflowNodeCapability, WorkflowNodeVi
 
 export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
   const { node } = data;
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const [draftTitle, setDraftTitle] = useState(node.title);
   const branchKind = getWorkflowBranchSourceKind(node);
   const branchOutcomes = branchKind ? getWorkflowBranchOutcomes(branchKind) : [];
   const [primaryOutcome, secondaryOutcome] = branchOutcomes;
@@ -100,7 +103,39 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
       ? "border-destructive/55 bg-destructive/5 ring-4 ring-destructive/15"
       : validationSuccess
         ? "border-success/45 bg-success/5 ring-2 ring-success/15"
-        : null;
+      : null;
+
+  useEffect(() => {
+    if (data.editingTitle) {
+      setDraftTitle(node.title);
+      requestAnimationFrame(() => {
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+      });
+    }
+  }, [data.editingTitle, node.title]);
+
+  function handleStartTitleEdit(event: MouseEvent) {
+    event.stopPropagation();
+    if (data.disabled) return;
+    data.onStartRename(node.id);
+  }
+
+  function handleCommitTitle() {
+    const nextTitle = draftTitle.trim();
+    if (nextTitle && nextTitle !== node.title) {
+      data.onRenameNode(node.id, nextTitle);
+    }
+    if (!nextTitle) {
+      setDraftTitle(node.title);
+    }
+    data.onCancelRename();
+  }
+
+  function handleCancelTitleEdit() {
+    setDraftTitle(node.title);
+    data.onCancelRename();
+  }
 
   return (
     <div
@@ -223,9 +258,43 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
           />
           <span className="truncate">{displayLabels.capabilityLabel}</span>
         </span>
-        <span className="block w-full truncate text-[15px] font-semibold leading-5 text-foreground">
-          {displayLabels.specificLabel}
-        </span>
+        {data.editingTitle ? (
+          <input
+            ref={titleInputRef}
+            data-workflow-node-title-input="true"
+            className={[
+              "nodrag nopan block h-7 w-full rounded-md border border-primary bg-background px-2 text-[14px] font-semibold leading-5 text-foreground shadow-sm outline-none",
+              "focus-visible:ring-2 focus-visible:ring-primary/25",
+              isDecisionNode || isTerminalControlNode ? "text-center" : "text-left",
+            ].join(" ")}
+            maxLength={80}
+            value={draftTitle}
+            onBlur={handleCommitTitle}
+            onChange={(event) => setDraftTitle(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                handleCommitTitle();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                handleCancelTitleEdit();
+              }
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          />
+        ) : (
+          <span
+            data-workflow-node-title="true"
+            className="block w-full truncate text-[15px] font-semibold leading-5 text-foreground"
+            title="双击编辑节点名称"
+            onDoubleClick={handleStartTitleEdit}
+          >
+            {displayLabels.specificLabel}
+          </span>
+        )}
       </div>
       {selected ? (
         <span

@@ -137,7 +137,16 @@ export function WorkflowDesignerShell({
     });
     setDirty(true);
   }
-
+  function renameNode(nodeId: string, title: string) {
+    if (!graph) return;
+    const nextTitle = title.trim();
+    if (!nextTitle) return toast.error("节点名称不能为空");
+    const nodes = graph.nodes.map((node) =>
+      node.id === nodeId ? { ...node, title: nextTitle } : node
+    );
+    setGraph({ ...graph, nodes });
+    setDirty(true);
+  }
   function arrangeNodes(nodes: WorkflowNode[]) {
     if (!graph) return;
     setGraph({
@@ -435,6 +444,7 @@ export function WorkflowDesignerShell({
                 onArrangeNodes={arrangeNodes}
                 onMoveNode={moveNode}
                 onOpenNodeLibrary={showNodeLibrary}
+                onRenameNode={renameNode}
                 onSelectNode={selectNode}
                 validationPlayback={playback}
                 viewStorageKey={`workflow-canvas:${workflowId}:zoom`}

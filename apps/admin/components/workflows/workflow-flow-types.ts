@@ -19,6 +19,10 @@ export type WorkflowFlowNodeData = {
   node: WorkflowNode;
   connecting: boolean;
   disabled?: boolean;
+  editingTitle: boolean;
+  onCancelRename: () => void;
+  onRenameNode: (nodeId: string, title: string) => void;
+  onStartRename: (nodeId: string) => void;
   selected: boolean;
   validationState: WorkflowFlowValidationState;
 };
@@ -48,8 +52,12 @@ export type WorkflowFlowAdapterInput = {
   disabled?: boolean;
   edges: WorkflowEdge[];
   errorValidationNodeIds: Set<string>;
+  editingTitleNodeId: string | null;
   nodes: WorkflowNode[];
   onDeleteEdge: (edgeId: string) => void;
+  onCancelRename: () => void;
+  onRenameNode: (nodeId: string, title: string) => void;
+  onStartRename: (nodeId: string) => void;
   selectedNodeId: string | null;
   connectingNodeId: string | null;
   successValidationNodeIds: Set<string>;

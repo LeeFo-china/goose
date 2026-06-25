@@ -74,6 +74,7 @@ export function WorkflowCanvas(props: {
   onArrangeNodes: (nodes: WorkflowNode[]) => void;
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
   onOpenNodeLibrary: () => void;
+  onRenameNode: (nodeId: string, title: string) => void;
   onSelectNode: (nodeId: string) => void;
   validationPlayback?: WorkflowValidationPlaybackSnapshot;
   viewStorageKey?: string;
@@ -98,6 +99,7 @@ function WorkflowCanvasInner({
   onFinishConnect,
   onMoveNode,
   onOpenNodeLibrary,
+  onRenameNode,
   onSelectNode,
   selectedNodeId,
   validationPlayback,
@@ -108,6 +110,7 @@ function WorkflowCanvasInner({
   const reactFlow = useReactFlow<WorkflowFlowNodeType, WorkflowFlowEdgeType>();
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<WorkflowFlowNodeType>([]);
   const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState<WorkflowFlowEdgeType>([]);
+  const [editingTitleNodeId, setEditingTitleNodeId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [canvasViewReady, setCanvasViewReady] = useState(!viewStorageKey);
   const selectedNode = useMemo(
@@ -138,15 +141,45 @@ function WorkflowCanvasInner({
   }, []);
 
   useEffect(() => {
+    if (
+      disabled ||
+      (editingTitleNodeId &&
+        !nodes.some((node) => node.id === editingTitleNodeId))
+    ) {
+      setEditingTitleNodeId(null);
+    }
+  }, [disabled, editingTitleNodeId, nodes]);
+
+  const handleStartRename = useCallback((nodeId: string) => {
+    if (disabled) return;
+    onCancelConnect();
+    onSelectNode(nodeId);
+    setEditingTitleNodeId(nodeId);
+  }, [disabled, onCancelConnect, onSelectNode]);
+
+  const handleCancelRename = useCallback(() => {
+    setEditingTitleNodeId(null);
+  }, []);
+
+  const handleRenameNode = useCallback((nodeId: string, title: string) => {
+    onRenameNode(nodeId, title);
+    setEditingTitleNodeId(null);
+  }, [onRenameNode]);
+
+  useEffect(() => {
     setFlowNodes(toWorkflowFlowNodes({
       activeValidationEdgeIds,
       activeValidationNodeIds,
       connectingNodeId,
       disabled,
+      editingTitleNodeId,
       edges,
       errorValidationNodeIds,
       nodes,
+      onCancelRename: handleCancelRename,
       onDeleteEdge: handleDeleteEdge,
+      onRenameNode: handleRenameNode,
+      onStartRename: handleStartRename,
       selectedNodeId,
       successValidationNodeIds,
     }));
@@ -155,9 +188,13 @@ function WorkflowCanvasInner({
     activeValidationNodeIds,
     connectingNodeId,
     disabled,
+    editingTitleNodeId,
     edges,
     errorValidationNodeIds,
+    handleCancelRename,
     handleDeleteEdge,
+    handleRenameNode,
+    handleStartRename,
     nodes,
     selectedNodeId,
     setFlowNodes,
