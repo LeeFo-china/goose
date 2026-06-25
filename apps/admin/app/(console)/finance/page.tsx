@@ -147,7 +147,7 @@ export default async function FinancePage({
   const page = normalizePage(params.page);
   const data = await fetchFinanceProjectSummaries({
     page,
-    pageSize: 20,
+    pageSize: 3,
     keyword: clean(params.keyword),
     status: clean(params.status),
     risk_level: clean(params.risk_level),

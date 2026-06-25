@@ -56,6 +56,11 @@ async function expectFinanceAdvancedFilterInline(page: Page) {
   expect(positions!.yDelta).toBeLessThanOrEqual(4);
 }
 
+async function expectFinanceProjectTablePageSize(page: Page) {
+  await expect(page.getByText("每页 3 个")).toBeVisible();
+  await expect(page.getByText(/当前显示 3 个项目，共 \d+ 个/)).toBeVisible();
+}
+
 test.describe("finance workspace", () => {
   test.beforeEach(async ({ page }) => {
     await loginAsTenantAdmin(page);
@@ -81,6 +86,7 @@ test.describe("finance workspace", () => {
     await expect(page.getByRole("heading", { name: "风险分布" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "30天现金流" })).toBeVisible();
     await expectFinanceAdvancedFilterInline(page);
+    await expectFinanceProjectTablePageSize(page);
     await expectNoDocumentScroll(page);
 
     await financeNav.getByRole("link", { name: "财务诊断" }).click();
