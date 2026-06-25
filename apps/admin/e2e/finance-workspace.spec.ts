@@ -122,6 +122,19 @@ async function expectFinanceProjectTablePageSize(page: Page) {
   await expect(page.getByText(/当前显示 3 个项目，共 \d+ 个/)).toBeVisible();
 }
 
+async function expectUnallocatedProjectSummaryPopover(page: Page) {
+  await page.goto("/finance?has_unallocated_expense=true", { waitUntil: "load" });
+  const unallocatedBadge = page.getByText("有未归集").first();
+  await expect(unallocatedBadge).toBeVisible();
+
+  await unallocatedBadge.hover();
+  const popover = page.getByRole("dialog", { name: "未归集费用摘要" });
+  await expect(popover).toBeVisible();
+  await expect(popover.getByText("未归集金额")).toBeVisible();
+  await expect(popover.getByText("流水数量")).toBeVisible();
+  await expect(popover.getByRole("link", { name: "归集成本" })).toBeVisible();
+}
+
 async function expectFinancePaginationSpinner(page: Page) {
   const nextLink = page.getByRole("link", { name: "下一页" });
   const nextControl = await nextLink.count()
@@ -189,6 +202,8 @@ test.describe("finance workspace", () => {
   });
 
   test("财务总览展示图表并可进入财务诊断", async ({ page }) => {
+    test.setTimeout(90_000);
+
     await page.goto("/finance", { waitUntil: "load" });
 
     const financeNav = page.getByRole("navigation", { name: "财务模块" });
@@ -210,6 +225,8 @@ test.describe("finance workspace", () => {
     await expectFinanceAdvancedFilterInline(page);
     await expectFinanceAdvancedFiltersExpandedLayout(page);
     await expectFinanceProjectTablePageSize(page);
+    await expectUnallocatedProjectSummaryPopover(page);
+    await page.goto("/finance", { waitUntil: "load" });
     await expectFinancePaginationSpinner(page);
     await expectNoDocumentScroll(page);
 

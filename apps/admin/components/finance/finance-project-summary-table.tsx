@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { type ReactNode, useRef, useState } from "react";
+import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type {
   FinanceProjectOperatingSummary,
   FinanceProjectRiskLevel,
@@ -95,6 +101,12 @@ function unallocatedActionHref(row: FinanceProjectOperatingSummary) {
     : null;
 }
 
+function unallocatedRiskReason(row: FinanceProjectOperatingSummary) {
+  return row.risk_reasons?.find((reason) =>
+    reason.code === "unallocated_expense"
+  );
+}
+
 function rowToneClass(row: FinanceProjectOperatingSummary) {
   if (riskLevel(row) === "danger") return "bg-red-50/40 hover:bg-red-50/70";
   if (riskLevel(row) === "warning") return "bg-amber-50/35 hover:bg-amber-50/70";
@@ -102,6 +114,122 @@ function rowToneClass(row: FinanceProjectOperatingSummary) {
     return "bg-amber-50/20 hover:bg-amber-50/50";
   }
   return undefined;
+}
+
+function ProjectCellContent({
+  row,
+}: {
+  row: FinanceProjectOperatingSummary;
+}) {
+  return (
+    <>
+      <div className="truncate font-medium">{projectName(row)}</div>
+      <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+        <span>{row.ledger_entry_count} 条流水</span>
+        {row.unallocated_expense_amount > 0 ? (
+          <Badge variant="warning" className="px-1.5 py-0 text-[11px]">
+            有未归集
+          </Badge>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+function FinanceUnallocatedProjectPopover({
+  row,
+  children,
+}: {
+  row: FinanceProjectOperatingSummary;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+  const actionHref = unallocatedActionHref(row);
+  const reason = unallocatedRiskReason(row);
+
+  function clearCloseTimer() {
+    if (closeTimerRef.current === null) return;
+    window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  }
+
+  function openPopover() {
+    clearCloseTimer();
+    setOpen(true);
+  }
+
+  function scheduleClose() {
+    clearCloseTimer();
+    closeTimerRef.current = window.setTimeout(() => {
+      setOpen(false);
+      closeTimerRef.current = null;
+    }, 120);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="block w-full max-w-[18rem] cursor-default rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onBlur={scheduleClose}
+          onFocus={openPopover}
+          onMouseEnter={openPopover}
+          onMouseLeave={scheduleClose}
+        >
+          {children}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        aria-label="未归集费用摘要"
+        className="w-80 p-0"
+        onBlur={scheduleClose}
+        onFocus={openPopover}
+        onMouseEnter={openPopover}
+        onMouseLeave={scheduleClose}
+        side="right"
+      >
+        <div className="flex flex-col gap-3 p-3">
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700">
+              <AlertTriangle aria-hidden="true" className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold">未归集费用摘要</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {projectName(row)}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="rounded-md border bg-muted/30 p-2">
+              <div className="text-xs text-muted-foreground">未归集金额</div>
+              <div className="mt-1 font-semibold tabular-nums">
+                {formatFinanceMoney(row.unallocated_expense_amount)}
+              </div>
+            </div>
+            <div className="rounded-md border bg-muted/30 p-2">
+              <div className="text-xs text-muted-foreground">流水数量</div>
+              <div className="mt-1 font-semibold tabular-nums">
+                {row.ledger_entry_count} 条
+              </div>
+            </div>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {reason?.description ||
+              "该项目存在未归集成本，实际利润和毛利率可能偏高。"}
+          </p>
+          {actionHref ? (
+            <Button asChild variant="outline" size="sm" className="w-full">
+              <Link href={actionHref}>归集成本</Link>
+            </Button>
+          ) : null}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function FinanceProjectSummaryTable({
@@ -113,19 +241,18 @@ export function FinanceProjectSummaryTable({
     {
       id: "project",
       header: "项目",
-      cell: ({ row }) => (
-        <div className="max-w-[18rem]">
-          <div className="truncate font-medium">{projectName(row.original)}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            <span>{row.original.ledger_entry_count} 条流水</span>
-            {row.original.unallocated_expense_amount > 0 ? (
-              <Badge variant="warning" className="px-1.5 py-0 text-[11px]">
-                有未归集
-              </Badge>
-            ) : null}
-          </div>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const content = <ProjectCellContent row={row.original} />;
+        if (row.original.unallocated_expense_amount <= 0) {
+          return <div className="max-w-[18rem]">{content}</div>;
+        }
+
+        return (
+          <FinanceUnallocatedProjectPopover row={row.original}>
+            {content}
+          </FinanceUnallocatedProjectPopover>
+        );
+      },
       meta: {
         cellClassName: "whitespace-nowrap",
       },
