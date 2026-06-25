@@ -2,6 +2,7 @@
 
 import { Check, ChevronsUpDown, Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { PermissionCodeConfig, isPermissionCode } from "@gooes/domain";
 import type { PermissionRecord } from "@/components/permissions/permission-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,13 @@ import { cn } from "@/lib/utils";
 type PermissionListData = {
   list: PermissionRecord[];
 };
+
+export function getWorkflowPermissionLabel(code: string) {
+  if (isPermissionCode(code)) {
+    return PermissionCodeConfig[code].label;
+  }
+  return code;
+}
 
 export function WorkflowPermissionMultiSelect({
   disabled,
@@ -226,13 +234,15 @@ export function WorkflowPermissionMultiSelect({
             {[...selectedPermissions.map((permission) => permission.code), ...missingSelectedCodes]
               .map((code) => (
                 <Badge key={code} variant="secondary" className="gap-1">
-                  <span className="max-w-[180px] truncate">{code}</span>
+                  <span className="max-w-[180px] truncate">
+                    {getWorkflowPermissionLabel(code)}
+                  </span>
                   <button
                     type="button"
                     className="rounded-sm hover:bg-background/80"
                     disabled={disabled}
                     onClick={() => removePermission(code)}
-                    aria-label={`移除权限 ${code}`}
+                    aria-label={`移除权限 ${getWorkflowPermissionLabel(code)}`}
                   >
                     <X className="size-3" />
                   </button>
@@ -254,7 +264,7 @@ function SelectedPermissionSummary({
 }) {
   const labels = [
     ...permissions.map((permission) => permission.name || permission.code),
-    ...missingCodes,
+    ...missingCodes.map(getWorkflowPermissionLabel),
   ];
   const visibleLabels = labels.slice(0, 2);
   const hiddenCount = Math.max(labels.length - visibleLabels.length, 0);

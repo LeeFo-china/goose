@@ -37,6 +37,13 @@ type RoleListData = {
 
 type AssigneeRule = NonNullable<WorkflowApprovalNodeConfig["assignee_rule"]>;
 
+const BUILT_IN_ROLE_LABELS: Record<string, string> = {
+  system_admin: "系统管理员",
+  employee_base: "员工基础角色",
+  finance_base: "财务基础角色",
+  design_manage: "设计主管",
+};
+
 function getEmployeeLabel(employee: WorkflowEmployeeOption | null | undefined) {
   if (!employee) return "";
   return employee.name || employee.phone || employee.id;
@@ -57,6 +64,10 @@ function getRoleLabel(role: WorkflowRoleOption | null | undefined) {
 
 function getRoleMeta(role: WorkflowRoleOption) {
   return [role.code, role.description].filter(Boolean).join(" · ");
+}
+
+export function getWorkflowRoleFallbackLabel(code: string) {
+  return BUILT_IN_ROLE_LABELS[code] ?? code;
 }
 
 export function WorkflowApprovalAssigneeSelect({
@@ -320,7 +331,7 @@ function RoleAssigneeSelect({
               {selectedRole
                 ? getRoleLabel(selectedRole)
                 : value
-                  ? value
+                  ? getWorkflowRoleFallbackLabel(value)
                   : "选择角色"}
             </span>
             <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
