@@ -114,3 +114,23 @@ describe("workflowTemplateService construction_main", () => {
     });
   });
 });
+
+describe("workflowTemplateService expense_approval", () => {
+  test("uses applicant department manager for manager review", () => {
+    const template = workflowTemplateService.getTemplateForTest({
+      template_key: "expense_approval",
+    });
+
+    expect(
+      template.graph.nodes.find((node) => node.node_key === "manager_review"),
+    ).toMatchObject({
+      node_type: "approval",
+      business_kind: "expense_approval",
+      config: {
+        approval_type: "expense_approval",
+        assignee_rule: "applicant_department_manager",
+        required_permissions: ["expense_request.approve_manager"],
+      },
+    });
+  });
+});

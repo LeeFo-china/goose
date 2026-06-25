@@ -6544,6 +6544,7 @@ export type Database = {
           created_at: string
           enabled: boolean
           id: string
+          manager_employee_id: string | null
           sort: number
           template_id: string
           tenant_id: string
@@ -6555,6 +6556,7 @@ export type Database = {
           created_at?: string
           enabled?: boolean
           id?: string
+          manager_employee_id?: string | null
           sort?: number
           template_id: string
           tenant_id: string
@@ -6566,12 +6568,20 @@ export type Database = {
           created_at?: string
           enabled?: boolean
           id?: string
+          manager_employee_id?: string | null
           sort?: number
           template_id?: string
           tenant_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tenant_departments_manager_employee_id_fkey"
+            columns: ["manager_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tenant_departments_template_id_fkey"
             columns: ["template_id"]

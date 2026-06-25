@@ -37,6 +37,37 @@ describe("applyWorkflowConstructionStageKind", () => {
       stage_type: "construction_start",
     });
   });
+
+  test("enables report config for final acceptance construction stage", () => {
+    const result = applyWorkflowConstructionStageKind({
+      node: baseNode(),
+      stageKind: "final_acceptance",
+      usedNodeKeys: ["start"],
+    });
+
+    expect(result.node_key).toBe("final_acceptance");
+    expect(result.business_kind).toBe("final_acceptance");
+    expect(result.config).toMatchObject({
+      required_permissions: [],
+      stage_type: "final_acceptance",
+      final_acceptance_report_enabled: true,
+    });
+  });
+});
+
+describe("applyWorkflowNodeCapability", () => {
+  test("uses applicant department manager by default for expense approval nodes", () => {
+    const result = applyWorkflowNodeCapability({
+      node: baseNode(),
+      capability: "approval",
+      usedNodeKeys: ["start"],
+    });
+
+    expect(result.config).toMatchObject({
+      approval_type: "expense_approval",
+      assignee_rule: "applicant_department_manager",
+    });
+  });
 });
 
 function baseNode(): WorkflowNode {

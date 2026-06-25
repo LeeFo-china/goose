@@ -16,6 +16,45 @@ const createExpense = mock(async (payload: Record<string, unknown>) => ({
   total_amount: payload.total_amount,
   status: payload.status,
 }));
+const findExpenseById = mock(async () => ({
+  id: "expense-1",
+  tenant_id: "tenant-1",
+  employee_id: "employee-1",
+  project_id: null,
+  cost_category_id: null,
+  mode: "reimbursement",
+  title: "差旅费用",
+  total_amount: 100,
+  status: "draft",
+  submitted_at: null,
+  approved_at: null,
+  rejected_at: null,
+  cancelled_at: null,
+  completed_at: null,
+  assignee_id: null,
+  rejected_reason: null,
+  items: [
+    {
+      category: "差旅",
+      amount: 100,
+      evidence_images: [],
+    },
+  ],
+  approvals: [],
+}));
+const updateExpense = mock(async (_id: string, payload: Record<string, unknown>) => ({
+  id: "expense-1",
+  tenant_id: "tenant-1",
+  employee_id: "employee-1",
+  project_id: null,
+  cost_category_id: null,
+  mode: "reimbursement",
+  title: "差旅费用",
+  total_amount: payload.total_amount,
+  status: payload.status,
+  assignee_id: payload.assignee_id,
+}));
+const syncSubmit = mock(async () => ({ status: "started" }));
 
 const listActiveCategoriesByIds = mock(async () => [
   { id: "category-1", code: "labor", name: "人工", status: "active" },
@@ -24,6 +63,8 @@ const listActiveCategoriesByIds = mock(async () => [
 mock.module("@/repositories/expense-requests", () => ({
   expenseRequestRepository: {
     create: createExpense,
+    findById: findExpenseById,
+    update: updateExpense,
   },
 }));
 
@@ -38,7 +79,9 @@ mock.module("@/services/expense-request-categories", () => ({
 }));
 
 mock.module("@/services/expense-workflow-runtime", () => ({
-  expenseWorkflowRuntimeService: {},
+  expenseWorkflowRuntimeService: {
+    syncSubmit,
+  },
 }));
 
 function authContext(): AuthContext {
@@ -66,13 +109,28 @@ function authContext(): AuthContext {
 }
 
 function draftServiceContext() {
+  const appendApprovalOnce = mock(async () => true);
+  const getLatestExpenseRequest = mock(async (_id: string) => ({
+    id: "expense-1",
+    tenant_id: "tenant-1",
+    employee_id: "employee-1",
+    status: "pending",
+    assignee_id: "manager-1",
+  }));
+  const resolveApplicantDepartmentManagerAssignee = mock(async () => "manager-1");
+
   return {
     requireTenantId: (context: AuthContext) => context.tenantId,
     ensureCurrentEmployee: mock(() => null),
     assertEmployeeExists: mock(async () => null),
     assertCanLinkProject: mock(async () => null),
+    assertCanReadExpenseRequest: mock(async () => null),
     resolveItems: mock(async (items: unknown[]) => items),
     serializeExpenseRequest: mock((record: unknown) => record),
+    getApprovalRound: mock(() => 1),
+    appendApprovalOnce,
+    getLatestExpenseRequest,
+    resolveApplicantDepartmentManagerAssignee,
   };
 }
 
@@ -115,5 +173,39 @@ describe("createExpenseRequest", () => {
     expect(result).toMatchObject({
       cost_category_id: "category-1",
     });
+  });
+
+  test("assigns submitted manager review to applicant department manager", async () => {
+    const { submitExpenseRequest } = await import("./drafts");
+    const context = draftServiceContext();
+
+    await submitExpenseRequest.call(
+      context,
+      authContext(),
+      "expense-1",
+      {
+        operator_id: "employee-1",
+        comment: "提交",
+      },
+    );
+
+    expect(context.resolveApplicantDepartmentManagerAssignee)
+      .toHaveBeenCalledWith("employee-1", "tenant-1");
+    expect(updateExpense).toHaveBeenCalledWith(
+      "expense-1",
+      expect.objectContaining({
+        status: "pending",
+        assignee_id: "manager-1",
+      }),
+      undefined,
+      "tenant-1",
+    );
+    expect(syncSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expenseRequest: expect.objectContaining({
+          assignee_id: "manager-1",
+        }),
+      }),
+    );
   });
 });

@@ -229,12 +229,16 @@ export async function submitExpenseRequest(this: any,
     const approvalRound = existing.status === "rejected"
       ? this.getApprovalRound(existing) + 1
       : this.getApprovalRound(existing);
+    const assigneeId = await this.resolveApplicantDepartmentManagerAssignee(
+      existing.employee_id,
+      tenantId,
+    );
     const updated = await expenseRequestRepository.update(id, {
       total_amount: totalAmount,
       status: "pending",
       submitted_at: now,
       rejected_reason: null,
-      assignee_id: null,
+      assignee_id: assigneeId,
       ...buildLegacyFields(existing.title, items, totalAmount),
     }, undefined, tenantId);
 

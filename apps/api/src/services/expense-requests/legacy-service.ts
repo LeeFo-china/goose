@@ -42,6 +42,9 @@ import {
   submitExpenseRequest,
 } from './legacy/drafts';
 import {
+  resolveApplicantDepartmentManagerAssignee,
+} from './legacy/department-manager-assignee';
+import {
   approveExpenseRequest,
   rejectExpenseRequest,
   cancelExpenseRequest,
@@ -89,6 +92,8 @@ class ExpenseRequestService {
   createExpenseRequest = createExpenseRequest;
   updateExpenseRequest = updateExpenseRequest;
   submitExpenseRequest = submitExpenseRequest;
+  private resolveApplicantDepartmentManagerAssignee =
+    resolveApplicantDepartmentManagerAssignee;
   approveExpenseRequest = approveExpenseRequest;
   rejectExpenseRequest = rejectExpenseRequest;
   cancelExpenseRequest = cancelExpenseRequest;

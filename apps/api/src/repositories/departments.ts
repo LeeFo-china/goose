@@ -19,10 +19,20 @@ export type TenantDepartmentRow = {
   code: string;
   alias_name: string;
   enabled: boolean;
+  manager_employee_id: string | null;
   sort: number | null;
   created_at: string | null;
   updated_at: string | null;
   department_templates?: DepartmentTemplateRow | DepartmentTemplateRow[] | null;
+  manager?: DepartmentManagerEmployeeRow | DepartmentManagerEmployeeRow[] | null;
+};
+
+export type DepartmentManagerEmployeeRow = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  status: string | null;
+  tenant_department_id: string | null;
 };
 
 export type DepartmentListQueryInput = {
@@ -40,6 +50,7 @@ const TENANT_DEPARTMENT_SELECT = `
   code,
   alias_name,
   enabled,
+  manager_employee_id,
   sort,
   created_at,
   updated_at,
@@ -48,6 +59,13 @@ const TENANT_DEPARTMENT_SELECT = `
     code,
     default_name,
     sort
+  ),
+  manager:employees!tenant_departments_manager_employee_id_fkey (
+    id,
+    name,
+    phone,
+    status,
+    tenant_department_id
   )
 `;
 
@@ -187,7 +205,7 @@ class DepartmentRepository {
   }) {
     const { data, error } = await this.adminClient
       .from("tenant_departments")
-      .select("id, code, alias_name, enabled, sort")
+      .select("id, code, alias_name, enabled, sort, manager_employee_id")
       .eq("id", input.id)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
@@ -199,7 +217,26 @@ class DepartmentRepository {
       alias_name: string;
       enabled: boolean;
       sort: number | null;
+      manager_employee_id: string | null;
     } | null;
+  }
+
+  async findDepartmentManagerCandidate(input: {
+    tenantId: string;
+    departmentId: string;
+    employeeId: string;
+  }) {
+    const { data, error } = await this.adminClient
+      .from("employees")
+      .select("id, name, phone, status, tenant_department_id")
+      .eq("id", input.employeeId)
+      .eq("tenant_id", input.tenantId)
+      .eq("tenant_department_id", input.departmentId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询部门经理失败", error);
+    return data as DepartmentManagerEmployeeRow | null;
   }
 
   async updateTenantDepartment(input: {

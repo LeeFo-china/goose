@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { DepartmentRecord } from "@/components/organization/organization-types";
+import { DepartmentManagerSelect } from "@/components/organization/department-manager-select";
 import { enabledOptions, mutateDepartment, toDepartmentCode } from "@/components/organization/department-mutation-shared";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
@@ -31,18 +32,26 @@ export function DepartmentDialog({
     name: department?.name || "",
     code: toDepartmentCode(department?.code),
     enabled: department?.enabled === false ? "false" : "true",
+    managerEmployeeId: department?.manager_employee_id || null,
+    managerEmployeeLabel: department?.manager_employee_name ||
+      department?.manager_employee_phone ||
+      null,
     sort: department?.sort != null ? String(department.sort) : "0",
   }), [department]);
   const code = defaults.code;
   const [enabled, setEnabled] = useState(defaults.enabled);
   const [name, setName] = useState(defaults.name || DepartmentConfig[defaults.code].label);
+  const [managerEmployeeId, setManagerEmployeeId] = useState<string | null>(
+    defaults.managerEmployeeId,
+  );
 
   useEffect(() => {
     if (!open) return;
     setEnabled(defaults.enabled);
     setName(defaults.name || DepartmentConfig[defaults.code].label);
+    setManagerEmployeeId(defaults.managerEmployeeId);
     setError("");
-  }, [defaults.code, defaults.enabled, defaults.name, open]);
+  }, [defaults.code, defaults.enabled, defaults.managerEmployeeId, defaults.name, open]);
 
   function close() {
     if (pending) return;
@@ -58,6 +67,7 @@ export function DepartmentDialog({
     const payload = {
       name: nameValue,
       enabled: enabled === "true",
+      manager_employee_id: managerEmployeeId,
       sort: sortValue ? Number(sortValue) : 0,
     };
 
@@ -122,6 +132,19 @@ export function DepartmentDialog({
               </div>
             </Field>
             <Field>
+              <FieldLabel>部门经理</FieldLabel>
+              <DepartmentManagerSelect
+                departmentId={department?.tenant_department_id || department?.id || ""}
+                value={managerEmployeeId}
+                fallbackLabel={defaults.managerEmployeeLabel}
+                disabled={pending}
+                onChange={setManagerEmployeeId}
+              />
+              <FieldDescription>
+                费用审批选择“申请人部门经理”时，会自动派给这里配置的本部门员工。
+              </FieldDescription>
+            </Field>
+            <Field>
               <FieldLabel htmlFor="edit-department-enabled">状态</FieldLabel>
               <FormSelect
                 id="edit-department-enabled"
@@ -162,4 +185,3 @@ export function DepartmentDialog({
     </Dialog>
   );
 }
-

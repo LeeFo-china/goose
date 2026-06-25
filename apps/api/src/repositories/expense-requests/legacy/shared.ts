@@ -113,6 +113,15 @@ export type ExpenseApprovalCandidateEmployee = {
   post?: unknown;
 };
 
+export type ExpenseDepartmentManagerResolution = {
+  applicant_exists: boolean;
+  applicant_tenant_department_id: string | null;
+  department_name: string | null;
+  manager_employee_id: string | null;
+  manager_status: string | null;
+  manager_tenant_department_id: string | null;
+};
+
 export type ExpenseProjectCandidateRow = {
   id: string;
   name: string | null;

@@ -151,6 +151,11 @@ export function DepartmentsTable({
                             标准部门：{label}
                           </span>
                         ) : null}
+                        <span className="block truncate text-xs text-muted-foreground">
+                          经理：{department.manager_employee_name ||
+                            department.manager_employee_phone ||
+                            "未配置"}
+                        </span>
                       </span>
                     </span>
                   </Button>

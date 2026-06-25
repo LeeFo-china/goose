@@ -23,8 +23,14 @@ class DepartmentService {
     return value ?? null;
   }
 
+  private normalizeManager(value: TenantDepartmentRow["manager"]) {
+    if (Array.isArray(value)) return value[0] ?? null;
+    return value ?? null;
+  }
+
   private serializeTenantDepartment(row: TenantDepartmentRow) {
     const template = this.normalizeTemplate(row.department_templates);
+    const manager = this.normalizeManager(row.manager);
 
     return {
       id: row.id,
@@ -33,6 +39,9 @@ class DepartmentService {
       name: row.alias_name,
       template_name: template?.default_name ?? row.alias_name,
       enabled: row.enabled,
+      manager_employee_id: row.manager_employee_id,
+      manager_employee_name: manager?.name ?? null,
+      manager_employee_phone: manager?.phone ?? null,
       sort: row.sort,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -166,11 +175,27 @@ class DepartmentService {
     }
 
     const nextAliasName = input.payload.name ?? current.alias_name;
+    const managerEmployeeId = input.payload.manager_employee_id === undefined
+      ? current.manager_employee_id
+      : input.payload.manager_employee_id;
+
+    if (managerEmployeeId) {
+      const manager = await departmentRepository.findDepartmentManagerCandidate({
+        tenantId: input.tenantId,
+        departmentId: current.id,
+        employeeId: managerEmployeeId,
+      });
+      if (!manager) {
+        throw Errors.badRequest("部门经理必须是本部门在职员工");
+      }
+    }
+
     const row = await departmentRepository.updateTenantDepartment({
       id: current.id,
       payload: {
         alias_name: nextAliasName,
         enabled: input.payload.enabled ?? current.enabled,
+        manager_employee_id: managerEmployeeId,
         sort: input.payload.sort ?? current.sort,
       },
     });

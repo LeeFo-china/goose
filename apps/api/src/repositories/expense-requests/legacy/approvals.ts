@@ -1,6 +1,7 @@
 import { Errors, SupabaseDB } from "./shared";
 import type {
   ExpenseApprovalCandidateEmployee,
+  ExpenseDepartmentManagerResolution,
   ExpenseRequestApprovalPayload,
 } from "./shared";
 
@@ -89,6 +90,109 @@ export async function findEmployeeForApproval(this: any, id: string, tenantId?: 
   }
 
   return (data as unknown) as ExpenseApprovalCandidateEmployee | null;
+}
+
+export async function findApplicantDepartmentManager(this: any, input: {
+  applicantEmployeeId: string;
+  tenantId?: string | null;
+}): Promise<ExpenseDepartmentManagerResolution> {
+  let applicantQuery = SupabaseDB.getAdminClient()
+    .from("employees")
+    .select("id, status, tenant_department_id")
+    .eq("id", input.applicantEmployeeId);
+
+  if (input.tenantId) {
+    applicantQuery = applicantQuery.eq("tenant_id", input.tenantId);
+  }
+
+  const { data: applicant, error: applicantError } =
+    await applicantQuery.maybeSingle();
+  if (applicantError) {
+    throw Errors.dbError("查询费用申请人部门失败", applicantError);
+  }
+
+  if (!applicant || applicant.status !== "active") {
+    return {
+      applicant_exists: false,
+      applicant_tenant_department_id: null,
+      department_name: null,
+      manager_employee_id: null,
+      manager_status: null,
+      manager_tenant_department_id: null,
+    };
+  }
+
+  const applicantDepartmentId =
+    (applicant as { tenant_department_id?: string | null })
+      .tenant_department_id ?? null;
+  if (!applicantDepartmentId) {
+    return {
+      applicant_exists: true,
+      applicant_tenant_department_id: null,
+      department_name: null,
+      manager_employee_id: null,
+      manager_status: null,
+      manager_tenant_department_id: null,
+    };
+  }
+
+  let departmentQuery = SupabaseDB.getAdminClient()
+    .from("tenant_departments")
+    .select("id, alias_name, manager_employee_id")
+    .eq("id", applicantDepartmentId);
+
+  if (input.tenantId) {
+    departmentQuery = departmentQuery.eq("tenant_id", input.tenantId);
+  }
+
+  const { data: department, error: departmentError } =
+    await departmentQuery.maybeSingle();
+  if (departmentError) {
+    throw Errors.dbError("查询申请人所属部门失败", departmentError);
+  }
+
+  const managerEmployeeId =
+    (department as { manager_employee_id?: string | null } | null)
+      ?.manager_employee_id ?? null;
+  if (!managerEmployeeId) {
+    return {
+      applicant_exists: true,
+      applicant_tenant_department_id: applicantDepartmentId,
+      department_name:
+        (department as { alias_name?: string | null } | null)?.alias_name ?? null,
+      manager_employee_id: null,
+      manager_status: null,
+      manager_tenant_department_id: null,
+    };
+  }
+
+  let managerQuery = SupabaseDB.getAdminClient()
+    .from("employees")
+    .select("id, status, tenant_department_id")
+    .eq("id", managerEmployeeId);
+
+  if (input.tenantId) {
+    managerQuery = managerQuery.eq("tenant_id", input.tenantId);
+  }
+
+  const { data: manager, error: managerError } =
+    await managerQuery.maybeSingle();
+  if (managerError) {
+    throw Errors.dbError("查询部门审批经理失败", managerError);
+  }
+
+  return {
+    applicant_exists: true,
+    applicant_tenant_department_id: applicantDepartmentId,
+    department_name:
+      (department as { alias_name?: string | null } | null)?.alias_name ?? null,
+    manager_employee_id: managerEmployeeId,
+    manager_status:
+      (manager as { status?: string | null } | null)?.status ?? null,
+    manager_tenant_department_id:
+      (manager as { tenant_department_id?: string | null } | null)
+        ?.tenant_department_id ?? null,
+  };
 }
 
 export async function listEmployeesForApprovalCandidates(this: any, input: {

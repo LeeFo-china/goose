@@ -24,6 +24,7 @@ export const DepartmentBaseSchema = z.object({
   created_at: z.string().datetime().nullable().optional(),
   enabled: z.boolean().optional(),
   sort: z.number().int().nullable().optional(),
+  manager_employee_id: z.uuid("无效的部门经理 ID").nullable().optional(),
 });
 
 /**

@@ -14,6 +14,9 @@ export type DepartmentRecord = {
   name: string;
   template_name?: string | null;
   enabled?: boolean | null;
+  manager_employee_id?: string | null;
+  manager_employee_name?: string | null;
+  manager_employee_phone?: string | null;
   sort?: number | null;
   created_at: string | null;
   updated_at?: string | null;

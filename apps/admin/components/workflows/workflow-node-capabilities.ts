@@ -150,7 +150,7 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
     config: {
       required_permissions: [],
       approval_type: "expense_approval",
-      assignee_rule: "role",
+      assignee_rule: "applicant_department_manager",
       approve_mode: "any",
       amount_threshold: null,
     },
@@ -395,7 +395,7 @@ export function applyWorkflowApprovalKind(input: {
       {
         required_permissions: [],
         approval_type: option.value,
-        assignee_rule: "role",
+        assignee_rule: "applicant_department_manager",
         approve_mode: "any",
         amount_threshold: null,
       },
