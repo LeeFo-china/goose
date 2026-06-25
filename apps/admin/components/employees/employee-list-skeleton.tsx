@@ -13,7 +13,7 @@ function SkeletonBlock({ className }: { className: string }) {
 export function EmployeeListSkeleton() {
   return (
     <div
-      className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5"
+      className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden"
       aria-busy="true"
       aria-live="polite"
     >

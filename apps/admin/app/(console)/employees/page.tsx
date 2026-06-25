@@ -248,7 +248,7 @@ export default async function EmployeesPage({
   const { list, pagination, error } = employeeData;
 
   return (
-    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
