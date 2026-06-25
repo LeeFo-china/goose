@@ -39,7 +39,13 @@ test.describe("finance workspace", () => {
       .toBeVisible();
 
     await expect(page.getByRole("heading", { name: "回款结构" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "利润结构" })).toBeVisible();
+    const profitBreakdown = page
+      .getByRole("heading", { name: "利润拆解" })
+      .locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
+    await expect(profitBreakdown).toBeVisible();
+    await expect(profitBreakdown.getByText("合同")).toHaveCount(0);
+    await expect(profitBreakdown.getByText("已付成本")).toBeVisible();
+    await expect(profitBreakdown.getByText("实际利润")).toBeVisible();
     await expect(page.getByRole("heading", { name: "风险分布" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "30天现金流" })).toBeVisible();
     await expectNoDocumentScroll(page);

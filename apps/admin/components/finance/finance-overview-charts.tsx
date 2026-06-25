@@ -77,11 +77,18 @@ function FinanceBarChart({
   return (
     <div className="h-[125px]">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ left: -16, right: 8, top: 8, bottom: 0 }}>
+        <BarChart data={data} margin={{ left: 4, right: 8, top: 8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} />
+          <XAxis
+            dataKey="label"
+            interval={0}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+          />
           <YAxis
             allowDecimals={false}
+            width={46}
             tickFormatter={unit === "money" ? moneyTick : undefined}
             tickLine={false}
             axisLine={false}
@@ -117,10 +124,10 @@ function FinanceTrendChart({
   return (
     <div className="h-[125px]">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ left: -16, right: 8, top: 8, bottom: 0 }}>
+        <LineChart data={data} margin={{ left: 4, right: 8, top: 8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="date" tickFormatter={(value: string) => value.slice(5)} tickLine={false} axisLine={false} />
-          <YAxis tickFormatter={moneyTick} tickLine={false} axisLine={false} />
+          <YAxis width={46} tickFormatter={moneyTick} tickLine={false} axisLine={false} />
           <Tooltip content={<ChartTooltip unit="money" />} />
           <Line
             type="monotone"
@@ -159,8 +166,8 @@ export function FinanceOverviewCharts({
     { label: "逾期", value: toNumber(summary.overdue_amount) },
   ];
   const profitData: ChartItem[] = [
-    { label: "合同", value: toNumber(summary.contract_amount) },
-    { label: "支出", value: toNumber(summary.expense_paid_amount) },
+    { label: "已收", value: toNumber(summary.received_amount) },
+    { label: "已付成本", value: toNumber(summary.expense_paid_amount) },
     { label: "实际利润", value: toNumber(summary.actual_profit_amount) },
     { label: "预算利润", value: toNumber(summary.projected_budget_profit_amount) },
   ];
@@ -189,7 +196,7 @@ export function FinanceOverviewCharts({
       </Card>
       <Card className="shadow-none">
         <CardHeader className="p-2.5 pb-1">
-          <CardTitle className="text-sm">利润结构</CardTitle>
+          <CardTitle className="text-sm">利润拆解</CardTitle>
         </CardHeader>
         <CardContent className="p-2.5 pt-0">
           {hasPositiveData(profitData) ? (
