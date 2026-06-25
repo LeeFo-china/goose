@@ -289,6 +289,20 @@ function ApprovalConfigFields({
         disabled={disabled}
         onChange={(value) => onChangeConfig({ assignee_id: value })}
       />
+      <div className="grid gap-2">
+        <Label>办理权限点</Label>
+        <WorkflowPermissionMultiSelect
+          value={approvalConfig.assignee_permission_code
+            ? [approvalConfig.assignee_permission_code]
+            : []}
+          disabled={disabled}
+          onChange={(value) =>
+            onChangeConfig({
+              assignee_permission_code: value?.at(-1) ?? null,
+            })
+          }
+        />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-amount-threshold">金额阈值</Label>

@@ -86,6 +86,7 @@ export type WorkflowApprovalNodeConfig = WorkflowBaseNodeConfig & {
   approval_type?: "expense_approval" | "workflow_approval";
   assignee_rule?: "employee" | "department" | "role" | "applicant_department_manager";
   assignee_id?: string | null;
+  assignee_permission_code?: string | null;
   amount_threshold?: number | null;
   approve_mode?: "any" | "all";
   reject_target_key?: string | null;

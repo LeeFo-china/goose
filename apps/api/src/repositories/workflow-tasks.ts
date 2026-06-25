@@ -303,7 +303,7 @@ class WorkflowTaskRepository {
       .filter((roleCode) => SAFE_ROLE_CODE_PATTERN.test(roleCode));
     if (roleCodes.length > 0) {
       filters.push(
-        `and(assignee_employee_id.is.null,assignee_role_code.in.(${roleCodes.join(",")}))`,
+        `and(assignee_employee_id.is.null,assignee_role_code.in.(${roleCodes.join(",")}),assignee_permission_code.is.null)`,
       );
     }
 
@@ -313,7 +313,12 @@ class WorkflowTaskRepository {
       );
     if (permissionCodes.length > 0) {
       filters.push(
-        `and(assignee_employee_id.is.null,assignee_permission_code.in.(${permissionCodes.join(",")}))`,
+        `and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.in.(${permissionCodes.join(",")}))`,
+      );
+    }
+    if (roleCodes.length > 0 && permissionCodes.length > 0) {
+      filters.push(
+        `and(assignee_employee_id.is.null,assignee_role_code.in.(${roleCodes.join(",")}),assignee_permission_code.in.(${permissionCodes.join(",")}))`,
       );
     }
     filters.push(

@@ -53,7 +53,7 @@ mock.module("@/utils/supabase", () => ({
 }));
 
 describe("workflowTaskRepository", () => {
-  test("does not match employee-assigned tasks through role or permission filters", async () => {
+  test("matches role and permission assignees as separate or combined constraints", async () => {
     orCalls.length = 0;
     eqCalls.length = 0;
     selectCalls.length = 0;
@@ -70,8 +70,9 @@ describe("workflowTaskRepository", () => {
 
     expect(orCalls[0]).toBe([
       "assignee_employee_id.eq.employee-1",
-      "and(assignee_employee_id.is.null,assignee_role_code.in.(finance))",
-      "and(assignee_employee_id.is.null,assignee_permission_code.in.(finance.payment.confirm))",
+      "and(assignee_employee_id.is.null,assignee_role_code.in.(finance),assignee_permission_code.is.null)",
+      "and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.in.(finance.payment.confirm))",
+      "and(assignee_employee_id.is.null,assignee_role_code.in.(finance),assignee_permission_code.in.(finance.payment.confirm))",
       "and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.is.null)",
     ].join(","));
   });

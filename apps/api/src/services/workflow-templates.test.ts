@@ -135,10 +135,26 @@ describe("workflowTemplateService expense_approval", () => {
     });
     expect(
       template.graph.nodes.find((node) => node.node_key === "finance_review"),
-    ).toMatchObject({ title: "财务审批" });
+    ).toMatchObject({
+      title: "财务审批",
+      config: {
+        assignee_rule: "role",
+        assignee_id: "finance_base",
+        assignee_permission_code: "expense_request.approve_finance",
+        required_permissions: ["expense_request.approve_finance"],
+      },
+    });
     expect(
       template.graph.nodes.find((node) => node.node_key === "payment"),
-    ).toMatchObject({ title: "出纳打款" });
+    ).toMatchObject({
+      title: "出纳打款",
+      config: {
+        assignee_rule: "role",
+        assignee_id: "finance_base",
+        assignee_permission_code: "expense_request.pay",
+        required_permissions: ["expense_request.pay"],
+      },
+    });
     expect(
       template.graph.nodes.find((node) => node.node_key === "rejected"),
     ).toMatchObject({

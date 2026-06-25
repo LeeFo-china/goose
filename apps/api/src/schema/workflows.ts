@@ -162,6 +162,10 @@ const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
     message: "无效的审批人规则",
   }).default("role"),
   assignee_id: textField("审批人 ID 格式无效").max(100, "审批人 ID 过长").nullable().optional(),
+  assignee_permission_code: textField("办理权限点格式无效")
+    .max(100, "办理权限点编码过长")
+    .nullable()
+    .optional(),
   amount_threshold: numericField("金额阈值必须为数字").nonnegative("金额阈值不能为负数").nullable().optional(),
   approve_mode: z.enum(["any", "all"], { message: "无效的审批方式" }).default("any"),
   reject_target_key: textField("驳回目标节点格式无效").max(100, "驳回目标节点编码过长").nullable().optional(),
