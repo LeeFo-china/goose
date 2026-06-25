@@ -220,6 +220,7 @@ function emptySummary(projectId: string): FinanceProjectOperatingSummary {
     risk_level: "normal",
     risk_flags: [],
     risk_reasons: [],
+    unallocated_expense_items: [],
   };
 }
 

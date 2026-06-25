@@ -32,6 +32,19 @@ export type FinanceProjectRiskReason = {
   } | null;
 };
 
+export type FinanceProjectUnallocatedExpenseItem = {
+  id: string;
+  amount: number;
+  occurred_at: string | null;
+  summary: string | null;
+  request_title: string | null;
+  expense_category: string | null;
+  applicant_name: string | null;
+  applicant_phone: string | null;
+  request_time: string | null;
+  request_no: string | null;
+};
+
 export type FinanceProjectOperatingSummary = {
   project_id: string;
   project_name: string | null;
@@ -60,6 +73,7 @@ export type FinanceProjectOperatingSummary = {
   risk_level: FinanceProjectRiskLevel;
   risk_flags: FinanceProjectRiskFlag[];
   risk_reasons: FinanceProjectRiskReason[];
+  unallocated_expense_items: FinanceProjectUnallocatedExpenseItem[];
 };
 
 export type FinanceProjectOperatingSummaryTotals = {

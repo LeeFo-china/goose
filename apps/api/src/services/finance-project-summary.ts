@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   financeProjectSummaryRepository,
   type FinanceProjectSummaryProjectRow,
+  type FinanceProjectUnallocatedExpenseItem,
 } from "@/repositories/finance-project-summary";
 import type { FinanceProjectSummaryListQuery } from "@/schema/finance";
 import { accessPolicyService } from "@/services/access-policy";
@@ -49,6 +50,7 @@ export type FinanceProjectOperatingSummary = {
   risk_level: FinanceProjectRiskLevel;
   risk_flags: FinanceProjectRiskFlag[];
   risk_reasons: FinanceProjectRiskReason[];
+  unallocated_expense_items: FinanceProjectUnallocatedExpenseItem[];
 };
 
 export type FinanceProjectOperatingSummaryTotals = {
@@ -87,6 +89,7 @@ type FinanceProjectSummaryServiceDependencies = {
     listProjectsByIds: typeof financeProjectSummaryRepository.listProjectsByIds;
     listProjectsForAnalytics: typeof financeProjectSummaryRepository.listProjectsForAnalytics;
     listLedgerTotals: typeof financeProjectSummaryRepository.listLedgerTotals;
+    listUnallocatedExpenseItems: typeof financeProjectSummaryRepository.listUnallocatedExpenseItems;
     listLedgerTrend: typeof financeProjectSummaryRepository.listLedgerTrend;
     listReceivableTotals: typeof financeProjectSummaryRepository.listReceivableTotals;
     listBudgetTotals: typeof financeProjectSummaryRepository.listBudgetTotals;
@@ -180,10 +183,20 @@ export class FinanceProjectSummaryService {
   }) {
     const projectIds = input.projects.map((project) => project.id);
     const tenantToday = getTenantToday();
-    const [ledgerTotals, receivableTotals, budgetTotals] = await Promise.all([
+    const [
+      ledgerTotals,
+      unallocatedExpenseItems,
+      receivableTotals,
+      budgetTotals,
+    ] = await Promise.all([
       this.dependencies.repository.listLedgerTotals({
         tenantId: input.tenantId,
         projectIds,
+      }),
+      this.dependencies.repository.listUnallocatedExpenseItems({
+        tenantId: input.tenantId,
+        projectIds,
+        limitPerProject: 3,
       }),
       this.dependencies.repository.listReceivableTotals({
         tenantId: input.tenantId,
@@ -199,6 +212,7 @@ export class FinanceProjectSummaryService {
     return input.projects.map((project) => buildProjectOperatingSummary({
       project,
       ledgerTotals: ledgerTotals.get(project.id),
+      unallocatedExpenseItems: unallocatedExpenseItems.get(project.id),
       receivableTotals: receivableTotals.get(project.id),
       budgetTotals: budgetTotals.get(project.id),
     }));

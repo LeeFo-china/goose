@@ -3,6 +3,7 @@ import type {
   FinanceProjectLedgerTotals,
   FinanceProjectReceivableTotals,
   FinanceProjectSummaryProjectRow,
+  FinanceProjectUnallocatedExpenseItem,
 } from "@/repositories/finance-project-summary";
 import {
   buildFinanceProjectRisk,
@@ -17,6 +18,7 @@ import type {
 export function buildProjectOperatingSummary(input: {
   project: FinanceProjectSummaryProjectRow;
   ledgerTotals?: FinanceProjectLedgerTotals;
+  unallocatedExpenseItems?: FinanceProjectUnallocatedExpenseItem[];
   receivableTotals?: FinanceProjectReceivableTotals;
   budgetTotals?: FinanceProjectBudgetTotals;
 }): FinanceProjectOperatingSummary {
@@ -101,6 +103,7 @@ export function buildProjectOperatingSummary(input: {
     risk_level: risk.risk_level,
     risk_flags: risk.risk_flags,
     risk_reasons: risk.risk_reasons,
+    unallocated_expense_items: input.unallocatedExpenseItems ?? [],
   };
 }
 

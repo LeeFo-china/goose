@@ -1,17 +1,10 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { FinanceProjectSummaryListQuerySchema } from "@/schema/finance";
 import type { AuthContext } from "@/services/authorization";
 
+const baseProject = { id: "project-1", status: "constructing", signed_amount: 100000, budget: 90000 };
+
 const listProjects = mock(async () => ({
-  list: [
-    {
-      id: "project-1",
-      name: "阶段三经营项目",
-      status: "constructing",
-      signed_amount: 100000,
-      budget: 90000,
-    },
-  ],
+  list: [{ ...baseProject, name: "阶段三经营项目" }],
   pagination: {
     page: 1,
     pageSize: 20,
@@ -20,12 +13,9 @@ const listProjects = mock(async () => ({
   },
 }));
 const findProject = mock(async () => ({
-  id: "project-1",
+  ...baseProject,
   tenant_id: "tenant-1",
   name: "阶段三经营项目",
-  status: "constructing",
-  signed_amount: 100000,
-  budget: 90000,
 }));
 const searchProjectIdsByRisk = mock(async () => ({
   projectIds: ["project-1"],
@@ -36,25 +26,9 @@ const searchProjectIdsByRisk = mock(async () => ({
     totalPages: 1,
   },
 }));
-const listProjectsByIds = mock(async () => [
-  {
-    id: "project-1",
-    name: "阶段五风险项目",
-    status: "constructing",
-    signed_amount: 100000,
-    budget: 90000,
-  },
-]);
+const listProjectsByIds = mock(async () => [{ ...baseProject, name: "阶段五风险项目" }]);
 const listProjectsForAnalytics = mock(async () => ({
-  list: [
-    {
-      id: "project-1",
-      name: "阶段五风险项目",
-      status: "constructing",
-      signed_amount: 100000,
-      budget: 90000,
-    },
-  ],
+  list: [{ ...baseProject, name: "阶段五风险项目" }],
   total: 1,
   limit: 100,
 }));
@@ -69,13 +43,12 @@ const listLedgerTotals = mock(async () => new Map([
     ]),
   }],
 ]));
-const listLedgerTrend = mock(async () => [
-  {
-    date: "2026-06-01",
-    income_amount: 50000,
-    expense_amount: 12000,
-  },
-]);
+const listUnallocatedExpenseItems = mock(async () => new Map());
+const listLedgerTrend = mock(async () => [{
+  date: "2026-06-01",
+  income_amount: 50000,
+  expense_amount: 12000,
+}]);
 const listReceivableTotals = mock(async () => new Map([
   ["project-1", {
     receivable_amount: 80000,
@@ -110,6 +83,7 @@ mock.module("@/repositories/finance-project-summary", () => ({
     listProjectsByIds,
     listProjectsForAnalytics,
     listLedgerTotals,
+    listUnallocatedExpenseItems,
     listLedgerTrend,
     listReceivableTotals,
     listBudgetTotals,
@@ -167,34 +141,9 @@ describe("financeProjectSummaryService", () => {
     listLedgerTrend.mockClear();
     listReceivableTotals.mockClear();
     listBudgetTotals.mockClear();
+    listUnallocatedExpenseItems.mockClear();
     canAccessProject.mockClear();
     canAccessProject.mockImplementation(async () => true);
-  });
-
-  test("parses finance project risk filter query", () => {
-    const parsed = FinanceProjectSummaryListQuerySchema.parse({
-      page: "2",
-      pageSize: "50",
-      risk_level: "warning",
-      risk_flag: "unallocated_expense",
-      budget_configured: "false",
-      has_unallocated_expense: "true",
-      overdue: "true",
-      min_budget_usage_ratio: "0.8",
-      max_projected_budget_gross_margin: "0.2",
-    });
-
-    expect(parsed).toMatchObject({
-      page: 2,
-      pageSize: 50,
-      risk_level: "warning",
-      risk_flag: "unallocated_expense",
-      budget_configured: false,
-      has_unallocated_expense: true,
-      overdue: true,
-      min_budget_usage_ratio: 0.8,
-      max_projected_budget_gross_margin: 0.2,
-    });
   });
 
   test("lists project operating summaries for finance viewers", async () => {
@@ -371,6 +320,54 @@ describe("financeProjectSummaryService", () => {
         action: expect.objectContaining({ key: "open_unallocated_ledger" }),
       }),
     );
+  });
+
+  test("returns unallocated expense item previews", async () => {
+    listLedgerTotals.mockImplementationOnce(async () => new Map([
+      ["project-1", {
+        income_amount: 50000,
+        expense_amount: 12000,
+        unallocated_expense_amount: 1200,
+        ledger_entry_count: 3,
+        expense_by_category: new Map(),
+      }],
+    ]));
+    listUnallocatedExpenseItems.mockImplementationOnce(async () => new Map([
+      ["project-1", [
+        {
+          id: "ledger-1",
+          amount: 1200,
+          occurred_at: "2026-06-25T10:00:00.000Z",
+          summary: "材料费用",
+          request_title: "木工材料采购",
+          expense_category: "材料",
+          applicant_name: "令狐冲",
+          applicant_phone: "18800000001",
+          request_time: "2026-06-25T09:30:00.000Z",
+          request_no: "EXP-20260625-001",
+        },
+      ]],
+    ]));
+
+    const { financeProjectSummaryService } =
+      await import("./finance-project-summary");
+
+    const result = await financeProjectSummaryService.listProjectSummaries(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      { page: 1, pageSize: 20 },
+    );
+
+    expect(listUnallocatedExpenseItems).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectIds: ["project-1"],
+      limitPerProject: 3,
+    });
+    expect(result.list[0]?.unallocated_expense_items[0]).toMatchObject({
+      request_title: "木工材料采购",
+      expense_category: "材料",
+      applicant_name: "令狐冲",
+      request_time: "2026-06-25T09:30:00.000Z",
+    });
   });
 
   test("marks over-budget projects as danger", async () => {

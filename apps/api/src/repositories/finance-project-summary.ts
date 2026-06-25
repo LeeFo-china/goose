@@ -5,6 +5,10 @@ import {
   normalizeMoney,
   normalizeNumber,
 } from "@/repositories/finance-project-summary-helpers";
+import {
+  listFinanceProjectUnallocatedExpenseItems,
+  type FinanceProjectUnallocatedExpenseItem,
+} from "@/repositories/finance-project-summary-unallocated-items";
 import type { FinanceProjectSummaryListQuery } from "@/schema/finance";
 import { SupabaseDB } from "@/utils/supabase/index";
 
@@ -23,6 +27,8 @@ export type FinanceProjectLedgerTotals = {
   ledger_entry_count: number;
   expense_by_category: Map<string, number>;
 };
+
+export type { FinanceProjectUnallocatedExpenseItem };
 
 export type FinanceProjectReceivableTotals = {
   receivable_amount: number;
@@ -329,6 +335,14 @@ class FinanceProjectSummaryRepository {
     }
 
     return totals;
+  }
+
+  async listUnallocatedExpenseItems(input: {
+    tenantId: string;
+    projectIds: string[];
+    limitPerProject: number;
+  }): Promise<Map<string, FinanceProjectUnallocatedExpenseItem[]>> {
+    return listFinanceProjectUnallocatedExpenseItems(input);
   }
 
   async listLedgerTrend(input: {

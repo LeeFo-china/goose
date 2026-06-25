@@ -136,8 +136,9 @@ async function expectUnallocatedProjectSummaryPopover(page: Page) {
   }
 
   await expect(popover).toBeVisible();
-  await expect(popover.getByText("未归集金额")).toBeVisible();
-  await expect(popover.getByText("流水数量")).toBeVisible();
+  await expect(popover.getByText("待归集申请明细")).toBeVisible();
+  await expect(popover.getByText("申请标题 / 费用分类")).toHaveCount(0);
+  await expect(popover.getByText("未归集费用摘要")).toHaveCount(0);
 
   const popoverBox = await popover.boundingBox();
   expect(popoverBox).not.toBeNull();

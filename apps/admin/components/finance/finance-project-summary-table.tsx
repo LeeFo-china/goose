@@ -101,10 +101,16 @@ function unallocatedActionHref(row: FinanceProjectOperatingSummary) {
     : null;
 }
 
-function unallocatedRiskReason(row: FinanceProjectOperatingSummary) {
-  return row.risk_reasons?.find((reason) =>
-    reason.code === "unallocated_expense"
-  );
+function formatFinanceDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function rowToneClass(row: FinanceProjectOperatingSummary) {
@@ -143,7 +149,7 @@ function FinanceUnallocatedProjectHoverCard({
   row: FinanceProjectOperatingSummary;
   children: ReactNode;
 }) {
-  const reason = unallocatedRiskReason(row);
+  const items = row.unallocated_expense_items || [];
 
   return (
     <HoverCard openDelay={0} closeDelay={80}>
@@ -162,36 +168,43 @@ function FinanceUnallocatedProjectHoverCard({
         data-testid="finance-unallocated-summary-hover-card"
         side="right"
       >
-        <div className="flex flex-col gap-3 p-3">
+        <div className="flex flex-col gap-3 p-3 text-sm">
           <div className="flex items-start gap-2">
             <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700">
               <AlertTriangle aria-hidden="true" className="size-4" />
             </span>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold">未归集费用摘要</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {projectName(row)}
-              </p>
+              <h3 className="text-sm font-semibold">待归集申请明细</h3>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded-md border bg-muted/30 p-2">
-              <div className="text-xs text-muted-foreground">未归集金额</div>
-              <div className="mt-1 font-semibold tabular-nums">
-                {formatFinanceMoney(row.unallocated_expense_amount)}
+          <div className="flex flex-col gap-2">
+            {items.length > 0 ? items.map((item) => (
+              <div key={item.id} className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">
+                      {item.request_title || item.summary || "未命名费用申请"}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {item.expense_category || "未设置分类"}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>{item.applicant_name || item.applicant_phone || "未知员工"}</span>
+                      <span>{formatFinanceDateTime(item.request_time)}</span>
+                      {item.request_no ? <span>{item.request_no}</span> : null}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right text-xs font-medium tabular-nums">
+                    {formatFinanceMoney(item.amount)}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="rounded-md border bg-muted/30 p-2">
-              <div className="text-xs text-muted-foreground">流水数量</div>
-              <div className="mt-1 font-semibold tabular-nums">
-                {row.ledger_entry_count} 条
+            )) : (
+              <div className="text-xs text-muted-foreground">
+                暂无可展示的费用申请明细
               </div>
-            </div>
+            )}
           </div>
-          <p className="text-xs leading-5 text-muted-foreground">
-            {reason?.description ||
-              "该项目存在未归集成本，实际利润和毛利率可能偏高。"}
-          </p>
         </div>
       </HoverCardContent>
     </HoverCard>
