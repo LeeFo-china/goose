@@ -272,4 +272,66 @@ describe("ProjectProcedureAssignmentService", () => {
       },
     });
   });
+
+  test("uses project department as default candidate department when node config is empty", async () => {
+    const observed = {
+      departmentCodes: [] as string[],
+      tenantDepartmentIds: undefined as string[] | undefined,
+    };
+    const service = new ProjectProcedureAssignmentService({
+      listTenantDepartmentIdsByCodes: async (
+        input: { departmentCodes: string[] },
+      ) => {
+        observed.departmentCodes = input.departmentCodes;
+        return ["department-project"];
+      },
+      listCandidateEmployees: async (
+        input: { tenantDepartmentIds?: string[] },
+      ) => {
+        observed.tenantDepartmentIds = input.tenantDepartmentIds;
+        return {
+          list: [],
+          pagination: {
+            page: 1,
+            pageSize: 20,
+            total: 0,
+            totalPages: 0,
+          },
+        };
+      },
+      listOverlappingAssignments: async () => [],
+    } as never, {
+      findById: async () => ({
+        instance: {
+          subject_id: "11111111-1111-4111-8111-111111111111",
+          current_node_snapshot: {
+            config: {
+              stage_key: "plumbing_electrical",
+            },
+          },
+        },
+      }),
+    } as never);
+
+    const result = await service.listCandidates({
+      authContext: {
+        tenantId: "tenant-1",
+        employeeId: "manager-1",
+        roleCodes: [],
+        permissions: [{ code: "project_procedure.assign", scope: "all" }],
+      } as never,
+      projectId: "11111111-1111-4111-8111-111111111111",
+      query: {
+        task_id: "22222222-2222-4222-8222-222222222222",
+        planned_start_date: "2026-06-24",
+        planned_duration_days: 3,
+        page: 1,
+        pageSize: 20,
+      },
+    });
+
+    expect(observed.departmentCodes).toEqual(["PROJECT"]);
+    expect(observed.tenantDepartmentIds).toEqual(["department-project"]);
+    expect(result.meta.candidate_department_codes).toEqual(["PROJECT"]);
+  });
 });

@@ -333,7 +333,11 @@ class ProjectProcedureAssignmentRepository {
 
     const keyword = input.keyword?.trim();
     if (keyword) {
-      request = request.ilike("name", `%${escapeLikePattern(keyword)}%`);
+      const escapedKeyword = escapeLikePattern(keyword);
+      request = request.or([
+        `name.ilike.%${escapedKeyword}%`,
+        `phone.ilike.%${escapedKeyword}%`,
+      ].join(","));
     }
 
     const { data, error, count } = await request
@@ -389,7 +393,10 @@ export const projectProcedureAssignmentRepository =
   new ProjectProcedureAssignmentRepository();
 
 function escapeLikePattern(value: string) {
-  return value.replace(/[%_]/g, "\\$&");
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/[%_]/g, "\\$&")
+    .replace(/,/g, "\\,");
 }
 
 export type {

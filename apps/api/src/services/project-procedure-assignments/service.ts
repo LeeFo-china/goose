@@ -1,12 +1,11 @@
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
-import {
-  projectProcedureAssignmentRepository,
-} from "@/repositories/project-procedure-assignments";
+import { projectProcedureAssignmentRepository } from "@/repositories/project-procedure-assignments";
 import { workflowTaskRepository } from "@/repositories/workflow-tasks";
 import type { ProjectProcedureCandidatesQuery } from "@/schema/project-procedure-assignments";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import type { DepartmentCode } from "@gooes/domain";
 import {
   calculatePlannedEndDate,
   getEffectiveAssignmentStatus,
@@ -54,6 +53,7 @@ type ProcedureAssignmentResult = {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_CANDIDATE_DEPARTMENT_CODES: DepartmentCode[] = ["PROJECT"];
 
 export class ProjectProcedureAssignmentService {
   constructor(
@@ -316,15 +316,14 @@ export class ProjectProcedureAssignmentService {
     }
 
     const config = this.readNodeConfig(task.instance.current_node_snapshot);
-    const departmentCodes = readCandidateDepartmentCodes(
-      config.candidate_department_codes,
-    );
-    const tenantDepartmentIds = departmentCodes.length > 0
-      ? await this.repository.listTenantDepartmentIdsByCodes({
-        tenantId,
-        departmentCodes,
-      })
-      : undefined;
+    const configuredDepartmentCodes = readCandidateDepartmentCodes(config.candidate_department_codes);
+    const departmentCodes = configuredDepartmentCodes.length > 0
+      ? configuredDepartmentCodes
+      : DEFAULT_CANDIDATE_DEPARTMENT_CODES;
+    const tenantDepartmentIds = await this.repository.listTenantDepartmentIdsByCodes({
+      tenantId,
+      departmentCodes,
+    });
     const plannedEndDate = calculatePlannedEndDate(
       input.query.planned_start_date,
       input.query.planned_duration_days,
