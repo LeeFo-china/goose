@@ -127,8 +127,14 @@ async function expectUnallocatedProjectSummaryPopover(page: Page) {
   const unallocatedBadge = page.getByText("有未归集").first();
   await expect(unallocatedBadge).toBeVisible();
 
-  await unallocatedBadge.hover();
-  const popover = page.getByRole("dialog", { name: "未归集费用摘要" });
+  const popover = page.getByTestId("finance-unallocated-summary-hover-card");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.mouse.move(24, 24);
+    await expect(popover).toBeHidden();
+    await unallocatedBadge.hover();
+    await expect(popover).toBeVisible();
+  }
+
   await expect(popover).toBeVisible();
   await expect(popover.getByText("未归集金额")).toBeVisible();
   await expect(popover.getByText("流水数量")).toBeVisible();

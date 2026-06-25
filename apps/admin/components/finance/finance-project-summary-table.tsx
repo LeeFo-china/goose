@@ -1,17 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode } from "react";
 import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import type {
   FinanceProjectOperatingSummary,
   FinanceProjectRiskLevel,
@@ -136,66 +136,30 @@ function ProjectCellContent({
   );
 }
 
-function FinanceUnallocatedProjectPopover({
+function FinanceUnallocatedProjectHoverCard({
   row,
   children,
 }: {
   row: FinanceProjectOperatingSummary;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const reason = unallocatedRiskReason(row);
 
-  useEffect(() => {
-    if (!open) return;
-
-    function handlePointerMove(event: PointerEvent) {
-      const trigger = triggerRef.current;
-      if (!trigger) {
-        setOpen(false);
-        return;
-      }
-
-      const rect = trigger.getBoundingClientRect();
-      const isInsideTrigger =
-        event.clientX >= rect.left &&
-        event.clientX <= rect.right &&
-        event.clientY >= rect.top &&
-        event.clientY <= rect.bottom;
-
-      if (!isInsideTrigger) setOpen(false);
-    }
-
-    document.addEventListener("pointermove", handlePointerMove);
-    return () => {
-      document.removeEventListener("pointermove", handlePointerMove);
-    };
-  }, [open]);
-
-  function openPopover() {
-    setOpen(true);
-  }
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <HoverCard openDelay={0} closeDelay={80}>
+      <HoverCardTrigger asChild>
         <button
-          ref={triggerRef}
           type="button"
-          className="block w-full max-w-[18rem] cursor-default rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onBlur={() => setOpen(false)}
-          onFocus={openPopover}
-          onMouseEnter={openPopover}
-          onMouseLeave={() => setOpen(false)}
+          className="-mx-5 -my-2 block w-[calc(100%+2.5rem)] max-w-[20.5rem] cursor-default rounded-sm px-5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {children}
         </button>
-      </PopoverTrigger>
-      <PopoverContent
+      </HoverCardTrigger>
+      <HoverCardContent
         align="start"
         aria-label="未归集费用摘要"
         className="pointer-events-none w-80 p-0"
+        data-testid="finance-unallocated-summary-hover-card"
         side="right"
       >
         <div className="flex flex-col gap-3 p-3">
@@ -229,8 +193,8 @@ function FinanceUnallocatedProjectPopover({
               "该项目存在未归集成本，实际利润和毛利率可能偏高。"}
           </p>
         </div>
-      </PopoverContent>
-    </Popover>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
@@ -250,9 +214,9 @@ export function FinanceProjectSummaryTable({
         }
 
         return (
-          <FinanceUnallocatedProjectPopover row={row.original}>
+          <FinanceUnallocatedProjectHoverCard row={row.original}>
             {content}
-          </FinanceUnallocatedProjectPopover>
+          </FinanceUnallocatedProjectHoverCard>
         );
       },
       meta: {
