@@ -55,6 +55,55 @@ function riskLevel(row: FinanceProjectOperatingSummary): FinanceProjectRiskLevel
   return row.risk_level || "normal";
 }
 
+function collectionRate(row: FinanceProjectOperatingSummary) {
+  const contractAmount = Number(row.contract_amount || 0);
+  if (!Number.isFinite(contractAmount) || contractAmount <= 0) return "-";
+  return formatFinancePercent(Number(row.received_amount || 0) / contractAmount);
+}
+
+function moneyTextClass(value: number | string | null | undefined) {
+  const amount = Number(value || 0);
+  if (amount < 0) return "text-red-700";
+  if (amount > 0) return "text-foreground";
+  return "text-muted-foreground";
+}
+
+function financeRiskActionByKey(
+  row: FinanceProjectOperatingSummary,
+  key: string,
+) {
+  return row.risk_reasons
+    ?.map((reason) => reason.action)
+    .find((action) => action?.key === key);
+}
+
+function budgetActionHref(row: FinanceProjectOperatingSummary) {
+  const href = financeRiskActionHref(
+    financeRiskActionByKey(row, "open_cost_budget"),
+  );
+  if (href) return href;
+  return budgetConfigured(row) ? null : `/projects/${row.project_id}?tab=overview`;
+}
+
+function unallocatedActionHref(row: FinanceProjectOperatingSummary) {
+  const href = financeRiskActionHref(
+    financeRiskActionByKey(row, "open_unallocated_ledger"),
+  );
+  if (href) return href;
+  return row.unallocated_expense_amount > 0
+    ? `/finance/ledger?project_id=${row.project_id}&direction=out&unallocated_only=true`
+    : null;
+}
+
+function rowToneClass(row: FinanceProjectOperatingSummary) {
+  if (riskLevel(row) === "danger") return "bg-red-50/40 hover:bg-red-50/70";
+  if (riskLevel(row) === "warning") return "bg-amber-50/35 hover:bg-amber-50/70";
+  if (!budgetConfigured(row) || row.unallocated_expense_amount > 0) {
+    return "bg-amber-50/20 hover:bg-amber-50/50";
+  }
+  return undefined;
+}
+
 export function FinanceProjectSummaryTable({
   rows,
 }: {
@@ -67,8 +116,13 @@ export function FinanceProjectSummaryTable({
       cell: ({ row }) => (
         <div className="max-w-[18rem]">
           <div className="truncate font-medium">{projectName(row.original)}</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {row.original.ledger_entry_count} 条流水
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            <span>{row.original.ledger_entry_count} 条流水</span>
+            {row.original.unallocated_expense_amount > 0 ? (
+              <Badge variant="warning" className="px-1.5 py-0 text-[11px]">
+                有未归集
+              </Badge>
+            ) : null}
           </div>
         </div>
       ),
@@ -90,7 +144,7 @@ export function FinanceProjectSummaryTable({
     },
     {
       accessorKey: "contract_amount",
-      header: "合同",
+      header: "合同额",
       cell: ({ row }) => formatFinanceMoney(row.original.contract_amount),
       meta: {
         headerClassName: "text-right",
@@ -99,11 +153,20 @@ export function FinanceProjectSummaryTable({
     },
     {
       accessorKey: "received_amount",
-      header: "已收",
-      cell: ({ row }) => formatFinanceMoney(row.original.received_amount),
+      header: "已收/回款率",
+      cell: ({ row }) => (
+        <div className="text-right">
+          <div className="font-medium tabular-nums">
+            {formatFinanceMoney(row.original.received_amount)}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+            {collectionRate(row.original)}
+          </div>
+        </div>
+      ),
       meta: {
         headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums",
+        cellClassName: "whitespace-nowrap text-right",
       },
     },
     {
@@ -118,7 +181,7 @@ export function FinanceProjectSummaryTable({
     },
     {
       accessorKey: "expense_paid_amount",
-      header: "支出",
+      header: "实际支出",
       cell: ({ row }) => formatFinanceMoney(row.original.expense_paid_amount),
       meta: {
         headerClassName: "text-right",
@@ -128,46 +191,28 @@ export function FinanceProjectSummaryTable({
     {
       accessorKey: "budget_cost_amount",
       header: "预算成本",
-      cell: ({ row }) => budgetConfigured(row.original)
-        ? formatFinanceMoney(budgetNumber(row.original, "budget_cost_amount"))
-        : "未配置",
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums",
+      cell: ({ row }) => {
+        if (!budgetConfigured(row.original)) {
+          return (
+            <div className="flex justify-end">
+              <Badge variant="warning">未配置</Badge>
+            </div>
+          );
+        }
+        return (
+          <div className="text-right">
+            <div className="font-medium tabular-nums">
+              {formatFinanceMoney(budgetNumber(row.original, "budget_cost_amount"))}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+              使用率 {formatFinancePercent(budgetRatio(row.original))}
+            </div>
+          </div>
+        );
       },
-    },
-    {
-      accessorKey: "budget_remaining_amount",
-      header: "预算剩余",
-      cell: ({ row }) => budgetConfigured(row.original)
-        ? formatFinanceMoney(budgetNumber(row.original, "budget_remaining_amount"))
-        : "-",
       meta: {
         headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums",
-      },
-    },
-    {
-      accessorKey: "budget_usage_ratio",
-      header: "使用率",
-      cell: ({ row }) => budgetConfigured(row.original)
-        ? formatFinancePercent(budgetRatio(row.original))
-        : "-",
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums text-muted-foreground",
-      },
-    },
-    {
-      accessorKey: "unallocated_expense_amount",
-      header: "未归集",
-      cell: ({ row }) => row.original.unallocated_expense_amount > 0
-        ? formatFinanceMoney(row.original.unallocated_expense_amount)
-        : "-",
-      meta: {
-        headerClassName: "text-right",
-        cellClassName:
-          "whitespace-nowrap text-right tabular-nums text-muted-foreground",
+        cellClassName: "whitespace-nowrap text-right",
       },
     },
     {
@@ -180,7 +225,7 @@ export function FinanceProjectSummaryTable({
               budgetNumber(row.original, "projected_budget_profit_amount"),
             )}
           </div>
-          <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+          <div className={`mt-1 text-xs tabular-nums ${moneyTextClass(row.original.profit_variance_amount)}`}>
             偏差 {formatFinanceMoney(budgetNumber(row.original, "profit_variance_amount"))}
           </div>
         </div>
@@ -191,37 +236,8 @@ export function FinanceProjectSummaryTable({
       },
     },
     {
-      accessorKey: "actual_profit_amount",
-      header: "实际利润",
-      cell: ({ row }) => formatFinanceMoney(row.original.actual_profit_amount),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right font-medium tabular-nums",
-      },
-    },
-    {
-      accessorKey: "actual_gross_margin",
-      header: "实际毛利率",
-      cell: ({ row }) => formatFinancePercent(row.original.actual_gross_margin),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums text-muted-foreground",
-      },
-    },
-    {
-      accessorKey: "overdue_amount",
-      header: "逾期",
-      cell: ({ row }) => row.original.overdue_count > 0
-        ? `${formatFinanceMoney(row.original.overdue_amount)} / ${row.original.overdue_count} 笔`
-        : "-",
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums text-muted-foreground",
-      },
-    },
-    {
       accessorKey: "risk_level",
-      header: "风险",
+      header: "风险状态",
       cell: ({ row }) => {
         const level = riskLevel(row.original);
         const reasonText = summarizeFinanceRiskReasons(
@@ -232,6 +248,11 @@ export function FinanceProjectSummaryTable({
             <Badge variant={financeRiskVariant(level)}>
               {financeRiskLabel(level)}
             </Badge>
+            {row.original.overdue_count > 0 ? (
+              <Badge variant="danger" className="ml-1">
+                逾期 {row.original.overdue_count} 笔
+              </Badge>
+            ) : null}
             {reasonText ? (
               <div className="mt-1 truncate text-xs text-muted-foreground">
                 {reasonText}
@@ -246,22 +267,25 @@ export function FinanceProjectSummaryTable({
     },
     {
       id: "action",
-      header: "",
+      header: "操作",
       cell: ({ row }) => {
-        const action = row.original.risk_reasons
-          ?.map((reason) => reason.action)
-          .find((item) => financeRiskActionHref(item));
-        const href = financeRiskActionHref(action);
+        const budgetHref = budgetActionHref(row.original);
+        const unallocatedHref = unallocatedActionHref(row.original);
         return (
           <div className="flex justify-end gap-1">
-            {href ? (
+            {budgetHref ? (
               <Button asChild variant="outline" size="sm" className="h-8 px-2">
-                <Link href={href}>{action?.label || "处理"}</Link>
+                <Link href={budgetHref}>配预算</Link>
+              </Button>
+            ) : null}
+            {unallocatedHref ? (
+              <Button asChild variant="outline" size="sm" className="h-8 px-2">
+                <Link href={unallocatedHref}>归集成本</Link>
               </Button>
             ) : null}
             <Button asChild variant="ghost" size="sm" className="h-8 px-2">
               <Link href={`/projects/${row.original.project_id}`}>
-                查看项目
+                查看
                 <ArrowUpRight data-icon="inline-end" />
               </Link>
             </Button>
@@ -269,7 +293,10 @@ export function FinanceProjectSummaryTable({
         );
       },
       meta: {
-        cellClassName: "whitespace-nowrap text-right",
+        headerClassName:
+          "text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        cellClassName:
+          "whitespace-nowrap text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
       },
     },
   ];
@@ -279,7 +306,9 @@ export function FinanceProjectSummaryTable({
       columns={columns}
       data={rows}
       emptyText="暂无项目经营数据"
-      minWidth="min-w-[1800px]"
+      minWidth="min-w-[1280px]"
+      headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
+      rowClassName={rowToneClass}
     />
   );
 }
