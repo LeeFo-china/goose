@@ -115,6 +115,9 @@ Query：
 
 响应为分页列表。候选员工中：
 
+- 后端会先按当前工序候选部门过滤，默认部门为工程部 `PROJECT`。
+- 后端还会要求员工具备稳定权限 `project_procedure.assignee`，该权限通过员工绑定的
+  active 角色授予；小程序不要传或写死租户自定义角色 code。
 - `busy=false`：可选择。
 - `busy=true`：不能选择，只展示占用信息。
 - `busy_assignment.project_name`：员工正在施工的项目。

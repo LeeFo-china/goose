@@ -311,6 +311,7 @@ class ProjectProcedureAssignmentRepository {
   async listCandidateEmployees(input: {
     tenantId: string;
     tenantDepartmentIds?: string[];
+    candidateEmployeeIds?: string[];
     keyword?: string;
     page: number;
     pageSize: number;
@@ -328,6 +329,11 @@ class ProjectProcedureAssignmentRepository {
     if (input.tenantDepartmentIds) {
       request = input.tenantDepartmentIds.length > 0
         ? request.in("tenant_department_id", input.tenantDepartmentIds)
+        : request.eq("id", "00000000-0000-0000-0000-000000000000");
+    }
+    if (input.candidateEmployeeIds) {
+      request = input.candidateEmployeeIds.length > 0
+        ? request.in("id", input.candidateEmployeeIds)
         : request.eq("id", "00000000-0000-0000-0000-000000000000");
     }
 
@@ -358,6 +364,75 @@ class ProjectProcedureAssignmentRepository {
         totalPages: total ? Math.ceil(total / pageSize) : 0,
       },
     };
+  }
+
+  async listEmployeeIdsByPermissionCodes(input: {
+    tenantId: string;
+    permissionCodes: string[];
+  }): Promise<string[]> {
+    if (input.permissionCodes.length === 0) {
+      return [];
+    }
+
+    const { data: permissions, error: permissionError } =
+      await SupabaseDB.getAdminClient()
+        .from("permissions")
+        .select("id")
+        .in("code", input.permissionCodes)
+        .eq("status", "active")
+        .limit(100);
+
+    if (permissionError) {
+      throw Errors.dbError("查询工序候选权限失败", permissionError);
+    }
+
+    const permissionIds = (permissions ?? [])
+      .map((row) => typeof row.id === "string" ? row.id : null)
+      .filter((id): id is string => Boolean(id));
+    if (permissionIds.length === 0) {
+      return [];
+    }
+
+    const { data: rolePermissions, error: rolePermissionError } =
+      await SupabaseDB.getAdminClient()
+        .from("role_permissions")
+        .select(`
+          role_id,
+          role:roles!role_permissions_role_id_fkey!inner(id, tenant_id, status)
+        `)
+        .in("permission_id", permissionIds)
+        .eq("role.tenant_id", input.tenantId)
+        .eq("role.status", "active");
+
+    if (rolePermissionError) {
+      throw Errors.dbError("查询工序候选角色失败", rolePermissionError);
+    }
+
+    const roleIds = Array.from(new Set((rolePermissions ?? [])
+      .map((row) => typeof row.role_id === "string" ? row.role_id : null)
+      .filter((id): id is string => Boolean(id))));
+    if (roleIds.length === 0) {
+      return [];
+    }
+
+    const { data: employeeRoles, error: employeeRoleError } =
+      await SupabaseDB.getAdminClient()
+        .from("employee_roles")
+        .select(`
+          employee_id,
+          employee:employees!employee_roles_employee_id_fkey!inner(id, tenant_id, status)
+        `)
+        .in("role_id", roleIds)
+        .eq("employee.tenant_id", input.tenantId)
+        .eq("employee.status", "active");
+
+    if (employeeRoleError) {
+      throw Errors.dbError("查询工序候选施工人员角色失败", employeeRoleError);
+    }
+
+    return Array.from(new Set((employeeRoles ?? [])
+      .map((row) => typeof row.employee_id === "string" ? row.employee_id : null)
+      .filter((id): id is string => Boolean(id))));
   }
 
   async listOverlappingAssignments(input: {

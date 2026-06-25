@@ -46,6 +46,7 @@ export const PERMISSION_CODE_VALUES = [
   'project_acceptance.manage',
   'project_log.create',
   'project_procedure.read',
+  'project_procedure.assignee',
   'project_procedure.assign',
   'project_procedure.adjust',
   'project_procedure.complete',
@@ -198,6 +199,10 @@ export const PermissionCodeConfig: Record<
   },
   'project_procedure.read': {
     label: '查看工序派工',
+    module: 'project_procedure',
+  },
+  'project_procedure.assignee': {
+    label: '可被安排工序',
     module: 'project_procedure',
   },
   'project_procedure.assign': {

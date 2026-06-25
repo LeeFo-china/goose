@@ -58,6 +58,8 @@
 
 3. 候选施工人员来自工程部。
    - 默认使用租户部门 `code=PROJECT` 的在职员工。
+   - 员工还必须通过绑定的 active 角色具备稳定权限
+     `project_procedure.assignee`；不要依赖租户自定义角色 code 或角色名称。
    - 后续可在节点属性中配置 `candidate_department_codes`，例如只允许工程部或安装部。
 
 4. 员工占用以工序派工日期区间为准。
@@ -190,6 +192,7 @@
 | `default_duration_days` | 默认工期天数，必须为正整数 |
 | `allow_duration_override` | 开始工序时是否允许修改工期 |
 | `candidate_department_codes` | 候选施工人员部门，默认 `["PROJECT"]` |
+| `project_procedure.assignee` | 员工可被派为工序施工人员的稳定权限点，由角色权限配置授予 |
 | `conflict_policy` | 第一版固定 `block_active_assignment` |
 
 第一版建议施工 workflow 的 `procedure` 节点默认强制派工，即

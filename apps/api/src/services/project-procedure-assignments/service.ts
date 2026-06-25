@@ -5,13 +5,14 @@ import { workflowTaskRepository } from "@/repositories/workflow-tasks";
 import type { ProjectProcedureCandidatesQuery } from "@/schema/project-procedure-assignments";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
-import type { DepartmentCode } from "@gooes/domain";
 import {
   calculatePlannedEndDate,
   getEffectiveAssignmentStatus,
 } from "./status";
 import { assertEmployeeCanCreateAssignmentProjectLog } from "./log-gate";
 import {
+  DEFAULT_CANDIDATE_DEPARTMENT_CODES,
+  DEFAULT_CANDIDATE_PERMISSION_CODES,
   readCandidateDepartmentCodes,
   serializeProcedureCandidate,
 } from "./candidates";
@@ -23,6 +24,7 @@ type AssignmentRepositoryLike = Pick<
   | "findActiveByProjectStage"
   | "listActiveForProject"
   | "listTenantDepartmentIdsByCodes"
+  | "listEmployeeIdsByPermissionCodes"
   | "listCandidateEmployees"
   | "listOverlappingAssignments"
   | "createAssignment"
@@ -53,7 +55,6 @@ type ProcedureAssignmentResult = {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const DEFAULT_CANDIDATE_DEPARTMENT_CODES: DepartmentCode[] = ["PROJECT"];
 
 export class ProjectProcedureAssignmentService {
   constructor(
@@ -298,10 +299,7 @@ export class ProjectProcedureAssignmentService {
     query: ProjectProcedureCandidatesQuery;
   }) {
     const tenantId = this.assertTenantId(input.authContext);
-    accessPolicyService.assertPermission(
-      input.authContext,
-      "project_procedure.assign",
-    );
+    accessPolicyService.assertPermission(input.authContext, "project_procedure.assign");
 
     const task = await this.tasks.findById({
       tenantId,
@@ -320,17 +318,14 @@ export class ProjectProcedureAssignmentService {
     const departmentCodes = configuredDepartmentCodes.length > 0
       ? configuredDepartmentCodes
       : DEFAULT_CANDIDATE_DEPARTMENT_CODES;
-    const tenantDepartmentIds = await this.repository.listTenantDepartmentIdsByCodes({
-      tenantId,
-      departmentCodes,
-    });
-    const plannedEndDate = calculatePlannedEndDate(
-      input.query.planned_start_date,
-      input.query.planned_duration_days,
-    );
+    const tenantDepartmentIds = await this.repository.listTenantDepartmentIdsByCodes({ tenantId, departmentCodes });
+    const permissionCodes = DEFAULT_CANDIDATE_PERMISSION_CODES;
+    const candidateEmployeeIds = await this.repository.listEmployeeIdsByPermissionCodes({ tenantId, permissionCodes });
+    const plannedEndDate = calculatePlannedEndDate(input.query.planned_start_date, input.query.planned_duration_days);
     const candidates = await this.repository.listCandidateEmployees({
       tenantId,
       tenantDepartmentIds,
+      candidateEmployeeIds,
       keyword: input.query.keyword,
       page: input.query.page,
       pageSize: input.query.pageSize,
@@ -359,6 +354,7 @@ export class ProjectProcedureAssignmentService {
         planned_duration_days: input.query.planned_duration_days,
         planned_end_date: plannedEndDate,
         candidate_department_codes: departmentCodes,
+        candidate_permission_codes: permissionCodes,
       },
     };
   }

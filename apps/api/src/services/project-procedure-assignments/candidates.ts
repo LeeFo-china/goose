@@ -2,7 +2,13 @@ import type {
   CandidateEmployeeRow,
   ProcedureAssignmentOverlapRow,
 } from "@/repositories/project-procedure-assignments";
+import type { DepartmentCode, PermissionCode } from "@gooes/domain";
 import { calculateRemainingDays } from "./status";
+
+export const DEFAULT_CANDIDATE_DEPARTMENT_CODES: DepartmentCode[] = ["PROJECT"];
+export const DEFAULT_CANDIDATE_PERMISSION_CODES: PermissionCode[] = [
+  "project_procedure.assignee",
+];
 
 export function readCandidateDepartmentCodes(value: unknown): string[] {
   if (!Array.isArray(value)) {

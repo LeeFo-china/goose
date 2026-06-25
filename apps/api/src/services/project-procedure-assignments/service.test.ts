@@ -188,6 +188,7 @@ describe("ProjectProcedureAssignmentService", () => {
   test("lists candidates with busy assignment metadata", async () => {
     const service = new ProjectProcedureAssignmentService({
       listTenantDepartmentIdsByCodes: async () => ["department-1"],
+      listEmployeeIdsByPermissionCodes: async () => ["employee-1"],
       listCandidateEmployees: async () => ({
         list: [{
           id: "employee-1",
@@ -277,6 +278,8 @@ describe("ProjectProcedureAssignmentService", () => {
     const observed = {
       departmentCodes: [] as string[],
       tenantDepartmentIds: undefined as string[] | undefined,
+      permissionCodes: [] as string[],
+      candidateEmployeeIds: undefined as string[] | undefined,
     };
     const service = new ProjectProcedureAssignmentService({
       listTenantDepartmentIdsByCodes: async (
@@ -285,9 +288,19 @@ describe("ProjectProcedureAssignmentService", () => {
         observed.departmentCodes = input.departmentCodes;
         return ["department-project"];
       },
-      listCandidateEmployees: async (
-        input: { tenantDepartmentIds?: string[] },
+      listEmployeeIdsByPermissionCodes: async (
+        input: { permissionCodes: string[] },
       ) => {
+        observed.permissionCodes = input.permissionCodes;
+        return ["employee-assignee"];
+      },
+      listCandidateEmployees: async (
+        input: {
+          candidateEmployeeIds?: string[];
+          tenantDepartmentIds?: string[];
+        },
+      ) => {
+        observed.candidateEmployeeIds = input.candidateEmployeeIds;
         observed.tenantDepartmentIds = input.tenantDepartmentIds;
         return {
           list: [],
@@ -332,6 +345,11 @@ describe("ProjectProcedureAssignmentService", () => {
 
     expect(observed.departmentCodes).toEqual(["PROJECT"]);
     expect(observed.tenantDepartmentIds).toEqual(["department-project"]);
+    expect(observed.permissionCodes).toEqual(["project_procedure.assignee"]);
+    expect(observed.candidateEmployeeIds).toEqual(["employee-assignee"]);
     expect(result.meta.candidate_department_codes).toEqual(["PROJECT"]);
+    expect(result.meta.candidate_permission_codes).toEqual([
+      "project_procedure.assignee",
+    ]);
   });
 });
