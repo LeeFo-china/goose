@@ -1,7 +1,10 @@
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-export type FinanceModuleTab = "overview" | "receivables" | "ledger";
+export type FinanceModuleTab =
+  | "overview"
+  | "diagnostics"
+  | "receivables"
+  | "ledger";
 
 const FINANCE_MODULE_TABS: Array<{
   value: FinanceModuleTab;
@@ -9,6 +12,7 @@ const FINANCE_MODULE_TABS: Array<{
   href: string;
 }> = [
   { value: "overview", label: "财务总览", href: "/finance" },
+  { value: "diagnostics", label: "财务诊断", href: "/finance/diagnostics" },
   { value: "receivables", label: "应收计划", href: "/finance/receivables" },
   { value: "ledger", label: "财务台账", href: "/finance/ledger" },
 ];
@@ -28,7 +32,7 @@ export function FinanceModuleTabs({
           const active = tab.value === activeTab;
 
           return (
-            <Link
+            <a
               key={tab.value}
               href={tab.href}
               aria-current={active ? "page" : undefined}
@@ -38,7 +42,7 @@ export function FinanceModuleTabs({
               )}
             >
               {tab.label}
-            </Link>
+            </a>
           );
         })}
       </div>

@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CircleDollarSign,
   LineChart,
-  ListChecks,
   Search,
   WalletCards,
 } from "lucide-react";
@@ -12,10 +11,9 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { FinanceFilterSelectField } from "@/components/finance/finance-filter-controls";
 import {
   FinanceMetricCard,
-  FinanceTodoCard,
   formatCollectionRate,
-  formatCompactMoney,
 } from "@/components/finance/finance-overview-cards";
+import { FinanceOverviewCharts } from "@/components/finance/finance-overview-charts";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { FinanceProjectSummaryTable } from "@/components/finance/finance-project-summary-table";
 import {
@@ -165,13 +163,9 @@ export default async function FinancePage({
     warning: 0,
     danger: 0,
   };
-  const flagCounts = summary.risk_flag_counts || {};
   const projectCount = Number(summary.project_count || data.pagination.total || 0);
-  const budgetMissingCount = Number(flagCounts.budget_missing || 0);
-  const unallocatedProjectCount = Number(flagCounts.unallocated_expense || 0);
   const highRiskCount = Number(riskCounts.danger || 0);
   const warningRiskCount = Number(riskCounts.warning || 0);
-  const overdueProjectCount = Number(flagCounts.receivable_overdue || 0);
   const actualGrossMargin = Number(summary.actual_gross_margin);
   const hasAbnormalGrossMargin = Number.isFinite(actualGrossMargin) && actualGrossMargin > 0.6;
   const advancedFilterCount = [
@@ -236,90 +230,7 @@ export default async function FinancePage({
         />
       </div>
 
-      <section className="shrink-0 space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">财务待办</h2>
-          <span className="text-xs text-muted-foreground">
-            优先补齐影响利润准确性的基础数据
-          </span>
-        </div>
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          <FinanceTodoCard
-            title="未配置预算"
-            value={`${budgetMissingCount} 个`}
-            helper={`有 ${budgetMissingCount} 个项目未配置预算 · 预算使用率 ${formatFinancePercent(summary.budget_usage_ratio)}`}
-            actionLabel="去配置"
-            href={buildFinanceSummaryHref({
-              page: 1,
-              filters: { ...params, budget_configured: "false" },
-            })}
-            tone={budgetMissingCount > 0 ? "warning" : "normal"}
-          />
-          <FinanceTodoCard
-            title="未归集成本"
-            value={`${unallocatedProjectCount} 个`}
-            helper={`有 ${unallocatedProjectCount} 个项目存在未归集成本 · ${formatFinanceMoney(summary.unallocated_expense_amount)}`}
-            actionLabel="去归集"
-            href="/finance/ledger?direction=out&unallocated_only=true"
-            tone={unallocatedProjectCount > 0 ? "warning" : "normal"}
-          />
-          <FinanceTodoCard
-            title="预算利润偏差"
-            value={formatFinanceMoney(summary.profit_variance_amount)}
-            helper={`预算利润 ${formatFinanceMoney(summary.projected_budget_profit_amount)}`}
-            actionLabel="看偏差"
-            href={buildFinanceSummaryHref({
-              page: 1,
-              filters: { ...params, risk_flag: "low_projected_margin" },
-            })}
-            tone={Number(summary.profit_variance_amount || 0) < 0 ? "danger" : "normal"}
-          />
-          <FinanceTodoCard
-            title="逾期应收"
-            value={formatFinanceMoney(summary.overdue_amount)}
-            helper={`${summary.overdue_count} 笔 / ${overdueProjectCount} 个项目`}
-            actionLabel="看应收"
-            href="/finance/receivables?overdue_only=true"
-            tone={Number(summary.overdue_amount || 0) > 0 ? "danger" : "normal"}
-          />
-        </div>
-      </section>
-
-      <div className="shrink-0 rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-1.5">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700">
-              <ListChecks aria-hidden="true" className="size-4" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-xs font-semibold text-amber-950">财务诊断</h2>
-              <p className="max-w-5xl text-xs leading-5 text-amber-950/80 lg:truncate">
-                筛选 {projectCount} 个项目，合同 {formatCompactMoney(summary.contract_amount)}，已收 {formatCompactMoney(summary.received_amount)}，回款率 {formatCollectionRate(summary.received_amount, summary.contract_amount)}；实际支出 {formatFinanceMoney(summary.expense_paid_amount)}，实际毛利率 {formatFinancePercent(summary.actual_gross_margin)}。当前 {budgetMissingCount} 个项目未配预算，{unallocatedProjectCount} 个项目有未归集成本。
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
-            <Button asChild variant="outline" size="sm" className="h-8 bg-background/80">
-              <Link href={buildFinanceSummaryHref({
-                page: 1,
-                filters: { ...params, risk_level: "danger" },
-              })}>
-                查看高风险项目
-              </Link>
-            </Button>
-            <Button asChild size="sm" className="h-8">
-              <Link href={buildFinanceSummaryHref({
-                page: 1,
-                filters: budgetMissingCount > 0
-                  ? { ...params, budget_configured: "false" }
-                  : { ...params, has_unallocated_expense: "true" },
-              })}>
-                处理财务待办
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </div>
+      <FinanceOverviewCharts summary={summary} />
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">
