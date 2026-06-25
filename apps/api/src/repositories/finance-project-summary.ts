@@ -1,4 +1,10 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  hasFinanceProjectRiskFilters,
+  isUuid,
+  normalizeMoney,
+  normalizeNumber,
+} from "@/repositories/finance-project-summary-helpers";
 import type { FinanceProjectSummaryListQuery } from "@/schema/finance";
 import { SupabaseDB } from "@/utils/supabase/index";
 
@@ -64,6 +70,13 @@ type FinanceProjectBudgetRow = {
 type FinanceProjectRiskSearchRow = {
   project_id: string;
   total_count: number | string | null;
+};
+
+type FinanceProjectLedgerTrendRow = {
+  project_id: string | null;
+  direction: string | null;
+  amount: number | string | null;
+  occurred_at: string | null;
 };
 
 class FinanceProjectSummaryRepository {
@@ -202,6 +215,66 @@ class FinanceProjectSummaryRepository {
       );
   }
 
+  async listProjectsForAnalytics(input: {
+    tenantId: string;
+    query: FinanceProjectSummaryListQuery;
+    limit: number;
+  }): Promise<{
+    list: FinanceProjectSummaryProjectRow[];
+    total: number;
+    limit: number;
+  }> {
+    const limit = Math.min(Math.max(Math.floor(input.limit), 1), 100);
+    if (hasFinanceProjectRiskFilters(input.query)) {
+      const search = await this.searchProjectIdsByRisk({
+        tenantId: input.tenantId,
+        query: {
+          ...input.query,
+          page: 1,
+          pageSize: limit,
+        },
+      });
+      return {
+        list: await this.listProjectsByIds({
+          tenantId: input.tenantId,
+          projectIds: search.projectIds,
+        }),
+        total: search.pagination.total,
+        limit,
+      };
+    }
+
+    let request = SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, name, status, signed_amount, budget", { count: "exact" })
+      .eq("tenant_id", input.tenantId)
+      .order("created_at", { ascending: false })
+      .range(0, limit - 1);
+
+    if (input.query.keyword) {
+      const keyword = input.query.keyword.trim();
+      if (isUuid(keyword)) {
+        request = request.or(`name.ilike.%${keyword}%,id.eq.${keyword}`);
+      } else {
+        request = request.ilike("name", `%${keyword}%`);
+      }
+    }
+    if (input.query.status) {
+      request = request.eq("status", input.query.status);
+    }
+
+    const { data, error, count } = await request;
+    if (error) {
+      throw Errors.dbError("查询项目财务分析范围失败", error);
+    }
+
+    return {
+      list: ((data as FinanceProjectSummaryProjectRow[] | null) || []),
+      total: count || 0,
+      limit,
+    };
+  }
+
   async listLedgerTotals(input: {
     tenantId: string;
     projectIds: string[];
@@ -256,6 +329,56 @@ class FinanceProjectSummaryRepository {
     }
 
     return totals;
+  }
+
+  async listLedgerTrend(input: {
+    tenantId: string;
+    projectIds: string[];
+    dateFrom: string;
+  }): Promise<Array<{
+    date: string;
+    income_amount: number;
+    expense_amount: number;
+  }>> {
+    if (input.projectIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("finance_ledger_entries")
+      .select("project_id, direction, amount, occurred_at")
+      .eq("tenant_id", input.tenantId)
+      .in("project_id", input.projectIds)
+      .gte("occurred_at", `${input.dateFrom}T00:00:00`);
+
+    if (error) {
+      throw Errors.dbError("查询项目财务趋势失败", error);
+    }
+
+    const byDate = new Map<string, {
+      date: string;
+      income_amount: number;
+      expense_amount: number;
+    }>();
+    for (const row of ((data as FinanceProjectLedgerTrendRow[] | null) || [])) {
+      if (!row.project_id || !row.occurred_at) continue;
+      const date = row.occurred_at.slice(0, 10);
+      const current = byDate.get(date) || {
+        date,
+        income_amount: 0,
+        expense_amount: 0,
+      };
+      const amount = normalizeMoney(row.amount);
+      if (row.direction === "in") {
+        current.income_amount += amount;
+      } else if (row.direction === "out") {
+        current.expense_amount += amount;
+      }
+      byDate.set(date, current);
+    }
+
+    return Array.from(byDate.values())
+      .sort((left, right) => left.date.localeCompare(right.date));
   }
 
   async listReceivableTotals(input: {
@@ -356,21 +479,6 @@ function isOverdueReceivable(
       remainingAmount > 0 &&
       row.status !== "paid",
   );
-}
-
-function normalizeMoney(value: unknown) {
-  const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? amount : 0;
-}
-
-function normalizeNumber(value: unknown, fallback: number) {
-  const numberValue = Number(value ?? fallback);
-  return Number.isFinite(numberValue) ? numberValue : fallback;
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    .test(value);
 }
 
 export const financeProjectSummaryRepository =

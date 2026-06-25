@@ -45,6 +45,19 @@ const listProjectsByIds = mock(async () => [
     budget: 90000,
   },
 ]);
+const listProjectsForAnalytics = mock(async () => ({
+  list: [
+    {
+      id: "project-1",
+      name: "阶段五风险项目",
+      status: "constructing",
+      signed_amount: 100000,
+      budget: 90000,
+    },
+  ],
+  total: 1,
+  limit: 100,
+}));
 const listLedgerTotals = mock(async () => new Map([
   ["project-1", {
     income_amount: 50000,
@@ -56,6 +69,13 @@ const listLedgerTotals = mock(async () => new Map([
     ]),
   }],
 ]));
+const listLedgerTrend = mock(async () => [
+  {
+    date: "2026-06-01",
+    income_amount: 50000,
+    expense_amount: 12000,
+  },
+]);
 const listReceivableTotals = mock(async () => new Map([
   ["project-1", {
     receivable_amount: 80000,
@@ -88,7 +108,9 @@ mock.module("@/repositories/finance-project-summary", () => ({
     findProject,
     searchProjectIdsByRisk,
     listProjectsByIds,
+    listProjectsForAnalytics,
     listLedgerTotals,
+    listLedgerTrend,
     listReceivableTotals,
     listBudgetTotals,
   },
@@ -140,7 +162,9 @@ describe("financeProjectSummaryService", () => {
     findProject.mockClear();
     searchProjectIdsByRisk.mockClear();
     listProjectsByIds.mockClear();
+    listProjectsForAnalytics.mockClear();
     listLedgerTotals.mockClear();
+    listLedgerTrend.mockClear();
     listReceivableTotals.mockClear();
     listBudgetTotals.mockClear();
     canAccessProject.mockClear();
@@ -222,6 +246,78 @@ describe("financeProjectSummaryService", () => {
       budget_cost_amount: 80000,
       projected_budget_profit_amount: 20000,
       risk_count: 0,
+    });
+    expect(result.analytics.scope).toMatchObject({
+      project_count: 1,
+      project_limit: 100,
+      truncated: false,
+      trend_days: 30,
+    });
+    expect(result.analytics.trends).toEqual([
+      {
+        date: "2026-06-01",
+        income_amount: 50000,
+        expense_amount: 12000,
+        net_cash_flow_amount: 38000,
+      },
+    ]);
+  });
+
+  test("returns finance analytics rankings independent of current page rows", async () => {
+    listProjects.mockImplementationOnce(async () => ({
+      list: [],
+      pagination: {
+        page: 2,
+        pageSize: 20,
+        total: 21,
+        totalPages: 2,
+      },
+    }));
+    listProjectsForAnalytics.mockImplementationOnce(async () => ({
+      list: [
+        {
+          id: "project-1",
+          name: "未归集项目",
+          status: "constructing",
+          signed_amount: 100000,
+          budget: 90000,
+        },
+      ],
+      total: 21,
+      limit: 100,
+    }));
+    listLedgerTotals.mockImplementationOnce(async () => new Map());
+    listLedgerTotals.mockImplementationOnce(async () => new Map([
+      ["project-1", {
+        income_amount: 20000,
+        expense_amount: 10000,
+        unallocated_expense_amount: 1800,
+        ledger_entry_count: 2,
+        expense_by_category: new Map(),
+      }],
+    ]));
+    listBudgetTotals.mockImplementationOnce(async () => new Map());
+    listBudgetTotals.mockImplementationOnce(async () => new Map());
+
+    const { financeProjectSummaryService } =
+      await import("./finance-project-summary");
+
+    const result = await financeProjectSummaryService.listProjectSummaries(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      { page: 2, pageSize: 20 },
+    );
+
+    expect(result.list).toEqual([]);
+    expect(listProjectsForAnalytics).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      query: { page: 2, pageSize: 20 },
+      limit: 100,
+    });
+    expect(result.analytics.rankings.unallocated_expense[0]).toMatchObject({
+      project_id: "project-1",
+      project_name: "未归集项目",
+      value: 1800,
+      target: "/finance/ledger?project_id=project-1&direction=out&unallocated_only=true",
     });
   });
 
