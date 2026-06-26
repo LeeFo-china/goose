@@ -87,6 +87,13 @@ test.describe("admin smoke", () => {
     await gotoAdminPage(page, "/employees");
 
     await expect(page.getByRole("heading", { name: "员工管理" })).toBeVisible();
+    const listViewport = page.getByTestId("employee-list-table-viewport");
+    await expect(listViewport).toBeVisible();
+    await page.waitForTimeout(800);
+    expect(await listViewport.evaluate((element) =>
+      element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth
+    )).toBe(false);
+
     await page.getByRole("button", { name: "新增员工" }).click();
     const createDialog = page.getByRole("dialog").filter({ hasText: "创建可登录后台或小程序员工身份" });
     await expect(createDialog).toBeVisible();
@@ -95,9 +102,12 @@ test.describe("admin smoke", () => {
     await expect(createDialog.getByLabel("部门")).toBeVisible();
     await createDialog.getByRole("button", { name: "取消" }).click();
 
-    const roleButton = page.getByRole("button", { name: "角色" }).first();
-    await expect(roleButton).toBeVisible();
-    await roleButton.click();
+    const actionButton = page.getByRole("button", { name: "操作" }).first();
+    await expect(actionButton).toBeVisible();
+    await actionButton.click();
+    const roleMenuItem = page.getByRole("menuitem", { name: "角色" }).first();
+    await expect(roleMenuItem).toBeVisible();
+    await roleMenuItem.click();
     const roleDialog = page.getByRole("dialog").filter({ hasText: "配置员工角色" });
     await expect(roleDialog).toBeVisible();
     await expect(roleDialog.getByRole("button", { name: "保存角色" })).toBeVisible();

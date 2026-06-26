@@ -38,20 +38,27 @@ export function EmployeeListSkeleton() {
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {["全部", "在职", "待入职", "已封禁", "已离职"].map((item, index) => (
-                <div
-                  key={item}
-                  className={cn(
-                    "inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium",
-                    index === 0
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-foreground",
-                  )}
-                >
-                  {item}
-                </div>
-              ))}
+            <div className="flex flex-col gap-2 xl:flex-row xl:flex-wrap xl:items-center">
+              <div className="flex flex-wrap gap-1 rounded-md border bg-card p-1">
+                {["全部", "在职", "待入职", "已封禁", "已离职"].map((item, index) => (
+                  <div
+                    key={item}
+                    className={cn(
+                      "inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium",
+                      index === 0
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-transparent bg-background text-foreground",
+                    )}
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <div className="grid gap-2 md:grid-cols-3 xl:flex xl:flex-wrap xl:items-center">
+                <SkeletonBlock className="h-9 w-[170px]" />
+                <SkeletonBlock className="h-9 w-[170px]" />
+                <SkeletonBlock className="h-9 w-[170px]" />
+              </div>
             </div>
             <div className="flex w-full gap-2 xl:w-[360px]">
               <div className="relative flex-1">
@@ -63,66 +70,69 @@ export function EmployeeListSkeleton() {
           </div>
         </CardHeader>
         <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full min-w-[1180px] text-sm">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <table className="w-full table-fixed text-sm">
               <thead className="sticky top-0 z-10 bg-card text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <tr>
-                  <th className="px-5 py-3">员工</th>
-                  <th className="px-5 py-3">手机号</th>
-                  <th className="px-5 py-3">状态</th>
-                  <th className="px-5 py-3">登录绑定</th>
-                  <th className="px-5 py-3">角色</th>
-                  <th className="px-5 py-3">部门</th>
-                  <th className="px-5 py-3">职位</th>
-                  <th className="px-5 py-3">创建时间</th>
-                  <th className="px-5 py-3 text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
+                  <th className="h-10 w-[200px] px-5 py-3">员工</th>
+                  <th className="h-10 w-[118px] px-5 py-3">手机号</th>
+                  <th className="h-10 w-[88px] px-5 py-3">状态</th>
+                  <th className="h-10 w-[150px] px-5 py-3">登录绑定</th>
+                  <th className="hidden h-10 w-[170px] px-5 py-3 xl:table-cell">角色</th>
+                  <th className="hidden h-10 w-[135px] px-5 py-3 2xl:table-cell">部门</th>
+                  <th className="hidden h-10 w-[120px] px-5 py-3 2xl:table-cell">职位</th>
+                  <th className="hidden h-10 w-[112px] px-5 py-3 2xl:table-cell">创建时间</th>
+                  <th className="h-10 w-24 px-5 py-3 text-right">
                     操作
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {Array.from({ length: 8 }).map((_, index) => (
-                  <tr key={index} className="border-t">
+                  <tr key={index} className="h-[76px] border-t">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <SkeletonBlock className="size-9" />
-                        <div className="flex flex-col gap-2">
+                        <div className="flex min-w-0 flex-col gap-2">
                           <SkeletonBlock className="h-4 w-24" />
-                          <SkeletonBlock className="h-3 w-56" />
+                          <SkeletonBlock className="h-3 w-32" />
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <SkeletonBlock className="h-4 w-24" />
-                    </td>
-                    <td className="px-5 py-4">
-                      <SkeletonBlock className="h-6 w-14" />
-                    </td>
-                    <td className="px-5 py-4">
-                      <SkeletonBlock className="h-6 w-16" />
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex max-w-[220px] flex-wrap gap-1.5">
-                        <SkeletonBlock className="h-6 w-20" />
-                        <SkeletonBlock className="h-6 w-16" />
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex flex-col gap-2">
-                        <SkeletonBlock className="h-4 w-20" />
-                        <SkeletonBlock className="h-3 w-14" />
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex flex-col gap-2">
-                        <SkeletonBlock className="h-4 w-16" />
-                        <SkeletonBlock className="h-3 w-12" />
                       </div>
                     </td>
                     <td className="px-5 py-4">
                       <SkeletonBlock className="h-4 w-20" />
                     </td>
-                    <td className="px-5 py-4 text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
+                    <td className="px-5 py-4">
+                      <SkeletonBlock className="h-6 w-14" />
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-col gap-2">
+                        <SkeletonBlock className="h-6 w-20" />
+                        <SkeletonBlock className="h-3 w-24" />
+                      </div>
+                    </td>
+                    <td className="hidden px-5 py-4 xl:table-cell">
+                      <div className="flex flex-wrap gap-1.5">
+                        <SkeletonBlock className="h-6 w-20" />
+                        <SkeletonBlock className="h-6 w-12" />
+                      </div>
+                    </td>
+                    <td className="hidden px-5 py-4 2xl:table-cell">
+                      <div className="flex flex-col gap-2">
+                        <SkeletonBlock className="h-4 w-20" />
+                        <SkeletonBlock className="h-3 w-14" />
+                      </div>
+                    </td>
+                    <td className="hidden px-5 py-4 2xl:table-cell">
+                      <div className="flex flex-col gap-2">
+                        <SkeletonBlock className="h-4 w-16" />
+                        <SkeletonBlock className="h-3 w-12" />
+                      </div>
+                    </td>
+                    <td className="hidden px-5 py-4 2xl:table-cell">
+                      <SkeletonBlock className="h-4 w-20" />
+                    </td>
+                    <td className="px-5 py-4 text-right">
                       <div className="flex justify-end">
                         <SkeletonBlock className="h-8 w-20" />
                       </div>
