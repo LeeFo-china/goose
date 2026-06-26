@@ -61,12 +61,6 @@ function riskLevel(row: FinanceProjectOperatingSummary): FinanceProjectRiskLevel
   return row.risk_level || "normal";
 }
 
-function collectionRate(row: FinanceProjectOperatingSummary) {
-  const contractAmount = Number(row.contract_amount || 0);
-  if (!Number.isFinite(contractAmount) || contractAmount <= 0) return "-";
-  return formatFinancePercent(Number(row.received_amount || 0) / contractAmount);
-}
-
 function moneyTextClass(value: number | string | null | undefined) {
   const amount = Number(value || 0);
   if (amount < 0) return "text-red-700";
@@ -233,7 +227,8 @@ export function FinanceProjectSummaryTable({
         );
       },
       meta: {
-        cellClassName: "whitespace-nowrap",
+        headerClassName: "w-[17%]",
+        cellClassName: "min-w-0 whitespace-nowrap",
       },
     },
     {
@@ -245,100 +240,75 @@ export function FinanceProjectSummaryTable({
         </Badge>
       ),
       meta: {
+        headerClassName: "w-[7%]",
         cellClassName: "whitespace-nowrap",
       },
     },
     {
       accessorKey: "contract_amount",
-      header: "合同额",
-      cell: ({ row }) => formatFinanceMoney(row.original.contract_amount),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums",
-      },
-    },
-    {
-      accessorKey: "received_amount",
-      header: "已收/回款率",
+      header: "合同/回款",
       cell: ({ row }) => (
-        <div className="text-right">
-          <div className="font-medium tabular-nums">
+        <div className="min-w-0 text-right">
+          <div className="truncate font-medium tabular-nums">
+            {formatFinanceMoney(row.original.contract_amount)}
+          </div>
+          <div className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
             {formatFinanceMoney(row.original.received_amount)}
           </div>
-          <div className="mt-1 text-xs text-muted-foreground tabular-nums">
-            {collectionRate(row.original)}
+          <div className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
+            待收 {formatFinanceMoney(row.original.receivable_remaining_amount)}
           </div>
         </div>
       ),
       meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right",
-      },
-    },
-    {
-      accessorKey: "receivable_remaining_amount",
-      header: "待收",
-      cell: ({ row }) =>
-        formatFinanceMoney(row.original.receivable_remaining_amount),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums",
+        headerClassName: "w-[14%] text-right",
+        cellClassName: "min-w-0 text-right",
       },
     },
     {
       accessorKey: "expense_paid_amount",
-      header: "实际支出",
-      cell: ({ row }) => formatFinanceMoney(row.original.expense_paid_amount),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right tabular-nums",
-      },
-    },
-    {
-      accessorKey: "budget_cost_amount",
-      header: "预算成本",
-      cell: ({ row }) => {
-        if (!budgetConfigured(row.original)) {
-          return (
-            <div className="flex justify-end">
-              <Badge variant="warning">未配置</Badge>
-            </div>
-          );
-        }
-        return (
-          <div className="text-right">
-            <div className="font-medium tabular-nums">
-              {formatFinanceMoney(budgetNumber(row.original, "budget_cost_amount"))}
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground tabular-nums">
-              使用率 {formatFinancePercent(budgetRatio(row.original))}
-            </div>
+      header: "支出/预算",
+      cell: ({ row }) => (
+        <div className="min-w-0 text-right">
+          <div className="truncate font-medium tabular-nums">
+            {formatFinanceMoney(row.original.expense_paid_amount)}
           </div>
-        );
-      },
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right",
-      },
-    },
-    {
-      accessorKey: "projected_budget_profit_amount",
-      header: "预算利润",
-      cell: ({ row }) => budgetConfigured(row.original) ? (
-        <div className="text-right">
-          <div className="font-medium tabular-nums">
-            {formatFinanceMoney(
-              budgetNumber(row.original, "projected_budget_profit_amount"),
-            )}
+          <div className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
+            {budgetConfigured(row.original)
+              ? `预算 ${formatFinanceMoney(budgetNumber(row.original, "budget_cost_amount"))}`
+              : "预算未配置"}
           </div>
-          <div className={`mt-1 text-xs tabular-nums ${moneyTextClass(row.original.profit_variance_amount)}`}>
-            偏差 {formatFinanceMoney(budgetNumber(row.original, "profit_variance_amount"))}
+          <div className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
+            使用率 {formatFinancePercent(budgetRatio(row.original))}
           </div>
         </div>
-      ) : "-",
+      ),
       meta: {
-        headerClassName: "text-right",
-        cellClassName: "whitespace-nowrap text-right",
+        headerClassName: "w-[14%] text-right",
+        cellClassName: "min-w-0 text-right",
+      },
+    },
+    {
+      accessorKey: "actual_profit_amount",
+      header: "利润",
+      cell: ({ row }) => (
+        <div className="min-w-0 text-right">
+          <div className={`truncate font-medium tabular-nums ${moneyTextClass(row.original.actual_profit_amount)}`}>
+            {formatFinanceMoney(row.original.actual_profit_amount)}
+          </div>
+          <div className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
+            毛利率 {formatFinancePercent(row.original.actual_gross_margin)}
+          </div>
+          <div className={`mt-1 truncate text-xs tabular-nums ${moneyTextClass(row.original.profit_variance_amount)}`}>
+            偏差 {formatFinanceMoney(
+              budgetNumber(row.original, "profit_variance_amount"),
+            )}
+          </div>
+        </div>
+      ),
+      meta: {
+        headerClassName: "w-[12%] text-right",
+        cellClassName: "min-w-0 text-right",
       },
     },
     {
@@ -368,7 +338,8 @@ export function FinanceProjectSummaryTable({
         );
       },
       meta: {
-        cellClassName: "whitespace-nowrap",
+        headerClassName: "w-[13%]",
+        cellClassName: "min-w-0",
       },
     },
     {
@@ -378,7 +349,7 @@ export function FinanceProjectSummaryTable({
         const budgetHref = budgetActionHref(row.original);
         const unallocatedHref = unallocatedActionHref(row.original);
         return (
-          <div className="flex justify-end gap-1">
+          <div className="flex flex-nowrap justify-end gap-1">
             {budgetHref ? (
               <Button asChild variant="outline" size="sm" className="h-8 px-2">
                 <Link href={budgetHref}>配预算</Link>
@@ -400,9 +371,9 @@ export function FinanceProjectSummaryTable({
       },
       meta: {
         headerClassName:
-          "text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+          "w-[13.5rem] text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
         cellClassName:
-          "whitespace-nowrap text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+          "text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
       },
     },
   ];
@@ -412,8 +383,8 @@ export function FinanceProjectSummaryTable({
       columns={columns}
       data={rows}
       emptyText="暂无项目经营数据"
-      minWidth="min-w-[1280px]"
-      tableClassName="[&_td]:py-2"
+      containerClassName="overflow-x-hidden"
+      tableClassName="table-fixed [&_td]:px-3 [&_td]:py-2 [&_th]:px-3"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
       rowClassName={rowToneClass}
     />

@@ -263,7 +263,10 @@ export default async function FinancePage({
               }}
             />
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div
+            className="min-h-0 flex-1 overflow-auto"
+            data-testid="finance-project-summary-table-container"
+          >
             <FinanceProjectSummaryTable rows={data.list} />
           </div>
           <div

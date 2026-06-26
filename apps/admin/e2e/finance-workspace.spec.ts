@@ -122,6 +122,55 @@ async function expectFinanceProjectTablePageSize(page: Page) {
   await expect(page.getByText(/当前显示 3 个项目，共 \d+ 个/)).toBeVisible();
 }
 
+async function expectFinanceProjectTableNoHorizontalScroll(page: Page) {
+  const overflow = await page
+    .getByTestId("finance-project-summary-table-container")
+    .evaluate((container) => {
+      const elements = [container, ...Array.from(container.querySelectorAll("*"))];
+      return elements
+        .filter((element) => {
+          const style = window.getComputedStyle(element);
+          return ["auto", "scroll"].includes(style.overflowX);
+        })
+        .map((element) => ({
+          tagName: element.tagName,
+          className: element.getAttribute("class") || "",
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+        }))
+        .filter((item) => item.scrollWidth > item.clientWidth + 1);
+    });
+
+  expect(overflow).toEqual([]);
+}
+
+async function expectFinanceProjectTableActionsInline(page: Page) {
+  const actionLayout = await page
+    .getByTestId("finance-project-summary-table-container")
+    .evaluate((container) => {
+      const headerCell = container.querySelector("thead th:last-child");
+      const headerWidth = headerCell?.getBoundingClientRect().width || 0;
+      const wrappedRows = Array.from(container.querySelectorAll("tbody tr"))
+        .map((row, rowIndex) => {
+          const actionCell = row.querySelector("td:last-child");
+          const actions = Array.from(actionCell?.querySelectorAll("a") || [])
+            .filter((action) => action.getBoundingClientRect().width > 0);
+          if (actions.length <= 1) return null;
+
+          const tops = actions.map((action) =>
+            Math.round(action.getBoundingClientRect().top)
+          );
+          return new Set(tops).size > 1 ? { rowIndex, tops } : null;
+        })
+        .filter(Boolean);
+
+      return { headerWidth, wrappedRows };
+    });
+
+  expect(actionLayout.wrappedRows).toEqual([]);
+  expect(actionLayout.headerWidth).toBeLessThanOrEqual(260);
+}
+
 async function expectUnallocatedProjectSummaryPopover(page: Page) {
   await page.goto("/finance?has_unallocated_expense=true", { waitUntil: "load" });
   const unallocatedBadge = page.getByText("有未归集").first();
@@ -241,6 +290,8 @@ test.describe("finance workspace", () => {
     await expectFinanceAdvancedFilterInline(page);
     await expectFinanceAdvancedFiltersExpandedLayout(page);
     await expectFinanceProjectTablePageSize(page);
+    await expectFinanceProjectTableNoHorizontalScroll(page);
+    await expectFinanceProjectTableActionsInline(page);
     await expectUnallocatedProjectSummaryPopover(page);
     await page.goto("/finance", { waitUntil: "load" });
     await expectFinancePaginationSpinner(page);
