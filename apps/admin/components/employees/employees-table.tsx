@@ -61,6 +61,17 @@ type EmployeeRoleSummary = {
   status: string;
 };
 
+const EMPLOYEE_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[var(--employee-table-row-height,76px)]";
+const EMPLOYEE_IDENTITY_COLUMN_CLASS_NAME = "w-[200px] min-w-0";
+const EMPLOYEE_PHONE_COLUMN_CLASS_NAME = "w-[118px] whitespace-nowrap";
+const EMPLOYEE_STATUS_COLUMN_CLASS_NAME = "w-[88px] whitespace-nowrap";
+const EMPLOYEE_LOGIN_COLUMN_CLASS_NAME = "w-[150px] min-w-0";
+const EMPLOYEE_ROLES_COLUMN_CLASS_NAME = "hidden w-[170px] xl:table-cell";
+const EMPLOYEE_DEPARTMENT_COLUMN_CLASS_NAME = "hidden w-[135px] 2xl:table-cell";
+const EMPLOYEE_POST_COLUMN_CLASS_NAME = "hidden w-[120px] 2xl:table-cell";
+const EMPLOYEE_CREATED_AT_COLUMN_CLASS_NAME = "hidden w-[112px] whitespace-nowrap 2xl:table-cell";
+const EMPLOYEE_ACTION_COLUMN_CLASS_NAME = "w-24 text-right";
+
 const statusMeta: Record<string, {
   label: string;
   variant: "success" | "warning" | "secondary" | "outline";
@@ -163,12 +174,12 @@ function EmployeeRolesCell({ roles }: { roles?: EmployeeRoleSummary[] }) {
   const hiddenCount = roles.length - visibleRoles.length;
 
   return (
-    <div className="flex max-w-[220px] flex-wrap gap-1.5">
+    <div className="flex min-w-0 flex-wrap gap-1.5">
       {visibleRoles.map((role) => (
         <Badge
           key={role.id}
           variant={getRoleBadgeVariant(role)}
-          className="max-w-[140px] truncate"
+          className="max-w-[120px] truncate"
           title={`${role.name} · ${role.code}`}
         >
           {role.name || role.code}
@@ -196,10 +207,10 @@ function EmployeeIdentityText({
         type="button"
         className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="truncate font-semibold">
+        <div className="w-[8.5rem] truncate font-semibold">
           {name}
         </div>
-        <div className="max-w-[160px] truncate text-xs tabular-nums text-muted-foreground">
+        <div className="w-[8.5rem] truncate text-xs tabular-nums text-muted-foreground">
           {id}
         </div>
       </TooltipTrigger>
@@ -244,7 +255,7 @@ export function EmployeesTable({
         const identity = getEmployeeIdentityMeta(row.original);
 
         return (
-          <div className="group/employee-cell flex items-center gap-3">
+          <div className="group/employee-cell flex min-w-0 items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent text-accent-foreground">
               {row.original.avatar ? (
                 <img
@@ -271,13 +282,18 @@ export function EmployeesTable({
           </div>
         );
       },
+      meta: {
+        headerClassName: EMPLOYEE_IDENTITY_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_IDENTITY_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "phone",
       header: "手机号",
       cell: ({ row }) => maskPhone(row.original.phone),
       meta: {
-        cellClassName: "whitespace-nowrap tabular-nums",
+        headerClassName: EMPLOYEE_PHONE_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_PHONE_COLUMN_CLASS_NAME,
       },
     },
     {
@@ -295,7 +311,8 @@ export function EmployeesTable({
         );
       },
       meta: {
-        cellClassName: "whitespace-nowrap",
+        headerClassName: EMPLOYEE_STATUS_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_STATUS_COLUMN_CLASS_NAME,
       },
     },
     {
@@ -305,22 +322,30 @@ export function EmployeesTable({
         const loginMeta = getLoginBindingMeta(row.original);
         const LoginIcon = loginMeta.icon;
         return (
-          <div className="flex min-w-[132px] flex-col gap-1">
-            <Badge variant={loginMeta.variant} className="w-fit gap-1">
-              <LoginIcon className="size-3" />
+          <div className="flex min-w-0 flex-col gap-1">
+            <Badge variant={loginMeta.variant} className="w-fit max-w-full gap-1 truncate">
+              <LoginIcon className="size-3 shrink-0" />
               {loginMeta.label}
             </Badge>
-            <div className="text-xs text-muted-foreground">
+            <div className="truncate text-xs text-muted-foreground">
               {loginMeta.description}
             </div>
           </div>
         );
+      },
+      meta: {
+        headerClassName: EMPLOYEE_LOGIN_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_LOGIN_COLUMN_CLASS_NAME,
       },
     },
     {
       id: "roles",
       header: "角色",
       cell: ({ row }) => <EmployeeRolesCell roles={row.original.roles} />,
+      meta: {
+        headerClassName: EMPLOYEE_ROLES_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_ROLES_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "department",
@@ -332,13 +357,17 @@ export function EmployeesTable({
         const departmentName = row.original.department_name || department?.name || "";
         const departmentCode = row.original.department_code || department?.code || "";
         return departmentName || departmentCode ? (
-          <div className="whitespace-nowrap">
-            <div className="font-medium text-foreground">{departmentName || "-"}</div>
-            <div className="text-xs text-muted-foreground">{departmentCode || "-"}</div>
+          <div className="min-w-0">
+            <div className="truncate font-medium text-foreground">{departmentName || "-"}</div>
+            <div className="truncate text-xs text-muted-foreground">{departmentCode || "-"}</div>
           </div>
         ) : (
           <span className="text-muted-foreground">-</span>
         );
+      },
+      meta: {
+        headerClassName: EMPLOYEE_DEPARTMENT_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_DEPARTMENT_COLUMN_CLASS_NAME,
       },
     },
     {
@@ -347,13 +376,17 @@ export function EmployeesTable({
       cell: ({ row }) => {
         const post = row.original.post_id ? postMap.get(row.original.post_id) : null;
         return post ? (
-          <div className="whitespace-nowrap">
-            <div className="font-medium text-foreground">{post.name}</div>
-            <div className="text-xs text-muted-foreground">{post.code}</div>
+          <div className="min-w-0">
+            <div className="truncate font-medium text-foreground">{post.name}</div>
+            <div className="truncate text-xs text-muted-foreground">{post.code}</div>
           </div>
         ) : (
           <span className="text-muted-foreground">-</span>
         );
+      },
+      meta: {
+        headerClassName: EMPLOYEE_POST_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_POST_COLUMN_CLASS_NAME,
       },
     },
     {
@@ -364,6 +397,10 @@ export function EmployeesTable({
           {formatDate(row.original.created_at)}
         </span>
       ),
+      meta: {
+        headerClassName: EMPLOYEE_CREATED_AT_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_CREATED_AT_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "actions",
@@ -379,8 +416,8 @@ export function EmployeesTable({
         </div>
       ),
       meta: {
-        headerClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
-        cellClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        headerClassName: EMPLOYEE_ACTION_COLUMN_CLASS_NAME,
+        cellClassName: EMPLOYEE_ACTION_COLUMN_CLASS_NAME,
       },
     },
   ], [departmentMap, departments, onEmployeeChanged, postMap, posts]);
@@ -390,9 +427,9 @@ export function EmployeesTable({
       columns={columns}
       data={employees}
       emptyText="没有符合条件的员工"
-      minWidth="min-w-[1180px]"
-      tableClassName="border-t-0"
+      tableClassName="border-t-0 table-fixed"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
+      rowClassName={() => EMPLOYEE_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

@@ -4,6 +4,10 @@ import {
   type EmployeeStatus,
 } from "@gooes/domain";
 import { UsersRound } from "lucide-react";
+import {
+  EMPLOYEE_TABLE_MAX_PAGE_SIZE,
+  EMPLOYEE_TABLE_MIN_PAGE_SIZE,
+} from "@/components/employees/employee-list-page-size";
 import { EmployeesClientShell } from "@/components/employees/employees-client-shell";
 import { CreateEmployeeButton } from "@/components/employees/employee-mutations";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -89,6 +93,7 @@ type RoleListData = {
 
 type EmployeePageSearchParams = {
   page?: string;
+  pageSize?: string;
   status?: string;
   keyword?: string;
   tenant_department_id?: string;
@@ -112,17 +117,28 @@ function normalizePage(value: string | undefined) {
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
+function normalizePageSize(value: string | undefined) {
+  const pageSize = Number(value || 20);
+  if (!Number.isFinite(pageSize)) return 20;
+
+  return Math.min(
+    EMPLOYEE_TABLE_MAX_PAGE_SIZE,
+    Math.max(EMPLOYEE_TABLE_MIN_PAGE_SIZE, Math.floor(pageSize)),
+  );
+}
+
 async function getEmployees(params: EmployeePageSearchParams) {
   const token = await getAdminToken();
+  const page = normalizePage(params.page);
+  const pageSize = normalizePageSize(params.pageSize);
+
   if (!token) {
     return {
       list: [],
-      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
-
-  const page = normalizePage(params.page);
   const keyword = params.keyword?.trim() || "";
   const status = params.status?.trim() || "";
   const tenantDepartmentId = params.tenant_department_id?.trim() || "";
@@ -130,7 +146,7 @@ async function getEmployees(params: EmployeePageSearchParams) {
   const roleId = params.role_id?.trim() || "";
   const query = new URLSearchParams({
     page: String(page),
-    pageSize: "20",
+    pageSize: String(pageSize),
   });
   if (keyword) query.set("keyword", keyword);
   if (status) query.set("status", status);
@@ -149,14 +165,14 @@ async function getEmployees(params: EmployeePageSearchParams) {
     return {
       ...(payload.data || {
         list: [],
-        pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+        pagination: { page, pageSize, total: 0, totalPages: 0 },
       }),
       error: null,
     };
   } catch (error) {
     return {
       list: [],
-      pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "员工列表加载失败",
     };
   }

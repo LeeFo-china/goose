@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import type { EmployeeStatus } from "@gooes/domain";
-import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -21,6 +21,7 @@ import type {
   EmployeeDepartmentOption,
   EmployeePostOption,
 } from "@/components/employees/employee-mutations";
+import { buildEmployeesHref } from "@/components/employees/employee-list-filter-utils";
 import type { RoleOption } from "@/components/employees/employee-mutation-shared";
 
 type StatusOption = {
@@ -39,31 +40,11 @@ type Navigate = (href: string) => void;
 
 const ALL_SELECT_VALUE = "__all__";
 
-function buildEmployeesHref(input: {
-  page?: number;
-  status?: string;
-  keyword?: string;
-  tenantDepartmentId?: string;
-  postId?: string;
-  roleId?: string;
-}) {
-  const params = new URLSearchParams();
-  if (input.page && input.page > 1) params.set("page", String(input.page));
-  if (input.status) params.set("status", input.status);
-  if (input.keyword) params.set("keyword", input.keyword);
-  if (input.tenantDepartmentId) {
-    params.set("tenant_department_id", input.tenantDepartmentId);
-  }
-  if (input.postId) params.set("post_id", input.postId);
-  if (input.roleId) params.set("role_id", input.roleId);
-  const query = params.toString();
-  return query ? `/employees?${query}` : "/employees";
-}
-
 export function EmployeesStatusFilters({
   options,
   currentStatus,
   keyword,
+  pageSize,
   tenantDepartmentId,
   postId,
   roleId,
@@ -73,6 +54,7 @@ export function EmployeesStatusFilters({
   options: StatusOption[];
   currentStatus: string;
   keyword: string;
+  pageSize: number;
   tenantDepartmentId: string;
   postId: string;
   roleId: string;
@@ -91,6 +73,7 @@ export function EmployeesStatusFilters({
             size="sm"
             disabled={pending}
             onClick={() => onNavigate(buildEmployeesHref({
+              pageSize,
               status: item.value,
               keyword,
               tenantDepartmentId,
@@ -99,7 +82,6 @@ export function EmployeesStatusFilters({
             }))}
             className="h-8 border-transparent px-3 shadow-none"
           >
-            {pending && active ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
             {item.label}
           </Button>
         );
@@ -111,6 +93,7 @@ export function EmployeesStatusFilters({
 export function EmployeeSearchForm({
   status,
   keyword,
+  pageSize,
   tenantDepartmentId,
   postId,
   roleId,
@@ -119,6 +102,7 @@ export function EmployeeSearchForm({
 }: {
   status: string;
   keyword: string;
+  pageSize: number;
   tenantDepartmentId: string;
   postId: string;
   roleId: string;
@@ -134,6 +118,7 @@ export function EmployeeSearchForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onNavigate(buildEmployeesHref({
+      pageSize,
       status,
       keyword: selectedKeyword.trim(),
       tenantDepartmentId,
@@ -169,7 +154,6 @@ export function EmployeeSearchForm({
         ) : null}
       </InputGroup>
       <Button type="submit" variant="outline" disabled={pending} className="bg-card">
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
     </form>
@@ -179,6 +163,7 @@ export function EmployeeSearchForm({
 export function EmployeesStructuredFilters({
   status,
   keyword,
+  pageSize,
   tenantDepartmentId,
   postId,
   roleId,
@@ -190,6 +175,7 @@ export function EmployeesStructuredFilters({
 }: {
   status: string;
   keyword: string;
+  pageSize: number;
   tenantDepartmentId: string;
   postId: string;
   roleId: string;
@@ -205,6 +191,7 @@ export function EmployeesStructuredFilters({
     roleId?: string;
   }) {
     onNavigate(buildEmployeesHref({
+      pageSize,
       status,
       keyword,
       tenantDepartmentId,
@@ -290,6 +277,7 @@ export function EmployeesPagination({
   pagination,
   status,
   keyword,
+  pageSize,
   tenantDepartmentId,
   postId,
   roleId,
@@ -299,6 +287,7 @@ export function EmployeesPagination({
   pagination: Pagination;
   status: string;
   keyword: string;
+  pageSize: number;
   tenantDepartmentId: string;
   postId: string;
   roleId: string;
@@ -316,6 +305,7 @@ export function EmployeesPagination({
         disabled={previousDisabled}
         onClick={() => onNavigate(buildEmployeesHref({
           page: Math.max(1, pagination.page - 1),
+          pageSize,
           status,
           keyword,
           tenantDepartmentId,
@@ -323,7 +313,7 @@ export function EmployeesPagination({
           roleId,
         }))}
       >
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
+        <ChevronLeft data-icon="inline-start" />
         上一页
       </Button>
       <Button
@@ -332,6 +322,7 @@ export function EmployeesPagination({
         disabled={nextDisabled}
         onClick={() => onNavigate(buildEmployeesHref({
           page: pagination.page + 1,
+          pageSize,
           status,
           keyword,
           tenantDepartmentId,
@@ -340,7 +331,7 @@ export function EmployeesPagination({
         }))}
       >
         下一页
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-end" /> : <ChevronRight data-icon="inline-end" />}
+        <ChevronRight data-icon="inline-end" />
       </Button>
     </div>
   );

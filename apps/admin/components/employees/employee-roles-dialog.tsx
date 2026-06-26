@@ -13,15 +13,18 @@ import { requestBackend, type EmployeePermissionContext, type RoleOption } from 
 import type { EmployeeMutationRecord } from "@/components/employees/employee-types";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
-export function ManageEmployeeRolesButton({
+export function EmployeeRolesDialog({
   employee,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   employee: EmployeeMutationRecord;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -73,10 +76,6 @@ export function ManageEmployeeRolesButton({
     onOpenChange(false);
   }
 
-  function onOpenChange(nextOpen: boolean) {
-    setOpen(nextOpen);
-  }
-
   function toggleRole(roleId: string, checked: boolean) {
     setSelectedRoleIds((current) => {
       if (checked) return Array.from(new Set([...current, roleId]));
@@ -93,7 +92,7 @@ export function ManageEmployeeRolesButton({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ role_ids: selectedRoleIds }),
         });
-        setOpen(false);
+        onOpenChange(false);
         if (onSaved) {
           onSaved();
         } else {
@@ -106,6 +105,95 @@ export function ManageEmployeeRolesButton({
   }
 
   return (
+    <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
+      <DialogContent className="flex h-[82vh] max-w-[620px] flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <KeyRound className="size-4" />
+            </div>
+            <div>
+              <DialogTitle>配置员工角色</DialogTitle>
+              <DialogDescription>
+                {employee.name || "未命名员工"} · 已选择 {selectedRoleIds.length} 个角色
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          {loading ? (
+            <div className="flex h-36 items-center justify-center text-sm text-muted-foreground">
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              正在加载角色
+            </div>
+          ) : (
+            <div className="divide-y rounded-md border">
+              {roles.length > 0 ? roles.map((role) => {
+                const checked = selectedRoleIds.includes(role.id);
+                const statusMeta = role.status === "active"
+                  ? { label: RoleStatusConfig.active.label, variant: "success" as const }
+                  : { label: RoleStatusConfig.inactive.label, variant: "secondary" as const };
+
+                return (
+                  <label
+                    key={role.id}
+                    className="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-muted/40"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      disabled={pending}
+                      className="mt-1"
+                      onCheckedChange={(value) => toggleRole(role.id, value === true)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{role.name}</span>
+                        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                      </span>
+                      <span className="mt-1 block break-all text-xs text-muted-foreground">
+                        {role.code}
+                      </span>
+                      {role.description ? (
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {role.description}
+                        </span>
+                      ) : null}
+                    </span>
+                  </label>
+                );
+              }) : (
+                <div className="p-6 text-sm text-muted-foreground">
+                  还没有可分配的角色，请先到角色管理页面创建角色。
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {error ? <StatusAlert>{error}</StatusAlert> : null}
+        <DialogFooter className="shrink-0">
+          <Button type="button" variant="outline" onClick={close} disabled={pending}>
+            取消
+          </Button>
+          <Button type="button" onClick={save} disabled={loading || pending}>
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+            保存角色
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ManageEmployeeRolesButton({
+  employee,
+  onSaved,
+}: {
+  employee: EmployeeMutationRecord;
+  onSaved?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
     <>
       <Button
         type="button"
@@ -116,82 +204,12 @@ export function ManageEmployeeRolesButton({
         <KeyRound />
         角色
       </Button>
-      <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? setOpen(true) : close())}>
-        <DialogContent className="flex h-[82vh] max-w-[620px] flex-col overflow-hidden">
-          <DialogHeader className="shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                <KeyRound className="size-4" />
-              </div>
-              <div>
-                <DialogTitle>配置员工角色</DialogTitle>
-                <DialogDescription>
-                  {employee.name || "未命名员工"} · 已选择 {selectedRoleIds.length} 个角色
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            {loading ? (
-              <div className="flex h-36 items-center justify-center text-sm text-muted-foreground">
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                正在加载角色
-              </div>
-            ) : (
-              <div className="divide-y rounded-md border">
-                {roles.length > 0 ? roles.map((role) => {
-                  const checked = selectedRoleIds.includes(role.id);
-                  const statusMeta = role.status === "active"
-                    ? { label: RoleStatusConfig.active.label, variant: "success" as const }
-                    : { label: RoleStatusConfig.inactive.label, variant: "secondary" as const };
-
-                  return (
-                    <label
-                      key={role.id}
-                      className="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-muted/40"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        disabled={pending}
-                        className="mt-1"
-                        onCheckedChange={(value) => toggleRole(role.id, value === true)}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium">{role.name}</span>
-                          <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
-                        </span>
-                        <span className="mt-1 block break-all text-xs text-muted-foreground">
-                          {role.code}
-                        </span>
-                        {role.description ? (
-                          <span className="mt-1 block text-xs text-muted-foreground">
-                            {role.description}
-                          </span>
-                        ) : null}
-                      </span>
-                    </label>
-                  );
-                }) : (
-                  <div className="p-6 text-sm text-muted-foreground">
-                    还没有可分配的角色，请先到角色管理页面创建角色。
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          {error ? <StatusAlert>{error}</StatusAlert> : null}
-          <DialogFooter className="shrink-0">
-            <Button type="button" variant="outline" onClick={close} disabled={pending}>
-              取消
-            </Button>
-            <Button type="button" onClick={save} disabled={loading || pending}>
-              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-              保存角色
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EmployeeRolesDialog
+        employee={employee}
+        open={open}
+        onOpenChange={setOpen}
+        onSaved={onSaved}
+      />
     </>
   );
 }
