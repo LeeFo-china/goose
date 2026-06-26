@@ -14,4 +14,16 @@ describe("finance receivable permissions", () => {
       module: "finance",
     });
   });
+
+  test("exposes cost budget and allocation permissions in domain constants", () => {
+    expect(PERMISSION_CODE_VALUES).toContain("finance.budget.view");
+    expect(PERMISSION_CODE_VALUES).toContain("finance.budget.manage");
+    expect(PERMISSION_CODE_VALUES).toContain("finance.cost-category.view");
+    expect(PERMISSION_CODE_VALUES).toContain("finance.cost-category.manage");
+    expect(PERMISSION_CODE_VALUES).toContain("finance.cost-allocation.manage");
+    expect(PermissionCodeConfig["finance.cost-allocation.manage"]).toEqual({
+      label: "管理成本归集",
+      module: "finance",
+    });
+  });
 });
