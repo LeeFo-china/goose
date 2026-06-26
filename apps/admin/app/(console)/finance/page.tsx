@@ -176,7 +176,7 @@ export default async function FinancePage({
   const canGoNext = data.pagination.totalPages > 0 && data.pagination.page < data.pagination.totalPages;
 
   return (
-    <div className="flex min-h-0 flex-col gap-2 overflow-visible lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-2 overflow-hidden">
       <div className="shrink-0 flex flex-col justify-between gap-2 md:flex-row md:items-end">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
@@ -198,107 +198,109 @@ export default async function FinancePage({
 
       <FinanceModuleTabs activeTab="overview" />
 
-      <div className="grid shrink-0 gap-2 md:grid-cols-2 xl:grid-cols-4">
-        <FinanceMetricCard
-          icon={<WalletCards aria-hidden="true" className="size-4" />}
-          label="合同总额"
-          value={formatFinanceMoney(summary.contract_amount)}
-          helper={`当前筛选 ${projectCount} 个项目`}
-        />
-        <FinanceMetricCard
-          icon={<CircleDollarSign aria-hidden="true" className="size-4" />}
-          label="已收金额"
-          value={formatFinanceMoney(summary.received_amount)}
-          helper={`回款率 ${formatCollectionRate(summary.received_amount, summary.contract_amount)}`}
-        />
-        <FinanceMetricCard
-          icon={<LineChart aria-hidden="true" className="size-4" />}
-          label="实际利润"
-          value={formatFinanceMoney(summary.actual_profit_amount)}
-          helper={`毛利率 ${formatFinancePercent(summary.actual_gross_margin)}`}
-          alert={hasAbnormalGrossMargin ? "毛利率异常偏高，可能存在成本未完整归集" : undefined}
-        />
-        <FinanceMetricCard
-          icon={<AlertTriangle aria-hidden="true" className="size-4" />}
-          label="风险项目"
-          value={`${highRiskCount + warningRiskCount} 个`}
-          helper={`高风险 ${highRiskCount} 个 / 预警 ${warningRiskCount} 个`}
-          tone={highRiskCount > 0 ? "danger" : warningRiskCount > 0 ? "warning" : "normal"}
-        />
-      </div>
-
-      <FinanceOverviewCharts summary={summary} analytics={data.analytics} />
-
-      <Card className="min-h-0 flex-1 overflow-hidden">
-        <CardContent className="flex h-full min-h-0 flex-col p-0">
-          <FinanceProjectSummaryFilterForm
-            keyword={params.keyword}
-            status={params.status}
-            riskLevel={params.risk_level}
-            riskFlag={params.risk_flag}
-            budgetConfigured={params.budget_configured}
-            hasUnallocatedExpense={params.has_unallocated_expense}
-            overdue={params.overdue}
-            advancedFilterCount={advancedFilterCount}
-            projectStatusOptions={PROJECT_STATUS_OPTIONS}
-            riskLevelOptions={RISK_LEVEL_OPTIONS}
-            riskFlagOptions={RISK_FLAG_OPTIONS}
-            booleanFilterOptions={BOOLEAN_FILTER_OPTIONS}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto lg:contents">
+        <div className="grid shrink-0 gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <FinanceMetricCard
+            icon={<WalletCards aria-hidden="true" className="size-4" />}
+            label="合同总额"
+            value={formatFinanceMoney(summary.contract_amount)}
+            helper={`当前筛选 ${projectCount} 个项目`}
           />
-          {data.error ? (
-            <div className="shrink-0 border-b p-4">
-              <StatusAlert>{data.error}</StatusAlert>
-            </div>
-          ) : null}
-          <div className="shrink-0 flex flex-col gap-2 border-b bg-card px-4 py-0 md:flex-row md:items-center md:justify-between">
-            <div className="py-2">
-              <h2 className="text-sm font-semibold">项目财务明细表</h2>
-            </div>
-            <FinanceProjectSummaryViewTabs
-              activeView={summaryView}
-              hrefs={{
-                all: buildProjectSummaryViewHref("all", params),
-                danger: buildProjectSummaryViewHref("danger", params),
-                info: buildProjectSummaryViewHref("info", params),
-              }}
+          <FinanceMetricCard
+            icon={<CircleDollarSign aria-hidden="true" className="size-4" />}
+            label="已收金额"
+            value={formatFinanceMoney(summary.received_amount)}
+            helper={`回款率 ${formatCollectionRate(summary.received_amount, summary.contract_amount)}`}
+          />
+          <FinanceMetricCard
+            icon={<LineChart aria-hidden="true" className="size-4" />}
+            label="实际利润"
+            value={formatFinanceMoney(summary.actual_profit_amount)}
+            helper={`毛利率 ${formatFinancePercent(summary.actual_gross_margin)}`}
+            alert={hasAbnormalGrossMargin ? "毛利率异常偏高，可能存在成本未完整归集" : undefined}
+          />
+          <FinanceMetricCard
+            icon={<AlertTriangle aria-hidden="true" className="size-4" />}
+            label="风险项目"
+            value={`${highRiskCount + warningRiskCount} 个`}
+            helper={`高风险 ${highRiskCount} 个 / 预警 ${warningRiskCount} 个`}
+            tone={highRiskCount > 0 ? "danger" : warningRiskCount > 0 ? "warning" : "normal"}
+          />
+        </div>
+
+        <FinanceOverviewCharts summary={summary} analytics={data.analytics} />
+
+        <Card className="min-h-[24rem] flex-1 overflow-hidden lg:min-h-0">
+          <CardContent className="flex h-full min-h-0 flex-col p-0">
+            <FinanceProjectSummaryFilterForm
+              keyword={params.keyword}
+              status={params.status}
+              riskLevel={params.risk_level}
+              riskFlag={params.risk_flag}
+              budgetConfigured={params.budget_configured}
+              hasUnallocatedExpense={params.has_unallocated_expense}
+              overdue={params.overdue}
+              advancedFilterCount={advancedFilterCount}
+              projectStatusOptions={PROJECT_STATUS_OPTIONS}
+              riskLevelOptions={RISK_LEVEL_OPTIONS}
+              riskFlagOptions={RISK_FLAG_OPTIONS}
+              booleanFilterOptions={BOOLEAN_FILTER_OPTIONS}
             />
-          </div>
-          <div
-            className="min-h-0 flex-1 overflow-auto"
-            data-testid="finance-project-summary-table-container"
-          >
-            <FinanceProjectSummaryTable rows={data.list} />
-          </div>
-          <div
-            className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between"
-            data-testid="finance-project-summary-footer"
-          >
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline" className="tabular-nums">
-                第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
-              </Badge>
-              <span>当前显示 {data.list.length} 个项目，共 {data.pagination.total} 个</span>
-              <Badge variant="outline" className="tabular-nums">
-                每页 {data.pagination.pageSize} 个
-              </Badge>
+            {data.error ? (
+              <div className="shrink-0 border-b p-4">
+                <StatusAlert>{data.error}</StatusAlert>
+              </div>
+            ) : null}
+            <div className="shrink-0 flex flex-col gap-2 border-b bg-card px-4 py-0 md:flex-row md:items-center md:justify-between">
+              <div className="py-2">
+                <h2 className="text-sm font-semibold">项目财务明细表</h2>
+              </div>
+              <FinanceProjectSummaryViewTabs
+                activeView={summaryView}
+                hrefs={{
+                  all: buildProjectSummaryViewHref("all", params),
+                  danger: buildProjectSummaryViewHref("danger", params),
+                  info: buildProjectSummaryViewHref("info", params),
+                }}
+              />
             </div>
-            <FinanceProjectSummaryPagination
-              previousHref={canGoPrev
-                ? buildFinanceSummaryHref({
-                  page: data.pagination.page - 1,
-                  filters: params,
-                })
-                : null}
-              nextHref={canGoNext
-                ? buildFinanceSummaryHref({
-                  page: data.pagination.page + 1,
-                  filters: params,
-                })
-                : null}
-            />
-          </div>
-        </CardContent>
-      </Card>
+            <div
+              className="min-h-0 flex-1 overflow-auto"
+              data-testid="finance-project-summary-table-container"
+            >
+              <FinanceProjectSummaryTable rows={data.list} />
+            </div>
+            <div
+              className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between"
+              data-testid="finance-project-summary-footer"
+            >
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline" className="tabular-nums">
+                  第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
+                </Badge>
+                <span>当前显示 {data.list.length} 个项目，共 {data.pagination.total} 个</span>
+                <Badge variant="outline" className="tabular-nums">
+                  每页 {data.pagination.pageSize} 个
+                </Badge>
+              </div>
+              <FinanceProjectSummaryPagination
+                previousHref={canGoPrev
+                  ? buildFinanceSummaryHref({
+                    page: data.pagination.page - 1,
+                    filters: params,
+                  })
+                  : null}
+                nextHref={canGoNext
+                  ? buildFinanceSummaryHref({
+                    page: data.pagination.page + 1,
+                    filters: params,
+                  })
+                  : null}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

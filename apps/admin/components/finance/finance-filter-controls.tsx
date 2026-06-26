@@ -54,7 +54,7 @@ export function FinanceFilterSelectField({
         value={filterSelectSubmitValue(selectedValue)}
       />
       <Select value={selectedValue} onValueChange={setSelectedValue}>
-        <SelectTrigger id={id}>
+        <SelectTrigger id={id} className="h-11 md:h-9">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -98,6 +98,7 @@ function FinanceBarChart({
             dataKey="value"
             name={unit === "money" ? "金额" : "项目数"}
             fill={fill}
+            isAnimationActive={false}
             radius={[4, 4, 0, 0]}
           />
         </BarChart>
@@ -136,6 +137,7 @@ function FinanceTrendChart({
             stroke="hsl(var(--primary))"
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>

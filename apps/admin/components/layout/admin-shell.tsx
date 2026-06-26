@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
@@ -51,6 +51,19 @@ export function AdminShell({
     applyThemeTone(nextPreferences.themeTone);
   }, []);
 
+  useLayoutEffect(() => {
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, []);
+
   useEffect(() => {
     savePreferences(preferences);
     applyThemeTone(preferences.themeTone);
@@ -58,7 +71,7 @@ export function AdminShell({
   }, [preferences]);
 
   return (
-    <div className="goose-workbench-bg min-h-screen">
+    <div className="goose-workbench-bg h-screen overflow-hidden">
       <aside className={cn(
         "fixed inset-y-0 left-0 hidden flex-col border-r border-black/10 bg-white transition-[width] duration-200 lg:flex",
         preferences.sidebarCollapsed ? "w-20" : "w-64",
@@ -85,8 +98,8 @@ export function AdminShell({
           </div>
         </div>
       </aside>
-      <div className={cn("transition-[padding] duration-200", preferences.sidebarCollapsed ? "lg:pl-20" : "lg:pl-64")}>
-        <header className="sticky top-0 z-40 border-b border-black/10 bg-card shadow-[0_6px_18px_rgba(17,17,17,0.05)]">
+      <div className={cn("flex h-screen min-h-0 flex-col transition-[padding] duration-200", preferences.sidebarCollapsed ? "lg:pl-20" : "lg:pl-64")}>
+        <header className="shrink-0 sticky top-0 z-40 border-b border-black/10 bg-card shadow-[0_6px_18px_rgba(17,17,17,0.05)]">
           <div className="flex min-h-16 items-center justify-between gap-3 px-3 md:px-5">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background lg:hidden">
@@ -131,7 +144,7 @@ export function AdminShell({
           </div>
         </header>
         <main className={cn(
-          "mx-auto w-full px-4 md:px-6",
+          "mx-auto min-h-0 w-full flex-1 overflow-hidden px-4 md:px-6",
           mainWidthClassName,
           preferences.compact ? "py-3" : "py-5",
         )}>

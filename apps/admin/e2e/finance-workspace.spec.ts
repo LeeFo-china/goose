@@ -14,13 +14,26 @@ async function loginAsTenantAdmin(page: Page) {
 }
 
 async function expectNoDocumentScroll(page: Page) {
+  await page.waitForFunction(() => {
+    const htmlOverflow = window.getComputedStyle(document.documentElement).overflow;
+    const bodyOverflow = window.getComputedStyle(document.body).overflow;
+    return htmlOverflow === "hidden" && bodyOverflow === "hidden";
+  });
   const state = await page.evaluate(() => ({
     scrollHeight: document.documentElement.scrollHeight,
     clientHeight: document.documentElement.clientHeight,
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,
+    bodyScrollHeight: document.body.scrollHeight,
+    bodyClientHeight: document.body.clientHeight,
+    htmlOverflow: window.getComputedStyle(document.documentElement).overflow,
+    bodyOverflow: window.getComputedStyle(document.body).overflow,
+    scrollYBefore: window.scrollY,
   }));
-  expect(state.scrollHeight).toBeLessThanOrEqual(state.clientHeight + 1);
+  expect(state.bodyScrollHeight).toBeLessThanOrEqual(state.bodyClientHeight + 1);
+  expect(state.htmlOverflow).toBe("hidden");
+  expect(state.bodyOverflow).toBe("hidden");
+  expect(state.scrollYBefore).toBeLessThanOrEqual(1);
   expect(state.scrollWidth).toBeLessThanOrEqual(state.clientWidth + 1);
 }
 
@@ -122,6 +135,28 @@ async function expectFinanceProjectTablePageSize(page: Page) {
   await expect(page.getByText(/当前显示 3 个项目，共 \d+ 个/)).toBeVisible();
 }
 
+async function expectFinanceProjectViewTabSpinner(page: Page) {
+  const nav = page.getByRole("navigation", { name: "项目财务明细视图" });
+  const dangerTab = nav.getByRole("link", { name: /高风险项目/ });
+
+  await dangerTab.dispatchEvent("pointerdown");
+  await expect(page.getByTestId("finance-summary-view-tab-spinner-danger"))
+    .toBeVisible();
+  await dangerTab.click({ noWaitAfter: true });
+  await expect(page).toHaveURL(/risk_level=danger/, { timeout: 15_000 });
+  await expect(nav.getByRole("link", { name: /高风险项目/ }))
+    .toHaveAttribute("aria-current", "page");
+
+  const allTab = nav.getByRole("link", { name: /全部项目/ });
+  await allTab.dispatchEvent("pointerdown");
+  await expect(page.getByTestId("finance-summary-view-tab-spinner-all"))
+    .toBeVisible();
+  await allTab.click({ noWaitAfter: true });
+  await expect(page).toHaveURL(/\/finance\?page=1$/, { timeout: 15_000 });
+  await expect(nav.getByRole("link", { name: /全部项目/ }))
+    .toHaveAttribute("aria-current", "page");
+}
+
 async function expectFinanceProjectTableNoHorizontalScroll(page: Page) {
   const overflow = await page
     .getByTestId("finance-project-summary-table-container")
@@ -176,6 +211,39 @@ async function expectFinanceProjectTableWideLayout(page: Page) {
   await page.goto("/finance?risk_level=danger", { waitUntil: "load" });
   await expectFinanceProjectTableNoHorizontalScroll(page);
   await expectFinanceProjectTableActionsInline(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+}
+
+async function expectFinanceOverviewMobileLayout(page: Page) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/finance", { waitUntil: "load" });
+  await expectNoDocumentScroll(page);
+
+  const filterControls = await page.locator("form[action='/finance']")
+    .evaluate((form) => {
+      const selectors = [
+        "#finance-keyword",
+        "#finance-status",
+        "#finance-risk-level",
+        "button[type='submit']",
+      ];
+      return selectors.map((selector) => {
+        const element = form.querySelector(selector);
+        const rect = element?.getBoundingClientRect();
+        return {
+          selector,
+          width: rect?.width || 0,
+          height: rect?.height || 0,
+        };
+      });
+    });
+
+  for (const control of filterControls) {
+    expect(control.width).toBeGreaterThanOrEqual(44);
+    expect(control.height).toBeGreaterThanOrEqual(44);
+  }
+
+  await page.setViewportSize({ width: 1280, height: 720 });
 }
 
 async function expectUnallocatedProjectSummaryPopover(page: Page) {
@@ -296,10 +364,12 @@ test.describe("finance workspace", () => {
     await expect(page.getByRole("heading", { name: "30天现金流" })).toBeVisible();
     await expectFinanceAdvancedFilterInline(page);
     await expectFinanceAdvancedFiltersExpandedLayout(page);
+    await expectFinanceProjectViewTabSpinner(page);
     await expectFinanceProjectTablePageSize(page);
     await expectFinanceProjectTableNoHorizontalScroll(page);
     await expectFinanceProjectTableActionsInline(page);
     await expectFinanceProjectTableWideLayout(page);
+    await expectFinanceOverviewMobileLayout(page);
     await expectUnallocatedProjectSummaryPopover(page);
     await page.goto("/finance", { waitUntil: "load" });
     await expectFinancePaginationSpinner(page);

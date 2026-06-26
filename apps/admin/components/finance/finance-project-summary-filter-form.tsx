@@ -59,7 +59,7 @@ export function FinanceProjectSummaryFilterForm({
               name="keyword"
               defaultValue={keyword || ""}
               placeholder="搜索项目名称 / 客户 / 小区"
-              className="h-9 pl-9"
+              className="h-11 pl-9 md:h-9"
             />
           </div>
         </div>
@@ -85,7 +85,7 @@ export function FinanceProjectSummaryFilterForm({
         </div>
         <button
           type="button"
-          className="order-4 flex h-9 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="order-4 flex h-11 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:px-1.5"
           aria-expanded={advancedOpen}
           aria-controls="finance-advanced-filters"
           onClick={() => setAdvancedOpen((current) => !current)}
@@ -98,8 +98,8 @@ export function FinanceProjectSummaryFilterForm({
           ) : null}
         </button>
         <div className="order-5 flex shrink-0 flex-nowrap items-center gap-1">
-          <Button type="submit" size="sm" className="h-9">筛选</Button>
-          <Button asChild type="button" variant="ghost" size="sm" className="h-9 px-1.5">
+          <Button type="submit" size="sm" className="h-11 md:h-9">筛选</Button>
+          <Button asChild type="button" variant="ghost" size="sm" className="h-11 px-2 md:h-9 md:px-1.5">
             <Link href="/finance">重置</Link>
           </Button>
         </div>
