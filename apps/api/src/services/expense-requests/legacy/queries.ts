@@ -56,7 +56,10 @@ export async function getExpenseRequestById(this: any, authContext: AuthContext,
 
     await this.assertCanReadExpenseRequest(authContext, data);
 
-    return this.serializeExpenseRequest(data);
+    const [serialized] = await attachExpenseWorkflowStates([
+      this.serializeExpenseRequest(data),
+    ], tenantId);
+    return serialized ?? this.serializeExpenseRequest(data);
   }
 
 export async function listExpenseRequests(this: any, 

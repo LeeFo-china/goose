@@ -25,6 +25,7 @@ import {
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
+import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
 
 const PROJECT_PROCEDURE_PERMISSION_BY_ACTION: Record<string, string> = {
   start_procedure: "project_procedure.assign",
@@ -55,6 +56,7 @@ class WorkflowTaskService {
       ...tasks,
       list: await Promise.all(tasks.list.map(async (task) => ({
         ...task,
+        ...buildWorkflowTaskAssigneeMetadata(task),
         actions: task.instance
           ? await buildWorkflowTaskActionsForTask({
             tenantId,
