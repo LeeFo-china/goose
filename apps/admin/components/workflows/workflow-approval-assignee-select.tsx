@@ -110,8 +110,12 @@ export function WorkflowApprovalAssigneeSelect({
           className="h-10 justify-start font-normal text-muted-foreground"
           disabled
         >
-          提交后自动派给申请人所属部门的经理
+          按申请人部门权限自动匹配
         </Button>
+        <p className="text-xs text-muted-foreground">
+          自动匹配申请人所属部门中具备经理审批权限的员工；
+          如部门负责人也具备该权限，会优先派给部门负责人。
+        </p>
       </div>
     );
   }

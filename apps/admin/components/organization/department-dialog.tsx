@@ -141,7 +141,8 @@ export function DepartmentDialog({
                 onChange={setManagerEmployeeId}
               />
               <FieldDescription>
-                费用审批选择“申请人部门经理”时，会自动派给这里配置的本部门员工。
+                部门负责人为组织管理字段。费用经理审批会优先使用具备审批权限的部门负责人；
+                未配置时会自动匹配本部门具备费用经理审批权限的员工。
               </FieldDescription>
             </Field>
             <Field>

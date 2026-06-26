@@ -43,7 +43,23 @@ describe("workflow node config contract labels", () => {
     expect(assigneeSource).toContain("搜索员工姓名或手机号");
     expect(assigneeSource).toContain("搜索角色名称或编码");
     expect(configSource).toContain("申请人部门经理");
-    expect(assigneeSource).toContain("提交后自动派给申请人所属部门的经理");
+    expect(assigneeSource).toContain("自动匹配申请人所属部门中具备经理审批权限的员工");
     expect(assigneeSource).toContain("部门审批对象暂未接入待办分配");
+  });
+
+  test("explains department manager as an optional approval preference", () => {
+    const departmentSource = readFileSync(
+      new URL("../organization/department-dialog.tsx", import.meta.url),
+      "utf8",
+    );
+    const assigneeSource = readFileSync(
+      new URL("./workflow-approval-assignee-select.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(departmentSource).toContain("部门负责人为组织管理字段");
+    expect(departmentSource).toContain("优先使用具备审批权限的部门负责人");
+    expect(departmentSource).toContain("本部门具备费用经理审批权限的员工");
+    expect(assigneeSource).toContain("如部门负责人也具备该权限，会优先派给部门负责人");
   });
 });
