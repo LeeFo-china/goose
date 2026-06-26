@@ -23,7 +23,16 @@ import {
 import { IdentityIdCopyButton } from "@/components/admin/identity-id-copy-button";
 import { getIdentityCopyMeta } from "@/components/admin/identity-copy-utils";
 
-const CUSTOMER_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[75px]";
+const CUSTOMER_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[var(--customer-table-row-height,75px)]";
+const CUSTOMER_IDENTITY_COLUMN_CLASS_NAME = "w-[160px] min-w-0";
+const CUSTOMER_PHONE_COLUMN_CLASS_NAME = "hidden w-[126px] whitespace-nowrap lg:table-cell";
+const CUSTOMER_OWNER_COLUMN_CLASS_NAME = "hidden w-[96px] whitespace-nowrap xl:table-cell";
+const CUSTOMER_SOURCE_COLUMN_CLASS_NAME = "hidden w-[140px] min-w-0 2xl:table-cell";
+const CUSTOMER_ORIGIN_COLUMN_CLASS_NAME = "hidden w-[108px] whitespace-nowrap 2xl:table-cell";
+const CUSTOMER_STATUS_COLUMN_CLASS_NAME = "w-[92px] whitespace-nowrap";
+const CUSTOMER_FOLLOW_COLUMN_CLASS_NAME = "w-[190px] min-w-0";
+const CUSTOMER_CREATED_AT_COLUMN_CLASS_NAME = "hidden w-[96px] whitespace-nowrap xl:table-cell";
+const CUSTOMER_ACTION_COLUMN_CLASS_NAME = "w-24 text-right";
 
 const statusMeta: Record<string, {
   label: string;
@@ -157,10 +166,10 @@ function CustomerIdentityCell({
           type="button"
           className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <div className="w-[5em] truncate font-semibold">
+          <div className="w-[8em] truncate font-semibold">
             {name}
           </div>
-          <div className="w-[5em] truncate text-xs tabular-nums text-muted-foreground">
+          <div className="w-[8em] truncate text-xs tabular-nums text-muted-foreground">
             {id}
           </div>
         </TooltipTrigger>
@@ -198,7 +207,8 @@ const columns: ColumnDef<CustomerRecord>[] = [
       );
     },
     meta: {
-      cellClassName: "w-[120px] max-w-[120px]",
+      headerClassName: CUSTOMER_IDENTITY_COLUMN_CLASS_NAME,
+      cellClassName: CUSTOMER_IDENTITY_COLUMN_CLASS_NAME,
     },
   },
   {
@@ -206,7 +216,8 @@ const columns: ColumnDef<CustomerRecord>[] = [
     header: "手机号",
     cell: ({ row }) => row.original.phone || row.original.phone_masked || "-",
     meta: {
-      cellClassName: "whitespace-nowrap tabular-nums",
+      headerClassName: CUSTOMER_PHONE_COLUMN_CLASS_NAME,
+      cellClassName: `${CUSTOMER_PHONE_COLUMN_CLASS_NAME} tabular-nums`,
     },
   },
   {
@@ -214,7 +225,8 @@ const columns: ColumnDef<CustomerRecord>[] = [
     header: "负责人",
     cell: ({ row }) => ownerName(row.original),
     meta: {
-      cellClassName: "whitespace-nowrap text-muted-foreground",
+      headerClassName: CUSTOMER_OWNER_COLUMN_CLASS_NAME,
+      cellClassName: `${CUSTOMER_OWNER_COLUMN_CLASS_NAME} text-muted-foreground`,
     },
   },
   {
@@ -224,12 +236,12 @@ const columns: ColumnDef<CustomerRecord>[] = [
       const badges = sourceBadges(row.original);
 
       return (
-        <div className="flex min-w-[150px] flex-col gap-1">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="truncate text-sm text-muted-foreground">
             {sourceMeta[row.original.source || ""] || row.original.source || "-"}
           </span>
           {badges.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex min-w-0 flex-wrap gap-1 overflow-hidden">
               {badges.map((badge) => (
                 <Badge key={badge.key} variant={badge.variant}>{badge.label}</Badge>
               ))}
@@ -239,7 +251,8 @@ const columns: ColumnDef<CustomerRecord>[] = [
       );
     },
     meta: {
-      cellClassName: "whitespace-nowrap",
+      headerClassName: CUSTOMER_SOURCE_COLUMN_CLASS_NAME,
+      cellClassName: CUSTOMER_SOURCE_COLUMN_CLASS_NAME,
     },
   },
   {
@@ -247,7 +260,8 @@ const columns: ColumnDef<CustomerRecord>[] = [
     header: "创建渠道",
     cell: ({ row }) => originBadge(row.original.customer_origin),
     meta: {
-      cellClassName: "whitespace-nowrap",
+      headerClassName: CUSTOMER_ORIGIN_COLUMN_CLASS_NAME,
+      cellClassName: CUSTOMER_ORIGIN_COLUMN_CLASS_NAME,
     },
   },
   {
@@ -270,7 +284,8 @@ const columns: ColumnDef<CustomerRecord>[] = [
       return <Badge className="whitespace-nowrap" variant={badgeMeta.variant}>{badgeMeta.label}</Badge>;
     },
     meta: {
-      cellClassName: "whitespace-nowrap",
+      headerClassName: CUSTOMER_STATUS_COLUMN_CLASS_NAME,
+      cellClassName: CUSTOMER_STATUS_COLUMN_CLASS_NAME,
     },
   },
   {
@@ -280,13 +295,13 @@ const columns: ColumnDef<CustomerRecord>[] = [
       if (row.original.status === "signed") {
         const project = row.original.latest_project;
         return (
-          <div className="min-w-[180px]">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               {project ? projectStatusBadge(project.status) : (
                 <Badge className="whitespace-nowrap" variant="secondary">暂无项目</Badge>
               )}
             </div>
-            <div className="mt-1 max-w-[220px] truncate text-xs text-muted-foreground">
+            <div className="mt-1 truncate text-xs text-muted-foreground">
               {project?.name || "已签约，暂无关联项目摘要"}
             </div>
           </div>
@@ -294,10 +309,10 @@ const columns: ColumnDef<CustomerRecord>[] = [
       }
 
       return (
-        <div className="min-w-[180px]">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
             {followUpBadge(row.original.follow_up_state)}
-            <span className="text-xs text-muted-foreground">
+            <span className="truncate text-xs text-muted-foreground">
               最近 {formatDateTime(row.original.last_follow_at)}
             </span>
           </div>
@@ -305,12 +320,16 @@ const columns: ColumnDef<CustomerRecord>[] = [
             下次 {formatDateTime(row.original.next_follow_at)}
           </div>
           {row.original.latest_follow_up?.content ? (
-            <div className="mt-1 max-w-[220px] truncate text-xs text-muted-foreground">
+            <div className="mt-1 truncate text-xs text-muted-foreground">
               {row.original.latest_follow_up.content}
             </div>
           ) : null}
         </div>
       );
+    },
+    meta: {
+      headerClassName: CUSTOMER_FOLLOW_COLUMN_CLASS_NAME,
+      cellClassName: CUSTOMER_FOLLOW_COLUMN_CLASS_NAME,
     },
   },
   {
@@ -318,16 +337,21 @@ const columns: ColumnDef<CustomerRecord>[] = [
     header: "创建时间",
     cell: ({ row }) => formatDate(row.original.created_at),
     meta: {
-      cellClassName: "whitespace-nowrap tabular-nums text-muted-foreground",
+      headerClassName: CUSTOMER_CREATED_AT_COLUMN_CLASS_NAME,
+      cellClassName: `${CUSTOMER_CREATED_AT_COLUMN_CLASS_NAME} tabular-nums text-muted-foreground`,
     },
   },
   {
     id: "actions",
-    header: "操作",
-    cell: ({ row }) => <CustomerRowActions customer={row.original} />,
+    header: () => <div className="text-right">操作</div>,
+    cell: ({ row }) => (
+      <div className="flex justify-end">
+        <CustomerRowActions customer={row.original} />
+      </div>
+    ),
     meta: {
-      headerClassName: "text-right",
-      cellClassName: "relative whitespace-nowrap text-right",
+      headerClassName: CUSTOMER_ACTION_COLUMN_CLASS_NAME,
+      cellClassName: CUSTOMER_ACTION_COLUMN_CLASS_NAME,
     },
   },
 ];
@@ -342,8 +366,7 @@ export function CustomersTable({
       columns={columns}
       data={customers}
       emptyText="没有符合条件的客户"
-      minWidth="min-w-[1240px]"
-      tableClassName="border-t-0"
+      tableClassName="border-t-0 table-fixed"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
       rowClassName={() => CUSTOMER_TABLE_ROW_HEIGHT_CLASS_NAME}
     />

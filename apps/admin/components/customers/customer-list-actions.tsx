@@ -9,7 +9,7 @@ import {
   CustomerSourceConfig,
   CustomerStatusConfig,
 } from "@gooes/domain";
-import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -230,7 +230,6 @@ export function CustomerFilters({
         ) : null}
       </InputGroup>
       <Button type="submit" variant="outline" disabled={pending} className="w-full bg-card">
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
     </form>
@@ -277,7 +276,7 @@ export function CustomersPagination({
           follow,
         }))}
       >
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
+        <ChevronLeft data-icon="inline-start" />
         上一页
       </Button>
       <Button
@@ -295,7 +294,7 @@ export function CustomersPagination({
         }))}
       >
         下一页
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-end" /> : <ChevronRight data-icon="inline-end" />}
+        <ChevronRight data-icon="inline-end" />
       </Button>
     </div>
   );

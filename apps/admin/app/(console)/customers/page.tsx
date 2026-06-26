@@ -1,9 +1,5 @@
-import { UsersRound } from "lucide-react";
 import { CustomersClientShell } from "@/components/customers/customers-client-shell";
-import {
-  CreateCustomerButton,
-  type CustomerRecord,
-} from "@/components/customers/customer-mutations";
+import { type CustomerRecord } from "@/components/customers/customer-mutations";
 import {
   CUSTOMER_TABLE_MAX_PAGE_SIZE,
   CUSTOMER_TABLE_MIN_PAGE_SIZE,
@@ -120,21 +116,6 @@ export default async function CustomersPage({
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-            <UsersRound aria-hidden="true" className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-normal">客户管理</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              客户资料、负责人、来源状态和跟进计划。当前筛选共 {pagination.total} 条记录。
-            </p>
-          </div>
-        </div>
-        <CreateCustomerButton />
-      </div>
-
       <CustomersClientShell
         customers={list}
         pagination={pagination}
