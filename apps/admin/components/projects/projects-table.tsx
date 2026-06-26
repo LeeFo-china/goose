@@ -18,6 +18,15 @@ import {
 import { projectWorkflowSummary } from "@/components/projects/project-list-workflow-display";
 
 const PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[var(--project-table-row-height,75px)]";
+const PROJECT_IDENTITY_COLUMN_CLASS_NAME = "w-[180px] min-w-0";
+const PROJECT_PROPERTY_COLUMN_CLASS_NAME = "hidden w-[190px] xl:table-cell";
+const PROJECT_STATUS_COLUMN_CLASS_NAME = "w-[92px] whitespace-nowrap";
+const PROJECT_WORKFLOW_COLUMN_CLASS_NAME = "w-[170px] min-w-0";
+const PROJECT_BUDGET_COLUMN_CLASS_NAME = "w-[120px] whitespace-nowrap";
+const PROJECT_DESIGNER_COLUMN_CLASS_NAME = "hidden w-[86px] whitespace-nowrap 2xl:table-cell";
+const PROJECT_SUPERVISOR_COLUMN_CLASS_NAME = "hidden w-[100px] whitespace-nowrap 2xl:table-cell";
+const PROJECT_START_DATE_COLUMN_CLASS_NAME = "hidden w-[96px] whitespace-nowrap 2xl:table-cell";
+const PROJECT_ACTION_COLUMN_CLASS_NAME = "w-24 text-right";
 
 const statusMeta: Record<string, {
   label: string;
@@ -159,17 +168,22 @@ export function ProjectsTable({
         );
       },
       meta: {
-        cellClassName: "w-[220px]",
+        headerClassName: PROJECT_IDENTITY_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_IDENTITY_COLUMN_CLASS_NAME,
       },
     },
     {
       id: "property",
       header: "房产",
       cell: ({ row }) => (
-        <div className="max-w-[260px] truncate text-muted-foreground">
+        <div className="truncate text-muted-foreground">
           {propertyLabel(row.original.property)}
         </div>
       ),
+      meta: {
+        headerClassName: PROJECT_PROPERTY_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_PROPERTY_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "status",
@@ -183,7 +197,8 @@ export function ProjectsTable({
         );
       },
       meta: {
-        cellClassName: "whitespace-nowrap",
+        headerClassName: PROJECT_STATUS_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_STATUS_COLUMN_CLASS_NAME,
       },
     },
     {
@@ -192,7 +207,7 @@ export function ProjectsTable({
       cell: ({ row }) => {
         const summary = projectWorkflowSummary(row.original);
         return (
-          <div className="flex min-w-[140px] flex-col gap-1">
+          <div className="flex min-w-0 flex-col gap-1">
             <div className="flex items-center gap-1.5">
               <Badge variant="outline" className="whitespace-nowrap">
                 {summary.groupLabel}
@@ -208,7 +223,8 @@ export function ProjectsTable({
         );
       },
       meta: {
-        cellClassName: "min-w-[180px]",
+        headerClassName: PROJECT_WORKFLOW_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_WORKFLOW_COLUMN_CLASS_NAME,
       },
     },
     {
@@ -219,6 +235,10 @@ export function ProjectsTable({
           ¥{formatMoney(row.original.budget)}
         </span>
       ),
+      meta: {
+        headerClassName: PROJECT_BUDGET_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_BUDGET_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "designer",
@@ -228,6 +248,10 @@ export function ProjectsTable({
           {personName(row.original.designer)}
         </span>
       ),
+      meta: {
+        headerClassName: PROJECT_DESIGNER_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_DESIGNER_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "supervisor",
@@ -237,6 +261,10 @@ export function ProjectsTable({
           {personName(row.original.supervisor)}
         </span>
       ),
+      meta: {
+        headerClassName: PROJECT_SUPERVISOR_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_SUPERVISOR_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "startDate",
@@ -246,6 +274,10 @@ export function ProjectsTable({
           {formatDate(row.original.start_date)}
         </span>
       ),
+      meta: {
+        headerClassName: PROJECT_START_DATE_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_START_DATE_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "actions",
@@ -256,8 +288,8 @@ export function ProjectsTable({
         </div>
       ),
       meta: {
-        headerClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
-        cellClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        headerClassName: PROJECT_ACTION_COLUMN_CLASS_NAME,
+        cellClassName: PROJECT_ACTION_COLUMN_CLASS_NAME,
       },
     },
   ], [onProjectChanged]);
@@ -267,8 +299,7 @@ export function ProjectsTable({
       columns={columns}
       data={projects}
       emptyText="没有符合条件的项目"
-      minWidth="min-w-[1320px]"
-      tableClassName="border-t-0"
+      tableClassName="border-t-0 table-fixed"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
       rowClassName={() => PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME}
     />

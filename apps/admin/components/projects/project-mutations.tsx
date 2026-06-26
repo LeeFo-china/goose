@@ -3,9 +3,16 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Edit3, Plus, Trash2 } from "lucide-react";
+import { ClipboardCheck, Edit3, Loader2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { projectDetailHref } from "@/components/projects/project-detail-page-tabs";
 import { ProjectDialog } from "@/components/projects/project-form-dialog";
 import type { ProjectRecord } from "@/components/projects/project-mutation-types";
@@ -71,26 +78,46 @@ export function ProjectRowActions({
   }
 
   return (
-    <div className="flex min-w-[300px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-      <Button asChild type="button" variant="outline" size="sm">
-        <Link href={projectDetailHref(project.id, "acceptances")}>
-          <ClipboardCheck />
-          工序验收
-        </Link>
-      </Button>
-      <Button asChild type="button" variant="outline" size="sm">
-        <Link href={projectDetailHref(project.id, "acceptances")}>
-          详情
-        </Link>
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)} disabled={disabled}>
-        <Edit3 />
-        编辑
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={() => setDeleteOpen(true)} disabled={disabled}>
-        <Trash2 />
-        作废
-      </Button>
+    <div className="relative flex min-w-24 justify-end whitespace-nowrap">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm" disabled={pending}>
+            {pending ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <MoreHorizontal data-icon="inline-start" />
+            )}
+            操作
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="left" sideOffset={8} className="w-36">
+          <DropdownMenuGroup>
+            <DropdownMenuItem asChild>
+              <Link href={projectDetailHref(project.id, "acceptances")}>
+                <ClipboardCheck />
+                工序验收
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={projectDetailHref(project.id, "acceptances")}>
+                详情
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={disabled} onSelect={() => setEditOpen(true)}>
+              <Edit3 />
+              编辑
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              disabled={disabled}
+              onSelect={() => setDeleteOpen(true)}
+            >
+              <Trash2 />
+              作废
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <ProjectDialog
         mode="edit"
         project={project}

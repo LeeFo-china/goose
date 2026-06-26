@@ -55,4 +55,22 @@ describe("Project management page layout", () => {
     expect(table).toContain("rowClassName={() => PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME}");
     expect(shell).toContain("PROJECT_TABLE_HEADER_HEIGHT");
   });
+
+  test("keeps project table within the list viewport without horizontal scrolling", () => {
+    const table = readFileSync(
+      new URL("./projects-table.tsx", import.meta.url),
+      "utf8",
+    );
+    const mutations = readFileSync(
+      new URL("./project-mutations.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(table).toContain('tableClassName="border-t-0 table-fixed"');
+    expect(table).not.toContain('minWidth="min-w-[1320px]"');
+    expect(table).toContain("PROJECT_ACTION_COLUMN_CLASS_NAME");
+    expect(mutations).toContain("DropdownMenu");
+    expect(mutations).toContain("MoreHorizontal");
+    expect(mutations).not.toContain("min-w-[300px]");
+  });
 });
