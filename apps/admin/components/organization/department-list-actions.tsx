@@ -5,7 +5,7 @@ import {
   DEPARTMENT_CODE_VALUES,
   DepartmentConfig,
 } from "@gooes/domain";
-import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,18 +14,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import {
-  ORGANIZATION_PAGE_SIZE_OPTIONS,
-  type Pagination,
-} from "@/components/organization/organization-types";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import type { Pagination } from "@/components/organization/organization-types";
 
 type Navigate = (href: string) => void;
 
@@ -37,7 +26,9 @@ const codeOptions = [
   ] as const),
 ] as const;
 
-function buildDepartmentsHref(input: {
+const flatControlClassName = "bg-card shadow-none";
+
+export function buildDepartmentsHref(input: {
   page?: number;
   pageSize?: number;
   code?: string;
@@ -46,7 +37,7 @@ function buildDepartmentsHref(input: {
   const params = new URLSearchParams();
   params.set("tab", "departments");
   if (input.page && input.page > 1) params.set("departmentPage", String(input.page));
-  if (input.pageSize && input.pageSize !== 20) {
+  if (input.pageSize && input.pageSize > 0) {
     params.set("departmentPageSize", String(input.pageSize));
   }
   if (input.code) params.set("departmentCode", input.code);
@@ -94,12 +85,13 @@ export function DepartmentFilters({
   }
 
   return (
-    <form className="grid gap-3 lg:grid-cols-[180px_1fr_72px]" onSubmit={submit}>
+    <form className="grid flex-1 gap-2 md:grid-cols-[180px_minmax(220px,1fr)_72px]" onSubmit={submit}>
       <input type="hidden" name="code" value={selectedCode} />
       <FormSelect
         id="department-code-filter"
         value={selectedCode || "__all"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={codeOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
@@ -110,7 +102,7 @@ export function DepartmentFilters({
           applyCodeFilter(nextCode);
         }}
       />
-      <InputGroup>
+      <InputGroup className="h-9 bg-card">
         <InputGroupAddon>
           <Search aria-hidden="true" />
         </InputGroupAddon>
@@ -134,8 +126,7 @@ export function DepartmentFilters({
           </InputGroupAddon>
         ) : null}
       </InputGroup>
-      <Button type="submit" variant="outline" disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+      <Button type="submit" variant="outline" disabled={pending} className="w-full bg-card">
         搜索
       </Button>
     </form>
@@ -146,84 +137,50 @@ export function DepartmentsPagination({
   pagination,
   code,
   keyword,
+  pageSize,
   pending,
   onNavigate,
 }: {
   pagination: Pagination;
   code: string;
   keyword: string;
+  pageSize: number;
   pending: boolean;
   onNavigate: Navigate;
 }) {
+  const previousDisabled = pagination.page <= 1 || pending;
+  const nextDisabled = pagination.page >= pagination.totalPages || pending;
+
   return (
     <div className="flex gap-2">
       <Button
         type="button"
         variant="outline"
-        disabled={pagination.page <= 1 || pending}
+        disabled={previousDisabled}
         onClick={() => onNavigate(buildDepartmentsHref({
           page: Math.max(1, pagination.page - 1),
-          pageSize: pagination.pageSize,
+          pageSize,
           code,
           keyword,
         }))}
       >
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
+        <ChevronLeft data-icon="inline-start" />
         上一页
       </Button>
       <Button
         type="button"
         variant="outline"
-        disabled={pagination.page >= pagination.totalPages || pending}
+        disabled={nextDisabled}
         onClick={() => onNavigate(buildDepartmentsHref({
           page: pagination.page + 1,
-          pageSize: pagination.pageSize,
+          pageSize,
           code,
           keyword,
         }))}
       >
         下一页
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-end" /> : <ChevronRight data-icon="inline-end" />}
+        <ChevronRight data-icon="inline-end" />
       </Button>
     </div>
-  );
-}
-
-export function DepartmentPageSizeSelect({
-  pagination,
-  code,
-  keyword,
-  pending,
-  onNavigate,
-}: {
-  pagination: Pagination;
-  code: string;
-  keyword: string;
-  pending: boolean;
-  onNavigate: Navigate;
-}) {
-  return (
-    <Select
-      value={String(pagination.pageSize)}
-      disabled={pending}
-      onValueChange={(value) => onNavigate(buildDepartmentsHref({
-        pageSize: Number(value),
-        code,
-        keyword,
-      }))}
-    >
-      <SelectTrigger className="h-8 w-[104px] shadow-none" aria-label="选择每页部门条数">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
-          {ORGANIZATION_PAGE_SIZE_OPTIONS.map((option) => (
-            <SelectItem key={option} value={String(option)}>
-              {option} 条/页
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
   );
 }

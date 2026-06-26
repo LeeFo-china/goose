@@ -46,13 +46,13 @@ export default function OrganizationLoading() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
-            <div className="hidden border-b bg-muted/60 px-4 py-2 lg:grid lg:grid-cols-[minmax(280px,1fr)_120px_120px_140px_190px] lg:gap-3">
+            <div className="hidden border-b bg-muted/60 px-4 py-2 lg:grid lg:grid-cols-[minmax(0,1fr)_88px_92px_96px_104px] lg:gap-3">
               {Array.from({ length: 5 }).map((_, index) => (
                 <Skeleton key={index} className="h-4" />
               ))}
             </div>
             {Array.from({ length: 8 }).map((_, index) => (
-              <div key={index} className="border-b px-4 py-3">
+              <div key={index} className="min-h-[112px] border-b px-4 py-3">
                 <Skeleton className="h-9" />
               </div>
             ))}

@@ -1,13 +1,14 @@
-import { Building2 } from "lucide-react";
-import { StatusAlert } from "@/components/admin/status-alert";
 import { OrganizationTabs } from "@/components/organization/organization-tabs";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
+import {
+  ORGANIZATION_TABLE_MAX_PAGE_SIZE,
+  ORGANIZATION_TABLE_MIN_PAGE_SIZE,
+} from "@/components/organization/organization-list-page-size";
 import type {
   DepartmentRecord,
   DepartmentPostRuleConfig,
   Pagination,
 } from "@/components/organization/organization-types";
-import { ORGANIZATION_PAGE_SIZE_OPTIONS } from "@/components/organization/organization-types";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -44,9 +45,12 @@ function normalizePage(value: string | undefined) {
 
 function normalizePageSize(value: string | undefined) {
   const pageSize = Number(value || emptyPagination.pageSize);
-  return (ORGANIZATION_PAGE_SIZE_OPTIONS as readonly number[]).includes(pageSize)
-    ? pageSize
-    : emptyPagination.pageSize;
+  if (!Number.isFinite(pageSize)) return emptyPagination.pageSize;
+
+  return Math.min(
+    ORGANIZATION_TABLE_MAX_PAGE_SIZE,
+    Math.max(ORGANIZATION_TABLE_MIN_PAGE_SIZE, Math.floor(pageSize)),
+  );
 }
 
 function normalizeTab(_value: string | undefined): OrganizationTab {
@@ -165,34 +169,13 @@ export default async function OrganizationPage({
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-            <Building2 aria-hidden="true" className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-normal">组织架构</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              管理部门启停、岗位配置和组织规则。当前筛选共 {departments.pagination.total} 个部门。
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {routeErrors.length > 0 ? (
-        <div className="shrink-0 space-y-2">
-          {routeErrors.map((message, index) => (
-            <StatusAlert key={`${index}-${message}`}>{message}</StatusAlert>
-          ))}
-        </div>
-      ) : null}
-
       <OrganizationTabs
         activeTab={activeTab}
         departments={departments}
         departmentPostRuleConfig={departmentPostRuleConfig}
         departmentCode={params.departmentCode?.trim() || ""}
         departmentKeyword={params.departmentKeyword?.trim() || ""}
+        errors={routeErrors}
       />
     </div>
   );

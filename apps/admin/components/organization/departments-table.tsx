@@ -29,6 +29,12 @@ import type {
 } from "@/components/organization/organization-types";
 import { cn } from "@/lib/utils";
 
+const DEPARTMENT_TABLE_ROW_HEIGHT_CLASS_NAME = "min-h-[var(--organization-table-row-height,112px)]";
+const DEPARTMENT_GRID_CLASS_NAME =
+  "grid gap-3 px-4 lg:grid-cols-[minmax(0,1fr)_88px_92px_96px_104px] lg:items-center";
+const DEPARTMENT_ACTION_COLUMN_CLASS_NAME =
+  "flex flex-nowrap items-center justify-start gap-1 whitespace-nowrap lg:justify-end";
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -112,8 +118,14 @@ export function DepartmentsTable({
 
   return (
     <div>
-      <div className="sticky top-0 z-10 hidden grid-cols-[minmax(280px,1fr)_120px_120px_140px_190px] items-center gap-3 border-b bg-muted/60 px-4 py-2 text-xs font-medium text-muted-foreground lg:grid">
-        <div>部门</div>
+      <div
+        data-organization-table-header
+        className={cn(
+          DEPARTMENT_GRID_CLASS_NAME,
+          "sticky top-0 z-10 hidden border-b bg-muted/60 py-2 text-xs font-medium text-muted-foreground lg:grid",
+        )}
+      >
+        <div className="min-w-0">部门</div>
         <div>状态</div>
         <div>关联岗位</div>
         <div>创建时间</div>
@@ -128,7 +140,13 @@ export function DepartmentsTable({
 
           return (
             <Collapsible key={department.id} open={open} onOpenChange={() => toggle(code)}>
-              <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(280px,1fr)_120px_120px_140px_190px] lg:items-center">
+              <div
+                className={cn(
+                  DEPARTMENT_GRID_CLASS_NAME,
+                  DEPARTMENT_TABLE_ROW_HEIGHT_CLASS_NAME,
+                  "overflow-hidden py-3",
+                )}
+              >
                 <CollapsibleTrigger asChild>
                   <Button
                     type="button"
@@ -140,11 +158,11 @@ export function DepartmentsTable({
                       className={cn("transition-transform", open ? "rotate-90" : "")}
                       data-icon="inline-start"
                     />
-                    <span className="flex min-w-0 items-center gap-3">
+                    <span className="flex min-w-0 flex-1 items-center gap-3">
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                         <FolderTree aria-hidden="true" />
                       </span>
-                      <span className="min-w-0">
+                      <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium">{department.name}</span>
                         {label ? (
                           <span className="block truncate text-xs text-muted-foreground">
@@ -165,13 +183,13 @@ export function DepartmentsTable({
                     {department.enabled === false ? "已停用" : "已启用"}
                   </Badge>
                 </div>
-                <div className="text-sm text-muted-foreground">
+                <div className="truncate text-sm text-muted-foreground">
                   {posts.length} 个岗位
                 </div>
-                <div className="text-sm text-muted-foreground">
+                <div className="truncate text-sm text-muted-foreground">
                   {formatDate(department.created_at)}
                 </div>
-                <div className="flex flex-nowrap items-center justify-start gap-1 whitespace-nowrap lg:justify-end">
+                <div className={DEPARTMENT_ACTION_COLUMN_CLASS_NAME}>
                   <DepartmentPostConfigDialog
                     department={department}
                     departmentPostRuleConfig={departmentPostRuleConfig}
