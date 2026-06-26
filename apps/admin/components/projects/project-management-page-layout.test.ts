@@ -73,4 +73,16 @@ describe("Project management page layout", () => {
     expect(mutations).toContain("MoreHorizontal");
     expect(mutations).not.toContain("min-w-[300px]");
   });
+
+  test("uses a single refresh spinner for project list navigation", () => {
+    const { shell } = readProjectManagementSources();
+    const actions = readFileSync(
+      new URL("./project-list-actions.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(shell.match(/animate-spin/g)?.length ?? 0).toBe(1);
+    expect(actions).not.toContain("animate-spin");
+    expect(actions).not.toContain("pending ? <Loader2");
+  });
 });

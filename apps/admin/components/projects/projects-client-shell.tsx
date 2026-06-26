@@ -235,16 +235,9 @@ export function ProjectsClientShell({
           ) : null}
           <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              {pending ? (
-                <Badge variant="secondary">
-                  <Loader2 className="animate-spin" data-icon="inline-start" />
-                  正在更新
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="tabular-nums">
-                  第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-                </Badge>
-              )}
+              <Badge variant="outline" className="tabular-nums">
+                第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+              </Badge>
               <span className="tabular-nums">
                 当前显示 {visibleProjects.length} 条，共 {pagination.total} 条
               </span>
