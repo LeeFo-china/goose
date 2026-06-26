@@ -338,7 +338,7 @@ export function FinanceProjectSummaryTable({
         );
       },
       meta: {
-        headerClassName: "w-[13%]",
+        headerClassName: "min-w-0",
         cellClassName: "min-w-0",
       },
     },

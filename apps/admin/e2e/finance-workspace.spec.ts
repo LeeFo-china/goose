@@ -171,6 +171,13 @@ async function expectFinanceProjectTableActionsInline(page: Page) {
   expect(actionLayout.headerWidth).toBeLessThanOrEqual(260);
 }
 
+async function expectFinanceProjectTableWideLayout(page: Page) {
+  await page.setViewportSize({ width: 2048, height: 920 });
+  await page.goto("/finance?risk_level=danger", { waitUntil: "load" });
+  await expectFinanceProjectTableNoHorizontalScroll(page);
+  await expectFinanceProjectTableActionsInline(page);
+}
+
 async function expectUnallocatedProjectSummaryPopover(page: Page) {
   await page.goto("/finance?has_unallocated_expense=true", { waitUntil: "load" });
   const unallocatedBadge = page.getByText("有未归集").first();
@@ -267,7 +274,7 @@ test.describe("finance workspace", () => {
   });
 
   test("财务总览展示图表并可进入财务诊断", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
 
     await page.goto("/finance", { waitUntil: "load" });
 
@@ -292,6 +299,7 @@ test.describe("finance workspace", () => {
     await expectFinanceProjectTablePageSize(page);
     await expectFinanceProjectTableNoHorizontalScroll(page);
     await expectFinanceProjectTableActionsInline(page);
+    await expectFinanceProjectTableWideLayout(page);
     await expectUnallocatedProjectSummaryPopover(page);
     await page.goto("/finance", { waitUntil: "load" });
     await expectFinancePaginationSpinner(page);
