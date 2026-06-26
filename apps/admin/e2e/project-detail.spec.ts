@@ -50,4 +50,26 @@ test.describe("project detail", () => {
       { timeout: 25_000 },
     ).toBe(0);
   });
+
+  test("项目总览展示财务进度、资金流向和风险处理", async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const projectId = await getFirstProjectId(page);
+    await page.goto(`/projects/${projectId}?tab=overview`, {
+      waitUntil: "domcontentloaded",
+      timeout: 20_000,
+    });
+
+    await expect(page.getByTestId("project-detail-workspace"))
+      .toBeVisible({ timeout: 20_000 });
+    const financePanel = page.getByTestId("project-finance-operating-summary");
+    await expect(financePanel.getByRole("heading", { name: "经营财务摘要" }))
+      .toBeVisible();
+    await expect(financePanel.getByText("收款进度")).toBeVisible();
+    await expect(financePanel.getByText("预算执行率")).toBeVisible();
+    await expect(financePanel.getByText("资金流向")).toBeVisible();
+    await expect(financePanel.getByText("状态预警")).toBeVisible();
+    await expect(financePanel.getByText("合同金额")).toBeVisible();
+    await expect(financePanel.getByText("实际利润")).toBeVisible();
+  });
 });
