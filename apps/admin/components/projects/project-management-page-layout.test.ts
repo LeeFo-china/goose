@@ -85,4 +85,13 @@ describe("Project management page layout", () => {
     expect(actions).not.toContain("animate-spin");
     expect(actions).not.toContain("pending ? <Loader2");
   });
+
+  test("centers the project list refresh spinner inside the loading mask", () => {
+    const { shell } = readProjectManagementSources();
+
+    expect(shell).toContain(
+      "absolute inset-0 flex items-center justify-center bg-background/65 backdrop-blur-[1px]",
+    );
+    expect(shell).not.toContain("items-start justify-center bg-background/65 pt-8");
+  });
 });

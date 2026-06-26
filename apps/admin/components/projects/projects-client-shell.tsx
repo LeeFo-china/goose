@@ -226,7 +226,7 @@ export function ProjectsClientShell({
             <ProjectsTable projects={visibleProjects} onProjectChanged={refreshProjects} />
           </div>
           {pending ? (
-            <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/65 backdrop-blur-[1px]">
               <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
                 <Loader2 className="animate-spin" data-icon="inline-start" />
                 正在更新列表
