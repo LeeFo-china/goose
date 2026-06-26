@@ -54,8 +54,9 @@ const originOptions = [
 
 const flatControlClassName = "bg-card shadow-none";
 
-function buildCustomersHref(input: {
+export function buildCustomersHref(input: {
   page?: number;
+  pageSize?: number;
   status?: string;
   source?: string;
   customerOrigin?: string;
@@ -64,6 +65,9 @@ function buildCustomersHref(input: {
 }) {
   const params = new URLSearchParams();
   if (input.page && input.page > 1) params.set("page", String(input.page));
+  if (input.pageSize && input.pageSize > 0) {
+    params.set("pageSize", String(input.pageSize));
+  }
   if (input.status) params.set("status", input.status);
   if (input.source) params.set("source", input.source);
   if (input.customerOrigin) params.set("customer_origin", input.customerOrigin);
@@ -79,6 +83,7 @@ export function CustomerFilters({
   customerOrigin,
   keyword,
   follow,
+  pageSize,
   pending,
   onNavigate,
 }: {
@@ -87,6 +92,7 @@ export function CustomerFilters({
   customerOrigin: string;
   keyword: string;
   follow: string;
+  pageSize: number;
   pending: boolean;
   onNavigate: Navigate;
 }) {
@@ -111,6 +117,7 @@ export function CustomerFilters({
     follow?: string;
   }) {
     onNavigate(buildCustomersHref({
+      pageSize,
       status: input.status ?? status,
       source: input.source ?? source,
       customerOrigin: input.customerOrigin ?? customerOrigin,
@@ -122,6 +129,7 @@ export function CustomerFilters({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onNavigate(buildCustomersHref({
+      pageSize,
       status: selectedStatus,
       source: selectedSource,
       customerOrigin: selectedOrigin,
@@ -236,6 +244,7 @@ export function CustomersPagination({
   customerOrigin,
   keyword,
   follow,
+  pageSize,
   pending,
   onNavigate,
 }: {
@@ -245,6 +254,7 @@ export function CustomersPagination({
   customerOrigin: string;
   keyword: string;
   follow: string;
+  pageSize: number;
   pending: boolean;
   onNavigate: Navigate;
 }) {
@@ -259,6 +269,7 @@ export function CustomersPagination({
         disabled={previousDisabled}
         onClick={() => onNavigate(buildCustomersHref({
           page: Math.max(1, pagination.page - 1),
+          pageSize,
           status,
           source,
           customerOrigin,
@@ -275,6 +286,7 @@ export function CustomersPagination({
         disabled={nextDisabled}
         onClick={() => onNavigate(buildCustomersHref({
           page: pagination.page + 1,
+          pageSize,
           status,
           source,
           customerOrigin,

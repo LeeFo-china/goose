@@ -23,6 +23,8 @@ import {
 import { IdentityIdCopyButton } from "@/components/admin/identity-id-copy-button";
 import { getIdentityCopyMeta } from "@/components/admin/identity-copy-utils";
 
+const CUSTOMER_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[75px]";
+
 const statusMeta: Record<string, {
   label: string;
   variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
@@ -343,6 +345,7 @@ export function CustomersTable({
       minWidth="min-w-[1240px]"
       tableClassName="border-t-0"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
+      rowClassName={() => CUSTOMER_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

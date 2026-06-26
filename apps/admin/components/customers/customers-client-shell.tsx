@@ -1,10 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useCallback, useEffect, useRef, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
+  calculateCustomerListPageSize,
+  CUSTOMER_TABLE_HEADER_HEIGHT,
+} from "@/components/customers/customer-list-page-size";
+import {
+  buildCustomersHref,
   CustomerFilters,
   CustomersPagination,
 } from "@/components/customers/customer-list-actions";
@@ -41,13 +46,80 @@ export function CustomersClientShell({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const tableViewportRef = useRef<HTMLDivElement | null>(null);
 
-  function navigate(href: string) {
+  const navigate = useCallback((href: string) => {
     startTransition(() => {
       router.push(href);
       router.refresh();
     });
-  }
+  }, [router, startTransition]);
+
+  useEffect(() => {
+    const viewport = tableViewportRef.current;
+    if (!viewport || pending) return;
+
+    let frameId = 0;
+    const syncPageSize = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        const viewportHeight = viewport.clientHeight;
+        if (!viewportHeight) return;
+        const headerHeight = measureElementHeight(
+          viewport.querySelector("thead"),
+          CUSTOMER_TABLE_HEADER_HEIGHT,
+        );
+        const rowHeight = measureElementHeight(
+          viewport.querySelector("tbody tr"),
+          undefined,
+        );
+
+        const nextPageSize = calculateCustomerListPageSize({
+          viewportHeight,
+          headerHeight,
+          rowHeight,
+        });
+        if (nextPageSize === pagination.pageSize) return;
+
+        const nextTotalPages = Math.max(1, Math.ceil(pagination.total / nextPageSize));
+        const nextPage = Math.min(pagination.page, nextTotalPages);
+        navigate(buildCustomersHref({
+          page: nextPage,
+          pageSize: nextPageSize,
+          status,
+          source,
+          customerOrigin,
+          keyword,
+          follow,
+        }));
+      });
+    };
+
+    syncPageSize();
+
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(syncPageSize);
+    resizeObserver?.observe(viewport);
+    window.addEventListener("resize", syncPageSize);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", syncPageSize);
+    };
+  }, [
+    customerOrigin,
+    follow,
+    keyword,
+    navigate,
+    pagination.page,
+    pagination.pageSize,
+    pagination.total,
+    pending,
+    source,
+    status,
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -63,12 +135,17 @@ export function CustomersClientShell({
             customerOrigin={customerOrigin}
             keyword={keyword}
             follow={follow}
+            pageSize={pagination.pageSize}
             pending={pending}
             onNavigate={navigate}
           />
         </CardHeader>
         <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div
+            ref={tableViewportRef}
+            data-testid="customer-list-table-viewport"
+            className="min-h-0 flex-1 overflow-auto"
+          >
             <CustomersTable customers={customers} />
           </div>
           {pending ? (
@@ -100,6 +177,7 @@ export function CustomersClientShell({
               customerOrigin={customerOrigin}
               keyword={keyword}
               follow={follow}
+              pageSize={pagination.pageSize}
               pending={pending}
               onNavigate={navigate}
             />
@@ -108,4 +186,14 @@ export function CustomersClientShell({
       </Card>
     </div>
   );
+}
+
+function measureElementHeight(
+  element: Element | null,
+  fallback: number | undefined,
+) {
+  if (!(element instanceof HTMLElement)) return fallback;
+
+  const height = Math.ceil(element.getBoundingClientRect().height);
+  return height > 0 ? height : fallback;
 }

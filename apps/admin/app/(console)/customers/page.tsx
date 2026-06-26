@@ -4,6 +4,10 @@ import {
   CreateCustomerButton,
   type CustomerRecord,
 } from "@/components/customers/customer-mutations";
+import {
+  CUSTOMER_TABLE_MAX_PAGE_SIZE,
+  CUSTOMER_TABLE_MIN_PAGE_SIZE,
+} from "@/components/customers/customer-list-page-size";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -22,6 +26,7 @@ type CustomerListData = {
 
 type CustomerPageSearchParams = {
   page?: string;
+  pageSize?: string;
   status?: string;
   source?: string;
   customer_origin?: string;
@@ -34,17 +39,29 @@ function normalizePage(value: string | undefined) {
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
+function normalizePageSize(value: string | undefined) {
+  const pageSize = Number(value || 20);
+  if (!Number.isFinite(pageSize)) return 20;
+
+  return Math.min(
+    CUSTOMER_TABLE_MAX_PAGE_SIZE,
+    Math.max(CUSTOMER_TABLE_MIN_PAGE_SIZE, Math.floor(pageSize)),
+  );
+}
+
 async function getCustomers(params: CustomerPageSearchParams) {
   const token = await getAdminToken();
+  const page = normalizePage(params.page);
+  const pageSize = normalizePageSize(params.pageSize);
+
   if (!token) {
     return {
       list: [],
-      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
 
-  const page = normalizePage(params.page);
   const status = params.status?.trim() || "";
   const source = params.source?.trim() || "";
   const customerOrigin = params.customer_origin?.trim() || "";
@@ -52,7 +69,7 @@ async function getCustomers(params: CustomerPageSearchParams) {
   const follow = params.follow?.trim() || "";
   const query = new URLSearchParams({
     page: String(page),
-    pageSize: "20",
+    pageSize: String(pageSize),
     mode: "compact",
   });
   if (status) query.set("status", status);
@@ -72,14 +89,14 @@ async function getCustomers(params: CustomerPageSearchParams) {
     return {
       ...(payload.data || {
         list: [],
-        pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+        pagination: { page, pageSize, total: 0, totalPages: 0 },
       }),
       error: null,
     };
   } catch (error) {
     return {
       list: [],
-      pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "客户列表加载失败",
     };
   }
@@ -102,8 +119,8 @@ export default async function CustomersPage({
   const { list, pagination, error } = await getCustomers(params);
 
   return (
-    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
             <UsersRound aria-hidden="true" className="size-4" />
