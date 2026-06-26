@@ -152,7 +152,7 @@ export default async function ProjectsPage({
   ]);
 
   return (
-    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <ProjectsClientShell
         projects={list}
         pagination={pagination}

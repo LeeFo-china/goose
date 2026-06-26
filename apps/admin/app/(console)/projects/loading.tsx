@@ -3,16 +3,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProjectsLoading() {
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex justify-between gap-3">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex justify-between gap-3">
         <div>
           <Skeleton className="h-8 w-32" />
           <Skeleton className="mt-2 h-4 w-96" />
         </div>
         <Skeleton className="h-9 w-24" />
       </div>
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
           <div className="flex justify-end">
             <Skeleton className="h-6 w-28" />
           </div>
@@ -22,11 +22,15 @@ export default function ProjectsLoading() {
             ))}
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <Skeleton key={index} className="h-14" />
-          ))}
-          <div className="flex flex-col gap-3 pt-1 md:flex-row md:items-center md:justify-between">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="border-b px-4 py-3">
+                <Skeleton className="h-10" />
+              </div>
+            ))}
+          </div>
+          <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
             <Skeleton className="h-4 w-32" />
             <div className="flex gap-2">
               <Skeleton className="h-9 w-20" />
