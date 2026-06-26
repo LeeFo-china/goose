@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 
 const listEmployeeIdsByDepartmentId = mock(async () => [
@@ -101,6 +101,29 @@ describe("accessPolicyService customer visibility", () => {
 });
 
 describe("accessPolicyService project access", () => {
+  beforeEach(() => {
+    canAccessProjectByScope.mockClear();
+    listVisibleProjectIds.mockClear();
+    findProjectTenantById.mockClear();
+  });
+
+  test("checks tenant ownership directly for all-scope project access", async () => {
+    const { accessPolicyService } = await import("./access-policy");
+    const authContext = buildAuthContext({
+      employeeId: "admin-employee",
+      tenantDepartmentId: "admin-department",
+      permissions: [{ code: "project.read", scope: "all" }],
+    });
+
+    await expect(
+      accessPolicyService.canAccessProject(authContext, "project-1", "project.read"),
+    ).resolves.toBe(true);
+
+    expect(findProjectTenantById).toHaveBeenCalledWith("project-1");
+    expect(canAccessProjectByScope).not.toHaveBeenCalled();
+    expect(listVisibleProjectIds).not.toHaveBeenCalled();
+  });
+
   test("uses direct project scope check without listing visible project ids", async () => {
     const { accessPolicyService } = await import("./access-policy");
     const authContext = buildAuthContext({

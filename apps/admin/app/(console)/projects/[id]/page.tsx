@@ -16,11 +16,18 @@ type ProjectDetailPageSearchParams = {
   acceptanceId?: string | string[];
 };
 
+const PROJECT_DETAIL_FETCH_TIMEOUT_MS = 15_000;
+
 async function getProject(projectId: string) {
   const token = await getAdminToken();
   if (!token) {
     return { project: null, error: "缺少登录凭证" };
   }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, PROJECT_DETAIL_FETCH_TIMEOUT_MS);
 
   try {
     const response = await fetch(buildBackendUrl(`/projects/${projectId}`), {
@@ -28,6 +35,7 @@ async function getProject(projectId: string) {
         authorization: `Bearer ${token}`,
       },
       cache: "no-store",
+      signal: controller.signal,
     });
 
     if (response.status === 404) {
@@ -36,11 +44,20 @@ async function getProject(projectId: string) {
 
     const payload = await parseBackendJson<ProjectRecord>(response);
     return { project: payload.data || null, error: null };
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return {
+        project: null,
+        error: "项目详情加载超时，请稍后重试",
+      };
+    }
+
     return {
       project: null,
       error: "项目详情加载失败",
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

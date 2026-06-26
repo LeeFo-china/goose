@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import type { AuthContext, EffectivePermission } from "@/services/authorization";
 import { permissionRepository } from "@/repositories/permissions";
 import { isEmployeeOperableStatus } from "@gooes/domain";
+import { resolveProjectAccess } from "@/services/access-policy-project-access";
 
 const PROJECT_SCOPE_CACHE_TTL_MS = 10_000;
 
@@ -263,24 +264,13 @@ class AccessPolicyService {
     const scope = this.assertPermission(authContext, permissionCode);
     if (!scope || !authContext.employeeId) return false;
 
-    if (authContext.tenantId) {
-      const directAccess = await permissionRepository.canAccessProjectByScope({
-        projectId, tenantId: authContext.tenantId, scope,
-        employeeId: authContext.employeeId, tenantDepartmentId: authContext.tenantDepartmentId,
-      });
-      if (directAccess !== null) return directAccess;
-    }
-    const visibleProjectIds = await this.getVisibleProjectIds(
+    return resolveProjectAccess({
       authContext,
-      permissionCode,
-    );
-
-    if (visibleProjectIds === null) {
-      const project = await permissionRepository.findProjectTenantById(projectId);
-      return Boolean(project && this.matchesTenant(authContext, project));
-    }
-
-    return visibleProjectIds.includes(projectId);
+      projectId,
+      scope,
+      getVisibleProjectIds: () => this.getVisibleProjectIds(authContext, permissionCode),
+      matchesTenant: (project) => this.matchesTenant(authContext, project),
+    });
   }
 
   async canWriteProjectLog(authContext: AuthContext, projectId: string) {
