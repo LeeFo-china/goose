@@ -68,6 +68,16 @@ describe("Organization management page layout", () => {
     expect(table).toContain("DEPARTMENT_ACTION_COLUMN_CLASS_NAME");
   });
 
+  test("reserves enough space for date and row actions so the last columns do not overlap", () => {
+    const table = readFileSync(
+      new URL("./departments-table.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(table).toContain("lg:grid-cols-[minmax(0,1fr)_88px_92px_104px_260px]");
+    expect(table).not.toContain("lg:grid-cols-[minmax(0,1fr)_88px_92px_96px_104px]");
+  });
+
   test("uses one centered spinner for department list navigation", () => {
     const { shell } = readOrganizationManagementSources();
     const actions = readFileSync(

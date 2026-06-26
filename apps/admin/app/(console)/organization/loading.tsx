@@ -46,7 +46,7 @@ export default function OrganizationLoading() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
-            <div className="hidden border-b bg-muted/60 px-4 py-2 lg:grid lg:grid-cols-[minmax(0,1fr)_88px_92px_96px_104px] lg:gap-3">
+            <div className="hidden border-b bg-muted/60 px-4 py-2 lg:grid lg:grid-cols-[minmax(0,1fr)_88px_92px_104px_260px] lg:gap-3">
               {Array.from({ length: 5 }).map((_, index) => (
                 <Skeleton key={index} className="h-4" />
               ))}

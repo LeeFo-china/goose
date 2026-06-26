@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 
 const DEPARTMENT_TABLE_ROW_HEIGHT_CLASS_NAME = "min-h-[var(--organization-table-row-height,112px)]";
 const DEPARTMENT_GRID_CLASS_NAME =
-  "grid gap-3 px-4 lg:grid-cols-[minmax(0,1fr)_88px_92px_96px_104px] lg:items-center";
+  "grid gap-3 px-4 lg:grid-cols-[minmax(0,1fr)_88px_92px_104px_260px] lg:items-center";
 const DEPARTMENT_ACTION_COLUMN_CLASS_NAME =
   "flex flex-nowrap items-center justify-start gap-1 whitespace-nowrap lg:justify-end";
 
