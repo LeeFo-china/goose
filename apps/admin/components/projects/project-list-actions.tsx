@@ -38,6 +38,7 @@ const flatControlClassName = "bg-card shadow-none";
 export function ProjectFilters({
   ownership,
   keyword,
+  pageSize,
   workflowGroupKey,
   workflowNodeKey,
   workflowInstanceStatus,
@@ -47,6 +48,7 @@ export function ProjectFilters({
 }: {
   ownership: string;
   keyword: string;
+  pageSize: number;
   workflowGroupKey: string;
   workflowNodeKey: string;
   workflowInstanceStatus: string;
@@ -90,6 +92,7 @@ export function ProjectFilters({
     workflowInstanceStatus?: string;
   }) {
     onNavigate(buildProjectsHref({
+      pageSize,
       ownership: input.ownership ?? ownership,
       keyword,
       workflowGroupKey: input.workflowGroupKey ?? workflowGroupKey,
@@ -102,6 +105,7 @@ export function ProjectFilters({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onNavigate(buildProjectsHref({
+      pageSize,
       ownership: selectedOwnership,
       keyword: selectedKeyword.trim(),
       workflowGroupKey: selectedWorkflowGroupKey,
@@ -233,6 +237,7 @@ export function ProjectsPagination({
   pagination,
   ownership,
   keyword,
+  pageSize,
   workflowGroupKey,
   workflowNodeKey,
   workflowInstanceStatus,
@@ -242,6 +247,7 @@ export function ProjectsPagination({
   pagination: Pagination;
   ownership: string;
   keyword: string;
+  pageSize: number;
   workflowGroupKey: string;
   workflowNodeKey: string;
   workflowInstanceStatus: string;
@@ -259,6 +265,7 @@ export function ProjectsPagination({
         disabled={previousDisabled}
         onClick={() => onNavigate(buildProjectsHref({
           page: Math.max(1, pagination.page - 1),
+          pageSize,
           ownership,
           keyword,
           workflowGroupKey,
@@ -275,6 +282,7 @@ export function ProjectsPagination({
         disabled={nextDisabled}
         onClick={() => onNavigate(buildProjectsHref({
           page: pagination.page + 1,
+          pageSize,
           ownership,
           keyword,
           workflowGroupKey,

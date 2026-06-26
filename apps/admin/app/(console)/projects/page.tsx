@@ -5,6 +5,10 @@ import {
   emptyWorkflowFilters,
   type ProjectWorkflowFiltersData,
 } from "@/components/projects/project-list-filter-utils";
+import {
+  PROJECT_TABLE_MAX_PAGE_SIZE,
+  PROJECT_TABLE_MIN_PAGE_SIZE,
+} from "@/components/projects/project-list-page-size";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -22,6 +26,7 @@ type ProjectListData = {
 
 type ProjectPageSearchParams = {
   page?: string;
+  pageSize?: string;
   ownership?: string;
   keyword?: string;
   workflow_group_key?: string;
@@ -34,17 +39,29 @@ function normalizePage(value: string | undefined) {
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
+function normalizePageSize(value: string | undefined) {
+  const pageSize = Number(value || 20);
+  if (!Number.isFinite(pageSize)) return 20;
+
+  return Math.min(
+    PROJECT_TABLE_MAX_PAGE_SIZE,
+    Math.max(PROJECT_TABLE_MIN_PAGE_SIZE, Math.floor(pageSize)),
+  );
+}
+
 async function getProjects(params: ProjectPageSearchParams) {
   const token = await getAdminToken();
+  const page = normalizePage(params.page);
+  const pageSize = normalizePageSize(params.pageSize);
+
   if (!token) {
     return {
       list: [],
-      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
 
-  const page = normalizePage(params.page);
   const ownership = params.ownership?.trim() || "";
   const keyword = params.keyword?.trim() || "";
   const workflowGroupKey = params.workflow_group_key?.trim() || "";
@@ -52,7 +69,7 @@ async function getProjects(params: ProjectPageSearchParams) {
   const workflowInstanceStatus = params.workflow_instance_status?.trim() || "";
   const query = new URLSearchParams({
     page: String(page),
-    pageSize: "20",
+    pageSize: String(pageSize),
   });
   if (ownership) query.set("ownership", ownership);
   if (keyword) query.set("keyword", keyword);
@@ -73,14 +90,14 @@ async function getProjects(params: ProjectPageSearchParams) {
     return {
       ...(payload.data || {
         list: [],
-        pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+        pagination: { page, pageSize, total: 0, totalPages: 0 },
       }),
       error: null,
     };
   } catch (error) {
     return {
       list: [],
-      pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "项目列表加载失败",
     };
   }

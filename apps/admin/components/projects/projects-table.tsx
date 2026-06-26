@@ -17,6 +17,8 @@ import {
 } from "@/components/projects/project-mutations";
 import { projectWorkflowSummary } from "@/components/projects/project-list-workflow-display";
 
+const PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[75px]";
+
 const statusMeta: Record<string, {
   label: string;
   variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
@@ -268,6 +270,7 @@ export function ProjectsTable({
       minWidth="min-w-[1320px]"
       tableClassName="border-t-0"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
+      rowClassName={() => PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

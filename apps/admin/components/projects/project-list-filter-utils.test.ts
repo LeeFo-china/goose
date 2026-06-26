@@ -57,13 +57,14 @@ describe("project list workflow filters", () => {
   test("builds projects href with workflow v2 query params", () => {
     expect(buildProjectsHref({
       page: 2,
+      pageSize: 8,
       ownership: "all",
       keyword: "张三",
       workflowGroupKey: "construction",
       workflowNodeKey: "procedure_plumbing_electrical",
       workflowInstanceStatus: "running",
     })).toBe(
-      "/projects?page=2&ownership=all&keyword=%E5%BC%A0%E4%B8%89&workflow_group_key=construction&workflow_node_key=procedure_plumbing_electrical&workflow_instance_status=running",
+      "/projects?page=2&pageSize=8&ownership=all&keyword=%E5%BC%A0%E4%B8%89&workflow_group_key=construction&workflow_node_key=procedure_plumbing_electrical&workflow_instance_status=running",
     );
   });
 

@@ -1,14 +1,28 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { FolderKanban, Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   ProjectFilters,
   ProjectsPagination,
 } from "@/components/projects/project-list-actions";
-import type { ProjectWorkflowFiltersData } from "@/components/projects/project-list-filter-utils";
+import {
+  buildProjectsHref,
+  type ProjectWorkflowFiltersData,
+} from "@/components/projects/project-list-filter-utils";
+import {
+  calculateProjectListPageSize,
+  PROJECT_TABLE_HEADER_HEIGHT,
+} from "@/components/projects/project-list-page-size";
 import {
   CreateProjectButton,
   type ProjectRecord,
@@ -47,6 +61,7 @@ export function ProjectsClientShell({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const tableViewportRef = useRef<HTMLDivElement | null>(null);
   const [projectOverrides, setProjectOverrides] = useState<Record<string, ProjectRecord>>({});
   const visibleProjects = useMemo(() => {
     const visibleIds = new Set(projects.map((project) => project.id));
@@ -59,12 +74,78 @@ export function ProjectsClientShell({
     return [...optimisticProjects, ...patchedProjects];
   }, [projectOverrides, projects]);
 
-  function navigate(href: string) {
+  const navigate = useCallback((href: string) => {
     startTransition(() => {
       router.push(href);
       router.refresh();
     });
-  }
+  }, [router, startTransition]);
+
+  useEffect(() => {
+    const viewport = tableViewportRef.current;
+    if (!viewport || pending) return;
+
+    let frameId = 0;
+    const syncPageSize = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        const viewportHeight = viewport.clientHeight;
+        if (!viewportHeight) return;
+        const headerHeight = measureElementHeight(
+          viewport.querySelector("thead"),
+          PROJECT_TABLE_HEADER_HEIGHT,
+        );
+        const rowHeight = measureElementHeight(
+          viewport.querySelector("tbody tr"),
+          undefined,
+        );
+
+        const nextPageSize = calculateProjectListPageSize({
+          viewportHeight,
+          headerHeight,
+          rowHeight,
+        });
+        if (nextPageSize === pagination.pageSize) return;
+
+        const nextTotalPages = Math.max(1, Math.ceil(pagination.total / nextPageSize));
+        const nextPage = Math.min(pagination.page, nextTotalPages);
+        navigate(buildProjectsHref({
+          page: nextPage,
+          pageSize: nextPageSize,
+          ownership,
+          keyword,
+          workflowGroupKey,
+          workflowNodeKey,
+          workflowInstanceStatus,
+        }));
+      });
+    };
+
+    syncPageSize();
+
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(syncPageSize);
+    resizeObserver?.observe(viewport);
+    window.addEventListener("resize", syncPageSize);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", syncPageSize);
+    };
+  }, [
+    keyword,
+    navigate,
+    ownership,
+    pagination.page,
+    pagination.pageSize,
+    pagination.total,
+    pending,
+    workflowGroupKey,
+    workflowInstanceStatus,
+    workflowNodeKey,
+  ]);
 
   function refreshProjects(project?: ProjectRecord) {
     if (project?.id) {
@@ -110,6 +191,7 @@ export function ProjectsClientShell({
           <ProjectFilters
             ownership={ownership}
             keyword={keyword}
+            pageSize={pagination.pageSize}
             workflowGroupKey={workflowGroupKey}
             workflowNodeKey={workflowNodeKey}
             workflowInstanceStatus={workflowInstanceStatus}
@@ -119,7 +201,11 @@ export function ProjectsClientShell({
           />
         </CardHeader>
         <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div
+            ref={tableViewportRef}
+            data-testid="project-list-table-viewport"
+            className="min-h-0 flex-1 overflow-auto"
+          >
             <ProjectsTable projects={visibleProjects} onProjectChanged={refreshProjects} />
           </div>
           {pending ? (
@@ -150,6 +236,7 @@ export function ProjectsClientShell({
               pagination={pagination}
               ownership={ownership}
               keyword={keyword}
+              pageSize={pagination.pageSize}
               workflowGroupKey={workflowGroupKey}
               workflowNodeKey={workflowNodeKey}
               workflowInstanceStatus={workflowInstanceStatus}
@@ -161,4 +248,14 @@ export function ProjectsClientShell({
       </Card>
     </div>
   );
+}
+
+function measureElementHeight(
+  element: Element | null,
+  fallback: number | undefined,
+) {
+  if (!(element instanceof HTMLElement)) return fallback;
+
+  const height = Math.ceil(element.getBoundingClientRect().height);
+  return height > 0 ? height : fallback;
 }

@@ -25,6 +25,7 @@ export type ProjectWorkflowFiltersData = {
 
 export type ProjectListHrefInput = {
   page?: number;
+  pageSize?: number;
   ownership?: string;
   keyword?: string;
   workflowGroupKey?: string;
@@ -35,6 +36,9 @@ export type ProjectListHrefInput = {
 export function buildProjectsHref(input: ProjectListHrefInput) {
   const params = new URLSearchParams();
   if (input.page && input.page > 1) params.set("page", String(input.page));
+  if (input.pageSize && input.pageSize > 0) {
+    params.set("pageSize", String(input.pageSize));
+  }
   if (input.ownership) params.set("ownership", input.ownership);
   if (input.keyword) params.set("keyword", input.keyword);
   if (input.workflowGroupKey) {
