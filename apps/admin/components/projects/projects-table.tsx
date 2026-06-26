@@ -17,7 +17,7 @@ import {
 } from "@/components/projects/project-mutations";
 import { projectWorkflowSummary } from "@/components/projects/project-list-workflow-display";
 
-const PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[75px]";
+const PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[var(--project-table-row-height,75px)]";
 
 const statusMeta: Record<string, {
   label: string;

@@ -36,7 +36,9 @@ describe("Project management page layout", () => {
     expect(shell).toContain('data-testid="project-list-table-viewport"');
     expect(shell).toContain("tableViewportRef");
     expect(shell).toContain("calculateProjectListPageSize");
+    expect(shell).toContain("calculateProjectListRowHeight");
     expect(shell).toContain("getBoundingClientRect().height");
+    expect(shell).toContain("--project-table-row-height");
     expect(shell).toContain("min-h-0 flex-1 overflow-auto");
     expect(shell).toContain("pageSize={pagination.pageSize}");
   });
@@ -49,6 +51,7 @@ describe("Project management page layout", () => {
     );
 
     expect(table).toContain("PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME");
+    expect(table).toContain("h-[var(--project-table-row-height,75px)]");
     expect(table).toContain("rowClassName={() => PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME}");
     expect(shell).toContain("PROJECT_TABLE_HEADER_HEIGHT");
   });

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import {
+  type CSSProperties,
   useCallback,
   useEffect,
   useMemo,
@@ -20,8 +21,10 @@ import {
   type ProjectWorkflowFiltersData,
 } from "@/components/projects/project-list-filter-utils";
 import {
+  calculateProjectListRowHeight,
   calculateProjectListPageSize,
   PROJECT_TABLE_HEADER_HEIGHT,
+  PROJECT_TABLE_ROW_HEIGHT,
 } from "@/components/projects/project-list-page-size";
 import {
   CreateProjectButton,
@@ -62,6 +65,9 @@ export function ProjectsClientShell({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const tableViewportRef = useRef<HTMLDivElement | null>(null);
+  const [projectTableRowHeight, setProjectTableRowHeight] = useState(
+    PROJECT_TABLE_ROW_HEIGHT,
+  );
   const [projectOverrides, setProjectOverrides] = useState<Record<string, ProjectRecord>>({});
   const visibleProjects = useMemo(() => {
     const visibleIds = new Set(projects.map((project) => project.id));
@@ -73,6 +79,9 @@ export function ProjectsClientShell({
     );
     return [...optimisticProjects, ...patchedProjects];
   }, [projectOverrides, projects]);
+  const tableViewportStyle = useMemo(() => ({
+    "--project-table-row-height": `${projectTableRowHeight}px`,
+  }) as CSSProperties, [projectTableRowHeight]);
 
   const navigate = useCallback((href: string) => {
     startTransition(() => {
@@ -95,16 +104,23 @@ export function ProjectsClientShell({
           viewport.querySelector("thead"),
           PROJECT_TABLE_HEADER_HEIGHT,
         );
-        const rowHeight = measureElementHeight(
-          viewport.querySelector("tbody tr"),
-          undefined,
-        );
+        const scrollbarHeight = measureHorizontalScrollbarHeight(viewport);
 
         const nextPageSize = calculateProjectListPageSize({
           viewportHeight,
           headerHeight,
-          rowHeight,
+          rowHeight: PROJECT_TABLE_ROW_HEIGHT,
+          scrollbarHeight,
         });
+        const nextRowHeight = calculateProjectListRowHeight({
+          viewportHeight,
+          headerHeight,
+          scrollbarHeight,
+          pageSize: nextPageSize,
+        });
+        setProjectTableRowHeight((current) =>
+          current === nextRowHeight ? current : nextRowHeight
+        );
         if (nextPageSize === pagination.pageSize) return;
 
         const nextTotalPages = Math.max(1, Math.ceil(pagination.total / nextPageSize));
@@ -204,6 +220,7 @@ export function ProjectsClientShell({
           <div
             ref={tableViewportRef}
             data-testid="project-list-table-viewport"
+            style={tableViewportStyle}
             className="min-h-0 flex-1 overflow-auto"
           >
             <ProjectsTable projects={visibleProjects} onProjectChanged={refreshProjects} />
@@ -258,4 +275,11 @@ function measureElementHeight(
 
   const height = Math.ceil(element.getBoundingClientRect().height);
   return height > 0 ? height : fallback;
+}
+
+function measureHorizontalScrollbarHeight(viewport: HTMLElement) {
+  const scroller = viewport.firstElementChild;
+  if (!(scroller instanceof HTMLElement)) return 0;
+
+  return Math.max(0, scroller.offsetHeight - scroller.clientHeight);
 }
