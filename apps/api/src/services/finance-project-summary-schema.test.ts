@@ -11,6 +11,7 @@ describe("FinanceProjectSummaryListQuerySchema", () => {
       budget_configured: "false",
       has_unallocated_expense: "true",
       overdue: "true",
+      include_analytics: "false",
       min_budget_usage_ratio: "0.8",
       max_projected_budget_gross_margin: "0.2",
     });
@@ -23,6 +24,7 @@ describe("FinanceProjectSummaryListQuerySchema", () => {
       budget_configured: false,
       has_unallocated_expense: true,
       overdue: true,
+      include_analytics: false,
       min_budget_usage_ratio: 0.8,
       max_projected_budget_gross_margin: 0.2,
     });

@@ -119,20 +119,25 @@ export class FinanceProjectSummaryService {
     const projects = hasRiskFilters(query)
       ? await this.listRiskFilteredProjects({ tenantId, query })
       : await this.dependencies.repository.listProjects(tenantId, query);
-    const list = await this.buildSummaries({
-      tenantId,
-      projects: projects.list,
-    });
-    const analytics = await this.buildAnalytics({
-      tenantId,
-      query,
-    });
+    const shouldIncludeAnalytics = query.include_analytics !== false;
+    const [list, analytics] = await Promise.all([
+      this.buildSummaries({
+        tenantId,
+        projects: projects.list,
+      }),
+      shouldIncludeAnalytics
+        ? this.buildAnalytics({
+          tenantId,
+          query,
+        })
+        : Promise.resolve(undefined),
+    ]);
 
     return {
       ...projects,
       list,
       summary: summarizeFinanceProjectSummaryList(list),
-      analytics,
+      ...(analytics ? { analytics } : {}),
     };
   }
 

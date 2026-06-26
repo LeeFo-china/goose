@@ -64,15 +64,18 @@ export async function buildFinanceProjectSummaryAnalytics(input: {
     query: input.query,
     limit: FINANCE_ANALYTICS_PROJECT_LIMIT,
   });
-  const list = await input.buildSummaries({
-    tenantId: input.tenantId,
-    projects: projects.list,
-  });
-  const trends = await input.repository.listLedgerTrend({
-    tenantId: input.tenantId,
-    projectIds: projects.list.map((project) => project.id),
-    dateFrom: getDateDaysAgo(FINANCE_ANALYTICS_TREND_DAYS - 1),
-  });
+  const projectIds = projects.list.map((project) => project.id);
+  const [list, trends] = await Promise.all([
+    input.buildSummaries({
+      tenantId: input.tenantId,
+      projects: projects.list,
+    }),
+    input.repository.listLedgerTrend({
+      tenantId: input.tenantId,
+      projectIds,
+      dateFrom: getDateDaysAgo(FINANCE_ANALYTICS_TREND_DAYS - 1),
+    }),
+  ]);
 
   return {
     scope: {

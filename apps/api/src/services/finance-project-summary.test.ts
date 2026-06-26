@@ -196,6 +196,8 @@ describe("financeProjectSummaryService", () => {
       projected_budget_profit_amount: 20000,
       risk_count: 0,
     });
+    expect(result.analytics).toBeDefined();
+    if (!result.analytics) throw new Error("expected finance analytics");
     expect(result.analytics.scope).toMatchObject({
       project_count: 1,
       project_limit: 100,
@@ -257,6 +259,8 @@ describe("financeProjectSummaryService", () => {
     );
 
     expect(result.list).toEqual([]);
+    expect(result.analytics).toBeDefined();
+    if (!result.analytics) throw new Error("expected finance analytics");
     expect(listProjectsForAnalytics).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       query: { page: 2, pageSize: 20 },

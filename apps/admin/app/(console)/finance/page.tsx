@@ -5,20 +5,14 @@ import {
   LineChart,
   WalletCards,
 } from "lucide-react";
-import { StatusAlert } from "@/components/admin/status-alert";
 import {
   FinanceMetricCard,
   formatCollectionRate,
 } from "@/components/finance/finance-overview-cards";
 import { FinanceOverviewCharts } from "@/components/finance/finance-overview-charts";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
-import { FinanceProjectSummaryFilterForm } from "@/components/finance/finance-project-summary-filter-form";
-import { FinanceProjectSummaryPagination } from "@/components/finance/finance-project-summary-pagination";
-import { FinanceProjectSummaryTable } from "@/components/finance/finance-project-summary-table";
-import {
-  FinanceProjectSummaryViewTabs,
-  type FinanceProjectSummaryView,
-} from "@/components/finance/finance-project-summary-view-tabs";
+import { FinanceProjectSummaryTablePanel } from "@/components/finance/finance-project-summary-table-panel";
+import type { FinanceProjectSummaryView } from "@/components/finance/finance-project-summary-view-tabs";
 import { fetchFinanceProjectSummaries } from "@/components/finance/finance-requests";
 import {
   formatFinanceMoney,
@@ -83,53 +77,12 @@ function clean(value: string | undefined) {
   return normalized || undefined;
 }
 
-function buildFinanceSummaryHref(input: {
-  page: number;
-  filters: FinancePageSearchParams;
-}) {
-  const params = new URLSearchParams();
-  params.set("page", String(input.page));
-  append(params, "keyword", input.filters.keyword);
-  append(params, "status", input.filters.status);
-  append(params, "risk_level", input.filters.risk_level);
-  append(params, "risk_flag", input.filters.risk_flag);
-  append(params, "budget_configured", input.filters.budget_configured);
-  append(
-    params,
-    "has_unallocated_expense",
-    input.filters.has_unallocated_expense,
-  );
-  append(params, "overdue", input.filters.overdue);
-  return `/finance?${params}`;
-}
-
 function resolveProjectSummaryView(
   filters: FinancePageSearchParams,
 ): FinanceProjectSummaryView {
   if (filters.risk_level === "danger") return "danger";
   if (filters.risk_level === "info") return "info";
   return "all";
-}
-
-function buildProjectSummaryViewHref(
-  view: FinanceProjectSummaryView,
-  filters: FinancePageSearchParams,
-) {
-  const baseFilters: FinancePageSearchParams = {
-    keyword: filters.keyword,
-    status: filters.status,
-    risk_level: view === "all" ? undefined : view,
-  };
-
-  return buildFinanceSummaryHref({
-    page: 1,
-    filters: baseFilters,
-  });
-}
-
-function append(params: URLSearchParams, key: string, value: string | undefined) {
-  const normalized = clean(value);
-  if (normalized) params.set(key, normalized);
 }
 
 export default async function FinancePage({
@@ -165,15 +118,7 @@ export default async function FinancePage({
   const warningRiskCount = Number(riskCounts.warning || 0);
   const actualGrossMargin = Number(summary.actual_gross_margin);
   const hasAbnormalGrossMargin = Number.isFinite(actualGrossMargin) && actualGrossMargin > 0.6;
-  const advancedFilterCount = [
-    params.risk_flag,
-    params.budget_configured,
-    params.has_unallocated_expense,
-    params.overdue,
-  ].filter(Boolean).length;
   const summaryView = resolveProjectSummaryView(params);
-  const canGoPrev = data.pagination.page > 1;
-  const canGoNext = data.pagination.totalPages > 0 && data.pagination.page < data.pagination.totalPages;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-2 overflow-hidden">
@@ -232,72 +177,23 @@ export default async function FinancePage({
 
         <Card className="min-h-[24rem] flex-1 overflow-hidden lg:min-h-0">
           <CardContent className="flex h-full min-h-0 flex-col p-0">
-            <FinanceProjectSummaryFilterForm
-              keyword={params.keyword}
-              status={params.status}
-              riskLevel={params.risk_level}
-              riskFlag={params.risk_flag}
-              budgetConfigured={params.budget_configured}
-              hasUnallocatedExpense={params.has_unallocated_expense}
-              overdue={params.overdue}
-              advancedFilterCount={advancedFilterCount}
+            <FinanceProjectSummaryTablePanel
+              initialData={data}
+              initialFilters={{
+                keyword: clean(params.keyword),
+                status: clean(params.status),
+                risk_level: clean(params.risk_level),
+                risk_flag: clean(params.risk_flag),
+                budget_configured: clean(params.budget_configured),
+                has_unallocated_expense: clean(params.has_unallocated_expense),
+                overdue: clean(params.overdue),
+              }}
+              initialView={summaryView}
               projectStatusOptions={PROJECT_STATUS_OPTIONS}
               riskLevelOptions={RISK_LEVEL_OPTIONS}
               riskFlagOptions={RISK_FLAG_OPTIONS}
               booleanFilterOptions={BOOLEAN_FILTER_OPTIONS}
             />
-            {data.error ? (
-              <div className="shrink-0 border-b p-4">
-                <StatusAlert>{data.error}</StatusAlert>
-              </div>
-            ) : null}
-            <div className="shrink-0 flex flex-col gap-2 border-b bg-card px-4 py-0 md:flex-row md:items-center md:justify-between">
-              <div className="py-2">
-                <h2 className="text-sm font-semibold">项目财务明细表</h2>
-              </div>
-              <FinanceProjectSummaryViewTabs
-                activeView={summaryView}
-                hrefs={{
-                  all: buildProjectSummaryViewHref("all", params),
-                  danger: buildProjectSummaryViewHref("danger", params),
-                  info: buildProjectSummaryViewHref("info", params),
-                }}
-              />
-            </div>
-            <div
-              className="min-h-0 flex-1 overflow-auto"
-              data-testid="finance-project-summary-table-container"
-            >
-              <FinanceProjectSummaryTable rows={data.list} />
-            </div>
-            <div
-              className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between"
-              data-testid="finance-project-summary-footer"
-            >
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <Badge variant="outline" className="tabular-nums">
-                  第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
-                </Badge>
-                <span>当前显示 {data.list.length} 个项目，共 {data.pagination.total} 个</span>
-                <Badge variant="outline" className="tabular-nums">
-                  每页 {data.pagination.pageSize} 个
-                </Badge>
-              </div>
-              <FinanceProjectSummaryPagination
-                previousHref={canGoPrev
-                  ? buildFinanceSummaryHref({
-                    page: data.pagination.page - 1,
-                    filters: params,
-                  })
-                  : null}
-                nextHref={canGoNext
-                  ? buildFinanceSummaryHref({
-                    page: data.pagination.page + 1,
-                    filters: params,
-                  })
-                  : null}
-              />
-            </div>
           </CardContent>
         </Card>
       </div>

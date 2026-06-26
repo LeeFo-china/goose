@@ -10,28 +10,48 @@ export type FinanceProjectSummaryView = "all" | "danger" | "info";
 export function FinanceProjectSummaryViewTabs({
   activeView,
   hrefs,
+  pendingView,
+  onPendingView,
+  onNavigate,
 }: {
   activeView: FinanceProjectSummaryView;
   hrefs: Record<FinanceProjectSummaryView, string>;
+  pendingView?: FinanceProjectSummaryView | null;
+  onPendingView?: (view: FinanceProjectSummaryView | null) => void;
+  onNavigate?: (view: FinanceProjectSummaryView, href: string) => void;
 }) {
-  const [pendingView, setPendingView] =
+  const [internalPendingView, setInternalPendingView] =
     useState<FinanceProjectSummaryView | null>(null);
+  const currentPendingView = pendingView === undefined
+    ? internalPendingView
+    : pendingView;
 
   useEffect(() => {
-    setPendingView(null);
+    setPending(null);
   }, [activeView, hrefs.all, hrefs.danger, hrefs.info]);
+
+  function setPending(view: FinanceProjectSummaryView | null) {
+    if (pendingView === undefined) {
+      setInternalPendingView(view);
+    }
+    onPendingView?.(view);
+  }
 
   function handleNavigate(
     event: MouseEvent<HTMLAnchorElement>,
     view: FinanceProjectSummaryView,
   ) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    if (view === activeView && !pendingView) {
+    if (view === activeView && !currentPendingView) {
       event.preventDefault();
       return;
     }
 
-    setPendingView(view);
+    setPending(view);
+    if (onNavigate) {
+      event.preventDefault();
+      onNavigate(view, hrefs[view]);
+    }
   }
 
   function handlePointerDown(
@@ -39,7 +59,7 @@ export function FinanceProjectSummaryViewTabs({
     view: FinanceProjectSummaryView,
   ) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    if (view !== activeView) setPendingView(view);
+    if (view !== activeView) setPending(view);
   }
 
   const tabs: Array<{ value: FinanceProjectSummaryView; label: string }> = [
@@ -51,13 +71,13 @@ export function FinanceProjectSummaryViewTabs({
   return (
     <nav
       aria-label="项目财务明细视图"
-      aria-busy={pendingView !== null || undefined}
+      aria-busy={currentPendingView !== null || undefined}
       className="overflow-x-auto overflow-y-hidden"
     >
       <div className="flex min-w-max items-center gap-5">
         {tabs.map((tab) => {
           const active = tab.value === activeView;
-          const pending = pendingView === tab.value;
+          const pending = currentPendingView === tab.value;
 
           return (
             <Link

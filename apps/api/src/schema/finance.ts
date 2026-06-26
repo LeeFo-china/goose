@@ -70,6 +70,7 @@ export const FinanceProjectSummaryListQuerySchema = PaginationQuerySchema.extend
   budget_configured: OptionalBooleanQuerySchema,
   has_unallocated_expense: OptionalBooleanQuerySchema,
   overdue: OptionalBooleanQuerySchema,
+  include_analytics: OptionalBooleanQuerySchema,
   min_budget_usage_ratio: OptionalRatioQuerySchema,
   max_projected_budget_gross_margin: OptionalRatioQuerySchema,
 });

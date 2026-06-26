@@ -10,18 +10,34 @@ type FinancePaginationTarget = "previous" | "next";
 type FinanceProjectSummaryPaginationProps = {
   previousHref: string | null;
   nextHref: string | null;
+  pendingTarget?: FinancePaginationTarget | null;
+  onPendingTarget?: (target: FinancePaginationTarget | null) => void;
+  onNavigate?: (target: FinancePaginationTarget, href: string) => void;
 };
 
 export function FinanceProjectSummaryPagination({
   previousHref,
   nextHref,
+  pendingTarget,
+  onPendingTarget,
+  onNavigate,
 }: FinanceProjectSummaryPaginationProps) {
-  const [pendingTarget, setPendingTarget] =
+  const [internalPendingTarget, setInternalPendingTarget] =
     useState<FinancePaginationTarget | null>(null);
+  const currentPendingTarget = pendingTarget === undefined
+    ? internalPendingTarget
+    : pendingTarget;
 
   useEffect(() => {
-    setPendingTarget(null);
+    setPending(null);
   }, [previousHref, nextHref]);
+
+  function setPending(target: FinancePaginationTarget | null) {
+    if (pendingTarget === undefined) {
+      setInternalPendingTarget(target);
+    }
+    onPendingTarget?.(target);
+  }
 
   function handleNavigate(
     event: MouseEvent<HTMLAnchorElement>,
@@ -29,12 +45,18 @@ export function FinanceProjectSummaryPagination({
   ) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
-    if (pendingTarget && pendingTarget !== target) {
+    if (currentPendingTarget && currentPendingTarget !== target) {
       event.preventDefault();
       return;
     }
 
-    setPendingTarget(target);
+    setPending(target);
+    if (onNavigate) {
+      const href = target === "previous" ? previousHref : nextHref;
+      if (!href) return;
+      event.preventDefault();
+      onNavigate(target, href);
+    }
   }
 
   function handlePointerDown(
@@ -42,12 +64,12 @@ export function FinanceProjectSummaryPagination({
     target: FinancePaginationTarget,
   ) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    if (!pendingTarget) setPendingTarget(target);
+    if (!currentPendingTarget) setPending(target);
   }
 
-  const isNavigating = pendingTarget !== null;
-  const previousPending = pendingTarget === "previous";
-  const nextPending = pendingTarget === "next";
+  const isNavigating = currentPendingTarget !== null;
+  const previousPending = currentPendingTarget === "previous";
+  const nextPending = currentPendingTarget === "next";
   const buttonClassName = "min-w-[5.5rem] gap-1.5";
   const navigatingClassName = isNavigating
     ? "opacity-60"

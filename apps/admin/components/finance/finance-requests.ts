@@ -285,6 +285,7 @@ export async function fetchFinanceProjectSummaries(query: {
   budget_configured?: string;
   has_unallocated_expense?: string;
   overdue?: string;
+  include_analytics?: string;
   min_budget_usage_ratio?: string;
   max_projected_budget_gross_margin?: string;
 }): Promise<FinanceProjectSummaryResult> {
@@ -317,6 +318,7 @@ export async function fetchFinanceProjectSummaries(query: {
     query.has_unallocated_expense,
   );
   appendOptionalParam(params, "overdue", query.overdue);
+  appendOptionalParam(params, "include_analytics", query.include_analytics);
   appendOptionalParam(
     params,
     "min_budget_usage_ratio",
