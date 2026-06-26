@@ -8,6 +8,7 @@ import { create, update, replaceItems } from "./legacy/mutations";
 import {
   appendApproval,
   findApprovalByBusinessKey,
+  findApplicantDepartmentApprovalAssignee,
   findApplicantDepartmentManager,
   findEmployeeForApproval,
   listEmployeesForApprovalCandidates,
@@ -22,6 +23,7 @@ import { list, listStatsRows } from "./legacy/lists";
 
 export type {
   ExpenseApprovalCandidateEmployee,
+  ExpenseDepartmentApprovalAssigneeResolution,
   ExpenseDepartmentManagerResolution,
   ExpenseProjectCandidateRow,
   ExpenseRequestMutationPayload,
@@ -109,6 +111,8 @@ class ExpenseRequestRepository {
   replaceItems = replaceItems;
   appendApproval = appendApproval;
   findApprovalByBusinessKey = findApprovalByBusinessKey;
+  findApplicantDepartmentApprovalAssignee =
+    findApplicantDepartmentApprovalAssignee;
   findApplicantDepartmentManager = findApplicantDepartmentManager;
   findEmployeeForApproval = findEmployeeForApproval;
   listEmployeesForApprovalCandidates = listEmployeesForApprovalCandidates;

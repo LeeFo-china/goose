@@ -1,6 +1,7 @@
 import { Errors, SupabaseDB } from "./shared";
 import type {
   ExpenseApprovalCandidateEmployee,
+  ExpenseDepartmentApprovalAssigneeResolution,
   ExpenseDepartmentManagerResolution,
   ExpenseRequestApprovalPayload,
 } from "./shared";
@@ -195,6 +196,68 @@ export async function findApplicantDepartmentManager(this: any, input: {
   };
 }
 
+export async function findApplicantDepartmentApprovalAssignee(this: any, input: {
+  applicantEmployeeId: string;
+  tenantId?: string | null;
+  permissionCode: string;
+}): Promise<ExpenseDepartmentApprovalAssigneeResolution> {
+  const resolution = await findApplicantDepartmentManager.call(this, input);
+  if (!resolution.applicant_exists || !resolution.applicant_tenant_department_id) {
+    return {
+      ...resolution,
+      permission_assignee_employee_id: null,
+      permission_candidate_count: 0,
+    };
+  }
+
+  let candidateQuery = SupabaseDB.getAdminClient()
+    .from("employees")
+    .select("id, tenant_department_id")
+    .eq("status", "active")
+    .eq("tenant_department_id", resolution.applicant_tenant_department_id)
+    .order("created_at", { ascending: true });
+
+  if (input.tenantId) {
+    candidateQuery = candidateQuery.eq("tenant_id", input.tenantId);
+  }
+
+  const { data: candidates, error } = await candidateQuery;
+  if (error) {
+    throw Errors.dbError("查询部门经理审批候选人失败", error);
+  }
+
+  const candidateRows = ((candidates || []) as Array<{
+    id: string;
+    tenant_department_id: string | null;
+  }>);
+  const permissionRows = await listEmployeePermissionContexts.call(
+    this,
+    candidateRows.map((candidate) => candidate.id),
+    input.permissionCode,
+  );
+  const scopeByEmployeeId = buildPermissionScopeMap(permissionRows);
+  const eligibleCandidates = candidateRows.filter((candidate) => {
+    const scope = scopeByEmployeeId.get(candidate.id);
+    return scope === "all" || scope === "department";
+  });
+  const eligibleIds = new Set(eligibleCandidates.map((candidate) => candidate.id));
+  const preferredManagerId =
+    resolution.manager_employee_id &&
+      resolution.manager_status === "active" &&
+      resolution.manager_tenant_department_id ===
+        resolution.applicant_tenant_department_id &&
+      eligibleIds.has(resolution.manager_employee_id)
+      ? resolution.manager_employee_id
+      : null;
+
+  return {
+    ...resolution,
+    permission_assignee_employee_id:
+      preferredManagerId ?? eligibleCandidates[0]?.id ?? null,
+    permission_candidate_count: eligibleCandidates.length,
+  };
+}
+
 export async function listEmployeesForApprovalCandidates(this: any, input: {
   keyword?: string;
   tenantId?: string | null;
@@ -328,4 +391,65 @@ export async function listEmployeePermissionContexts(this: any, employeeIds: str
   }
 
   return rows;
+}
+
+function buildPermissionScopeMap(
+  rows: Array<{
+    employee_id: string;
+    role_scope: string | null;
+    override_effect: string | null;
+    override_scope: string | null;
+  }>,
+) {
+  const map = new Map<string, string>();
+
+  for (const row of rows) {
+    if (row.override_effect === "deny") {
+      map.delete(row.employee_id);
+      continue;
+    }
+
+    if (row.override_effect === "allow") {
+      map.set(row.employee_id, mergePermissionScope(
+        map.get(row.employee_id) ?? null,
+        row.override_scope,
+      ));
+      continue;
+    }
+
+    if (row.role_scope) {
+      map.set(row.employee_id, mergePermissionScope(
+        map.get(row.employee_id) ?? null,
+        row.role_scope,
+      ));
+    }
+  }
+
+  return map;
+}
+
+function mergePermissionScope(
+  existing: string | null,
+  incoming: string | null,
+) {
+  const normalizedExisting = normalizePermissionScope(existing);
+  const normalizedIncoming = normalizePermissionScope(incoming);
+  return scopeWeight(normalizedIncoming) > scopeWeight(normalizedExisting)
+    ? normalizedIncoming
+    : normalizedExisting;
+}
+
+function normalizePermissionScope(value: string | null | undefined) {
+  if (value === "department" || value === "assigned" || value === "all") {
+    return value;
+  }
+
+  return "self";
+}
+
+function scopeWeight(value: string) {
+  if (value === "all") return 4;
+  if (value === "department") return 3;
+  if (value === "assigned") return 2;
+  return 1;
 }

@@ -122,6 +122,12 @@ export type ExpenseDepartmentManagerResolution = {
   manager_tenant_department_id: string | null;
 };
 
+export type ExpenseDepartmentApprovalAssigneeResolution =
+  ExpenseDepartmentManagerResolution & {
+    permission_assignee_employee_id: string | null;
+    permission_candidate_count: number;
+  };
+
 export type ExpenseProjectCandidateRow = {
   id: string;
   name: string | null;
