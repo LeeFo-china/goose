@@ -98,7 +98,7 @@ export function ProgressTile({
         : "执行正常";
 
   return (
-    <div className="rounded-md border bg-card px-3 py-3">
+    <div className="px-1 py-2">
       <div className="flex items-center gap-3">
         <ProgressRing progress={progress} overLimit={overLimit} />
         <div className="min-w-0">
@@ -115,7 +115,7 @@ export function ProgressTile({
         </div>
       </div>
       <SegmentedProgress progress={progress} overLimit={overLimit} />
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-xs">
         <ProgressValue
           label={primaryLabel}
           value={primaryValue}
@@ -224,6 +224,7 @@ export function MoneyFlowChart({
             dataKey="label"
             interval={0}
             tick={{ fontSize: 11 }}
+            tickFormatter={moneyFlowAxisLabel}
             tickLine={false}
             axisLine={false}
           />
@@ -287,7 +288,7 @@ export function CompactMetric({
   danger?: boolean;
 }) {
   return (
-    <div className="rounded-md border bg-card px-3 py-2">
+    <div className="border-t pt-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div
         className={cn(
@@ -309,7 +310,7 @@ export function StatusListItem({
   loading: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2">
+    <div className="flex items-center justify-between gap-3 border-t py-2 first:border-t-0">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <Badge variant={financeRiskVariant(item.level)}>
@@ -349,6 +350,17 @@ function moneyTick(value: number) {
     })}万`;
   }
   return value.toLocaleString("zh-CN");
+}
+
+function moneyFlowAxisLabel(value: string) {
+  const labels: Record<string, string> = {
+    合同金额: "合同",
+    已收金额: "已收",
+    已付支出: "已付",
+    实际利润: "实利",
+    预测利润: "预利",
+  };
+  return labels[value] || value;
 }
 
 function clampProgress(value: number | null) {

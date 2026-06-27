@@ -34,10 +34,12 @@ type WorkflowStateResponse = {
 
 export function ProjectWorkflowRuntimePanel({
   active = true,
+  compact = false,
   onChanged,
   project,
 }: {
   active?: boolean;
+  compact?: boolean;
   onChanged?: () => Promise<void>;
   project: ProjectRecord;
 }) {
@@ -69,6 +71,10 @@ export function ProjectWorkflowRuntimePanel({
     );
     setState(stateData.workflow_state ?? null);
     setLoaded(true);
+    if (compact) {
+      setTransitions([]);
+      return;
+    }
 
     void requestBackendJson<WorkflowSubjectTimelineResponse>(
       `/workflow-subjects/project/${project.id}/timeline?page=1&pageSize=5`,
@@ -156,6 +162,77 @@ export function ProjectWorkflowRuntimePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, project.id]);
 
+  if (compact) {
+    return (
+      <section className="border-y bg-card">
+        <div className="flex items-start justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+              <Workflow className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold">流程管理</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                当前节点与可执行动作
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={loadRuntime}
+            disabled={refreshing || submitting}
+            aria-label="刷新项目流程"
+          >
+            <RefreshCw className={refreshing ? "animate-spin" : ""} />
+          </Button>
+        </div>
+        <div className="border-t px-4 py-3">
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+          {!loaded && refreshing ? (
+            <div className="text-sm text-muted-foreground">
+              <Loader2 className="mr-2 inline size-4 animate-spin" />
+              流程加载中
+            </div>
+          ) : !state ? (
+            <div className="text-sm text-muted-foreground">
+              当前项目暂无流程运行数据。
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <CurrentNodeSummary
+                currentNode={currentNode}
+                currentNodeAttributes={currentNodeAttributes}
+                currentNodeInsight={currentNodeInsight}
+                state={state}
+              />
+              <CurrentNodeActions
+                actions={currentActions}
+                refreshing={refreshing}
+                selectedAction={selectedAction}
+                submitting={submitting}
+                onOpenAction={openActionDialog}
+              />
+            </div>
+          )}
+        </div>
+        <ProjectStatusActionDialog
+          projectId={project.id}
+          selectedAction={selectedAction}
+          pending={submitting}
+          reason={reason}
+          setReason={setReason}
+          outputValues={actionOutputValues}
+          setOutputValues={setActionOutputValues}
+          closeActionDialog={closeActionDialog}
+          submitAction={submitAction}
+        />
+      </section>
+    );
+  }
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b p-5">
@@ -166,9 +243,11 @@ export function ProjectWorkflowRuntimePanel({
             </span>
             <div className="min-w-0">
               <CardTitle>流程管理</CardTitle>
-              <CardDescription className="mt-2">
-                以项目运行态为准展示节点、属性和动作；施工阶段明细不参与推导当前节点。
-              </CardDescription>
+              {!compact ? (
+                <CardDescription className="mt-2">
+                  以项目运行态为准展示节点、属性和动作；施工阶段明细不参与推导当前节点。
+                </CardDescription>
+              ) : null}
             </div>
           </div>
           <Button
@@ -197,11 +276,13 @@ export function ProjectWorkflowRuntimePanel({
           </div>
         ) : (
           <>
-            <WorkflowRuntimeSummary
-              actionCount={currentActions.length}
-              executableActionCount={executableActions.length}
-              state={state}
-            />
+            {!compact ? (
+              <WorkflowRuntimeSummary
+                actionCount={currentActions.length}
+                executableActionCount={executableActions.length}
+                state={state}
+              />
+            ) : null}
             <section className="rounded-md border bg-background p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <CurrentNodeSummary
@@ -219,8 +300,12 @@ export function ProjectWorkflowRuntimePanel({
                 />
               </div>
             </section>
-            <WorkflowTimeline nodes={timelineNodes} />
-            <WorkflowTransitionList nodes={timelineNodes} transitions={transitions} />
+            {!compact ? (
+              <>
+                <WorkflowTimeline nodes={timelineNodes} />
+                <WorkflowTransitionList nodes={timelineNodes} transitions={transitions} />
+              </>
+            ) : null}
           </>
         )}
       </CardContent>
@@ -258,7 +343,7 @@ function CurrentNodeSummary({
           <Badge variant={nodeStatusVariant(currentNode)}>{nodeStatusLabel(currentNode)}</Badge>
         ) : null}
       </div>
-      <h3 className="mt-3 truncate text-lg font-semibold tracking-normal">
+      <h3 className="mt-3 truncate text-base font-semibold tracking-normal">
         {currentNode ? timelineNodeTitle(currentNode) : state.current_node_title || "-"}
       </h3>
       <div className="mt-1 break-all text-xs text-muted-foreground">
@@ -321,7 +406,7 @@ function CurrentNodeActions({
           })}
         </div>
       ) : (
-        <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <div className="px-0 py-1 text-xs text-muted-foreground">
           当前账号暂无可执行动作。
         </div>
       )}

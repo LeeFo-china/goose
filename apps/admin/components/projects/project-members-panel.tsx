@@ -22,11 +22,14 @@ export function ProjectMembersPanel({
     .filter((item): item is string => Boolean(item));
 
   return (
-    <section className="rounded-lg border bg-card p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-base font-semibold">项目成员</h3>
-          <p className="mt-1 text-sm text-muted-foreground">设计、工程和客户归属成员。</p>
+    <section data-testid="project-members-panel" className="border-y bg-card">
+      <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold">项目成员</h3>
+            <Badge variant="secondary">{members.length} 人</Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">设计、工程和客户归属成员。</p>
         </div>
         <div className="flex items-center gap-2">
           {refreshing ? (
@@ -43,25 +46,29 @@ export function ProjectMembersPanel({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2 md:grid-cols-2">
+      <div data-testid="project-member-list" className="divide-y">
         {members.map((member) => (
-          <article key={member.id} className="rounded-md border bg-background p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate font-medium">{personName(member.employee)}</div>
-                <div className="mt-1 truncate text-sm text-muted-foreground">
-                  {getEmployeeMeta(member.employee) || "暂无部门岗位信息"}
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
+          <article
+            key={member.id}
+            className="flex min-w-0 flex-col gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="min-w-0 truncate font-medium">{personName(member.employee)}</span>
                 {member.is_primary ? <Badge variant="success">主责</Badge> : null}
                 {member.is_virtual ? <Badge variant="secondary">客户归属</Badge> : null}
               </div>
+              <div className="mt-1 truncate text-xs text-muted-foreground">
+                {getEmployeeMeta(member.employee) || "暂无部门岗位信息"}
+              </div>
+            </div>
+            <div className="shrink-0 text-xs text-muted-foreground">
+              {member.is_virtual ? "客户关系" : "内部成员"}
             </div>
           </article>
         ))}
         {members.length === 0 ? (
-          <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+          <div className="px-4 py-6 text-sm text-muted-foreground">
             暂无成员
           </div>
         ) : null}

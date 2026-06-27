@@ -4,13 +4,9 @@ import { useEffect, useState } from "react";
 import { PROJECT_LOG_STAGE_CONFIG, isProjectLogStageCode } from "@gooes/domain";
 import {
   CalendarDays,
-  FileText,
   ImageIcon,
-  Loader2,
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectLogImagePreviewDialog, type ProjectLogImagePreviewState } from "@/components/projects/project-log-image-preview-dialog";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
@@ -75,12 +71,22 @@ function employeeName(log: ProjectLogRecord) {
 
 function ProjectLogSkeleton() {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="overflow-hidden border-y bg-background/60">
       {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="rounded-md border p-4">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="mt-3 h-4 w-full" />
-          <Skeleton className="mt-2 h-4 w-2/3" />
+        <div key={index} className="border-b px-4 py-4 last:border-b-0">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="mt-3 h-4 w-full" />
+              <Skeleton className="mt-2 h-4 w-2/3" />
+            </div>
+            <Skeleton className="h-3 w-28 shrink-0" />
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Skeleton className="size-14" />
+            <Skeleton className="size-14" />
+            <Skeleton className="size-14" />
+          </div>
         </div>
       ))}
     </div>
@@ -133,62 +139,74 @@ export function ProjectLogsPanel({
 
   return (
     <>
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
         {error ? <StatusAlert>{error}</StatusAlert> : null}
 
         {loading ? (
           <ProjectLogSkeleton />
         ) : logs.length > 0 ? (
-          <div className="relative flex flex-col gap-4 before:absolute before:left-[11px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-border">
+          <div className="overflow-hidden border-y bg-background/60">
             {logs.map((log) => (
-              <article key={log.id} className="relative pl-8">
-                <span className="absolute left-0 top-1 flex size-6 items-center justify-center rounded-full border bg-background">
-                  <FileText className="size-3.5 text-muted-foreground" />
-                </span>
-                <div className="rounded-md border bg-card p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">{stageLabel(log)}</Badge>
-                    {log.node_name ? <Badge variant="outline">{log.node_name}</Badge> : null}
-                    <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <article key={log.id} className="border-b px-4 py-4 last:border-b-0">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <h4 className="text-sm font-medium leading-5">
+                          {stageLabel(log)}
+                        </h4>
+                        {log.node_name ? (
+                          <span className="text-xs text-muted-foreground">
+                            {log.node_name}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
+                        {log.content}
+                      </p>
+                    </div>
+
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                       <CalendarDays className="size-3" />
                       {formatDateTime(log.created_at)}
                     </span>
                   </div>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{log.content}</p>
+
                   {log.images.length > 0 ? (
-                    <div className="mt-3 flex gap-2 overflow-x-auto">
+                    <div className="flex gap-2 overflow-x-auto pb-1">
                       {log.images.slice(0, 6).map((image, index) => (
-                        <Button
-                          key={image}
+                        <button
+                          key={`${image}-${index}`}
                           type="button"
-                          variant="ghost"
-                          className="block size-20 shrink-0 overflow-hidden rounded-md border bg-muted p-0 transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="block size-14 shrink-0 overflow-hidden rounded border bg-muted p-0 transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => setPreview({
                             images: log.images,
                             index,
-                            title: `${stageLabel(log)} · ${formatDateTime(log.created_at)}`,
+                            title: `${stageLabel(log)} - ${formatDateTime(log.created_at)}`,
                           })}
+                          aria-label={`查看施工日志图片 ${index + 1}`}
                         >
                           <img src={image} alt="施工日志图片" className="size-full object-cover" />
-                        </Button>
+                        </button>
                       ))}
                       {log.images.length > 6 ? (
-                        <Button
+                        <button
                           type="button"
-                          variant="ghost"
-                          className="flex size-20 shrink-0 items-center justify-center rounded-md border bg-muted p-0 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="flex size-14 shrink-0 items-center justify-center rounded border bg-muted p-0 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => setPreview({
                             images: log.images,
                             index: 6,
-                            title: `${stageLabel(log)} · ${formatDateTime(log.created_at)}`,
+                            title: `${stageLabel(log)} - ${formatDateTime(log.created_at)}`,
                           })}
+                          aria-label={`查看其余 ${log.images.length - 6} 张施工日志图片`}
                         >
                           +{log.images.length - 6}
-                        </Button>
+                        </button>
                       ) : null}
                     </div>
                   ) : null}
-                  <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span>{employeeName(log)}</span>
                     <span className="inline-flex items-center gap-1">
                       <ImageIcon className="size-3" />
@@ -200,17 +218,14 @@ export function ProjectLogsPanel({
             ))}
           </div>
         ) : (
-          <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+          <div className="border-y bg-background/60 px-4 py-10 text-center text-sm text-muted-foreground">
             暂无施工日志
           </div>
         )}
 
         {total > logs.length ? (
-          <div className="flex justify-center">
-            <Button type="button" variant="outline" disabled>
-              {loading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-              暂仅展示最近 10 条
-            </Button>
+          <div className="text-center text-xs text-muted-foreground">
+            已展示最近 {logs.length} 条，共 {total} 条
           </div>
         ) : null}
       </div>

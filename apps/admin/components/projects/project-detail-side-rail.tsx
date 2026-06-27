@@ -72,7 +72,7 @@ export function ProjectDetailSideRail({
           </div>
         </div>
 
-        <section className="flex flex-col gap-3 rounded-md border bg-background p-3">
+        <section className="flex flex-col gap-3 border-t pt-4">
           <div className="flex items-center gap-2 text-sm font-medium">
             <MapPin className="size-4 text-muted-foreground" />
             房产
@@ -87,7 +87,7 @@ export function ProjectDetailSideRail({
           </div>
         </section>
 
-        <section className="flex flex-col gap-3 rounded-md border bg-background p-3">
+        <section className="flex flex-col gap-3 border-t pt-4">
           <div className="flex items-center gap-2 text-sm font-medium">
             <UsersRound className="size-4 text-muted-foreground" />
             负责人
@@ -104,7 +104,7 @@ export function ProjectDetailSideRail({
           </dl>
         </section>
 
-        <nav className="flex flex-col gap-1 pb-2" aria-label="项目详情导航">
+        <nav className="flex flex-col gap-1 border-t pt-4 pb-2" aria-label="项目详情导航">
           {navItems.map((item) => {
             const isActive = item.value === activeTab;
 

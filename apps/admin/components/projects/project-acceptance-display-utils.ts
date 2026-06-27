@@ -117,6 +117,23 @@ function imageItemsFromPaths(input: {
   }));
 }
 
+function evidenceImageKey(image: AcceptanceImageItem) {
+  return image.path || image.url || image.thumb_url || image.id || "";
+}
+
+function dedupeEvidenceImages(
+  images: AcceptanceImageItem[],
+  seen: Set<string>,
+) {
+  return images.filter((image) => {
+    const key = evidenceImageKey(image);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function getAcceptanceEvidenceSummary(
   acceptance: ProjectAcceptance | null,
 ): AcceptanceEvidenceSummary {
@@ -129,7 +146,8 @@ export function getAcceptanceEvidenceSummary(
     };
   }
 
-  const acceptanceImages = acceptance.items.flatMap((item) =>
+  const seen = new Set<string>();
+  const acceptanceImages = dedupeEvidenceImages(acceptance.items.flatMap((item) =>
     item.image_items?.length
       ? item.image_items
       : imageItemsFromPaths({
@@ -138,8 +156,8 @@ export function getAcceptanceEvidenceSummary(
         itemId: item.id,
         itemTitle: item.title,
       })
-  );
-  const rectificationImages = acceptance.items.flatMap((item) =>
+  ), seen);
+  const rectificationImages = dedupeEvidenceImages(acceptance.items.flatMap((item) =>
     item.rectification_image_items?.length
       ? item.rectification_image_items
       : imageItemsFromPaths({
@@ -148,15 +166,15 @@ export function getAcceptanceEvidenceSummary(
         itemId: item.id,
         itemTitle: item.title,
       })
-  );
-  const actionImages = (acceptance.actions || []).flatMap((action) =>
+  ), seen);
+  const actionImages = dedupeEvidenceImages((acceptance.actions || []).flatMap((action) =>
     action.image_items?.length
       ? action.image_items
       : imageItemsFromPaths({
         paths: action.images || [],
         source: action.action,
       })
-  );
+  ), seen);
 
   return {
     acceptanceImages,

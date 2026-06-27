@@ -36,32 +36,40 @@ export function ImageUploadBlock({
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <Label htmlFor={inputId}>{label}</Label>
-        <input
-          ref={inputRef}
-          id={inputId}
-          type="file"
-          accept="image/*"
-          multiple
-          className="sr-only"
-          tabIndex={-1}
-          onChange={onUpload}
-          disabled={disabled || uploading}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled || uploading}
-          onClick={() => inputRef.current?.click()}
-        >
-          {uploading ? (
-            <Loader2 className="animate-spin" data-icon="inline-start" />
-          ) : (
-            <Upload data-icon="inline-start" />
-          )}
-          上传
-        </Button>
+        <Label htmlFor={disabled ? undefined : inputId}>{label}</Label>
+        {disabled ? (
+          <span className="text-xs text-muted-foreground">
+            {images.length ? `${images.length} 张` : "无图片"}
+          </span>
+        ) : (
+          <>
+            <input
+              ref={inputRef}
+              id={inputId}
+              type="file"
+              accept="image/*"
+              multiple
+              className="sr-only"
+              tabIndex={-1}
+              onChange={onUpload}
+              disabled={uploading}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploading}
+              onClick={() => inputRef.current?.click()}
+            >
+              {uploading ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Upload data-icon="inline-start" />
+              )}
+              上传
+            </Button>
+          </>
+        )}
       </div>
       {images.length > 0 ? (
         <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(64px,64px))] gap-2">
@@ -104,6 +112,8 @@ export function ImageUploadBlock({
             );
           })}
         </div>
+      ) : disabled ? (
+        <div className="mt-2 text-xs text-muted-foreground">暂无图片</div>
       ) : (
         <div className="mt-3 rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
           暂无图片
