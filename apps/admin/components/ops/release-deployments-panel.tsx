@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { ReleaseEnvironment, ReleaseRefType, ReleaseSuccessfulRef } from "@/components/ops/ops-types";
+import { OpsTabsList } from "@/components/ops/ops-tabs";
 import { useReleaseDeploymentStore } from "@/components/ops/release-deployments-store";
 import { RuntimeVersionsPanel } from "@/components/ops/release-deployments-dialogs";
 import { ProductionMigrationAssistCard } from "@/components/ops/production-migration-assist-card";
@@ -11,7 +12,10 @@ import { ProductionMigrationCard, ReleaseDispatchCard } from "@/components/ops/r
 import { ReleaseRunsCard, SuccessfulRefsCard } from "@/components/ops/release-deployments-sections";
 import { createReleaseTag, createRollbackTag, dispatchRelease, RELEASE_RUN_FORCE_POLL_MS, type ReleaseDeploymentsPanelProps } from "@/components/ops/release-deployments-shared";
 import { useReleaseDeploymentSnapshots } from "@/components/ops/release-deployments-snapshots";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+
+type ReleaseMode = "service-release" | "database-migration";
 
 export function ReleaseDeploymentsPanel({
   options,
@@ -25,6 +29,7 @@ export function ReleaseDeploymentsPanel({
 }: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [releaseMode, setReleaseMode] = useState<ReleaseMode>("service-release");
   const [rollbackConfirmText, setRollbackConfirmText] = useState("");
   const snapshots = useReleaseDeploymentSnapshots({
     runs,
@@ -256,33 +261,51 @@ export function ReleaseDeploymentsPanel({
         onRefresh={() => void refreshReleaseSnapshots()}
       />
 
-      <Tabs defaultValue="service-release" className="flex flex-col gap-3">
-        <TabsList className="h-auto min-h-9 w-full flex-wrap justify-start gap-1 overflow-visible">
-          <TabsTrigger value="service-release">服务发布</TabsTrigger>
-          <TabsTrigger value="database-migration">数据库迁移</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="service-release" className="mt-0">
-          <div className="flex flex-col gap-5">
-            <ReleaseDispatchCard state={{ error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText }} actions={{ onEnvironmentChange, setDraft, onRefTypeChange, runDispatch }} />
-
-            <SuccessfulRefsCard state={{ successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText }} actions={{ setSuccessfulRefEnvironment, setSuccessfulRefKeyword, applySuccessfulRef, runCreateRollbackTag, setRollbackConfirmText, runRollbackDispatch, changeSuccessfulRefsPage }} />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="database-migration" className="mt-0">
-          <div className="flex flex-col gap-5">
-            <ProductionMigrationCard
-              options={options}
-              onSubmitted={() => {
-                router.refresh();
-                setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
-                void refreshReleaseSnapshots({ silent: true });
-              }}
-            />
-            <ProductionMigrationAssistCard options={options} />
-          </div>
-        </TabsContent>
+      <Tabs value={releaseMode} onValueChange={(value) => setReleaseMode(value as ReleaseMode)}>
+        <div className={releaseMode === "database-migration" ? "grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.62fr)]" : ""}>
+          <Card>
+            <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle>{releaseMode === "database-migration" ? "数据库迁移" : "服务发布"}</CardTitle>
+                <CardDescription>
+                  {releaseMode === "database-migration"
+                    ? "提交生产 migration GitHub Actions，默认先预检查 pending migrations。"
+                    : "选择发布来源、配置目标服务，并提交 GitHub Actions 发布任务。"}
+                </CardDescription>
+              </div>
+              <OpsTabsList className="md:w-auto">
+                <TabsTrigger value="service-release">服务发布</TabsTrigger>
+                <TabsTrigger value="database-migration">数据库迁移</TabsTrigger>
+              </OpsTabsList>
+            </CardHeader>
+            <CardContent>
+              <TabsContent value="service-release" className="mt-0">
+                <ReleaseDispatchCard
+                  state={{ error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText }}
+                  actions={{ onEnvironmentChange, setDraft, onRefTypeChange, runDispatch }}
+                  sourcePicker={(
+                    <SuccessfulRefsCard
+                      embedded
+                      state={{ successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText }}
+                      actions={{ setSuccessfulRefEnvironment, setSuccessfulRefKeyword, applySuccessfulRef, runCreateRollbackTag, setRollbackConfirmText, runRollbackDispatch, changeSuccessfulRefsPage }}
+                    />
+                  )}
+                />
+              </TabsContent>
+              <TabsContent value="database-migration" className="mt-0">
+                <ProductionMigrationCard
+                  options={options}
+                  onSubmitted={() => {
+                    router.refresh();
+                    setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
+                    void refreshReleaseSnapshots({ silent: true });
+                  }}
+                />
+              </TabsContent>
+            </CardContent>
+          </Card>
+          {releaseMode === "database-migration" ? <ProductionMigrationAssistCard options={options} /> : null}
+        </div>
       </Tabs>
 
       <ReleaseRunsCard state={{ lastRunsRefreshedAt, runsPollError, hasActiveRuns, currentRunsPagination, runsRefreshing, currentRuns }} actions={{ refreshReleaseSnapshots, changeRunsPage }} />

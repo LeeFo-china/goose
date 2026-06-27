@@ -1,10 +1,29 @@
-import { Fragment, type ReactNode } from "react";
-import { AlertTriangle, MapPinned, ShieldCheck } from "lucide-react";
+import type { ReactNode } from "react";
+import { AlertTriangle, ChevronDown, MapPinned, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { OpsEmptyState, OpsSection } from "@/components/ops/ops-section";
 import type { LocationMetricsData, LocationMetricsWindow } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
@@ -31,12 +50,18 @@ function areaText(item: LocationMetricsData["recent_no_match"][number]) {
   return [item.province, item.city, item.district].filter(Boolean).join(" ") || item.adcode || "-";
 }
 
-function WindowMetricCell({
+function sourceLabel(value: LocationMetricsData["recent_no_match"][number]["source"]) {
+  if (value === "manual_city") return "手动城市";
+  if (value === "manual_address") return "手动地址";
+  return "GPS";
+}
+
+function MetricStack({
   value,
   detail,
 }: {
   value: ReactNode;
-  detail: string;
+  detail: ReactNode;
 }) {
   return (
     <div className="min-w-0">
@@ -46,7 +71,7 @@ function WindowMetricCell({
   );
 }
 
-function WindowNoMatchCell({ metrics }: { metrics: LocationMetricsWindow }) {
+function NoMatchMetricCell({ metrics }: { metrics: LocationMetricsWindow }) {
   const noMatchRate = ratio(metrics.no_match, metrics.total);
 
   return (
@@ -67,127 +92,149 @@ function WindowNoMatchCell({ metrics }: { metrics: LocationMetricsWindow }) {
   );
 }
 
-function MobileMetricItem({
-  label,
-  value,
-  detail,
+function WindowMetricsTable({ windows }: { windows: LocationMetricsWindow[] }) {
+  return (
+    <Table className="min-w-[920px]">
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="w-36">统计窗口</TableHead>
+          <TableHead>定位上下文</TableHead>
+          <TableHead>多装修公司</TableHead>
+          <TableHead>无服务区域</TableHead>
+          <TableHead>确认率</TableHead>
+          <TableHead className="min-w-56">来源 / 隐私</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {windows.map((metrics) => (
+          <TableRow key={metrics.window}>
+            <TableCell>
+              <div className="font-medium">
+                {metrics.window === "24h" ? "最近 24 小时" : "最近 7 天"}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                自 {formatDateTime(metrics.since)}
+              </div>
+            </TableCell>
+            <TableCell>
+              <MetricStack
+                value={metrics.total}
+                detail={`活跃 ${metrics.active}，已确认 ${metrics.confirmed}`}
+              />
+            </TableCell>
+            <TableCell>
+              <MetricStack
+                value={metrics.multi_tenant}
+                detail={`占比 ${formatPercent(ratio(metrics.multi_tenant, metrics.total))}`}
+              />
+            </TableCell>
+            <TableCell>
+              <NoMatchMetricCell metrics={metrics} />
+            </TableCell>
+            <TableCell>
+              <MetricStack
+                value={formatPercent(metrics.confirmation_rate)}
+                detail={`过期未确认 ${metrics.expired_unconfirmed}`}
+              />
+            </TableCell>
+            <TableCell>
+              <MetricStack
+                value={`手动 ${metrics.source_counts.manual_city || 0} / GPS ${metrics.source_counts.gps || 0}`}
+                detail={`身份保护 ${metrics.identity_match} / 原始坐标 ${metrics.raw_coordinate_stored}`}
+              />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function NoMatchRow({
+  item,
 }: {
-  label: string;
-  value: ReactNode;
-  detail: string;
+  item: LocationMetricsData["recent_no_match"][number];
 }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm font-semibold tabular-nums">{value}</dd>
-      <dd className="mt-1 truncate text-xs text-muted-foreground">{detail}</dd>
+    <div className="grid gap-2 px-3 py-3 text-sm md:grid-cols-[minmax(0,1fr)_9rem] md:items-start">
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="truncate font-medium">{areaText(item)}</span>
+          <Badge variant="outline" className="shrink-0">
+            {sourceLabel(item.source)}
+          </Badge>
+        </div>
+        <div className="mt-1 truncate text-xs text-muted-foreground">
+          {item.fallback_reason || "-"} / {item.adcode || "-"}
+        </div>
+      </div>
+      <div className="text-xs text-muted-foreground md:text-right">
+        {formatDateTime(item.created_at)}
+      </div>
     </div>
   );
 }
 
-function WindowMetricsTable({ windows }: { windows: LocationMetricsWindow[] }) {
-  return (
-    <>
-      <div className="hidden overflow-x-auto border-y md:block">
-        <div className="min-w-[920px]">
-          <div className="grid grid-cols-[9rem_repeat(4,minmax(7rem,1fr))_minmax(15rem,1.3fr)] gap-3 bg-muted/35 px-3 py-2 text-xs font-medium text-muted-foreground">
-            <span>统计窗口</span>
-            <span>定位上下文</span>
-            <span>多装修公司</span>
-            <span>无服务区域</span>
-            <span>确认率</span>
-            <span>来源 / 隐私</span>
-          </div>
-          {windows.map((metrics) => (
-            <div
-              key={metrics.window}
-              className="grid grid-cols-[9rem_repeat(4,minmax(7rem,1fr))_minmax(15rem,1.3fr)] gap-3 border-t px-3 py-3"
-            >
-              <div className="min-w-0">
-                <div className="text-sm font-medium">
-                  {metrics.window === "24h" ? "最近 24 小时" : "最近 7 天"}
-                </div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">
-                  自 {formatDateTime(metrics.since)}
-                </div>
-              </div>
-              <WindowMetricCell
-                value={metrics.total}
-                detail={`活跃 ${metrics.active}，已确认 ${metrics.confirmed}`}
-              />
-              <WindowMetricCell
-                value={metrics.multi_tenant}
-                detail={`占比 ${formatPercent(ratio(metrics.multi_tenant, metrics.total))}`}
-              />
-              <WindowNoMatchCell metrics={metrics} />
-              <WindowMetricCell
-                value={formatPercent(metrics.confirmation_rate)}
-                detail={`过期未确认 ${metrics.expired_unconfirmed}`}
-              />
-              <WindowMetricCell
-                value={`手动 ${metrics.source_counts.manual_city || 0} / GPS ${metrics.source_counts.gps || 0}`}
-                detail={`身份保护 ${metrics.identity_match}，原始坐标 ${metrics.raw_coordinate_stored}`}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
+function RecentNoMatchList({
+  items,
+}: {
+  items: LocationMetricsData["recent_no_match"];
+}) {
+  const visibleItems = items.slice(0, 3);
+  const collapsedItems = items.slice(3);
 
-      <div className="divide-y border-y md:hidden">
-        {windows.map((metrics) => (
-          <section key={metrics.window} className="px-1 py-3">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="text-sm font-medium">
-                  {metrics.window === "24h" ? "最近 24 小时" : "最近 7 天"}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  自 {formatDateTime(metrics.since)}
-                </div>
-              </div>
-              <Badge
-                variant={metrics.no_match ? "warning" : "outline"}
-                className="shrink-0"
-              >
-                无服务 {formatPercent(ratio(metrics.no_match, metrics.total))}
-              </Badge>
-            </div>
-            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
-              <MobileMetricItem
-                label="定位上下文"
-                value={metrics.total}
-                detail={`活跃 ${metrics.active}，已确认 ${metrics.confirmed}`}
-              />
-              <MobileMetricItem
-                label="多装修公司"
-                value={metrics.multi_tenant}
-                detail={`占比 ${formatPercent(ratio(metrics.multi_tenant, metrics.total))}`}
-              />
-              <MobileMetricItem
-                label="无服务区域"
-                value={metrics.no_match}
-                detail={`兜底 ${metrics.fallback_reason_counts.NO_SERVICE_AREA_MATCHED || 0}`}
-              />
-              <MobileMetricItem
-                label="确认率"
-                value={formatPercent(metrics.confirmation_rate)}
-                detail={`过期未确认 ${metrics.expired_unconfirmed}`}
-              />
-              <MobileMetricItem
-                label="来源"
-                value={`手动 ${metrics.source_counts.manual_city || 0}`}
-                detail={`GPS ${metrics.source_counts.gps || 0}`}
-              />
-              <MobileMetricItem
-                label="隐私"
-                value={`身份保护 ${metrics.identity_match}`}
-                detail={`原始坐标 ${metrics.raw_coordinate_stored}`}
-              />
-            </dl>
-          </section>
-        ))}
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <MapPinned data-icon="inline-start" />
+          最近无服务区域
+        </div>
+        <Badge variant="outline">共 {items.length} 条</Badge>
       </div>
-    </>
+      {items.length ? (
+        <div className="divide-y rounded-md border">
+          {visibleItems.map((item) => (
+            <NoMatchRow key={item.id} item={item} />
+          ))}
+          {collapsedItems.length ? (
+            <Collapsible>
+              <CollapsibleContent className="divide-y">
+                {collapsedItems.map((item) => (
+                  <NoMatchRow key={item.id} item={item} />
+                ))}
+              </CollapsibleContent>
+              <div className="border-t p-2">
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="group w-full text-muted-foreground"
+                  >
+                    <span className="group-data-[state=open]:hidden">
+                      展开剩余 {collapsedItems.length} 条
+                    </span>
+                    <span className="hidden group-data-[state=open]:inline">收起明细</span>
+                    <ChevronDown
+                      className="transition-transform group-data-[state=open]:rotate-180"
+                      data-icon="inline-end"
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </Collapsible>
+          ) : null}
+        </div>
+      ) : (
+        <Empty className="min-h-24 rounded-md bg-muted/20 p-6 md:p-8">
+          <EmptyHeader>
+            <EmptyTitle>没有无服务区域记录</EmptyTitle>
+            <EmptyDescription>最近没有进入兜底的定位匹配。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
+    </section>
   );
 }
 
@@ -201,56 +248,30 @@ export function LocationMetricsPanel({
   const latest = metrics?.windows.find((item) => item.window === "24h") || null;
 
   return (
-    <OpsSection
-      title="定位匹配治理"
-      description="观察登录定位、多装修公司候选、无服务区域和隐私坐标保存情况。"
-      actions={
-        <>
+    <Card>
+      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <CardTitle>定位匹配治理</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            观察登录定位、多装修公司候选、无服务区域和隐私坐标保存情况。
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant={latest?.raw_coordinate_stored ? "warning" : "outline"}>
-            <ShieldCheck className="size-3.5" data-icon="inline-start" />
+            <ShieldCheck data-icon="inline-start" />
             原始坐标 {latest?.raw_coordinate_stored || 0}
           </Badge>
           <Badge variant={latest?.expired_unconfirmed ? "warning" : "outline"}>
             待清理 {latest?.expired_unconfirmed || 0}
           </Badge>
-        </>
-      }
-    >
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {metrics ? (
           <>
             <WindowMetricsTable windows={metrics.windows} />
-
-            <section className="flex flex-col gap-3 border-t pt-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <MapPinned data-icon="inline-start" />
-                最近无服务区域
-              </div>
-              {metrics.recent_no_match.length ? (
-                <div className="flex flex-col">
-                  {metrics.recent_no_match.map((item) => (
-                    <Fragment key={item.id}>
-                      <div className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 text-sm md:flex-row md:items-start md:justify-between">
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{areaText(item)}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {item.source} / {item.fallback_reason || "-"} / {item.adcode || "-"}
-                          </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground">{formatDateTime(item.created_at)}</div>
-                      </div>
-                      {item.id !== metrics.recent_no_match[metrics.recent_no_match.length - 1]?.id ? <Separator /> : null}
-                    </Fragment>
-                  ))}
-                </div>
-              ) : (
-                <OpsEmptyState
-                  title="没有无服务区域记录"
-                  description="最近没有进入兜底的定位匹配。"
-                />
-              )}
-            </section>
-
+            <RecentNoMatchList items={metrics.recent_no_match} />
             {latest?.low_accuracy ? (
               <StatusAlert>
                 <span className="inline-flex items-center gap-2">
@@ -263,6 +284,7 @@ export function LocationMetricsPanel({
         ) : error ? null : (
           <StatusAlert>定位匹配统计暂无数据。</StatusAlert>
         )}
-    </OpsSection>
+      </CardContent>
+    </Card>
   );
 }

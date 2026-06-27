@@ -2,7 +2,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
 import { OpsScriptsPanel } from "@/components/ops/ops-scripts-panel";
-import { OpsSection } from "@/components/ops/ops-section";
+import { OpsTabsList } from "@/components/ops/ops-tabs";
 import { LocationMetricsPanel } from "@/components/ops/location-metrics-panel";
 import { ReleaseDeploymentsPanel } from "@/components/ops/release-deployments-panel";
 import { ServiceHealthPanel } from "@/components/ops/service-health-panel";
@@ -21,9 +21,11 @@ import type {
   ReleaseSuccessfulRefListData,
 } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getAdminToken } from "@/lib/auth";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+import { isPlatformOnlySession } from "@/lib/session-mode";
 
 type ScriptListData = {
   list: OpsScript[];
@@ -41,6 +43,7 @@ type OpsPageSearchParams = {
 
 const OPS_RUNS_PAGE_SIZE = 10;
 const OPS_TABS = ["health", "scripts", "runs", "releases"] as const;
+const OPS_PAGE_SHELL_CLASS = "flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]";
 
 type OpsTab = typeof OPS_TABS[number];
 
@@ -73,26 +76,48 @@ async function fetchBackendData<T>(token: string, path: string) {
   return payload.data as T;
 }
 
-async function getOpsData(params: OpsPageSearchParams) {
+async function fetchOptionalBackendData<T>(token: string, path: string, fallbackMessage: string) {
+  try {
+    return {
+      data: await fetchBackendData<T>(token, path),
+      error: null as string | null,
+    };
+  } catch (error) {
+    return {
+      data: null as T | null,
+      error: error instanceof Error ? error.message : fallbackMessage,
+    };
+  }
+}
+
+function emptyPagination(page: number, pageSize: number): Pagination {
+  return { page, pageSize, total: 0, totalPages: 0 };
+}
+
+function emptyOpsData(page: number, errorMessage?: string) {
+  return {
+    scripts: [] as OpsScript[],
+    runs: [] as OpsScriptRun[],
+    releaseOptions: null as ReleaseOptionsData | null,
+    releaseRuns: [] as ReleaseRun[],
+    releaseRunsPagination: emptyPagination(1, 5),
+    releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
+    releaseSuccessfulRefsPagination: emptyPagination(1, 5),
+    releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
+    locationMetrics: null as LocationMetricsData | null,
+    pagination: emptyPagination(page, OPS_RUNS_PAGE_SIZE),
+    error: errorMessage || null,
+    releaseError: errorMessage || null,
+    releaseRuntimeError: errorMessage || null,
+    locationMetricsError: errorMessage || null,
+  };
+}
+
+async function getOpsData(params: OpsPageSearchParams, activeTab: OpsTab) {
   const page = normalizePage(params.page);
   const token = await getAdminToken();
   if (!token) {
-    return {
-      scripts: [] as OpsScript[],
-      runs: [] as OpsScriptRun[],
-      releaseOptions: null as ReleaseOptionsData | null,
-      releaseRuns: [] as ReleaseRun[],
-      releaseRunsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
-      releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
-      releaseSuccessfulRefsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
-      releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
-      locationMetrics: null as LocationMetricsData | null,
-      pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
-      error: "缺少登录凭证",
-      releaseError: "缺少登录凭证",
-      releaseRuntimeError: "缺少登录凭证",
-      locationMetricsError: "缺少登录凭证",
-    };
+    return emptyOpsData(page, "缺少登录凭证");
   }
 
   try {
@@ -100,74 +125,84 @@ async function getOpsData(params: OpsPageSearchParams) {
       page: String(page),
       pageSize: String(OPS_RUNS_PAGE_SIZE),
     });
-    const [scriptData, runData, locationMetricsResult, releaseOptionsResult, releaseRunsResult, releaseSuccessfulRefsResult, releaseRuntimeVersionsResult] = await Promise.all([
-      fetchBackendData<ScriptListData>(token, "/admin/ops/scripts"),
-      fetchBackendData<RunListData>(token, `/admin/ops/script-runs?${query}`),
-      fetchBackendData<LocationMetricsData>(token, "/admin/ops/location-metrics")
-        .then((data) => ({ data, error: null as string | null }))
-        .catch((error) => ({
-          data: null as LocationMetricsData | null,
-          error: error instanceof Error ? error.message : "定位匹配统计加载失败",
-        })),
-      fetchBackendData<ReleaseOptionsData>(token, "/admin/ops/releases/options")
-        .then((data) => ({ data, error: null as string | null }))
-        .catch((error) => ({
-          data: null as ReleaseOptionsData | null,
-          error: error instanceof Error ? error.message : "发布配置加载失败",
-        })),
-      fetchBackendData<ReleaseRunListData>(token, "/admin/ops/releases/runs?page=1&pageSize=5")
-        .then((data) => ({ data, error: null as string | null }))
-        .catch((error) => ({
-          data: null as ReleaseRunListData | null,
-          error: error instanceof Error ? error.message : "发布记录加载失败",
-        })),
-      fetchBackendData<ReleaseSuccessfulRefListData>(token, "/admin/ops/releases/successful-refs?pageSize=5")
-        .then((data) => ({ data, error: null as string | null }))
-        .catch((error) => ({
-          data: null as ReleaseSuccessfulRefListData | null,
-          error: error instanceof Error ? error.message : "成功版本加载失败",
-        })),
-      fetchBackendData<ReleaseRuntimeVersionData>(token, "/admin/ops/releases/runtime-versions")
-        .then((data) => ({ data, error: null as string | null }))
-        .catch((error) => ({
-          data: null as ReleaseRuntimeVersionData | null,
-          error: error instanceof Error ? error.message : "运行版本加载失败",
-        })),
-    ]);
+    const baseData = emptyOpsData(page);
 
-    return {
-      scripts: scriptData?.list || [],
-      runs: runData?.list || [],
-      releaseOptions: releaseOptionsResult.data,
-      releaseRuns: releaseRunsResult.data?.list || [],
-      releaseRunsPagination: releaseRunsResult.data?.pagination || { page: 1, pageSize: 5, total: 0, totalPages: 0 },
-      releaseSuccessfulRefs: releaseSuccessfulRefsResult.data?.list || [],
-      releaseSuccessfulRefsPagination: releaseSuccessfulRefsResult.data?.pagination || { page: 1, pageSize: 5, total: 0, totalPages: 0 },
-      releaseRuntimeVersions: releaseRuntimeVersionsResult.data,
-      locationMetrics: locationMetricsResult.data,
-      pagination: runData?.pagination || { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
-      error: null,
-      releaseError: releaseOptionsResult.error || releaseRunsResult.error || releaseSuccessfulRefsResult.error,
-      releaseRuntimeError: releaseRuntimeVersionsResult.error,
-      locationMetricsError: locationMetricsResult.error,
-    };
+    if (activeTab === "health") {
+      const locationMetricsResult = await fetchOptionalBackendData<LocationMetricsData>(
+        token,
+        "/admin/ops/location-metrics",
+        "定位匹配统计加载失败",
+      );
+
+      return {
+        ...baseData,
+        locationMetrics: locationMetricsResult.data,
+        locationMetricsError: locationMetricsResult.error,
+      };
+    }
+
+    if (activeTab === "scripts") {
+      const scriptData = await fetchBackendData<ScriptListData>(token, "/admin/ops/scripts");
+      const runData = await fetchBackendData<RunListData>(token, `/admin/ops/script-runs?${query}`);
+
+      return {
+        ...baseData,
+        scripts: scriptData?.list || [],
+        runs: runData?.list || [],
+        pagination: runData?.pagination || emptyPagination(page, OPS_RUNS_PAGE_SIZE),
+        error: null,
+      };
+    }
+
+    if (activeTab === "runs") {
+      const runData = await fetchBackendData<RunListData>(token, `/admin/ops/script-runs?${query}`);
+
+      return {
+        ...baseData,
+        runs: runData?.list || [],
+        pagination: runData?.pagination || emptyPagination(page, OPS_RUNS_PAGE_SIZE),
+        error: null,
+      };
+    }
+
+    if (activeTab === "releases") {
+      const releaseOptionsResult = await fetchOptionalBackendData<ReleaseOptionsData>(
+        token,
+        "/admin/ops/releases/options",
+        "发布配置加载失败",
+      );
+      const releaseRunsResult = await fetchOptionalBackendData<ReleaseRunListData>(
+        token,
+        "/admin/ops/releases/runs?page=1&pageSize=5",
+        "发布记录加载失败",
+      );
+      const releaseSuccessfulRefsResult = await fetchOptionalBackendData<ReleaseSuccessfulRefListData>(
+        token,
+        "/admin/ops/releases/successful-refs?pageSize=5",
+        "成功版本加载失败",
+      );
+      const releaseRuntimeVersionsResult = await fetchOptionalBackendData<ReleaseRuntimeVersionData>(
+        token,
+        "/admin/ops/releases/runtime-versions",
+        "运行版本加载失败",
+      );
+
+      return {
+        ...baseData,
+        releaseOptions: releaseOptionsResult.data,
+        releaseRuns: releaseRunsResult.data?.list || [],
+        releaseRunsPagination: releaseRunsResult.data?.pagination || emptyPagination(1, 5),
+        releaseSuccessfulRefs: releaseSuccessfulRefsResult.data?.list || [],
+        releaseSuccessfulRefsPagination: releaseSuccessfulRefsResult.data?.pagination || emptyPagination(1, 5),
+        releaseRuntimeVersions: releaseRuntimeVersionsResult.data,
+        releaseError: releaseOptionsResult.error || releaseRunsResult.error || releaseSuccessfulRefsResult.error,
+        releaseRuntimeError: releaseRuntimeVersionsResult.error,
+      };
+    }
+
+    return baseData;
   } catch (error) {
-    return {
-      scripts: [] as OpsScript[],
-      runs: [] as OpsScriptRun[],
-      releaseOptions: null as ReleaseOptionsData | null,
-      releaseRuns: [] as ReleaseRun[],
-      releaseRunsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
-      releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
-      releaseSuccessfulRefsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
-      releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
-      locationMetrics: null as LocationMetricsData | null,
-      pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
-      error: error instanceof Error ? error.message : "运维脚本加载失败",
-      releaseError: error instanceof Error ? error.message : "发布信息加载失败",
-      releaseRuntimeError: error instanceof Error ? error.message : "运行版本加载失败",
-      locationMetricsError: error instanceof Error ? error.message : "定位匹配统计加载失败",
-    };
+    return emptyOpsData(page, error instanceof Error ? error.message : "运维脚本加载失败");
   }
 }
 
@@ -177,6 +212,26 @@ export default async function OpsPage({
   searchParams: Promise<OpsPageSearchParams>;
 }) {
   const params = await searchParams;
+  const activeTab = normalizeTab(params.tab);
+  const session = await getAdminSession();
+  const hasPlatformAccess = isPlatformOnlySession(session);
+
+  if (!hasPlatformAccess) {
+    return (
+      <div className={OPS_PAGE_SHELL_CLASS}>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-normal">运维脚本</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            聚合资源状态、微服务健康、白名单脚本和执行记录，平台运维动作保持可审计。
+          </p>
+        </div>
+        <StatusAlert title="无法访问运维脚本">
+          当前账号不是平台超管，无法访问运维脚本。请切换到平台管理账号后再试。
+        </StatusAlert>
+      </div>
+    );
+  }
+
   const {
     scripts,
     runs,
@@ -192,8 +247,7 @@ export default async function OpsPage({
     releaseError,
     releaseRuntimeError,
     locationMetricsError,
-  } = await getOpsData(params);
-  const activeTab = normalizeTab(params.tab);
+  } = await getOpsData(params, activeTab);
   const successCount = runs.filter((item) => item.status === "success").length;
   const failedCount = runs.filter((item) => item.status === "failed" || item.status === "timeout").length;
   const opsTabs = [
@@ -214,7 +268,7 @@ export default async function OpsPage({
       value: "scripts" as const,
       label: "脚本执行",
       href: buildOpsTabHref("scripts"),
-      count: String(scripts.length),
+      count: activeTab === "scripts" ? String(scripts.length) : "",
       content: (
         <div className="flex flex-col gap-3">
           <OpsScriptsPanel scripts={scripts} recentRuns={runs} error={error} />
@@ -225,21 +279,21 @@ export default async function OpsPage({
       value: "runs" as const,
       label: "执行记录",
       href: buildOpsTabHref("runs", pagination.page),
-      count: `${successCount}/${failedCount}`,
+      count: activeTab === "runs" ? `${successCount}/${failedCount}` : "",
       content: (
         <div className="flex flex-col gap-3">
           {error ? <StatusAlert>{error}</StatusAlert> : null}
-          <OpsSection
-            title="最近执行记录"
-            description="按时间查看脚本执行结果、耗时和执行人。"
-            actions={
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+              <CardTitle>最近执行记录</CardTitle>
               <Badge variant="outline">
                 第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
               </Badge>
-            }
-          >
-            <OpsRunsTable runs={runs} />
-          </OpsSection>
+            </CardHeader>
+            <CardContent className="p-0">
+              <OpsRunsTable runs={runs} />
+            </CardContent>
+          </Card>
 
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm text-muted-foreground">
@@ -254,7 +308,7 @@ export default async function OpsPage({
       value: "releases" as const,
       label: "版本发布",
       href: buildOpsTabHref("releases"),
-      count: String(releaseRuns.length),
+      count: activeTab === "releases" ? String(releaseRuns.length) : "",
       content: (
         <ReleaseDeploymentsPanel
           options={releaseOptions}
@@ -271,7 +325,7 @@ export default async function OpsPage({
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+    <div className={OPS_PAGE_SHELL_CLASS}>
       <div>
         <h1 className="text-2xl font-semibold tracking-normal">运维脚本</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -280,20 +334,16 @@ export default async function OpsPage({
       </div>
 
       <Tabs defaultValue={activeTab} className="flex flex-col gap-3">
-        <TabsList className="h-auto min-h-9 w-full flex-wrap justify-start gap-1 overflow-visible">
+        <OpsTabsList>
           {opsTabs.map((item) => (
             <TabsTrigger key={item.value} value={item.value} asChild>
               <Link href={item.href}>
                 {item.label}
-                {item.count ? (
-                  <span className="hidden text-xs text-muted-foreground sm:ml-2 sm:inline">
-                    {item.count}
-                  </span>
-                ) : null}
+                {item.count ? <span className="ml-2 text-xs text-muted-foreground">{item.count}</span> : null}
               </Link>
             </TabsTrigger>
           ))}
-        </TabsList>
+        </OpsTabsList>
 
         {opsTabs.map((item) => (
           <TabsContent key={item.value} value={item.value} className="mt-0">

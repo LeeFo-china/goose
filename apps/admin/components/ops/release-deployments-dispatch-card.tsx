@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Database, Loader2, Rocket, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { OpsSection } from "@/components/ops/ops-section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -17,15 +16,11 @@ import type { ReleaseEnvironment, ReleaseMigrationMode, ReleaseOptionsData, Rele
 import { ReleaseRefCombobox, ReleaseServiceMultiSelect, getTodayTagPlaceholder } from "@/components/ops/release-deployments-controls";
 import { dispatchProductionMigration, REF_TYPE_OPTIONS } from "@/components/ops/release-deployments-shared";
 
-export function ReleaseDispatchCard({ state, actions }: { state: any; actions: any }) {
+export function ReleaseDispatchCard({ state, actions, sourcePicker }: { state: any; actions: any; sourcePicker?: ReactNode }) {
   const { error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText } = state;
   const { onEnvironmentChange, setDraft, onRefTypeChange, runDispatch } = actions;
   return (
-    <OpsSection
-      title="发起发布"
-      description="后台只提交 GitHub Actions，构建、部署和日志仍由 CI/CD 执行。"
-      icon={<Rocket data-icon="inline-start" />}
-    >
+        <div className="flex flex-col gap-4">
             {error ? <StatusAlert>{error}</StatusAlert> : null}
             {!options?.configured ? (
               <Alert variant="destructive">
@@ -58,7 +53,9 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </Alert>
             ) : null}
 
-          <FieldGroup className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.7fr)]">
+              <div className="flex min-w-0 flex-col gap-4">
+          <FieldGroup>
             <Field>
               <FieldLabel>环境</FieldLabel>
               <Select value={environment} onValueChange={(value) => onEnvironmentChange(value as ReleaseEnvironment)}>
@@ -153,8 +150,8 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                       <FieldDescription>格式固定为 vYYYY.MM.DD.N，例如 {getTodayTagPlaceholder()}。</FieldDescription>
                     </Field>
 
-                    <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)] lg:col-span-2">
-                      <Field className="sm:w-[140px]">
+                    <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+                      <Field>
                         <FieldLabel>来源类型</FieldLabel>
                         <Select
                           value={tagSourceRefType}
@@ -181,7 +178,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                           </SelectContent>
                         </Select>
                       </Field>
-                      <Field className="min-w-0 flex-1">
+                      <Field>
                         <FieldLabel>来源版本</FieldLabel>
                         <ReleaseRefCombobox
                           type={tagSourceRefType}
@@ -196,7 +193,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                       </Field>
                     </div>
 
-                    <Field className="lg:col-span-2">
+                    <Field>
                       <FieldLabel htmlFor="release-tag-message">Tag 说明</FieldLabel>
                       <Textarea
                         id="release-tag-message"
@@ -246,7 +243,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </>
             )}
 
-            <Field className="lg:col-span-2">
+            <Field>
               <FieldLabel htmlFor="release-reason">发布说明</FieldLabel>
               <Textarea
                 id="release-reason"
@@ -258,7 +255,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
             </Field>
 
             {production ? (
-              <Field className="lg:col-span-2">
+              <Field>
                 <FieldLabel htmlFor="release-confirm">生产确认</FieldLabel>
                 <Input
                   id="release-confirm"
@@ -273,7 +270,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button type="button" className="w-full sm:ml-auto sm:w-auto sm:min-w-[180px]" disabled={disabled}>
+              <Button type="button" disabled={disabled}>
                 {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Rocket data-icon="inline-start" />}
                 {creatingProductionTag ? "创建 Tag 并提交发布" : "提交发布"}
               </Button>
@@ -293,7 +290,10 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-      </OpsSection>
+              </div>
+              {sourcePicker ? <div className="min-w-0 border-t pt-4 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">{sourcePicker}</div> : null}
+            </div>
+        </div>
   );
 }
 
@@ -340,11 +340,7 @@ export function ProductionMigrationCard({
   }
 
   return (
-    <OpsSection
-      title="生产数据库迁移"
-      description="只提交 migration GitHub Actions；默认先预检查 pending migrations。"
-      icon={<Database data-icon="inline-start" />}
-    >
+      <div className="flex flex-col gap-4">
         {!options?.configured ? (
           <Alert variant="destructive">
             <ShieldCheck data-icon="inline-start" />
@@ -390,8 +386,8 @@ export function ProductionMigrationCard({
             </FieldDescription>
           </Field>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Field className="sm:w-[140px]">
+          <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+            <Field>
               <FieldLabel>来源类型</FieldLabel>
               <Select
                 value={refType}
@@ -415,7 +411,7 @@ export function ProductionMigrationCard({
                 </SelectContent>
               </Select>
             </Field>
-            <Field className="min-w-0 flex-1">
+            <Field>
               <FieldLabel>迁移版本</FieldLabel>
               <ReleaseRefCombobox
                 type={refType}
@@ -474,8 +470,8 @@ export function ProductionMigrationCard({
                 确认提交
               </AlertDialogAction>
             </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-    </OpsSection>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
   );
 }
