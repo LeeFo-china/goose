@@ -68,9 +68,9 @@ export function WorkflowVersionInlineContent({
   return (
     <div
       data-testid="workflow-version-inline-list"
-      className={cn("rounded-md border bg-background", className)}
+      className={cn("min-w-0", className)}
     >
-      <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+      <div className="flex items-center justify-between gap-3 pb-2">
         <div className="min-w-0">
           <div className="text-sm font-medium">发布版本</div>
           <div className="text-xs text-muted-foreground">
@@ -94,18 +94,18 @@ export function WorkflowVersionInlineContent({
       </div>
 
       {error ? (
-        <div className="px-3 pt-3">
+        <div className="pt-2">
           <StatusAlert>{error}</StatusAlert>
         </div>
       ) : null}
 
-      <div className="max-h-72 overflow-auto px-3 py-1">
+      <div className="max-h-72 overflow-auto">
         {isInitialLoading ? (
           <div className="py-6 text-center text-sm text-muted-foreground">
             正在加载版本
           </div>
         ) : versions.length > 0 ? (
-          <div className="divide-y">
+          <div className="divide-y border-y">
             {versions.map((version) => {
               const isActive = version.id === activeVersionId;
               const isArchived = version.status === "deprecated";
@@ -185,7 +185,7 @@ export function WorkflowVersionInlineContent({
         )}
       </div>
 
-      <div className="flex items-center justify-between border-t px-3 py-2 text-sm text-muted-foreground">
+      <div className="flex items-center justify-between pt-2 text-sm text-muted-foreground">
         <span>第 {pageLabel} 页</span>
         <div className="flex gap-2">
           <Button

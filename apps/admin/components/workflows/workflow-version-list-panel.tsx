@@ -431,7 +431,7 @@ export function WorkflowVersionInlineList({
       compact
       defaultOpen
       workflowId={workflowId}
-      className={cn("rounded-md shadow-none", className)}
+      className={className}
     />
   );
 }

@@ -74,6 +74,10 @@ describe("workflow version semantics", () => {
     expect(versionPanelSource).toContain("compact\n      defaultOpen");
     expect(inlineVersionSource).toContain('data-testid="workflow-version-inline-list"');
     expect(inlineVersionSource).toContain('data-testid="workflow-version-inline-item"');
+    expect(inlineVersionSource).not.toContain('"rounded-md border bg-background"');
+    expect(versionPanelSource).not.toContain('"rounded-md shadow-none"');
+    expect(tableSource).not.toContain('className="px-4 py-4"');
+    expect(tableSource).not.toContain('className="bg-card"');
     expect(inlineVersionSource).not.toContain("TableHeader");
     expect(inlineVersionSource).not.toContain("TableHead");
     expect(publishDialogSource).toContain("ConfirmActionDialog");

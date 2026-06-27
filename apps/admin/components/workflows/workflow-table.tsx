@@ -355,11 +355,10 @@ export function WorkflowTable({
                     data-testid="workflow-version-expanded-row"
                     className="border-t bg-muted/20 hover:bg-muted/20"
                   >
-                    <TableCell colSpan={columns.length} className="px-4 py-4">
+                    <TableCell colSpan={columns.length} className="px-5 py-3">
                       <WorkflowVersionInlineList
                         activeVersionId={row.original.active_version_id}
                         workflowId={row.original.id}
-                        className="bg-card"
                       />
                     </TableCell>
                   </TableRow>
