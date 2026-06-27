@@ -33,6 +33,7 @@ import {
   archiveWorkflowVersion,
   fetchWorkflowVersions,
 } from "./workflow-requests";
+import { WorkflowVersionInlineContent } from "./workflow-version-inline-content";
 import { WORKFLOW_VERSION_EFFECT_COPY } from "./workflow-version-semantics";
 import type {
   WorkflowVersionListData,
@@ -62,11 +63,13 @@ export function WorkflowVersionListPanel({
   workflowId,
   activeVersionId,
   className,
+  compact = false,
   defaultOpen = false,
 }: {
   workflowId: string;
   activeVersionId?: string | null;
   className?: string;
+  compact?: boolean;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -160,6 +163,57 @@ export function WorkflowVersionListPanel({
   const totalPages = data?.pagination.totalPages ?? 0;
   const hasPreviousPage = page > 1;
   const hasNextPage = totalPages > 0 && page < totalPages;
+  const actionDialogs = (
+    <>
+      <ConfirmActionDialog
+        open={Boolean(activateTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setActivateTarget(null);
+        }}
+        title="设为当前版本"
+        description="设为当前版本后，只影响后续新建或受控重建的实例；运行中的实例仍绑定原版本。"
+        confirmLabel="确认设置"
+        pending={pending}
+        onConfirm={confirmActivateVersion}
+      />
+      <ConfirmActionDialog
+        open={Boolean(archiveTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setArchiveTarget(null);
+        }}
+        title="归档流程版本"
+        description="归档后该历史版本不再作为可用发布版本展示，但已绑定的实例审计记录会保留。"
+        confirmLabel="确认归档"
+        pending={pending}
+        onConfirm={confirmArchiveVersion}
+      />
+    </>
+  );
+
+  if (compact) {
+    return (
+      <>
+        <WorkflowVersionInlineContent
+          activeVersionId={activeVersionIdFromData}
+          className={className}
+          error={error}
+          hasNextPage={hasNextPage}
+          hasPreviousPage={hasPreviousPage}
+          page={page}
+          pending={pending}
+          total={data?.pagination.total ?? 0}
+          totalPages={totalPages}
+          versions={versions}
+          onActivateVersion={setActivateTarget}
+          onArchiveVersion={setArchiveTarget}
+          onNextPage={() => loadVersions(page + 1)}
+          onPreviousPage={() => loadVersions(page - 1)}
+          onRefresh={() => loadVersions(page)}
+        />
+        {actionDialogs}
+      </>
+    );
+  }
 
   return (
     <Collapsible
@@ -357,28 +411,7 @@ export function WorkflowVersionListPanel({
           </div>
         </div>
       </CollapsibleContent>
-      <ConfirmActionDialog
-        open={Boolean(activateTarget)}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setActivateTarget(null);
-        }}
-        title="设为当前版本"
-        description="设为当前版本后，只影响后续新建或受控重建的实例；运行中的实例仍绑定原版本。"
-        confirmLabel="确认设置"
-        pending={pending}
-        onConfirm={confirmActivateVersion}
-      />
-      <ConfirmActionDialog
-        open={Boolean(archiveTarget)}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setArchiveTarget(null);
-        }}
-        title="归档流程版本"
-        description="归档后该历史版本不再作为可用发布版本展示，但已绑定的实例审计记录会保留。"
-        confirmLabel="确认归档"
-        pending={pending}
-        onConfirm={confirmArchiveVersion}
-      />
+      {actionDialogs}
     </Collapsible>
   );
 }
@@ -395,6 +428,7 @@ export function WorkflowVersionInlineList({
   return (
     <WorkflowVersionListPanel
       activeVersionId={activeVersionId}
+      compact
       defaultOpen
       workflowId={workflowId}
       className={cn("rounded-md shadow-none", className)}

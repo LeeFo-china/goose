@@ -41,6 +41,10 @@ describe("workflow version semantics", () => {
       new URL("./workflow-version-list-panel.tsx", import.meta.url),
       "utf8",
     );
+    const inlineVersionSource = readFileSync(
+      new URL("./workflow-version-inline-content.tsx", import.meta.url),
+      "utf8",
+    );
     const publishDialogSource = readFileSync(
       new URL("./workflow-publish-confirm-dialog.tsx", import.meta.url),
       "utf8",
@@ -64,6 +68,14 @@ describe("workflow version semantics", () => {
     expect(tableSource).toContain("getExpandedRowModel");
     expect(tableSource).toContain("colSpan={columns.length}");
     expect(tableSource).not.toContain("DialogContent");
+    expect(versionPanelSource).toContain("WorkflowVersionInlineContent");
+    expect(versionPanelSource).toContain("compact = false");
+    expect(versionPanelSource).toContain("if (compact)");
+    expect(versionPanelSource).toContain("compact\n      defaultOpen");
+    expect(inlineVersionSource).toContain('data-testid="workflow-version-inline-list"');
+    expect(inlineVersionSource).toContain('data-testid="workflow-version-inline-item"');
+    expect(inlineVersionSource).not.toContain("TableHeader");
+    expect(inlineVersionSource).not.toContain("TableHead");
     expect(publishDialogSource).toContain("ConfirmActionDialog");
     expect(publishDialogSource).toContain("WORKFLOW_VERSION_EFFECT_COPY.publishConfirm");
     expect(publishDialogSource).toContain("版本标签");

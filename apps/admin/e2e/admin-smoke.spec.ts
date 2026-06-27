@@ -129,7 +129,10 @@ test.describe("admin smoke", () => {
     expect(await versionButtons.count()).toBeGreaterThan(1);
 
     await versionButtons.first().click();
-    await expect(page.getByTestId("workflow-version-expanded-row")).toHaveCount(1);
+    const expandedRow = page.getByTestId("workflow-version-expanded-row");
+    await expect(expandedRow).toHaveCount(1);
+    await expect(expandedRow.getByTestId("workflow-version-inline-list")).toBeVisible();
+    await expect(expandedRow.getByRole("columnheader")).toHaveCount(0);
     expect(await listViewport.evaluate((element) =>
       element.scrollWidth > element.clientWidth
     )).toBe(false);
