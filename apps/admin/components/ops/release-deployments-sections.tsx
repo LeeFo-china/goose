@@ -1,6 +1,5 @@
 "use client";
 
-import { Fragment } from "react";
 import Link from "next/link";
 import { ExternalLink, Loader2, RefreshCw, RotateCcw, Tag } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -10,13 +9,12 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { OpsEmptyState, OpsSection } from "@/components/ops/ops-section";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CompactPagination, successfulRefEnvironmentLabel } from "@/components/ops/release-deployments-controls";
 import { ReleaseRunDetailsDialog, TruncatedTooltipText } from "@/components/ops/release-deployments-dialogs";
-import { formatDateTime, getSuccessfulRefDescription, statusLabel, statusVariant, type ReleaseSearchEnvironment } from "@/components/ops/release-deployments-shared";
+import { formatDateTime, statusLabel, statusVariant, type ReleaseSearchEnvironment } from "@/components/ops/release-deployments-shared";
 
 export function SuccessfulRefsCard({ state, actions }: { state: any; actions: any }) {
   const { successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText } = state;
@@ -66,11 +64,21 @@ export function SuccessfulRefsCard({ state, actions }: { state: any; actions: an
           />
         ) : (
           <TooltipProvider delayDuration={200}>
-            <div className="flex flex-col">
+            <div className="overflow-x-auto border-y">
+              <Table className="min-w-[980px]">
+                <TableHeader className="bg-muted/35">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-[42%]">Commit</TableHead>
+                    <TableHead>来源</TableHead>
+                    <TableHead>发布时间</TableHead>
+                    <TableHead className="w-[280px] text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
               {currentSuccessfulRefs.map((item: any) => (
-                <Fragment key={`${item.environment}-${item.id}`}>
-                  <div className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0">
+                <TableRow key={`${item.environment}-${item.id}`}>
+                  <TableCell>
+                    <div className="min-w-0 py-1">
                       <div className="flex min-w-0 items-center gap-2">
                         <Badge variant="outline" className="shrink-0">{item.workflow_label}</Badge>
                         <span className="truncate text-sm font-medium">{item.head_sha.slice(0, 7)}</span>
@@ -79,14 +87,21 @@ export function SuccessfulRefsCard({ state, actions }: { state: any; actions: an
                         value={item.title}
                         className="mt-1 text-xs text-muted-foreground"
                       />
-                      <TruncatedTooltipText
-                        value={getSuccessfulRefDescription(item)}
-                        className="mt-0.5 text-xs text-muted-foreground"
-                      />
                     </div>
-                    <div className="flex flex-wrap items-center gap-1 lg:justify-end">
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    <div className="min-w-0">
+                      <div className="font-medium text-foreground">{item.head_branch || "-"}</div>
+                      <div className="mt-1 text-xs">{item.environment === "production" ? "生产环境" : "开发环境"}</div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {formatDateTime(item.created_at)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
                       {item.html_url ? (
-                        <Button asChild variant="ghost" size="icon" title="查看发布记录">
+                        <Button asChild variant="ghost" size="icon" className="size-8" title="查看发布记录">
                           <Link href={item.html_url} target="_blank" rel="noreferrer">
                             <ExternalLink data-icon="icon-only" />
                           </Link>
@@ -102,7 +117,9 @@ export function SuccessfulRefsCard({ state, actions }: { state: any; actions: an
                       </Button>
                       <Button
                         type="button"
+                        variant="ghost"
                         size="sm"
+                        className="text-muted-foreground"
                         disabled={Boolean(rollbackPendingId)}
                         onClick={() => runCreateRollbackTag(item)}
                       >
@@ -117,7 +134,13 @@ export function SuccessfulRefsCard({ state, actions }: { state: any; actions: an
                         if (open) setRollbackConfirmText("");
                       }}>
                         <AlertDialogTrigger asChild>
-                          <Button type="button" variant="destructive" size="sm" disabled={Boolean(rollbackPendingId)}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            disabled={Boolean(rollbackPendingId)}
+                          >
                             <RotateCcw data-icon="inline-start" />
                             回滚发布
                           </Button>
@@ -144,6 +167,7 @@ export function SuccessfulRefsCard({ state, actions }: { state: any; actions: an
                           <AlertDialogFooter>
                             <AlertDialogCancel>取消</AlertDialogCancel>
                             <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               disabled={rollbackConfirmText !== "确认回滚生产" || Boolean(rollbackPendingId)}
                               onClick={() => runRollbackDispatch(item)}
                             >
@@ -158,10 +182,11 @@ export function SuccessfulRefsCard({ state, actions }: { state: any; actions: an
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
-                  </div>
-                  {item.id !== currentSuccessfulRefs[currentSuccessfulRefs.length - 1]?.id ? <Separator /> : null}
-                </Fragment>
+                  </TableCell>
+                </TableRow>
               ))}
+                </TableBody>
+              </Table>
             </div>
           </TooltipProvider>
         )}

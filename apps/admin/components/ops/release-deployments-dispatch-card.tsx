@@ -58,7 +58,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </Alert>
             ) : null}
 
-          <FieldGroup>
+          <FieldGroup className="grid gap-4 lg:grid-cols-2">
             <Field>
               <FieldLabel>环境</FieldLabel>
               <Select value={environment} onValueChange={(value) => onEnvironmentChange(value as ReleaseEnvironment)}>
@@ -153,7 +153,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                       <FieldDescription>格式固定为 vYYYY.MM.DD.N，例如 {getTodayTagPlaceholder()}。</FieldDescription>
                     </Field>
 
-                    <div className="flex flex-col gap-3 sm:flex-row">
+                    <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)] lg:col-span-2">
                       <Field className="sm:w-[140px]">
                         <FieldLabel>来源类型</FieldLabel>
                         <Select
@@ -196,7 +196,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                       </Field>
                     </div>
 
-                    <Field>
+                    <Field className="lg:col-span-2">
                       <FieldLabel htmlFor="release-tag-message">Tag 说明</FieldLabel>
                       <Textarea
                         id="release-tag-message"
@@ -246,7 +246,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </>
             )}
 
-            <Field>
+            <Field className="lg:col-span-2">
               <FieldLabel htmlFor="release-reason">发布说明</FieldLabel>
               <Textarea
                 id="release-reason"
@@ -258,7 +258,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
             </Field>
 
             {production ? (
-              <Field>
+              <Field className="lg:col-span-2">
                 <FieldLabel htmlFor="release-confirm">生产确认</FieldLabel>
                 <Input
                   id="release-confirm"
@@ -273,7 +273,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button type="button" disabled={disabled}>
+              <Button type="button" className="w-full sm:ml-auto sm:w-auto sm:min-w-[180px]" disabled={disabled}>
                 {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Rocket data-icon="inline-start" />}
                 {creatingProductionTag ? "创建 Tag 并提交发布" : "提交发布"}
               </Button>
