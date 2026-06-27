@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -22,6 +22,15 @@ export function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
   const [failureSummary, setFailureSummary] = useState<ReleaseRunFailureSummary | null>(null);
   const [failureSummaryPending, setFailureSummaryPending] = useState(false);
   const [failureSummaryError, setFailureSummaryError] = useState("");
+  const detailItems = [
+    { label: "环境", value: run.workflow_label },
+    { label: "类型", value: run.audit?.operation_label || "发布" },
+    { label: "服务", value: run.service_label },
+    { label: "版本", value: getRunRefLabel(run) },
+    { label: "GitHub Run ID", value: run.audit?.run_id || run.id },
+    { label: "发起人", value: getRunActorLabel(run) },
+    { label: "发布时间", value: formatDateTime(run.created_at) },
+  ];
 
   useEffect(() => {
     if (!open || !shouldShowFailureSummary(run)) return;
@@ -66,15 +75,14 @@ export function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
             <Badge variant="secondary">{run.event || "unknown"}</Badge>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ReleaseRunDetailItem label="环境" value={run.workflow_label} />
-            <ReleaseRunDetailItem label="类型" value={run.audit?.operation_label || "发布"} />
-            <ReleaseRunDetailItem label="服务" value={run.service_label} />
-            <ReleaseRunDetailItem label="版本" value={getRunRefLabel(run)} />
-            <ReleaseRunDetailItem label="GitHub Run ID" value={run.audit?.run_id || run.id} />
-            <ReleaseRunDetailItem label="发起人" value={getRunActorLabel(run)} />
-            <ReleaseRunDetailItem label="发布时间" value={formatDateTime(run.created_at)} />
-          </div>
+          <dl className="flex flex-col">
+            {detailItems.map((item, index) => (
+              <Fragment key={item.label}>
+                <ReleaseRunDetailItem label={item.label} value={item.value} />
+                {index < detailItems.length - 1 ? <Separator /> : null}
+              </Fragment>
+            ))}
+          </dl>
 
           <Separator />
 
@@ -122,9 +130,9 @@ export function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
 
 export function ReleaseRunDetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border bg-background p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 break-all text-sm font-medium">{value || "-"}</div>
+    <div className="flex flex-col gap-1 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <dt className="text-xs text-muted-foreground sm:w-32">{label}</dt>
+      <dd className="break-all text-sm font-medium sm:flex-1 sm:text-right">{value || "-"}</dd>
     </div>
   );
 }
