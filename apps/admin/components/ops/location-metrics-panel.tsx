@@ -1,7 +1,10 @@
-import { AlertTriangle, LocateFixed, MapPinned, ShieldCheck } from "lucide-react";
+import { Fragment } from "react";
+import { AlertTriangle, MapPinned, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { OpsEmptyState, OpsSection } from "@/components/ops/ops-section";
 import type { LocationMetricsData, LocationMetricsWindow } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
@@ -48,7 +51,7 @@ function MetricBlock({
 
 function WindowSummary({ metrics }: { metrics: LocationMetricsWindow }) {
   return (
-    <section className="space-y-3 border-t pt-3">
+    <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-medium">{metrics.window === "24h" ? "最近 24 小时" : "最近 7 天"}</div>
@@ -82,7 +85,8 @@ function WindowSummary({ metrics }: { metrics: LocationMetricsWindow }) {
           detail={`过期未确认 ${metrics.expired_unconfirmed}`}
         />
       </div>
-      <div className="flex flex-wrap gap-x-6 gap-y-1 border-t pt-2">
+      <Separator />
+      <div className="flex flex-wrap gap-x-6 gap-y-1">
         <MetricBlock
           label="手动区域"
           value={metrics.source_counts.manual_city || 0}
@@ -113,15 +117,11 @@ export function LocationMetricsPanel({
   const latest = metrics?.windows.find((item) => item.window === "24h") || null;
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-col gap-3 border-b pb-3 md:flex-row md:items-end md:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold tracking-normal">定位匹配治理</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            观察登录定位、多装修公司候选、无服务区域和隐私坐标保存情况。
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <OpsSection
+      title="定位匹配治理"
+      description="观察登录定位、多装修公司候选、无服务区域和隐私坐标保存情况。"
+      actions={
+        <>
           <Badge variant={latest?.raw_coordinate_stored ? "warning" : "success"}>
             <ShieldCheck data-icon="inline-start" />
             原始坐标 {latest?.raw_coordinate_stored || 0}
@@ -129,43 +129,49 @@ export function LocationMetricsPanel({
           <Badge variant={latest?.expired_unconfirmed ? "outline" : "secondary"}>
             待清理 {latest?.expired_unconfirmed || 0}
           </Badge>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-4">
+        </>
+      }
+    >
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {metrics ? (
           <>
-            <div className="space-y-4">
-              {metrics.windows.map((item) => (
-                <WindowSummary key={item.window} metrics={item} />
+            <div className="flex flex-col gap-4">
+              {metrics.windows.map((item, index) => (
+                <Fragment key={item.window}>
+                  {index > 0 ? <Separator /> : null}
+                  <WindowSummary metrics={item} />
+                </Fragment>
               ))}
             </div>
 
-            <section className="border-t">
+            <section className="flex flex-col gap-3">
+              <Separator />
               <div className="flex items-center gap-2 py-3 text-sm font-medium">
                 <MapPinned data-icon="inline-start" />
                 最近无服务区域
               </div>
               {metrics.recent_no_match.length ? (
-                <div className="divide-y">
+                <div className="flex flex-col">
                   {metrics.recent_no_match.map((item) => (
-                    <div key={item.id} className="flex flex-col gap-2 py-3 text-sm md:flex-row md:items-start md:justify-between">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{areaText(item)}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {item.source} / {item.fallback_reason || "-"} / {item.adcode || "-"}
+                    <Fragment key={item.id}>
+                      <div className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 text-sm md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{areaText(item)}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {item.source} / {item.fallback_reason || "-"} / {item.adcode || "-"}
+                          </div>
                         </div>
+                        <div className="text-xs text-muted-foreground">{formatDateTime(item.created_at)}</div>
                       </div>
-                      <div className="text-xs text-muted-foreground">{formatDateTime(item.created_at)}</div>
-                    </div>
+                      {item.id !== metrics.recent_no_match[metrics.recent_no_match.length - 1]?.id ? <Separator /> : null}
+                    </Fragment>
                   ))}
                 </div>
               ) : (
-                <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-                  <LocateFixed data-icon="inline-start" />
-                  最近没有无服务区域记录。
-                </div>
+                <OpsEmptyState
+                  title="没有无服务区域记录"
+                  description="最近没有进入兜底的定位匹配。"
+                />
               )}
             </section>
 
@@ -181,7 +187,6 @@ export function LocationMetricsPanel({
         ) : error ? null : (
           <StatusAlert>定位匹配统计暂无数据。</StatusAlert>
         )}
-      </div>
-    </section>
+    </OpsSection>
   );
 }

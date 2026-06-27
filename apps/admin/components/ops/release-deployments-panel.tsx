@@ -257,13 +257,13 @@ export function ReleaseDeploymentsPanel({
       />
 
       <Tabs defaultValue="service-release" className="flex flex-col gap-3">
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className="h-auto min-h-9 w-full flex-wrap justify-start gap-1 overflow-visible">
           <TabsTrigger value="service-release">服务发布</TabsTrigger>
           <TabsTrigger value="database-migration">数据库迁移</TabsTrigger>
         </TabsList>
 
         <TabsContent value="service-release" className="mt-0">
-          <div className="space-y-5">
+          <div className="flex flex-col gap-5">
             <ReleaseDispatchCard state={{ error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText }} actions={{ onEnvironmentChange, setDraft, onRefTypeChange, runDispatch }} />
 
             <SuccessfulRefsCard state={{ successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText }} actions={{ setSuccessfulRefEnvironment, setSuccessfulRefKeyword, applySuccessfulRef, runCreateRollbackTag, setRollbackConfirmText, runRollbackDispatch, changeSuccessfulRefsPage }} />
@@ -271,7 +271,7 @@ export function ReleaseDeploymentsPanel({
         </TabsContent>
 
         <TabsContent value="database-migration" className="mt-0">
-          <div className="space-y-5">
+          <div className="flex flex-col gap-5">
             <ProductionMigrationCard
               options={options}
               onSubmitted={() => {

@@ -98,23 +98,23 @@ export function RunOpsScriptButton({ script }: { script: OpsScript }) {
             </div>
           ) : null}
           {result ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="rounded-md border p-3">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap gap-3">
+                <div className="min-w-[140px] flex-1 rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">状态</div>
                   <Badge className="mt-1" variant={statusVariant(result.status)}>
                     {result.status}
                   </Badge>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="min-w-[140px] flex-1 rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">退出码</div>
                   <div className="mt-1 font-medium">{result.exit_code ?? "-"}</div>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="min-w-[140px] flex-1 rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">耗时</div>
                   <div className="mt-1 font-medium">{result.duration_ms ?? 0}ms</div>
                 </div>
-                <div className="rounded-md border p-3">
+                <div className="min-w-[140px] flex-1 rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">开始时间</div>
                   <div className="mt-1 font-medium">{formatDateTime(result.started_at)}</div>
                 </div>

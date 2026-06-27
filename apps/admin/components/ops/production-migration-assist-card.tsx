@@ -1,10 +1,13 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { GitBranch, MapPinned, ShieldCheck } from "lucide-react";
+import { OpsSection } from "@/components/ops/ops-section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import type { ReleaseOptionsData } from "@/components/ops/ops-types";
 
 const MIGRATION_ASSIST_CHECKLIST = [
@@ -35,18 +38,12 @@ export function ProductionMigrationAssistCard({
   const workflowUrl = migrationOptions?.workflow_url;
 
   return (
-    <section className="space-y-4 border-t pt-4">
-      <div className="border-b pb-3">
-        <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
-          <ShieldCheck data-icon="inline-start" />
-          迁移辅助信息
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          生产数据库迁移只负责 SQL 变更，外部主数据和系统配置需要单独确认。
-        </p>
-      </div>
-      <div className="flex flex-col gap-4">
-        <div className="divide-y border-y">
+    <OpsSection
+      title="迁移辅助信息"
+      description="生产数据库迁移只负责 SQL 变更，外部主数据和系统配置需要单独确认。"
+      icon={<ShieldCheck data-icon="inline-start" />}
+    >
+        <div className="flex flex-col">
           <div className="py-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
@@ -59,6 +56,8 @@ export function ProductionMigrationAssistCard({
               {migrationOptions?.workflow_id || "production-migration.yml"}
             </div>
           </div>
+
+          <Separator />
 
           <div className="py-3">
             <div className="flex items-center justify-between gap-2">
@@ -86,15 +85,18 @@ export function ProductionMigrationAssistCard({
 
         <div className="flex flex-col gap-3">
           {MIGRATION_ASSIST_CHECKLIST.map((item, index) => (
-            <div key={item.label} className="flex gap-3">
-              <div className="flex size-7 items-center justify-center rounded-full border bg-background text-xs font-medium">
-                {index + 1}
+            <Fragment key={item.label}>
+              {index > 0 ? <Separator /> : null}
+              <div className="flex gap-3 py-2">
+                <div className="flex size-7 items-center justify-center rounded-full border bg-background text-xs font-medium">
+                  {index + 1}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{item.label}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</div>
+                </div>
               </div>
-              <div className="min-w-0">
-                <div className="text-sm font-medium">{item.label}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</div>
-              </div>
-            </div>
+            </Fragment>
           ))}
         </div>
 
@@ -119,7 +121,6 @@ export function ProductionMigrationAssistCard({
             </Link>
           </Button>
         </div>
-      </div>
-    </section>
+    </OpsSection>
   );
 }

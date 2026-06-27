@@ -1,14 +1,11 @@
+import { Fragment } from "react";
 import { ShieldAlert } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { RunOpsScriptButton } from "@/components/ops/ops-actions";
+import { OpsEmptyState, OpsSection } from "@/components/ops/ops-section";
 import type { OpsScript, OpsScriptRun } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -71,110 +68,93 @@ export function OpsScriptsPanel({
   );
 
   return (
-    <div className="space-y-5">
-      <section className="space-y-3">
-        <div className="flex flex-col gap-2 border-b pb-3 md:flex-row md:items-end md:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold tracking-normal">白名单脚本</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              集中执行低频运维动作，保留审计记录。
-            </p>
-          </div>
-          <Badge variant="outline" className="w-fit">{scripts.length} 个脚本</Badge>
-        </div>
+    <div className="flex flex-col gap-5">
+      <OpsSection
+        title="白名单脚本"
+        description="集中执行低频运维动作，保留审计记录。"
+        actions={<Badge variant="outline">{scripts.length} 个脚本</Badge>}
+      >
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {scripts.length === 0 ? (
-          <Empty className="min-h-32 rounded-none border-t bg-muted/20 p-8 md:p-10">
-            <EmptyHeader>
-              <EmptyTitle>暂无脚本</EmptyTitle>
-              <EmptyDescription>后端白名单脚本为空。</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <OpsEmptyState title="暂无脚本" description="后端白名单脚本为空。" />
         ) : (
-          <div className="overflow-x-auto">
-            <Table className="min-w-[760px] border-t">
-              <TableHeader className="bg-muted/40">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>脚本</TableHead>
-                  <TableHead className="whitespace-nowrap">风险</TableHead>
-                  <TableHead className="whitespace-nowrap">超时</TableHead>
-                  <TableHead className="w-[120px] text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scripts.map((script) => (
-                  <TableRow key={script.key}>
-                    <TableCell>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{script.label}</div>
-                        <div className="mt-1 line-clamp-2 max-w-[680px] text-xs text-muted-foreground">
-                          {script.description}
-                        </div>
+          <Table className="min-w-[760px]">
+            <TableHeader className="bg-muted/40">
+              <TableRow className="hover:bg-transparent">
+                <TableHead>脚本</TableHead>
+                <TableHead className="whitespace-nowrap">风险</TableHead>
+                <TableHead className="whitespace-nowrap">超时</TableHead>
+                <TableHead className="w-[120px] text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {scripts.map((script) => (
+                <TableRow key={script.key}>
+                  <TableCell>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{script.label}</div>
+                      <div className="mt-1 line-clamp-2 max-w-[680px] text-xs text-muted-foreground">
+                        {script.description}
                       </div>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      <Badge variant={script.danger_level === "medium" ? "warning" : "outline"}>
-                        {script.danger_level === "medium" ? "会发送通知" : "低风险"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {durationLabel(script.timeout_ms)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <RunOpsScriptButton script={script} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <Badge variant={script.danger_level === "medium" ? "warning" : "outline"}>
+                      {script.danger_level === "medium" ? "会发送通知" : "低风险"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {durationLabel(script.timeout_ms)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <RunOpsScriptButton script={script} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
-      </section>
+      </OpsSection>
 
-      <section className="space-y-3 border-t pt-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold tracking-normal">最近执行</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              快速判断脚本执行后的结果状态。
-            </p>
-          </div>
-          {hasRecentFailure ? (
+      <OpsSection
+        title="最近执行"
+        description="快速判断脚本执行后的结果状态。"
+        actions={
+          hasRecentFailure ? (
             <div className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground">
               <ShieldAlert className="size-3.5" />
               存在失败或超时
             </div>
-          ) : null}
-        </div>
+          ) : null
+        }
+      >
         {latestRuns.length === 0 ? (
-          <Empty className="border-0 bg-muted/30 p-6">
-            <EmptyHeader>
-              <EmptyTitle>暂无记录</EmptyTitle>
-              <EmptyDescription>还没有脚本执行记录。</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <OpsEmptyState title="暂无记录" description="还没有脚本执行记录。" />
         ) : (
-          <div className="divide-y">
+          <div className="flex flex-col">
             {latestRuns.map((run) => {
               const meta = statusMeta[run.status] || statusMeta.failed;
 
               return (
-                <div key={run.id} className="flex items-start justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{run.script_label}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>{formatDateTime(run.created_at)}</span>
-                      <span>{runDurationLabel(run.duration_ms)}</span>
-                      <span>{executorName(run)}</span>
+                <Fragment key={run.id}>
+                  <div className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{run.script_label}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatDateTime(run.created_at)}</span>
+                        <span>{runDurationLabel(run.duration_ms)}</span>
+                        <span>{executorName(run)}</span>
+                      </div>
                     </div>
+                    <Badge variant={meta.variant}>{meta.label}</Badge>
                   </div>
-                  <Badge variant={meta.variant}>{meta.label}</Badge>
-                </div>
+                  {run.id !== latestRuns[latestRuns.length - 1]?.id ? <Separator /> : null}
+                </Fragment>
               );
             })}
           </div>
         )}
-      </section>
+      </OpsSection>
     </div>
   );
 }

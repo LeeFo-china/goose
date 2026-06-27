@@ -1,11 +1,14 @@
 "use client";
 
+import { Fragment } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Gauge, HardDrive, Loader2, MemoryStick, Pause, Play, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { OpsSection } from "@/components/ops/ops-section";
 import type { OpsSystemMetrics } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { requestBackendJson } from "@/lib/backend-client";
 import { cn } from "@/lib/utils";
 
@@ -192,17 +195,59 @@ export function SystemMetricsPanel() {
   const loadAverage = useMemo(() => {
     return metrics?.server.load_average?.map((value) => value.toFixed(2)).join(" / ") || "-";
   }, [metrics]);
+  const resourceMetrics = [
+    {
+      key: "cpu",
+      node: (
+        <ResourceMetric
+          label="CPU"
+          value={metrics?.server.cpu_usage_percent ?? 0}
+          detail="实时采样"
+          icon={<Gauge className="size-4" />}
+        />
+      ),
+    },
+    {
+      key: "memory",
+      node: (
+        <ResourceMetric
+          label="内存"
+          value={metrics?.server.memory.usage_percent ?? 0}
+          detail={metrics ? `${formatMb(metrics.server.memory.used_mb)} / ${formatMb(metrics.server.memory.total_mb)}` : "-"}
+          icon={<MemoryStick className="size-4" />}
+        />
+      ),
+    },
+    {
+      key: "disk",
+      node: (
+        <ResourceMetric
+          label="磁盘"
+          value={metrics?.server.disk.usage_percent ?? 0}
+          detail={metrics ? `${formatMb(metrics.server.disk.used_mb)} / ${formatMb(metrics.server.disk.total_mb)}` : "-"}
+          icon={<HardDrive className="size-4" />}
+        />
+      ),
+    },
+    {
+      key: "load",
+      node: (
+        <TextMetric
+          label="Load Average"
+          value={loadAverage}
+          detail={`最近检查 ${formatDateTime(metrics?.checked_at)}`}
+          icon={<Activity className="size-4" />}
+        />
+      ),
+    },
+  ];
 
   return (
-    <section className="space-y-3 border-t pt-4">
-      <div className="flex flex-col gap-3 border-b pb-3 md:flex-row md:items-end md:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold tracking-normal">实时资源状态</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            前台每 2 秒刷新一次，页面隐藏时暂停，失败后自动降频重试。
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <OpsSection
+      title="实时资源状态"
+      description="前台每 2 秒刷新一次，页面隐藏时暂停，失败后自动降频重试。"
+      actions={
+        <>
           <Badge variant={autoRefresh && pageVisible ? "success" : "outline"}>
             {autoRefresh ? pageVisible ? "自动刷新" : "页面隐藏暂停" : "已暂停"}
           </Badge>
@@ -231,39 +276,19 @@ export function SystemMetricsPanel() {
           >
             {manualPending ? <Loader2 className="animate-spin" data-icon="icon-only" /> : <RefreshCw data-icon="icon-only" />}
           </Button>
-        </div>
-      </div>
+        </>
+      }
+    >
+      {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <div className="space-y-4">
-        {error ? <StatusAlert>{error}</StatusAlert> : null}
-
-        <div className="divide-y border-y">
-          <ResourceMetric
-            label="CPU"
-            value={metrics?.server.cpu_usage_percent ?? 0}
-            detail="实时采样"
-            icon={<Gauge className="size-4" />}
-          />
-          <ResourceMetric
-            label="内存"
-            value={metrics?.server.memory.usage_percent ?? 0}
-            detail={metrics ? `${formatMb(metrics.server.memory.used_mb)} / ${formatMb(metrics.server.memory.total_mb)}` : "-"}
-            icon={<MemoryStick className="size-4" />}
-          />
-          <ResourceMetric
-            label="磁盘"
-            value={metrics?.server.disk.usage_percent ?? 0}
-            detail={metrics ? `${formatMb(metrics.server.disk.used_mb)} / ${formatMb(metrics.server.disk.total_mb)}` : "-"}
-            icon={<HardDrive className="size-4" />}
-          />
-          <TextMetric
-            label="Load Average"
-            value={loadAverage}
-            detail={`最近检查 ${formatDateTime(metrics?.checked_at)}`}
-            icon={<Activity className="size-4" />}
-          />
-        </div>
+      <div className="flex flex-col">
+        {resourceMetrics.map((item, index) => (
+          <Fragment key={item.key}>
+            {index > 0 ? <Separator /> : null}
+            {item.node}
+          </Fragment>
+        ))}
       </div>
-    </section>
+    </OpsSection>
   );
 }

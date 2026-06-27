@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Pagination, ReleaseRefOption, ReleaseRefType, ReleaseService } from "@/components/ops/ops-types";
@@ -241,29 +242,32 @@ export function CompactPagination({
   const page = Math.min(Math.max(pagination.page || 1, 1), totalPages);
 
   return (
-    <div className="flex items-center justify-between gap-3 border-t px-5 py-3">
-      <div className="text-xs text-muted-foreground">
-        第 {page} / {totalPages} 页，共 {pagination.total} 条
-      </div>
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending || page <= 1}
-          onClick={() => onPageChange(page - 1)}
-        >
-          上一页
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending || page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-        >
-          下一页
-        </Button>
+    <div className="flex flex-col gap-3">
+      <Separator />
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-muted-foreground">
+          第 {page} / {totalPages} 页，共 {pagination.total} 条
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending || page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            上一页
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending || page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            下一页
+          </Button>
+        </div>
       </div>
     </div>
   );

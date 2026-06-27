@@ -2,6 +2,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
 import { OpsScriptsPanel } from "@/components/ops/ops-scripts-panel";
+import { OpsSection } from "@/components/ops/ops-section";
 import { LocationMetricsPanel } from "@/components/ops/location-metrics-panel";
 import { ReleaseDeploymentsPanel } from "@/components/ops/release-deployments-panel";
 import { ServiceHealthPanel } from "@/components/ops/service-health-panel";
@@ -228,20 +229,17 @@ export default async function OpsPage({
       content: (
         <div className="flex flex-col gap-3">
           {error ? <StatusAlert>{error}</StatusAlert> : null}
-          <section className="space-y-3">
-            <div className="flex flex-col gap-2 border-b pb-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <h2 className="text-base font-semibold tracking-normal">最近执行记录</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  按时间查看脚本执行结果、耗时和执行人。
-                </p>
-              </div>
-              <Badge variant="outline" className="w-fit">
+          <OpsSection
+            title="最近执行记录"
+            description="按时间查看脚本执行结果、耗时和执行人。"
+            actions={
+              <Badge variant="outline">
                 第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
               </Badge>
-            </div>
+            }
+          >
             <OpsRunsTable runs={runs} />
-          </section>
+          </OpsSection>
 
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm text-muted-foreground">
@@ -282,12 +280,16 @@ export default async function OpsPage({
       </div>
 
       <Tabs defaultValue={activeTab} className="flex flex-col gap-3">
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className="h-auto min-h-9 w-full flex-wrap justify-start gap-1 overflow-visible">
           {opsTabs.map((item) => (
             <TabsTrigger key={item.value} value={item.value} asChild>
               <Link href={item.href}>
                 {item.label}
-                {item.count ? <span className="ml-2 text-xs text-muted-foreground">{item.count}</span> : null}
+                {item.count ? (
+                  <span className="hidden text-xs text-muted-foreground sm:ml-2 sm:inline">
+                    {item.count}
+                  </span>
+                ) : null}
               </Link>
             </TabsTrigger>
           ))}

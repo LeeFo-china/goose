@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Database, Loader2, Rocket, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { OpsSection } from "@/components/ops/ops-section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -20,17 +21,11 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
   const { error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText } = state;
   const { onEnvironmentChange, setDraft, onRefTypeChange, runDispatch } = actions;
   return (
-        <section className="space-y-4">
-          <div className="border-b pb-3">
-            <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
-              <Rocket data-icon="inline-start" />
-              发起发布
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              后台只提交 GitHub Actions，构建、部署和日志仍由 CI/CD 执行。
-            </p>
-          </div>
-          <div className="flex flex-col gap-4">
+    <OpsSection
+      title="发起发布"
+      description="后台只提交 GitHub Actions，构建、部署和日志仍由 CI/CD 执行。"
+      icon={<Rocket data-icon="inline-start" />}
+    >
             {error ? <StatusAlert>{error}</StatusAlert> : null}
             {!options?.configured ? (
               <Alert variant="destructive">
@@ -298,8 +293,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </div>
-      </section>
+      </OpsSection>
   );
 }
 
@@ -346,17 +340,11 @@ export function ProductionMigrationCard({
   }
 
   return (
-    <section className="space-y-4">
-      <div className="border-b pb-3">
-        <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
-          <Database data-icon="inline-start" />
-          生产数据库迁移
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          只提交 migration GitHub Actions；默认先预检查 pending migrations。
-        </p>
-      </div>
-      <div className="flex flex-col gap-4">
+    <OpsSection
+      title="生产数据库迁移"
+      description="只提交 migration GitHub Actions；默认先预检查 pending migrations。"
+      icon={<Database data-icon="inline-start" />}
+    >
         {!options?.configured ? (
           <Alert variant="destructive">
             <ShieldCheck data-icon="inline-start" />
@@ -486,9 +474,8 @@ export function ProductionMigrationCard({
                 确认提交
               </AlertDialogAction>
             </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    </section>
+            </AlertDialogContent>
+          </AlertDialog>
+    </OpsSection>
   );
 }
