@@ -26,6 +26,7 @@ import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
+import { workflowTaskCardContextService } from "@/services/workflow-task-card-context";
 
 const PROJECT_PROCEDURE_PERMISSION_BY_ACTION: Record<string, string> = {
   start_procedure: "project_procedure.assign",
@@ -52,22 +53,41 @@ class WorkflowTaskService {
       tasks.list,
     );
 
+    const enrichedTasks = await Promise.all(tasks.list.map(async (task) => {
+      const assignee = buildWorkflowTaskAssigneeMetadata(task);
+      const actions = task.instance
+        ? await buildWorkflowTaskActionsForTask({
+          tenantId,
+          subjectType: task.instance.subject_type,
+          task,
+          procedureAssignment: procedureAssignments.get(
+            this.procedureAssignmentTaskKey(task.instance_id, task.node_key),
+          ),
+        })
+        : [];
+
+      return {
+        task,
+        assignee,
+        actions,
+      };
+    }));
+    const cardContextByTaskId =
+      await workflowTaskCardContextService.buildTaskCardContextMap({
+        tenantId,
+        items: enrichedTasks,
+      });
+
     return {
       ...tasks,
-      list: await Promise.all(tasks.list.map(async (task) => ({
+      list: enrichedTasks.map(({ task, assignee, actions }) => ({
         ...task,
-        ...buildWorkflowTaskAssigneeMetadata(task),
-        actions: task.instance
-          ? await buildWorkflowTaskActionsForTask({
-            tenantId,
-            subjectType: task.instance.subject_type,
-            task,
-            procedureAssignment: procedureAssignments.get(
-              this.procedureAssignmentTaskKey(task.instance_id, task.node_key),
-            ),
-          })
-          : [],
-      }))),
+        ...assignee,
+        actions,
+        ...(cardContextByTaskId.has(task.id)
+          ? { card_context: cardContextByTaskId.get(task.id) }
+          : {}),
+      })),
     };
   }
 
