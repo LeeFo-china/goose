@@ -83,54 +83,52 @@ export function OpsScriptsPanel({
           <Badge variant="outline" className="w-fit">{scripts.length} 个脚本</Badge>
         </div>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
-        <div className="overflow-x-auto">
-          <Table className="min-w-[760px] border-t">
-            <TableHeader className="bg-muted/40">
-              <TableRow className="hover:bg-transparent">
-                <TableHead>脚本</TableHead>
-                <TableHead className="whitespace-nowrap">风险</TableHead>
-                <TableHead className="whitespace-nowrap">超时</TableHead>
-                <TableHead className="w-[120px] text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {scripts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="h-32">
-                    <Empty className="border-0 p-4">
-                      <EmptyHeader>
-                        <EmptyTitle>暂无脚本</EmptyTitle>
-                        <EmptyDescription>后端白名单脚本为空。</EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  </TableCell>
+        {scripts.length === 0 ? (
+          <Empty className="min-h-32 rounded-none border-t bg-muted/20 p-8 md:p-10">
+            <EmptyHeader>
+              <EmptyTitle>暂无脚本</EmptyTitle>
+              <EmptyDescription>后端白名单脚本为空。</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table className="min-w-[760px] border-t">
+              <TableHeader className="bg-muted/40">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>脚本</TableHead>
+                  <TableHead className="whitespace-nowrap">风险</TableHead>
+                  <TableHead className="whitespace-nowrap">超时</TableHead>
+                  <TableHead className="w-[120px] text-right">操作</TableHead>
                 </TableRow>
-              ) : scripts.map((script) => (
-                <TableRow key={script.key}>
-                  <TableCell>
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{script.label}</div>
-                      <div className="mt-1 line-clamp-2 max-w-[680px] text-xs text-muted-foreground">
-                        {script.description}
+              </TableHeader>
+              <TableBody>
+                {scripts.map((script) => (
+                  <TableRow key={script.key}>
+                    <TableCell>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{script.label}</div>
+                        <div className="mt-1 line-clamp-2 max-w-[680px] text-xs text-muted-foreground">
+                          {script.description}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <Badge variant={script.danger_level === "medium" ? "warning" : "outline"}>
-                      {script.danger_level === "medium" ? "会发送通知" : "低风险"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {durationLabel(script.timeout_ms)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <RunOpsScriptButton script={script} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={script.danger_level === "medium" ? "warning" : "outline"}>
+                        {script.danger_level === "medium" ? "会发送通知" : "低风险"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {durationLabel(script.timeout_ms)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <RunOpsScriptButton script={script} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </section>
 
       <section className="space-y-3 border-t pt-4">
