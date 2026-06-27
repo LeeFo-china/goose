@@ -8,10 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProjectAcceptanceWorkbench } from "@/components/projects/project-acceptance-workbench";
 import { ProjectConstructionStagesPanel } from "@/components/projects/project-construction-stages-panel";
-import { ProjectCostBudgetPanel } from "@/components/projects/project-cost-budget-panel";
+import { ProjectDetailOverviewPanel } from "@/components/projects/project-detail-overview-panel";
 import { ProjectDetailSideRail } from "@/components/projects/project-detail-side-rail";
-import { ProjectFinanceOperatingSummaryPanel } from "@/components/projects/project-finance-operating-summary-panel";
-import { ProjectFinanceReceivableSummaryPanel } from "@/components/projects/project-finance-receivable-summary-panel";
 import {
   projectDetailHref,
   type ProjectDetailPageTab,
@@ -19,14 +17,9 @@ import {
 import { ProjectLogsPanel } from "@/components/projects/project-logs-dialog";
 import { ProjectMembersPanel } from "@/components/projects/project-members-panel";
 import type { ProjectRecord } from "@/components/projects/project-mutation-types";
-import {
-  propertyLabel,
-  relationOne,
-  requestProject,
-} from "@/components/projects/project-mutation-utils";
+import { requestProject } from "@/components/projects/project-mutation-utils";
 import { ProjectStatusPanel } from "@/components/projects/project-status-panel";
 import { ProjectWorkflowRuntimePanel } from "@/components/projects/project-workflow-runtime-panel";
-import { PropertyLocationStatus } from "@/components/properties/property-location-status";
 
 export function ProjectDetailPageClient({
   project,
@@ -117,7 +110,6 @@ export function ProjectDetailPageClient({
     });
   }
 
-  const property = relationOne(currentProject.property);
   const isAcceptanceTab = activeTab === "acceptances";
 
   return (
@@ -214,43 +206,12 @@ export function ProjectDetailPageClient({
                 />
               </div>
             ) : (
-              <div className="flex flex-col gap-5">
-                <ProjectFinanceOperatingSummaryPanel
-                  projectId={currentProject.id}
-                  refreshVersion={refreshVersion}
-                />
-                <ProjectCostBudgetPanel projectId={currentProject.id} />
-                <ProjectFinanceReceivableSummaryPanel projectId={currentProject.id} />
-                <section className="rounded-lg border bg-card p-4">
-                  <h3 className="text-base font-semibold">房产位置</h3>
-                  {property?.id ? (
-                    <div className="mt-3 rounded-md border bg-background p-3">
-                      <div className="font-medium">{propertyLabel(property)}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {[property.layout, property.area != null ? `${property.area}㎡` : null]
-                          .filter(Boolean)
-                          .join(" · ") || currentProject.address || "-"}
-                      </div>
-                      <div className="mt-3">
-                        <PropertyLocationStatus
-                          property={{ ...property, id: property.id }}
-                          onConfirmed={refreshProject}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                      当前项目未关联房产，位置待补全。
-                    </div>
-                  )}
-                </section>
-                <ProjectStatusPanel project={currentProject} />
-                <ProjectWorkflowRuntimePanel
-                  project={currentProject}
-                  active={activeTab === "overview"}
-                  onChanged={refreshProject}
-                />
-              </div>
+              <ProjectDetailOverviewPanel
+                active={activeTab === "overview"}
+                project={currentProject}
+                refreshVersion={refreshVersion}
+                onChanged={refreshProject}
+              />
             )}
           </div>
         </div>

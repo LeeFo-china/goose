@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 function readProjectDetailSources() {
   return {
     detail: readFileSync(new URL("./project-acceptance-detail.tsx", import.meta.url), "utf8"),
+    overview: readFileSync(new URL("./project-detail-overview-panel.tsx", import.meta.url), "utf8"),
     page: readFileSync(new URL("./project-detail-page-client.tsx", import.meta.url), "utf8"),
+    financeSummary: readFileSync(new URL("./project-finance-operating-summary-panel.tsx", import.meta.url), "utf8"),
     rail: readFileSync(new URL("./project-detail-side-rail.tsx", import.meta.url), "utf8"),
     stageList: readFileSync(new URL("./project-acceptance-stage-list.tsx", import.meta.url), "utf8"),
     workbench: readFileSync(new URL("./project-acceptance-workbench.tsx", import.meta.url), "utf8"),
@@ -33,5 +35,22 @@ describe("Project detail page layout", () => {
     expect(workbench).toContain("flex h-full min-h-0 min-w-0 flex-col");
     expect(stageList).toContain("flex h-full min-h-0 min-w-0 flex-col");
     expect(detail).toContain("flex h-full min-h-0 min-w-0 flex-col overflow-hidden");
+  });
+
+  test("keeps overview as a lightweight workbench instead of stacked detail panels", () => {
+    const { financeSummary, overview, page } = readProjectDetailSources();
+
+    expect(page).toContain("ProjectDetailOverviewPanel");
+    expect(page).not.toContain("<ProjectCostBudgetPanel projectId={currentProject.id} />");
+    expect(page).not.toContain("<ProjectFinanceReceivableSummaryPanel projectId={currentProject.id} />");
+    expect(overview).toContain('data-testid="project-detail-overview-workbench"');
+    expect(overview).toContain('data-testid="project-overview-secondary-actions"');
+    expect(overview).toContain("<ProjectConstructionStagesPanel");
+    expect(overview).toContain("compact");
+    expect(overview).toContain("<ProjectWorkflowRuntimePanel");
+    expect(overview).toContain("compact");
+    expect(financeSummary).toContain('data-testid="project-finance-flow-analysis"');
+    expect(financeSummary).toContain('data-testid="project-finance-status-rail"');
+    expect(financeSummary).not.toContain("repeat(auto-fit,minmax(min(100%,22rem),1fr))");
   });
 });

@@ -34,10 +34,12 @@ type WorkflowStateResponse = {
 
 export function ProjectWorkflowRuntimePanel({
   active = true,
+  compact = false,
   onChanged,
   project,
 }: {
   active?: boolean;
+  compact?: boolean;
   onChanged?: () => Promise<void>;
   project: ProjectRecord;
 }) {
@@ -69,6 +71,10 @@ export function ProjectWorkflowRuntimePanel({
     );
     setState(stateData.workflow_state ?? null);
     setLoaded(true);
+    if (compact) {
+      setTransitions([]);
+      return;
+    }
 
     void requestBackendJson<WorkflowSubjectTimelineResponse>(
       `/workflow-subjects/project/${project.id}/timeline?page=1&pageSize=5`,
@@ -166,9 +172,11 @@ export function ProjectWorkflowRuntimePanel({
             </span>
             <div className="min-w-0">
               <CardTitle>流程管理</CardTitle>
-              <CardDescription className="mt-2">
-                以项目运行态为准展示节点、属性和动作；施工阶段明细不参与推导当前节点。
-              </CardDescription>
+              {!compact ? (
+                <CardDescription className="mt-2">
+                  以项目运行态为准展示节点、属性和动作；施工阶段明细不参与推导当前节点。
+                </CardDescription>
+              ) : null}
             </div>
           </div>
           <Button
@@ -197,11 +205,13 @@ export function ProjectWorkflowRuntimePanel({
           </div>
         ) : (
           <>
-            <WorkflowRuntimeSummary
-              actionCount={currentActions.length}
-              executableActionCount={executableActions.length}
-              state={state}
-            />
+            {!compact ? (
+              <WorkflowRuntimeSummary
+                actionCount={currentActions.length}
+                executableActionCount={executableActions.length}
+                state={state}
+              />
+            ) : null}
             <section className="rounded-md border bg-background p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <CurrentNodeSummary
@@ -219,8 +229,12 @@ export function ProjectWorkflowRuntimePanel({
                 />
               </div>
             </section>
-            <WorkflowTimeline nodes={timelineNodes} />
-            <WorkflowTransitionList nodes={timelineNodes} transitions={transitions} />
+            {!compact ? (
+              <>
+                <WorkflowTimeline nodes={timelineNodes} />
+                <WorkflowTransitionList nodes={timelineNodes} transitions={transitions} />
+              </>
+            ) : null}
           </>
         )}
       </CardContent>

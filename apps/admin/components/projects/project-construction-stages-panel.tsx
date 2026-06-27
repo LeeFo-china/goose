@@ -13,13 +13,6 @@ import {
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 import { cn } from "@/lib/utils";
@@ -96,21 +89,51 @@ async function requestBackend<T>(path: string) {
 
 function statusMeta(status: ConstructionStageStatus) {
   if (status === "accepted") {
-    return { label: "已通过", variant: "success" as const, icon: CheckCircle2 };
+    return {
+      label: "已通过",
+      variant: "success" as const,
+      icon: CheckCircle2,
+      dotClass: "border-success bg-success text-success-foreground",
+    };
   }
   if (status === "pending_acceptance") {
-    return { label: "验收中", variant: "warning" as const, icon: Clock3 };
+    return {
+      label: "验收中",
+      variant: "warning" as const,
+      icon: Clock3,
+      dotClass: "border-warning bg-warning text-warning-foreground",
+    };
   }
   if (status === "rework_required") {
-    return { label: "需整改", variant: "danger" as const, icon: AlertTriangle };
+    return {
+      label: "需整改",
+      variant: "danger" as const,
+      icon: AlertTriangle,
+      dotClass: "border-destructive bg-destructive text-destructive-foreground",
+    };
   }
   if (status === "in_progress") {
-    return { label: "施工中", variant: "default" as const, icon: Wrench };
+    return {
+      label: "施工中",
+      variant: "default" as const,
+      icon: Wrench,
+      dotClass: "border-primary bg-primary text-primary-foreground",
+    };
   }
   if (status === "locked") {
-    return { label: "未解锁", variant: "outline" as const, icon: Lock };
+    return {
+      label: "未解锁",
+      variant: "outline" as const,
+      icon: Lock,
+      dotClass: "border-border bg-muted text-muted-foreground",
+    };
   }
-  return { label: "未开始", variant: "secondary" as const, icon: CircleDot };
+  return {
+    label: "未开始",
+    variant: "secondary" as const,
+    icon: CircleDot,
+    dotClass: "border-border bg-background text-muted-foreground",
+  };
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -154,23 +177,37 @@ function workflowProgressBadge(progress: WorkflowProgressPayload | null) {
 
 function ConstructionStageSkeleton({ compact }: { compact: boolean }) {
   return (
-    <Card>
-      <CardHeader>
-        <Skeleton className="h-5 w-36" />
-        <Skeleton className="h-4 w-56" />
-      </CardHeader>
-      <CardContent
-        className={cn(
-          "grid gap-3",
-          compact ? "md:grid-cols-3" : "md:grid-cols-4",
-        )}
-      >
+    <section className="rounded-md border bg-card p-4">
+      <Skeleton className="h-5 w-36" />
+      <Skeleton className="mt-2 h-4 w-56" />
+      <div className="mt-4 flex flex-col gap-3 lg:flex-row">
         {Array.from({ length: compact ? 3 : 7 }).map((_, index) => (
-          <Skeleton key={index} className="h-24 rounded-md" />
+          <Skeleton key={index} className="h-24 min-w-0 flex-1 rounded-md" />
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
+}
+
+function stageFlowConnector(index: number, total: number) {
+  return cn(
+    "absolute bg-border",
+    index < total - 1 &&
+      "left-[15px] top-10 h-[calc(100%+0.75rem)] w-px lg:left-[calc(50%+1.25rem)] lg:top-4 lg:h-px lg:w-[calc(100%-2.5rem)]",
+  );
+}
+
+function stageSummary(stage: ConstructionStageItem) {
+  if (stage.blocked_reason) return stage.blocked_reason;
+  if (stage.latest_log) {
+    const dateTime = formatDateTime(stage.latest_log.created_at);
+    return [
+      `最近日志：${stage.latest_log.node_name || "施工更新"}`,
+      dateTime,
+    ].filter(Boolean).join(" · ");
+  }
+  if (stage.can_create_log || stage.can_create_acceptance) return "当前可推进";
+  return "暂无记录";
 }
 
 export function ProjectConstructionStagesPanel({
@@ -226,103 +263,109 @@ export function ProjectConstructionStagesPanel({
   }
 
   return (
-    <Card>
-      <CardHeader className="gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle>施工阶段明细</CardTitle>
-            <CardDescription className="mt-2">
-              当前节点以流程状态为准。
-              {progressTitle ? ` 参考节点：${progressTitle}` : ""}
-              {data?.required_completed
-                ? " · 必需工序已完成"
-                : data?.missing_required_stages?.length
-                  ? ` · 待完成 ${data.missing_required_stages.length} 个工序`
-                  : ""}
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {progressBadge ? (
-              <Badge variant={progressBadge.variant}>{progressBadge.label}</Badge>
-            ) : (
-              <Badge variant="secondary">阶段明细</Badge>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={loadStages}
-              disabled={loading}
-              aria-label="刷新施工阶段"
-            >
-              <RefreshCw className={loading ? "animate-spin" : ""} />
-            </Button>
-          </div>
+    <section className="rounded-md border bg-card p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold">施工阶段明细</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            当前节点以流程状态为准。
+            {progressTitle ? ` 参考节点：${progressTitle}` : ""}
+            {data?.required_completed
+              ? " · 必需工序已完成"
+              : data?.missing_required_stages?.length
+                ? ` · 待完成 ${data.missing_required_stages.length} 个工序`
+                : ""}
+          </p>
         </div>
-        {error ? <StatusAlert>{error}</StatusAlert> : null}
-      </CardHeader>
-      <CardContent
-        className={cn(
-          "grid gap-3",
-          compact ? "md:grid-cols-3" : "md:grid-cols-4",
-        )}
-      >
-        {visibleStages.map((stage, index) => {
-          const meta = statusMeta(stage.status);
-          const Icon = meta.icon;
-          return (
-            <article
-              key={stage.stage_code}
-              className={cn(
-                "flex min-h-28 flex-col gap-3 rounded-md border bg-background p-3",
-                stage.stage_code === currentStageCode && "border-primary",
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-muted">
-                    <Icon className="size-4 text-muted-foreground" />
+        <div className="flex flex-wrap items-center gap-2">
+          {progressBadge ? (
+            <Badge variant={progressBadge.variant}>{progressBadge.label}</Badge>
+          ) : (
+            <Badge variant="secondary">阶段明细</Badge>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={loadStages}
+            disabled={loading}
+            aria-label="刷新施工阶段"
+          >
+            <RefreshCw className={loading ? "animate-spin" : ""} />
+          </Button>
+        </div>
+      </div>
+      {error ? <div className="mt-3"><StatusAlert>{error}</StatusAlert></div> : null}
+
+      {visibleStages.length > 0 ? (
+        <ol
+          data-testid="project-construction-stage-flow"
+          className="mt-4 flex flex-col gap-3 lg:flex-row lg:gap-4"
+        >
+          {visibleStages.map((stage, index) => {
+            const meta = statusMeta(stage.status);
+            const Icon = meta.icon;
+            const current = stage.stage_code === currentStageCode;
+
+            return (
+              <li
+                key={stage.stage_code}
+                className="relative flex min-w-0 flex-1 gap-3 lg:block"
+              >
+                <span aria-hidden="true" className={stageFlowConnector(index, visibleStages.length)} />
+                <div className="relative z-10 flex shrink-0 flex-col items-center">
+                  <span
+                    className={cn(
+                      "flex size-8 items-center justify-center rounded-full border shadow-sm",
+                      meta.dotClass,
+                      current && "ring-2 ring-primary/30 ring-offset-2 ring-offset-background",
+                    )}
+                  >
+                    <Icon className="size-4" />
                   </span>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">
-                      {index + 1}. {stage.stage_label}
-                    </div>
-                    {stage.is_completion ? (
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        项目级验收
-                      </div>
-                    ) : null}
-                  </div>
                 </div>
-                <Badge variant={meta.variant}>{meta.label}</Badge>
-              </div>
-              {stage.blocked_reason ? (
-                <p className="text-xs leading-5 text-muted-foreground">
-                  {stage.blocked_reason}
-                </p>
-              ) : stage.latest_log ? (
-                <p className="text-xs leading-5 text-muted-foreground">
-                  最近日志：{stage.latest_log.node_name || "施工更新"}
-                  {formatDateTime(stage.latest_log.created_at)
-                    ? ` · ${formatDateTime(stage.latest_log.created_at)}`
-                    : ""}
-                </p>
-              ) : (
-                <p className="text-xs leading-5 text-muted-foreground">
-                  {stage.can_create_log || stage.can_create_acceptance
-                    ? "当前可推进"
-                    : "暂无记录"}
-                </p>
-              )}
-              <div className="mt-auto flex flex-wrap gap-1.5">
-                {stage.can_create_log ? <Badge variant="outline">可写日志</Badge> : null}
-                {stage.can_create_acceptance ? <Badge variant="outline">可发起验收</Badge> : null}
-              </div>
-            </article>
-          );
-        })}
-      </CardContent>
-    </Card>
+                <article
+                  className={cn(
+                    "min-w-0 flex-1 rounded-md border bg-background/80 px-3 py-2",
+                    current && "border-primary bg-primary/5",
+                  )}
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs tabular-nums text-muted-foreground">
+                        {String(index + 1).padStart(2, "0")}
+                      </div>
+                      <h4 className="mt-0.5 truncate text-sm font-semibold">
+                        {stage.stage_label}
+                      </h4>
+                    </div>
+                    <Badge variant={meta.variant}>{meta.label}</Badge>
+                  </div>
+                  {stage.is_completion ? (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      项目级验收
+                    </div>
+                  ) : null}
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                    {stageSummary(stage)}
+                  </p>
+                  {(stage.can_create_log || stage.can_create_acceptance) ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {stage.can_create_log ? <Badge variant="outline">可写日志</Badge> : null}
+                      {stage.can_create_acceptance ? <Badge variant="outline">可发起验收</Badge> : null}
+                    </div>
+                  ) : null}
+                </article>
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <div className="mt-4 rounded-md border border-dashed px-3 py-5 text-sm text-muted-foreground">
+          暂无施工阶段明细。
+        </div>
+      )}
+    </section>
   );
 }
