@@ -20,7 +20,6 @@ import type {
   ReleaseSuccessfulRefListData,
 } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -229,17 +228,20 @@ export default async function OpsPage({
       content: (
         <div className="flex flex-col gap-3">
           {error ? <StatusAlert>{error}</StatusAlert> : null}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <CardTitle>最近执行记录</CardTitle>
-              <Badge variant="outline">
+          <section className="space-y-3">
+            <div className="flex flex-col gap-2 border-b pb-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="text-base font-semibold tracking-normal">最近执行记录</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  按时间查看脚本执行结果、耗时和执行人。
+                </p>
+              </div>
+              <Badge variant="outline" className="w-fit">
                 第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
               </Badge>
-            </CardHeader>
-            <CardContent className="p-0">
-              <OpsRunsTable runs={runs} />
-            </CardContent>
-          </Card>
+            </div>
+            <OpsRunsTable runs={runs} />
+          </section>
 
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm text-muted-foreground">
