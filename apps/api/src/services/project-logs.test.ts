@@ -41,6 +41,17 @@ const update = mock(async (input: { payload: Record<string, unknown> }) => ({
   images: [],
   ...input.payload,
 }));
+const listBootstrapByProject = mock(async () => ({
+  rows: Array.from({ length: 5 }, (_, index) => ({
+    id: `log-${index + 1}`,
+    project_id: "550e8400-e29b-41d4-a716-446655440001",
+    tenant_id: "tenant-1",
+    content: `施工日志 ${index + 1}`,
+    images: [],
+  })),
+  hasMore: true,
+  total: 28,
+}));
 const assertProjectWorkflowStageMutationAllowed = mock(async () => undefined);
 const assertCanCreateProjectLog = mock(async () => undefined);
 
@@ -51,6 +62,7 @@ mock.module("@/repositories/project-logs", () => ({
     createFast,
     create,
     update,
+    listBootstrapByProject,
   },
 }));
 
@@ -72,6 +84,7 @@ mock.module("@/services/access-policy", () => ({
     matchesTenant: mock(() => true),
     canWriteProjectLogForProject: mock(async () => true),
     canWriteProjectLog: mock(async () => true),
+    canAccessProject: mock(async () => true),
     getScope: mock(() => "self"),
   },
 }));
@@ -183,5 +196,29 @@ describe("projectLogService", () => {
       id: "log-1",
       stage_code: "woodwork",
     }));
+  });
+
+  test("uses exact total when building bootstrap project log pagination", async () => {
+    const { projectLogService } = await import("./project-logs");
+
+    const result = await projectLogService.listProjectLogBootstrapByProject({
+      authContext,
+      projectId: "550e8400-e29b-41d4-a716-446655440001",
+      pageSize: 5,
+    });
+
+    expect(listBootstrapByProject).toHaveBeenCalledWith({
+      projectId: "550e8400-e29b-41d4-a716-446655440001",
+      tenantId: "tenant-1",
+      from: 0,
+      limit: 5,
+    });
+    expect(result.rows).toHaveLength(5);
+    expect(result.pagination).toEqual({
+      page: 1,
+      pageSize: 5,
+      total: 28,
+      totalPages: 6,
+    });
   });
 });

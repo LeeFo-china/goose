@@ -22,7 +22,9 @@ export function buildLogsFromBundle(this: any,
   commentSummaries: ProjectLogCommentSummaryMap;
 } {
   const rows = bundle.logs.rows;
-  const total = rows.length + (bundle.logs.has_more ? 1 : 0);
+  const total = Number.isFinite(bundle.logs.total)
+    ? Math.max(0, Math.trunc(bundle.logs.total))
+    : rows.length + (bundle.logs.has_more ? 1 : 0);
 
   return {
     rows,

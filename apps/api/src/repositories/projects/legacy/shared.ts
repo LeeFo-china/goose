@@ -271,6 +271,7 @@ export type EmployeeProjectBootstrapBundle = {
   logs: {
     rows: Array<Record<string, unknown>>;
     has_more: boolean;
+    total: number;
     comment_counts: Array<{
       log_id: string;
       comment_count: number | string;

@@ -79,6 +79,15 @@ function normalizeProjectLogRpcRow(row: Record<string, unknown>) {
   }
 }
 
+function isPostgrestRangeNotSatisfiable(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "PGRST103",
+  );
+}
+
 class ProjectLogRepository {
   async findProjectById(input: { projectId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -269,43 +278,7 @@ class ProjectLogRepository {
     from: number;
     to: number;
   }) {
-    const SqlConstructor = getBunSqlConstructor();
-    const databaseUrl = getProjectLogDatabaseUrl();
-    if (SqlConstructor && databaseUrl) {
-      return this.listByProjectViaSql(SqlConstructor, databaseUrl, input);
-    }
     return this.listByProjectViaSupabase(input);
-  }
-
-  private async listByProjectViaSql(
-    SqlConstructor: ProjectLogSqlConstructor,
-    databaseUrl: string,
-    input: Parameters<ProjectLogRepository["listByProject"]>[0],
-  ) {
-    const limit = input.to - input.from + 1;
-    const sqlClient = new SqlConstructor(databaseUrl);
-    try {
-      const rows = await sqlClient`
-        SELECT
-          pl.*,
-          jsonb_build_object('id', e.id, 'name', e.name, 'avatar', e.avatar) AS employee,
-          count(*) OVER() AS total_count
-        FROM public.project_logs pl
-        LEFT JOIN public.employees e ON e.id = pl.employee_id
-        WHERE pl.project_id = ${input.projectId}::uuid
-          AND pl.tenant_id = ${input.tenantId}::uuid
-        ORDER BY pl.created_at DESC
-        LIMIT ${limit}
-        OFFSET ${input.from}
-      `;
-      const total = Number(rows[0]?.total_count ?? 0);
-      return {
-        rows: rows.map(({ total_count: _total, ...row }) => row),
-        total,
-      };
-    } finally {
-      await sqlClient.close?.();
-    }
   }
 
   private async listByProjectViaSupabase(input: {
@@ -323,6 +296,25 @@ class ProjectLogRepository {
       .range(input.from, input.to);
 
     if (error) {
+      if (isPostgrestRangeNotSatisfiable(error)) {
+        const { error: countError, count } = await SupabaseDB.getAdminClient()
+          .from("project_logs")
+          .select("id", { count: "exact" })
+          .eq("project_id", input.projectId)
+          .eq("tenant_id", input.tenantId)
+          .order("created_at", { ascending: false })
+          .range(0, 0);
+
+        if (countError) {
+          throw Errors.dbError("查询项目日志总数失败", countError);
+        }
+
+        return {
+          rows: [] as Array<Record<string, unknown>>,
+          total: count ?? 0,
+        };
+      }
+
       throw Errors.dbError("查询项目日志失败", error);
     }
 
@@ -338,8 +330,8 @@ class ProjectLogRepository {
     from: number;
     limit: number;
   }) {
-    const to = input.from + input.limit;
-    const { data, error } = await SupabaseDB.getAdminClient()
+    const to = input.from + input.limit - 1;
+    const { data, error, count } = await SupabaseDB.getAdminClient()
       .from("project_logs")
       .select(`
         id,
@@ -352,7 +344,7 @@ class ProjectLogRepository {
         images,
         created_at,
         employee:employees!project_logs_employee_id_fkey(id, name, avatar)
-      `)
+      `, { count: "exact" })
       .eq("project_id", input.projectId)
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false })
@@ -363,9 +355,11 @@ class ProjectLogRepository {
     }
 
     const rows = (data || []) as unknown as Array<Record<string, unknown>>;
+    const total = count ?? 0;
     return {
-      rows: rows.slice(0, input.limit),
-      hasMore: rows.length > input.limit,
+      rows,
+      hasMore: total > input.from + rows.length,
+      total,
     };
   }
 
@@ -373,53 +367,7 @@ class ProjectLogRepository {
     projectId: string;
     tenantId: string;
   }) {
-    const SqlConstructor = getBunSqlConstructor();
-    const databaseUrl = getProjectLogDatabaseUrl();
-    if (SqlConstructor && databaseUrl) {
-      return this.listCalendarRowsViaSql(SqlConstructor, databaseUrl, input);
-    }
-
     return this.listCalendarRowsViaSupabaseRpc(input.projectId);
-  }
-
-  private async listCalendarRowsViaSql(
-    SqlConstructor: ProjectLogSqlConstructor,
-    databaseUrl: string,
-    input: Parameters<ProjectLogRepository["listCalendarRows"]>[0],
-  ) {
-    const sqlClient = new SqlConstructor(databaseUrl);
-    try {
-      const timezone = "Asia/Shanghai";
-      const rows = await sqlClient`
-        WITH ranked AS (
-          SELECT
-            (created_at AT TIME ZONE ${timezone})::date AS biz_date,
-            stage_code,
-            node_name,
-            created_at,
-            id,
-            row_number() OVER (
-              PARTITION BY (created_at AT TIME ZONE ${timezone})::date
-              ORDER BY created_at DESC, id DESC
-            ) AS rn
-          FROM public.project_logs
-          WHERE project_id = ${input.projectId}::uuid
-            AND tenant_id = ${input.tenantId}::uuid
-        )
-        SELECT
-          biz_date::text AS date,
-          count(*) AS count,
-          max(CASE WHEN rn = 1 THEN stage_code END) AS stage_code,
-          max(CASE WHEN rn = 1 THEN node_name END) AS node_name
-        FROM ranked
-        GROUP BY biz_date
-        ORDER BY biz_date ASC
-      `;
-
-      return rows as ProjectLogCalendarRow[];
-    } finally {
-      await sqlClient.close?.();
-    }
   }
 
   private async listCalendarRowsViaSupabaseRpc(projectId: string) {

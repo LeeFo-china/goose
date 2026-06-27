@@ -372,15 +372,14 @@ class ProjectLogService {
       from,
       limit: input.pageSize,
     });
-    const total = result.rows.length + (result.hasMore ? 1 : 0);
 
     return {
       rows: result.rows,
       pagination: {
         page: 1,
         pageSize: input.pageSize,
-        total,
-        totalPages: total ? Math.ceil(total / input.pageSize) : 0,
+        total: result.total,
+        totalPages: result.total ? Math.ceil(result.total / input.pageSize) : 0,
       },
     };
   }
