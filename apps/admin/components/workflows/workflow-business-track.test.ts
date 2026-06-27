@@ -13,6 +13,8 @@ describe("workflow business track options", () => {
     expect(getWorkflowTrack({ workflow_key: "customer_main_custom" })).toBe("customer_design");
     expect(getWorkflowTrack({ workflow_key: "project_signing_custom" })).toBe("project_signing");
     expect(getWorkflowTrack({ workflow_key: "construction_main_custom" })).toBe("construction");
+    expect(getWorkflowTrack({ workflow_key: "construction_custom_mq7hqqgl_1_d0c5a149" }))
+      .toBe("construction");
   });
 
   test("filters customer design workflow to customer capabilities", () => {

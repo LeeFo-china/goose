@@ -117,8 +117,8 @@ function ProjectConstructionDefaultAction({ workflow }: { workflow: WorkflowDefi
 
   if (isDefault) {
     return (
-      <Badge variant="secondary" className="h-8 whitespace-nowrap px-2">
-        <Star data-icon="inline-start" />
+      <Badge variant="secondary" className="h-8 gap-1.5 whitespace-nowrap px-2">
+        <Star className="size-3" data-icon="inline-start" />
         默认施工
       </Badge>
     );
@@ -355,11 +355,10 @@ export function WorkflowTable({
                     data-testid="workflow-version-expanded-row"
                     className="border-t bg-muted/20 hover:bg-muted/20"
                   >
-                    <TableCell colSpan={columns.length} className="px-4 py-4">
+                    <TableCell colSpan={columns.length} className="px-5 py-3">
                       <WorkflowVersionInlineList
                         activeVersionId={row.original.active_version_id}
                         workflowId={row.original.id}
-                        className="bg-card"
                       />
                     </TableCell>
                   </TableRow>
