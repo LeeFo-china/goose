@@ -124,11 +124,18 @@ test.describe("admin smoke", () => {
       element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth
     )).toBe(false);
 
-    const versionButtons = page.getByRole("button", { name: "版本" });
+    const versionButtons = page.getByRole("button", { name: "版本", exact: true });
     await expect(versionButtons.first()).toBeVisible();
     expect(await versionButtons.count()).toBeGreaterThan(1);
 
+    const versionPageResponse = page.waitForResponse((response) =>
+      response.url().includes("/api/backend/workflows/") &&
+      response.url().includes("/versions?page=1&pageSize=3") &&
+      response.status() === 200
+    );
+
     await versionButtons.first().click();
+    await versionPageResponse;
     const expandedRow = page.getByTestId("workflow-version-expanded-row");
     await expect(expandedRow).toHaveCount(1);
     await expect(expandedRow.getByTestId("workflow-version-inline-list")).toBeVisible();

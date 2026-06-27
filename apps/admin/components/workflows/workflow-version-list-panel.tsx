@@ -40,7 +40,8 @@ import type {
   WorkflowVersionSummary,
 } from "./workflow-types";
 
-const PAGE_SIZE = 20;
+const FULL_VERSION_PAGE_SIZE = 20;
+const INLINE_VERSION_PAGE_SIZE = 3;
 
 const versionStatusLabels: Record<WorkflowVersionSummary["status"], string> = {
   published: "已发布",
@@ -79,6 +80,7 @@ export function WorkflowVersionListPanel({
   const [archiveTarget, setArchiveTarget] = useState<WorkflowVersionSummary | null>(null);
   const [activateTarget, setActivateTarget] = useState<WorkflowVersionSummary | null>(null);
   const [pending, startTransition] = useTransition();
+  const pageSize = compact ? INLINE_VERSION_PAGE_SIZE : FULL_VERSION_PAGE_SIZE;
 
   function loadVersions(nextPage = page) {
     startTransition(async () => {
@@ -86,7 +88,7 @@ export function WorkflowVersionListPanel({
         setError(null);
         const result = await fetchWorkflowVersions(workflowId, {
           page: nextPage,
-          pageSize: PAGE_SIZE,
+          pageSize,
         });
         setPage(nextPage);
         setData(result);
@@ -113,7 +115,7 @@ export function WorkflowVersionListPanel({
         await archiveWorkflowVersion(workflowId, archiveTarget.id);
         const result = await fetchWorkflowVersions(workflowId, {
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
         });
         setData(result);
         setArchiveTarget(null);
@@ -133,7 +135,7 @@ export function WorkflowVersionListPanel({
         await activateWorkflowVersion(workflowId, activateTarget.id);
         const result = await fetchWorkflowVersions(workflowId, {
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
         });
         setData(result);
         setActivateTarget(null);

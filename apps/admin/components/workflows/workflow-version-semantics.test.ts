@@ -72,6 +72,11 @@ describe("workflow version semantics", () => {
     expect(versionPanelSource).toContain("compact = false");
     expect(versionPanelSource).toContain("if (compact)");
     expect(versionPanelSource).toContain("compact\n      defaultOpen");
+    expect(versionPanelSource).toContain("const FULL_VERSION_PAGE_SIZE = 20");
+    expect(versionPanelSource).toContain("const INLINE_VERSION_PAGE_SIZE = 3");
+    expect(versionPanelSource).toContain(
+      "const pageSize = compact ? INLINE_VERSION_PAGE_SIZE : FULL_VERSION_PAGE_SIZE",
+    );
     expect(inlineVersionSource).toContain('data-testid="workflow-version-inline-list"');
     expect(inlineVersionSource).toContain('data-testid="workflow-version-inline-item"');
     expect(inlineVersionSource).not.toContain('"rounded-md border bg-background"');
