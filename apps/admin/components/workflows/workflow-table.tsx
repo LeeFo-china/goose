@@ -118,7 +118,7 @@ function ProjectConstructionDefaultAction({ workflow }: { workflow: WorkflowDefi
   if (isDefault) {
     return (
       <Badge variant="secondary" className="h-8 whitespace-nowrap px-2">
-        <Star data-icon="inline-start" />
+        <Star className="size-3" data-icon="inline-start" />
         默认施工
       </Badge>
     );
