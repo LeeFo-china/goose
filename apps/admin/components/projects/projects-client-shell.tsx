@@ -33,6 +33,7 @@ import {
 import { ProjectsTable } from "@/components/projects/projects-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 type Pagination = {
   page: number;
@@ -223,7 +224,9 @@ export function ProjectsClientShell({
             style={tableViewportStyle}
             className="min-h-0 flex-1 overflow-auto"
           >
-            <ProjectsTable projects={visibleProjects} onProjectChanged={refreshProjects} />
+            <TooltipProvider delayDuration={0} skipDelayDuration={100}>
+              <ProjectsTable projects={visibleProjects} onProjectChanged={refreshProjects} />
+            </TooltipProvider>
           </div>
           {pending ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/65 backdrop-blur-[1px]">
