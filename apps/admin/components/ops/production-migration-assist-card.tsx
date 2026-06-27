@@ -5,7 +5,6 @@ import { GitBranch, MapPinned, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ReleaseOptionsData } from "@/components/ops/ops-types";
 
 const MIGRATION_ASSIST_CHECKLIST = [
@@ -36,19 +35,19 @@ export function ProductionMigrationAssistCard({
   const workflowUrl = migrationOptions?.workflow_url;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
+    <section className="space-y-4 border-t pt-4">
+      <div className="border-b pb-3">
+        <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
           <ShieldCheck data-icon="inline-start" />
           迁移辅助信息
-        </CardTitle>
-        <CardDescription>
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           生产数据库迁移只负责 SQL 变更，外部主数据和系统配置需要单独确认。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-          <div className="rounded-md border bg-muted/30 p-3">
+        </p>
+      </div>
+      <div className="flex flex-col gap-4">
+        <div className="divide-y border-y">
+          <div className="py-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
                 <GitBranch data-icon="inline-start" />
@@ -61,7 +60,7 @@ export function ProductionMigrationAssistCard({
             </div>
           </div>
 
-          <div className="rounded-md border bg-muted/30 p-3">
+          <div className="py-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
                 <MapPinned data-icon="inline-start" />
@@ -87,7 +86,7 @@ export function ProductionMigrationAssistCard({
 
         <div className="flex flex-col gap-3">
           {MIGRATION_ASSIST_CHECKLIST.map((item, index) => (
-            <div key={item.label} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+            <div key={item.label} className="flex gap-3">
               <div className="flex size-7 items-center justify-center rounded-full border bg-background text-xs font-medium">
                 {index + 1}
               </div>
@@ -120,7 +119,7 @@ export function ProductionMigrationAssistCard({
             </Link>
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

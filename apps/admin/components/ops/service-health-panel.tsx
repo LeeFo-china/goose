@@ -7,7 +7,6 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import type { OpsServiceHealth } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -78,22 +77,20 @@ function SummaryItem({
   tone?: "default" | "success" | "warning" | "danger";
 }) {
   return (
-    <div className="rounded-md border p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {icon}
-          {label}
-        </div>
-        <div
-          className={cn(
-            "text-xl font-semibold",
-            tone === "success" && "text-success",
-            tone === "warning" && "text-warning",
-            tone === "danger" && "text-destructive",
-          )}
-        >
-          {value}
-        </div>
+    <div className="flex min-w-[148px] flex-1 items-center justify-between gap-3 py-2">
+      <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <div
+        className={cn(
+          "text-lg font-semibold tabular-nums",
+          tone === "success" && "text-success",
+          tone === "warning" && "text-warning",
+          tone === "danger" && "text-destructive",
+        )}
+      >
+        {value}
       </div>
     </div>
   );
@@ -104,9 +101,17 @@ function ContainersTable({
 }: {
   containers: OpsServiceHealth["containers"];
 }) {
+  if (containers.length === 0) {
+    return (
+      <div className="border-t py-10 text-center text-sm text-muted-foreground">
+        暂无匹配容器
+      </div>
+    );
+  }
+
   return (
-    <div className="overflow-hidden rounded-md border">
-      <Table>
+    <div className="overflow-x-auto border-t">
+      <Table className="min-w-[1040px]">
         <TableHeader>
           <TableRow>
             <TableHead>服务</TableHead>
@@ -148,13 +153,6 @@ function ContainersTable({
               </TableCell>
             </TableRow>
           ))}
-          {containers.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
-                暂无匹配容器
-              </TableCell>
-            </TableRow>
-          ) : null}
         </TableBody>
       </Table>
     </div>
@@ -212,10 +210,10 @@ export function ServiceHealthPanel() {
   }, [snapshot]);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <CardTitle>微服务健康</CardTitle>
+    <section className="space-y-3">
+      <div className="flex flex-col gap-3 border-b pb-3 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-normal">微服务健康</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             读取 Docker 容器状态和 Healthcheck，重点观察 API、Admin、视频转文本 Worker 与 COS 对账 Worker。
           </p>
@@ -237,11 +235,12 @@ export function ServiceHealthPanel() {
             {pending ? <Loader2 className="animate-spin" data-icon="icon-only" /> : <RefreshCw data-icon="icon-only" />}
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      </div>
+
+      <div className="flex flex-col gap-4">
         {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="flex flex-wrap gap-x-6 gap-y-1 border-y py-2">
           <SummaryItem icon={<Container className="size-4" />} label="容器总数" value={snapshot?.summary.total || 0} />
           <SummaryItem icon={<ShieldCheck className="size-4" />} label="健康" value={snapshot?.summary.healthy || 0} tone="success" />
           <SummaryItem icon={<TriangleAlert className="size-4" />} label="异常/停止" value={(snapshot?.summary.unhealthy || 0) + (snapshot?.summary.exited || 0)} tone={(snapshot?.summary.unhealthy || snapshot?.summary.exited) ? "danger" : "default"} />
@@ -285,7 +284,7 @@ export function ServiceHealthPanel() {
           <span>最近检查 {formatDateTime(snapshot?.checked_at)}</span>
           <span>业务容器 {containersByGroup.business.length} 个</span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

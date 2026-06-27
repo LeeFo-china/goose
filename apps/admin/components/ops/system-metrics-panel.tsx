@@ -6,7 +6,6 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import type { OpsSystemMetrics } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requestBackendJson } from "@/lib/backend-client";
 import { cn } from "@/lib/utils";
 
@@ -44,39 +43,7 @@ async function requestMetrics() {
   });
 }
 
-function RingMetric({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-}) {
-  const percent = clampPercent(value);
-  return (
-    <div className="flex items-center gap-4 rounded-md border p-4">
-      <div
-        className="relative grid size-20 place-items-center rounded-full"
-        style={{
-          background: `conic-gradient(hsl(var(--primary)) ${percent * 3.6}deg, hsl(var(--muted)) 0deg)`,
-        }}
-      >
-        <div className="absolute inset-2 rounded-full bg-card" />
-        <div className="relative text-lg font-semibold">{percent.toFixed(0)}%</div>
-      </div>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {icon}
-          {label}
-        </div>
-        <div className="mt-1 text-xs text-muted-foreground">实时采样</div>
-      </div>
-    </div>
-  );
-}
-
-function BarMetric({
+function ResourceMetric({
   label,
   value,
   detail,
@@ -89,15 +56,15 @@ function BarMetric({
 }) {
   const percent = clampPercent(value);
   return (
-    <div className="rounded-md border p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
+    <div className="flex flex-col gap-2 py-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
           {icon}
-          {label}
+          <span className="truncate">{label}</span>
         </div>
-        <div className="text-sm font-semibold">{percent.toFixed(1)}%</div>
+        <div className="text-sm font-semibold tabular-nums">{percent.toFixed(1)}%</div>
       </div>
-      <div className="mt-3 h-2 rounded-full bg-muted">
+      <div className="h-1.5 rounded-full bg-muted">
         <div
           className={cn(
             "h-full rounded-full",
@@ -106,7 +73,32 @@ function BarMetric({
           style={{ width: `${percent}%` }}
         />
       </div>
-      <div className="mt-2 text-xs text-muted-foreground">{detail}</div>
+      <div className="text-xs text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function TextMetric({
+  label,
+  value,
+  detail,
+  icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {icon}
+          <span>{label}</span>
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+      </div>
+      <div className="text-right text-base font-semibold tabular-nums">{value}</div>
     </div>
   );
 }
@@ -202,10 +194,10 @@ export function SystemMetricsPanel() {
   }, [metrics]);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <CardTitle>实时资源状态</CardTitle>
+    <section className="space-y-3 border-t pt-4">
+      <div className="flex flex-col gap-3 border-b pb-3 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-normal">实时资源状态</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             前台每 2 秒刷新一次，页面隐藏时暂停，失败后自动降频重试。
           </p>
@@ -240,41 +232,38 @@ export function SystemMetricsPanel() {
             {manualPending ? <Loader2 className="animate-spin" data-icon="icon-only" /> : <RefreshCw data-icon="icon-only" />}
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </div>
+
+      <div className="space-y-4">
         {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-        <div className="grid gap-3 lg:grid-cols-4">
-          <RingMetric
+        <div className="divide-y border-y">
+          <ResourceMetric
             label="CPU"
             value={metrics?.server.cpu_usage_percent ?? 0}
+            detail="实时采样"
             icon={<Gauge className="size-4" />}
           />
-          <BarMetric
+          <ResourceMetric
             label="内存"
             value={metrics?.server.memory.usage_percent ?? 0}
             detail={metrics ? `${formatMb(metrics.server.memory.used_mb)} / ${formatMb(metrics.server.memory.total_mb)}` : "-"}
             icon={<MemoryStick className="size-4" />}
           />
-          <BarMetric
+          <ResourceMetric
             label="磁盘"
             value={metrics?.server.disk.usage_percent ?? 0}
             detail={metrics ? `${formatMb(metrics.server.disk.used_mb)} / ${formatMb(metrics.server.disk.total_mb)}` : "-"}
             icon={<HardDrive className="size-4" />}
           />
-          <div className="rounded-md border p-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Activity className="size-4" />
-              Load Average
-            </div>
-            <div className="mt-3 text-2xl font-semibold">{loadAverage}</div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              最近检查 {formatDateTime(metrics?.checked_at)}
-            </div>
-          </div>
+          <TextMetric
+            label="Load Average"
+            value={loadAverage}
+            detail={`最近检查 ${formatDateTime(metrics?.checked_at)}`}
+            icon={<Activity className="size-4" />}
+          />
         </div>
-
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

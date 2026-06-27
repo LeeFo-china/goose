@@ -8,7 +8,6 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,17 +20,17 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
   const { error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText } = state;
   const { onEnvironmentChange, setDraft, onRefTypeChange, runDispatch } = actions;
   return (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
+        <section className="space-y-4">
+          <div className="border-b pb-3">
+            <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
               <Rocket data-icon="inline-start" />
               发起发布
-            </CardTitle>
-            <CardDescription>
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               后台只提交 GitHub Actions，构建、部署和日志仍由 CI/CD 执行。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+            </p>
+          </div>
+          <div className="flex flex-col gap-4">
             {error ? <StatusAlert>{error}</StatusAlert> : null}
             {!options?.configured ? (
               <Alert variant="destructive">
@@ -159,8 +158,8 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                       <FieldDescription>格式固定为 vYYYY.MM.DD.N，例如 {getTodayTagPlaceholder()}。</FieldDescription>
                     </Field>
 
-                    <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
-                      <Field>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <Field className="sm:w-[140px]">
                         <FieldLabel>来源类型</FieldLabel>
                         <Select
                           value={tagSourceRefType}
@@ -187,7 +186,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                           </SelectContent>
                         </Select>
                       </Field>
-                      <Field>
+                      <Field className="min-w-0 flex-1">
                         <FieldLabel>来源版本</FieldLabel>
                         <ReleaseRefCombobox
                           type={tagSourceRefType}
@@ -299,8 +298,8 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
   );
 }
 
@@ -347,17 +346,17 @@ export function ProductionMigrationCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
+    <section className="space-y-4">
+      <div className="border-b pb-3">
+        <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
           <Database data-icon="inline-start" />
           生产数据库迁移
-        </CardTitle>
-        <CardDescription>
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           只提交 migration GitHub Actions；默认先预检查 pending migrations。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+        </p>
+      </div>
+      <div className="flex flex-col gap-4">
         {!options?.configured ? (
           <Alert variant="destructive">
             <ShieldCheck data-icon="inline-start" />
@@ -403,8 +402,8 @@ export function ProductionMigrationCard({
             </FieldDescription>
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
-            <Field>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Field className="sm:w-[140px]">
               <FieldLabel>来源类型</FieldLabel>
               <Select
                 value={refType}
@@ -428,7 +427,7 @@ export function ProductionMigrationCard({
                 </SelectContent>
               </Select>
             </Field>
-            <Field>
+            <Field className="min-w-0 flex-1">
               <FieldLabel>迁移版本</FieldLabel>
               <ReleaseRefCombobox
                 type={refType}
@@ -489,7 +488,7 @@ export function ProductionMigrationCard({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

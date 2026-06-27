@@ -6,7 +6,6 @@ import { ExternalLink, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -158,15 +157,15 @@ export function RuntimeVersionsPanel({
   const latestProdSha = data?.latest_successful.production?.head_sha || null;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <div>
-          <CardTitle className="text-base">当前部署版本</CardTitle>
-          <CardDescription>
+    <section className="space-y-3">
+      <div className="flex flex-col gap-3 border-b pb-3 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-normal">当前部署版本</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             从 Docker 容器读取实际运行镜像；新版镜像会显示 Commit，旧镜像会显示 tag 或提示等待新版镜像。
-          </CardDescription>
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">
             dev {latestDevSha ? latestDevSha.slice(0, 7) : "未知"}
           </Badge>
@@ -186,70 +185,73 @@ export function RuntimeVersionsPanel({
             <RefreshCw className={cn(refreshing && "animate-spin")} data-icon="icon-only" />
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="p-0">
+      </div>
+
+      <div>
         {error ? (
-          <div className="px-5 pb-4">
+          <div className="pb-3">
             <StatusAlert>{error}</StatusAlert>
           </div>
         ) : null}
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>环境</TableHead>
-              <TableHead>服务</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>运行版本</TableHead>
-              <TableHead>镜像</TableHead>
-              <TableHead>Dev 差异</TableHead>
-              <TableHead>启动时间</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {services.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
-                  暂无运行版本信息
-                </TableCell>
-              </TableRow>
-            ) : services.map((item) => (
-              <TableRow key={`${item.environment}-${item.service}-${item.container_name}`}>
-                <TableCell>
-                  <Badge variant={item.environment === "production" ? "default" : "outline"}>
-                    {environmentLabel(item.environment)}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="font-medium">{item.service_label}</div>
-                  <div className="text-xs text-muted-foreground">{item.container_name}</div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={runtimeHealthVariant(item)}>
-                    {item.health === "none" ? item.state : item.health}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <TruncatedTooltipText
-                    value={item.revision || item.image_tag || "等待新版镜像 labels"}
-                    className="max-w-[180px] text-sm font-medium"
-                  />
-                  <div className="text-xs text-muted-foreground">{runtimeVersionLabel(item)}</div>
-                </TableCell>
-                <TableCell>
-                  <TruncatedTooltipText value={item.image} className="max-w-[260px] text-sm" />
-                  <div className="text-xs text-muted-foreground">ID {shortenImageId(item.image_id)}</div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={diffVariant(item)}>{item.diff_label}</Badge>
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                  {formatDateTime(item.started_at)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+        {services.length === 0 ? (
+          <div className="border-t py-10 text-center text-sm text-muted-foreground">
+            暂无运行版本信息
+          </div>
+        ) : (
+          <div className="overflow-x-auto border-t">
+            <Table className="min-w-[1040px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>环境</TableHead>
+                  <TableHead>服务</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>运行版本</TableHead>
+                  <TableHead>镜像</TableHead>
+                  <TableHead>Dev 差异</TableHead>
+                  <TableHead>启动时间</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {services.map((item) => (
+                  <TableRow key={`${item.environment}-${item.service}-${item.container_name}`}>
+                    <TableCell>
+                      <Badge variant={item.environment === "production" ? "default" : "outline"}>
+                        {environmentLabel(item.environment)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{item.service_label}</div>
+                      <div className="text-xs text-muted-foreground">{item.container_name}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={runtimeHealthVariant(item)}>
+                        {item.health === "none" ? item.state : item.health}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <TruncatedTooltipText
+                        value={item.revision || item.image_tag || "等待新版镜像 labels"}
+                        className="max-w-[180px] text-sm font-medium"
+                      />
+                      <div className="text-xs text-muted-foreground">{runtimeVersionLabel(item)}</div>
+                    </TableCell>
+                    <TableCell>
+                      <TruncatedTooltipText value={item.image} className="max-w-[260px] text-sm" />
+                      <div className="text-xs text-muted-foreground">ID {shortenImageId(item.image_id)}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={diffVariant(item)}>{item.diff_label}</Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {formatDateTime(item.started_at)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

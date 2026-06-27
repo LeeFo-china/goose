@@ -263,7 +263,7 @@ export function ReleaseDeploymentsPanel({
         </TabsList>
 
         <TabsContent value="service-release" className="mt-0">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.9fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(580px,0.9fr)]">
+          <div className="space-y-5">
             <ReleaseDispatchCard state={{ error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText }} actions={{ onEnvironmentChange, setDraft, onRefTypeChange, runDispatch }} />
 
             <SuccessfulRefsCard state={{ successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText }} actions={{ setSuccessfulRefEnvironment, setSuccessfulRefKeyword, applySuccessfulRef, runCreateRollbackTag, setRollbackConfirmText, runRollbackDispatch, changeSuccessfulRefsPage }} />
@@ -271,7 +271,7 @@ export function ReleaseDeploymentsPanel({
         </TabsContent>
 
         <TabsContent value="database-migration" className="mt-0">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.62fr)]">
+          <div className="space-y-5">
             <ProductionMigrationCard
               options={options}
               onSubmitted={() => {

@@ -2,7 +2,6 @@ import { AlertTriangle, LocateFixed, MapPinned, ShieldCheck } from "lucide-react
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { LocationMetricsData, LocationMetricsWindow } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
@@ -39,9 +38,9 @@ function MetricBlock({
   detail: string;
 }) {
   return (
-    <div className="rounded-md border p-3">
+    <div className="min-w-[148px] flex-1 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-xl font-semibold">{value}</div>
+      <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
     </div>
   );
@@ -49,7 +48,7 @@ function MetricBlock({
 
 function WindowSummary({ metrics }: { metrics: LocationMetricsWindow }) {
   return (
-    <div className="rounded-md border p-4">
+    <section className="space-y-3 border-t pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-medium">{metrics.window === "24h" ? "最近 24 小时" : "最近 7 天"}</div>
@@ -61,7 +60,7 @@ function WindowSummary({ metrics }: { metrics: LocationMetricsWindow }) {
           无服务 {formatPercent(ratio(metrics.no_match, metrics.total))}
         </Badge>
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <div className="flex flex-wrap gap-x-6 gap-y-1">
         <MetricBlock
           label="定位上下文"
           value={metrics.total}
@@ -83,7 +82,7 @@ function WindowSummary({ metrics }: { metrics: LocationMetricsWindow }) {
           detail={`过期未确认 ${metrics.expired_unconfirmed}`}
         />
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="flex flex-wrap gap-x-6 gap-y-1 border-t pt-2">
         <MetricBlock
           label="手动区域"
           value={metrics.source_counts.manual_city || 0}
@@ -100,7 +99,7 @@ function WindowSummary({ metrics }: { metrics: LocationMetricsWindow }) {
           detail={metrics.raw_coordinate_stored ? "需确认隐私开关" : "符合默认隐私策略"}
         />
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -114,10 +113,10 @@ export function LocationMetricsPanel({
   const latest = metrics?.windows.find((item) => item.window === "24h") || null;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <CardTitle>定位匹配治理</CardTitle>
+    <section className="space-y-3">
+      <div className="flex flex-col gap-3 border-b pb-3 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-normal">定位匹配治理</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             观察登录定位、多装修公司候选、无服务区域和隐私坐标保存情况。
           </p>
@@ -131,30 +130,31 @@ export function LocationMetricsPanel({
             待清理 {latest?.expired_unconfirmed || 0}
           </Badge>
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      </div>
+
+      <div className="flex flex-col gap-4">
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {metrics ? (
           <>
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="space-y-4">
               {metrics.windows.map((item) => (
                 <WindowSummary key={item.window} metrics={item} />
               ))}
             </div>
 
-            <div className="rounded-md border">
-              <div className="flex items-center gap-2 border-b p-3 text-sm font-medium">
+            <section className="border-t">
+              <div className="flex items-center gap-2 py-3 text-sm font-medium">
                 <MapPinned data-icon="inline-start" />
                 最近无服务区域
               </div>
               {metrics.recent_no_match.length ? (
                 <div className="divide-y">
                   {metrics.recent_no_match.map((item) => (
-                    <div key={item.id} className="grid gap-2 p-3 text-sm md:grid-cols-[minmax(0,1fr)_auto]">
+                    <div key={item.id} className="flex flex-col gap-2 py-3 text-sm md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
                         <div className="truncate font-medium">{areaText(item)}</div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {item.source} · {item.fallback_reason || "-"} · {item.adcode || "-"}
+                          {item.source} / {item.fallback_reason || "-"} / {item.adcode || "-"}
                         </div>
                       </div>
                       <div className="text-xs text-muted-foreground">{formatDateTime(item.created_at)}</div>
@@ -167,7 +167,7 @@ export function LocationMetricsPanel({
                   最近没有无服务区域记录。
                 </div>
               )}
-            </div>
+            </section>
 
             {latest?.low_accuracy ? (
               <StatusAlert>
@@ -181,7 +181,7 @@ export function LocationMetricsPanel({
         ) : error ? null : (
           <StatusAlert>定位匹配统计暂无数据。</StatusAlert>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
