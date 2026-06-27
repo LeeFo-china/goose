@@ -40,6 +40,16 @@ type SearchParams = Promise<{
 
 type PictureLibraryTab = "assets" | "categories" | "comments" | "health";
 
+const PICTURE_LIBRARY_TABS = [
+  { value: "assets", label: "图片" },
+  { value: "categories", label: "分类" },
+  { value: "comments", label: "评论" },
+  { value: "health", label: "健康" },
+] as const satisfies ReadonlyArray<{
+  value: PictureLibraryTab;
+  label: string;
+}>;
+
 function readPositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -241,6 +251,12 @@ export default async function PlatformPictureLibraryPage({
     commentKeyword,
   });
   const issueTotal = health?.metrics.issue_total ?? 0;
+  const tabCounts: Record<PictureLibraryTab, number> = {
+    assets: assets.pagination.total,
+    categories: categories.length,
+    comments: comments.pagination.total,
+    health: issueTotal,
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -289,31 +305,17 @@ export default async function PlatformPictureLibraryPage({
       </div>
 
       <Tabs defaultValue={activeTab} className="flex flex-col gap-3">
-        <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger value="assets" asChild>
-            <Link href={buildHref("assets")}>
-              图片
-              <span className="ml-2 text-xs text-muted-foreground">{assets.pagination.total}</span>
-            </Link>
-          </TabsTrigger>
-          <TabsTrigger value="categories" asChild>
-            <Link href={buildHref("categories")}>
-              分类
-              <span className="ml-2 text-xs text-muted-foreground">{categories.length}</span>
-            </Link>
-          </TabsTrigger>
-          <TabsTrigger value="comments" asChild>
-            <Link href={buildHref("comments")}>
-              评论
-              <span className="ml-2 text-xs text-muted-foreground">{comments.pagination.total}</span>
-            </Link>
-          </TabsTrigger>
-          <TabsTrigger value="health" asChild>
-            <Link href={buildHref("health")}>
-              健康
-              <span className="ml-2 text-xs text-muted-foreground">{issueTotal}</span>
-            </Link>
-          </TabsTrigger>
+        <TabsList>
+          {PICTURE_LIBRARY_TABS.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} asChild>
+              <Link href={buildHref(tab.value)}>
+                {tab.label}
+                <span className="hidden text-xs text-muted-foreground sm:ml-2 sm:inline">
+                  {tabCounts[tab.value]}
+                </span>
+              </Link>
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         <TabsContent value="assets" className="mt-0">
