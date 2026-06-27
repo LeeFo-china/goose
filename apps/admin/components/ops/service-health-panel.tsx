@@ -5,10 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Container, Loader2, RefreshCw, Server, ShieldCheck, TriangleAlert } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { OpsServiceHealth } from "@/components/ops/ops-types";
+import { OpsTabsList } from "@/components/ops/ops-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -249,7 +250,7 @@ export function ServiceHealthPanel() {
         </div>
 
         <Tabs defaultValue="business" className="flex flex-col gap-3">
-          <TabsList className="w-full justify-start overflow-x-auto">
+          <OpsTabsList>
             <TabsTrigger value="business">
               业务服务
               <span className="ml-2 text-xs text-muted-foreground">{containersByGroup.business.length}</span>
@@ -266,7 +267,7 @@ export function ServiceHealthPanel() {
               全部
               <span className="ml-2 text-xs text-muted-foreground">{containersByGroup.all.length}</span>
             </TabsTrigger>
-          </TabsList>
+          </OpsTabsList>
           <TabsContent value="business" className="mt-0">
             <ContainersTable containers={containersByGroup.business} />
           </TabsContent>

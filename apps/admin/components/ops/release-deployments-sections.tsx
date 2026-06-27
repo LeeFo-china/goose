@@ -17,28 +17,20 @@ import { CompactPagination, successfulRefEnvironmentLabel } from "@/components/o
 import { ReleaseRunDetailsDialog, TruncatedTooltipText } from "@/components/ops/release-deployments-dialogs";
 import { formatDateTime, getSuccessfulRefDescription, statusLabel, statusVariant, type ReleaseSearchEnvironment } from "@/components/ops/release-deployments-shared";
 
-export function SuccessfulRefsCard({ state, actions }: { state: any; actions: any }) {
+export function SuccessfulRefsCard({ state, actions, embedded = false }: { state: any; actions: any; embedded?: boolean }) {
   const { successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText } = state;
   const { setSuccessfulRefEnvironment, setSuccessfulRefKeyword, applySuccessfulRef, runCreateRollbackTag, setRollbackConfirmText, runRollbackDispatch, changeSuccessfulRefsPage } = actions;
-  return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Tag data-icon="inline-start" />
-            发布辅助
-          </CardTitle>
-          <CardDescription>从成功 Commit 选择生产来源，或生成回滚 Tag。</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+  const content = (
+        <div className="flex flex-col gap-3">
+          <div className={cn("flex flex-col gap-3", !embedded && "lg:flex-row lg:items-center lg:justify-between")}>
             <div className="flex items-center gap-2">
-              <div className="text-sm font-medium">成功 Commit</div>
+              <div className="text-sm font-medium">{embedded ? "选择发布来源" : "成功 Commit"}</div>
               <Badge variant="outline">
                 {successfulRefEnvironmentLabel(successfulRefEnvironment)} · {currentSuccessfulRefsPagination.total}
               </Badge>
               {successfulRefsRefreshing ? <Loader2 className="animate-spin text-muted-foreground" data-icon="inline-start" /> : null}
             </div>
-            <div className="grid gap-2 sm:grid-cols-[120px_minmax(220px,1fr)] lg:w-[420px]">
+            <div className={cn("grid gap-2", embedded ? "2xl:grid-cols-[120px_minmax(220px,1fr)]" : "sm:grid-cols-[120px_minmax(220px,1fr)] lg:w-[420px]")}>
               <Select
                 value={successfulRefEnvironment}
                 onValueChange={(value) => setSuccessfulRefEnvironment(value as ReleaseSearchEnvironment)}
@@ -67,6 +59,7 @@ export function SuccessfulRefsCard({ state, actions }: { state: any; actions: an
             </div>
           ) : (
             <TooltipProvider delayDuration={200}>
+              <div className={cn(embedded && "border-y xl:max-h-[520px] xl:overflow-y-auto")}>
               {currentSuccessfulRefs.map((item: any) => (
                 <div
                   key={`${item.environment}-${item.id}`}
@@ -162,17 +155,32 @@ export function SuccessfulRefsCard({ state, actions }: { state: any; actions: an
                   </div>
                 </div>
               ))}
+              </div>
             </TooltipProvider>
           )}
           <p className="text-xs text-muted-foreground">
-            “作为来源”会把 Commit 填入左侧创建新 Tag 流程；“回滚 Tag”只创建并填入发布版本；“回滚发布”会创建 Tag 并提交生产全部服务回滚。
+            {embedded
+              ? "“作为来源”会把 Commit 填入创建新 Tag 流程；回滚操作会创建 Tag，并在提交生产前二次确认。"
+              : "“作为来源”会把 Commit 填入创建新 Tag 流程；“回滚 Tag”只创建并填入发布版本；“回滚发布”会创建 Tag 并提交生产全部服务回滚。"}
           </p>
           <CompactPagination
             pagination={currentSuccessfulRefsPagination}
             pending={successfulRefsRefreshing}
             onPageChange={changeSuccessfulRefsPage}
           />
-        </CardContent>
+        </div>
+  );
+  if (embedded) return content;
+  return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Tag data-icon="inline-start" />
+            发布辅助
+          </CardTitle>
+          <CardDescription>从成功 Commit 选择生产来源，或生成回滚 Tag。</CardDescription>
+        </CardHeader>
+        <CardContent>{content}</CardContent>
       </Card>
   );
 }

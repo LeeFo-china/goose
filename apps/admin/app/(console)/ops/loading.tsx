@@ -3,10 +3,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function OpsLoading() {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]">
       <div className="space-y-2">
         <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-4 w-96" />
+        <Skeleton className="h-4 w-full max-w-96" />
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         {Array.from({ length: 3 }).map((_, index) => (
@@ -37,4 +37,3 @@ export default function OpsLoading() {
     </div>
   );
 }
-

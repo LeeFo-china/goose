@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Database, Loader2, Rocket, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,21 +16,11 @@ import type { ReleaseEnvironment, ReleaseMigrationMode, ReleaseOptionsData, Rele
 import { ReleaseRefCombobox, ReleaseServiceMultiSelect, getTodayTagPlaceholder } from "@/components/ops/release-deployments-controls";
 import { dispatchProductionMigration, REF_TYPE_OPTIONS } from "@/components/ops/release-deployments-shared";
 
-export function ReleaseDispatchCard({ state, actions }: { state: any; actions: any }) {
+export function ReleaseDispatchCard({ state, actions, sourcePicker }: { state: any; actions: any; sourcePicker?: ReactNode }) {
   const { error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText } = state;
   const { onEnvironmentChange, setDraft, onRefTypeChange, runDispatch } = actions;
   return (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Rocket data-icon="inline-start" />
-              发起发布
-            </CardTitle>
-            <CardDescription>
-              后台只提交 GitHub Actions，构建、部署和日志仍由 CI/CD 执行。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
             {error ? <StatusAlert>{error}</StatusAlert> : null}
             {!options?.configured ? (
               <Alert variant="destructive">
@@ -64,6 +53,8 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </Alert>
             ) : null}
 
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.7fr)]">
+              <div className="flex min-w-0 flex-col gap-4">
           <FieldGroup>
             <Field>
               <FieldLabel>环境</FieldLabel>
@@ -299,8 +290,10 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </CardContent>
-      </Card>
+              </div>
+              {sourcePicker ? <div className="min-w-0 border-t pt-4 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">{sourcePicker}</div> : null}
+            </div>
+        </div>
   );
 }
 
@@ -347,17 +340,7 @@ export function ProductionMigrationCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Database data-icon="inline-start" />
-          生产数据库迁移
-        </CardTitle>
-        <CardDescription>
-          只提交 migration GitHub Actions；默认先预检查 pending migrations。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4">
         {!options?.configured ? (
           <Alert variant="destructive">
             <ShieldCheck data-icon="inline-start" />
@@ -489,7 +472,6 @@ export function ProductionMigrationCard({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </CardContent>
-    </Card>
+      </div>
   );
 }
