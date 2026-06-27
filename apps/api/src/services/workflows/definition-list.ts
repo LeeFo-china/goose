@@ -2,7 +2,6 @@ import { workflowRepository } from "@/repositories/workflows";
 import type { WorkflowListQuery } from "@/schema/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { getWorkflowDefinitionBusinessTrack } from "@gooes/domain";
 
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
 
@@ -21,9 +20,7 @@ export async function listWorkflowDefinitions(
   });
   const constructionDefinitionIds = result.list
     .filter((definition) =>
-      definition.category === "construction" &&
-      getWorkflowDefinitionBusinessTrack(definition.workflow_key) ===
-        "construction"
+      definition.category === "construction"
     )
     .map((definition) => definition.id);
   const constructionDefinitionIdSet = new Set(constructionDefinitionIds);
