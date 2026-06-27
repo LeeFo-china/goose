@@ -226,6 +226,7 @@ mock.module("@/services/project-procedure-assignments", () => ({
     markProcedureCompleted,
   },
 }));
+mock.module("@/repositories/workflow-task-card-context", () => ({ workflowTaskCardContextRepository: { listProjectSummariesByIds: mock(async () => []), listCustomerSummariesByIds: mock(async () => []), listExpenseRequestSummariesByIds: mock(async () => []), listProjectReceivableSummaries: mock(async () => []), listProjectAcceptanceSummariesByProjectIds: mock(async () => []) } }));
 
 describe("workflowTaskService", () => {
   test("keeps payment collection action executable for assigned finance", async () => {
@@ -246,6 +247,7 @@ describe("workflowTaskService", () => {
       business_action: "confirm_payment",
       disabled: false,
     });
+    expect(tasks.list[0]?.card_context).toMatchObject({ todo_type: "project_payment" });
     expect(tasks.list[0]?.actions[0]).not.toHaveProperty("blocked_reason");
   });
 
