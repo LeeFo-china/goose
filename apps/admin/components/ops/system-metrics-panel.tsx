@@ -1,6 +1,5 @@
 "use client";
 
-import { Fragment } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Gauge, HardDrive, Loader2, MemoryStick, Pause, Play, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -8,7 +7,6 @@ import { OpsSection } from "@/components/ops/ops-section";
 import type { OpsSystemMetrics } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { requestBackendJson } from "@/lib/backend-client";
 import { cn } from "@/lib/utils";
 
@@ -59,15 +57,22 @@ function ResourceMetric({
 }) {
   const percent = clampPercent(value);
   return (
-    <div className="flex flex-col gap-2 py-3">
-      <div className="flex items-start justify-between gap-4">
+    <div className="min-w-0 py-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
           {icon}
           <span className="truncate">{label}</span>
         </div>
-        <div className="text-sm font-semibold tabular-nums">{percent.toFixed(1)}%</div>
+        <div
+          className={cn(
+            "shrink-0 text-sm font-semibold tabular-nums",
+            percent >= 85 ? "text-destructive" : percent >= 70 ? "text-warning-foreground" : undefined,
+          )}
+        >
+          {percent.toFixed(1)}%
+        </div>
       </div>
-      <div className="h-1.5 rounded-full bg-muted">
+      <div className="mt-3 h-1.5 rounded-full bg-muted/70">
         <div
           className={cn(
             "h-full rounded-full",
@@ -76,7 +81,7 @@ function ResourceMetric({
           style={{ width: `${percent}%` }}
         />
       </div>
-      <div className="text-xs text-muted-foreground">{detail}</div>
+      <div className="mt-2 truncate text-xs text-muted-foreground">{detail}</div>
     </div>
   );
 }
@@ -93,15 +98,13 @@ function TextMetric({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          {icon}
-          <span>{label}</span>
-        </div>
-        <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+    <div className="min-w-0 py-3">
+      <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+        {icon}
+        <span className="truncate">{label}</span>
       </div>
-      <div className="text-right text-base font-semibold tabular-nums">{value}</div>
+      <div className="mt-3 truncate text-sm font-semibold tabular-nums">{value}</div>
+      <div className="mt-2 truncate text-xs text-muted-foreground">{detail}</div>
     </div>
   );
 }
@@ -281,12 +284,11 @@ export function SystemMetricsPanel() {
     >
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <div className="flex flex-col">
-        {resourceMetrics.map((item, index) => (
-          <Fragment key={item.key}>
-            {index > 0 ? <Separator /> : null}
+      <div className="grid grid-cols-2 gap-x-5 gap-y-1 border-y py-1 xl:grid-cols-4">
+        {resourceMetrics.map((item) => (
+          <div key={item.key} className="min-w-0">
             {item.node}
-          </Fragment>
+          </div>
         ))}
       </div>
     </OpsSection>

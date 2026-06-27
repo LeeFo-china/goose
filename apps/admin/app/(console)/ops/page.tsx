@@ -204,8 +204,8 @@ export default async function OpsPage({
       count: "",
       content: (
         <div className="flex flex-col gap-3">
-          <LocationMetricsPanel metrics={locationMetrics} error={locationMetricsError} />
           <SystemMetricsPanel />
+          <LocationMetricsPanel metrics={locationMetrics} error={locationMetricsError} />
           <ServiceHealthPanel />
         </div>
       ),
