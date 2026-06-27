@@ -113,6 +113,18 @@ test.describe("admin smoke", () => {
     await expect(roleDialog.getByRole("button", { name: "保存角色" })).toBeVisible();
   });
 
+  test("流程编排列表按视口分页且列表区无滚动条", async ({ page }) => {
+    await gotoAdminPage(page, "/workflows");
+
+    await expect(page.getByRole("heading", { name: "流程编排" })).toBeVisible();
+    const listViewport = page.getByTestId("workflow-list-table-viewport");
+    await expect(listViewport).toBeVisible();
+    await page.waitForTimeout(800);
+    expect(await listViewport.evaluate((element) =>
+      element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth
+    )).toBe(false);
+  });
+
   test("权限点列表展示核心字段", async ({ page }) => {
     await gotoAdminPage(page, "/permissions");
 

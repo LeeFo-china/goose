@@ -60,7 +60,9 @@ describe("workflow version semantics", () => {
     expect(designerSource).toContain("WorkflowVersionListPanel");
     expect(designerSource).toContain("WorkflowPublishConfirmDialog");
     expect(tableSource).toContain("WorkflowVersionInlineList");
-    expect(tableSource).toContain("expandedWorkflowId");
+    expect(tableSource).toContain("DialogContent");
+    expect(tableSource).not.toContain("expandedWorkflowId");
+    expect(tableSource).not.toContain("colSpan={7}");
     expect(publishDialogSource).toContain("ConfirmActionDialog");
     expect(publishDialogSource).toContain("WORKFLOW_VERSION_EFFECT_COPY.publishConfirm");
     expect(publishDialogSource).toContain("版本标签");

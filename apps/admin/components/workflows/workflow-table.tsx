@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useState, useTransition } from "react";
+import { useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronDown, ChevronRight, FileText, Loader2, Star } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { ArrowRight, History, Loader2, Star } from "lucide-react";
 import { toast } from "sonner";
+import { DataTable } from "@/components/admin/data-table";
 import {
   formatWorkflowDate,
   workflowCategoryLabel,
@@ -17,12 +19,29 @@ import type { WorkflowDefinition } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getWorkflowRuntimeIntegrationHint } from "@/components/workflows/workflow-business-track";
 import { canSetProjectConstructionDefaultWorkflow } from "@/components/workflows/workflow-project-construction-default";
+
+const WORKFLOW_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[var(--workflow-table-row-height,88px)]";
+const WORKFLOW_IDENTITY_COLUMN_CLASS_NAME = "w-[230px] min-w-0";
+const WORKFLOW_CATEGORY_COLUMN_CLASS_NAME = "hidden w-[104px] whitespace-nowrap lg:table-cell";
+const WORKFLOW_STATUS_COLUMN_CLASS_NAME = "w-[92px] whitespace-nowrap";
+const WORKFLOW_VERSION_COLUMN_CLASS_NAME = "hidden w-[92px] whitespace-nowrap md:table-cell";
+const WORKFLOW_UPDATED_COLUMN_CLASS_NAME = "hidden w-[118px] whitespace-nowrap xl:table-cell";
+const WORKFLOW_DESCRIPTION_COLUMN_CLASS_NAME = "hidden w-[220px] min-w-0 2xl:table-cell";
+const WORKFLOW_ACTION_COLUMN_CLASS_NAME = "w-[220px] text-right";
 
 function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
   const integrationHint = getWorkflowRuntimeIntegrationHint(workflow);
@@ -133,122 +152,148 @@ function ProjectConstructionDefaultAction({ workflow }: { workflow: WorkflowDefi
   );
 }
 
+function WorkflowVersionDialogAction({ workflow }: { workflow: WorkflowDefinition }) {
+  if (!workflow.active_version_id) return null;
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm">
+          <History data-icon="inline-start" />
+          版本
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="flex max-h-[86vh] max-w-[880px] flex-col overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>流程版本</DialogTitle>
+          <DialogDescription>
+            {workflow.name} 的发布版本和运行中实例影响。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 overflow-auto">
+          <WorkflowVersionInlineList
+            activeVersionId={workflow.active_version_id}
+            workflowId={workflow.id}
+            className="border-0 shadow-none"
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WorkflowActionsCell({ workflow }: { workflow: WorkflowDefinition }) {
+  return (
+    <div className="flex justify-end gap-2">
+      <ProjectConstructionDefaultAction workflow={workflow} />
+      <WorkflowVersionDialogAction workflow={workflow} />
+      <Button asChild variant="outline" size="sm">
+        <Link href={`/workflows/${workflow.id}`}>
+          打开
+          <ArrowRight data-icon="inline-end" />
+        </Link>
+      </Button>
+    </div>
+  );
+}
+
 export function WorkflowTable({
   workflows,
 }: {
   workflows: WorkflowDefinition[];
 }) {
-  const [expandedWorkflowId, setExpandedWorkflowId] = useState<string | null>(null);
+  const columns = useMemo<ColumnDef<WorkflowDefinition>[]>(() => [
+    {
+      id: "workflow",
+      header: "流程",
+      cell: ({ row }) => <WorkflowIdentityCell workflow={row.original} />,
+      meta: {
+        headerClassName: WORKFLOW_IDENTITY_COLUMN_CLASS_NAME,
+        cellClassName: WORKFLOW_IDENTITY_COLUMN_CLASS_NAME,
+      },
+    },
+    {
+      id: "category",
+      header: "分类",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {workflowCategoryLabel(row.original.category)}
+        </span>
+      ),
+      meta: {
+        headerClassName: WORKFLOW_CATEGORY_COLUMN_CLASS_NAME,
+        cellClassName: WORKFLOW_CATEGORY_COLUMN_CLASS_NAME,
+      },
+    },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge
+          className="whitespace-nowrap"
+          variant={workflowStatusVariant(row.original.status)}
+        >
+          {workflowStatusLabel(row.original.status)}
+        </Badge>
+      ),
+      meta: {
+        headerClassName: WORKFLOW_STATUS_COLUMN_CLASS_NAME,
+        cellClassName: WORKFLOW_STATUS_COLUMN_CLASS_NAME,
+      },
+    },
+    {
+      id: "version",
+      header: "当前版本",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {row.original.active_version_id ? "已绑定" : "未发布"}
+        </span>
+      ),
+      meta: {
+        headerClassName: WORKFLOW_VERSION_COLUMN_CLASS_NAME,
+        cellClassName: WORKFLOW_VERSION_COLUMN_CLASS_NAME,
+      },
+    },
+    {
+      id: "updatedAt",
+      header: "更新时间",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap tabular-nums text-muted-foreground">
+          {formatWorkflowDate(row.original.updated_at)}
+        </span>
+      ),
+      meta: {
+        headerClassName: WORKFLOW_UPDATED_COLUMN_CLASS_NAME,
+        cellClassName: WORKFLOW_UPDATED_COLUMN_CLASS_NAME,
+      },
+    },
+    {
+      id: "description",
+      header: "说明",
+      cell: ({ row }) => <WorkflowDescription value={row.original.description} />,
+      meta: {
+        headerClassName: WORKFLOW_DESCRIPTION_COLUMN_CLASS_NAME,
+        cellClassName: WORKFLOW_DESCRIPTION_COLUMN_CLASS_NAME,
+      },
+    },
+    {
+      id: "actions",
+      header: "操作",
+      cell: ({ row }) => <WorkflowActionsCell workflow={row.original} />,
+      meta: {
+        headerClassName: WORKFLOW_ACTION_COLUMN_CLASS_NAME,
+        cellClassName: WORKFLOW_ACTION_COLUMN_CLASS_NAME,
+      },
+    },
+  ], []);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1270px] table-fixed text-sm">
-        <colgroup>
-          <col className="w-[270px]" />
-          <col className="w-[120px]" />
-          <col className="w-[110px]" />
-          <col className="w-[130px]" />
-          <col className="w-[170px]" />
-          <col className="w-[240px]" />
-          <col className="w-[270px]" />
-        </colgroup>
-        <thead className="sticky top-0 z-10 bg-card text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]">
-          <tr>
-            <th className="whitespace-nowrap px-4 py-3">流程</th>
-            <th className="whitespace-nowrap px-4 py-3">分类</th>
-            <th className="whitespace-nowrap px-4 py-3">状态</th>
-            <th className="whitespace-nowrap px-4 py-3">当前版本</th>
-            <th className="whitespace-nowrap px-4 py-3">更新时间</th>
-            <th className="whitespace-nowrap px-4 py-3">说明</th>
-            <th className="sticky right-0 whitespace-nowrap bg-card px-4 py-3 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
-              操作
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {workflows.length > 0 ? (
-            workflows.map((workflow) => {
-              const expanded = expandedWorkflowId === workflow.id;
-              const canExpandVersions = Boolean(workflow.active_version_id);
-              return (
-                <Fragment key={workflow.id}>
-                  <tr className="group border-t transition-colors hover:bg-muted/40">
-                    <td className="px-4 py-4">
-                      <WorkflowIdentityCell workflow={workflow} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
-                      {workflowCategoryLabel(workflow.category)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4">
-                      <Badge
-                        className="whitespace-nowrap"
-                        variant={workflowStatusVariant(workflow.status)}
-                      >
-                        {workflowStatusLabel(workflow.status)}
-                      </Badge>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
-                      {workflow.active_version_id ? "已绑定" : "未发布"}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4 tabular-nums text-muted-foreground">
-                      {formatWorkflowDate(workflow.updated_at)}
-                    </td>
-                    <td className="px-4 py-4">
-                      <WorkflowDescription value={workflow.description} />
-                    </td>
-                    <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted/40">
-                      <div className="flex justify-end gap-2">
-                        <ProjectConstructionDefaultAction workflow={workflow} />
-                        {canExpandVersions ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setExpandedWorkflowId(expanded ? null : workflow.id)}
-                          >
-                            {expanded ? (
-                              <ChevronDown data-icon="inline-start" />
-                            ) : (
-                              <ChevronRight data-icon="inline-start" />
-                            )}
-                            版本
-                          </Button>
-                        ) : null}
-                        <Button asChild variant="outline" size="sm">
-                          <Link href={`/workflows/${workflow.id}`}>
-                            打开
-                            <ArrowRight data-icon="inline-end" />
-                          </Link>
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                  {expanded ? (
-                    <tr className="border-t bg-muted/20">
-                      <td colSpan={7} className="px-4 py-4">
-                        <WorkflowVersionInlineList
-                          activeVersionId={workflow.active_version_id}
-                          workflowId={workflow.id}
-                        />
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              );
-            })
-          ) : (
-            <tr>
-              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={7}>
-                <div className="flex flex-col items-center gap-2">
-                  <FileText className="size-8 text-muted-foreground/70" />
-                  <div className="font-medium text-foreground">没有符合条件的流程</div>
-                  <div className="text-sm">调整筛选条件，或新建流程后再编排节点。</div>
-                </div>
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      data={workflows}
+      emptyText="调整筛选条件，或新建流程后再编排节点。"
+      tableClassName="border-t-0 table-fixed"
+      rowClassName={() => WORKFLOW_TABLE_ROW_HEIGHT_CLASS_NAME}
+    />
   );
 }

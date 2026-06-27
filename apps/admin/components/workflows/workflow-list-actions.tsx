@@ -1,8 +1,9 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
+import { buildWorkflowsHref } from "@/components/workflows/workflow-list-filter-utils";
 import { WorkflowCreateDialog } from "@/components/workflows/workflow-create-dialog";
 import {
   workflowCategoryOptions,
@@ -26,25 +27,11 @@ type Navigate = (href: string) => void;
 
 const flatControlClassName = "bg-card shadow-none";
 
-function buildWorkflowsHref(input: {
-  page?: number;
-  status?: string;
-  category?: string;
-  keyword?: string;
-}) {
-  const params = new URLSearchParams();
-  if (input.page && input.page > 1) params.set("page", String(input.page));
-  if (input.status) params.set("status", input.status);
-  if (input.category) params.set("category", input.category);
-  if (input.keyword) params.set("keyword", input.keyword);
-  const query = params.toString();
-  return query ? `/workflows?${query}` : "/workflows";
-}
-
 export function WorkflowFilters({
   status,
   category,
   keyword,
+  pageSize,
   pending,
   onNavigate,
   onCreated,
@@ -52,6 +39,7 @@ export function WorkflowFilters({
   status: string;
   category: string;
   keyword: string;
+  pageSize: number;
   pending: boolean;
   onNavigate: Navigate;
   onCreated: (workflow: WorkflowDefinition) => void;
@@ -71,6 +59,7 @@ export function WorkflowFilters({
     category?: string;
   }) {
     onNavigate(buildWorkflowsHref({
+      pageSize,
       status: input.status ?? status,
       category: input.category ?? category,
       keyword,
@@ -80,6 +69,7 @@ export function WorkflowFilters({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onNavigate(buildWorkflowsHref({
+      pageSize,
       status: selectedStatus,
       category: selectedCategory,
       keyword: selectedKeyword.trim(),
@@ -155,7 +145,6 @@ export function WorkflowFilters({
         ) : null}
       </InputGroup>
       <Button type="submit" variant="outline" disabled={pending} className="w-full bg-card">
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
       <div className="flex flex-wrap gap-2 xl:justify-end">
@@ -171,6 +160,7 @@ export function WorkflowPagination({
   status,
   category,
   keyword,
+  pageSize,
   pending,
   onNavigate,
 }: {
@@ -178,6 +168,7 @@ export function WorkflowPagination({
   status: string;
   category: string;
   keyword: string;
+  pageSize: number;
   pending: boolean;
   onNavigate: Navigate;
 }) {
@@ -192,12 +183,13 @@ export function WorkflowPagination({
         disabled={previousDisabled}
         onClick={() => onNavigate(buildWorkflowsHref({
           page: Math.max(1, pagination.page - 1),
+          pageSize,
           status,
           category,
           keyword,
         }))}
       >
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
+        <ChevronLeft data-icon="inline-start" />
         上一页
       </Button>
       <Button
@@ -206,13 +198,14 @@ export function WorkflowPagination({
         disabled={nextDisabled}
         onClick={() => onNavigate(buildWorkflowsHref({
           page: pagination.page + 1,
+          pageSize,
           status,
           category,
           keyword,
         }))}
       >
         下一页
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-end" /> : <ChevronRight data-icon="inline-end" />}
+        <ChevronRight data-icon="inline-end" />
       </Button>
     </div>
   );
