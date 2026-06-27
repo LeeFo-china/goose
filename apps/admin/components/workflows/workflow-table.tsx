@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowRight, History, Loader2, Star } from "lucide-react";
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getExpandedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import { ArrowRight, ChevronDown, ChevronRight, Loader2, Star } from "lucide-react";
 import { toast } from "sonner";
-import { DataTable } from "@/components/admin/data-table";
 import {
   formatWorkflowDate,
   workflowCategoryLabel,
@@ -18,14 +23,8 @@ import { WorkflowVersionInlineList } from "@/components/workflows/workflow-versi
 import type { WorkflowDefinition } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -35,6 +34,7 @@ import { getWorkflowRuntimeIntegrationHint } from "@/components/workflows/workfl
 import { canSetProjectConstructionDefaultWorkflow } from "@/components/workflows/workflow-project-construction-default";
 
 const WORKFLOW_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[var(--workflow-table-row-height,88px)]";
+const WORKFLOW_TABLE_CLASS_NAME = "border-t-0 table-fixed";
 const WORKFLOW_IDENTITY_COLUMN_CLASS_NAME = "w-[230px] min-w-0";
 const WORKFLOW_CATEGORY_COLUMN_CLASS_NAME = "hidden w-[104px] whitespace-nowrap lg:table-cell";
 const WORKFLOW_STATUS_COLUMN_CLASS_NAME = "w-[92px] whitespace-nowrap";
@@ -152,41 +152,46 @@ function ProjectConstructionDefaultAction({ workflow }: { workflow: WorkflowDefi
   );
 }
 
-function WorkflowVersionDialogAction({ workflow }: { workflow: WorkflowDefinition }) {
+function WorkflowVersionInlineAction({
+  expanded,
+  onToggle,
+  workflow,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  workflow: WorkflowDefinition;
+}) {
   if (!workflow.active_version_id) return null;
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
-          <History data-icon="inline-start" />
-          版本
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="flex max-h-[86vh] max-w-[880px] flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>流程版本</DialogTitle>
-          <DialogDescription>
-            {workflow.name} 的发布版本和运行中实例影响。
-          </DialogDescription>
-        </DialogHeader>
-        <div className="min-h-0 overflow-auto">
-          <WorkflowVersionInlineList
-            activeVersionId={workflow.active_version_id}
-            workflowId={workflow.id}
-            className="border-0 shadow-none"
-          />
-        </div>
-      </DialogContent>
-    </Dialog>
+    <Button type="button" variant="outline" size="sm" onClick={onToggle}>
+      {expanded ? (
+        <ChevronDown data-icon="inline-start" />
+      ) : (
+        <ChevronRight data-icon="inline-start" />
+      )}
+      版本
+    </Button>
   );
 }
 
-function WorkflowActionsCell({ workflow }: { workflow: WorkflowDefinition }) {
+function WorkflowActionsCell({
+  expanded,
+  onToggleVersions,
+  workflow,
+}: {
+  expanded: boolean;
+  onToggleVersions: () => void;
+  workflow: WorkflowDefinition;
+}) {
   return (
     <div className="flex justify-end gap-2">
       <ProjectConstructionDefaultAction workflow={workflow} />
-      <WorkflowVersionDialogAction workflow={workflow} />
+      <WorkflowVersionInlineAction
+        expanded={expanded}
+        onToggle={onToggleVersions}
+        workflow={workflow}
+      />
       <Button asChild variant="outline" size="sm">
         <Link href={`/workflows/${workflow.id}`}>
           打开
@@ -202,6 +207,7 @@ export function WorkflowTable({
 }: {
   workflows: WorkflowDefinition[];
 }) {
+  const [expandedWorkflowId, setExpandedWorkflowId] = useState<string | null>(null);
   const columns = useMemo<ColumnDef<WorkflowDefinition>[]>(() => [
     {
       id: "workflow",
@@ -279,21 +285,103 @@ export function WorkflowTable({
     {
       id: "actions",
       header: "操作",
-      cell: ({ row }) => <WorkflowActionsCell workflow={row.original} />,
+      cell: ({ row }) => (
+        <WorkflowActionsCell
+          expanded={row.getIsExpanded()}
+          onToggleVersions={() => {
+            setExpandedWorkflowId((current) =>
+              current === row.original.id ? null : row.original.id
+            );
+          }}
+          workflow={row.original}
+        />
+      ),
       meta: {
         headerClassName: WORKFLOW_ACTION_COLUMN_CLASS_NAME,
         cellClassName: WORKFLOW_ACTION_COLUMN_CLASS_NAME,
       },
     },
   ], []);
+  const expandedState = useMemo(() =>
+    expandedWorkflowId ? { [expandedWorkflowId]: true } : {},
+  [expandedWorkflowId]);
+  const table = useReactTable({
+    data: workflows,
+    columns,
+    getRowId: (workflow) => workflow.id,
+    getCoreRowModel: getCoreRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
+    getRowCanExpand: (row) => Boolean(row.original.active_version_id),
+    state: {
+      expanded: expandedState,
+    },
+  });
 
   return (
-    <DataTable
-      columns={columns}
-      data={workflows}
-      emptyText="调整筛选条件，或新建流程后再编排节点。"
-      tableClassName="border-t-0 table-fixed"
-      rowClassName={() => WORKFLOW_TABLE_ROW_HEIGHT_CLASS_NAME}
-    />
+    <div>
+      <Table className={`w-full text-sm ${WORKFLOW_TABLE_CLASS_NAME}`}>
+        <TableHeader className="bg-muted/60">
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id} className="hover:bg-transparent">
+              {headerGroup.headers.map((header) => (
+                <TableHead
+                  key={header.id}
+                  className={header.column.columnDef.meta?.headerClassName}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.length ? (
+            table.getRowModel().rows.map((row) => (
+              <Fragment key={row.id}>
+                <TableRow className={WORKFLOW_TABLE_ROW_HEIGHT_CLASS_NAME}>
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell
+                      key={cell.id}
+                      className={cell.column.columnDef.meta?.cellClassName}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+                {row.getIsExpanded() ? (
+                  <TableRow
+                    data-testid="workflow-version-expanded-row"
+                    className="border-t bg-muted/20 hover:bg-muted/20"
+                  >
+                    <TableCell colSpan={columns.length} className="px-4 py-4">
+                      <WorkflowVersionInlineList
+                        activeVersionId={row.original.active_version_id}
+                        workflowId={row.original.id}
+                        className="bg-card"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </Fragment>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={columns.length} className="h-32">
+                <Empty className="border-0 p-4">
+                  <EmptyHeader>
+                    <EmptyTitle>暂无数据</EmptyTitle>
+                    <EmptyDescription>
+                      调整筛选条件，或新建流程后再编排节点。
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

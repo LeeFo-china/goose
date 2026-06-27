@@ -113,7 +113,7 @@ test.describe("admin smoke", () => {
     await expect(roleDialog.getByRole("button", { name: "保存角色" })).toBeVisible();
   });
 
-  test("流程编排列表按视口分页且列表区无滚动条", async ({ page }) => {
+  test("流程编排列表按视口分页并支持互斥版本展开", async ({ page }) => {
     await gotoAdminPage(page, "/workflows");
 
     await expect(page.getByRole("heading", { name: "流程编排" })).toBeVisible();
@@ -122,6 +122,25 @@ test.describe("admin smoke", () => {
     await page.waitForTimeout(800);
     expect(await listViewport.evaluate((element) =>
       element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth
+    )).toBe(false);
+
+    const versionButtons = page.getByRole("button", { name: "版本" });
+    await expect(versionButtons.first()).toBeVisible();
+    expect(await versionButtons.count()).toBeGreaterThan(1);
+
+    await versionButtons.first().click();
+    await expect(page.getByTestId("workflow-version-expanded-row")).toHaveCount(1);
+    expect(await listViewport.evaluate((element) =>
+      element.scrollWidth > element.clientWidth
+    )).toBe(false);
+    expect(await listViewport.evaluate((element) =>
+      element.scrollHeight >= element.clientHeight
+    )).toBe(true);
+
+    await versionButtons.nth(1).click();
+    await expect(page.getByTestId("workflow-version-expanded-row")).toHaveCount(1);
+    expect(await listViewport.evaluate((element) =>
+      element.scrollWidth > element.clientWidth
     )).toBe(false);
   });
 

@@ -46,15 +46,15 @@ describe("Workflow management page layout", () => {
 
     expect(table).toContain("WORKFLOW_TABLE_ROW_HEIGHT_CLASS_NAME");
     expect(table).toContain("h-[var(--workflow-table-row-height,88px)]");
-    expect(table).toContain("rowClassName={() => WORKFLOW_TABLE_ROW_HEIGHT_CLASS_NAME}");
+    expect(table).toContain("className={WORKFLOW_TABLE_ROW_HEIGHT_CLASS_NAME}");
     expect(shell).toContain("WORKFLOW_TABLE_HEADER_HEIGHT");
   });
 
   test("keeps workflow table within the list viewport without horizontal scrolling", () => {
     const { table } = readWorkflowManagementSources();
 
-    expect(table).toContain("DataTable");
-    expect(table).toContain('tableClassName="border-t-0 table-fixed"');
+    expect(table).toContain("WORKFLOW_TABLE_CLASS_NAME");
+    expect(table).toContain('"border-t-0 table-fixed"');
     expect(table).not.toContain("min-w-[1270px]");
     expect(table).not.toContain("overflow-x-auto");
   });
@@ -103,14 +103,18 @@ describe("Workflow management page layout", () => {
     expect(shell).toContain("当前显示 {visibleWorkflows.length} 条");
   });
 
-  test("keeps workflow version viewing from increasing table row count", () => {
+  test("expands a single workflow version row inline with TanStack Table", () => {
     const { table } = readWorkflowManagementSources();
 
-    expect(table).toContain("DialogContent");
+    expect(table).toContain("getExpandedRowModel");
+    expect(table).toContain("expandedWorkflowId");
+    expect(table).toContain("setExpandedWorkflowId");
+    expect(table).toContain("row.getIsExpanded()");
+    expect(table).toContain("colSpan={columns.length}");
+    expect(table).toContain('data-testid="workflow-version-expanded-row"');
     expect(table).toContain("WorkflowVersionInlineList");
-    expect(table).not.toContain("expandedWorkflowId");
-    expect(table).not.toContain("<Fragment");
-    expect(table).not.toContain("colSpan={7}");
+    expect(table).not.toContain("DialogContent");
+    expect(table).not.toContain("Record<string, boolean>");
   });
 
   test("defines workflow viewport page size math", async () => {
