@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { WorkflowDefinitionRow } from "./types";
+import type {
+  WorkflowDefinitionBindingRow,
+  WorkflowDefinitionRow,
+} from "./types";
 
 const NOW = "2026-06-27T00:00:00.000Z";
 
@@ -45,6 +48,39 @@ describe("listProjectConstructionWorkflowOptions", () => {
   });
 });
 
+describe("updateProjectConstructionWorkflowCandidate", () => {
+  beforeEach(() => {
+    workflowTable.mockClear();
+    queryCalls.length = 0;
+  });
+
+  test("marks a project construction workflow binding as not selectable", async () => {
+    const { updateProjectConstructionWorkflowCandidate } = await import(
+      "./definition-bindings"
+    );
+
+    const result = await updateProjectConstructionWorkflowCandidate({
+      tenantId: "tenant-1",
+      definitionId: "construction-custom",
+      selectable: false,
+      isDefault: false,
+    });
+
+    expect(queryCalls).toContainEqual({
+      table: "workflow_definition_bindings",
+      method: "update",
+      args: [{ selectable: false, is_default: false }],
+    });
+    expect(queryCalls).toContainEqual({
+      table: "workflow_definition_bindings",
+      method: "eq",
+      args: ["definition_id", "construction-custom"],
+    });
+    expect(result.selectable).toBe(false);
+    expect(result.is_default).toBe(false);
+  });
+});
+
 function createBuilder(table: string) {
   const builder = {
     select(...args: unknown[]) {
@@ -67,6 +103,10 @@ function createBuilder(table: string) {
       queryCalls.push({ table, method: "order", args });
       return builder;
     },
+    update(...args: unknown[]) {
+      queryCalls.push({ table, method: "update", args });
+      return builder;
+    },
     range(...args: unknown[]) {
       queryCalls.push({ table, method: "range", args });
       return Promise.resolve({
@@ -82,9 +122,40 @@ function createBuilder(table: string) {
         error: null,
       });
     },
+    single(...args: unknown[]) {
+      queryCalls.push({ table, method: "single", args });
+      return Promise.resolve({
+        data: table === "workflow_definition_bindings"
+          ? bindingFromUpdate()
+          : null,
+        error: null,
+      });
+    },
   };
 
   return builder;
+}
+
+function bindingFromUpdate(): WorkflowDefinitionBindingRow {
+  const updateCall = queryCalls.findLast((call) =>
+    call.table === "workflow_definition_bindings" &&
+    call.method === "update"
+  );
+  const payload = updateCall?.args[0] as
+    | { selectable?: boolean; is_default?: boolean }
+    | undefined;
+
+  return {
+    id: "binding-1",
+    tenant_id: "tenant-1",
+    subject_type: "project",
+    workflow_purpose: "construction",
+    definition_id: "construction-custom",
+    selectable: payload?.selectable ?? true,
+    is_default: payload?.is_default ?? false,
+    created_at: NOW,
+    updated_at: NOW,
+  };
 }
 
 function definitions(): WorkflowDefinitionRow[] {

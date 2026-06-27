@@ -10,7 +10,13 @@ import {
   getExpandedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowRight, ChevronDown, ChevronRight, Loader2, Star } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Star,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   formatWorkflowDate,
@@ -19,6 +25,7 @@ import {
   workflowStatusVariant,
 } from "@/components/workflows/workflow-labels";
 import { setProjectConstructionDefaultWorkflow } from "@/components/workflows/workflow-requests";
+import { WorkflowSecondaryActions } from "@/components/workflows/workflow-secondary-actions";
 import { WorkflowVersionInlineList } from "@/components/workflows/workflow-version-list-panel";
 import type { WorkflowDefinition } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +48,7 @@ const WORKFLOW_STATUS_COLUMN_CLASS_NAME = "w-[92px] whitespace-nowrap";
 const WORKFLOW_VERSION_COLUMN_CLASS_NAME = "hidden w-[92px] whitespace-nowrap md:table-cell";
 const WORKFLOW_UPDATED_COLUMN_CLASS_NAME = "hidden w-[118px] whitespace-nowrap xl:table-cell";
 const WORKFLOW_DESCRIPTION_COLUMN_CLASS_NAME = "hidden w-[220px] min-w-0 2xl:table-cell";
-const WORKFLOW_ACTION_COLUMN_CLASS_NAME = "w-[220px] text-right";
+const WORKFLOW_ACTION_COLUMN_CLASS_NAME = "w-[264px] text-right";
 
 function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
   const integrationHint = getWorkflowRuntimeIntegrationHint(workflow);
@@ -198,6 +205,7 @@ function WorkflowActionsCell({
           <ArrowRight data-icon="inline-end" />
         </Link>
       </Button>
+      <WorkflowSecondaryActions workflow={workflow} />
     </div>
   );
 }

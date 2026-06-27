@@ -184,3 +184,31 @@ export async function listProjectConstructionBindingsByDefinitionIds(input: {
 
   return (data ?? []) as WorkflowDefinitionBindingRow[];
 }
+
+export async function updateProjectConstructionWorkflowCandidate(input: {
+  tenantId: string;
+  definitionId: string;
+  selectable: boolean;
+  isDefault?: boolean;
+}): Promise<WorkflowDefinitionBindingRow> {
+  const { data, error } = await workflowTable("workflow_definition_bindings")
+    .update({
+      selectable: input.selectable,
+      ...(input.isDefault === undefined ? {} : { is_default: input.isDefault }),
+    })
+    .eq("tenant_id", input.tenantId)
+    .eq("subject_type", PROJECT_CONSTRUCTION_SUBJECT_TYPE)
+    .eq("workflow_purpose", PROJECT_CONSTRUCTION_PURPOSE)
+    .eq("definition_id", input.definitionId)
+    .select(PROJECT_CONSTRUCTION_BINDING_SELECT)
+    .single();
+
+  if (error) {
+    throw Errors.dbError("更新项目施工流程候选失败", error);
+  }
+  if (!data) {
+    throw Errors.badRequest("项目施工流程候选不存在");
+  }
+
+  return data as WorkflowDefinitionBindingRow;
+}

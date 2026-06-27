@@ -11,6 +11,12 @@ const assertTenantContext = mock((_authContext: AuthContext) => "tenant-1");
 const assertPermission = mock((_authContext: AuthContext, _permission: string) => undefined);
 const getDefinitionById = mock(async () => definition());
 const setDefaultProjectConstructionWorkflow = mock(async () => binding());
+const listProjectConstructionBindingsByDefinitionIds = mock(async () => [
+  binding({ is_default: false }),
+]);
+const updateProjectConstructionWorkflowCandidate = mock(async () =>
+  binding({ selectable: false, is_default: false })
+);
 
 mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
@@ -23,6 +29,8 @@ mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
     getDefinitionById,
     setDefaultProjectConstructionWorkflow,
+    listProjectConstructionBindingsByDefinitionIds,
+    updateProjectConstructionWorkflowCandidate,
   },
 }));
 
@@ -34,6 +42,14 @@ describe("setProjectConstructionDefaultWorkflow", () => {
     getDefinitionById.mockImplementation(async () => definition());
     setDefaultProjectConstructionWorkflow.mockClear();
     setDefaultProjectConstructionWorkflow.mockImplementation(async () => binding());
+    listProjectConstructionBindingsByDefinitionIds.mockClear();
+    listProjectConstructionBindingsByDefinitionIds.mockImplementation(async () => [
+      binding({ is_default: false }),
+    ]);
+    updateProjectConstructionWorkflowCandidate.mockClear();
+    updateProjectConstructionWorkflowCandidate.mockImplementation(async () =>
+      binding({ selectable: false, is_default: false })
+    );
   });
 
   test("allows a custom active construction workflow to become the default", async () => {
@@ -56,6 +72,48 @@ describe("setProjectConstructionDefaultWorkflow", () => {
     });
     expect(result.definition.workflow_key).toBe("construction_custom_mq7hqqgl_1_d0c5a149");
     expect(result.binding.is_default).toBe(true);
+  });
+
+  test("removes a non-default construction workflow from project candidates", async () => {
+    const { removeProjectConstructionCandidateWorkflow } = await import(
+      "./workflows/project-construction-default"
+    );
+
+    const result = await removeProjectConstructionCandidateWorkflow(
+      authContext(),
+      "construction-custom-1",
+    );
+
+    expect(listProjectConstructionBindingsByDefinitionIds).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      definitionIds: ["construction-custom-1"],
+    });
+    expect(updateProjectConstructionWorkflowCandidate).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      definitionId: "construction-custom-1",
+      selectable: false,
+      isDefault: false,
+    });
+    expect(result.binding?.selectable).toBe(false);
+    expect(result.binding?.is_default).toBe(false);
+  });
+
+  test("rejects removing the default construction workflow from project candidates", async () => {
+    listProjectConstructionBindingsByDefinitionIds.mockImplementation(async () => [
+      binding({ is_default: true }),
+    ]);
+    const { removeProjectConstructionCandidateWorkflow } = await import(
+      "./workflows/project-construction-default"
+    );
+
+    await expect(removeProjectConstructionCandidateWorkflow(
+      authContext(),
+      "construction-custom-1",
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WORKFLOW_PROJECT_CONSTRUCTION_DEFAULT_REMOVE_FORBIDDEN",
+    });
+    expect(updateProjectConstructionWorkflowCandidate).not.toHaveBeenCalled();
   });
 });
 
@@ -84,15 +142,18 @@ function definition(): WorkflowDefinitionRow {
   };
 }
 
-function binding(): WorkflowDefinitionBindingRow {
+function binding(input: {
+  selectable?: boolean;
+  is_default?: boolean;
+} = {}): WorkflowDefinitionBindingRow {
   return {
     id: "binding-1",
     tenant_id: "tenant-1",
     subject_type: "project",
     workflow_purpose: "construction",
     definition_id: "construction-custom-1",
-    selectable: true,
-    is_default: true,
+    selectable: input.selectable ?? true,
+    is_default: input.is_default ?? true,
     created_at: NOW,
     updated_at: NOW,
   };

@@ -27,6 +27,7 @@ import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-
 import { resolveWorkflowKey } from "@/services/workflow-key";
 import {
   activateWorkflowVersion,
+  archiveWorkflowDefinition,
   archiveWorkflowRuntimeInstance,
   archiveWorkflowVersion,
 } from "@/services/workflows/archive";
@@ -34,6 +35,7 @@ import {
   listWorkflowDefinitions,
 } from "@/services/workflows/definition-list";
 import {
+  removeProjectConstructionCandidateWorkflow,
   setProjectConstructionDefaultWorkflow,
 } from "@/services/workflows/project-construction-default";
 import {
@@ -248,14 +250,15 @@ class WorkflowService {
     return setProjectConstructionDefaultWorkflow(authContext, definitionId);
   }
 
-  async archiveDefinition(authContext: AuthContext, id: string) {
-    const tenantId = this.assertManagePermission(authContext);
-    await this.getRequiredDefinition(tenantId, id);
+  async removeProjectConstructionCandidate(
+    authContext: AuthContext,
+    definitionId: string,
+  ) {
+    return removeProjectConstructionCandidateWorkflow(authContext, definitionId);
+  }
 
-    return workflowRepository.updateDefinition(id, tenantId, {
-      status: "archived",
-      updatedBy: authContext.employeeId,
-    });
+  async archiveDefinition(authContext: AuthContext, id: string) {
+    return archiveWorkflowDefinition(authContext, id);
   }
 
   async archiveVersion(

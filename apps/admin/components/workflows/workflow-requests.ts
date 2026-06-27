@@ -214,6 +214,19 @@ export async function setProjectConstructionDefaultWorkflow(id: string) {
   );
 }
 
+export async function removeProjectConstructionCandidateWorkflow(id: string) {
+  return requestBackendJson<{
+    definition: WorkflowDefinition;
+    binding: WorkflowDefinition["project_construction_binding"];
+  }>(
+    `/workflows/${encodeURIComponent(id)}/project-construction-candidate/remove`,
+    {
+      method: "POST",
+      fallbackMessage: "移出施工候选失败",
+    },
+  );
+}
+
 export async function fetchWorkflowRuntimeInstances(
   id: string,
   query: WorkflowRuntimeInstanceListQuery = {},

@@ -10,3 +10,11 @@ export function canSetProjectConstructionDefaultWorkflow(
     workflow.status === "active" &&
     Boolean(workflow.active_version_id);
 }
+
+export function canRemoveProjectConstructionCandidateWorkflow(
+  workflow: Pick<WorkflowDefinition, "category" | "project_construction_binding">,
+) {
+  return workflow.category === "construction" &&
+    workflow.project_construction_binding?.selectable === true &&
+    workflow.project_construction_binding.is_default !== true;
+}

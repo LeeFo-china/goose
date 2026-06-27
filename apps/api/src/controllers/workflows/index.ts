@@ -157,6 +157,22 @@ class WorkflowController extends TenantBaseController<
     return ResponseHandler.success(data);
   }
 
+  @Post("/workflows/:id/project-construction-candidate/remove")
+  async removeProjectConstructionCandidate(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowDefinitionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await workflowService.removeProjectConstructionCandidate(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Get("/workflows/:id/versions")
   async listVersions(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);

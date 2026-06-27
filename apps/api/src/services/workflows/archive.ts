@@ -6,6 +6,41 @@ import type { AuthContext } from "@/services/authorization";
 
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
 
+export async function archiveWorkflowDefinition(
+  authContext: AuthContext,
+  definitionId: string,
+) {
+  const tenantId = assertManagePermission(authContext);
+  const definition = await getRequiredDefinition(tenantId, definitionId);
+
+  if (definition.category === "construction") {
+    const [binding] = await workflowRepository.listProjectConstructionBindingsByDefinitionIds({
+      tenantId,
+      definitionIds: [definitionId],
+    });
+    if (binding?.selectable === true) {
+      if (binding.is_default) {
+        throw Errors.business(
+          409,
+          "默认施工流程不能归档，请先切换默认施工流程",
+          "WORKFLOW_PROJECT_CONSTRUCTION_DEFAULT_ARCHIVE_FORBIDDEN",
+        );
+      }
+      await workflowRepository.updateProjectConstructionWorkflowCandidate({
+        tenantId,
+        definitionId,
+        selectable: false,
+        isDefault: false,
+      });
+    }
+  }
+
+  return workflowRepository.updateDefinition(definitionId, tenantId, {
+    status: "archived",
+    updatedBy: authContext.employeeId,
+  });
+}
+
 export async function archiveWorkflowVersion(
   authContext: AuthContext,
   definitionId: string,

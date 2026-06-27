@@ -12,6 +12,7 @@ import {
   listProjectConstructionBindingsByDefinitionIds,
   listProjectConstructionWorkflowOptions,
   setDefaultProjectConstructionWorkflow,
+  updateProjectConstructionWorkflowCandidate,
 } from "./workflows/definition-bindings";
 import {
   getDraftGraph,
@@ -66,6 +67,7 @@ class WorkflowRepository {
   findDefaultProjectConstructionWorkflow = findDefaultProjectConstructionWorkflow;
   listProjectConstructionBindingsByDefinitionIds = listProjectConstructionBindingsByDefinitionIds;
   setDefaultProjectConstructionWorkflow = setDefaultProjectConstructionWorkflow;
+  updateProjectConstructionWorkflowCandidate = updateProjectConstructionWorkflowCandidate;
   listRuntimeInstances = listRuntimeInstances;
   getRuntimeInstanceById = getRuntimeInstanceById;
   findLatestRunningRuntimeInstance = findLatestRunningRuntimeInstance;
