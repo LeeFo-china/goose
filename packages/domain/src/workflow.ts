@@ -146,7 +146,10 @@ export function getWorkflowDefinitionBusinessTrack(
   if (isWorkflowKeyDerivedFrom(normalized, 'project_signing')) {
     return 'project_signing';
   }
-  if (isWorkflowKeyDerivedFrom(normalized, 'construction_main')) {
+  if (
+    isWorkflowKeyDerivedFrom(normalized, 'construction_main') ||
+    normalized.startsWith('construction_')
+  ) {
     return 'construction';
   }
   return 'generic';

@@ -1,13 +1,29 @@
-import { describe, expect, test } from "bun:test";
-import { isUsableConstructionWorkflowDefinition } from "./project-construction-workflow-selection";
+import { describe, expect, mock, test } from "bun:test";
 import type { WorkflowDefinitionRow } from "@/repositories/workflows";
 
 const NOW = "2026-06-22T00:00:00.000Z";
 
+mock.module("@/repositories/workflows", () => ({
+  workflowRepository: {},
+}));
+
+mock.module("@/repositories/projects", () => ({
+  projectRepository: {},
+}));
+
 describe("isUsableConstructionWorkflowDefinition", () => {
-  test("accepts only active published construction main track definitions", () => {
+  test("accepts any active published construction definition", async () => {
+    const { isUsableConstructionWorkflowDefinition } = await import(
+      "./project-construction-workflow-selection"
+    );
+
     expect(isUsableConstructionWorkflowDefinition(definition({
       workflow_key: "construction_main",
+      category: "construction",
+    }))).toBe(true);
+
+    expect(isUsableConstructionWorkflowDefinition(definition({
+      workflow_key: "construction_custom_mq7hqqgl_1_d0c5a149",
       category: "construction",
     }))).toBe(true);
 
@@ -19,6 +35,13 @@ describe("isUsableConstructionWorkflowDefinition", () => {
     expect(isUsableConstructionWorkflowDefinition(definition({
       workflow_key: "custom_construction_bucket",
       category: "construction",
+      status: "archived",
+    }))).toBe(false);
+
+    expect(isUsableConstructionWorkflowDefinition(definition({
+      workflow_key: "draft_construction_bucket",
+      category: "construction",
+      active_version_id: null,
     }))).toBe(false);
   });
 });
@@ -37,7 +60,9 @@ function definition(input: {
     description: null,
     category: input.category,
     status: input.status ?? "active",
-    active_version_id: input.active_version_id ?? "version-1",
+    active_version_id: Object.hasOwn(input, "active_version_id")
+      ? input.active_version_id ?? null
+      : "version-1",
     created_by: null,
     updated_by: null,
     created_at: NOW,
