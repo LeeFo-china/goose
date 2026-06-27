@@ -97,4 +97,33 @@ describe("project acceptance display helpers", () => {
     expect(summary.rectificationImages[0]?.path).toBe("rectification-a.jpg");
     expect(summary.actionImages[0]?.path).toBe("customer-a.jpg");
   });
+
+  test("dedupes evidence images across item and action sources", () => {
+    const acceptance = acceptanceFixture();
+    acceptance.actions = [{
+      id: "action-duplicate",
+      action: "customer_confirm",
+      operator_type: "customer",
+      operator_id: null,
+      comment: "确认验收",
+      created_at: null,
+      image_items: [{
+        id: "duplicate-image",
+        item_id: "item-1",
+        item_title: "冷热水管",
+        path: "acceptance-a.jpg",
+        url: "acceptance-a.jpg",
+        source: "customer_confirm",
+      }],
+    }];
+
+    const summary = getAcceptanceEvidenceSummary(acceptance);
+
+    expect(summary.total).toBe(3);
+    expect(summary.acceptanceImages.map((image) => image.path)).toEqual([
+      "acceptance-a.jpg",
+      "acceptance-b.jpg",
+    ]);
+    expect(summary.actionImages).toEqual([]);
+  });
 });

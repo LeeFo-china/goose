@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent } from "react";
-import { Clock3 } from "lucide-react";
+import { Clock3, MessageSquareText } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -144,14 +144,14 @@ export function ProjectAcceptanceDetail({
             <StatusAlert>{selected.blocked_reason}</StatusAlert>
           ) : null}
 
-          <div className="mt-4 overflow-hidden rounded-md border bg-background">
+          <div className="mt-4 overflow-hidden border-y bg-background/60">
             {selectedSections.map((section, sectionIndex) => (
               <section
                 key={section.id || `flat-items-${sectionIndex}`}
                 className={cn(sectionIndex > 0 ? "border-t" : null)}
               >
                 {isFinalAcceptance(selected) ? (
-                  <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
                     <div className="min-w-0">
                       <h4 className="truncate text-sm font-semibold">
                         {section.title}
@@ -170,7 +170,6 @@ export function ProjectAcceptanceDetail({
                   {section.items.map((item) => (
                     <AcceptanceItemRow
                       key={item.id}
-                      selected={selected}
                       item={item}
                       draft={editable.items[item.id]}
                       editableNow={editableNow}
@@ -199,16 +198,19 @@ export function ProjectAcceptanceDetail({
 
             <section className="space-y-2">
               <Label>整体验收说明</Label>
-              <Textarea
-                value={editable.summary}
-                onChange={(event) =>
-                  setEditable((current) => ({
-                    ...current,
-                    summary: event.target.value,
-                  }))}
-                disabled={!editableNow}
-                placeholder={editableNow ? "填写现场整体情况" : "暂无整体验收说明"}
-              />
+              {editableNow ? (
+                <Textarea
+                  value={editable.summary}
+                  onChange={(event) =>
+                    setEditable((current) => ({
+                      ...current,
+                      summary: event.target.value,
+                    }))}
+                  placeholder="填写现场整体情况"
+                />
+              ) : (
+                <ReadOnlySummaryText value={editable.summary} />
+              )}
             </section>
 
             <EvidenceSummaryPanel acceptance={selected} />
@@ -228,5 +230,21 @@ export function ProjectAcceptanceDetail({
         </aside>
       </div>
     </section>
+  );
+}
+
+function ReadOnlySummaryText({ value }: { value: string }) {
+  const text = value.trim();
+
+  return (
+    <div className="border-t pt-3 text-sm leading-6">
+      <div className="mb-1 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <MessageSquareText className="size-3.5" />
+        现场整体情况
+      </div>
+      <p className={cn(text ? "text-foreground" : "text-muted-foreground")}>
+        {text || "未填写整体验收说明"}
+      </p>
+    </div>
   );
 }

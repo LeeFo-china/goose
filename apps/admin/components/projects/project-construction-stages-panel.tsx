@@ -176,6 +176,19 @@ function workflowProgressBadge(progress: WorkflowProgressPayload | null) {
 }
 
 function ConstructionStageSkeleton({ compact }: { compact: boolean }) {
+  if (compact) {
+    return (
+      <section className="border-y bg-background/60 px-4 py-3">
+        <Skeleton className="h-4 w-32" />
+        <div className="mt-2 flex flex-wrap gap-3">
+          <Skeleton className="h-3 w-40" />
+          <Skeleton className="h-3 w-36" />
+          <Skeleton className="h-3 w-44" />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="rounded-md border bg-card p-4">
       <Skeleton className="h-5 w-36" />
@@ -210,7 +223,7 @@ function stageSummary(stage: ConstructionStageItem) {
     return [
       `最近日志：${stage.latest_log.node_name || "施工更新"}`,
       dateTime,
-    ].filter(Boolean).join(" · ");
+    ].filter(Boolean).join(" - ");
   }
   if (stage.can_create_log || stage.can_create_acceptance) return "当前可推进";
   return "暂无记录";
@@ -257,15 +270,70 @@ export function ProjectConstructionStagesPanel({
   }, [active, projectId]);
 
   const stages = useMemo(() => data?.stages || [], [data?.stages]);
-  const visibleStages = compact ? stages.slice(0, 6) : stages;
+  const visibleStages = stages;
   const progressTitle = workflowProgressTitle(workflowProgress);
   const progressBadge = workflowProgressBadge(workflowProgress);
   const currentStageCode = workflowProgress?.source === "workflow_runtime"
     ? workflowProgress.current_stage_code
     : null;
+  const currentStage = currentStageCode
+    ? stages.find((stage) => stage.stage_code === currentStageCode)
+    : null;
+  const latestLogStage = stages.find((stage) => stage.latest_log);
+  const requiredSummary = data?.required_completed
+    ? "必需工序已完成"
+    : data?.missing_required_stages?.length
+      ? `待完成 ${data.missing_required_stages.length} 个工序`
+      : "必需工序同步中";
+  const compactCurrentTitle = currentStage?.stage_label || progressTitle || "流程同步中";
+  const compactLatestSummary = latestLogStage?.latest_log
+    ? [
+      latestLogStage.stage_label,
+      latestLogStage.latest_log.node_name || "施工更新",
+      formatDateTime(latestLogStage.latest_log.created_at),
+    ].filter(Boolean).join(" - ")
+    : "暂无最近日志";
 
   if (loading && !data) {
     return <ConstructionStageSkeleton compact={compact} />;
+  }
+
+  if (compact) {
+    return (
+      <section className="border-y bg-background/60 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h3 className="text-sm font-semibold">施工阶段</h3>
+          {progressBadge ? (
+            <Badge variant={progressBadge.variant}>{progressBadge.label}</Badge>
+          ) : (
+            <Badge variant="secondary">阶段明细</Badge>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="ml-auto size-8"
+            onClick={loadStages}
+            disabled={loading}
+            aria-label="刷新施工阶段"
+          >
+            <RefreshCw className={loading ? "animate-spin" : ""} />
+          </Button>
+        </div>
+        {error ? <div className="mt-3"><StatusAlert>{error}</StatusAlert></div> : null}
+        {data ? (
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span>当前：{compactCurrentTitle}</span>
+            <span>{requiredSummary}</span>
+            <span>最近：{compactLatestSummary}</span>
+          </div>
+        ) : (
+          <div className="mt-2 text-xs text-muted-foreground">
+            暂无施工阶段明细。
+          </div>
+        )}
+      </section>
+    );
   }
 
   return (

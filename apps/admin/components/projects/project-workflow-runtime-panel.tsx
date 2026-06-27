@@ -164,7 +164,7 @@ export function ProjectWorkflowRuntimePanel({
 
   if (compact) {
     return (
-      <section className="bg-card">
+      <section className="border-y bg-card">
         <div className="flex items-start justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 items-start gap-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
@@ -406,7 +406,7 @@ function CurrentNodeActions({
           })}
         </div>
       ) : (
-        <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <div className="px-0 py-1 text-xs text-muted-foreground">
           当前账号暂无可执行动作。
         </div>
       )}

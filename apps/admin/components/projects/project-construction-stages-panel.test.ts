@@ -25,4 +25,18 @@ describe("ProjectConstructionStagesPanel workflow boundary", () => {
     expect(source).not.toContain("md:grid-cols-4");
     expect(source).not.toContain("flex min-h-28 flex-col gap-3 rounded-md border bg-background p-3");
   });
+
+  test("uses a lightweight summary strip for compact construction stage views", () => {
+    const source = readFileSync(
+      new URL("./project-construction-stages-panel.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("if (compact) {");
+    expect(source).toContain("border-y bg-background/60 px-4 py-3");
+    expect(source).toContain("<h3 className=\"text-sm font-semibold\">施工阶段</h3>");
+    expect(source).toContain("当前：{compactCurrentTitle}");
+    expect(source).toContain("最近：{compactLatestSummary}");
+    expect(source).not.toContain("compact ? stages.slice(0, 6) : stages");
+  });
 });

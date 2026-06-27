@@ -1,8 +1,9 @@
 "use client";
 
-import { ChangeEvent } from "react";
+import { ChangeEvent, useState } from "react";
 import {
   CheckCircle2,
+  CircleMinus,
   Image as ImageIcon,
   Loader2,
   MessageSquareText,
@@ -39,6 +40,8 @@ import {
 import { ImageUploadBlock } from "@/components/projects/project-acceptance-image-upload-block";
 import { HoverImagePreview } from "@/components/projects/project-acceptance-image-preview";
 import { cn } from "@/lib/utils";
+
+const EVIDENCE_PREVIEW_LIMIT = 8;
 
 export function nextStepLabel(acceptance: ProjectAcceptance) {
   if (acceptance.status === "draft") return "填写检查项后提交验收";
@@ -206,11 +209,14 @@ function EvidenceThumb({
 
 export function EvidenceSummaryPanel({ acceptance }: { acceptance: ProjectAcceptance }) {
   const evidence = getAcceptanceEvidenceSummary(acceptance);
-  const previewImages = [
+  const [expanded, setExpanded] = useState(false);
+  const allImages = [
     ...evidence.acceptanceImages,
     ...evidence.rectificationImages,
     ...evidence.actionImages,
-  ].slice(0, 8);
+  ];
+  const hiddenCount = Math.max(allImages.length - EVIDENCE_PREVIEW_LIMIT, 0);
+  const previewImages = expanded ? allImages : allImages.slice(0, EVIDENCE_PREVIEW_LIMIT);
 
   return (
     <section className="space-y-3">
@@ -227,26 +233,41 @@ export function EvidenceSummaryPanel({ acceptance }: { acceptance: ProjectAccept
         <span>流程 {evidence.actionImages.length}</span>
       </div>
       {previewImages.length ? (
-        <div className="grid grid-cols-4 gap-2">
-          {previewImages.map((image, index) => (
-            <EvidenceThumb
-              key={image.id || image.path || image.url || index}
-              image={image}
-              index={index}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-4 gap-2">
+            {previewImages.map((image, index) => (
+              <EvidenceThumb
+                key={image.id || image.path || image.url || index}
+                image={image}
+                index={index}
+              />
+            ))}
+          </div>
+          {hiddenCount > 0 ? (
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>
+                {expanded ? "已展示全部图片" : <>还有 {hiddenCount} 张未展示</>}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded ? "收起" : "展开全部"}
+              </Button>
+            </div>
+          ) : null}
+        </>
       ) : (
-        <div className="rounded-md border border-dashed bg-background p-4 text-center text-xs text-muted-foreground">
-          暂无图片证据
-        </div>
+        <div className="text-xs text-muted-foreground">暂无图片证据</div>
       )}
     </section>
   );
 }
 
 export function AcceptanceItemRow({
-  selected,
   item,
   draft,
   editableNow,
@@ -254,7 +275,6 @@ export function AcceptanceItemRow({
   updateEditableItem,
   uploadImages,
 }: {
-  selected: ProjectAcceptance;
   item: AcceptanceItem;
   draft: EditableItem | undefined;
   editableNow: boolean;
@@ -266,14 +286,26 @@ export function AcceptanceItemRow({
     target: "images" | "rectification_images",
   ) => void;
 }) {
+  const result = draft?.result ?? item.result;
+  const remark = (draft?.remark ?? item.remark ?? "").trim();
+
   return (
-    <article className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_168px]">
+    <article
+      className={cn(
+        "grid gap-4 px-4 py-4",
+        editableNow
+          ? "lg:grid-cols-[minmax(0,1fr)_168px]"
+          : "lg:grid-cols-[minmax(0,1fr)_auto]",
+      )}
+    >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="font-medium">{item.title}</h4>
-          <Badge variant={resultVariant(draft?.result)}>
-            {resultLabel(draft?.result)}
-          </Badge>
+          {editableNow ? (
+            <Badge variant={resultVariant(result)}>
+              {resultLabel(result)}
+            </Badge>
+          ) : null}
           {item.required ? <Badge variant="outline">必检</Badge> : null}
           {item.photo_required ? (
             <Badge variant="outline">
@@ -287,45 +319,49 @@ export function AcceptanceItemRow({
         </p>
       </div>
 
-      <Select
-        value={draft?.result || "unset"}
-        disabled={!editableNow}
-        onValueChange={(value) =>
-          updateEditableItem(item.id, {
-            result: value === "unset"
-              ? null
-              : value as AcceptanceItemResult,
-          })}
-      >
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="unset">未填写</SelectItem>
-          <SelectItem value="pass">通过</SelectItem>
-          <SelectItem value="fail">不通过</SelectItem>
-          {item.allow_not_applicable ? (
-            <SelectItem value="not_applicable">不适用</SelectItem>
-          ) : null}
-        </SelectContent>
-      </Select>
+      {editableNow ? (
+        <Select
+          value={result || "unset"}
+          onValueChange={(value) =>
+            updateEditableItem(item.id, {
+              result: value === "unset"
+                ? null
+                : value as AcceptanceItemResult,
+            })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="unset">未填写</SelectItem>
+            <SelectItem value="pass">通过</SelectItem>
+            <SelectItem value="fail">不通过</SelectItem>
+            {item.allow_not_applicable ? (
+              <SelectItem value="not_applicable">不适用</SelectItem>
+            ) : null}
+          </SelectContent>
+        </Select>
+      ) : (
+        <ReadOnlyResultStamp result={result} />
+      )}
 
       <div className="grid gap-4 lg:col-span-2 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="space-y-2">
-          <Label>备注</Label>
-          <Textarea
-            className="min-h-24"
-            value={draft?.remark || ""}
-            disabled={!editableNow}
-            onChange={(event) =>
-              updateEditableItem(item.id, {
-                remark: event.target.value,
-              })}
-            placeholder={
-              canEdit(selected.status) ? "填写验收备注" : "暂无验收备注"
-            }
-          />
-        </div>
+        {editableNow ? (
+          <div className="space-y-2">
+            <Label>备注</Label>
+            <Textarea
+              className="min-h-24"
+              value={remark}
+              onChange={(event) =>
+                updateEditableItem(item.id, {
+                  remark: event.target.value,
+                })}
+              placeholder="填写验收备注"
+            />
+          </div>
+        ) : (
+          <ReadOnlyRemarkSummary remark={remark} />
+        )}
 
         <ImageUploadBlock
           label="现场照片"
@@ -341,5 +377,52 @@ export function AcceptanceItemRow({
         />
       </div>
     </article>
+  );
+}
+
+function ReadOnlyResultStamp({
+  result,
+}: {
+  result: AcceptanceItemResult | null | undefined;
+}) {
+  const Icon = result === "pass"
+    ? CheckCircle2
+    : result === "fail"
+      ? XCircle
+      : CircleMinus;
+
+  return (
+    <div
+      className={cn(
+        "inline-flex h-8 w-20 shrink-0 rotate-[-2deg] items-center justify-center gap-1 justify-self-end rounded-[3px] border text-xs font-semibold shadow-none",
+        result === "pass" && "border-success/55 bg-success/10 text-success",
+        result === "fail" && "border-destructive/55 bg-destructive/10 text-destructive",
+        result === "not_applicable" && "border-muted-foreground/35 bg-muted/60 text-muted-foreground",
+        !result && "border-dashed border-muted-foreground/35 bg-muted/30 text-muted-foreground",
+      )}
+      aria-label={`验收结果：${resultLabel(result)}`}
+    >
+      <Icon className="size-3.5 shrink-0" />
+      <span className="leading-none">{resultLabel(result)}</span>
+    </div>
+  );
+}
+
+function ReadOnlyRemarkSummary({ remark }: { remark: string }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <MessageSquareText className="size-3.5" />
+        备注
+      </div>
+      <p
+        className={cn(
+          "text-sm leading-6",
+          remark ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {remark || "未填写备注"}
+      </p>
+    </div>
   );
 }

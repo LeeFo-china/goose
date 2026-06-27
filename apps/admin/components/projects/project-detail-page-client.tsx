@@ -192,16 +192,17 @@ export function ProjectDetailPageClient({
                 <ProjectLogsPanel project={currentProject} active={activeTab === "logs"} />
               </div>
             ) : activeTab === "members" ? (
-              <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-4">
+                <ProjectStatusPanel project={currentProject} />
                 <ProjectMembersPanel
                   project={currentProject}
                   refreshing={refreshing}
                   onChanged={refreshProject}
                 />
-                <ProjectStatusPanel project={currentProject} />
                 <ProjectWorkflowRuntimePanel
                   project={currentProject}
                   active={activeTab === "members"}
+                  compact
                   onChanged={refreshProject}
                 />
               </div>
