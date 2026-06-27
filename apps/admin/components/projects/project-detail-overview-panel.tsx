@@ -96,7 +96,7 @@ export function ProjectDetailOverviewPanel({
         </div>
       </section>
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,0.9fr)]">
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,0.9fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <ProjectConstructionStagesPanel
             active={active}
@@ -181,14 +181,14 @@ export function ProjectDetailOverviewPanel({
           </Collapsible>
         </div>
 
-        <aside className="flex min-w-0 flex-col gap-4">
+        <aside className="min-w-0 overflow-hidden rounded-md border bg-card">
           <ProjectWorkflowRuntimePanel
             active={active}
             compact
             onChanged={onChanged}
             project={project}
           />
-          <section className="rounded-md border bg-card px-4 py-3">
+          <section className="border-t px-4 py-3">
             <div className="flex items-center gap-2">
               <Home className="size-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold">房产位置</h3>
@@ -209,7 +209,7 @@ export function ProjectDetailOverviewPanel({
                 />
               </div>
             ) : (
-              <div className="mt-3 rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+              <div className="mt-3 border border-dashed px-3 py-4 text-sm text-muted-foreground">
                 当前项目未关联房产，位置待补全。
               </div>
             )}

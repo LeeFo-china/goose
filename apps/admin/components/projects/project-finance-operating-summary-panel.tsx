@@ -111,7 +111,7 @@ export function ProjectFinanceOperatingSummaryPanel({
         </div>
       ) : null}
 
-      <div className="mt-3 grid min-w-0 gap-4 xl:grid-cols-[minmax(18rem,0.9fr)_minmax(22rem,1.2fr)_minmax(16rem,0.85fr)]">
+      <div className="mt-3 grid min-w-0 gap-4 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
         <section
           data-testid="project-finance-core-progress"
           className="min-w-0"
@@ -121,7 +121,7 @@ export function ProjectFinanceOperatingSummaryPanel({
             title="核心进度"
             helper="收款与预算执行"
           />
-          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+          <div className="mt-3 grid gap-3">
             <ProgressTile
               title="收款进度"
               progress={collectionRatio}
@@ -153,7 +153,7 @@ export function ProjectFinanceOperatingSummaryPanel({
 
         <section
           data-testid="project-finance-flow-analysis"
-          className="min-w-0 border-t pt-4 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0"
+          className="min-w-0 border-t pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"
         >
           <SectionHeading
             icon={<WalletCards className="size-4" />}
@@ -189,7 +189,7 @@ export function ProjectFinanceOperatingSummaryPanel({
 
         <section
           data-testid="project-finance-status-rail"
-          className="min-w-0 border-t pt-4 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0"
+          className="min-w-0 border-t pt-4 lg:col-span-2"
         >
           <SectionHeading
             icon={<AlertTriangle className="size-4" />}

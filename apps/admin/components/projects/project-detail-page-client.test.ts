@@ -7,6 +7,7 @@ function readProjectDetailSources() {
     overview: readFileSync(new URL("./project-detail-overview-panel.tsx", import.meta.url), "utf8"),
     page: readFileSync(new URL("./project-detail-page-client.tsx", import.meta.url), "utf8"),
     financeSummary: readFileSync(new URL("./project-finance-operating-summary-panel.tsx", import.meta.url), "utf8"),
+    financeWidgets: readFileSync(new URL("./project-finance-operating-summary-widgets.tsx", import.meta.url), "utf8"),
     rail: readFileSync(new URL("./project-detail-side-rail.tsx", import.meta.url), "utf8"),
     stageList: readFileSync(new URL("./project-acceptance-stage-list.tsx", import.meta.url), "utf8"),
     workbench: readFileSync(new URL("./project-acceptance-workbench.tsx", import.meta.url), "utf8"),
@@ -38,7 +39,7 @@ describe("Project detail page layout", () => {
   });
 
   test("keeps overview as a lightweight workbench instead of stacked detail panels", () => {
-    const { financeSummary, overview, page } = readProjectDetailSources();
+    const { financeSummary, financeWidgets, overview, page, rail } = readProjectDetailSources();
 
     expect(page).toContain("ProjectDetailOverviewPanel");
     expect(page).not.toContain("<ProjectCostBudgetPanel projectId={currentProject.id} />");
@@ -51,6 +52,10 @@ describe("Project detail page layout", () => {
     expect(overview).toContain("compact");
     expect(financeSummary).toContain('data-testid="project-finance-flow-analysis"');
     expect(financeSummary).toContain('data-testid="project-finance-status-rail"');
+    expect(financeSummary).toContain("lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]");
     expect(financeSummary).not.toContain("repeat(auto-fit,minmax(min(100%,22rem),1fr))");
+    expect(financeWidgets).toContain("moneyFlowAxisLabel");
+    expect(financeWidgets).not.toContain("rounded-md border bg-card px-3 py-3");
+    expect(rail).not.toContain("rounded-md border bg-background p-3");
   });
 });

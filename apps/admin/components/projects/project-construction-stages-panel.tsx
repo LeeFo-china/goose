@@ -180,9 +180,15 @@ function ConstructionStageSkeleton({ compact }: { compact: boolean }) {
     <section className="rounded-md border bg-card p-4">
       <Skeleton className="h-5 w-36" />
       <Skeleton className="mt-2 h-4 w-56" />
-      <div className="mt-4 flex flex-col gap-3 lg:flex-row">
+      <div className="mt-5 flex flex-col gap-4 lg:flex-row">
         {Array.from({ length: compact ? 3 : 7 }).map((_, index) => (
-          <Skeleton key={index} className="h-24 min-w-0 flex-1 rounded-md" />
+          <div key={index} className="flex min-w-0 flex-1 items-start gap-3 lg:block">
+            <Skeleton className="size-8 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 lg:mt-3">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="mt-2 h-3 w-16" />
+            </div>
+          </div>
         ))}
       </div>
     </section>
@@ -301,7 +307,7 @@ export function ProjectConstructionStagesPanel({
       {visibleStages.length > 0 ? (
         <ol
           data-testid="project-construction-stage-flow"
-          className="mt-4 flex flex-col gap-3 lg:flex-row lg:gap-4"
+          className="mt-5 flex flex-col gap-4 lg:flex-row lg:gap-5"
         >
           {visibleStages.map((stage, index) => {
             const meta = statusMeta(stage.status);
@@ -311,7 +317,7 @@ export function ProjectConstructionStagesPanel({
             return (
               <li
                 key={stage.stage_code}
-                className="relative flex min-w-0 flex-1 gap-3 lg:block"
+                className="relative flex min-w-0 flex-1 gap-3 lg:flex-col lg:items-center lg:gap-2"
               >
                 <span aria-hidden="true" className={stageFlowConnector(index, visibleStages.length)} />
                 <div className="relative z-10 flex shrink-0 flex-col items-center">
@@ -327,20 +333,25 @@ export function ProjectConstructionStagesPanel({
                 </div>
                 <article
                   className={cn(
-                    "min-w-0 flex-1 rounded-md border bg-background/80 px-3 py-2",
-                    current && "border-primary bg-primary/5",
+                    "min-w-0 flex-1 border-b pb-3 lg:w-full lg:border-b-0 lg:pb-0 lg:text-center",
+                    current && "text-foreground",
                   )}
                 >
-                  <div className="flex min-w-0 items-start justify-between gap-2">
-                    <div className="min-w-0">
+                  <div className="flex min-w-0 items-start justify-between gap-2 lg:block">
+                    <div className="min-w-0 lg:flex lg:flex-col lg:items-center">
                       <div className="text-xs tabular-nums text-muted-foreground">
                         {String(index + 1).padStart(2, "0")}
                       </div>
-                      <h4 className="mt-0.5 truncate text-sm font-semibold">
+                      <h4 className="mt-0.5 text-sm font-semibold leading-5">
                         {stage.stage_label}
                       </h4>
                     </div>
-                    <Badge variant={meta.variant}>{meta.label}</Badge>
+                    <Badge
+                      variant={meta.variant}
+                      className="shrink-0 lg:mt-2"
+                    >
+                      {meta.label}
+                    </Badge>
                   </div>
                   {stage.is_completion ? (
                     <div className="mt-2 text-xs text-muted-foreground">
