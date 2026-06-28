@@ -194,7 +194,8 @@ class CustomerFollowUpService {
         continue;
       }
 
-      summaryMap.set(item.customer_id, item as CustomerFollowUpSummary);
+      const summary = item as CustomerFollowUpSummary;
+      summaryMap.set(summary.customer_id, summary);
     }
 
     return summaryMap;

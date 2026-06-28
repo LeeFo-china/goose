@@ -1,18 +1,27 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Edit3, Eye, Loader2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
-import { CustomerDetailDialog } from "@/components/customers/customer-detail-dialog";
-import { CustomerDialog } from "@/components/customers/customer-form-dialog";
 import type { CustomerRecord } from "@/components/customers/customer-mutation-types";
 import { requestCustomer } from "@/components/customers/customer-mutation-shared";
 
 export type { CustomerFollowUpRecord, CustomerLatestProjectSummary, CustomerRecord } from "@/components/customers/customer-mutation-types";
+
+const CustomerDialog = dynamic(
+  () => import("@/components/customers/customer-form-dialog").then((mod) => mod.CustomerDialog),
+  { ssr: false },
+);
+
+const CustomerDetailDialog = dynamic(
+  () => import("@/components/customers/customer-detail-dialog").then((mod) => mod.CustomerDetailDialog),
+  { ssr: false },
+);
 
 export function CreateCustomerButton() {
   const [open, setOpen] = useState(false);
@@ -23,7 +32,9 @@ export function CreateCustomerButton() {
         <Plus />
         新增客户
       </Button>
-      <CustomerDialog mode="create" open={open} onOpenChange={setOpen} />
+      {open ? (
+        <CustomerDialog mode="create" open={open} onOpenChange={setOpen} />
+      ) : null}
     </>
   );
 }
@@ -97,12 +108,14 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      <CustomerDialog
-        mode="edit"
-        customer={customer}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-      />
+      {editOpen ? (
+        <CustomerDialog
+          mode="edit"
+          customer={customer}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+        />
+      ) : null}
       {detail ? <CustomerDetailDialog customer={detail} onClose={() => setDetail(null)} /> : null}
       <ConfirmActionDialog
         open={deleteOpen}

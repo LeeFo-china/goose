@@ -85,4 +85,21 @@ describe("Customer management page layout", () => {
     expect(actions).not.toContain("animate-spin");
     expect(actions).not.toContain("pending ? <Loader2");
   });
+
+  test("keeps customer list navigation and dialogs light for first render", () => {
+    const { shell } = readCustomerManagementSources();
+    const mutations = readFileSync(
+      new URL("./customer-mutations.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(shell).toContain("router.push(href)");
+    expect(shell).not.toContain("router.refresh();");
+    expect(mutations).toContain("import dynamic from \"next/dynamic\"");
+    expect(mutations).not.toContain("import { CustomerDialog }");
+    expect(mutations).not.toContain("import { CustomerDetailDialog }");
+    expect(mutations).toContain("dynamic(");
+    expect(mutations).toContain("open ? (");
+    expect(mutations).toContain("editOpen ? (");
+  });
 });
