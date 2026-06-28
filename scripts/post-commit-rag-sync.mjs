@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,7 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const repoRoot = resolve(__dirname, '..');
 const workspaceRoot = resolve(repoRoot, '..');
-const ragRoot = resolve(process.env.LIGHTRAG_MCP_DIR || resolve(workspaceRoot, 'mcp/rag'));
+const ragRoot = resolveRagRoot(repoRoot, workspaceRoot);
 const sharedRunner = resolve(ragRoot, 'scripts/post-commit-rag-sync.mjs');
 const configPath = resolve(repoRoot, '.codex/rag-sync.config.json');
 
@@ -45,4 +46,28 @@ Examples:
   ./scripts/post-commit-rag-sync.mjs --dry-run-only
   ./scripts/post-commit-rag-sync.mjs --force
   ./scripts/post-commit-rag-sync.mjs --force --dry-run-only`);
+}
+
+function resolveRagRoot(repoRoot, workspaceRoot) {
+  if (process.env.LIGHTRAG_MCP_DIR) {
+    return resolve(process.env.LIGHTRAG_MCP_DIR);
+  }
+
+  const candidates = [
+    resolve(workspaceRoot, 'mcp/rag'),
+    resolve(repoRoot, '../mcp/rag'),
+    resolve(repoRoot, '../../../mcp/rag'),
+  ];
+  const worktreeBase = repoRoot.split('/.worktrees/')[0];
+  if (worktreeBase && worktreeBase !== repoRoot) {
+    candidates.push(resolve(worktreeBase, '../mcp/rag'));
+  }
+
+  for (const candidate of candidates) {
+    if (existsSync(resolve(candidate, 'scripts/post-commit-rag-sync.mjs'))) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
 }
