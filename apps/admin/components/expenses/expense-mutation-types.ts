@@ -9,6 +9,22 @@ export type Project = {
   id?: string | null;
   name?: string | null;
   status?: string | null;
+  signed_amount?: number | string | null;
+  customer_id?: string | null;
+  customer?: {
+    name?: string | null;
+    phone?: string | null;
+  } | Array<{
+    name?: string | null;
+    phone?: string | null;
+  }> | null;
+  property?: {
+    community?: string | null;
+    building_info?: string | null;
+  } | Array<{
+    community?: string | null;
+    building_info?: string | null;
+  }> | null;
 };
 
 export type CostCategory = {

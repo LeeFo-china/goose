@@ -34,7 +34,15 @@ class ExpenseRequestRepository {
   private summarySelect = `
     *,
     employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
-    project:projects(id, name, status, signed_amount, customer_id),
+    project:projects(
+      id,
+      name,
+      status,
+      signed_amount,
+      customer_id,
+      customer:customers!projects_customer_id_fkey(name, phone),
+      property:properties!projects_property_id_fkey(community, building_info)
+    ),
     cost_category:finance_cost_categories!expense_requests_cost_category_id_fkey(id, code, name, status),
     assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
     settlement:expense_request_settlements(
@@ -49,7 +57,15 @@ class ExpenseRequestRepository {
   private detailSelect = `
     *,
     employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
-    project:projects(id, name, status, signed_amount, customer_id),
+    project:projects(
+      id,
+      name,
+      status,
+      signed_amount,
+      customer_id,
+      customer:customers!projects_customer_id_fkey(name, phone),
+      property:properties!projects_property_id_fkey(community, building_info)
+    ),
     cost_category:finance_cost_categories!expense_requests_cost_category_id_fkey(id, code, name, status),
     assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
     items:expense_request_items(

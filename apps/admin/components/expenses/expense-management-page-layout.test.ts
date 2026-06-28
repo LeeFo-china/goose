@@ -45,4 +45,21 @@ describe("Expense management page layout", () => {
     expect(table).not.toContain('minWidth="min-w-[1480px]"');
     expect(table).toContain("EXPENSE_ACTION_COLUMN_CLASS_NAME");
   });
+
+  test("shows project summaries from expense row data with a shadcn hover card", () => {
+    const { table } = readExpenseManagementSources();
+
+    expect(table).toContain("@/components/ui/hover-card");
+    expect(table).toContain("ExpenseProjectCell");
+    expect(table).toContain("HoverCard openDelay={120} closeDelay={80}");
+    expect(table).toContain("HoverCardTrigger asChild");
+    expect(table).toContain('data-testid="expense-project-summary-hover-card"');
+    expect(table).toContain("项目摘要");
+    expect(table).toContain("客户");
+    expect(table).toContain("房产");
+    expect(table).toContain("状态");
+    expect(table).toContain("签约金额");
+    expect(table).toContain("项目 ID");
+    expect(table).not.toContain("fetch(");
+  });
 });
