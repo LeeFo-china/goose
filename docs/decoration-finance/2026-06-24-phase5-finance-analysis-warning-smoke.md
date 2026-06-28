@@ -30,6 +30,66 @@
   - 首条流水：`d5b60241-ad52-4890-8f03-28a5bee1bbbd`
   - `direction=out`，`cost_category_id=null`，`amount=1000`
 
+## 2026-06-28 高风险样本补充验收
+
+背景：2026-06-24 初始 smoke 中，`warning`、`project_over_budget`、
+`low_projected_margin`、`receivable_overdue` 缺少真实样本，无法证明对应筛选
+在有数据时能命中。本轮补充受控样本后重新验证风险筛选。
+
+执行环境：
+
+- API：`http://127.0.0.1:3000`
+- 账号：`18800005001 / 小龙女`
+- tenant ID：`3eebca47-961f-4899-b976-a3d3208d326b`
+- 日期：`2026-06-28`
+- 安全约束：未执行 workflow complete，未推进业务流程。
+
+样本准备：
+
+- 项目超预算样本通过公开 API `PUT /projects/:id/cost-budgets` 配置成本预算：
+  - project ID：`634ff402-ff84-4541-aa7c-3cdcd4fd5460`
+  - 项目：`刘德华·信合·湖畔春天1期 E4号楼4001`
+  - 成本分类：`main_material`
+  - 预算金额：`400`
+  - 已有支出台账：`500.7`
+- 预算毛利偏低样本通过公开 API `PUT /projects/:id/cost-budgets` 配置成本预算：
+  - project ID：`b95f6b51-6b9c-4970-948e-b369106545d8`
+  - 项目：`应收小程序联调 Smoke项目 20260623125051`
+  - 合同金额：`50000`
+  - 预算总额：`45000`
+  - 预测预算毛利率：`0.1`
+- 逾期应收样本因当前没有公开 Admin/API 手工创建应收计划入口，使用应用
+  Supabase client 进行受控幂等 upsert：
+  - receivable plan ID：`f55e810c-aacb-44af-817e-3ab1d35699c2`
+  - project ID：`407537b4-2adc-4a0f-ac83-bdaecf70e559`
+  - source ID：`00000000-0000-4000-8000-202606280001`
+  - title：`阶段五风险样本逾期应收`
+  - amount：`3000`
+  - due_date：`2026-06-01`
+  - status：`pending`
+- 未归集成本复用既有样本：
+  - project ID：`c20e4693-e3a8-47b8-840f-4fb3639d6420`
+  - 未归集支出：`1000`
+
+补充验收结果：
+
+| 验收项 | 接口 | 结果 |
+| --- | --- | --- |
+| 项目超预算 | `GET /finance/project-summary?page=1&pageSize=5&risk_flag=project_over_budget` | `pagination.total=1`，命中 `634ff402-ff84-4541-aa7c-3cdcd4fd5460`，`risk_level=danger`，`risk_flags=["category_over_budget","project_over_budget","negative_actual_profit"]`，`budget_cost_amount=400`，`expense_paid_amount=500.7` |
+| 预算毛利偏低 | `GET /finance/project-summary?page=1&pageSize=5&risk_flag=low_projected_margin` | `pagination.total=1`，命中 `b95f6b51-6b9c-4970-948e-b369106545d8`，`risk_level=warning`，`risk_flags=["low_projected_margin"]`，`budget_cost_amount=45000`，`projected_budget_gross_margin=0.1` |
+| 应收逾期 | `GET /finance/project-summary?page=1&pageSize=5&risk_flag=receivable_overdue` | `pagination.total=1`，命中 `407537b4-2adc-4a0f-ac83-bdaecf70e559`，`risk_level=warning`，`risk_flags=["budget_missing","receivable_overdue"]`，`overdue_count=1`，`overdue_amount=3000` |
+| 未归集支出 | `GET /finance/project-summary?page=1&pageSize=5&has_unallocated_expense=true` | `pagination.total=1`，命中 `c20e4693-e3a8-47b8-840f-4fb3639d6420`，`risk_level=danger`，`risk_flags=["budget_missing","unallocated_expense","negative_actual_profit"]`，`unallocated_expense_amount=1000` |
+| 预警等级筛选 | `GET /finance/project-summary?page=1&pageSize=5&risk_level=warning` | `pagination.total=2`，命中低毛利和逾期应收两个 warning 项目 |
+| 高风险等级筛选 | `GET /finance/project-summary?page=1&pageSize=5&risk_level=danger` | `pagination.total=2`，命中未归集/实际利润为负项目和项目超预算项目 |
+| 逾期应收列表 | `GET /finance/receivables?page=1&pageSize=5&overdue_only=true` | `pagination.total=1`，首条为 `f55e810c-aacb-44af-817e-3ab1d35699c2`，`status=overdue`，`remaining_amount=3000`，`overdue_days=27` |
+
+结论：Phase 5 风险筛选已覆盖 `project_over_budget`、`low_projected_margin`、
+`receivable_overdue`、`has_unallocated_expense`、`risk_level=warning` 和
+`risk_level=danger` 的真实数据命中路径。
+
+后续如果需要清理本轮 smoke 数据，应优先按上述固定 project ID、receivable plan ID 和
+source ID 做受控回滚，不要模糊删除同类业务数据。
+
 ## Admin 验收
 
 - [x] 财务总览风险等级筛选。

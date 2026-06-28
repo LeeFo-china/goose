@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
 const baseProject = { id: "project-1", status: "constructing", signed_amount: 100000, budget: 90000 };
 
 const listProjects = mock(async () => ({
@@ -75,30 +79,28 @@ const listBudgetTotals = mock(async () => new Map([
 ]));
 const canAccessProject = mock(async () => true);
 
-mock.module("@/repositories/finance-project-summary", () => ({
-  financeProjectSummaryRepository: {
-    listProjects,
-    findProject,
-    searchProjectIdsByRisk,
-    listProjectsByIds,
-    listProjectsForAnalytics,
-    listLedgerTotals,
-    listUnallocatedExpenseItems,
-    listLedgerTrend,
-    listReceivableTotals,
-    listBudgetTotals,
-  },
-}));
+const repository = {
+  listProjects,
+  findProject,
+  searchProjectIdsByRisk,
+  listProjectsByIds,
+  listProjectsForAnalytics,
+  listLedgerTotals,
+  listUnallocatedExpenseItems,
+  listLedgerTrend,
+  listReceivableTotals,
+  listBudgetTotals,
+};
 
-mock.module("@/services/access-policy", () => ({
-  accessPolicyService: {
-    assertTenantContext: mock((authContext: AuthContext) => authContext.tenantId),
-    hasPermission: mock((authContext: AuthContext, permissionCode: string) =>
-      authContext.permissions.some((permission) => permission.code === permissionCode)
-    ),
-    canAccessProject,
+const accessPolicyService = {
+  assertTenantContext: (authContext: AuthContext) => {
+    if (!authContext.tenantId) throw new Error("missing tenant id");
+    return authContext.tenantId;
   },
-}));
+  hasPermission: (authContext: AuthContext, permissionCode: string) =>
+    authContext.permissions.some((permission) => permission.code === permissionCode),
+  canAccessProject,
+};
 
 const baseAuthContext = {
   authUserId: "auth-1",
@@ -130,6 +132,14 @@ function authContextWithPermissions(
   };
 }
 
+async function createService() {
+  const { FinanceProjectSummaryService } = await import("./finance-project-summary");
+  return new FinanceProjectSummaryService({
+    repository,
+    accessPolicyService,
+  });
+}
+
 describe("financeProjectSummaryService", () => {
   beforeEach(() => {
     listProjects.mockClear();
@@ -147,8 +157,7 @@ describe("financeProjectSummaryService", () => {
   });
 
   test("lists project operating summaries for finance viewers", async () => {
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.listProjectSummaries(
       authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
@@ -250,8 +259,7 @@ describe("financeProjectSummaryService", () => {
     listBudgetTotals.mockImplementationOnce(async () => new Map());
     listBudgetTotals.mockImplementationOnce(async () => new Map());
 
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.listProjectSummaries(
       authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
@@ -275,8 +283,7 @@ describe("financeProjectSummaryService", () => {
   });
 
   test("uses risk search path when risk filters are provided", async () => {
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.listProjectSummaries(
       authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
@@ -308,8 +315,7 @@ describe("financeProjectSummaryService", () => {
       }],
     ]));
 
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.listProjectSummaries(
       authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
@@ -353,8 +359,7 @@ describe("financeProjectSummaryService", () => {
       ]],
     ]));
 
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.listProjectSummaries(
       authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
@@ -388,8 +393,7 @@ describe("financeProjectSummaryService", () => {
       }],
     ]));
 
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.listProjectSummaries(
       authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
@@ -407,8 +411,7 @@ describe("financeProjectSummaryService", () => {
   test("marks missing budgets as info", async () => {
     listBudgetTotals.mockImplementationOnce(async () => new Map());
 
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.listProjectSummaries(
       authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
@@ -445,8 +448,7 @@ describe("financeProjectSummaryService", () => {
       }],
     ]));
 
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.listProjectSummaries(
       authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
@@ -463,8 +465,7 @@ describe("financeProjectSummaryService", () => {
   });
 
   test("returns one project summary for readable project users", async () => {
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     const result = await financeProjectSummaryService.getProjectSummary(
       authContextWithPermissions([{ code: "project.read", scope: "all" }]),
@@ -483,8 +484,7 @@ describe("financeProjectSummaryService", () => {
   });
 
   test("rejects project summary list without finance permission", async () => {
-    const { financeProjectSummaryService } =
-      await import("./finance-project-summary");
+    const financeProjectSummaryService = await createService();
 
     await expect(
       financeProjectSummaryService.listProjectSummaries(
