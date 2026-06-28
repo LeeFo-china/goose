@@ -86,7 +86,7 @@ async function getProjects(params: ProjectPageSearchParams) {
     page: String(page),
     pageSize: String(pageSize),
   });
-  query.set("workflow_summary", "compact");
+  query.set("workflow_summary", "list");
   if (ownership) query.set("ownership", ownership);
   if (keyword) query.set("keyword", keyword);
   if (workflowGroupKey) query.set("workflow_group_key", workflowGroupKey);

@@ -184,8 +184,8 @@ export const ProjectListQuerySchema = PaginationQuerySchema.extend({
       message: "无效的流程实例状态",
     }),
   ),
-  workflow_summary: optionalQueryValue(z.enum(["full", "compact"], {
-    message: "workflow_summary must be one of: full, compact",
+  workflow_summary: optionalQueryValue(z.enum(["full", "compact", "list"], {
+    message: "workflow_summary must be one of: full, compact, list",
   })),
   mode: optionalQueryValue(z.enum(["home"], {
     message: "mode must be one of: home",

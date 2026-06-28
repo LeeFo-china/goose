@@ -24,9 +24,12 @@ function buildProjectListDebugTiming(input: {
     assignees_ms: input.timings?.assigneesMs ?? null,
     stages_ms: input.timings?.stagesMs ?? null,
     display_status_ms: input.timings?.displayStatusMs ?? null,
+    workflow_summary_ms: input.timings?.workflowSummaryMs ?? null,
+    workflow_filters_ms: input.timings?.workflowFiltersMs ?? null,
     total_ms: input.timings?.totalMs ?? input.controllerTotalMs,
     visible_project_count: input.timings?.visibleProjectCount ?? null,
     today_project_count: input.timings?.todayProjectCount ?? null,
+    workflow_project_count: input.timings?.workflowProjectCount ?? null,
     row_count: input.timings?.rowCount ?? null,
     has_more: input.timings?.hasMore ?? null,
   };
@@ -52,6 +55,15 @@ class ProjectController extends ProjectBaseController {
       authContext,
       query: queryResult.data,
     });
+    const debugTiming = queryResult.data.debug_timing
+      ? {
+        debug_timing: buildProjectListDebugTiming({
+          authContextMs,
+          controllerTotalMs: Date.now() - requestStartedAt,
+          timings: result.debugTimings,
+        }),
+      }
+      : {};
     if (queryResult.data.mode === "home") {
       request.log.info(
         {
@@ -67,15 +79,7 @@ class ProjectController extends ProjectBaseController {
       return ResponseHandler.success({
         list: result.rows.map((item) => serializeProjectListItem(item)),
         pagination: result.pagination,
-        ...(queryResult.data.debug_timing
-          ? {
-            debug_timing: buildProjectListDebugTiming({
-              authContextMs,
-              controllerTotalMs: Date.now() - requestStartedAt,
-              timings: result.debugTimings,
-            }),
-          }
-          : {}),
+        ...debugTiming,
       });
     }
 
@@ -88,6 +92,7 @@ class ProjectController extends ProjectBaseController {
         serializeProjectListItem(item, phonePrivacyContext)
       ),
       pagination: result.pagination,
+      ...debugTiming,
     });
   };
 

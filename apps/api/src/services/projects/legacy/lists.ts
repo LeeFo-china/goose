@@ -31,7 +31,14 @@ import {
 } from "./shared";
 import { attachCurrentConstructionStages } from "./current-stage";
 import { attachProjectDisplayStatuses } from "./display-status";
-import { attachProjectWorkflowSummaries } from "./workflow-summary";
+import {
+    attachProjectWorkflowSummaries,
+    type ProjectWorkflowSummaryMode,
+} from "./workflow-summary";
+import {
+    mergeProjectListEnrichmentRows,
+    mergeProjectListWorkflowRows,
+} from "./list-enrichment-rows";
 import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
 
 export async function listProjects(this: any, input: {
@@ -39,9 +46,9 @@ export async function listProjects(this: any, input: {
     query: ProjectListQuery;
 }): Promise<ProjectListResult> {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
-    const workflowSummaryMode = input.query.workflow_summary === "compact"
-        ? "compact"
-        : "full";
+    const workflowSummaryMode = resolveProjectWorkflowSummaryMode(
+        input.query.workflow_summary,
+    );
     const cacheKey = this.projectListCacheKey(input.authContext, input.query);
     const cached = this.getProjectListCache(cacheKey);
     if (cached) {
@@ -76,7 +83,17 @@ export async function listProjects(this: any, input: {
         );
     }
 
-    const request = this.loadProjects({ tenantId, ...input })
+    const loadStartedAt = Date.now();
+    const rawRequest = this.loadProjects({ tenantId, ...input });
+    const request = rawRequest
+        .then((result: ProjectListResult) =>
+            attachProjectListBaseResult({
+                result,
+                tenantId,
+                projectService: this,
+                startedAt: loadStartedAt,
+            })
+        )
         .then((result: ProjectListResult) => {
             this.setProjectListCache(cacheKey, result);
             return result;
@@ -87,6 +104,26 @@ export async function listProjects(this: any, input: {
             }
         });
     this.projectListInFlight.set(cacheKey, request);
+    if (workflowSummaryMode === "list") {
+        return rawRequest.then(async (rawResult: ProjectListResult) => {
+            const [baseResult, workflowResult] = await Promise.all([
+                request,
+                attachLiveWorkflowSummaries({
+                    result: rawResult,
+                    tenantId,
+                    authContext: input.authContext,
+                    workflowSummaryMode,
+                }),
+            ]);
+
+            return mergeProjectListResultWithWorkflowSummary({
+                baseResult,
+                workflowResult,
+                startedAt: loadStartedAt,
+            });
+        });
+    }
+
     return request.then((result: ProjectListResult) =>
         attachLiveWorkflowSummaries({
             result,
@@ -101,7 +138,7 @@ async function attachLiveWorkflowSummaries(input: {
     result: ProjectListResult;
     tenantId: string;
     authContext: AuthContext;
-    workflowSummaryMode: "full" | "compact";
+    workflowSummaryMode: ProjectWorkflowSummaryMode;
 }): Promise<ProjectListResult> {
     const startedAt = Date.now();
     const rows = await attachProjectWorkflowSummaries({
@@ -111,12 +148,20 @@ async function attachLiveWorkflowSummaries(input: {
         workflowSummaryMode: input.workflowSummaryMode,
     });
 
+    const workflowSummaryMs = Date.now() - startedAt;
+    const baseTotalMs = typeof input.result.debugTimings?.totalMs === "number"
+        ? input.result.debugTimings.totalMs
+        : null;
+
     return {
         ...input.result,
         rows,
         debugTimings: {
             ...input.result.debugTimings,
-            workflowSummaryMs: Date.now() - startedAt,
+            workflowSummaryMs,
+            totalMs: baseTotalMs === null
+                ? workflowSummaryMs
+                : baseTotalMs + workflowSummaryMs,
         },
     };
 }
@@ -181,6 +226,13 @@ export function setProjectListCache(this: any, cacheKey: string, value: ProjectL
     });
 }
 
+function resolveProjectWorkflowSummaryMode(
+    value: ProjectListQuery["workflow_summary"],
+): ProjectWorkflowSummaryMode {
+    if (value === "list" || value === "compact") return value;
+    return "full";
+}
+
 export async function loadProjects(this: any, input: {
     tenantId: string;
     authContext: AuthContext;
@@ -205,6 +257,22 @@ export async function loadProjects(this: any, input: {
     const hasWorkflowFilters = Boolean(
         workflowGroupKey || workflowNodeKey || workflowInstanceStatus,
     );
+    let workflowFiltersDurationMs: number | null = null;
+    const workflowProjectIdsPromise = hasWorkflowFilters
+        ? (async () => {
+            const workflowFiltersStartedAt = Date.now();
+            try {
+                return await workflowSubjectStateRepository.listProjectIdsByWorkflowFilters({
+                    tenantId,
+                    workflowGroupKey,
+                    workflowNodeKey,
+                    workflowInstanceStatus,
+                });
+            } finally {
+                workflowFiltersDurationMs = Date.now() - workflowFiltersStartedAt;
+            }
+        })()
+        : Promise.resolve(null);
     const [visibleProjectIds, todayProjectIds, workflowProjectIds] = await Promise.all([
         accessPolicyService.getVisibleProjectIdsByOwnership(
             input.authContext,
@@ -214,14 +282,7 @@ export async function loadProjects(this: any, input: {
         workScope === "today"
             ? projectRepository.listTodayWorkProjectIds(tenantId)
             : Promise.resolve(null),
-        hasWorkflowFilters
-            ? workflowSubjectStateRepository.listProjectIdsByWorkflowFilters({
-                tenantId,
-                workflowGroupKey,
-                workflowNodeKey,
-                workflowInstanceStatus,
-            })
-            : Promise.resolve(null),
+        workflowProjectIdsPromise,
     ]);
     const scopeDurationMs = Date.now() - scopeStartedAt;
     const filters = {
@@ -239,23 +300,7 @@ export async function loadProjects(this: any, input: {
             to: from + pageSize,
         });
         const rowsDurationMs = Date.now() - rowsStartedAt;
-        const assignmentStartedAt = Date.now();
-        const rowsWithAssignees = await this.attachPrimaryAssignees(
-            rowsWithLookahead.slice(0, pageSize),
-        );
-        const assignmentDurationMs = Date.now() - assignmentStartedAt;
-        const stageStartedAt = Date.now();
-        const rowsWithStages = await attachCurrentConstructionStages({
-            rows: rowsWithAssignees,
-            tenantId,
-        });
-        const stageDurationMs = Date.now() - stageStartedAt;
-        const displayStatusStartedAt = Date.now();
-        const rows = await attachProjectDisplayStatuses({
-            rows: rowsWithStages,
-            tenantId,
-        });
-        const displayStatusDurationMs = Date.now() - displayStatusStartedAt;
+        const rows = rowsWithLookahead.slice(0, pageSize);
         const hasMore = rowsWithLookahead.length > pageSize;
         const total = from + rows.length + (hasMore ? 1 : 0);
 
@@ -270,10 +315,11 @@ export async function loadProjects(this: any, input: {
             debugTimings: {
                 cache: "miss",
                 scopeMs: scopeDurationMs,
+                workflowFiltersMs: workflowFiltersDurationMs,
                 rowsMs: rowsDurationMs,
-                assigneesMs: assignmentDurationMs,
-                stagesMs: stageDurationMs,
-                displayStatusMs: displayStatusDurationMs,
+                assigneesMs: null,
+                stagesMs: null,
+                displayStatusMs: null,
                 totalMs: Date.now() - startedAt,
                 visibleProjectCount: visibleProjectIds?.length ?? null,
                 todayProjectCount: todayProjectIds?.length ?? null,
@@ -284,21 +330,13 @@ export async function loadProjects(this: any, input: {
         };
     }
 
+    const rowsStartedAt = Date.now();
     const [total, rawRows] = await Promise.all([
         projectRepository.count(filters),
         projectRepository.listRows({ filters, from, to }),
     ]);
-    const rowsWithAssignees = from >= total
-        ? []
-        : await this.attachPrimaryAssignees(rawRows);
-    const rowsWithStages = await attachCurrentConstructionStages({
-        rows: rowsWithAssignees,
-        tenantId,
-    });
-    const rows = await attachProjectDisplayStatuses({
-        rows: rowsWithStages,
-        tenantId,
-    });
+    const rowsDurationMs = Date.now() - rowsStartedAt;
+    const rows = from >= total ? [] : rawRows;
 
     return {
         rows,
@@ -308,10 +346,143 @@ export async function loadProjects(this: any, input: {
             total,
             totalPages: total ? Math.ceil(total / pageSize) : 0,
         },
+        debugTimings: {
+            cache: "miss",
+            scopeMs: scopeDurationMs,
+            workflowFiltersMs: workflowFiltersDurationMs,
+            rowsMs: rowsDurationMs,
+            assigneesMs: null,
+            stagesMs: null,
+            displayStatusMs: null,
+            totalMs: Date.now() - startedAt,
+            visibleProjectCount: visibleProjectIds?.length ?? null,
+            todayProjectCount: todayProjectIds?.length ?? null,
+            workflowProjectCount: workflowProjectIds?.length ?? null,
+            rowCount: rows.length,
+            hasMore: null,
+        },
     };
 }
 
 export async function searchProjectsByName(this: any): Promise<void> {
+}
+
+async function attachProjectListBaseResult(input: {
+    result: ProjectListResult;
+    tenantId: string;
+    projectService: {
+        attachPrimaryAssignees: (
+            rows: Array<Record<string, unknown>>,
+        ) => Promise<Array<Record<string, unknown>>>;
+    };
+    startedAt: number;
+}): Promise<ProjectListResult> {
+    const enrichment = await attachProjectListBaseEnrichments({
+        rows: input.result.rows,
+        tenantId: input.tenantId,
+        projectService: input.projectService,
+    });
+
+    return {
+        ...input.result,
+        rows: enrichment.rows,
+        debugTimings: {
+            ...input.result.debugTimings,
+            assigneesMs: enrichment.assigneesMs,
+            stagesMs: enrichment.stagesMs,
+            displayStatusMs: enrichment.displayStatusMs,
+            totalMs: Date.now() - input.startedAt,
+        },
+    };
+}
+
+function mergeProjectListResultWithWorkflowSummary(input: {
+    baseResult: ProjectListResult;
+    workflowResult: ProjectListResult;
+    startedAt: number;
+}): ProjectListResult {
+    return {
+        ...input.baseResult,
+        rows: mergeProjectListWorkflowRows({
+            baseRows: input.baseResult.rows,
+            workflowRows: input.workflowResult.rows,
+        }),
+        debugTimings: {
+            ...input.baseResult.debugTimings,
+            workflowSummaryMs: typeof input.workflowResult.debugTimings?.workflowSummaryMs === "number"
+                ? input.workflowResult.debugTimings.workflowSummaryMs
+                : null,
+            totalMs: Date.now() - input.startedAt,
+        },
+    };
+}
+
+async function attachProjectListBaseEnrichments(input: {
+    rows: Array<Record<string, unknown>>;
+    tenantId: string;
+    projectService: {
+        attachPrimaryAssignees: (
+            rows: Array<Record<string, unknown>>,
+        ) => Promise<Array<Record<string, unknown>>>;
+    };
+}) {
+    let assigneesMs = 0;
+    let stagesMs = 0;
+    let displayStatusMs = 0;
+
+    const assigneesPromise = measureProjectListEnrichment(
+        (durationMs) => {
+            assigneesMs = durationMs;
+        },
+        () => input.projectService.attachPrimaryAssignees(input.rows),
+    );
+    const stagesPromise = measureProjectListEnrichment(
+        (durationMs) => {
+            stagesMs = durationMs;
+        },
+        () => attachCurrentConstructionStages({
+            rows: input.rows,
+            tenantId: input.tenantId,
+        }),
+    );
+    const displayStatusPromise = measureProjectListEnrichment(
+        (durationMs) => {
+            displayStatusMs = durationMs;
+        },
+        () => attachProjectDisplayStatuses({
+            rows: input.rows,
+            tenantId: input.tenantId,
+        }),
+    );
+    const [assigneeRows, stageRows, displayStatusRows] = await Promise.all([
+        assigneesPromise,
+        stagesPromise,
+        displayStatusPromise,
+    ]);
+
+    return {
+        rows: mergeProjectListEnrichmentRows({
+            baseRows: input.rows,
+            assigneeRows,
+            stageRows,
+            displayStatusRows,
+        }),
+        assigneesMs,
+        stagesMs,
+        displayStatusMs,
+    };
+}
+
+async function measureProjectListEnrichment(
+    setDuration: (durationMs: number) => void,
+    load: () => Promise<Array<Record<string, unknown>>>,
+) {
+    const startedAt = Date.now();
+    try {
+        return await load();
+    } finally {
+        setDuration(Date.now() - startedAt);
+    }
 }
 
 function intersectProjectIdFilters(

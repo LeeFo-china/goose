@@ -21,13 +21,14 @@ import {
   buildWorkflowTaskActionsForTask,
   type WorkflowTaskActionPayload,
 } from "@/services/workflow-task-actions";
+import { attachProjectWorkflowListSummaries } from "./workflow-list-summary";
 
 const MAX_ACCESSIBLE_TASKS_PER_PROJECT = 100;
 const MAX_RUNTIME_NODES_PER_INSTANCE = 200;
 const WORKFLOW_GRAPH_CACHE_TTL_MS = 5 * 60_000;
 const WORKFLOW_GRAPH_CACHE_MAX_ENTRIES = 200;
 
-type ProjectWorkflowSummaryMode = "full" | "compact";
+export type ProjectWorkflowSummaryMode = "full" | "compact" | "list";
 type WorkflowGraphProjection = Pick<WorkflowGraphResult, "definition" | "nodes" | "edges">;
 type WorkflowGraphCacheEntry = {
   expiresAt: number;
@@ -67,6 +68,14 @@ export async function attachProjectWorkflowSummaries(input: {
   );
   if (projectIds.length === 0) {
     return input.rows.map(stripLegacyStageFields);
+  }
+
+  if (input.workflowSummaryMode === "list") {
+    return attachProjectWorkflowListSummaries({
+      rows: input.rows,
+      tenantId: input.tenantId,
+      projectIds,
+    });
   }
 
   const [subjectStates, runtimeInstances, accessibleTasks] = await Promise.all([
