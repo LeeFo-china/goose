@@ -1,5 +1,11 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  buildWorkflowTaskAssigneeScope,
+  listAccessiblePendingByProjectIdsViaDirectSql,
+  listAccessibleTasksViaDirectSql,
+} from "@/repositories/workflow-tasks-direct";
 import { workflowTable } from "@/repositories/workflows/client";
+import { getDirectPostgresSql } from "@/utils/postgres-direct";
 import type {
   JsonObject,
   WorkflowInstanceRow,
@@ -46,7 +52,7 @@ export type WorkflowTransitionLogRow = {
   created_at: string;
 };
 
-type WorkflowTaskListInput = {
+export type WorkflowTaskListInput = {
   tenantId: string;
   employeeId?: string | null;
   roleCodes?: string[];
@@ -59,7 +65,7 @@ type WorkflowTaskListInput = {
   instanceId?: string;
 };
 
-type WorkflowTaskListResult = {
+export type WorkflowTaskListResult = {
   list: WorkflowTaskWithInstanceRow[];
   pagination: {
     page: number;
@@ -121,10 +127,9 @@ const WORKFLOW_TRANSITION_LOG_SELECT = [
   "created_at",
 ].join(", ");
 
-const SAFE_ROLE_CODE_PATTERN = /^[a-zA-Z0-9_.:-]+$/;
-const SAFE_PERMISSION_CODE_PATTERN = /^[a-zA-Z0-9_.:-]+$/;
-
 class WorkflowTaskRepository {
+  private directSqlUnavailable = false;
+
   async listAccessibleTasks(
     input: WorkflowTaskListInput,
   ): Promise<WorkflowTaskListResult> {
@@ -136,6 +141,21 @@ class WorkflowTaskRepository {
 
     if (!assigneeFilter) {
       return this.emptyList(page, pageSize);
+    }
+
+    const directSql = getDirectPostgresSql();
+    if (directSql && !this.directSqlUnavailable) {
+      try {
+        return await listAccessibleTasksViaDirectSql({
+          input,
+          page,
+          pageSize,
+          offset: from,
+          sql: directSql,
+        });
+      } catch {
+        this.directSqlUnavailable = true;
+      }
     }
 
     let request = workflowTable("workflow_tasks")
@@ -251,6 +271,20 @@ class WorkflowTaskRepository {
     }
 
     const limit = Math.min(input.limit ?? projectIds.length * 100, 10_000);
+    const directSql = getDirectPostgresSql();
+    if (directSql && !this.directSqlUnavailable) {
+      try {
+        return await listAccessiblePendingByProjectIdsViaDirectSql({
+          ...input,
+          projectIds,
+          limit,
+          sql: directSql,
+        });
+      } catch {
+        this.directSqlUnavailable = true;
+      }
+    }
+
     const { data, error } = await workflowTable("workflow_tasks")
       .select(WORKFLOW_TASK_SELECT)
       .eq("tenant_id", input.tenantId)
@@ -321,22 +355,18 @@ class WorkflowTaskRepository {
 
   private buildAssigneeFilter(input: WorkflowTaskListInput): string | null {
     const filters: string[] = [];
-    if (input.employeeId) {
-      filters.push(`assignee_employee_id.eq.${input.employeeId}`);
+    const { employeeId, roleCodes, permissionCodes } =
+      buildWorkflowTaskAssigneeScope(input);
+    if (employeeId) {
+      filters.push(`assignee_employee_id.eq.${employeeId}`);
     }
 
-    const roleCodes = Array.from(new Set(input.roleCodes ?? []))
-      .filter((roleCode) => SAFE_ROLE_CODE_PATTERN.test(roleCode));
     if (roleCodes.length > 0) {
       filters.push(
         `and(assignee_employee_id.is.null,assignee_role_code.in.(${roleCodes.join(",")}),assignee_permission_code.is.null)`,
       );
     }
 
-    const permissionCodes = Array.from(new Set(input.permissionCodes ?? []))
-      .filter((permissionCode) =>
-        SAFE_PERMISSION_CODE_PATTERN.test(permissionCode)
-      );
     if (permissionCodes.length > 0) {
       filters.push(
         `and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.in.(${permissionCodes.join(",")}))`,

@@ -3,6 +3,7 @@ import type {
   CreateVisitorPictureShareEventInput,
   VisitorPictureAssetListQuery,
 } from "@/schema/visitor-picture-library";
+import { findCoverAssetsDirect } from "@/repositories/visitor-picture-library-covers";
 import { listVisitorPictureAssetsFast } from "@/repositories/visitor-picture-library-list";
 import * as personalPictureLibraryRepository from "@/repositories/visitor-picture-library-personal";
 import { getDirectPostgresSql } from "@/utils/postgres-direct";
@@ -80,11 +81,6 @@ type VisitorPictureAssetRpcRow = {
   }) | null;
   total_count: number | string;
 };
-
-type VisitorPictureAssetSqlRow = VisitorPictureAssetRpcRow & {
-  total_count: number | string | bigint;
-};
-
 class VisitorPictureLibraryRepository {
   async listCategories() {
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -131,7 +127,7 @@ class VisitorPictureLibraryRepository {
     query: VisitorPictureAssetListQuery,
     sql: NonNullable<ReturnType<typeof getDirectPostgresSql>>,
   ) {
-    const rows = await sql<VisitorPictureAssetSqlRow[]>`
+    const rows = await sql<VisitorPictureAssetRpcRow[]>`
       select *
       from public.list_visitor_picture_assets(
         ${query.category_id ?? null}::uuid,
@@ -159,7 +155,7 @@ class VisitorPictureLibraryRepository {
   }
 
   private toAssetRpcPage(
-    rows: VisitorPictureAssetSqlRow[],
+    rows: VisitorPictureAssetRpcRow[],
     query: VisitorPictureAssetListQuery,
   ) {
     const list = rows
@@ -204,6 +200,14 @@ class VisitorPictureLibraryRepository {
 
   async findCoverAssets(assetIds: string[]) {
     if (assetIds.length === 0) return new Map<string, VisitorPictureAssetRecord>();
+    const directSql = getDirectPostgresSql();
+    if (directSql) {
+      try {
+        return await findCoverAssetsDirect(assetIds, directSql);
+      } catch {
+        // Fall back to the existing PostgREST path below.
+      }
+    }
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("picture_assets")
       .select("id,title,description,width,height,like_count,favorite_count,comment_count,share_count,sort_order,created_at,updated_at")
