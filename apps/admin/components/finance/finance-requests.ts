@@ -77,6 +77,15 @@ export type FinanceReceivableRecord = {
   due_date: string;
   status: FinanceReceivableStatus;
   overdue_days: number;
+  owner_employee_id: string | null;
+  owner_employee_name: string | null;
+  latest_follow_up_at: string | null;
+  latest_follow_up_note: string | null;
+  next_follow_up_at: string | null;
+  canceled_at: string | null;
+  canceled_by: string | null;
+  canceled_by_name: string | null;
+  canceled_reason: string | null;
   created_at: string | null;
   updated_at: string | null;
   project?: { id: string; name: string | null; status: string | null } | null;
@@ -221,10 +230,13 @@ export async function fetchFinanceReceivables(query: {
   pageSize?: number;
   status?: string;
   payment_type?: string;
+  source_type?: string;
+  owner_employee_id?: string;
   project_id?: string;
   due_date_from?: string;
   due_date_to?: string;
   overdue_only?: boolean;
+  follow_up_due_only?: boolean;
 }): Promise<FinanceReceivableResult> {
   const token = await getAdminToken();
   const page = normalizeFinanceLedgerPage(query.page);
@@ -246,10 +258,13 @@ export async function fetchFinanceReceivables(query: {
   });
   appendOptionalParam(params, "status", query.status);
   appendOptionalParam(params, "payment_type", query.payment_type);
+  appendOptionalParam(params, "source_type", query.source_type);
+  appendOptionalParam(params, "owner_employee_id", query.owner_employee_id);
   appendOptionalParam(params, "project_id", query.project_id);
   appendOptionalParam(params, "due_date_from", query.due_date_from);
   appendOptionalParam(params, "due_date_to", query.due_date_to);
   if (query.overdue_only) params.set("overdue_only", "true");
+  if (query.follow_up_due_only) params.set("follow_up_due_only", "true");
 
   try {
     const response = await fetch(buildBackendUrl(`/finance/receivables?${params}`), {

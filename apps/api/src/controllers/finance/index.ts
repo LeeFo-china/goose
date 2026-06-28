@@ -11,12 +11,22 @@ import {
   FinanceLedgerListQuerySchema,
   FinanceProjectSummaryListQuerySchema,
 } from "@/schema/finance";
-import { FinanceReceivableListQuerySchema } from "@/schema/finance-receivables";
+import {
+  CancelFinanceReceivableSchema,
+  CreateFinanceReceivableFollowUpSchema,
+  CreateFinanceReceivableSchema,
+  FinanceReceivableEventListQuerySchema,
+  FinanceReceivableListQuerySchema,
+  UpdateFinanceReceivableSchema,
+} from "@/schema/finance-receivables";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
 import { financeLedgerService } from "@/services/finance-ledger";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
 import { projectCostBudgetService } from "@/services/project-cost-budgets";
 import { projectReceivablesService } from "@/services/project-receivables";
+import {
+  projectReceivableOperationsService,
+} from "@/services/project-receivables-operations";
 import { Get, Patch, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -72,6 +82,89 @@ class FinanceController extends TenantBaseController {
 
     const data = await projectReceivablesService.listReceivables(
       authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/receivables")
+  async createReceivable(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const bodyResult = CreateFinanceReceivableSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await projectReceivableOperationsService
+      .createManualReceivable(authContext, bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Patch("/finance/receivables/:id")
+  async updateReceivable(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = UpdateFinanceReceivableSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await projectReceivableOperationsService.updateReceivable(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/receivables/:id/cancel")
+  async cancelReceivable(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = CancelFinanceReceivableSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await projectReceivableOperationsService.cancelReceivable(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/receivables/:id/follow-ups")
+  async createReceivableFollowUp(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = CreateFinanceReceivableFollowUpSchema.safeParse(
+      request.body,
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await projectReceivableOperationsService.createFollowUp(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/receivables/:id/events")
+  async listReceivableEvents(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const queryResult = FinanceReceivableEventListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await projectReceivableOperationsService.listEvents(
+      authContext,
+      idVerify.data.id,
       queryResult.data,
     );
     return ResponseHandler.success(data);

@@ -7,6 +7,7 @@ import {
   FinanceFilterSelectField,
 } from "@/components/finance/finance-filter-controls";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
+import { FinanceReceivableCreateButton } from "@/components/finance/finance-receivable-actions";
 import { FinanceReceivablesTable } from "@/components/finance/finance-receivables-table";
 import { fetchFinanceReceivables } from "@/components/finance/finance-requests";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -19,10 +20,13 @@ type FinanceReceivablesPageSearchParams = {
   page?: string;
   status?: string;
   payment_type?: string;
+  source_type?: string;
+  owner_employee_id?: string;
   project_id?: string;
   due_date_from?: string;
   due_date_to?: string;
   overdue_only?: string;
+  follow_up_due_only?: string;
 };
 
 const RECEIVABLE_STATUS_OPTIONS = [
@@ -38,6 +42,14 @@ const PAYMENT_TYPE_OPTIONS = [
   { value: "", label: "全部类型" },
   ...(["deposit", "stage_1", "stage_2", "stage_3", "add_on"] as const)
     .map((value) => ({ value, label: PaymentTypeConfig[value].label })),
+];
+
+const SOURCE_TYPE_OPTIONS = [
+  { value: "", label: "全部来源" },
+  { value: "workflow_node", label: "流程生成" },
+  { value: "manual", label: "人工创建" },
+  { value: "migration", label: "历史迁移" },
+  { value: "add_on", label: "增项" },
 ];
 
 function normalizePage(value: string | undefined) {
@@ -58,10 +70,15 @@ function buildReceivableHref(input: {
   params.set("page", String(input.page));
   append(params, "status", input.filters.status);
   append(params, "payment_type", input.filters.payment_type);
+  append(params, "source_type", input.filters.source_type);
+  append(params, "owner_employee_id", input.filters.owner_employee_id);
   append(params, "project_id", input.filters.project_id);
   append(params, "due_date_from", input.filters.due_date_from);
   append(params, "due_date_to", input.filters.due_date_to);
   if (input.filters.overdue_only === "true") params.set("overdue_only", "true");
+  if (input.filters.follow_up_due_only === "true") {
+    params.set("follow_up_due_only", "true");
+  }
   return `/finance/receivables?${params}`;
 }
 
@@ -85,10 +102,13 @@ export default async function FinanceReceivablesPage({
     pageSize: 20,
     status: clean(params.status),
     payment_type: clean(params.payment_type),
+    source_type: clean(params.source_type),
+    owner_employee_id: clean(params.owner_employee_id),
     project_id: clean(params.project_id),
     due_date_from: clean(params.due_date_from),
     due_date_to: clean(params.due_date_to),
     overdue_only: params.overdue_only === "true",
+    follow_up_due_only: params.follow_up_due_only === "true",
   });
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
@@ -111,6 +131,7 @@ export default async function FinanceReceivablesPage({
         <Badge variant="outline" className="w-fit tabular-nums">
           第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
         </Badge>
+        <FinanceReceivableCreateButton />
       </div>
 
       <FinanceModuleTabs activeTab="receivables" />
@@ -119,7 +140,7 @@ export default async function FinanceReceivablesPage({
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance/receivables"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-[minmax(9rem,12rem)_minmax(9rem,12rem)_minmax(12rem,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_auto] md:items-end"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 xl:grid-cols-[minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(10rem,12rem)_minmax(12rem,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_auto] xl:items-end"
           >
             <FinanceFilterSelectField
               id="receivable-status"
@@ -135,6 +156,25 @@ export default async function FinanceReceivablesPage({
               value={params.payment_type}
               options={PAYMENT_TYPE_OPTIONS}
             />
+            <FinanceFilterSelectField
+              id="receivable-source-type"
+              name="source_type"
+              label="来源"
+              value={params.source_type}
+              options={SOURCE_TYPE_OPTIONS}
+            />
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-owner-id">
+                负责人 ID
+              </label>
+              <Input
+                id="receivable-owner-id"
+                name="owner_employee_id"
+                defaultValue={params.owner_employee_id || ""}
+                placeholder="按员工 ID 筛选"
+                className="h-9"
+              />
+            </div>
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-project-id">
                 项目 ID
@@ -178,6 +218,13 @@ export default async function FinanceReceivablesPage({
                 value="true"
                 checked={params.overdue_only === "true"}
                 label="只看逾期"
+              />
+              <FinanceCheckboxField
+                id="receivable-follow-up-due-only"
+                name="follow_up_due_only"
+                value="true"
+                checked={params.follow_up_due_only === "true"}
+                label="跟进到期"
               />
               <Button type="submit" size="sm">筛选</Button>
               <Button asChild type="button" variant="outline" size="sm">

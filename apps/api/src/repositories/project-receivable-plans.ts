@@ -6,6 +6,7 @@ import type {
 import { SupabaseDB } from "@/utils/supabase/index";
 
 const UNPAID_RECEIVABLE_STATUSES = ["pending", "partially_paid", "overdue"];
+const RECEIVABLE_PLAN_RECORD_SELECT = "id, tenant_id, project_id, workflow_instance_id, workflow_node_key, source_type, source_id, payment_type, title, amount, due_date, paid_amount, status, owner_employee_id, latest_follow_up_at, latest_follow_up_note, next_follow_up_at, canceled_at, canceled_by, canceled_reason";
 
 type ProjectReceivablePlanRow = {
   id: string;
@@ -21,6 +22,13 @@ type ProjectReceivablePlanRow = {
   due_date: string;
   paid_amount: number | string | null;
   status: string | null;
+  owner_employee_id: string | null;
+  latest_follow_up_at: string | null;
+  latest_follow_up_note: string | null;
+  next_follow_up_at: string | null;
+  canceled_at: string | null;
+  canceled_by: string | null;
+  canceled_reason: string | null;
   created_at: string | null;
   updated_at: string | null;
   project?: {
@@ -28,6 +36,14 @@ type ProjectReceivablePlanRow = {
     name: string | null;
     status: string | null;
   } | null;
+  owner?: EmployeeRelation | null;
+  canceled_by_employee?: EmployeeRelation | null;
+};
+
+type EmployeeRelation = {
+  id: string;
+  name: string | null;
+  phone: string | null;
 };
 
 export type ProjectReceivablePlanListItem = {
@@ -46,6 +62,15 @@ export type ProjectReceivablePlanListItem = {
   due_date: string;
   status: ProjectReceivableStatus;
   overdue_days: number;
+  owner_employee_id: string | null;
+  owner_employee_name: string | null;
+  latest_follow_up_at: string | null;
+  latest_follow_up_note: string | null;
+  next_follow_up_at: string | null;
+  canceled_at: string | null;
+  canceled_by: string | null;
+  canceled_by_name: string | null;
+  canceled_reason: string | null;
   created_at: string | null;
   updated_at: string | null;
   project?: {
@@ -110,9 +135,18 @@ class ProjectReceivablePlanRepository {
     due_date,
     paid_amount,
     status,
+    owner_employee_id,
+    latest_follow_up_at,
+    latest_follow_up_note,
+    next_follow_up_at,
+    canceled_at,
+    canceled_by,
+    canceled_reason,
     created_at,
     updated_at,
-    project:projects(id, name, status)
+    project:projects(id, name, status),
+    owner:employees!project_receivable_plans_owner_employee_id_fkey(id, name, phone),
+    canceled_by_employee:employees!project_receivable_plans_canceled_by_fkey(id, name, phone)
   `;
 
   async findProjectTenant(projectId: string) {
@@ -153,7 +187,7 @@ class ProjectReceivablePlanRepository {
   }): Promise<ProjectReceivablePlanRecord | null> {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_receivable_plans")
-      .select("id, tenant_id, project_id, workflow_instance_id, workflow_node_key, source_type, source_id, payment_type, title, amount, due_date, paid_amount, status")
+      .select(RECEIVABLE_PLAN_RECORD_SELECT)
       .eq("tenant_id", input.tenantId)
       .eq("source_type", "workflow_node")
       .eq("source_id", input.sourceId)
@@ -199,7 +233,7 @@ class ProjectReceivablePlanRepository {
         onConflict: "tenant_id,source_type,source_id,payment_type",
         ignoreDuplicates: false,
       })
-      .select("id, tenant_id, project_id, workflow_instance_id, workflow_node_key, source_type, source_id, payment_type, title, amount, due_date, paid_amount, status")
+      .select(RECEIVABLE_PLAN_RECORD_SELECT)
       .single();
 
     if (error) {
@@ -225,7 +259,7 @@ class ProjectReceivablePlanRepository {
       })
       .eq("tenant_id", input.tenantId)
       .eq("id", input.planId)
-      .select("id, tenant_id, project_id, workflow_instance_id, workflow_node_key, source_type, source_id, payment_type, title, amount, due_date, paid_amount, status")
+      .select(RECEIVABLE_PLAN_RECORD_SELECT)
       .single();
 
     if (error) {
@@ -256,6 +290,12 @@ class ProjectReceivablePlanRepository {
     if (input.query.payment_type) {
       request = request.eq("payment_type", input.query.payment_type);
     }
+    if (input.query.source_type) {
+      request = request.eq("source_type", input.query.source_type);
+    }
+    if (input.query.owner_employee_id) {
+      request = request.eq("owner_employee_id", input.query.owner_employee_id);
+    }
     if (input.query.due_date_from) {
       request = request.gte("due_date", input.query.due_date_from);
     }
@@ -268,6 +308,11 @@ class ProjectReceivablePlanRepository {
     if (input.query.overdue_only || input.query.status === "overdue") {
       request = request
         .lt("due_date", input.tenantToday)
+        .in("status", UNPAID_RECEIVABLE_STATUSES);
+    }
+    if (input.query.follow_up_due_only) {
+      request = request
+        .lte("next_follow_up_at", `${input.tenantToday}T23:59:59.999Z`)
         .in("status", UNPAID_RECEIVABLE_STATUSES);
     }
 
@@ -374,6 +419,15 @@ function normalizeReceivablePlanRow(
       overdueDays,
     }),
     overdue_days: overdueDays,
+    owner_employee_id: row.owner_employee_id,
+    owner_employee_name: row.owner?.name ?? null,
+    latest_follow_up_at: row.latest_follow_up_at,
+    latest_follow_up_note: row.latest_follow_up_note,
+    next_follow_up_at: row.next_follow_up_at,
+    canceled_at: row.canceled_at,
+    canceled_by: row.canceled_by,
+    canceled_by_name: row.canceled_by_employee?.name ?? null,
+    canceled_reason: row.canceled_reason,
     created_at: row.created_at,
     updated_at: row.updated_at,
     project: row.project ?? null,
@@ -442,5 +496,4 @@ function normalizeInteger(value: unknown) {
   return Number.isFinite(count) ? Math.trunc(count) : 0;
 }
 
-export const projectReceivablePlanRepository =
-  new ProjectReceivablePlanRepository();
+export const projectReceivablePlanRepository = new ProjectReceivablePlanRepository();

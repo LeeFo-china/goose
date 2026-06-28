@@ -7,6 +7,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
+import { FinanceReceivableRowActions } from "./finance-receivable-actions";
 import type {
   FinanceReceivableRecord,
   FinanceReceivableStatus,
@@ -18,6 +19,14 @@ import {
 
 function projectName(row: FinanceReceivableRecord) {
   return row.project?.name || row.project_id;
+}
+
+function sourceTypeLabel(value: string) {
+  if (value === "manual") return "人工";
+  if (value === "workflow_node") return "流程";
+  if (value === "migration") return "迁移";
+  if (value === "add_on") return "增项";
+  return value || "-";
 }
 
 function paymentTypeLabel(value: string) {
@@ -90,6 +99,14 @@ export function FinanceReceivablesTable({
       },
     },
     {
+      accessorKey: "owner_employee_name",
+      header: "负责人",
+      cell: ({ row }) => row.original.owner_employee_name || "未指定",
+      meta: {
+        cellClassName: "whitespace-nowrap text-muted-foreground",
+      },
+    },
+    {
       accessorKey: "amount",
       header: "应收",
       cell: ({ row }) => formatFinanceMoney(row.original.amount),
@@ -137,15 +154,45 @@ export function FinanceReceivablesTable({
       },
     },
     {
+      accessorKey: "latest_follow_up_note",
+      header: "最近跟进",
+      cell: ({ row }) => (
+        <div className="max-w-[16rem]">
+          <div className="truncate">
+            {row.original.latest_follow_up_note || "-"}
+          </div>
+          {row.original.next_follow_up_at ? (
+            <div className="mt-1 truncate text-xs text-muted-foreground">
+              下次 {formatFinanceDate(row.original.next_follow_up_at)}
+            </div>
+          ) : null}
+        </div>
+      ),
+      meta: {
+        cellClassName: "text-muted-foreground",
+      },
+    },
+    {
+      accessorKey: "source_type",
+      header: "来源",
+      cell: ({ row }) => sourceTypeLabel(row.original.source_type),
+      meta: {
+        cellClassName: "whitespace-nowrap text-muted-foreground",
+      },
+    },
+    {
       id: "action",
       header: "",
       cell: ({ row }) => (
-        <Button asChild variant="ghost" size="sm" className="h-8 px-2">
-          <Link href={`/projects/${row.original.project_id}`}>
-            查看项目
-            <ArrowUpRight data-icon="inline-end" />
-          </Link>
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+          <FinanceReceivableRowActions row={row.original} />
+          <Button asChild variant="ghost" size="sm" className="h-8 px-2">
+            <Link href={`/projects/${row.original.project_id}`}>
+              查看项目
+              <ArrowUpRight data-icon="inline-end" />
+            </Link>
+          </Button>
+        </div>
       ),
       meta: {
         cellClassName: "whitespace-nowrap text-right",
@@ -158,7 +205,7 @@ export function FinanceReceivablesTable({
       columns={columns}
       data={rows}
       emptyText="暂无应收计划"
-      minWidth="min-w-[1180px]"
+      minWidth="min-w-[1480px]"
     />
   );
 }
