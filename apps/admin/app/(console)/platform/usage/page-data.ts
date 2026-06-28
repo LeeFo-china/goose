@@ -1,4 +1,5 @@
 import type { UsageTab } from "@/components/usage/usage-list-actions";
+import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
 import type {
   PlatformTenantUsageData,
   TenantUsageSummaryData,
@@ -10,9 +11,13 @@ import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 export type PlatformUsageSearchParams = Promise<{
   tab?: string;
   page?: string;
+  pageSize?: string;
   aiPage?: string;
+  aiPageSize?: string;
   smsPage?: string;
+  smsPageSize?: string;
   socialVideoPage?: string;
+  socialVideoPageSize?: string;
   keyword?: string;
   tenant_id?: string;
   ai_status?: string;
@@ -27,6 +32,8 @@ export function readPositiveInteger(value: string | undefined, fallback: number)
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
+
+export { normalizePlatformListPageSize };
 
 export function readTab(value: string | undefined): UsageTab {
   return value === "ai" || value === "sms" || value === "social_video" ? value : "summary";
@@ -80,18 +87,23 @@ export async function fetchBackend<T>(path: string, fallback: T) {
   }
 }
 
-export function emptyPlatformUsage(params: { page: number; dateFrom: string; dateTo: string }): PlatformTenantUsageData {
+export function emptyPlatformUsage(params: {
+  page: number;
+  pageSize: number;
+  dateFrom: string;
+  dateTo: string;
+}): PlatformTenantUsageData {
   return {
     range: { date_from: params.dateFrom, date_to: params.dateTo },
     list: [],
-    pagination: { page: params.page, pageSize: 20, total: 0, totalPages: 0 },
+    pagination: { page: params.page, pageSize: params.pageSize, total: 0, totalPages: 0 },
   };
 }
 
-export function emptyLogList<T>(page: number): UsageLogListData<T> {
+export function emptyLogList<T>(page: number, pageSize: number): UsageLogListData<T> {
   return {
     list: [],
-    pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+    pagination: { page, pageSize, total: 0, totalPages: 0 },
   };
 }
 

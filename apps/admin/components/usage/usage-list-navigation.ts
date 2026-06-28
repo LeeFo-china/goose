@@ -34,9 +34,13 @@ export function buildUsageHref(input: {
   basePath: string;
   tab?: UsageTab;
   page?: number;
+  pageSize?: number;
   aiPage?: number;
+  aiPageSize?: number;
   smsPage?: number;
+  smsPageSize?: number;
   socialVideoPage?: number;
+  socialVideoPageSize?: number;
   dateFrom?: string;
   dateTo?: string;
   keyword?: string;
@@ -49,9 +53,13 @@ export function buildUsageHref(input: {
   const params = new URLSearchParams();
   if (input.tab && input.tab !== "summary") params.set("tab", input.tab);
   if (input.page && input.page > 1) params.set("page", String(input.page));
+  if (input.pageSize) params.set("pageSize", String(input.pageSize));
   if (input.aiPage && input.aiPage > 1) params.set("aiPage", String(input.aiPage));
+  if (input.aiPageSize) params.set("aiPageSize", String(input.aiPageSize));
   if (input.smsPage && input.smsPage > 1) params.set("smsPage", String(input.smsPage));
+  if (input.smsPageSize) params.set("smsPageSize", String(input.smsPageSize));
   if (input.socialVideoPage && input.socialVideoPage > 1) params.set("socialVideoPage", String(input.socialVideoPage));
+  if (input.socialVideoPageSize) params.set("socialVideoPageSize", String(input.socialVideoPageSize));
   if (input.dateFrom) params.set("date_from", input.dateFrom);
   if (input.dateTo) params.set("date_to", input.dateTo);
   if (input.keyword) params.set("keyword", input.keyword);

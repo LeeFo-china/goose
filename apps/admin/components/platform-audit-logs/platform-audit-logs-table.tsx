@@ -3,6 +3,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import {
   getPlatformAuditLogActionLabel,
   getPlatformAuditLogActionVariant,
@@ -115,6 +116,8 @@ export function PlatformAuditLogsTable({ logs }: { logs: PlatformAuditLogRecord[
       data={logs}
       emptyText="暂无平台审计记录"
       minWidth="min-w-[1120px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

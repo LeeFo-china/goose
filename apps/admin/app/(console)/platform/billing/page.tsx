@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertCircle, Coins, CreditCard, WalletCards } from "lucide-react";
-import { StatusAlert } from "@/components/admin/status-alert";
+import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession } from "@/lib/auth";
 import { BillingEventsTab, BillingTenantsTab } from "@/app/(console)/platform/billing/billing-account-tabs";
 import { BillingAiTab, BillingLedgerTab, BillingPricingTab } from "@/app/(console)/platform/billing/billing-usage-tabs";
-import { buildQuery, cleanParam, emptyAiFilterOptions, emptyAiUsageStats, emptyEventList, emptyLedgerList, emptyPricingList, emptySummary, emptyTenantList, fetchBackend, formatCredits, normalizeBillingTab, pickParam, readPositiveInteger, SummaryItem, type BillingTab, type SearchParams } from "@/app/(console)/platform/billing/billing-page-shared";
+import { buildQuery, cleanParam, emptyAiFilterOptions, emptyAiUsageStats, emptyEventList, emptyLedgerList, emptyPricingList, emptySummary, emptyTenantList, fetchBackend, formatCredits, normalizeBillingTab, normalizePlatformListPageSize, pickParam, readPositiveInteger, SummaryItem, type SearchParams } from "@/app/(console)/platform/billing/billing-page-shared";
 import type {
   BillingAiUsageFilterOptions,
   BillingAiUsageStats,
@@ -33,9 +31,13 @@ export default async function PlatformBillingPage({
   const hasPlatformAccess = session.roles.includes("platform_admin");
   const params = await searchParams;
   const page = readPositiveInteger(params.page, 1);
+  const pageSize = normalizePlatformListPageSize(params.pageSize);
   const ledgerPage = readPositiveInteger(params.ledgerPage, 1);
+  const ledgerPageSize = normalizePlatformListPageSize(params.ledgerPageSize);
   const rulePage = readPositiveInteger(params.rulePage, 1);
+  const rulePageSize = normalizePlatformListPageSize(params.rulePageSize);
   const eventPage = readPositiveInteger(params.eventPage, 1);
+  const eventPageSize = normalizePlatformListPageSize(params.eventPageSize);
   const activeTab = normalizeBillingTab(params.tab);
   const tenantStatus = pickParam(params.tenantStatus, ["active", "suspended", "closed"] as const);
   const tenantFilters = {
@@ -89,19 +91,19 @@ export default async function PlatformBillingPage({
     ? await fetchBackend<BillingTenantListData>(
       `/platform/billing/tenants?${buildQuery({
         page,
-        pageSize: 20,
+        pageSize,
         keyword: tenantFilters.tenantKeyword,
         status: tenantFilters.tenantStatus,
         low_balance_only: tenantFilters.tenantLowBalance,
       })}`,
-      emptyTenantList(page),
+      emptyTenantList(page, pageSize),
     )
-    : { data: emptyTenantList(page), error: null };
+    : { data: emptyTenantList(page, pageSize), error: null };
   const ledgerResult = hasPlatformAccess
     ? await fetchBackend<BillingLedgerListData>(
       `/platform/billing/ledger?${buildQuery({
         page: ledgerPage,
-        pageSize: 10,
+        pageSize: ledgerPageSize,
         tenant_keyword: ledgerFilters.ledgerTenantKeyword,
         direction: ledgerFilters.ledgerDirection,
         metric_code: ledgerFilters.ledgerMetricCode,
@@ -111,26 +113,26 @@ export default async function PlatformBillingPage({
         start_date: ledgerFilters.ledgerStartDate,
         end_date: ledgerFilters.ledgerEndDate,
       })}`,
-      emptyLedgerList(ledgerPage),
+      emptyLedgerList(ledgerPage, ledgerPageSize),
     )
-    : { data: emptyLedgerList(ledgerPage), error: null };
+    : { data: emptyLedgerList(ledgerPage, ledgerPageSize), error: null };
   const pricingResult = hasPlatformAccess
     ? await fetchBackend<BillingPricingRuleListData>(
       `/platform/billing/pricing-rules?${buildQuery({
         page: rulePage,
-        pageSize: 20,
+        pageSize: rulePageSize,
         metric_code: ruleFilters.ruleMetricCode,
         scope: ruleFilters.ruleScope,
         enabled: ruleFilters.ruleEnabled,
       })}`,
-      emptyPricingList(rulePage),
+      emptyPricingList(rulePage, rulePageSize),
     )
-    : { data: emptyPricingList(rulePage), error: null };
+    : { data: emptyPricingList(rulePage, rulePageSize), error: null };
   const eventResult = hasPlatformAccess
     ? await fetchBackend<BillingEventListData>(
       `/platform/billing/events?${buildQuery({
         page: eventPage,
-        pageSize: 20,
+        pageSize: eventPageSize,
         tenant_keyword: eventFilters.eventTenantKeyword,
         metric_code: eventFilters.eventMetricCode,
         scene_code: eventFilters.eventSceneCode,
@@ -139,9 +141,9 @@ export default async function PlatformBillingPage({
         start_date: eventFilters.eventStartDate,
         end_date: eventFilters.eventEndDate,
       })}`,
-      emptyEventList(eventPage),
+      emptyEventList(eventPage, eventPageSize),
     )
-    : { data: emptyEventList(eventPage), error: null };
+    : { data: emptyEventList(eventPage, eventPageSize), error: null };
   const aiStatsResult = hasPlatformAccess
     ? await fetchBackend<BillingAiUsageStats>(
       `/platform/billing/ai-usage-stats?${buildQuery({
@@ -162,74 +164,109 @@ export default async function PlatformBillingPage({
       emptyAiFilterOptions,
     )
     : { data: emptyAiFilterOptions, error: null };
+  const activeError = summaryResult.error
+    || tenantsResult.error
+    || ledgerResult.error
+    || pricingResult.error
+    || eventResult.error
+    || aiStatsResult.error
+    || aiFilterOptionsResult.error;
+  const activePagination = activeTab === "tenants"
+    ? tenantsResult.data.pagination
+    : activeTab === "events"
+      ? eventResult.data.pagination
+      : activeTab === "pricing"
+        ? pricingResult.data.pagination
+        : activeTab === "ledger"
+          ? ledgerResult.data.pagination
+          : { page: 1, pageSize, total: aiStatsResult.data.list.length, totalPages: 1 };
+  const activeCount = activeTab === "tenants"
+    ? tenantsResult.data.list.length
+    : activeTab === "events"
+      ? eventResult.data.list.length
+      : activeTab === "pricing"
+        ? pricingResult.data.list.length
+        : activeTab === "ledger"
+          ? ledgerResult.data.list.length
+          : aiStatsResult.data.list.length;
+  const pageKey = activeTab === "ledger"
+    ? "ledgerPage"
+    : activeTab === "pricing"
+      ? "rulePage"
+      : activeTab === "events"
+        ? "eventPage"
+        : "page";
+  const pageSizeKey = activeTab === "ledger"
+    ? "ledgerPageSize"
+    : activeTab === "pricing"
+      ? "rulePageSize"
+      : activeTab === "events"
+        ? "eventPageSize"
+        : "pageSize";
+  const unit = activeTab === "tenants"
+    ? "个账户"
+    : activeTab === "events"
+      ? "条影子计费"
+      : activeTab === "pricing"
+        ? "条价格规则"
+        : activeTab === "ledger"
+          ? "条流水"
+          : "个 AI 观察项";
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">计费中心</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            管理租户积分账户、人工充值、价格规则和计费流水。
-          </p>
-        </div>
-        <Badge variant="outline">低余额阈值 {formatCredits(summaryResult.data.low_balance_threshold)} 积分</Badge>
-      </div>
-
-      {summaryResult.error ? <StatusAlert>{summaryResult.error}</StatusAlert> : null}
-      {tenantsResult.error ? <StatusAlert>{tenantsResult.error}</StatusAlert> : null}
-      {ledgerResult.error ? <StatusAlert>{ledgerResult.error}</StatusAlert> : null}
-      {pricingResult.error ? <StatusAlert>{pricingResult.error}</StatusAlert> : null}
-      {eventResult.error ? <StatusAlert>{eventResult.error}</StatusAlert> : null}
-      {aiStatsResult.error ? <StatusAlert>{aiStatsResult.error}</StatusAlert> : null}
-      {aiFilterOptionsResult.error ? <StatusAlert>{aiFilterOptionsResult.error}</StatusAlert> : null}
-
-      <div className="grid gap-3 md:grid-cols-4">
-        <SummaryItem icon={WalletCards} label="可用积分" value={formatCredits(summaryResult.data.total_available_credits)} />
-        <SummaryItem icon={Coins} label="冻结积分" value={formatCredits(summaryResult.data.total_frozen_credits)} />
-        <SummaryItem icon={CreditCard} label="累计消耗" value={formatCredits(summaryResult.data.total_consumed_credits)} />
-        <SummaryItem icon={AlertCircle} label="低余额租户" value={formatCredits(summaryResult.data.low_balance_count)} />
-      </div>
-
-      <Tabs defaultValue={activeTab}>
-        <Card>
-          <CardHeader className="flex flex-col gap-4">
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-              <div>
-                <CardTitle>计费运营</CardTitle>
-                <CardDescription>账户、试算、价格和流水集中在同一管理区内。</CardDescription>
-              </div>
-              <Badge variant="outline">当前 {summaryResult.data.active_account_count} 个有效账户</Badge>
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <Tabs defaultValue={activeTab} className="contents">
+        <PlatformListPageShell
+          title="计费中心"
+          description="管理租户积分账户、人工充值、价格规则和计费流水。"
+          titleMeta={<Badge variant="outline">低余额阈值 {formatCredits(summaryResult.data.low_balance_threshold)} 积分</Badge>}
+          error={activeError}
+          summary={
+            <div className="grid gap-3 md:grid-cols-4">
+              <SummaryItem key="available" icon={WalletCards} label="可用积分" value={formatCredits(summaryResult.data.total_available_credits)} />
+              <SummaryItem key="frozen" icon={Coins} label="冻结积分" value={formatCredits(summaryResult.data.total_frozen_credits)} />
+              <SummaryItem key="consumed" icon={CreditCard} label="累计消耗" value={formatCredits(summaryResult.data.total_consumed_credits)} />
+              <SummaryItem key="low-balance" icon={AlertCircle} label="低余额租户" value={formatCredits(summaryResult.data.low_balance_count)} />
             </div>
-            <TabsList className="w-full justify-start overflow-x-auto">
+          }
+          tabs={
+            <TabsList>
               <TabsTrigger value="tenants" asChild>
-                <Link href={`/platform/billing?${buildQuery({ tab: "tenants" })}`}>租户账户</Link>
+                <Link href={`/platform/billing?${buildQuery({ tab: "tenants", pageSize })}`}>租户账户</Link>
               </TabsTrigger>
               <TabsTrigger value="events" asChild>
-                <Link href={`/platform/billing?${buildQuery({ tab: "events" })}`}>影子计费</Link>
+                <Link href={`/platform/billing?${buildQuery({ tab: "events", eventPageSize })}`}>影子计费</Link>
               </TabsTrigger>
               <TabsTrigger value="ai" asChild>
                 <Link href={`/platform/billing?${buildQuery({ tab: "ai" })}`}>AI 观察</Link>
               </TabsTrigger>
               <TabsTrigger value="pricing" asChild>
-                <Link href={`/platform/billing?${buildQuery({ tab: "pricing" })}`}>价格规则</Link>
+                <Link href={`/platform/billing?${buildQuery({ tab: "pricing", rulePageSize })}`}>价格规则</Link>
               </TabsTrigger>
               <TabsTrigger value="ledger" asChild>
-                <Link href={`/platform/billing?${buildQuery({ tab: "ledger" })}`}>计费流水</Link>
+                <Link href={`/platform/billing?${buildQuery({ tab: "ledger", ledgerPageSize })}`}>计费流水</Link>
               </TabsTrigger>
             </TabsList>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          }
+          pagination={activePagination}
+          currentCount={activeCount}
+          pageKey={pageKey}
+          pageSizeKey={pageSizeKey}
+          tableViewportTestId="platform-billing-list-table-viewport"
+          unit={unit}
+        >
+          {activeTab === "tenants" ? (
             <BillingTenantsTab tenants={tenantsResult.data} tenantFilters={tenantFilters} />
-
+          ) : activeTab === "events" ? (
             <BillingEventsTab events={eventResult.data} eventFilters={eventFilters} />
-
-<BillingAiTab aiStats={aiStatsResult.data} aiFilterOptions={aiFilterOptionsResult.data} aiFilters={aiFilters} />
-
+          ) : activeTab === "ai" ? (
+            <BillingAiTab aiStats={aiStatsResult.data} aiFilterOptions={aiFilterOptionsResult.data} aiFilters={aiFilters} />
+          ) : activeTab === "pricing" ? (
             <BillingPricingTab pricing={pricingResult.data} ruleFilters={ruleFilters} />
-
+          ) : (
             <BillingLedgerTab ledger={ledgerResult.data} ledgerFilters={ledgerFilters} />
-          </CardContent>
-        </Card>
+          )}
+        </PlatformListPageShell>
       </Tabs>
     </div>
   );

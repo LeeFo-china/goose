@@ -107,12 +107,12 @@ export function ProviderFormCard({
   onReset: () => void;
 }) {
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex min-h-0 flex-col overflow-hidden">
+      <CardHeader className="shrink-0">
         <CardTitle>{form.id ? "编辑供应商" : "新增供应商"}</CardTitle>
         <CardDescription>供应商密钥只保存引用 Key，密钥值仍在系统配置维护。</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="min-h-0 flex-1 overflow-auto">
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="ai-provider-code">编码</FieldLabel>
@@ -159,12 +159,12 @@ export function ModelFormCard({
   onReset: () => void;
 }) {
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex min-h-0 flex-col overflow-hidden">
+      <CardHeader className="shrink-0">
         <CardTitle>{form.id ? "编辑模型" : "新增模型"}</CardTitle>
         <CardDescription>模型编码用于内部统计，调用名称会传给供应商接口。</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="min-h-0 flex-1 overflow-auto">
         <FieldGroup>
           <Field>
             <FieldLabel>供应商</FieldLabel>
@@ -215,14 +215,14 @@ export function ModelTable({
   onEdit: (item: AiModelRecord) => void;
 }) {
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex min-h-0 flex-col overflow-hidden">
+      <CardHeader className="shrink-0">
         <CardTitle>模型列表</CardTitle>
         <CardDescription>同一场景可以使用不同供应商下的模型做主备切换。</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
+      <CardContent className="min-h-0 flex-1 p-0">
+        <Table containerClassName="h-full" className="min-w-[900px]">
+          <TableHeader className="sticky top-0 bg-card">
             <TableRow>
               <TableHead>模型</TableHead>
               <TableHead>供应商</TableHead>
@@ -266,14 +266,14 @@ export function ProviderTable({
   onEdit: (item: AiProviderRecord) => void;
 }) {
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex min-h-0 flex-col overflow-hidden">
+      <CardHeader className="shrink-0">
         <CardTitle>供应商列表</CardTitle>
         <CardDescription>当前只接入 OpenAI-compatible 协议，原生 Claude/Gemini 需要后续扩展适配器。</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
+      <CardContent className="min-h-0 flex-1 p-0">
+        <Table containerClassName="h-full" className="min-w-[980px]">
+          <TableHeader className="sticky top-0 bg-card">
             <TableRow>
               <TableHead>供应商</TableHead>
               <TableHead>Endpoint</TableHead>

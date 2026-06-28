@@ -36,13 +36,13 @@ export function AiModelRouteTab({
   onRouteEdit: (item: AiSceneRouteRecord) => void;
 }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
-      <Card>
-        <CardHeader>
+    <div className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden">
+      <Card className="flex min-h-0 flex-col overflow-hidden">
+        <CardHeader className="shrink-0">
           <CardTitle>{routeForm.id ? "编辑场景路由" : "新增场景路由"}</CardTitle>
           <CardDescription>给业务场景配置主模型、备用模型和调用参数。</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-h-0 flex-1 overflow-auto">
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="ai-route-scene-code">场景编码</FieldLabel>
@@ -157,14 +157,14 @@ export function AiModelRouteTab({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="flex min-h-0 flex-col overflow-hidden">
+        <CardHeader className="shrink-0">
           <CardTitle>场景路由列表</CardTitle>
           <CardDescription>模型切换后，新请求立即按最新配置解析。</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
+        <CardContent className="min-h-0 flex-1 p-0">
+          <Table containerClassName="h-full" className="min-w-[980px]">
+            <TableHeader className="sticky top-0 bg-card">
               <TableRow>
                 <TableHead>场景</TableHead>
                 <TableHead>主模型</TableHead>

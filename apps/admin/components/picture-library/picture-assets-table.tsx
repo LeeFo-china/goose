@@ -3,6 +3,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import {
   DeletePictureAssetButton,
   EditPictureAssetButton,
@@ -117,6 +118,8 @@ export function PictureAssetsTable({
       data={assets}
       emptyText="还没有上传图片"
       minWidth="min-w-[1180px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

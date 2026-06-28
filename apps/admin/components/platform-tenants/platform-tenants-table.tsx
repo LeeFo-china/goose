@@ -6,6 +6,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import {
   EditPlatformTenantButton,
   PlatformTenantStatusButton,
@@ -124,6 +125,8 @@ export function PlatformTenantsTable({ tenants }: { tenants: PlatformTenantRecor
       data={tenants}
       emptyText="还没有创建租户"
       minWidth="min-w-[1080px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

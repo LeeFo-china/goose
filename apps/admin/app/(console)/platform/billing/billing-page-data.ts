@@ -7,14 +7,19 @@ import type {
   BillingPricingRuleListData,
   BillingTenantListData,
 } from "@/components/billing/billing-types";
+import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 export type SearchParams = Promise<{
   page?: string;
+  pageSize?: string;
   ledgerPage?: string;
+  ledgerPageSize?: string;
   rulePage?: string;
+  rulePageSize?: string;
   eventPage?: string;
+  eventPageSize?: string;
   tab?: string;
   tenantKeyword?: string;
   tenantStatus?: string;
@@ -87,32 +92,34 @@ export const emptyAiFilterOptions: BillingAiUsageFilterOptions = {
   models: [],
 };
 
-export function emptyTenantList(page: number): BillingTenantListData {
+export { normalizePlatformListPageSize };
+
+export function emptyTenantList(page: number, pageSize: number): BillingTenantListData {
   return {
     list: [],
-    pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+    pagination: { page, pageSize, total: 0, totalPages: 0 },
     low_balance_threshold: 5000,
   };
 }
 
-export function emptyLedgerList(page: number): BillingLedgerListData {
+export function emptyLedgerList(page: number, pageSize: number): BillingLedgerListData {
   return {
     list: [],
-    pagination: { page, pageSize: 10, total: 0, totalPages: 0 },
+    pagination: { page, pageSize, total: 0, totalPages: 0 },
   };
 }
 
-export function emptyPricingList(page: number): BillingPricingRuleListData {
+export function emptyPricingList(page: number, pageSize: number): BillingPricingRuleListData {
   return {
     list: [],
-    pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+    pagination: { page, pageSize, total: 0, totalPages: 0 },
   };
 }
 
-export function emptyEventList(page: number): BillingEventListData {
+export function emptyEventList(page: number, pageSize: number): BillingEventListData {
   return {
     list: [],
-    pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+    pagination: { page, pageSize, total: 0, totalPages: 0 },
   };
 }
 

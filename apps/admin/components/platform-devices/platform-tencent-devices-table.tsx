@@ -6,6 +6,7 @@ import { Eye, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   getPlatformDeviceStatusMeta,
@@ -327,6 +328,8 @@ export function PlatformTencentDevicesTable({ devices }: { devices: PlatformTenc
       data={devices}
       emptyText="暂无腾讯云设备"
       minWidth="min-w-[1340px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

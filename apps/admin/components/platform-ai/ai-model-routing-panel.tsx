@@ -131,14 +131,14 @@ export function AiModelRoutingPanel({ data }: { data: AiConfigData }) {
   }
 
   return (
-    <Tabs defaultValue="routes" className="flex flex-col gap-4">
-      <TabsList className="w-fit">
+    <Tabs defaultValue="routes" className="flex min-h-0 flex-1 flex-col gap-4">
+      <TabsList className="w-fit shrink-0">
         <TabsTrigger value="routes">场景路由</TabsTrigger>
         <TabsTrigger value="models">模型</TabsTrigger>
         <TabsTrigger value="providers">供应商</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="routes" className="m-0">
+      <TabsContent value="routes" className="m-0 min-h-0 flex-1 overflow-hidden">
         <AiModelRouteTab
           routes={data.routes}
           models={data.models}
@@ -150,8 +150,8 @@ export function AiModelRoutingPanel({ data }: { data: AiConfigData }) {
         />
       </TabsContent>
 
-      <TabsContent value="models" className="m-0">
-        <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+      <TabsContent value="models" className="m-0 min-h-0 flex-1 overflow-hidden">
+        <div className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden">
           <ModelFormCard
             form={modelForm}
             providers={data.providers}
@@ -164,8 +164,8 @@ export function AiModelRoutingPanel({ data }: { data: AiConfigData }) {
         </div>
       </TabsContent>
 
-      <TabsContent value="providers" className="m-0">
-        <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+      <TabsContent value="providers" className="m-0 min-h-0 flex-1 overflow-hidden">
+        <div className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden">
           <ProviderFormCard
             form={providerForm}
             isPending={isPending}

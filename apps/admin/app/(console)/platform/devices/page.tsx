@@ -3,6 +3,7 @@ import { getAdminSession } from "@/lib/auth";
 import {
   getPlatformDevices,
   getPlatformTencentDevices,
+  normalizePlatformListPageSize,
   readBoolean,
   readPositiveInteger,
   readStatus,
@@ -26,23 +27,24 @@ export default async function PlatformDevicesPage({
   const params = await searchParams;
   const activeTab = readTab(params.tab);
   const page = readPositiveInteger(params.page, 1);
+  const pageSize = normalizePlatformListPageSize(params.pageSize);
   const vendor = readVendor(params.vendor);
   const status = readStatus(params.status);
   const onlyUnbound = readBoolean(params.only_unbound);
   const keyword = (params.keyword || "").trim().slice(0, 100);
 
   const ownershipData = activeTab === "ownership" && hasPlatformAccess
-    ? await getPlatformDevices({ page, vendor, status, onlyUnbound, keyword })
+    ? await getPlatformDevices({ page, pageSize, vendor, status, onlyUnbound, keyword })
     : {
       list: [],
-      pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: hasPlatformAccess ? null : "当前账号不是平台超管，无法访问设备资产",
     };
   const tencentData = activeTab === "tencent" && hasPlatformAccess
-    ? await getPlatformTencentDevices({ page, status, keyword })
+    ? await getPlatformTencentDevices({ page, pageSize, status, keyword })
     : {
       list: [],
-      pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: hasPlatformAccess ? null : "当前账号不是平台超管，无法访问腾讯云设备",
     };
 

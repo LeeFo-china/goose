@@ -4,7 +4,7 @@ import type { BillingLedgerListData, BillingPricingRuleListData } from "@/compon
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TabsContent } from "@/components/ui/tabs";
-import { directionLabel, FilterInput, FilterPanel, formatCredits, formatDateTime, PaginationLinks, scopeLabel, SectionHeader } from "@/app/(console)/platform/billing/billing-page-shared";
+import { directionLabel, FilterInput, FilterPanel, formatCredits, formatDateTime, scopeLabel, SectionHeader } from "@/app/(console)/platform/billing/billing-page-shared";
 
 export { BillingAiTab, type BillingAiFilters } from "./billing-ai-tab";
 
@@ -86,14 +86,6 @@ export function BillingPricingTab({ pricing, ruleFilters }: { pricing: BillingPr
                     ) : null}
                   </TableBody>
                 </Table>
-                <div className="border-t p-4">
-                  <PaginationLinks
-                    pagination={pricing.pagination}
-                    pageKey="rulePage"
-                    tab="pricing"
-                    filters={ruleFilters}
-                  />
-                </div>
               </div>
             </TabsContent>
   );
@@ -187,14 +179,6 @@ export function BillingLedgerTab({ ledger, ledgerFilters }: { ledger: BillingLed
                     ) : null}
                   </TableBody>
                 </Table>
-                <div className="border-t p-4">
-                  <PaginationLinks
-                    pagination={ledger.pagination}
-                    pageKey="ledgerPage"
-                    tab="ledger"
-                    filters={ledgerFilters}
-                  />
-                </div>
               </div>
             </TabsContent>
   );

@@ -109,6 +109,7 @@ export function PictureCommentFilters({
           </SelectContent>
         </Select>
         <Input
+          className="h-9"
           value={selectedKeyword}
           onChange={(event) => setSelectedKeyword(event.target.value)}
           placeholder="搜索评论内容"

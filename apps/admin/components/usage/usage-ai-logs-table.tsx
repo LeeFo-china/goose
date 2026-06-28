@@ -3,6 +3,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import type { UsageAiLogRecord } from "@/components/usage/usage-types";
 import {
   aiBillableBadge,
@@ -114,6 +115,8 @@ export function UsageAiLogsTable({ logs }: { logs: UsageAiLogRecord[] }) {
       data={logs}
       emptyText="暂无 AI 调用明细"
       minWidth="min-w-[1210px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

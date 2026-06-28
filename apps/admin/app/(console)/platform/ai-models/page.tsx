@@ -53,15 +53,15 @@ export default async function PlatformAiModelsPage() {
   const activeProviders = result.data.providers.filter((item) => item.status === "active").length;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div>
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-normal">AI 模型路由</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           统一维护平台 AI 供应商、模型和业务场景路由。场景配置生效后，后端按主模型调用，失败时可切换备用模型。
         </p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid shrink-0 gap-3 md:grid-cols-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -103,7 +103,11 @@ export default async function PlatformAiModelsPage() {
         </Card>
       </div>
 
-      {result.error ? <StatusAlert>{result.error}</StatusAlert> : null}
+      {result.error ? (
+        <div className="shrink-0">
+          <StatusAlert>{result.error}</StatusAlert>
+        </div>
+      ) : null}
 
       {hasPlatformAccess ? <AiModelRoutingPanel data={result.data} /> : null}
     </div>
