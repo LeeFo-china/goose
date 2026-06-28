@@ -3,6 +3,7 @@ import type { PlatformDevicesTabValue } from "@/components/platform-devices/plat
 export function buildPlatformDevicesHref(input: {
   tab?: PlatformDevicesTabValue;
   page?: number;
+  pageSize?: number;
   vendor?: string;
   status?: string;
   onlyUnbound?: string;
@@ -11,6 +12,7 @@ export function buildPlatformDevicesHref(input: {
   const params = new URLSearchParams();
   if (input.tab && input.tab !== "ownership") params.set("tab", input.tab);
   if (input.page && input.page > 1) params.set("page", String(input.page));
+  if (input.pageSize) params.set("pageSize", String(input.pageSize));
   if (input.vendor && input.vendor !== "__all") params.set("vendor", input.vendor);
   if (input.status && input.status !== "__all") params.set("status", input.status);
   if (input.onlyUnbound === "true") params.set("only_unbound", "true");

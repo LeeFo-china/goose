@@ -3,6 +3,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import { PlatformDeviceActions } from "@/components/platform-devices/platform-device-actions";
 import {
   getPlatformDeviceStatusMeta,
@@ -156,6 +157,8 @@ export function PlatformDevicesTable({ devices }: { devices: PlatformDeviceRecor
       data={devices}
       emptyText="暂无平台设备资产"
       minWidth="min-w-[1420px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

@@ -28,14 +28,21 @@ export function FilterSelect({
   const [value, setValue] = useState(defaultValue || "");
 
   return (
-    <Field>
-      <FieldLabel htmlFor={name}>{label}</FieldLabel>
+    <Field className="min-w-fit flex-row items-center gap-2">
+      <FieldLabel
+        htmlFor={name}
+        className="shrink-0 text-sm font-medium text-foreground"
+      >
+        {label}
+      </FieldLabel>
       <input type="hidden" name={name} value={value} />
       <Select
         value={value || ALL_VALUE}
-        onValueChange={(nextValue) => setValue(nextValue === ALL_VALUE ? "" : nextValue)}
+        onValueChange={(nextValue) =>
+          setValue(nextValue === ALL_VALUE ? "" : nextValue)
+        }
       >
-        <SelectTrigger id={name}>
+        <SelectTrigger id={name} className="w-36 md:w-40">
           <SelectValue placeholder="全部" />
         </SelectTrigger>
         <SelectContent>

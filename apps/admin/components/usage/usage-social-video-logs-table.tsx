@@ -2,6 +2,7 @@
 
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import type { UsageSocialVideoLogRecord } from "@/components/usage/usage-types";
 import {
   formatDurationSeconds,
@@ -128,6 +129,8 @@ export function UsageSocialVideoLogsTable({ logs }: { logs: UsageSocialVideoLogR
       data={logs}
       emptyText="暂无短视频转写明细"
       minWidth="min-w-[1260px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

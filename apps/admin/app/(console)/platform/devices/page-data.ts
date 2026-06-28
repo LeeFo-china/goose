@@ -7,6 +7,7 @@ import {
   type PlatformTencentDeviceListData,
   type PlatformTencentDeviceRecord,
 } from "@/components/platform-devices/platform-device-types";
+import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -16,6 +17,7 @@ const DEVICE_STATUSES = platformDeviceStatusOptions.map((item) => item.value);
 export type SearchParams = Promise<{
   tab?: string;
   page?: string;
+  pageSize?: string;
   vendor?: string;
   status?: string;
   only_unbound?: string;
@@ -26,6 +28,8 @@ export function readPositiveInteger(value: string | undefined, fallback: number)
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
+
+export { normalizePlatformListPageSize };
 
 export function readVendor(value: string | undefined) {
   return DEVICE_VENDORS.includes(value as (typeof DEVICE_VENDORS)[number]) ? value || "" : "";
@@ -45,6 +49,7 @@ export function readTab(value: string | undefined): PlatformDevicesTabValue {
 
 function buildOwnershipQuery(params: {
   page: number;
+  pageSize: number;
   vendor: string;
   status: string;
   onlyUnbound: boolean;
@@ -52,7 +57,7 @@ function buildOwnershipQuery(params: {
 }) {
   const query = new URLSearchParams();
   query.set("page", String(params.page));
-  query.set("pageSize", "20");
+  query.set("pageSize", String(params.pageSize));
   if (params.vendor) query.set("vendor", params.vendor);
   if (params.status) query.set("status", params.status);
   if (params.onlyUnbound) query.set("only_unbound", "true");
@@ -62,12 +67,13 @@ function buildOwnershipQuery(params: {
 
 function buildTencentQuery(params: {
   page: number;
+  pageSize: number;
   status: string;
   keyword: string;
 }) {
   const query = new URLSearchParams();
   query.set("page", String(params.page));
-  query.set("pageSize", "20");
+  query.set("pageSize", String(params.pageSize));
   if (params.status) query.set("status", params.status);
   if (params.keyword) query.set("keyword", params.keyword);
   return query.toString();
@@ -75,6 +81,7 @@ function buildTencentQuery(params: {
 
 export async function getPlatformDevices(input: {
   page: number;
+  pageSize: number;
   vendor: string;
   status: string;
   onlyUnbound: boolean;
@@ -84,7 +91,7 @@ export async function getPlatformDevices(input: {
   if (!token) {
     return {
       list: [],
-      pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
@@ -100,14 +107,14 @@ export async function getPlatformDevices(input: {
     return {
       ...(payload.data || {
         list: [],
-        pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+        pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       }),
       error: null,
     };
   } catch (error) {
     return {
       list: [],
-      pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "平台设备资产列表加载失败",
     };
   }
@@ -115,6 +122,7 @@ export async function getPlatformDevices(input: {
 
 export async function getPlatformTencentDevices(input: {
   page: number;
+  pageSize: number;
   status: string;
   keyword: string;
 }) {
@@ -122,7 +130,7 @@ export async function getPlatformTencentDevices(input: {
   if (!token) {
     return {
       list: [],
-      pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
@@ -138,14 +146,14 @@ export async function getPlatformTencentDevices(input: {
     return {
       ...(payload.data || {
         list: [],
-        pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+        pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       }),
       error: null,
     };
   } catch (error) {
     return {
       list: [],
-      pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "腾讯云设备列表加载失败",
     };
   }

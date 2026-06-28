@@ -1,9 +1,9 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
-import { BrainCircuit, Landmark } from "lucide-react";
+import { BrainCircuit, Landmark, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { Pagination } from "@/components/billing/billing-types";
 import { buildQuery, type BillingTab, type QueryValue } from "@/app/(console)/platform/billing/billing-page-data";
@@ -124,14 +124,22 @@ export function FilterPanel({
   children: ReactNode;
 }) {
   return (
-    <form action="/platform/billing" className="my-4 rounded-md border bg-muted/20 p-3">
+    <form action="/platform/billing" className="border-b bg-muted/20 p-3">
       <input type="hidden" name="tab" value={tab} />
-      <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-6">{children}</div>
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <Button asChild variant="ghost" size="sm">
-          <Link href={`/platform/billing?${buildQuery({ tab })}`}>重置</Link>
-        </Button>
-        <Button type="submit" size="sm">筛选</Button>
+      <div className="flex flex-wrap items-end gap-3">
+        <FieldGroup className="contents">{children}</FieldGroup>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/platform/billing?${buildQuery({ tab })}`}>
+              <RotateCcw data-icon="inline-start" />
+              重置
+            </Link>
+          </Button>
+          <Button type="submit">
+            <SlidersHorizontal data-icon="inline-start" />
+            筛选
+          </Button>
+        </div>
       </div>
     </form>
   );
@@ -143,17 +151,31 @@ export function FilterInput({
   defaultValue,
   placeholder,
   type = "text",
+  labelVisibility = "visible",
 }: {
   label: string;
   name: string;
   defaultValue?: string;
   placeholder?: string;
   type?: "text" | "date" | "number";
+  labelVisibility?: "visible" | "srOnly";
 }) {
   return (
-    <Field>
-      <FieldLabel htmlFor={name}>{label}</FieldLabel>
-      <Input id={name} name={name} type={type} defaultValue={defaultValue || ""} placeholder={placeholder} />
+    <Field className="min-w-[12rem] flex-1 md:flex-none md:basis-60">
+      <FieldLabel
+        htmlFor={name}
+        className={labelVisibility === "srOnly" ? "sr-only" : undefined}
+      >
+        {label}
+      </FieldLabel>
+      <Input
+        id={name}
+        name={name}
+        type={type}
+        defaultValue={defaultValue || ""}
+        placeholder={placeholder}
+        className="h-9"
+      />
     </Field>
   );
 }

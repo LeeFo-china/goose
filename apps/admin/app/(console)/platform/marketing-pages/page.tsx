@@ -5,9 +5,10 @@ import type {
   H5MarketingPageRecord,
   Pagination,
 } from "@/components/marketing/marketing-types";
-import { StatusAlert } from "@/components/admin/status-alert";
+import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
+import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -20,19 +21,42 @@ type PlatformH5PageListData = {
   pagination: Pagination;
 };
 
-async function getPlatformH5Pages() {
+type SearchParams = Promise<{
+  page?: string;
+  pageSize?: string;
+}>;
+
+function readPositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function buildPlatformH5PageQuery(input: {
+  page: number;
+  pageSize: number;
+}) {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page));
+  query.set("pageSize", String(input.pageSize));
+  return query.toString();
+}
+
+async function getPlatformH5Pages(input: {
+  page: number;
+  pageSize: number;
+}) {
   const token = await getAdminToken();
   if (!token) {
     return {
       list: [] as H5MarketingPageRecord[],
-      pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
+      pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
 
   try {
     const response = await fetch(
-      buildBackendUrl(`${PLATFORM_H5_API_BASE_PATH}?page=1&pageSize=100`),
+      buildBackendUrl(`${PLATFORM_H5_API_BASE_PATH}?${buildPlatformH5PageQuery(input)}`),
       {
         headers: {
           authorization: `Bearer ${token}`,
@@ -44,14 +68,14 @@ async function getPlatformH5Pages() {
     return {
       ...(payload.data || {
         list: [],
-        pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
+        pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       }),
       error: null,
     };
   } catch (error) {
     return {
       list: [] as H5MarketingPageRecord[],
-      pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
+      pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "平台 H5 活动页加载失败",
     };
   }
@@ -76,74 +100,72 @@ function isCurrentPublishedH5Page(page: H5MarketingPageRecord, now = Date.now())
   return true;
 }
 
-export default async function PlatformMarketingPagesPage() {
+export default async function PlatformMarketingPagesPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const session = await getAdminSession();
   if (!session) {
     redirect("/login");
   }
 
   const hasPlatformAccess = session.roles.includes("platform_admin");
+  const params = await searchParams;
+  const page = readPositiveInteger(params.page, 1);
+  const pageSize = normalizePlatformListPageSize(params.pageSize);
   const { list, pagination, error } = hasPlatformAccess
-    ? await getPlatformH5Pages()
+    ? await getPlatformH5Pages({ page, pageSize })
     : {
       list: [] as H5MarketingPageRecord[],
-      pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
+      pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: "当前账号不是平台超管，无法访问平台 H5 活动页",
     };
   const summary = summarizePages(list);
   const activePublishedCount = list.filter((item) => isCurrentPublishedH5Page(item)).length;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-normal">平台 H5 活动页</h1>
-            <Badge variant="outline">平台公域</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            配置访客态小程序首页和平台公域入口展示的 H5 活动页，发布后通过 h5.goodcms.cn 访问。
-          </p>
-        </div>
-        {hasPlatformAccess ? (
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <PlatformListPageShell
+        title="平台 H5 活动页"
+        description="配置访客态小程序首页和平台公域入口展示的 H5 活动页，发布后通过 h5.goodcms.cn 访问。"
+        titleMeta={<Badge variant="outline">平台公域</Badge>}
+        action={hasPlatformAccess ? (
           <CreateH5MarketingPageButton
             apiBasePath={PLATFORM_H5_API_BASE_PATH}
             activePageCount={activePublishedCount}
           />
         ) : null}
-      </div>
-
-      {error ? <StatusAlert>{error}</StatusAlert> : null}
-
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>活动页总数</CardDescription>
-            <CardTitle>{pagination.total}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>已发布</CardDescription>
-            <CardTitle>{summary.published}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>草稿</CardDescription>
-            <CardTitle>{summary.draft}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>已下线</CardDescription>
-            <CardTitle>{summary.offline}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
+        error={error}
+        summary={
+          <div className="grid gap-3 md:grid-cols-4">
+            <Card key="total">
+              <CardHeader className="pb-2">
+                <CardDescription>活动页总数</CardDescription>
+                <CardTitle>{pagination.total}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card key="published">
+              <CardHeader className="pb-2">
+                <CardDescription>已发布</CardDescription>
+                <CardTitle>{summary.published}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card key="draft">
+              <CardHeader className="pb-2">
+                <CardDescription>草稿</CardDescription>
+                <CardTitle>{summary.draft}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card key="offline">
+              <CardHeader className="pb-2">
+                <CardDescription>已下线</CardDescription>
+                <CardTitle>{summary.offline}</CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+        }
+        listHeader={
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
             <div>
               <CardTitle>H5 活动页列表</CardTitle>
@@ -153,20 +175,20 @@ export default async function PlatformMarketingPagesPage() {
             </div>
             <Badge variant="outline">共 {pagination.total} 个</Badge>
           </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-0">
-          <H5MarketingPagesTable
-            pages={list}
-            apiBasePath={PLATFORM_H5_API_BASE_PATH}
-            editBasePath={PLATFORM_H5_EDIT_BASE_PATH}
-            returnTo={PLATFORM_H5_RETURN_TO}
-            stickyActionColumn
-          />
-          <div className="px-4 pb-4 text-sm text-muted-foreground">
-            当前展示 {list.length} 条记录，共 {pagination.total} 条。
-          </div>
-        </CardContent>
-      </Card>
+        }
+        pagination={pagination}
+        currentCount={list.length}
+        tableViewportTestId="platform-h5-page-list-table-viewport"
+        unit="个活动页"
+      >
+        <H5MarketingPagesTable
+          pages={list}
+          apiBasePath={PLATFORM_H5_API_BASE_PATH}
+          editBasePath={PLATFORM_H5_EDIT_BASE_PATH}
+          returnTo={PLATFORM_H5_RETURN_TO}
+          stickyActionColumn
+        />
+      </PlatformListPageShell>
     </div>
   );
 }

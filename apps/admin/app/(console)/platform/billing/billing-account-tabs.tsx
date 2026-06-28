@@ -5,22 +5,18 @@ import type { BillingEventListData, BillingTenantListData } from "@/components/b
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TabsContent } from "@/components/ui/tabs";
-import { eventStatusLabel, FilterInput, FilterPanel, formatCredits, formatDateTime, PaginationLinks, SectionHeader } from "@/app/(console)/platform/billing/billing-page-shared";
+import { eventStatusLabel, FilterInput, FilterPanel, formatCredits, formatDateTime, SectionHeader } from "@/app/(console)/platform/billing/billing-page-shared";
 
 export function BillingTenantsTab({ tenants, tenantFilters }: { tenants: BillingTenantListData; tenantFilters: Record<string, string | undefined> }) {
   return (
             <TabsContent value="tenants" className="mt-0">
-              <SectionHeader
-                title="租户账户"
-                description="租户积分余额和人工充值入口。"
-                badge={`${tenants.pagination.total} 个账户`}
-              />
               <FilterPanel tab="tenants">
                 <FilterInput
                   label="租户"
                   name="tenantKeyword"
                   defaultValue={tenantFilters.tenantKeyword}
                   placeholder="租户名称或标识"
+                  labelVisibility="srOnly"
                 />
                 <FilterSelect
                   label="账户状态"
@@ -82,14 +78,6 @@ export function BillingTenantsTab({ tenants, tenantFilters }: { tenants: Billing
                     ) : null}
                   </TableBody>
                 </Table>
-                <div className="border-t p-4">
-                  <PaginationLinks
-                    pagination={tenants.pagination}
-                    pageKey="page"
-                    tab="tenants"
-                    filters={tenantFilters}
-                  />
-                </div>
               </div>
             </TabsContent>
   );
@@ -193,14 +181,6 @@ export function BillingEventsTab({ events, eventFilters }: { events: BillingEven
                     ) : null}
                   </TableBody>
                 </Table>
-                <div className="border-t p-4">
-                  <PaginationLinks
-                    pagination={events.pagination}
-                    pageKey="eventPage"
-                    tab="events"
-                    filters={eventFilters}
-                  />
-                </div>
               </div>
             </TabsContent>
   );

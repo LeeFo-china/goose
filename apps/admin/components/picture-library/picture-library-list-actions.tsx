@@ -113,6 +113,7 @@ export function PictureLibraryFilters({
           </SelectContent>
         </Select>
         <Input
+          className="h-9"
           value={selectedKeyword}
           onChange={(event) => setSelectedKeyword(event.target.value)}
           placeholder="搜索图片标题"

@@ -3,6 +3,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { ExternalLink } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import { h5PageDisplaySceneOptions, h5PageStatusOptions } from "@/components/marketing/marketing-constants";
 import { H5PageOrderControls, H5PageRowActions } from "@/components/marketing/h5-page-mutations";
 import type { H5MarketingPageRecord } from "@/components/marketing/marketing-types";
@@ -230,6 +231,8 @@ export function H5MarketingPagesTable({
       data={pages}
       emptyText="还没有 H5 活动页"
       minWidth="min-w-[960px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

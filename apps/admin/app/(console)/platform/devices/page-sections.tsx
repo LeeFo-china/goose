@@ -1,13 +1,11 @@
+import Link from "next/link";
 import { buildPlatformDevicesHref } from "@/components/platform-devices/platform-device-href";
-import { PlatformDeviceTabsNav } from "@/components/platform-devices/platform-device-tabs-nav";
 import {
   PlatformDeviceFilters,
-  PlatformDevicePagination,
 } from "@/components/platform-devices/platform-device-list-actions";
 import { PlatformDevicesTable } from "@/components/platform-devices/platform-devices-table";
 import {
   PlatformTencentDeviceFilters,
-  PlatformTencentDevicePagination,
 } from "@/components/platform-devices/platform-tencent-device-list-actions";
 import { PlatformTencentDevicesTable } from "@/components/platform-devices/platform-tencent-devices-table";
 import {
@@ -17,10 +15,10 @@ import {
   type PlatformDevicesTabValue,
   type PlatformTencentDeviceListData,
 } from "@/components/platform-devices/platform-device-types";
-import { StatusAlert } from "@/components/admin/status-alert";
+import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs } from "@/components/ui/tabs";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   summarizeOwnershipPage,
   summarizeTencentPage,
@@ -49,54 +47,65 @@ export function PlatformDevicesContent({
   const currentTotal = activeTab === "ownership"
     ? ownershipData.pagination.total
     : tencentData.pagination.total;
+  const currentPageSize = activeTab === "ownership"
+    ? ownershipData.pagination.pageSize
+    : tencentData.pagination.pageSize;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-normal">设备资产</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          平台分别从资产归属和腾讯云原始设备两个视角查看设备接入状态。
-        </p>
-      </div>
-
-      {error ? <StatusAlert>{error}</StatusAlert> : null}
-
-      <Tabs value={activeTab} className="flex flex-col gap-4">
-        {activeTab === "ownership" ? (
-          <OwnershipSummaryCards
-            total={ownershipData.pagination.total}
-            summary={ownershipSummary}
-          />
-        ) : (
-          <TencentSummaryCards
-            total={tencentData.pagination.total}
-            summary={tencentSummary}
-          />
-        )}
-
-        <Card>
-          <CardHeader className="flex flex-col gap-4">
-            <PlatformDeviceTabsNav
-              activeTab={activeTab}
-              hrefs={{
-                ownership: buildPlatformDevicesHref({
-                  tab: "ownership",
-                  vendor,
-                  status,
-                  onlyUnbound: onlyUnbound ? "true" : "__all",
-                  keyword,
-                }),
-                tencent: buildPlatformDevicesHref({
-                  tab: "tencent",
-                  status,
-                  keyword,
-                }),
-              }}
-              counts={{
-                ownership: activeTab === "ownership" ? ownershipData.pagination.total : undefined,
-                tencent: activeTab === "tencent" ? tencentData.pagination.total : undefined,
-              }}
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <Tabs value={activeTab} className="contents">
+        <PlatformListPageShell
+          title="设备资产"
+          description="平台分别从资产归属和腾讯云原始设备两个视角查看设备接入状态。"
+          error={error}
+          summary={activeTab === "ownership" ? (
+            <OwnershipSummaryCards
+              total={ownershipData.pagination.total}
+              summary={ownershipSummary}
             />
+          ) : (
+            <TencentSummaryCards
+              total={tencentData.pagination.total}
+              summary={tencentSummary}
+            />
+          )}
+          tabs={
+            <TabsList className="h-auto w-full justify-start overflow-x-auto">
+              <TabsTrigger value="ownership" asChild className="gap-2 whitespace-nowrap">
+                <Link
+                  href={buildPlatformDevicesHref({
+                    tab: "ownership",
+                    pageSize: currentPageSize,
+                    vendor,
+                    status,
+                    onlyUnbound: onlyUnbound ? "true" : "__all",
+                    keyword,
+                  })}
+                >
+                  资产归属
+                  {activeTab === "ownership" ? (
+                    <Badge variant="default">{ownershipData.pagination.total}</Badge>
+                  ) : null}
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="tencent" asChild className="gap-2 whitespace-nowrap">
+                <Link
+                  href={buildPlatformDevicesHref({
+                    tab: "tencent",
+                    pageSize: currentPageSize,
+                    status,
+                    keyword,
+                  })}
+                >
+                  腾讯云设备
+                  {activeTab === "tencent" ? (
+                    <Badge variant="default">{tencentData.pagination.total}</Badge>
+                  ) : null}
+                </Link>
+              </TabsTrigger>
+            </TabsList>
+          }
+          listHeader={
             <DeviceListHeader
               activeTab={activeTab}
               vendor={vendor}
@@ -104,45 +113,28 @@ export function PlatformDevicesContent({
               onlyUnbound={onlyUnbound}
               currentTotal={currentTotal}
             />
-            {activeTab === "ownership" ? (
-              <PlatformDeviceFilters
-                vendor={vendor}
-                status={status}
-                onlyUnbound={onlyUnbound}
-                keyword={keyword}
-              />
-            ) : (
-              <PlatformTencentDeviceFilters status={status} keyword={keyword} />
-            )}
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4 p-0">
-            {activeTab === "ownership" ? (
-              <>
-                <PlatformDevicesTable devices={ownershipData.list} />
-                <div className="px-4 pb-4">
-                  <PlatformDevicePagination
-                    pagination={ownershipData.pagination}
-                    vendor={vendor}
-                    status={status}
-                    onlyUnbound={onlyUnbound}
-                    keyword={keyword}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <PlatformTencentDevicesTable devices={tencentData.list} />
-                <div className="px-4 pb-4">
-                  <PlatformTencentDevicePagination
-                    pagination={tencentData.pagination}
-                    status={status}
-                    keyword={keyword}
-                  />
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+          }
+          filters={activeTab === "ownership" ? (
+            <PlatformDeviceFilters
+              vendor={vendor}
+              status={status}
+              onlyUnbound={onlyUnbound}
+              keyword={keyword}
+            />
+          ) : (
+            <PlatformTencentDeviceFilters status={status} keyword={keyword} />
+          )}
+          pagination={activeTab === "ownership" ? ownershipData.pagination : tencentData.pagination}
+          currentCount={activeTab === "ownership" ? ownershipData.list.length : tencentData.list.length}
+          tableViewportTestId="platform-device-list-table-viewport"
+          unit={activeTab === "ownership" ? "个设备资产" : "台腾讯云设备"}
+        >
+          {activeTab === "ownership" ? (
+            <PlatformDevicesTable devices={ownershipData.list} />
+          ) : (
+            <PlatformTencentDevicesTable devices={tencentData.list} />
+          )}
+        </PlatformListPageShell>
       </Tabs>
     </div>
   );
@@ -212,7 +204,7 @@ function DeviceListHeader({
     <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
       <div>
         <CardTitle>{activeTab === "ownership" ? "设备归属列表" : "腾讯云设备列表"}</CardTitle>
-        <CardDescription className="flex flex-wrap items-center gap-2">
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           {activeTab === "ownership" ? (
             <>
               {vendor ? <Badge variant="outline">{getPlatformDeviceVendorLabel(vendor)}</Badge> : <Badge variant="outline">全部厂商</Badge>}
@@ -225,7 +217,7 @@ function DeviceListHeader({
               <Badge variant="outline">包含设备基本信息与通道归属</Badge>
             </>
           )}
-        </CardDescription>
+        </div>
       </div>
       <Badge variant="outline">共 {currentTotal} {activeTab === "ownership" ? "个" : "台"}</Badge>
     </div>

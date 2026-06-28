@@ -3,6 +3,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
+import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import {
   DeletePictureCommentButton,
   HidePictureCommentButton,
@@ -128,6 +129,8 @@ export function PictureCommentsTable({ comments }: { comments: PictureCommentRec
       data={comments}
       emptyText="还没有图片评论"
       minWidth="min-w-[1080px]"
+      tableClassName="border-t-0"
+      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }

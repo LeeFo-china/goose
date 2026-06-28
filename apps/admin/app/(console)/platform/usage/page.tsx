@@ -1,12 +1,12 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { StatusAlert } from "@/components/admin/status-alert";
+import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { PlatformUsageTable } from "@/components/usage/platform-usage-table";
 import {
   UsageFilters,
-  UsagePagination,
-  UsageTabsNav,
   type UsageTab,
 } from "@/components/usage/usage-list-actions";
+import { buildUsageHref } from "@/components/usage/usage-list-navigation";
 import {
   UsageAiLogsTable,
   UsageSmsLogsTable,
@@ -21,7 +21,7 @@ import type {
   UsageSocialVideoLogRecord,
 } from "@/components/usage/usage-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession } from "@/lib/auth";
 import {
   buildQuery,
@@ -30,6 +30,7 @@ import {
   emptyLogList,
   emptyPlatformUsage,
   fetchBackend,
+  normalizePlatformListPageSize,
   type PlatformUsageSearchParams,
   readPositiveInteger,
   readStatus,
@@ -51,9 +52,13 @@ export default async function PlatformUsagePage({
   const params = await searchParams;
   const tab = readTab(params.tab);
   const page = readPositiveInteger(params.page, 1);
+  const pageSize = normalizePlatformListPageSize(params.pageSize);
   const aiPage = readPositiveInteger(params.aiPage, 1);
+  const aiPageSize = normalizePlatformListPageSize(params.aiPageSize);
   const smsPage = readPositiveInteger(params.smsPage, 1);
+  const smsPageSize = normalizePlatformListPageSize(params.smsPageSize);
   const socialVideoPage = readPositiveInteger(params.socialVideoPage, 1);
+  const socialVideoPageSize = normalizePlatformListPageSize(params.socialVideoPageSize);
   const dateFrom = (params.date_from || defaultDateFrom()).slice(0, 10);
   const dateTo = (params.date_to || defaultDateTo()).slice(0, 10);
   const keyword = (params.keyword || "").trim().slice(0, 80);
@@ -74,7 +79,7 @@ export default async function PlatformUsagePage({
 
   const usageQuery = buildQuery({
     page,
-    pageSize: 20,
+    pageSize,
     keyword,
     date_from: dateFrom,
     date_to: dateTo,
@@ -82,17 +87,17 @@ export default async function PlatformUsagePage({
   const usageResult = hasPlatformAccess
     ? await fetchBackend<PlatformTenantUsageData>(
       `/platform/usage/tenants?${usageQuery}`,
-      emptyPlatformUsage({ page, dateFrom, dateTo }),
+      emptyPlatformUsage({ page, pageSize, dateFrom, dateTo }),
     )
     : {
-      data: emptyPlatformUsage({ page, dateFrom, dateTo }),
+      data: emptyPlatformUsage({ page, pageSize, dateFrom, dateTo }),
       error: "当前账号不是平台超管，无法访问平台用量统计",
     };
   const summary = summarizePage(usageResult.data);
 
   const aiQuery = buildQuery({
     page: aiPage,
-    pageSize: 20,
+    pageSize: aiPageSize,
     tenant_id: tenantId,
     status: aiStatus === "__all" ? undefined : aiStatus,
     date_from: dateFrom,
@@ -100,7 +105,7 @@ export default async function PlatformUsagePage({
   });
   const smsQuery = buildQuery({
     page: smsPage,
-    pageSize: 20,
+    pageSize: smsPageSize,
     tenant_id: tenantId,
     status: smsStatus === "__all" ? undefined : smsStatus,
     date_from: dateFrom,
@@ -108,7 +113,7 @@ export default async function PlatformUsagePage({
   });
   const socialVideoQuery = buildQuery({
     page: socialVideoPage,
-    pageSize: 20,
+    pageSize: socialVideoPageSize,
     tenant_id: tenantId,
     status: socialVideoStatus === "__all" ? undefined : socialVideoStatus,
     billable: socialVideoBillable === "__all" ? undefined : socialVideoBillable,
@@ -118,51 +123,133 @@ export default async function PlatformUsagePage({
   const aiResult = tab === "ai" && hasPlatformAccess
     ? await fetchBackend<UsageLogListData<UsageAiLogRecord>>(
       `/platform/usage/ai-logs?${aiQuery}`,
-      emptyLogList<UsageAiLogRecord>(aiPage),
+      emptyLogList<UsageAiLogRecord>(aiPage, aiPageSize),
     )
-    : { data: emptyLogList<UsageAiLogRecord>(aiPage), error: null };
+    : { data: emptyLogList<UsageAiLogRecord>(aiPage, aiPageSize), error: null };
   const smsResult = tab === "sms" && hasPlatformAccess
     ? await fetchBackend<UsageLogListData<UsageSmsLogRecord>>(
       `/platform/usage/sms-logs?${smsQuery}`,
-      emptyLogList<UsageSmsLogRecord>(smsPage),
+      emptyLogList<UsageSmsLogRecord>(smsPage, smsPageSize),
     )
-    : { data: emptyLogList<UsageSmsLogRecord>(smsPage), error: null };
+    : { data: emptyLogList<UsageSmsLogRecord>(smsPage, smsPageSize), error: null };
   const socialVideoResult = tab === "social_video" && hasPlatformAccess
     ? await fetchBackend<UsageLogListData<UsageSocialVideoLogRecord>>(
       `/platform/usage/social-video-logs?${socialVideoQuery}`,
-      emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage),
+      emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage, socialVideoPageSize),
     )
-    : { data: emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage), error: null };
+    : { data: emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage, socialVideoPageSize), error: null };
+  const activeError = usageResult.error || aiResult.error || smsResult.error || socialVideoResult.error;
+  const activePagination = tab === "summary"
+    ? usageResult.data.pagination
+    : tab === "ai"
+      ? aiResult.data.pagination
+      : tab === "sms"
+        ? smsResult.data.pagination
+        : socialVideoResult.data.pagination;
+  const activeCount = tab === "summary"
+    ? usageResult.data.list.length
+    : tab === "ai"
+      ? aiResult.data.list.length
+      : tab === "sms"
+        ? smsResult.data.list.length
+        : socialVideoResult.data.list.length;
+  const pageKey = tab === "summary"
+    ? "page"
+    : tab === "ai"
+      ? "aiPage"
+      : tab === "sms"
+        ? "smsPage"
+        : "socialVideoPage";
+  const pageSizeKey = tab === "summary"
+    ? "pageSize"
+    : tab === "ai"
+      ? "aiPageSize"
+      : tab === "sms"
+        ? "smsPageSize"
+        : "socialVideoPageSize";
+  const unit = tab === "summary"
+    ? "个租户"
+    : tab === "ai"
+      ? "条 AI 明细"
+      : tab === "sms"
+        ? "条短信明细"
+        : "条短视频明细";
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">用量统计</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            查看租户 AI token、短信发送量、短视频转写分钟和失败明细，用于成本核算和异常排查。
-          </p>
-        </div>
-        <Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>
-      </div>
-
-      {usageResult.error ? <StatusAlert>{usageResult.error}</StatusAlert> : null}
-      {aiResult.error ? <StatusAlert>{aiResult.error}</StatusAlert> : null}
-      {smsResult.error ? <StatusAlert>{smsResult.error}</StatusAlert> : null}
-      {socialVideoResult.error ? <StatusAlert>{socialVideoResult.error}</StatusAlert> : null}
-
-      <UsageSummaryCards data={summary} />
-
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>平台用量</CardTitle>
-              <CardDescription>
-                当前页合计。平台全量成本结算后续可由日汇总任务生成。
-              </CardDescription>
-            </div>
-            <UsageTabsNav
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <Tabs value={tab} className="contents">
+        <PlatformListPageShell
+          title="用量统计"
+          description="查看租户 AI token、短信发送量、短视频转写分钟和失败明细，用于成本核算和异常排查。"
+          titleMeta={<Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>}
+          error={activeError}
+          summary={<UsageSummaryCards data={summary} />}
+          tabs={
+            <TabsList>
+              <TabsTrigger value="summary" asChild>
+                <Link href={buildUsageHref({
+                  basePath: "/platform/usage",
+                  tab: "summary",
+                  pageSize,
+                  dateFrom,
+                  dateTo,
+                  keyword,
+                  tenantId,
+                  aiStatus,
+                  smsStatus,
+                  socialVideoStatus,
+                  socialVideoBillable,
+                })}>租户汇总</Link>
+              </TabsTrigger>
+              <TabsTrigger value="ai" asChild>
+                <Link href={buildUsageHref({
+                  basePath: "/platform/usage",
+                  tab: "ai",
+                  aiPageSize,
+                  dateFrom,
+                  dateTo,
+                  keyword,
+                  tenantId,
+                  aiStatus,
+                  smsStatus,
+                  socialVideoStatus,
+                  socialVideoBillable,
+                })}>AI 明细</Link>
+              </TabsTrigger>
+              <TabsTrigger value="sms" asChild>
+                <Link href={buildUsageHref({
+                  basePath: "/platform/usage",
+                  tab: "sms",
+                  smsPageSize,
+                  dateFrom,
+                  dateTo,
+                  keyword,
+                  tenantId,
+                  aiStatus,
+                  smsStatus,
+                  socialVideoStatus,
+                  socialVideoBillable,
+                })}>短信明细</Link>
+              </TabsTrigger>
+              <TabsTrigger value="social_video" asChild>
+                <Link href={buildUsageHref({
+                  basePath: "/platform/usage",
+                  tab: "social_video",
+                  socialVideoPageSize,
+                  dateFrom,
+                  dateTo,
+                  keyword,
+                  tenantId,
+                  aiStatus,
+                  smsStatus,
+                  socialVideoStatus,
+                  socialVideoBillable,
+                })}>短视频明细</Link>
+              </TabsTrigger>
+            </TabsList>
+          }
+          filters={
+            <UsageFilters
               basePath="/platform/usage"
               tab={tab}
               dateFrom={dateFrom}
@@ -173,112 +260,32 @@ export default async function PlatformUsagePage({
               smsStatus={smsStatus}
               socialVideoStatus={socialVideoStatus}
               socialVideoBillable={socialVideoBillable}
+              showKeyword={tab === "summary"}
+              showTenantId={tab !== "summary"}
             />
-          </div>
-          <UsageFilters
-            basePath="/platform/usage"
-            tab={tab}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            keyword={keyword}
-            tenantId={tenantId}
-            aiStatus={aiStatus}
-            smsStatus={smsStatus}
-            socialVideoStatus={socialVideoStatus}
-            socialVideoBillable={socialVideoBillable}
-            showKeyword={tab === "summary"}
-            showTenantId={tab !== "summary"}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-0">
+          }
+          pagination={activePagination}
+          currentCount={activeCount}
+          pageKey={pageKey}
+          pageSizeKey={pageSizeKey}
+          tableViewportTestId="platform-usage-list-table-viewport"
+          unit={unit}
+        >
           {tab === "summary" ? (
-            <>
-              <PlatformUsageTable
-                list={usageResult.data.list}
-                dateFrom={dateFrom}
-                dateTo={dateTo}
-              />
-              <div className="px-4 pb-4">
-                <UsagePagination
-                  basePath="/platform/usage"
-                  pagination={usageResult.data.pagination}
-                  pageKey="page"
-                  tab={tab}
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  keyword={keyword}
-                  tenantId={tenantId}
-                  aiStatus={aiStatus}
-                  smsStatus={smsStatus}
-                  socialVideoStatus={socialVideoStatus}
-                  socialVideoBillable={socialVideoBillable}
-                  unit="个租户"
-                />
-              </div>
-            </>
+            <PlatformUsageTable
+              list={usageResult.data.list}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+            />
           ) : tab === "ai" ? (
-            <>
-              <UsageAiLogsTable logs={aiResult.data.list} />
-              <div className="px-4 pb-4">
-                <UsagePagination
-                  basePath="/platform/usage"
-                  pagination={aiResult.data.pagination}
-                  pageKey="aiPage"
-                  tab={tab}
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  tenantId={tenantId}
-                  aiStatus={aiStatus}
-                  smsStatus={smsStatus}
-                  socialVideoStatus={socialVideoStatus}
-                  socialVideoBillable={socialVideoBillable}
-                  unit="条 AI 明细"
-                />
-              </div>
-            </>
+            <UsageAiLogsTable logs={aiResult.data.list} />
           ) : tab === "sms" ? (
-            <>
-              <UsageSmsLogsTable logs={smsResult.data.list} />
-              <div className="px-4 pb-4">
-                <UsagePagination
-                  basePath="/platform/usage"
-                  pagination={smsResult.data.pagination}
-                  pageKey="smsPage"
-                  tab={tab}
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  tenantId={tenantId}
-                  aiStatus={aiStatus}
-                  smsStatus={smsStatus}
-                  socialVideoStatus={socialVideoStatus}
-                  socialVideoBillable={socialVideoBillable}
-                  unit="条短信明细"
-                />
-              </div>
-            </>
+            <UsageSmsLogsTable logs={smsResult.data.list} />
           ) : (
-            <>
-              <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
-              <div className="px-4 pb-4">
-                <UsagePagination
-                  basePath="/platform/usage"
-                  pagination={socialVideoResult.data.pagination}
-                  pageKey="socialVideoPage"
-                  tab={tab}
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  tenantId={tenantId}
-                  aiStatus={aiStatus}
-                  smsStatus={smsStatus}
-                  socialVideoStatus={socialVideoStatus}
-                  socialVideoBillable={socialVideoBillable}
-                  unit="条短视频明细"
-                />
-              </div>
-            </>
+            <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
           )}
-        </CardContent>
-      </Card>
+        </PlatformListPageShell>
+      </Tabs>
     </div>
   );
 }
