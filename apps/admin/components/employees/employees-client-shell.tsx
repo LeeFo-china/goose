@@ -98,7 +98,6 @@ export function EmployeesClientShell({
   const navigate = useCallback((href: string) => {
     startTransition(() => {
       router.push(href);
-      router.refresh();
     });
   }, [router, startTransition]);
 

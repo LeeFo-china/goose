@@ -88,6 +88,16 @@ describe("Employee management page layout", () => {
     expect(actions).not.toContain("pending ? <Loader2");
   });
 
+  test("does not force refresh after employee URL navigation", () => {
+    const { shell } = readEmployeeManagementSources();
+    const navigateBody = shell.match(/const navigate = useCallback\(\(href: string\) => \{[\s\S]*?\n  \}, \[router, startTransition\]\);/)?.[0] || "";
+
+    expect(navigateBody).toContain("router.push(href)");
+    expect(navigateBody).not.toContain("router.refresh()");
+    expect(shell).toContain("function refreshEmployees()");
+    expect(shell).toContain("router.refresh()");
+  });
+
   test("centers the employee list refresh spinner inside the loading mask", () => {
     const { shell } = readEmployeeManagementSources();
 
