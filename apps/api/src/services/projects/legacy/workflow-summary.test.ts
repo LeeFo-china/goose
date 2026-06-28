@@ -152,6 +152,65 @@ describe("attachProjectWorkflowSummaries", () => {
       limit: 100,
     });
   });
+
+  test("reuses workflow graph snapshots across project list summary attaches", async () => {
+    const { attachProjectWorkflowSummaries } = await import("./workflow-summary");
+    listLatestRuntimeInstancesBySubjectIds.mockImplementation(async () => [
+      runtimeInstance({ version_id: "version-cache" }),
+    ]);
+    const rows = [{
+      id: "project-1",
+      name: "测试项目",
+    }];
+
+    await attachProjectWorkflowSummaries({
+      rows,
+      tenantId: "tenant-1",
+      authContext: authContext(),
+    });
+    await attachProjectWorkflowSummaries({
+      rows,
+      tenantId: "tenant-1",
+      authContext: authContext(),
+    });
+
+    expect(getGraph).toHaveBeenCalledTimes(1);
+    expect(getGraph).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      definitionId: "definition-1",
+      versionId: "version-cache",
+    });
+  });
+
+  test("can attach compact list summaries without shipping timeline nodes", async () => {
+    const { attachProjectWorkflowSummaries } = await import("./workflow-summary");
+    listLatestRuntimeInstancesBySubjectIds.mockImplementation(async () => [
+      runtimeInstance({ version_id: "version-compact" }),
+    ]);
+    const rows = [{
+      id: "project-1",
+      name: "测试项目",
+    }];
+
+    const result = await attachProjectWorkflowSummaries({
+      rows,
+      tenantId: "tenant-1",
+      authContext: authContext(),
+      workflowSummaryMode: "compact",
+    });
+    const item = result[0]!;
+    const progress = item.workflow_progress as {
+      current_node_title: string | null;
+      actions: unknown[];
+      timeline_nodes: unknown[];
+    };
+    const state = item.workflow_state as { timeline_nodes: unknown[] } | null;
+
+    expect(progress.current_node_title).toBe("水电");
+    expect(progress.actions).toHaveLength(1);
+    expect(progress.timeline_nodes).toEqual([]);
+    expect(state?.timeline_nodes).toEqual([]);
+  });
 });
 
 function authContext(): AuthContext {
@@ -196,7 +255,9 @@ function subjectState(): WorkflowSubjectStateRow {
   };
 }
 
-function runtimeInstance(): WorkflowRuntimeProjectionRow {
+function runtimeInstance(
+  overrides: Partial<WorkflowRuntimeProjectionRow> = {},
+): WorkflowRuntimeProjectionRow {
   return {
     id: "instance-1",
     tenant_id: "tenant-1",
@@ -210,6 +271,7 @@ function runtimeInstance(): WorkflowRuntimeProjectionRow {
     started_at: NOW,
     created_at: NOW,
     updated_at: NOW,
+    ...overrides,
   };
 }
 

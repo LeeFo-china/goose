@@ -26,6 +26,7 @@ import {
   PROJECT_TABLE_HEADER_HEIGHT,
   PROJECT_TABLE_ROW_HEIGHT,
 } from "@/components/projects/project-list-page-size";
+import { persistProjectListPageSize } from "@/components/projects/project-list-page-size-preference";
 import {
   CreateProjectButton,
   type ProjectRecord,
@@ -40,6 +41,10 @@ type Pagination = {
   pageSize: number;
   total: number;
   totalPages: number;
+};
+
+type NavigateOptions = {
+  replace?: boolean;
 };
 
 export function ProjectsClientShell({
@@ -84,10 +89,14 @@ export function ProjectsClientShell({
     "--project-table-row-height": `${projectTableRowHeight}px`,
   }) as CSSProperties, [projectTableRowHeight]);
 
-  const navigate = useCallback((href: string) => {
+  const navigate = useCallback((href: string, options?: NavigateOptions) => {
     startTransition(() => {
+      if (options?.replace) {
+        router.replace(href);
+        return;
+      }
+
       router.push(href);
-      router.refresh();
     });
   }, [router, startTransition]);
 
@@ -122,6 +131,7 @@ export function ProjectsClientShell({
         setProjectTableRowHeight((current) =>
           current === nextRowHeight ? current : nextRowHeight
         );
+        persistProjectListPageSize(nextPageSize);
         if (nextPageSize === pagination.pageSize) return;
 
         const nextTotalPages = Math.max(1, Math.ceil(pagination.total / nextPageSize));
@@ -134,7 +144,7 @@ export function ProjectsClientShell({
           workflowGroupKey,
           workflowNodeKey,
           workflowInstanceStatus,
-        }));
+        }), { replace: true });
       });
     };
 

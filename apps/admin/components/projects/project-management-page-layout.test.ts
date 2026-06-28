@@ -86,6 +86,20 @@ describe("Project management page layout", () => {
     expect(actions).not.toContain("pending ? <Loader2");
   });
 
+  test("navigates project list filters without forcing a duplicate refresh", () => {
+    const { shell } = readProjectManagementSources();
+
+    expect(shell).toContain("router.push(href)");
+    expect(shell).toContain("router.replace(href)");
+    expect(shell).not.toContain("router.push(href);\n      router.refresh();");
+  });
+
+  test("requests compact workflow summary for the admin project list", () => {
+    const { page } = readProjectManagementSources();
+
+    expect(page).toContain('query.set("workflow_summary", "compact")');
+  });
+
   test("centers the project list refresh spinner inside the loading mask", () => {
     const { shell } = readProjectManagementSources();
 

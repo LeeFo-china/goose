@@ -1,6 +1,7 @@
 export const PROJECT_TABLE_HEADER_HEIGHT = 40;
 export const PROJECT_TABLE_ROW_HEIGHT = 75;
 export const PROJECT_TABLE_MIN_PAGE_SIZE = 1;
+export const PROJECT_TABLE_DEFAULT_PAGE_SIZE = 7;
 export const PROJECT_TABLE_MAX_PAGE_SIZE = 100;
 
 export function calculateProjectListPageSize({

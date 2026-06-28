@@ -39,6 +39,9 @@ export async function listProjects(this: any, input: {
     query: ProjectListQuery;
 }): Promise<ProjectListResult> {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const workflowSummaryMode = input.query.workflow_summary === "compact"
+        ? "compact"
+        : "full";
     const cacheKey = this.projectListCacheKey(input.authContext, input.query);
     const cached = this.getProjectListCache(cacheKey);
     if (cached) {
@@ -51,6 +54,7 @@ export async function listProjects(this: any, input: {
             },
             tenantId,
             authContext: input.authContext,
+            workflowSummaryMode,
         });
     }
 
@@ -67,6 +71,7 @@ export async function listProjects(this: any, input: {
                 },
                 tenantId,
                 authContext: input.authContext,
+                workflowSummaryMode,
             })
         );
     }
@@ -87,6 +92,7 @@ export async function listProjects(this: any, input: {
             result,
             tenantId,
             authContext: input.authContext,
+            workflowSummaryMode,
         })
     );
 }
@@ -95,12 +101,14 @@ async function attachLiveWorkflowSummaries(input: {
     result: ProjectListResult;
     tenantId: string;
     authContext: AuthContext;
+    workflowSummaryMode: "full" | "compact";
 }): Promise<ProjectListResult> {
     const startedAt = Date.now();
     const rows = await attachProjectWorkflowSummaries({
         rows: input.result.rows,
         tenantId: input.tenantId,
         authContext: input.authContext,
+        workflowSummaryMode: input.workflowSummaryMode,
     });
 
     return {

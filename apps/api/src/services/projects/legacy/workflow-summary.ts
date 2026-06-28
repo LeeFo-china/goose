@@ -24,6 +24,17 @@ import {
 
 const MAX_ACCESSIBLE_TASKS_PER_PROJECT = 100;
 const MAX_RUNTIME_NODES_PER_INSTANCE = 200;
+const WORKFLOW_GRAPH_CACHE_TTL_MS = 5 * 60_000;
+const WORKFLOW_GRAPH_CACHE_MAX_ENTRIES = 200;
+
+type ProjectWorkflowSummaryMode = "full" | "compact";
+type WorkflowGraphProjection = Pick<WorkflowGraphResult, "definition" | "nodes" | "edges">;
+type WorkflowGraphCacheEntry = {
+  expiresAt: number;
+  value: WorkflowGraphProjection | null;
+};
+
+const workflowGraphCache = new Map<string, WorkflowGraphCacheEntry>();
 
 type ProjectWorkflowStateSummary = {
   subject_type: "project";
@@ -45,6 +56,7 @@ export async function attachProjectWorkflowSummaries(input: {
   rows: Array<Record<string, unknown>>;
   tenantId: string;
   authContext: AuthContext;
+  workflowSummaryMode?: ProjectWorkflowSummaryMode;
 }): Promise<Array<Record<string, unknown>>> {
   const projectIds = unique(
     input.rows
@@ -127,14 +139,17 @@ export async function attachProjectWorkflowSummaries(input: {
         ? actionsByInstanceId.get(runtimeInstance.id) ?? []
         : [],
     });
+    const workflowProgress = input.workflowSummaryMode === "compact"
+      ? compactProjectWorkflowProgress(progress)
+      : progress;
 
     return {
       ...stripLegacyStageFields(row),
-      workflow_progress: progress,
+      workflow_progress: workflowProgress,
       workflow_state: buildWorkflowStateSummary({
         projectId,
         subjectState,
-        progress,
+        progress: workflowProgress,
       }),
     };
   });
@@ -156,9 +171,7 @@ function stripLegacyStageFields(row: Record<string, unknown>): Record<string, un
 async function loadGraphsByRuntimeKey(input: {
   tenantId: string;
   runtimeInstances: WorkflowRuntimeProjectionRow[];
-}): Promise<
-  Map<string, Pick<WorkflowGraphResult, "definition" | "nodes" | "edges"> | null>
-> {
+}): Promise<Map<string, WorkflowGraphProjection | null>> {
   const runtimeByKey = new Map<string, WorkflowRuntimeProjectionRow>();
   for (const runtimeInstance of input.runtimeInstances) {
     runtimeByKey.set(runtimeKey(runtimeInstance), runtimeInstance);
@@ -166,22 +179,90 @@ async function loadGraphsByRuntimeKey(input: {
 
   const entries = await Promise.all(
     Array.from(runtimeByKey.entries()).map(async ([key, runtimeInstance]) => {
+      const cacheKey = workflowGraphCacheKey({
+        tenantId: input.tenantId,
+        runtimeInstance,
+      });
+      const cachedGraph = getCachedWorkflowGraph(cacheKey);
+      if (cachedGraph !== undefined) {
+        return [key, cachedGraph] as const;
+      }
+
       const graph = await workflowRepository.getGraph({
         tenantId: input.tenantId,
         definitionId: runtimeInstance.definition_id,
         versionId: runtimeInstance.version_id,
       });
+      const graphProjection = graph
+        ? { definition: graph.definition, nodes: graph.nodes, edges: graph.edges }
+        : null;
+      setCachedWorkflowGraph(cacheKey, graphProjection);
 
       return [
         key,
-        graph
-          ? { definition: graph.definition, nodes: graph.nodes, edges: graph.edges }
-          : null,
+        graphProjection,
       ] as const;
     }),
   );
 
   return new Map(entries);
+}
+
+function compactProjectWorkflowProgress(
+  progress: ProjectWorkflowProgress,
+): ProjectWorkflowProgress {
+  return {
+    ...progress,
+    timeline_nodes: [],
+  };
+}
+
+function workflowGraphCacheKey(input: {
+  tenantId: string;
+  runtimeInstance: WorkflowRuntimeProjectionRow;
+}): string {
+  return [
+    input.tenantId,
+    input.runtimeInstance.definition_id,
+    input.runtimeInstance.version_id,
+  ].join(":");
+}
+
+function getCachedWorkflowGraph(
+  key: string,
+): WorkflowGraphProjection | null | undefined {
+  const cached = workflowGraphCache.get(key);
+  if (!cached) return undefined;
+
+  if (cached.expiresAt <= Date.now()) {
+    workflowGraphCache.delete(key);
+    return undefined;
+  }
+
+  return cached.value;
+}
+
+function setCachedWorkflowGraph(
+  key: string,
+  value: WorkflowGraphProjection | null,
+) {
+  const now = Date.now();
+  if (workflowGraphCache.size >= WORKFLOW_GRAPH_CACHE_MAX_ENTRIES) {
+    for (const [cacheKey, cached] of workflowGraphCache.entries()) {
+      if (cached.expiresAt <= now) {
+        workflowGraphCache.delete(cacheKey);
+      }
+    }
+
+    if (workflowGraphCache.size >= WORKFLOW_GRAPH_CACHE_MAX_ENTRIES) {
+      workflowGraphCache.clear();
+    }
+  }
+
+  workflowGraphCache.set(key, {
+    expiresAt: now + WORKFLOW_GRAPH_CACHE_TTL_MS,
+    value,
+  });
 }
 
 async function buildAccessibleActionsByInstance(input: {

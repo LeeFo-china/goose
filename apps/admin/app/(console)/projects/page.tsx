@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { type ProjectRecord } from "@/components/projects/project-mutations";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { ProjectsClientShell } from "@/components/projects/projects-client-shell";
@@ -6,9 +7,14 @@ import {
   type ProjectWorkflowFiltersData,
 } from "@/components/projects/project-list-filter-utils";
 import {
+  PROJECT_TABLE_DEFAULT_PAGE_SIZE,
   PROJECT_TABLE_MAX_PAGE_SIZE,
   PROJECT_TABLE_MIN_PAGE_SIZE,
 } from "@/components/projects/project-list-page-size";
+import {
+  PROJECT_LIST_PAGE_SIZE_COOKIE,
+  normalizeProjectListPreferredPageSize,
+} from "@/components/projects/project-list-page-size-preference";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -32,6 +38,7 @@ type ProjectPageSearchParams = {
   workflow_group_key?: string;
   workflow_node_key?: string;
   workflow_instance_status?: string;
+  workflow_summary?: string;
 };
 
 function normalizePage(value: string | undefined) {
@@ -39,9 +46,12 @@ function normalizePage(value: string | undefined) {
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
-function normalizePageSize(value: string | undefined) {
-  const pageSize = Number(value || 20);
-  if (!Number.isFinite(pageSize)) return 20;
+function normalizePageSize(
+  value: string | undefined,
+  fallback = PROJECT_TABLE_DEFAULT_PAGE_SIZE,
+) {
+  const pageSize = Number(value || fallback);
+  if (!Number.isFinite(pageSize)) return fallback;
 
   return Math.min(
     PROJECT_TABLE_MAX_PAGE_SIZE,
@@ -52,7 +62,12 @@ function normalizePageSize(value: string | undefined) {
 async function getProjects(params: ProjectPageSearchParams) {
   const token = await getAdminToken();
   const page = normalizePage(params.page);
-  const pageSize = normalizePageSize(params.pageSize);
+  const preferredPageSize = params.pageSize
+    ? PROJECT_TABLE_DEFAULT_PAGE_SIZE
+    : normalizeProjectListPreferredPageSize(
+      (await cookies()).get(PROJECT_LIST_PAGE_SIZE_COOKIE)?.value,
+    );
+  const pageSize = normalizePageSize(params.pageSize, preferredPageSize);
 
   if (!token) {
     return {
@@ -71,6 +86,7 @@ async function getProjects(params: ProjectPageSearchParams) {
     page: String(page),
     pageSize: String(pageSize),
   });
+  query.set("workflow_summary", "compact");
   if (ownership) query.set("ownership", ownership);
   if (keyword) query.set("keyword", keyword);
   if (workflowGroupKey) query.set("workflow_group_key", workflowGroupKey);
