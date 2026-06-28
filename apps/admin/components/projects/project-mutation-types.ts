@@ -47,6 +47,13 @@ export type ProjectRecord = {
   stage_code?: string | null;
   stage_label?: string | null;
   construction_workflow_definition_id?: string | null;
+  construction_workflow_definition?: {
+    id?: string | null;
+    name?: string | null;
+  } | Array<{
+    id?: string | null;
+    name?: string | null;
+  }> | null;
   budget: number | null;
   signed_amount?: number | null;
   start_date: string | null;
@@ -61,6 +68,8 @@ export type ProjectRecord = {
   designer?: RelationPerson | RelationPerson[] | null;
   supervisor?: RelationPerson | RelationPerson[] | null;
   workflow_progress?: {
+    workflow_definition_id?: string | null;
+    workflow_title?: string | null;
     instance_status?: string | null;
     current_group_key?: string | null;
     current_group_label?: string | null;

@@ -2,6 +2,7 @@ type JsonObject = Record<string, unknown>;
 
 export type WorkflowFinanceReviewerGraphDefinition = {
   workflow_key?: string | null;
+  name?: string | null;
   category?: string | null;
 };
 

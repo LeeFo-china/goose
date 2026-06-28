@@ -40,6 +40,10 @@ export const PROJECT_LIST_SELECT = `
   status,
   budget,
   construction_workflow_definition_id,
+  construction_workflow_definition:workflow_definitions!projects_construction_workflow_definition_id_fkey(
+    id,
+    name
+  ),
   start_date,
   created_at,
   address,

@@ -60,6 +60,8 @@ export { enrichWorkflowTimelineNodesWithConstructionStages };
 export type ProjectWorkflowProgress = {
   source: WorkflowProgressSource;
   instance_id: string | null;
+  workflow_definition_id?: string | null;
+  workflow_title?: string | null;
   instance_status: WorkflowInstanceStatus | null;
   current_node_key: string | null;
   current_node_title: string | null;
@@ -92,6 +94,7 @@ type SubjectStateInput = {
 
 type RuntimeInstanceInput = {
   id: string;
+  definition_id?: string | null;
   status: WorkflowInstanceStatus;
   current_node_key: string | null;
   current_node_snapshot: unknown;
@@ -165,6 +168,8 @@ export function buildProjectWorkflowProgressProjection(
   return {
     source: "workflow_runtime",
     instance_id: input.runtimeInstance.id,
+    workflow_definition_id: input.runtimeInstance.definition_id ?? null,
+    workflow_title: input.graph?.definition?.name ?? null,
     instance_status: input.runtimeInstance.status,
     current_node_key: currentNodeKey,
     current_node_title: currentNodeTitle,

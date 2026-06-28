@@ -207,19 +207,9 @@ export function ProjectsTable({
       cell: ({ row }) => {
         const summary = projectWorkflowSummary(row.original);
         return (
-          <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex items-center gap-1.5">
-              <Badge variant="outline" className="whitespace-nowrap">
-                {summary.groupLabel}
-              </Badge>
-              <span className="truncate text-sm font-medium">
-                {summary.nodeLabel}
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {summary.statusLabel}
-            </span>
-          </div>
+          <span className="block truncate text-sm font-medium">
+            {summary.workflowTitle}
+          </span>
         );
       },
       meta: {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PROJECT_DETAIL_SELECT } from "./shared";
+import { PROJECT_DETAIL_SELECT, PROJECT_LIST_SELECT } from "./shared";
 
 describe("project detail select", () => {
   test("uses explicit project fields instead of selecting every column", () => {
@@ -12,5 +12,12 @@ describe("project detail select", () => {
     expect(select).toContain("id,");
     expect(select).toContain("tenant_id,");
     expect(select).toContain("construction_workflow_definition_id,");
+  });
+
+  test("loads connected workflow definition title for project lists", () => {
+    expect(PROJECT_LIST_SELECT).toContain(
+      "construction_workflow_definition:workflow_definitions!projects_construction_workflow_definition_id_fkey(",
+    );
+    expect(PROJECT_LIST_SELECT).toContain("name");
   });
 });

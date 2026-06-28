@@ -1,4 +1,5 @@
 type ProjectWorkflowProgressLike = {
+  workflow_title?: string | null;
   current_group_label?: string | null;
   current_node_title?: string | null;
   instance_status?: string | null;
@@ -21,6 +22,7 @@ export function projectWorkflowSummary(input: ProjectWorkflowSummaryInput) {
   const instanceStatus = readString(progress?.instance_status);
 
   return {
+    workflowTitle: readString(progress?.workflow_title) ?? "未接入流程",
     groupLabel: readString(progress?.current_group_label) ?? "未绑定流程",
     nodeLabel: readString(progress?.current_node_title) ?? "未定位当前节点",
     statusLabel: instanceStatus

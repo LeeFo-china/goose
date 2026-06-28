@@ -100,6 +100,19 @@ describe("Project management page layout", () => {
     expect(page).toContain('query.set("workflow_summary", "compact")');
   });
 
+  test("keeps the workflow column focused on the connected workflow title", () => {
+    const table = readFileSync(
+      new URL("./projects-table.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(table).toContain("projectWorkflowSummary(row.original)");
+    expect(table).toContain("summary.workflowTitle");
+    expect(table).not.toContain("summary.groupLabel");
+    expect(table).not.toContain("summary.nodeLabel");
+    expect(table).not.toContain("summary.statusLabel");
+  });
+
   test("centers the project list refresh spinner inside the loading mask", () => {
     const { shell } = readProjectManagementSources();
 

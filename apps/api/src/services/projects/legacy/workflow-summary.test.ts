@@ -88,6 +88,8 @@ describe("attachProjectWorkflowSummaries", () => {
     expect(item.workflow_progress).toMatchObject({
       source: "workflow_runtime",
       instance_id: "instance-1",
+      workflow_definition_id: "definition-1",
+      workflow_title: "项目施工主流程",
       current_group_key: "construction",
       current_group_label: "施工阶段",
       current_node_key: "procedure_plumbing_electrical",
@@ -98,6 +100,8 @@ describe("attachProjectWorkflowSummaries", () => {
       subject_type: "project",
       subject_id: "project-1",
       instance_id: "instance-1",
+      workflow_definition_id: "definition-1",
+      workflow_title: "项目施工主流程",
       current_group_key: "construction",
       current_group_label: "施工阶段",
       current_node_key: "procedure_plumbing_electrical",
@@ -200,16 +204,52 @@ describe("attachProjectWorkflowSummaries", () => {
     });
     const item = result[0]!;
     const progress = item.workflow_progress as {
+      workflow_title: string | null;
       current_node_title: string | null;
       actions: unknown[];
       timeline_nodes: unknown[];
     };
     const state = item.workflow_state as { timeline_nodes: unknown[] } | null;
 
+    expect(progress.workflow_title).toBe("项目施工主流程");
     expect(progress.current_node_title).toBe("水电");
     expect(progress.actions).toHaveLength(1);
     expect(progress.timeline_nodes).toEqual([]);
     expect(state?.timeline_nodes).toEqual([]);
+  });
+
+  test("uses selected workflow definition title when a project has no runtime yet", async () => {
+    const { attachProjectWorkflowSummaries } = await import("./workflow-summary");
+    listBySubjectIds.mockImplementation(async () => []);
+    listLatestRuntimeInstancesBySubjectIds.mockImplementation(async () => []);
+    listAccessiblePendingByProjectIds.mockImplementation(async () => []);
+    const rows = [{
+      id: "project-1",
+      name: "测试项目",
+      construction_workflow_definition_id: "definition-1",
+      construction_workflow_definition: {
+        id: "definition-1",
+        name: "项目施工主流程",
+      },
+    }];
+
+    const result = await attachProjectWorkflowSummaries({
+      rows,
+      tenantId: "tenant-1",
+      authContext: authContext(),
+      workflowSummaryMode: "compact",
+    });
+    const progress = result[0]!.workflow_progress as {
+      workflow_definition_id: string | null;
+      workflow_title: string | null;
+      source: string;
+    };
+
+    expect(progress).toMatchObject({
+      source: "missing_runtime",
+      workflow_definition_id: "definition-1",
+      workflow_title: "项目施工主流程",
+    });
   });
 });
 

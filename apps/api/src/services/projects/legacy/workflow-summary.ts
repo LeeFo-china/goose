@@ -40,6 +40,8 @@ type ProjectWorkflowStateSummary = {
   subject_type: "project";
   subject_id: string;
   instance_id: string | null;
+  workflow_definition_id: string | null;
+  workflow_title: string | null;
   instance_status: ProjectWorkflowProgress["instance_status"];
   current_node_key: string | null;
   current_node_title: string | null;
@@ -126,12 +128,13 @@ export async function attachProjectWorkflowSummaries(input: {
 
     const runtimeInstance = runtimeInstanceByProjectId.get(projectId) ?? null;
     const subjectState = subjectStateByProjectId.get(projectId) ?? null;
+    const graph = runtimeInstance
+      ? graphByRuntimeKey.get(runtimeKey(runtimeInstance)) ?? null
+      : null;
     const progress = buildProjectWorkflowProgressProjection({
       subjectState,
       runtimeInstance,
-      graph: runtimeInstance
-        ? graphByRuntimeKey.get(runtimeKey(runtimeInstance)) ?? null
-        : null,
+      graph,
       completedNodeKeys: runtimeInstance
         ? completedNodeKeysByInstanceId.get(runtimeInstance.id) ?? []
         : [],
@@ -139,9 +142,16 @@ export async function attachProjectWorkflowSummaries(input: {
         ? actionsByInstanceId.get(runtimeInstance.id) ?? []
         : [],
     });
+    const progressWithDefinition = attachWorkflowDefinitionSummary({
+      progress,
+      runtimeInstance,
+      subjectState,
+      graph,
+      row,
+    });
     const workflowProgress = input.workflowSummaryMode === "compact"
-      ? compactProjectWorkflowProgress(progress)
-      : progress;
+      ? compactProjectWorkflowProgress(progressWithDefinition)
+      : progressWithDefinition;
 
     return {
       ...stripLegacyStageFields(row),
@@ -214,6 +224,45 @@ function compactProjectWorkflowProgress(
   return {
     ...progress,
     timeline_nodes: [],
+  };
+}
+
+function attachWorkflowDefinitionSummary(input: {
+  progress: ProjectWorkflowProgress;
+  runtimeInstance: WorkflowRuntimeProjectionRow | null;
+  subjectState: WorkflowSubjectStateRow | null;
+  graph: WorkflowGraphProjection | null;
+  row: Record<string, unknown>;
+}): ProjectWorkflowProgress {
+  const selectedDefinition = readSelectedWorkflowDefinition(input.row);
+
+  return {
+    ...input.progress,
+    workflow_definition_id: input.progress.workflow_definition_id ??
+      input.runtimeInstance?.definition_id ??
+      input.subjectState?.definition_id ??
+      selectedDefinition.id ??
+      readString(input.row.construction_workflow_definition_id),
+    workflow_title: input.progress.workflow_title ??
+      readString(input.graph?.definition.name) ??
+      selectedDefinition.name,
+  };
+}
+
+function readSelectedWorkflowDefinition(row: Record<string, unknown>): {
+  id: string | null;
+  name: string | null;
+} {
+  const relation = row.construction_workflow_definition;
+  const item = Array.isArray(relation) ? relation[0] : relation;
+  if (!item || typeof item !== "object") {
+    return { id: null, name: null };
+  }
+
+  const record = item as Record<string, unknown>;
+  return {
+    id: readString(record.id),
+    name: readString(record.name),
   };
 }
 
@@ -334,6 +383,9 @@ function buildWorkflowStateSummary(input: {
     subject_id: input.projectId,
     instance_id: input.progress.instance_id ?? input.subjectState?.instance_id ??
       null,
+    workflow_definition_id: input.progress.workflow_definition_id ??
+      input.subjectState?.definition_id ?? null,
+    workflow_title: input.progress.workflow_title ?? null,
     instance_status: input.progress.instance_status ??
       input.subjectState?.instance_status ?? null,
     current_node_key: input.progress.current_node_key ??
@@ -358,6 +410,10 @@ function runtimeKey(runtimeInstance: WorkflowRuntimeProjectionRow): string {
 
 function readProjectId(row: Record<string, unknown>): string | null {
   const value = row.id;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
