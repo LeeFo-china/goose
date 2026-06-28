@@ -12,6 +12,15 @@ export const CUSTOMER_FOLLOW_UP_SELECT = `
   )
 `;
 
+const CUSTOMER_FOLLOW_UP_SUMMARY_SELECT = `
+  id,
+  customer_id,
+  employee_id,
+  content,
+  next_follow_at,
+  created_at
+`;
+
 export type CustomerFollowUpAccessCustomer = {
   id: string;
   owner_id: string | null;
@@ -97,7 +106,7 @@ class CustomerFollowUpRepository {
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customer_follow_ups")
-      .select(CUSTOMER_FOLLOW_UP_SELECT)
+      .select(CUSTOMER_FOLLOW_UP_SUMMARY_SELECT)
       .in("customer_id", customerIds)
       .order("created_at", { ascending: false });
 

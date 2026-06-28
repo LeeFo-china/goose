@@ -1,4 +1,6 @@
 import {
+  type CustomerCoreRow,
+  type CustomerLatestProjectSummary,
   customerCoreRepository,
 } from "@/repositories/customer-core";
 import type {
@@ -6,7 +8,10 @@ import type {
 } from "@/schema/customer";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { customerFollowUpService } from "@/services/customer-follow-ups";
+import {
+  customerFollowUpService,
+  type CustomerFollowUpSummary,
+} from "@/services/customer-follow-ups";
 import type { CustomerListResult, LatestFollowUpSummary } from "./types";
 
 const CUSTOMER_LIST_CACHE_TTL_MS = 60_000;
@@ -68,6 +73,61 @@ export class CustomerListManager {
     }
 
     return state === "due" || state === "overdue";
+  }
+
+  private normalizeEmbeddedLatestFollowUp(
+    value: unknown,
+  ): CustomerFollowUpSummary | null {
+    const followUp = Array.isArray(value) ? value[0] : value;
+    if (!followUp || typeof followUp !== "object") {
+      return null;
+    }
+
+    const summary = followUp as CustomerFollowUpSummary;
+    return summary.customer_id ? summary : null;
+  }
+
+  private buildEmbeddedFollowUpMap(rows: CustomerCoreRow[]) {
+    const followUpMap = new Map<string, CustomerFollowUpSummary>();
+    for (const row of rows) {
+      const latest = this.normalizeEmbeddedLatestFollowUp(row.latest_follow_ups);
+      if (!latest) continue;
+      followUpMap.set(row.id, latest);
+    }
+
+    return followUpMap;
+  }
+
+  private normalizeEmbeddedLatestProject(
+    value: unknown,
+  ): CustomerLatestProjectSummary | null {
+    const project = Array.isArray(value) ? value[0] : value;
+    if (!project || typeof project !== "object") {
+      return null;
+    }
+
+    const summary = project as CustomerLatestProjectSummary;
+    return summary.customer_id ? summary : null;
+  }
+
+  private buildEmbeddedLatestProjectMap(rows: CustomerCoreRow[]) {
+    const latestProjectMap = new Map<string, CustomerLatestProjectSummary>();
+    for (const row of rows) {
+      const latest = this.normalizeEmbeddedLatestProject(row.latest_projects);
+      if (!latest) continue;
+      latestProjectMap.set(row.id, latest);
+    }
+
+    return latestProjectMap;
+  }
+
+  private stripEmbeddedSummaryRows(rows: CustomerCoreRow[]) {
+    return rows.map((row) => {
+      const cleanRow = { ...row };
+      delete cleanRow.latest_follow_ups;
+      delete cleanRow.latest_projects;
+      return cleanRow;
+    });
   }
 
   private buildListCacheKey(authContext: AuthContext, query: CustomerListQueryType) {
@@ -233,27 +293,19 @@ export class CustomerListManager {
       const rowsDurationMs = Date.now() - rowsStartedAt;
       const pagedRows = rowsWithLookahead.slice(0, pageSize);
       const hasMore = rowsWithLookahead.length > pageSize;
-      const pageCustomerIds = pagedRows.map((item) => item.id);
-      const signedCustomerIds = pagedRows
-        .filter((item) => item.status === "signed")
-        .map((item) => item.id);
       const followUpStartedAt = Date.now();
       const [followUpMap, latestProjectMap] = mode === "compact"
-        ? await Promise.all([
-          customerFollowUpService.getLatestFollowUpMap({
-            customerIds: pageCustomerIds,
-            tenantId,
-          }),
-          customerCoreRepository.listLatestProjectsByCustomerIds({
-            customerIds: signedCustomerIds,
-            tenantId,
-          }),
-        ])
+        ? [
+          this.buildEmbeddedFollowUpMap(pagedRows),
+          this.buildEmbeddedLatestProjectMap(pagedRows),
+        ]
         : [new Map(), new Map()];
       const followUpDurationMs = Date.now() - followUpStartedAt;
 
       return {
-        rows: pagedRows,
+        rows: mode === "compact"
+          ? this.stripEmbeddedSummaryRows(pagedRows)
+          : pagedRows,
         total: from + pagedRows.length + (hasMore ? 1 : 0),
         followUpMap,
         latestProjectMap,

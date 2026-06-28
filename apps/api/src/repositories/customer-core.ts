@@ -42,6 +42,21 @@ export const CUSTOMER_COMPACT_LIST_SELECT = `
     id,
     name,
     phone
+  ),
+  latest_follow_ups:customer_follow_ups!customer_follow_ups_customer_id_fkey(
+    id,
+    customer_id,
+    employee_id,
+    content,
+    next_follow_at,
+    created_at
+  ),
+  latest_projects:projects!projects_customer_id_fkey(
+    id,
+    customer_id,
+    name,
+    status,
+    created_at
   )
 `;
 
@@ -57,6 +72,8 @@ export type CustomerCoreAccessRow = {
 
 export type CustomerCoreRow = CustomerCoreAccessRow & {
   owner?: unknown;
+  latest_follow_ups?: unknown;
+  latest_projects?: unknown;
   avatar?: string | null;
   source?: string | null;
   phone?: string | null;
@@ -224,7 +241,17 @@ class CustomerCoreRepository {
       SupabaseDB.getAdminClient()
         .from("customers")
         .select(CUSTOMER_COMPACT_LIST_SELECT)
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .order("created_at", {
+          referencedTable: "customer_follow_ups",
+          ascending: false,
+        })
+        .limit(1, { referencedTable: "customer_follow_ups" })
+        .order("created_at", {
+          referencedTable: "projects",
+          ascending: false,
+        })
+        .limit(1, { referencedTable: "projects" }),
       input.filters,
     );
 
