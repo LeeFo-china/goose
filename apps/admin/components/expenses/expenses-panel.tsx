@@ -132,7 +132,7 @@ export function ExpensesPanel({
               <StatusAlert>{error}</StatusAlert>
             </div>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <ExpensesTable
               expenses={expenses}
               currentEmployeeId={currentEmployeeId}

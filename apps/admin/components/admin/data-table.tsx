@@ -35,6 +35,7 @@ export function DataTable<TData, TValue>({
   emptyText = "暂无数据",
   minWidth,
   containerClassName,
+  tableContainerClassName,
   tableClassName,
   headerClassName,
   rowClassName,
@@ -46,6 +47,7 @@ export function DataTable<TData, TValue>({
   emptyText?: string;
   minWidth?: string;
   containerClassName?: string;
+  tableContainerClassName?: string;
   tableClassName?: string;
   headerClassName?: string;
   rowClassName?: (row: TData) => string | undefined;
@@ -61,7 +63,10 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className={cn("overflow-x-auto", containerClassName)}>
-      <Table className={cn("border-t", minWidth, tableClassName)}>
+      <Table
+        containerClassName={tableContainerClassName}
+        className={cn("border-t", minWidth, tableClassName)}
+      >
         <TableHeader className={cn("bg-muted/60", headerClassName)}>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id} className="hover:bg-transparent">

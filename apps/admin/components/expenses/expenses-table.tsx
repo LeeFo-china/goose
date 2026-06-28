@@ -53,6 +53,17 @@ const modeMeta: Record<string, string> = Object.fromEntries(
   ]),
 );
 
+const EXPENSE_IDENTITY_COLUMN_CLASS_NAME = "w-[44%] min-w-0 lg:w-[220px]";
+const EXPENSE_EMPLOYEE_COLUMN_CLASS_NAME = "hidden w-[96px] whitespace-nowrap lg:table-cell";
+const EXPENSE_PROJECT_COLUMN_CLASS_NAME = "hidden w-[150px] min-w-0 xl:table-cell";
+const EXPENSE_COST_CATEGORY_COLUMN_CLASS_NAME = "hidden w-[120px] whitespace-nowrap 2xl:table-cell";
+const EXPENSE_AMOUNT_COLUMN_CLASS_NAME = "w-[22%] whitespace-nowrap lg:w-[112px]";
+const EXPENSE_STATUS_COLUMN_CLASS_NAME = "w-[16%] whitespace-nowrap lg:w-[92px]";
+const EXPENSE_WORKFLOW_COLUMN_CLASS_NAME = "hidden w-[140px] min-w-0 xl:table-cell";
+const EXPENSE_ASSIGNEE_COLUMN_CLASS_NAME = "hidden w-[96px] whitespace-nowrap 2xl:table-cell";
+const EXPENSE_CREATED_AT_COLUMN_CLASS_NAME = "hidden w-[104px] whitespace-nowrap 2xl:table-cell";
+const EXPENSE_ACTION_COLUMN_CLASS_NAME = "w-[18%] text-right lg:w-24";
+
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
@@ -107,12 +118,12 @@ function ExpenseIdentityCell({
     <Tooltip>
       <TooltipTrigger
         type="button"
-        className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="block w-full min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="w-[10em] truncate font-medium">
+        <div className="truncate font-medium">
           {title}
         </div>
-        <div className="w-[10em] truncate text-xs text-muted-foreground">
+        <div className="truncate text-xs text-muted-foreground">
           {requestNo}
         </div>
       </TooltipTrigger>
@@ -149,21 +160,31 @@ export function ExpensesTable({
           mode={modeMeta[row.original.mode] || row.original.mode}
         />
       ),
+      meta: {
+        headerClassName: EXPENSE_IDENTITY_COLUMN_CLASS_NAME,
+        cellClassName: EXPENSE_IDENTITY_COLUMN_CLASS_NAME,
+      },
     },
     {
       id: "employee",
       header: "申请人",
       cell: ({ row }) => employeeName(row.original),
       meta: {
-        cellClassName: "whitespace-nowrap",
+        headerClassName: EXPENSE_EMPLOYEE_COLUMN_CLASS_NAME,
+        cellClassName: EXPENSE_EMPLOYEE_COLUMN_CLASS_NAME,
       },
     },
     {
       id: "project",
       header: "项目",
-      cell: ({ row }) => projectName(row.original),
+      cell: ({ row }) => (
+        <div className="truncate text-muted-foreground">
+          {projectName(row.original)}
+        </div>
+      ),
       meta: {
-        cellClassName: "whitespace-nowrap text-muted-foreground",
+        headerClassName: EXPENSE_PROJECT_COLUMN_CLASS_NAME,
+        cellClassName: EXPENSE_PROJECT_COLUMN_CLASS_NAME,
       },
     },
     {
@@ -171,7 +192,8 @@ export function ExpensesTable({
       header: "成本归集",
       cell: ({ row }) => expenseCostCategoryLabel(row.original),
       meta: {
-        cellClassName: "whitespace-nowrap text-muted-foreground",
+        headerClassName: EXPENSE_COST_CATEGORY_COLUMN_CLASS_NAME,
+        cellClassName: `${EXPENSE_COST_CATEGORY_COLUMN_CLASS_NAME} text-muted-foreground`,
       },
     },
     {
@@ -179,7 +201,8 @@ export function ExpensesTable({
       header: "金额",
       cell: ({ row }) => `¥${formatMoney(row.original.total_amount)}`,
       meta: {
-        cellClassName: "whitespace-nowrap font-medium",
+        headerClassName: EXPENSE_AMOUNT_COLUMN_CLASS_NAME,
+        cellClassName: `${EXPENSE_AMOUNT_COLUMN_CLASS_NAME} font-medium tabular-nums`,
       },
     },
     {
@@ -194,18 +217,23 @@ export function ExpensesTable({
         return <Badge className="whitespace-nowrap" variant={meta.variant}>{meta.label}</Badge>;
       },
       meta: {
-        cellClassName: "whitespace-nowrap",
+        headerClassName: EXPENSE_STATUS_COLUMN_CLASS_NAME,
+        cellClassName: EXPENSE_STATUS_COLUMN_CLASS_NAME,
       },
     },
     {
       id: "workflow_state",
       header: "当前节点",
-      cell: ({ row }) =>
-        row.original.workflow_state?.current_node_title ||
-        row.original.workflow_state?.current_node_key ||
-        "未接入流程",
+      cell: ({ row }) => (
+        <div className="truncate text-muted-foreground">
+          {row.original.workflow_state?.current_node_title ||
+            row.original.workflow_state?.current_node_key ||
+            "未接入流程"}
+        </div>
+      ),
       meta: {
-        cellClassName: "whitespace-nowrap text-muted-foreground",
+        headerClassName: EXPENSE_WORKFLOW_COLUMN_CLASS_NAME,
+        cellClassName: EXPENSE_WORKFLOW_COLUMN_CLASS_NAME,
       },
     },
     {
@@ -213,7 +241,8 @@ export function ExpensesTable({
       header: "处理人",
       cell: ({ row }) => assigneeName(row.original),
       meta: {
-        cellClassName: "whitespace-nowrap text-muted-foreground",
+        headerClassName: EXPENSE_ASSIGNEE_COLUMN_CLASS_NAME,
+        cellClassName: `${EXPENSE_ASSIGNEE_COLUMN_CLASS_NAME} text-muted-foreground`,
       },
     },
     {
@@ -221,26 +250,29 @@ export function ExpensesTable({
       header: "创建时间",
       cell: ({ row }) => formatDate(row.original.created_at),
       meta: {
-        cellClassName: "whitespace-nowrap text-muted-foreground",
+        headerClassName: EXPENSE_CREATED_AT_COLUMN_CLASS_NAME,
+        cellClassName: `${EXPENSE_CREATED_AT_COLUMN_CLASS_NAME} text-muted-foreground tabular-nums`,
       },
     },
     {
       id: "actions",
-      header: "操作",
+      header: () => <div className="text-right">操作</div>,
       cell: ({ row, table }) => {
         const meta = table.options.meta as { onExpenseUpdated?: ExpenseUpdatedHandler } | undefined;
 
         return (
-          <ExpenseRowActions
-            expense={row.original}
-            currentEmployeeId={currentEmployeeId}
-            onExpenseUpdated={meta?.onExpenseUpdated}
-          />
+          <div className="flex justify-end">
+            <ExpenseRowActions
+              expense={row.original}
+              currentEmployeeId={currentEmployeeId}
+              onExpenseUpdated={meta?.onExpenseUpdated}
+            />
+          </div>
         );
       },
       meta: {
-        headerClassName: "sticky right-0 z-10 bg-muted text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
-        cellClassName: "sticky right-0 z-10 whitespace-nowrap bg-card text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        headerClassName: EXPENSE_ACTION_COLUMN_CLASS_NAME,
+        cellClassName: EXPENSE_ACTION_COLUMN_CLASS_NAME,
       },
     },
   ];
@@ -250,7 +282,10 @@ export function ExpensesTable({
       columns={columns}
       data={expenses}
       emptyText="没有符合条件的费用申请"
-      minWidth="min-w-[1480px]"
+      containerClassName="overflow-x-hidden"
+      tableContainerClassName="overflow-x-hidden"
+      tableClassName="border-t-0 table-fixed"
+      headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
       tableMeta={{ onExpenseUpdated }}
     />
   );
