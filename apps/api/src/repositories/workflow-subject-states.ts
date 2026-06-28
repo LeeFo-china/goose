@@ -42,6 +42,13 @@ export type WorkflowSubjectStateRow = {
   pending_task_count: number;
   created_at: string;
   updated_at: string;
+  definition?: {
+    id?: string | null;
+    name?: string | null;
+  } | Array<{
+    id?: string | null;
+    name?: string | null;
+  }> | null;
 };
 
 export type WorkflowSubjectStateUpsertInput = {
@@ -98,6 +105,7 @@ const WORKFLOW_SUBJECT_STATE_SELECT = [
   "pending_task_count",
   "created_at",
   "updated_at",
+  "definition:workflow_definitions(id, name)",
 ].join(", ");
 
 const WORKFLOW_RUNTIME_PROJECTION_SELECT = [

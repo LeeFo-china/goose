@@ -94,10 +94,11 @@ describe("Project management page layout", () => {
     expect(shell).not.toContain("router.push(href);\n      router.refresh();");
   });
 
-  test("requests compact workflow summary for the admin project list", () => {
+  test("requests lightweight list workflow summary for the admin project list", () => {
     const { page } = readProjectManagementSources();
 
-    expect(page).toContain('query.set("workflow_summary", "compact")');
+    expect(page).toContain('query.set("workflow_summary", "list")');
+    expect(page).not.toContain('query.set("workflow_summary", "compact")');
   });
 
   test("keeps the workflow column focused on the connected workflow title", () => {
