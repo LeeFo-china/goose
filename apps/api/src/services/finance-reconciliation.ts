@@ -1,29 +1,35 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  financeReconciliationActionsRepository,
+  type FinanceReconciliationActionRecord,
+} from "@/repositories/finance-reconciliation-actions";
+import {
   financeReconciliationRepository,
-  type FinanceReconciliationCandidateRows,
-  type FinanceReconciliationLedgerRow,
-  type FinanceReconciliationPaymentRow,
   type FinanceReconciliationProjectTotals,
-  type FinanceReconciliationReceivableRow,
 } from "@/repositories/finance-reconciliation";
 import type {
-  FinanceReconciliationDirection,
-  FinanceReconciliationExceptionCode,
+  CreateFinanceReconciliationExceptionAction,
+  FinanceReconciliationAction,
   FinanceReconciliationExceptionListQuery,
-  FinanceReconciliationLevel,
 } from "@/schema/finance-reconciliation";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  buildFinanceReconciliationExceptions,
+  type FinanceReconciliationException,
+} from "@/services/finance-reconciliation-exceptions";
 
 const MAX_RECONCILIATION_RANGE_DAYS = 366;
 const DEFAULT_RECONCILIATION_RANGE_DAYS = 30;
-const MONEY_TOLERANCE = 0.009;
 
 type FinanceReconciliationServiceDependencies = {
   repository: Pick<
     typeof financeReconciliationRepository,
     "listCandidateRows" | "getProjectSummaryTotals"
+  >;
+  actionsRepository: Pick<
+    typeof financeReconciliationActionsRepository,
+    "listLatestActions" | "createAction"
   >;
   accessPolicyService: Pick<
     typeof accessPolicyService,
@@ -32,37 +38,26 @@ type FinanceReconciliationServiceDependencies = {
   now?: () => Date;
 };
 
-export type FinanceReconciliationException = {
-  id: string;
-  project_id: string | null;
-  project_name: string | null;
-  exception_code: FinanceReconciliationExceptionCode;
-  level: FinanceReconciliationLevel;
-  direction: FinanceReconciliationDirection;
-  status: "open";
-  title: string;
-  description: string;
-  amount: number;
-  occurred_at: string;
-  action: {
-    key: string;
-    label: string;
-    target: string;
-  };
-};
-
 export type FinanceReconciliationProjectSummary =
   FinanceReconciliationProjectTotals & {
     exception_count: number;
     danger_count: number;
     warning_count: number;
+    open_exception_count: number;
+    acknowledged_exception_count: number;
+    ignored_exception_count: number;
+    resolved_exception_count: number;
     latest_exception_at: string | null;
+    latest_action_at: string | null;
+    latest_action_remark: string | null;
+    latest_actor_employee_name: string | null;
   };
 
 export class FinanceReconciliationService {
   constructor(
     private readonly dependencies: FinanceReconciliationServiceDependencies = {
       repository: financeReconciliationRepository,
+      actionsRepository: financeReconciliationActionsRepository,
       accessPolicyService,
       now: () => new Date(),
     },
@@ -77,9 +72,6 @@ export class FinanceReconciliationService {
     this.assertCanViewReconciliation(authContext);
 
     const range = this.resolveDateRange(query);
-    if (query.status === "resolved") {
-      return buildListResponse([], query);
-    }
 
     const candidates = await this.dependencies.repository.listCandidateRows({
       tenantId,
@@ -87,8 +79,13 @@ export class FinanceReconciliationService {
       dateTo: range.dateTo,
       projectId: query.project_id,
     });
+    const exceptionsWithActions = await withActionState({
+      tenantId,
+      exceptions: buildFinanceReconciliationExceptions(candidates, range.dateTo),
+      actionsRepository: this.dependencies.actionsRepository,
+    });
     const exceptions = this.filterExceptions(
-      this.buildExceptions(candidates, range.dateTo),
+      exceptionsWithActions,
       query,
     );
 
@@ -124,179 +121,65 @@ export class FinanceReconciliationService {
       dateFrom: "1970-01-01",
       dateTo,
     });
-    const exceptions = this.buildExceptions(candidates, dateTo);
+    const exceptions = await withActionState({
+      tenantId,
+      exceptions: buildFinanceReconciliationExceptions(candidates, dateTo),
+      actionsRepository: this.dependencies.actionsRepository,
+    });
+    const latestAction = latestActionFromExceptions(exceptions);
 
     return {
       ...totals,
       exception_count: exceptions.length,
       danger_count: exceptions.filter((item) => item.level === "danger").length,
       warning_count: exceptions.filter((item) => item.level === "warning").length,
+      open_exception_count: exceptions.filter((item) => item.status === "open").length,
+      acknowledged_exception_count: exceptions.filter((item) =>
+        item.status === "acknowledged"
+      ).length,
+      ignored_exception_count: exceptions.filter((item) => item.status === "ignored")
+        .length,
+      resolved_exception_count: exceptions.filter((item) => item.status === "resolved")
+        .length,
       latest_exception_at: exceptions[0]?.occurred_at ?? null,
+      latest_action_at: latestAction?.last_action_at ?? null,
+      latest_action_remark: latestAction?.last_action_remark ?? null,
+      latest_actor_employee_name: latestAction?.last_actor_employee_name ?? null,
     };
   }
 
-  private buildExceptions(
-    candidates: FinanceReconciliationCandidateRows,
-    tenantToday: string,
-  ): FinanceReconciliationException[] {
-    return [
-      ...candidates.receivables.flatMap((row) =>
-        this.buildReceivableExceptions(row, tenantToday)
-      ),
-      ...candidates.payments.flatMap((row) =>
-        this.buildPaymentExceptions(row)
-      ),
-      ...candidates.ledgers.flatMap((row) => this.buildLedgerExceptions(row)),
-    ].sort(compareExceptions);
-  }
+  async createExceptionAction(
+    authContext: AuthContext,
+    fingerprint: string,
+    input: CreateFinanceReconciliationExceptionAction,
+  ) {
+    const tenantId = this.dependencies.accessPolicyService
+      .assertTenantContext(authContext);
+    this.assertCanManageReconciliation(authContext);
 
-  private buildReceivableExceptions(
-    row: FinanceReconciliationReceivableRow,
-    tenantToday: string,
-  ): FinanceReconciliationException[] {
-    const exceptions: FinanceReconciliationException[] = [];
-    const remainingAmount = roundMoney(row.amount - row.paid_amount);
-    const dueAt = toDateTime(row.due_date);
-
-    if (
-      row.status !== "paid" &&
-      row.status !== "canceled" &&
-      remainingAmount > MONEY_TOLERANCE &&
-      row.due_date !== null &&
-      row.due_date < tenantToday
-    ) {
-      exceptions.push({
-        id: row.id,
-        project_id: row.project_id,
-        project_name: row.project_name,
-        exception_code: "receivable_overdue",
-        level: "warning",
-        direction: "receivable",
-        status: "open",
-        title: "应收已逾期",
-        description: `${row.title ?? "应收计划"}已到期未结清，剩余 ${formatMoney(remainingAmount)}。`,
-        amount: remainingAmount,
-        occurred_at: dueAt,
-        action: receivableAction(row.project_id),
-      });
+    const dateTo = toDateOnly(this.dependencies.now?.() ?? new Date());
+    const candidates = await this.dependencies.repository.listCandidateRows({
+      tenantId,
+      dateFrom: "1970-01-01",
+      dateTo,
+    });
+    const target = buildFinanceReconciliationExceptions(candidates, dateTo)
+      .find((item) => item.exception_fingerprint === fingerprint);
+    if (!target) {
+      throw Errors.notFound("对账异常不存在或已消失");
     }
 
-    const paidDiff = roundMoney(
-      Math.abs(row.paid_amount - row.allocation_amount),
-    );
-    if (
-      paidDiff > MONEY_TOLERANCE &&
-      (row.paid_amount > MONEY_TOLERANCE ||
-        row.allocation_amount > MONEY_TOLERANCE)
-    ) {
-      exceptions.push({
-        id: row.id,
-        project_id: row.project_id,
-        project_name: row.project_name,
-        exception_code: "receivable_paid_amount_mismatch",
-        level: "danger",
-        direction: "receivable",
-        status: "open",
-        title: "应收已收金额与核销不一致",
-        description:
-          `应收已收 ${formatMoney(row.paid_amount)}，核销合计 ${formatMoney(row.allocation_amount)}。`,
-        amount: paidDiff,
-        occurred_at: dueAt,
-        action: receivableAction(row.project_id),
-      });
-    }
-
-    return exceptions;
-  }
-
-  private buildPaymentExceptions(
-    row: FinanceReconciliationPaymentRow,
-  ): FinanceReconciliationException[] {
-    const exceptions: FinanceReconciliationException[] = [];
-    const occurredAt = row.pay_date ?? row.created_at ?? new Date(0).toISOString();
-    const projectId = row.project_id;
-
-    if (row.amount > MONEY_TOLERANCE && row.ledger_amount <= MONEY_TOLERANCE) {
-      exceptions.push({
-        id: row.id,
-        project_id: projectId,
-        project_name: row.project_name,
-        exception_code: "payment_without_ledger",
-        level: "danger",
-        direction: "payment",
-        status: "open",
-        title: "确认收款未入账",
-        description:
-          `收款 ${formatMoney(row.amount)} 已确认，但未找到对应项目收款入账流水。`,
-        amount: row.amount,
-        occurred_at: occurredAt,
-        action: receivableAction(projectId),
-      });
-    }
-
-    const unallocatedAmount = roundMoney(row.amount - row.allocation_amount);
-    if (unallocatedAmount > MONEY_TOLERANCE) {
-      exceptions.push({
-        id: row.id,
-        project_id: projectId,
-        project_name: row.project_name,
-        exception_code: "payment_unallocated",
-        level: "warning",
-        direction: "payment",
-        status: "open",
-        title: "收款未完全核销",
-        description:
-          `收款 ${formatMoney(row.amount)}，已核销 ${formatMoney(row.allocation_amount)}。`,
-        amount: unallocatedAmount,
-        occurred_at: occurredAt,
-        action: receivableAction(projectId),
-      });
-    }
-
-    const overAllocatedAmount = roundMoney(row.allocation_amount - row.amount);
-    if (overAllocatedAmount > MONEY_TOLERANCE) {
-      exceptions.push({
-        id: row.id,
-        project_id: projectId,
-        project_name: row.project_name,
-        exception_code: "allocation_amount_mismatch",
-        level: "danger",
-        direction: "payment",
-        status: "open",
-        title: "核销金额超过收款金额",
-        description:
-          `收款 ${formatMoney(row.amount)}，核销合计 ${formatMoney(row.allocation_amount)}。`,
-        amount: overAllocatedAmount,
-        occurred_at: occurredAt,
-        action: receivableAction(projectId),
-      });
-    }
-
-    return exceptions;
-  }
-
-  private buildLedgerExceptions(
-    row: FinanceReconciliationLedgerRow,
-  ): FinanceReconciliationException[] {
-    if (row.payment_id) {
-      return [];
-    }
-
-    return [{
-      id: row.id,
-      project_id: row.project_id,
-      project_name: row.project_name,
-      exception_code: "ledger_without_payment",
-      level: "warning",
-      direction: "ledger",
-      status: "open",
-      title: "项目收款流水缺少收款关联",
-      description:
-        `项目收款流水 ${formatMoney(row.amount)} 缺少 payment 关联。`,
-      amount: row.amount,
-      occurred_at: row.occurred_at ?? new Date(0).toISOString(),
-      action: ledgerAction(row.project_id),
-    }];
+    return this.dependencies.actionsRepository.createAction({
+      tenantId,
+      exceptionFingerprint: target.exception_fingerprint,
+      exceptionCode: target.exception_code,
+      subjectType: target.subject_type,
+      subjectId: target.subject_id,
+      projectId: target.project_id,
+      action: input.action,
+      remark: input.remark,
+      actorEmployeeId: authContext.employeeId ?? null,
+    });
   }
 
   private filterExceptions(
@@ -307,7 +190,10 @@ export class FinanceReconciliationService {
       (!query.exception_code || item.exception_code === query.exception_code) &&
       (!query.level || item.level === query.level) &&
       (!query.direction || item.direction === query.direction) &&
-      (!query.project_id || item.project_id === query.project_id)
+      (!query.project_id || item.project_id === query.project_id) &&
+      (!query.status || item.status === query.status) &&
+      (!query.actor_employee_id ||
+        item.last_actor_employee_id === query.actor_employee_id)
     );
   }
 
@@ -340,6 +226,17 @@ export class FinanceReconciliationService {
     }
   }
 
+  private assertCanManageReconciliation(authContext: AuthContext) {
+    if (
+      !this.dependencies.accessPolicyService.hasPermission(
+        authContext,
+        "finance.reconciliation.manage",
+      )
+    ) {
+      throw Errors.forbidden();
+    }
+  }
+
   private canViewReconciliation(authContext: AuthContext) {
     return [
       "finance.view",
@@ -353,6 +250,56 @@ export class FinanceReconciliationService {
       )
     );
   }
+}
+
+async function withActionState(input: {
+  tenantId: string;
+  exceptions: FinanceReconciliationException[];
+  actionsRepository: Pick<
+    typeof financeReconciliationActionsRepository,
+    "listLatestActions"
+  >;
+}) {
+  const actionMap = await input.actionsRepository.listLatestActions({
+    tenantId: input.tenantId,
+    fingerprints: input.exceptions.map((item) => item.exception_fingerprint),
+  });
+
+  return input.exceptions.map((item) =>
+    applyActionState(item, actionMap.get(item.exception_fingerprint) ?? null)
+  );
+}
+
+function applyActionState(
+  item: FinanceReconciliationException,
+  action: FinanceReconciliationActionRecord | null,
+): FinanceReconciliationException {
+  if (!action) return item;
+  return {
+    ...item,
+    status: statusFromAction(action.action),
+    last_action: action.action,
+    last_action_at: action.created_at,
+    last_action_remark: action.remark,
+    last_actor_employee_id: action.actor_employee_id,
+    last_actor_employee_name: action.actor_employee_name,
+  };
+}
+
+function statusFromAction(action: FinanceReconciliationAction) {
+  if (action === "acknowledge") return "acknowledged" as const;
+  if (action === "ignore") return "ignored" as const;
+  if (action === "resolve") return "resolved" as const;
+  return "open" as const;
+}
+
+function latestActionFromExceptions(exceptions: FinanceReconciliationException[]) {
+  return exceptions
+    .filter((item) => item.last_action_at)
+    .sort((left, right) =>
+      Date.parse(right.last_action_at || "") -
+      Date.parse(left.last_action_at || "")
+    )[0] ?? null;
 }
 
 function buildListResponse(
@@ -387,39 +334,6 @@ function summarize(exceptions: FinanceReconciliationException[]) {
   );
 }
 
-function compareExceptions(
-  left: FinanceReconciliationException,
-  right: FinanceReconciliationException,
-) {
-  return Date.parse(right.occurred_at) - Date.parse(left.occurred_at) ||
-    left.exception_code.localeCompare(right.exception_code) ||
-    left.id.localeCompare(right.id);
-}
-
-function receivableAction(projectId: string | null) {
-  return {
-    key: "open_payment",
-    label: "查看应收",
-    target: projectId
-      ? `/finance/receivables?project_id=${projectId}`
-      : "/finance/receivables",
-  };
-}
-
-function ledgerAction(projectId: string | null) {
-  return {
-    key: "open_ledger",
-    label: "查看台账",
-    target: projectId
-      ? `/finance/ledger?project_id=${projectId}&direction=in`
-      : "/finance/ledger?direction=in",
-  };
-}
-
-function toDateTime(date: string | null) {
-  return date ? `${date}T00:00:00.000Z` : new Date(0).toISOString();
-}
-
 function toDateOnly(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -428,17 +342,6 @@ function shiftDate(date: string, days: number) {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() + days);
   return toDateOnly(value);
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function formatMoney(value: number) {
-  return `¥${roundMoney(value).toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 export const financeReconciliationService =

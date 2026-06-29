@@ -31,7 +31,14 @@ function emptySummary(projectId: string): ProjectFinanceReconciliationSummary {
     exception_count: 0,
     danger_count: 0,
     warning_count: 0,
+    open_exception_count: 0,
+    acknowledged_exception_count: 0,
+    ignored_exception_count: 0,
+    resolved_exception_count: 0,
     latest_exception_at: null,
+    latest_action_at: null,
+    latest_action_remark: null,
+    latest_actor_employee_name: null,
   };
 }
 
@@ -116,6 +123,18 @@ export function ProjectFinanceReconciliationSummaryPanel({
           最近异常：{formatFinanceDateTime(summary.latest_exception_at)}
         </span>
         <span>应收总额：{formatFinanceMoney(summary.receivable_amount)}</span>
+        <span>
+          最近处理：{summary.latest_action_at
+            ? `${formatFinanceDateTime(summary.latest_action_at)} · ${
+              summary.latest_actor_employee_name || "未知处理人"
+            }`
+            : "-"}
+        </span>
+        {summary.latest_action_remark ? (
+          <span className="truncate">
+            备注：{summary.latest_action_remark}
+          </span>
+        ) : null}
       </div>
     </section>
   );

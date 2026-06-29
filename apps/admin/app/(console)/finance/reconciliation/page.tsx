@@ -27,6 +27,8 @@ type FinanceReconciliationPageSearchParams = {
   exception_code?: string;
   level?: string;
   direction?: string;
+  status?: string;
+  actor_employee_id?: string;
 };
 
 const EXCEPTION_OPTIONS = [
@@ -54,6 +56,14 @@ const DIRECTION_OPTIONS = [
   { value: "expense", label: "费用" },
 ];
 
+const STATUS_OPTIONS = [
+  { value: "", label: "全部状态" },
+  { value: "open", label: "未处理" },
+  { value: "acknowledged", label: "已确认" },
+  { value: "ignored", label: "已忽略" },
+  { value: "resolved", label: "已解决" },
+];
+
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -77,6 +87,8 @@ function reconciliationPageHref(
     exception_code: filters.exception_code,
     level: filters.level,
     direction: filters.direction,
+    status: filters.status,
+    actor_employee_id: filters.actor_employee_id,
   });
   return `/finance/reconciliation?${params}`;
 }
@@ -100,6 +112,8 @@ export default async function FinanceReconciliationPage({
     exception_code: clean(params.exception_code),
     level: clean(params.level),
     direction: clean(params.direction),
+    status: clean(params.status),
+    actor_employee_id: clean(params.actor_employee_id),
   });
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
@@ -160,7 +174,7 @@ export default async function FinanceReconciliationPage({
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance/reconciliation"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(12rem,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(10rem,12rem)_auto] xl:items-end"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(12rem,1fr)_minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(12rem,1fr)_auto] xl:items-end"
           >
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="reconciliation-date-from">
@@ -219,6 +233,25 @@ export default async function FinanceReconciliationPage({
               value={params.direction}
               options={DIRECTION_OPTIONS}
             />
+            <FinanceFilterSelectField
+              id="reconciliation-status"
+              name="status"
+              label="处理状态"
+              value={params.status}
+              options={STATUS_OPTIONS}
+            />
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="reconciliation-actor-employee-id">
+                处理人 ID
+              </label>
+              <Input
+                id="reconciliation-actor-employee-id"
+                name="actor_employee_id"
+                defaultValue={params.actor_employee_id || ""}
+                placeholder="按处理人 ID 精确筛选"
+                className="h-9"
+              />
+            </div>
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <Button type="submit" size="sm">筛选</Button>
               <Button asChild type="button" variant="outline" size="sm">

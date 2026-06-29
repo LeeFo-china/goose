@@ -16,6 +16,16 @@ export type FinanceReconciliationDirection =
   | "payment"
   | "expense"
   | "ledger";
+export type FinanceReconciliationStatus =
+  | "open"
+  | "acknowledged"
+  | "ignored"
+  | "resolved";
+export type FinanceReconciliationAction =
+  | "acknowledge"
+  | "ignore"
+  | "resolve"
+  | "reopen";
 
 export type FinanceReconciliationExceptionRecord = {
   id: string;
@@ -24,7 +34,10 @@ export type FinanceReconciliationExceptionRecord = {
   exception_code: FinanceReconciliationExceptionCode;
   level: FinanceReconciliationLevel;
   direction: FinanceReconciliationDirection;
-  status: "open";
+  status: FinanceReconciliationStatus;
+  exception_fingerprint: string;
+  subject_type: "receivable" | "payment" | "ledger";
+  subject_id: string | null;
   title: string;
   description: string;
   amount: number;
@@ -34,6 +47,11 @@ export type FinanceReconciliationExceptionRecord = {
     label: string;
     target: string;
   };
+  last_action: FinanceReconciliationAction | null;
+  last_action_at: string | null;
+  last_action_remark: string | null;
+  last_actor_employee_id: string | null;
+  last_actor_employee_name: string | null;
 };
 
 export type FinanceReconciliationSummary = {
@@ -90,6 +108,7 @@ export async function fetchFinanceReconciliationExceptions(query: {
   level?: string;
   direction?: string;
   status?: string;
+  actor_employee_id?: string;
 }): Promise<FinanceReconciliationResult> {
   const token = await getAdminToken();
   const params = buildFinanceReconciliationSearchParams(query);

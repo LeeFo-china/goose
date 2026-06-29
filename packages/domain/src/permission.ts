@@ -73,6 +73,7 @@ export const PERMISSION_CODE_VALUES = [
   'finance.cost-allocation.manage',
   'finance.receivable.view',
   'finance.receivable.manage',
+  'finance.reconciliation.manage',
   'finance.dashboard.view',
   'project_referral.read',
   'project_referral.manage',
@@ -266,6 +267,7 @@ export const PermissionCodeConfig: Record<
   },
   'finance.receivable.view': { label: '查看应收计划', module: 'finance' },
   'finance.receivable.manage': { label: '管理应收计划', module: 'finance' },
+  'finance.reconciliation.manage': { label: '处理对账异常', module: 'finance' },
   'finance.dashboard.view': { label: '查看财务看板', module: 'finance' },
   'project_referral.read': {
     label: '查看介绍费',

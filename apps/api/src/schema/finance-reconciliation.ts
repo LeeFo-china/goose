@@ -23,6 +23,20 @@ export const FINANCE_RECONCILIATION_DIRECTION_VALUES = [
   "ledger",
 ] as const;
 
+export const FINANCE_RECONCILIATION_STATUS_VALUES = [
+  "open",
+  "acknowledged",
+  "ignored",
+  "resolved",
+] as const;
+
+export const FINANCE_RECONCILIATION_ACTION_VALUES = [
+  "acknowledge",
+  "ignore",
+  "resolve",
+  "reopen",
+] as const;
+
 export const FinanceReconciliationExceptionCodeSchema = z.enum(
   FINANCE_RECONCILIATION_EXCEPTION_CODE_VALUES,
   { message: "无效的对账异常类型" },
@@ -38,6 +52,16 @@ export const FinanceReconciliationDirectionSchema = z.enum(
   { message: "无效的对账方向" },
 );
 
+export const FinanceReconciliationStatusSchema = z.enum(
+  FINANCE_RECONCILIATION_STATUS_VALUES,
+  { message: "无效的对账异常状态" },
+);
+
+export const FinanceReconciliationActionSchema = z.enum(
+  FINANCE_RECONCILIATION_ACTION_VALUES,
+  { message: "无效的对账异常处理动作" },
+);
+
 const OptionalDateSchema = z.preprocess((value) => {
   if (value == null || value === "") return undefined;
   return value;
@@ -51,10 +75,24 @@ export const FinanceReconciliationExceptionListQuerySchema =
     exception_code: FinanceReconciliationExceptionCodeSchema.optional(),
     level: FinanceReconciliationLevelSchema.optional(),
     direction: FinanceReconciliationDirectionSchema.optional(),
-    status: z.enum(["open", "resolved"], {
-      message: "无效的对账异常状态",
-    }).optional(),
+    status: FinanceReconciliationStatusSchema.optional(),
+    actor_employee_id: z.uuid("请选择有效的处理人").optional(),
   });
+
+export const CreateFinanceReconciliationExceptionActionSchema = z.object({
+  action: FinanceReconciliationActionSchema,
+  remark: z.string()
+    .trim()
+    .min(1, "请填写处理备注")
+    .max(500, "处理备注不能超过 500 个字符"),
+});
+
+export const FinanceReconciliationExceptionFingerprintParamsSchema = z.object({
+  fingerprint: z.string()
+    .trim()
+    .min(1, "缺少对账异常标识")
+    .max(200, "对账异常标识过长"),
+});
 
 export type FinanceReconciliationExceptionCode =
   (typeof FINANCE_RECONCILIATION_EXCEPTION_CODE_VALUES)[number];
@@ -62,6 +100,13 @@ export type FinanceReconciliationLevel =
   (typeof FINANCE_RECONCILIATION_LEVEL_VALUES)[number];
 export type FinanceReconciliationDirection =
   (typeof FINANCE_RECONCILIATION_DIRECTION_VALUES)[number];
+export type FinanceReconciliationStatus =
+  (typeof FINANCE_RECONCILIATION_STATUS_VALUES)[number];
+export type FinanceReconciliationAction =
+  (typeof FINANCE_RECONCILIATION_ACTION_VALUES)[number];
 export type FinanceReconciliationExceptionListQuery = z.infer<
   typeof FinanceReconciliationExceptionListQuerySchema
+>;
+export type CreateFinanceReconciliationExceptionAction = z.infer<
+  typeof CreateFinanceReconciliationExceptionActionSchema
 >;
