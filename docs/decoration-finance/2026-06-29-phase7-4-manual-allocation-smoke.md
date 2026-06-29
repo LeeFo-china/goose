@@ -118,41 +118,123 @@ git diff --check
 # 通过
 ```
 
-## Migration 和 E2E Smoke 状态
+## Migration 应用和核验
 
-本轮未执行真实写入 smoke，原因是数据库 migration 状态无法通过当前环境验证：
+CLI 状态：
 
-- `supabase db diff --local --schema public` 失败：
-  - Docker daemon 未运行。
-- `supabase migration list` 失败：
-  - `SUPABASE_DB_PASSWORD` 认证失败。
-- `supabase migration list --db-url $SUPABASE_DB_DIRECT_URL` 失败：
-  - 连接 host `api-dev.goodcms.cn` 时 TLS 被拒绝。
-- `supabase migration list --db-url $SUPABASE_DB_URL` 失败：
-  - 同样为 TLS 被拒绝。
+- `supabase db diff --local --schema public` 仍因本机 Docker daemon 未运行而不可用。
+- `supabase migration list` 仍因当前 linked project 密码认证失败不可用。
+- `supabase migration list --db-url $SUPABASE_DB_DIRECT_URL` 和 `--db-url $SUPABASE_DB_URL` 仍会被 TLS 配置拒绝。
 
-因此未执行：
+处理方式：
 
-- 远端 migration apply。
-- 临时 API/Admin 写入 smoke。
-- 人工核销 create/adjust/reverse 的真实数据库验证。
+- 已使用 `supabase/migrations/20260629193000_receivable_manual_allocation_reversal.sql` 原文在事务内应用。
+- 已同步写入 `supabase_migrations.schema_migrations`：
+  - `version = 20260629193000`
+  - `name = receivable_manual_allocation_reversal`
+- 应用后做只读核验：
+  - `project_receivable_allocations.reversed_at` 存在，类型 `timestamp with time zone`。
+  - `project_receivable_allocations.reversed_by` 存在，类型 `uuid`。
+  - `project_receivable_allocations.reverse_reason` 存在，类型 `text`。
+  - 三个 active allocation 索引均存在：
+    - `project_receivable_allocations_active_plan_idx`
+    - `project_receivable_allocations_active_payment_idx`
+    - `project_receivable_allocations_project_active_idx`
+  - `project_receivable_events_event_type_check` 已包含：
+    - `allocate_payment`
+    - `adjust_allocation`
+    - `reverse_allocation`
 
-继续 E2E 的前置条件：
+补充说明：
 
-1. 提供可用的 Supabase Postgres 连接凭据，或修复 `.env.local` 中的 DB URL/TLS 配置。
-2. 用 migration 正式应用 `20260629193000_receivable_manual_allocation_reversal.sql`。
-3. 执行 `supabase migration list`，确认 Local/Remote 对齐。
-4. 在 worktree 临时端口拉起：
-   - API：`3320`
-   - Admin：`3330`
-5. 使用测试项目执行：
-   - 查询 `payment_unallocated` 异常。
-   - 打开应收核销 dialog。
-   - 新增 manual allocation。
-   - 复查应收 `paid_amount`。
-   - 复查对账异常数量。
-   - 调整 allocation。
-   - 撤销 allocation。
+- 由于 Supabase CLI 当前连接链路仍不可用，`supabase migration list` 不能作为本轮验收证据。
+- 后续正式发布窗口仍建议修复 CLI 连接配置后再次执行 `supabase migration list`，确认 Local/Remote 对齐。
+
+## API 写入 Smoke
+
+临时 API：
+
+- 地址：`http://127.0.0.1:3320`
+- 启动方式：在 worktree 使用 `apps/api/.env` 启动。
+- 说明：根目录 `.env.local` 缺少 `JWT_SECRET`，不适合作为 API runtime env。
+
+执行账号：
+
+- 账号：`18800005001`
+- 员工：小龙女
+- employee ID：`bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`
+- tenant ID：`3eebca47-961f-4899-b976-a3d3208d326b`
+
+样本：
+
+- project ID：`d382cd45-9141-476e-a7a5-5bf88d0a3255`
+- payment ID：`5859aec7-a8a8-474b-83d8-ba420bf1555d`
+- receivable plan ID：`ab6b42e0-6d99-4bdf-9f64-a42d93d5ee83`
+- receivable title：`Phase 7.4 人工核销 smoke 应收`
+
+执行链路：
+
+1. 创建 manual receivable。
+2. 对 payment `5859aec7-a8a8-474b-83d8-ba420bf1555d` 创建 manual allocation。
+3. 将首笔 allocation 调整为 `9000`。
+4. 撤销首笔 allocation。
+5. 重新创建最终 allocation，金额 `10000`。
+
+最终状态：
+
+- receivable `amount = 10000`
+- receivable `paid_amount = 10000`
+- receivable `remaining_amount = 0`
+- receivable `status = paid`
+- payment `allocated_amount = 10000`
+- payment `remaining_amount = 0`
+- 当前 active allocation：
+  - allocation ID：`4c7a828f-f650-41bb-baf7-4e5fb6a42e29`
+  - amount：`10000`
+  - source_type：`manual`
+  - reversed_at：`null`
+- 已撤销 allocation 保留审计：
+  - allocation ID：`e80fd168-8e35-4f49-be01-132746fae7b5`
+  - amount：`9000`
+  - source_type：`manual`
+  - reversed：`true`
+  - reversed_by：`bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`
+  - reverse_reason：`Phase 7.4 smoke 撤销旧核销后重建`
+
+事件追溯：
+
+- `manual_created`：人工创建应收
+- `allocate_payment`：首次人工核销
+- `adjust_allocation`：调整核销金额
+- `reverse_allocation`：撤销收款核销
+- `allocate_payment`：最终人工核销
+
+对账异常复查：
+
+- 执行前 payment `5859aec7-a8a8-474b-83d8-ba420bf1555d` 来自 open `payment_unallocated` 样本。
+- 执行后 `payment_unallocated` open 总数为 `7`。
+- 执行后目标 payment 在 `payment_unallocated` open 列表中出现次数为 `0`。
+
+## Admin 只读 Smoke
+
+临时 Admin：
+
+- 地址：`http://127.0.0.1:3330`
+- API 指向：`GOOES_API_BASE_URL=http://127.0.0.1:3320`
+
+验证结果：
+
+- `POST /api/auth/login` 返回 `200`，成功写入 `gooes_admin_token` cookie。
+- `GET /finance/receivables?project_id=d382cd45-9141-476e-a7a5-5bf88d0a3255` 返回 `200`。
+- 页面 HTML 包含 `Phase 7.4 人工核销 smoke 应收`。
+- 页面 HTML 包含“核销”操作入口。
+- 页面 HTML 未出现 `Application error`。
+- 页面 HTML 未出现 `后端服务未连接`。
+- `GET /api/backend/finance/receivables/ab6b42e0-6d99-4bdf-9f64-a42d93d5ee83/allocation-context` 返回 `200`。
+- 代理接口返回：
+  - `receivable_plan.id = ab6b42e0-6d99-4bdf-9f64-a42d93d5ee83`
+  - `allocations.length = 1`
+  - `payments.length = 1`
 
 ## 回滚口径
 
