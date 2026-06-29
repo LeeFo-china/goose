@@ -36,6 +36,7 @@
 - [2026-06-29-phase7-1-reconciliation-closure-plan.md](./2026-06-29-phase7-1-reconciliation-closure-plan.md)：Phase 7.1 财务对账异常处理闭环计划。
 - [2026-06-29-phase7-1-reconciliation-closure-smoke.md](./2026-06-29-phase7-1-reconciliation-closure-smoke.md)：Phase 7.1 对账异常处理闭环 migration、Admin smoke 和源数据不变性验收记录。
 - [2026-06-29-phase7-1-post-release-smoke.md](./2026-06-29-phase7-1-post-release-smoke.md)：Phase 7.1 合入 main 后的发布后只读 smoke、GitHub Actions 观察和 Admin/小程序回执。
+- [2026-06-29-phase7-2-admin-ux-post-release-smoke.md](./2026-06-29-phase7-2-admin-ux-post-release-smoke.md)：Phase 7.2 Admin 对账体验合入 main 后的发布后只读 smoke 记录。
 - [2026-06-29-phase7-3-reconciliation-correction-entry-plan.md](./2026-06-29-phase7-3-reconciliation-correction-entry-plan.md)：Phase 7.3 对账异常修正入口计划，明确只做人工引导、不自动修账。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
