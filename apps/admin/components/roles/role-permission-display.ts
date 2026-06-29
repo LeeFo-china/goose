@@ -91,9 +91,17 @@ export function getModuleLabel(module: string) {
   return permissionModuleLabels[module] || "其他模块";
 }
 
+export function getPermissionResourceLabel(resourceKey: string) {
+  return permissionResourceLabels[resourceKey] || "其他资源";
+}
+
+export function getPermissionActionLabel(actionKey: string) {
+  return permissionActionLabels[actionKey] || "其他操作";
+}
+
 export function getPermissionSummary(permission: PermissionRecord) {
-  const resource = permissionResourceLabels[permission.resource] || "其他资源";
-  const action = permissionActionLabels[permission.action] || "其他操作";
+  const resource = getPermissionResourceLabel(permission.resource);
+  const action = getPermissionActionLabel(permission.action);
 
   return resource === action ? resource : `${resource} · ${action}`;
 }

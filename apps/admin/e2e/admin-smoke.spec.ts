@@ -192,6 +192,11 @@ test.describe("admin smoke", () => {
       await permissionLink.click();
       await expect(page).toHaveURL(/\/roles\/[^/?]+\/permissions$/);
       await expect(page.getByRole("heading", { name: "配置角色权限" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "展开全部" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "收起全部" })).toBeVisible();
+      await expect(page.getByText("本次变更：")).toBeVisible();
+      await expect(page.getByText(/\d+ 个资源/).first()).toBeVisible();
+      await expect(page.getByText(/\d+ 个权限点/).first()).toBeVisible();
       await expect(page.getByRole("button", { name: "保存权限" })).toBeVisible();
     } else {
       await expect(page.getByText("还没有创建角色")).toBeVisible();
