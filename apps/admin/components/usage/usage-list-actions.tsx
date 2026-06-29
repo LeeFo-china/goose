@@ -3,7 +3,6 @@
 import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Search, X } from "lucide-react";
-import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -11,6 +10,14 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   buildUsageHref,
@@ -24,6 +31,9 @@ import {
 export type { UsageTab } from "@/components/usage/usage-list-navigation";
 export { UsagePagination } from "@/components/usage/usage-pagination";
 
+const filterControlClassName = "h-9 bg-card";
+const filterSelectClassName = "h-9 min-w-0 bg-card shadow-none";
+
 export function UsageTabsNav({
   basePath,
   tab,
@@ -35,7 +45,7 @@ export function UsageTabsNav({
   smsStatus,
   socialVideoStatus,
   socialVideoBillable,
-  summaryLabel = "租户汇总",
+  summaryLabel = "用量概览",
 }: {
   basePath: string;
   tab: UsageTab;
@@ -164,9 +174,19 @@ export function UsageFilters({
     navigate();
   }
 
+  const queryClassName = tab === "summary"
+    ? "col-span-2 h-9 bg-card xl:col-span-3"
+    : "col-span-2 h-9 bg-card xl:col-span-1";
+  const actionClassName = tab === "summary"
+    ? "col-span-2 h-9 w-full bg-card sm:col-span-1"
+    : "h-9 w-full bg-card";
+
   return (
-    <form className="grid gap-3 lg:grid-cols-[160px_160px_1fr_180px_160px_80px]" onSubmit={submit}>
-      <InputGroup>
+    <form
+      className="grid grid-cols-2 gap-2 xl:grid-cols-[160px_160px_minmax(220px,1fr)_180px_160px_72px]"
+      onSubmit={submit}
+    >
+      <InputGroup className={filterControlClassName}>
         <InputGroupInput
           type="date"
           value={nextDateFrom}
@@ -179,7 +199,7 @@ export function UsageFilters({
           }}
         />
       </InputGroup>
-      <InputGroup>
+      <InputGroup className={filterControlClassName}>
         <InputGroupInput
           type="date"
           value={nextDateTo}
@@ -193,7 +213,7 @@ export function UsageFilters({
         />
       </InputGroup>
       {showKeyword ? (
-        <InputGroup>
+        <InputGroup className={queryClassName}>
           <InputGroupAddon>
             <Search data-icon="inline-start" />
           </InputGroupAddon>
@@ -219,8 +239,9 @@ export function UsageFilters({
             </InputGroupAddon>
           ) : null}
         </InputGroup>
-      ) : showTenantId ? (
-        <InputGroup>
+      ) : null}
+      {showTenantId ? (
+        <InputGroup className={queryClassName}>
           <InputGroupInput
             value={nextTenantId}
             placeholder="按租户 ID 过滤"
@@ -243,12 +264,11 @@ export function UsageFilters({
             </InputGroupAddon>
           ) : null}
         </InputGroup>
-      ) : (
-        <div />
-      )}
+      ) : null}
       {tab === "ai" ? (
-        <FormSelect
+        <UsageFilterSelect
           id="usage-ai-status-filter"
+          ariaLabel="AI 明细状态"
           value={nextAiStatus}
           options={statusOptions}
           disabled={pending}
@@ -257,9 +277,11 @@ export function UsageFilters({
             navigate({ aiStatus: value });
           }}
         />
-      ) : tab === "sms" ? (
-        <FormSelect
+      ) : null}
+      {tab === "sms" ? (
+        <UsageFilterSelect
           id="usage-sms-status-filter"
+          ariaLabel="短信明细状态"
           value={nextSmsStatus}
           options={smsStatusOptions}
           disabled={pending}
@@ -268,38 +290,75 @@ export function UsageFilters({
             navigate({ smsStatus: value });
           }}
         />
-      ) : tab === "social_video" ? (
-        <FormSelect
-          id="usage-social-video-status-filter"
-          value={nextSocialVideoStatus}
-          options={socialVideoStatusOptions}
-          disabled={pending}
-          onChange={(value) => {
-            setNextSocialVideoStatus(value);
-            navigate({ socialVideoStatus: value });
-          }}
-        />
-      ) : (
-        <div />
-      )}
+      ) : null}
       {tab === "social_video" ? (
-        <FormSelect
-          id="usage-social-video-billable-filter"
-          value={nextSocialVideoBillable}
-          options={socialVideoBillableOptions}
-          disabled={pending}
-          onChange={(value) => {
-            setNextSocialVideoBillable(value);
-            navigate({ socialVideoBillable: value });
-          }}
-        />
-      ) : (
-        <div />
-      )}
-      <Button type="submit" disabled={pending}>
+        <>
+          <UsageFilterSelect
+            id="usage-social-video-status-filter"
+            ariaLabel="短视频明细状态"
+            value={nextSocialVideoStatus}
+            options={socialVideoStatusOptions}
+            disabled={pending}
+            onChange={(value) => {
+              setNextSocialVideoStatus(value);
+              navigate({ socialVideoStatus: value });
+            }}
+          />
+          <UsageFilterSelect
+            id="usage-social-video-billable-filter"
+            ariaLabel="短视频计费状态"
+            value={nextSocialVideoBillable}
+            options={socialVideoBillableOptions}
+            disabled={pending}
+            onChange={(value) => {
+              setNextSocialVideoBillable(value);
+              navigate({ socialVideoBillable: value });
+            }}
+          />
+        </>
+      ) : null}
+      <Button
+        type="submit"
+        variant="outline"
+        disabled={pending}
+        className={actionClassName}
+      >
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         筛选
       </Button>
     </form>
+  );
+}
+
+function UsageFilterSelect({
+  id,
+  ariaLabel,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  ariaLabel: string;
+  value: string;
+  options: readonly { value: string; label: string }[];
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select value={value} disabled={disabled} onValueChange={onChange}>
+      <SelectTrigger id={id} aria-label={ariaLabel} className={filterSelectClassName}>
+        <SelectValue placeholder="请选择" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }
