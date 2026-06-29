@@ -83,7 +83,11 @@ function buildReceivableExceptions(
       description: `${row.title ?? "应收计划"}已到期未结清，剩余 ${formatMoney(remainingAmount)}。`,
       amount: remainingAmount,
       occurred_at: dueAt,
-      action: receivableAction(row.project_id, { status: "overdue" }),
+      action: receivableAction(row.project_id, {
+        status: "overdue",
+        receivablePlanId: row.id,
+        key: "open_receivable_overdue",
+      }),
     });
   }
 
@@ -229,13 +233,18 @@ function compareExceptions(
 
 function receivableAction(
   projectId: string | null,
-  filters: { status?: string } = {},
+  filters: {
+    status?: string;
+    receivablePlanId?: string;
+    key?: string;
+  } = {},
 ) {
   const params = new URLSearchParams();
   appendParam(params, "project_id", projectId);
   appendParam(params, "status", filters.status);
+  appendParam(params, "receivable_plan_id", filters.receivablePlanId);
   return {
-    key: "open_receivables",
+    key: filters.key ?? "open_receivables",
     label: "去处理",
     target: buildTarget("/finance/receivables", params),
   };

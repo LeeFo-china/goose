@@ -165,6 +165,11 @@ describe("financeReconciliationService", () => {
         level: "warning",
         amount: 10000,
         occurred_at: "2026-06-01T00:00:00.000Z",
+        action: expect.objectContaining({
+          key: "open_receivable_overdue",
+          target:
+            "/finance/receivables?project_id=project-1&status=overdue&receivable_plan_id=plan-overdue",
+        }),
       }),
     );
     expect(listCandidateRows).toHaveBeenCalledWith(

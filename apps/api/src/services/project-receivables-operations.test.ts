@@ -39,7 +39,9 @@ const findEmployeeTenant = mock(async () => ({
 }));
 const findById = mock(async () => baseRecord);
 const createManualPlan = mock(async () => baseRecord);
-const updatePlan = mock(async () => baseRecord);
+const updatePlan = mock(async (_input?: {
+  values?: Record<string, unknown>;
+}) => baseRecord);
 const cancelPlan = mock(async () => ({
   ...baseRecord,
   status: "canceled" as const,
@@ -229,6 +231,54 @@ describe("projectReceivableOperationsService", () => {
       statusCode: 409,
       code: "RECEIVABLE_ALREADY_ALLOCATED",
     });
+  });
+
+  test("adjusts due date with dedicated audit event", async () => {
+    updatePlan.mockImplementationOnce(async (input) => ({
+      ...baseRecord,
+      due_date: String(input?.values?.due_date),
+    }));
+    const service = await createService();
+
+    const result = await service.adjustDueDate(authContext, "plan-1", {
+      due_date: "2026-07-20",
+      reason: "客户延期付款",
+    });
+
+    expect(result.due_date).toBe("2026-07-20");
+    expect(updatePlan).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      planId: "plan-1",
+      values: {
+        due_date: "2026-07-20",
+        status: "pending",
+      },
+    });
+    expect(createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: "adjust_due_date",
+        title: "调整应收到期日",
+        note: "客户延期付款",
+        before_snapshot: expect.objectContaining({ due_date: "2026-07-05" }),
+        after_snapshot: expect.objectContaining({ due_date: "2026-07-20" }),
+      }),
+    );
+  });
+
+  test("writes explicit cancel receivable event type", async () => {
+    const service = await createService();
+
+    await service.cancelReceivable(authContext, "plan-1", {
+      reason: "客户取消增项",
+    });
+
+    expect(createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: "cancel_receivable",
+        title: "取消应收计划",
+        note: "客户取消增项",
+      }),
+    );
   });
 
   test("creates follow-up and updates receivable summary fields", async () => {

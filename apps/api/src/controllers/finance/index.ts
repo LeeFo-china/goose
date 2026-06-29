@@ -18,43 +18,26 @@ import {
   FinanceReconciliationExceptionFingerprintParamsSchema,
   FinanceReconciliationExceptionListQuerySchema,
 } from "@/schema/finance-reconciliation";
-import {
-  CancelFinanceReceivableSchema,
-  CreateFinanceReceivableAllocationSchema,
-  CreateFinanceReceivableFollowUpSchema,
-  CreateFinanceReceivableSchema,
-  FinanceReceivableEventListQuerySchema,
-  FinanceReceivableListQuerySchema,
-  ReverseFinanceReceivableAllocationSchema,
-  UpdateFinanceReceivableAllocationSchema,
-  UpdateFinanceReceivableSchema,
-} from "@/schema/finance-receivables";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
 import { financeLedgerService } from "@/services/finance-ledger";
 import { financeOperatingReportService } from "@/services/finance-operating-report";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
 import { financeReconciliationService } from "@/services/finance-reconciliation";
 import { projectCostBudgetService } from "@/services/project-cost-budgets";
-import { projectReceivablesService } from "@/services/project-receivables";
-import {
-  projectReceivableAllocationsService,
-} from "@/services/project-receivable-allocations";
-import {
-  projectReceivableOperationsService,
-} from "@/services/project-receivables-operations";
-import { Get, Patch, Post, Put } from "@/utils/decorators/route";
+import { Get, Patch, Post, Put, registerRoutes } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import type { FastifyReply, FastifyRequest } from "fastify";
-import { z } from "zod";
-
-const AllocationIdParamSchema = z.object({
-  allocationId: z.uuid("无效的核销记录 ID"),
-});
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import financeReceivablesController from "./receivables-controller";
 
 class FinanceController extends TenantBaseController {
   constructor() {
     super("finance");
   }
+
+  public override registerExtraRoutes = (fastify: FastifyInstance) => {
+    registerRoutes(fastify, this);
+    financeReceivablesController.registerExtraRoutes(fastify);
+  };
 
   @Get("/finance/ledger")
   async listLedger(request: FastifyRequest, reply: FastifyReply) {
@@ -172,195 +155,6 @@ class FinanceController extends TenantBaseController {
       authContext,
       idVerify.data.id,
       bodyResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Get("/finance/receivables")
-  async listReceivables(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const queryResult = FinanceReceivableListQuerySchema.safeParse(request.query);
-    if (!queryResult.success) {
-      throw Errors.fromZod(queryResult.error);
-    }
-
-    const data = await projectReceivablesService.listReceivables(
-      authContext,
-      queryResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/finance/receivables")
-  async createReceivable(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const bodyResult = CreateFinanceReceivableSchema.safeParse(request.body);
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableOperationsService
-      .createManualReceivable(authContext, bodyResult.data);
-    return ResponseHandler.success(data);
-  }
-
-  @Patch("/finance/receivables/:id")
-  async updateReceivable(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const bodyResult = UpdateFinanceReceivableSchema.safeParse(request.body);
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableOperationsService.updateReceivable(
-      authContext,
-      idVerify.data.id,
-      bodyResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/finance/receivables/:id/cancel")
-  async cancelReceivable(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const bodyResult = CancelFinanceReceivableSchema.safeParse(request.body);
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableOperationsService.cancelReceivable(
-      authContext,
-      idVerify.data.id,
-      bodyResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/finance/receivables/:id/follow-ups")
-  async createReceivableFollowUp(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const bodyResult = CreateFinanceReceivableFollowUpSchema.safeParse(
-      request.body,
-    );
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableOperationsService.createFollowUp(
-      authContext,
-      idVerify.data.id,
-      bodyResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Get("/finance/receivables/:id/allocation-context")
-  async getReceivableAllocationContext(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const data = await projectReceivableAllocationsService.getAllocationContext(
-      authContext,
-      idVerify.data.id,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/finance/receivables/:id/allocations")
-  async createReceivableAllocation(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const bodyResult = CreateFinanceReceivableAllocationSchema.safeParse(
-      request.body,
-    );
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableAllocationsService
-      .createManualAllocation(authContext, idVerify.data.id, bodyResult.data);
-    return ResponseHandler.success(data);
-  }
-
-  @Patch("/finance/receivables/:id/allocations/:allocationId")
-  async updateReceivableAllocation(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-    const allocationIdResult = AllocationIdParamSchema.safeParse(request.params);
-    if (!allocationIdResult.success) {
-      throw Errors.fromZod(allocationIdResult.error);
-    }
-
-    const bodyResult = UpdateFinanceReceivableAllocationSchema.safeParse(
-      request.body,
-    );
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableAllocationsService
-      .adjustManualAllocation(
-        authContext,
-        idVerify.data.id,
-        allocationIdResult.data.allocationId,
-        bodyResult.data,
-      );
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/finance/receivables/:id/allocations/:allocationId/reverse")
-  async reverseReceivableAllocation(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-    const allocationIdResult = AllocationIdParamSchema.safeParse(request.params);
-    if (!allocationIdResult.success) {
-      throw Errors.fromZod(allocationIdResult.error);
-    }
-
-    const bodyResult = ReverseFinanceReceivableAllocationSchema.safeParse(
-      request.body,
-    );
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableAllocationsService
-      .reverseManualAllocation(
-        authContext,
-        idVerify.data.id,
-        allocationIdResult.data.allocationId,
-        bodyResult.data,
-      );
-    return ResponseHandler.success(data);
-  }
-
-  @Get("/finance/receivables/:id/events")
-  async listReceivableEvents(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const queryResult = FinanceReceivableEventListQuerySchema.safeParse(
-      request.query,
-    );
-    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
-
-    const data = await projectReceivableOperationsService.listEvents(
-      authContext,
-      idVerify.data.id,
-      queryResult.data,
     );
     return ResponseHandler.success(data);
   }

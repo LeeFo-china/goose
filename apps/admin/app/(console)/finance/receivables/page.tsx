@@ -22,6 +22,7 @@ type FinanceReceivablesPageSearchParams = {
   payment_type?: string;
   source_type?: string;
   owner_employee_id?: string;
+  receivable_plan_id?: string;
   project_id?: string;
   due_date_from?: string;
   due_date_to?: string;
@@ -72,6 +73,7 @@ function buildReceivableHref(input: {
   append(params, "payment_type", input.filters.payment_type);
   append(params, "source_type", input.filters.source_type);
   append(params, "owner_employee_id", input.filters.owner_employee_id);
+  append(params, "receivable_plan_id", input.filters.receivable_plan_id);
   append(params, "project_id", input.filters.project_id);
   append(params, "due_date_from", input.filters.due_date_from);
   append(params, "due_date_to", input.filters.due_date_to);
@@ -104,6 +106,7 @@ export default async function FinanceReceivablesPage({
     payment_type: clean(params.payment_type),
     source_type: clean(params.source_type),
     owner_employee_id: clean(params.owner_employee_id),
+    receivable_plan_id: clean(params.receivable_plan_id),
     project_id: clean(params.project_id),
     due_date_from: clean(params.due_date_from),
     due_date_to: clean(params.due_date_to),
@@ -238,7 +241,10 @@ export default async function FinanceReceivablesPage({
             </div>
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
-            <FinanceReceivablesTable rows={data.list} />
+            <FinanceReceivablesTable
+              rows={data.list}
+              highlightReceivablePlanId={clean(params.receivable_plan_id)}
+            />
           </div>
           <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

@@ -285,6 +285,7 @@ export async function fetchFinanceReceivables(query: {
   payment_type?: string;
   source_type?: string;
   owner_employee_id?: string;
+  receivable_plan_id?: string;
   project_id?: string;
   due_date_from?: string;
   due_date_to?: string;
@@ -313,6 +314,7 @@ export async function fetchFinanceReceivables(query: {
   appendOptionalParam(params, "payment_type", query.payment_type);
   appendOptionalParam(params, "source_type", query.source_type);
   appendOptionalParam(params, "owner_employee_id", query.owner_employee_id);
+  appendOptionalParam(params, "receivable_plan_id", query.receivable_plan_id);
   appendOptionalParam(params, "project_id", query.project_id);
   appendOptionalParam(params, "due_date_from", query.due_date_from);
   appendOptionalParam(params, "due_date_to", query.due_date_to);

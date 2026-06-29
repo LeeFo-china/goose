@@ -277,13 +277,12 @@ class ProjectReceivablePlanRepository {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    let request = SupabaseDB.getAdminClient()
-      .from("project_receivable_plans")
-      .select(this.select, { count: "exact" })
-      .eq("tenant_id", input.tenantId)
+    let request = SupabaseDB.getAdminClient().from("project_receivable_plans")
+      .select(this.select, { count: "exact" }).eq("tenant_id", input.tenantId)
       .order("due_date", { ascending: true })
       .order("created_at", { ascending: false });
 
+    if (input.query.receivable_plan_id) request = request.eq("id", input.query.receivable_plan_id);
     if (input.query.project_id) {
       request = request.eq("project_id", input.query.project_id);
     }

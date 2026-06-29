@@ -29,6 +29,8 @@ export const PROJECT_RECEIVABLE_EVENT_TYPE_VALUES = [
   "adjusted",
   "canceled",
   "follow_up",
+  "adjust_due_date",
+  "cancel_receivable",
   "allocate_payment",
   "adjust_allocation",
   "reverse_allocation",
@@ -46,6 +48,7 @@ const OptionalBooleanQuerySchema = z.preprocess((value) => {
 }, z.boolean({ message: "布尔参数必须是 true 或 false" }).optional());
 
 const ReceivableQueryBaseSchema = PaginationQuerySchema.extend({
+  receivable_plan_id: z.uuid("请选择有效的应收计划").optional(),
   status: z.enum(PROJECT_RECEIVABLE_STATUS_VALUES, {
     message: "无效的应收状态",
   }).optional(),
@@ -122,6 +125,13 @@ export const CancelFinanceReceivableSchema = z.object({
   reason: z.string().trim().min(1, "请输入取消原因").max(500, "取消原因不能超过 500 个字符"),
 });
 
+export const AdjustFinanceReceivableDueDateSchema = z.object({
+  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "应收日期格式必须为 YYYY-MM-DD"),
+  reason: z.string().trim()
+    .min(1, "请输入调整原因")
+    .max(500, "调整原因不能超过 500 个字符"),
+});
+
 export const CreateFinanceReceivableFollowUpSchema = z.object({
   note: z.string().trim().min(1, "请输入跟进内容").max(500, "跟进内容不能超过 500 个字符"),
   next_follow_up_at: OptionalTimestampSchema,
@@ -173,6 +183,9 @@ export type UpdateFinanceReceivableInput = z.infer<
 >;
 export type CancelFinanceReceivableInput = z.infer<
   typeof CancelFinanceReceivableSchema
+>;
+export type AdjustFinanceReceivableDueDateInput = z.infer<
+  typeof AdjustFinanceReceivableDueDateSchema
 >;
 export type CreateFinanceReceivableFollowUpInput = z.infer<
   typeof CreateFinanceReceivableFollowUpSchema
