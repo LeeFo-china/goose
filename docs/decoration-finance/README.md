@@ -25,6 +25,15 @@
 - [2026-06-24-phase5-finance-analysis-warning-prd.md](./2026-06-24-phase5-finance-analysis-warning-prd.md)：第五阶段经营分析与预算预警闭环 PRD，定义风险筛选、风险原因、Admin 处理入口和小程序边界。
 - [2026-06-24-phase5-finance-analysis-warning-miniprogram-handoff.md](./2026-06-24-phase5-finance-analysis-warning-miniprogram-handoff.md)：第五阶段小程序对接说明，明确本阶段无必改及后续可选只读展示契约。
 - [2026-06-24-phase5-finance-analysis-warning-smoke.md](./2026-06-24-phase5-finance-analysis-warning-smoke.md)：第五阶段经营预警 API、Admin 和小程序影响 smoke 记录。
+- [2026-06-28-phase6-receivable-operations-prd.md](./2026-06-28-phase6-receivable-operations-prd.md)：第六阶段应收运营 PRD，包含人工新增、调整、取消、跟进和事件追溯。
+- [2026-06-28-phase6-receivable-operations-implementation-plan.md](./2026-06-28-phase6-receivable-operations-implementation-plan.md)：第六阶段应收运营实施计划。
+- [2026-06-28-phase6-receivable-operations-post-release-smoke.md](./2026-06-28-phase6-receivable-operations-post-release-smoke.md)：第六阶段应收运营发布后 smoke 记录。
+- [2026-06-28-phase6-receivable-operations-miniprogram-handoff.md](./2026-06-28-phase6-receivable-operations-miniprogram-handoff.md)：第六阶段小程序影响说明，明确当前无必改。
+- [2026-06-28-phase7-finance-reconciliation-dashboard-plan.md](./2026-06-28-phase7-finance-reconciliation-dashboard-plan.md)：第七阶段财务对账与运营报表方向计划。
+- [2026-06-29-phase7-task1-reconciliation-exceptions-handoff.md](./2026-06-29-phase7-task1-reconciliation-exceptions-handoff.md)：第七阶段 Task 1 对账异常接口 handoff。
+- [2026-06-29-phase7-reconciliation-operating-report-smoke.md](./2026-06-29-phase7-reconciliation-operating-report-smoke.md)：第七阶段 worktree 内只读 smoke 记录。
+- [2026-06-29-phase7-post-release-smoke-handoff.md](./2026-06-29-phase7-post-release-smoke-handoff.md)：第七阶段发布后 smoke 与 Admin/小程序对接回执。
+- [2026-06-29-phase7-1-reconciliation-closure-plan.md](./2026-06-29-phase7-1-reconciliation-closure-plan.md)：Phase 7.1 财务对账异常处理闭环计划。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
