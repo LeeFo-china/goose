@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Search, X } from "lucide-react";
-import { FormSelect } from "@/components/admin/form-select";
+import { Loader2, RotateCcw, Search, X } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   accessScopeOptions,
   normalizeAccessScope,
@@ -21,14 +19,47 @@ import {
 } from "@/components/roles/role-mutation-shared";
 import {
   getModuleLabel,
-  getPermissionDescription,
-  getPermissionName,
   getPermissionSearchText,
-  getPermissionSummary,
   permissionFilterOptions,
   type PermissionFilter,
 } from "@/components/roles/role-permission-display";
-import { cn } from "@/lib/utils";
+import { RolePermissionTreeView } from "@/components/roles/role-permission-tree-view";
+import {
+  buildPermissionTree,
+  getPermissionSelectionDelta,
+} from "@/components/roles/role-permission-tree";
+
+const ACTIVE_PERMISSION_PAGE_SIZE = 100;
+
+type PermissionListResponse = {
+  list?: PermissionRecord[];
+  pagination?: {
+    page?: number;
+    totalPages?: number;
+  };
+};
+
+async function loadActivePermissions() {
+  const permissions: PermissionRecord[] = [];
+  let page = 1;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    const data = await requestRoleJson<PermissionListResponse>(
+      `/api/backend/permissions?page=${page}&pageSize=${ACTIVE_PERMISSION_PAGE_SIZE}&status=active`,
+    );
+    const items = data.list || [];
+    permissions.push(...items);
+
+    const totalPages = data.pagination?.totalPages;
+    hasNextPage = totalPages
+      ? page < totalPages
+      : items.length === ACTIVE_PERMISSION_PAGE_SIZE;
+    page += 1;
+  }
+
+  return permissions;
+}
 
 export function RolePermissionsEditor({
   role,
@@ -43,9 +74,12 @@ export function RolePermissionsEditor({
   const [error, setError] = useState("");
   const [permissions, setPermissions] = useState<PermissionRecord[]>([]);
   const [selected, setSelected] = useState<Record<string, AccessScope>>({});
+  const [initialSelected, setInitialSelected] = useState<Record<string, AccessScope>>({});
   const [keyword, setKeyword] = useState("");
   const [permissionFilter, setPermissionFilter] = useState<PermissionFilter>("all");
   const [activeModule, setActiveModule] = useState("all");
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
+  const [expandedResources, setExpandedResources] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -58,21 +92,22 @@ export function RolePermissionsEditor({
 
     Promise.all([
       detailRequest,
-      requestRoleJson<{ list: PermissionRecord[] }>(
-        "/api/backend/permissions?page=1&pageSize=200&status=active",
-      ),
+      loadActivePermissions(),
     ])
-      .then(([detail, permissionData]) => {
+      .then(([detail, permissionList]) => {
         if (cancelled) return;
         const nextSelected: Record<string, AccessScope> = {};
         for (const item of detail.permissions || []) {
           nextSelected[item.id] = normalizeAccessScope(item.access_scope);
         }
-        setPermissions(permissionData.list || []);
+        setPermissions(permissionList);
         setSelected(nextSelected);
+        setInitialSelected(nextSelected);
         setKeyword("");
         setPermissionFilter("all");
         setActiveModule("all");
+        setExpandedModules({});
+        setExpandedResources({});
       })
       .catch((err) => {
         if (!cancelled) {
@@ -126,6 +161,26 @@ export function RolePermissionsEditor({
       }
       return next;
     });
+  }
+
+  function setGroupPermissions(items: PermissionRecord[], checked: boolean) {
+    if (checked) {
+      selectPermissions(items);
+    } else {
+      clearPermissions(items);
+    }
+  }
+
+  function resetChanges() {
+    setSelected(initialSelected);
+  }
+
+  function setModuleExpanded(module: string, open: boolean) {
+    setExpandedModules((current) => ({ ...current, [module]: open }));
+  }
+
+  function setResourceExpanded(resource: string, open: boolean) {
+    setExpandedResources((current) => ({ ...current, [resource]: open }));
   }
 
   function save() {
@@ -184,15 +239,47 @@ export function RolePermissionsEditor({
     [activeModule, normalizedKeyword, permissionFilter, permissions, selected],
   );
   const visibleSelectedCount = visiblePermissions.filter((item) => selected[item.id]).length;
-  const groupedPermissions = visiblePermissions.reduce<Record<string, PermissionRecord[]>>(
-    (groups, permission) => {
-      const key = permission.module || "未分组";
-      groups[key] = groups[key] || [];
-      groups[key].push(permission);
-      return groups;
-    },
-    {},
+  const permissionTree = useMemo(
+    () => buildPermissionTree(visiblePermissions, selected),
+    [visiblePermissions, selected],
   );
+  const selectionDelta = useMemo(
+    () => getPermissionSelectionDelta(initialSelected, selected),
+    [initialSelected, selected],
+  );
+  const changeSummary = selectionDelta.hasChanges
+    ? `新增 ${selectionDelta.added} 项，移除 ${selectionDelta.removed} 项，范围变更 ${selectionDelta.scopeChanged} 项`
+    : "无";
+
+  function expandAll() {
+    const nextModules: Record<string, boolean> = {};
+    const nextResources: Record<string, boolean> = {};
+
+    for (const moduleGroup of permissionTree) {
+      nextModules[moduleGroup.key] = true;
+      for (const resourceGroup of moduleGroup.resources) {
+        nextResources[resourceGroup.key] = true;
+      }
+    }
+
+    setExpandedModules(nextModules);
+    setExpandedResources(nextResources);
+  }
+
+  function collapseAll() {
+    const nextModules: Record<string, boolean> = {};
+    const nextResources: Record<string, boolean> = {};
+
+    for (const moduleGroup of permissionTree) {
+      nextModules[moduleGroup.key] = false;
+      for (const resourceGroup of moduleGroup.resources) {
+        nextResources[resourceGroup.key] = false;
+      }
+    }
+
+    setExpandedModules(nextModules);
+    setExpandedResources(nextResources);
+  }
 
   return (
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -255,6 +342,24 @@ export function RolePermissionsEditor({
                 </Button>
                 <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pending || loading || permissionTree.length === 0}
+                  onClick={expandAll}
+                >
+                  展开全部
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={pending || loading || permissionTree.length === 0}
+                  onClick={collapseAll}
+                >
+                  收起全部
+                </Button>
+                <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
                   disabled={pending || loading || visibleSelectedCount === 0}
@@ -307,97 +412,43 @@ export function RolePermissionsEditor({
                 没有匹配的权限点
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
-                {Object.entries(groupedPermissions).map(([module, items]) => (
-                  <div key={module} className="rounded-md border">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/50 px-4 py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-medium">{getModuleLabel(module)}</div>
-                        <Badge variant="outline">
-                          {items.filter((item) => selected[item.id]).length}/{items.length} 已选
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2"
-                          disabled={pending || items.every((item) => selected[item.id])}
-                          onClick={() => selectPermissions(items)}
-                        >
-                          全选本组
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2"
-                          disabled={pending || items.every((item) => !selected[item.id])}
-                          onClick={() => clearPermissions(items)}
-                        >
-                          清空
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="divide-y">
-                      {items.map((permission) => {
-                        const checked = Boolean(selected[permission.id]);
-                        const description = getPermissionDescription(permission);
-                        return (
-                          <div
-                            key={permission.id}
-                            className={cn(
-                              "grid gap-3 px-4 py-3 transition-colors md:grid-cols-[1fr_180px]",
-                              checked ? "bg-primary/5" : "bg-background",
-                            )}
-                          >
-                            <label className="flex min-w-0 cursor-pointer items-start gap-3">
-                              <Checkbox
-                                checked={checked}
-                                disabled={pending}
-                                className="mt-1"
-                                onCheckedChange={(value) =>
-                                  togglePermission(permission.id, value === true)
-                                }
-                              />
-                              <span className="min-w-0">
-                                <span className="block text-sm font-medium">
-                                  {getPermissionName(permission)}
-                                </span>
-                                <span className="block text-xs text-muted-foreground">
-                                  {getPermissionSummary(permission)}
-                                </span>
-                                {description ? (
-                                  <span className="mt-1 block text-xs text-muted-foreground">
-                                    {description}
-                                  </span>
-                                ) : null}
-                              </span>
-                            </label>
-                            <FormSelect
-                              id={`role-${role.id}-permission-${permission.id}-scope`}
-                              value={selected[permission.id] || "self"}
-                              options={accessScopeOptions}
-                              disabled={!checked || pending}
-                              onChange={(value) => updateScope(permission.id, value)}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <RolePermissionTreeView
+                roleId={role.id}
+                permissionTree={permissionTree}
+                selected={selected}
+                pending={pending}
+                expandedModules={expandedModules}
+                expandedResources={expandedResources}
+                onModuleExpanded={setModuleExpanded}
+                onResourceExpanded={setResourceExpanded}
+                onGroupPermissions={setGroupPermissions}
+                onTogglePermission={togglePermission}
+                onUpdateScope={updateScope}
+              />
             )}
           </div>
           <div className="shrink-0 border-t bg-background px-4 py-3">
             {error ? <StatusAlert>{error}</StatusAlert> : null}
-            <div className="flex justify-end">
-              <Button type="button" onClick={save} disabled={loading || pending}>
-                {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-                保存权限
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs text-muted-foreground">
+                本次变更：{changeSummary}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={loading || pending || !selectionDelta.hasChanges}
+                  onClick={resetChanges}
+                >
+                  <RotateCcw data-icon="inline-start" />
+                  撤销变更
+                </Button>
+                <Separator orientation="vertical" className="h-6" />
+                <Button type="button" onClick={save} disabled={loading || pending}>
+                  {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+                  保存权限
+                </Button>
+              </div>
             </div>
           </div>
         </div>
