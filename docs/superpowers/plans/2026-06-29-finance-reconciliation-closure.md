@@ -282,7 +282,6 @@ class FinanceReconciliationActionsRepository {
   async listLatestActions(input: {
     tenantId: string;
     fingerprints: string[];
-    actorEmployeeId?: string;
   }): Promise<Map<string, FinanceReconciliationActionRecord>> {
     const fingerprints = Array.from(new Set(input.fingerprints.filter(Boolean)));
     if (fingerprints.length === 0) return new Map();
@@ -307,10 +306,6 @@ class FinanceReconciliationActionsRepository {
       .in("exception_fingerprint", fingerprints)
       .order("created_at", { ascending: false })
       .limit(fingerprints.length * 5);
-
-    if (input.actorEmployeeId) {
-      query = query.eq("actor_employee_id", input.actorEmployeeId);
-    }
 
     const { data, error } = await query;
     if (error) {
@@ -616,7 +611,6 @@ Add helpers in `apps/api/src/services/finance-reconciliation.ts`:
 async function withActionState(input: {
   tenantId: string;
   exceptions: FinanceReconciliationException[];
-  actorEmployeeId?: string;
   actionsRepository: Pick<
     typeof financeReconciliationActionsRepository,
     "listLatestActions"
@@ -625,7 +619,6 @@ async function withActionState(input: {
   const actionMap = await input.actionsRepository.listLatestActions({
     tenantId: input.tenantId,
     fingerprints: input.exceptions.map((item) => item.exception_fingerprint),
-    actorEmployeeId: input.actorEmployeeId,
   });
 
   return input.exceptions.map((item) =>
@@ -667,6 +660,10 @@ Modify `filterExceptions`:
 (!query.status || item.status === query.status) &&
 (!query.actor_employee_id || item.last_actor_employee_id === query.actor_employee_id)
 ```
+
+Important: actor filtering must run after merging each exception's latest action. Do not push
+`actor_employee_id` into `listLatestActions`, because that would find "latest action by this actor"
+instead of "latest action on this exception, and that latest actor is this actor".
 
 Remove the old early return for `query.status === "resolved"`.
 
@@ -890,6 +887,9 @@ export async function submitFinanceReconciliationAction(input: {
   return payload.data;
 }
 ```
+
+The fingerprint contains `:` separators, so every client caller must URL-encode it before putting it
+into the route path.
 
 - [ ] **Step 3: Add status helpers**
 
