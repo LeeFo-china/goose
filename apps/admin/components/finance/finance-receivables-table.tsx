@@ -47,8 +47,10 @@ function receivableStatusMeta(status: FinanceReceivableStatus) {
 }
 
 export function FinanceReceivablesTable({
+  highlightReceivablePlanId,
   rows,
 }: {
+  highlightReceivablePlanId?: string;
   rows: FinanceReceivableRecord[];
 }) {
   const columns: ColumnDef<FinanceReceivableRecord>[] = [
@@ -72,7 +74,12 @@ export function FinanceReceivablesTable({
       header: "应收事项",
       cell: ({ row }) => (
         <div className="max-w-[16rem] truncate">
-          {row.original.title || paymentTypeLabel(row.original.payment_type)}
+          {row.original.id === highlightReceivablePlanId ? (
+            <Badge variant="warning" className="mr-2">待处理</Badge>
+          ) : null}
+          <span>
+            {row.original.title || paymentTypeLabel(row.original.payment_type)}
+          </span>
         </div>
       ),
       meta: {

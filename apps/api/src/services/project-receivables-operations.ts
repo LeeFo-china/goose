@@ -10,6 +10,7 @@ import {
   projectReceivablePlanRepository,
 } from "@/repositories/project-receivable-plans";
 import type {
+  AdjustFinanceReceivableDueDateInput,
   CancelFinanceReceivableInput,
   CreateFinanceReceivableFollowUpInput,
   CreateFinanceReceivableInput,
@@ -140,7 +141,7 @@ export class ProjectReceivableOperationsService {
     });
     await this.createEvent({
       record: canceled,
-      eventType: "canceled",
+      eventType: "cancel_receivable",
       title: "取消应收计划",
       note: input.reason,
       before: snapshot(current),
@@ -148,6 +149,33 @@ export class ProjectReceivableOperationsService {
       createdBy: authContext.employeeId,
     });
     return canceled;
+  }
+
+  async adjustDueDate(
+    authContext: AuthContext,
+    planId: string,
+    input: AdjustFinanceReceivableDueDateInput,
+  ) {
+    const tenantId = this.requireManage(authContext);
+    const current = await this.getWritablePlan(tenantId, planId, "adjust");
+    const updated = await this.dependencies.operationsRepository.updatePlan({
+      tenantId,
+      planId,
+      values: {
+        due_date: input.due_date,
+        status: deriveStoredStatus(current.paid_amount, current.amount),
+      },
+    });
+    await this.createEvent({
+      record: updated,
+      eventType: "adjust_due_date",
+      title: "调整应收到期日",
+      note: input.reason,
+      before: snapshot(current),
+      after: snapshot(updated),
+      createdBy: authContext.employeeId,
+    });
+    return updated;
   }
 
   async createFollowUp(
@@ -242,7 +270,13 @@ export class ProjectReceivableOperationsService {
 
   private async createEvent(input: {
     record: ProjectReceivableOperationRecord;
-    eventType: "manual_created" | "adjusted" | "canceled" | "follow_up";
+    eventType:
+      | "manual_created"
+      | "adjusted"
+      | "canceled"
+      | "follow_up"
+      | "adjust_due_date"
+      | "cancel_receivable";
     title: string;
     note?: string | null;
     before?: Record<string, unknown> | null;
