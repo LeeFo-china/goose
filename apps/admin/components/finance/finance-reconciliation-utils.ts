@@ -2,6 +2,8 @@ import type {
   FinanceReconciliationDirection,
   FinanceReconciliationExceptionCode,
   FinanceReconciliationLevel,
+  FinanceReconciliationStatus,
+  FinanceReconciliationAction,
 } from "./finance-reconciliation-requests";
 
 export type FinanceReconciliationQuery = {
@@ -14,6 +16,7 @@ export type FinanceReconciliationQuery = {
   level?: FinanceReconciliationLevel | string;
   direction?: FinanceReconciliationDirection | string;
   status?: string;
+  actor_employee_id?: string;
 };
 
 export function buildFinanceReconciliationSearchParams(
@@ -30,6 +33,7 @@ export function buildFinanceReconciliationSearchParams(
   appendOptionalParam(params, "level", query.level);
   appendOptionalParam(params, "direction", query.direction);
   appendOptionalParam(params, "status", query.status);
+  appendOptionalParam(params, "actor_employee_id", query.actor_employee_id);
   return params;
 }
 
@@ -43,6 +47,34 @@ export function financeReconciliationLevelMeta(
     return { label: "预警", variant: "secondary" as const };
   }
   return { label: "提示", variant: "outline" as const };
+}
+
+export function financeReconciliationStatusMeta(
+  status: FinanceReconciliationStatus | string | null | undefined,
+) {
+  if (status === "open") {
+    return { label: "未处理", variant: "warning" as const };
+  }
+  if (status === "acknowledged") {
+    return { label: "已确认", variant: "outline" as const };
+  }
+  if (status === "ignored") {
+    return { label: "已忽略", variant: "secondary" as const };
+  }
+  if (status === "resolved") {
+    return { label: "已解决", variant: "success" as const };
+  }
+  return { label: status || "-", variant: "outline" as const };
+}
+
+export function financeReconciliationActionLabel(
+  action: FinanceReconciliationAction | string | null | undefined,
+) {
+  if (action === "acknowledge") return "标记已确认";
+  if (action === "ignore") return "标记忽略";
+  if (action === "resolve") return "标记已解决";
+  if (action === "reopen") return "重新打开";
+  return action || "处理";
 }
 
 export function financeReconciliationDirectionLabel(

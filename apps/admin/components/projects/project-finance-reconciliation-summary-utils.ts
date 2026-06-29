@@ -9,7 +9,14 @@ export type ProjectFinanceReconciliationSummary = {
   exception_count: number;
   danger_count: number;
   warning_count: number;
+  open_exception_count: number;
+  acknowledged_exception_count: number;
+  ignored_exception_count: number;
+  resolved_exception_count: number;
   latest_exception_at: string | null;
+  latest_action_at: string | null;
+  latest_action_remark: string | null;
+  latest_actor_employee_name: string | null;
 };
 
 export type ProjectReconciliationCheckStatus = "success" | "warning" | "danger";
@@ -66,14 +73,17 @@ export function buildProjectReconciliationChecks(
     {
       key: "exceptions",
       label: "异常清单",
-      status: summary.danger_count > 0
+      status: summary.open_exception_count <= 0
+        ? "success"
+        : summary.danger_count > 0
         ? "danger"
         : summary.warning_count > 0
           ? "warning"
           : "success",
       primary: summary.exception_count,
       secondary: summary.danger_count,
-      helper: `高风险 ${summary.danger_count} 条 / 预警 ${summary.warning_count} 条`,
+      helper:
+        `未处理 ${summary.open_exception_count} 条 / 已解决 ${summary.resolved_exception_count} 条`,
     },
   ];
 }

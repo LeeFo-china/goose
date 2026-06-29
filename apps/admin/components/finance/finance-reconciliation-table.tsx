@@ -1,17 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ClipboardCheck } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/admin/data-table";
 import type {
   FinanceReconciliationExceptionRecord,
 } from "@/components/finance/finance-reconciliation-requests";
+import { FinanceReconciliationActionDialog } from "@/components/finance/finance-reconciliation-action-dialog";
 import {
   financeReconciliationActionHref,
+  financeReconciliationActionLabel,
   financeReconciliationDirectionLabel,
   financeReconciliationExceptionLabel,
   financeReconciliationLevelMeta,
+  financeReconciliationStatusMeta,
 } from "@/components/finance/finance-reconciliation-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,11 +69,44 @@ export function FinanceReconciliationTable({
       },
     },
     {
+      accessorKey: "status",
+      header: "处理状态",
+      cell: ({ row }) => {
+        const meta = financeReconciliationStatusMeta(row.original.status);
+        return <Badge variant={meta.variant}>{meta.label}</Badge>;
+      },
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
       accessorKey: "exception_code",
       header: "异常类型",
       cell: ({ row }) => (
         <div className="max-w-[12rem] truncate">
           {financeReconciliationExceptionLabel(row.original.exception_code)}
+        </div>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap text-muted-foreground",
+      },
+    },
+    {
+      id: "last_action",
+      header: "最近处理",
+      cell: ({ row }) => (
+        <div className="max-w-[14rem]">
+          <div className="truncate text-sm">
+            {row.original.last_action
+              ? financeReconciliationActionLabel(row.original.last_action)
+              : "-"}
+          </div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">
+            {[
+              row.original.last_actor_employee_name,
+              formatFinanceDateTime(row.original.last_action_at),
+            ].filter(Boolean).join(" · ") || "-"}
+          </div>
         </div>
       ),
       meta: {
@@ -109,14 +146,7 @@ export function FinanceReconciliationTable({
     {
       id: "action",
       header: "",
-      cell: ({ row }) => (
-        <Button asChild variant="ghost" size="sm" className="h-8 px-2">
-          <Link href={financeReconciliationActionHref(row.original.action.target)}>
-            {row.original.action.label || "查看"}
-            <ArrowUpRight data-icon="inline-end" />
-          </Link>
-        </Button>
-      ),
+      cell: ({ row }) => <ReconciliationRowActions row={row.original} />,
       meta: {
         cellClassName: "whitespace-nowrap text-right",
       },
@@ -128,7 +158,41 @@ export function FinanceReconciliationTable({
       columns={columns}
       data={rows}
       emptyText="当前筛选条件下暂无对账异常"
-      minWidth="min-w-[1180px]"
+      minWidth="min-w-[1480px]"
     />
+  );
+}
+
+function ReconciliationRowActions({
+  row,
+}: {
+  row: FinanceReconciliationExceptionRecord;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex justify-end gap-1">
+      <Button asChild variant="ghost" size="sm" className="h-8 px-2">
+        <Link href={financeReconciliationActionHref(row.action.target)}>
+          {row.action.label || "查看"}
+          <ArrowUpRight data-icon="inline-end" />
+        </Link>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2"
+        onClick={() => setOpen(true)}
+      >
+        <ClipboardCheck data-icon="inline-start" />
+        处理
+      </Button>
+      {open ? (
+        <FinanceReconciliationActionDialog
+          row={row}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </div>
   );
 }

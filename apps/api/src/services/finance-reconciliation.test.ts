@@ -1,108 +1,31 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { CreateFinanceReconciliationActionInput } from "@/repositories/finance-reconciliation-actions";
 import type { AuthContext } from "@/services/authorization";
+import {
+  reconciliationCandidateRows,
+  reconciliationProjectSummaryTotals,
+} from "@/services/finance-reconciliation.test-fixtures";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const listCandidateRows = mock(async () => ({
-  receivables: [
-    {
-      id: "plan-overdue",
-      project_id: "project-1",
-      project_name: "逾期项目",
-      title: "中期款",
-      amount: 10000,
-      paid_amount: 0,
-      due_date: "2026-06-01",
-      status: "pending",
-      allocation_amount: 0,
-    },
-    {
-      id: "plan-paid-mismatch",
-      project_id: "project-2",
-      project_name: "核销不一致项目",
-      title: "尾款",
-      amount: 10000,
-      paid_amount: 7000,
-      due_date: "2026-06-30",
-      status: "partially_paid",
-      allocation_amount: 5000,
-    },
-  ],
-  payments: [
-    {
-      id: "payment-without-ledger",
-      project_id: "project-3",
-      project_name: "未入账项目",
-      amount: 10000,
-      status: "confirmed",
-      pay_date: "2026-06-20T10:00:00.000Z",
-      created_at: "2026-06-20T10:00:00.000Z",
-      allocation_amount: 10000,
-      ledger_amount: 0,
-    },
-    {
-      id: "payment-unallocated",
-      project_id: "project-4",
-      project_name: "未完全核销项目",
-      amount: 10000,
-      status: "confirmed",
-      pay_date: "2026-06-21T10:00:00.000Z",
-      created_at: "2026-06-21T10:00:00.000Z",
-      allocation_amount: 6000,
-      ledger_amount: 10000,
-    },
-    {
-      id: "payment-over-allocated",
-      project_id: "project-5",
-      project_name: "超额核销项目",
-      amount: 10000,
-      status: "confirmed",
-      pay_date: "2026-06-22T10:00:00.000Z",
-      created_at: "2026-06-22T10:00:00.000Z",
-      allocation_amount: 12000,
-      ledger_amount: 10000,
-    },
-    {
-      id: "payment-clean",
-      project_id: "project-6",
-      project_name: "正常项目",
-      amount: 10000,
-      status: "confirmed",
-      pay_date: "2026-06-23T10:00:00.000Z",
-      created_at: "2026-06-23T10:00:00.000Z",
-      allocation_amount: 10000,
-      ledger_amount: 10000,
-    },
-  ],
-  ledgers: [
-    {
-      id: "ledger-without-payment",
-      project_id: "project-7",
-      project_name: "手工流水项目",
-      amount: 3000,
-      occurred_at: "2026-06-24T10:00:00.000Z",
-      payment_id: null,
-    },
-    {
-      id: "ledger-clean",
-      project_id: "project-6",
-      project_name: "正常项目",
-      amount: 10000,
-      occurred_at: "2026-06-23T10:00:00.000Z",
-      payment_id: "payment-clean",
-    },
-  ],
-}));
-const getProjectSummaryTotals = mock(async () => ({
-  project_id: "project-1",
-  receivable_amount: 30000,
-  received_amount: 28000,
-  allocated_amount: 25000,
-  ledger_income_amount: 28000,
-  expense_paid_amount: 12000,
-  ledger_expense_amount: 12000,
+const listCandidateRows = mock(async () => reconciliationCandidateRows);
+const getProjectSummaryTotals = mock(async () => reconciliationProjectSummaryTotals);
+const listLatestActions = mock(async () => new Map());
+const createAction = mock(async (input: CreateFinanceReconciliationActionInput) => ({
+  id: "action-1",
+  tenant_id: input.tenantId,
+  exception_fingerprint: input.exceptionFingerprint,
+  exception_code: input.exceptionCode,
+  subject_type: input.subjectType,
+  subject_id: input.subjectId,
+  project_id: input.projectId,
+  action: input.action,
+  remark: input.remark,
+  actor_employee_id: input.actorEmployeeId,
+  actor_employee_name: "财务",
+  created_at: "2026-06-30T08:00:00.000Z",
 }));
 
 const accessPolicy = {
@@ -160,6 +83,10 @@ async function createService() {
       listCandidateRows,
       getProjectSummaryTotals,
     },
+    actionsRepository: {
+      listLatestActions,
+      createAction,
+    },
     accessPolicyService: accessPolicy,
   });
 }
@@ -168,6 +95,9 @@ describe("financeReconciliationService", () => {
   beforeEach(() => {
     listCandidateRows.mockClear();
     getProjectSummaryTotals.mockClear();
+    listLatestActions.mockClear();
+    createAction.mockClear();
+    listLatestActions.mockImplementation(async () => new Map());
     accessPolicy.assertTenantContext.mockClear();
     accessPolicy.hasPermission.mockClear();
     accessPolicy.canAccessProject.mockClear();
@@ -210,6 +140,9 @@ describe("financeReconciliationService", () => {
     expect(result.list).toContainEqual(
       expect.objectContaining({
         id: "payment-without-ledger",
+        exception_fingerprint: "payment_without_ledger:payment-without-ledger",
+        subject_type: "payment",
+        subject_id: "payment-without-ledger",
         project_id: "project-3",
         project_name: "未入账项目",
         exception_code: "payment_without_ledger",
@@ -237,6 +170,68 @@ describe("financeReconciliationService", () => {
         dateTo: "2026-06-30",
       }),
     );
+  });
+
+  test("merges latest action state before status and actor filters", async () => {
+    listLatestActions.mockImplementationOnce(async () =>
+      new Map([
+        [
+          "payment_unallocated:payment-unallocated",
+          {
+            id: "action-resolved",
+            tenant_id: "tenant-1",
+            exception_fingerprint: "payment_unallocated:payment-unallocated",
+            exception_code: "payment_unallocated",
+            subject_type: "payment",
+            subject_id: "payment-unallocated",
+            project_id: "project-4",
+            action: "resolve",
+            remark: "已补核销",
+            actor_employee_id: "employee-2",
+            actor_employee_name: "小龙女",
+            created_at: "2026-06-30T08:00:00.000Z",
+          },
+        ],
+      ])
+    );
+    const service = await createService();
+
+    const result = await service.listExceptions(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      {
+        page: 1,
+        pageSize: 20,
+        date_from: "2026-06-01",
+        date_to: "2026-06-30",
+        status: "resolved",
+        actor_employee_id: "employee-2",
+      },
+    );
+
+    expect(result.pagination.total).toBe(1);
+    expect(result.summary).toEqual({
+      total: 1,
+      danger: 0,
+      warning: 1,
+      info: 0,
+    });
+    expect(result.list).toEqual([
+      expect.objectContaining({
+        id: "payment-unallocated",
+        exception_fingerprint: "payment_unallocated:payment-unallocated",
+        status: "resolved",
+        last_action: "resolve",
+        last_action_remark: "已补核销",
+        last_actor_employee_id: "employee-2",
+        last_actor_employee_name: "小龙女",
+      }),
+    ]);
+    expect(listLatestActions).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      fingerprints: expect.arrayContaining([
+        "payment_unallocated:payment-unallocated",
+      ]),
+    });
   });
 
   test("filters exception code before pagination", async () => {
@@ -294,6 +289,59 @@ describe("financeReconciliationService", () => {
     expect(listCandidateRows).not.toHaveBeenCalled();
   });
 
+  test("creates an exception action for the current computed exception", async () => {
+    const service = await createService();
+
+    const result = await service.createExceptionAction(
+      authContextWithPermissions([
+        { code: "finance.view", scope: "all" },
+        { code: "finance.reconciliation.manage", scope: "all" },
+      ]),
+      "payment_without_ledger:payment-without-ledger",
+      {
+        action: "acknowledge",
+        remark: "已通知出纳补录台账",
+      },
+    );
+
+    expect(result).toEqual(expect.objectContaining({
+      exception_fingerprint: "payment_without_ledger:payment-without-ledger",
+      action: "acknowledge",
+      remark: "已通知出纳补录台账",
+      actor_employee_id: "employee-1",
+    }));
+    expect(createAction).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      exceptionFingerprint: "payment_without_ledger:payment-without-ledger",
+      exceptionCode: "payment_without_ledger",
+      subjectType: "payment",
+      subjectId: "payment-without-ledger",
+      projectId: "project-3",
+      action: "acknowledge",
+      remark: "已通知出纳补录台账",
+      actorEmployeeId: "employee-1",
+    });
+  });
+
+  test("rejects exception actions without manage permission", async () => {
+    const service = await createService();
+
+    await expect(
+      service.createExceptionAction(
+        authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+        "payment_without_ledger:payment-without-ledger",
+        {
+          action: "acknowledge",
+          remark: "已通知出纳补录台账",
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      code: "FORBIDDEN",
+    });
+    expect(createAction).not.toHaveBeenCalled();
+  });
+
   test("rejects date ranges longer than 366 days", async () => {
     const service = await createService();
 
@@ -333,7 +381,14 @@ describe("financeReconciliationService", () => {
       exception_count: 6,
       danger_count: 3,
       warning_count: 3,
+      open_exception_count: 6,
+      acknowledged_exception_count: 0,
+      ignored_exception_count: 0,
+      resolved_exception_count: 0,
       latest_exception_at: "2026-06-30T00:00:00.000Z",
+      latest_action_at: null,
+      latest_action_remark: null,
+      latest_actor_employee_name: null,
     });
     expect(accessPolicy.canAccessProject).toHaveBeenCalledWith(
       expect.any(Object),
@@ -350,5 +405,41 @@ describe("financeReconciliationService", () => {
         projectId: "project-1",
       }),
     );
+  });
+
+  test("returns project reconciliation summary with latest action state", async () => {
+    listLatestActions.mockImplementationOnce(async () =>
+      new Map([
+        [
+          "ledger_without_payment:ledger-without-payment",
+          {
+            id: "action-2",
+            tenant_id: "tenant-1",
+            exception_fingerprint: "ledger_without_payment:ledger-without-payment",
+            exception_code: "ledger_without_payment",
+            subject_type: "ledger",
+            subject_id: "ledger-without-payment",
+            project_id: "project-7",
+            action: "ignore",
+            remark: "历史手工流水保留",
+            actor_employee_id: "employee-1",
+            actor_employee_name: "财务",
+            created_at: "2026-06-29T11:00:00.000Z",
+          },
+        ],
+      ])
+    );
+    const service = await createService();
+
+    const result = await service.getProjectSummary(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      "project-1",
+    );
+
+    expect(result.open_exception_count).toBe(5);
+    expect(result.ignored_exception_count).toBe(1);
+    expect(result.latest_action_at).toBe("2026-06-29T11:00:00.000Z");
+    expect(result.latest_action_remark).toBe("历史手工流水保留");
+    expect(result.latest_actor_employee_name).toBe("财务");
   });
 });

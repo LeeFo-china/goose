@@ -13,6 +13,8 @@ import {
 } from "@/schema/finance";
 import { FinanceOperatingReportQuerySchema } from "@/schema/finance-reports";
 import {
+  CreateFinanceReconciliationExceptionActionSchema,
+  FinanceReconciliationExceptionFingerprintParamsSchema,
   FinanceReconciliationExceptionListQuerySchema,
 } from "@/schema/finance-reconciliation";
 import {
@@ -89,6 +91,30 @@ class FinanceController extends TenantBaseController {
     const data = await financeReconciliationService.getProjectSummary(
       authContext,
       idVerify.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/reconciliation/exceptions/:fingerprint/actions")
+  async createReconciliationExceptionAction(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult =
+      FinanceReconciliationExceptionFingerprintParamsSchema.safeParse(
+        request.params,
+      );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = CreateFinanceReconciliationExceptionActionSchema
+      .safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await financeReconciliationService.createExceptionAction(
+      authContext,
+      paramsResult.data.fingerprint,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }
