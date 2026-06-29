@@ -40,6 +40,7 @@
 - [2026-06-29-phase7-3-reconciliation-correction-entry-plan.md](./2026-06-29-phase7-3-reconciliation-correction-entry-plan.md)：Phase 7.3 对账异常修正入口计划，明确只做人工引导、不自动修账。
 - [2026-06-29-phase7-3-reconciliation-correction-entry-smoke.md](./2026-06-29-phase7-3-reconciliation-correction-entry-smoke.md)：Phase 7.3 对账异常修正入口实施与只读 smoke 记录。
 - [2026-06-29-phase7-3-post-release-smoke.md](./2026-06-29-phase7-3-post-release-smoke.md)：Phase 7.3 合入 main 后的发布后只读 smoke、Admin 和小程序回执。
+- [2026-06-29-phase7-4-manual-correction-closure-plan.md](./2026-06-29-phase7-4-manual-correction-closure-plan.md)：Phase 7.4 单据级人工修正闭环计划，明确先做人工修正能力、不做自动修账。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
