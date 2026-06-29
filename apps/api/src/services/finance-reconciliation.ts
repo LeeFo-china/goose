@@ -4,6 +4,7 @@ import {
   type FinanceReconciliationCandidateRows,
   type FinanceReconciliationLedgerRow,
   type FinanceReconciliationPaymentRow,
+  type FinanceReconciliationProjectTotals,
   type FinanceReconciliationReceivableRow,
 } from "@/repositories/finance-reconciliation";
 import type {
@@ -22,11 +23,11 @@ const MONEY_TOLERANCE = 0.009;
 type FinanceReconciliationServiceDependencies = {
   repository: Pick<
     typeof financeReconciliationRepository,
-    "listCandidateRows"
+    "listCandidateRows" | "getProjectSummaryTotals"
   >;
   accessPolicyService: Pick<
     typeof accessPolicyService,
-    "assertTenantContext" | "hasPermission"
+    "assertTenantContext" | "hasPermission" | "canAccessProject"
   >;
   now?: () => Date;
 };
@@ -49,6 +50,14 @@ export type FinanceReconciliationException = {
     target: string;
   };
 };
+
+export type FinanceReconciliationProjectSummary =
+  FinanceReconciliationProjectTotals & {
+    exception_count: number;
+    danger_count: number;
+    warning_count: number;
+    latest_exception_at: string | null;
+  };
 
 export class FinanceReconciliationService {
   constructor(
@@ -84,6 +93,46 @@ export class FinanceReconciliationService {
     );
 
     return buildListResponse(exceptions, query);
+  }
+
+  async getProjectSummary(
+    authContext: AuthContext,
+    projectId: string,
+  ): Promise<FinanceReconciliationProjectSummary> {
+    const tenantId = this.dependencies.accessPolicyService
+      .assertTenantContext(authContext);
+    const totals = await this.dependencies.repository.getProjectSummaryTotals({
+      tenantId,
+      projectId,
+    });
+    if (!totals) {
+      throw Errors.forbidden();
+    }
+
+    if (!this.canViewReconciliation(authContext)) {
+      const canAccessProject = await this.dependencies.accessPolicyService
+        .canAccessProject(authContext, projectId, "project.read");
+      if (!canAccessProject) {
+        throw Errors.forbidden();
+      }
+    }
+
+    const dateTo = toDateOnly(this.dependencies.now?.() ?? new Date());
+    const candidates = await this.dependencies.repository.listCandidateRows({
+      tenantId,
+      projectId,
+      dateFrom: "1970-01-01",
+      dateTo,
+    });
+    const exceptions = this.buildExceptions(candidates, dateTo);
+
+    return {
+      ...totals,
+      exception_count: exceptions.length,
+      danger_count: exceptions.filter((item) => item.level === "danger").length,
+      warning_count: exceptions.filter((item) => item.level === "warning").length,
+      latest_exception_at: exceptions[0]?.occurred_at ?? null,
+    };
   }
 
   private buildExceptions(
@@ -286,7 +335,13 @@ export class FinanceReconciliationService {
   }
 
   private assertCanViewReconciliation(authContext: AuthContext) {
-    const allowed = [
+    if (!this.canViewReconciliation(authContext)) {
+      throw Errors.forbidden();
+    }
+  }
+
+  private canViewReconciliation(authContext: AuthContext) {
+    return [
       "finance.view",
       "finance.ledger.view",
       "finance.receivable.view",
@@ -297,10 +352,6 @@ export class FinanceReconciliationService {
         permission,
       )
     );
-
-    if (!allowed) {
-      throw Errors.forbidden();
-    }
   }
 }
 

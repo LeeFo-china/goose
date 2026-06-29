@@ -29,6 +29,9 @@ import {
   relationOne,
 } from "@/components/projects/project-mutation-utils";
 import { ProjectFinanceOperatingSummaryPanel } from "@/components/projects/project-finance-operating-summary-panel";
+import {
+  ProjectFinanceReconciliationSummaryPanel,
+} from "@/components/projects/project-finance-reconciliation-summary-panel";
 import { ProjectFinanceReceivableSummaryPanel } from "@/components/projects/project-finance-receivable-summary-panel";
 import { ProjectWorkflowRuntimePanel } from "@/components/projects/project-workflow-runtime-panel";
 import { PropertyLocationStatus } from "@/components/properties/property-location-status";
@@ -104,6 +107,10 @@ export function ProjectDetailOverviewPanel({
             projectId={project.id}
           />
           <ProjectFinanceOperatingSummaryPanel
+            projectId={project.id}
+            refreshVersion={refreshVersion}
+          />
+          <ProjectFinanceReconciliationSummaryPanel
             projectId={project.id}
             refreshVersion={refreshVersion}
           />

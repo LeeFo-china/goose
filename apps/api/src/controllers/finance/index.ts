@@ -75,6 +75,22 @@ class FinanceController extends TenantBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/finance/reconciliation/project/:id")
+  async getProjectReconciliationSummary(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await financeReconciliationService.getProjectSummary(
+      authContext,
+      idVerify.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Patch("/finance/ledger/:id/cost-category")
   async updateLedgerCostCategory(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);

@@ -1,4 +1,8 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  getFinanceReconciliationProjectTotals,
+  type FinanceReconciliationProjectTotals,
+} from "@/repositories/finance-reconciliation-project-summary";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 const DEFAULT_SOURCE_LIMIT = 5_000;
@@ -158,6 +162,13 @@ class FinanceReconciliationRepository {
         payment_id: row.payment_id,
       })),
     };
+  }
+
+  async getProjectSummaryTotals(input: {
+    tenantId: string;
+    projectId: string;
+  }): Promise<FinanceReconciliationProjectTotals | null> {
+    return getFinanceReconciliationProjectTotals(input);
   }
 
   private async listReceivableRows(
@@ -320,6 +331,7 @@ class FinanceReconciliationRepository {
 
     return sumByKey(data as PaymentAmountDbRow[] | null, "payment_id");
   }
+
 }
 
 function sumByKey<T extends {
@@ -344,3 +356,4 @@ function normalizeMoney(value: unknown): number {
 
 export const financeReconciliationRepository =
   new FinanceReconciliationRepository();
+export type { FinanceReconciliationProjectTotals };

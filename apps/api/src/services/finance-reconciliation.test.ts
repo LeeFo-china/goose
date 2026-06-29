@@ -95,6 +95,15 @@ const listCandidateRows = mock(async () => ({
     },
   ],
 }));
+const getProjectSummaryTotals = mock(async () => ({
+  project_id: "project-1",
+  receivable_amount: 30000,
+  received_amount: 28000,
+  allocated_amount: 25000,
+  ledger_income_amount: 28000,
+  expense_paid_amount: 12000,
+  ledger_expense_amount: 12000,
+}));
 
 const accessPolicy = {
   assertTenantContext: mock((authContext: AuthContext) => {
@@ -109,6 +118,7 @@ const accessPolicy = {
   hasPermission: mock((authContext: AuthContext, permissionCode: string) =>
     authContext.permissions.some((permission) => permission.code === permissionCode)
   ),
+  canAccessProject: mock(async () => true),
 };
 
 const baseAuthContext = {
@@ -148,6 +158,7 @@ async function createService() {
   return new FinanceReconciliationService({
     repository: {
       listCandidateRows,
+      getProjectSummaryTotals,
     },
     accessPolicyService: accessPolicy,
   });
@@ -156,8 +167,11 @@ async function createService() {
 describe("financeReconciliationService", () => {
   beforeEach(() => {
     listCandidateRows.mockClear();
+    getProjectSummaryTotals.mockClear();
     accessPolicy.assertTenantContext.mockClear();
     accessPolicy.hasPermission.mockClear();
+    accessPolicy.canAccessProject.mockClear();
+    accessPolicy.canAccessProject.mockImplementation(async () => true);
   });
 
   test("lists receivable, payment, allocation, and ledger exceptions", async () => {
@@ -298,5 +312,43 @@ describe("financeReconciliationService", () => {
       code: "VALIDATION_ERROR",
     });
     expect(listCandidateRows).not.toHaveBeenCalled();
+  });
+
+  test("returns project reconciliation summary with exception counts", async () => {
+    const service = await createService();
+
+    const result = await service.getProjectSummary(
+      authContextWithPermissions([{ code: "project.read", scope: "all" }]),
+      "project-1",
+    );
+
+    expect(result).toEqual({
+      project_id: "project-1",
+      receivable_amount: 30000,
+      received_amount: 28000,
+      allocated_amount: 25000,
+      ledger_income_amount: 28000,
+      expense_paid_amount: 12000,
+      ledger_expense_amount: 12000,
+      exception_count: 6,
+      danger_count: 3,
+      warning_count: 3,
+      latest_exception_at: "2026-06-30T00:00:00.000Z",
+    });
+    expect(accessPolicy.canAccessProject).toHaveBeenCalledWith(
+      expect.any(Object),
+      "project-1",
+      "project.read",
+    );
+    expect(getProjectSummaryTotals).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+    });
+    expect(listCandidateRows).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+      }),
+    );
   });
 });
