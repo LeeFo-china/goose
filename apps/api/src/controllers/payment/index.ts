@@ -2,10 +2,12 @@ import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreatePaymentSchema,
+  GeneratePaymentLedgerSchema,
   PaymentListQuerySchema,
   UpdatePaymentSchema,
 } from "@/schema/payment";
 import { paymentService } from "@/services/payments";
+import { Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -62,6 +64,23 @@ class PaymentController extends TenantBaseController<
     );
     return ResponseHandler.success(data);
   };
+
+  @Post("/payments/:id/generate-ledger")
+  async generateLedger(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const result = GeneratePaymentLedgerSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await paymentService.generateProjectPaymentLedger(
+      authContext,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
 }
 
 export default new PaymentController();

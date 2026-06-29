@@ -3,6 +3,7 @@ import { ScrollText } from "lucide-react";
 import { FinanceFilterSelectField } from "@/components/finance/finance-filter-controls";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { fetchFinanceCostCategories } from "@/components/finance/finance-cost-budget-requests";
+import { FinanceMissingPaymentLedgerPanel } from "@/components/finance/finance-missing-payment-ledger-panel";
 import { buildFinanceLedgerPageHref } from "@/components/finance/finance-ledger-query-utils";
 import { FinanceLedgerTable } from "@/components/finance/finance-ledger-table";
 import { fetchFinanceLedger } from "@/components/finance/finance-requests";
@@ -18,6 +19,7 @@ type FinanceLedgerPageSearchParams = {
   project_id?: string;
   direction?: string;
   entry_type?: string;
+  payment_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;
 };
@@ -73,6 +75,7 @@ export default async function FinanceLedgerPage({
   const projectId = clean(params.project_id);
   const direction = clean(params.direction);
   const entryType = clean(params.entry_type);
+  const paymentId = clean(params.payment_id);
   const costCategoryId = clean(params.cost_category_id);
   const unallocatedOnly = clean(params.unallocated_only);
   const [data, categories, session] = await Promise.all([
@@ -82,6 +85,7 @@ export default async function FinanceLedgerPage({
       project_id: projectId,
       direction,
       entry_type: entryType,
+      payment_id: paymentId,
       cost_category_id: costCategoryId,
       unallocated_only: unallocatedOnly,
     }),
@@ -125,6 +129,9 @@ export default async function FinanceLedgerPage({
           >
             {projectId ? (
               <input type="hidden" name="project_id" value={projectId} />
+            ) : null}
+            {paymentId ? (
+              <input type="hidden" name="payment_id" value={paymentId} />
             ) : null}
             <FinanceFilterSelectField
               id="ledger-direction-filter"
@@ -176,6 +183,9 @@ export default async function FinanceLedgerPage({
             <div className="shrink-0 border-b p-4">
               <StatusAlert>{data.error}</StatusAlert>
             </div>
+          ) : null}
+          {paymentId && !data.error && data.list.length === 0 ? (
+            <FinanceMissingPaymentLedgerPanel paymentId={paymentId} />
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
             <FinanceLedgerTable

@@ -140,7 +140,7 @@ function buildPaymentExceptions(
         `收款 ${formatMoney(row.amount)} 已确认，但未找到对应项目收款入账流水。`,
       amount: row.amount,
       occurred_at: occurredAt,
-      action: projectPaymentLedgerAction(projectId),
+      action: projectPaymentLedgerAction(projectId, row.id),
     });
   }
 
@@ -261,11 +261,12 @@ function ledgerAction(projectId: string | null) {
   };
 }
 
-function projectPaymentLedgerAction(projectId: string | null) {
+function projectPaymentLedgerAction(projectId: string | null, paymentId: string) {
   const params = new URLSearchParams();
   appendParam(params, "project_id", projectId);
   params.set("direction", "in");
   params.set("entry_type", "project_payment");
+  params.set("payment_id", paymentId);
   return {
     key: "open_project_payment_ledger",
     label: "去处理",
