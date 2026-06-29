@@ -29,6 +29,9 @@ export const PROJECT_RECEIVABLE_EVENT_TYPE_VALUES = [
   "adjusted",
   "canceled",
   "follow_up",
+  "allocate_payment",
+  "adjust_allocation",
+  "reverse_allocation",
 ] as const;
 
 const OptionalBooleanQuerySchema = z.preprocess((value) => {
@@ -71,6 +74,9 @@ export const ProjectReceivableListQuerySchema = ReceivableQueryBaseSchema;
 
 const MoneyAmountSchema = z.coerce.number("金额必须是数字")
   .positive("金额必须大于 0");
+
+const AllocationAmountSchema = z.coerce.number("核销金额必须是数字")
+  .positive("核销金额必须大于 0");
 
 const OptionalEmployeeIdSchema = z.preprocess((value) => {
   if (value === "" || value === null) return undefined;
@@ -121,6 +127,28 @@ export const CreateFinanceReceivableFollowUpSchema = z.object({
   next_follow_up_at: OptionalTimestampSchema,
 });
 
+export const CreateFinanceReceivableAllocationSchema = z.object({
+  payment_id: z.uuid("请选择有效的收款记录"),
+  amount: AllocationAmountSchema,
+  reason: z.string().trim()
+    .min(1, "请输入核销原因")
+    .max(500, "核销原因不能超过 500 个字符"),
+  idempotency_key: z.uuid("核销幂等键必须是有效 UUID").optional(),
+});
+
+export const UpdateFinanceReceivableAllocationSchema = z.object({
+  amount: AllocationAmountSchema,
+  reason: z.string().trim()
+    .min(1, "请输入调整原因")
+    .max(500, "调整原因不能超过 500 个字符"),
+});
+
+export const ReverseFinanceReceivableAllocationSchema = z.object({
+  reason: z.string().trim()
+    .min(1, "请输入撤销原因")
+    .max(500, "撤销原因不能超过 500 个字符"),
+});
+
 export const FinanceReceivableEventListQuerySchema = PaginationQuerySchema;
 
 export type ProjectReceivableStatus =
@@ -148,6 +176,15 @@ export type CancelFinanceReceivableInput = z.infer<
 >;
 export type CreateFinanceReceivableFollowUpInput = z.infer<
   typeof CreateFinanceReceivableFollowUpSchema
+>;
+export type CreateFinanceReceivableAllocationInput = z.infer<
+  typeof CreateFinanceReceivableAllocationSchema
+>;
+export type UpdateFinanceReceivableAllocationInput = z.infer<
+  typeof UpdateFinanceReceivableAllocationSchema
+>;
+export type ReverseFinanceReceivableAllocationInput = z.infer<
+  typeof ReverseFinanceReceivableAllocationSchema
 >;
 export type FinanceReceivableEventListQuery = z.infer<
   typeof FinanceReceivableEventListQuerySchema

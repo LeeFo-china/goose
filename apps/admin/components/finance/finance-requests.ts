@@ -96,6 +96,56 @@ export type FinanceReceivableRecord = {
   project?: { id: string; name: string | null; status: string | null } | null;
 };
 
+export type FinanceReceivableAllocationRecord = {
+  id: string;
+  payment_id: string;
+  receivable_plan_id: string;
+  amount: number;
+  allocated_at: string | null;
+  allocated_by_name: string | null;
+  source_type: string;
+  source_id: string | null;
+  reversed_at?: string | null;
+  reversed_by?: string | null;
+  reverse_reason?: string | null;
+  payment?: {
+    id: string;
+    amount: number;
+    type: string | null;
+    pay_date: string | null;
+    status: string | null;
+    remark?: string | null;
+  } | null;
+};
+
+export type FinanceReceivablePaymentCandidate = {
+  id: string;
+  amount: number;
+  allocated_amount: number;
+  remaining_amount: number;
+  type: string | null;
+  pay_date: string | null;
+  remark: string | null;
+};
+
+export type FinanceReceivableAllocationPlan = Pick<
+  FinanceReceivableRecord,
+  "id" | "project_id" | "payment_type" | "title" | "amount" | "paid_amount" | "due_date" | "status"
+> & {
+  remaining_amount: number;
+};
+
+export type FinanceReceivableAllocationContext = {
+  receivable_plan: FinanceReceivableAllocationPlan;
+  allocations: FinanceReceivableAllocationRecord[];
+  payments: FinanceReceivablePaymentCandidate[];
+};
+
+export type FinanceReceivableAllocationMutationResult = {
+  allocation: FinanceReceivableAllocationRecord;
+  receivable_plan: FinanceReceivableAllocationPlan;
+};
+
 export type FinanceReceivableSummary = {
   contract_amount: number;
   receivable_amount: number;
