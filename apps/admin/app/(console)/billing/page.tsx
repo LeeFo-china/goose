@@ -1,4 +1,15 @@
 import { redirect } from "next/navigation";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  BrainCircuit,
+  Clock3,
+  LockKeyhole,
+  MessageSquareText,
+  Video,
+  WalletCards,
+  type LucideIcon,
+} from "lucide-react";
 import type {
   BillingLedger,
   BillingLedgerListData,
@@ -7,6 +18,8 @@ import type {
 } from "@/components/billing/billing-types";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -111,14 +124,35 @@ export default async function TenantBillingPage() {
     ? accountStatusMeta[account.status] || { label: account.status, variant: "outline" as const }
     : { label: "未初始化", variant: "outline" as const };
   const accountStats = [
-    { label: "可用积分", value: formatCredits(account.available_credits), helper: "当前可扣费余额" },
-    { label: "冻结积分", value: formatCredits(account.frozen_credits), helper: "待结算或锁定额度" },
-    { label: "累计充值", value: formatCredits(account.total_recharged_credits), helper: "历史入账总额" },
-    { label: "累计消耗", value: formatCredits(account.total_consumed_credits), helper: "历史扣费总额" },
+    { label: "可用积分", value: formatCredits(account.available_credits), helper: "当前可扣费余额", icon: WalletCards },
+    { label: "冻结积分", value: formatCredits(account.frozen_credits), helper: "待结算或锁定额度", icon: LockKeyhole },
+    { label: "累计充值", value: formatCredits(account.total_recharged_credits), helper: "历史入账总额", icon: ArrowDownToLine },
+    { label: "累计消耗", value: formatCredits(account.total_consumed_credits), helper: "历史扣费总额", icon: ArrowUpFromLine },
   ];
+  const priceLines = [
+    {
+      label: "短信",
+      value: `${formatCredits(estimateResult.data.sms.unit_credits)} 积分 / 条`,
+      min: estimateResult.data.sms.min_charge_credits,
+      icon: MessageSquareText,
+    },
+    {
+      label: "视频转文本",
+      value: `${formatCredits(estimateResult.data.social_video.unit_credits)} 积分 / 分钟`,
+      min: estimateResult.data.social_video.min_charge_credits,
+      icon: Video,
+    },
+    {
+      label: "AI token",
+      value: `输入 ${formatCredits(estimateResult.data.ai.input_token_1k_credits)} / 输出 ${formatCredits(estimateResult.data.ai.output_token_1k_credits)} 积分`,
+      min: estimateResult.data.ai.min_charge_credits,
+      icon: BrainCircuit,
+    },
+  ];
+  const lastActivity = formatDateTime(account.last_activity_at || account.updated_at);
 
   return (
-    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-4 overflow-hidden">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-auto lg:overflow-hidden">
       <div className="flex shrink-0 flex-col justify-between gap-3 md:flex-row md:items-end">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -129,8 +163,9 @@ export default async function TenantBillingPage() {
             查看当前租户积分余额、近期扣费和主要功能的计费口径。
           </p>
         </div>
-        <div className="text-sm text-muted-foreground">
-          最近活动 {formatDateTime(account.last_activity_at || account.updated_at)}
+        <div className="flex w-fit items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
+          <Clock3 className="size-4" />
+          最近活动 {lastActivity}
         </div>
       </div>
 
@@ -138,85 +173,117 @@ export default async function TenantBillingPage() {
       {estimateResult.error ? <StatusAlert>{estimateResult.error}</StatusAlert> : null}
       {ledgerResult.error ? <StatusAlert>{ledgerResult.error}</StatusAlert> : null}
 
-      <section className="shrink-0 overflow-hidden border-y bg-background/40">
-        <div className="grid divide-y md:grid-cols-4 md:divide-x md:divide-y-0">
-          {accountStats.map((item) => (
-            <AccountStat key={item.label} {...item} />
-          ))}
-        </div>
-        <div className="border-t">
-          <div className="flex flex-col gap-1 px-4 py-3 md:flex-row md:items-baseline md:justify-between">
-            <div>
-              <h2 className="text-sm font-semibold tracking-normal">功能计费</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                当前生效规则的简化展示，实际扣费以生成账单时的价格快照为准。
-              </p>
+      <Card className="shrink-0 overflow-hidden shadow-none">
+        <CardHeader className="border-b bg-muted/20 p-4">
+          <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle>账户概览</CardTitle>
+                <Badge variant={status.variant}>{status.label}</Badge>
+              </div>
+              <CardDescription className="mt-1">
+                可用余额、冻结额度和当前功能计费口径集中展示。
+              </CardDescription>
+            </div>
+            <div className="rounded-md border bg-background px-3 py-2 text-sm">
+              <div className="text-xs text-muted-foreground">当前可用</div>
+              <div className="mt-1 text-lg font-semibold tabular-nums">
+                {formatCredits(account.available_credits)} 积分
+              </div>
             </div>
           </div>
-          <div className="grid border-t md:grid-cols-3 md:divide-x">
-            <PriceLine label="短信" value={`${formatCredits(estimateResult.data.sms.unit_credits)} 积分 / 条`} min={estimateResult.data.sms.min_charge_credits} />
-            <PriceLine label="视频转文本" value={`${formatCredits(estimateResult.data.social_video.unit_credits)} 积分 / 分钟`} min={estimateResult.data.social_video.min_charge_credits} />
-            <PriceLine label="AI token" value={`输入 ${formatCredits(estimateResult.data.ai.input_token_1k_credits)} / 输出 ${formatCredits(estimateResult.data.ai.output_token_1k_credits)} 积分`} min={estimateResult.data.ai.min_charge_credits} />
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="grid divide-y md:grid-cols-4 md:divide-x md:divide-y-0">
+            {accountStats.map((item) => (
+              <AccountStat key={item.label} {...item} />
+            ))}
           </div>
-        </div>
-      </section>
-
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-y bg-background/40">
-        <div className="flex shrink-0 flex-col gap-1 border-b px-4 py-3 md:flex-row md:items-baseline md:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold tracking-normal">积分流水</h2>
-            <p className="mt-1 text-xs text-muted-foreground">租户最近的充值、扣费、冻结和解冻记录。</p>
-          </div>
-          <Badge variant="outline" className="w-fit">
-            最近 {ledgerResult.data.list.length} 条 / 共 {ledgerResult.data.pagination.total} 条
-          </Badge>
-        </div>
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <Table className="table-fixed" containerClassName="h-full overflow-auto">
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              <TableRow>
-                <TableHead className="w-[150px]">时间</TableHead>
-                <TableHead className="w-[118px]">类型</TableHead>
-                <TableHead>来源</TableHead>
-                <TableHead className="w-[128px] text-right">积分</TableHead>
-                <TableHead className="w-[128px] text-right">余额</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ledgerResult.data.list.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(item.created_at)}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="whitespace-nowrap">{directionLabel(item.direction)}</Badge>
-                    <div className="mt-1 text-xs text-muted-foreground">{item.event_type}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="min-w-0 truncate" title={ledgerSourceLabel(item)}>
-                      {ledgerSourceLabel(item)}
-                    </div>
-                    {item.remark ? (
-                      <div className="mt-1 min-w-0 truncate text-xs text-muted-foreground" title={item.remark}>
-                        {item.remark}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className={`text-right font-medium tabular-nums ${ledgerDirectionClassName(item.direction)}`}>
-                    {formatCredits(item.change_credits)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCredits(item.balance_after)}</TableCell>
-                </TableRow>
+          <Separator />
+          <div className="grid lg:grid-cols-[13rem_minmax(0,1fr)]">
+            <div className="border-b px-4 py-3 lg:border-b-0 lg:border-r">
+              <CardTitle className="text-sm">功能计费</CardTitle>
+              <CardDescription className="mt-1 text-xs">
+                账单生成时会保存价格快照。
+              </CardDescription>
+            </div>
+            <div className="grid md:grid-cols-3 md:divide-x">
+              {priceLines.map((item) => (
+                <PriceLine key={item.label} {...item} />
               ))}
-              {!ledgerResult.data.list.length ? (
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="flex min-h-[18rem] flex-1 flex-col overflow-hidden shadow-none lg:min-h-0">
+        <CardHeader className="shrink-0 border-b bg-muted/20 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <CardTitle>积分流水</CardTitle>
+              <CardDescription className="mt-1">
+                租户最近的充值、扣费、冻结和解冻记录。
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="w-fit tabular-nums">
+              最近 {ledgerResult.data.list.length} 条 / 共 {ledgerResult.data.pagination.total} 条
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <div data-testid="tenant-billing-ledger-viewport" className="min-h-0 flex-1 overflow-auto">
+            <Table className="table-fixed" containerClassName="min-w-[780px] overflow-visible">
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
-                    暂无积分流水
-                  </TableCell>
+                  <TableHead className="w-[150px]">时间</TableHead>
+                  <TableHead className="w-[118px]">类型</TableHead>
+                  <TableHead>来源</TableHead>
+                  <TableHead className="w-[128px] text-right">积分</TableHead>
+                  <TableHead className="w-[128px] text-right">余额</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
+              </TableHeader>
+              <TableBody>
+                {ledgerResult.data.list.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(item.created_at)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="whitespace-nowrap">{directionLabel(item.direction)}</Badge>
+                      <div className="mt-1 text-xs text-muted-foreground">{item.event_type}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="min-w-0 truncate" title={ledgerSourceLabel(item)}>
+                        {ledgerSourceLabel(item)}
+                      </div>
+                      {item.remark ? (
+                        <div className="mt-1 min-w-0 truncate text-xs text-muted-foreground" title={item.remark}>
+                          {item.remark}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className={`text-right font-medium tabular-nums ${ledgerDirectionClassName(item.direction)}`}>
+                      {formatCredits(item.change_credits)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCredits(item.balance_after)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {!ledgerResult.data.list.length ? (
+              <div
+                data-testid="tenant-billing-ledger-empty"
+                className="flex h-24 items-center justify-center border-t text-sm text-muted-foreground"
+              >
+                暂无积分流水
+              </div>
+            ) : null}
+          </div>
+          <div className="shrink-0 border-t bg-card px-4 py-3 text-sm text-muted-foreground">
+            <span className="tabular-nums">
+              当前显示 {ledgerResult.data.list.length} 条，接口返回第 {ledgerResult.data.pagination.page} / {Math.max(1, ledgerResult.data.pagination.totalPages)} 页
+            </span>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -225,14 +292,19 @@ function AccountStat({
   label,
   value,
   helper,
+  icon: Icon,
 }: {
   label: string;
   value: string;
   helper: string;
+  icon: LucideIcon;
 }) {
   return (
     <div className="px-4 py-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{label}</span>
+        <Icon className="size-4" />
+      </div>
       <div className="mt-1 text-2xl font-semibold tracking-normal tabular-nums">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
     </div>
@@ -243,14 +315,19 @@ function PriceLine({
   label,
   value,
   min,
+  icon: Icon,
 }: {
   label: string;
   value: string;
   min: number;
+  icon: LucideIcon;
 }) {
   return (
     <div className="border-t px-4 py-3 first:border-t-0 md:border-t-0">
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{label}</span>
+        <Icon className="size-4" />
+      </div>
       <div className="mt-1 text-sm font-semibold tracking-normal">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">最低 {formatCredits(min)} 积分</div>
     </div>
