@@ -21,7 +21,7 @@ import type {
   UsageSocialVideoLogRecord,
 } from "@/components/usage/usage-types";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession } from "@/lib/auth";
 import {
   buildQuery,
@@ -37,6 +37,13 @@ import {
   readTab,
   summarizePage,
 } from "./page-data";
+
+const USAGE_TABS: ReadonlyArray<{ value: UsageTab; label: string }> = [
+  { value: "summary", label: "用量概览" },
+  { value: "ai", label: "AI 明细" },
+  { value: "sms", label: "短信明细" },
+  { value: "social_video", label: "短视频明细" },
+];
 
 export default async function PlatformUsagePage({
   searchParams,
@@ -174,6 +181,22 @@ export default async function PlatformUsagePage({
       : tab === "sms"
         ? "条短信明细"
         : "条短视频明细";
+  const buildTabHref = (nextTab: UsageTab) => buildUsageHref({
+    basePath: "/platform/usage",
+    tab: nextTab,
+    pageSize: nextTab === "summary" ? pageSize : undefined,
+    aiPageSize: nextTab === "ai" ? aiPageSize : undefined,
+    smsPageSize: nextTab === "sms" ? smsPageSize : undefined,
+    socialVideoPageSize: nextTab === "social_video" ? socialVideoPageSize : undefined,
+    dateFrom,
+    dateTo,
+    keyword,
+    tenantId,
+    aiStatus,
+    smsStatus,
+    socialVideoStatus,
+    socialVideoBillable,
+  });
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -183,71 +206,21 @@ export default async function PlatformUsagePage({
           description="查看租户 AI token、短信发送量、短视频转写分钟和失败明细，用于成本核算和异常排查。"
           titleMeta={<Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>}
           error={activeError}
-          summary={<UsageSummaryCards data={summary} />}
           tabs={
-            <TabsList>
-              <TabsTrigger value="summary" asChild>
-                <Link href={buildUsageHref({
-                  basePath: "/platform/usage",
-                  tab: "summary",
-                  pageSize,
-                  dateFrom,
-                  dateTo,
-                  keyword,
-                  tenantId,
-                  aiStatus,
-                  smsStatus,
-                  socialVideoStatus,
-                  socialVideoBillable,
-                })}>租户汇总</Link>
-              </TabsTrigger>
-              <TabsTrigger value="ai" asChild>
-                <Link href={buildUsageHref({
-                  basePath: "/platform/usage",
-                  tab: "ai",
-                  aiPageSize,
-                  dateFrom,
-                  dateTo,
-                  keyword,
-                  tenantId,
-                  aiStatus,
-                  smsStatus,
-                  socialVideoStatus,
-                  socialVideoBillable,
-                })}>AI 明细</Link>
-              </TabsTrigger>
-              <TabsTrigger value="sms" asChild>
-                <Link href={buildUsageHref({
-                  basePath: "/platform/usage",
-                  tab: "sms",
-                  smsPageSize,
-                  dateFrom,
-                  dateTo,
-                  keyword,
-                  tenantId,
-                  aiStatus,
-                  smsStatus,
-                  socialVideoStatus,
-                  socialVideoBillable,
-                })}>短信明细</Link>
-              </TabsTrigger>
-              <TabsTrigger value="social_video" asChild>
-                <Link href={buildUsageHref({
-                  basePath: "/platform/usage",
-                  tab: "social_video",
-                  socialVideoPageSize,
-                  dateFrom,
-                  dateTo,
-                  keyword,
-                  tenantId,
-                  aiStatus,
-                  smsStatus,
-                  socialVideoStatus,
-                  socialVideoBillable,
-                })}>短视频明细</Link>
-              </TabsTrigger>
+            <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
+              {USAGE_TABS.map((usageTab) => (
+                <TabsTrigger
+                  key={usageTab.value}
+                  value={usageTab.value}
+                  asChild
+                  className="shrink-0"
+                >
+                  <Link href={buildTabHref(usageTab.value)}>{usageTab.label}</Link>
+                </TabsTrigger>
+              ))}
             </TabsList>
           }
+          listHeader={tab === "summary" ? <UsageSummaryCards data={summary} /> : null}
           filters={
             <UsageFilters
               basePath="/platform/usage"
@@ -271,19 +244,22 @@ export default async function PlatformUsagePage({
           tableViewportTestId="platform-usage-list-table-viewport"
           unit={unit}
         >
-          {tab === "summary" ? (
+          <TabsContent value="summary" className="m-0 min-h-full">
             <PlatformUsageTable
               list={usageResult.data.list}
               dateFrom={dateFrom}
               dateTo={dateTo}
             />
-          ) : tab === "ai" ? (
+          </TabsContent>
+          <TabsContent value="ai" className="m-0 min-h-full">
             <UsageAiLogsTable logs={aiResult.data.list} />
-          ) : tab === "sms" ? (
+          </TabsContent>
+          <TabsContent value="sms" className="m-0 min-h-full">
             <UsageSmsLogsTable logs={smsResult.data.list} />
-          ) : (
+          </TabsContent>
+          <TabsContent value="social_video" className="m-0 min-h-full">
             <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
-          )}
+          </TabsContent>
         </PlatformListPageShell>
       </Tabs>
     </div>

@@ -1,10 +1,12 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   UsageFilters,
   UsagePagination,
-  UsageTabsNav,
+  type UsageTab,
 } from "@/components/usage/usage-list-actions";
+import { buildUsageHref } from "@/components/usage/usage-list-navigation";
 import {
   UsageAiLogsTable,
   UsageSmsLogsTable,
@@ -19,7 +21,8 @@ import type {
   UsageSocialVideoLogRecord,
 } from "@/components/usage/usage-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession } from "@/lib/auth";
 import { isPlatformOnlySession } from "@/lib/session-mode";
 import {
@@ -34,6 +37,13 @@ import {
   readStatus,
   readTab,
 } from "./page-data";
+
+const TENANT_USAGE_TABS: ReadonlyArray<{ value: UsageTab; label: string }> = [
+  { value: "summary", label: "用量概览" },
+  { value: "ai", label: "AI 明细" },
+  { value: "sms", label: "短信明细" },
+  { value: "social_video", label: "短视频明细" },
+];
 
 export default async function TenantUsagePage({
   searchParams,
@@ -118,14 +128,39 @@ export default async function TenantUsagePage({
       emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage),
     )
     : { data: emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage), error: null };
+  const buildTabHref = (nextTab: UsageTab) => buildUsageHref({
+    basePath: "/usage",
+    tab: nextTab,
+    dateFrom,
+    dateTo,
+    aiStatus,
+    smsStatus,
+    socialVideoStatus,
+    socialVideoBillable,
+  });
+  const activePagination = tab === "ai"
+    ? aiResult.data.pagination
+    : tab === "sms"
+      ? smsResult.data.pagination
+      : socialVideoResult.data.pagination;
+  const activePageKey = tab === "ai"
+    ? "aiPage"
+    : tab === "sms"
+      ? "smsPage"
+      : "socialVideoPage";
+  const activeUnit = tab === "ai"
+    ? "条 AI 明细"
+    : tab === "sms"
+      ? "条短信明细"
+      : "条短视频明细";
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">用量统计</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-normal">用量统计</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            查看本公司 AI token、短信发送量、短视频转写分钟和失败明细。
+            本租户用量仅包含本公司的 AI、短信和短视频转写记录。
           </p>
         </div>
         <Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>
@@ -136,18 +171,23 @@ export default async function TenantUsagePage({
       {smsResult.error ? <StatusAlert>{smsResult.error}</StatusAlert> : null}
       {socialVideoResult.error ? <StatusAlert>{socialVideoResult.error}</StatusAlert> : null}
 
-      <UsageSummaryCards data={summaryResult.data} />
-
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>本租户用量</CardTitle>
-              <CardDescription>
-                租户只能查看本公司的 AI、短信和短视频转写用量，手机号仅展示脱敏值。
-              </CardDescription>
-            </div>
-            <UsageTabsNav
+      <Tabs value={tab} className="contents">
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+          <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
+            <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
+              {TENANT_USAGE_TABS.map((usageTab) => (
+                <TabsTrigger
+                  key={usageTab.value}
+                  value={usageTab.value}
+                  asChild
+                  className="shrink-0"
+                >
+                  <Link href={buildTabHref(usageTab.value)}>{usageTab.label}</Link>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {tab === "summary" ? <UsageSummaryCards data={summaryResult.data} /> : null}
+            <UsageFilters
               basePath="/usage"
               tab={tab}
               dateFrom={dateFrom}
@@ -156,70 +196,32 @@ export default async function TenantUsagePage({
               smsStatus={smsStatus}
               socialVideoStatus={socialVideoStatus}
               socialVideoBillable={socialVideoBillable}
-              summaryLabel="用量概览"
             />
-          </div>
-          <UsageFilters
-            basePath="/usage"
-            tab={tab}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            aiStatus={aiStatus}
-            smsStatus={smsStatus}
-            socialVideoStatus={socialVideoStatus}
-            socialVideoBillable={socialVideoBillable}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-0">
-          {tab === "summary" ? (
-            <div className="grid gap-3 p-4 md:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardDescription>AI 成功率</CardDescription>
-                  <CardTitle>
-                    {summaryResult.data.ai.call_count > 0
-                      ? `${Math.round((summaryResult.data.ai.success_count / summaryResult.data.ai.call_count) * 100)}%`
-                      : "-"}
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>短信成功率</CardDescription>
-                  <CardTitle>
-                    {summaryResult.data.sms.send_count > 0
-                      ? `${Math.round((summaryResult.data.sms.success_count / summaryResult.data.sms.send_count) * 100)}%`
-                      : "-"}
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>AI token 缺失</CardDescription>
-                  <CardTitle>{summaryResult.data.ai.missing_token_count}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>短视频计费分钟</CardDescription>
-                  <CardTitle>{summaryResult.data.social_video.billable_minutes}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>短视频时长缺失</CardDescription>
-                  <CardTitle>{summaryResult.data.social_video.missing_duration_count}</CardTitle>
-                </CardHeader>
-              </Card>
+          </CardHeader>
+          <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
+            <div
+              data-testid="tenant-usage-list-table-viewport"
+              className="min-h-0 flex-1 overflow-auto"
+            >
+              <TabsContent value="summary" className="m-0 min-h-full">
+                <TenantUsageOverview data={summaryResult.data} />
+              </TabsContent>
+              <TabsContent value="ai" className="m-0 min-h-full">
+                <UsageAiLogsTable logs={aiResult.data.list} />
+              </TabsContent>
+              <TabsContent value="sms" className="m-0 min-h-full">
+                <UsageSmsLogsTable logs={smsResult.data.list} />
+              </TabsContent>
+              <TabsContent value="social_video" className="m-0 min-h-full">
+                <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
+              </TabsContent>
             </div>
-          ) : tab === "ai" ? (
-            <>
-              <UsageAiLogsTable logs={aiResult.data.list} />
-              <div className="px-4 pb-4">
+            {tab === "summary" ? null : (
+              <div className="shrink-0 border-t bg-card px-4 py-3">
                 <UsagePagination
                   basePath="/usage"
-                  pagination={aiResult.data.pagination}
-                  pageKey="aiPage"
+                  pagination={activePagination}
+                  pageKey={activePageKey}
                   tab={tab}
                   dateFrom={dateFrom}
                   dateTo={dateTo}
@@ -227,51 +229,49 @@ export default async function TenantUsagePage({
                   smsStatus={smsStatus}
                   socialVideoStatus={socialVideoStatus}
                   socialVideoBillable={socialVideoBillable}
-                  unit="条 AI 明细"
+                  unit={activeUnit}
                 />
               </div>
-            </>
-          ) : tab === "sms" ? (
-            <>
-              <UsageSmsLogsTable logs={smsResult.data.list} />
-              <div className="px-4 pb-4">
-                <UsagePagination
-                  basePath="/usage"
-                  pagination={smsResult.data.pagination}
-                  pageKey="smsPage"
-                  tab={tab}
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  aiStatus={aiStatus}
-                  smsStatus={smsStatus}
-                  socialVideoStatus={socialVideoStatus}
-                  socialVideoBillable={socialVideoBillable}
-                  unit="条短信明细"
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
-              <div className="px-4 pb-4">
-                <UsagePagination
-                  basePath="/usage"
-                  pagination={socialVideoResult.data.pagination}
-                  pageKey="socialVideoPage"
-                  tab={tab}
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  aiStatus={aiStatus}
-                  smsStatus={smsStatus}
-                  socialVideoStatus={socialVideoStatus}
-                  socialVideoBillable={socialVideoBillable}
-                  unit="条短视频明细"
-                />
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      </Tabs>
     </div>
+  );
+}
+
+function TenantUsageOverview({ data }: { data: TenantUsageSummaryData }) {
+  const aiSuccessRate = data.ai.call_count > 0
+    ? `${Math.round((data.ai.success_count / data.ai.call_count) * 100)}%`
+    : "-";
+  const smsSuccessRate = data.sms.send_count > 0
+    ? `${Math.round((data.sms.success_count / data.sms.send_count) * 100)}%`
+    : "-";
+
+  return (
+    <div className="grid gap-0 divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
+      <TenantUsageMetric label="AI 成功率" value={aiSuccessRate} />
+      <TenantUsageMetric label="短信成功率" value={smsSuccessRate} />
+      <TenantUsageMetric label="AI token 缺失" value={data.ai.missing_token_count} />
+      <TenantUsageMetric label="短视频计费分钟" value={data.social_video.billable_minutes} />
+      <TenantUsageMetric label="短视频时长缺失" value={data.social_video.missing_duration_count} />
+    </div>
+  );
+}
+
+function TenantUsageMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <section className="min-w-0 p-4">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-xl font-semibold tabular-nums text-foreground">
+        {value}
+      </div>
+    </section>
   );
 }

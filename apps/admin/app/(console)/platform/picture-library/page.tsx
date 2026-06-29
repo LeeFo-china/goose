@@ -22,7 +22,7 @@ import type {
 } from "@/components/picture-library/picture-library-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -288,6 +288,12 @@ export default async function PlatformPictureLibraryPage({
       : activeTab === "categories"
         ? "个分类"
         : "项健康问题";
+  const tabCounts: Record<PictureLibraryTab, number> = {
+    assets: assets.pagination.total,
+    categories: categories.length,
+    comments: comments.pagination.total,
+    health: issueTotal,
+  };
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -332,30 +338,16 @@ export default async function PlatformPictureLibraryPage({
           }
           tabs={
             <TabsList>
-              <TabsTrigger value="assets" asChild>
-                <Link href={buildHref("assets")}>
-                  图片
-                  <span className="ml-2 text-xs text-muted-foreground">{assets.pagination.total}</span>
-                </Link>
-              </TabsTrigger>
-              <TabsTrigger value="categories" asChild>
-                <Link href={buildHref("categories")}>
-                  分类
-                  <span className="ml-2 text-xs text-muted-foreground">{categories.length}</span>
-                </Link>
-              </TabsTrigger>
-              <TabsTrigger value="comments" asChild>
-                <Link href={buildHref("comments")}>
-                  评论
-                  <span className="ml-2 text-xs text-muted-foreground">{comments.pagination.total}</span>
-                </Link>
-              </TabsTrigger>
-              <TabsTrigger value="health" asChild>
-                <Link href={buildHref("health")}>
-                  健康
-                  <span className="ml-2 text-xs text-muted-foreground">{issueTotal}</span>
-                </Link>
-              </TabsTrigger>
+              {PICTURE_LIBRARY_TABS.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value} asChild>
+                  <Link href={buildHref(tab.value)}>
+                    {tab.label}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {tabCounts[tab.value]}
+                    </span>
+                  </Link>
+                </TabsTrigger>
+              ))}
             </TabsList>
           }
           listHeader={activeTab === "categories" ? (
@@ -408,15 +400,18 @@ export default async function PlatformPictureLibraryPage({
           tableViewportTestId="platform-picture-library-list-table-viewport"
           unit={activeUnit}
         >
-          {activeTab === "assets" ? (
+          <TabsContent value="assets" className="m-0 data-[state=inactive]:hidden">
             <PictureAssetsTable assets={assets.list} categories={categories} />
-          ) : activeTab === "categories" ? (
+          </TabsContent>
+          <TabsContent value="categories" className="m-0 data-[state=inactive]:hidden">
             <PictureCategoryTable categories={categories} assets={assets.list} />
-          ) : activeTab === "comments" ? (
+          </TabsContent>
+          <TabsContent value="comments" className="m-0 data-[state=inactive]:hidden">
             <PictureCommentsTable comments={comments.list} />
-          ) : (
+          </TabsContent>
+          <TabsContent value="health" className="m-0 data-[state=inactive]:hidden">
             <PictureLibraryHealthCard health={health} />
-          )}
+          </TabsContent>
         </PlatformListPageShell>
       </Tabs>
     </div>

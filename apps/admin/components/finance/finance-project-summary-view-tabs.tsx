@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type MouseEvent, type PointerEvent, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export type FinanceProjectSummaryView = "all" | "danger" | "info";
 
@@ -69,41 +69,42 @@ export function FinanceProjectSummaryViewTabs({
   ];
 
   return (
-    <nav
+    <Tabs
+      value={activeView}
       aria-label="项目财务明细视图"
       aria-busy={currentPendingView !== null || undefined}
       className="overflow-x-auto overflow-y-hidden"
     >
-      <div className="flex min-w-max items-center gap-5">
+      <TabsList className="h-auto min-w-max justify-start">
         {tabs.map((tab) => {
-          const active = tab.value === activeView;
           const pending = currentPendingView === tab.value;
 
           return (
-            <Link
+            <TabsTrigger
               key={tab.value}
-              href={hrefs[tab.value]}
-              aria-current={active ? "page" : undefined}
-              onPointerDown={(event) => handlePointerDown(event, tab.value)}
-              onClick={(event) => handleNavigate(event, tab.value)}
-              className={cn(
-                "inline-flex h-9 items-center gap-1.5 border-b-2 border-transparent text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-                active && "border-primary text-foreground",
-                pending && "text-foreground",
-              )}
+              value={tab.value}
+              asChild
+              className="gap-1.5 whitespace-nowrap"
             >
-              {pending ? (
-                <Loader2
-                  aria-hidden="true"
-                  className="size-3.5 animate-spin"
-                  data-testid={`finance-summary-view-tab-spinner-${tab.value}`}
-                />
-              ) : null}
-              {tab.label}
-            </Link>
+              <Link
+                href={hrefs[tab.value]}
+                onPointerDown={(event) => handlePointerDown(event, tab.value)}
+                onClick={(event) => handleNavigate(event, tab.value)}
+              >
+                {pending ? (
+                  <Loader2
+                    aria-hidden="true"
+                    className="animate-spin"
+                    data-icon="inline-start"
+                    data-testid={`finance-summary-view-tab-spinner-${tab.value}`}
+                  />
+                ) : null}
+                {tab.label}
+              </Link>
+            </TabsTrigger>
           );
         })}
-      </div>
-    </nav>
+      </TabsList>
+    </Tabs>
   );
 }
