@@ -72,14 +72,16 @@ describe("finance reconciliation exception action targets", () => {
       ),
     ).toMatchObject({
       receivable_overdue: {
-        key: "open_receivables",
+        key: "open_receivable_overdue",
         label: "去处理",
-        target: "/finance/receivables?project_id=project-1&status=overdue",
+        target:
+          "/finance/receivables?project_id=project-1&status=overdue&receivable_plan_id=plan-overdue",
       },
       payment_without_ledger: {
         key: "open_project_payment_ledger",
         label: "去处理",
-        target: "/finance/ledger?project_id=project-3&direction=in&entry_type=project_payment",
+        target:
+          "/finance/ledger?project_id=project-3&direction=in&entry_type=project_payment&payment_id=payment-without-ledger",
       },
       ledger_without_payment: {
         key: "open_ledger",

@@ -44,6 +44,9 @@ class FinanceLedgerRepository {
     if (query.project_id) {
       request = request.eq("project_id", query.project_id);
     }
+    if (query.payment_id) {
+      request = request.eq("payment_id", query.payment_id);
+    }
     if (query.cost_category_id) {
       request = request.eq("cost_category_id", query.cost_category_id);
     }
@@ -96,6 +99,25 @@ class FinanceLedgerRepository {
     }
 
     return data;
+  }
+
+  async findProjectPaymentByPaymentId(input: {
+    tenantId: string;
+    paymentId: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("finance_ledger_entries")
+      .select(this.select)
+      .eq("tenant_id", input.tenantId)
+      .eq("payment_id", input.paymentId)
+      .eq("entry_type", "project_payment")
+      .limit(1);
+
+    if (error) {
+      throw Errors.dbError("查询项目收款台账失败", error);
+    }
+
+    return data?.[0] ?? null;
   }
 
   async findActiveCostCategory(input: {
