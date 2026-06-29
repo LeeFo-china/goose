@@ -106,6 +106,12 @@ export function financeReconciliationActionHref(value: string | null | undefined
   return value.startsWith("/") ? value : "/finance/reconciliation";
 }
 
+export function financeReconciliationPrimaryActionLabel(
+  value: string | null | undefined,
+) {
+  return value?.trim() || "去处理";
+}
+
 function normalizePage(value: number | undefined) {
   const page = Number(value || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;

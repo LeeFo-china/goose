@@ -6,6 +6,11 @@ import {
   type FinanceProjectSummaryListData,
   type FinanceProjectSummaryResult,
 } from "./finance-project-summary-types";
+import {
+  buildFinanceLedgerSearchParams,
+  normalizeFinanceLedgerPage,
+  normalizeFinanceLedgerPageSize,
+} from "./finance-ledger-query-utils";
 
 export type {
   FinanceProjectOperatingSummary,
@@ -162,6 +167,7 @@ export async function fetchFinanceLedger(query: {
   pageSize?: number;
   project_id?: string;
   direction?: string;
+  entry_type?: string;
   cost_category_id?: string;
   unallocated_only?: string;
 }): Promise<FinanceLedgerResult> {
@@ -182,14 +188,11 @@ export async function fetchFinanceLedger(query: {
     };
   }
 
-  const params = new URLSearchParams({
-    page: String(page),
-    pageSize: String(pageSize),
+  const params = buildFinanceLedgerSearchParams({
+    ...query,
+    page,
+    pageSize,
   });
-  appendOptionalParam(params, "project_id", query.project_id);
-  appendOptionalParam(params, "direction", query.direction);
-  appendOptionalParam(params, "cost_category_id", query.cost_category_id);
-  appendOptionalParam(params, "unallocated_only", query.unallocated_only);
 
   try {
     const response = await fetch(buildBackendUrl(`/finance/ledger?${params}`), {
@@ -373,17 +376,6 @@ export async function fetchFinanceProjectSummaries(query: {
       error: error instanceof Error ? error.message : "项目经营汇总加载失败",
     };
   }
-}
-
-function normalizeFinanceLedgerPage(value: number | undefined) {
-  const page = Number(value || 1);
-  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-}
-
-function normalizeFinanceLedgerPageSize(value: number | undefined) {
-  const pageSize = Number(value || FINANCE_LEDGER_PAGE_SIZE);
-  if (!Number.isFinite(pageSize) || pageSize <= 0) return FINANCE_LEDGER_PAGE_SIZE;
-  return Math.min(Math.floor(pageSize), 100);
 }
 
 function appendOptionalParam(

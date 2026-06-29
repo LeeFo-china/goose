@@ -83,7 +83,7 @@ function buildReceivableExceptions(
       description: `${row.title ?? "应收计划"}已到期未结清，剩余 ${formatMoney(remainingAmount)}。`,
       amount: remainingAmount,
       occurred_at: dueAt,
-      action: receivableAction(row.project_id),
+      action: receivableAction(row.project_id, { status: "overdue" }),
     });
   }
 
@@ -136,7 +136,7 @@ function buildPaymentExceptions(
         `收款 ${formatMoney(row.amount)} 已确认，但未找到对应项目收款入账流水。`,
       amount: row.amount,
       occurred_at: occurredAt,
-      action: receivableAction(projectId),
+      action: projectPaymentLedgerAction(projectId),
     });
   }
 
@@ -227,24 +227,51 @@ function compareExceptions(
     left.id.localeCompare(right.id);
 }
 
-function receivableAction(projectId: string | null) {
+function receivableAction(
+  projectId: string | null,
+  filters: { status?: string } = {},
+) {
+  const params = new URLSearchParams();
+  appendParam(params, "project_id", projectId);
+  appendParam(params, "status", filters.status);
   return {
-    key: "open_payment",
-    label: "查看应收",
-    target: projectId
-      ? `/finance/receivables?project_id=${projectId}`
-      : "/finance/receivables",
+    key: "open_receivables",
+    label: "去处理",
+    target: buildTarget("/finance/receivables", params),
   };
 }
 
 function ledgerAction(projectId: string | null) {
+  const params = new URLSearchParams();
+  appendParam(params, "project_id", projectId);
+  params.set("direction", "in");
   return {
     key: "open_ledger",
-    label: "查看台账",
-    target: projectId
-      ? `/finance/ledger?project_id=${projectId}&direction=in`
-      : "/finance/ledger?direction=in",
+    label: "去处理",
+    target: buildTarget("/finance/ledger", params),
   };
+}
+
+function projectPaymentLedgerAction(projectId: string | null) {
+  const params = new URLSearchParams();
+  appendParam(params, "project_id", projectId);
+  params.set("direction", "in");
+  params.set("entry_type", "project_payment");
+  return {
+    key: "open_project_payment_ledger",
+    label: "去处理",
+    target: buildTarget("/finance/ledger", params),
+  };
+}
+
+function appendParam(params: URLSearchParams, key: string, value: string | null | undefined) {
+  const normalized = value?.trim();
+  if (normalized) params.set(key, normalized);
+}
+
+function buildTarget(path: string, params: URLSearchParams) {
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 function toDateTime(date: string | null) {

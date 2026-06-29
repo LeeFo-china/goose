@@ -153,8 +153,8 @@ describe("financeReconciliationService", () => {
         level: "danger",
         amount: 10000,
         action: expect.objectContaining({
-          key: "open_payment",
-          target: "/finance/receivables?project_id=project-3",
+          key: "open_project_payment_ledger",
+          target: "/finance/ledger?project_id=project-3&direction=in&entry_type=project_payment",
         }),
       }),
     );

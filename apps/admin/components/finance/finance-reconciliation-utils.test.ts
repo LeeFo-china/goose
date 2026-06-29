@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildFinanceReconciliationSearchParams,
   financeReconciliationActionLabel,
+  financeReconciliationPrimaryActionLabel,
   financeReconciliationLevelMeta,
   financeReconciliationStatusMeta,
 } from "./finance-reconciliation-utils";
@@ -51,5 +52,10 @@ describe("finance reconciliation helpers", () => {
       variant: "success",
     });
     expect(financeReconciliationActionLabel("resolve")).toBe("标记人工闭环");
+  });
+
+  test("uses a clear manual correction label for row navigation", () => {
+    expect(financeReconciliationPrimaryActionLabel("")).toBe("去处理");
+    expect(financeReconciliationPrimaryActionLabel(" 查看应收 ")).toBe("查看应收");
   });
 });
