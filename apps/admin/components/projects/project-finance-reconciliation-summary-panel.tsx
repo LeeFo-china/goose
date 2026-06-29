@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requestProject } from "@/components/projects/project-mutation-utils";
 import {
+  buildProjectReconciliationExceptionHref,
   buildProjectReconciliationChecks,
   projectReconciliationStatusLabel,
   projectReconciliationStatusVariant,
@@ -95,7 +96,7 @@ export function ProjectFinanceReconciliationSummaryPanel({
             {loading ? "加载中" : projectReconciliationStatusLabel(worstStatus)}
           </Badge>
           <Button asChild type="button" variant="outline" size="sm">
-            <Link href={`/finance/reconciliation?project_id=${projectId}`}>
+            <Link href={buildProjectReconciliationExceptionHref(projectId)}>
               查看异常
             </Link>
           </Button>

@@ -51,6 +51,59 @@ type ActionDbRow = {
 };
 
 class FinanceReconciliationActionsRepository {
+  async listActions(input: {
+    tenantId: string;
+    exceptionFingerprint: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{
+    list: FinanceReconciliationActionRecord[];
+    pagination: {
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+    const { data, error, count } = await SupabaseDB.getAdminClient()
+      .from("finance_reconciliation_exception_actions")
+      .select(`
+        id,
+        tenant_id,
+        exception_fingerprint,
+        exception_code,
+        subject_type,
+        subject_id,
+        project_id,
+        action,
+        remark,
+        actor_employee_id,
+        created_at,
+        actor_employee:employees!finance_reconciliation_exception_actions_actor_employee_id_fkey(name)
+      `, { count: "exact" })
+      .eq("tenant_id", input.tenantId)
+      .eq("exception_fingerprint", input.exceptionFingerprint)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      throw Errors.dbError("查询对账异常处理历史失败", error);
+    }
+
+    const total = count || 0;
+    return {
+      list: ((data || []) as unknown as ActionDbRow[]).map(normalizeActionRow),
+      pagination: {
+        page: input.page,
+        pageSize: input.pageSize,
+        total,
+        totalPages: total > 0 ? Math.ceil(total / input.pageSize) : 0,
+      },
+    };
+  }
+
   async listLatestActions(input: {
     tenantId: string;
     fingerprints: string[];

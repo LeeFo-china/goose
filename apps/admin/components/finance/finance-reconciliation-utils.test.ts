@@ -46,6 +46,10 @@ describe("finance reconciliation helpers", () => {
       label: "已忽略",
       variant: "secondary",
     });
-    expect(financeReconciliationActionLabel("resolve")).toBe("标记已解决");
+    expect(financeReconciliationStatusMeta("resolved")).toEqual({
+      label: "人工闭环",
+      variant: "success",
+    });
+    expect(financeReconciliationActionLabel("resolve")).toBe("标记人工闭环");
   });
 });

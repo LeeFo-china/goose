@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -26,6 +26,8 @@ import { requestBackendJson } from "@/lib/backend-client";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import type {
   FinanceReconciliationAction,
+  FinanceReconciliationActionListData,
+  FinanceReconciliationActionRecord,
   FinanceReconciliationExceptionRecord,
 } from "./finance-reconciliation-requests";
 import {
@@ -33,6 +35,7 @@ import {
   financeReconciliationExceptionLabel,
   financeReconciliationStatusMeta,
 } from "./finance-reconciliation-utils";
+import { formatFinanceDateTime } from "./finance-ledger-utils";
 
 const ACTION_OPTIONS: FinanceReconciliationAction[] = [
   "acknowledge",
@@ -53,8 +56,38 @@ export function FinanceReconciliationActionDialog({
     row.status === "open" ? "acknowledge" : "reopen",
   );
   const [error, setError] = useState("");
+  const [history, setHistory] = useState<FinanceReconciliationActionRecord[]>([]);
+  const [historyError, setHistoryError] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [pending, startTransition] = useTransition();
   const statusMeta = financeReconciliationStatusMeta(row.status);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setHistoryLoading(true);
+    setHistoryError("");
+    requestBackendJson<FinanceReconciliationActionListData>(
+      `/finance/reconciliation/exceptions/${
+        encodeURIComponent(row.exception_fingerprint)
+      }/actions?page=1&pageSize=10`,
+      {
+        cache: "no-store",
+        signal: controller.signal,
+        fallbackMessage: "处理历史加载失败",
+      },
+    )
+      .then((data) => setHistory(data.list || []))
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setHistory([]);
+        setHistoryError(err instanceof Error ? err.message : "处理历史加载失败");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setHistoryLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [row.exception_fingerprint]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -109,6 +142,44 @@ export function FinanceReconciliationActionDialog({
             </div>
           </div>
 
+          <div className="rounded-md border px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                处理历史
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {historyLoading ? "加载中" : `${history.length} 条`}
+              </span>
+            </div>
+            {historyError ? (
+              <p className="mt-2 text-xs text-destructive">{historyError}</p>
+            ) : history.length > 0 ? (
+              <div className="mt-2 grid max-h-32 gap-2 overflow-auto pr-1">
+                {history.map((item) => (
+                  <div key={item.id} className="grid gap-1 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">
+                        {financeReconciliationActionLabel(item.action)}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {formatFinanceDateTime(item.created_at)}
+                      </span>
+                    </div>
+                    <div className="truncate text-muted-foreground">
+                      {[item.actor_employee_name || "未知处理人", item.remark]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                暂无处理历史
+              </p>
+            )}
+          </div>
+
           <label className="grid gap-1.5 text-sm">
             <span className="text-xs font-medium text-muted-foreground">处理动作</span>
             <Select
@@ -144,7 +215,7 @@ export function FinanceReconciliationActionDialog({
           </label>
 
           <p className="text-xs text-muted-foreground">
-            该操作只写入对账异常处理记录，不修改收款、应收、核销或台账数据。
+            该操作只写入对账异常处理记录，不修改收款、应收、核销或台账数据；人工闭环仅表示人工确认异常已闭环。
           </p>
         </form>
 

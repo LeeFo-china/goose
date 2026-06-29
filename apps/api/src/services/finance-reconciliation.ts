@@ -10,6 +10,7 @@ import {
 import type {
   CreateFinanceReconciliationExceptionAction,
   FinanceReconciliationAction,
+  FinanceReconciliationExceptionActionListQuery,
   FinanceReconciliationExceptionListQuery,
 } from "@/schema/finance-reconciliation";
 import { accessPolicyService } from "@/services/access-policy";
@@ -29,7 +30,7 @@ type FinanceReconciliationServiceDependencies = {
   >;
   actionsRepository: Pick<
     typeof financeReconciliationActionsRepository,
-    "listLatestActions" | "createAction"
+    "listLatestActions" | "listActions" | "createAction"
   >;
   accessPolicyService: Pick<
     typeof accessPolicyService,
@@ -179,6 +180,23 @@ export class FinanceReconciliationService {
       action: input.action,
       remark: input.remark,
       actorEmployeeId: authContext.employeeId ?? null,
+    });
+  }
+
+  async listExceptionActions(
+    authContext: AuthContext,
+    fingerprint: string,
+    query: FinanceReconciliationExceptionActionListQuery,
+  ) {
+    const tenantId = this.dependencies.accessPolicyService
+      .assertTenantContext(authContext);
+    this.assertCanViewReconciliation(authContext);
+
+    return this.dependencies.actionsRepository.listActions({
+      tenantId,
+      exceptionFingerprint: fingerprint,
+      page: query.page ?? 1,
+      pageSize: Math.min(query.pageSize ?? 20, 100),
     });
   }
 

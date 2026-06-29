@@ -1,0 +1,38 @@
+export const reconciliationActionHistoryResponse = {
+  list: [
+    {
+      id: "action-2",
+      tenant_id: "tenant-1",
+      exception_fingerprint: "payment_without_ledger:payment-without-ledger",
+      exception_code: "payment_without_ledger" as const,
+      subject_type: "payment" as const,
+      subject_id: "payment-without-ledger",
+      project_id: "project-3",
+      action: "resolve" as const,
+      remark: "已人工核对并闭环",
+      actor_employee_id: "employee-2",
+      actor_employee_name: "小龙女",
+      created_at: "2026-06-30T09:00:00.000Z",
+    },
+    {
+      id: "action-1",
+      tenant_id: "tenant-1",
+      exception_fingerprint: "payment_without_ledger:payment-without-ledger",
+      exception_code: "payment_without_ledger" as const,
+      subject_type: "payment" as const,
+      subject_id: "payment-without-ledger",
+      project_id: "project-3",
+      action: "acknowledge" as const,
+      remark: "已通知出纳补录台账",
+      actor_employee_id: "employee-1",
+      actor_employee_name: "财务",
+      created_at: "2026-06-30T08:00:00.000Z",
+    },
+  ],
+  pagination: {
+    page: 1,
+    pageSize: 20,
+    total: 2,
+    totalPages: 1,
+  },
+};

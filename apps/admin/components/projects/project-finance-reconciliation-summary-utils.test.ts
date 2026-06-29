@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { buildProjectReconciliationChecks } from "./project-finance-reconciliation-summary-utils";
+import {
+  buildProjectReconciliationChecks,
+  buildProjectReconciliationExceptionHref,
+} from "./project-finance-reconciliation-summary-utils";
 
 describe("project finance reconciliation summary", () => {
   test("builds reconciliation check items from backend summary", () => {
@@ -57,8 +60,14 @@ describe("project finance reconciliation summary", () => {
     expect(checks.find((item) => item.key === "exceptions")).toEqual(
       expect.objectContaining({
         status: "success",
-        helper: "未处理 0 条 / 已解决 1 条",
+        helper: "未处理 0 条 / 人工闭环 1 条",
       }),
+    );
+  });
+
+  test("builds project exception link with open status by default", () => {
+    expect(buildProjectReconciliationExceptionHref("project-1")).toBe(
+      "/finance/reconciliation?project_id=project-1&status=open",
     );
   });
 });
