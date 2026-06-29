@@ -11,6 +11,7 @@ import {
   FinanceLedgerListQuerySchema,
   FinanceProjectSummaryListQuerySchema,
 } from "@/schema/finance";
+import { FinanceOperatingReportQuerySchema } from "@/schema/finance-reports";
 import {
   FinanceReconciliationExceptionListQuerySchema,
 } from "@/schema/finance-reconciliation";
@@ -24,6 +25,7 @@ import {
 } from "@/schema/finance-receivables";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
 import { financeLedgerService } from "@/services/finance-ledger";
+import { financeOperatingReportService } from "@/services/finance-operating-report";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
 import { financeReconciliationService } from "@/services/finance-reconciliation";
 import { projectCostBudgetService } from "@/services/project-cost-budgets";
@@ -221,6 +223,23 @@ class FinanceController extends TenantBaseController {
     }
 
     const data = await financeProjectSummaryService.listProjectSummaries(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reports/operating")
+  async getOperatingReport(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceOperatingReportQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeOperatingReportService.getOperatingReport(
       authContext,
       queryResult.data,
     );

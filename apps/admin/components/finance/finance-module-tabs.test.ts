@@ -9,4 +9,12 @@ describe("FinanceModuleTabs", () => {
       href: "/finance/reconciliation",
     });
   });
+
+  test("includes reports as a finance module tab", () => {
+    expect(FINANCE_MODULE_TABS).toContainEqual({
+      value: "reports",
+      label: "运营报表",
+      href: "/finance/reports",
+    });
+  });
 });
