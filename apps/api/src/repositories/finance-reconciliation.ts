@@ -281,6 +281,7 @@ class FinanceReconciliationRepository {
       .select("payment_id, receivable_plan_id, amount")
       .eq("tenant_id", input.tenantId)
       .in("payment_id", input.paymentIds)
+      .is("reversed_at", null)
       .limit(input.sourceLimit);
 
     if (error) {
@@ -301,6 +302,7 @@ class FinanceReconciliationRepository {
       .select("payment_id, receivable_plan_id, amount")
       .eq("tenant_id", input.tenantId)
       .in("receivable_plan_id", input.receivableIds)
+      .is("reversed_at", null)
       .limit(input.sourceLimit);
 
     if (error) {
