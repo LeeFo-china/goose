@@ -62,27 +62,182 @@ git diff --check
 
 结果：通过。
 
-## 未执行
+## Migration 执行
 
-本轮尚未对实际数据库执行 migration，也未在真实 Admin 页面提交闭环动作。
+时间：2026-06-29 15:08-15:12 Asia/Shanghai
 
-待发布或本地联调前需要先应用 migration：
+执行对象：
 
-```bash
-supabase migration up
-supabase migration list
+- migration：`20260629143000_finance_reconciliation_exception_actions`
+- 数据库：`.env.local` 中 `SUPABASE_DB_URL`
+- 连接方式：`pg` 客户端，`ssl=false`
+
+说明：
+
+- 本机 `/opt/homebrew/bin/supabase` 和 `bunx supabase` 均命中 Bun JSON parse 异常。
+- `pnpm dlx supabase migration list --db-url ...` 可运行，但当前 DB URL 与 Supabase CLI TLS 探测不匹配，返回 `server refused TLS connection`。
+- 因 `.env.local` 的 `SUPABASE_DB_URL` 明确带 `sslmode=disable`，本轮改用 `pg` 连接执行 migration，并直接查询 `supabase_migrations.schema_migrations` 验证对齐。
+
+执行前：
+
+```json
+{
+  "local_count": 267,
+  "remote_count": 266,
+  "local_latest": "20260629143000",
+  "remote_latest": "20260628110000",
+  "target_remote_present": false,
+  "missing_tail": ["20260629143000"]
+}
 ```
 
-应用后再执行真实 smoke：
+执行结果：
 
-1. 使用具备 `finance.reconciliation.manage` 的员工登录 Admin。
-2. 打开 `/finance/reconciliation`。
-3. 选择一条未处理异常，点击“处理”。
-4. 提交 `acknowledge`，填写备注。
-5. 刷新列表，确认该行进入“已确认”。
-6. 使用 `status=acknowledged` 筛选，确认该异常可查到。
-7. 打开对应项目详情，确认对账摘要显示最近处理人、处理时间和备注。
-8. 核对原始收款、应收、核销、台账数据未被修改。
+```json
+{
+  "applied": true,
+  "version": "20260629143000",
+  "name": "finance_reconciliation_exception_actions"
+}
+```
+
+执行后：
+
+```json
+{
+  "local_count": 267,
+  "remote_count": 267,
+  "local_latest": "20260629143000",
+  "remote_latest": "20260629143000",
+  "target_remote_present": true,
+  "missing_tail": []
+}
+```
+
+对象核验：
+
+```json
+{
+  "action_table": "finance_reconciliation_exception_actions",
+  "latest_rpc": "list_latest_finance_reconciliation_exception_actions(uuid,text[])",
+  "permission_exists": true
+}
+```
+
+## 真实 Admin Smoke
+
+时间：2026-06-29 15:18 Asia/Shanghai
+
+临时服务：
+
+- API：`http://127.0.0.1:3300`
+- Admin：`http://127.0.0.1:3310`
+- 均从 worktree `/Users/leefo/Public/work/gooes/.worktrees/finance-reconciliation-closure` 启动，未触碰 main 工作区服务。
+
+登录账号：
+
+- 手机号：`18800005001`
+- 员工：小龙女
+- employee ID：`bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`
+- 租户：固始晴天装饰工程有限公司
+- 权限：已具备 `finance.reconciliation.manage`
+
+执行链路：
+
+1. `POST /api/auth/login` 通过 Admin 登录。
+2. `GET /api/backend/admin/auth/me` 确认员工、租户和权限。
+3. `GET /api/backend/finance/reconciliation/exceptions?page=1&pageSize=50&status=open` 返回 open 异常 `10` 条。
+4. 选择异常并通过 Admin 代理提交：
+
+```http
+POST /api/backend/finance/reconciliation/exceptions/payment_unallocated%3A2595309b-662a-4a4c-972c-14bc2bc2be8f/actions
+```
+
+请求体：
+
+```json
+{
+  "action": "acknowledge",
+  "remark": "Phase 7.1 smoke acknowledge 2026-06-29T07:18:23.980Z"
+}
+```
+
+样本异常：
+
+```json
+{
+  "fingerprint": "payment_unallocated:2595309b-662a-4a4c-972c-14bc2bc2be8f",
+  "exception_code": "payment_unallocated",
+  "subject_type": "payment",
+  "subject_id": "2595309b-662a-4a4c-972c-14bc2bc2be8f",
+  "project_id": "fa32f6dd-b2d0-4efc-a810-347dfe90ec4c",
+  "project_name": "郭富城 - 日出东方卓悦3期 1栋305设计项目",
+  "level": "warning",
+  "direction": "payment",
+  "status_before": "open",
+  "amount": 130000
+}
+```
+
+动作写入结果：
+
+```json
+{
+  "id": "248b8f09-5667-4988-bc6d-31219d5eed34",
+  "action": "acknowledge",
+  "actor_employee_id": "bbab0193-43ae-4b7a-a7f3-24314e0f2e0d",
+  "actor_employee_name": "小龙女",
+  "created_at": "2026-06-29T07:18:27.472824+00:00"
+}
+```
+
+回查结果：
+
+- `status=acknowledged&actor_employee_id=bbab0193-43ae-4b7a-a7f3-24314e0f2e0d` 能查到该异常。
+- 回查状态：`acknowledged`
+- 回查最近动作：`acknowledge`
+- 项目对账摘要：
+  - `open_exception_count = 1`
+  - `acknowledged_exception_count = 1`
+  - `latest_actor_employee_name = 小龙女`
+  - `latest_action_remark = Phase 7.1 smoke acknowledge 2026-06-29T07:18:23.980Z`
+- DB 中 `finance_reconciliation_exception_actions.id = 248b8f09-5667-4988-bc6d-31219d5eed34` 存在。
+- Admin 页面 `/finance/reconciliation?status=acknowledged&actor_employee_id=bbab0193-43ae-4b7a-a7f3-24314e0f2e0d` 返回 `200`，页面包含“对账异常”和“已确认”，未出现后端未连接或应用错误提示。
+
+## 原始数据不变性核验
+
+对样本项目 `fa32f6dd-b2d0-4efc-a810-347dfe90ec4c`，动作写入前后项目维度源表统计一致。
+
+写入前：
+
+```json
+[
+  { "table": "payments", "count": 2, "sum_amount": "190000" },
+  { "table": "project_receivable_plans", "count": 0, "sum_amount": "0", "sum_paid_amount": "0" },
+  { "table": "project_receivable_allocations", "count": 0, "sum_amount": "0" },
+  { "table": "finance_ledger_entries", "count": 2, "sum_amount": "190000.00" }
+]
+```
+
+写入后：
+
+```json
+[
+  { "table": "payments", "count": 2, "sum_amount": "190000" },
+  { "table": "project_receivable_plans", "count": 0, "sum_amount": "0", "sum_paid_amount": "0" },
+  { "table": "project_receivable_allocations", "count": 0, "sum_amount": "0" },
+  { "table": "finance_ledger_entries", "count": 2, "sum_amount": "190000.00" }
+]
+```
+
+结论：本次 `acknowledge` 只写入 `finance_reconciliation_exception_actions`，未修改 `payments`、`project_receivable_plans`、`project_receivable_allocations`、`finance_ledger_entries`。
+
+## 验收结论
+
+- migration 已应用到当前 dev 数据库，`schema_migrations` 与本地 migration 对齐。
+- API/Admin 临时服务真实 smoke 通过。
+- Admin 代理链路、后端权限、action 写入、状态回查、项目摘要和页面渲染均可用。
+- 对账异常闭环动作仍是审计和人工标记，不自动修账。
 
 ## 风险与后续
 
