@@ -83,9 +83,17 @@ export function buildProjectReconciliationChecks(
       primary: summary.exception_count,
       secondary: summary.danger_count,
       helper:
-        `未处理 ${summary.open_exception_count} 条 / 已解决 ${summary.resolved_exception_count} 条`,
+        `未处理 ${summary.open_exception_count} 条 / 人工闭环 ${summary.resolved_exception_count} 条`,
     },
   ];
+}
+
+export function buildProjectReconciliationExceptionHref(projectId: string) {
+  const params = new URLSearchParams({
+    project_id: projectId,
+    status: "open",
+  });
+  return `/finance/reconciliation?${params}`;
 }
 
 export function projectReconciliationStatusLabel(

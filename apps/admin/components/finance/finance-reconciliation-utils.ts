@@ -62,7 +62,7 @@ export function financeReconciliationStatusMeta(
     return { label: "已忽略", variant: "secondary" as const };
   }
   if (status === "resolved") {
-    return { label: "已解决", variant: "success" as const };
+    return { label: "人工闭环", variant: "success" as const };
   }
   return { label: status || "-", variant: "outline" as const };
 }
@@ -72,7 +72,7 @@ export function financeReconciliationActionLabel(
 ) {
   if (action === "acknowledge") return "标记已确认";
   if (action === "ignore") return "标记忽略";
-  if (action === "resolve") return "标记已解决";
+  if (action === "resolve") return "标记人工闭环";
   if (action === "reopen") return "重新打开";
   return action || "处理";
 }

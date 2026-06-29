@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { CreateFinanceReconciliationActionInput } from "@/repositories/finance-reconciliation-actions";
 import type { AuthContext } from "@/services/authorization";
+import { reconciliationActionHistoryResponse } from "@/services/finance-reconciliation-action-history.test-fixtures";
 import {
   reconciliationCandidateRows,
   reconciliationProjectSummaryTotals,
@@ -13,6 +14,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const listCandidateRows = mock(async () => reconciliationCandidateRows);
 const getProjectSummaryTotals = mock(async () => reconciliationProjectSummaryTotals);
 const listLatestActions = mock(async () => new Map());
+const listActions = mock(async () => reconciliationActionHistoryResponse);
 const createAction = mock(async (input: CreateFinanceReconciliationActionInput) => ({
   id: "action-1",
   tenant_id: input.tenantId,
@@ -85,6 +87,7 @@ async function createService() {
     },
     actionsRepository: {
       listLatestActions,
+      listActions,
       createAction,
     },
     accessPolicyService: accessPolicy,
@@ -96,6 +99,7 @@ describe("financeReconciliationService", () => {
     listCandidateRows.mockClear();
     getProjectSummaryTotals.mockClear();
     listLatestActions.mockClear();
+    listActions.mockClear();
     createAction.mockClear();
     listLatestActions.mockImplementation(async () => new Map());
     accessPolicy.assertTenantContext.mockClear();
@@ -321,6 +325,50 @@ describe("financeReconciliationService", () => {
       remark: "已通知出纳补录台账",
       actorEmployeeId: "employee-1",
     });
+  });
+
+  test("lists exception action history with pagination", async () => {
+    const service = await createService();
+
+    const result = await service.listExceptionActions(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      "payment_without_ledger:payment-without-ledger",
+      {
+        page: 1,
+        pageSize: 20,
+      },
+    );
+
+    expect(result.pagination.total).toBe(2);
+    expect(result.list.map((item) => item.action)).toEqual([
+      "resolve",
+      "acknowledge",
+    ]);
+    expect(listActions).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      exceptionFingerprint: "payment_without_ledger:payment-without-ledger",
+      page: 1,
+      pageSize: 20,
+    });
+  });
+
+  test("rejects exception action history without finance permissions", async () => {
+    const service = await createService();
+
+    await expect(
+      service.listExceptionActions(
+        authContextWithPermissions([{ code: "project.read", scope: "all" }]),
+        "payment_without_ledger:payment-without-ledger",
+        {
+          page: 1,
+          pageSize: 20,
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      code: "FORBIDDEN",
+    });
+    expect(listActions).not.toHaveBeenCalled();
   });
 
   test("rejects exception actions without manage permission", async () => {

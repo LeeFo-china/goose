@@ -94,6 +94,9 @@ export const FinanceReconciliationExceptionFingerprintParamsSchema = z.object({
     .max(200, "对账异常标识过长"),
 });
 
+export const FinanceReconciliationExceptionActionListQuerySchema =
+  PaginationQuerySchema;
+
 export type FinanceReconciliationExceptionCode =
   (typeof FINANCE_RECONCILIATION_EXCEPTION_CODE_VALUES)[number];
 export type FinanceReconciliationLevel =
@@ -106,6 +109,9 @@ export type FinanceReconciliationAction =
   (typeof FINANCE_RECONCILIATION_ACTION_VALUES)[number];
 export type FinanceReconciliationExceptionListQuery = z.infer<
   typeof FinanceReconciliationExceptionListQuerySchema
+>;
+export type FinanceReconciliationExceptionActionListQuery = z.infer<
+  typeof FinanceReconciliationExceptionActionListQuerySchema
 >;
 export type CreateFinanceReconciliationExceptionAction = z.infer<
   typeof CreateFinanceReconciliationExceptionActionSchema

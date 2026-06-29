@@ -54,6 +54,31 @@ export type FinanceReconciliationExceptionRecord = {
   last_actor_employee_name: string | null;
 };
 
+export type FinanceReconciliationActionRecord = {
+  id: string;
+  tenant_id: string;
+  exception_fingerprint: string;
+  exception_code: FinanceReconciliationExceptionCode;
+  subject_type: "receivable" | "payment" | "ledger";
+  subject_id: string | null;
+  project_id: string | null;
+  action: FinanceReconciliationAction;
+  remark: string;
+  actor_employee_id: string | null;
+  actor_employee_name: string | null;
+  created_at: string;
+};
+
+export type FinanceReconciliationActionListData = {
+  list: FinanceReconciliationActionRecord[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 export type FinanceReconciliationSummary = {
   total: number;
   danger: number;
@@ -74,6 +99,23 @@ export type FinanceReconciliationListData = {
 
 export type FinanceReconciliationResult = FinanceReconciliationListData & {
   error: string | null;
+};
+
+export type FinanceReconciliationEmployeeOption = {
+  value: string;
+  label: string;
+};
+
+type EmployeeOptionRow = {
+  id: string;
+  name?: string | null;
+  phone?: string | null;
+  department_name?: string | null;
+  post_name?: string | null;
+};
+
+type EmployeeListData = {
+  list?: EmployeeOptionRow[];
 };
 
 export function emptyFinanceReconciliation(
@@ -145,4 +187,59 @@ export async function fetchFinanceReconciliationExceptions(query: {
       error: error instanceof Error ? error.message : "对账异常加载失败",
     };
   }
+}
+
+export async function fetchFinanceReconciliationEmployeeOptions(
+  selectedEmployeeId?: string,
+): Promise<FinanceReconciliationEmployeeOption[]> {
+  const token = await getAdminToken();
+  const fallbackOption = selectedEmployeeId
+    ? [{
+      value: selectedEmployeeId,
+      label: `已选处理人 ${selectedEmployeeId.slice(0, 8)}`,
+    }]
+    : [];
+
+  if (!token) {
+    return [{ value: "", label: "全部处理人" }, ...fallbackOption];
+  }
+
+  try {
+    const params = new URLSearchParams({
+      page: "1",
+      pageSize: "100",
+      status: "active",
+    });
+    const response = await fetch(buildBackendUrl(`/employees?${params}`), {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<EmployeeListData>(response);
+    const options = (payload.data?.list || []).map((employee) => ({
+      value: employee.id,
+      label: employeeLabel(employee),
+    }));
+    if (
+      selectedEmployeeId &&
+      !options.some((option) => option.value === selectedEmployeeId)
+    ) {
+      const selectedOption = fallbackOption[0];
+      if (selectedOption) options.push(selectedOption);
+    }
+    return [{ value: "", label: "全部处理人" }, ...options];
+  } catch {
+    return [{ value: "", label: "全部处理人" }, ...fallbackOption];
+  }
+}
+
+function employeeLabel(employee: EmployeeOptionRow) {
+  const title = employee.name || employee.phone || employee.id;
+  const meta = [
+    employee.department_name,
+    employee.post_name,
+    employee.phone && employee.phone !== title ? employee.phone : null,
+  ].filter(Boolean).join(" · ");
+  return meta ? `${title} (${meta})` : title;
 }

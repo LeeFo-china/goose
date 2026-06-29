@@ -7,6 +7,7 @@ import {
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { FinanceMetricCard } from "@/components/finance/finance-overview-cards";
 import {
+  fetchFinanceReconciliationEmployeeOptions,
   fetchFinanceReconciliationExceptions,
 } from "@/components/finance/finance-reconciliation-requests";
 import { FinanceReconciliationTable } from "@/components/finance/finance-reconciliation-table";
@@ -61,7 +62,7 @@ const STATUS_OPTIONS = [
   { value: "open", label: "未处理" },
   { value: "acknowledged", label: "已确认" },
   { value: "ignored", label: "已忽略" },
-  { value: "resolved", label: "已解决" },
+  { value: "resolved", label: "人工闭环" },
 ];
 
 function normalizePage(value: string | undefined) {
@@ -103,18 +104,21 @@ export default async function FinanceReconciliationPage({
 
   const params = await searchParams;
   const page = normalizePage(params.page);
-  const data = await fetchFinanceReconciliationExceptions({
-    page,
-    pageSize: 20,
-    date_from: clean(params.date_from),
-    date_to: clean(params.date_to),
-    project_id: clean(params.project_id),
-    exception_code: clean(params.exception_code),
-    level: clean(params.level),
-    direction: clean(params.direction),
-    status: clean(params.status),
-    actor_employee_id: clean(params.actor_employee_id),
-  });
+  const [data, employeeOptions] = await Promise.all([
+    fetchFinanceReconciliationExceptions({
+      page,
+      pageSize: 20,
+      date_from: clean(params.date_from),
+      date_to: clean(params.date_to),
+      project_id: clean(params.project_id),
+      exception_code: clean(params.exception_code),
+      level: clean(params.level),
+      direction: clean(params.direction),
+      status: clean(params.status),
+      actor_employee_id: clean(params.actor_employee_id),
+    }),
+    fetchFinanceReconciliationEmployeeOptions(clean(params.actor_employee_id)),
+  ]);
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
     data.pagination.page < data.pagination.totalPages;
@@ -240,18 +244,13 @@ export default async function FinanceReconciliationPage({
               value={params.status}
               options={STATUS_OPTIONS}
             />
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="reconciliation-actor-employee-id">
-                处理人 ID
-              </label>
-              <Input
-                id="reconciliation-actor-employee-id"
-                name="actor_employee_id"
-                defaultValue={params.actor_employee_id || ""}
-                placeholder="按处理人 ID 精确筛选"
-                className="h-9"
-              />
-            </div>
+            <FinanceFilterSelectField
+              id="reconciliation-actor-employee-id"
+              name="actor_employee_id"
+              label="处理人"
+              value={params.actor_employee_id}
+              options={employeeOptions}
+            />
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <Button type="submit" size="sm">筛选</Button>
               <Button asChild type="button" variant="outline" size="sm">
