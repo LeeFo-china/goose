@@ -3,16 +3,20 @@ import { cn } from "@/lib/utils";
 export type FinanceModuleTab =
   | "overview"
   | "diagnostics"
+  | "reconciliation"
+  | "reports"
   | "receivables"
   | "ledger";
 
-const FINANCE_MODULE_TABS: Array<{
+export const FINANCE_MODULE_TABS: Array<{
   value: FinanceModuleTab;
   label: string;
   href: string;
 }> = [
   { value: "overview", label: "财务总览", href: "/finance" },
   { value: "diagnostics", label: "财务诊断", href: "/finance/diagnostics" },
+  { value: "reconciliation", label: "对账异常", href: "/finance/reconciliation" },
+  { value: "reports", label: "运营报表", href: "/finance/reports" },
   { value: "receivables", label: "应收计划", href: "/finance/receivables" },
   { value: "ledger", label: "财务台账", href: "/finance/ledger" },
 ];

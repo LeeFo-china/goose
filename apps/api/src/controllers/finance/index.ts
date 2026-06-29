@@ -11,6 +11,10 @@ import {
   FinanceLedgerListQuerySchema,
   FinanceProjectSummaryListQuerySchema,
 } from "@/schema/finance";
+import { FinanceOperatingReportQuerySchema } from "@/schema/finance-reports";
+import {
+  FinanceReconciliationExceptionListQuerySchema,
+} from "@/schema/finance-reconciliation";
 import {
   CancelFinanceReceivableSchema,
   CreateFinanceReceivableFollowUpSchema,
@@ -21,7 +25,9 @@ import {
 } from "@/schema/finance-receivables";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
 import { financeLedgerService } from "@/services/finance-ledger";
+import { financeOperatingReportService } from "@/services/finance-operating-report";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
+import { financeReconciliationService } from "@/services/finance-reconciliation";
 import { projectCostBudgetService } from "@/services/project-cost-budgets";
 import { projectReceivablesService } from "@/services/project-receivables";
 import {
@@ -47,6 +53,42 @@ class FinanceController extends TenantBaseController {
     const data = await financeLedgerService.listLedger(
       authContext,
       queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reconciliation/exceptions")
+  async listReconciliationExceptions(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceReconciliationExceptionListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeReconciliationService.listExceptions(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reconciliation/project/:id")
+  async getProjectReconciliationSummary(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await financeReconciliationService.getProjectSummary(
+      authContext,
+      idVerify.data.id,
     );
     return ResponseHandler.success(data);
   }
@@ -181,6 +223,23 @@ class FinanceController extends TenantBaseController {
     }
 
     const data = await financeProjectSummaryService.listProjectSummaries(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reports/operating")
+  async getOperatingReport(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceOperatingReportQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeOperatingReportService.getOperatingReport(
       authContext,
       queryResult.data,
     );
