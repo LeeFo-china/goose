@@ -12,6 +12,9 @@ import {
   FinanceProjectSummaryListQuerySchema,
 } from "@/schema/finance";
 import {
+  FinanceReconciliationExceptionListQuerySchema,
+} from "@/schema/finance-reconciliation";
+import {
   CancelFinanceReceivableSchema,
   CreateFinanceReceivableFollowUpSchema,
   CreateFinanceReceivableSchema,
@@ -22,6 +25,7 @@ import {
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
 import { financeLedgerService } from "@/services/finance-ledger";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
+import { financeReconciliationService } from "@/services/finance-reconciliation";
 import { projectCostBudgetService } from "@/services/project-cost-budgets";
 import { projectReceivablesService } from "@/services/project-receivables";
 import {
@@ -45,6 +49,26 @@ class FinanceController extends TenantBaseController {
     }
 
     const data = await financeLedgerService.listLedger(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reconciliation/exceptions")
+  async listReconciliationExceptions(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceReconciliationExceptionListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeReconciliationService.listExceptions(
       authContext,
       queryResult.data,
     );
