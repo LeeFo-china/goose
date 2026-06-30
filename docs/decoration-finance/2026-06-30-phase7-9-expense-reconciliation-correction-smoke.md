@@ -71,24 +71,41 @@ Admin `/finance/audits` 已补齐费用修正审计类型：
 
 ## 验证命令
 
-已执行：
+已在 main 分支执行：
 
 ```bash
-bun test src/services/finance-reconciliation.test.ts
-bun test src/services/finance-correction-audits.test.ts
+cd apps/api
+bun test src/services/finance-reconciliation.test.ts src/services/finance-reconciliation-expense-corrections.test.ts src/services/finance-correction-audits.test.ts
+cd ../..
 pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit
 pnpm --dir apps/admin check
-```
-
-待最终收口前执行：
-
-```bash
 bun run check:file-size
 git diff --check
 ```
 
-如本地 Supabase 环境可用，再执行 migration 状态核验：
+结果：
+
+- API 单测：20 pass，0 fail。
+- API TypeScript：通过。
+- Admin check：file-size 与 typecheck 通过。
+- 全仓 file-size：通过。
+- `git diff --check`：通过。
+
+## Migration 状态
+
+已提交 migration：
+
+```text
+supabase/migrations/20260630190000_finance_reconciliation_expense_correction_actions.sql
+```
+
+已尝试加载 `.env.local` 后执行远端状态核验：
 
 ```bash
+set -a
+source /Users/leefo/Public/work/gooes/.env.local
+set +a
 supabase migration list
 ```
+
+结果：未通过。CLI 能连接到 Supabase pooler，但远端数据库认证失败，错误为 `password authentication failed for user "postgres..."`，并提示检查 `SUPABASE_DB_PASSWORD`。因此本次只能确认 migration 文件已纳入版本控制，远端 Local/Remote migration 对齐状态仍需在数据库凭据可用后复核。
