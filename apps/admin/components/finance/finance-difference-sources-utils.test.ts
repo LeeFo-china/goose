@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildFinanceMonthlyDifferenceSourcesSearchParams,
+  financeDifferenceResolutionStatusMeta,
   financeDifferenceSourceTypeMeta,
   safeFinanceDifferenceSourceHref,
 } from "./finance-difference-sources-utils";
@@ -10,13 +11,14 @@ describe("finance difference source helpers", () => {
     const params = buildFinanceMonthlyDifferenceSourcesSearchParams({
       month: "2026-06",
       source_type: "ledger_entry",
+      resolution_status: "confirmed",
       project_id: "00000000-0000-4000-8000-000000000001",
       page: 2,
       pageSize: 50,
     });
 
     expect(params.toString()).toBe(
-      "month=2026-06&page=2&pageSize=50&source_type=ledger_entry&project_id=00000000-0000-4000-8000-000000000001",
+      "month=2026-06&page=2&pageSize=50&source_type=ledger_entry&resolution_status=confirmed&project_id=00000000-0000-4000-8000-000000000001",
     );
   });
 
@@ -42,5 +44,20 @@ describe("finance difference source helpers", () => {
       .toBe("/expenses?expense_request_id=1");
     expect(safeFinanceDifferenceSourceHref("https://example.com"))
       .toBe("/finance/reports/difference-sources");
+  });
+
+  test("maps resolution statuses to display metadata", () => {
+    expect(financeDifferenceResolutionStatusMeta("pending")).toEqual({
+      label: "待处理",
+      variant: "warning",
+    });
+    expect(financeDifferenceResolutionStatusMeta("resolved")).toEqual({
+      label: "已修复",
+      variant: "success",
+    });
+    expect(financeDifferenceResolutionStatusMeta("unknown")).toEqual({
+      label: "未知状态",
+      variant: "outline",
+    });
   });
 });

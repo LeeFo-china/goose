@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type {
+  FinanceMonthlyDifferenceResolutionRecord,
+} from "@/repositories/finance-monthly-difference-resolutions";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -148,6 +151,13 @@ const listExpenseRequestSources = mock(async () => ({
   ],
   total: 1,
 }));
+const listResolutionsBySources = mock(
+  async (): Promise<FinanceMonthlyDifferenceResolutionRecord[]> => [],
+);
+const upsertResolution = mock(
+  async (): Promise<FinanceMonthlyDifferenceResolutionRecord> =>
+    resolutionRecord(),
+);
 
 const accessPolicy = {
   assertTenantContext: mock((authContext: AuthContext) => {
@@ -194,6 +204,27 @@ function authContextWithPermissions(
   };
 }
 
+function resolutionRecord(
+  overrides: Partial<FinanceMonthlyDifferenceResolutionRecord> = {},
+): FinanceMonthlyDifferenceResolutionRecord {
+  return {
+    id: "resolution-1",
+    tenant_id: "tenant-1",
+    month: "2026-06",
+    source_type: "ledger_entry",
+    source_id: "ledger-1",
+    project_id: projectId,
+    status: "confirmed",
+    note: "已确认",
+    handled_by: "employee-1",
+    handled_by_name: "财务",
+    handled_at: "2026-06-30T14:00:00.000Z",
+    created_at: "2026-06-30T14:00:00.000Z",
+    updated_at: "2026-06-30T14:00:00.000Z",
+    ...overrides,
+  };
+}
+
 async function createService() {
   const { FinanceMonthlyDifferenceSourcesService } = await import(
     "./finance-monthly-difference-sources"
@@ -211,6 +242,10 @@ async function createService() {
     monthlyOverviewService: {
       getMonthlyOverview,
     },
+    resolutionRepository: {
+      listBySources: listResolutionsBySources,
+      upsert: upsertResolution,
+    },
     accessPolicyService: accessPolicy,
   });
 }
@@ -223,6 +258,8 @@ describe("FinanceMonthlyDifferenceSourcesService", () => {
     listLedgerEntrySources.mockClear();
     listReceivablePlanSources.mockClear();
     listExpenseRequestSources.mockClear();
+    listResolutionsBySources.mockClear();
+    upsertResolution.mockClear();
     accessPolicy.assertTenantContext.mockClear();
     accessPolicy.hasPermission.mockClear();
   });
@@ -244,6 +281,7 @@ describe("FinanceMonthlyDifferenceSourcesService", () => {
       has_snapshot_difference: false,
       total: 0,
       by_source_type: {},
+      resolution: { pending: 0, confirmed: 0, ignored: 0, resolved: 0 },
     });
     expect(getMonthlyOverview).not.toHaveBeenCalled();
     expect(listLedgerEntrySources).not.toHaveBeenCalled();
@@ -279,6 +317,24 @@ describe("FinanceMonthlyDifferenceSourcesService", () => {
         receivable_plan: 1,
         expense_request: 1,
       },
+      resolution: { pending: 4, confirmed: 0, ignored: 0, resolved: 0 },
+    });
+    expect(result.list[0]?.resolution).toEqual({
+      status: "pending",
+      note: null,
+      handled_by: null,
+      handled_by_name: null,
+      handled_at: null,
+    });
+    expect(listResolutionsBySources).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      month: "2026-06",
+      sources: [
+        { sourceType: "correction_audit", sourceId: "audit-1" },
+        { sourceType: "ledger_entry", sourceId: "ledger-1" },
+        { sourceType: "receivable_plan", sourceId: "plan-1" },
+        { sourceType: "expense_request", sourceId: "expense-1" },
+      ],
     });
     expect(listCorrectionAuditSources).toHaveBeenCalledWith({
       tenantId: "tenant-1",
@@ -342,6 +398,89 @@ describe("FinanceMonthlyDifferenceSourcesService", () => {
     expect(result.summary.by_source_type).toEqual({
       expense_request: 2,
     });
+  });
+
+  test("filters sources by handled resolution status", async () => {
+    listResolutionsBySources.mockResolvedValueOnce([
+      resolutionRecord({
+        source_type: "receivable_plan",
+        source_id: "plan-1",
+        note: "已确认应收变化",
+        handled_by: "employee-2",
+        handled_by_name: "主管",
+      }),
+    ]);
+    const service = await createService();
+
+    const result = await service.listDifferenceSources(
+      authContextWithPermissions([{ code: "finance.reports.read", scope: "all" }]),
+      {
+        month: "2026-06",
+        resolution_status: "confirmed",
+        page: 1,
+        pageSize: 20,
+      },
+    );
+
+    expect(result.list.map((record) => record.id)).toEqual([
+      "receivable_plan:plan-1",
+    ]);
+    expect(result.list[0]?.resolution).toEqual({
+      status: "confirmed",
+      note: "已确认应收变化",
+      handled_by: "employee-2",
+      handled_by_name: "主管",
+      handled_at: "2026-06-30T14:00:00.000Z",
+    });
+    expect(result.pagination.total).toBe(1);
+    expect(result.summary.resolution).toEqual(
+      { pending: 3, confirmed: 1, ignored: 0, resolved: 0 },
+    );
+  });
+
+  test("upserts a difference resolution with closing manage permission", async () => {
+    const service = await createService();
+
+    const result = await service.updateResolution(
+      authContextWithPermissions([{ code: "finance.closing.manage", scope: "all" }]),
+      {
+        month: "2026-06",
+        source_type: "ledger_entry",
+        source_id: "ledger-1",
+        project_id: projectId,
+        status: "confirmed",
+        note: "已确认",
+      },
+    );
+
+    expect(result.status).toBe("confirmed");
+    expect(upsertResolution).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      month: "2026-06",
+      sourceType: "ledger_entry",
+      sourceId: "ledger-1",
+      projectId,
+      status: "confirmed",
+      note: "已确认",
+      handledBy: "employee-1",
+    });
+  });
+
+  test("rejects resolution updates without closing manage permission", async () => {
+    const service = await createService();
+
+    await expect(
+      service.updateResolution(
+        authContextWithPermissions([{ code: "finance.reports.read", scope: "all" }]),
+        {
+          month: "2026-06",
+          source_type: "ledger_entry",
+          source_id: "ledger-1",
+          status: "confirmed",
+        },
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(upsertResolution).not.toHaveBeenCalled();
   });
 
   test("rejects users without finance report permissions", async () => {

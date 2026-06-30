@@ -6,11 +6,23 @@ export type FinanceDifferenceSourceType =
   | "receivable_plan"
   | "expense_request";
 
+export type FinanceDifferenceResolutionStatus =
+  | "pending"
+  | "confirmed"
+  | "ignored"
+  | "resolved";
+
+export type FinanceDifferenceResolutionWriteStatus =
+  | "confirmed"
+  | "ignored"
+  | "resolved";
+
 export type FinanceDifferenceSourcesQuery = {
   month: string;
   page?: number;
   pageSize?: number;
   source_type?: FinanceDifferenceSourceType | string;
+  resolution_status?: FinanceDifferenceResolutionStatus | string;
   project_id?: string;
 };
 
@@ -26,6 +38,16 @@ const SOURCE_TYPE_META: Record<
   expense_request: { label: "费用申请", variant: "outline" },
 };
 
+const RESOLUTION_STATUS_META: Record<
+  FinanceDifferenceResolutionStatus,
+  { label: string; variant: BadgeVariant }
+> = {
+  pending: { label: "待处理", variant: "warning" },
+  confirmed: { label: "已确认", variant: "secondary" },
+  ignored: { label: "已忽略", variant: "outline" },
+  resolved: { label: "已修复", variant: "success" },
+};
+
 export function buildFinanceMonthlyDifferenceSourcesSearchParams(
   query: FinanceDifferenceSourcesQuery,
 ) {
@@ -34,6 +56,7 @@ export function buildFinanceMonthlyDifferenceSourcesSearchParams(
   params.set("page", String(query.page || 1));
   params.set("pageSize", String(query.pageSize || 20));
   appendIfPresent(params, "source_type", query.source_type);
+  appendIfPresent(params, "resolution_status", query.resolution_status);
   appendIfPresent(params, "project_id", query.project_id);
   return params;
 }
@@ -43,6 +66,15 @@ export function financeDifferenceSourceTypeMeta(
 ): { label: string; variant: BadgeVariant } {
   return SOURCE_TYPE_META[sourceType as FinanceDifferenceSourceType] || {
     label: "未知来源",
+    variant: "outline",
+  };
+}
+
+export function financeDifferenceResolutionStatusMeta(
+  status: FinanceDifferenceResolutionStatus | string,
+): { label: string; variant: BadgeVariant } {
+  return RESOLUTION_STATUS_META[status as FinanceDifferenceResolutionStatus] || {
+    label: "未知状态",
     variant: "outline",
   };
 }

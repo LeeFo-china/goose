@@ -52,12 +52,35 @@ export const FinanceMonthlyOverviewDifferenceSourceTypeSchema = z.enum([
   "expense_request",
 ]);
 
+export const FinanceMonthlyDifferenceResolutionStatusSchema = z.enum([
+  "pending",
+  "confirmed",
+  "ignored",
+  "resolved",
+]);
+
+export const FinanceMonthlyDifferenceResolutionWriteStatusSchema = z.enum([
+  "confirmed",
+  "ignored",
+  "resolved",
+]);
+
 export const FinanceMonthlyOverviewDifferenceSourcesQuerySchema = z.object({
   month: RequiredMonthSchema,
   source_type: FinanceMonthlyOverviewDifferenceSourceTypeSchema.optional(),
+  resolution_status: FinanceMonthlyDifferenceResolutionStatusSchema.optional(),
   project_id: z.uuid("请选择有效的项目").optional(),
   page: PageSchema,
   pageSize: PageSizeSchema,
+});
+
+export const UpdateFinanceMonthlyDifferenceResolutionSchema = z.object({
+  month: RequiredMonthSchema,
+  source_type: FinanceMonthlyOverviewDifferenceSourceTypeSchema,
+  source_id: z.string().trim().min(1, "请选择有效的差异来源").max(120),
+  project_id: z.uuid("请选择有效的项目").nullable().optional(),
+  status: FinanceMonthlyDifferenceResolutionWriteStatusSchema,
+  note: z.string().trim().max(500, "备注不能超过 500 个字符").optional(),
 });
 
 export const FinanceProjectRankingSortBySchema = z.enum([
@@ -121,8 +144,17 @@ export type FinanceMonthlyOverviewQuery = z.infer<
 export type FinanceMonthlyOverviewDifferenceSourceType = z.infer<
   typeof FinanceMonthlyOverviewDifferenceSourceTypeSchema
 >;
+export type FinanceMonthlyDifferenceResolutionStatus = z.infer<
+  typeof FinanceMonthlyDifferenceResolutionStatusSchema
+>;
+export type FinanceMonthlyDifferenceResolutionWriteStatus = z.infer<
+  typeof FinanceMonthlyDifferenceResolutionWriteStatusSchema
+>;
 export type FinanceMonthlyOverviewDifferenceSourcesQuery = z.infer<
   typeof FinanceMonthlyOverviewDifferenceSourcesQuerySchema
+>;
+export type UpdateFinanceMonthlyDifferenceResolutionInput = z.infer<
+  typeof UpdateFinanceMonthlyDifferenceResolutionSchema
 >;
 export type FinanceProjectRankingQuery = z.infer<
   typeof FinanceProjectRankingQuerySchema

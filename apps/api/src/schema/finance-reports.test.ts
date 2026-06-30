@@ -6,6 +6,7 @@ import {
   FinanceMonthlyOverviewQuerySchema,
   FinanceProjectRankingQuerySchema,
   FinanceReceivableAgingQuerySchema,
+  UpdateFinanceMonthlyDifferenceResolutionSchema,
 } from "@/schema/finance-reports";
 
 describe("FinanceMonthlyOverviewQuerySchema", () => {
@@ -32,6 +33,7 @@ describe("FinanceMonthlyOverviewDifferenceSourcesQuerySchema", () => {
       FinanceMonthlyOverviewDifferenceSourcesQuerySchema.parse({
         month: "2026-06",
         source_type: "ledger_entry",
+        resolution_status: "confirmed",
         project_id: "00000000-0000-4000-8000-000000000001",
         page: "2",
         pageSize: "50",
@@ -39,6 +41,7 @@ describe("FinanceMonthlyOverviewDifferenceSourcesQuerySchema", () => {
     ).toEqual({
       month: "2026-06",
       source_type: "ledger_entry",
+      resolution_status: "confirmed",
       project_id: "00000000-0000-4000-8000-000000000001",
       page: 2,
       pageSize: 50,
@@ -53,6 +56,12 @@ describe("FinanceMonthlyOverviewDifferenceSourcesQuerySchema", () => {
     ).toThrow();
     expect(() =>
       FinanceMonthlyOverviewDifferenceSourcesQuerySchema.parse({
+        month: "2026-06",
+        resolution_status: "unknown",
+      })
+    ).toThrow();
+    expect(() =>
+      FinanceMonthlyOverviewDifferenceSourcesQuerySchema.parse({
         month: "",
       })
     ).toThrow();
@@ -60,6 +69,56 @@ describe("FinanceMonthlyOverviewDifferenceSourcesQuerySchema", () => {
       FinanceMonthlyOverviewDifferenceSourcesQuerySchema.parse({
         month: "2026-06",
         pageSize: "101",
+      })
+    ).toThrow();
+  });
+});
+
+describe("UpdateFinanceMonthlyDifferenceResolutionSchema", () => {
+  test("parses a handled difference resolution", () => {
+    expect(
+      UpdateFinanceMonthlyDifferenceResolutionSchema.parse({
+        month: "2026-06",
+        source_type: "ledger_entry",
+        source_id: "ledger-1",
+        project_id: "00000000-0000-4000-8000-000000000001",
+        status: "ignored",
+        note: "已确认无需处理",
+      }),
+    ).toEqual({
+      month: "2026-06",
+      source_type: "ledger_entry",
+      source_id: "ledger-1",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      status: "ignored",
+      note: "已确认无需处理",
+    });
+  });
+
+  test("rejects pending writes and oversized notes", () => {
+    expect(() =>
+      UpdateFinanceMonthlyDifferenceResolutionSchema.parse({
+        month: "2026-06",
+        source_type: "ledger_entry",
+        source_id: "ledger-1",
+        status: "pending",
+      })
+    ).toThrow();
+    expect(() =>
+      UpdateFinanceMonthlyDifferenceResolutionSchema.parse({
+        month: "2026-06",
+        source_type: "ledger_entry",
+        source_id: "",
+        status: "confirmed",
+      })
+    ).toThrow();
+    expect(() =>
+      UpdateFinanceMonthlyDifferenceResolutionSchema.parse({
+        month: "2026-06",
+        source_type: "ledger_entry",
+        source_id: "ledger-1",
+        status: "confirmed",
+        note: "x".repeat(501),
       })
     ).toThrow();
   });

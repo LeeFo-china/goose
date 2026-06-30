@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 type DifferenceSourcesPageSearchParams = {
   month?: string;
   source_type?: string;
+  resolution_status?: string;
   project_id?: string;
   page?: string;
 };
@@ -48,6 +49,14 @@ const SOURCE_TYPE_OPTIONS = [
   { value: "ledger_entry", label: "财务台账" },
   { value: "receivable_plan", label: "应收计划" },
   { value: "expense_request", label: "费用申请" },
+];
+
+const RESOLUTION_STATUS_OPTIONS = [
+  { value: "", label: "全部处理状态" },
+  { value: "pending", label: "待处理" },
+  { value: "confirmed", label: "已确认" },
+  { value: "ignored", label: "已忽略" },
+  { value: "resolved", label: "已修复" },
 ];
 
 function clean(value: string | undefined) {
@@ -71,6 +80,7 @@ function differenceSourcesHref(
   const params = buildFinanceMonthlyDifferenceSourcesSearchParams({
     month: clean(filters.month) || currentMonth(),
     source_type: clean(filters.source_type),
+    resolution_status: clean(filters.resolution_status),
     project_id: clean(filters.project_id),
     page,
     pageSize: 20,
@@ -94,8 +104,14 @@ export default async function FinanceDifferenceSourcesPage({
     page,
     pageSize: 20,
     source_type: clean(params.source_type),
+    resolution_status: clean(params.resolution_status),
     project_id: clean(params.project_id),
   });
+  const pendingResolutionCount = data.summary.resolution?.pending ?? 0;
+  const handledResolutionCount =
+    (data.summary.resolution?.confirmed ?? 0) +
+    (data.summary.resolution?.ignored ?? 0) +
+    (data.summary.resolution?.resolved ?? 0);
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
     data.pagination.page < data.pagination.totalPages;
@@ -135,13 +151,26 @@ export default async function FinanceDifferenceSourcesPage({
         </StatusAlert>
       ) : null}
 
-      <div className="grid shrink-0 gap-2 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid shrink-0 gap-2 md:grid-cols-2 xl:grid-cols-5">
         <FinanceMetricCard
           icon={<FileSearch aria-hidden="true" className="size-4" />}
           label="差异来源"
           value={`${data.summary.total} 条`}
           helper="当前筛选范围"
           tone={data.summary.total > 0 ? "warning" : "normal"}
+        />
+        <FinanceMetricCard
+          icon={<GitCompareArrows aria-hidden="true" className="size-4" />}
+          label="待处理"
+          value={`${pendingResolutionCount} 条`}
+          helper="未写入处理记录"
+          tone={pendingResolutionCount > 0 ? "warning" : "normal"}
+        />
+        <FinanceMetricCard
+          icon={<History aria-hidden="true" className="size-4" />}
+          label="已处理"
+          value={`${handledResolutionCount} 条`}
+          helper="已确认 / 忽略 / 修复"
         />
         <FinanceMetricCard
           icon={<History aria-hidden="true" className="size-4" />}
@@ -160,19 +189,13 @@ export default async function FinanceDifferenceSourcesPage({
             : "-"}
           helper={month}
         />
-        <FinanceMetricCard
-          icon={<GitCompareArrows aria-hidden="true" className="size-4" />}
-          label="主要来源"
-          value={topSourceLabel(data.summary.by_source_type)}
-          helper="按来源数量排序"
-        />
       </div>
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance/reports/difference-sources"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(9rem,10rem)_minmax(11rem,13rem)_minmax(16rem,1fr)_auto] xl:items-end"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(9rem,10rem)_minmax(11rem,13rem)_minmax(11rem,13rem)_minmax(16rem,1fr)_auto] xl:items-end"
           >
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="difference-month">
@@ -192,6 +215,13 @@ export default async function FinanceDifferenceSourcesPage({
               label="来源类型"
               value={params.source_type}
               options={SOURCE_TYPE_OPTIONS}
+            />
+            <FinanceFilterSelectField
+              id="difference-resolution-status"
+              name="resolution_status"
+              label="处理状态"
+              value={params.resolution_status}
+              options={RESOLUTION_STATUS_OPTIONS}
             />
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="difference-project-id">
@@ -216,7 +246,7 @@ export default async function FinanceDifferenceSourcesPage({
           </form>
 
           <div className="min-h-0 flex-1 overflow-auto">
-            <FinanceDifferenceSourcesTable rows={data.list} />
+            <FinanceDifferenceSourcesTable month={month} rows={data.list} />
           </div>
 
           <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t bg-card px-4 py-3">
@@ -262,15 +292,4 @@ export default async function FinanceDifferenceSourcesPage({
       </Card>
     </div>
   );
-}
-
-function topSourceLabel(
-  bySourceType: Record<string, number | undefined>,
-) {
-  const [sourceType, count] = Object.entries(bySourceType)
-    .filter(([, value]) => Number(value || 0) > 0)
-    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))[0] ||
-    [];
-  if (!sourceType || !count) return "-";
-  return `${financeDifferenceSourceTypeMeta(sourceType).label} ${count} 条`;
 }

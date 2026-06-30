@@ -6,6 +6,7 @@ import {
   FinanceMonthlyOverviewExportQuerySchema,
   FinanceProjectRankingQuerySchema,
   FinanceReceivableAgingQuerySchema,
+  UpdateFinanceMonthlyDifferenceResolutionSchema,
 } from "@/schema/finance-reports";
 import {
   financeMonthlyDifferenceSourcesService,
@@ -13,7 +14,7 @@ import {
 import {
   financeSpecializedReportService,
 } from "@/services/finance-specialized-reports";
-import { Get, registerRoutes } from "@/utils/decorators/route";
+import { Get, Put, registerRoutes } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -61,6 +62,22 @@ class FinanceReportsController extends TenantBaseController {
 
     const data = await financeMonthlyDifferenceSourcesService
       .listDifferenceSources(authContext, queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Put("/finance/reports/monthly-overview/difference-resolutions")
+  async updateMonthlyOverviewDifferenceResolution(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const bodyResult = UpdateFinanceMonthlyDifferenceResolutionSchema.safeParse(
+      request.body,
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await financeMonthlyDifferenceSourcesService
+      .updateResolution(authContext, bodyResult.data);
     return ResponseHandler.success(data);
   }
 
