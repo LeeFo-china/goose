@@ -88,6 +88,7 @@ export function emptyFinanceCorrectionAuditResult(
 export async function fetchFinanceCorrectionAudits(query: {
   page?: number;
   pageSize?: number;
+  month?: string;
   date_from?: string;
   date_to?: string;
   project_id?: string;

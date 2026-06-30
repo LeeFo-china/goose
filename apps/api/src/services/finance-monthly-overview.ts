@@ -60,6 +60,9 @@ export type FinanceMonthlyOverviewClosing = {
   reopened_at: string | null;
   notes: string | null;
   snapshot_summary: Partial<FinanceMonthlyOverviewSummary> | null;
+  current_summary: FinanceMonthlyOverviewSummary | null;
+  difference_summary: Partial<FinanceMonthlyOverviewSummary> | null;
+  has_snapshot_difference: boolean;
 };
 
 export type FinanceMonthlyOverview = {
@@ -122,17 +125,19 @@ export class FinanceMonthlyOverviewService {
         }),
       ]);
 
+    const summary = buildSummary({
+      ledgerRows,
+      receivableRows,
+      reconciliationExceptionCount: buildFinanceReconciliationExceptions(
+        reconciliationCandidates,
+        range.dateTo,
+      ).length,
+      tenantToday: range.dateTo,
+    });
+
     return {
-      summary: buildSummary({
-        ledgerRows,
-        receivableRows,
-        reconciliationExceptionCount: buildFinanceReconciliationExceptions(
-          reconciliationCandidates,
-          range.dateTo,
-        ).length,
-        tenantToday: range.dateTo,
-      }),
-      closing: serializeClosing(closingPeriod),
+      summary,
+      closing: serializeClosing(closingPeriod, summary),
       scope: {
         month: range.month,
         date_from: range.dateFrom,
@@ -235,6 +240,7 @@ function buildSummary(input: {
 
 function serializeClosing(
   closingPeriod: FinanceClosingPeriodRow | null,
+  currentSummary: FinanceMonthlyOverviewSummary,
 ): FinanceMonthlyOverviewClosing {
   if (!closingPeriod) {
     return {
@@ -244,8 +250,17 @@ function serializeClosing(
       reopened_at: null,
       notes: null,
       snapshot_summary: null,
+      current_summary: null,
+      difference_summary: null,
+      has_snapshot_difference: false,
     };
   }
+
+  const snapshotSummary = readSnapshotSummary(closingPeriod.snapshot_json);
+  const differenceSummary = buildDifferenceSummary(
+    currentSummary,
+    snapshotSummary,
+  );
 
   return {
     id: closingPeriod.id,
@@ -253,8 +268,43 @@ function serializeClosing(
     closed_at: closingPeriod.closed_at,
     reopened_at: closingPeriod.reopened_at,
     notes: closingPeriod.notes,
-    snapshot_summary: readSnapshotSummary(closingPeriod.snapshot_json),
+    snapshot_summary: snapshotSummary,
+    current_summary: snapshotSummary ? currentSummary : null,
+    difference_summary: differenceSummary,
+    has_snapshot_difference: hasSnapshotDifference(differenceSummary),
   };
+}
+
+function buildDifferenceSummary(
+  currentSummary: FinanceMonthlyOverviewSummary,
+  snapshotSummary: Partial<FinanceMonthlyOverviewSummary> | null,
+): Partial<FinanceMonthlyOverviewSummary> | null {
+  if (!snapshotSummary) return null;
+
+  const result: Partial<FinanceMonthlyOverviewSummary> = {};
+  for (const key of SUMMARY_KEYS) {
+    const snapshotValue = snapshotSummary[key];
+    if (typeof snapshotValue !== "number" || !Number.isFinite(snapshotValue)) {
+      continue;
+    }
+    const difference = currentSummary[key] - snapshotValue;
+    result[key] = key === "gross_profit_rate"
+      ? roundRate(difference)
+      : key === "reconciliation_exception_count"
+        ? difference
+        : roundMoney(difference);
+  }
+
+  return Object.keys(result).length ? result : null;
+}
+
+function hasSnapshotDifference(
+  differenceSummary: Partial<FinanceMonthlyOverviewSummary> | null,
+) {
+  if (!differenceSummary) return false;
+  return Object.values(differenceSummary).some((value) =>
+    typeof value === "number" && Number.isFinite(value) && value !== 0
+  );
 }
 
 function readSnapshotSummary(
@@ -267,18 +317,7 @@ function readSnapshotSummary(
   }
 
   const result: Partial<FinanceMonthlyOverviewSummary> = {};
-  for (const key of [
-    "income_amount",
-    "expense_amount",
-    "gross_profit_amount",
-    "gross_profit_rate",
-    "receivable_amount",
-    "received_amount",
-    "receivable_remaining_amount",
-    "overdue_receivable_amount",
-    "reconciliation_exception_count",
-    "unallocated_expense_amount",
-  ] as const) {
+  for (const key of SUMMARY_KEYS) {
     const value = (summary as Record<string, unknown>)[key];
     if (typeof value === "number" && Number.isFinite(value)) {
       result[key] = value;
@@ -317,6 +356,19 @@ function roundMoney(value: number) {
 function roundRate(value: number) {
   return Math.round(value * 10_000) / 10_000;
 }
+
+const SUMMARY_KEYS = [
+  "income_amount",
+  "expense_amount",
+  "gross_profit_amount",
+  "gross_profit_rate",
+  "receivable_amount",
+  "received_amount",
+  "receivable_remaining_amount",
+  "overdue_receivable_amount",
+  "reconciliation_exception_count",
+  "unallocated_expense_amount",
+] as const;
 
 export const financeMonthlyOverviewService =
   new FinanceMonthlyOverviewService();

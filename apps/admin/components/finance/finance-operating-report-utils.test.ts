@@ -6,6 +6,8 @@ import {
   buildFinanceProjectRankingSearchParams,
   buildFinanceReceivableAgingSearchParams,
   financeClosingStatusLabel,
+  financeSnapshotDifferenceLabel,
+  financeSnapshotDifferenceVariant,
   financeOperatingGroupByLabel,
 } from "./finance-operating-report-utils";
 
@@ -42,6 +44,13 @@ describe("finance operating report helpers", () => {
     expect(financeClosingStatusLabel("draft")).toBe("草稿");
     expect(financeClosingStatusLabel("closed")).toBe("已结账");
     expect(financeClosingStatusLabel("reopened")).toBe("已反结账");
+  });
+
+  test("maps snapshot difference state to display metadata", () => {
+    expect(financeSnapshotDifferenceLabel(true)).toBe("数据已变化");
+    expect(financeSnapshotDifferenceLabel(false)).toBe("快照一致");
+    expect(financeSnapshotDifferenceVariant(true)).toBe("warning");
+    expect(financeSnapshotDifferenceVariant(false)).toBe("outline");
   });
 
   test("builds specialized report query params", () => {

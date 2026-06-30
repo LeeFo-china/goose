@@ -57,6 +57,9 @@ export type FinanceMonthlyOverviewClosing = {
   reopened_at: string | null;
   notes: string | null;
   snapshot_summary: Partial<FinanceMonthlyOverviewSummary> | null;
+  current_summary: FinanceMonthlyOverviewSummary | null;
+  difference_summary: Partial<FinanceMonthlyOverviewSummary> | null;
+  has_snapshot_difference: boolean;
 };
 
 export type FinanceMonthlyOverviewData = {
@@ -148,6 +151,9 @@ export function emptyFinanceMonthlyOverview(): FinanceMonthlyOverviewResult {
       reopened_at: null,
       notes: null,
       snapshot_summary: null,
+      current_summary: null,
+      difference_summary: null,
+      has_snapshot_difference: false,
     },
     scope: {
       month: "",

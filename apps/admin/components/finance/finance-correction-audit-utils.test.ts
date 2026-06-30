@@ -14,6 +14,7 @@ describe("finance correction audit helpers", () => {
     const params = buildFinanceCorrectionAuditSearchParams({
       page: 2,
       pageSize: 20,
+      month: "2026-06",
       operation: "link_ledger_payment",
       project_id: "project-1",
       actor_employee_id: "employee-1",
@@ -22,7 +23,7 @@ describe("finance correction audit helpers", () => {
     });
 
     expect(params.toString()).toBe(
-      "page=2&pageSize=20&date_from=2026-06-01&date_to=2026-06-30&project_id=project-1&operation=link_ledger_payment&actor_employee_id=employee-1",
+      "page=2&pageSize=20&month=2026-06&date_from=2026-06-01&date_to=2026-06-30&project_id=project-1&operation=link_ledger_payment&actor_employee_id=employee-1",
     );
   });
 

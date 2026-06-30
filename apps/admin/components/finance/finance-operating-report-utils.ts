@@ -139,6 +139,18 @@ export function financeClosingStatusVariant(
   return "outline";
 }
 
+export function financeSnapshotDifferenceLabel(
+  hasSnapshotDifference: boolean | null | undefined,
+) {
+  return hasSnapshotDifference ? "数据已变化" : "快照一致";
+}
+
+export function financeSnapshotDifferenceVariant(
+  hasSnapshotDifference: boolean | null | undefined,
+): "outline" | "warning" {
+  return hasSnapshotDifference ? "warning" : "outline";
+}
+
 function appendOptionalParam(
   params: URLSearchParams,
   key: string,

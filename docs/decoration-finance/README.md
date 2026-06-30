@@ -65,6 +65,7 @@
 - [2026-06-30-phase8-task6-10-next-plan.md](./2026-06-30-phase8-task6-10-next-plan.md)：Phase 8 后半段 Task 6-10 计划，覆盖结账写操作受控、快照差异、导出、专项报表、审计闭环和小程序边界。
 - [2026-06-30-phase8-task6-10-implementation-smoke.md](./2026-06-30-phase8-task6-10-implementation-smoke.md)：Phase 8 Task 6-10 执行记录，覆盖专项报表 API、CSV 导出、Admin 页面和结账受控写 smoke。
 - [2026-06-30-phase8-task6-10-miniprogram-boundary.md](./2026-06-30-phase8-task6-10-miniprogram-boundary.md)：Phase 8 Task 6-10 小程序边界说明，明确本轮小程序无必改。
+- [2026-06-30-phase8-1-snapshot-diff-audit-smoke.md](./2026-06-30-phase8-1-snapshot-diff-audit-smoke.md)：Phase 8.1 结账快照差异与修正审计闭环 smoke，覆盖 API 新字段、Admin 展示、当月审计跳转和小程序边界。
 - [2026-06-30-wechat-pay-integration-prd.md](./2026-06-30-wechat-pay-integration-prd.md)：微信支付接入 PRD，明确租户独立商户优先、支付订单、回调幂等、workflow 对接、对账异常和小程序边界。
 - [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。

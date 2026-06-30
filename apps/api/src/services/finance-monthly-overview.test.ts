@@ -228,6 +228,24 @@ describe("FinanceMonthlyOverviewService", () => {
         expense_amount: 9000,
         gross_profit_amount: 10000,
       },
+      current_summary: {
+        income_amount: 20000,
+        expense_amount: 9500,
+        gross_profit_amount: 10500,
+        gross_profit_rate: 0.525,
+        receivable_amount: 30000,
+        received_amount: 20000,
+        receivable_remaining_amount: 10000,
+        overdue_receivable_amount: 5000,
+        reconciliation_exception_count: 2,
+        unallocated_expense_amount: 1500,
+      },
+      difference_summary: {
+        income_amount: 1000,
+        expense_amount: 500,
+        gross_profit_amount: 500,
+      },
+      has_snapshot_difference: true,
     });
     expect(listLedgerRows).toHaveBeenCalledWith({
       tenantId: "tenant-1",

@@ -40,6 +40,10 @@ export const FinanceCorrectionAuditListQuerySchema = PaginationQuerySchema
       z.string()
         .regex(/^\d{4}-\d{2}-\d{2}$/, "结束日期格式必须为 YYYY-MM-DD"),
     ),
+    month: optionalQueryValue(
+      z.string()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "月份格式必须为 YYYY-MM"),
+    ),
   });
 
 export type FinanceCorrectionAuditListQuery =
