@@ -1,6 +1,9 @@
 import Link from "next/link";
-import { History } from "lucide-react";
+import { FileSearch, History } from "lucide-react";
 import { FinanceClosingActions } from "@/components/finance/finance-closing-actions";
+import {
+  buildFinanceMonthlyDifferenceSourcesSearchParams,
+} from "@/components/finance/finance-difference-sources-utils";
 import {
   financeClosingStatusLabel,
   financeClosingStatusVariant,
@@ -107,6 +110,17 @@ export function FinanceMonthlyClosingSummaryCard({
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <Button asChild variant="outline" size="sm">
             <Link
+              href={month
+                ? differenceSourcesHref(month)
+                : "/finance/reports/difference-sources"}
+              aria-disabled={!month}
+            >
+              <FileSearch data-icon="inline-start" />
+              查看差异来源
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link
               href={month ? correctionAuditHref(month) : "/finance/audits"}
               aria-disabled={!month}
             >
@@ -123,6 +137,15 @@ export function FinanceMonthlyClosingSummaryCard({
       </CardContent>
     </Card>
   );
+}
+
+function differenceSourcesHref(month: string) {
+  const params = buildFinanceMonthlyDifferenceSourcesSearchParams({
+    page: 1,
+    pageSize: 20,
+    month,
+  });
+  return `/finance/reports/difference-sources?${params}`;
 }
 
 function correctionAuditHref(month: string) {
