@@ -37,4 +37,12 @@ describe("Finance receivables page layout", () => {
     expect(page).not.toContain("<label");
     expect(filters).not.toContain("<label");
   });
+
+  test("pins the receivable table action column to the right", () => {
+    const table = readSource("../../../../components/finance/finance-receivables-table.tsx");
+
+    expect(table).toContain("DataTable");
+    expect(table).toContain("sticky right-0 z-10 w-[11rem] bg-muted/60 text-right");
+    expect(table).toContain("sticky right-0 z-10 whitespace-nowrap border-l bg-background text-right");
+  });
 });

@@ -202,7 +202,10 @@ export function FinanceReceivablesTable({
         </div>
       ),
       meta: {
-        cellClassName: "whitespace-nowrap text-right",
+        headerClassName:
+          "sticky right-0 z-10 w-[11rem] bg-muted/60 text-right",
+        cellClassName:
+          "sticky right-0 z-10 whitespace-nowrap border-l bg-background text-right",
       },
     },
   ];
