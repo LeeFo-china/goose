@@ -5,8 +5,18 @@ import type { FinancePagination } from "./finance-specialized-report-requests";
 import {
   buildFinanceMonthlyDifferenceSourcesSearchParams,
   type FinanceDifferenceSourcesQuery,
+  type FinanceDifferenceResolutionStatus,
+  type FinanceDifferenceResolutionWriteStatus,
   type FinanceDifferenceSourceType,
 } from "./finance-difference-sources-utils";
+
+export type FinanceDifferenceSourceResolution = {
+  status: FinanceDifferenceResolutionStatus;
+  note: string | null;
+  handled_by: string | null;
+  handled_by_name: string | null;
+  handled_at: string | null;
+};
 
 export type FinanceDifferenceSourceRecord = {
   id: string;
@@ -23,6 +33,7 @@ export type FinanceDifferenceSourceRecord = {
     label: string;
     href: string;
   };
+  resolution: FinanceDifferenceSourceResolution;
 };
 
 export type FinanceDifferenceSourcesSummary = {
@@ -32,6 +43,32 @@ export type FinanceDifferenceSourcesSummary = {
   has_snapshot_difference: boolean;
   total: number;
   by_source_type: Partial<Record<FinanceDifferenceSourceType, number>>;
+  resolution: Record<FinanceDifferenceResolutionStatus, number>;
+};
+
+export type FinanceDifferenceResolutionUpdateInput = {
+  month: string;
+  source_type: FinanceDifferenceSourceType | string;
+  source_id: string;
+  project_id?: string | null;
+  status: FinanceDifferenceResolutionWriteStatus;
+  note?: string;
+};
+
+export type FinanceDifferenceResolutionRecord = {
+  id: string;
+  tenant_id: string;
+  month: string;
+  source_type: FinanceDifferenceSourceType | string;
+  source_id: string;
+  project_id: string | null;
+  status: FinanceDifferenceResolutionWriteStatus;
+  note: string | null;
+  handled_by: string | null;
+  handled_by_name: string | null;
+  handled_at: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type FinanceDifferenceSourcesResult = {
@@ -59,6 +96,7 @@ export function emptyFinanceDifferenceSources(
       has_snapshot_difference: false,
       total: 0,
       by_source_type: {},
+      resolution: { pending: 0, confirmed: 0, ignored: 0, resolved: 0 },
     },
     error: null,
   };
