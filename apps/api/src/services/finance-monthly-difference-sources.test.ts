@@ -319,6 +319,31 @@ describe("FinanceMonthlyDifferenceSourcesService", () => {
     expect(listExpenseRequestSources).not.toHaveBeenCalled();
   });
 
+  test("keeps source type summary when a source returns total without rows", async () => {
+    listExpenseRequestSources.mockResolvedValueOnce({
+      list: [],
+      total: 2,
+    });
+    const service = await createService();
+
+    const result = await service.listDifferenceSources(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      {
+        month: "2026-06",
+        source_type: "expense_request",
+        project_id: projectId,
+        page: 1,
+        pageSize: 20,
+      },
+    );
+
+    expect(result.list).toEqual([]);
+    expect(result.pagination.total).toBe(2);
+    expect(result.summary.by_source_type).toEqual({
+      expense_request: 2,
+    });
+  });
+
   test("rejects users without finance report permissions", async () => {
     const service = await createService();
 

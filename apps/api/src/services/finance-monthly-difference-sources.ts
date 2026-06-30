@@ -114,9 +114,10 @@ export class FinanceMonthlyDifferenceSourcesService {
       candidateLimit,
     };
     const results = await Promise.all(
-      sourceTypes.map((sourceType) =>
-        this.listSourceType(sourceType, requestInput)
-      ),
+      sourceTypes.map(async (sourceType) => ({
+        sourceType,
+        ...await this.listSourceType(sourceType, requestInput),
+      })),
     );
     const list = results
       .flatMap((result) => result.list)
@@ -205,6 +206,7 @@ function emptyResult(
 
 function buildSourceTypeSummary(
   results: Array<{
+    sourceType: FinanceMonthlyOverviewDifferenceSourceType;
     list: FinanceMonthlyDifferenceSourceRecord[];
     total: number;
   }>,
@@ -212,8 +214,7 @@ function buildSourceTypeSummary(
   return results.reduce<
     Partial<Record<FinanceMonthlyOverviewDifferenceSourceType, number>>
   >((summary, result) => {
-    const sourceType = result.list[0]?.source_type;
-    if (sourceType) summary[sourceType] = result.total;
+    if (result.total > 0) summary[result.sourceType] = result.total;
     return summary;
   }, {});
 }
