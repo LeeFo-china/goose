@@ -55,7 +55,7 @@ function ChartTooltip({ active, payload, label, unit }: {
 
 function EmptyChart() {
   return (
-    <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+    <div className="flex h-full min-h-[120px] items-center justify-center text-sm text-muted-foreground">
       暂无趋势数据
     </div>
   );
@@ -70,15 +70,15 @@ export function TenantOverviewCharts({ trend }: { trend: TenantOverviewTrendPoin
   );
 
   return (
-    <div className="grid gap-5 xl:grid-cols-2">
-      <Card>
-        <CardHeader>
+    <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-2 xl:grid-rows-2">
+      <Card className="flex min-h-0 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 space-y-1 p-4 pb-2">
           <CardTitle>客户增长趋势</CardTitle>
           <CardDescription>按天统计新增客户数量。</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-h-0 flex-1 p-4 pt-0">
           {hasData ? (
-            <div className="h-[260px]">
+            <div className="h-full min-h-[120px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trend} margin={{ left: -20, right: 8, top: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -102,14 +102,14 @@ export function TenantOverviewCharts({ trend }: { trend: TenantOverviewTrendPoin
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="flex min-h-0 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 space-y-1 p-4 pb-2">
           <CardTitle>项目新增趋势</CardTitle>
           <CardDescription>按天统计新增项目数量。</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-h-0 flex-1 p-4 pt-0">
           {hasData ? (
-            <div className="h-[260px]">
+            <div className="h-full min-h-[120px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend} margin={{ left: -20, right: 8, top: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -131,14 +131,14 @@ export function TenantOverviewCharts({ trend }: { trend: TenantOverviewTrendPoin
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="flex min-h-0 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 space-y-1 p-4 pb-2">
           <CardTitle>AI Token 用量</CardTitle>
           <CardDescription>按天统计租户 AI token 消耗。</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-h-0 flex-1 p-4 pt-0">
           {hasData ? (
-            <div className="h-[260px]">
+            <div className="h-full min-h-[120px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend} margin={{ left: -10, right: 8, top: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -160,14 +160,14 @@ export function TenantOverviewCharts({ trend }: { trend: TenantOverviewTrendPoin
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="flex min-h-0 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 space-y-1 p-4 pb-2">
           <CardTitle>视频转文本分钟</CardTitle>
           <CardDescription>按天统计短视频转文本计费分钟。</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-h-0 flex-1 p-4 pt-0">
           {hasData ? (
-            <div className="h-[260px]">
+            <div className="h-full min-h-[120px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend} margin={{ left: -20, right: 8, top: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
