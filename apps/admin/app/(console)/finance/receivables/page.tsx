@@ -2,19 +2,22 @@ import Link from "next/link";
 import { PaymentTypeConfig } from "@gooes/domain";
 import { CalendarClock } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import {
-  FinanceCheckboxField,
-  FinanceFilterSelectField,
-} from "@/components/finance/finance-filter-controls";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { FinanceReceivableCreateButton } from "@/components/finance/finance-receivable-actions";
+import { FinanceReceivableFilters } from "@/components/finance/finance-receivable-filters";
 import { FinanceReceivablesTable } from "@/components/finance/finance-receivables-table";
 import { fetchFinanceReceivables } from "@/components/finance/finance-requests";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 type FinanceReceivablesPageSearchParams = {
   page?: string;
@@ -113,6 +116,14 @@ export default async function FinanceReceivablesPage({
     overdue_only: params.overdue_only === "true",
     follow_up_due_only: params.follow_up_due_only === "true",
   });
+  const status = clean(params.status);
+  const paymentType = clean(params.payment_type);
+  const sourceType = clean(params.source_type);
+  const ownerEmployeeId = clean(params.owner_employee_id);
+  const receivablePlanId = clean(params.receivable_plan_id);
+  const projectId = clean(params.project_id);
+  const dueDateFrom = clean(params.due_date_from);
+  const dueDateTo = clean(params.due_date_to);
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
     data.pagination.page < data.pagination.totalPages;
@@ -131,170 +142,109 @@ export default async function FinanceReceivablesPage({
             </p>
           </div>
         </div>
-        <Badge variant="outline" className="w-fit tabular-nums">
-          第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
-        </Badge>
-        <FinanceReceivableCreateButton />
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Badge variant="outline" className="w-fit tabular-nums">
+            第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
+          </Badge>
+          <FinanceReceivableCreateButton />
+        </div>
       </div>
 
       <FinanceModuleTabs activeTab="receivables" />
 
-      <Card className="min-h-0 flex-1 overflow-hidden">
-        <CardContent className="flex h-full min-h-0 flex-col p-0">
-          <form
-            action="/finance/receivables"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 xl:grid-cols-[minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(10rem,12rem)_minmax(12rem,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_auto] xl:items-end"
-          >
-            <FinanceFilterSelectField
-              id="receivable-status"
-              name="status"
-              label="状态"
-              value={params.status}
-              options={RECEIVABLE_STATUS_OPTIONS}
-            />
-            <FinanceFilterSelectField
-              id="receivable-payment-type"
-              name="payment_type"
-              label="收款类型"
-              value={params.payment_type}
-              options={PAYMENT_TYPE_OPTIONS}
-            />
-            <FinanceFilterSelectField
-              id="receivable-source-type"
-              name="source_type"
-              label="来源"
-              value={params.source_type}
-              options={SOURCE_TYPE_OPTIONS}
-            />
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-owner-id">
-                负责人 ID
-              </label>
-              <Input
-                id="receivable-owner-id"
-                name="owner_employee_id"
-                defaultValue={params.owner_employee_id || ""}
-                placeholder="按员工 ID 筛选"
-                className="h-9"
-              />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 gap-3 border-b p-3 md:gap-4 md:p-4">
+          <div className="hidden flex-col justify-between gap-3 md:flex lg:flex-row lg:items-start">
+            <div className="min-w-0">
+              <CardTitle>应收计划列表</CardTitle>
+              <CardDescription>
+                按状态、收款类型、来源、项目、负责人和应收日期筛选应收记录。
+              </CardDescription>
             </div>
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-project-id">
-                项目 ID
-              </label>
-              <Input
-                id="receivable-project-id"
-                name="project_id"
-                defaultValue={params.project_id || ""}
-                placeholder="按项目 ID 精确筛选"
-                className="h-9"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-due-from">
-                起始日期
-              </label>
-              <Input
-                id="receivable-due-from"
-                name="due_date_from"
-                type="date"
-                defaultValue={params.due_date_from || ""}
-                className="h-9"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="receivable-due-to">
-                截止日期
-              </label>
-              <Input
-                id="receivable-due-to"
-                name="due_date_to"
-                type="date"
-                defaultValue={params.due_date_to || ""}
-                className="h-9"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 md:justify-end">
-              <FinanceCheckboxField
-                id="receivable-overdue-only"
-                name="overdue_only"
-                value="true"
-                checked={params.overdue_only === "true"}
-                label="只看逾期"
-              />
-              <FinanceCheckboxField
-                id="receivable-follow-up-due-only"
-                name="follow_up_due_only"
-                value="true"
-                checked={params.follow_up_due_only === "true"}
-                label="跟进到期"
-              />
-              <Button type="submit" size="sm">筛选</Button>
-              <Button asChild type="button" variant="outline" size="sm">
-                <Link href="/finance/receivables">重置</Link>
-              </Button>
-            </div>
-          </form>
+            <Badge variant="outline" className="w-fit tabular-nums">
+              当前显示 {data.list.length} / {data.pagination.total} 条
+            </Badge>
+          </div>
+          <FinanceReceivableFilters
+            dueDateFrom={dueDateFrom}
+            dueDateTo={dueDateTo}
+            followUpDueOnly={params.follow_up_due_only === "true"}
+            ownerEmployeeId={ownerEmployeeId}
+            paymentType={paymentType}
+            paymentTypeOptions={PAYMENT_TYPE_OPTIONS}
+            projectId={projectId}
+            receivablePlanId={receivablePlanId}
+            sourceType={sourceType}
+            sourceTypeOptions={SOURCE_TYPE_OPTIONS}
+            status={status}
+            statusOptions={RECEIVABLE_STATUS_OPTIONS}
+            overdueOnly={params.overdue_only === "true"}
+          />
+        </CardHeader>
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           {data.error ? (
             <div className="shrink-0 border-b p-4">
               <StatusAlert>{data.error}</StatusAlert>
             </div>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div
+            data-testid="tenant-receivables-table-viewport"
+            className="min-h-0 flex-1 overflow-auto"
+          >
             <FinanceReceivablesTable
               rows={data.list}
-              highlightReceivablePlanId={clean(params.receivable_plan_id)}
+              highlightReceivablePlanId={receivablePlanId}
             />
           </div>
-          <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>当前显示 {data.list.length} 条，共 {data.pagination.total} 条</span>
-              <Badge variant="outline" className="tabular-nums">
-                每页 {data.pagination.pageSize} 条
-              </Badge>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canGoPrev}
-                asChild={canGoPrev}
-              >
-                {canGoPrev ? (
-                  <Link
-                    href={buildReceivableHref({
-                      page: data.pagination.page - 1,
-                      filters: params,
-                    })}
-                  >
-                    上一页
-                  </Link>
-                ) : (
-                  <span>上一页</span>
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canGoNext}
-                asChild={canGoNext}
-              >
-                {canGoNext ? (
-                  <Link
-                    href={buildReceivableHref({
-                      page: data.pagination.page + 1,
-                      filters: params,
-                    })}
-                  >
-                    下一页
-                  </Link>
-                ) : (
-                  <span>下一页</span>
-                )}
-              </Button>
-            </div>
-          </div>
         </CardContent>
+        <CardFooter className="shrink-0 flex-col gap-3 border-t px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>当前显示 {data.list.length} 条，共 {data.pagination.total} 条</span>
+            <Badge variant="outline" className="tabular-nums">
+              每页 {data.pagination.pageSize} 条
+            </Badge>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!canGoPrev}
+              asChild={canGoPrev}
+            >
+              {canGoPrev ? (
+                <Link
+                  href={buildReceivableHref({
+                    page: data.pagination.page - 1,
+                    filters: params,
+                  })}
+                >
+                  上一页
+                </Link>
+              ) : (
+                <span>上一页</span>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!canGoNext}
+              asChild={canGoNext}
+            >
+              {canGoNext ? (
+                <Link
+                  href={buildReceivableHref({
+                    page: data.pagination.page + 1,
+                    filters: params,
+                  })}
+                >
+                  下一页
+                </Link>
+              ) : (
+                <span>下一页</span>
+              )}
+            </Button>
+          </div>
+        </CardFooter>
       </Card>
     </div>
   );

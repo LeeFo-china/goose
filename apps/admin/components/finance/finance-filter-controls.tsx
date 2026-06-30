@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ export function FinanceFilterSelectField({
   value,
   options,
   compact = false,
+  className,
 }: {
   id: string;
   name: string;
@@ -35,13 +37,14 @@ export function FinanceFilterSelectField({
   value?: string;
   options: readonly FinanceFilterOption[];
   compact?: boolean;
+  className?: string;
 }) {
   const [selectedValue, setSelectedValue] = useState(
     normalizeFilterSelectValue(value),
   );
 
   return (
-    <Field className={compact ? "gap-0" : "gap-1.5"}>
+    <Field className={cn(compact ? "gap-0" : "gap-1.5", className)}>
       <FieldLabel
         className={compact ? "sr-only" : "text-xs font-medium text-muted-foreground"}
         htmlFor={id}
@@ -80,15 +83,22 @@ export function FinanceCheckboxField({
   value,
   checked,
   label,
+  className,
 }: {
   id: string;
   name: string;
   value: string;
   checked: boolean;
   label: string;
+  className?: string;
 }) {
   return (
-    <Field className="h-9 flex-row items-center gap-2 rounded-md border px-3">
+    <Field
+      className={cn(
+        "h-9 flex-row items-center gap-2 rounded-md border px-3",
+        className,
+      )}
+    >
       <Checkbox
         id={id}
         name={name}
