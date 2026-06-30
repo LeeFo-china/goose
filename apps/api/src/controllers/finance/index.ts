@@ -22,6 +22,7 @@ import {
   FinanceReconciliationExceptionActionListQuerySchema,
   FinanceReconciliationExceptionFingerprintParamsSchema,
   FinanceReconciliationExceptionListQuerySchema,
+  FinanceReconciliationOperatingStatsQuerySchema,
 } from "@/schema/finance-reconciliation";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
 import { financeCorrectionAuditService } from "@/services/finance-correction-audits";
@@ -74,6 +75,25 @@ class FinanceController extends TenantBaseController {
     }
 
     const data = await financeReconciliationService.listExceptions(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reconciliation/operating-stats")
+  async getReconciliationOperatingStats(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceReconciliationOperatingStatsQuerySchema
+      .safeParse(request.query);
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeReconciliationService.getOperatingStats(
       authContext,
       queryResult.data,
     );

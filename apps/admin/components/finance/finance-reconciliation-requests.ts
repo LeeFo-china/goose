@@ -1,6 +1,9 @@
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
-import { buildFinanceReconciliationSearchParams } from "./finance-reconciliation-utils";
+import {
+  buildFinanceReconciliationSearchParams,
+  buildFinanceReconciliationStatsSearchParams,
+} from "./finance-reconciliation-utils";
 
 export type FinanceReconciliationExceptionCode =
   | "receivable_overdue"
@@ -97,9 +100,62 @@ export type FinanceReconciliationListData = {
   summary: FinanceReconciliationSummary;
 };
 
+export type FinanceReconciliationOperatingStatsData = {
+  scope: {
+    date_from: string;
+    date_to: string;
+    stale_days: [3, 7];
+  };
+  summary: FinanceReconciliationSummary & {
+    open: number;
+    acknowledged: number;
+    ignored: number;
+    resolved: number;
+    total_amount: number;
+    stale_open_over_3_days: number;
+    stale_open_over_7_days: number;
+    latest_exception_at: string | null;
+    latest_action_at: string | null;
+  };
+  by_exception_code: Array<{
+    key: FinanceReconciliationExceptionCode;
+    label: string;
+    count: number;
+    amount: number;
+  }>;
+  by_status: Array<{
+    key: FinanceReconciliationStatus;
+    label: string;
+    count: number;
+  }>;
+  by_level: Array<{
+    key: FinanceReconciliationLevel;
+    label: string;
+    count: number;
+  }>;
+  recent_actions: Array<{
+    exception_fingerprint: string;
+    exception_code: FinanceReconciliationExceptionCode;
+    title: string;
+    project_id: string | null;
+    project_name: string | null;
+    status: FinanceReconciliationStatus;
+    action: FinanceReconciliationAction | null;
+    actor_employee_id: string | null;
+    actor_employee_name: string | null;
+    acted_at: string | null;
+    remark: string | null;
+  }>;
+};
+
 export type FinanceReconciliationResult = FinanceReconciliationListData & {
   error: string | null;
 };
+
+export type FinanceReconciliationOperatingStatsResult =
+  FinanceReconciliationOperatingStatsData & {
+    error: string | null;
+  };
 
 export type FinanceReconciliationEmployeeOption = {
   value: string;
@@ -136,6 +192,45 @@ export function emptyFinanceReconciliation(
       warning: 0,
       info: 0,
     },
+    error: null,
+  };
+}
+
+export function emptyFinanceReconciliationOperatingStats(): FinanceReconciliationOperatingStatsResult {
+  return {
+    scope: {
+      date_from: "",
+      date_to: "",
+      stale_days: [3, 7],
+    },
+    summary: {
+      total: 0,
+      danger: 0,
+      warning: 0,
+      info: 0,
+      open: 0,
+      acknowledged: 0,
+      ignored: 0,
+      resolved: 0,
+      total_amount: 0,
+      stale_open_over_3_days: 0,
+      stale_open_over_7_days: 0,
+      latest_exception_at: null,
+      latest_action_at: null,
+    },
+    by_exception_code: [],
+    by_status: [
+      { key: "open", label: "未处理", count: 0 },
+      { key: "acknowledged", label: "已确认", count: 0 },
+      { key: "ignored", label: "已忽略", count: 0 },
+      { key: "resolved", label: "人工闭环", count: 0 },
+    ],
+    by_level: [
+      { key: "danger", label: "高风险", count: 0 },
+      { key: "warning", label: "预警", count: 0 },
+      { key: "info", label: "提示", count: 0 },
+    ],
+    recent_actions: [],
     error: null,
   };
 }
@@ -185,6 +280,53 @@ export async function fetchFinanceReconciliationExceptions(query: {
     return {
       ...emptyFinanceReconciliation(page, pageSize),
       error: error instanceof Error ? error.message : "对账异常加载失败",
+    };
+  }
+}
+
+export async function fetchFinanceReconciliationOperatingStats(query: {
+  date_from?: string;
+  date_to?: string;
+  project_id?: string;
+  exception_code?: string;
+  level?: string;
+  direction?: string;
+  status?: string;
+  actor_employee_id?: string;
+}): Promise<FinanceReconciliationOperatingStatsResult> {
+  const token = await getAdminToken();
+  const params = buildFinanceReconciliationStatsSearchParams(query);
+  const suffix = params.toString() ? `?${params}` : "";
+
+  if (!token) {
+    return {
+      ...emptyFinanceReconciliationOperatingStats(),
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const response = await fetch(
+      buildBackendUrl(`/finance/reconciliation/operating-stats${suffix}`),
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      },
+    );
+    const payload =
+      await parseBackendJson<FinanceReconciliationOperatingStatsData>(
+        response,
+      );
+    return {
+      ...(payload.data || emptyFinanceReconciliationOperatingStats()),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ...emptyFinanceReconciliationOperatingStats(),
+      error: error instanceof Error ? error.message : "对账运营统计加载失败",
     };
   }
 }
