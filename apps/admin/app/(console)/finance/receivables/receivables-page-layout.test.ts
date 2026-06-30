@@ -12,11 +12,12 @@ describe("Finance receivables page layout", () => {
     expect(page).toContain("h-[calc(100vh-6.5625rem)]");
     expect(page).toContain("min-h-0 flex-col gap-5 overflow-hidden");
     expect(page).toContain("CardHeader");
-    expect(page).toContain("CardTitle");
-    expect(page).toContain("CardDescription");
     expect(page).toContain("CardFooter");
     expect(page).toContain("data-testid=\"tenant-receivables-table-viewport\"");
     expect(page).toContain("className=\"min-h-0 flex-1 overflow-auto\"");
+    expect(page).not.toContain("应收计划列表");
+    expect(page).not.toContain("按状态、收款类型、来源、项目、负责人和应收日期筛选应收记录。");
+    expect(page).not.toContain("当前显示 {data.list.length} / {data.pagination.total} 条");
   });
 
   test("keeps the filter form on shadcn field components", () => {
