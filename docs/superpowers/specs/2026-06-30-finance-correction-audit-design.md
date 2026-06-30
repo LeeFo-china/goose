@@ -63,8 +63,9 @@ Phase 7.4 已上线多类财务人工修正能力：
 原因：
 
 - 该视图包含修账原因、操作人和业务对象 ID。
-- 当前这些写操作也由 `finance.reconciliation.manage` 或财务管理权限保护。
-- 先对财务主管和系统管理员开放，不作为普通财务台账只读能力。
+- 台账关联收款、历史流水标记由 `finance.reconciliation.manage` 保护。
+- 人工核销、调整核销、撤销核销由 `finance.receivable.manage` 保护。
+- 审计视图不是普通经办入口，第一版先对财务主管和系统管理员开放，不自动等同所有经办人可见。
 
 ## API 设计
 
@@ -155,9 +156,18 @@ type FinanceCorrectionAuditRecord = {
 - `note` -> `reason`
 - `receivable_plan_id` -> `receivable_plan_id`
 - `project_id` -> `project_id`
-- `after_snapshot.id` 或 snapshot 中 allocation ID -> `allocation_id`
+- `adjust_allocation`、`reverse_allocation` 可从 allocation snapshot 中读取 `id` -> `allocation_id`
 
-如果 snapshot 不包含 allocation ID，第一版允许为空，但 target 仍指向应收计划。
+当前代码事实：
+
+- 新建人工核销 `allocate_payment` 的事件 `after_snapshot` 是应收计划快照，不包含 allocation ID。
+- 调整核销 `adjust_allocation` 和撤销核销 `reverse_allocation` 的事件快照来自 allocation，包含 allocation ID。
+
+第一版行为：
+
+- `manual_allocation` 的 `allocation_id` 允许为空，target 指向应收计划。
+- `adjust_allocation`、`reverse_allocation` 优先回填 `allocation_id`，target 可指向应收计划并携带 allocation 上下文。
+- 不为了补齐 `manual_allocation.allocation_id` 新增写表或反查不稳定关系。
 
 ### 历史台账关联收款
 
@@ -230,6 +240,19 @@ legacy_payment_ledger_marked_at IS NOT NULL
 - 两类来源分别分页候选，再在 service 层归一化、合并排序、分页。
 - 如果合并分页无法准确 total，第一版可在仓库层分别 count 后合计，列表拉取当前页需要的上限并按 `occurred_at` 排序截取。
 - 不新增 migration，除非实施时发现必要索引缺失。
+- 现有 `project_receivable_events` 只有按应收计划分页的仓库方法，实施时需要新增面向审计的 tenant 级分页查询方法。
+- 现有 `finance_ledger_entries` 仓库已包含台账修正审计字段，实施时新增只读查询，不复用 `listLedger` 的全字段 select。
+
+## 实现前复核结果
+
+已按当前代码复核以下事实：
+
+- `ProjectReceivableAllocationsService.createManualAllocation()` 写入 `allocate_payment` 事件，但快照只包含应收计划字段。
+- `ProjectReceivableAllocationsService.adjustManualAllocation()` 和 `reverseManualAllocation()` 写入 allocation 快照，包含 allocation ID。
+- `FinanceLedgerService.linkProjectPayment()` 已写入 `payment_linked_at`、`payment_linked_by`、`payment_link_reason`、`payment_link_previous_payment_id` 和 metadata operation。
+- `FinanceLedgerService.markLegacyProjectPayment()` 已写入 `legacy_payment_ledger_marked_at`、`legacy_payment_ledger_marked_by`、`legacy_payment_ledger_reason` 和 metadata operation。
+- Admin 财务页面已使用 `FinanceModuleTabs`、`FinanceMetricCard`、`FinanceFilterSelectField`、`DataTable` 和 server-side fetch 模式，新页面应复用这些模式。
+- 当前项目使用 `bun:test`，API service 单测和 Admin util/layout 单测都已有先例，实施必须先写失败测试再写实现。
 
 ## Admin 实现结构
 
@@ -298,7 +321,7 @@ Admin：
 
 ## 风险
 
-- `project_receivable_events` snapshot 里未必稳定包含 allocation ID，需要实现时确认。
+- `project_receivable_events` 的 `allocate_payment` 快照当前不包含 allocation ID，第一版不展示该字段。
 - 补生成台账当前可能没有足够明确的审计字段，第一版不应为了凑齐而误判普通台账。
 - 多来源聚合分页需要谨慎处理 total 和排序，不能无界读取。
 
