@@ -5,8 +5,11 @@ export type FinanceCorrectionAuditOperation =
   | "adjust_allocation"
   | "reverse_allocation"
   | "generate_payment_ledger"
+  | "generate_expense_ledger"
   | "link_ledger_payment"
-  | "mark_legacy_ledger";
+  | "mark_legacy_ledger"
+  | "update_expense_ledger_category"
+  | "record_expense_amount_mismatch_review";
 
 export type FinanceCorrectionAuditDomain = "receivable" | "ledger";
 
@@ -17,8 +20,11 @@ const OPERATION_LABELS: Record<FinanceCorrectionAuditOperation, string> = {
   adjust_allocation: "调整核销",
   reverse_allocation: "撤销核销",
   generate_payment_ledger: "补生成收款台账",
+  generate_expense_ledger: "补生成支出台账",
   link_ledger_payment: "关联收款",
   mark_legacy_ledger: "标记历史流水",
+  update_expense_ledger_category: "补支出台账成本分类",
+  record_expense_amount_mismatch_review: "记录费用金额复核",
 };
 
 export function financeCorrectionAuditOperationLabel(

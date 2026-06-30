@@ -73,6 +73,61 @@ const listLedgerCorrectionAudits = mock(async () => ({
       },
     },
     {
+      id: "expense-ledger-generated",
+      tenant_id: "tenant-1",
+      project_id: "project-4",
+      project_name: "费用项目",
+      amount: 1200,
+      payment_id: null,
+      expense_settlement_id: "expense-settlement-1",
+      payment_linked_at: null,
+      payment_linked_by: null,
+      payment_linked_by_name: null,
+      payment_link_reason: null,
+      legacy_payment_ledger_marked_at: null,
+      legacy_payment_ledger_marked_by: null,
+      legacy_payment_ledger_marked_by_name: null,
+      legacy_payment_ledger_reason: null,
+      generated_ledger_at: "2026-06-30T14:00:00.000Z",
+      generated_ledger_by: "employee-1",
+      generated_ledger_by_name: "财务甲",
+      generated_ledger_reason: "费用打款补入账",
+      generated_ledger_operation: "generate_expense_ledger",
+      cost_category_updated_at: null,
+      cost_category_updated_by: null,
+      cost_category_updated_by_name: null,
+      metadata: {
+        operation: "generate_expense_ledger",
+        repair_reason: "费用打款补入账",
+        repaired_by: "employee-1",
+      },
+    },
+    {
+      id: "expense-ledger-category",
+      tenant_id: "tenant-1",
+      project_id: "project-5",
+      project_name: "归集项目",
+      amount: 888,
+      payment_id: null,
+      expense_settlement_id: "expense-settlement-2",
+      payment_linked_at: null,
+      payment_linked_by: null,
+      payment_linked_by_name: null,
+      payment_link_reason: null,
+      legacy_payment_ledger_marked_at: null,
+      legacy_payment_ledger_marked_by: null,
+      legacy_payment_ledger_marked_by_name: null,
+      legacy_payment_ledger_reason: null,
+      generated_ledger_at: null,
+      generated_ledger_by: null,
+      generated_ledger_by_name: null,
+      generated_ledger_reason: null,
+      cost_category_updated_at: "2026-06-30T13:30:00.000Z",
+      cost_category_updated_by: "employee-2",
+      cost_category_updated_by_name: "主管乙",
+      metadata: { operation: "update_expense_ledger_category" },
+    },
+    {
       id: "ledger-1",
       tenant_id: "tenant-1",
       project_id: "project-1",
@@ -107,13 +162,34 @@ const listLedgerCorrectionAudits = mock(async () => ({
       metadata: { operation: "mark_legacy_ledger" },
     },
   ],
-  total: 3,
+  total: 5,
+}));
+
+const listReconciliationExceptionActions = mock(async () => ({
+  list: [
+    {
+      id: "expense-mismatch-review",
+      tenant_id: "tenant-1",
+      exception_fingerprint: "expense_paid_amount_mismatch:expense-settlement-3",
+      exception_code: "expense_paid_amount_mismatch",
+      subject_type: "expense_settlement",
+      subject_id: "expense-settlement-3",
+      project_id: "project-6",
+      action: "record_expense_amount_mismatch_review",
+      remark: "已复核，待线下调整",
+      actor_employee_id: "employee-1",
+      actor_employee_name: "财务甲",
+      created_at: "2026-06-30T14:30:00.000Z",
+    },
+  ],
+  total: 1,
 }));
 
 mock.module("@/repositories/finance-correction-audits", () => ({
   financeCorrectionAuditRepository: {
     listReceivableCorrectionEvents,
     listLedgerCorrectionAudits,
+    listReconciliationExceptionActions,
   },
 }));
 
@@ -162,6 +238,7 @@ describe("financeCorrectionAuditService", () => {
   beforeEach(() => {
     listReceivableCorrectionEvents.mockClear();
     listLedgerCorrectionAudits.mockClear();
+    listReconciliationExceptionActions.mockClear();
   });
 
   test("requires reconciliation manage permission", async () => {
@@ -192,11 +269,14 @@ describe("financeCorrectionAuditService", () => {
     );
 
     expect(result.summary).toEqual({
-      total: 5,
-      ledger_repair: 3,
+      total: 8,
+      ledger_repair: 6,
       receivable_allocation: 2,
     });
     expect(result.list.map((item) => item.operation)).toEqual([
+      "record_expense_amount_mismatch_review",
+      "generate_expense_ledger",
+      "update_expense_ledger_category",
       "generate_payment_ledger",
       "link_ledger_payment",
       "adjust_allocation",
@@ -204,6 +284,34 @@ describe("financeCorrectionAuditService", () => {
       "mark_legacy_ledger",
     ]);
     expect(result.list[0]).toMatchObject({
+      id: "reconciliation-action:expense-mismatch-review",
+      operation: "record_expense_amount_mismatch_review",
+      operation_label: "记录费用金额复核",
+      domain: "ledger",
+      project_id: "project-6",
+      actor_employee_name: "财务甲",
+      reason: "已复核，待线下调整",
+      target: {
+        label: "查看对账异常",
+        href:
+          "/finance/reconciliation?exception_code=expense_paid_amount_mismatch&status=acknowledged",
+      },
+    });
+    expect(result.list[1]).toMatchObject({
+      id: "ledger:expense-ledger-generated:generate_expense_ledger",
+      operation_label: "补生成支出台账",
+      domain: "ledger",
+      project_name: "费用项目",
+      ledger_id: "expense-ledger-generated",
+    });
+    expect(result.list[2]).toMatchObject({
+      id: "ledger:expense-ledger-category:update_expense_ledger_category",
+      operation_label: "补支出台账成本分类",
+      domain: "ledger",
+      project_name: "归集项目",
+      ledger_id: "expense-ledger-category",
+    });
+    expect(result.list[3]).toMatchObject({
       id: "ledger:ledger-generated:generate_payment_ledger",
       operation_label: "补生成收款台账",
       domain: "ledger",
@@ -217,7 +325,7 @@ describe("financeCorrectionAuditService", () => {
         href: "/finance/ledger?ledger_id=ledger-generated",
       },
     });
-    expect(result.list[1]).toMatchObject({
+    expect(result.list[4]).toMatchObject({
       id: "ledger:ledger-1:link_ledger_payment",
       operation_label: "关联收款",
       domain: "ledger",
@@ -230,8 +338,8 @@ describe("financeCorrectionAuditService", () => {
         href: "/finance/ledger?ledger_id=ledger-1",
       },
     });
-    expect(result.list.at(2)?.allocation_id).toBe("allocation-1");
-    expect(result.list[3]).toMatchObject({
+    expect(result.list.at(5)?.allocation_id).toBe("allocation-1");
+    expect(result.list[6]).toMatchObject({
       operation: "manual_allocation",
       allocation_id: null,
       target: {
@@ -287,11 +395,24 @@ describe("financeCorrectionAuditService", () => {
       },
       candidateLimit: 4,
     });
+    expect(listReconciliationExceptionActions).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      query: {
+        page: 2,
+        pageSize: 2,
+        operation: "manual_allocation",
+        project_id: "11111111-1111-4111-8111-111111111111",
+        actor_employee_id: "22222222-2222-4222-8222-222222222222",
+        date_from: "2026-06-01",
+        date_to: "2026-06-30",
+      },
+      candidateLimit: 4,
+    });
     expect(result.pagination).toEqual({
       page: 2,
       pageSize: 2,
-      total: 5,
-      totalPages: 3,
+      total: 8,
+      totalPages: 4,
     });
     expect(result.list).toHaveLength(2);
   });
@@ -323,5 +444,10 @@ describe("financeCorrectionAuditService", () => {
     expect(() =>
       FinanceCorrectionAuditListQuerySchema.parse({ pageSize: "101" })
     ).toThrow();
+    expect(
+      FinanceCorrectionAuditListQuerySchema.parse({
+        operation: "generate_expense_ledger",
+      }).operation,
+    ).toBe("generate_expense_ledger");
   });
 });

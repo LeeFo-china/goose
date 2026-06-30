@@ -89,6 +89,11 @@ export function financeReconciliationActionLabel(
   if (action === "ignore") return "标记忽略";
   if (action === "resolve") return "标记人工闭环";
   if (action === "reopen") return "重新打开";
+  if (action === "generate_expense_ledger") return "补生成支出台账";
+  if (action === "update_expense_ledger_category") return "补成本分类";
+  if (action === "record_expense_amount_mismatch_review") {
+    return "记录金额复核";
+  }
   return action || "处理";
 }
 

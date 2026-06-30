@@ -35,8 +35,11 @@ const OPERATION_OPTIONS = [
   { value: "adjust_allocation", label: "调整核销" },
   { value: "reverse_allocation", label: "撤销核销" },
   { value: "generate_payment_ledger", label: "补生成收款台账" },
+  { value: "generate_expense_ledger", label: "补生成支出台账" },
   { value: "link_ledger_payment", label: "关联收款" },
   { value: "mark_legacy_ledger", label: "标记历史流水" },
+  { value: "update_expense_ledger_category", label: "补支出台账成本分类" },
+  { value: "record_expense_amount_mismatch_review", label: "记录费用金额复核" },
 ];
 
 function normalizePage(value: string | undefined) {

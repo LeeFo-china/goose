@@ -17,8 +17,11 @@ export const FinanceCorrectionAuditOperationSchema = z.enum([
   "adjust_allocation",
   "reverse_allocation",
   "generate_payment_ledger",
+  "generate_expense_ledger",
   "link_ledger_payment",
   "mark_legacy_ledger",
+  "update_expense_ledger_category",
+  "record_expense_amount_mismatch_review",
 ]);
 
 export type FinanceCorrectionAuditOperation =

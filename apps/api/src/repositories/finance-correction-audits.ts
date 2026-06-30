@@ -1,4 +1,8 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  listLedgerCorrectionAuditRows,
+  type LedgerCorrectionAuditRow,
+} from "@/repositories/finance-correction-audit-ledgers";
 import type {
   FinanceCorrectionAuditListQuery,
   FinanceCorrectionAuditOperation,
@@ -26,29 +30,21 @@ export type ReceivableCorrectionEventRow = {
   created_at: string;
 };
 
-export type LedgerCorrectionAuditRow = {
+export type { LedgerCorrectionAuditRow };
+
+export type ReconciliationExceptionActionAuditRow = {
   id: string;
   tenant_id: string;
+  exception_fingerprint: string;
+  exception_code: string;
+  subject_type: string;
+  subject_id: string | null;
   project_id: string | null;
-  project_name: string | null;
-  amount: number | null;
-  occurred_at: string | null;
-  payment_id: string | null;
-  handled_by: string | null;
-  handled_by_name: string | null;
-  payment_linked_at: string | null;
-  payment_linked_by: string | null;
-  payment_linked_by_name: string | null;
-  payment_link_reason: string | null;
-  legacy_payment_ledger_marked_at: string | null;
-  legacy_payment_ledger_marked_by: string | null;
-  legacy_payment_ledger_marked_by_name: string | null;
-  legacy_payment_ledger_reason: string | null;
-  generated_ledger_at: string | null;
-  generated_ledger_by: string | null;
-  generated_ledger_by_name: string | null;
-  generated_ledger_reason: string | null;
-  metadata: Record<string, unknown> | null;
+  action: FinanceCorrectionAuditOperation;
+  remark: string;
+  actor_employee_id: string | null;
+  actor_employee_name: string | null;
+  created_at: string;
 };
 
 type ListInput = {
@@ -132,162 +128,70 @@ class FinanceCorrectionAuditRepository {
     list: LedgerCorrectionAuditRow[];
     total: number;
   }> {
-    if (input.query.operation && !isLedgerOperation(input.query.operation)) {
+    return listLedgerCorrectionAuditRows(input);
+  }
+
+  async listReconciliationExceptionActions(input: ListInput): Promise<{
+    list: ReconciliationExceptionActionAuditRow[];
+    total: number;
+  }> {
+    if (
+      input.query.operation &&
+      input.query.operation !== "record_expense_amount_mismatch_review"
+    ) {
       return { list: [], total: 0 };
     }
 
-    const [linked, legacy, generated] = await Promise.all([
-      input.query.operation && input.query.operation !== "link_ledger_payment"
-        ? Promise.resolve({ list: [], total: 0 })
-        : this.listLinkedLedgerRows(input),
-      input.query.operation && input.query.operation !== "mark_legacy_ledger"
-        ? Promise.resolve({ list: [], total: 0 })
-        : this.listLegacyLedgerRows(input),
-      input.query.operation && input.query.operation !== "generate_payment_ledger"
-        ? Promise.resolve({ list: [], total: 0 })
-        : this.listGeneratedLedgerRows(input),
-    ]);
-    const list = [...linked.list, ...legacy.list, ...generated.list]
-      .sort((left, right) =>
-        ledgerOccurredAt(right).localeCompare(ledgerOccurredAt(left))
-      )
-      .slice(0, input.candidateLimit);
+    let request = SupabaseDB.getAdminClient()
+      .from("finance_reconciliation_exception_actions")
+      .select(`
+        id,
+        tenant_id,
+        exception_fingerprint,
+        exception_code,
+        subject_type,
+        subject_id,
+        project_id,
+        action,
+        remark,
+        actor_employee_id,
+        created_at,
+        actor_employee:employees!finance_reconciliation_exception_actions_actor_employee_id_fkey(name)
+      `, { count: "exact" })
+      .eq("tenant_id", input.tenantId)
+      .eq("action", "record_expense_amount_mismatch_review")
+      .order("created_at", { ascending: false });
 
-    return {
-      list,
-      total: linked.total + legacy.total + generated.total,
-    };
-  }
-
-  private async listLinkedLedgerRows(input: ListInput): Promise<{
-    list: LedgerCorrectionAuditRow[];
-    total: number;
-  }> {
-    let request = baseLedgerRequest(input.tenantId)
-      .not("payment_linked_at", "is", null)
-      .order("payment_linked_at", { ascending: false });
-    request = applyLedgerSharedFilters(request, input, "payment_linked");
-
-    const limit = Math.max(input.candidateLimit, 1);
-    const { data, error, count } = await request.range(0, limit - 1);
-    if (error) throw Errors.dbError("查询财务台账关联收款审计失败", error);
-
-    return {
-      list: ((data as unknown[]) || []).map((row) => normalizeLedgerRow(row)),
-      total: count || 0,
-    };
-  }
-
-  private async listLegacyLedgerRows(input: ListInput): Promise<{
-    list: LedgerCorrectionAuditRow[];
-    total: number;
-  }> {
-    let request = baseLedgerRequest(input.tenantId)
-      .not("legacy_payment_ledger_marked_at", "is", null)
-      .order("legacy_payment_ledger_marked_at", { ascending: false });
-    request = applyLedgerSharedFilters(request, input, "legacy_marked");
+    if (input.query.project_id) {
+      request = request.eq("project_id", input.query.project_id);
+    }
+    if (input.query.actor_employee_id) {
+      request = request.eq("actor_employee_id", input.query.actor_employee_id);
+    }
+    if (input.query.date_from) {
+      request = request.gte(
+        "created_at",
+        `${input.query.date_from}T00:00:00.000Z`,
+      );
+    }
+    if (input.query.date_to) {
+      request = request.lte(
+        "created_at",
+        `${input.query.date_to}T23:59:59.999Z`,
+      );
+    }
 
     const limit = Math.max(input.candidateLimit, 1);
     const { data, error, count } = await request.range(0, limit - 1);
-    if (error) throw Errors.dbError("查询财务台账历史标记审计失败", error);
+    if (error) throw Errors.dbError("查询费用金额复核审计失败", error);
 
     return {
-      list: ((data as unknown[]) || []).map((row) => normalizeLedgerRow(row)),
+      list: ((data as unknown[]) || []).map((row) =>
+        normalizeReconciliationActionRow(row)
+      ),
       total: count || 0,
     };
   }
-
-  private async listGeneratedLedgerRows(input: ListInput): Promise<{
-    list: LedgerCorrectionAuditRow[];
-    total: number;
-  }> {
-    let request = baseLedgerRequest(input.tenantId)
-      .eq("metadata->>operation", "generate_missing_project_payment_ledger")
-      .order("occurred_at", { ascending: false });
-    request = applyLedgerSharedFilters(request, input, "generated");
-
-    const limit = Math.max(input.candidateLimit, 1);
-    const { data, error, count } = await request.range(0, limit - 1);
-    if (error) throw Errors.dbError("查询财务台账补生成审计失败", error);
-
-    return {
-      list: ((data as unknown[]) || []).map((row) => normalizeLedgerRow(row)),
-      total: count || 0,
-    };
-  }
-}
-
-function baseLedgerRequest(tenantId: string) {
-  return SupabaseDB.getAdminClient()
-    .from("finance_ledger_entries")
-    .select(`
-      id,
-      tenant_id,
-      project_id,
-      occurred_at,
-      amount,
-      payment_id,
-      handled_by,
-      payment_linked_at,
-      payment_linked_by,
-      payment_link_reason,
-      legacy_payment_ledger_marked_at,
-      legacy_payment_ledger_marked_by,
-      legacy_payment_ledger_reason,
-      metadata,
-      project:projects(id, name),
-      handler:employees!finance_ledger_entries_handled_by_fkey(id, name),
-      payment_linker:employees!finance_ledger_entries_payment_linked_by_fkey(id, name),
-      legacy_marker:employees!finance_ledger_entries_legacy_payment_ledger_marked_by_fkey(id, name)
-    `, { count: "exact" })
-    .eq("tenant_id", tenantId)
-    .eq("entry_type", "project_payment");
-}
-
-function applyLedgerSharedFilters(
-  request: ReturnType<typeof baseLedgerRequest>,
-  input: ListInput,
-  mode: "payment_linked" | "legacy_marked" | "generated",
-) {
-  let nextRequest = request;
-  if (input.query.project_id) {
-    nextRequest = nextRequest.eq("project_id", input.query.project_id);
-  }
-  if (input.query.actor_employee_id) {
-    nextRequest = nextRequest.eq(
-      actorColumnForLedgerMode(mode),
-      input.query.actor_employee_id,
-    );
-  }
-  if (input.query.date_from) {
-    nextRequest = nextRequest.gte(
-      dateColumnForLedgerMode(mode),
-      `${input.query.date_from}T00:00:00.000Z`,
-    );
-  }
-  if (input.query.date_to) {
-    nextRequest = nextRequest.lte(
-      dateColumnForLedgerMode(mode),
-      `${input.query.date_to}T23:59:59.999Z`,
-    );
-  }
-  return nextRequest;
-}
-
-function actorColumnForLedgerMode(
-  mode: "payment_linked" | "legacy_marked" | "generated",
-) {
-  if (mode === "payment_linked") return "payment_linked_by";
-  if (mode === "legacy_marked") return "legacy_payment_ledger_marked_by";
-  return "handled_by";
-}
-
-function dateColumnForLedgerMode(
-  mode: "payment_linked" | "legacy_marked" | "generated",
-) {
-  if (mode === "payment_linked") return "payment_linked_at";
-  if (mode === "legacy_marked") return "legacy_payment_ledger_marked_at";
-  return "occurred_at";
 }
 
 function receivableEventTypesForOperation(
@@ -301,19 +205,6 @@ function receivableEventTypesForOperation(
   >)
     .filter(([, mappedOperation]) => mappedOperation === operation)
     .map(([eventType]) => eventType);
-}
-
-function isLedgerOperation(operation: FinanceCorrectionAuditOperation) {
-  return operation === "link_ledger_payment" ||
-    operation === "mark_legacy_ledger" ||
-    operation === "generate_payment_ledger";
-}
-
-function ledgerOccurredAt(row: LedgerCorrectionAuditRow) {
-  return row.payment_linked_at ??
-    row.legacy_payment_ledger_marked_at ??
-    row.generated_ledger_at ??
-    "";
 }
 
 function normalizeReceivableEventRow(
@@ -339,48 +230,24 @@ function normalizeReceivableEventRow(
   };
 }
 
-function normalizeLedgerRow(value: unknown): LedgerCorrectionAuditRow {
+function normalizeReconciliationActionRow(
+  value: unknown,
+): ReconciliationExceptionActionAuditRow {
   const row = objectOrNull(value) ?? {};
-  const project = relationObject(row.project);
-  const handler = relationObject(row.handler);
-  const paymentLinker = relationObject(row.payment_linker);
-  const legacyMarker = relationObject(row.legacy_marker);
-  const metadata = objectOrNull(row.metadata);
-  const isGeneratedLedger =
-    readString(metadata, "operation") === "generate_missing_project_payment_ledger";
+  const actor = relationObject(row.actor_employee);
   return {
     id: String(row.id),
     tenant_id: String(row.tenant_id),
+    exception_fingerprint: String(row.exception_fingerprint),
+    exception_code: String(row.exception_code),
+    subject_type: String(row.subject_type),
+    subject_id: stringOrNull(row.subject_id),
     project_id: stringOrNull(row.project_id),
-    project_name: stringOrNull(project?.name),
-    amount: numberOrNull(row.amount),
-    occurred_at: stringOrNull(row.occurred_at),
-    payment_id: stringOrNull(row.payment_id),
-    handled_by: stringOrNull(row.handled_by),
-    handled_by_name: stringOrNull(handler?.name),
-    payment_linked_at: stringOrNull(row.payment_linked_at),
-    payment_linked_by: stringOrNull(row.payment_linked_by),
-    payment_linked_by_name: stringOrNull(paymentLinker?.name),
-    payment_link_reason: stringOrNull(row.payment_link_reason),
-    legacy_payment_ledger_marked_at: stringOrNull(
-      row.legacy_payment_ledger_marked_at,
-    ),
-    legacy_payment_ledger_marked_by: stringOrNull(
-      row.legacy_payment_ledger_marked_by,
-    ),
-    legacy_payment_ledger_marked_by_name: stringOrNull(legacyMarker?.name),
-    legacy_payment_ledger_reason: stringOrNull(row.legacy_payment_ledger_reason),
-    generated_ledger_at: isGeneratedLedger ? stringOrNull(row.occurred_at) : null,
-    generated_ledger_by: isGeneratedLedger
-      ? readString(metadata, "repaired_by") ?? stringOrNull(row.handled_by)
-      : null,
-    generated_ledger_by_name: isGeneratedLedger
-      ? stringOrNull(handler?.name)
-      : null,
-    generated_ledger_reason: isGeneratedLedger
-      ? readString(metadata, "repair_reason")
-      : null,
-    metadata,
+    action: row.action as FinanceCorrectionAuditOperation,
+    remark: String(row.remark ?? ""),
+    actor_employee_id: stringOrNull(row.actor_employee_id),
+    actor_employee_name: stringOrNull(actor?.name),
+    created_at: String(row.created_at),
   };
 }
 
@@ -397,18 +264,6 @@ function objectOrNull(value: unknown): Record<string, unknown> | null {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
-}
-
-function readString(
-  record: Record<string, unknown> | null,
-  key: string,
-): string | null {
-  return stringOrNull(record?.[key]);
-}
-
-function numberOrNull(value: unknown): number | null {
-  const numeric = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
 }
 
 export const financeCorrectionAuditRepository =

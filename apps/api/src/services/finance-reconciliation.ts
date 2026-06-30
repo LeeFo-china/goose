@@ -1,7 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import {
   financeReconciliationActionsRepository,
-  type FinanceReconciliationActionRecord,
 } from "@/repositories/finance-reconciliation-actions";
 import {
   financeReconciliationRepository,
@@ -9,7 +8,6 @@ import {
 } from "@/repositories/finance-reconciliation";
 import type {
   CreateFinanceReconciliationExceptionAction,
-  FinanceReconciliationAction,
   FinanceReconciliationExceptionCode,
   FinanceReconciliationExceptionActionListQuery,
   FinanceReconciliationExceptionListQuery,
@@ -19,6 +17,18 @@ import type {
 } from "@/schema/finance-reconciliation";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  highestLevelFromExceptions,
+  latestActionFromExceptions,
+  withFinanceReconciliationActionState,
+} from "@/services/finance-reconciliation-action-state";
+import {
+  availableActionsForReconciliationException,
+  defaultFinanceReconciliationCorrectionDependencies,
+  performFinanceReconciliationCorrectionAction,
+  resolveFinanceReconciliationExceptionContext,
+  type FinanceReconciliationCorrectionDependencies,
+} from "@/services/finance-reconciliation-correction-actions";
 import {
   buildFinanceReconciliationOperatingStats,
   type FinanceReconciliationOperatingStats,
@@ -52,6 +62,7 @@ type FinanceReconciliationServiceDependencies = {
     typeof financeReconciliationActionsRepository,
     "listLatestActions" | "listActions" | "createAction"
   >;
+  correctionDependencies: FinanceReconciliationCorrectionDependencies;
   accessPolicyService: Pick<
     typeof accessPolicyService,
     "assertTenantContext" | "hasPermission" | "canAccessProject"
@@ -81,14 +92,21 @@ export type FinanceReconciliationProjectSummary =
   };
 
 export class FinanceReconciliationService {
+  private readonly dependencies: FinanceReconciliationServiceDependencies;
+
   constructor(
-    private readonly dependencies: FinanceReconciliationServiceDependencies = {
+    dependencies: Partial<FinanceReconciliationServiceDependencies> = {},
+  ) {
+    this.dependencies = {
       repository: financeReconciliationRepository,
       actionsRepository: financeReconciliationActionsRepository,
+      correctionDependencies:
+        defaultFinanceReconciliationCorrectionDependencies,
       accessPolicyService,
       now: () => new Date(),
-    },
-  ) {}
+      ...dependencies,
+    };
+  }
 
   async listExceptions(
     authContext: AuthContext,
@@ -106,7 +124,7 @@ export class FinanceReconciliationService {
       dateTo: range.dateTo,
       projectId: query.project_id,
     });
-    const exceptionsWithActions = await withActionState({
+    const exceptionsWithActions = await withFinanceReconciliationActionState({
       tenantId,
       exceptions: buildFinanceReconciliationExceptions(candidates, range.dateTo),
       actionsRepository: this.dependencies.actionsRepository,
@@ -134,7 +152,7 @@ export class FinanceReconciliationService {
       dateTo: range.dateTo,
       projectId: query.project_id,
     });
-    const exceptionsWithActions = await withActionState({
+    const exceptionsWithActions = await withFinanceReconciliationActionState({
       tenantId,
       exceptions: buildFinanceReconciliationExceptions(candidates, range.dateTo),
       actionsRepository: this.dependencies.actionsRepository,
@@ -173,7 +191,7 @@ export class FinanceReconciliationService {
       dateFrom: "1970-01-01",
       dateTo,
     });
-    const exceptions = await withActionState({
+    const exceptions = await withFinanceReconciliationActionState({
       tenantId,
       exceptions: buildFinanceReconciliationExceptions(candidates, dateTo),
       actionsRepository: this.dependencies.actionsRepository,
@@ -230,17 +248,14 @@ export class FinanceReconciliationService {
       .assertTenantContext(authContext);
     this.assertCanManageReconciliation(authContext);
 
-    const dateTo = toDateOnly(this.dependencies.now?.() ?? new Date());
-    const candidates = await this.dependencies.repository.listCandidateRows({
+    const target = await this.findCurrentException(tenantId, fingerprint);
+    await performFinanceReconciliationCorrectionAction(
+      authContext,
       tenantId,
-      dateFrom: "1970-01-01",
-      dateTo,
-    });
-    const target = buildFinanceReconciliationExceptions(candidates, dateTo)
-      .find((item) => item.exception_fingerprint === fingerprint);
-    if (!target) {
-      throw Errors.notFound("对账异常不存在或已消失");
-    }
+      target,
+      input,
+      this.dependencies.correctionDependencies,
+    );
 
     return this.dependencies.actionsRepository.createAction({
       tenantId,
@@ -253,6 +268,31 @@ export class FinanceReconciliationService {
       remark: input.remark,
       actorEmployeeId: authContext.employeeId ?? null,
     });
+  }
+
+  async getExceptionDetail(
+    authContext: AuthContext,
+    fingerprint: string,
+  ) {
+    const tenantId = this.dependencies.accessPolicyService
+      .assertTenantContext(authContext);
+    this.assertCanViewReconciliation(authContext);
+
+    const exception = await this.findCurrentException(tenantId, fingerprint);
+    const context = await this.resolveExceptionContext(tenantId, exception);
+    const history = await this.dependencies.actionsRepository.listActions({
+      tenantId,
+      exceptionFingerprint: exception.exception_fingerprint,
+      page: 1,
+      pageSize: 10,
+    });
+
+    return {
+      exception,
+      context,
+      available_actions: availableActionsForReconciliationException(exception),
+      history: history.list,
+    };
   }
 
   async listExceptionActions(
@@ -340,65 +380,39 @@ export class FinanceReconciliationService {
       )
     );
   }
-}
 
-async function withActionState(input: {
-  tenantId: string;
-  exceptions: FinanceReconciliationException[];
-  actionsRepository: Pick<
-    typeof financeReconciliationActionsRepository,
-    "listLatestActions"
-  >;
-}) {
-  const actionMap = await input.actionsRepository.listLatestActions({
-    tenantId: input.tenantId,
-    fingerprints: input.exceptions.map((item) => item.exception_fingerprint),
-  });
+  private async findCurrentException(
+    tenantId: string,
+    fingerprint: string,
+  ) {
+    const dateTo = toDateOnly(this.dependencies.now?.() ?? new Date());
+    const candidates = await this.dependencies.repository.listCandidateRows({
+      tenantId,
+      dateFrom: "1970-01-01",
+      dateTo,
+    });
+    const [target] = await withFinanceReconciliationActionState({
+      tenantId,
+      exceptions: buildFinanceReconciliationExceptions(candidates, dateTo)
+        .filter((item) => item.exception_fingerprint === fingerprint),
+      actionsRepository: this.dependencies.actionsRepository,
+    });
+    if (!target) {
+      throw Errors.notFound("对账异常不存在或已消失");
+    }
+    return target;
+  }
 
-  return input.exceptions.map((item) =>
-    applyActionState(item, actionMap.get(item.exception_fingerprint) ?? null)
-  );
-}
-
-function applyActionState(
-  item: FinanceReconciliationException,
-  action: FinanceReconciliationActionRecord | null,
-): FinanceReconciliationException {
-  if (!action) return item;
-  return {
-    ...item,
-    status: statusFromAction(action.action),
-    last_action: action.action,
-    last_action_at: action.created_at,
-    last_action_remark: action.remark,
-    last_actor_employee_id: action.actor_employee_id,
-    last_actor_employee_name: action.actor_employee_name,
-  };
-}
-
-function statusFromAction(action: FinanceReconciliationAction) {
-  if (action === "acknowledge") return "acknowledged" as const;
-  if (action === "ignore") return "ignored" as const;
-  if (action === "resolve") return "resolved" as const;
-  return "open" as const;
-}
-
-function latestActionFromExceptions(exceptions: FinanceReconciliationException[]) {
-  return exceptions
-    .filter((item) => item.last_action_at)
-    .sort((left, right) =>
-      Date.parse(right.last_action_at || "") -
-      Date.parse(left.last_action_at || "")
-    )[0] ?? null;
-}
-
-function highestLevelFromExceptions(
-  exceptions: FinanceReconciliationException[],
-): FinanceReconciliationLevel | null {
-  if (exceptions.some((item) => item.level === "danger")) return "danger";
-  if (exceptions.some((item) => item.level === "warning")) return "warning";
-  if (exceptions.some((item) => item.level === "info")) return "info";
-  return null;
+  private async resolveExceptionContext(
+    tenantId: string,
+    exception: FinanceReconciliationException,
+  ) {
+    return resolveFinanceReconciliationExceptionContext(
+      tenantId,
+      exception,
+      this.dependencies.correctionDependencies,
+    );
+  }
 }
 
 function buildListResponse(
