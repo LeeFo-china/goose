@@ -59,6 +59,8 @@
 - [2026-06-30-phase7-9-expense-reconciliation-correction-plan.md](./2026-06-30-phase7-9-expense-reconciliation-correction-plan.md)：Phase 7.9 费用对账修正闭环计划，覆盖费用未入账、金额不一致和缺成本分类。
 - [2026-06-30-phase7-9-post-release-smoke.md](./2026-06-30-phase7-9-post-release-smoke.md)：Phase 7.9 发布后只读 smoke，覆盖费用异常详情、修正动作、修正审计、Admin 处理抽屉和 migration 阻塞记录。
 - [2026-06-30-phase8-finance-reporting-closing-prd.md](./2026-06-30-phase8-finance-reporting-closing-prd.md)：Phase 8 财务报表与月度结账 PRD，定义月度经营总览、项目排行、成本分类、应收账龄、结账快照和导出。
+- [2026-06-30-phase8-task0-baseline.md](./2026-06-30-phase8-task0-baseline.md)：Phase 8 Task 0 基线核查，记录 migration 连接口径、已有 API/Admin 页面、索引和权限缺口。
+- [2026-06-30-phase8-task1-5-implementation-smoke.md](./2026-06-30-phase8-task1-5-implementation-smoke.md)：Phase 8 Task 1-5 执行记录，覆盖月度总览 API、Admin 财务报表、结账快照、migration 和 smoke 结果。
 - [2026-06-30-wechat-pay-integration-prd.md](./2026-06-30-wechat-pay-integration-prd.md)：微信支付接入 PRD，明确租户独立商户优先、支付订单、回调幂等、workflow 对接、对账异常和小程序边界。
 - [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。

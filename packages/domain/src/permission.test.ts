@@ -26,4 +26,19 @@ describe("finance receivable permissions", () => {
       module: "finance",
     });
   });
+
+  test("exposes finance report and closing permissions in domain constants", () => {
+    expect(PERMISSION_CODE_VALUES).toContain("finance.reports.read");
+    expect(PERMISSION_CODE_VALUES).toContain("finance.reports.export");
+    expect(PERMISSION_CODE_VALUES).toContain("finance.closing.read");
+    expect(PERMISSION_CODE_VALUES).toContain("finance.closing.manage");
+    expect(PermissionCodeConfig["finance.reports.read"]).toEqual({
+      label: "查看财务报表",
+      module: "finance",
+    });
+    expect(PermissionCodeConfig["finance.closing.manage"]).toEqual({
+      label: "管理月度结账",
+      module: "finance",
+    });
+  });
 });

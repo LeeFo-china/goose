@@ -13,16 +13,23 @@ import {
 } from "@/components/finance/finance-filter-controls";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { FinanceMetricCard } from "@/components/finance/finance-overview-cards";
+import { FinanceClosingActions } from "@/components/finance/finance-closing-actions";
 import {
+  fetchFinanceClosingPeriods,
+  fetchFinanceMonthlyOverview,
   fetchFinanceOperatingReport,
   type FinanceOperatingReportGroup,
 } from "@/components/finance/finance-operating-report-requests";
 import {
   buildFinanceOperatingReportSearchParams,
+  financeClosingStatusLabel,
+  financeClosingStatusVariant,
   financeOperatingGroupByLabel,
 } from "@/components/finance/finance-operating-report-utils";
 import {
+  formatFinanceDateTime,
   formatFinanceMoney,
+  formatFinancePercent,
 } from "@/components/finance/finance-ledger-utils";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +46,7 @@ import {
 } from "@/components/ui/table";
 
 type FinanceReportsPageSearchParams = {
+  month?: string;
   date_from?: string;
   date_to?: string;
   group_by?: string;
@@ -69,6 +77,8 @@ function clean(value: string | undefined) {
 
 function reportHref(filters: FinanceReportsPageSearchParams) {
   const params = buildFinanceOperatingReportSearchParams(filters);
+  const month = clean(filters.month);
+  if (month) params.set("month", month);
   return `/finance/reports${params.size ? `?${params}` : ""}`;
 }
 
@@ -82,14 +92,28 @@ export default async function FinanceReportsPage({
 
   const params = await searchParams;
   const groupBy = clean(params.group_by) || "month";
-  const data = await fetchFinanceOperatingReport({
-    date_from: clean(params.date_from),
-    date_to: clean(params.date_to),
-    group_by: groupBy,
-    project_id: clean(params.project_id),
-    project_status: clean(params.project_status),
+  const monthlyOverview = await fetchFinanceMonthlyOverview({
+    month: clean(params.month),
   });
-  const summary = data.summary;
+  const reportMonth = monthlyOverview.scope.month || clean(params.month) || "";
+  const dateFrom = clean(params.date_from) || monthlyOverview.scope.date_from;
+  const dateTo = clean(params.date_to) || monthlyOverview.scope.date_to;
+  const [data, closingPeriods] = await Promise.all([
+    fetchFinanceOperatingReport({
+      date_from: dateFrom,
+      date_to: dateTo,
+      group_by: groupBy,
+      project_id: clean(params.project_id),
+      project_status: clean(params.project_status),
+    }),
+    fetchFinanceClosingPeriods({
+      month: reportMonth,
+      page: 1,
+      pageSize: 5,
+    }),
+  ]);
+  const summary = monthlyOverview.summary;
+  const closing = monthlyOverview.closing;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -99,17 +123,23 @@ export default async function FinanceReportsPage({
             <BarChart3 aria-hidden="true" className="size-4" />
           </span>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-normal">运营报表</h1>
+            <h1 className="text-xl font-semibold tracking-normal">财务报表</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              按日期、项目、收款类型和成本分类汇总收入、支出、利润与逾期。
+              按月份查看收入、支出、毛利、应收、对账异常和结账快照。
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="tabular-nums">
-            {data.scope.date_from || "-"} 至 {data.scope.date_to || "-"}
+            {reportMonth || "-"}
           </Badge>
-          {data.scope.truncated ? (
+          <Badge
+            variant={financeClosingStatusVariant(closing.status)}
+            className="tabular-nums"
+          >
+            {financeClosingStatusLabel(closing.status)}
+          </Badge>
+          {monthlyOverview.scope.truncated || data.scope.truncated ? (
             <Badge variant="warning">已达到源数据上限</Badge>
           ) : null}
         </div>
@@ -117,42 +147,100 @@ export default async function FinanceReportsPage({
 
       <FinanceModuleTabs activeTab="reports" />
 
+      {monthlyOverview.error || closingPeriods.error ? (
+        <div className="shrink-0 grid gap-2">
+          {monthlyOverview.error ? <StatusAlert>{monthlyOverview.error}</StatusAlert> : null}
+          {closingPeriods.error ? <StatusAlert>{closingPeriods.error}</StatusAlert> : null}
+        </div>
+      ) : null}
+
       <div className="grid shrink-0 gap-2 md:grid-cols-2 xl:grid-cols-4">
         <FinanceMetricCard
           icon={<WalletCards aria-hidden="true" className="size-4" />}
-          label="收入"
-          value={formatFinanceMoney(summary.received_amount)}
+          label="本月收入"
+          value={formatFinanceMoney(summary.income_amount)}
           helper="项目收款入账"
         />
         <FinanceMetricCard
           icon={<ReceiptText aria-hidden="true" className="size-4" />}
-          label="支出"
+          label="本月支出"
           value={formatFinanceMoney(summary.expense_amount)}
           helper={`未归集 ${formatFinanceMoney(summary.unallocated_expense_amount)}`}
           tone={summary.unallocated_expense_amount > 0 ? "warning" : "normal"}
         />
         <FinanceMetricCard
           icon={<LineChart aria-hidden="true" className="size-4" />}
-          label="实际利润"
-          value={formatFinanceMoney(summary.actual_profit_amount)}
-          helper="收入 - 支出"
-          tone={summary.actual_profit_amount < 0 ? "danger" : "normal"}
+          label="毛利 / 毛利率"
+          value={formatFinanceMoney(summary.gross_profit_amount)}
+          helper={formatFinancePercent(summary.gross_profit_rate)}
+          tone={summary.gross_profit_amount < 0 ? "danger" : "normal"}
         />
         <FinanceMetricCard
           icon={<CircleDollarSign aria-hidden="true" className="size-4" />}
-          label="待收 / 逾期"
+          label="未收 / 异常"
           value={formatFinanceMoney(summary.receivable_remaining_amount)}
-          helper={`逾期 ${formatFinanceMoney(summary.overdue_amount)}`}
-          tone={summary.overdue_amount > 0 ? "warning" : "normal"}
+          helper={`逾期 ${formatFinanceMoney(summary.overdue_receivable_amount)} · 异常 ${summary.reconciliation_exception_count}`}
+          tone={summary.overdue_receivable_amount > 0 || summary.reconciliation_exception_count > 0 ? "warning" : "normal"}
         />
       </div>
+
+      <Card className="shrink-0">
+        <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">结账状态</div>
+              <div className="mt-1 flex items-center gap-2">
+                <Badge variant={financeClosingStatusVariant(closing.status)}>
+                  {financeClosingStatusLabel(closing.status)}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {closing.closed_at ? `结账 ${formatFinanceDateTime(closing.closed_at)}` : "尚未确认结账"}
+                </span>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">快照毛利</div>
+              <div className="mt-1 text-sm font-medium tabular-nums">
+                {closing.snapshot_summary?.gross_profit_amount !== undefined
+                  ? formatFinanceMoney(closing.snapshot_summary.gross_profit_amount)
+                  : "-"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">最近记录</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {closingPeriods.list[0]
+                  ? `${financeClosingStatusLabel(closingPeriods.list[0].status)} · ${formatFinanceDateTime(closingPeriods.list[0].updated_at)}`
+                  : "暂无结账记录"}
+              </div>
+            </div>
+          </div>
+          <FinanceClosingActions
+            month={reportMonth}
+            periodId={closing.id}
+            status={closing.status}
+          />
+        </CardContent>
+      </Card>
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance/reports"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(11rem,13rem)_minmax(12rem,1fr)_minmax(11rem,13rem)_auto] xl:items-end"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(9rem,10rem)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(11rem,13rem)_minmax(12rem,1fr)_minmax(11rem,13rem)_auto] xl:items-end"
           >
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="report-month">
+                月份
+              </label>
+              <Input
+                id="report-month"
+                name="month"
+                type="month"
+                defaultValue={reportMonth}
+                className="h-9"
+              />
+            </div>
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="report-date-from">
                 起始日期
@@ -161,7 +249,7 @@ export default async function FinanceReportsPage({
                 id="report-date-from"
                 name="date_from"
                 type="date"
-                defaultValue={params.date_from || ""}
+                defaultValue={dateFrom || ""}
                 className="h-9"
               />
             </div>
@@ -173,7 +261,7 @@ export default async function FinanceReportsPage({
                 id="report-date-to"
                 name="date_to"
                 type="date"
-                defaultValue={params.date_to || ""}
+                defaultValue={dateTo || ""}
                 className="h-9"
               />
             </div>
@@ -221,6 +309,9 @@ export default async function FinanceReportsPage({
           <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span>{financeOperatingGroupByLabel(data.scope.group_by)}</span>
+              <Badge variant="outline" className="tabular-nums">
+                {data.scope.date_from || "-"} 至 {data.scope.date_to || "-"}
+              </Badge>
               <Badge variant="outline" className="tabular-nums">
                 {data.groups.length} 组
               </Badge>

@@ -13,6 +13,16 @@ export type FinanceOperatingReportQuery = {
   project_status?: string;
 };
 
+export type FinanceMonthlyOverviewQuery = {
+  month?: string;
+};
+
+export type FinanceClosingStatus =
+  | "not_started"
+  | "draft"
+  | "closed"
+  | "reopened";
+
 export function buildFinanceOperatingReportSearchParams(
   query: FinanceOperatingReportQuery,
 ) {
@@ -25,6 +35,14 @@ export function buildFinanceOperatingReportSearchParams(
   return params;
 }
 
+export function buildFinanceMonthlyOverviewSearchParams(
+  query: FinanceMonthlyOverviewQuery,
+) {
+  const params = new URLSearchParams();
+  appendOptionalParam(params, "month", query.month);
+  return params;
+}
+
 export function financeOperatingGroupByLabel(
   value: FinanceOperatingReportGroupBy | string | null | undefined,
 ) {
@@ -34,6 +52,23 @@ export function financeOperatingGroupByLabel(
   if (value === "payment_type") return "按收款类型";
   if (value === "cost_category") return "按成本分类";
   return "按月份";
+}
+
+export function financeClosingStatusLabel(
+  value: FinanceClosingStatus | string | null | undefined,
+) {
+  if (value === "draft") return "草稿";
+  if (value === "closed") return "已结账";
+  if (value === "reopened") return "已反结账";
+  return "未结账";
+}
+
+export function financeClosingStatusVariant(
+  value: FinanceClosingStatus | string | null | undefined,
+): "outline" | "success" | "warning" {
+  if (value === "closed") return "success";
+  if (value === "draft" || value === "reopened") return "warning";
+  return "outline";
 }
 
 function appendOptionalParam(
