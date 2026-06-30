@@ -13,6 +13,9 @@ import {
   LinkFinanceLedgerPaymentSchema,
   MarkLegacyFinanceLedgerSchema,
 } from "@/schema/finance";
+import {
+  FinanceCorrectionAuditListQuerySchema,
+} from "@/schema/finance-correction-audits";
 import { FinanceOperatingReportQuerySchema } from "@/schema/finance-reports";
 import {
   CreateFinanceReconciliationExceptionActionSchema,
@@ -21,6 +24,7 @@ import {
   FinanceReconciliationExceptionListQuerySchema,
 } from "@/schema/finance-reconciliation";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
+import { financeCorrectionAuditService } from "@/services/finance-correction-audits";
 import { financeLedgerService } from "@/services/finance-ledger";
 import { financeOperatingReportService } from "@/services/finance-operating-report";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
@@ -70,6 +74,23 @@ class FinanceController extends TenantBaseController {
     }
 
     const data = await financeReconciliationService.listExceptions(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/correction-audits")
+  async listCorrectionAudits(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceCorrectionAuditListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeCorrectionAuditService.listAudits(
       authContext,
       queryResult.data,
     );

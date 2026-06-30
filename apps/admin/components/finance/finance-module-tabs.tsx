@@ -4,6 +4,7 @@ export type FinanceModuleTab =
   | "overview"
   | "diagnostics"
   | "reconciliation"
+  | "audits"
   | "reports"
   | "receivables"
   | "ledger";
@@ -16,6 +17,7 @@ export const FINANCE_MODULE_TABS: Array<{
   { value: "overview", label: "财务总览", href: "/finance" },
   { value: "diagnostics", label: "财务诊断", href: "/finance/diagnostics" },
   { value: "reconciliation", label: "对账异常", href: "/finance/reconciliation" },
+  { value: "audits", label: "修正审计", href: "/finance/audits" },
   { value: "reports", label: "运营报表", href: "/finance/reports" },
   { value: "receivables", label: "应收计划", href: "/finance/receivables" },
   { value: "ledger", label: "财务台账", href: "/finance/ledger" },
