@@ -45,6 +45,7 @@
 - [2026-06-29-phase7-4-post-release-smoke.md](./2026-06-29-phase7-4-post-release-smoke.md)：Phase 7.4 人工核销合入 main 后的发布后 smoke，包含 migration list 验证口径、API/Admin 只读核验和后续任务顺序。
 - [2026-06-29-phase7-4-payment-ledger-repair-smoke.md](./2026-06-29-phase7-4-payment-ledger-repair-smoke.md)：Phase 7.4 收款台账补生成实施与 smoke 记录，覆盖 `payment_without_ledger` 精确跳转、Admin 补生成入口、API 防重和 migration 验证。
 - [2026-06-30-phase7-4-ledger-legacy-repair-smoke.md](./2026-06-30-phase7-4-ledger-legacy-repair-smoke.md)：Phase 7.4 历史收款台账修正实施与 smoke 记录，覆盖 `ledger_without_payment` 精确跳转、关联 confirmed payment、标记历史和异常关闭。
+- [2026-06-30-phase7-4-ledger-legacy-repair-post-release-smoke.md](./2026-06-30-phase7-4-ledger-legacy-repair-post-release-smoke.md)：Phase 7.4 历史收款台账修正合入 main 后的发布后 smoke，覆盖 migration、API 只读核验、Admin 精确跳转和小程序边界。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
