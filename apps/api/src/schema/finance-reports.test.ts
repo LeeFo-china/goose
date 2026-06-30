@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   FinanceCostCategorySummaryQuerySchema,
+  FinanceMonthlyOverviewDifferenceSourcesQuerySchema,
   FinanceMonthlyOverviewExportQuerySchema,
   FinanceMonthlyOverviewQuerySchema,
   FinanceProjectRankingQuerySchema,
@@ -21,6 +22,45 @@ describe("FinanceMonthlyOverviewQuerySchema", () => {
     ).toThrow();
     expect(() =>
       FinanceMonthlyOverviewQuerySchema.parse({ month: "2026-06-01" })
+    ).toThrow();
+  });
+});
+
+describe("FinanceMonthlyOverviewDifferenceSourcesQuerySchema", () => {
+  test("requires month and parses pagination filters", () => {
+    expect(
+      FinanceMonthlyOverviewDifferenceSourcesQuerySchema.parse({
+        month: "2026-06",
+        source_type: "ledger_entry",
+        project_id: "00000000-0000-4000-8000-000000000001",
+        page: "2",
+        pageSize: "50",
+      }),
+    ).toEqual({
+      month: "2026-06",
+      source_type: "ledger_entry",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      page: 2,
+      pageSize: 50,
+    });
+  });
+
+  test("rejects invalid source type, missing month, and oversized page", () => {
+    expect(() =>
+      FinanceMonthlyOverviewDifferenceSourcesQuerySchema.parse({
+        source_type: "unknown",
+      })
+    ).toThrow();
+    expect(() =>
+      FinanceMonthlyOverviewDifferenceSourcesQuerySchema.parse({
+        month: "",
+      })
+    ).toThrow();
+    expect(() =>
+      FinanceMonthlyOverviewDifferenceSourcesQuerySchema.parse({
+        month: "2026-06",
+        pageSize: "101",
+      })
     ).toThrow();
   });
 });

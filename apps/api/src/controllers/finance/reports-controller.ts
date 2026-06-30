@@ -2,10 +2,14 @@ import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   FinanceCostCategorySummaryQuerySchema,
+  FinanceMonthlyOverviewDifferenceSourcesQuerySchema,
   FinanceMonthlyOverviewExportQuerySchema,
   FinanceProjectRankingQuerySchema,
   FinanceReceivableAgingQuerySchema,
 } from "@/schema/finance-reports";
+import {
+  financeMonthlyDifferenceSourcesService,
+} from "@/services/finance-monthly-difference-sources";
 import {
   financeSpecializedReportService,
 } from "@/services/finance-specialized-reports";
@@ -41,6 +45,23 @@ class FinanceReportsController extends TenantBaseController {
         `attachment; filename="${data.filename}"`,
       )
       .send(data.content);
+  }
+
+  @Get("/finance/reports/monthly-overview/difference-sources")
+  async listMonthlyOverviewDifferenceSources(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult =
+      FinanceMonthlyOverviewDifferenceSourcesQuerySchema.safeParse(
+        request.query,
+      );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await financeMonthlyDifferenceSourcesService
+      .listDifferenceSources(authContext, queryResult.data);
+    return ResponseHandler.success(data);
   }
 
   @Get("/finance/reports/project-ranking")

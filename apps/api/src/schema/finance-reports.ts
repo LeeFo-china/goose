@@ -12,6 +12,9 @@ const OptionalMonthSchema = z.preprocess((value) => {
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "月份格式必须为 YYYY-MM")
   .optional());
 
+const RequiredMonthSchema = z.string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "月份格式必须为 YYYY-MM");
+
 const PageSchema = z.coerce.number()
   .int("页码必须是整数")
   .min(1, "页码不能小于 1")
@@ -40,6 +43,21 @@ export const FinanceOperatingReportQuerySchema = z.object({
 
 export const FinanceMonthlyOverviewQuerySchema = z.object({
   month: OptionalMonthSchema,
+});
+
+export const FinanceMonthlyOverviewDifferenceSourceTypeSchema = z.enum([
+  "correction_audit",
+  "ledger_entry",
+  "receivable_plan",
+  "expense_request",
+]);
+
+export const FinanceMonthlyOverviewDifferenceSourcesQuerySchema = z.object({
+  month: RequiredMonthSchema,
+  source_type: FinanceMonthlyOverviewDifferenceSourceTypeSchema.optional(),
+  project_id: z.uuid("请选择有效的项目").optional(),
+  page: PageSchema,
+  pageSize: PageSizeSchema,
 });
 
 export const FinanceProjectRankingSortBySchema = z.enum([
@@ -99,6 +117,12 @@ export type FinanceOperatingReportQuery = z.infer<
 >;
 export type FinanceMonthlyOverviewQuery = z.infer<
   typeof FinanceMonthlyOverviewQuerySchema
+>;
+export type FinanceMonthlyOverviewDifferenceSourceType = z.infer<
+  typeof FinanceMonthlyOverviewDifferenceSourceTypeSchema
+>;
+export type FinanceMonthlyOverviewDifferenceSourcesQuery = z.infer<
+  typeof FinanceMonthlyOverviewDifferenceSourcesQuerySchema
 >;
 export type FinanceProjectRankingQuery = z.infer<
   typeof FinanceProjectRankingQuerySchema
