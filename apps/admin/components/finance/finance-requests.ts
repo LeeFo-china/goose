@@ -33,6 +33,13 @@ export type FinanceLedgerRecord = {
   direction: "in" | "out";
   entry_type: string;
   payment_id?: string | null;
+  payment_linked_at?: string | null;
+  payment_linked_by?: string | null;
+  payment_link_reason?: string | null;
+  payment_link_previous_payment_id?: string | null;
+  legacy_payment_ledger_marked_at?: string | null;
+  legacy_payment_ledger_marked_by?: string | null;
+  legacy_payment_ledger_reason?: string | null;
   source_type?: string | null;
   source_id?: string | null;
   workflow_task_id?: string | null;
@@ -222,6 +229,7 @@ export async function fetchFinanceLedger(query: {
   project_id?: string;
   direction?: string;
   entry_type?: string;
+  ledger_id?: string;
   payment_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;

@@ -10,6 +10,8 @@ import {
 import {
   FinanceLedgerListQuerySchema,
   FinanceProjectSummaryListQuerySchema,
+  LinkFinanceLedgerPaymentSchema,
+  MarkLegacyFinanceLedgerSchema,
 } from "@/schema/finance";
 import { FinanceOperatingReportQuerySchema } from "@/schema/finance-reports";
 import {
@@ -152,6 +154,43 @@ class FinanceController extends TenantBaseController {
     }
 
     const data = await financeLedgerService.updateCostCategory(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/ledger/:id/link-payment")
+  async linkLedgerPayment(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = LinkFinanceLedgerPaymentSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await financeLedgerService.linkProjectPayment(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/ledger/:id/mark-legacy-payment")
+  async markLedgerLegacyPayment(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = MarkLegacyFinanceLedgerSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await financeLedgerService.markLegacyProjectPayment(
       authContext,
       idVerify.data.id,
       bodyResult.data,

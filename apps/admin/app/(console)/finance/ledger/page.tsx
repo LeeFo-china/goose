@@ -19,6 +19,7 @@ type FinanceLedgerPageSearchParams = {
   project_id?: string;
   direction?: string;
   entry_type?: string;
+  ledger_id?: string;
   payment_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;
@@ -75,6 +76,7 @@ export default async function FinanceLedgerPage({
   const projectId = clean(params.project_id);
   const direction = clean(params.direction);
   const entryType = clean(params.entry_type);
+  const ledgerId = clean(params.ledger_id);
   const paymentId = clean(params.payment_id);
   const costCategoryId = clean(params.cost_category_id);
   const unallocatedOnly = clean(params.unallocated_only);
@@ -85,6 +87,7 @@ export default async function FinanceLedgerPage({
       project_id: projectId,
       direction,
       entry_type: entryType,
+      ledger_id: ledgerId,
       payment_id: paymentId,
       cost_category_id: costCategoryId,
       unallocated_only: unallocatedOnly,
@@ -95,6 +98,10 @@ export default async function FinanceLedgerPage({
   const canManageAllocation = hasPermission(
     session,
     "finance.cost-allocation.manage",
+  );
+  const canManageReconciliation = hasPermission(
+    session,
+    "finance.reconciliation.manage",
   );
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
@@ -132,6 +139,9 @@ export default async function FinanceLedgerPage({
             ) : null}
             {paymentId ? (
               <input type="hidden" name="payment_id" value={paymentId} />
+            ) : null}
+            {ledgerId ? (
+              <input type="hidden" name="ledger_id" value={ledgerId} />
             ) : null}
             <FinanceFilterSelectField
               id="ledger-direction-filter"
@@ -192,6 +202,7 @@ export default async function FinanceLedgerPage({
               rows={data.list}
               costCategories={categories.list}
               canManageAllocation={canManageAllocation}
+              canManageReconciliation={canManageReconciliation}
             />
           </div>
           <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">

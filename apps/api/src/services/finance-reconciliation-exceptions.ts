@@ -199,7 +199,7 @@ function buildLedgerExceptions(
     description: `项目收款流水 ${formatMoney(row.amount)} 缺少 payment 关联。`,
     amount: row.amount,
     occurred_at: row.occurred_at ?? new Date(0).toISOString(),
-    action: ledgerAction(row.project_id),
+    action: ledgerAction(row.project_id, row.id),
   }];
 }
 
@@ -250,10 +250,12 @@ function receivableAction(
   };
 }
 
-function ledgerAction(projectId: string | null) {
+function ledgerAction(projectId: string | null, ledgerId: string) {
   const params = new URLSearchParams();
   appendParam(params, "project_id", projectId);
   params.set("direction", "in");
+  params.set("entry_type", "project_payment");
+  params.set("ledger_id", ledgerId);
   return {
     key: "open_ledger",
     label: "去处理",
