@@ -13,10 +13,8 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 
 type FinanceReceivablesPageSearchParams = {
@@ -154,17 +152,6 @@ export default async function FinanceReceivablesPage({
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <CardHeader className="shrink-0 gap-3 border-b p-3 md:gap-4 md:p-4">
-          <div className="hidden flex-col justify-between gap-3 md:flex lg:flex-row lg:items-start">
-            <div className="min-w-0">
-              <CardTitle>应收计划列表</CardTitle>
-              <CardDescription>
-                按状态、收款类型、来源、项目、负责人和应收日期筛选应收记录。
-              </CardDescription>
-            </div>
-            <Badge variant="outline" className="w-fit tabular-nums">
-              当前显示 {data.list.length} / {data.pagination.total} 条
-            </Badge>
-          </div>
           <FinanceReceivableFilters
             dueDateFrom={dueDateFrom}
             dueDateTo={dueDateTo}
