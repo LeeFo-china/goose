@@ -10,11 +10,19 @@ import {
 import type {
   CreateFinanceReconciliationExceptionAction,
   FinanceReconciliationAction,
+  FinanceReconciliationExceptionCode,
   FinanceReconciliationExceptionActionListQuery,
   FinanceReconciliationExceptionListQuery,
+  FinanceReconciliationLevel,
+  FinanceReconciliationOperatingStatsQuery,
+  FinanceReconciliationStatus,
 } from "@/schema/finance-reconciliation";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  buildFinanceReconciliationOperatingStats,
+  type FinanceReconciliationOperatingStats,
+} from "@/services/finance-reconciliation-operating-stats";
 import {
   buildFinanceReconciliationExceptions,
   type FinanceReconciliationException,
@@ -22,6 +30,17 @@ import {
 
 const MAX_RECONCILIATION_RANGE_DAYS = 366;
 const DEFAULT_RECONCILIATION_RANGE_DAYS = 30;
+
+type FinanceReconciliationFilterQuery = {
+  date_from?: string;
+  date_to?: string;
+  project_id?: string;
+  exception_code?: FinanceReconciliationExceptionCode;
+  level?: FinanceReconciliationLevel;
+  direction?: FinanceReconciliationExceptionListQuery["direction"];
+  status?: FinanceReconciliationStatus;
+  actor_employee_id?: string;
+};
 
 type FinanceReconciliationServiceDependencies = {
   repository: Pick<
@@ -91,6 +110,31 @@ export class FinanceReconciliationService {
     );
 
     return buildListResponse(exceptions, query);
+  }
+
+  async getOperatingStats(
+    authContext: AuthContext,
+    query: FinanceReconciliationOperatingStatsQuery,
+  ): Promise<FinanceReconciliationOperatingStats> {
+    const tenantId = this.dependencies.accessPolicyService
+      .assertTenantContext(authContext);
+    this.assertCanViewReconciliation(authContext);
+
+    const range = this.resolveDateRange(query);
+    const candidates = await this.dependencies.repository.listCandidateRows({
+      tenantId,
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      projectId: query.project_id,
+    });
+    const exceptionsWithActions = await withActionState({
+      tenantId,
+      exceptions: buildFinanceReconciliationExceptions(candidates, range.dateTo),
+      actionsRepository: this.dependencies.actionsRepository,
+    });
+    const exceptions = this.filterExceptions(exceptionsWithActions, query);
+
+    return buildFinanceReconciliationOperatingStats(exceptions, range);
   }
 
   async getProjectSummary(
@@ -202,7 +246,7 @@ export class FinanceReconciliationService {
 
   private filterExceptions(
     exceptions: FinanceReconciliationException[],
-    query: FinanceReconciliationExceptionListQuery,
+    query: FinanceReconciliationFilterQuery,
   ) {
     return exceptions.filter((item) =>
       (!query.exception_code || item.exception_code === query.exception_code) &&
@@ -215,7 +259,7 @@ export class FinanceReconciliationService {
     );
   }
 
-  private resolveDateRange(query: FinanceReconciliationExceptionListQuery) {
+  private resolveDateRange(query: FinanceReconciliationFilterQuery) {
     const dateTo = query.date_to ??
       toDateOnly(this.dependencies.now?.() ?? new Date());
     const dateFrom = query.date_from ??

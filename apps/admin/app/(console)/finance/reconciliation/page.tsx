@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, BadgeAlert, CircleAlert, ShieldCheck } from "lucide-react";
+import { BadgeAlert, CheckCircle2, Clock3, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   FinanceFilterSelectField,
@@ -7,8 +7,12 @@ import {
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { FinanceMetricCard } from "@/components/finance/finance-overview-cards";
 import {
+  FinanceReconciliationOperatingStatsPanel,
+} from "@/components/finance/finance-reconciliation-operating-stats-panel";
+import {
   fetchFinanceReconciliationEmployeeOptions,
   fetchFinanceReconciliationExceptions,
+  fetchFinanceReconciliationOperatingStats,
 } from "@/components/finance/finance-reconciliation-requests";
 import { FinanceReconciliationTable } from "@/components/finance/finance-reconciliation-table";
 import {
@@ -104,21 +108,34 @@ export default async function FinanceReconciliationPage({
 
   const params = await searchParams;
   const page = normalizePage(params.page);
-  const [data, employeeOptions] = await Promise.all([
+  const filters = {
+    date_from: clean(params.date_from),
+    date_to: clean(params.date_to),
+    project_id: clean(params.project_id),
+    exception_code: clean(params.exception_code),
+    level: clean(params.level),
+    direction: clean(params.direction),
+    status: clean(params.status),
+    actor_employee_id: clean(params.actor_employee_id),
+  };
+  const [data, stats, employeeOptions] = await Promise.all([
     fetchFinanceReconciliationExceptions({
       page,
       pageSize: 20,
-      date_from: clean(params.date_from),
-      date_to: clean(params.date_to),
-      project_id: clean(params.project_id),
-      exception_code: clean(params.exception_code),
-      level: clean(params.level),
-      direction: clean(params.direction),
-      status: clean(params.status),
-      actor_employee_id: clean(params.actor_employee_id),
+      ...filters,
     }),
+    fetchFinanceReconciliationOperatingStats(filters),
     fetchFinanceReconciliationEmployeeOptions(clean(params.actor_employee_id)),
   ]);
+  const summary = stats.error
+    ? {
+      ...stats.summary,
+      total: data.summary.total,
+      danger: data.summary.danger,
+      warning: data.summary.warning,
+      info: data.summary.info,
+    }
+    : stats.summary;
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
     data.pagination.page < data.pagination.totalPages;
@@ -148,31 +165,39 @@ export default async function FinanceReconciliationPage({
         <FinanceMetricCard
           icon={<BadgeAlert aria-hidden="true" className="size-4" />}
           label="异常总数"
-          value={`${data.summary.total} 条`}
+          value={`${summary.total} 条`}
           helper="当前筛选范围"
-          tone={data.summary.total > 0 ? "warning" : "normal"}
+          tone={summary.total > 0 ? "warning" : "normal"}
         />
         <FinanceMetricCard
-          icon={<AlertTriangle aria-hidden="true" className="size-4" />}
-          label="高风险"
-          value={`${data.summary.danger} 条`}
-          helper="需优先核对"
-          tone={data.summary.danger > 0 ? "danger" : "normal"}
-        />
-        <FinanceMetricCard
-          icon={<CircleAlert aria-hidden="true" className="size-4" />}
-          label="预警"
-          value={`${data.summary.warning} 条`}
-          helper="需财务跟进"
-          tone={data.summary.warning > 0 ? "warning" : "normal"}
+          icon={<Clock3 aria-hidden="true" className="size-4" />}
+          label="未处理"
+          value={`${summary.open ?? 0} 条`}
+          helper="尚未标记处理动作"
+          tone={(summary.open ?? 0) > 0 ? "warning" : "normal"}
         />
         <FinanceMetricCard
           icon={<ShieldCheck aria-hidden="true" className="size-4" />}
-          label="提示"
-          value={`${data.summary.info} 条`}
-          helper="待归档或补充信息"
+          label="超 7 天未处理"
+          value={`${summary.stale_open_over_7_days ?? 0} 条`}
+          helper="需优先跟进"
+          tone={(summary.stale_open_over_7_days ?? 0) > 0 ? "danger" : "normal"}
+        />
+        <FinanceMetricCard
+          icon={<CheckCircle2 aria-hidden="true" className="size-4" />}
+          label="人工闭环"
+          value={`${summary.resolved ?? 0} 条`}
+          helper="最近动作标记闭环"
         />
       </div>
+
+      {stats.error ? (
+        <div className="shrink-0">
+          <StatusAlert>{stats.error}</StatusAlert>
+        </div>
+      ) : (
+        <FinanceReconciliationOperatingStatsPanel stats={stats} />
+      )}
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">

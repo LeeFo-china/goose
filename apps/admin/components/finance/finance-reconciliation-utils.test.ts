@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildFinanceReconciliationStatsSearchParams,
   buildFinanceReconciliationSearchParams,
   financeReconciliationActionLabel,
   financeReconciliationPrimaryActionLabel,
@@ -25,6 +26,27 @@ describe("finance reconciliation helpers", () => {
     expect(params.toString()).toBe(
       "page=2&pageSize=20&date_from=2026-06-01&date_to=2026-06-30&project_id=project-1&exception_code=payment_without_ledger&level=danger&direction=payment&status=acknowledged&actor_employee_id=employee-1",
     );
+  });
+
+  test("builds stats query params without pagination", () => {
+    const params = buildFinanceReconciliationStatsSearchParams({
+      page: 2,
+      pageSize: 20,
+      date_from: "2026-06-01",
+      date_to: "2026-06-30",
+      exception_code: "payment_without_ledger",
+      level: "danger",
+      direction: "payment",
+      project_id: "project-1",
+      status: "acknowledged",
+      actor_employee_id: "employee-1",
+    });
+
+    expect(params.toString()).toBe(
+      "date_from=2026-06-01&date_to=2026-06-30&project_id=project-1&exception_code=payment_without_ledger&level=danger&direction=payment&status=acknowledged&actor_employee_id=employee-1",
+    );
+    expect(params.has("page")).toBe(false);
+    expect(params.has("pageSize")).toBe(false);
   });
 
   test("maps reconciliation levels to badge labels", () => {

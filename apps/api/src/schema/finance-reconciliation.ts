@@ -79,6 +79,17 @@ export const FinanceReconciliationExceptionListQuerySchema =
     actor_employee_id: z.uuid("请选择有效的处理人").optional(),
   });
 
+export const FinanceReconciliationOperatingStatsQuerySchema = z.object({
+  date_from: OptionalDateSchema,
+  date_to: OptionalDateSchema,
+  project_id: z.uuid("请选择有效的项目").optional(),
+  exception_code: FinanceReconciliationExceptionCodeSchema.optional(),
+  level: FinanceReconciliationLevelSchema.optional(),
+  direction: FinanceReconciliationDirectionSchema.optional(),
+  status: FinanceReconciliationStatusSchema.optional(),
+  actor_employee_id: z.uuid("请选择有效的处理人").optional(),
+});
+
 export const CreateFinanceReconciliationExceptionActionSchema = z.object({
   action: FinanceReconciliationActionSchema,
   remark: z.string()
@@ -109,6 +120,9 @@ export type FinanceReconciliationAction =
   (typeof FINANCE_RECONCILIATION_ACTION_VALUES)[number];
 export type FinanceReconciliationExceptionListQuery = z.infer<
   typeof FinanceReconciliationExceptionListQuerySchema
+>;
+export type FinanceReconciliationOperatingStatsQuery = z.infer<
+  typeof FinanceReconciliationOperatingStatsQuerySchema
 >;
 export type FinanceReconciliationExceptionActionListQuery = z.infer<
   typeof FinanceReconciliationExceptionActionListQuerySchema

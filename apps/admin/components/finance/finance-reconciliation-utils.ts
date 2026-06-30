@@ -37,6 +37,21 @@ export function buildFinanceReconciliationSearchParams(
   return params;
 }
 
+export function buildFinanceReconciliationStatsSearchParams(
+  query: FinanceReconciliationQuery,
+) {
+  const params = new URLSearchParams();
+  appendOptionalParam(params, "date_from", query.date_from);
+  appendOptionalParam(params, "date_to", query.date_to);
+  appendOptionalParam(params, "project_id", query.project_id);
+  appendOptionalParam(params, "exception_code", query.exception_code);
+  appendOptionalParam(params, "level", query.level);
+  appendOptionalParam(params, "direction", query.direction);
+  appendOptionalParam(params, "status", query.status);
+  appendOptionalParam(params, "actor_employee_id", query.actor_employee_id);
+  return params;
+}
+
 export function financeReconciliationLevelMeta(
   level: FinanceReconciliationLevel | string | null | undefined,
 ) {
