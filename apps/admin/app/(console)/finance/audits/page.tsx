@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 
 type FinanceCorrectionAuditPageSearchParams = {
   page?: string;
+  month?: string;
   date_from?: string;
   date_to?: string;
   project_id?: string;
@@ -59,6 +60,7 @@ function auditPageHref(
   const params = buildFinanceCorrectionAuditSearchParams({
     page,
     pageSize: 20,
+    month: filters.month,
     date_from: filters.date_from,
     date_to: filters.date_to,
     project_id: filters.project_id,
@@ -82,6 +84,7 @@ export default async function FinanceCorrectionAuditPage({
     fetchFinanceCorrectionAudits({
       page,
       pageSize: 20,
+      month: clean(params.month),
       date_from: clean(params.date_from),
       date_to: clean(params.date_to),
       project_id: clean(params.project_id),
@@ -149,8 +152,20 @@ export default async function FinanceCorrectionAuditPage({
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance/audits"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(12rem,1fr)_minmax(11rem,13rem)_minmax(12rem,1fr)_auto] xl:items-end"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[minmax(9rem,10rem)_minmax(9rem,11rem)_minmax(9rem,11rem)_minmax(12rem,1fr)_minmax(11rem,13rem)_minmax(12rem,1fr)_auto] xl:items-end"
           >
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="audit-month">
+                月份
+              </label>
+              <Input
+                id="audit-month"
+                name="month"
+                type="month"
+                defaultValue={params.month || ""}
+                className="h-9"
+              />
+            </div>
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="audit-date-from">
                 起始日期

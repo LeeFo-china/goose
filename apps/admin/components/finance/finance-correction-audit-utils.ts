@@ -46,6 +46,7 @@ export function financeCorrectionAuditDomainMeta(
 export function buildFinanceCorrectionAuditSearchParams(query: {
   page?: number;
   pageSize?: number;
+  month?: string;
   date_from?: string;
   date_to?: string;
   project_id?: string;
@@ -55,6 +56,7 @@ export function buildFinanceCorrectionAuditSearchParams(query: {
   const params = new URLSearchParams();
   params.set("page", String(query.page || 1));
   params.set("pageSize", String(query.pageSize || 20));
+  appendIfPresent(params, "month", query.month);
   appendIfPresent(params, "date_from", query.date_from);
   appendIfPresent(params, "date_to", query.date_to);
   appendIfPresent(params, "project_id", query.project_id);

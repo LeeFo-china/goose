@@ -14,7 +14,9 @@ import {
 } from "@/components/finance/finance-filter-controls";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { FinanceMetricCard } from "@/components/finance/finance-overview-cards";
-import { FinanceClosingActions } from "@/components/finance/finance-closing-actions";
+import {
+  FinanceMonthlyClosingSummaryCard,
+} from "@/components/finance/finance-monthly-closing-summary-card";
 import {
   fetchFinanceClosingPeriods,
   fetchFinanceMonthlyOverview,
@@ -39,7 +41,6 @@ import {
   ReceivableAgingTable,
 } from "@/components/finance/finance-specialized-report-tables";
 import {
-  formatFinanceDateTime,
   formatFinanceMoney,
   formatFinancePercent,
 } from "@/components/finance/finance-ledger-utils";
@@ -241,44 +242,12 @@ export default async function FinanceReportsPage({
         />
       </div>
 
-      <Card className="shrink-0">
-        <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div>
-              <div className="text-xs font-medium text-muted-foreground">结账状态</div>
-              <div className="mt-1 flex items-center gap-2">
-                <Badge variant={financeClosingStatusVariant(closing.status)}>
-                  {financeClosingStatusLabel(closing.status)}
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {closing.closed_at ? `结账 ${formatFinanceDateTime(closing.closed_at)}` : "尚未确认结账"}
-                </span>
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-muted-foreground">快照毛利</div>
-              <div className="mt-1 text-sm font-medium tabular-nums">
-                {closing.snapshot_summary?.gross_profit_amount !== undefined
-                  ? formatFinanceMoney(closing.snapshot_summary.gross_profit_amount)
-                  : "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-muted-foreground">最近记录</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {closingPeriods.list[0]
-                  ? `${financeClosingStatusLabel(closingPeriods.list[0].status)} · ${formatFinanceDateTime(closingPeriods.list[0].updated_at)}`
-                  : "暂无结账记录"}
-              </div>
-            </div>
-          </div>
-          <FinanceClosingActions
-            month={reportMonth}
-            periodId={closing.id}
-            status={closing.status}
-          />
-        </CardContent>
-      </Card>
+      <FinanceMonthlyClosingSummaryCard
+        month={reportMonth}
+        closing={closing}
+        currentSummary={summary}
+        latestClosingPeriod={closingPeriods.list[0]}
+      />
 
       <Card className="min-h-0 flex-1 overflow-hidden">
         <CardContent className="flex h-full min-h-0 flex-col p-0">
