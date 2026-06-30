@@ -38,6 +38,9 @@ export const FINANCE_RECONCILIATION_ACTION_VALUES = [
   "ignore",
   "resolve",
   "reopen",
+  "generate_expense_ledger",
+  "update_expense_ledger_category",
+  "record_expense_amount_mismatch_review",
 ] as const;
 
 export const FinanceReconciliationExceptionCodeSchema = z.enum(
@@ -99,6 +102,18 @@ export const CreateFinanceReconciliationExceptionActionSchema = z.object({
     .trim()
     .min(1, "请填写处理备注")
     .max(500, "处理备注不能超过 500 个字符"),
+  cost_category_id: z.uuid("请选择有效的成本分类").optional(),
+}).superRefine((value, context) => {
+  if (
+    value.action === "update_expense_ledger_category" &&
+    !value.cost_category_id
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["cost_category_id"],
+      message: "请选择成本分类",
+    });
+  }
 });
 
 export const FinanceReconciliationExceptionFingerprintParamsSchema = z.object({

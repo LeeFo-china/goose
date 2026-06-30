@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   financeCorrectionAuditRepository,
   type LedgerCorrectionAuditRow,
+  type ReconciliationExceptionActionAuditRow,
   type ReceivableCorrectionEventRow,
 } from "@/repositories/finance-correction-audits";
 import type {
@@ -15,7 +16,9 @@ import type { AuthContext } from "@/services/authorization";
 type Dependencies = {
   repository: Pick<
     typeof financeCorrectionAuditRepository,
-    "listReceivableCorrectionEvents" | "listLedgerCorrectionAudits"
+    | "listReceivableCorrectionEvents"
+    | "listLedgerCorrectionAudits"
+    | "listReconciliationExceptionActions"
   >;
   accessPolicyService: Pick<
     typeof accessPolicyService,
@@ -28,8 +31,11 @@ const OPERATION_LABELS: Record<FinanceCorrectionAuditOperation, string> = {
   adjust_allocation: "调整核销",
   reverse_allocation: "撤销核销",
   generate_payment_ledger: "补生成收款台账",
+  generate_expense_ledger: "补生成支出台账",
   link_ledger_payment: "关联收款",
   mark_legacy_ledger: "标记历史流水",
+  update_expense_ledger_category: "补支出台账成本分类",
+  record_expense_amount_mismatch_review: "记录费用金额复核",
 };
 
 export class FinanceCorrectionAuditService {
@@ -48,13 +54,18 @@ export class FinanceCorrectionAuditService {
     const page = query.page ?? 1;
     const pageSize = Math.min(query.pageSize ?? 20, 100);
     const candidateLimit = page * pageSize;
-    const [receivableResult, ledgerResult] = await Promise.all([
+    const [receivableResult, ledgerResult, actionResult] = await Promise.all([
       this.dependencies.repository.listReceivableCorrectionEvents({
         tenantId,
         query,
         candidateLimit,
       }),
       this.dependencies.repository.listLedgerCorrectionAudits({
+        tenantId,
+        query,
+        candidateLimit,
+      }),
+      this.dependencies.repository.listReconciliationExceptionActions({
         tenantId,
         query,
         candidateLimit,
@@ -68,13 +79,17 @@ export class FinanceCorrectionAuditService {
       );
     const ledgerRecords = ledgerResult.list
       .flatMap((row) => this.mapLedgerRow(row));
-    const allRecords = [...receivableRecords, ...ledgerRecords]
+    const actionRecords = actionResult.list.map((row) =>
+      this.mapReconciliationAction(row)
+    );
+    const allRecords = [...receivableRecords, ...ledgerRecords, ...actionRecords]
       .sort((left, right) =>
         right.occurred_at.localeCompare(left.occurred_at)
       );
     const from = (page - 1) * pageSize;
     const list = allRecords.slice(from, from + pageSize);
-    const total = receivableResult.total + ledgerResult.total;
+    const total = receivableResult.total + ledgerResult.total +
+      actionResult.total;
 
     return {
       list,
@@ -86,7 +101,7 @@ export class FinanceCorrectionAuditService {
       },
       summary: {
         total,
-        ledger_repair: ledgerResult.total,
+        ledger_repair: ledgerResult.total + actionResult.total,
         receivable_allocation: receivableResult.total,
       },
     };
@@ -148,10 +163,12 @@ export class FinanceCorrectionAuditService {
   private mapLedgerRow(row: LedgerCorrectionAuditRow): FinanceCorrectionAuditRecord[] {
     const records: FinanceCorrectionAuditRecord[] = [];
     if (row.generated_ledger_at) {
+      const operation = row.generated_ledger_operation ??
+        "generate_payment_ledger";
       records.push({
-        id: `ledger:${row.id}:generate_payment_ledger`,
-        operation: "generate_payment_ledger",
-        operation_label: OPERATION_LABELS.generate_payment_ledger,
+        id: `ledger:${row.id}:${operation}`,
+        operation,
+        operation_label: OPERATION_LABELS[operation],
         domain: "ledger",
         project_id: row.project_id,
         project_name: row.project_name,
@@ -163,6 +180,26 @@ export class FinanceCorrectionAuditService {
         receivable_plan_id: null,
         allocation_id: null,
         payment_id: row.payment_id,
+        ledger_id: row.id,
+        target: ledgerTarget(row.id),
+      });
+    }
+    if (row.cost_category_updated_at) {
+      records.push({
+        id: `ledger:${row.id}:update_expense_ledger_category`,
+        operation: "update_expense_ledger_category",
+        operation_label: OPERATION_LABELS.update_expense_ledger_category,
+        domain: "ledger",
+        project_id: row.project_id,
+        project_name: row.project_name,
+        actor_employee_id: row.cost_category_updated_by,
+        actor_employee_name: row.cost_category_updated_by_name,
+        occurred_at: row.cost_category_updated_at,
+        reason: readString(row.metadata, "repair_reason") ?? "补充成本分类",
+        amount: row.amount,
+        receivable_plan_id: null,
+        allocation_id: null,
+        payment_id: null,
         ledger_id: row.id,
         target: ledgerTarget(row.id),
       });
@@ -208,6 +245,33 @@ export class FinanceCorrectionAuditService {
       });
     }
     return records;
+  }
+
+  private mapReconciliationAction(
+    row: ReconciliationExceptionActionAuditRow,
+  ): FinanceCorrectionAuditRecord {
+    return {
+      id: `reconciliation-action:${row.id}`,
+      operation: row.action,
+      operation_label: OPERATION_LABELS[row.action],
+      domain: "ledger",
+      project_id: row.project_id,
+      project_name: null,
+      actor_employee_id: row.actor_employee_id,
+      actor_employee_name: row.actor_employee_name,
+      occurred_at: row.created_at,
+      reason: row.remark,
+      amount: null,
+      receivable_plan_id: null,
+      allocation_id: null,
+      payment_id: null,
+      ledger_id: null,
+      target: {
+        label: "查看对账异常",
+        href:
+          `/finance/reconciliation?exception_code=${row.exception_code}&status=acknowledged`,
+      },
+    };
   }
 }
 

@@ -31,7 +31,10 @@ export type FinanceReconciliationAction =
   | "acknowledge"
   | "ignore"
   | "resolve"
-  | "reopen";
+  | "reopen"
+  | "generate_expense_ledger"
+  | "update_expense_ledger_category"
+  | "record_expense_amount_mismatch_review";
 
 export type FinanceReconciliationExceptionRecord = {
   id: string;
@@ -83,6 +86,55 @@ export type FinanceReconciliationActionListData = {
     total: number;
     totalPages: number;
   };
+};
+
+export type FinanceReconciliationAvailableAction = {
+  key: FinanceReconciliationAction;
+  label: string;
+};
+
+export type FinanceReconciliationExpenseContext = {
+  settlement?: {
+    id: string;
+    expense_request_id?: string | null;
+    payee_name?: string | null;
+    method?: string | null;
+    paid_amount?: number | string | null;
+    paid_at?: string | null;
+    paid_by?: string | null;
+    remark?: string | null;
+  } | null;
+  expense_request?: {
+    id: string;
+    title?: string | null;
+    project_id?: string | null;
+    project_name?: string | null;
+    cost_category_id?: string | null;
+    total_amount?: number | string | null;
+  } | null;
+  ledger?: {
+    id: string;
+    project_id?: string | null;
+    project_name?: string | null;
+    cost_category_id?: string | null;
+    amount?: number | string | null;
+    occurred_at?: string | null;
+    expense_request_id?: string | null;
+    expense_settlement_id?: string | null;
+  } | null;
+  ledgers?: Array<{
+    id: string;
+    amount?: number | string | null;
+    occurred_at?: string | null;
+    cost_category_id?: string | null;
+  }>;
+};
+
+export type FinanceReconciliationExceptionDetailData = {
+  exception: FinanceReconciliationExceptionRecord;
+  context: FinanceReconciliationExpenseContext | null;
+  available_actions: FinanceReconciliationAvailableAction[];
+  history: FinanceReconciliationActionRecord[];
 };
 
 export type FinanceReconciliationSummary = {

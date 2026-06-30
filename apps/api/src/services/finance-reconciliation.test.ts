@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { FinanceReconciliationCandidateRows } from "@/repositories/finance-reconciliation";
 import type { CreateFinanceReconciliationActionInput } from "@/repositories/finance-reconciliation-actions";
 import type { AuthContext } from "@/services/authorization";
 import { reconciliationActionHistoryResponse } from "@/services/finance-reconciliation-action-history.test-fixtures";
@@ -11,7 +12,7 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const listCandidateRows = mock(async () => reconciliationCandidateRows);
+const listCandidateRows = mock(async (): Promise<FinanceReconciliationCandidateRows> => reconciliationCandidateRows);
 const getProjectSummaryTotals = mock(async () => reconciliationProjectSummaryTotals);
 const listLatestActions = mock(async () => new Map());
 const listActions = mock(async () => reconciliationActionHistoryResponse);
@@ -70,10 +71,7 @@ const baseAuthContext = {
 function authContextWithPermissions(
   permissions: AuthContext["permissions"],
 ): AuthContext {
-  return {
-    ...baseAuthContext,
-    permissions,
-  };
+  return { ...baseAuthContext, permissions };
 }
 
 async function createService() {
@@ -101,6 +99,7 @@ describe("financeReconciliationService", () => {
     listLatestActions.mockClear();
     listActions.mockClear();
     createAction.mockClear();
+    listCandidateRows.mockImplementation(async () => reconciliationCandidateRows);
     listLatestActions.mockImplementation(async () => new Map());
     accessPolicy.assertTenantContext.mockClear();
     accessPolicy.hasPermission.mockClear();

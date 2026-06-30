@@ -31,6 +31,16 @@ describe("finance correction audit helpers", () => {
       .toBe("人工核销");
     expect(financeCorrectionAuditOperationLabel("generate_payment_ledger"))
       .toBe("补生成收款台账");
+    expect(financeCorrectionAuditOperationLabel("generate_expense_ledger"))
+      .toBe("补生成支出台账");
+    expect(
+      financeCorrectionAuditOperationLabel("update_expense_ledger_category"),
+    ).toBe("补支出台账成本分类");
+    expect(
+      financeCorrectionAuditOperationLabel(
+        "record_expense_amount_mismatch_review",
+      ),
+    ).toBe("记录费用金额复核");
     expect(financeCorrectionAuditOperationLabel("mark_legacy_ledger"))
       .toBe("标记历史流水");
     expect(financeCorrectionAuditDomainMeta("receivable")).toEqual({

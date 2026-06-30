@@ -91,6 +91,44 @@ export const reconciliationCandidateRows = {
   expenseLedgers: [],
 };
 
+export const reconciliationCandidateRowsWithExpenseExceptions = {
+  ...reconciliationCandidateRows,
+  expenseSettlements: [
+    {
+      id: "expense-settlement-without-ledger",
+      expense_request_id: "expense-request-1",
+      project_id: "project-expense-1",
+      project_name: "费用未入账项目",
+      title: "材料采购",
+      paid_amount: 1200,
+      paid_at: "2026-06-25T10:00:00.000Z",
+      ledger_amount: 0,
+    },
+    {
+      id: "expense-settlement-mismatch",
+      expense_request_id: "expense-request-2",
+      project_id: "project-expense-2",
+      project_name: "费用金额不一致项目",
+      title: "人工费用",
+      paid_amount: 2000,
+      paid_at: "2026-06-26T10:00:00.000Z",
+      ledger_amount: 1800,
+    },
+  ],
+  expenseLedgers: [
+    {
+      id: "expense-ledger-without-category",
+      expense_request_id: "expense-request-3",
+      expense_settlement_id: "expense-settlement-3",
+      project_id: "project-expense-3",
+      project_name: "费用未归集项目",
+      amount: 888,
+      occurred_at: "2026-06-27T10:00:00.000Z",
+      cost_category_id: null,
+    },
+  ],
+};
+
 export const reconciliationProjectSummaryTotals = {
   project_id: "project-1",
   receivable_amount: 30000,

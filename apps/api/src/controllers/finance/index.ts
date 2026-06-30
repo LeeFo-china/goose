@@ -157,6 +157,25 @@ class FinanceController extends TenantBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/finance/reconciliation/exceptions/:fingerprint")
+  async getReconciliationExceptionDetail(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult =
+      FinanceReconciliationExceptionFingerprintParamsSchema.safeParse(
+        request.params,
+      );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await financeReconciliationService.getExceptionDetail(
+      authContext,
+      paramsResult.data.fingerprint,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Get("/finance/reconciliation/exceptions/:fingerprint/actions")
   async listReconciliationExceptionActions(
     request: FastifyRequest,
