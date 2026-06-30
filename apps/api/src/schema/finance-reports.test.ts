@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  FinanceCostCategorySummaryQuerySchema,
+  FinanceMonthlyOverviewExportQuerySchema,
   FinanceMonthlyOverviewQuerySchema,
+  FinanceProjectRankingQuerySchema,
+  FinanceReceivableAgingQuerySchema,
 } from "@/schema/finance-reports";
 
 describe("FinanceMonthlyOverviewQuerySchema", () => {
@@ -18,5 +22,61 @@ describe("FinanceMonthlyOverviewQuerySchema", () => {
     expect(() =>
       FinanceMonthlyOverviewQuerySchema.parse({ month: "2026-06-01" })
     ).toThrow();
+  });
+});
+
+describe("finance specialized report query schemas", () => {
+  test("parses paginated project ranking filters", () => {
+    expect(
+      FinanceProjectRankingQuerySchema.parse({
+        month: "2026-06",
+        page: "2",
+        pageSize: "50",
+        sort_by: "gross_profit_rate",
+        sort_order: "asc",
+      }),
+    ).toEqual({
+      month: "2026-06",
+      page: 2,
+      pageSize: 50,
+      sort_by: "gross_profit_rate",
+      sort_order: "asc",
+    });
+  });
+
+  test("caps specialized report page size", () => {
+    expect(() =>
+      FinanceProjectRankingQuerySchema.parse({
+        pageSize: "101",
+      })
+    ).toThrow();
+    expect(() =>
+      FinanceCostCategorySummaryQuerySchema.parse({
+        pageSize: "0",
+      })
+    ).toThrow();
+  });
+
+  test("parses receivable aging and csv export filters", () => {
+    expect(
+      FinanceReceivableAgingQuerySchema.parse({
+        as_of: "2026-06-30",
+        page: "1",
+        pageSize: "20",
+      }),
+    ).toEqual({
+      as_of: "2026-06-30",
+      page: 1,
+      pageSize: 20,
+    });
+    expect(
+      FinanceMonthlyOverviewExportQuerySchema.parse({
+        month: "2026-06",
+        format: "csv",
+      }),
+    ).toEqual({
+      month: "2026-06",
+      format: "csv",
+    });
   });
 });

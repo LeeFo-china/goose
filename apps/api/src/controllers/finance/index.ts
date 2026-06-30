@@ -46,6 +46,7 @@ import { Get, Patch, Post, Put, registerRoutes } from "@/utils/decorators/route"
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import financeReceivablesController from "./receivables-controller";
+import financeReportsController from "./reports-controller";
 
 class FinanceController extends TenantBaseController {
   constructor() {
@@ -55,6 +56,7 @@ class FinanceController extends TenantBaseController {
   public override registerExtraRoutes = (fastify: FastifyInstance) => {
     registerRoutes(fastify, this);
     financeReceivablesController.registerExtraRoutes(fastify);
+    financeReportsController.registerExtraRoutes(fastify);
   };
 
   @Get("/finance/ledger")

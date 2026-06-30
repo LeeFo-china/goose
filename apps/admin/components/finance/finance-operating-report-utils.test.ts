@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildFinanceCostCategorySummarySearchParams,
   buildFinanceMonthlyOverviewSearchParams,
   buildFinanceOperatingReportSearchParams,
+  buildFinanceProjectRankingSearchParams,
+  buildFinanceReceivableAgingSearchParams,
   financeClosingStatusLabel,
   financeOperatingGroupByLabel,
 } from "./finance-operating-report-utils";
@@ -39,5 +42,31 @@ describe("finance operating report helpers", () => {
     expect(financeClosingStatusLabel("draft")).toBe("草稿");
     expect(financeClosingStatusLabel("closed")).toBe("已结账");
     expect(financeClosingStatusLabel("reopened")).toBe("已反结账");
+  });
+
+  test("builds specialized report query params", () => {
+    expect(
+      buildFinanceProjectRankingSearchParams({
+        month: "2026-06",
+        page: 2,
+        pageSize: 50,
+        sort_by: "gross_profit_rate",
+        sort_order: "asc",
+      }).toString(),
+    ).toBe(
+      "month=2026-06&page=2&pageSize=50&sort_by=gross_profit_rate&sort_order=asc",
+    );
+    expect(
+      buildFinanceCostCategorySummarySearchParams({
+        month: "2026-06",
+        sort_by: "expense_amount",
+      }).toString(),
+    ).toBe("month=2026-06&sort_by=expense_amount");
+    expect(
+      buildFinanceReceivableAgingSearchParams({
+        as_of: "2026-06-30",
+        page: 1,
+      }).toString(),
+    ).toBe("as_of=2026-06-30&page=1");
   });
 });

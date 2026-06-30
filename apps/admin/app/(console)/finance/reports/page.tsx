@@ -3,6 +3,7 @@ import { ProjectStatusConfig } from "@gooes/domain";
 import {
   BarChart3,
   CircleDollarSign,
+  Download,
   LineChart,
   ReceiptText,
   WalletCards,
@@ -21,11 +22,22 @@ import {
   type FinanceOperatingReportGroup,
 } from "@/components/finance/finance-operating-report-requests";
 import {
+  fetchFinanceCostCategorySummary,
+  fetchFinanceProjectRanking,
+  fetchFinanceReceivableAging,
+} from "@/components/finance/finance-specialized-report-requests";
+import {
+  buildFinanceMonthlyOverviewSearchParams,
   buildFinanceOperatingReportSearchParams,
   financeClosingStatusLabel,
   financeClosingStatusVariant,
   financeOperatingGroupByLabel,
 } from "@/components/finance/finance-operating-report-utils";
+import {
+  CostCategorySummaryTable,
+  ProjectRankingTable,
+  ReceivableAgingTable,
+} from "@/components/finance/finance-specialized-report-tables";
 import {
   formatFinanceDateTime,
   formatFinanceMoney,
@@ -44,6 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type FinanceReportsPageSearchParams = {
   month?: string;
@@ -82,6 +95,12 @@ function reportHref(filters: FinanceReportsPageSearchParams) {
   return `/finance/reports${params.size ? `?${params}` : ""}`;
 }
 
+function monthlyOverviewExportHref(month: string) {
+  const params = buildFinanceMonthlyOverviewSearchParams({ month });
+  params.set("format", "csv");
+  return `/api/backend/finance/reports/monthly-overview/export?${params}`;
+}
+
 export default async function FinanceReportsPage({
   searchParams,
 }: {
@@ -98,7 +117,13 @@ export default async function FinanceReportsPage({
   const reportMonth = monthlyOverview.scope.month || clean(params.month) || "";
   const dateFrom = clean(params.date_from) || monthlyOverview.scope.date_from;
   const dateTo = clean(params.date_to) || monthlyOverview.scope.date_to;
-  const [data, closingPeriods] = await Promise.all([
+  const [
+    data,
+    closingPeriods,
+    projectRanking,
+    costCategorySummary,
+    receivableAging,
+  ] = await Promise.all([
     fetchFinanceOperatingReport({
       date_from: dateFrom,
       date_to: dateTo,
@@ -110,6 +135,27 @@ export default async function FinanceReportsPage({
       month: reportMonth,
       page: 1,
       pageSize: 5,
+    }),
+    fetchFinanceProjectRanking({
+      month: reportMonth,
+      project_status: clean(params.project_status),
+      page: 1,
+      pageSize: 10,
+      sort_by: "gross_profit_amount",
+      sort_order: "desc",
+    }),
+    fetchFinanceCostCategorySummary({
+      month: reportMonth,
+      page: 1,
+      pageSize: 10,
+      sort_by: "expense_amount",
+      sort_order: "desc",
+    }),
+    fetchFinanceReceivableAging({
+      as_of: dateTo,
+      project_status: clean(params.project_status),
+      page: 1,
+      pageSize: 10,
     }),
   ]);
   const summary = monthlyOverview.summary;
@@ -142,15 +188,26 @@ export default async function FinanceReportsPage({
           {monthlyOverview.scope.truncated || data.scope.truncated ? (
             <Badge variant="warning">已达到源数据上限</Badge>
           ) : null}
+          <Button asChild variant="outline" size="sm">
+            <Link href={monthlyOverviewExportHref(reportMonth)} download>
+              <Download data-icon="inline-start" />
+              导出 CSV
+            </Link>
+          </Button>
         </div>
       </div>
 
       <FinanceModuleTabs activeTab="reports" />
 
-      {monthlyOverview.error || closingPeriods.error ? (
+      {monthlyOverview.error || closingPeriods.error ||
+          projectRanking.error || costCategorySummary.error ||
+          receivableAging.error ? (
         <div className="shrink-0 grid gap-2">
           {monthlyOverview.error ? <StatusAlert>{monthlyOverview.error}</StatusAlert> : null}
           {closingPeriods.error ? <StatusAlert>{closingPeriods.error}</StatusAlert> : null}
+          {projectRanking.error ? <StatusAlert>{projectRanking.error}</StatusAlert> : null}
+          {costCategorySummary.error ? <StatusAlert>{costCategorySummary.error}</StatusAlert> : null}
+          {receivableAging.error ? <StatusAlert>{receivableAging.error}</StatusAlert> : null}
         </div>
       ) : null}
 
@@ -304,7 +361,28 @@ export default async function FinanceReportsPage({
             </div>
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
-            <OperatingReportTable rows={data.groups} />
+            <Tabs defaultValue="operating" className="flex min-h-full flex-col">
+              <div className="shrink-0 overflow-x-auto border-b bg-muted/20 px-4 py-3">
+                <TabsList className="w-max">
+                  <TabsTrigger value="operating">运营报表</TabsTrigger>
+                  <TabsTrigger value="project-ranking">项目排行</TabsTrigger>
+                  <TabsTrigger value="cost-category">成本分类</TabsTrigger>
+                  <TabsTrigger value="receivable-aging">应收账龄</TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="operating" className="m-0 min-h-0 flex-1 overflow-auto">
+                <OperatingReportTable rows={data.groups} />
+              </TabsContent>
+              <TabsContent value="project-ranking" className="m-0 min-h-0 flex-1 overflow-auto">
+                <ProjectRankingTable data={projectRanking} />
+              </TabsContent>
+              <TabsContent value="cost-category" className="m-0 min-h-0 flex-1 overflow-auto p-0">
+                <CostCategorySummaryTable data={costCategorySummary} />
+              </TabsContent>
+              <TabsContent value="receivable-aging" className="m-0 min-h-0 flex-1 overflow-auto p-4">
+                <ReceivableAgingTable data={receivableAging} />
+              </TabsContent>
+            </Tabs>
           </div>
           <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

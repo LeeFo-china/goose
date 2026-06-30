@@ -17,6 +17,34 @@ export type FinanceMonthlyOverviewQuery = {
   month?: string;
 };
 
+export type FinanceProjectRankingQuery = {
+  month?: string;
+  date_from?: string;
+  date_to?: string;
+  project_status?: string;
+  page?: number;
+  pageSize?: number;
+  sort_by?: string;
+  sort_order?: string;
+};
+
+export type FinanceCostCategorySummaryQuery = {
+  month?: string;
+  date_from?: string;
+  date_to?: string;
+  page?: number;
+  pageSize?: number;
+  sort_by?: string;
+  sort_order?: string;
+};
+
+export type FinanceReceivableAgingQuery = {
+  as_of?: string;
+  project_status?: string;
+  page?: number;
+  pageSize?: number;
+};
+
 export type FinanceClosingStatus =
   | "not_started"
   | "draft"
@@ -40,6 +68,46 @@ export function buildFinanceMonthlyOverviewSearchParams(
 ) {
   const params = new URLSearchParams();
   appendOptionalParam(params, "month", query.month);
+  return params;
+}
+
+export function buildFinanceProjectRankingSearchParams(
+  query: FinanceProjectRankingQuery,
+) {
+  const params = new URLSearchParams();
+  appendOptionalParam(params, "month", query.month);
+  appendOptionalParam(params, "date_from", query.date_from);
+  appendOptionalParam(params, "date_to", query.date_to);
+  appendOptionalParam(params, "project_status", query.project_status);
+  appendOptionalNumberParam(params, "page", query.page);
+  appendOptionalNumberParam(params, "pageSize", query.pageSize);
+  appendOptionalParam(params, "sort_by", query.sort_by);
+  appendOptionalParam(params, "sort_order", query.sort_order);
+  return params;
+}
+
+export function buildFinanceCostCategorySummarySearchParams(
+  query: FinanceCostCategorySummaryQuery,
+) {
+  const params = new URLSearchParams();
+  appendOptionalParam(params, "month", query.month);
+  appendOptionalParam(params, "date_from", query.date_from);
+  appendOptionalParam(params, "date_to", query.date_to);
+  appendOptionalNumberParam(params, "page", query.page);
+  appendOptionalNumberParam(params, "pageSize", query.pageSize);
+  appendOptionalParam(params, "sort_by", query.sort_by);
+  appendOptionalParam(params, "sort_order", query.sort_order);
+  return params;
+}
+
+export function buildFinanceReceivableAgingSearchParams(
+  query: FinanceReceivableAgingQuery,
+) {
+  const params = new URLSearchParams();
+  appendOptionalParam(params, "as_of", query.as_of);
+  appendOptionalParam(params, "project_status", query.project_status);
+  appendOptionalNumberParam(params, "page", query.page);
+  appendOptionalNumberParam(params, "pageSize", query.pageSize);
   return params;
 }
 
@@ -78,4 +146,14 @@ function appendOptionalParam(
 ) {
   const normalized = value?.trim();
   if (normalized) params.set(key, normalized);
+}
+
+function appendOptionalNumberParam(
+  params: URLSearchParams,
+  key: string,
+  value: number | undefined,
+) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    params.set(key, String(value));
+  }
 }
