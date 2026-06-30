@@ -36,6 +36,8 @@ export function UsageTabsNav({
   socialVideoStatus,
   socialVideoBillable,
   summaryLabel = "租户汇总",
+  tabsListClassName,
+  tabsTriggerClassName,
 }: {
   basePath: string;
   tab: UsageTab;
@@ -48,6 +50,8 @@ export function UsageTabsNav({
   socialVideoStatus?: string;
   socialVideoBillable?: string;
   summaryLabel?: string;
+  tabsListClassName?: string;
+  tabsTriggerClassName?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -67,17 +71,24 @@ export function UsageTabsNav({
         socialVideoStatus,
         socialVideoBillable,
       }));
-      router.refresh();
     });
   }
 
   return (
     <Tabs value={tab} onValueChange={switchTab}>
-      <TabsList>
-        <TabsTrigger value="summary" disabled={pending}>{summaryLabel}</TabsTrigger>
-        <TabsTrigger value="ai" disabled={pending}>AI 明细</TabsTrigger>
-        <TabsTrigger value="sms" disabled={pending}>短信明细</TabsTrigger>
-        <TabsTrigger value="social_video" disabled={pending}>短视频明细</TabsTrigger>
+      <TabsList className={tabsListClassName}>
+        <TabsTrigger value="summary" className={tabsTriggerClassName} disabled={pending}>
+          {summaryLabel}
+        </TabsTrigger>
+        <TabsTrigger value="ai" className={tabsTriggerClassName} disabled={pending}>
+          AI 明细
+        </TabsTrigger>
+        <TabsTrigger value="sms" className={tabsTriggerClassName} disabled={pending}>
+          短信明细
+        </TabsTrigger>
+        <TabsTrigger value="social_video" className={tabsTriggerClassName} disabled={pending}>
+          短视频明细
+        </TabsTrigger>
       </TabsList>
     </Tabs>
   );
@@ -165,8 +176,8 @@ export function UsageFilters({
   }
 
   return (
-    <form className="grid gap-3 lg:grid-cols-[160px_160px_1fr_180px_160px_80px]" onSubmit={submit}>
-      <InputGroup>
+    <form className="flex flex-wrap items-center gap-3" onSubmit={submit}>
+      <InputGroup className="w-full sm:w-40">
         <InputGroupInput
           type="date"
           value={nextDateFrom}
@@ -179,7 +190,7 @@ export function UsageFilters({
           }}
         />
       </InputGroup>
-      <InputGroup>
+      <InputGroup className="w-full sm:w-40">
         <InputGroupInput
           type="date"
           value={nextDateTo}
@@ -193,7 +204,7 @@ export function UsageFilters({
         />
       </InputGroup>
       {showKeyword ? (
-        <InputGroup>
+        <InputGroup className="min-w-[220px] flex-1">
           <InputGroupAddon>
             <Search data-icon="inline-start" />
           </InputGroupAddon>
@@ -220,7 +231,7 @@ export function UsageFilters({
           ) : null}
         </InputGroup>
       ) : showTenantId ? (
-        <InputGroup>
+        <InputGroup className="min-w-[220px] flex-1">
           <InputGroupInput
             value={nextTenantId}
             placeholder="按租户 ID 过滤"
@@ -243,15 +254,14 @@ export function UsageFilters({
             </InputGroupAddon>
           ) : null}
         </InputGroup>
-      ) : (
-        <div />
-      )}
+      ) : null}
       {tab === "ai" ? (
         <FormSelect
           id="usage-ai-status-filter"
           value={nextAiStatus}
           options={statusOptions}
           disabled={pending}
+          triggerClassName="w-full sm:w-40"
           onChange={(value) => {
             setNextAiStatus(value);
             navigate({ aiStatus: value });
@@ -263,6 +273,7 @@ export function UsageFilters({
           value={nextSmsStatus}
           options={smsStatusOptions}
           disabled={pending}
+          triggerClassName="w-full sm:w-40"
           onChange={(value) => {
             setNextSmsStatus(value);
             navigate({ smsStatus: value });
@@ -274,29 +285,27 @@ export function UsageFilters({
           value={nextSocialVideoStatus}
           options={socialVideoStatusOptions}
           disabled={pending}
+          triggerClassName="w-full sm:w-40"
           onChange={(value) => {
             setNextSocialVideoStatus(value);
             navigate({ socialVideoStatus: value });
           }}
         />
-      ) : (
-        <div />
-      )}
+      ) : null}
       {tab === "social_video" ? (
         <FormSelect
           id="usage-social-video-billable-filter"
           value={nextSocialVideoBillable}
           options={socialVideoBillableOptions}
           disabled={pending}
+          triggerClassName="w-full sm:w-40"
           onChange={(value) => {
             setNextSocialVideoBillable(value);
             navigate({ socialVideoBillable: value });
           }}
         />
-      ) : (
-        <div />
-      )}
-      <Button type="submit" disabled={pending}>
+      ) : null}
+      <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         筛选
       </Button>

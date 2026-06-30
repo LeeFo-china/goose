@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { type ReactNode } from "react";
+import { BarChart3 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   UsageFilters,
@@ -10,7 +12,7 @@ import {
   UsageSmsLogsTable,
   UsageSocialVideoLogsTable,
 } from "@/components/usage/usage-logs-tables";
-import { UsageSummaryCards } from "@/components/usage/usage-summary-cards";
+import { UsageOverviewPanel } from "@/components/usage/usage-overview-panel";
 import type {
   TenantUsageSummaryData,
   UsageAiLogRecord,
@@ -118,30 +120,44 @@ export default async function TenantUsagePage({
       emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage),
     )
     : { data: emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage), error: null };
+  const errors = [
+    summaryResult.error,
+    aiResult.error,
+    smsResult.error,
+    socialVideoResult.error,
+  ].filter((message): message is string => Boolean(message));
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">用量统计</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            查看本公司 AI token、短信发送量、短视频转写分钟和失败明细。
-          </p>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <BarChart3 aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-normal">用量统计</h1>
+              <Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              本公司 AI token、短信发送量、短视频转写分钟和失败明细。
+            </p>
+          </div>
         </div>
-        <Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>
       </div>
 
-      {summaryResult.error ? <StatusAlert>{summaryResult.error}</StatusAlert> : null}
-      {aiResult.error ? <StatusAlert>{aiResult.error}</StatusAlert> : null}
-      {smsResult.error ? <StatusAlert>{smsResult.error}</StatusAlert> : null}
-      {socialVideoResult.error ? <StatusAlert>{socialVideoResult.error}</StatusAlert> : null}
+      {errors.length > 0 ? (
+        <div className="shrink-0 space-y-2">
+          {errors.map((message, index) => (
+            <StatusAlert key={`${index}-${message}`}>{message}</StatusAlert>
+          ))}
+        </div>
+      ) : null}
 
-      <UsageSummaryCards data={summaryResult.data} />
-
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
+            <div className="min-w-0">
               <CardTitle>本租户用量</CardTitle>
               <CardDescription>
                 租户只能查看本公司的 AI、短信和短视频转写用量，手机号仅展示脱敏值。
@@ -157,6 +173,8 @@ export default async function TenantUsagePage({
               socialVideoStatus={socialVideoStatus}
               socialVideoBillable={socialVideoBillable}
               summaryLabel="用量概览"
+              tabsListClassName="w-full shrink-0 justify-start overflow-x-auto md:w-auto"
+              tabsTriggerClassName="px-2 sm:px-3"
             />
           </div>
           <UsageFilters
@@ -170,52 +188,14 @@ export default async function TenantUsagePage({
             socialVideoBillable={socialVideoBillable}
           />
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-0">
+        <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
           {tab === "summary" ? (
-            <div className="grid gap-3 p-4 md:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardDescription>AI 成功率</CardDescription>
-                  <CardTitle>
-                    {summaryResult.data.ai.call_count > 0
-                      ? `${Math.round((summaryResult.data.ai.success_count / summaryResult.data.ai.call_count) * 100)}%`
-                      : "-"}
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>短信成功率</CardDescription>
-                  <CardTitle>
-                    {summaryResult.data.sms.send_count > 0
-                      ? `${Math.round((summaryResult.data.sms.success_count / summaryResult.data.sms.send_count) * 100)}%`
-                      : "-"}
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>AI token 缺失</CardDescription>
-                  <CardTitle>{summaryResult.data.ai.missing_token_count}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>短视频计费分钟</CardDescription>
-                  <CardTitle>{summaryResult.data.social_video.billable_minutes}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>短视频时长缺失</CardDescription>
-                  <CardTitle>{summaryResult.data.social_video.missing_duration_count}</CardTitle>
-                </CardHeader>
-              </Card>
+            <div className="min-h-0 flex-1 overflow-auto">
+              <UsageOverviewPanel data={summaryResult.data} />
             </div>
           ) : tab === "ai" ? (
-            <>
-              <UsageAiLogsTable logs={aiResult.data.list} />
-              <div className="px-4 pb-4">
+            <UsageLogPanel
+              pagination={
                 <UsagePagination
                   basePath="/usage"
                   pagination={aiResult.data.pagination}
@@ -229,12 +209,13 @@ export default async function TenantUsagePage({
                   socialVideoBillable={socialVideoBillable}
                   unit="条 AI 明细"
                 />
-              </div>
-            </>
+              }
+            >
+              <UsageAiLogsTable logs={aiResult.data.list} />
+            </UsageLogPanel>
           ) : tab === "sms" ? (
-            <>
-              <UsageSmsLogsTable logs={smsResult.data.list} />
-              <div className="px-4 pb-4">
+            <UsageLogPanel
+              pagination={
                 <UsagePagination
                   basePath="/usage"
                   pagination={smsResult.data.pagination}
@@ -248,12 +229,13 @@ export default async function TenantUsagePage({
                   socialVideoBillable={socialVideoBillable}
                   unit="条短信明细"
                 />
-              </div>
-            </>
+              }
+            >
+              <UsageSmsLogsTable logs={smsResult.data.list} />
+            </UsageLogPanel>
           ) : (
-            <>
-              <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
-              <div className="px-4 pb-4">
+            <UsageLogPanel
+              pagination={
                 <UsagePagination
                   basePath="/usage"
                   pagination={socialVideoResult.data.pagination}
@@ -267,11 +249,35 @@ export default async function TenantUsagePage({
                   socialVideoBillable={socialVideoBillable}
                   unit="条短视频明细"
                 />
-              </div>
-            </>
+              }
+            >
+              <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
+            </UsageLogPanel>
           )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function UsageLogPanel({
+  children,
+  pagination,
+}: {
+  children: ReactNode;
+  pagination: ReactNode;
+}) {
+  return (
+    <>
+      <div
+        data-testid="tenant-usage-list-table-viewport"
+        className="min-h-0 flex-1 overflow-auto"
+      >
+        {children}
+      </div>
+      <div className="shrink-0 border-t bg-card px-4 py-3">
+        {pagination}
+      </div>
+    </>
   );
 }
