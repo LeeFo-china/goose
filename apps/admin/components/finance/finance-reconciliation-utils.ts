@@ -113,6 +113,9 @@ export function financeReconciliationExceptionLabel(
   if (code === "receivable_paid_amount_mismatch") {
     return "应收已收不一致";
   }
+  if (code === "expense_paid_without_ledger") return "费用未入账";
+  if (code === "expense_paid_amount_mismatch") return "费用入账金额不一致";
+  if (code === "expense_ledger_without_category") return "费用缺成本分类";
   return code || "-";
 }
 

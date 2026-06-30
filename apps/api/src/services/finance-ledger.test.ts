@@ -214,6 +214,32 @@ describe("financeLedgerService", () => {
     });
   });
 
+  test("parses expense request and settlement ledger filters", async () => {
+    const parsed = FinanceLedgerListQuerySchema.parse({
+      page: "1",
+      pageSize: "20",
+      expense_request_id: "22222222-2222-4222-8222-222222222222",
+      expense_settlement_id: "33333333-3333-4333-8333-333333333333",
+      direction: "out",
+      entry_type: "expense_settlement",
+    });
+    const { financeLedgerService } = await import("./finance-ledger");
+
+    await financeLedgerService.listLedger(
+      authContextWithPermissions([{ code: "finance.ledger.view", scope: "all" }]),
+      parsed,
+    );
+
+    expect(listLedger).toHaveBeenCalledWith("tenant-1", {
+      page: 1,
+      pageSize: 20,
+      expense_request_id: "22222222-2222-4222-8222-222222222222",
+      expense_settlement_id: "33333333-3333-4333-8333-333333333333",
+      direction: "out",
+      entry_type: "expense_settlement",
+    });
+  });
+
   test("rejects users without finance ledger permission", async () => {
     const { financeLedgerService } = await import("./finance-ledger");
 

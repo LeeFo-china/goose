@@ -44,6 +44,9 @@ const EXCEPTION_OPTIONS = [
   { value: "payment_unallocated", label: "收款未核销" },
   { value: "allocation_amount_mismatch", label: "核销金额不一致" },
   { value: "receivable_paid_amount_mismatch", label: "应收已收不一致" },
+  { value: "expense_paid_without_ledger", label: "费用未入账" },
+  { value: "expense_paid_amount_mismatch", label: "费用入账金额不一致" },
+  { value: "expense_ledger_without_category", label: "费用缺成本分类" },
 ];
 
 const LEVEL_OPTIONS = [

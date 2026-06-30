@@ -6,6 +6,9 @@ export type ProjectFinanceReconciliationSummary = {
   ledger_income_amount: number;
   expense_paid_amount: number;
   ledger_expense_amount: number;
+  income_ledger_consistent?: boolean;
+  payment_allocation_consistent?: boolean;
+  expense_ledger_consistent?: boolean;
   exception_count: number;
   danger_count: number;
   warning_count: number;
@@ -14,6 +17,9 @@ export type ProjectFinanceReconciliationSummary = {
   ignored_exception_count: number;
   resolved_exception_count: number;
   latest_exception_at: string | null;
+  latest_exception_code?: string | null;
+  latest_exception_title?: string | null;
+  highest_exception_level?: "info" | "warning" | "danger" | null;
   latest_action_at: string | null;
   latest_action_remark: string | null;
   latest_actor_employee_name: string | null;
@@ -110,6 +116,15 @@ export function projectReconciliationStatusVariant(
   if (status === "danger") return "danger" as const;
   if (status === "warning") return "warning" as const;
   return "success" as const;
+}
+
+export function projectReconciliationLevelLabel(
+  level: ProjectFinanceReconciliationSummary["highest_exception_level"],
+) {
+  if (level === "danger") return "高风险";
+  if (level === "warning") return "预警";
+  if (level === "info") return "提示";
+  return "无";
 }
 
 function amountDiffStatus(value: number): ProjectReconciliationCheckStatus {

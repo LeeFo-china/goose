@@ -33,6 +33,8 @@ export type FinanceLedgerRecord = {
   direction: "in" | "out";
   entry_type: string;
   payment_id?: string | null;
+  expense_request_id?: string | null;
+  expense_settlement_id?: string | null;
   payment_linked_at?: string | null;
   payment_linked_by?: string | null;
   payment_link_reason?: string | null;
@@ -231,6 +233,8 @@ export async function fetchFinanceLedger(query: {
   entry_type?: string;
   ledger_id?: string;
   payment_id?: string;
+  expense_request_id?: string;
+  expense_settlement_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;
 }): Promise<FinanceLedgerResult> {

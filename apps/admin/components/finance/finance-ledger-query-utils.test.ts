@@ -14,12 +14,14 @@ describe("finance ledger query helpers", () => {
       entry_type: "project_payment",
       ledger_id: "ledger-1",
       payment_id: "payment-1",
+      expense_request_id: "expense-1",
+      expense_settlement_id: "settlement-1",
       cost_category_id: "category-1",
       unallocated_only: "true",
     });
 
     expect(params.toString()).toBe(
-      "page=2&pageSize=20&project_id=project-1&direction=in&entry_type=project_payment&ledger_id=ledger-1&payment_id=payment-1&cost_category_id=category-1&unallocated_only=true",
+      "page=2&pageSize=20&project_id=project-1&direction=in&entry_type=project_payment&ledger_id=ledger-1&payment_id=payment-1&expense_request_id=expense-1&expense_settlement_id=settlement-1&cost_category_id=category-1&unallocated_only=true",
     );
   });
 
@@ -30,12 +32,14 @@ describe("finance ledger query helpers", () => {
       entry_type: "project_payment",
       ledger_id: "ledger-1",
       payment_id: "payment-1",
+      expense_request_id: "expense-1",
+      expense_settlement_id: "settlement-1",
       cost_category_id: "category-1",
       unallocated_only: "true",
     });
 
     expect(href).toBe(
-      "/finance/ledger?page=3&project_id=project-1&direction=in&entry_type=project_payment&ledger_id=ledger-1&payment_id=payment-1&cost_category_id=category-1&unallocated_only=true",
+      "/finance/ledger?page=3&project_id=project-1&direction=in&entry_type=project_payment&ledger_id=ledger-1&payment_id=payment-1&expense_request_id=expense-1&expense_settlement_id=settlement-1&cost_category_id=category-1&unallocated_only=true",
     );
   });
 });

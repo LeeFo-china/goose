@@ -21,6 +21,8 @@ type FinanceLedgerPageSearchParams = {
   entry_type?: string;
   ledger_id?: string;
   payment_id?: string;
+  expense_request_id?: string;
+  expense_settlement_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;
 };
@@ -78,6 +80,8 @@ export default async function FinanceLedgerPage({
   const entryType = clean(params.entry_type);
   const ledgerId = clean(params.ledger_id);
   const paymentId = clean(params.payment_id);
+  const expenseRequestId = clean(params.expense_request_id);
+  const expenseSettlementId = clean(params.expense_settlement_id);
   const costCategoryId = clean(params.cost_category_id);
   const unallocatedOnly = clean(params.unallocated_only);
   const [data, categories, session] = await Promise.all([
@@ -89,6 +93,8 @@ export default async function FinanceLedgerPage({
       entry_type: entryType,
       ledger_id: ledgerId,
       payment_id: paymentId,
+      expense_request_id: expenseRequestId,
+      expense_settlement_id: expenseSettlementId,
       cost_category_id: costCategoryId,
       unallocated_only: unallocatedOnly,
     }),
@@ -139,6 +145,20 @@ export default async function FinanceLedgerPage({
             ) : null}
             {paymentId ? (
               <input type="hidden" name="payment_id" value={paymentId} />
+            ) : null}
+            {expenseRequestId ? (
+              <input
+                type="hidden"
+                name="expense_request_id"
+                value={expenseRequestId}
+              />
+            ) : null}
+            {expenseSettlementId ? (
+              <input
+                type="hidden"
+                name="expense_settlement_id"
+                value={expenseSettlementId}
+              />
             ) : null}
             {ledgerId ? (
               <input type="hidden" name="ledger_id" value={ledgerId} />

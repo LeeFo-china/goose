@@ -3,6 +3,7 @@ import {
   buildFinanceReconciliationStatsSearchParams,
   buildFinanceReconciliationSearchParams,
   financeReconciliationActionLabel,
+  financeReconciliationExceptionLabel,
   financeReconciliationPrimaryActionLabel,
   financeReconciliationLevelMeta,
   financeReconciliationStatusMeta,
@@ -79,5 +80,14 @@ describe("finance reconciliation helpers", () => {
   test("uses a clear manual correction label for row navigation", () => {
     expect(financeReconciliationPrimaryActionLabel("")).toBe("去处理");
     expect(financeReconciliationPrimaryActionLabel(" 查看应收 ")).toBe("查看应收");
+  });
+
+  test("maps expense reconciliation exception labels", () => {
+    expect(financeReconciliationExceptionLabel("expense_paid_without_ledger"))
+      .toBe("费用未入账");
+    expect(financeReconciliationExceptionLabel("expense_paid_amount_mismatch"))
+      .toBe("费用入账金额不一致");
+    expect(financeReconciliationExceptionLabel("expense_ledger_without_category"))
+      .toBe("费用缺成本分类");
   });
 });

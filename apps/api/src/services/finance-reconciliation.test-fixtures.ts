@@ -87,6 +87,8 @@ export const reconciliationCandidateRows = {
       payment_id: "payment-clean",
     },
   ],
+  expenseSettlements: [],
+  expenseLedgers: [],
 };
 
 export const reconciliationProjectSummaryTotals = {

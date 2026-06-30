@@ -424,7 +424,7 @@ describe("financeReconciliationService", () => {
       "project-1",
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       project_id: "project-1",
       receivable_amount: 30000,
       received_amount: 28000,

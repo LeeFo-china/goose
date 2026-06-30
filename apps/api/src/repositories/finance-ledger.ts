@@ -67,6 +67,12 @@ class FinanceLedgerRepository {
     if (query.payment_id) {
       request = request.eq("payment_id", query.payment_id);
     }
+    if (query.expense_request_id) {
+      request = request.eq("expense_request_id", query.expense_request_id);
+    }
+    if (query.expense_settlement_id) {
+      request = request.eq("expense_settlement_id", query.expense_settlement_id);
+    }
     if (query.cost_category_id) {
       request = request.eq("cost_category_id", query.cost_category_id);
     }

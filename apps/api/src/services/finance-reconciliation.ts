@@ -30,6 +30,7 @@ import {
 
 const MAX_RECONCILIATION_RANGE_DAYS = 366;
 const DEFAULT_RECONCILIATION_RANGE_DAYS = 30;
+const MONEY_TOLERANCE = 0.009;
 
 type FinanceReconciliationFilterQuery = {
   date_from?: string;
@@ -60,6 +61,9 @@ type FinanceReconciliationServiceDependencies = {
 
 export type FinanceReconciliationProjectSummary =
   FinanceReconciliationProjectTotals & {
+    income_ledger_consistent: boolean;
+    payment_allocation_consistent: boolean;
+    expense_ledger_consistent: boolean;
     exception_count: number;
     danger_count: number;
     warning_count: number;
@@ -68,6 +72,9 @@ export type FinanceReconciliationProjectSummary =
     ignored_exception_count: number;
     resolved_exception_count: number;
     latest_exception_at: string | null;
+    latest_exception_code: FinanceReconciliationExceptionCode | null;
+    latest_exception_title: string | null;
+    highest_exception_level: FinanceReconciliationLevel | null;
     latest_action_at: string | null;
     latest_action_remark: string | null;
     latest_actor_employee_name: string | null;
@@ -172,9 +179,27 @@ export class FinanceReconciliationService {
       actionsRepository: this.dependencies.actionsRepository,
     });
     const latestAction = latestActionFromExceptions(exceptions);
+    const latestException = exceptions[0] ?? null;
+    const highestExceptionLevel = highestLevelFromExceptions(
+      exceptions.filter((item) =>
+        item.status !== "ignored" && item.status !== "resolved"
+      ),
+    );
 
     return {
       ...totals,
+      income_ledger_consistent: moneyEquals(
+        totals.received_amount,
+        totals.ledger_income_amount,
+      ),
+      payment_allocation_consistent: moneyEquals(
+        totals.received_amount,
+        totals.allocated_amount,
+      ),
+      expense_ledger_consistent: moneyEquals(
+        totals.expense_paid_amount,
+        totals.ledger_expense_amount,
+      ),
       exception_count: exceptions.length,
       danger_count: exceptions.filter((item) => item.level === "danger").length,
       warning_count: exceptions.filter((item) => item.level === "warning").length,
@@ -186,7 +211,10 @@ export class FinanceReconciliationService {
         .length,
       resolved_exception_count: exceptions.filter((item) => item.status === "resolved")
         .length,
-      latest_exception_at: exceptions[0]?.occurred_at ?? null,
+      latest_exception_at: latestException?.occurred_at ?? null,
+      latest_exception_code: latestException?.exception_code ?? null,
+      latest_exception_title: latestException?.title ?? null,
+      highest_exception_level: highestExceptionLevel,
       latest_action_at: latestAction?.last_action_at ?? null,
       latest_action_remark: latestAction?.last_action_remark ?? null,
       latest_actor_employee_name: latestAction?.last_actor_employee_name ?? null,
@@ -364,6 +392,15 @@ function latestActionFromExceptions(exceptions: FinanceReconciliationException[]
     )[0] ?? null;
 }
 
+function highestLevelFromExceptions(
+  exceptions: FinanceReconciliationException[],
+): FinanceReconciliationLevel | null {
+  if (exceptions.some((item) => item.level === "danger")) return "danger";
+  if (exceptions.some((item) => item.level === "warning")) return "warning";
+  if (exceptions.some((item) => item.level === "info")) return "info";
+  return null;
+}
+
 function buildListResponse(
   exceptions: FinanceReconciliationException[],
   query: FinanceReconciliationExceptionListQuery,
@@ -394,6 +431,10 @@ function summarize(exceptions: FinanceReconciliationException[]) {
     },
     { total: 0, danger: 0, warning: 0, info: 0 },
   );
+}
+
+function moneyEquals(left: number, right: number) {
+  return Math.abs(left - right) <= MONEY_TOLERANCE;
 }
 
 function toDateOnly(date: Date) {

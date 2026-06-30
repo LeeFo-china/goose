@@ -3,6 +3,11 @@ import {
   getFinanceReconciliationProjectTotals,
   type FinanceReconciliationProjectTotals,
 } from "@/repositories/finance-reconciliation-project-summary";
+import {
+  listFinanceReconciliationExpenseRows,
+  type FinanceReconciliationExpenseLedgerRow,
+  type FinanceReconciliationExpenseSettlementRow,
+} from "@/repositories/finance-reconciliation-expenses";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 const DEFAULT_SOURCE_LIMIT = 5_000;
@@ -45,6 +50,8 @@ export type FinanceReconciliationCandidateRows = {
   receivables: FinanceReconciliationReceivableRow[];
   payments: FinanceReconciliationPaymentRow[];
   ledgers: FinanceReconciliationLedgerRow[];
+  expenseSettlements: FinanceReconciliationExpenseSettlementRow[];
+  expenseLedgers: FinanceReconciliationExpenseLedgerRow[];
 };
 
 type CandidateQueryInput = {
@@ -108,10 +115,11 @@ class FinanceReconciliationRepository {
     input: CandidateQueryInput,
   ): Promise<FinanceReconciliationCandidateRows> {
     const sourceLimit = input.sourceLimit ?? DEFAULT_SOURCE_LIMIT;
-    const [receivableRows, paymentRows, ledgerRows] = await Promise.all([
+    const [receivableRows, paymentRows, ledgerRows, expenseRows] = await Promise.all([
       this.listReceivableRows(input, sourceLimit),
       this.listPaymentRows(input, sourceLimit),
       this.listLedgerRows(input, sourceLimit),
+      listFinanceReconciliationExpenseRows(input, sourceLimit),
     ]);
     const [allocationsByPayment, allocationsByReceivable, ledgerByPayment] =
       await Promise.all([
@@ -164,6 +172,8 @@ class FinanceReconciliationRepository {
         payment_id: row.payment_id,
         legacy_payment_ledger_marked_at: row.legacy_payment_ledger_marked_at,
       })),
+      expenseSettlements: expenseRows.expenseSettlements,
+      expenseLedgers: expenseRows.expenseLedgers,
     };
   }
 
@@ -364,3 +374,7 @@ function normalizeMoney(value: unknown): number {
 export const financeReconciliationRepository =
   new FinanceReconciliationRepository();
 export type { FinanceReconciliationProjectTotals };
+export type {
+  FinanceReconciliationExpenseLedgerRow,
+  FinanceReconciliationExpenseSettlementRow,
+};

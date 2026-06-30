@@ -11,7 +11,10 @@ export type FinanceReconciliationExceptionCode =
   | "ledger_without_payment"
   | "payment_unallocated"
   | "allocation_amount_mismatch"
-  | "receivable_paid_amount_mismatch";
+  | "receivable_paid_amount_mismatch"
+  | "expense_paid_without_ledger"
+  | "expense_paid_amount_mismatch"
+  | "expense_ledger_without_category";
 
 export type FinanceReconciliationLevel = "info" | "warning" | "danger";
 export type FinanceReconciliationDirection =
@@ -39,7 +42,7 @@ export type FinanceReconciliationExceptionRecord = {
   direction: FinanceReconciliationDirection;
   status: FinanceReconciliationStatus;
   exception_fingerprint: string;
-  subject_type: "receivable" | "payment" | "ledger";
+  subject_type: "receivable" | "payment" | "ledger" | "expense_settlement";
   subject_id: string | null;
   title: string;
   description: string;
@@ -62,7 +65,7 @@ export type FinanceReconciliationActionRecord = {
   tenant_id: string;
   exception_fingerprint: string;
   exception_code: FinanceReconciliationExceptionCode;
-  subject_type: "receivable" | "payment" | "ledger";
+  subject_type: "receivable" | "payment" | "ledger" | "expense_settlement";
   subject_id: string | null;
   project_id: string | null;
   action: FinanceReconciliationAction;

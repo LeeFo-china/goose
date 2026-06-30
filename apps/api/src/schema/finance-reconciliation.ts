@@ -8,6 +8,9 @@ export const FINANCE_RECONCILIATION_EXCEPTION_CODE_VALUES = [
   "payment_unallocated",
   "allocation_amount_mismatch",
   "receivable_paid_amount_mismatch",
+  "expense_paid_without_ledger",
+  "expense_paid_amount_mismatch",
+  "expense_ledger_without_category",
 ] as const;
 
 export const FINANCE_RECONCILIATION_LEVEL_VALUES = [

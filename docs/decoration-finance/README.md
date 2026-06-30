@@ -51,6 +51,9 @@
 - [2026-06-30-phase7-5-post-release-smoke.md](./2026-06-30-phase7-5-post-release-smoke.md)：Phase 7.5 财务修正审计合入 main 后的发布后 smoke，覆盖 API 只读聚合、Admin 页面和小程序边界。
 - [2026-06-30-phase7-5-1-generated-ledger-audit.md](./2026-06-30-phase7-5-1-generated-ledger-audit.md)：Phase 7.5.1 补生成项目收款台账纳入修正审计，覆盖 API operation、Admin 筛选和小程序边界。
 - [2026-06-30-phase7-6-reconciliation-operating-stats.md](./2026-06-30-phase7-6-reconciliation-operating-stats.md)：Phase 7.6 财务对账运营统计，覆盖只读统计 API、Admin 运营统计区和小程序边界。
+- [2026-06-30-phase7-6-post-release-smoke.md](./2026-06-30-phase7-6-post-release-smoke.md)：Phase 7.6 财务对账运营统计发布后只读 smoke 记录。
+- [2026-06-30-phase7-6-rag-sync-dry-run-investigation.md](./2026-06-30-phase7-6-rag-sync-dry-run-investigation.md)：Phase 7.6 RAG sync dry-run / upload 失败核查，确认实际失败为 LightRAG 409 已存在文档。
+- [2026-06-30-phase7-7-7-8-expense-reconciliation-summary.md](./2026-06-30-phase7-7-7-8-expense-reconciliation-summary.md)：Phase 7.7/7.8 费用侧对账异常、项目级对账摘要增强、Admin 对接和小程序边界。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
