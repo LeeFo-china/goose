@@ -49,6 +49,7 @@
 - [2026-06-30-phase7-4-summary.md](./2026-06-30-phase7-4-summary.md)：Phase 7.4 财务人工修正闭环总结，汇总人工核销、补生成台账、历史台账关联/标记、Admin/API/小程序边界和后续审计视图方向。
 - [2026-06-30-phase7-5-finance-correction-audit.md](./2026-06-30-phase7-5-finance-correction-audit.md)：Phase 7.5 财务修正审计视图，覆盖统一只读审计 API、Admin 修正审计 tab、权限和小程序边界。
 - [2026-06-30-phase7-5-post-release-smoke.md](./2026-06-30-phase7-5-post-release-smoke.md)：Phase 7.5 财务修正审计合入 main 后的发布后 smoke，覆盖 API 只读聚合、Admin 页面和小程序边界。
+- [2026-06-30-phase7-5-1-generated-ledger-audit.md](./2026-06-30-phase7-5-1-generated-ledger-audit.md)：Phase 7.5.1 补生成项目收款台账纳入修正审计，覆盖 API operation、Admin 筛选和小程序边界。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。

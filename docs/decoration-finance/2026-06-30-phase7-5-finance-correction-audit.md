@@ -20,6 +20,7 @@ Phase 7.5 新增 Admin 财务“修正审计”只读视图，用于追溯财务
 - 人工核销收款：`manual_allocation`
 - 调整人工核销：`adjust_allocation`
 - 撤销人工核销：`reverse_allocation`
+- 缺失项目收款台账补生成：`generate_payment_ledger`
 - 历史收款台账关联 confirmed payment：`link_ledger_payment`
 - 历史收款台账标记为历史流水：`mark_legacy_ledger`
 
@@ -62,7 +63,7 @@ GET /finance/correction-audits
 - 不新增导出。
 - 不新增数据库表。
 - `manual_allocation` 当前没有稳定 `allocation_id`，第一版展示为空。
-- 补生成台账缺少稳定审计字段时不纳入列表，避免误报。
+- 补生成台账已在 Phase 7.5.1 通过 ledger metadata 规范纳入列表。
 
 ## 验证
 
@@ -82,5 +83,4 @@ git diff --check
 
 ## 后续
 
-- 如果需要把补生成台账也纳入审计列表，应先补充稳定审计字段或 metadata 规范，避免误判普通台账。
 - Phase 7.6 可继续基于该审计口径做对账异常运营统计。

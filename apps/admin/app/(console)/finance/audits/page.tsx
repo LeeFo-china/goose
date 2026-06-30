@@ -34,6 +34,7 @@ const OPERATION_OPTIONS = [
   { value: "manual_allocation", label: "人工核销" },
   { value: "adjust_allocation", label: "调整核销" },
   { value: "reverse_allocation", label: "撤销核销" },
+  { value: "generate_payment_ledger", label: "补生成收款台账" },
   { value: "link_ledger_payment", label: "关联收款" },
   { value: "mark_legacy_ledger", label: "标记历史流水" },
 ];
