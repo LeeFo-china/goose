@@ -16,7 +16,16 @@ import {
 import {
   FinanceCorrectionAuditListQuerySchema,
 } from "@/schema/finance-correction-audits";
-import { FinanceOperatingReportQuerySchema } from "@/schema/finance-reports";
+import {
+  CloseFinanceClosingPeriodSchema,
+  CreateFinanceClosingDraftSchema,
+  FinanceClosingPeriodListQuerySchema,
+  ReopenFinanceClosingPeriodSchema,
+} from "@/schema/finance-closing";
+import {
+  FinanceMonthlyOverviewQuerySchema,
+  FinanceOperatingReportQuerySchema,
+} from "@/schema/finance-reports";
 import {
   CreateFinanceReconciliationExceptionActionSchema,
   FinanceReconciliationExceptionActionListQuerySchema,
@@ -25,8 +34,10 @@ import {
   FinanceReconciliationOperatingStatsQuerySchema,
 } from "@/schema/finance-reconciliation";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
+import { financeClosingPeriodService } from "@/services/finance-closing-periods";
 import { financeCorrectionAuditService } from "@/services/finance-correction-audits";
 import { financeLedgerService } from "@/services/finance-ledger";
+import { financeMonthlyOverviewService } from "@/services/finance-monthly-overview";
 import { financeOperatingReportService } from "@/services/finance-operating-report";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
 import { financeReconciliationService } from "@/services/finance-reconciliation";
@@ -288,6 +299,93 @@ class FinanceController extends TenantBaseController {
     const data = await financeOperatingReportService.getOperatingReport(
       authContext,
       queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reports/monthly-overview")
+  async getMonthlyOverview(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceMonthlyOverviewQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeMonthlyOverviewService.getMonthlyOverview(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/closing-periods")
+  async listClosingPeriods(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceClosingPeriodListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeClosingPeriodService.listPeriods(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/closing-periods")
+  async createClosingDraft(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const bodyResult = CreateFinanceClosingDraftSchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeClosingPeriodService.createDraftSnapshot(
+      authContext,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/closing-periods/:id/close")
+  async closeClosingPeriod(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = CloseFinanceClosingPeriodSchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeClosingPeriodService.closePeriod(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/closing-periods/:id/reopen")
+  async reopenClosingPeriod(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = ReopenFinanceClosingPeriodSchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeClosingPeriodService.reopenPeriod(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }
