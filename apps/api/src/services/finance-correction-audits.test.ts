@@ -450,4 +450,33 @@ describe("financeCorrectionAuditService", () => {
       }).operation,
     ).toBe("generate_expense_ledger");
   });
+
+  test("expands month filter into a full audit date range", async () => {
+    const { financeCorrectionAuditService } = await import(
+      "./finance-correction-audits"
+    );
+
+    await financeCorrectionAuditService.listAudits(
+      authContextWithPermissions([
+        { code: "finance.reconciliation.manage", scope: "all" },
+      ]),
+      {
+        page: 1,
+        pageSize: 20,
+        month: "2026-06",
+      },
+    );
+
+    expect(listReceivableCorrectionEvents).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      query: {
+        page: 1,
+        pageSize: 20,
+        month: "2026-06",
+        date_from: "2026-06-01",
+        date_to: "2026-06-30",
+      },
+      candidateLimit: 20,
+    });
+  });
 });

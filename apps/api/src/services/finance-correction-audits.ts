@@ -51,23 +51,24 @@ export class FinanceCorrectionAuditService {
     query: FinanceCorrectionAuditListQuery,
   ) {
     const tenantId = this.requireView(authContext);
-    const page = query.page ?? 1;
-    const pageSize = Math.min(query.pageSize ?? 20, 100);
+    const auditQuery = normalizeAuditQuery(query);
+    const page = auditQuery.page ?? 1;
+    const pageSize = Math.min(auditQuery.pageSize ?? 20, 100);
     const candidateLimit = page * pageSize;
     const [receivableResult, ledgerResult, actionResult] = await Promise.all([
       this.dependencies.repository.listReceivableCorrectionEvents({
         tenantId,
-        query,
+        query: auditQuery,
         candidateLimit,
       }),
       this.dependencies.repository.listLedgerCorrectionAudits({
         tenantId,
-        query,
+        query: auditQuery,
         candidateLimit,
       }),
       this.dependencies.repository.listReconciliationExceptionActions({
         tenantId,
-        query,
+        query: auditQuery,
         candidateLimit,
       }),
     ]);
@@ -273,6 +274,32 @@ export class FinanceCorrectionAuditService {
       },
     };
   }
+}
+
+function normalizeAuditQuery(
+  query: FinanceCorrectionAuditListQuery,
+): FinanceCorrectionAuditListQuery {
+  if (!query.month) return query;
+  const range = resolveMonthRange(query.month);
+  return {
+    ...query,
+    date_from: query.date_from ?? range.dateFrom,
+    date_to: query.date_to ?? range.dateTo,
+  };
+}
+
+function resolveMonthRange(month: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) {
+    throw Errors.badRequest("月份格式必须为 YYYY-MM");
+  }
+  const year = Number(match[1]);
+  const monthNumber = Number(match[2]);
+  const dateFrom = `${month}-01`;
+  const dateTo = new Date(Date.UTC(year, monthNumber, 0))
+    .toISOString()
+    .slice(0, 10);
+  return { dateFrom, dateTo };
 }
 
 function receivableEventOperation(

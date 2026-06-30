@@ -32,6 +32,9 @@ const monthlyOverview = {
     reopened_at: null,
     notes: null,
     snapshot_summary: null,
+    current_summary: null,
+    difference_summary: null,
+    has_snapshot_difference: false,
   },
 };
 
