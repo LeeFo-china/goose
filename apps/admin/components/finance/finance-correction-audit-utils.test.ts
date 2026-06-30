@@ -29,6 +29,8 @@ describe("finance correction audit helpers", () => {
   test("maps operation and domain labels", () => {
     expect(financeCorrectionAuditOperationLabel("manual_allocation"))
       .toBe("人工核销");
+    expect(financeCorrectionAuditOperationLabel("generate_payment_ledger"))
+      .toBe("补生成收款台账");
     expect(financeCorrectionAuditOperationLabel("mark_legacy_ledger"))
       .toBe("标记历史流水");
     expect(financeCorrectionAuditDomainMeta("receivable")).toEqual({

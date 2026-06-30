@@ -147,6 +147,26 @@ export class FinanceCorrectionAuditService {
 
   private mapLedgerRow(row: LedgerCorrectionAuditRow): FinanceCorrectionAuditRecord[] {
     const records: FinanceCorrectionAuditRecord[] = [];
+    if (row.generated_ledger_at) {
+      records.push({
+        id: `ledger:${row.id}:generate_payment_ledger`,
+        operation: "generate_payment_ledger",
+        operation_label: OPERATION_LABELS.generate_payment_ledger,
+        domain: "ledger",
+        project_id: row.project_id,
+        project_name: row.project_name,
+        actor_employee_id: row.generated_ledger_by,
+        actor_employee_name: row.generated_ledger_by_name,
+        occurred_at: row.generated_ledger_at,
+        reason: row.generated_ledger_reason,
+        amount: row.amount,
+        receivable_plan_id: null,
+        allocation_id: null,
+        payment_id: row.payment_id,
+        ledger_id: row.id,
+        target: ledgerTarget(row.id),
+      });
+    }
     if (row.payment_linked_at) {
       records.push({
         id: `ledger:${row.id}:link_ledger_payment`,

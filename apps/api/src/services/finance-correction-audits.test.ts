@@ -48,6 +48,31 @@ const listReceivableCorrectionEvents = mock(async () => ({
 const listLedgerCorrectionAudits = mock(async () => ({
   list: [
     {
+      id: "ledger-generated",
+      tenant_id: "tenant-1",
+      project_id: "project-3",
+      project_name: "王五施工项目",
+      amount: 3000,
+      payment_id: "payment-generated",
+      payment_linked_at: null,
+      payment_linked_by: null,
+      payment_linked_by_name: null,
+      payment_link_reason: null,
+      legacy_payment_ledger_marked_at: null,
+      legacy_payment_ledger_marked_by: null,
+      legacy_payment_ledger_marked_by_name: null,
+      legacy_payment_ledger_reason: null,
+      generated_ledger_at: "2026-06-30T13:00:00.000Z",
+      generated_ledger_by: "employee-1",
+      generated_ledger_by_name: "财务甲",
+      generated_ledger_reason: "对账异常补入账",
+      metadata: {
+        operation: "generate_missing_project_payment_ledger",
+        repair_reason: "对账异常补入账",
+        repaired_by: "employee-1",
+      },
+    },
+    {
       id: "ledger-1",
       tenant_id: "tenant-1",
       project_id: "project-1",
@@ -82,7 +107,7 @@ const listLedgerCorrectionAudits = mock(async () => ({
       metadata: { operation: "mark_legacy_ledger" },
     },
   ],
-  total: 2,
+  total: 3,
 }));
 
 mock.module("@/repositories/finance-correction-audits", () => ({
@@ -167,17 +192,32 @@ describe("financeCorrectionAuditService", () => {
     );
 
     expect(result.summary).toEqual({
-      total: 4,
-      ledger_repair: 2,
+      total: 5,
+      ledger_repair: 3,
       receivable_allocation: 2,
     });
     expect(result.list.map((item) => item.operation)).toEqual([
+      "generate_payment_ledger",
       "link_ledger_payment",
       "adjust_allocation",
       "manual_allocation",
       "mark_legacy_ledger",
     ]);
     expect(result.list[0]).toMatchObject({
+      id: "ledger:ledger-generated:generate_payment_ledger",
+      operation_label: "补生成收款台账",
+      domain: "ledger",
+      project_name: "王五施工项目",
+      actor_employee_name: "财务甲",
+      payment_id: "payment-generated",
+      ledger_id: "ledger-generated",
+      reason: "对账异常补入账",
+      target: {
+        label: "查看台账流水",
+        href: "/finance/ledger?ledger_id=ledger-generated",
+      },
+    });
+    expect(result.list[1]).toMatchObject({
       id: "ledger:ledger-1:link_ledger_payment",
       operation_label: "关联收款",
       domain: "ledger",
@@ -190,8 +230,8 @@ describe("financeCorrectionAuditService", () => {
         href: "/finance/ledger?ledger_id=ledger-1",
       },
     });
-    expect(result.list.at(1)?.allocation_id).toBe("allocation-1");
-    expect(result.list[2]).toMatchObject({
+    expect(result.list.at(2)?.allocation_id).toBe("allocation-1");
+    expect(result.list[3]).toMatchObject({
       operation: "manual_allocation",
       allocation_id: null,
       target: {
@@ -250,8 +290,8 @@ describe("financeCorrectionAuditService", () => {
     expect(result.pagination).toEqual({
       page: 2,
       pageSize: 2,
-      total: 4,
-      totalPages: 2,
+      total: 5,
+      totalPages: 3,
     });
     expect(result.list).toHaveLength(2);
   });
