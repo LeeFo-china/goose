@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  emptyFinanceCorrectionAuditResult,
+} from "./finance-correction-audit-requests";
+import {
   buildFinanceCorrectionAuditSearchParams,
   financeCorrectionAuditDomainMeta,
   financeCorrectionAuditOperationLabel,
@@ -44,5 +47,23 @@ describe("finance correction audit helpers", () => {
     ).toBe("/finance/ledger?ledger_id=ledger-1");
     expect(safeFinanceCorrectionAuditHref("https://example.com"))
       .toBe("/finance/audits");
+  });
+
+  test("builds an empty correction audit result with pagination", () => {
+    expect(emptyFinanceCorrectionAuditResult(3, 50)).toEqual({
+      list: [],
+      pagination: {
+        page: 3,
+        pageSize: 50,
+        total: 0,
+        totalPages: 0,
+      },
+      summary: {
+        total: 0,
+        ledger_repair: 0,
+        receivable_allocation: 0,
+      },
+      error: null,
+    });
   });
 });
