@@ -4,6 +4,7 @@ export type FinanceLedgerQueryInput = {
   project_id?: string;
   direction?: string;
   entry_type?: string;
+  ledger_id?: string;
   payment_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;
@@ -13,6 +14,7 @@ export type FinanceLedgerPageFilters = {
   project_id?: string;
   direction?: string;
   entry_type?: string;
+  ledger_id?: string;
   payment_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;
@@ -28,6 +30,7 @@ export function buildFinanceLedgerSearchParams(
   appendOptionalParam(params, "project_id", query.project_id);
   appendOptionalParam(params, "direction", query.direction);
   appendOptionalParam(params, "entry_type", query.entry_type);
+  appendOptionalParam(params, "ledger_id", query.ledger_id);
   appendOptionalParam(params, "payment_id", query.payment_id);
   appendOptionalParam(params, "cost_category_id", query.cost_category_id);
   appendOptionalParam(params, "unallocated_only", query.unallocated_only);

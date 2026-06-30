@@ -38,6 +38,7 @@ export type FinanceReconciliationLedgerRow = {
   amount: number;
   occurred_at: string | null;
   payment_id: string | null;
+  legacy_payment_ledger_marked_at?: string | null;
 };
 
 export type FinanceReconciliationCandidateRows = {
@@ -87,6 +88,7 @@ type LedgerDbRow = {
   amount: number | string | null;
   occurred_at: string | null;
   payment_id: string | null;
+  legacy_payment_ledger_marked_at?: string | null;
   project?: ProjectRelation | null;
 };
 
@@ -160,6 +162,7 @@ class FinanceReconciliationRepository {
         amount: normalizeMoney(row.amount),
         occurred_at: row.occurred_at,
         payment_id: row.payment_id,
+        legacy_payment_ledger_marked_at: row.legacy_payment_ledger_marked_at,
       })),
     };
   }
@@ -249,11 +252,13 @@ class FinanceReconciliationRepository {
         amount,
         occurred_at,
         payment_id,
+        legacy_payment_ledger_marked_at,
         project:projects(id, name)
       `)
       .eq("tenant_id", input.tenantId)
       .eq("direction", "in")
       .eq("entry_type", "project_payment")
+      .is("legacy_payment_ledger_marked_at", null)
       .gte("occurred_at", `${input.dateFrom}T00:00:00.000Z`)
       .lte("occurred_at", `${input.dateTo}T23:59:59.999Z`)
       .order("occurred_at", { ascending: false })

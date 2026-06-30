@@ -86,7 +86,8 @@ describe("finance reconciliation exception action targets", () => {
       ledger_without_payment: {
         key: "open_ledger",
         label: "去处理",
-        target: "/finance/ledger?project_id=project-7&direction=in",
+        target:
+          "/finance/ledger?project_id=project-7&direction=in&entry_type=project_payment&ledger_id=ledger-without-payment",
       },
       payment_unallocated: {
         key: "open_receivables",

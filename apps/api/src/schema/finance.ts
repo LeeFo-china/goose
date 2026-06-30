@@ -45,6 +45,7 @@ export const FinanceProjectRiskFlagSchema = z.enum(
 
 export const FinanceLedgerListQuerySchema = PaginationQuerySchema.extend({
   project_id: z.uuid("请选择有效的项目").optional(),
+  ledger_id: optionalQueryValue(z.uuid("请选择有效的台账流水")),
   payment_id: optionalQueryValue(z.uuid("请选择有效的收款记录")),
   cost_category_id: optionalQueryValue(z.uuid("请选择有效的成本分类")),
   direction: z.enum(["in", "out"], { message: "无效的流水方向" }).optional(),
@@ -62,6 +63,21 @@ export const FinanceLedgerListQuerySchema = PaginationQuerySchema.extend({
 });
 
 export type FinanceLedgerListQuery = z.infer<typeof FinanceLedgerListQuerySchema>;
+
+export const LinkFinanceLedgerPaymentSchema = z.object({
+  payment_id: z.uuid("请选择有效的收款记录"),
+  reason: z.string().trim().min(1, "请填写关联原因").max(500, "原因不能超过 500 个字符"),
+});
+
+export type LinkFinanceLedgerPaymentInput =
+  z.infer<typeof LinkFinanceLedgerPaymentSchema>;
+
+export const MarkLegacyFinanceLedgerSchema = z.object({
+  reason: z.string().trim().min(1, "请填写历史标记原因").max(500, "原因不能超过 500 个字符"),
+});
+
+export type MarkLegacyFinanceLedgerInput =
+  z.infer<typeof MarkLegacyFinanceLedgerSchema>;
 
 export const FinanceProjectSummaryListQuerySchema = PaginationQuerySchema.extend({
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
