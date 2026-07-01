@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { WalletCards } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
@@ -11,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export default async function FinanceWechatPayPage() {
   const accessDenied = await getTenantBusinessAccessDenied();
@@ -32,6 +34,9 @@ export default async function FinanceWechatPayPage() {
             </p>
           </div>
         </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/finance/wechat-pay/orders">支付订单</Link>
+        </Button>
       </div>
 
       <FinanceModuleTabs activeTab="wechat-pay" />
