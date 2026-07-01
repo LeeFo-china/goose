@@ -15,6 +15,7 @@ describe("wechat pay order schemas", () => {
       receivable_plan_id: receivablePlanId,
       workflow_task_id: workflowTaskId,
       amount: "10000.50",
+      payer_openid: "  o-test-openid  ",
     });
 
     expect(result.success).toBe(true);
@@ -24,6 +25,7 @@ describe("wechat pay order schemas", () => {
       receivable_plan_id: receivablePlanId,
       workflow_task_id: workflowTaskId,
       amount: 10000.5,
+      payer_openid: "o-test-openid",
     });
   });
 

@@ -308,6 +308,7 @@ export class WechatPayOrderService {
       receivable_plan_id: input.input.receivable_plan_id,
       out_trade_no: this.tradeNoFactory(),
       amount: input.input.amount,
+      payer_openid: input.input.payer_openid ?? null,
       status: "pending",
       currency: "CNY",
       created_by_employee_id: input.authContext.employeeId ?? null,

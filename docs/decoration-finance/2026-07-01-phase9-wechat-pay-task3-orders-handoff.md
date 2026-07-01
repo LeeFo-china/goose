@@ -51,7 +51,8 @@
   "project_id": "project-id",
   "receivable_plan_id": "receivable-plan-id",
   "workflow_task_id": "workflow-task-id",
-  "amount": 8000
+  "amount": 8000,
+  "payer_openid": "o-platform-mini-program-openid"
 }
 ```
 
@@ -61,6 +62,7 @@
 - `receivable_plan_id`：当前收款节点关联的应收计划 ID。
 - `workflow_task_id`：当前收款 workflow 待办 ID。
 - `amount`：本次微信支付订单金额，必须大于 0，且不能超过应收计划剩余金额。
+- `payer_openid`：可选，用户在平台小程序 AppID 下的 openid；真实 JSAPI 下单需要该字段。
 
 返回示例：
 
@@ -83,6 +85,7 @@
     "paid_amount": 0,
     "currency": "CNY",
     "status": "pending",
+    "payer_openid": "o-platform-mini-program-openid",
     "prepay_id": null,
     "paid_at": null,
     "created_at": "2026-07-01T11:30:00.000Z"
@@ -275,6 +278,7 @@ workflow_task_id=workflow-task-id
    - `payment_request` 为 `null`。
    - 小程序可以先按只读/占位结果处理，不调用 `wx.requestPayment`。
    - Task 4 后端返回真实 `prepay_id` 和支付参数后，再接 `wx.requestPayment`。
+   - 小程序可以先把平台小程序 openid 作为 `payer_openid` 传给创建订单接口。
 
 5. 金额来源以后应来自后端 workflow action / node attributes。
    - 当前创建接口要求提交 `amount`。

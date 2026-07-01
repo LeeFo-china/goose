@@ -240,6 +240,7 @@ describe("WechatPayOrderService", () => {
       receivable_plan_id: receivablePlanId,
       workflow_task_id: workflowTaskId,
       amount: 8000,
+      payer_openid: "o-test-openid",
     });
 
     expect(findById).toHaveBeenCalledWith({ tenantId, taskId: workflowTaskId });
@@ -257,6 +258,7 @@ describe("WechatPayOrderService", () => {
         receivable_plan_id: receivablePlanId,
         out_trade_no: "WX202607010999",
         amount: 8000,
+        payer_openid: "o-test-openid",
         status: "pending",
         created_by_employee_id: employeeId,
       }),

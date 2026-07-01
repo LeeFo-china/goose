@@ -14,12 +14,20 @@ export const WechatPayOrderStatusSchema = z.enum(
   { message: "无效的微信支付订单状态" },
 );
 
+const OptionalOpenIdSchema = z.preprocess((value) => {
+  if (value == null) return undefined;
+  if (typeof value !== "string") return value;
+  const normalized = value.trim();
+  return normalized || undefined;
+}, z.string().max(128, "openid 不能超过 128 个字符").optional());
+
 export const CreateWechatPayOrderSchema = z.object({
   project_id: z.uuid("请选择有效的项目"),
   receivable_plan_id: z.uuid("请选择有效的应收计划"),
   workflow_task_id: z.uuid("请选择有效的流程待办"),
   amount: z.coerce.number("金额必须是数字")
     .positive("金额必须大于 0"),
+  payer_openid: OptionalOpenIdSchema,
 }).strict();
 
 export const WechatPayOrderListQuerySchema = PaginationQuerySchema.extend({
