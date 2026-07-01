@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   CircleDollarSign,
   Clapperboard,
+  FileCheck2,
   GitBranch,
   Inbox,
   Images,
@@ -53,6 +54,7 @@ export const platformNavGroups: AdminMenuGroup[] = [
       { href: "/platform/marketing-pages", label: "H5 活动页", icon: Megaphone },
       { href: "/platform/usage", label: "用量统计", icon: BarChart3 },
       { href: "/platform/billing", label: "计费中心", icon: CircleDollarSign },
+      { href: "/platform/wechat-pay/applyments", label: "支付进件", icon: FileCheck2 },
       { href: "/platform/ai-models", label: "AI 模型路由", icon: Bot },
       { href: "/platform/audit-logs", label: "平台审计", icon: ScrollText },
       { href: "/platform/identity-diagnostics", label: "身份排障", icon: SearchCheck },
@@ -138,6 +140,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "微信支付",
         icon: WalletCards,
         permission: "wechat_pay.config.read",
+      },
+      {
+        href: "/finance/wechat-pay/applyment",
+        label: "支付开通",
+        icon: FileCheck2,
+        permission: "wechat_pay.applyment.read",
       },
       {
         href: "/expenses",

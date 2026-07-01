@@ -7109,6 +7109,226 @@ export type Database = {
           },
         ]
       }
+      tenant_wechat_pay_applyment_events: {
+        Row: {
+          applyment_id: string
+          created_at: string
+          event_type: string
+          from_status: string | null
+          id: string
+          message: string | null
+          metadata: Json
+          operator_employee_id: string | null
+          tenant_id: string
+          to_status: string | null
+        }
+        Insert: {
+          applyment_id: string
+          created_at?: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json
+          operator_employee_id?: string | null
+          tenant_id: string
+          to_status?: string | null
+        }
+        Update: {
+          applyment_id?: string
+          created_at?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json
+          operator_employee_id?: string | null
+          tenant_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_events_applyment_id_fkey"
+            columns: ["applyment_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_wechat_pay_applyments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_events_operator_employee_id_fkey"
+            columns: ["operator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_wechat_pay_applyments: {
+        Row: {
+          activated_at: string | null
+          appid_binding_message: string | null
+          appid_binding_state: string
+          application_no: string
+          applyment_business_code: string | null
+          applyment_id: string | null
+          applyment_state: string
+          applyment_state_message: string | null
+          approved_at: string | null
+          attachments: Json
+          business_scene_description: string | null
+          contact_address: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          id: string
+          legal_representative_name: string | null
+          license_code: string | null
+          license_name: string | null
+          merchant_short_name: string
+          opened_at: string | null
+          payment_config_id: string | null
+          rejected_at: string | null
+          rejected_reason: string | null
+          remark: string | null
+          reviewed_by_employee_id: string | null
+          settlement_account_name: string | null
+          settlement_account_summary: string | null
+          settlement_bank_name: string | null
+          status: string
+          sub_appid: string | null
+          sub_mchid: string | null
+          submitted_at: string | null
+          super_admin_email: string | null
+          super_admin_name: string | null
+          super_admin_phone_masked: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          appid_binding_message?: string | null
+          appid_binding_state?: string
+          application_no: string
+          applyment_business_code?: string | null
+          applyment_id?: string | null
+          applyment_state?: string
+          applyment_state_message?: string | null
+          approved_at?: string | null
+          attachments?: Json
+          business_scene_description?: string | null
+          contact_address?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          legal_representative_name?: string | null
+          license_code?: string | null
+          license_name?: string | null
+          merchant_short_name: string
+          opened_at?: string | null
+          payment_config_id?: string | null
+          rejected_at?: string | null
+          rejected_reason?: string | null
+          remark?: string | null
+          reviewed_by_employee_id?: string | null
+          settlement_account_name?: string | null
+          settlement_account_summary?: string | null
+          settlement_bank_name?: string | null
+          status?: string
+          sub_appid?: string | null
+          sub_mchid?: string | null
+          submitted_at?: string | null
+          super_admin_email?: string | null
+          super_admin_name?: string | null
+          super_admin_phone_masked?: string | null
+          tenant_id: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          appid_binding_message?: string | null
+          appid_binding_state?: string
+          application_no?: string
+          applyment_business_code?: string | null
+          applyment_id?: string | null
+          applyment_state?: string
+          applyment_state_message?: string | null
+          approved_at?: string | null
+          attachments?: Json
+          business_scene_description?: string | null
+          contact_address?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          legal_representative_name?: string | null
+          license_code?: string | null
+          license_name?: string | null
+          merchant_short_name?: string
+          opened_at?: string | null
+          payment_config_id?: string | null
+          rejected_at?: string | null
+          rejected_reason?: string | null
+          remark?: string | null
+          reviewed_by_employee_id?: string | null
+          settlement_account_name?: string | null
+          settlement_account_summary?: string | null
+          settlement_bank_name?: string | null
+          status?: string
+          sub_appid?: string | null
+          sub_mchid?: string | null
+          submitted_at?: string | null
+          super_admin_email?: string | null
+          super_admin_name?: string | null
+          super_admin_phone_masked?: string | null
+          tenant_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_payment_config_id_fkey"
+            columns: ["payment_config_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_payment_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_pricing_rules: {
         Row: {
           created_at: string

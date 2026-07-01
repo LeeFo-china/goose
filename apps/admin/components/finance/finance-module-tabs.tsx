@@ -8,6 +8,7 @@ export type FinanceModuleTab =
   | "reports"
   | "receivables"
   | "wechat-pay"
+  | "wechat-pay-applyment"
   | "ledger";
 
 export const FINANCE_MODULE_TABS: Array<{
@@ -22,6 +23,7 @@ export const FINANCE_MODULE_TABS: Array<{
   { value: "reports", label: "运营报表", href: "/finance/reports" },
   { value: "receivables", label: "应收计划", href: "/finance/receivables" },
   { value: "wechat-pay", label: "微信支付", href: "/finance/wechat-pay" },
+  { value: "wechat-pay-applyment", label: "支付开通", href: "/finance/wechat-pay/applyment" },
   { value: "ledger", label: "财务台账", href: "/finance/ledger" },
 ];
 

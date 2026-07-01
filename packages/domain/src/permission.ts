@@ -83,6 +83,12 @@ export const PERMISSION_CODE_VALUES = [
   'wechat_pay.config.manage',
   'wechat_pay.order.read',
   'wechat_pay.notify.read',
+  'wechat_pay.applyment.read',
+  'wechat_pay.applyment.submit',
+  'platform.wechat_pay.applyment.read',
+  'platform.wechat_pay.applyment.review',
+  'platform.wechat_pay.applyment.manage',
+  'platform.wechat_pay.config.activate',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -296,6 +302,30 @@ export const PermissionCodeConfig: Record<
   'wechat_pay.notify.read': {
     label: '查看微信支付回调',
     module: 'wechat_pay',
+  },
+  'wechat_pay.applyment.read': {
+    label: '查看微信支付开通申请',
+    module: 'wechat_pay',
+  },
+  'wechat_pay.applyment.submit': {
+    label: '提交微信支付开通申请',
+    module: 'wechat_pay',
+  },
+  'platform.wechat_pay.applyment.read': {
+    label: '平台查看微信支付进件申请',
+    module: 'platform_wechat_pay',
+  },
+  'platform.wechat_pay.applyment.review': {
+    label: '平台审核微信支付进件申请',
+    module: 'platform_wechat_pay',
+  },
+  'platform.wechat_pay.applyment.manage': {
+    label: '平台管理微信支付进件进度',
+    module: 'platform_wechat_pay',
+  },
+  'platform.wechat_pay.config.activate': {
+    label: '激活租户微信支付配置',
+    module: 'platform_wechat_pay',
   },
   'project_referral.read': {
     label: '查看介绍费',

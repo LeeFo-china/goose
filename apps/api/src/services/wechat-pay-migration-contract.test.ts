@@ -61,6 +61,30 @@ describe("wechat pay migration contract", () => {
     );
     expect(migrationSource).toContain("encrypted_config_ref IS NOT NULL");
   });
+
+  test("creates tenant wechat pay applyment workflow tables and indexes", () => {
+    const migrationSource = readWechatPayApplymentMigration();
+
+    expect(migrationSource).toContain("CREATE TABLE IF NOT EXISTS public.tenant_wechat_pay_applyments");
+    expect(migrationSource).toContain("CREATE TABLE IF NOT EXISTS public.tenant_wechat_pay_applyment_events");
+    expect(migrationSource).toContain("tenant_wechat_pay_applyments_status_check");
+    expect(migrationSource).toContain("tenant_wechat_pay_applyments_tenant_status_submitted_idx");
+    expect(migrationSource).toContain("tenant_wechat_pay_applyment_events_applyment_created_idx");
+    expect(migrationSource).toContain("tenant_wechat_pay_applyments_application_no_unique_idx");
+    expect(migrationSource).not.toContain("api_v3_key");
+    expect(migrationSource).not.toContain("private_key");
+  });
+
+  test("registers tenant and platform applyment permissions", () => {
+    const migrationSource = readWechatPayApplymentMigration();
+
+    expect(migrationSource).toContain("wechat_pay.applyment.read");
+    expect(migrationSource).toContain("wechat_pay.applyment.submit");
+    expect(migrationSource).toContain("platform.wechat_pay.applyment.read");
+    expect(migrationSource).toContain("platform.wechat_pay.applyment.review");
+    expect(migrationSource).toContain("platform.wechat_pay.applyment.manage");
+    expect(migrationSource).toContain("platform.wechat_pay.config.activate");
+  });
 });
 
 function readWechatPayMigration() {
@@ -87,6 +111,16 @@ function readWechatPayCallbackLookupMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260701170000_wechat_pay_callback_lookup_indexes.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readWechatPayApplymentMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260701210000_wechat_pay_applyments.sql",
       import.meta.url,
     ),
     "utf8",

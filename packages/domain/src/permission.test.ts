@@ -47,6 +47,12 @@ describe("finance receivable permissions", () => {
     expect(PERMISSION_CODE_VALUES).toContain("wechat_pay.config.manage");
     expect(PERMISSION_CODE_VALUES).toContain("wechat_pay.order.read");
     expect(PERMISSION_CODE_VALUES).toContain("wechat_pay.notify.read");
+    expect(PERMISSION_CODE_VALUES).toContain("wechat_pay.applyment.read");
+    expect(PERMISSION_CODE_VALUES).toContain("wechat_pay.applyment.submit");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.read");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.review");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.manage");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.config.activate");
     expect(PermissionCodeConfig["wechat_pay.config.read"]).toEqual({
       label: "查看微信支付配置",
       module: "wechat_pay",
@@ -62,6 +68,14 @@ describe("finance receivable permissions", () => {
     expect(PermissionCodeConfig["wechat_pay.notify.read"]).toEqual({
       label: "查看微信支付回调",
       module: "wechat_pay",
+    });
+    expect(PermissionCodeConfig["wechat_pay.applyment.submit"]).toEqual({
+      label: "提交微信支付开通申请",
+      module: "wechat_pay",
+    });
+    expect(PermissionCodeConfig["platform.wechat_pay.config.activate"]).toEqual({
+      label: "激活租户微信支付配置",
+      module: "platform_wechat_pay",
     });
   });
 });
