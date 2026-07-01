@@ -253,7 +253,18 @@ supabase gen types typescript --db-url "$SUPABASE_DB_DIRECT_URL" --schema public
 failed to inspect docker image: Cannot connect to the Docker daemon
 ```
 
-因此本轮不更新 `apps/api/src/types/database.ts`。当前 Task 1 未新增 TypeScript repository/service 读取新表，不影响编译。Task 2 开始写微信支付 repository 前，应在 Docker 可用或 typegen 路径修复后重新生成类型。
+Task 1 提交时因此没有更新 `apps/api/src/types/database.ts`。Task 1.1 为支持后续微信支付 repository/service 类型约束，按以下方式补齐：
+
+1. 再次使用 `supabase gen types --project-id ... --schema public` 临时生成，结果仍未包含本次新增字段和表。
+2. 当前环境没有 Docker，`supabase gen types --db-url ...` 仍不可用。
+3. 使用远端 REST OpenAPI 只读 schema 确认以下对象已存在：
+   - `tenant_payment_configs` 新增 `merchant_name`、`serial_no`、`notify_url`、`validation_status`、`last_validated_at`、`created_by_employee_id`、`updated_by_employee_id`。
+   - `wechat_payment_orders`。
+   - `wechat_payment_notifications`。
+4. 以已应用 migration 为 nullable/default/relationship 来源，窄范围补齐 `apps/api/src/types/database.ts`，没有做全量 typegen 覆盖，避免引入无关 schema 漂移。
+5. 新增 `apps/api/src/types/database-wechat-pay-contract.test.ts`，通过 API `tsc` 检查关键字段和表名类型可用。
+
+Task 1.1 后续仍建议在 Docker/typegen 路径恢复后做一次全量生成对照，但当前提交已经能让 Task 2 使用受控的数据库类型。
 
 ## 小程序边界
 
