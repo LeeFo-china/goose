@@ -75,6 +75,7 @@
 - [2026-07-01-phase8-3-post-release-smoke.md](./2026-07-01-phase8-3-post-release-smoke.md)：Phase 8.3 发布后真实非空差异处理闭环 smoke，覆盖 pending、confirmed、resolved、Admin 行内动作和 summary 筛选。
 - [2026-06-30-wechat-pay-integration-prd.md](./2026-06-30-wechat-pay-integration-prd.md)：微信支付接入 PRD，明确租户独立商户优先、支付订单、回调幂等、workflow 对接、对账异常和小程序边界。
 - [2026-07-01-phase9-wechat-pay-task0-baseline.md](./2026-07-01-phase9-wechat-pay-task0-baseline.md)：Phase 9 微信支付接入 Task 0 基线核查，确认复用 `tenant_payment_configs`、新增订单/通知表、workflow/payment/ledger 对接边界和小程序影响。
+- [2026-07-01-phase9-wechat-pay-task1-migration-smoke.md](./2026-07-01-phase9-wechat-pay-task1-migration-smoke.md)：Phase 9 微信支付 Task 1 migration 与权限 smoke，覆盖 `tenant_payment_configs` 扩展、微信支付订单/通知表、权限、远端应用和小程序边界。
 - [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。

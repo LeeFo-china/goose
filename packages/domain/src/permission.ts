@@ -79,6 +79,10 @@ export const PERMISSION_CODE_VALUES = [
   'finance.reports.export',
   'finance.closing.read',
   'finance.closing.manage',
+  'wechat_pay.config.read',
+  'wechat_pay.config.manage',
+  'wechat_pay.order.read',
+  'wechat_pay.notify.read',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -277,6 +281,22 @@ export const PermissionCodeConfig: Record<
   'finance.reports.export': { label: '导出财务报表', module: 'finance' },
   'finance.closing.read': { label: '查看月度结账', module: 'finance' },
   'finance.closing.manage': { label: '管理月度结账', module: 'finance' },
+  'wechat_pay.config.read': {
+    label: '查看微信支付配置',
+    module: 'wechat_pay',
+  },
+  'wechat_pay.config.manage': {
+    label: '管理微信支付配置',
+    module: 'wechat_pay',
+  },
+  'wechat_pay.order.read': {
+    label: '查看微信支付订单',
+    module: 'wechat_pay',
+  },
+  'wechat_pay.notify.read': {
+    label: '查看微信支付回调',
+    module: 'wechat_pay',
+  },
   'project_referral.read': {
     label: '查看介绍费',
     module: 'project_referral',
