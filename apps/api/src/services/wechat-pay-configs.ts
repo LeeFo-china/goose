@@ -1,0 +1,188 @@
+import { Errors } from "@/errors/error-factory";
+import {
+  wechatPayConfigRepository,
+  type WechatPayConfigRecord,
+  type WechatPayConfigUpsertInput,
+} from "@/repositories/wechat-pay-configs";
+import type { UpdateWechatPayConfigInput } from "@/schema/wechat-pay-configs";
+import { accessPolicyService } from "@/services/access-policy";
+import type { AuthContext } from "@/services/authorization";
+
+type WechatPayConfigRepositoryPort = {
+  findWechatPayConfig: (tenantId: string) =>
+    Promise<WechatPayConfigRecord | null>;
+  upsertWechatPayConfig: (
+    input: WechatPayConfigUpsertInput,
+  ) => Promise<WechatPayConfigRecord>;
+};
+
+type AccessPolicyPort = {
+  assertTenantContext: (authContext: AuthContext) => string;
+  hasPermission: (authContext: AuthContext, permissionCode: string) => boolean;
+};
+
+type WechatPayConfigServiceDependencies = {
+  repository?: WechatPayConfigRepositoryPort;
+  accessPolicyService?: AccessPolicyPort;
+};
+
+type SaveWechatPayConfigInput =
+  Partial<UpdateWechatPayConfigInput> &
+  Pick<UpdateWechatPayConfigInput, "merchant_mode" | "status">;
+
+export type WechatPayConfigView = {
+  id: string;
+  merchant_mode: string;
+  merchant_name: string | null;
+  merchant_id: string | null;
+  sub_merchant_id: string | null;
+  app_id: string | null;
+  sub_app_id: string | null;
+  status: string;
+  enabled_channels: unknown;
+  settlement_account_summary: string | null;
+  encrypted_config_ref: string | null;
+  has_encrypted_config_ref: boolean;
+  risk_switches: unknown;
+  serial_no_masked: string | null;
+  notify_url: string | null;
+  validation_status: string;
+  last_validated_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_employee_id: string | null;
+  updated_by_employee_id: string | null;
+};
+
+export type WechatPayConfigResult = {
+  configured: boolean;
+  can_manage: boolean;
+  config: WechatPayConfigView | null;
+};
+
+export class WechatPayConfigService {
+  private repository: WechatPayConfigRepositoryPort;
+  private accessPolicyService: AccessPolicyPort;
+
+  constructor(dependencies: WechatPayConfigServiceDependencies = {}) {
+    this.repository = dependencies.repository ?? wechatPayConfigRepository;
+    this.accessPolicyService =
+      dependencies.accessPolicyService ?? accessPolicyService;
+  }
+
+  async getConfig(authContext: AuthContext): Promise<WechatPayConfigResult> {
+    const tenantId = this.accessPolicyService.assertTenantContext(authContext);
+    this.assertReadPermission(authContext);
+
+    const config = await this.repository.findWechatPayConfig(tenantId);
+    return {
+      configured: Boolean(config),
+      can_manage: this.canManage(authContext),
+      config: config ? this.toView(config) : null,
+    };
+  }
+
+  async saveConfig(
+    authContext: AuthContext,
+    input: SaveWechatPayConfigInput,
+  ): Promise<WechatPayConfigResult> {
+    const tenantId = this.accessPolicyService.assertTenantContext(authContext);
+    if (!this.canManage(authContext)) {
+      throw Errors.forbidden();
+    }
+    if (!authContext.employeeId) {
+      throw Errors.forbidden();
+    }
+
+    const current = await this.repository.findWechatPayConfig(tenantId);
+    const saved = await this.repository.upsertWechatPayConfig({
+      tenant_id: tenantId,
+      provider: "wechat_pay",
+      merchant_mode: input.merchant_mode,
+      merchant_name: input.merchant_name ?? null,
+      merchant_id: input.merchant_id ?? null,
+      sub_merchant_id: input.sub_merchant_id ?? null,
+      app_id: input.app_id ?? null,
+      sub_app_id: input.sub_app_id ?? null,
+      status: input.status,
+      enabled_channels: input.enabled_channels ??
+        current?.enabled_channels ??
+        ["project_payment"],
+      settlement_account_summary: input.settlement_account_summary ?? null,
+      encrypted_config_ref: input.encrypted_config_ref === undefined
+        ? current?.encrypted_config_ref ?? null
+        : input.encrypted_config_ref,
+      risk_switches: (input.risk_switches === undefined
+        ? current?.risk_switches ?? {}
+        : input.risk_switches) as WechatPayConfigUpsertInput["risk_switches"],
+      serial_no: input.serial_no === undefined
+        ? current?.serial_no ?? null
+        : input.serial_no,
+      notify_url: input.notify_url ?? null,
+      validation_status: "unchecked",
+      last_validated_at: null,
+      created_by_employee_id:
+        current?.created_by_employee_id ?? authContext.employeeId,
+      updated_by_employee_id: authContext.employeeId,
+    });
+
+    return {
+      configured: true,
+      can_manage: true,
+      config: this.toView(saved),
+    };
+  }
+
+  private assertReadPermission(authContext: AuthContext) {
+    if (this.canManage(authContext)) {
+      return;
+    }
+    if (!this.accessPolicyService.hasPermission(
+      authContext,
+      "wechat_pay.config.read",
+    )) {
+      throw Errors.forbidden();
+    }
+  }
+
+  private canManage(authContext: AuthContext) {
+    return this.accessPolicyService.hasPermission(
+      authContext,
+      "wechat_pay.config.manage",
+    );
+  }
+
+  private toView(config: WechatPayConfigRecord): WechatPayConfigView {
+    return {
+      id: config.id,
+      merchant_mode: config.merchant_mode,
+      merchant_name: config.merchant_name,
+      merchant_id: config.merchant_id,
+      sub_merchant_id: config.sub_merchant_id,
+      app_id: config.app_id,
+      sub_app_id: config.sub_app_id,
+      status: config.status,
+      enabled_channels: config.enabled_channels,
+      settlement_account_summary: config.settlement_account_summary,
+      encrypted_config_ref: config.encrypted_config_ref,
+      has_encrypted_config_ref: Boolean(config.encrypted_config_ref),
+      risk_switches: config.risk_switches,
+      serial_no_masked: this.maskSerialNo(config.serial_no),
+      notify_url: config.notify_url,
+      validation_status: config.validation_status,
+      last_validated_at: config.last_validated_at,
+      created_at: config.created_at,
+      updated_at: config.updated_at,
+      created_by_employee_id: config.created_by_employee_id,
+      updated_by_employee_id: config.updated_by_employee_id,
+    };
+  }
+
+  private maskSerialNo(serialNo: string | null) {
+    if (!serialNo) return null;
+    if (serialNo.length <= 8) return "****";
+    return `${serialNo.slice(0, 8)}****${serialNo.slice(-4)}`;
+  }
+}
+
+export const wechatPayConfigService = new WechatPayConfigService();
