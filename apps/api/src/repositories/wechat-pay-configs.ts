@@ -39,6 +39,23 @@ class WechatPayConfigRepository {
 
     return data as WechatPayConfigRecord;
   }
+
+  async listCallbackCandidateConfigs(): Promise<WechatPayConfigRecord[]> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenant_payment_configs")
+      .select("*")
+      .eq("provider", "wechat_pay")
+      .eq("status", "active")
+      .not("encrypted_config_ref", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      throw Errors.dbError("查询微信支付回调候选配置失败", error);
+    }
+
+    return (data ?? []) as WechatPayConfigRecord[];
+  }
 }
 
 export const wechatPayConfigRepository = new WechatPayConfigRepository();

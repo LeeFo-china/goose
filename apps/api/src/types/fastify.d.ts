@@ -21,6 +21,7 @@ declare module "fastify" {
   interface FastifyRequest {
     user?: JwtPayload;
     authContext?: AuthContext;
+    rawBody?: string;
     isMultipart: () => boolean;
     parts: () => AsyncIterableIterator<MultipartUploadPart>;
   }

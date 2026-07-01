@@ -5,6 +5,9 @@ import type { WechatPayOrderListQuery } from "@/schema/wechat-pay-orders";
 
 export type WechatPayOrderRecord = Tables<"wechat_payment_orders">;
 export type WechatPayOrderCreateInput = Inserts<"wechat_payment_orders">;
+export type WechatPayNotificationRecord = Tables<"wechat_payment_notifications">;
+export type WechatPayNotificationCreateInput =
+  Inserts<"wechat_payment_notifications">;
 
 export type WechatPayReceivablePlanRecord = {
   id: string;
@@ -116,6 +119,31 @@ const RECEIVABLE_PLAN_SELECT = [
 ].join(", ");
 
 class WechatPayOrderRepository {
+  async findByOutTradeNo(
+    outTradeNo: string,
+  ): Promise<WechatPayOrderRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .select("*")
+      .eq("out_trade_no", outTradeNo)
+      .limit(2);
+
+    if (error) {
+      throw Errors.dbError("查询微信支付订单失败", error);
+    }
+
+    const rows = (data ?? []) as WechatPayOrderRecord[];
+    if (rows.length > 1) {
+      throw Errors.business(
+        409,
+        "微信支付商户订单号匹配到多个订单",
+        "WECHAT_PAY_OUT_TRADE_NO_DUPLICATED",
+      );
+    }
+
+    return rows[0] ?? null;
+  }
+
   async findPendingByWorkflowTask(input: {
     tenantId: string;
     workflowTaskId: string;
@@ -186,6 +214,117 @@ class WechatPayOrderRepository {
 
     if (error) {
       throw Errors.dbError("更新微信支付预支付单失败", error);
+    }
+
+    return data as WechatPayOrderRecord;
+  }
+
+  async findNotificationByNotifyId(input: {
+    tenantId: string;
+    notifyId: string;
+  }): Promise<WechatPayNotificationRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_notifications")
+      .select("*")
+      .eq("tenant_id", input.tenantId)
+      .eq("notify_id", input.notifyId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询微信支付回调通知失败", error);
+    }
+
+    return (data as WechatPayNotificationRecord | null) ?? null;
+  }
+
+  async createNotification(
+    input: WechatPayNotificationCreateInput,
+  ): Promise<WechatPayNotificationRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_notifications")
+      .insert(input)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("写入微信支付回调通知失败", error);
+    }
+
+    return data as WechatPayNotificationRecord;
+  }
+
+  async markNotificationProcessed(input: {
+    tenantId: string;
+    notificationId: string;
+  }): Promise<WechatPayNotificationRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_notifications")
+      .update({
+        processed: true,
+        processed_at: new Date().toISOString(),
+        error_message: null,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.notificationId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("标记微信支付回调通知已处理失败", error);
+    }
+
+    return data as WechatPayNotificationRecord;
+  }
+
+  async markNotificationFailed(input: {
+    tenantId: string;
+    notificationId: string;
+    errorMessage: string;
+  }): Promise<WechatPayNotificationRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_notifications")
+      .update({
+        processed: false,
+        error_message: input.errorMessage.slice(0, 500),
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.notificationId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("标记微信支付回调通知失败原因失败", error);
+    }
+
+    return data as WechatPayNotificationRecord;
+  }
+
+  async markOrderPaid(input: {
+    tenantId: string;
+    orderId: string;
+    paymentId: string;
+    transactionId: string;
+    paidAmount: number;
+    paidAt: string;
+    notificationId: string;
+  }): Promise<WechatPayOrderRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .update({
+        payment_id: input.paymentId,
+        transaction_id: input.transactionId,
+        paid_amount: input.paidAmount,
+        paid_at: input.paidAt,
+        status: "paid",
+        latest_notification_id: input.notificationId,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.orderId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新微信支付订单付款状态失败", error);
     }
 
     return data as WechatPayOrderRecord;

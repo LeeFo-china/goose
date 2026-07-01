@@ -51,6 +51,16 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).not.toContain("api_v3_key");
     expect(migrationSource).not.toContain("private_key");
   });
+
+  test("adds bounded lookup indexes for wechat pay callback processing", () => {
+    const migrationSource = readWechatPayCallbackLookupMigration();
+
+    expect(migrationSource).toContain("wechat_payment_orders_out_trade_no_idx");
+    expect(migrationSource).toContain(
+      "tenant_payment_configs_wechat_callback_candidates_idx",
+    );
+    expect(migrationSource).toContain("encrypted_config_ref IS NOT NULL");
+  });
 });
 
 function readWechatPayMigration() {
@@ -67,6 +77,16 @@ function readWechatPaySubMerchantMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260701143000_wechat_pay_submerchant_onboarding.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readWechatPayCallbackLookupMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260701170000_wechat_pay_callback_lookup_indexes.sql",
       import.meta.url,
     ),
     "utf8",
