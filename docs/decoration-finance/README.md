@@ -77,6 +77,7 @@
 - [2026-07-01-phase9-wechat-pay-task0-baseline.md](./2026-07-01-phase9-wechat-pay-task0-baseline.md)：Phase 9 微信支付接入 Task 0 基线核查，确认复用 `tenant_payment_configs`、新增订单/通知表、workflow/payment/ledger 对接边界和小程序影响。
 - [2026-07-01-phase9-wechat-pay-task1-migration-smoke.md](./2026-07-01-phase9-wechat-pay-task1-migration-smoke.md)：Phase 9 微信支付 Task 1 migration 与权限 smoke，覆盖 `tenant_payment_configs` 扩展、微信支付订单/通知表、权限、远端应用和小程序边界。
 - [2026-07-01-phase9-wechat-pay-task2-config-admin-smoke.md](./2026-07-01-phase9-wechat-pay-task2-config-admin-smoke.md)：Phase 9 微信支付 Task 2 配置 API 与 Admin 配置页 smoke，覆盖租户商户配置读写、权限、脱敏展示、校验状态和小程序边界。
+- [2026-07-01-phase9-wechat-pay-task3-orders-handoff.md](./2026-07-01-phase9-wechat-pay-task3-orders-handoff.md)：Phase 9 微信支付 Task 3 订单 API、Admin 只读页和小程序 handoff，明确 pending 订单创建、幂等、权限、应收校验和 Task 4 前不拉起真实支付。
 - [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
