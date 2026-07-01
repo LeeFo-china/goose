@@ -3,12 +3,21 @@ import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 export type WechatPayConfigView = {
   id: string;
+  principal_type: string;
   merchant_mode: string;
   merchant_name: string | null;
   merchant_id: string | null;
   sub_merchant_id: string | null;
   app_id: string | null;
   sub_app_id: string | null;
+  applyment_business_code: string | null;
+  applyment_id: string | null;
+  applyment_state: string;
+  applyment_state_message: string | null;
+  appid_binding_state: string;
+  appid_binding_message: string | null;
+  opened_at: string | null;
+  suspended_at: string | null;
   status: string;
   enabled_channels: unknown;
   settlement_account_summary: string | null;

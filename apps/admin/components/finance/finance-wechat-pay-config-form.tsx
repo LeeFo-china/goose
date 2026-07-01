@@ -24,11 +24,37 @@ const MERCHANT_MODE_OPTIONS = [
   { value: "service_provider_sub_merchant", label: "服务商子商户" },
 ];
 
+const PRINCIPAL_TYPE_OPTIONS = [
+  { value: "tenant", label: "租户收款" },
+  { value: "platform", label: "平台收款" },
+];
+
 const STATUS_OPTIONS = [
   { value: "disabled", label: "停用" },
   { value: "pending", label: "待启用" },
   { value: "active", label: "启用" },
   { value: "suspended", label: "暂停" },
+];
+
+const APPLYMENT_STATE_OPTIONS = [
+  { value: "not_started", label: "未开始" },
+  { value: "draft", label: "草稿" },
+  { value: "submitted", label: "已提交" },
+  { value: "reviewing", label: "审核中" },
+  { value: "rejected", label: "已驳回" },
+  { value: "account_verifying", label: "账户验证" },
+  { value: "signing", label: "待签约" },
+  { value: "opened", label: "已开通" },
+  { value: "suspended", label: "已暂停" },
+  { value: "closed", label: "已关闭" },
+];
+
+const APPID_BINDING_STATE_OPTIONS = [
+  { value: "not_required", label: "无需绑定" },
+  { value: "not_bound", label: "未绑定" },
+  { value: "pending_confirm", label: "待确认" },
+  { value: "bound", label: "已绑定" },
+  { value: "rejected", label: "已拒绝" },
 ];
 
 export function FinanceWechatPayConfigForm({
@@ -52,12 +78,20 @@ export function FinanceWechatPayConfigForm({
     const form = new FormData(event.currentTarget);
     const serialNo = optionalText(form, "serial_no");
     const payload: Record<string, unknown> = {
+      principal_type: requiredText(form, "principal_type") || "tenant",
       merchant_mode: requiredText(form, "merchant_mode") || "direct_merchant",
       merchant_name: optionalText(form, "merchant_name"),
       merchant_id: optionalText(form, "merchant_id"),
       sub_merchant_id: optionalText(form, "sub_merchant_id"),
       app_id: optionalText(form, "app_id"),
       sub_app_id: optionalText(form, "sub_app_id"),
+      applyment_business_code: optionalText(form, "applyment_business_code"),
+      applyment_id: optionalText(form, "applyment_id"),
+      applyment_state: requiredText(form, "applyment_state") || "not_started",
+      applyment_state_message: optionalText(form, "applyment_state_message"),
+      appid_binding_state: requiredText(form, "appid_binding_state") ||
+        "not_required",
+      appid_binding_message: optionalText(form, "appid_binding_message"),
       status: requiredText(form, "status") || "pending",
       enabled_channels: ["project_payment"],
       settlement_account_summary: optionalText(form, "settlement_account_summary"),
@@ -111,9 +145,22 @@ export function FinanceWechatPayConfigForm({
             最近校验 {formatDateTime(config.last_validated_at)}
           </Badge>
         ) : null}
+        <Badge variant={applymentStatusVariant(config?.applyment_state)}>
+          进件 {applymentStatusLabel(config?.applyment_state)}
+        </Badge>
+        <Badge variant={appidBindingStatusVariant(config?.appid_binding_state)}>
+          AppID {appidBindingStatusLabel(config?.appid_binding_state)}
+        </Badge>
       </div>
 
       <FieldGroup className="grid gap-4 md:grid-cols-2">
+        <SelectField
+          label="收款主体"
+          name="principal_type"
+          defaultValue={config?.principal_type || "tenant"}
+          options={PRINCIPAL_TYPE_OPTIONS}
+          disabled={pending || readonly}
+        />
         <SelectField
           label="商户模式"
           name="merchant_mode"
@@ -159,6 +206,46 @@ export function FinanceWechatPayConfigForm({
           disabled={pending || readonly}
         />
         <TextField
+          label="进件业务编号"
+          name="applyment_business_code"
+          defaultValue={config?.applyment_business_code || ""}
+          disabled={pending || readonly}
+        />
+        <TextField
+          label="微信申请单号"
+          name="applyment_id"
+          defaultValue={config?.applyment_id || ""}
+          disabled={pending || readonly}
+        />
+        <SelectField
+          label="进件状态"
+          name="applyment_state"
+          defaultValue={config?.applyment_state || "not_started"}
+          options={APPLYMENT_STATE_OPTIONS}
+          disabled={pending || readonly}
+        />
+        <SelectField
+          label="AppID 绑定状态"
+          name="appid_binding_state"
+          defaultValue={config?.appid_binding_state || "not_required"}
+          options={APPID_BINDING_STATE_OPTIONS}
+          disabled={pending || readonly}
+        />
+        <TextField
+          label="进件状态说明"
+          name="applyment_state_message"
+          defaultValue={config?.applyment_state_message || ""}
+          disabled={pending || readonly}
+          className="md:col-span-2"
+        />
+        <TextField
+          label="AppID 绑定说明"
+          name="appid_binding_message"
+          defaultValue={config?.appid_binding_message || ""}
+          disabled={pending || readonly}
+          className="md:col-span-2"
+        />
+        <TextField
           label="证书序列号"
           name="serial_no"
           placeholder={config?.serial_no_masked ? `当前 ${config.serial_no_masked}` : "保存时写入"}
@@ -193,6 +280,7 @@ export function FinanceWechatPayConfigForm({
       <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
         <div className="text-xs text-muted-foreground">
           支付渠道：项目收款；更新时间：{config?.updated_at ? formatDateTime(config.updated_at) : "-"}
+          {config?.opened_at ? `；开通时间：${formatDateTime(config.opened_at)}` : ""}
         </div>
         <Button type="submit" disabled={pending || readonly}>
           {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Save data-icon="inline-start" />}
@@ -302,6 +390,45 @@ function validationStatusVariant(status: string | null | undefined) {
   if (status === "valid") return "success";
   if (status === "invalid") return "danger";
   return "warning";
+}
+
+function applymentStatusLabel(status: string | null | undefined) {
+  return optionLabel(APPLYMENT_STATE_OPTIONS, status, "未开始");
+}
+
+function applymentStatusVariant(status: string | null | undefined) {
+  if (status === "opened") return "success";
+  if (status === "rejected" || status === "closed") return "danger";
+  if (
+    status === "reviewing" ||
+    status === "submitted" ||
+    status === "account_verifying" ||
+    status === "signing"
+  ) {
+    return "warning";
+  }
+  if (status === "suspended") return "secondary";
+  return "outline";
+}
+
+function appidBindingStatusLabel(status: string | null | undefined) {
+  return optionLabel(APPID_BINDING_STATE_OPTIONS, status, "无需绑定");
+}
+
+function appidBindingStatusVariant(status: string | null | undefined) {
+  if (status === "bound") return "success";
+  if (status === "rejected") return "danger";
+  if (status === "pending_confirm") return "warning";
+  if (status === "not_bound") return "secondary";
+  return "outline";
+}
+
+function optionLabel(
+  options: Array<{ value: string; label: string }>,
+  value: string | null | undefined,
+  fallback: string,
+) {
+  return options.find((option) => option.value === value)?.label || fallback;
 }
 
 function formatDateTime(value: string) {

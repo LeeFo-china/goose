@@ -25,4 +25,24 @@ describe("Finance wechat pay admin page layout", () => {
     expect(pageSource).toContain("FinanceWechatPayConfigForm");
     expect(pageSource).toContain("fetchWechatPayConfig");
   });
+
+  test("config form exposes sub merchant onboarding and appid binding fields", () => {
+    const formSource = readFileSync(
+      new URL("./finance-wechat-pay-config-form.tsx", import.meta.url),
+      "utf8",
+    );
+    const requestSource = readFileSync(
+      new URL("./finance-wechat-pay-requests.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(requestSource).toContain("principal_type");
+    expect(requestSource).toContain("applyment_state");
+    expect(requestSource).toContain("appid_binding_state");
+    expect(formSource).toContain("收款主体");
+    expect(formSource).toContain("进件业务编号");
+    expect(formSource).toContain("微信申请单号");
+    expect(formSource).toContain("进件状态");
+    expect(formSource).toContain("AppID 绑定状态");
+  });
 });

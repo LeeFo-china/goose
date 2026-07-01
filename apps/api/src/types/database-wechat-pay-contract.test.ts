@@ -19,7 +19,10 @@ describe("wechat pay database types", () => {
     };
 
     const fields = [
+      config.principal_type,
       config.merchant_name,
+      config.applyment_state,
+      config.appid_binding_state,
       config.validation_status,
       orderRow.metadata,
       orderInsert.amount,
@@ -27,6 +30,6 @@ describe("wechat pay database types", () => {
       notificationUpdate.processed,
     ];
 
-    expect(fields).toHaveLength(6);
+    expect(fields).toHaveLength(9);
   });
 });

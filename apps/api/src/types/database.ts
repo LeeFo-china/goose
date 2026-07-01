@@ -6982,6 +6982,12 @@ export type Database = {
       tenant_payment_configs: {
         Row: {
           app_id: string | null
+          appid_binding_message: string | null
+          appid_binding_state: string
+          applyment_business_code: string | null
+          applyment_id: string | null
+          applyment_state: string
+          applyment_state_message: string | null
           created_at: string
           created_by_employee_id: string | null
           disabled_at: string | null
@@ -6994,6 +7000,8 @@ export type Database = {
           merchant_mode: string
           merchant_name: string | null
           notify_url: string | null
+          opened_at: string | null
+          principal_type: string
           provider: string
           risk_switches: Json
           serial_no: string | null
@@ -7001,6 +7009,7 @@ export type Database = {
           status: string
           sub_app_id: string | null
           sub_merchant_id: string | null
+          suspended_at: string | null
           tenant_id: string
           updated_at: string
           updated_by_employee_id: string | null
@@ -7008,6 +7017,12 @@ export type Database = {
         }
         Insert: {
           app_id?: string | null
+          appid_binding_message?: string | null
+          appid_binding_state?: string
+          applyment_business_code?: string | null
+          applyment_id?: string | null
+          applyment_state?: string
+          applyment_state_message?: string | null
           created_at?: string
           created_by_employee_id?: string | null
           disabled_at?: string | null
@@ -7020,6 +7035,8 @@ export type Database = {
           merchant_mode: string
           merchant_name?: string | null
           notify_url?: string | null
+          opened_at?: string | null
+          principal_type?: string
           provider: string
           risk_switches?: Json
           serial_no?: string | null
@@ -7027,6 +7044,7 @@ export type Database = {
           status?: string
           sub_app_id?: string | null
           sub_merchant_id?: string | null
+          suspended_at?: string | null
           tenant_id: string
           updated_at?: string
           updated_by_employee_id?: string | null
@@ -7034,6 +7052,12 @@ export type Database = {
         }
         Update: {
           app_id?: string | null
+          appid_binding_message?: string | null
+          appid_binding_state?: string
+          applyment_business_code?: string | null
+          applyment_id?: string | null
+          applyment_state?: string
+          applyment_state_message?: string | null
           created_at?: string
           created_by_employee_id?: string | null
           disabled_at?: string | null
@@ -7046,6 +7070,8 @@ export type Database = {
           merchant_mode?: string
           merchant_name?: string | null
           notify_url?: string | null
+          opened_at?: string | null
+          principal_type?: string
           provider?: string
           risk_switches?: Json
           serial_no?: string | null
@@ -7053,6 +7079,7 @@ export type Database = {
           status?: string
           sub_app_id?: string | null
           sub_merchant_id?: string | null
+          suspended_at?: string | null
           tenant_id?: string
           updated_at?: string
           updated_by_employee_id?: string | null

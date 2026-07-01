@@ -32,12 +32,21 @@ type SaveWechatPayConfigInput =
 
 export type WechatPayConfigView = {
   id: string;
+  principal_type: string;
   merchant_mode: string;
   merchant_name: string | null;
   merchant_id: string | null;
   sub_merchant_id: string | null;
   app_id: string | null;
   sub_app_id: string | null;
+  applyment_business_code: string | null;
+  applyment_id: string | null;
+  applyment_state: string;
+  applyment_state_message: string | null;
+  appid_binding_state: string;
+  appid_binding_message: string | null;
+  opened_at: string | null;
+  suspended_at: string | null;
   status: string;
   enabled_channels: unknown;
   settlement_account_summary: string | null;
@@ -98,12 +107,29 @@ export class WechatPayConfigService {
     const saved = await this.repository.upsertWechatPayConfig({
       tenant_id: tenantId,
       provider: "wechat_pay",
+      principal_type: input.principal_type ?? current?.principal_type ?? "tenant",
       merchant_mode: input.merchant_mode,
       merchant_name: input.merchant_name ?? null,
       merchant_id: input.merchant_id ?? null,
       sub_merchant_id: input.sub_merchant_id ?? null,
       app_id: input.app_id ?? null,
       sub_app_id: input.sub_app_id ?? null,
+      applyment_business_code: input.applyment_business_code === undefined
+        ? current?.applyment_business_code ?? null
+        : input.applyment_business_code,
+      applyment_id: input.applyment_id === undefined
+        ? current?.applyment_id ?? null
+        : input.applyment_id,
+      applyment_state:
+        input.applyment_state ?? current?.applyment_state ?? "not_started",
+      applyment_state_message: input.applyment_state_message === undefined
+        ? current?.applyment_state_message ?? null
+        : input.applyment_state_message,
+      appid_binding_state:
+        input.appid_binding_state ?? current?.appid_binding_state ?? "not_required",
+      appid_binding_message: input.appid_binding_message === undefined
+        ? current?.appid_binding_message ?? null
+        : input.appid_binding_message,
       status: input.status,
       enabled_channels: input.enabled_channels ??
         current?.enabled_channels ??
@@ -155,12 +181,21 @@ export class WechatPayConfigService {
   private toView(config: WechatPayConfigRecord): WechatPayConfigView {
     return {
       id: config.id,
+      principal_type: config.principal_type,
       merchant_mode: config.merchant_mode,
       merchant_name: config.merchant_name,
       merchant_id: config.merchant_id,
       sub_merchant_id: config.sub_merchant_id,
       app_id: config.app_id,
       sub_app_id: config.sub_app_id,
+      applyment_business_code: config.applyment_business_code,
+      applyment_id: config.applyment_id,
+      applyment_state: config.applyment_state,
+      applyment_state_message: config.applyment_state_message,
+      appid_binding_state: config.appid_binding_state,
+      appid_binding_message: config.appid_binding_message,
+      opened_at: config.opened_at,
+      suspended_at: config.suspended_at,
       status: config.status,
       enabled_channels: config.enabled_channels,
       settlement_account_summary: config.settlement_account_summary,

@@ -34,12 +34,39 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).not.toContain("wechat_pay.refund.request");
     expect(migrationSource).not.toContain("wechat_pay.refund.review");
   });
+
+  test("extends tenant payment configs for sub merchant onboarding state", () => {
+    const migrationSource = readWechatPaySubMerchantMigration();
+
+    expect(migrationSource).toContain("ALTER TABLE public.tenant_payment_configs");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS principal_type");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS applyment_business_code");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS applyment_id");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS applyment_state");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS appid_binding_state");
+    expect(migrationSource).toContain("tenant_payment_configs_principal_type_check");
+    expect(migrationSource).toContain("tenant_payment_configs_applyment_state_check");
+    expect(migrationSource).toContain("tenant_payment_configs_appid_binding_state_check");
+    expect(migrationSource).toContain("tenant_payment_configs_sub_merchant_unique_idx");
+    expect(migrationSource).not.toContain("api_v3_key");
+    expect(migrationSource).not.toContain("private_key");
+  });
 });
 
 function readWechatPayMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260701093000_wechat_pay_models.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readWechatPaySubMerchantMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260701143000_wechat_pay_submerchant_onboarding.sql",
       import.meta.url,
     ),
     "utf8",
