@@ -6982,67 +6982,129 @@ export type Database = {
       tenant_payment_configs: {
         Row: {
           app_id: string | null
+          appid_binding_message: string | null
+          appid_binding_state: string
+          applyment_business_code: string | null
+          applyment_id: string | null
+          applyment_state: string
+          applyment_state_message: string | null
           created_at: string
+          created_by_employee_id: string | null
           disabled_at: string | null
           enabled_at: string | null
           enabled_channels: Json
           encrypted_config_ref: string | null
           id: string
+          last_validated_at: string | null
           merchant_id: string | null
           merchant_mode: string
+          merchant_name: string | null
+          notify_url: string | null
+          opened_at: string | null
+          principal_type: string
           provider: string
           risk_switches: Json
+          serial_no: string | null
           settlement_account_summary: string | null
           status: string
           sub_app_id: string | null
           sub_merchant_id: string | null
+          suspended_at: string | null
           tenant_id: string
           updated_at: string
+          updated_by_employee_id: string | null
+          validation_status: string
         }
         Insert: {
           app_id?: string | null
+          appid_binding_message?: string | null
+          appid_binding_state?: string
+          applyment_business_code?: string | null
+          applyment_id?: string | null
+          applyment_state?: string
+          applyment_state_message?: string | null
           created_at?: string
+          created_by_employee_id?: string | null
           disabled_at?: string | null
           enabled_at?: string | null
           enabled_channels?: Json
           encrypted_config_ref?: string | null
           id?: string
+          last_validated_at?: string | null
           merchant_id?: string | null
           merchant_mode: string
+          merchant_name?: string | null
+          notify_url?: string | null
+          opened_at?: string | null
+          principal_type?: string
           provider: string
           risk_switches?: Json
+          serial_no?: string | null
           settlement_account_summary?: string | null
           status?: string
           sub_app_id?: string | null
           sub_merchant_id?: string | null
+          suspended_at?: string | null
           tenant_id: string
           updated_at?: string
+          updated_by_employee_id?: string | null
+          validation_status?: string
         }
         Update: {
           app_id?: string | null
+          appid_binding_message?: string | null
+          appid_binding_state?: string
+          applyment_business_code?: string | null
+          applyment_id?: string | null
+          applyment_state?: string
+          applyment_state_message?: string | null
           created_at?: string
+          created_by_employee_id?: string | null
           disabled_at?: string | null
           enabled_at?: string | null
           enabled_channels?: Json
           encrypted_config_ref?: string | null
           id?: string
+          last_validated_at?: string | null
           merchant_id?: string | null
           merchant_mode?: string
+          merchant_name?: string | null
+          notify_url?: string | null
+          opened_at?: string | null
+          principal_type?: string
           provider?: string
           risk_switches?: Json
+          serial_no?: string | null
           settlement_account_summary?: string | null
           status?: string
           sub_app_id?: string | null
           sub_merchant_id?: string | null
+          suspended_at?: string | null
           tenant_id?: string
           updated_at?: string
+          updated_by_employee_id?: string | null
+          validation_status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tenant_payment_configs_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tenant_payment_configs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_payment_configs_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -7738,6 +7800,210 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wechat_payment_notifications: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          notify_id: string
+          order_id: string | null
+          processed: boolean
+          processed_at: string | null
+          raw_payload: Json
+          resource_type: string | null
+          signature_valid: boolean
+          summary: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_type: string
+          id?: string
+          notify_id: string
+          order_id?: string | null
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          resource_type?: string | null
+          signature_valid?: boolean
+          summary?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          notify_id?: string
+          order_id?: string | null
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          resource_type?: string | null
+          signature_valid?: boolean
+          summary?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_payment_notifications_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_payment_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wechat_payment_orders: {
+        Row: {
+          amount: number
+          closed_at: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          currency: string
+          failed_at: string | null
+          failure_reason: string | null
+          id: string
+          latest_notification_id: string | null
+          metadata: Json
+          out_trade_no: string
+          paid_amount: number
+          paid_at: string | null
+          payer_openid: string | null
+          payment_config_id: string | null
+          payment_id: string | null
+          prepay_id: string | null
+          project_id: string
+          receivable_plan_id: string | null
+          status: string
+          tenant_id: string
+          transaction_id: string | null
+          updated_at: string
+          workflow_instance_id: string | null
+          workflow_task_id: string | null
+        }
+        Insert: {
+          amount: number
+          closed_at?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          currency?: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          latest_notification_id?: string | null
+          metadata?: Json
+          out_trade_no: string
+          paid_amount?: number
+          paid_at?: string | null
+          payer_openid?: string | null
+          payment_config_id?: string | null
+          payment_id?: string | null
+          prepay_id?: string | null
+          project_id: string
+          receivable_plan_id?: string | null
+          status?: string
+          tenant_id: string
+          transaction_id?: string | null
+          updated_at?: string
+          workflow_instance_id?: string | null
+          workflow_task_id?: string | null
+        }
+        Update: {
+          amount?: number
+          closed_at?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          currency?: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          latest_notification_id?: string | null
+          metadata?: Json
+          out_trade_no?: string
+          paid_amount?: number
+          paid_at?: string | null
+          payer_openid?: string | null
+          payment_config_id?: string | null
+          payment_id?: string | null
+          prepay_id?: string | null
+          project_id?: string
+          receivable_plan_id?: string | null
+          status?: string
+          tenant_id?: string
+          transaction_id?: string | null
+          updated_at?: string
+          workflow_instance_id?: string | null
+          workflow_task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_payment_orders_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_orders_payment_config_id_fkey"
+            columns: ["payment_config_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_payment_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_orders_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_orders_receivable_plan_id_fkey"
+            columns: ["receivable_plan_id"]
+            isOneToOne: false
+            referencedRelation: "project_receivable_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_orders_workflow_instance_id_fkey"
+            columns: ["workflow_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_orders_workflow_task_id_fkey"
+            columns: ["workflow_task_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_tasks"
             referencedColumns: ["id"]
           },
         ]

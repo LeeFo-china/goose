@@ -102,6 +102,13 @@ export function isPublicRoute(method: string, url: string) {
 
   if (
     method === "POST"
+    && url === "/pay/wechat/callback"
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
     && url === "/customer/project-acceptances/open-ticket/verify"
   ) {
     return true;

@@ -74,6 +74,13 @@
 - [2026-06-30-phase8-3-difference-resolution-smoke.md](./2026-06-30-phase8-3-difference-resolution-smoke.md)：Phase 8.3 月结差异处理闭环 smoke，覆盖 migration、API、Admin 页面和小程序边界。
 - [2026-07-01-phase8-3-post-release-smoke.md](./2026-07-01-phase8-3-post-release-smoke.md)：Phase 8.3 发布后真实非空差异处理闭环 smoke，覆盖 pending、confirmed、resolved、Admin 行内动作和 summary 筛选。
 - [2026-06-30-wechat-pay-integration-prd.md](./2026-06-30-wechat-pay-integration-prd.md)：微信支付接入 PRD，明确租户独立商户优先、支付订单、回调幂等、workflow 对接、对账异常和小程序边界。
+- [2026-07-01-phase9-wechat-pay-task0-baseline.md](./2026-07-01-phase9-wechat-pay-task0-baseline.md)：Phase 9 微信支付接入 Task 0 基线核查，确认复用 `tenant_payment_configs`、新增订单/通知表、workflow/payment/ledger 对接边界和小程序影响。
+- [2026-07-01-phase9-wechat-pay-task1-migration-smoke.md](./2026-07-01-phase9-wechat-pay-task1-migration-smoke.md)：Phase 9 微信支付 Task 1 migration 与权限 smoke，覆盖 `tenant_payment_configs` 扩展、微信支付订单/通知表、权限、远端应用和小程序边界。
+- [2026-07-01-phase9-wechat-pay-task2-config-admin-smoke.md](./2026-07-01-phase9-wechat-pay-task2-config-admin-smoke.md)：Phase 9 微信支付 Task 2 配置 API 与 Admin 配置页 smoke，覆盖租户商户配置读写、权限、脱敏展示、校验状态和小程序边界。
+- [2026-07-01-phase9-wechat-pay-task3-orders-handoff.md](./2026-07-01-phase9-wechat-pay-task3-orders-handoff.md)：Phase 9 微信支付 Task 3 订单 API、Admin 只读页和小程序 handoff，明确 pending 订单创建、幂等、权限、应收校验和 Task 4 前不拉起真实支付。
+- [2026-07-01-phase9-payment-principal-submerchant-plan.md](./2026-07-01-phase9-payment-principal-submerchant-plan.md)：Phase 9 支付主体与租户特约商户管理方案，明确平台直连收款、租户服务商子商户收款、`sub_mchid` 申请维护、AppID 绑定和小程序边界。
+- [2026-07-01-phase9-submerchant-onboarding-model-smoke.md](./2026-07-01-phase9-submerchant-onboarding-model-smoke.md)：Phase 9 租户特约商户进件模型 smoke，覆盖 `tenant_payment_configs` 进件/AppID 绑定字段、API/Admin 配置扩展、验证命令和小程序边界。
+- [2026-07-01-phase9-wechat-pay-task4-prepay-primitives.md](./2026-07-01-phase9-wechat-pay-task4-prepay-primitives.md)：Phase 9 微信支付 Task 4 前置，覆盖 API v3 请求签名、小程序支付参数签名、直连/服务商 JSAPI 请求体构造和 `payer_openid` 支持。
 - [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。

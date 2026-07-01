@@ -1,0 +1,394 @@
+import { Errors } from "@/errors/error-factory";
+import type { Inserts, Tables } from "@/types/db";
+import { SupabaseDB } from "@/utils/supabase/index";
+import type { WechatPayOrderListQuery } from "@/schema/wechat-pay-orders";
+
+export type WechatPayOrderRecord = Tables<"wechat_payment_orders">;
+export type WechatPayOrderCreateInput = Inserts<"wechat_payment_orders">;
+export type WechatPayNotificationRecord = Tables<"wechat_payment_notifications">;
+export type WechatPayNotificationCreateInput =
+  Inserts<"wechat_payment_notifications">;
+
+export type WechatPayReceivablePlanRecord = {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  workflow_instance_id: string | null;
+  workflow_node_key: string | null;
+  source_type: string;
+  source_id: string | null;
+  payment_type: string;
+  title: string;
+  amount: number;
+  paid_amount: number;
+  status: string;
+  due_date: string;
+};
+
+export type WechatPayOrderListItem = WechatPayOrderRecord & {
+  project?: {
+    id: string;
+    name: string | null;
+    status: string | null;
+  } | null;
+  receivable_plan?: {
+    id: string;
+    title: string | null;
+    payment_type: string | null;
+    status: string | null;
+    amount: number | string | null;
+    paid_amount: number | string | null;
+    due_date: string | null;
+  } | null;
+  payment?: {
+    id: string;
+    status: string | null;
+    amount: number | string | null;
+    pay_date: string | null;
+    payment_channel: string | null;
+    provider: string | null;
+    provider_transaction_id: string | null;
+  } | null;
+};
+
+export type WechatPayOrderListResult = {
+  list: WechatPayOrderListItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+const WECHAT_PAY_ORDER_SELECT = [
+  "id",
+  "tenant_id",
+  "payment_config_id",
+  "project_id",
+  "workflow_instance_id",
+  "workflow_task_id",
+  "receivable_plan_id",
+  "payment_id",
+  "out_trade_no",
+  "transaction_id",
+  "amount",
+  "paid_amount",
+  "currency",
+  "status",
+  "payer_openid",
+  "prepay_id",
+  "paid_at",
+  "closed_at",
+  "failed_at",
+  "failure_reason",
+  "latest_notification_id",
+  "metadata",
+  "created_by_employee_id",
+  "created_at",
+  "updated_at",
+  "project:projects!wechat_payment_orders_project_id_fkey(id, name, status)",
+  [
+    "receivable_plan:project_receivable_plans!",
+    "wechat_payment_orders_receivable_plan_id_fkey(",
+    "id, title, payment_type, status, amount, paid_amount, due_date",
+    ")",
+  ].join(""),
+  [
+    "payment:payments!wechat_payment_orders_payment_id_fkey(",
+    "id, status, amount, pay_date, payment_channel, provider, ",
+    "provider_transaction_id",
+    ")",
+  ].join(""),
+].join(", ");
+
+const RECEIVABLE_PLAN_SELECT = [
+  "id",
+  "tenant_id",
+  "project_id",
+  "workflow_instance_id",
+  "workflow_node_key",
+  "source_type",
+  "source_id",
+  "payment_type",
+  "title",
+  "amount",
+  "paid_amount",
+  "status",
+  "due_date",
+].join(", ");
+
+class WechatPayOrderRepository {
+  async findByOutTradeNo(
+    outTradeNo: string,
+  ): Promise<WechatPayOrderRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .select("*")
+      .eq("out_trade_no", outTradeNo)
+      .limit(2);
+
+    if (error) {
+      throw Errors.dbError("查询微信支付订单失败", error);
+    }
+
+    const rows = (data ?? []) as WechatPayOrderRecord[];
+    if (rows.length > 1) {
+      throw Errors.business(
+        409,
+        "微信支付商户订单号匹配到多个订单",
+        "WECHAT_PAY_OUT_TRADE_NO_DUPLICATED",
+      );
+    }
+
+    return rows[0] ?? null;
+  }
+
+  async findPendingByWorkflowTask(input: {
+    tenantId: string;
+    workflowTaskId: string;
+  }): Promise<WechatPayOrderRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .select("*")
+      .eq("tenant_id", input.tenantId)
+      .eq("workflow_task_id", input.workflowTaskId)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询微信支付订单失败", error);
+    }
+
+    return (data as WechatPayOrderRecord | null) ?? null;
+  }
+
+  async findReceivablePlan(input: {
+    tenantId: string;
+    planId: string;
+  }): Promise<WechatPayReceivablePlanRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_receivable_plans")
+      .select(RECEIVABLE_PLAN_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.planId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询应收计划失败", error);
+    }
+
+    return data
+      ? normalizeReceivablePlan(data as unknown as WechatPayReceivablePlanRecord)
+      : null;
+  }
+
+  async createOrder(
+    input: WechatPayOrderCreateInput,
+  ): Promise<WechatPayOrderRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .insert(input)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("创建微信支付订单失败", error);
+    }
+
+    return data as WechatPayOrderRecord;
+  }
+
+  async markPrepayCreated(input: {
+    tenantId: string;
+    orderId: string;
+    prepayId: string;
+  }): Promise<WechatPayOrderRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .update({ prepay_id: input.prepayId })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.orderId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新微信支付预支付单失败", error);
+    }
+
+    return data as WechatPayOrderRecord;
+  }
+
+  async findNotificationByNotifyId(input: {
+    tenantId: string;
+    notifyId: string;
+  }): Promise<WechatPayNotificationRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_notifications")
+      .select("*")
+      .eq("tenant_id", input.tenantId)
+      .eq("notify_id", input.notifyId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询微信支付回调通知失败", error);
+    }
+
+    return (data as WechatPayNotificationRecord | null) ?? null;
+  }
+
+  async createNotification(
+    input: WechatPayNotificationCreateInput,
+  ): Promise<WechatPayNotificationRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_notifications")
+      .insert(input)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("写入微信支付回调通知失败", error);
+    }
+
+    return data as WechatPayNotificationRecord;
+  }
+
+  async markNotificationProcessed(input: {
+    tenantId: string;
+    notificationId: string;
+  }): Promise<WechatPayNotificationRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_notifications")
+      .update({
+        processed: true,
+        processed_at: new Date().toISOString(),
+        error_message: null,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.notificationId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("标记微信支付回调通知已处理失败", error);
+    }
+
+    return data as WechatPayNotificationRecord;
+  }
+
+  async markNotificationFailed(input: {
+    tenantId: string;
+    notificationId: string;
+    errorMessage: string;
+  }): Promise<WechatPayNotificationRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_notifications")
+      .update({
+        processed: false,
+        error_message: input.errorMessage.slice(0, 500),
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.notificationId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("标记微信支付回调通知失败原因失败", error);
+    }
+
+    return data as WechatPayNotificationRecord;
+  }
+
+  async markOrderPaid(input: {
+    tenantId: string;
+    orderId: string;
+    paymentId: string;
+    transactionId: string;
+    paidAmount: number;
+    paidAt: string;
+    notificationId: string;
+  }): Promise<WechatPayOrderRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .update({
+        payment_id: input.paymentId,
+        transaction_id: input.transactionId,
+        paid_amount: input.paidAmount,
+        paid_at: input.paidAt,
+        status: "paid",
+        latest_notification_id: input.notificationId,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.orderId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新微信支付订单付款状态失败", error);
+    }
+
+    return data as WechatPayOrderRecord;
+  }
+
+  async listOrders(input: {
+    tenantId: string;
+    query: WechatPayOrderListQuery;
+  }): Promise<WechatPayOrderListResult> {
+    const page = input.query.page ?? 1;
+    const pageSize = Math.min(input.query.pageSize ?? 20, 100);
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let request = SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .select(WECHAT_PAY_ORDER_SELECT, { count: "exact" })
+      .eq("tenant_id", input.tenantId);
+
+    if (input.query.status) request = request.eq("status", input.query.status);
+    if (input.query.project_id) {
+      request = request.eq("project_id", input.query.project_id);
+    }
+    if (input.query.receivable_plan_id) {
+      request = request.eq("receivable_plan_id", input.query.receivable_plan_id);
+    }
+    if (input.query.workflow_task_id) {
+      request = request.eq("workflow_task_id", input.query.workflow_task_id);
+    }
+
+    const { data, error, count } = await request
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      throw Errors.dbError("查询微信支付订单列表失败", error);
+    }
+
+    const total = count ?? 0;
+    return {
+      list: (data ?? []) as unknown as WechatPayOrderListItem[],
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: total ? Math.ceil(total / pageSize) : 0,
+      },
+    };
+  }
+}
+
+function normalizeReceivablePlan(
+  row: WechatPayReceivablePlanRecord,
+): WechatPayReceivablePlanRecord {
+  return {
+    ...row,
+    amount: normalizeMoney(row.amount),
+    paid_amount: normalizeMoney(row.paid_amount),
+  };
+}
+
+function normalizeMoney(value: unknown) {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+export const wechatPayOrderRepository = new WechatPayOrderRepository();

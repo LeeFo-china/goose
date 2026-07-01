@@ -24,6 +24,7 @@ import {
   TerminalSquare,
   Users,
   RefreshCw,
+  WalletCards,
   type LucideIcon,
 } from "lucide-react";
 
@@ -131,6 +132,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "应收计划",
         icon: CalendarClock,
         permission: "finance.receivable.view",
+      },
+      {
+        href: "/finance/wechat-pay",
+        label: "微信支付",
+        icon: WalletCards,
+        permission: "wechat_pay.config.read",
       },
       {
         href: "/expenses",

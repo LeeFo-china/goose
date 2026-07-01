@@ -47,6 +47,7 @@ import { ResponseHandler } from "@/utils/response";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import financeReceivablesController from "./receivables-controller";
 import financeReportsController from "./reports-controller";
+import financeWechatPayController from "./wechat-pay-controller";
 
 class FinanceController extends TenantBaseController {
   constructor() {
@@ -57,6 +58,7 @@ class FinanceController extends TenantBaseController {
     registerRoutes(fastify, this);
     financeReceivablesController.registerExtraRoutes(fastify);
     financeReportsController.registerExtraRoutes(fastify);
+    financeWechatPayController.registerExtraRoutes(fastify);
   };
 
   @Get("/finance/ledger")

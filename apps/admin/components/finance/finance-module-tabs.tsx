@@ -7,6 +7,7 @@ export type FinanceModuleTab =
   | "audits"
   | "reports"
   | "receivables"
+  | "wechat-pay"
   | "ledger";
 
 export const FINANCE_MODULE_TABS: Array<{
@@ -20,6 +21,7 @@ export const FINANCE_MODULE_TABS: Array<{
   { value: "audits", label: "修正审计", href: "/finance/audits" },
   { value: "reports", label: "运营报表", href: "/finance/reports" },
   { value: "receivables", label: "应收计划", href: "/finance/receivables" },
+  { value: "wechat-pay", label: "微信支付", href: "/finance/wechat-pay" },
   { value: "ledger", label: "财务台账", href: "/finance/ledger" },
 ];
 
