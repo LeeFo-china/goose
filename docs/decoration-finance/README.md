@@ -72,6 +72,7 @@
 - [2026-06-30-phase8-2-post-release-smoke.md](./2026-06-30-phase8-2-post-release-smoke.md)：Phase 8.2 发布后 smoke 和非空差异来源样本，覆盖真实应收计划来源、Admin 非空页和摘要加固。
 - [2026-06-30-phase8-3-difference-resolution-plan.md](./2026-06-30-phase8-3-difference-resolution-plan.md)：Phase 8.3 月结差异处理闭环 PRD 与计划，定义差异处理记录、API、Admin 和 smoke 验收口径。
 - [2026-06-30-phase8-3-difference-resolution-smoke.md](./2026-06-30-phase8-3-difference-resolution-smoke.md)：Phase 8.3 月结差异处理闭环 smoke，覆盖 migration、API、Admin 页面和小程序边界。
+- [2026-07-01-phase8-3-post-release-smoke.md](./2026-07-01-phase8-3-post-release-smoke.md)：Phase 8.3 发布后真实非空差异处理闭环 smoke，覆盖 pending、confirmed、resolved、Admin 行内动作和 summary 筛选。
 - [2026-06-30-wechat-pay-integration-prd.md](./2026-06-30-wechat-pay-integration-prd.md)：微信支付接入 PRD，明确租户独立商户优先、支付订单、回调幂等、workflow 对接、对账异常和小程序边界。
 - [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
