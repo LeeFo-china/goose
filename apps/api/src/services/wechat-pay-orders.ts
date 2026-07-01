@@ -19,6 +19,14 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import type { JsonObject } from "@/repositories/workflows";
+import {
+  wechatPayGateway,
+  type WechatPayCreateJsapiPrepayResult,
+} from "@/services/wechat-pay-gateway";
+import {
+  wechatPaySecretBundleService,
+  type WechatPaySecretBundle,
+} from "@/services/wechat-pay-secret-bundles";
 
 type WorkflowTaskRepositoryPort = Pick<typeof workflowTaskRepository, "findById">;
 type WechatPayConfigRepositoryPort = Pick<
@@ -30,6 +38,7 @@ type WechatPayOrderRepositoryPort = {
   findPendingByWorkflowTask: typeof wechatPayOrderRepository.findPendingByWorkflowTask;
   findReceivablePlan: typeof wechatPayOrderRepository.findReceivablePlan;
   createOrder: typeof wechatPayOrderRepository.createOrder;
+  markPrepayCreated: typeof wechatPayOrderRepository.markPrepayCreated;
   listOrders: typeof wechatPayOrderRepository.listOrders;
 };
 
@@ -42,6 +51,17 @@ type WechatPayOrderServiceDependencies = {
   orderRepository?: WechatPayOrderRepositoryPort;
   workflowTaskRepository?: WorkflowTaskRepositoryPort;
   configRepository?: WechatPayConfigRepositoryPort;
+  secretBundleService?: {
+    load: (encryptedConfigRef: string | null) => Promise<WechatPaySecretBundle>;
+  };
+  wechatPayGateway?: {
+    createJsapiPrepay: (input: {
+      config: WechatPayConfigRecord;
+      order: WechatPayOrderRecord;
+      description: string;
+      secretBundle: WechatPaySecretBundle;
+    }) => Promise<WechatPayCreateJsapiPrepayResult>;
+  };
   accessPolicyService?: AccessPolicyPort;
   tradeNoFactory?: () => string;
 };
@@ -53,7 +73,7 @@ export type WechatPayOrderView = Omit<WechatPayOrderRecord, "amount" | "paid_amo
 
 export type WechatPayOrderCreateResult = {
   idempotent: boolean;
-  payment_request: null;
+  payment_request: WechatPayCreateJsapiPrepayResult["paymentRequest"] | null;
   order: WechatPayOrderView;
   receivable_plan: {
     id: string;
@@ -69,6 +89,12 @@ export class WechatPayOrderService {
   private readonly orderRepository: WechatPayOrderRepositoryPort;
   private readonly workflowTaskRepository: WorkflowTaskRepositoryPort;
   private readonly configRepository: WechatPayConfigRepositoryPort;
+  private readonly secretBundleService: NonNullable<
+    WechatPayOrderServiceDependencies["secretBundleService"]
+  >;
+  private readonly wechatPayGateway: NonNullable<
+    WechatPayOrderServiceDependencies["wechatPayGateway"]
+  >;
   private readonly accessPolicyService: AccessPolicyPort;
   private readonly tradeNoFactory: () => string;
 
@@ -78,6 +104,9 @@ export class WechatPayOrderService {
       dependencies.workflowTaskRepository ?? workflowTaskRepository;
     this.configRepository = dependencies.configRepository ??
       wechatPayConfigRepository;
+    this.secretBundleService = dependencies.secretBundleService ??
+      wechatPaySecretBundleService;
+    this.wechatPayGateway = dependencies.wechatPayGateway ?? wechatPayGateway;
     this.accessPolicyService =
       dependencies.accessPolicyService ?? accessPolicyService;
     this.tradeNoFactory = dependencies.tradeNoFactory ?? createOutTradeNo;
@@ -131,11 +160,21 @@ export class WechatPayOrderService {
       task,
     });
     const order = await this.orderRepository.createOrder(orderInput);
+    const prepay = await this.createPrepay({
+      config,
+      order,
+      taskTitle: task.title,
+    });
+    const orderWithPrepay = await this.orderRepository.markPrepayCreated({
+      tenantId,
+      orderId: order.id,
+      prepayId: prepay.prepayId,
+    });
 
     return {
       idempotent: false,
-      payment_request: null,
-      order: this.toOrderView(order),
+      payment_request: prepay.paymentRequest,
+      order: this.toOrderView(orderWithPrepay),
       receivable_plan: this.toReceivablePlanView(receivablePlan),
     };
   }
@@ -327,6 +366,22 @@ export class WechatPayOrderService {
         real_wechat_prepay_created: false,
       } satisfies JsonObject,
     };
+  }
+
+  private async createPrepay(input: {
+    config: WechatPayConfigRecord;
+    order: WechatPayOrderRecord;
+    taskTitle: string;
+  }) {
+    const secretBundle = await this.secretBundleService.load(
+      input.config.encrypted_config_ref,
+    );
+    return this.wechatPayGateway.createJsapiPrepay({
+      config: input.config,
+      order: input.order,
+      description: input.taskTitle || "项目收款",
+      secretBundle,
+    });
   }
 
   private toReceivablePlanView(plan: WechatPayReceivablePlanRecord) {

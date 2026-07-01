@@ -1,133 +1,24 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { AuthContext } from "@/services/authorization";
+import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
+import {
+  activeConfig,
+  authContext,
+  employeeId,
+  paymentCollectionTask,
+  paymentConfigId,
+  pendingOrder,
+  projectId,
+  receivablePlan,
+  receivablePlanId,
+  tenantId,
+  workflowInstanceId,
+  workflowTaskId,
+} from "./wechat-pay-orders.test-helpers";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const tenantId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const projectId = "11111111-1111-4111-8111-111111111111";
-const receivablePlanId = "22222222-2222-4222-8222-222222222222";
-const workflowTaskId = "33333333-3333-4333-8333-333333333333";
-const workflowInstanceId = "44444444-4444-4444-8444-444444444444";
-const paymentConfigId = "55555555-5555-4555-8555-555555555555";
-const employeeId = "66666666-6666-4666-8666-666666666666";
-
-const paymentCollectionTask = {
-  id: workflowTaskId,
-  tenant_id: tenantId,
-  instance_id: workflowInstanceId,
-  instance_node_id: "77777777-7777-4777-8777-777777777777",
-  definition_id: "88888888-8888-4888-8888-888888888888",
-  version_id: "99999999-9999-4999-8999-999999999999",
-  node_id: "aaaaaaaa-bbbb-4bbb-8bbb-aaaaaaaaaaaa",
-  node_key: "payment_stage_2",
-  node_type: "confirmation" as const,
-  title: "中期进度款",
-  status: "pending" as const,
-  assignee_employee_id: null,
-  assignee_role_code: null,
-  assignee_permission_code: "finance.payment.confirm",
-  due_at: null,
-  completed_by: null,
-  completed_at: null,
-  created_at: "2026-07-01T10:00:00.000Z",
-  updated_at: "2026-07-01T10:00:00.000Z",
-  instance: {
-    id: workflowInstanceId,
-    subject_type: "project" as const,
-    subject_id: projectId,
-    status: "running" as const,
-    current_node_key: "payment_stage_2",
-    current_node_snapshot: {
-      business_kind: "payment_collection",
-      config: {
-        payment_type: "stage_2",
-      },
-    },
-  },
-};
-
-const receivablePlan = {
-  id: receivablePlanId,
-  tenant_id: tenantId,
-  project_id: projectId,
-  workflow_instance_id: workflowInstanceId,
-  workflow_node_key: "payment_stage_2",
-  source_type: "workflow_node",
-  source_id: "77777777-7777-4777-8777-777777777777",
-  payment_type: "stage_2",
-  title: "中期进度款",
-  amount: 10000,
-  paid_amount: 2000,
-  status: "partially_paid",
-  due_date: "2026-07-01",
-};
-
-const activeConfig: WechatPayConfigRecord = {
-  id: paymentConfigId,
-  tenant_id: tenantId,
-  provider: "wechat_pay",
-  principal_type: "tenant",
-  merchant_mode: "direct_merchant",
-  merchant_name: "固始晴天装饰微信商户",
-  merchant_id: "1900000001",
-  sub_merchant_id: null,
-  app_id: "wx-app-1",
-  sub_app_id: null,
-  applyment_business_code: null,
-  applyment_id: null,
-  applyment_state: "not_started",
-  applyment_state_message: null,
-  appid_binding_state: "not_required",
-  appid_binding_message: null,
-  opened_at: null,
-  suspended_at: null,
-  status: "active",
-  enabled_at: null,
-  disabled_at: null,
-  enabled_channels: ["project_payment"],
-  settlement_account_summary: null,
-  encrypted_config_ref: null,
-  risk_switches: {},
-  serial_no: null,
-  notify_url: null,
-  validation_status: "unchecked",
-  last_validated_at: null,
-  created_by_employee_id: null,
-  updated_by_employee_id: null,
-  created_at: "2026-07-01T09:00:00.000Z",
-  updated_at: "2026-07-01T09:00:00.000Z",
-};
-
-const pendingOrder = {
-  id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-  tenant_id: tenantId,
-  payment_config_id: paymentConfigId,
-  project_id: projectId,
-  workflow_instance_id: workflowInstanceId,
-  workflow_task_id: workflowTaskId,
-  receivable_plan_id: receivablePlanId,
-  payment_id: null,
-  out_trade_no: "WX202607010001",
-  transaction_id: null,
-  amount: 8000,
-  paid_amount: 0,
-  currency: "CNY",
-  status: "pending",
-  payer_openid: null,
-  prepay_id: null,
-  paid_at: null,
-  closed_at: null,
-  failed_at: null,
-  failure_reason: null,
-  latest_notification_id: null,
-  metadata: {},
-  created_by_employee_id: employeeId,
-  created_at: "2026-07-01T10:01:00.000Z",
-  updated_at: "2026-07-01T10:01:00.000Z",
-};
 
 const findById = mock(async () => paymentCollectionTask);
 const findPendingByWorkflowTask = mock(
@@ -143,6 +34,14 @@ const createOrder = mock(async (input: Record<string, unknown>) => ({
   created_at: "2026-07-01T10:02:00.000Z",
   updated_at: "2026-07-01T10:02:00.000Z",
 }));
+const markPrepayCreated = mock(async (input: Record<string, unknown>) => ({
+  ...pendingOrder,
+  id: String(input.orderId || pendingOrder.id),
+  out_trade_no: "WX202607010999",
+  amount: 8000,
+  payer_openid: "o-test-openid",
+  prepay_id: String(input.prepayId || "prepay-test"),
+}));
 const listOrders = mock(async () => ({
   list: [pendingOrder],
   pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
@@ -150,6 +49,23 @@ const listOrders = mock(async () => ({
 const findWechatPayConfig = mock(
   async (): Promise<typeof activeConfig | null> => activeConfig,
 );
+const loadSecretBundle = mock(async (): Promise<WechatPaySecretBundle> => ({
+  privateKeyPem: "private-key",
+  apiV3Key: "api-v3-key",
+  wechatPayPublicKeyId: null,
+  wechatPayPublicKeyPem: null,
+  baseUrl: "https://api.mch.weixin.qq.com",
+}));
+const createJsapiPrepay = mock(async () => ({
+  prepayId: "prepay-test",
+  paymentRequest: {
+    timeStamp: "1782873600",
+    nonceStr: "nonce",
+    package: "prepay_id=prepay-test",
+    signType: "RSA" as const,
+    paySign: "pay-sign",
+  },
+}));
 const assertTenantContext = mock((authContext: AuthContext) => {
   if (!authContext.tenantId) {
     throw Object.assign(new Error("缺少租户上下文"), {
@@ -163,36 +79,6 @@ const hasPermission = mock((authContext: AuthContext, permissionCode: string) =>
   authContext.permissions.some((permission) => permission.code === permissionCode)
 );
 
-function authContext(
-  permissions: AuthContext["permissions"] = [
-    { code: "finance.payment.confirm", scope: "all" },
-  ],
-  overrides: Partial<AuthContext> = {},
-): AuthContext {
-  return {
-    authUserId: "auth-1",
-    employeeId,
-    tenantId,
-    tenantName: null,
-    tenantSlug: null,
-    tenantStatus: "active",
-    isPlatformAdmin: false,
-    employeeName: "小龙女",
-    employeeStatus: "active",
-    departmentId: null,
-    tenantDepartmentId: null,
-    departmentCode: "FINANCE",
-    departmentName: "财务部",
-    postId: null,
-    postName: null,
-    avatar: null,
-    roleCodes: [],
-    roles: [],
-    permissions,
-    ...overrides,
-  };
-}
-
 async function createService() {
   const { WechatPayOrderService } = await import("./wechat-pay-orders");
   return new WechatPayOrderService({
@@ -200,6 +86,7 @@ async function createService() {
       findPendingByWorkflowTask,
       findReceivablePlan,
       createOrder,
+      markPrepayCreated,
       listOrders,
     },
     workflowTaskRepository: {
@@ -207,6 +94,12 @@ async function createService() {
     },
     configRepository: {
       findWechatPayConfig,
+    },
+    secretBundleService: {
+      load: loadSecretBundle,
+    },
+    wechatPayGateway: {
+      createJsapiPrepay,
     },
     accessPolicyService: {
       assertTenantContext,
@@ -222,14 +115,20 @@ describe("WechatPayOrderService", () => {
     findPendingByWorkflowTask.mockClear();
     findReceivablePlan.mockClear();
     createOrder.mockClear();
+    markPrepayCreated.mockClear();
     listOrders.mockClear();
     findWechatPayConfig.mockClear();
+    loadSecretBundle.mockClear();
+    createJsapiPrepay.mockClear();
     assertTenantContext.mockClear();
     hasPermission.mockClear();
     findById.mockImplementation(async () => paymentCollectionTask);
     findPendingByWorkflowTask.mockImplementation(async () => null);
     findReceivablePlan.mockImplementation(async () => receivablePlan);
-    findWechatPayConfig.mockImplementation(async () => activeConfig);
+    findWechatPayConfig.mockImplementation(async () => ({
+      ...activeConfig,
+      encrypted_config_ref: "env://WECHAT_PAY_TEST",
+    }));
   });
 
   test("creates pending order bound to receivable and executable workflow task", async () => {
@@ -264,7 +163,25 @@ describe("WechatPayOrderService", () => {
       }),
     );
     expect(result.idempotent).toBe(false);
-    expect(result.payment_request).toBeNull();
+    expect(loadSecretBundle).toHaveBeenCalledWith("env://WECHAT_PAY_TEST");
+    expect(createJsapiPrepay).toHaveBeenCalledWith({
+      config: expect.objectContaining({ id: paymentConfigId }),
+      order: expect.objectContaining({
+        out_trade_no: "WX202607010999",
+        payer_openid: "o-test-openid",
+      }),
+      description: "中期进度款",
+      secretBundle: expect.objectContaining({ apiV3Key: "api-v3-key" }),
+    });
+    expect(markPrepayCreated).toHaveBeenCalledWith({
+      tenantId,
+      orderId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      prepayId: "prepay-test",
+    });
+    expect(result.payment_request).toMatchObject({
+      package: "prepay_id=prepay-test",
+      paySign: "pay-sign",
+    });
     expect(result.order).toMatchObject({
       out_trade_no: "WX202607010999",
       status: "pending",
@@ -294,6 +211,7 @@ describe("WechatPayOrderService", () => {
       receivable_plan_id: receivablePlanId,
       workflow_task_id: workflowTaskId,
       amount: 8000,
+      payer_openid: "o-test-openid",
     });
 
     expect(createOrder).toHaveBeenCalledWith(

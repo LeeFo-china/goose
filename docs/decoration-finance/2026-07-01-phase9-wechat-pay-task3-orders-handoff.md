@@ -103,9 +103,10 @@
 
 当前说明：
 
-- `payment_request` 固定为 `null`。
-- 本轮不会调用微信支付真实下单接口。
-- 本轮不会生成 `prepay_id`。
+- Task 4 后，`payment_request` 不再固定为 `null`。
+- 后端会调用微信支付 JSAPI 预下单接口。
+- 后端会生成并保存 `prepay_id`。
+- 后端会返回小程序 `wx.requestPayment` 所需参数。
 - 本轮不会创建 `payments`。
 - 本轮不会写 `finance_ledger`。
 - 本轮不会推进 workflow。
@@ -121,7 +122,8 @@
   - `app_id`
   - `sub_app_id`
 
-这些能力留到 Task 4 的真实微信支付下单和回调闭环。
+支付成功后的 `payments`、`finance_ledger`、应收核销和 workflow 推进
+仍留到回调闭环任务处理。
 
 ### 幂等规则
 

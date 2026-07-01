@@ -171,6 +171,26 @@ class WechatPayOrderRepository {
     return data as WechatPayOrderRecord;
   }
 
+  async markPrepayCreated(input: {
+    tenantId: string;
+    orderId: string;
+    prepayId: string;
+  }): Promise<WechatPayOrderRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_payment_orders")
+      .update({ prepay_id: input.prepayId })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.orderId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新微信支付预支付单失败", error);
+    }
+
+    return data as WechatPayOrderRecord;
+  }
+
   async listOrders(input: {
     tenantId: string;
     query: WechatPayOrderListQuery;
