@@ -121,6 +121,7 @@ export class WechatPayOrderService {
     this.assertReceivablePlan(input, receivablePlan);
 
     const config = await this.configRepository.findWechatPayConfig(tenantId);
+    this.assertPaymentConfigReady(config);
     const orderInput = this.buildCreateInput({
       authContext,
       config,
@@ -250,9 +251,49 @@ export class WechatPayOrderService {
     }
   }
 
+  private assertPaymentConfigReady(
+    config: WechatPayConfigRecord | null,
+  ): asserts config is WechatPayConfigRecord {
+    if (!config || config.status !== "active") {
+      throw Errors.business(
+        409,
+        "微信支付配置未启用",
+        "WECHAT_PAY_CONFIG_NOT_ACTIVE",
+      );
+    }
+    if (!config.merchant_id || !config.app_id) {
+      throw Errors.business(
+        409,
+        "微信支付商户号或 AppID 未配置",
+        "WECHAT_PAY_CONFIG_INCOMPLETE",
+      );
+    }
+    if (config.merchant_mode !== "service_provider_sub_merchant") {
+      return;
+    }
+    if (
+      !config.sub_merchant_id ||
+      !config.sub_app_id ||
+      config.applyment_state !== "opened" ||
+      config.appid_binding_state !== "bound"
+    ) {
+      throw Errors.business(
+        409,
+        "租户特约商户尚未开通或 AppID 未完成绑定",
+        "WECHAT_PAY_SUB_MERCHANT_NOT_READY",
+        {
+          applyment_state: config.applyment_state,
+          appid_binding_state: config.appid_binding_state,
+          has_sub_merchant_id: Boolean(config.sub_merchant_id),
+          has_sub_app_id: Boolean(config.sub_app_id),
+        },
+      );
+    }
+  }
+
   private buildCreateInput(input: {
     authContext: AuthContext;
-    config: WechatPayConfigRecord | null;
+    config: WechatPayConfigRecord;
     input: CreateWechatPayOrderInput;
     receivablePlan: WechatPayReceivablePlanRecord;
     tenantId: string;
@@ -260,7 +301,7 @@ export class WechatPayOrderService {
   }): WechatPayOrderCreateInput {
     return {
       tenant_id: input.tenantId,
-      payment_config_id: input.config?.id ?? null,
+      payment_config_id: input.config.id,
       project_id: input.input.project_id,
       workflow_instance_id: input.task.instance_id,
       workflow_task_id: input.input.workflow_task_id,
@@ -276,6 +317,12 @@ export class WechatPayOrderService {
         workflow_node_key: input.task.node_key,
         receivable_plan_id: input.receivablePlan.id,
         payment_type: input.receivablePlan.payment_type,
+        principal_type: input.config.principal_type,
+        merchant_mode: input.config.merchant_mode,
+        merchant_id: input.config.merchant_id,
+        sub_merchant_id: input.config.sub_merchant_id,
+        app_id: input.config.app_id,
+        sub_app_id: input.config.sub_app_id,
         real_wechat_prepay_created: false,
       } satisfies JsonObject,
     };

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -64,7 +65,7 @@ const receivablePlan = {
   due_date: "2026-07-01",
 };
 
-const activeConfig = {
+const activeConfig: WechatPayConfigRecord = {
   id: paymentConfigId,
   tenant_id: tenantId,
   provider: "wechat_pay",
@@ -271,6 +272,91 @@ describe("WechatPayOrderService", () => {
       id: receivablePlanId,
       remaining_amount: 8000,
     });
+  });
+
+  test("stores service provider sub merchant routing metadata", async () => {
+    findWechatPayConfig.mockImplementationOnce(async () => ({
+      ...activeConfig,
+      merchant_mode: "service_provider_sub_merchant",
+      merchant_id: "1561816121",
+      sub_merchant_id: "1900000002",
+      app_id: "wx-service-app",
+      sub_app_id: "wx-platform-app",
+      applyment_state: "opened",
+      appid_binding_state: "bound",
+    }));
+    const service = await createService();
+
+    await service.createOrder(authContext(), {
+      project_id: projectId,
+      receivable_plan_id: receivablePlanId,
+      workflow_task_id: workflowTaskId,
+      amount: 8000,
+    });
+
+    expect(createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_config_id: paymentConfigId,
+        metadata: expect.objectContaining({
+          principal_type: "tenant",
+          merchant_mode: "service_provider_sub_merchant",
+          merchant_id: "1561816121",
+          sub_merchant_id: "1900000002",
+          app_id: "wx-service-app",
+          sub_app_id: "wx-platform-app",
+        }),
+      }),
+    );
+  });
+
+  test("rejects order creation when payment config is not active", async () => {
+    findWechatPayConfig.mockImplementationOnce(async () => ({
+      ...activeConfig,
+      status: "pending",
+    }));
+    const service = await createService();
+
+    await expect(
+      service.createOrder(authContext(), {
+        project_id: projectId,
+        receivable_plan_id: receivablePlanId,
+        workflow_task_id: workflowTaskId,
+        amount: 8000,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_CONFIG_NOT_ACTIVE",
+    });
+
+    expect(createOrder).not.toHaveBeenCalled();
+  });
+
+  test("rejects service provider order before sub merchant is ready", async () => {
+    findWechatPayConfig.mockImplementationOnce(async () => ({
+      ...activeConfig,
+      merchant_mode: "service_provider_sub_merchant",
+      merchant_id: "1561816121",
+      sub_merchant_id: null,
+      app_id: "wx-service-app",
+      sub_app_id: "wx-platform-app",
+      applyment_state: "reviewing",
+      appid_binding_state: "pending_confirm",
+    }));
+    const service = await createService();
+
+    await expect(
+      service.createOrder(authContext(), {
+        project_id: projectId,
+        receivable_plan_id: receivablePlanId,
+        workflow_task_id: workflowTaskId,
+        amount: 8000,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_SUB_MERCHANT_NOT_READY",
+    });
+
+    expect(createOrder).not.toHaveBeenCalled();
   });
 
   test("returns existing pending order for same workflow task without inserting", async () => {

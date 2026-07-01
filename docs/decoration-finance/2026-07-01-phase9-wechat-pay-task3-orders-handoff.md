@@ -106,6 +106,17 @@
 - 本轮不会创建 `payments`。
 - 本轮不会写 `finance_ledger`。
 - 本轮不会推进 workflow。
+- 创建订单前会校验微信支付配置：
+  - 配置必须为 `active`。
+  - 服务商子商户模式必须已有 `sub_mchid` / `sub_appid`。
+  - 服务商子商户模式必须 `applyment_state=opened` 且 `appid_binding_state=bound`。
+- 订单 `metadata` 会记录非敏感路由信息：
+  - `principal_type`
+  - `merchant_mode`
+  - `merchant_id`
+  - `sub_merchant_id`
+  - `app_id`
+  - `sub_app_id`
 
 这些能力留到 Task 4 的真实微信支付下单和回调闭环。
 
@@ -142,6 +153,9 @@
 - `WECHAT_PAY_RECEIVABLE_NOT_FOUND`：应收计划不存在。
 - `WECHAT_PAY_RECEIVABLE_PROJECT_MISMATCH`：应收计划不属于当前项目。
 - `WECHAT_PAY_AMOUNT_EXCEEDS_RECEIVABLE`：订单金额超过应收剩余金额。
+- `WECHAT_PAY_CONFIG_NOT_ACTIVE`：微信支付配置未启用。
+- `WECHAT_PAY_CONFIG_INCOMPLETE`：微信支付商户号或 AppID 未配置。
+- `WECHAT_PAY_SUB_MERCHANT_NOT_READY`：租户特约商户尚未开通或 AppID 未完成绑定。
 
 通用错误：
 

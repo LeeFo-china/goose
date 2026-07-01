@@ -48,6 +48,12 @@
    - AppID 绑定状态。
    - AppID 绑定说明。
 
+6. 微信支付订单创建 guard：
+   - 配置必须为 `active`。
+   - 服务商子商户必须已有 `sub_mchid` / `sub_appid`。
+   - 服务商子商户必须 `applyment_state=opened` 且 `appid_binding_state=bound`。
+   - 订单 `metadata` 记录非敏感路由信息，供后续真实下单和回调闭环使用。
+
 ## 状态枚举
 
 ### principal_type
@@ -98,7 +104,7 @@ pnpm --dir apps/api run check:file-size
 
 结果：
 
-- 微信支付相关 API 测试 19 pass。
+- 微信支付相关 API 测试 26 pass。
 - API typecheck 通过。
 - API file-size check 通过。
 
