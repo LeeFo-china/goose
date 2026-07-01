@@ -4,7 +4,7 @@ import type {
   WechatPayApplymentDetailData,
   WechatPayApplymentEvent,
   WechatPayApplymentRecord,
-} from "@/components/finance/finance-wechat-pay-applyment-requests";
+} from "@/components/finance/finance-wechat-pay-applyment-shared";
 
 export type {
   WechatPayApplymentDetailData,

@@ -5,7 +5,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import {
   formatWechatPayApplymentTime,
   getWechatPayApplymentStatusMeta,
-} from "@/components/finance/finance-wechat-pay-applyment-requests";
+} from "@/components/finance/finance-wechat-pay-applyment-shared";
 import { PlatformWechatPayApplymentActions } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-actions";
 import { fetchPlatformWechatPayApplymentDetail } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-requests";
 import { Badge } from "@/components/ui/badge";

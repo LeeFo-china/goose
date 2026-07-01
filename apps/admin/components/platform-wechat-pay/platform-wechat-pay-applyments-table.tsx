@@ -7,11 +7,11 @@ import { DataTable } from "@/components/admin/data-table";
 import {
   formatWechatPayApplymentTime,
   getWechatPayApplymentStatusMeta,
-} from "@/components/finance/finance-wechat-pay-applyment-requests";
+  type WechatPayApplymentRecord,
+} from "@/components/finance/finance-wechat-pay-applyment-shared";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { WechatPayApplymentRecord } from "./platform-wechat-pay-applyment-requests";
 
 const columns: ColumnDef<WechatPayApplymentRecord>[] = [
   {

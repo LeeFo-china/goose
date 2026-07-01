@@ -138,7 +138,7 @@ export function AdminShell({
                 preferences={preferences}
                 onChange={setPreferences}
               />
-              <NotificationMenu />
+              {!isPlatformMode ? <NotificationMenu /> : null}
               <LogoutButton />
             </div>
           </div>

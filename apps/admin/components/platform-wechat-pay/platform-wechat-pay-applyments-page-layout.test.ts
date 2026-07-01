@@ -39,9 +39,12 @@ describe("Platform wechat pay applyments page layout", () => {
     );
 
     expect(existsSync(pageUrl)).toBe(true);
+    const pageSource = readFileSync(pageUrl, "utf8");
     const requestSource = readSource("./platform-wechat-pay-applyment-requests.ts");
     const actionsSource = readSource("./platform-wechat-pay-applyment-actions.tsx");
 
+    expect(pageSource).toContain("finance-wechat-pay-applyment-shared");
+    expect(pageSource).not.toContain("finance-wechat-pay-applyment-requests");
     expect(requestSource).toContain("/platform/finance/wechat-pay/applyments?");
     expect(requestSource).toContain("/platform/finance/wechat-pay/applyments/");
     expect(actionsSource).toContain("/approve");
@@ -49,5 +52,12 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(actionsSource).toContain("/mark-applying");
     expect(actionsSource).toContain("/wechat-status");
     expect(actionsSource).toContain("/activate-config");
+  });
+
+  test("keeps platform applyment client table away from server-only request module", () => {
+    const tableSource = readSource("./platform-wechat-pay-applyments-table.tsx");
+
+    expect(tableSource).toContain("finance-wechat-pay-applyment-shared");
+    expect(tableSource).not.toContain("finance-wechat-pay-applyment-requests");
   });
 });

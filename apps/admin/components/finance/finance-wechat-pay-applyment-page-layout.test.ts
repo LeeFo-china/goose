@@ -50,4 +50,16 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(panelSource).toContain("super_admin_phone");
     expect(panelSource).not.toContain("api_v3_key");
   });
+
+  test("keeps tenant applyment client panel away from server-only request module", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const sharedSource = readSource("./finance-wechat-pay-applyment-shared.ts");
+    const requestSource = readSource("./finance-wechat-pay-applyment-requests.ts");
+
+    expect(panelSource).toContain("./finance-wechat-pay-applyment-shared");
+    expect(panelSource).not.toContain("./finance-wechat-pay-applyment-requests");
+    expect(sharedSource).not.toContain("@/lib/auth");
+    expect(sharedSource).not.toContain("next/headers");
+    expect(requestSource).toContain("./finance-wechat-pay-applyment-shared");
+  });
 });

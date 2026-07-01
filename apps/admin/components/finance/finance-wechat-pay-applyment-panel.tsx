@@ -20,7 +20,7 @@ import {
   getWechatPayApplymentStatusMeta,
   type WechatPayApplymentDetailData,
   type WechatPayApplymentDetailResult,
-} from "./finance-wechat-pay-applyment-requests";
+} from "./finance-wechat-pay-applyment-shared";
 
 export function FinanceWechatPayApplymentPanel({
   data,
