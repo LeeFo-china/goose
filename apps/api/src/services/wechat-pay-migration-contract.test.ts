@@ -97,6 +97,27 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).not.toContain("settlement_account_number text");
     expect(migrationSource).not.toContain("account_number_encrypted");
   });
+
+  test("adds platform wechat recharge primitives for tenant credit billing", () => {
+    const migrationSource = readPlatformWechatRechargeMigration();
+
+    expect(migrationSource).toContain("ALTER TABLE public.tenant_credit_orders");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS payment_config_id");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS out_trade_no");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS prepay_id");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS transaction_id");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS paid_amount_fen");
+    expect(migrationSource).toContain("CREATE TABLE IF NOT EXISTS public.tenant_credit_wechat_notifications");
+    expect(migrationSource).toContain("tenant_credit_orders_out_trade_unique_idx");
+    expect(migrationSource).toContain("tenant_credit_orders_wechat_transaction_unique_idx");
+    expect(migrationSource).toContain("tenant_credit_wechat_notifications_notify_unique_idx");
+    expect(migrationSource).toContain("CREATE OR REPLACE FUNCTION public.billing_confirm_wechat_recharge");
+    expect(migrationSource).toContain("'wechat_recharge'");
+    expect(migrationSource).toContain("FOR UPDATE");
+    expect(migrationSource).toContain("BILLING_RECHARGE_AMOUNT_MISMATCH");
+    expect(migrationSource).not.toContain("finance_ledger_entries");
+    expect(migrationSource).not.toContain("wechat_payment_orders");
+  });
 });
 
 function readWechatPayMigration() {
@@ -143,6 +164,16 @@ function readWechatPayApplymentBankAccountMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260702110000_wechat_pay_applyment_bank_account_fields.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readPlatformWechatRechargeMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260702150000_platform_wechat_recharge_credit.sql",
       import.meta.url,
     ),
     "utf8",
