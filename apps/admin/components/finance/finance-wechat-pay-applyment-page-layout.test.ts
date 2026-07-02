@@ -42,6 +42,7 @@ describe("Finance wechat pay applyment page layout", () => {
   test("tenant applyment panel posts create update and submit actions", () => {
     const requestSource = readSource("./finance-wechat-pay-applyment-requests.ts");
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const fieldSource = readSource("./finance-wechat-pay-applyment-form-fields.tsx");
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
 
     expect(requestSource).toContain("/finance/wechat-pay/applyment/current");
@@ -55,7 +56,34 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(panelSource).toContain("attachments");
     expect(panelSource).toContain("merchant_short_name");
     expect(panelSource).toContain("super_admin_phone");
+    expect(panelSource).toContain("settlement_account_type");
+    expect(panelSource).toContain("settlement_account_number");
+    expect(panelSource).toContain("settlement_bank_full_name");
+    expect(panelSource).toContain("settlement_bank_branch_id");
+    expect(fieldSource).toContain("@/components/ui/select");
+    expect(fieldSource).toContain("SelectGroup");
+    expect(panelSource).toContain('requirement="required"');
+    expect(panelSource).toContain('requirement="optional"');
+    expect(panelSource).toContain("标记为必填的字段会影响保存和提交");
+    expect(panelSource).not.toContain("settlement_account_summary: requiredText");
     expect(panelSource).not.toContain("api_v3_key");
+  });
+
+  test("tenant applyment form marks required optional and attachment requirements", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const fieldSource = readSource("./finance-wechat-pay-applyment-form-fields.tsx");
+    const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
+
+    expect(fieldSource).toContain("RequirementBadge");
+    expect(fieldSource).toContain("必填");
+    expect(fieldSource).toContain("选填");
+    expect(fieldSource).toContain("required={required}");
+    expect(fieldSource).toContain("aria-required");
+    expect(panelSource).toContain("用于微信支付开户联系");
+    expect(panelSource).toContain("保存后只记录掩码");
+    expect(panelSource).toContain("填写银行基础名称");
+    expect(attachmentSource).toContain("必传");
+    expect(attachmentSource).toContain("选传");
   });
 
   test("tenant applyment attachment uploader uses shadcn button for the visible upload action", () => {

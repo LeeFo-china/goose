@@ -282,13 +282,25 @@ export class WechatPayApplymentService {
     );
     assignIfDefined(patch, "super_admin_name", input.super_admin_name);
     assignIfDefined(patch, "super_admin_email", input.super_admin_email);
+    assignIfDefined(patch, "settlement_account_type", input.settlement_account_type);
     assignIfDefined(patch, "settlement_account_name", input.settlement_account_name);
     assignIfDefined(patch, "settlement_bank_name", input.settlement_bank_name);
-    assignIfDefined(
-      patch,
-      "settlement_account_summary",
-      input.settlement_account_summary,
-    );
+    assignIfDefined(patch, "settlement_bank_full_name", input.settlement_bank_full_name);
+    assignIfDefined(patch, "settlement_bank_branch_id", input.settlement_bank_branch_id);
+    if (input.settlement_account_number !== undefined) {
+      const accountNumber = input.settlement_account_number.trim();
+      patch.settlement_account_number_masked = maskBankAccountNumber(accountNumber);
+      patch.settlement_account_summary = buildSettlementAccountSummary(
+        input.settlement_bank_name,
+        accountNumber,
+      );
+    } else {
+      assignIfDefined(
+        patch,
+        "settlement_account_summary",
+        input.settlement_account_summary,
+      );
+    }
     assignIfDefined(
       patch,
       "business_scene_description",
@@ -364,8 +376,10 @@ export class WechatPayApplymentService {
       ["legal_representative_name", applyment.legal_representative_name],
       ["super_admin_name", applyment.super_admin_name],
       ["super_admin_phone_masked", applyment.super_admin_phone_masked],
+      ["settlement_account_type", applyment.settlement_account_type],
       ["settlement_account_name", applyment.settlement_account_name],
       ["settlement_bank_name", applyment.settlement_bank_name],
+      ["settlement_account_number_masked", applyment.settlement_account_number_masked],
       ["settlement_account_summary", applyment.settlement_account_summary],
       ["business_scene_description", applyment.business_scene_description],
       ["contact_address", applyment.contact_address],
@@ -426,6 +440,21 @@ function maskPhone(phone: string | null | undefined) {
   return `${normalized.slice(0, 3)}****${normalized.slice(-4)}`;
 }
 
+function maskBankAccountNumber(accountNumber: string) {
+  const normalized = accountNumber.trim();
+  if (normalized.length <= 6) return normalized;
+  return `${normalized.slice(0, 2)}${"*".repeat(Math.max(normalized.length - 6, 4))}${normalized.slice(-4)}`;
+}
+
+function buildSettlementAccountSummary(
+  bankName: string | null | undefined,
+  accountNumber: string,
+) {
+  const tail = accountNumber.trim().slice(-4);
+  const prefix = bankName?.trim();
+  return [prefix, tail ? `尾号 ${tail}` : null].filter(Boolean).join(" ");
+}
+
 function collectAttachmentCategories(attachments: unknown) {
   const categories = new Set<string>();
   if (!Array.isArray(attachments)) return categories;
@@ -442,27 +471,6 @@ function collectAttachmentCategories(attachments: unknown) {
   }
 
   return categories;
-}
-
-function resolveMainStatus(
-  currentStatus: string,
-  input: UpdateWechatPayApplymentWechatStatusInput,
-) {
-  const applymentState = input.applyment_state;
-  const appidBindingState = input.appid_binding_state;
-  if (applymentState === "opened" && appidBindingState === "bound") {
-    return "bound";
-  }
-  if (applymentState === "opened") return "opened";
-  if (
-    applymentState === "reviewing" ||
-    applymentState === "account_verifying" ||
-    applymentState === "signing"
-  ) {
-    return applymentState;
-  }
-  if (applymentState === "rejected") return "rejected";
-  return currentStatus === "approved" ? "applying" : currentStatus;
 }
 
 function createApplicationNo() {

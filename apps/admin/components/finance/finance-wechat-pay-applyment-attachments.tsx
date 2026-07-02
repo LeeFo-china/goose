@@ -167,7 +167,9 @@ export function WechatPayApplymentAttachmentsField({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                     <span>{label}</span>
-                    {slot.required ? <Badge variant="secondary">必传</Badge> : null}
+                    <Badge variant={slot.required ? "secondary" : "outline"}>
+                      {slot.required ? "必传" : "选传"}
+                    </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{slot.description}</p>
                 </div>

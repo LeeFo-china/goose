@@ -89,8 +89,13 @@ export default async function PlatformWechatPayApplymentDetailPage({
                 <InfoItem label="统一社会信用代码" value={applyment.license_code} />
                 <InfoItem label="法人" value={applyment.legal_representative_name} />
                 <InfoItem label="超级管理员" value={`${applyment.super_admin_name || "-"} / ${applyment.super_admin_phone_masked || "-"}`} />
-                <InfoItem label="结算账户" value={applyment.settlement_account_summary} />
+                <InfoItem label="账户类型" value={formatSettlementAccountType(applyment.settlement_account_type)} />
+                <InfoItem label="结算账户开户名" value={applyment.settlement_account_name} />
                 <InfoItem label="开户银行" value={applyment.settlement_bank_name} />
+                <InfoItem label="银行账号" value={applyment.settlement_account_number_masked} />
+                <InfoItem label="开户银行全称" value={applyment.settlement_bank_full_name} />
+                <InfoItem label="联行号" value={applyment.settlement_bank_branch_id} />
+                <InfoItem label="结算账户摘要" value={applyment.settlement_account_summary} />
                 <InfoItem label="进件业务编号" value={applyment.applyment_business_code} />
                 <InfoItem label="微信申请单号" value={applyment.applyment_id} />
                 <InfoItem label="子商户号" value={applyment.sub_mchid} />
@@ -220,4 +225,10 @@ function InfoItem({
       <div className="mt-1 break-words text-sm">{value || "-"}</div>
     </div>
   );
+}
+
+function formatSettlementAccountType(value?: string | null) {
+  if (value === "BANK_ACCOUNT_TYPE_CORPORATE") return "对公银行账户";
+  if (value === "BANK_ACCOUNT_TYPE_PERSONAL") return "经营者个人银行卡";
+  return value || "-";
 }

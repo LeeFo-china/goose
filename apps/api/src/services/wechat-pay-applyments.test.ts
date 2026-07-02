@@ -39,9 +39,13 @@ const submittedApplyment: WechatPayApplymentRecord = {
   super_admin_name: "李四",
   super_admin_phone_masked: "138****0000",
   super_admin_email: "admin@example.com",
+  settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
   settlement_account_name: "固始晴天装饰工程有限公司",
-  settlement_bank_name: "中国银行固始支行",
-  settlement_account_summary: "尾号 1234",
+  settlement_bank_name: "中国银行",
+  settlement_bank_full_name: "中国银行股份有限公司固始支行",
+  settlement_bank_branch_id: "104515080123",
+  settlement_account_number_masked: "62**********1234",
+  settlement_account_summary: "中国银行 尾号 1234",
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
   attachments: requiredAttachments,
@@ -195,6 +199,19 @@ function authContextWithPermissions(
   };
 }
 
+const tenantReadAuth = () =>
+  authContextWithPermissions([{ code: "wechat_pay.applyment.read", scope: "all" }]);
+
+const tenantSubmitAuth = () =>
+  authContextWithPermissions([{ code: "wechat_pay.applyment.submit", scope: "all" }]);
+
+const platformAdminAuth = () =>
+  authContextWithPermissions([], {
+    tenantId: null,
+    isPlatformAdmin: true,
+    roleCodes: ["platform_admin"],
+  });
+
 async function createService() {
   const { WechatPayApplymentService } = await import("./wechat-pay-applyments");
   return new WechatPayApplymentService({
@@ -236,13 +253,7 @@ describe("WechatPayApplymentService", () => {
 
   test("returns current tenant applyment with events for readers", async () => {
     const service = await createService();
-
-    const result = await service.getCurrent(
-      authContextWithPermissions([
-        { code: "wechat_pay.applyment.read", scope: "all" },
-      ]),
-    );
-
+    const result = await service.getCurrent(tenantReadAuth());
     expect(findLatestByTenant).toHaveBeenCalledWith(tenantId);
     expect(findEvents).toHaveBeenCalledWith({ tenantId, applymentId });
     expect(result.applyment?.application_no).toBe("WPA202607010001");
@@ -255,9 +266,7 @@ describe("WechatPayApplymentService", () => {
     const service = await createService();
 
     await service.createDraft(
-      authContextWithPermissions([
-        { code: "wechat_pay.applyment.submit", scope: "all" },
-      ]),
+      tenantSubmitAuth(),
       {
         merchant_short_name: "晴天装饰",
         license_name: "固始晴天装饰工程有限公司",
@@ -266,9 +275,12 @@ describe("WechatPayApplymentService", () => {
         super_admin_name: "李四",
         super_admin_phone: "13800000000",
         super_admin_email: "admin@example.com",
+        settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
         settlement_account_name: "固始晴天装饰工程有限公司",
-        settlement_bank_name: "中国银行固始支行",
-        settlement_account_summary: "尾号 1234",
+        settlement_bank_name: "中国银行",
+        settlement_bank_full_name: "中国银行股份有限公司固始支行",
+        settlement_bank_branch_id: "104515080123",
+        settlement_account_number: "6212345678901234",
         business_scene_description: "装修项目收款",
         contact_address: "河南省信阳市固始县",
       },
@@ -280,10 +292,14 @@ describe("WechatPayApplymentService", () => {
         application_no: "WPA202607010001",
         status: "draft",
         super_admin_phone_masked: "138****0000",
+        settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
+        settlement_account_number_masked: "62**********1234",
+        settlement_account_summary: "中国银行 尾号 1234",
         created_by_employee_id: employeeId,
       }),
     );
     expect(JSON.stringify(createApplyment.mock.calls[0]?.[0])).not.toContain("13800000000");
+    expect(JSON.stringify(createApplyment.mock.calls[0]?.[0])).not.toContain("6212345678901234");
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
       event_type: "created",
       to_status: "draft",
@@ -298,13 +314,7 @@ describe("WechatPayApplymentService", () => {
     }));
     const service = await createService();
 
-    await service.submit(
-      authContextWithPermissions([
-        { code: "wechat_pay.applyment.submit", scope: "all" },
-      ]),
-      applymentId,
-      { remark: "已补充资料" },
-    );
+    await service.submit(tenantSubmitAuth(), applymentId, { remark: "已补充资料" });
 
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,
@@ -330,33 +340,19 @@ describe("WechatPayApplymentService", () => {
       applyment_state: "closed",
     }));
     const service = await createService();
-
-    const result = await service.getCurrent(
-      authContextWithPermissions([
-        { code: "wechat_pay.applyment.submit", scope: "all" },
-      ]),
-    );
-
+    const result = await service.getCurrent(tenantSubmitAuth());
     expect(result.applyment).toBeNull();
     expect(result.events).toEqual([]);
     expect(result.can_submit).toBe(false);
   });
   test("rejects submit when required applyment attachments are missing", async () => {
     findById.mockImplementationOnce(async () => ({
-      ...submittedApplyment,
-      status: "draft",
-      attachments: [],
+      ...submittedApplyment, status: "draft", attachments: [],
     }));
     const service = await createService();
 
     await expect(
-      service.submit(
-        authContextWithPermissions([
-          { code: "wechat_pay.applyment.submit", scope: "all" },
-        ]),
-        applymentId,
-        {},
-      ),
+      service.submit(tenantSubmitAuth(), applymentId, {}),
     ).rejects.toMatchObject({
       statusCode: 400,
       code: "WECHAT_PAY_APPLYMENT_REQUIRED_FIELDS_MISSING",
@@ -369,13 +365,25 @@ describe("WechatPayApplymentService", () => {
       },
     });
   });
+
+  test("rejects submit when bank account number has not been captured", async () => {
+    findById.mockImplementationOnce(async () => ({
+      ...submittedApplyment, status: "draft", settlement_account_number_masked: null,
+    }));
+    const service = await createService();
+
+    await expect(
+      service.submit(tenantSubmitAuth(), applymentId, {}),
+    ).rejects.toMatchObject({
+      code: "WECHAT_PAY_APPLYMENT_REQUIRED_FIELDS_MISSING",
+      details: expect.objectContaining({
+        missing: expect.arrayContaining(["settlement_account_number_masked"]),
+      }),
+    });
+  });
   test("platform approves rejects and lists with pagination", async () => {
     const service = await createService();
-    const platformAuth = authContextWithPermissions([], {
-      tenantId: null,
-      isPlatformAdmin: true,
-      roleCodes: ["platform_admin"],
-    });
+    const platformAuth = platformAdminAuth();
 
     const list = await service.listForPlatform(platformAuth, {
       page: 1,
@@ -413,11 +421,7 @@ describe("WechatPayApplymentService", () => {
       payment_config_id: paymentConfigId,
     }));
     const service = await createService();
-    const platformAuth = authContextWithPermissions([], {
-      tenantId: null,
-      isPlatformAdmin: true,
-      roleCodes: ["platform_admin"],
-    });
+    const platformAuth = platformAdminAuth();
 
     await service.updateWechatStatus(platformAuth, applymentId, {
       applyment_state: "closed",
@@ -460,11 +464,7 @@ describe("WechatPayApplymentService", () => {
       opened_at: "2026-07-01T11:00:00.000Z",
     }));
     const service = await createService();
-    const platformAuth = authContextWithPermissions([], {
-      tenantId: null,
-      isPlatformAdmin: true,
-      roleCodes: ["platform_admin"],
-    });
+    const platformAuth = platformAdminAuth();
 
     await service.activateConfig(platformAuth, applymentId, {
       merchant_id: "1561816121",

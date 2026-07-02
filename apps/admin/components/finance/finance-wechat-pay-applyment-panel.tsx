@@ -6,14 +6,7 @@ import { Loader2, Save, SendHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { FieldGroup } from "@/components/ui/field";
 import { requestBackendJson } from "@/lib/backend-client";
 import {
   formatWechatPayApplymentTime,
@@ -23,6 +16,16 @@ import {
   type WechatPayApplymentDetailResult,
 } from "./finance-wechat-pay-applyment-shared";
 import { WechatPayApplymentAttachmentsField } from "./finance-wechat-pay-applyment-attachments";
+import {
+  SelectField,
+  TextareaField,
+  TextField,
+} from "./finance-wechat-pay-applyment-form-fields";
+
+const SETTLEMENT_ACCOUNT_TYPE_OPTIONS = [
+  { value: "BANK_ACCOUNT_TYPE_CORPORATE", label: "对公银行账户" },
+  { value: "BANK_ACCOUNT_TYPE_PERSONAL", label: "经营者个人银行卡" },
+];
 
 export function FinanceWechatPayApplymentPanel({
   data,
@@ -51,6 +54,7 @@ export function FinanceWechatPayApplymentPanel({
     const form = new FormData(event.currentTarget);
     const payload = buildApplymentPayload(form, {
       hasMaskedPhone: Boolean(applyment?.super_admin_phone_masked),
+      hasMaskedBankAccount: Boolean(applyment?.settlement_account_number_masked),
       attachments,
     });
     const path = applyment
@@ -123,35 +127,51 @@ export function FinanceWechatPayApplymentPanel({
           ) : null}
         </div>
 
+        <p className="text-xs leading-5 text-muted-foreground">
+          标记为必填的字段会影响保存和提交；营业执照、法人身份证正反面在提交时必传。
+        </p>
+
         <FieldGroup className="grid gap-4 md:grid-cols-2">
           <TextField
             label="商户简称"
             name="merchant_short_name"
             defaultValue={applyment?.merchant_short_name || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
+            description="对外展示的商户简称，建议使用门店或公司简称。"
           />
           <TextField
             label="营业执照主体名称"
             name="license_name"
             defaultValue={applyment?.license_name || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
+            description="按营业执照完整填写。"
           />
           <TextField
             label="统一社会信用代码"
             name="license_code"
             defaultValue={applyment?.license_code || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
           />
           <TextField
             label="法人姓名"
             name="legal_representative_name"
             defaultValue={applyment?.legal_representative_name || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
           />
           <TextField
             label="超级管理员姓名"
             name="super_admin_name"
             defaultValue={applyment?.super_admin_name || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
           />
           <TextField
@@ -159,50 +179,95 @@ export function FinanceWechatPayApplymentPanel({
             name="super_admin_phone"
             defaultValue=""
             placeholder={applyment?.super_admin_phone_masked || "用于平台审核后脱敏保存"}
+            requirement="required"
+            required={!applyment?.super_admin_phone_masked}
             disabled={pending || !editable}
-            description="保存后只记录脱敏手机号。"
+            description="用于微信支付开户联系；已有脱敏手机号时可留空。"
           />
           <TextField
             label="超级管理员邮箱"
             name="super_admin_email"
             type="email"
             defaultValue={applyment?.super_admin_email || ""}
+            requirement="optional"
             disabled={pending || !editable}
+          />
+          <SelectField
+            label="结算账户类型"
+            name="settlement_account_type"
+            defaultValue={applyment?.settlement_account_type || "BANK_ACCOUNT_TYPE_CORPORATE"}
+            options={SETTLEMENT_ACCOUNT_TYPE_OPTIONS}
+            requirement="required"
+            disabled={pending || !editable}
+            description="对公账户填公司账户；对私账户填经营者本人银行卡。"
           />
           <TextField
             label="结算账户开户名"
             name="settlement_account_name"
             defaultValue={applyment?.settlement_account_name || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
+            description="对公账户填公司全称；对私账户填银行卡开户人姓名。"
           />
           <TextField
             label="开户银行"
             name="settlement_bank_name"
             defaultValue={applyment?.settlement_bank_name || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
+            description="填写银行基础名称，如中国银行、招商银行。"
           />
           <TextField
-            label="结算账户摘要"
-            name="settlement_account_summary"
-            defaultValue={applyment?.settlement_account_summary || ""}
+            label="银行账号"
+            name="settlement_account_number"
+            defaultValue=""
+            placeholder={applyment?.settlement_account_number_masked || "请输入银行账号"}
+            requirement="required"
+            required={!applyment?.settlement_account_number_masked}
             disabled={pending || !editable}
+            description="保存后只记录掩码；真实进件时使用微信支付公钥加密。"
+          />
+          <TextField
+            label="开户银行全称（含支行）"
+            name="settlement_bank_full_name"
+            defaultValue={applyment?.settlement_bank_full_name || ""}
+            requirement="optional"
+            disabled={pending || !editable}
+            description="有支行信息时填写完整支行名称。"
+          />
+          <TextField
+            label="开户银行联行号"
+            name="settlement_bank_branch_id"
+            defaultValue={applyment?.settlement_bank_branch_id || ""}
+            requirement="optional"
+            disabled={pending || !editable}
+            description="已知银行联行号时填写，便于平台线下进件核对。"
           />
           <TextareaField
             label="经营场景说明"
             name="business_scene_description"
             defaultValue={applyment?.business_scene_description || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
+            description="说明租户通过小程序或线下服务收款的业务场景。"
           />
           <TextareaField
             label="联系地址"
             name="contact_address"
             defaultValue={applyment?.contact_address || ""}
+            requirement="required"
+            required
             disabled={pending || !editable}
+            description="填写经营或办公联系地址。"
           />
           <TextareaField
             label="备注"
             name="remark"
             defaultValue={applyment?.remark || ""}
+            requirement="optional"
             disabled={pending || !editable}
           />
         </FieldGroup>
@@ -260,68 +325,11 @@ export function FinanceWechatPayApplymentPanel({
   );
 }
 
-function TextField({
-  label,
-  name,
-  defaultValue,
-  placeholder,
-  description,
-  type = "text",
-  disabled,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  placeholder?: string;
-  description?: string;
-  type?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <Field>
-      <FieldLabel htmlFor={`wechat-pay-applyment-${name}`}>{label}</FieldLabel>
-      <Input
-        id={`wechat-pay-applyment-${name}`}
-        name={name}
-        type={type}
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        disabled={disabled}
-      />
-      {description ? <FieldDescription>{description}</FieldDescription> : null}
-    </Field>
-  );
-}
-
-function TextareaField({
-  label,
-  name,
-  defaultValue,
-  disabled,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <Field className="md:col-span-2">
-      <FieldLabel htmlFor={`wechat-pay-applyment-${name}`}>{label}</FieldLabel>
-      <Textarea
-        id={`wechat-pay-applyment-${name}`}
-        name={name}
-        defaultValue={defaultValue}
-        disabled={disabled}
-        rows={3}
-      />
-    </Field>
-  );
-}
-
 function buildApplymentPayload(
   form: FormData,
   options: {
     hasMaskedPhone: boolean;
+    hasMaskedBankAccount: boolean;
     attachments: WechatPayApplymentAttachment[];
   },
 ) {
@@ -332,9 +340,11 @@ function buildApplymentPayload(
     legal_representative_name: requiredText(form, "legal_representative_name"),
     super_admin_name: requiredText(form, "super_admin_name"),
     super_admin_email: optionalText(form, "super_admin_email"),
+    settlement_account_type: requiredText(form, "settlement_account_type"),
     settlement_account_name: requiredText(form, "settlement_account_name"),
     settlement_bank_name: requiredText(form, "settlement_bank_name"),
-    settlement_account_summary: requiredText(form, "settlement_account_summary"),
+    settlement_bank_full_name: optionalText(form, "settlement_bank_full_name"),
+    settlement_bank_branch_id: optionalText(form, "settlement_bank_branch_id"),
     business_scene_description: requiredText(form, "business_scene_description"),
     contact_address: requiredText(form, "contact_address"),
     attachments: options.attachments,
@@ -343,6 +353,10 @@ function buildApplymentPayload(
   const phone = requiredText(form, "super_admin_phone");
   if (phone || !options.hasMaskedPhone) {
     payload.super_admin_phone = phone;
+  }
+  const accountNumber = requiredText(form, "settlement_account_number");
+  if (accountNumber || !options.hasMaskedBankAccount) {
+    payload.settlement_account_number = accountNumber;
   }
   return payload;
 }

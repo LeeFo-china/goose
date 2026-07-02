@@ -17,9 +17,12 @@ const baseApplymentInput = {
   super_admin_name: "李四",
   super_admin_phone: "13800000000",
   super_admin_email: "admin@example.com",
+  settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
   settlement_account_name: "固始晴天装饰工程有限公司",
-  settlement_bank_name: "中国银行固始支行",
-  settlement_account_summary: "尾号 1234",
+  settlement_bank_name: "中国银行",
+  settlement_bank_full_name: "中国银行股份有限公司固始支行",
+  settlement_bank_branch_id: "104515080123",
+  settlement_account_number: "6212345678901234",
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
   attachments: [
@@ -42,7 +45,18 @@ describe("wechat pay applyment schemas", () => {
     if (!result.success) return;
     expect(result.data.merchant_short_name).toBe("固始晴天装饰");
     expect(result.data.super_admin_phone).toBe("13800000000");
+    expect(result.data.settlement_account_type).toBe("BANK_ACCOUNT_TYPE_CORPORATE");
+    expect(result.data.settlement_account_number).toBe("6212345678901234");
     expect(result.data.attachments?.[0]?.category).toBe("license_copy");
+  });
+
+  test("rejects invalid bank account number for tenant applyment input", () => {
+    const result = CreateWechatPayApplymentSchema.safeParse({
+      ...baseApplymentInput,
+      settlement_account_number: "abc123",
+    });
+
+    expect(result.success).toBe(false);
   });
 
   test("allows draft update without plaintext secret fields", () => {

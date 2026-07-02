@@ -46,8 +46,12 @@ export type WechatPayApplymentRecord = {
   super_admin_name: string | null;
   super_admin_phone_masked: string | null;
   super_admin_email: string | null;
+  settlement_account_type: string | null;
   settlement_account_name: string | null;
+  settlement_account_number_masked: string | null;
   settlement_bank_name: string | null;
+  settlement_bank_full_name: string | null;
+  settlement_bank_branch_id: string | null;
   settlement_account_summary: string | null;
   business_scene_description: string | null;
   contact_address: string | null;

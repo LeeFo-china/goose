@@ -66,6 +66,11 @@ export const WechatPayApplymentAttachmentCategorySchema = z.enum([
   "business_scene_material",
 ] as const, { message: "无效的微信支付开通申请附件类型" });
 
+export const WechatPayApplymentSettlementAccountTypeSchema = z.enum([
+  "BANK_ACCOUNT_TYPE_CORPORATE",
+  "BANK_ACCOUNT_TYPE_PERSONAL",
+] as const, { message: "无效的微信支付结算账户类型" });
+
 const AttachmentSchema = z.object({
   category: WechatPayApplymentAttachmentCategorySchema.optional(),
   object_key: requiredText(300, "附件对象 key 不能为空", "附件对象 key 不能超过 300 个字符"),
@@ -88,9 +93,15 @@ const TenantApplymentFields = {
       if (!value) return true;
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     }, "超级管理员邮箱格式不正确"),
+  settlement_account_type: WechatPayApplymentSettlementAccountTypeSchema,
   settlement_account_name: requiredText(100, "请输入结算账户开户名", "结算账户开户名不能超过 100 个字符"),
   settlement_bank_name: requiredText(100, "请输入结算账户开户银行", "开户银行不能超过 100 个字符"),
-  settlement_account_summary: requiredText(120, "请输入结算账户摘要", "结算账户摘要不能超过 120 个字符"),
+  settlement_bank_full_name: optionalText(128, "开户银行全称不能超过 128 个字符"),
+  settlement_bank_branch_id: optionalText(128, "开户银行联行号不能超过 128 个字符"),
+  settlement_account_number: z.string()
+    .trim()
+    .regex(/^\d{8,32}$/, "银行账号应为 8 到 32 位数字"),
+  settlement_account_summary: optionalText(120, "结算账户摘要不能超过 120 个字符"),
   business_scene_description: requiredText(500, "请输入经营场景说明", "经营场景说明不能超过 500 个字符"),
   contact_address: requiredText(200, "请输入联系地址", "联系地址不能超过 200 个字符"),
   attachments: z.array(AttachmentSchema).max(20, "附件数量不能超过 20").optional(),

@@ -85,6 +85,18 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).toContain("platform.wechat_pay.applyment.manage");
     expect(migrationSource).toContain("platform.wechat_pay.config.activate");
   });
+
+  test("extends applyments with official bank account fields without plaintext account storage", () => {
+    const migrationSource = readWechatPayApplymentBankAccountMigration();
+
+    expect(migrationSource).toContain("settlement_account_type");
+    expect(migrationSource).toContain("settlement_account_number_masked");
+    expect(migrationSource).toContain("settlement_bank_full_name");
+    expect(migrationSource).toContain("settlement_bank_branch_id");
+    expect(migrationSource).toContain("tenant_wechat_pay_applyments_settlement_account_type_check");
+    expect(migrationSource).not.toContain("settlement_account_number text");
+    expect(migrationSource).not.toContain("account_number_encrypted");
+  });
 });
 
 function readWechatPayMigration() {
@@ -121,6 +133,16 @@ function readWechatPayApplymentMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260701210000_wechat_pay_applyments.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readWechatPayApplymentBankAccountMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260702110000_wechat_pay_applyment_bank_account_fields.sql",
       import.meta.url,
     ),
     "utf8",

@@ -46,6 +46,10 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(pageSource).toContain("finance-wechat-pay-applyment-shared");
     expect(pageSource).toContain("申请附件");
     expect(pageSource).toContain("WechatPayApplymentAttachmentList");
+    expect(pageSource).toContain("账户类型");
+    expect(pageSource).toContain("银行账号");
+    expect(pageSource).toContain("开户银行全称");
+    expect(pageSource).toContain("联行号");
     expect(pageSource).not.toContain("finance-wechat-pay-applyment-requests");
     expect(requestSource).toContain("/platform/finance/wechat-pay/applyments?");
     expect(requestSource).toContain("/platform/finance/wechat-pay/applyments/");
