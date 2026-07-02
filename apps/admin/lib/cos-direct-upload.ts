@@ -1,4 +1,8 @@
-import { requestBackendJson } from "@/lib/backend-client";
+import {
+  getPayloadMessage,
+  requestBackendJson,
+  type BackendClientPayload,
+} from "@/lib/backend-client";
 
 export type DirectUploadInitResult = {
   object_key: string;
@@ -82,11 +86,23 @@ export async function uploadDirectToCos(
     fallbackMessage: input.initFallbackMessage || "初始化文件直传失败",
   });
 
-  const uploadResponse = await fetch(init.upload_url, {
-    method: init.method || "PUT",
-    headers: init.headers || { "content-type": mimetype },
-    body: file,
-  });
+  let uploadResponse: Response;
+  try {
+    uploadResponse = await fetch(init.upload_url, {
+      method: init.method || "PUT",
+      headers: init.headers || { "content-type": mimetype },
+      body: file,
+    });
+  } catch (error) {
+    if (!isBrowserDirectUploadNetworkError(error)) throw error;
+
+    const completed = await uploadDirectToCosProxy<DirectUploadCompleteResult>(
+      file,
+      commonPayload,
+      input.completeFallbackMessage || "登记文件直传结果失败",
+    );
+    return buildDirectUploadResult(completed, init, input.missingStorageMessage);
+  }
   if (!uploadResponse.ok) {
     const detail = await uploadResponse.text().catch(() => "");
     throw new Error(
@@ -109,10 +125,18 @@ export async function uploadDirectToCos(
     },
   );
 
+  return buildDirectUploadResult(completed, init, input.missingStorageMessage);
+}
+
+function buildDirectUploadResult(
+  completed: DirectUploadCompleteResult,
+  init: DirectUploadInitResult,
+  missingStorageMessage?: string,
+): DirectUploadResult {
   const storagePath = completed.storage_path || completed.object_key || init.storage_path ||
     init.object_key;
   if (typeof storagePath !== "string" || !storagePath) {
-    throw new Error(input.missingStorageMessage || "文件上传成功但未返回地址");
+    throw new Error(missingStorageMessage || "文件上传成功但未返回地址");
   }
 
   return {
@@ -124,4 +148,43 @@ export async function uploadDirectToCos(
     init,
     completed,
   };
+}
+
+function isBrowserDirectUploadNetworkError(error: unknown) {
+  if (!(error instanceof TypeError)) return false;
+  return /fetch|network|failed/i.test(error.message);
+}
+
+async function uploadDirectToCosProxy<T>(
+  file: File,
+  commonPayload: Record<string, unknown>,
+  fallbackMessage: string,
+) {
+  const formData = new FormData();
+  formData.set("file", file);
+  formData.set("payload", JSON.stringify(commonPayload));
+  for (const [key, value] of Object.entries(commonPayload)) {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      formData.set(key, String(value));
+    }
+  }
+
+  const response = await fetch("/api/uploads/cos/direct-proxy", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({})) as BackendClientPayload<T>;
+  if (!response.ok || payload.success === false) {
+    throw Object.assign(
+      new Error(getPayloadMessage(payload, fallbackMessage || `请求失败(${response.status})`)),
+      {
+        status: response.status,
+        code: payload.code,
+        requestId: payload.requestId,
+        payload,
+      },
+    );
+  }
+
+  return payload.data as T;
 }
