@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,6 +19,17 @@ const workspaceRoot = resolve(repoRoot, '..');
 const ragRoot = resolveRagRoot(repoRoot, workspaceRoot);
 const sharedRunner = resolve(ragRoot, 'scripts/post-commit-rag-sync.mjs');
 const configPath = resolve(repoRoot, '.codex/rag-sync.config.json');
+const config = JSON.parse(readFileSync(configPath, 'utf8'));
+
+if (process.env[config.disableEnvVar] === '0') {
+  log(config, `skip: ${config.disableEnvVar}=0`);
+  process.exit(0);
+}
+
+if (!argv.includes('--force') && !headTouchesConfiguredCandidates(repoRoot, config)) {
+  log(config, `skip: HEAD does not touch ${config.profile} docs`);
+  process.exit(0);
+}
 
 execFileSync(
   process.execPath,
@@ -70,4 +81,64 @@ function resolveRagRoot(repoRoot, workspaceRoot) {
   }
 
   return candidates[0];
+}
+
+function headTouchesConfiguredCandidates(repoRoot, config) {
+  const candidate = config.candidate || {};
+  const includeRootFiles = new Set(candidate.includeRootFiles || []);
+  const includePrefixes = candidate.includePrefixes || [];
+  const extensions = new Set((candidate.extensions || []).map((value) => value.toLowerCase()));
+  const pathspecs = [...includeRootFiles, ...includePrefixes];
+
+  if (pathspecs.length === 0) {
+    return true;
+  }
+
+  const output = execFileSync(
+    'git',
+    [
+      '-c',
+      'core.quotepath=false',
+      'diff-tree',
+      '--root',
+      '--no-commit-id',
+      '--name-only',
+      '-z',
+      '-r',
+      'HEAD',
+      '--',
+      ...pathspecs,
+    ],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      maxBuffer: 8 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'inherit'],
+    },
+  );
+
+  return output
+    .split('\0')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .some((filePath) =>
+      isProfileCandidate(filePath, includeRootFiles, includePrefixes, extensions),
+    );
+}
+
+function isProfileCandidate(filePath, includeRootFiles, includePrefixes, extensions) {
+  if (includeRootFiles.has(filePath)) {
+    return true;
+  }
+
+  if (!includePrefixes.some((prefix) => filePath.startsWith(prefix))) {
+    return false;
+  }
+
+  const extension = filePath.includes('.') ? `.${filePath.split('.').pop().toLowerCase()}` : '';
+  return extensions.has(extension);
+}
+
+function log(config, message) {
+  console.log(`[${config.logPrefix || 'rag-sync'}] ${message}`);
 }
