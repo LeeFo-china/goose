@@ -140,6 +140,7 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "微信支付",
         icon: WalletCards,
         permission: "wechat_pay.config.read",
+        activeMatch: "exact",
       },
       {
         href: "/finance/wechat-pay/applyment",

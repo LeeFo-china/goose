@@ -11,6 +11,7 @@ describe("Finance wechat pay admin page layout", () => {
         href: "/finance/wechat-pay",
         label: "微信支付",
         permission: "wechat_pay.config.read",
+        activeMatch: "exact",
       }),
     );
   });
