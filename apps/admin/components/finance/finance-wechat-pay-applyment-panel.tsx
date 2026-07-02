@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save, SendHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -34,6 +34,7 @@ export function FinanceWechatPayApplymentPanel({
 }) {
   const router = useRouter();
   const applyment = data.applyment;
+  const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState(data.error || "");
   const [saved, setSaved] = useState(false);
   const [attachments, setAttachments] = useState<WechatPayApplymentAttachment[]>(
@@ -51,26 +52,13 @@ export function FinanceWechatPayApplymentPanel({
     event.preventDefault();
     if (!editable) return;
 
-    const form = new FormData(event.currentTarget);
-    const payload = buildApplymentPayload(form, {
-      hasMaskedPhone: Boolean(applyment?.super_admin_phone_masked),
-      hasMaskedBankAccount: Boolean(applyment?.settlement_account_number_masked),
-      attachments,
-    });
-    const path = applyment
-      ? `/finance/wechat-pay/applyments/${applyment.id}`
-      : "/finance/wechat-pay/applyments";
-    const method = applyment ? "PUT" : "POST";
+    const payload = buildCurrentApplymentPayload(event.currentTarget);
 
     setError("");
     setSaved(false);
     startTransition(async () => {
       try {
-        await requestBackendJson<WechatPayApplymentDetailData>(path, {
-          method,
-          body: JSON.stringify(payload),
-          fallbackMessage: "微信支付开通申请保存失败",
-        });
+        await saveApplymentDraft(payload);
         setSaved(true);
         router.refresh();
       } catch (err) {
@@ -81,15 +69,20 @@ export function FinanceWechatPayApplymentPanel({
 
   function submitApplyment() {
     if (!applyment || !data.can_submit) return;
+    const formElement = formRef.current;
+    if (!formElement) return;
+    const payload = buildCurrentApplymentPayload(formElement);
     setError("");
     setSaved(false);
     startTransition(async () => {
       try {
+        const savedDetail = await saveApplymentDraft(payload);
+        const targetApplyment = savedDetail.applyment || applyment;
         await requestBackendJson<WechatPayApplymentDetailData>(
-          `/finance/wechat-pay/applyments/${applyment.id}/submit`,
+          `/finance/wechat-pay/applyments/${targetApplyment.id}/submit`,
           {
             method: "POST",
-            body: JSON.stringify({ remark: applyment.remark || null }),
+            body: JSON.stringify({ remark: payload.remark || targetApplyment.remark || null }),
             fallbackMessage: "微信支付开通申请提交失败",
           },
         );
@@ -100,9 +93,28 @@ export function FinanceWechatPayApplymentPanel({
     });
   }
 
+  function buildCurrentApplymentPayload(formElement: HTMLFormElement) {
+    return buildApplymentPayload(new FormData(formElement), {
+      hasMaskedPhone: Boolean(applyment?.super_admin_phone_masked),
+      hasMaskedBankAccount: Boolean(applyment?.settlement_account_number_masked),
+      attachments,
+    });
+  }
+
+  function saveApplymentDraft(payload: Record<string, unknown>) {
+    const path = applyment
+      ? `/finance/wechat-pay/applyments/${applyment.id}`
+      : "/finance/wechat-pay/applyments";
+    return requestBackendJson<WechatPayApplymentDetailData>(path, {
+      method: applyment ? "PUT" : "POST",
+      body: JSON.stringify(payload),
+      fallbackMessage: "微信支付开通申请保存失败",
+    });
+  }
+
   return (
     <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <form className="flex min-w-0 flex-col gap-4" onSubmit={submitSave}>
+      <form ref={formRef} className="flex min-w-0 flex-col gap-4" onSubmit={submitSave}>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {saved ? <StatusAlert tone="success">开通申请已保存。</StatusAlert> : null}
         {!editable ? (

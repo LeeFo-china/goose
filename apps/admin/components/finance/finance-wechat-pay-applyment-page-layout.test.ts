@@ -86,6 +86,15 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(attachmentSource).toContain("选传");
   });
 
+  test("tenant applyment submit persists current form and attachments before submit", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+
+    expect(panelSource).toContain("formRef");
+    expect(panelSource).toContain("saveApplymentDraft(payload)");
+    expect(panelSource).toContain("const savedDetail = await saveApplymentDraft(payload)");
+    expect(panelSource).toContain("targetApplyment.id");
+  });
+
   test("tenant applyment attachment uploader uses shadcn button for the visible upload action", () => {
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
 
