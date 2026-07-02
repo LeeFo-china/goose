@@ -118,6 +118,22 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).not.toContain("finance_ledger_entries");
     expect(migrationSource).not.toContain("wechat_payment_orders");
   });
+
+  test("creates platform payment config for platform recharge merchant", () => {
+    const migrationSource = readPlatformPaymentConfigMigration();
+
+    expect(migrationSource).toContain("CREATE TABLE IF NOT EXISTS public.platform_payment_configs");
+    expect(migrationSource).toContain("provider text NOT NULL DEFAULT 'wechat_pay'");
+    expect(migrationSource).toContain("principal_type text NOT NULL DEFAULT 'platform'");
+    expect(migrationSource).toContain("merchant_mode text NOT NULL DEFAULT 'direct_merchant'");
+    expect(migrationSource).toContain("encrypted_config_ref text NULL");
+    expect(migrationSource).toContain("enabled_channels text[] NOT NULL DEFAULT ARRAY['tenant_recharge']");
+    expect(migrationSource).toContain("platform_payment_configs_provider_unique_idx");
+    expect(migrationSource).toContain("platform.payment.config.read");
+    expect(migrationSource).toContain("platform.payment.config.manage");
+    expect(migrationSource).not.toContain("api_v3_key");
+    expect(migrationSource).not.toContain("private_key");
+  });
 });
 
 function readWechatPayMigration() {
@@ -174,6 +190,16 @@ function readPlatformWechatRechargeMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260702150000_platform_wechat_recharge_credit.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readPlatformPaymentConfigMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260702161000_platform_payment_configs.sql",
       import.meta.url,
     ),
     "utf8",
