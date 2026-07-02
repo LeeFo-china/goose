@@ -17,6 +17,7 @@ import type {
   UpdateWechatPayApplymentInput,
   UpdateWechatPayApplymentWechatStatusInput,
 } from "@/schema/wechat-pay-applyments";
+import { WechatPayApplymentAttachmentCategorySchema } from "@/schema/wechat-pay-applyments";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { WechatPayApplymentPlatformActions } from "@/services/wechat-pay-applyments-platform";
@@ -31,6 +32,12 @@ import {
   TENANT_READ_PERMISSION,
   TENANT_SUBMIT_PERMISSION,
 } from "@/services/wechat-pay-applyments-types";
+
+const REQUIRED_APPLYMENT_ATTACHMENT_CATEGORIES = [
+  "license_copy",
+  "legal_representative_id_card_front",
+  "legal_representative_id_card_back",
+] as const;
 
 export class WechatPayApplymentService {
   private readonly repository: WechatPayApplymentRepositoryPort;
@@ -60,6 +67,9 @@ export class WechatPayApplymentService {
     const tenantId = this.accessPolicyService.assertTenantContext(authContext);
     this.assertTenantRead(authContext);
     const applyment = await this.repository.findLatestByTenant(tenantId);
+    if (applyment && ["closed", "suspended"].includes(applyment.status)) {
+      return this.toDetail(authContext, null);
+    }
     return this.toDetail(authContext, applyment);
   }
 
@@ -362,6 +372,12 @@ export class WechatPayApplymentService {
     ]
       .filter(([, value]) => !String(value ?? "").trim())
       .map(([field]) => field);
+    const attachmentCategories = collectAttachmentCategories(applyment.attachments);
+    for (const category of REQUIRED_APPLYMENT_ATTACHMENT_CATEGORIES) {
+      if (!attachmentCategories.has(category)) {
+        missing.push(`attachments.${category}`);
+      }
+    }
     if (missing.length > 0) {
       throw Errors.business(
         400,
@@ -408,6 +424,24 @@ function maskPhone(phone: string | null | undefined) {
   const normalized = phone?.trim() ?? "";
   if (normalized.length < 7) return normalized || null;
   return `${normalized.slice(0, 3)}****${normalized.slice(-4)}`;
+}
+
+function collectAttachmentCategories(attachments: unknown) {
+  const categories = new Set<string>();
+  if (!Array.isArray(attachments)) return categories;
+
+  for (const attachment of attachments) {
+    if (!attachment || typeof attachment !== "object" || Array.isArray(attachment)) {
+      continue;
+    }
+    const category = (attachment as { category?: unknown }).category;
+    const parsed = WechatPayApplymentAttachmentCategorySchema.safeParse(category);
+    if (parsed.success) {
+      categories.add(parsed.data);
+    }
+  }
+
+  return categories;
 }
 
 function resolveMainStatus(

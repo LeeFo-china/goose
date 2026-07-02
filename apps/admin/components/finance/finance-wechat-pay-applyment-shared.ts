@@ -1,3 +1,39 @@
+export const WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORIES = [
+  "license_copy",
+  "legal_representative_id_card_front",
+  "legal_representative_id_card_back",
+  "settlement_account_proof",
+  "business_scene_material",
+] as const;
+
+export type WechatPayApplymentAttachmentCategory =
+  (typeof WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORIES)[number];
+
+export const WECHAT_PAY_APPLYMENT_REQUIRED_ATTACHMENT_CATEGORIES: WechatPayApplymentAttachmentCategory[] = [
+  "license_copy",
+  "legal_representative_id_card_front",
+  "legal_representative_id_card_back",
+];
+
+export const WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORY_LABELS: Record<
+  WechatPayApplymentAttachmentCategory,
+  string
+> = {
+  license_copy: "营业执照照片",
+  legal_representative_id_card_front: "法人身份证人像面",
+  legal_representative_id_card_back: "法人身份证国徽面",
+  settlement_account_proof: "结算账户证明",
+  business_scene_material: "经营场景材料",
+};
+
+export type WechatPayApplymentAttachment = {
+  category?: WechatPayApplymentAttachmentCategory | string | null;
+  object_key: string;
+  file_name?: string | null;
+  content_type?: string | null;
+  size?: number | null;
+};
+
 export type WechatPayApplymentRecord = {
   id: string;
   tenant_id: string;
@@ -15,6 +51,7 @@ export type WechatPayApplymentRecord = {
   settlement_account_summary: string | null;
   business_scene_description: string | null;
   contact_address: string | null;
+  attachments: WechatPayApplymentAttachment[];
   remark: string | null;
   applyment_business_code: string | null;
   applyment_id: string | null;
@@ -90,4 +127,28 @@ export function formatWechatPayApplymentTime(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("zh-CN");
+}
+
+export function getWechatPayApplymentAttachmentCategoryLabel(
+  category?: string | null,
+) {
+  if (!category) return "申请附件";
+  return WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORY_LABELS[
+    category as WechatPayApplymentAttachmentCategory
+  ] || category;
+}
+
+export function formatWechatPayApplymentAttachmentSize(size?: number | null) {
+  if (!size || size < 0) return "";
+  if (size < 1024) return `${size}B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)}KB`;
+  return `${(size / 1024 / 1024).toFixed(1)}MB`;
+}
+
+export function buildWechatPayApplymentAttachmentPreviewUrl(objectKey: string) {
+  if (!objectKey) return "";
+  if (/^https?:\/\//i.test(objectKey) || objectKey.startsWith("blob:")) {
+    return objectKey;
+  }
+  return `/api/backend/uploads/public-url?path=${encodeURIComponent(objectKey)}`;
 }

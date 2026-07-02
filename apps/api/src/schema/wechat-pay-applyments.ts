@@ -58,7 +58,16 @@ export const WechatPayApplymentAppIdBindingStateSchema = z.enum([
   "rejected",
 ] as const, { message: "无效的微信支付 AppID 绑定状态" });
 
+export const WechatPayApplymentAttachmentCategorySchema = z.enum([
+  "license_copy",
+  "legal_representative_id_card_front",
+  "legal_representative_id_card_back",
+  "settlement_account_proof",
+  "business_scene_material",
+] as const, { message: "无效的微信支付开通申请附件类型" });
+
 const AttachmentSchema = z.object({
+  category: WechatPayApplymentAttachmentCategorySchema.optional(),
   object_key: requiredText(300, "附件对象 key 不能为空", "附件对象 key 不能超过 300 个字符"),
   file_name: optionalText(120, "附件文件名不能超过 120 个字符"),
   content_type: optionalText(120, "附件类型不能超过 120 个字符"),

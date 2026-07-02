@@ -22,6 +22,15 @@ const baseApplymentInput = {
   settlement_account_summary: "尾号 1234",
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
+  attachments: [
+    {
+      category: "license_copy",
+      object_key: "tenants/tenant-1/wechat-pay-applyment/unassigned/2026/07/02/license.jpg",
+      file_name: "营业执照.jpg",
+      content_type: "image/jpeg",
+      size: 120000,
+    },
+  ],
   remark: "首次申请",
 };
 
@@ -33,6 +42,7 @@ describe("wechat pay applyment schemas", () => {
     if (!result.success) return;
     expect(result.data.merchant_short_name).toBe("固始晴天装饰");
     expect(result.data.super_admin_phone).toBe("13800000000");
+    expect(result.data.attachments?.[0]?.category).toBe("license_copy");
   });
 
   test("allows draft update without plaintext secret fields", () => {

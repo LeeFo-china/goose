@@ -1,12 +1,20 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
 import type {
@@ -30,6 +38,14 @@ const APPID_BINDING_OPTIONS = [
   { value: "bound", label: "已绑定" },
   { value: "rejected", label: "已拒绝" },
 ];
+const REJECTABLE_APPLYMENT_STATUSES = new Set([
+  "submitted",
+  "approved",
+  "applying",
+  "reviewing",
+  "account_verifying",
+  "signing",
+]);
 
 export function PlatformWechatPayApplymentActions({
   applyment,
@@ -40,6 +56,7 @@ export function PlatformWechatPayApplymentActions({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const canRejectApplyment = REJECTABLE_APPLYMENT_STATUSES.has(applyment.status);
 
   function submitJson(
     path: string,
@@ -154,7 +171,7 @@ export function PlatformWechatPayApplymentActions({
 
       <ActionSection title="驳回申请" onSubmit={handleReject}>
         <TextareaField name="reason" label="驳回原因" required />
-        <Button type="submit" variant="destructive" disabled={pending}>
+        <Button type="submit" variant="destructive" disabled={pending || !canRejectApplyment}>
           驳回
         </Button>
       </ActionSection>
@@ -172,6 +189,9 @@ export function PlatformWechatPayApplymentActions({
       </ActionSection>
 
       <ActionSection title="微信状态回填" onSubmit={handleWechatStatus}>
+        <p className="text-xs text-muted-foreground">
+          关闭或暂停已启用申请请在这里选择进件状态，租户侧随后可以重新提交真实资料。
+        </p>
         <FieldGroup className="grid gap-3 md:grid-cols-2">
           <TextField
             name="applyment_business_code"
@@ -320,19 +340,31 @@ function SelectField({
   defaultValue: string;
   options: Array<{ value: string; label: string }>;
 }) {
+  const [value, setValue] = useState(defaultValue);
+  const fieldId = `platform-wechat-pay-${name}`;
+
+  useEffect(() => {
+    setValue(defaultValue);
+  }, [defaultValue]);
+
   return (
     <Field>
-      <FieldLabel htmlFor={`platform-wechat-pay-${name}`}>{label}</FieldLabel>
-      <select
-        id={`platform-wechat-pay-${name}`}
-        name={name}
-        defaultValue={defaultValue}
-        className="h-10 rounded-md border bg-background px-3 text-sm"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+      <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+      <input type="hidden" name={name} value={value} />
+      <Select value={value} onValueChange={setValue}>
+        <SelectTrigger id={fieldId}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
     </Field>
   );
 }

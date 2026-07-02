@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -13,6 +13,15 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { requestBackendJson } from "@/lib/backend-client";
 import type {
   WechatPayConfigData,
@@ -277,7 +286,9 @@ export function FinanceWechatPayConfigForm({
         />
       </FieldGroup>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+      <Separator />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-xs text-muted-foreground">
           支付渠道：项目收款；更新时间：{config?.updated_at ? formatDateTime(config.updated_at) : "-"}
           {config?.opened_at ? `；开通时间：${formatDateTime(config.opened_at)}` : ""}
@@ -339,20 +350,31 @@ function SelectField({
   options: Array<{ value: string; label: string }>;
   disabled?: boolean;
 }) {
+  const [value, setValue] = useState(defaultValue);
+  const fieldId = `wechat-pay-${name}`;
+
+  useEffect(() => {
+    setValue(defaultValue);
+  }, [defaultValue]);
+
   return (
     <Field>
-      <FieldLabel htmlFor={`wechat-pay-${name}`}>{label}</FieldLabel>
-      <select
-        id={`wechat-pay-${name}`}
-        name={name}
-        defaultValue={defaultValue}
-        disabled={disabled}
-        className="h-10 rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+      <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+      <input type="hidden" name={name} value={value} />
+      <Select value={value} onValueChange={setValue} disabled={disabled}>
+        <SelectTrigger id={fieldId}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
     </Field>
   );
 }

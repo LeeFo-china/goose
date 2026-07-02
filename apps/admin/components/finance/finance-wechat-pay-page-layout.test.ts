@@ -46,4 +46,15 @@ describe("Finance wechat pay admin page layout", () => {
     expect(formSource).toContain("进件状态");
     expect(formSource).toContain("AppID 绑定状态");
   });
+
+  test("config form uses shadcn select components instead of native select controls", () => {
+    const formSource = readFileSync(
+      new URL("./finance-wechat-pay-config-form.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(formSource).toContain("@/components/ui/select");
+    expect(formSource).toContain("SelectGroup");
+    expect(formSource).not.toContain("<select");
+  });
 });

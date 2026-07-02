@@ -33,6 +33,7 @@ export function buildLegacyObjectPath(this: any, input: {
     project_payment: input.projectId?.trim()
       ? `${input.projectId.trim()}/payment`
       : "project-payment",
+    wechat_pay_applyment: "wechat-pay-applyment",
     picture_library: "picture-library",
     picture_comment: "picture-comment",
   };

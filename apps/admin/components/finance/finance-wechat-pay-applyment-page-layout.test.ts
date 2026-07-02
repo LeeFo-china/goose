@@ -42,13 +42,29 @@ describe("Finance wechat pay applyment page layout", () => {
   test("tenant applyment panel posts create update and submit actions", () => {
     const requestSource = readSource("./finance-wechat-pay-applyment-requests.ts");
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
 
     expect(requestSource).toContain("/finance/wechat-pay/applyment/current");
     expect(panelSource).toContain("/finance/wechat-pay/applyments");
     expect(panelSource).toContain("/submit");
+    expect(panelSource).toContain("WechatPayApplymentAttachmentsField");
+    expect(attachmentSource).toContain("uploadDirectToCos");
+    expect(attachmentSource).toContain("wechat_pay_applyment");
+    expect(attachmentSource).toContain("license_copy");
+    expect(attachmentSource).toContain("legal_representative_id_card_front");
+    expect(panelSource).toContain("attachments");
     expect(panelSource).toContain("merchant_short_name");
     expect(panelSource).toContain("super_admin_phone");
     expect(panelSource).not.toContain("api_v3_key");
+  });
+
+  test("tenant applyment attachment uploader uses shadcn button for the visible upload action", () => {
+    const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
+
+    expect(attachmentSource).toContain("<Button");
+    expect(attachmentSource).toContain("openAttachmentPicker");
+    expect(attachmentSource).not.toContain("inline-flex h-9 cursor-pointer");
+    expect(attachmentSource).not.toContain("<label");
   });
 
   test("keeps tenant applyment client panel away from server-only request module", () => {

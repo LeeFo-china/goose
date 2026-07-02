@@ -9,6 +9,7 @@ import type {
 import type {
   WechatPayConfigRecord,
   WechatPayConfigUpsertInput,
+  WechatPayConfigUpdate,
 } from "@/repositories/wechat-pay-configs";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
 import type { AuthContext } from "@/services/authorization";
@@ -39,6 +40,10 @@ export type WechatPayConfigRepositoryPort = {
   upsertWechatPayConfig: (
     input: WechatPayConfigUpsertInput,
   ) => Promise<WechatPayConfigRecord>;
+  updateWechatPayConfig: (input: {
+    id: string;
+    patch: WechatPayConfigUpdate;
+  }) => Promise<WechatPayConfigRecord>;
 };
 
 export type AccessPolicyPort = {

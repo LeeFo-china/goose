@@ -44,6 +44,8 @@ describe("Platform wechat pay applyments page layout", () => {
     const actionsSource = readSource("./platform-wechat-pay-applyment-actions.tsx");
 
     expect(pageSource).toContain("finance-wechat-pay-applyment-shared");
+    expect(pageSource).toContain("申请附件");
+    expect(pageSource).toContain("WechatPayApplymentAttachmentList");
     expect(pageSource).not.toContain("finance-wechat-pay-applyment-requests");
     expect(requestSource).toContain("/platform/finance/wechat-pay/applyments?");
     expect(requestSource).toContain("/platform/finance/wechat-pay/applyments/");
@@ -52,6 +54,11 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(actionsSource).toContain("/mark-applying");
     expect(actionsSource).toContain("/wechat-status");
     expect(actionsSource).toContain("/activate-config");
+    expect(actionsSource).toContain("canRejectApplyment");
+    expect(actionsSource).toContain("关闭或暂停已启用申请");
+    expect(actionsSource).toContain("@/components/ui/select");
+    expect(actionsSource).toContain("SelectGroup");
+    expect(actionsSource).not.toContain("<select");
   });
 
   test("keeps platform applyment client table away from server-only request module", () => {

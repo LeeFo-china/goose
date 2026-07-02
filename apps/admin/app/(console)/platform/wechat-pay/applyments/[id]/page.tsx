@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, FileCheck2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, FileCheck2, Paperclip } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
+  buildWechatPayApplymentAttachmentPreviewUrl,
+  formatWechatPayApplymentAttachmentSize,
   formatWechatPayApplymentTime,
+  getWechatPayApplymentAttachmentCategoryLabel,
   getWechatPayApplymentStatusMeta,
+  type WechatPayApplymentAttachment,
 } from "@/components/finance/finance-wechat-pay-applyment-shared";
 import { PlatformWechatPayApplymentActions } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-actions";
 import { fetchPlatformWechatPayApplymentDetail } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-requests";
@@ -100,6 +104,18 @@ export default async function PlatformWechatPayApplymentDetailPage({
 
             <Card className="shadow-none">
               <CardHeader>
+                <CardTitle>申请附件</CardTitle>
+                <CardDescription>
+                  租户提交的营业执照、法人证件和经营资料。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <WechatPayApplymentAttachmentList attachments={applyment.attachments || []} />
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-none">
+              <CardHeader>
                 <CardTitle>处理记录</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
@@ -135,6 +151,56 @@ export default async function PlatformWechatPayApplymentDetailPage({
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+function WechatPayApplymentAttachmentList({
+  attachments,
+}: {
+  attachments: WechatPayApplymentAttachment[];
+}) {
+  if (attachments.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+        暂无申请附件
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {attachments.map((attachment) => {
+        const previewUrl = buildWechatPayApplymentAttachmentPreviewUrl(attachment.object_key);
+        return (
+          <div key={`${attachment.category || "attachment"}:${attachment.object_key}`} className="rounded-md border p-3">
+            <div className="flex min-w-0 gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted text-muted-foreground">
+                <Paperclip aria-hidden="true" className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-medium">
+                  {getWechatPayApplymentAttachmentCategoryLabel(attachment.category)}
+                </div>
+                <div className="mt-1 truncate text-xs text-muted-foreground">
+                  {attachment.file_name || attachment.object_key}
+                </div>
+                {attachment.size ? (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {formatWechatPayApplymentAttachmentSize(attachment.size)}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <Button asChild variant="outline" size="sm" className="mt-3">
+              <a href={previewUrl} target="_blank" rel="noreferrer">
+                <ExternalLink data-icon="inline-start" />
+                查看附件
+              </a>
+            </Button>
+          </div>
+        );
+      })}
     </div>
   );
 }

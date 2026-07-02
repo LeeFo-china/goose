@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save, SendHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -18,9 +18,11 @@ import { requestBackendJson } from "@/lib/backend-client";
 import {
   formatWechatPayApplymentTime,
   getWechatPayApplymentStatusMeta,
+  type WechatPayApplymentAttachment,
   type WechatPayApplymentDetailData,
   type WechatPayApplymentDetailResult,
 } from "./finance-wechat-pay-applyment-shared";
+import { WechatPayApplymentAttachmentsField } from "./finance-wechat-pay-applyment-attachments";
 
 export function FinanceWechatPayApplymentPanel({
   data,
@@ -28,12 +30,19 @@ export function FinanceWechatPayApplymentPanel({
   data: WechatPayApplymentDetailResult;
 }) {
   const router = useRouter();
+  const applyment = data.applyment;
   const [error, setError] = useState(data.error || "");
   const [saved, setSaved] = useState(false);
+  const [attachments, setAttachments] = useState<WechatPayApplymentAttachment[]>(
+    applyment?.attachments || [],
+  );
   const [pending, startTransition] = useTransition();
-  const applyment = data.applyment;
   const statusMeta = getWechatPayApplymentStatusMeta(applyment?.status);
   const editable = !applyment || ["draft", "rejected"].includes(applyment.status);
+
+  useEffect(() => {
+    setAttachments(applyment?.attachments || []);
+  }, [applyment?.id, applyment?.updated_at]);
 
   function submitSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,6 +51,7 @@ export function FinanceWechatPayApplymentPanel({
     const form = new FormData(event.currentTarget);
     const payload = buildApplymentPayload(form, {
       hasMaskedPhone: Boolean(applyment?.super_admin_phone_masked),
+      attachments,
     });
     const path = applyment
       ? `/finance/wechat-pay/applyments/${applyment.id}`
@@ -197,6 +207,13 @@ export function FinanceWechatPayApplymentPanel({
           />
         </FieldGroup>
 
+        <WechatPayApplymentAttachmentsField
+          attachments={attachments}
+          editable={editable}
+          disabled={pending}
+          onChange={setAttachments}
+        />
+
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <div className="text-xs text-muted-foreground">
             最近更新：{formatWechatPayApplymentTime(applyment?.updated_at)}
@@ -303,7 +320,10 @@ function TextareaField({
 
 function buildApplymentPayload(
   form: FormData,
-  options: { hasMaskedPhone: boolean },
+  options: {
+    hasMaskedPhone: boolean;
+    attachments: WechatPayApplymentAttachment[];
+  },
 ) {
   const payload: Record<string, unknown> = {
     merchant_short_name: requiredText(form, "merchant_short_name"),
@@ -317,6 +337,7 @@ function buildApplymentPayload(
     settlement_account_summary: requiredText(form, "settlement_account_summary"),
     business_scene_description: requiredText(form, "business_scene_description"),
     contact_address: requiredText(form, "contact_address"),
+    attachments: options.attachments,
     remark: optionalText(form, "remark"),
   };
   const phone = requiredText(form, "super_admin_phone");

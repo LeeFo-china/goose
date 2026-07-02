@@ -1,8 +1,9 @@
 import { Errors } from "@/errors/error-factory";
-import type { Inserts, Tables } from "@/types/db";
+import type { Inserts, Tables, Updates } from "@/types/db";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 export type WechatPayConfigRecord = Tables<"tenant_payment_configs">;
+export type WechatPayConfigUpdate = Updates<"tenant_payment_configs">;
 
 export type WechatPayConfigUpsertInput =
   Inserts<"tenant_payment_configs"> & { provider: "wechat_pay" };
@@ -35,6 +36,24 @@ class WechatPayConfigRepository {
 
     if (error) {
       throw Errors.dbError("保存微信支付配置失败", error);
+    }
+
+    return data as WechatPayConfigRecord;
+  }
+
+  async updateWechatPayConfig(input: {
+    id: string;
+    patch: WechatPayConfigUpdate;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenant_payment_configs")
+      .update(input.patch)
+      .eq("id", input.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新微信支付配置失败", error);
     }
 
     return data as WechatPayConfigRecord;

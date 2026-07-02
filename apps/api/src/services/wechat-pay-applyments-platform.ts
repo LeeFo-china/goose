@@ -146,7 +146,17 @@ export class WechatPayApplymentPlatformActions {
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(
       current,
-      ["approved", "applying", "reviewing", "account_verifying", "signing", "opened", "bound"],
+      [
+        "approved",
+        "applying",
+        "reviewing",
+        "account_verifying",
+        "signing",
+        "opened",
+        "bound",
+        "active",
+        "suspended",
+      ],
       "当前申请不能回填微信进件状态",
     );
     const nextStatus = resolveMainStatus(current.status, input);
@@ -172,6 +182,12 @@ export class WechatPayApplymentPlatformActions {
           : current.opened_at,
         updated_by_employee_id: employeeId,
       },
+    });
+    await this.syncPaymentConfigStatus({
+      current,
+      nextStatus,
+      employeeId,
+      now,
     });
     await this.recordEvent({
       applyment: updated,
@@ -321,6 +337,26 @@ export class WechatPayApplymentPlatformActions {
     );
   }
 
+  private async syncPaymentConfigStatus(input: {
+    current: WechatPayApplymentRecord;
+    nextStatus: string;
+    employeeId: string;
+    now: string;
+  }) {
+    if (!input.current.payment_config_id) return;
+    if (input.nextStatus !== "closed" && input.nextStatus !== "suspended") return;
+
+    await this.configRepository.updateWechatPayConfig({
+      id: input.current.payment_config_id,
+      patch: {
+        status: input.nextStatus === "closed" ? "disabled" : "suspended",
+        disabled_at: input.nextStatus === "closed" ? input.now : null,
+        suspended_at: input.nextStatus === "suspended" ? input.now : null,
+        updated_by_employee_id: input.employeeId,
+      },
+    });
+  }
+
   private async recordEvent(input: {
     applyment: WechatPayApplymentRecord;
     eventType: string;
@@ -348,6 +384,8 @@ function resolveMainStatus(
   input: UpdateWechatPayApplymentWechatStatusInput,
 ) {
   const applymentState = input.applyment_state;
+  if (applymentState === "closed") return "closed";
+  if (applymentState === "suspended") return "suspended";
   if (applymentState === "opened" && input.appid_binding_state === "bound") {
     return "bound";
   }
