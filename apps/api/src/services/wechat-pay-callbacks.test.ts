@@ -148,7 +148,9 @@ const loadSecretBundle = mock(async (): Promise<WechatPaySecretBundle> => ({
 }));
 const verifySignature = mock(() => true);
 const decryptResource = mock(() => decryptedResource);
-const findByOutTradeNo = mock(async () => order);
+const findByOutTradeNo = mock(
+  async (): Promise<WechatPayOrderRecord | null> => order,
+);
 const findNotificationByNotifyId = mock(
   async (): Promise<WechatPayNotificationRecord | null> => null,
 );
@@ -404,4 +406,5 @@ describe("WechatPayCallbackService", () => {
       notificationId: "notification-1",
     }));
   });
+
 });

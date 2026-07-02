@@ -1,11 +1,11 @@
 import { Errors } from "@/errors/error-factory";
 import { PAYMENT_TYPE_VALUES } from "@gooes/domain";
 import type { Json } from "@/types/database";
-import { paymentRepository, type PaymentRecord } from "@/repositories/payments";
 import {
-  wechatPayConfigRepository,
-  type WechatPayConfigRecord,
-} from "@/repositories/wechat-pay-configs";
+  billingRechargeRepository,
+  type TenantCreditWechatNotificationRecord,
+} from "@/repositories/billing-recharge";
+import { paymentRepository, type PaymentRecord } from "@/repositories/payments";
 import {
   wechatPayOrderRepository,
   type WechatPayNotificationRecord,
@@ -14,19 +14,14 @@ import {
 import { workflowTaskRepository } from "@/repositories/workflow-tasks";
 import type { AuthContext } from "@/services/authorization";
 import {
-  decryptWechatPayResource,
-  verifyWechatPayCallbackSignature,
-} from "@/services/wechat-pay-callback-crypto";
-import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
+  type CallbackHeaders,
+  type CreditRechargeCallbackContext,
+  type ProjectPaymentCallbackContext,
+  WechatPayCallbackContextMatcher,
+  type WechatPayCallbackContextMatcherDependencies,
+} from "@/services/wechat-pay-callback-context-matcher";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
 
-type CallbackHeaders = Record<string, string | string[] | undefined>;
-
-type ConfigRepositoryPort = Pick<
-  typeof wechatPayConfigRepository,
-  "listCallbackCandidateConfigs"
->;
-type SecretBundleServicePort = Pick<typeof wechatPaySecretBundleService, "load">;
 type OrderRepositoryPort = Pick<
   typeof wechatPayOrderRepository,
   | "findByOutTradeNo"
@@ -39,50 +34,44 @@ type OrderRepositoryPort = Pick<
 type PaymentRepositoryPort = Pick<typeof paymentRepository, "create">;
 type WorkflowTaskRepositoryPort = Pick<typeof workflowTaskRepository, "findById">;
 type PaymentBridgePort = Pick<typeof workflowTaskPaymentBridge, "complete">;
+type CreditRechargeRepositoryPort = Pick<
+  typeof billingRechargeRepository,
+  | "findWechatOrderByOutTradeNo"
+  | "findWechatNotificationByNotifyId"
+  | "createWechatNotification"
+  | "markWechatNotificationProcessed"
+  | "markWechatNotificationFailed"
+  | "confirmWechatRecharge"
+>;
 
-type WechatPayCallbackServiceDependencies = {
-  configRepository?: ConfigRepositoryPort;
-  secretBundleService?: SecretBundleServicePort;
-  crypto?: {
-    verifySignature: typeof verifyWechatPayCallbackSignature;
-    decryptResource: typeof decryptWechatPayResource;
-  };
+type WechatPayCallbackServiceDependencies =
+  WechatPayCallbackContextMatcherDependencies & {
+  contextMatcher?: Pick<WechatPayCallbackContextMatcher, "match">;
   orderRepository?: OrderRepositoryPort;
+  creditRechargeRepository?: CreditRechargeRepositoryPort;
   paymentRepository?: PaymentRepositoryPort;
   workflowTaskRepository?: WorkflowTaskRepositoryPort;
   paymentBridge?: PaymentBridgePort;
-};
-
-type MatchedCallbackContext = {
-  config: WechatPayConfigRecord;
-  payload: Record<string, unknown>;
-  resource: Record<string, unknown>;
-  order: WechatPayOrderRecord;
 };
 
 const SUCCESS_RESPONSE = { code: "SUCCESS", message: "成功" } as const;
 type PaymentType = (typeof PAYMENT_TYPE_VALUES)[number];
 
 export class WechatPayCallbackService {
-  private readonly configRepository: ConfigRepositoryPort;
-  private readonly secretBundleService: SecretBundleServicePort;
-  private readonly crypto: NonNullable<WechatPayCallbackServiceDependencies["crypto"]>;
+  private readonly contextMatcher: Pick<WechatPayCallbackContextMatcher, "match">;
   private readonly orderRepository: OrderRepositoryPort;
+  private readonly creditRechargeRepository: CreditRechargeRepositoryPort;
   private readonly paymentRepository: PaymentRepositoryPort;
   private readonly workflowTaskRepository: WorkflowTaskRepositoryPort;
   private readonly paymentBridge: PaymentBridgePort;
 
   constructor(dependencies: WechatPayCallbackServiceDependencies = {}) {
-    this.configRepository = dependencies.configRepository ??
-      wechatPayConfigRepository;
-    this.secretBundleService = dependencies.secretBundleService ??
-      wechatPaySecretBundleService;
-    this.crypto = dependencies.crypto ?? {
-      verifySignature: verifyWechatPayCallbackSignature,
-      decryptResource: decryptWechatPayResource,
-    };
+    this.contextMatcher = dependencies.contextMatcher ??
+      new WechatPayCallbackContextMatcher(dependencies);
     this.orderRepository = dependencies.orderRepository ??
       wechatPayOrderRepository;
+    this.creditRechargeRepository = dependencies.creditRechargeRepository ??
+      billingRechargeRepository;
     this.paymentRepository = dependencies.paymentRepository ?? paymentRepository;
     this.workflowTaskRepository = dependencies.workflowTaskRepository ??
       workflowTaskRepository;
@@ -94,12 +83,25 @@ export class WechatPayCallbackService {
     headers: CallbackHeaders;
   }) {
     const payload = this.parsePayload(input.rawBody);
-    const matched = await this.matchCallbackContext({
+    const matched = await this.contextMatcher.match({
       rawBody: input.rawBody,
       headers: input.headers,
       payload,
     });
     const notifyId = this.requireString(payload, "id", "回调通知 ID 缺失");
+    if (matched.kind === "credit_recharge") {
+      return this.handleCreditRechargeCallback({ matched, notifyId, payload });
+    }
+
+    return this.handleProjectPaymentCallback({ matched, notifyId, payload });
+  }
+
+  private async handleProjectPaymentCallback(input: {
+    matched: ProjectPaymentCallbackContext;
+    notifyId: string;
+    payload: Record<string, unknown>;
+  }) {
+    const { matched, notifyId, payload } = input;
     const existing = await this.orderRepository.findNotificationByNotifyId({
       tenantId: matched.order.tenant_id,
       notifyId,
@@ -137,63 +139,53 @@ export class WechatPayCallbackService {
     }
   }
 
-  private async matchCallbackContext(input: {
-    rawBody: string;
-    headers: CallbackHeaders;
+  private async handleCreditRechargeCallback(input: {
+    matched: CreditRechargeCallbackContext;
+    notifyId: string;
     payload: Record<string, unknown>;
-  }): Promise<MatchedCallbackContext> {
-    const timestamp = this.requireHeader(input.headers, "wechatpay-timestamp");
-    const nonce = this.requireHeader(input.headers, "wechatpay-nonce");
-    const signature = this.requireHeader(input.headers, "wechatpay-signature");
-    const callbackSerial = this.optionalHeader(input.headers, "wechatpay-serial");
-    const resource = this.requireResource(input.payload);
-    const configs = await this.configRepository.listCallbackCandidateConfigs();
-
-    for (const config of configs) {
-      const bundle = await this.secretBundleService.load(config.encrypted_config_ref);
-      if (!bundle.wechatPayPublicKeyPem) continue;
-      if (
-        callbackSerial &&
-        bundle.wechatPayPublicKeyId &&
-        callbackSerial !== bundle.wechatPayPublicKeyId
-      ) {
-        continue;
-      }
-
-      const signatureValid = this.crypto.verifySignature({
-        timestamp,
-        nonce,
-        rawBody: input.rawBody,
-        signature,
-        publicKeyPem: bundle.wechatPayPublicKeyPem,
+  }) {
+    const { matched, notifyId, payload } = input;
+    const existing =
+      await this.creditRechargeRepository.findWechatNotificationByNotifyId({
+        notifyId,
       });
-      if (!signatureValid) continue;
-
-      const decrypted = this.tryDecryptResource({
-        apiV3Key: bundle.apiV3Key,
-        resource,
-      });
-      if (!decrypted) continue;
-      const outTradeNo = this.requireString(
-        decrypted,
-        "out_trade_no",
-        "微信支付回调缺少商户订单号",
-      );
-      const order = await this.orderRepository.findByOutTradeNo(outTradeNo);
-      if (order?.payment_config_id === config.id) {
-        return { config, payload: input.payload, resource: decrypted, order };
-      }
+    if (existing?.processed) {
+      return SUCCESS_RESPONSE;
     }
 
-    throw Errors.business(
-      401,
-      "微信支付回调签名或订单匹配失败",
-      "WECHAT_PAY_CALLBACK_VERIFY_FAILED",
-    );
+    const notification = existing ??
+      await this.creditRechargeRepository.createWechatNotification({
+        tenant_id: matched.order.tenant_id,
+        credit_order_id: matched.order.id,
+        notify_id: notifyId,
+        event_type: this.requireString(
+          payload,
+          "event_type",
+          "回调事件类型缺失",
+        ),
+        resource_type: this.optionalString(payload.resource_type),
+        raw_payload: payload as Record<string, unknown>,
+        signature_valid: true,
+        processed: false,
+      });
+
+    try {
+      await this.processCreditRechargeTransaction({ matched, notification });
+      await this.creditRechargeRepository.markWechatNotificationProcessed({
+        notificationId: notification.id,
+      });
+      return SUCCESS_RESPONSE;
+    } catch (error) {
+      await this.creditRechargeRepository.markWechatNotificationFailed({
+        notificationId: notification.id,
+        errorMessage: getErrorMessage(error),
+      });
+      throw error;
+    }
   }
 
   private async processSuccessfulTransaction(input: {
-    matched: MatchedCallbackContext;
+    matched: ProjectPaymentCallbackContext;
     notification: WechatPayNotificationRecord;
   }) {
     const { matched, notification } = input;
@@ -240,7 +232,51 @@ export class WechatPayCallbackService {
     });
   }
 
-  private buildPaymentInput(matched: MatchedCallbackContext) {
+  private async processCreditRechargeTransaction(input: {
+    matched: CreditRechargeCallbackContext;
+    notification: TenantCreditWechatNotificationRecord;
+  }) {
+    const { matched, notification } = input;
+    if (matched.resource.trade_state !== "SUCCESS") {
+      return;
+    }
+    if (matched.order.status === "paid" && matched.order.transaction_id) {
+      return;
+    }
+
+    const paidAmountFen = this.getResourceAmountTotal(matched.resource);
+    if (paidAmountFen !== matched.order.amount_fen) {
+      throw Errors.business(
+        409,
+        "微信支付积分充值回调金额与订单金额不一致",
+        "BILLING_RECHARGE_CALLBACK_AMOUNT_MISMATCH",
+        {
+          order_amount_fen: matched.order.amount_fen,
+          callback_amount_fen: paidAmountFen,
+          out_trade_no: matched.order.out_trade_no,
+        },
+      );
+    }
+
+    await this.creditRechargeRepository.confirmWechatRecharge({
+      orderId: matched.order.id,
+      transactionId: this.requireString(
+        matched.resource,
+        "transaction_id",
+        "微信支付交易号缺失",
+      ),
+      paidAmountFen,
+      paidAt: this.optionalString(matched.resource.success_time) ??
+        new Date().toISOString(),
+      notificationId: notification.id,
+      metadata: {
+        callback_notify_id: notification.notify_id,
+        out_trade_no: matched.order.out_trade_no,
+      },
+    });
+  }
+
+  private buildPaymentInput(matched: ProjectPaymentCallbackContext) {
     const transactionId = this.requireString(
       matched.resource,
       "transaction_id",
@@ -266,27 +302,7 @@ export class WechatPayCallbackService {
     };
   }
 
-  private tryDecryptResource(input: {
-    apiV3Key: string;
-    resource: Record<string, unknown>;
-  }) {
-    try {
-      return this.crypto.decryptResource({
-        apiV3Key: input.apiV3Key,
-        nonce: this.requireString(input.resource, "nonce", "回调资源 nonce 缺失"),
-        associatedData: this.optionalString(input.resource.associated_data) ?? "",
-        ciphertext: this.requireString(
-          input.resource,
-          "ciphertext",
-          "回调资源密文缺失",
-        ),
-      });
-    } catch {
-      return null;
-    }
-  }
-
-  private assertCallbackAmountMatchesOrder(matched: MatchedCallbackContext) {
+  private assertCallbackAmountMatchesOrder(matched: ProjectPaymentCallbackContext) {
     const callbackAmountFen = this.getResourceAmountTotal(matched.resource);
     const orderAmountFen = Math.round(Number(matched.order.amount || 0) * 100);
     if (callbackAmountFen !== orderAmountFen) {
@@ -373,28 +389,6 @@ export class WechatPayCallbackService {
       if (isAppErrorLike(error)) throw error;
       throw Errors.badRequest("微信支付回调 JSON 格式不正确");
     }
-  }
-
-  private requireResource(payload: Record<string, unknown>) {
-    const resource = payload.resource;
-    if (!resource || typeof resource !== "object" || Array.isArray(resource)) {
-      throw Errors.badRequest("微信支付回调资源缺失");
-    }
-    return resource as Record<string, unknown>;
-  }
-
-  private requireHeader(headers: CallbackHeaders, key: string) {
-    const value = this.optionalHeader(headers, key);
-    if (!value) {
-      throw Errors.badRequest(`微信支付回调缺少请求头 ${key}`);
-    }
-    return value;
-  }
-
-  private optionalHeader(headers: CallbackHeaders, key: string) {
-    const value = headers[key] ?? headers[key.toLowerCase()];
-    const first = Array.isArray(value) ? value[0] : value;
-    return this.optionalString(first);
   }
 
   private requireString(

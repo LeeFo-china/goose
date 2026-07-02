@@ -56,8 +56,10 @@ type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   upsert: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
+  limit: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
   single: () => Promise<{ data: unknown; error: unknown }>;
+  then: Promise<{ data: unknown; error: unknown }>["then"];
 };
 
 type UntypedClient = {
@@ -80,6 +82,20 @@ class PlatformPaymentConfigRepository {
     }
 
     return (data as PlatformPaymentConfigRecord | null) ?? null;
+  }
+
+  async listCallbackCandidateConfigs() {
+    const { data, error } = await this.from("platform_payment_configs")
+      .select("*")
+      .eq("provider", "wechat_pay")
+      .eq("status", "active")
+      .limit(10);
+
+    if (error) {
+      throw Errors.dbError("查询平台微信支付回调配置失败", error);
+    }
+
+    return (data ?? []) as PlatformPaymentConfigRecord[];
   }
 
   async upsertWechatPayConfig(input: PlatformPaymentConfigUpsertInput) {

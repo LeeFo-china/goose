@@ -60,6 +60,49 @@ export type TenantCreditOrderCreateInput = {
   metadata: Record<string, unknown>;
 };
 
+export type TenantCreditWechatNotificationRecord = {
+  id: string;
+  tenant_id: string;
+  credit_order_id: string | null;
+  notify_id: string;
+  event_type: string;
+  resource_type: string | null;
+  raw_payload: Record<string, unknown>;
+  signature_valid: boolean;
+  processed: boolean;
+  processed_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TenantCreditWechatNotificationCreateInput = {
+  tenant_id: string;
+  credit_order_id: string;
+  notify_id: string;
+  event_type: string;
+  resource_type: string | null;
+  raw_payload: Record<string, unknown>;
+  signature_valid: boolean;
+  processed: boolean;
+};
+
+export type BillingConfirmWechatRechargeInput = {
+  orderId: string;
+  transactionId: string;
+  paidAmountFen: number;
+  paidAt: string | null;
+  notificationId: string;
+  metadata: Record<string, unknown>;
+};
+
+export type BillingConfirmWechatRechargeResult = {
+  order: Record<string, unknown> | null;
+  account: Record<string, unknown> | null;
+  ledger: Record<string, unknown> | null;
+  idempotent: boolean;
+};
+
 type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   insert: (...args: unknown[]) => UntypedTable;
@@ -82,8 +125,13 @@ type UntypedClient = {
     table:
       | "platform_credit_recharge_products"
       | "tenant_credit_orders"
+      | "tenant_credit_wechat_notifications"
       | "tenant_credit_account_balances",
   ) => UntypedTable;
+  rpc: (
+    functionName: "billing_confirm_wechat_recharge",
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
 };
 
 class BillingRechargeRepository {
@@ -204,6 +252,114 @@ class BillingRechargeRepository {
     }
 
     return (data as BillingAccountBalance | null) ?? null;
+  }
+
+  async findWechatOrderByOutTradeNo(outTradeNo: string) {
+    const { data, error } = await this.from("tenant_credit_orders")
+      .select("*")
+      .eq("channel", "wechat_pay")
+      .eq("out_trade_no", outTradeNo)
+      .limit(2);
+
+    if (error) {
+      throw Errors.dbError("查询积分充值微信订单失败", error);
+    }
+
+    const rows = (data ?? []) as TenantCreditOrderRecord[];
+    if (rows.length > 1) {
+      throw Errors.business(
+        409,
+        "积分充值商户订单号匹配到多个订单",
+        "BILLING_RECHARGE_OUT_TRADE_NO_DUPLICATED",
+      );
+    }
+
+    return rows[0] ?? null;
+  }
+
+  async findWechatNotificationByNotifyId(input: { notifyId: string }) {
+    const { data, error } = await this.from("tenant_credit_wechat_notifications")
+      .select("*")
+      .eq("notify_id", input.notifyId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询积分充值微信回调通知失败", error);
+    }
+
+    return (data as TenantCreditWechatNotificationRecord | null) ?? null;
+  }
+
+  async createWechatNotification(
+    input: TenantCreditWechatNotificationCreateInput,
+  ) {
+    const { data, error } = await this.from("tenant_credit_wechat_notifications")
+      .insert(input)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("写入积分充值微信回调通知失败", error);
+    }
+
+    return data as TenantCreditWechatNotificationRecord;
+  }
+
+  async markWechatNotificationProcessed(input: { notificationId: string }) {
+    const { data, error } = await this.from("tenant_credit_wechat_notifications")
+      .update({
+        processed: true,
+        processed_at: new Date().toISOString(),
+        error_message: null,
+      })
+      .eq("id", input.notificationId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("标记积分充值微信回调通知已处理失败", error);
+    }
+
+    return data as TenantCreditWechatNotificationRecord;
+  }
+
+  async markWechatNotificationFailed(input: {
+    notificationId: string;
+    errorMessage: string;
+  }) {
+    const { data, error } = await this.from("tenant_credit_wechat_notifications")
+      .update({
+        processed: false,
+        error_message: input.errorMessage.slice(0, 500),
+      })
+      .eq("id", input.notificationId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("标记积分充值微信回调通知失败原因失败", error);
+    }
+
+    return data as TenantCreditWechatNotificationRecord;
+  }
+
+  async confirmWechatRecharge(input: BillingConfirmWechatRechargeInput) {
+    const { data, error } = await (
+      SupabaseDB.getAdminClient() as unknown as UntypedClient
+    ).rpc("billing_confirm_wechat_recharge", {
+      p_order_id: input.orderId,
+      p_transaction_id: input.transactionId,
+      p_paid_amount_fen: input.paidAmountFen,
+      p_paid_at: input.paidAt,
+      p_notification_id: input.notificationId,
+      p_metadata: input.metadata,
+    });
+
+    if (error) {
+      throw Errors.dbError("确认积分充值微信支付入账失败", error);
+    }
+
+    return data as BillingConfirmWechatRechargeResult;
   }
 }
 
