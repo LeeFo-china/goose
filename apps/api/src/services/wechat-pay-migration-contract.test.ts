@@ -134,6 +134,23 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).not.toContain("api_v3_key");
     expect(migrationSource).not.toContain("private_key");
   });
+
+  test("creates platform credit recharge product table", () => {
+    const migrationSource = readPlatformCreditRechargeProductsMigration();
+
+    expect(migrationSource).toContain("CREATE TABLE IF NOT EXISTS public.platform_credit_recharge_products");
+    expect(migrationSource).toContain("code text NOT NULL");
+    expect(migrationSource).toContain("amount_fen integer NOT NULL");
+    expect(migrationSource).toContain("credits bigint NOT NULL");
+    expect(migrationSource).toContain("bonus_credits bigint NOT NULL DEFAULT 0");
+    expect(migrationSource).toContain("platform_credit_recharge_products_code_unique_idx");
+    expect(migrationSource).toContain("platform_credit_recharge_products_enabled_sort_idx");
+    expect(migrationSource).toContain("billing.recharge.create");
+    expect(migrationSource).toContain("billing.recharge.read");
+    expect(migrationSource).toContain("platform.billing.recharge_product.manage");
+    expect(migrationSource).not.toContain("api_v3_key");
+    expect(migrationSource).not.toContain("private_key");
+  });
 });
 
 function readWechatPayMigration() {
@@ -200,6 +217,16 @@ function readPlatformPaymentConfigMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260702161000_platform_payment_configs.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readPlatformCreditRechargeProductsMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260702170000_platform_credit_recharge_products.sql",
       import.meta.url,
     ),
     "utf8",

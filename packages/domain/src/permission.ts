@@ -79,6 +79,8 @@ export const PERMISSION_CODE_VALUES = [
   'finance.reports.export',
   'finance.closing.read',
   'finance.closing.manage',
+  'billing.recharge.create',
+  'billing.recharge.read',
   'wechat_pay.config.read',
   'wechat_pay.config.manage',
   'wechat_pay.order.read',
@@ -89,6 +91,9 @@ export const PERMISSION_CODE_VALUES = [
   'platform.wechat_pay.applyment.review',
   'platform.wechat_pay.applyment.manage',
   'platform.wechat_pay.config.activate',
+  'platform.payment.config.read',
+  'platform.payment.config.manage',
+  'platform.billing.recharge_product.manage',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -287,6 +292,8 @@ export const PermissionCodeConfig: Record<
   'finance.reports.export': { label: '导出财务报表', module: 'finance' },
   'finance.closing.read': { label: '查看月度结账', module: 'finance' },
   'finance.closing.manage': { label: '管理月度结账', module: 'finance' },
+  'billing.recharge.create': { label: '发起积分充值', module: 'billing' },
+  'billing.recharge.read': { label: '查看积分充值订单', module: 'billing' },
   'wechat_pay.config.read': {
     label: '查看微信支付配置',
     module: 'wechat_pay',
@@ -326,6 +333,18 @@ export const PermissionCodeConfig: Record<
   'platform.wechat_pay.config.activate': {
     label: '激活租户微信支付配置',
     module: 'platform_wechat_pay',
+  },
+  'platform.payment.config.read': {
+    label: '查看平台支付配置',
+    module: 'platform_payment',
+  },
+  'platform.payment.config.manage': {
+    label: '管理平台支付配置',
+    module: 'platform_payment',
+  },
+  'platform.billing.recharge_product.manage': {
+    label: '管理积分充值套餐',
+    module: 'platform_billing',
   },
   'project_referral.read': {
     label: '查看介绍费',

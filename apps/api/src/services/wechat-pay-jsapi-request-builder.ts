@@ -1,10 +1,24 @@
 import { Errors } from "@/errors/error-factory";
-import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
-import type { WechatPayOrderRecord } from "@/repositories/wechat-pay-orders";
+
+export type WechatPayJsapiConfig = {
+  merchant_mode: string | null;
+  merchant_id: string | null;
+  sub_merchant_id?: string | null;
+  app_id: string | null;
+  sub_app_id?: string | null;
+  serial_no: string | null;
+  notify_url: string | null;
+};
+
+export type WechatPayJsapiOrder = {
+  out_trade_no: string;
+  amount: number | string;
+  payer_openid: string | null;
+};
 
 export type WechatPayJsapiPrepayRequestInput = {
-  config: WechatPayConfigRecord;
-  order: WechatPayOrderRecord;
+  config: WechatPayJsapiConfig;
+  order: WechatPayJsapiOrder;
   description: string;
 };
 

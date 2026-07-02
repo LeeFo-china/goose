@@ -63,6 +63,7 @@ import VisitorProjectsController from "@/controllers/visitor-projects";
 import NotificationsController from "@/controllers/notifications";
 import UsageController from "@/controllers/usage";
 import BillingController from "@/controllers/billing";
+import BillingRechargeController from "@/controllers/billing-recharge";
 import FinanceController from "@/controllers/finance";
 import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
@@ -135,6 +136,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   UsageController.registerExtraRoutes(app);
   FinanceController.registerExtraRoutes(app);
   BillingController.registerExtraRoutes(app);
+  BillingRechargeController.registerExtraRoutes(app);
   UserAuthEventsController.registerExtraRoutes(app);
   IdentityDiagnosticsController.registerExtraRoutes(app);
   PictureLibraryController.registerExtraRoutes(app);

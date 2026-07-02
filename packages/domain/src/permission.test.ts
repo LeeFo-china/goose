@@ -78,4 +78,24 @@ describe("finance receivable permissions", () => {
       module: "platform_wechat_pay",
     });
   });
+
+  test("exposes billing recharge permissions in domain constants", () => {
+    expect(PERMISSION_CODE_VALUES).toContain("billing.recharge.create");
+    expect(PERMISSION_CODE_VALUES).toContain("billing.recharge.read");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.payment.config.read");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.payment.config.manage");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.billing.recharge_product.manage");
+    expect(PermissionCodeConfig["billing.recharge.create"]).toEqual({
+      label: "发起积分充值",
+      module: "billing",
+    });
+    expect(PermissionCodeConfig["platform.payment.config.manage"]).toEqual({
+      label: "管理平台支付配置",
+      module: "platform_payment",
+    });
+    expect(PermissionCodeConfig["platform.billing.recharge_product.manage"]).toEqual({
+      label: "管理积分充值套餐",
+      module: "platform_billing",
+    });
+  });
 });

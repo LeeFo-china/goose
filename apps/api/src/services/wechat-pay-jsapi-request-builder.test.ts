@@ -103,8 +103,6 @@ describe("buildWechatPayJsapiPrepayRequest", () => {
         sub_merchant_id: "1900000002",
         app_id: "wx-service-app",
         sub_app_id: "wxbac3b1e168fd968a",
-        applyment_state: "opened",
-        appid_binding_state: "bound",
       },
       order: baseOrder,
       description: "项目收款",

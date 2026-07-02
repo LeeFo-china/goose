@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type {
+  PlatformPaymentConfigRecord,
+  PlatformPaymentConfigUpsertInput,
+} from "@/repositories/platform-payment-configs";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -25,16 +29,27 @@ const existingConfig = {
   updated_by_employee_id: "employee-old",
   created_at: "2026-07-02T07:00:00.000Z",
   updated_at: "2026-07-02T08:00:00.000Z",
-};
+} satisfies PlatformPaymentConfigRecord;
 
-const findWechatPayConfig = mock(async () => existingConfig);
-const upsertWechatPayConfig = mock(async (input: unknown) => ({
+const findWechatPayConfig = mock(async (): Promise<PlatformPaymentConfigRecord> => existingConfig);
+const upsertWechatPayConfig = mock(
+  async (
+    input: PlatformPaymentConfigUpsertInput,
+  ): Promise<PlatformPaymentConfigRecord> => ({
   ...existingConfig,
-  ...(input as Record<string, unknown>),
+  ...input,
   id: "platform-config-1",
   created_at: existingConfig.created_at,
   updated_at: "2026-07-02T09:00:00.000Z",
 }));
+
+const platformRole = {
+  id: "role-platform",
+  code: "platform_admin",
+  name: "平台超管",
+  description: null,
+  status: "active",
+} satisfies AuthContext["roles"][number];
 
 const platformAuthBase = {
   authUserId: "auth-platform",
@@ -54,7 +69,7 @@ const platformAuthBase = {
   postName: null,
   avatar: null,
   roleCodes: ["platform_admin"],
-  roles: ["platform_admin"],
+  roles: [platformRole],
 } satisfies Omit<AuthContext, "permissions">;
 
 const tenantAuth = {

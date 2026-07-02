@@ -1,8 +1,8 @@
 import { Errors } from "@/errors/error-factory";
-import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
-import type { WechatPayOrderRecord } from "@/repositories/wechat-pay-orders";
 import {
   buildWechatPayJsapiPrepayRequest,
+  type WechatPayJsapiConfig,
+  type WechatPayJsapiOrder,
 } from "@/services/wechat-pay-jsapi-request-builder";
 import type { WechatPaySecretBundle } from "@/services/wechat-pay-secret-bundles";
 import {
@@ -20,8 +20,8 @@ type WechatPayGatewayDependencies = {
 };
 
 export type WechatPayCreateJsapiPrepayInput = {
-  config: WechatPayConfigRecord;
-  order: WechatPayOrderRecord;
+  config: WechatPayJsapiConfig;
+  order: WechatPayJsapiOrder;
   description: string;
   secretBundle: WechatPaySecretBundle;
 };
