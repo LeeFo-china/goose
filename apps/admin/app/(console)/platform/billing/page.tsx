@@ -6,8 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession } from "@/lib/auth";
 import { BillingEventsTab, BillingTenantsTab } from "@/app/(console)/platform/billing/billing-account-tabs";
+import { BillingRechargeTab } from "@/app/(console)/platform/billing/billing-recharge-tab";
 import { BillingAiTab, BillingLedgerTab, BillingPricingTab } from "@/app/(console)/platform/billing/billing-usage-tabs";
-import { buildQuery, cleanParam, emptyAiFilterOptions, emptyAiUsageStats, emptyEventList, emptyLedgerList, emptyPricingList, emptySummary, emptyTenantList, fetchBackend, formatCredits, normalizeBillingTab, normalizePlatformListPageSize, pickParam, readPositiveInteger, SummaryItem, type SearchParams } from "@/app/(console)/platform/billing/billing-page-shared";
+import { buildQuery, cleanParam, emptyAiFilterOptions, emptyAiUsageStats, emptyEventList, emptyLedgerList, emptyPlatformWechatPayConfig, emptyPricingList, emptyRechargeOrderList, emptyRechargeProductList, emptySummary, emptyTenantList, fetchBackend, formatCredits, normalizeBillingTab, normalizePlatformListPageSize, pickParam, readPositiveInteger, SummaryItem, type SearchParams } from "@/app/(console)/platform/billing/billing-page-shared";
 import type {
   BillingAiUsageFilterOptions,
   BillingAiUsageStats,
@@ -16,6 +17,9 @@ import type {
   BillingPlatformSummary,
   BillingPricingRuleListData,
   BillingTenantListData,
+  PlatformRechargeOrderListData,
+  PlatformRechargeProductListData,
+  PlatformWechatPayConfigResult,
 } from "@/components/billing/billing-types";
 
 export default async function PlatformBillingPage({
@@ -38,6 +42,8 @@ export default async function PlatformBillingPage({
   const rulePageSize = normalizePlatformListPageSize(params.rulePageSize);
   const eventPage = readPositiveInteger(params.eventPage, 1);
   const eventPageSize = normalizePlatformListPageSize(params.eventPageSize);
+  const rechargeOrderPage = readPositiveInteger(params.rechargeOrderPage, 1);
+  const rechargeOrderPageSize = normalizePlatformListPageSize(params.rechargeOrderPageSize);
   const activeTab = normalizeBillingTab(params.tab);
   const tenantStatus = pickParam(params.tenantStatus, ["active", "suspended", "closed"] as const);
   const tenantFilters = {
@@ -82,6 +88,11 @@ export default async function PlatformBillingPage({
     ledgerKeyword: cleanParam(params.ledgerKeyword),
     ledgerStartDate: cleanParam(params.ledgerStartDate),
     ledgerEndDate: cleanParam(params.ledgerEndDate),
+  };
+  const rechargeOrderStatus = pickParam(params.rechargeOrderStatus, ["pending", "paid", "closed", "refunded"] as const);
+  const rechargeOrderFilters = {
+    rechargeOrderStatus,
+    rechargeOrderKeyword: cleanParam(params.rechargeOrderKeyword),
   };
 
   const summaryResult = hasPlatformAccess
@@ -164,13 +175,39 @@ export default async function PlatformBillingPage({
       emptyAiFilterOptions,
     )
     : { data: emptyAiFilterOptions, error: null };
+  const platformWechatPayConfigResult = hasPlatformAccess
+    ? await fetchBackend<PlatformWechatPayConfigResult>(
+      "/platform/payment/wechat-pay/config",
+      emptyPlatformWechatPayConfig,
+    )
+    : { data: emptyPlatformWechatPayConfig, error: null };
+  const rechargeProductsResult = hasPlatformAccess
+    ? await fetchBackend<PlatformRechargeProductListData>(
+      "/platform/billing/recharge-products?page=1&pageSize=100",
+      emptyRechargeProductList(),
+    )
+    : { data: emptyRechargeProductList(), error: null };
+  const rechargeOrdersResult = hasPlatformAccess
+    ? await fetchBackend<PlatformRechargeOrderListData>(
+      `/platform/billing/recharge-orders?${buildQuery({
+        page: rechargeOrderPage,
+        pageSize: rechargeOrderPageSize,
+        status: rechargeOrderFilters.rechargeOrderStatus,
+        keyword: rechargeOrderFilters.rechargeOrderKeyword,
+      })}`,
+      emptyRechargeOrderList(rechargeOrderPage, rechargeOrderPageSize),
+    )
+    : { data: emptyRechargeOrderList(rechargeOrderPage, rechargeOrderPageSize), error: null };
   const activeError = summaryResult.error
     || tenantsResult.error
     || ledgerResult.error
     || pricingResult.error
     || eventResult.error
     || aiStatsResult.error
-    || aiFilterOptionsResult.error;
+    || aiFilterOptionsResult.error
+    || platformWechatPayConfigResult.error
+    || rechargeProductsResult.error
+    || rechargeOrdersResult.error;
   const activePagination = activeTab === "tenants"
     ? tenantsResult.data.pagination
     : activeTab === "events"
@@ -179,7 +216,9 @@ export default async function PlatformBillingPage({
         ? pricingResult.data.pagination
         : activeTab === "ledger"
           ? ledgerResult.data.pagination
-          : { page: 1, pageSize, total: aiStatsResult.data.list.length, totalPages: 1 };
+          : activeTab === "recharge"
+            ? rechargeOrdersResult.data.pagination
+            : { page: 1, pageSize, total: aiStatsResult.data.list.length, totalPages: 1 };
   const activeCount = activeTab === "tenants"
     ? tenantsResult.data.list.length
     : activeTab === "events"
@@ -188,21 +227,27 @@ export default async function PlatformBillingPage({
         ? pricingResult.data.list.length
         : activeTab === "ledger"
           ? ledgerResult.data.list.length
-          : aiStatsResult.data.list.length;
+          : activeTab === "recharge"
+            ? rechargeOrdersResult.data.list.length
+            : aiStatsResult.data.list.length;
   const pageKey = activeTab === "ledger"
     ? "ledgerPage"
     : activeTab === "pricing"
       ? "rulePage"
       : activeTab === "events"
         ? "eventPage"
-        : "page";
+        : activeTab === "recharge"
+          ? "rechargeOrderPage"
+          : "page";
   const pageSizeKey = activeTab === "ledger"
     ? "ledgerPageSize"
     : activeTab === "pricing"
       ? "rulePageSize"
       : activeTab === "events"
         ? "eventPageSize"
-        : "pageSize";
+        : activeTab === "recharge"
+          ? "rechargeOrderPageSize"
+          : "pageSize";
   const unit = activeTab === "tenants"
     ? "个账户"
     : activeTab === "events"
@@ -211,7 +256,9 @@ export default async function PlatformBillingPage({
         ? "条价格规则"
         : activeTab === "ledger"
           ? "条流水"
-          : "个 AI 观察项";
+          : activeTab === "recharge"
+            ? "笔充值订单"
+            : "个 AI 观察项";
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -246,6 +293,9 @@ export default async function PlatformBillingPage({
               <TabsTrigger value="ledger" asChild>
                 <Link href={`/platform/billing?${buildQuery({ tab: "ledger", ledgerPageSize })}`}>计费流水</Link>
               </TabsTrigger>
+              <TabsTrigger value="recharge" asChild>
+                <Link href={`/platform/billing?${buildQuery({ tab: "recharge", rechargeOrderPageSize })}`}>微信充值</Link>
+              </TabsTrigger>
             </TabsList>
           }
           pagination={activePagination}
@@ -263,6 +313,13 @@ export default async function PlatformBillingPage({
             <BillingAiTab aiStats={aiStatsResult.data} aiFilterOptions={aiFilterOptionsResult.data} aiFilters={aiFilters} />
           ) : activeTab === "pricing" ? (
             <BillingPricingTab pricing={pricingResult.data} ruleFilters={ruleFilters} />
+          ) : activeTab === "recharge" ? (
+            <BillingRechargeTab
+              configResult={platformWechatPayConfigResult.data}
+              products={rechargeProductsResult.data}
+              orders={rechargeOrdersResult.data}
+              orderFilters={rechargeOrderFilters}
+            />
           ) : (
             <BillingLedgerTab ledger={ledgerResult.data} ledgerFilters={ledgerFilters} />
           )}

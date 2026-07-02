@@ -95,6 +95,77 @@ export type BillingPricingRuleListData = {
   pagination: Pagination;
 };
 
+export type PlatformWechatPayConfigView = {
+  id: string;
+  provider: "wechat_pay";
+  principal_type: "platform";
+  merchant_mode: "direct_merchant";
+  merchant_name: string | null;
+  merchant_id: string | null;
+  app_id: string | null;
+  encrypted_config_ref: string | null;
+  serial_no_masked: string | null;
+  notify_url: string | null;
+  enabled_channels: string[];
+  status: "pending" | "active" | "disabled" | "suspended";
+  validation_status: "unchecked" | "valid" | "invalid";
+  last_validated_at: string | null;
+  has_encrypted_config_ref: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformWechatPayConfigResult = {
+  configured: boolean;
+  can_manage: boolean;
+  config: PlatformWechatPayConfigView | null;
+};
+
+export type PlatformRechargeProduct = {
+  id: string;
+  code: string;
+  title: string;
+  amount_fen: number;
+  credits: number;
+  bonus_credits: number;
+  enabled: boolean;
+  sort_order: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformRechargeProductListData = {
+  list: PlatformRechargeProduct[];
+  pagination: Pagination;
+};
+
+export type PlatformRechargeOrder = {
+  id: string;
+  tenant_id: string;
+  order_no: string;
+  package_code: string | null;
+  credits: number;
+  bonus_credits: number;
+  amount_fen: number;
+  paid_amount_fen: number;
+  status: "pending" | "paid" | "closed" | "refunded";
+  out_trade_no: string | null;
+  transaction_id: string | null;
+  paid_at: string | null;
+  created_at: string;
+  tenant?: {
+    id: string;
+    name: string | null;
+    slug: string | null;
+  } | null;
+};
+
+export type PlatformRechargeOrderListData = {
+  list: PlatformRechargeOrder[];
+  pagination: Pagination;
+};
+
 export type BillingEvent = {
   id: string;
   tenant_id: string;
