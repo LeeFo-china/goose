@@ -40,7 +40,7 @@ export async function listLedger(this: any, query: BillingLedgerQuery & { tenant
   if (query.end_date) request = request.lte("created_at", query.end_date);
   if (query.keyword) {
     const escaped = query.keyword.replaceAll(",", "\\,");
-    request = request.or(`event_type.ilike.%${escaped}%,order_no.ilike.%${escaped}%,remark.ilike.%${escaped}%`);
+    request = request.or(`event_type.ilike.%${escaped}%,source_no.ilike.%${escaped}%,remark.ilike.%${escaped}%`);
   }
 
   const { data, count, error } = await request;
