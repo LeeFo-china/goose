@@ -13,11 +13,16 @@ import {
 import { requestBackendJson } from "@/lib/backend-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -179,7 +184,7 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
   }
 
   return (
-    <div className="grid gap-4 border-t px-5 py-4 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-center">
+    <div className="grid gap-4 border-b px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <div className="font-medium">{setting.name}</div>
@@ -196,8 +201,8 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor={`setting-${setting.key}`}>数据库配置值</Label>
+      <Field data-invalid={Boolean(error) || undefined}>
+        <FieldLabel htmlFor={`setting-${setting.key}`}>数据库配置值</FieldLabel>
         {getSettingSelectOptions(setting) ? (
           <Select
             value={value || "__empty__"}
@@ -209,12 +214,14 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
               <SelectValue placeholder="选择配置值" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__empty__">继承环境变量或默认值</SelectItem>
-              {getSettingSelectOptions(setting)?.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectItem value="__empty__">继承环境变量或默认值</SelectItem>
+                {getSettingSelectOptions(setting)?.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         ) : setting.is_secret ? (
@@ -232,9 +239,11 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
               <SelectValue placeholder="继承环境变量或默认值" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__empty__">继承环境变量或默认值</SelectItem>
-              <SelectItem value="true">是</SelectItem>
-              <SelectItem value="false">否</SelectItem>
+              <SelectGroup>
+                <SelectItem value="__empty__">继承环境变量或默认值</SelectItem>
+                <SelectItem value="true">是</SelectItem>
+                <SelectItem value="false">否</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         ) : setting.value_type === "json" || setting.key.includes("PROMPT") ? (
@@ -254,9 +263,12 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
             placeholder={getSettingPlaceholder(setting)}
           />
         )}
+        <FieldDescription>
+          {setting.effective_scope === "tenant" ? "租户覆盖值，留空保存可清空。" : "平台配置值，留空保存将回退环境变量或默认值。"}
+        </FieldDescription>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {saved ? <StatusAlert tone="success">已保存</StatusAlert> : null}
-      </div>
+      </Field>
 
       <div className="flex gap-2 lg:items-center lg:justify-end">
         <Button type="button" variant="outline" onClick={reset} disabled={pending || !dirty}>
@@ -301,8 +313,8 @@ export function SocialVideoTranscriptionTester() {
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="social-video-test-url">抖音视频链接</Label>
+        <Field data-invalid={Boolean(error) || undefined}>
+          <FieldLabel htmlFor="social-video-test-url">抖音视频链接</FieldLabel>
           <Textarea
             id="social-video-test-url"
             rows={3}
@@ -310,6 +322,7 @@ export function SocialVideoTranscriptionTester() {
             onChange={(event) => setUrl(event.target.value)}
             placeholder="粘贴抖音分享链接或完整分享口令"
           />
+          <FieldDescription>支持抖音分享链接、短链或完整分享口令。</FieldDescription>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           {result ? (
             <StatusAlert tone="success">
@@ -321,7 +334,7 @@ export function SocialVideoTranscriptionTester() {
               </div>
             </StatusAlert>
           ) : null}
-        </div>
+        </Field>
 
         <div className="flex gap-2 lg:items-center lg:justify-end">
           <Button type="button" onClick={submit} disabled={pending || !url.trim()}>

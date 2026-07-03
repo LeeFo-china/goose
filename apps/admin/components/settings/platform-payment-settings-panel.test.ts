@@ -37,6 +37,16 @@ describe("platform payment settings panel", () => {
     );
   });
 
+  test("settings tabs use shadcn line-style navigation and header summary", () => {
+    const tabsSource = readSource("./settings-tabs.tsx");
+
+    expect(tabsSource).toContain("CardDescription");
+    expect(tabsSource).toContain("groupStatusLabel");
+    expect(tabsSource).toContain("min-w-max justify-start rounded-none border-0 border-b bg-transparent");
+    expect(tabsSource).toContain("data-[state=active]:border-primary");
+    expect(tabsSource).not.toContain("h-auto w-full justify-start overflow-x-auto md:w-auto");
+  });
+
   test("payment panel uses shadcn form controls and certificate upload interactions", () => {
     const panelSource = [
       readSource("./platform-payment-settings-panel.tsx"),
@@ -47,6 +57,7 @@ describe("platform payment settings panel", () => {
     expect(panelSource).toContain("FieldGroup");
     expect(panelSource).toContain("FieldLabel");
     expect(panelSource).toContain("SelectTrigger");
+    expect(panelSource).toContain("SelectGroup");
     expect(panelSource).toContain("Textarea");
     expect(panelSource).toContain('type="file"');
     expect(panelSource).toContain("platform_direct_recharge");
@@ -55,5 +66,17 @@ describe("platform payment settings panel", () => {
     expect(panelSource).toContain("/secret-bundle");
     expect(panelSource).toContain("readFileAsText");
     expect(panelSource).not.toContain("<input");
+  });
+
+  test("generic system setting editor uses shadcn field and grouped select composition", () => {
+    const source = [
+      readSource("./settings-actions.tsx"),
+      readSource("./settings-file-access-policy-editor.tsx"),
+    ].join("\n");
+
+    expect(source).toContain("FieldLabel");
+    expect(source).toContain("FieldDescription");
+    expect(source).toContain("SelectGroup");
+    expect(source).not.toContain("space-y-2");
   });
 });

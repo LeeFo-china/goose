@@ -8,7 +8,14 @@ import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { sourceBadge, updateSetting } from "@/components/settings/settings-mutation-shared";
 
@@ -208,8 +215,10 @@ export function FileAccessPolicyEditor({ setting }: { setting: SystemSetting }) 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="signed">签名链接</SelectItem>
-                    <SelectItem value="public">公开链接</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="signed">签名链接</SelectItem>
+                      <SelectItem value="public">公开链接</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </TableCell>

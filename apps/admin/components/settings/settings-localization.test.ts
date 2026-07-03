@@ -21,6 +21,19 @@ describe("settings localization", () => {
     expect(source).not.toContain("label: groupLabels[groupCode] || groupCode");
   });
 
+  test("renders settings summary with shadcn badge metrics", () => {
+    const source = readFileSync(
+      new URL("../../app/(console)/settings/page.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("SettingsHeaderMetric");
+    expect(source).toContain('import { Badge } from "@/components/ui/badge"');
+    expect(source).toContain('label="配置项"');
+    expect(source).toContain('label="未配置"');
+    expect(source).not.toContain("text-xs text-muted-foreground");
+  });
+
   test("uses Chinese labels for platform settings interactions", () => {
     const source = [
       readSource("./settings-actions.tsx"),

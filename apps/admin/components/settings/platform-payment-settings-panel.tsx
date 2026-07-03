@@ -66,20 +66,22 @@ export function PlatformPaymentSettingsPanel({
         }
         className="flex min-h-0 flex-col gap-4"
       >
-        <TabsList className="h-auto w-full justify-start overflow-x-auto md:w-fit">
-          {profiles.map((profile) => (
-            <TabsTrigger
-              key={profile.profile_code}
-              value={profile.profile_code}
-              className="gap-2 whitespace-nowrap"
-            >
-              <span>{profile.label}</span>
-              <Badge variant={profile.configured ? "success" : "warning"}>
-                {profile.configured ? "已建档" : "未建档"}
-              </Badge>
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="-mx-4 overflow-x-auto px-4">
+          <TabsList className="h-auto min-w-max justify-start rounded-none border-0 border-b bg-transparent p-0 text-muted-foreground">
+            {profiles.map((profile) => (
+              <TabsTrigger
+                key={profile.profile_code}
+                value={profile.profile_code}
+                className="gap-2 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-3 py-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
+              >
+                <span>{profile.label}</span>
+                <Badge variant={profile.configured ? "success" : "warning"}>
+                  {profile.configured ? "已建档" : "未建档"}
+                </Badge>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
         {profiles.map((profile) => (
           <TabsContent

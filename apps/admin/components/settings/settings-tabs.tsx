@@ -14,10 +14,11 @@ import { PlatformPaymentSettingsPanel } from "@/components/settings/platform-pay
 import type { PlatformWechatPayProfileListResult } from "@/components/settings/platform-payment-settings-types";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -85,6 +86,14 @@ function countMissing(settings: SystemSetting[]) {
   return settings.filter((setting) => setting.source === "empty").length;
 }
 
+function groupStatusVariant(group: SettingsGroup) {
+  return group.emptyCount > 0 ? "warning" : "success";
+}
+
+function groupStatusLabel(group: SettingsGroup) {
+  return group.emptyCount > 0 ? `未配置 ${group.emptyCount}` : "配置完整";
+}
+
 function TenantSmsSettingsPanel({ settings }: { settings: SystemSetting[] }) {
   const router = useRouter();
   const modeSetting = findSetting(settings, "SMS_CHANNEL_MODE");
@@ -142,9 +151,11 @@ function TenantSmsSettingsPanel({ settings }: { settings: SystemSetting[] }) {
                 <SelectValue placeholder="选择短信通道" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="platform">{smsChannelModeLabels.platform}</SelectItem>
-                <SelectItem value="tenant_aliyun">{smsChannelModeLabels.tenant_aliyun}</SelectItem>
-                <SelectItem value="tenant_tencent">{smsChannelModeLabels.tenant_tencent}</SelectItem>
+                <SelectGroup>
+                  <SelectItem value="platform">{smsChannelModeLabels.platform}</SelectItem>
+                  <SelectItem value="tenant_aliyun">{smsChannelModeLabels.tenant_aliyun}</SelectItem>
+                  <SelectItem value="tenant_tencent">{smsChannelModeLabels.tenant_tencent}</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
             <div className="text-sm text-muted-foreground">
@@ -238,9 +249,29 @@ export function SettingsTabs({
       className="flex min-h-0 flex-1 flex-col"
     >
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-        <CardHeader className="shrink-0 border-b bg-card px-4 py-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <TabsList className="h-auto w-full justify-start overflow-x-auto md:w-auto">
+        <CardHeader className="shrink-0 gap-3 border-b bg-card px-4 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="text-base">{activeGroup.label}</CardTitle>
+              <CardDescription className="mt-1">
+                {activeGroup.settings.length} 项配置，{activeGroup.secretCount} 项敏感配置，
+                {activeGroup.emptyCount} 项未配置。
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={groupStatusVariant(activeGroup)}>
+                {groupStatusLabel(activeGroup)}
+              </Badge>
+              {activeGroup.secretCount > 0 ? (
+                <Badge variant="warning">
+                  敏感项 <span className="tabular-nums">{activeGroup.secretCount}</span>
+                </Badge>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="-mx-4 overflow-x-auto px-4">
+            <TabsList className="h-auto min-w-max justify-start rounded-none border-0 border-b bg-transparent p-0 text-muted-foreground">
               {groups.map((group) => {
                 const active = group.code === activeGroup.code;
 
@@ -249,30 +280,25 @@ export function SettingsTabs({
                     key={group.code}
                     value={group.code}
                     disabled={pending}
-                    className="gap-2 whitespace-nowrap"
+                    className="gap-2 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-3 py-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
                   >
                     {pending && active ? (
                       <Loader2 className="animate-spin" data-icon="inline-start" />
                     ) : null}
                     <span>{group.label}</span>
                     <Badge variant={active ? "secondary" : "outline"}>
-                      {group.settings.length}
+                      <span className="tabular-nums">{group.settings.length}</span>
                     </Badge>
                     {group.emptyCount > 0 ? (
                       <span className="inline-flex items-center gap-1 text-xs">
                         <AlertCircle />
-                        {group.emptyCount}
+                        <span className="tabular-nums">{group.emptyCount}</span>
                       </span>
                     ) : null}
                   </TabsTrigger>
                 );
               })}
             </TabsList>
-            <div className="flex flex-wrap gap-2 pb-3 text-xs text-muted-foreground md:pb-0">
-              <span>{activeGroup.settings.length} 项配置</span>
-              <span>{activeGroup.secretCount} 项敏感配置</span>
-              <span>{activeGroup.emptyCount} 项未配置</span>
-            </div>
           </div>
         </CardHeader>
 
@@ -289,18 +315,6 @@ export function SettingsTabs({
               <PlatformPaymentSettingsPanel paymentProfiles={paymentProfiles} />
             ) : (
               <>
-                <div className="flex flex-row items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
-                  <div>
-                    <CardTitle className="text-base">{activeGroup.label}</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {activeGroup.settings.length} 项配置，{activeGroup.secretCount} 项敏感配置，
-                      {activeGroup.emptyCount} 项未配置。
-                    </p>
-                  </div>
-                  <Badge variant={activeGroup.emptyCount > 0 ? "warning" : "success"}>
-                    {activeGroup.emptyCount > 0 ? `未配置 ${activeGroup.emptyCount}` : "配置完整"}
-                  </Badge>
-                </div>
                 <div>
                   {activeGroup.code === "social_video" ? (
                     <SocialVideoTranscriptionTester />
