@@ -31,4 +31,21 @@ describe("Tenant billing page layout", () => {
     expect(page).toContain('data-testid="tenant-billing-ledger-empty"');
     expect(page).not.toContain("colSpan={5}");
   });
+
+  test("renders subscription lock state while keeping recharge actions available", () => {
+    const page = readTenantBillingPage();
+    const rechargeAction = readFileSync(
+      new URL("../../../components/billing/tenant-recharge-actions.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(page).toContain("TENANT_BILLING_LOCKED");
+    expect(page).toContain("系统使用费待缴纳");
+    expect(page).toContain("当前租户积分不足");
+    expect(page).toContain("billing.recharge.create");
+    expect(page).toContain("TenantRechargeOrderButton");
+    expect(page).toContain("/billing/recharge-products?page=1&pageSize=20");
+    expect(rechargeAction).toContain("/billing/recharge-orders");
+    expect(rechargeAction).toContain("创建支付订单");
+  });
 });

@@ -140,6 +140,45 @@ export type PlatformRechargeProductListData = {
   pagination: Pagination;
 };
 
+export type TenantRechargeProduct = {
+  code: string;
+  title: string;
+  amount_fen: number;
+  credits: number;
+  bonus_credits: number;
+};
+
+export type TenantRechargeProductListData = {
+  list: TenantRechargeProduct[];
+  pagination: Pagination;
+};
+
+export type TenantRechargeOrder = {
+  id: string;
+  tenant_id: string;
+  order_no: string;
+  package_code: string | null;
+  amount_fen: number;
+  credits: number;
+  bonus_credits: number;
+  channel: string;
+  status: "pending" | "paid" | "closed" | "refunded";
+  paid_at: string | null;
+  paid_amount_fen: number;
+  out_trade_no: string | null;
+  prepay_id: string | null;
+  transaction_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TenantRechargeOrderCreateResult = {
+  idempotent: boolean;
+  order: TenantRechargeOrder;
+  product: TenantRechargeProduct | null;
+  payment_request: Record<string, string> | null;
+};
+
 export type PlatformRechargeOrder = {
   id: string;
   tenant_id: string;
@@ -323,6 +362,12 @@ export type TenantBillingSummary = {
     metric_code: string;
     credits: number;
   }>;
+  subscription_lock: {
+    locked: boolean;
+    reason: string | null;
+    locked_at: string | null;
+    last_invoice_id: string | null;
+  };
 };
 
 export type TenantFeatureEstimates = {

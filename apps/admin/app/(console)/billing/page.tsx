@@ -2,19 +2,24 @@ import { redirect } from "next/navigation";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  AlertTriangle,
   BrainCircuit,
   Clock3,
   LockKeyhole,
   MessageSquareText,
+  ShoppingCart,
   Video,
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
+import { TenantRechargeOrderButton } from "@/components/billing/tenant-recharge-actions";
 import type {
   BillingLedger,
   BillingLedgerListData,
   TenantBillingSummary,
   TenantFeatureEstimates,
+  TenantRechargeProduct,
+  TenantRechargeProductListData,
 } from "@/components/billing/billing-types";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
@@ -45,6 +50,12 @@ const emptySummary: TenantBillingSummary = {
     available_credits: 0,
   },
   metrics: [],
+  subscription_lock: {
+    locked: false,
+    reason: null,
+    locked_at: null,
+    last_invoice_id: null,
+  },
 };
 
 const emptyEstimates: TenantFeatureEstimates = {
@@ -54,6 +65,11 @@ const emptyEstimates: TenantFeatureEstimates = {
 };
 
 const emptyLedger: BillingLedgerListData = {
+  list: [],
+  pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+};
+
+const emptyRechargeProducts: TenantRechargeProductListData = {
   list: [],
   pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
 };
@@ -76,13 +92,23 @@ async function fetchBackend<T>(path: string, fallback: T) {
       cache: "no-store",
     });
     const payload = await parseBackendJson<T>(response);
-    return { data: payload.data || fallback, error: null };
+    return { data: payload.data || fallback, error: null, code: null };
   } catch (error) {
     return {
       data: fallback,
       error: error instanceof Error ? error.message : "计费数据加载失败",
+      code: getErrorCode(error),
     };
   }
+}
+
+function getErrorCode(error: unknown) {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : null;
+  }
+
+  return null;
 }
 
 function formatCredits(value: number | null | undefined) {
@@ -104,6 +130,22 @@ function directionLabel(direction: string) {
   return labels[direction] || direction;
 }
 
+function formatFen(value: number) {
+  return `￥${(Number(value || 0) / 100).toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function hasPermission(
+  session: Awaited<ReturnType<typeof getAdminSession>>,
+  permissionCode: string,
+) {
+  return Boolean(
+    session?.permissions.some((permission) => permission.code === permissionCode),
+  );
+}
+
 export default async function TenantBillingPage() {
   const session = await getAdminSession();
   if (!session) {
@@ -119,6 +161,18 @@ export default async function TenantBillingPage() {
     fetchBackend<TenantFeatureEstimates>("/billing/feature-estimates", emptyEstimates),
     fetchBackend<BillingLedgerListData>("/billing/ledger?page=1&pageSize=20", emptyLedger),
   ]);
+  const canRecharge = hasPermission(session, "billing.recharge.create");
+  const subscriptionLock = summaryResult.data.subscription_lock;
+  const isBillingLocked = subscriptionLock.locked ||
+    summaryResult.code === "TENANT_BILLING_LOCKED" ||
+    estimateResult.code === "TENANT_BILLING_LOCKED" ||
+    ledgerResult.code === "TENANT_BILLING_LOCKED";
+  const rechargeProductsResult = isBillingLocked && canRecharge
+    ? await fetchBackend<TenantRechargeProductListData>(
+      "/billing/recharge-products?page=1&pageSize=20",
+      emptyRechargeProducts,
+    )
+    : { data: emptyRechargeProducts, error: null, code: null };
   const account = summaryResult.data.account;
   const status = account.status
     ? accountStatusMeta[account.status] || { label: account.status, variant: "outline" as const }
@@ -172,6 +226,15 @@ export default async function TenantBillingPage() {
       {summaryResult.error ? <StatusAlert>{summaryResult.error}</StatusAlert> : null}
       {estimateResult.error ? <StatusAlert>{estimateResult.error}</StatusAlert> : null}
       {ledgerResult.error ? <StatusAlert>{ledgerResult.error}</StatusAlert> : null}
+
+      {isBillingLocked ? (
+        <BillingLockedPanel
+          canRecharge={canRecharge}
+          lock={subscriptionLock}
+          productError={rechargeProductsResult.error}
+          products={rechargeProductsResult.data.list}
+        />
+      ) : null}
 
       <Card className="shrink-0 overflow-hidden shadow-none">
         <CardHeader className="border-b bg-muted/20 p-4">
@@ -331,6 +394,97 @@ function PriceLine({
       <div className="mt-1 text-sm font-semibold tracking-normal">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">最低 {formatCredits(min)} 积分</div>
     </div>
+  );
+}
+
+function BillingLockedPanel({
+  canRecharge,
+  lock,
+  productError,
+  products,
+}: {
+  canRecharge: boolean;
+  lock: TenantBillingSummary["subscription_lock"];
+  productError: string | null;
+  products: TenantRechargeProduct[];
+}) {
+  return (
+    <Card className="shrink-0 border-warning/60 bg-warning/5 shadow-none">
+      <CardHeader className="border-b border-warning/30 p-4">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <AlertTriangle className="size-5 text-warning-foreground" />
+              <CardTitle>系统使用费待缴纳</CardTitle>
+              <Badge variant="warning">已锁定</Badge>
+            </div>
+            <CardDescription className="mt-1">
+              当前租户积分不足，业务功能已暂停。充值到账后系统会自动补扣欠费并恢复使用。
+            </CardDescription>
+          </div>
+          {lock.locked_at ? (
+            <Badge variant="outline" className="w-fit">
+              锁定时间 {formatDateTime(lock.locked_at)}
+            </Badge>
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="grid lg:grid-cols-[15rem_minmax(0,1fr)]">
+          <div className="border-b px-4 py-3 lg:border-b-0 lg:border-r">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <ShoppingCart className="size-4" />
+              购买积分
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {canRecharge
+                ? "选择套餐后创建支付订单。"
+                : "请联系具备积分充值权限的管理员处理。"}
+            </p>
+            {lock.reason ? (
+              <p className="mt-3 text-xs text-muted-foreground">
+                原因：{lock.reason}
+              </p>
+            ) : null}
+          </div>
+          <div className="min-w-0">
+            {productError ? (
+              <div className="px-4 py-3 text-sm text-destructive">
+                {productError}
+              </div>
+            ) : !canRecharge ? (
+              <div className="px-4 py-3 text-sm text-muted-foreground">
+                当前账号没有积分充值权限。
+              </div>
+            ) : products.length ? (
+              <div className="divide-y">
+                {products.map((product) => (
+                  <div
+                    key={product.code}
+                    className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{product.title}</span>
+                        <Badge variant="outline">{product.code}</Badge>
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {formatFen(product.amount_fen)}，到账 {formatCredits(product.credits + product.bonus_credits)} 积分
+                      </div>
+                    </div>
+                    <TenantRechargeOrderButton product={product} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-3 text-sm text-muted-foreground">
+                暂无可用充值套餐。
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
