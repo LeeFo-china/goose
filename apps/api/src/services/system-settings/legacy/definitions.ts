@@ -4,6 +4,7 @@ import { DEFINITIONS_AI_SOCIAL } from './definitions-ai-social';
 import { DEFINITIONS_WECHAT_NOTIFY } from './definitions-wechat-notify';
 import { DEFINITIONS_PICTURE_LIBRARY } from './definitions-picture-library';
 import { DEFINITIONS_VISITOR } from './definitions-visitor';
+import { DEFINITIONS_PAYMENT } from './definitions-payment';
 import type { SettingDefinition } from './shared';
 
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
@@ -13,6 +14,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   ...DEFINITIONS_WECHAT_NOTIFY,
   ...DEFINITIONS_PICTURE_LIBRARY,
   ...DEFINITIONS_VISITOR,
+  ...DEFINITIONS_PAYMENT,
 ];
 
 export const definitionByKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, item]));
