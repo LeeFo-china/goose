@@ -117,6 +117,9 @@ ON public.tenant_subscription_invoices(tenant_id, period_start, period_end);
 CREATE INDEX IF NOT EXISTS tenant_subscription_invoices_due_status_idx
 ON public.tenant_subscription_invoices(status, due_at);
 
+CREATE INDEX IF NOT EXISTS tenant_subscription_invoices_reminder_status_idx
+ON public.tenant_subscription_invoices(status, reminder_due_at);
+
 CREATE INDEX IF NOT EXISTS tenant_subscription_invoices_tenant_status_idx
 ON public.tenant_subscription_invoices(tenant_id, status, due_at DESC);
 

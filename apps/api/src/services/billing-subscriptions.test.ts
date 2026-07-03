@@ -29,6 +29,9 @@ describe("tenant subscription billing migration", () => {
     expect(migrationSource).toContain(
       "tenant_subscription_invoices_tenant_period_unique_idx",
     );
+    expect(migrationSource).toContain(
+      "tenant_subscription_invoices_reminder_status_idx",
+    );
     expect(migrationSource).toContain("'subscription_monthly_fee'");
     expect(migrationSource).toContain("'tenant_subscription_invoice'");
     expect(migrationSource).toContain(
@@ -64,6 +67,71 @@ describe("billing subscription repository contract", () => {
     expect(repositorySource).toContain(
       "billing_recover_subscription_after_recharge",
     );
+
+    const markInvoiceRemindedSource = repositorySource.slice(
+      repositorySource.indexOf("async markInvoiceReminded"),
+      repositorySource.indexOf("async chargeInvoice"),
+    );
+    expect(markInvoiceRemindedSource).toContain('.eq("status", "upcoming")');
+    expect(markInvoiceRemindedSource).toContain(".maybeSingle()");
+  });
+});
+
+describe("normalizeSubscriptionPageRange", () => {
+  test("falls back to page 1 when page is not positive", async () => {
+    const { normalizeSubscriptionPageRange } =
+      await importBillingSubscriptionRepository();
+
+    expect(
+      normalizeSubscriptionPageRange({ page: 0, pageSize: 50 }),
+    ).toEqual({
+      page: 1,
+      pageSize: 50,
+      from: 0,
+      to: 49,
+    });
+  });
+
+  test("caps pageSize at 100", async () => {
+    const { normalizeSubscriptionPageRange } =
+      await importBillingSubscriptionRepository();
+
+    expect(
+      normalizeSubscriptionPageRange({ page: 1, pageSize: 101 }),
+    ).toEqual({
+      page: 1,
+      pageSize: 100,
+      from: 0,
+      to: 99,
+    });
+  });
+
+  test("calculates page 2 range for pageSize 50", async () => {
+    const { normalizeSubscriptionPageRange } =
+      await importBillingSubscriptionRepository();
+
+    expect(
+      normalizeSubscriptionPageRange({ page: 2, pageSize: 50 }),
+    ).toEqual({
+      page: 2,
+      pageSize: 50,
+      from: 50,
+      to: 99,
+    });
+  });
+
+  test("falls back to default pageSize when pageSize is invalid", async () => {
+    const { normalizeSubscriptionPageRange } =
+      await importBillingSubscriptionRepository();
+
+    expect(
+      normalizeSubscriptionPageRange({ page: 1, pageSize: 50.5 }),
+    ).toEqual({
+      page: 1,
+      pageSize: 100,
+      from: 0,
+      to: 99,
+    });
   });
 });
 
@@ -80,4 +148,12 @@ function readLatestTenantSubscriptionBillingMigration() {
   }
 
   return readFileSync(join(migrationDir, migrationFile), "utf8");
+}
+
+async function importBillingSubscriptionRepository() {
+  process.env.SUPABASE_URL ??= "http://localhost:54321";
+  process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+  process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+  return import("../repositories/billing-subscriptions");
 }

@@ -52,7 +52,43 @@ export type TenantSubscriptionInvoiceRecord = {
   updated_at: string;
 };
 
-export type BillingSubscriptionRpcResult = Record<string, unknown>;
+export type BillingSubscriptionRpcResult = {
+  charged?: boolean;
+  recovered?: boolean;
+  failure_code?: string | null;
+  idempotent?: boolean;
+  invoice?: Record<string, unknown> | null;
+  subscription?: Record<string, unknown> | null;
+  ledger_id?: string | null;
+  reason?: string | null;
+  [key: string]: unknown;
+};
+
+export const DEFAULT_PAGE = 1;
+export const DEFAULT_PAGE_SIZE = 100;
+export const MAX_PAGE_SIZE = 100;
+
+export function normalizeSubscriptionPageRange(input: {
+  page?: number;
+  pageSize?: number;
+}): { page: number; pageSize: number; from: number; to: number } {
+  const pageCandidate = input.page;
+  const pageSizeCandidate = input.pageSize;
+  const page = typeof pageCandidate === "number" &&
+      Number.isInteger(pageCandidate) &&
+      pageCandidate > 0
+    ? pageCandidate
+    : DEFAULT_PAGE;
+  const pageSize = typeof pageSizeCandidate === "number" &&
+      Number.isInteger(pageSizeCandidate) &&
+      pageSizeCandidate > 0
+    ? Math.min(pageSizeCandidate, MAX_PAGE_SIZE)
+    : DEFAULT_PAGE_SIZE;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  return { page, pageSize, from, to };
+}
 
 export type TenantBillingSubscriptionLockRecord = Pick<
   TenantBillingSubscriptionRecord,
@@ -97,8 +133,7 @@ type UntypedClient = {
   from: (
     table:
       | "tenant_billing_subscriptions"
-      | "tenant_subscription_invoices"
-      | "tenant_credit_account_balances",
+      | "tenant_subscription_invoices",
   ) => UntypedTable;
   rpc: (
     functionName:
@@ -169,11 +204,10 @@ export class BillingSubscriptionRepository {
 
   async listInvoicesDueForReminder(input: {
     nowIso: string;
-    page: number;
-    pageSize: number;
+    page?: number;
+    pageSize?: number;
   }) {
-    const from = (input.page - 1) * input.pageSize;
-    const to = from + input.pageSize - 1;
+    const { from, to } = normalizeSubscriptionPageRange(input);
     const { data, error } = await this.from("tenant_subscription_invoices")
       .select("*")
       .in("status", ["upcoming"])
@@ -190,11 +224,10 @@ export class BillingSubscriptionRepository {
 
   async listInvoicesDueForCharge(input: {
     nowIso: string;
-    page: number;
-    pageSize: number;
+    page?: number;
+    pageSize?: number;
   }) {
-    const from = (input.page - 1) * input.pageSize;
-    const to = from + input.pageSize - 1;
+    const { from, to } = normalizeSubscriptionPageRange(input);
     const { data, error } = await this.from("tenant_subscription_invoices")
       .select("*")
       .in("status", ["upcoming", "reminded", "past_due", "failed"])
@@ -209,21 +242,24 @@ export class BillingSubscriptionRepository {
     return (data ?? []) as TenantSubscriptionInvoiceRecord[];
   }
 
-  async markInvoiceReminded(invoiceId: string) {
+  async markInvoiceReminded(
+    invoiceId: string,
+  ): Promise<TenantSubscriptionInvoiceRecord | null> {
     const { data, error } = await this.from("tenant_subscription_invoices")
       .update({
         status: "reminded",
         reminded_at: new Date().toISOString(),
       })
       .eq("id", invoiceId)
+      .eq("status", "upcoming")
       .select("*")
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw Errors.dbError("标记订阅账单已提醒失败", error);
     }
 
-    return data as TenantSubscriptionInvoiceRecord;
+    return (data as TenantSubscriptionInvoiceRecord | null) ?? null;
   }
 
   async chargeInvoice(input: {
