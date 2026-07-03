@@ -1,10 +1,12 @@
 import { FilterSelect } from "@/components/admin/filter-select";
 import {
   PlatformWechatPayConfigButton,
+  RecommendedRechargeProductsButton,
   RechargeProductCreateButton,
   RechargeProductEditButton,
   RechargeProductStatusButton,
 } from "@/components/billing/billing-recharge-actions";
+import { RechargeOrderDetailButton } from "@/components/billing/billing-recharge-order-actions";
 import type {
   PlatformRechargeOrderListData,
   PlatformRechargeProductListData,
@@ -55,7 +57,12 @@ export function BillingRechargeTab({
             title="充值套餐"
             description="小程序只展示启用套餐，金额、积分和赠送积分以后端配置为准。"
             badge={`${products.pagination.total} 个套餐`}
-            action={<RechargeProductCreateButton />}
+            action={
+              <div className="flex flex-wrap justify-end gap-2">
+                <RecommendedRechargeProductsButton />
+                <RechargeProductCreateButton />
+              </div>
+            }
           />
           <div className="overflow-hidden rounded-md border">
             <Table>
@@ -72,7 +79,12 @@ export function BillingRechargeTab({
                 {products.list.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell>
-                      <div className="font-medium">{product.title}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{product.title}</span>
+                        {productBadge(product.metadata) ? (
+                          <Badge variant="outline">{productBadge(product.metadata)}</Badge>
+                        ) : null}
+                      </div>
                       <div className="text-xs text-muted-foreground">{product.code} · 排序 {product.sort_order}</div>
                     </TableCell>
                     <TableCell className="text-right">{formatFen(product.amount_fen)}</TableCell>
@@ -140,6 +152,7 @@ export function BillingRechargeTab({
                   <TableHead className="text-right">金额</TableHead>
                   <TableHead className="text-right">积分</TableHead>
                   <TableHead>状态</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -161,11 +174,14 @@ export function BillingRechargeTab({
                         {orderStatusLabel(order.status)}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-right">
+                      <RechargeOrderDetailButton order={order} />
+                    </TableCell>
                   </TableRow>
                 ))}
                 {!orders.list.length ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
                       暂无充值订单
                     </TableCell>
                   </TableRow>
@@ -197,6 +213,11 @@ function formatFen(value: number) {
 
 function formatCredits(value: number) {
   return Number(value || 0).toLocaleString("zh-CN");
+}
+
+function productBadge(metadata: Record<string, unknown>) {
+  const badge = metadata.badge;
+  return typeof badge === "string" && badge.trim() ? badge.trim() : null;
 }
 
 function configStatusLabel(status?: string | null) {

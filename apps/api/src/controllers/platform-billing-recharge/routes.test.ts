@@ -19,8 +19,10 @@ describe("PlatformBillingRechargeController routes", () => {
     expect(routes).toEqual([
       { method: "GET", path: "/platform/billing/recharge-products" },
       { method: "POST", path: "/platform/billing/recharge-products" },
+      { method: "POST", path: "/platform/billing/recharge-products/recommended" },
       { method: "PATCH", path: "/platform/billing/recharge-products/:id" },
       { method: "GET", path: "/platform/billing/recharge-orders" },
+      { method: "GET", path: "/platform/billing/recharge-orders/:id" },
       { method: "POST", path: "/platform/billing/recharge-orders/:id/compensate" },
     ]);
   });

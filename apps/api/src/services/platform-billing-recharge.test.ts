@@ -81,6 +81,21 @@ const creditNotification = {
   updated_at: "2026-07-02T08:06:00.000Z",
 } satisfies TenantCreditWechatNotificationRecord;
 
+const auditLog = {
+  id: "audit-1",
+  action: "platform_billing_recharge",
+  actor_employee_id: "employee-platform",
+  actor_user_id: "auth-platform",
+  target_tenant_id: "tenant-1",
+  resource_type: "tenant_credit_order",
+  resource_id: "order-1",
+  resource_label: "TC202607020001",
+  status: "success",
+  summary: "微信支付查单确认积分充值入账",
+  metadata: { out_trade_no: "TC202607020001" },
+  created_at: "2026-07-02T08:07:00.000Z",
+};
+
 const platformPaymentConfig = {
   id: "platform-config-1",
   provider: "wechat_pay",
@@ -148,11 +163,20 @@ const repository = {
   })),
   createProduct: mock(async () => product),
   updateProduct: mock(async () => ({ ...product, enabled: false })),
+  upsertProducts: mock(async () => [
+    { ...product, code: "credit_1000", title: "体验包" },
+    { ...product, id: "00000000-0000-4000-8000-000000000002", code: "credit_3000", title: "标准包" },
+    { ...product, id: "00000000-0000-4000-8000-000000000003", code: "credit_5000", title: "成长包" },
+    { ...product, id: "00000000-0000-4000-8000-000000000004", code: "credit_10000", title: "专业包" },
+    { ...product, id: "00000000-0000-4000-8000-000000000005", code: "credit_30000", title: "企业包" },
+  ]),
   listOrders: mock(async () => ({
     list: [order],
     pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
   })),
   findOrderById: mock(async () => pendingOrder),
+  listNotificationsByOrderId: mock(async () => [creditNotification]),
+  listAuditLogsByOrderId: mock(async () => [auditLog]),
 };
 
 const rechargeRepository = {

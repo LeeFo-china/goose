@@ -49,6 +49,18 @@ class PlatformBillingRechargeController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Post("/platform/billing/recharge-products/recommended")
+  async applyRecommendedProducts(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const data = await platformBillingRechargeService.applyRecommendedProducts(
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Patch("/platform/billing/recharge-products/:id")
   async updateProduct(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredPlatformAdminContext(request);
@@ -80,6 +92,21 @@ class PlatformBillingRechargeController extends PlatformBaseController {
     const data = await platformBillingRechargeService.listOrders(
       authContext,
       queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/billing/recharge-orders/:id")
+  async getOrderDetail(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformRechargeOrderParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await platformBillingRechargeService.getOrderDetail(
+      authContext,
+      paramsResult.data.id,
     );
     return ResponseHandler.success(data);
   }

@@ -2,7 +2,9 @@ import { Errors } from "@/errors/error-factory";
 import type {
   CreditRechargeProductRecord,
   TenantCreditOrderRecord,
+  TenantCreditWechatNotificationRecord,
 } from "@/repositories/billing-recharge";
+import type { PlatformAuditLogRecord } from "@/repositories/platform-audit-logs";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 export type PlatformRechargeProductCreateRecordInput = {
@@ -35,11 +37,13 @@ export type PlatformBillingRechargeOrderListItem = TenantCreditOrderRecord & {
 type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   insert: (...args: unknown[]) => UntypedTable;
+  upsert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
   or: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
   range: (...args: unknown[]) => UntypedTable;
+  limit: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
   single: () => Promise<{ data: unknown; error: unknown }>;
   then: Promise<{
@@ -51,7 +55,11 @@ type UntypedTable = {
 
 type UntypedClient = {
   from: (
-    table: "platform_credit_recharge_products" | "tenant_credit_orders",
+    table:
+      | "platform_credit_recharge_products"
+      | "tenant_credit_orders"
+      | "tenant_credit_wechat_notifications"
+      | "platform_audit_logs",
   ) => UntypedTable;
 };
 
@@ -104,6 +112,23 @@ class PlatformBillingRechargeRepository {
     }
 
     return data as CreditRechargeProductRecord;
+  }
+
+  async upsertProducts(input: PlatformRechargeProductCreateRecordInput[]) {
+    const { data, error } = await this.from("platform_credit_recharge_products")
+      .upsert(input, {
+        onConflict: "code",
+        ignoreDuplicates: false,
+      })
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("amount_fen", { ascending: true });
+
+    if (error) {
+      throw Errors.dbError("保存平台积分充值推荐套餐失败", error);
+    }
+
+    return (data ?? []) as CreditRechargeProductRecord[];
   }
 
   async updateProduct(
@@ -183,6 +208,35 @@ class PlatformBillingRechargeRepository {
     }
 
     return (data as PlatformBillingRechargeOrderListItem | null) ?? null;
+  }
+
+  async listNotificationsByOrderId(orderId: string) {
+    const { data, error } = await this.from("tenant_credit_wechat_notifications")
+      .select("*")
+      .eq("credit_order_id", orderId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) {
+      throw Errors.dbError("查询积分充值微信通知失败", error);
+    }
+
+    return (data ?? []) as TenantCreditWechatNotificationRecord[];
+  }
+
+  async listAuditLogsByOrderId(orderId: string) {
+    const { data, error } = await this.from("platform_audit_logs")
+      .select("*")
+      .eq("resource_type", "tenant_credit_order")
+      .eq("resource_id", orderId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) {
+      throw Errors.dbError("查询积分充值审计日志失败", error);
+    }
+
+    return (data ?? []) as PlatformAuditLogRecord[];
   }
 }
 

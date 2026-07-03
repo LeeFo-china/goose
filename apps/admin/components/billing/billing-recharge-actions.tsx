@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Pencil, Plus, Power, Settings } from "lucide-react";
+import { Loader2, Pencil, Plus, Power, Settings, Sparkles } from "lucide-react";
 import type {
   PlatformRechargeProduct,
   PlatformWechatPayConfigResult,
@@ -130,6 +130,55 @@ export function PlatformWechatPayConfigButton({
 
 export function RechargeProductCreateButton() {
   return <RechargeProductDialog mode="create" />;
+}
+
+export function RecommendedRechargeProductsButton() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+
+  function applyRecommendedProducts() {
+    setError("");
+    startTransition(async () => {
+      try {
+        await requestJson("/api/backend/platform/billing/recharge-products/recommended", {
+          method: "POST",
+        });
+        setOpen(false);
+        refreshAfterDialogClose(router);
+      } catch (submitError) {
+        setError(submitError instanceof Error ? submitError.message : "保存推荐套餐失败");
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Sparkles data-icon="inline-start" />
+          推荐套餐
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>应用推荐充值套餐</DialogTitle>
+          <DialogDescription>
+            将按后端推荐模板创建或更新 5 档充值套餐，已存在的相同编码套餐会被同步为推荐配置。
+          </DialogDescription>
+        </DialogHeader>
+        <FieldError>{error}</FieldError>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>取消</Button>
+          <Button type="button" onClick={applyRecommendedProducts} disabled={pending}>
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Sparkles data-icon="inline-start" />}
+            确认应用
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export function RechargeProductEditButton({ product }: { product: PlatformRechargeProduct }) {

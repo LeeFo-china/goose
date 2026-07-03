@@ -166,6 +166,43 @@ export type PlatformRechargeOrderListData = {
   pagination: Pagination;
 };
 
+export type PlatformRechargeNotification = {
+  id: string;
+  tenant_id: string;
+  credit_order_id: string | null;
+  notify_id: string;
+  event_type: string;
+  resource_type: string | null;
+  raw_payload: Record<string, unknown>;
+  signature_valid: boolean;
+  processed: boolean;
+  processed_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformRechargeAuditLog = {
+  id: string;
+  action: string;
+  actor_employee_id: string | null;
+  actor_user_id: string | null;
+  target_tenant_id: string | null;
+  resource_type: string;
+  resource_id: string | null;
+  resource_label: string | null;
+  status: string;
+  summary: string | null;
+  metadata: unknown;
+  created_at: string;
+};
+
+export type PlatformRechargeOrderDetailData = {
+  order: PlatformRechargeOrder;
+  notifications: PlatformRechargeNotification[];
+  audit_logs: PlatformRechargeAuditLog[];
+};
+
 export type BillingEvent = {
   id: string;
   tenant_id: string;
