@@ -2,8 +2,13 @@ import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 export type PlatformPaymentProvider = "wechat_pay";
+export type PlatformPaymentProfileCode =
+  | "platform_direct_recharge"
+  | "tenant_service_provider";
 export type PlatformPaymentPrincipalType = "platform";
-export type PlatformPaymentMerchantMode = "direct_merchant";
+export type PlatformPaymentMerchantMode =
+  | "direct_merchant"
+  | "service_provider_sub_merchant";
 export type PlatformPaymentConfigStatus =
   | "pending"
   | "active"
@@ -14,11 +19,14 @@ export type PlatformPaymentValidationStatus = "unchecked" | "valid" | "invalid";
 export type PlatformPaymentConfigRecord = {
   id: string;
   provider: PlatformPaymentProvider;
+  profile_code: PlatformPaymentProfileCode;
   principal_type: PlatformPaymentPrincipalType;
   merchant_mode: PlatformPaymentMerchantMode;
   merchant_name: string | null;
   merchant_id: string | null;
+  sub_merchant_id: string | null;
   app_id: string | null;
+  sub_app_id: string | null;
   encrypted_config_ref: string | null;
   serial_no: string | null;
   notify_url: string | null;
@@ -35,11 +43,14 @@ export type PlatformPaymentConfigRecord = {
 
 export type PlatformPaymentConfigUpsertInput = {
   provider: PlatformPaymentProvider;
+  profile_code: PlatformPaymentProfileCode;
   principal_type: PlatformPaymentPrincipalType;
   merchant_mode: PlatformPaymentMerchantMode;
   merchant_name: string | null;
   merchant_id: string | null;
+  sub_merchant_id: string | null;
   app_id: string | null;
+  sub_app_id: string | null;
   encrypted_config_ref: string | null;
   serial_no: string | null;
   notify_url: string | null;
@@ -75,6 +86,21 @@ class PlatformPaymentConfigRepository {
     const { data, error } = await this.from("platform_payment_configs")
       .select("*")
       .eq("provider", "wechat_pay")
+      .eq("profile_code", "platform_direct_recharge")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询平台微信支付配置失败", error);
+    }
+
+    return (data as PlatformPaymentConfigRecord | null) ?? null;
+  }
+
+  async findWechatPayConfigByProfile(profileCode: PlatformPaymentProfileCode) {
+    const { data, error } = await this.from("platform_payment_configs")
+      .select("*")
+      .eq("provider", "wechat_pay")
+      .eq("profile_code", profileCode)
       .maybeSingle();
 
     if (error) {
@@ -101,7 +127,7 @@ class PlatformPaymentConfigRepository {
   async upsertWechatPayConfig(input: PlatformPaymentConfigUpsertInput) {
     const { data, error } = await this.from("platform_payment_configs")
       .upsert(input, {
-        onConflict: "provider",
+        onConflict: "provider,profile_code",
         ignoreDuplicates: false,
       })
       .select("*")

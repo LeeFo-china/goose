@@ -1,6 +1,7 @@
 import { SlidersHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
+import type { PlatformWechatPayProfileListResult } from "@/components/settings/platform-payment-settings-types";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -22,6 +23,7 @@ const groupLabels: Record<string, string> = {
   tencent_lbs: "腾讯位置",
   notify: "通知配置",
   wechat: "微信配置",
+  payment: "支付配置",
 };
 
 async function fetchSettings(token: string) {
@@ -33,8 +35,27 @@ async function fetchSettings(token: string) {
   return payload.data as SettingsData;
 }
 
-async function getSettingsData() {
-  const token = await getAdminToken();
+const emptyPlatformPaymentProfiles: PlatformWechatPayProfileListResult = {
+  can_manage: false,
+  profiles: [],
+  error: null,
+};
+
+async function fetchPlatformPaymentProfiles(token: string) {
+  const response = await fetch(
+    buildBackendUrl("/platform/payment/wechat-pay/profiles"),
+    {
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
+  );
+  const payload = await parseBackendJson<PlatformWechatPayProfileListResult>(
+    response,
+  );
+  return payload.data as PlatformWechatPayProfileListResult;
+}
+
+async function getSettingsData(token: string | null) {
   if (!token) {
     return {
       list: [] as SystemSetting[],
@@ -59,13 +80,42 @@ async function getSettingsData() {
   }
 }
 
+async function getPlatformPaymentProfilesData(
+  token: string | null,
+  isPlatformMode: boolean,
+) {
+  if (!isPlatformMode) return emptyPlatformPaymentProfiles;
+  if (!token) {
+    return {
+      ...emptyPlatformPaymentProfiles,
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    return {
+      ...await fetchPlatformPaymentProfiles(token),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ...emptyPlatformPaymentProfiles,
+      error: error instanceof Error ? error.message : "平台支付配置加载失败",
+    };
+  }
+}
+
 export default async function SettingsPage() {
-  const [session, settingsResult] = await Promise.all([
+  const [session, token] = await Promise.all([
     getAdminSession(),
-    getSettingsData(),
+    getAdminToken(),
+  ]);
+  const isPlatformMode = isPlatformOnlySession(session);
+  const [settingsResult, paymentProfiles] = await Promise.all([
+    getSettingsData(token),
+    getPlatformPaymentProfilesData(token, isPlatformMode),
   ]);
   const { list, groups, error } = settingsResult;
-  const isPlatformMode = isPlatformOnlySession(session);
   const databaseCount = list.filter((item) => item.source === "database").length;
   const envCount = list.filter((item) => item.source === "env").length;
   const emptyCount = list.filter((item) => item.source === "empty").length;
@@ -81,7 +131,7 @@ export default async function SettingsPage() {
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {
-      const order = ["sms", "customer_service", "storage", "tencent_lbs", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "notify"];
+      const order = ["sms", "customer_service", "storage", "tencent_lbs", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "payment", "notify"];
       const leftOrder = order.indexOf(left.code);
       const rightOrder = order.indexOf(right.code);
       return (leftOrder === -1 ? order.length : leftOrder) - (rightOrder === -1 ? order.length : rightOrder);
@@ -114,7 +164,11 @@ export default async function SettingsPage() {
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <SettingsTabs groups={groupEntries} isPlatformMode={isPlatformMode} />
+      <SettingsTabs
+        groups={groupEntries}
+        isPlatformMode={isPlatformMode}
+        paymentProfiles={paymentProfiles}
+      />
     </div>
   );
 }

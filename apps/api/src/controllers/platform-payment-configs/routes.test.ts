@@ -5,7 +5,7 @@ process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 describe("PlatformPaymentConfigsController routes", () => {
-  test("registers platform wechat pay config read and update routes", async () => {
+  test("registers platform wechat pay config profile routes", async () => {
     const { default: controller } = await import(".");
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
@@ -18,6 +18,19 @@ describe("PlatformPaymentConfigsController routes", () => {
     expect(routes).toEqual([
       { method: "GET", path: "/platform/payment/wechat-pay/config" },
       { method: "PUT", path: "/platform/payment/wechat-pay/config" },
+      { method: "GET", path: "/platform/payment/wechat-pay/profiles" },
+      {
+        method: "GET",
+        path: "/platform/payment/wechat-pay/profiles/:profileCode/config",
+      },
+      {
+        method: "PUT",
+        path: "/platform/payment/wechat-pay/profiles/:profileCode/config",
+      },
+      {
+        method: "PUT",
+        path: "/platform/payment/wechat-pay/profiles/:profileCode/secret-bundle",
+      },
     ]);
   });
 });

@@ -10,6 +10,8 @@ import {
   TencentLbsConfigTester,
   updateSetting,
 } from "@/components/settings/settings-actions";
+import { PlatformPaymentSettingsPanel } from "@/components/settings/platform-payment-settings-panel";
+import type { PlatformWechatPayProfileListResult } from "@/components/settings/platform-payment-settings-types";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +35,7 @@ type SettingsGroup = {
 type SettingsTabsProps = {
   groups: SettingsGroup[];
   isPlatformMode?: boolean;
+  paymentProfiles?: PlatformWechatPayProfileListResult;
 };
 
 function normalizeGroup(groups: SettingsGroup[], value: string | null) {
@@ -191,7 +194,17 @@ function TenantSmsSettingsPanel({ settings }: { settings: SystemSetting[] }) {
   );
 }
 
-export function SettingsTabs({ groups, isPlatformMode = false }: SettingsTabsProps) {
+const emptyPaymentProfiles: PlatformWechatPayProfileListResult = {
+  can_manage: false,
+  profiles: [],
+  error: null,
+};
+
+export function SettingsTabs({
+  groups,
+  isPlatformMode = false,
+  paymentProfiles = emptyPaymentProfiles,
+}: SettingsTabsProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -272,6 +285,8 @@ export function SettingsTabs({ groups, isPlatformMode = false }: SettingsTabsPro
               <div className="flex flex-col gap-3 p-4">
                 <TenantSmsSettingsPanel settings={activeGroup.settings} />
               </div>
+            ) : isPlatformMode && activeGroup.code === "payment" ? (
+              <PlatformPaymentSettingsPanel paymentProfiles={paymentProfiles} />
             ) : (
               <>
                 <div className="flex flex-row items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
