@@ -119,6 +119,25 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).not.toContain("wechat_payment_orders");
   });
 
+  test("binds tenant credit wechat recharge orders to platform payment configs", () => {
+    const migrationSource = readPlatformWechatRechargePaymentConfigFkMigration();
+
+    expect(migrationSource).toContain(
+      "DROP CONSTRAINT IF EXISTS tenant_credit_orders_payment_config_id_fkey",
+    );
+    expect(migrationSource).toContain(
+      "ADD CONSTRAINT tenant_credit_orders_payment_config_id_fkey",
+    );
+    expect(migrationSource).toContain("FOREIGN KEY (payment_config_id)");
+    expect(migrationSource).toContain(
+      "REFERENCES public.platform_payment_configs(id)",
+    );
+    expect(migrationSource).toContain("ON DELETE SET NULL");
+    expect(migrationSource).not.toContain(
+      "REFERENCES public.tenant_payment_configs(id)",
+    );
+  });
+
   test("creates platform payment config for platform recharge merchant", () => {
     const migrationSource = readPlatformPaymentConfigMigration();
 
@@ -207,6 +226,16 @@ function readPlatformWechatRechargeMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260702150000_platform_wechat_recharge_credit.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readPlatformWechatRechargePaymentConfigFkMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260703123000_fix_tenant_credit_order_platform_payment_fk.sql",
       import.meta.url,
     ),
     "utf8",
