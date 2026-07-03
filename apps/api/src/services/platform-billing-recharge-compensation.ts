@@ -12,6 +12,7 @@ import {
 } from "@/repositories/platform-payment-configs";
 import type { PlatformRechargeOrderCompensateInput } from "@/schema/platform-billing-recharge";
 import type { AuthContext } from "@/services/authorization";
+import { billingSubscriptionService } from "@/services/billing-subscriptions";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
   wechatPayGateway,
@@ -47,6 +48,11 @@ type WechatPayGatewayPort = Pick<
 
 type AuditLogServicePort = Pick<typeof platformAuditLogService, "recordBestEffort">;
 
+type BillingSubscriptionServicePort = Pick<
+  typeof billingSubscriptionService,
+  "recoverAfterRecharge"
+>;
+
 export type PlatformBillingRechargeCompensationServiceDependencies = {
   repository?: PlatformBillingRechargeRepositoryPort;
   rechargeRepository?: BillingRechargeRepositoryPort;
@@ -54,6 +60,7 @@ export type PlatformBillingRechargeCompensationServiceDependencies = {
   secretBundleService?: SecretBundleServicePort;
   wechatPayGateway?: WechatPayGatewayPort;
   auditLogService?: AuditLogServicePort;
+  billingSubscriptionService?: BillingSubscriptionServicePort;
 };
 
 const RECHARGE_CHANNEL = "tenant_recharge";
@@ -65,6 +72,7 @@ export class PlatformBillingRechargeCompensationService {
   private readonly secretBundleService: SecretBundleServicePort;
   private readonly wechatPayGateway: WechatPayGatewayPort;
   private readonly auditLogService: AuditLogServicePort;
+  private readonly billingSubscriptionService: BillingSubscriptionServicePort;
 
   constructor(
     dependencies: PlatformBillingRechargeCompensationServiceDependencies = {},
@@ -79,6 +87,8 @@ export class PlatformBillingRechargeCompensationService {
     this.wechatPayGateway = dependencies.wechatPayGateway ?? wechatPayGateway;
     this.auditLogService =
       dependencies.auditLogService ?? platformAuditLogService;
+    this.billingSubscriptionService =
+      dependencies.billingSubscriptionService ?? billingSubscriptionService;
   }
 
   async compensateWechatOrder(
@@ -280,6 +290,7 @@ export class PlatformBillingRechargeCompensationService {
           out_trade_no: outTradeNo,
         },
       });
+      await this.billingSubscriptionService.recoverAfterRecharge(order.tenant_id);
       await this.rechargeRepository.markWechatNotificationProcessed({
         notificationId: notification.id,
       });

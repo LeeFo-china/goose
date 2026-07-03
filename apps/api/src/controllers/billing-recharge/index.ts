@@ -16,11 +16,15 @@ class BillingRechargeController extends BaseController {
     super("tenant_credit_orders");
   }
 
+  private async getBillingAllowedAuthContext(request: FastifyRequest) {
+    return authorizationService.getRequiredAuthContext(request.user?.sub, {
+      allowedWhenBillingLocked: true,
+    });
+  }
+
   @Get("/billing/recharge-products")
   async listProducts(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = BillingRechargeProductQuerySchema.safeParse(
       request.query || {},
     );
@@ -35,9 +39,7 @@ class BillingRechargeController extends BaseController {
 
   @Post("/billing/recharge-orders")
   async createOrder(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const bodyResult = BillingRechargeCreateOrderSchema.safeParse(
       request.body || {},
     );
@@ -52,9 +54,7 @@ class BillingRechargeController extends BaseController {
 
   @Get("/billing/recharge-orders/:id")
   async getOrder(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = BillingRechargeOrderParamSchema.safeParse(
       request.params || {},
     );

@@ -25,16 +25,22 @@ class BillingController extends BaseController {
     super("tenant_credit_accounts");
   }
 
+  private async getBillingAllowedAuthContext(request: FastifyRequest) {
+    return authorizationService.getRequiredAuthContext(request.user?.sub, {
+      allowedWhenBillingLocked: true,
+    });
+  }
+
   @Get("/billing/account")
   async getTenantAccount(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const data = await billingService.getTenantAccount(authContext);
     return ResponseHandler.success(data);
   }
 
   @Get("/billing/summary")
   async getTenantSummary(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = BillingDateRangeQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -44,7 +50,7 @@ class BillingController extends BaseController {
 
   @Get("/billing/ledger")
   async listTenantLedger(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = BillingLedgerQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -54,7 +60,7 @@ class BillingController extends BaseController {
 
   @Get("/billing/feature-estimates")
   async getTenantFeatureEstimates(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const data = await billingService.getTenantFeatureEstimates(authContext);
     return ResponseHandler.success(data);
   }

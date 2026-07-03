@@ -227,6 +227,10 @@ const auditLogService = {
   recordBestEffort: mock(async () => null),
 };
 
+const billingSubscriptionService = {
+  recoverAfterRecharge: mock(async () => ({ recovered: true })),
+};
+
 async function createService() {
   const { PlatformBillingRechargeService } = await import("./platform-billing-recharge");
   return new PlatformBillingRechargeService({
@@ -236,6 +240,7 @@ async function createService() {
     secretBundleService,
     wechatPayGateway,
     auditLogService,
+    billingSubscriptionService,
   });
 }
 
@@ -248,6 +253,7 @@ describe("PlatformBillingRechargeService", () => {
       ...Object.values(secretBundleService),
       ...Object.values(wechatPayGateway),
       ...Object.values(auditLogService),
+      ...Object.values(billingSubscriptionService),
     ]) {
       fn.mockClear();
     }
@@ -388,6 +394,9 @@ describe("PlatformBillingRechargeService", () => {
         out_trade_no: "TC202607020001",
       },
     });
+    expect(billingSubscriptionService.recoverAfterRecharge).toHaveBeenCalledWith(
+      "tenant-1",
+    );
     expect(rechargeRepository.markWechatNotificationProcessed).toHaveBeenCalledWith({
       notificationId: "notification-compensate-1",
     });
@@ -421,6 +430,7 @@ describe("PlatformBillingRechargeService", () => {
 
     expect(rechargeRepository.createWechatNotification).not.toHaveBeenCalled();
     expect(rechargeRepository.confirmWechatRecharge).not.toHaveBeenCalled();
+    expect(billingSubscriptionService.recoverAfterRecharge).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       compensated: false,
       trade_state: "NOTPAY",
