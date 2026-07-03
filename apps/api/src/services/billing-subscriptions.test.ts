@@ -48,6 +48,25 @@ describe("tenant subscription billing migration", () => {
   });
 });
 
+describe("billing subscription repository contract", () => {
+  test("uses subscription tables, due invoice queries, pagination, and charge recovery RPCs", () => {
+    const repositorySource = readFileSync(
+      join(import.meta.dir, "../repositories/billing-subscriptions.ts"),
+      "utf8",
+    );
+
+    expect(repositorySource).toContain("tenant_billing_subscriptions");
+    expect(repositorySource).toContain("tenant_subscription_invoices");
+    expect(repositorySource).toContain("listInvoicesDueForReminder");
+    expect(repositorySource).toContain("listInvoicesDueForCharge");
+    expect(repositorySource).toContain(".range(from, to)");
+    expect(repositorySource).toContain("billing_charge_subscription_invoice");
+    expect(repositorySource).toContain(
+      "billing_recover_subscription_after_recharge",
+    );
+  });
+});
+
 function readLatestTenantSubscriptionBillingMigration() {
   const migrationFile = readdirSync(migrationDir)
     .filter((fileName) =>
