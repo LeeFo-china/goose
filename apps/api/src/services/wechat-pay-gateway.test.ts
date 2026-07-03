@@ -161,4 +161,45 @@ describe("WechatPayGateway", () => {
       code: "WECHAT_PAY_PREPAY_FAILED",
     });
   });
+
+  test("queries direct merchant transaction by out trade no", async () => {
+    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe(
+        "https://api.mch.weixin.qq.com/v3/pay/transactions/out-trade-no/WX202607010001?mchid=1112582521",
+      );
+      expect(init?.method).toBe("GET");
+      expect(String((init?.headers as Record<string, string>).Authorization))
+        .toContain('mchid="1112582521"');
+      return new Response(JSON.stringify({
+        out_trade_no: "WX202607010001",
+        transaction_id: "4200000000202607010000000001",
+        trade_state: "SUCCESS",
+        success_time: "2026-07-01T10:00:00+08:00",
+        amount: { total: 100, currency: "CNY" },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    const result = await gateway.queryTransactionByOutTradeNo({
+      config: directConfig,
+      outTradeNo: "WX202607010001",
+      secretBundle: {
+        privateKeyPem: privateKey,
+        apiV3Key: "api-v3-key",
+        wechatPayPublicKeyId: null,
+        wechatPayPublicKeyPem: null,
+        baseUrl: "https://api.mch.weixin.qq.com",
+      },
+    });
+
+    expect(result).toMatchObject({
+      out_trade_no: "WX202607010001",
+      transaction_id: "4200000000202607010000000001",
+      trade_state: "SUCCESS",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

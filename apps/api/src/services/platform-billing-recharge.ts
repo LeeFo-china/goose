@@ -5,29 +5,51 @@ import {
   type PlatformRechargeProductUpdateRecordInput,
 } from "@/repositories/platform-billing-recharge";
 import type {
+  PlatformRechargeOrderCompensateInput,
   PlatformRechargeOrderQuery,
   PlatformRechargeProductCreateInput,
   PlatformRechargeProductQuery,
   PlatformRechargeProductUpdateInput,
 } from "@/schema/platform-billing-recharge";
 import type { AuthContext } from "@/services/authorization";
+import {
+  PlatformBillingRechargeCompensationService,
+  type PlatformBillingRechargeCompensationServiceDependencies,
+} from "@/services/platform-billing-recharge-compensation";
 
 type PlatformBillingRechargeRepositoryPort = Pick<
   typeof platformBillingRechargeRepository,
-  "listProducts" | "createProduct" | "updateProduct" | "listOrders"
+  | "listProducts"
+  | "createProduct"
+  | "updateProduct"
+  | "listOrders"
+  | "findOrderById"
 >;
 
-type PlatformBillingRechargeServiceDependencies = {
-  repository?: PlatformBillingRechargeRepositoryPort;
-};
+type CompensationServicePort = Pick<
+  PlatformBillingRechargeCompensationService,
+  "compensateWechatOrder"
+>;
+
+type PlatformBillingRechargeServiceDependencies =
+  PlatformBillingRechargeCompensationServiceDependencies & {
+    repository?: PlatformBillingRechargeRepositoryPort;
+    compensationService?: CompensationServicePort;
+  };
 
 const PRODUCT_MANAGE_PERMISSION = "platform.billing.recharge_product.manage";
 
 export class PlatformBillingRechargeService {
   private readonly repository: PlatformBillingRechargeRepositoryPort;
+  private readonly compensationService: CompensationServicePort;
 
   constructor(dependencies: PlatformBillingRechargeServiceDependencies = {}) {
     this.repository = dependencies.repository ?? platformBillingRechargeRepository;
+    this.compensationService = dependencies.compensationService ??
+      new PlatformBillingRechargeCompensationService({
+        ...dependencies,
+        repository: this.repository,
+      });
   }
 
   async listProducts(
@@ -85,6 +107,19 @@ export class PlatformBillingRechargeService {
       status: query.status,
       keyword: query.keyword,
     });
+  }
+
+  async compensateWechatOrder(
+    authContext: AuthContext,
+    orderId: string,
+    input: PlatformRechargeOrderCompensateInput = {},
+  ) {
+    this.assertPlatformAdmin(authContext);
+    return this.compensationService.compensateWechatOrder(
+      authContext,
+      orderId,
+      input,
+    );
   }
 
   private assertCanManageProducts(authContext: AuthContext) {

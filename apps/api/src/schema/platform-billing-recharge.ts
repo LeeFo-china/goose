@@ -11,6 +11,10 @@ export const PlatformRechargeProductParamSchema = z.object({
   id: z.uuid("无效的充值套餐 ID"),
 });
 
+export const PlatformRechargeOrderParamSchema = z.object({
+  id: z.uuid("无效的充值订单 ID"),
+});
+
 export const PlatformRechargeProductQuerySchema = PaginationQuerySchema.extend({
   enabled: BooleanQuerySchema.optional(),
 });
@@ -43,6 +47,10 @@ export const PlatformRechargeOrderQuerySchema = PaginationQuerySchema.extend({
   keyword: z.string().trim().max(120, "关键词不能超过 120 个字符").optional(),
 });
 
+export const PlatformRechargeOrderCompensateSchema = z.object({
+  reason: z.string().trim().max(200, "补偿原因不能超过 200 个字符").optional(),
+}).strict();
+
 export type PlatformRechargeProductQuery =
   z.infer<typeof PlatformRechargeProductQuerySchema>;
 export type PlatformRechargeProductCreateInput =
@@ -51,3 +59,5 @@ export type PlatformRechargeProductUpdateInput =
   z.infer<typeof PlatformRechargeProductUpdateSchema>;
 export type PlatformRechargeOrderQuery =
   z.infer<typeof PlatformRechargeOrderQuerySchema>;
+export type PlatformRechargeOrderCompensateInput =
+  z.infer<typeof PlatformRechargeOrderCompensateSchema>;

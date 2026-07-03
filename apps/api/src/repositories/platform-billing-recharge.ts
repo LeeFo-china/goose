@@ -40,6 +40,7 @@ type UntypedTable = {
   or: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
   range: (...args: unknown[]) => UntypedTable;
+  maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
   single: () => Promise<{ data: unknown; error: unknown }>;
   then: Promise<{
     data: unknown;
@@ -164,6 +165,24 @@ class PlatformBillingRechargeRepository {
         totalPages: count ? Math.ceil(count / input.pageSize) : 0,
       },
     };
+  }
+
+  async findOrderById(orderId: string) {
+    const { data, error } = await this.from("tenant_credit_orders")
+      .select(
+        [
+          "*",
+          "tenant:tenants!tenant_credit_orders_tenant_id_fkey(id, name, slug)",
+        ].join(", "),
+      )
+      .eq("id", orderId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询平台积分充值订单失败", error);
+    }
+
+    return (data as PlatformBillingRechargeOrderListItem | null) ?? null;
   }
 }
 

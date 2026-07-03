@@ -1,6 +1,8 @@
 import { PlatformBaseController } from "@/controllers/PlatformBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  PlatformRechargeOrderCompensateSchema,
+  PlatformRechargeOrderParamSchema,
   PlatformRechargeOrderQuerySchema,
   PlatformRechargeProductCreateSchema,
   PlatformRechargeProductParamSchema,
@@ -78,6 +80,26 @@ class PlatformBillingRechargeController extends PlatformBaseController {
     const data = await platformBillingRechargeService.listOrders(
       authContext,
       queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/billing/recharge-orders/:id/compensate")
+  async compensateOrder(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformRechargeOrderParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = PlatformRechargeOrderCompensateSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformBillingRechargeService.compensateWechatOrder(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }

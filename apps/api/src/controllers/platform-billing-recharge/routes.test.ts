@@ -21,6 +21,7 @@ describe("PlatformBillingRechargeController routes", () => {
       { method: "POST", path: "/platform/billing/recharge-products" },
       { method: "PATCH", path: "/platform/billing/recharge-products/:id" },
       { method: "GET", path: "/platform/billing/recharge-orders" },
+      { method: "POST", path: "/platform/billing/recharge-orders/:id/compensate" },
     ]);
   });
 });
