@@ -276,10 +276,10 @@ export function SettingsTabs({
           </div>
         </CardHeader>
 
-        <CardContent className="min-h-0 flex-1 p-0">
+        <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
           <TabsContent
             value={activeGroup.code}
-            className="m-0 min-h-0 flex-1 overflow-auto data-[state=inactive]:hidden"
+            className="m-0 h-full min-h-0 overflow-auto data-[state=inactive]:hidden"
           >
             {!isPlatformMode && activeGroup.code === "sms" ? (
               <div className="flex flex-col gap-3 p-4">

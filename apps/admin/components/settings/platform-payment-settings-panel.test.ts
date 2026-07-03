@@ -26,6 +26,17 @@ describe("platform payment settings panel", () => {
     expect(tabsSource).toContain("paymentProfiles");
   });
 
+  test("settings card constrains tab panels so payment tabs scroll instead of clipping", () => {
+    const tabsSource = readSource("./settings-tabs.tsx");
+
+    expect(tabsSource).toContain(
+      'CardContent className="min-h-0 flex-1 overflow-hidden p-0"',
+    );
+    expect(tabsSource).toContain(
+      'className="m-0 h-full min-h-0 overflow-auto data-[state=inactive]:hidden"',
+    );
+  });
+
   test("payment panel uses shadcn form controls and certificate upload interactions", () => {
     const panelSource = [
       readSource("./platform-payment-settings-panel.tsx"),
