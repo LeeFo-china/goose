@@ -21,9 +21,12 @@ const groupLabels: Record<string, string> = {
   ai: "AI 配置",
   social_video: "短视频识别",
   tencent_lbs: "腾讯位置",
+  location: "定位匹配",
   notify: "通知配置",
   wechat: "微信配置",
   payment: "支付配置",
+  picture_library: "图片资料库",
+  visitor: "访客配置",
 };
 
 async function fetchSettings(token: string) {
@@ -125,13 +128,28 @@ export default async function SettingsPage() {
   const groupEntries = Object.entries(groups)
     .map(([groupCode, settings]) => ({
       code: groupCode,
-      label: groupLabels[groupCode] || groupCode,
+      label: groupLabels[groupCode] || "其他配置",
       settings,
       emptyCount: settings.filter((item) => item.source === "empty").length,
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {
-      const order = ["sms", "customer_service", "storage", "tencent_lbs", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "payment", "notify"];
+      const order = [
+        "sms",
+        "customer_service",
+        "storage",
+        "tencent_lbs",
+        "location",
+        "ai",
+        "social_video",
+        "ezviz",
+        "tencent_iot_video",
+        "wechat",
+        "payment",
+        "notify",
+        "picture_library",
+        "visitor",
+      ];
       const leftOrder = order.indexOf(left.code);
       const rightOrder = order.indexOf(right.code);
       return (leftOrder === -1 ? order.length : leftOrder) - (rightOrder === -1 ? order.length : rightOrder);

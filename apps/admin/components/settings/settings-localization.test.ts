@@ -6,6 +6,21 @@ function readSource(path: string) {
 }
 
 describe("settings localization", () => {
+  test("uses Chinese labels for system setting group tabs", () => {
+    const source = readFileSync(
+      new URL("../../app/(console)/settings/page.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('location: "定位匹配"');
+    expect(source).toContain('picture_library: "图片资料库"');
+    expect(source).toContain('visitor: "访客配置"');
+    expect(source).toContain('"location"');
+    expect(source).toContain('"picture_library"');
+    expect(source).toContain('"visitor"');
+    expect(source).not.toContain("label: groupLabels[groupCode] || groupCode");
+  });
+
   test("uses Chinese labels for platform settings interactions", () => {
     const source = [
       readSource("./settings-actions.tsx"),
