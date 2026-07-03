@@ -45,7 +45,7 @@ export function SecretBundleForm({
     const publicKeyFile = fileValue(formData, "wechat_pay_public_key_file");
     const apiV3Key = textValue(formData, "api_v3_key");
     if (!privateKeyFile || !apiV3Key) {
-      setError("请上传商户 API 私钥 PEM，并填写 APIv3 Key。");
+      setError("请上传商户接口私钥文件，并填写接口 v3 密钥。");
       return;
     }
 
@@ -88,7 +88,7 @@ export function SecretBundleForm({
       <SectionTitle
         icon={<KeyRound className="size-4" />}
         title="证书与密钥"
-        description="文件只用于本次上传，保存后页面不回显私钥或 APIv3 Key。"
+        description="文件只用于本次上传，保存后页面不回显私钥或接口 v3 密钥。"
       />
       <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
         当前密钥引用：{profile.config?.encrypted_config_ref ||
@@ -99,30 +99,30 @@ export function SecretBundleForm({
 
       <FieldGroup>
         <FileField
-          label="商户 API 私钥 PEM"
+          label="商户接口私钥文件"
           name="private_key_file"
           disabled={pending || readonly}
           required
         />
         <TextField
-          label="APIv3 Key"
+          label="接口 v3 密钥"
           name="api_v3_key"
           type="password"
           disabled={pending || readonly}
           required
         />
         <TextField
-          label="微信支付公钥 ID"
+          label="微信支付公钥编号"
           name="wechat_pay_public_key_id"
           disabled={pending || readonly}
         />
         <FileField
-          label="微信支付公钥 PEM"
+          label="微信支付公钥文件"
           name="wechat_pay_public_key_file"
           disabled={pending || readonly}
         />
         <TextField
-          label="微信支付 API 地址"
+          label="微信支付接口地址"
           name="base_url"
           type="url"
           placeholder="https://api.mch.weixin.qq.com"
