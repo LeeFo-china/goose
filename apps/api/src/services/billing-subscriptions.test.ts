@@ -1,0 +1,50 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
+const migrationDir = join(
+  import.meta.dir,
+  "../../../../supabase/migrations",
+);
+
+describe("tenant subscription billing migration", () => {
+  test("creates subscription billing tables and charge recovery RPCs", () => {
+    const migrationSource = readLatestTenantSubscriptionBillingMigration();
+
+    expect(migrationSource).toContain(
+      "CREATE TABLE IF NOT EXISTS public.tenant_billing_plans",
+    );
+    expect(migrationSource).toContain(
+      "CREATE TABLE IF NOT EXISTS public.tenant_billing_subscriptions",
+    );
+    expect(migrationSource).toContain(
+      "CREATE TABLE IF NOT EXISTS public.tenant_subscription_invoices",
+    );
+    expect(migrationSource).toContain(
+      "CREATE OR REPLACE FUNCTION public.billing_charge_subscription_invoice",
+    );
+    expect(migrationSource).toContain(
+      "CREATE OR REPLACE FUNCTION public.billing_recover_subscription_after_recharge",
+    );
+    expect(migrationSource).toContain(
+      "tenant_subscription_invoices_tenant_period_unique_idx",
+    );
+    expect(migrationSource).toContain("'subscription_monthly_fee'");
+    expect(migrationSource).toContain("'tenant_subscription_invoice'");
+  });
+});
+
+function readLatestTenantSubscriptionBillingMigration() {
+  const migrationFile = readdirSync(migrationDir)
+    .filter((fileName) =>
+      fileName.endsWith("_create_tenant_subscription_billing.sql")
+    )
+    .sort()
+    .at(-1);
+
+  if (!migrationFile) {
+    throw new Error("No tenant subscription billing migration found");
+  }
+
+  return readFileSync(join(migrationDir, migrationFile), "utf8");
+}
