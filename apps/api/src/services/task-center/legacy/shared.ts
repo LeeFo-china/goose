@@ -23,7 +23,13 @@ export type TaskCenterTodoItem = {
   created_at: string | null;
   action_label: string;
   target_url: string;
-  target_type: "customer" | "project" | "expense_request" | "project_acceptance" | "customer_service_ticket";
+  target_type:
+    | "customer"
+    | "project"
+    | "expense_request"
+    | "project_acceptance"
+    | "customer_service_ticket"
+    | "billing";
   target_id: string;
   metadata?: Record<string, unknown>;
 };

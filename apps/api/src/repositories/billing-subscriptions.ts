@@ -52,6 +52,11 @@ export type TenantSubscriptionInvoiceRecord = {
   updated_at: string;
 };
 
+export type TenantSubscriptionOpenInvoiceRecord = Pick<
+  TenantSubscriptionInvoiceRecord,
+  "id" | "tenant_id" | "amount_credits" | "due_at" | "status"
+>;
+
 export type BillingSubscriptionRpcResult = {
   charged?: boolean;
   recovered?: boolean;
@@ -200,6 +205,24 @@ export class BillingSubscriptionRepository {
       last_invoice_id: subscription.last_invoice_id,
       subscription,
     };
+  }
+
+  async findOpenInvoiceByTenantId(
+    tenantId: string,
+  ): Promise<TenantSubscriptionOpenInvoiceRecord | null> {
+    const { data, error } = await this.from("tenant_subscription_invoices")
+      .select("id, tenant_id, amount_credits, due_at, status")
+      .eq("tenant_id", tenantId)
+      .in("status", ["reminded", "past_due", "failed"])
+      .order("due_at", { ascending: true })
+      .range(0, 0)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询待处理订阅账单失败", error);
+    }
+
+    return (data as TenantSubscriptionOpenInvoiceRecord | null) ?? null;
   }
 
   async listInvoicesDueForReminder(input: {

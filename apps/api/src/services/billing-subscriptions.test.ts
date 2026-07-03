@@ -67,7 +67,9 @@ describe("billing subscription repository contract", () => {
     expect(repositorySource).toContain("tenant_subscription_invoices");
     expect(repositorySource).toContain("listInvoicesDueForReminder");
     expect(repositorySource).toContain("listInvoicesDueForCharge");
+    expect(repositorySource).toContain("findOpenInvoiceByTenantId");
     expect(repositorySource).toContain(".range(from, to)");
+    expect(repositorySource).toContain(".range(0, 0)");
     expect(repositorySource).toContain("billing_charge_subscription_invoice");
     expect(repositorySource).toContain(
       "billing_recover_subscription_after_recharge",
