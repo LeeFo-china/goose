@@ -27,6 +27,9 @@ describe("wechat pay signatures", () => {
     });
 
     expect(authorization).toStartWith("WECHATPAY2-SHA256-RSA2048 ");
+    expect(authorization).toMatch(
+      /^WECHATPAY2-SHA256-RSA2048 mchid="1561816121",nonce_str="nonce-1",signature="[^"]+",timestamp="1782873600",serial_no="SERIALNO"$/,
+    );
     expect(authorization).toContain('mchid="1561816121"');
     expect(authorization).toContain('serial_no="SERIALNO"');
     expect(authorization).toContain('nonce_str="nonce-1"');

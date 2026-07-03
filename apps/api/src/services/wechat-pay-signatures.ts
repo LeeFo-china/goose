@@ -56,14 +56,15 @@ export function buildWechatPayAuthorization(
   });
   const signature = signWechatPayMessage(message, input.privateKeyPem);
 
-  return [
-    "WECHATPAY2-SHA256-RSA2048",
+  const credentials = [
     `mchid="${input.merchantId}"`,
     `nonce_str="${nonce}"`,
     `signature="${signature}"`,
     `timestamp="${timestamp}"`,
     `serial_no="${input.serialNo}"`,
-  ].join(" ");
+  ].join(",");
+
+  return `WECHATPAY2-SHA256-RSA2048 ${credentials}`;
 }
 
 export function buildWechatPayRequestSignMessage(
