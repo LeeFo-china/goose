@@ -17,6 +17,20 @@
 
 小程序侧建议在员工首页抽屉增加“积分充值”入口，进入后只按本文接口完成套餐选择、下单、拉起微信支付和刷新余额。
 
+当前 dev smoke 已配置一个小额套餐：
+
+```json
+{
+  "code": "smoke_1fen",
+  "title": "1分钱测试充值",
+  "amount_fen": 1,
+  "credits": 1,
+  "bonus_credits": 0
+}
+```
+
+小程序真实小额支付 smoke 可优先使用 `package_code=smoke_1fen`。
+
 ## 小程序接口流程
 
 ### 1. 读取积分账户
