@@ -20,6 +20,7 @@ import {
   WechatPayCallbackContextMatcher,
   type WechatPayCallbackContextMatcherDependencies,
 } from "@/services/wechat-pay-callback-context-matcher";
+import { billingSubscriptionService } from "@/services/billing-subscriptions";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
 
 type OrderRepositoryPort = Pick<
@@ -49,6 +50,9 @@ type WechatPayCallbackServiceDependencies =
   contextMatcher?: Pick<WechatPayCallbackContextMatcher, "match">;
   orderRepository?: OrderRepositoryPort;
   creditRechargeRepository?: CreditRechargeRepositoryPort;
+  billingSubscriptionService?: {
+    recoverAfterRecharge: (tenantId: string) => Promise<unknown>;
+  };
   paymentRepository?: PaymentRepositoryPort;
   workflowTaskRepository?: WorkflowTaskRepositoryPort;
   paymentBridge?: PaymentBridgePort;
@@ -61,6 +65,9 @@ export class WechatPayCallbackService {
   private readonly contextMatcher: Pick<WechatPayCallbackContextMatcher, "match">;
   private readonly orderRepository: OrderRepositoryPort;
   private readonly creditRechargeRepository: CreditRechargeRepositoryPort;
+  private readonly billingSubscriptionService: {
+    recoverAfterRecharge: (tenantId: string) => Promise<unknown>;
+  };
   private readonly paymentRepository: PaymentRepositoryPort;
   private readonly workflowTaskRepository: WorkflowTaskRepositoryPort;
   private readonly paymentBridge: PaymentBridgePort;
@@ -72,6 +79,8 @@ export class WechatPayCallbackService {
       wechatPayOrderRepository;
     this.creditRechargeRepository = dependencies.creditRechargeRepository ??
       billingRechargeRepository;
+    this.billingSubscriptionService = dependencies.billingSubscriptionService ??
+      billingSubscriptionService;
     this.paymentRepository = dependencies.paymentRepository ?? paymentRepository;
     this.workflowTaskRepository = dependencies.workflowTaskRepository ??
       workflowTaskRepository;
@@ -274,6 +283,9 @@ export class WechatPayCallbackService {
         out_trade_no: matched.order.out_trade_no,
       },
     });
+    await this.billingSubscriptionService.recoverAfterRecharge(
+      matched.order.tenant_id,
+    );
   }
 
   private buildPaymentInput(matched: ProjectPaymentCallbackContext) {
