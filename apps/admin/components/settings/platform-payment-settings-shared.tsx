@@ -236,6 +236,13 @@ export function merchantModeLabel(mode: PlatformPaymentMerchantMode) {
   return mode === "service_provider_sub_merchant" ? "服务商模式" : "普通直连商户";
 }
 
+export function paymentChannelLabel(channel: string) {
+  if (channel === "tenant_recharge") return "租户充值";
+  if (channel === "project_payment") return "项目收款";
+  if (channel === "applyment") return "商户进件";
+  return channel;
+}
+
 export function statusLabel(
   status: PlatformWechatPayConfigView["status"] | undefined,
 ) {

@@ -10,6 +10,7 @@ import {
   emptyProfile,
   formatDateTime,
   merchantModeLabel,
+  paymentChannelLabel,
   profileDefinitions,
   type ProfileDefinition,
   ReadonlyField,
@@ -242,7 +243,7 @@ function ProfileConfigForm({
           required
         />
         <TextField
-          label={definition.profile_code === "tenant_service_provider" ? "服务商 AppID" : "小程序 AppID"}
+          label={definition.profile_code === "tenant_service_provider" ? "服务商应用编号" : "小程序应用编号"}
           name="app_id"
           defaultValue={config?.app_id}
           disabled={pending || readonly}
@@ -251,7 +252,7 @@ function ProfileConfigForm({
         <TextField
           label="证书序列号"
           name="serial_no"
-          placeholder={config?.serial_no_masked ? `当前 ${config.serial_no_masked}` : "填写商户 API 证书序列号"}
+          placeholder={config?.serial_no_masked ? `当前 ${config.serial_no_masked}` : "填写商户接口证书序列号"}
           disabled={pending || readonly}
         />
         {definition.profile_code === "tenant_service_provider" ? (
@@ -264,7 +265,7 @@ function ProfileConfigForm({
               description="平台服务商配置一般不预填，租户开通后记录在租户支付配置。"
             />
             <TextField
-              label="默认子商户 AppID"
+              label="默认子商户应用编号"
               name="sub_app_id"
               defaultValue={config?.sub_app_id}
               disabled={pending || readonly}
@@ -290,7 +291,7 @@ function ProfileConfigForm({
 
       <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs text-muted-foreground">
-          启用渠道：{definition.enabled_channels.join(" / ")}
+          启用渠道：{definition.enabled_channels.map(paymentChannelLabel).join(" / ")}
           {config?.updated_at ? `；更新时间：${formatDateTime(config.updated_at)}` : ""}
         </div>
         <Button type="submit" disabled={pending || readonly}>
