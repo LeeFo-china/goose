@@ -72,52 +72,60 @@ export class BillingSubscriptionService {
       errors: [],
     };
 
-    const reminderInvoices = await this.repository.listInvoicesDueForReminder({
-      nowIso,
-      page: 1,
-      pageSize: batchSize,
-    });
+    try {
+      const reminderInvoices = await this.repository.listInvoicesDueForReminder({
+        nowIso,
+        page: 1,
+        pageSize: batchSize,
+      });
 
-    for (const invoice of reminderInvoices) {
-      try {
-        const remindedInvoice = await this.repository.markInvoiceReminded(
-          invoice.id,
-        );
-        if (remindedInvoice) {
-          result.reminded += 1;
-        } else {
-          result.skipped += 1;
+      for (const invoice of reminderInvoices) {
+        try {
+          const remindedInvoice = await this.repository.markInvoiceReminded(
+            invoice.id,
+          );
+          if (remindedInvoice) {
+            result.reminded += 1;
+          } else {
+            result.skipped += 1;
+          }
+        } catch (error) {
+          result.errors.push(formatInvoiceError(invoice.id, error));
         }
-      } catch (error) {
-        result.errors.push(formatInvoiceError(invoice.id, error));
       }
+    } catch (error) {
+      result.errors.push(formatPhaseError("reminders", error));
     }
 
-    const chargeInvoices = await this.repository.listInvoicesDueForCharge({
-      nowIso,
-      page: 1,
-      pageSize: batchSize,
-    });
+    try {
+      const chargeInvoices = await this.repository.listInvoicesDueForCharge({
+        nowIso,
+        page: 1,
+        pageSize: batchSize,
+      });
 
-    for (const invoice of chargeInvoices) {
-      try {
-        const chargeResult = await this.repository.chargeInvoice({
-          invoiceId: invoice.id,
-          operatorUserId: input.operatorUserId ?? null,
-        });
+      for (const invoice of chargeInvoices) {
+        try {
+          const chargeResult = await this.repository.chargeInvoice({
+            invoiceId: invoice.id,
+            operatorUserId: input.operatorUserId ?? null,
+          });
 
-        if (chargeResult.charged === true) {
-          result.charged += 1;
+          if (chargeResult.charged === true) {
+            result.charged += 1;
+          }
+          if (chargeResult.failure_code === "TENANT_CREDITS_INSUFFICIENT") {
+            result.locked += 1;
+          }
+          if (chargeResult.idempotent === true) {
+            result.skipped += 1;
+          }
+        } catch (error) {
+          result.errors.push(formatInvoiceError(invoice.id, error));
         }
-        if (chargeResult.failure_code === "TENANT_CREDITS_INSUFFICIENT") {
-          result.locked += 1;
-        }
-        if (chargeResult.idempotent === true) {
-          result.skipped += 1;
-        }
-      } catch (error) {
-        result.errors.push(formatInvoiceError(invoice.id, error));
       }
+    } catch (error) {
+      result.errors.push(formatPhaseError("charges", error));
     }
 
     return result;
@@ -148,7 +156,15 @@ function normalizePositiveInteger(
 }
 
 function formatInvoiceError(invoiceId: string, error: unknown): string {
-  return `${invoiceId}: ${error instanceof Error ? error.message : String(error)}`;
+  return `${invoiceId}: ${formatErrorMessage(error)}`;
+}
+
+function formatPhaseError(phase: "reminders" | "charges", error: unknown): string {
+  return `${phase}: ${formatErrorMessage(error)}`;
+}
+
+function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export const billingSubscriptionService = new BillingSubscriptionService();

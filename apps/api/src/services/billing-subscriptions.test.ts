@@ -73,6 +73,16 @@ describe("billing subscription repository contract", () => {
       "billing_recover_subscription_after_recharge",
     );
 
+    const chargeListSource = repositorySource.slice(
+      repositorySource.indexOf("async listInvoicesDueForCharge"),
+      repositorySource.indexOf("async markInvoiceReminded"),
+    );
+    expect(chargeListSource).toContain(
+      '.in("status", ["upcoming", "reminded"])',
+    );
+    expect(chargeListSource).not.toContain('"past_due"');
+    expect(chargeListSource).not.toContain('"failed"');
+
     const markInvoiceRemindedSource = repositorySource.slice(
       repositorySource.indexOf("async markInvoiceReminded"),
       repositorySource.indexOf("async chargeInvoice"),
@@ -237,6 +247,70 @@ describe("BillingSubscriptionService", () => {
       locked: 1,
       skipped: 1,
       errors: ["invoice-error: rpc unavailable"],
+    });
+  });
+
+  test("continues charge phase when reminder list fails", async () => {
+    const service = await createService();
+    repository.listInvoicesDueForReminder.mockImplementation(async () => {
+      throw new Error("reminder query failed");
+    });
+    repository.listInvoicesDueForCharge.mockImplementation(async () => [
+      invoice("invoice-charged"),
+    ]);
+
+    const result = await service.runDueChecks({
+      now: fixedNow,
+      batchSize: 10,
+    });
+
+    expect(repository.listInvoicesDueForReminder).toHaveBeenCalledWith({
+      nowIso: fixedNow.toISOString(),
+      page: 1,
+      pageSize: 10,
+    });
+    expect(repository.markInvoiceReminded).not.toHaveBeenCalled();
+    expect(repository.listInvoicesDueForCharge).toHaveBeenCalledWith({
+      nowIso: fixedNow.toISOString(),
+      page: 1,
+      pageSize: 10,
+    });
+    expect(repository.chargeInvoice).toHaveBeenCalledWith({
+      invoiceId: "invoice-charged",
+      operatorUserId: null,
+    });
+    expect(result).toEqual({
+      reminded: 0,
+      charged: 1,
+      locked: 0,
+      skipped: 0,
+      errors: ["reminders: reminder query failed"],
+    });
+  });
+
+  test("records charge list failures in result errors", async () => {
+    const service = await createService();
+    repository.listInvoicesDueForCharge.mockImplementation(async () => {
+      throw new Error("charge query failed");
+    });
+
+    const result = await service.runDueChecks({
+      now: fixedNow,
+      batchSize: 10,
+    });
+
+    expect(repository.listInvoicesDueForCharge).toHaveBeenCalledWith({
+      nowIso: fixedNow.toISOString(),
+      page: 1,
+      pageSize: 10,
+    });
+    expect(repository.chargeInvoice).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      reminded: 0,
+      charged: 0,
+      locked: 0,
+      skipped: 0,
+      errors: ["charges: charge query failed"],
     });
   });
 

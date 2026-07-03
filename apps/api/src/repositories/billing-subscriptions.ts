@@ -230,7 +230,7 @@ export class BillingSubscriptionRepository {
     const { from, to } = normalizeSubscriptionPageRange(input);
     const { data, error } = await this.from("tenant_subscription_invoices")
       .select("*")
-      .in("status", ["upcoming", "reminded", "past_due", "failed"])
+      .in("status", ["upcoming", "reminded"])
       .lte("due_at", input.nowIso)
       .order("due_at", { ascending: true })
       .range(from, to);

@@ -57,7 +57,10 @@ function parseNumberEnv(
   min: number,
   max: number,
 ): number {
-  const value = Number(process.env[name]);
+  const rawValue = process.env[name]?.trim();
+  if (!rawValue) return fallback;
+
+  const value = Number(rawValue);
   if (!Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(Math.floor(value), max));
 }
@@ -114,22 +117,38 @@ export async function tick(): Promise<void> {
   }
 }
 
-process.on("SIGINT", () => {
-  stopping = true;
-  log("warn", "received SIGINT");
-});
+function registerShutdownSignalHandlers(): void {
+  process.on("SIGINT", () => {
+    stopping = true;
+    log("warn", "received SIGINT");
+  });
 
-process.on("SIGTERM", () => {
-  stopping = true;
-  log("warn", "received SIGTERM");
-});
+  process.on("SIGTERM", () => {
+    stopping = true;
+    log("warn", "received SIGTERM");
+  });
+}
+
+async function sleepUntilNextTick(intervalMs: number): Promise<void> {
+  const startedAt = Date.now();
+
+  while (!stopping) {
+    const remainingMs = intervalMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) {
+      return;
+    }
+
+    await sleep(Math.min(1000, remainingMs));
+  }
+}
 
 async function main(): Promise<void> {
+  registerShutdownSignalHandlers();
   log("info", "worker started", getWorkerConfig());
 
   while (!stopping) {
     await tick();
-    await sleep(getWorkerConfig().intervalMs);
+    await sleepUntilNextTick(getWorkerConfig().intervalMs);
   }
 
   while (running) {
