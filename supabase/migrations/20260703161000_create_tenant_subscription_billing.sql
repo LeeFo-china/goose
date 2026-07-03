@@ -34,13 +34,14 @@ CREATE TABLE IF NOT EXISTS public.tenant_billing_subscriptions (
   ),
   CONSTRAINT tenant_billing_subscriptions_period_check CHECK (
     current_period_end > current_period_start
-  )
+  ),
+  CONSTRAINT tenant_billing_subscriptions_id_tenant_unique UNIQUE (id, tenant_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.tenant_subscription_invoices (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants(id),
-  subscription_id uuid NOT NULL REFERENCES public.tenant_billing_subscriptions(id),
+  subscription_id uuid NOT NULL,
   plan_id uuid NOT NULL REFERENCES public.tenant_billing_plans(id),
   period_start date NOT NULL,
   period_end date NOT NULL,
@@ -71,8 +72,44 @@ CREATE TABLE IF NOT EXISTS public.tenant_subscription_invoices (
   ),
   CONSTRAINT tenant_subscription_invoices_period_check CHECK (
     period_end > period_start
-  )
+  ),
+  CONSTRAINT tenant_subscription_invoices_id_tenant_unique UNIQUE (id, tenant_id)
 );
+
+ALTER TABLE public.tenant_subscription_invoices
+  DROP CONSTRAINT IF EXISTS tenant_subscription_invoices_subscription_id_fkey;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'tenant_subscription_invoices_subscription_tenant_fkey'
+      AND conrelid = 'public.tenant_subscription_invoices'::regclass
+  ) THEN
+    ALTER TABLE public.tenant_subscription_invoices
+      ADD CONSTRAINT tenant_subscription_invoices_subscription_tenant_fkey
+      FOREIGN KEY (subscription_id, tenant_id)
+      REFERENCES public.tenant_billing_subscriptions(id, tenant_id);
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'tenant_billing_subscriptions_last_invoice_tenant_fkey'
+      AND conrelid = 'public.tenant_billing_subscriptions'::regclass
+  ) THEN
+    ALTER TABLE public.tenant_billing_subscriptions
+      ADD CONSTRAINT tenant_billing_subscriptions_last_invoice_tenant_fkey
+      FOREIGN KEY (last_invoice_id, tenant_id)
+      REFERENCES public.tenant_subscription_invoices(id, tenant_id);
+  END IF;
+END;
+$$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS tenant_subscription_invoices_tenant_period_unique_idx
 ON public.tenant_subscription_invoices(tenant_id, period_start, period_end);
@@ -229,15 +266,8 @@ BEGIN
   ON CONFLICT DO NOTHING
   RETURNING * INTO v_ledger;
 
-  IF v_ledger.id IS NULL AND p_source_type IS NOT NULL AND p_source_id IS NOT NULL THEN
-    SELECT *
-    INTO v_ledger
-    FROM public.tenant_credit_ledger
-    WHERE tenant_id = p_tenant_id
-      AND source_type = p_source_type
-      AND source_id = p_source_id
-      AND event_type = p_event_type
-    LIMIT 1;
+  IF v_ledger.id IS NULL THEN
+    RAISE EXCEPTION 'TENANT_CREDIT_LEDGER_CONFLICT';
   END IF;
 
   SELECT *
@@ -298,7 +328,15 @@ BEGIN
   WHERE id = v_invoice.subscription_id
   FOR UPDATE;
 
-  IF NOT FOUND OR v_subscription.status = 'canceled' THEN
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TENANT_SUBSCRIPTION_NOT_ACTIVE';
+  END IF;
+
+  IF v_subscription.tenant_id <> v_invoice.tenant_id THEN
+    RAISE EXCEPTION 'TENANT_SUBSCRIPTION_INVOICE_TENANT_MISMATCH';
+  END IF;
+
+  IF v_subscription.status = 'canceled' THEN
     RAISE EXCEPTION 'TENANT_SUBSCRIPTION_NOT_ACTIVE';
   END IF;
 
@@ -320,15 +358,16 @@ BEGIN
     )
     INTO v_charge_result;
   EXCEPTION WHEN OTHERS THEN
-    v_failure_code := SQLERRM;
-    v_failure_message := SQLERRM;
+    GET STACKED DIAGNOSTICS v_failure_code = MESSAGE_TEXT;
+    v_failure_message := v_failure_code;
+
+    IF v_failure_code <> 'TENANT_CREDITS_INSUFFICIENT' THEN
+      RAISE;
+    END IF;
 
     UPDATE public.tenant_subscription_invoices
     SET
-      status = CASE
-        WHEN v_failure_code = 'TENANT_CREDITS_INSUFFICIENT' THEN 'past_due'
-        ELSE 'failed'
-      END,
+      status = 'past_due',
       failure_code = v_failure_code,
       failure_message = v_failure_message
     WHERE id = v_invoice.id
@@ -421,3 +460,18 @@ BEGIN
   );
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.billing_charge_credits(uuid, bigint, text, text, text, uuid, jsonb, text, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.billing_charge_credits(uuid, bigint, text, text, text, uuid, jsonb, text, uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.billing_charge_credits(uuid, bigint, text, text, text, uuid, jsonb, text, uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.billing_charge_credits(uuid, bigint, text, text, text, uuid, jsonb, text, uuid) TO service_role;
+
+REVOKE ALL ON FUNCTION public.billing_charge_subscription_invoice(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.billing_charge_subscription_invoice(uuid, uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.billing_charge_subscription_invoice(uuid, uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.billing_charge_subscription_invoice(uuid, uuid) TO service_role;
+
+REVOKE ALL ON FUNCTION public.billing_recover_subscription_after_recharge(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.billing_recover_subscription_after_recharge(uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.billing_recover_subscription_after_recharge(uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.billing_recover_subscription_after_recharge(uuid) TO service_role;

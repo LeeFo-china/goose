@@ -31,6 +31,20 @@ describe("tenant subscription billing migration", () => {
     );
     expect(migrationSource).toContain("'subscription_monthly_fee'");
     expect(migrationSource).toContain("'tenant_subscription_invoice'");
+    expect(migrationSource).toContain(
+      "REVOKE ALL ON FUNCTION public.billing_charge_subscription_invoice",
+    );
+    expect(migrationSource).toContain(
+      "GRANT EXECUTE ON FUNCTION public.billing_charge_subscription_invoice",
+    );
+    expect(migrationSource).toContain(
+      "TENANT_SUBSCRIPTION_INVOICE_TENANT_MISMATCH",
+    );
+    expect(migrationSource).toContain("FOREIGN KEY (subscription_id, tenant_id)");
+    expect(migrationSource).toContain("FOREIGN KEY (last_invoice_id, tenant_id)");
+    expect(migrationSource).toContain("TENANT_CREDIT_LEDGER_CONFLICT");
+    expect(migrationSource).toContain("GET STACKED DIAGNOSTICS");
+    expect(migrationSource).toContain("RAISE;");
   });
 });
 
