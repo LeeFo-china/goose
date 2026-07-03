@@ -79,7 +79,7 @@ mchid            = 1112582521
 
 ### 3. 支付回调是否成功入库
 
-未成功入库。
+首次核对时未成功入库。
 
 数据库核对：
 
@@ -107,44 +107,80 @@ requestId = req-c9n
 api-dev 返回 `TOKEN_MISSING` 说明请求在进入微信回调 controller 前被全局鉴权拦截。当前更像是
 api-dev 未部署包含公开回调白名单的后端版本，或网关/部署层仍对该路径做登录鉴权。
 
-### 4. 订单状态是否已变更为 paid
-
-未变更。
-
-数据库当前状态：
+发布修复后重新核对：
 
 ```text
-tenant_credit_orders.status          = pending
-tenant_credit_orders.transaction_id  = null
-tenant_credit_orders.paid_amount_fen = 0
-tenant_credit_orders.paid_at         = null
+deploy run = https://github.com/LeeFo-china/goose/actions/runs/28638201654
+commit     = 4a24c679 fix(ci): 修复dev发布镜像引用
+api-dev callback probe:
+POST https://api-dev.goodcms.cn/pay/wechat/callback
+返回 400 VALIDATION_ERROR: 微信支付回调缺少请求头 wechatpay-timestamp
+requestId = req-4
+```
+
+结论：api-dev 回调入口已公开放行，不再返回 `TOKEN_MISSING`。
+
+微信回调重试后已成功入库：
+
+```text
+tenant_credit_wechat_notifications.id = ca12f8eb-ba08-4b42-9d4e-d475326fb5e8
+notify_id                             = cd0bc789-4ed2-54b6-895b-05da50b5472f
+event_type                            = TRANSACTION.SUCCESS
+signature_valid                       = true
+processed                             = true
+processed_at                          = 2026-07-03T04:24:30.151+00:00
+error_message                         = null
+```
+
+### 4. 订单状态是否已变更为 paid
+
+已变更为 `paid`。
+
+数据库最终状态：
+
+```text
+tenant_credit_orders.status                 = paid
+tenant_credit_orders.transaction_id         = 4200003222202607030242248069
+tenant_credit_orders.paid_amount_fen        = 1
+tenant_credit_orders.paid_at                = 2026-07-03T03:50:22+00:00
+tenant_credit_orders.latest_notification_id = ca12f8eb-ba08-4b42-9d4e-d475326fb5e8
+tenant_credit_orders.updated_at             = 2026-07-03T04:24:30.130431+00:00
 ```
 
 ### 5. 积分余额是否增加
 
-未增加。
+已增加。
 
 租户积分账户当前：
 
 ```text
-balance_credits          = 0
-available_credits        = 0
+balance_credits          = 1
+available_credits        = 1
 frozen_credits           = 0
-total_recharged_credits  = 0
-total_granted_credits    = 0
-last_recharged_at        = null
+total_recharged_credits  = 1
+total_consumed_credits   = 0
+last_recharged_at        = 2026-07-03T03:50:22+00:00
 ```
 
 ### 6. 积分流水是否生成
 
-未生成。
+已生成。
 
 数据库核对：
 
 ```text
 tenant_credit_ledger where source_type='tenant_credit_order'
 and source_id='25203845-9497-4856-9c6f-c13c393190cd'
-= 0 条
+= 1 条
+
+ledger.id        = 776e56fc-89d7-4592-8090-c68ddbd0edbf
+event_type       = wechat_recharge
+direction        = in
+change_credits   = 1
+balance_after    = 1
+source_no        = TC202607030350144069CF5EEF8
+remark           = 微信支付积分充值
+created_at       = 2026-07-03T04:24:30.130431+00:00
 ```
 
 ## 结论
@@ -154,58 +190,36 @@ and source_id='25203845-9497-4856-9c6f-c13c393190cd'
 - 预下单：通过
 - 小程序调起支付：通过
 - 微信支付结果：已支付成功
-- 后端回调入库：未完成
-- 后端订单 paid：未完成
-- 积分余额增加：未完成
-- 积分流水生成：未完成
+- 后端回调入库：通过
+- 后端订单 paid：通过
+- 积分余额增加：通过
+- 积分流水生成：通过
 
-当前问题已经不是小程序契约，也不是微信支付签名；缺口在后端回调入口未在 api-dev 公开放行，导致
-微信支付成功通知没有进入 `WechatPayCallbackService`。
+首次失败根因不是小程序契约，也不是微信支付签名，而是 api-dev 尚未部署公开回调白名单版本；
+回调请求在进入 `WechatPayCallbackService` 前被全局鉴权拦截。
 
-## 后端下一步
+发布后微信回调入口已公开放行，微信回调重试已进入后端并完成订单、积分账户和积分流水闭环。
 
-优先级 1：修复或发布 api-dev 回调公开入口
+## 发布与验证记录
 
-- 确保 api-dev 已部署包含 `POST /pay/wechat/callback` 公开白名单的后端版本。
-- 如果有 Nginx / API Gateway / 反向代理鉴权层，也必须对该路径放行。
-- 发布后用空 POST 探测应返回业务格式校验错误，而不是 `TOKEN_MISSING`：
+- `767e7175 fix(billing): 修复微信支付签名头格式`
+- `4db1edd7 docs(billing): 记录积分充值支付回调核对`
+- `4a24c679 fix(ci): 修复dev发布镜像引用`
+- Dev API 发布：`https://github.com/LeeFo-china/goose/actions/runs/28638201654`
 
-```bash
-curl -i -X POST https://api-dev.goodcms.cn/pay/wechat/callback \
-  -H 'Content-Type: application/json' \
-  --data '{}'
-```
-
-期望类似：
-
-```text
-400 VALIDATION_ERROR
-微信支付回调缺少请求头 wechatpay-timestamp
-```
-
-优先级 2：等待或触发微信回调重试
-
-- 回调入口放行后，观察 `tenant_credit_wechat_notifications` 是否生成记录。
-- 观察订单是否自动变更为 `paid`。
-- 观察 `tenant_credit_ledger` 是否生成 `wechat_recharge` 入账流水。
-
-优先级 3：补受控查单补偿能力
-
-如果微信不再重试这笔通知，不能手工直接改数据库。建议新增后端受控补偿能力：
-
-- 对 `pending` 的微信充值订单调用微信“商户订单号查询订单”接口。
-- 如果微信返回 `trade_state=SUCCESS` 且金额匹配，则通过服务层调用
-  `billing_confirm_wechat_recharge` 完成订单 paid、积分账户和积分流水入账。
-- 补偿动作需要记录审计日志或系统事件，避免静默改账。
+当前不需要手工补偿这笔订单。后续仍建议保留“受控查单补偿能力”作为运维能力，用于处理微信不再
+重试、网络中断或回调处理失败后的人工审计补偿；补偿必须复用服务层/RPC，不能直接手工改库。
 
 ## 给小程序侧的回执
 
-这次小程序无需改代码。后端已确认：
+这次小程序无需改代码。后端已确认该笔真实 1 分钱充值闭环通过：
 
 - 创建充值订单成功。
 - 微信侧查单为 `SUCCESS`。
 - `transaction_id=4200003222202607030242248069`。
-- 但 api-dev 回调入口当前返回 `401 TOKEN_MISSING`，支付成功通知未进入后端业务处理。
+- 微信回调已成功入库并处理。
+- 订单已变更为 `paid`。
+- 租户积分账户已增加 1 积分。
+- 积分流水已生成：`776e56fc-89d7-4592-8090-c68ddbd0edbf`。
 
-请小程序侧暂时不要重复支付同一笔订单。后端先修复/发布回调公开入口，等订单变更为 `paid` 后，
-小程序再刷新订单和积分账户做最终确认。
+小程序侧可以刷新订单和积分账户做最终确认；不需要重复支付同一笔订单。
