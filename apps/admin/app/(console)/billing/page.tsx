@@ -10,9 +10,9 @@ import {
   WalletCards,
 } from "lucide-react";
 import {
-  AccountStat,
+  AccountOverviewCard,
   BillingLockedPanel,
-  PriceLine,
+  FeaturePricingCard,
   ledgerDirectionClassName,
   ledgerSourceLabel,
 } from "./billing-page-sections";
@@ -218,10 +218,12 @@ export default async function TenantBillingPage() {
             查看当前租户积分余额、近期扣费和主要功能的计费口径。
           </p>
         </div>
-        <div className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
-          <Clock3 className="size-4" />
-          最近活动 {lastActivity}
-        </div>
+        {lastActivity !== "-" ? (
+          <div className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
+            <Clock3 className="size-4" />
+            最近活动 {lastActivity}
+          </div>
+        ) : null}
       </div>
 
       {summaryResult.error ? <StatusAlert>{summaryResult.error}</StatusAlert> : null}
@@ -237,43 +239,31 @@ export default async function TenantBillingPage() {
         />
       ) : null}
 
-      <section className="shrink-0 overflow-hidden border-y bg-background/40">
-        <div className="flex flex-col justify-between gap-3 px-4 py-3 lg:flex-row lg:items-start">
+      <section data-testid="tenant-billing-account-section" className="shrink-0">
+        <div className="mb-3 flex flex-col justify-between gap-2 md:flex-row md:items-end">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-sm font-semibold tracking-normal">账户与计费</h2>
               <Badge variant={status.variant}>{status.label}</Badge>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              可用余额、冻结额度和当前功能计费口径集中展示。
+              先看账户可用情况，再看功能计费规则。
             </p>
           </div>
-          <div className="text-sm lg:text-right">
-            <div className="text-xs text-muted-foreground">当前可用</div>
-            <div className="mt-1 text-lg font-semibold tabular-nums">
-              {formatCredits(account.available_credits)} 积分
-            </div>
+          <div className="text-xs text-muted-foreground">
+            价格按账单生成时的快照结算
           </div>
         </div>
-        <Separator />
-        <div className="grid divide-y md:grid-cols-4 md:divide-x md:divide-y-0">
-          {accountStats.map((item) => (
-            <AccountStat key={item.label} {...item} />
-          ))}
-        </div>
-        <Separator />
-        <div className="grid lg:grid-cols-[13rem_minmax(0,1fr)]">
-          <div className="px-4 py-3">
-            <h2 className="text-sm font-semibold tracking-normal">功能计费</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              账单生成时会保存价格快照。
-            </p>
-          </div>
-          <div className="grid border-t md:grid-cols-3 md:divide-x lg:border-l lg:border-t-0">
-            {priceLines.map((item) => (
-              <PriceLine key={item.label} {...item} />
-            ))}
-          </div>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
+          <AccountOverviewCard
+            availableCredits={account.available_credits}
+            balanceCredits={account.balance_credits}
+            frozenCredits={account.frozen_credits}
+            lastActivity={lastActivity}
+            metrics={accountStats}
+            status={status}
+          />
+          <FeaturePricingCard items={priceLines} />
         </div>
       </section>
 

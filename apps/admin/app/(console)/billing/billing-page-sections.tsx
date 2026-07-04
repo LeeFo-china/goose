@@ -6,52 +6,118 @@ import type {
   TenantRechargeProduct,
 } from "@/components/billing/billing-types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 
-export function AccountStat({
-  label,
-  value,
-  helper,
-  icon: Icon,
-}: {
+type AccountMetric = {
   label: string;
   value: string;
   helper: string;
   icon: LucideIcon;
-}) {
-  return (
-    <div className="px-4 py-3">
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{label}</span>
-        <Icon className="size-4" />
-      </div>
-      <div className="mt-1 text-2xl font-semibold tracking-normal tabular-nums">{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
-    </div>
-  );
-}
+};
 
-export function PriceLine({
-  label,
-  value,
-  min,
-  icon: Icon,
-}: {
+type PricingItem = {
   label: string;
   value: string;
   min: number;
   icon: LucideIcon;
+};
+
+export function AccountOverviewCard({
+  availableCredits,
+  balanceCredits,
+  frozenCredits,
+  lastActivity,
+  metrics,
+  status,
+}: {
+  availableCredits: number | null | undefined;
+  balanceCredits: number | null | undefined;
+  frozenCredits: number | null | undefined;
+  lastActivity: string;
+  metrics: AccountMetric[];
+  status: { label: string; variant: BadgeProps["variant"] };
 }) {
+  const available = toFiniteNumber(availableCredits);
+  const frozen = toFiniteNumber(frozenCredits);
+  const balance = toFiniteNumber(balanceCredits) || available + frozen;
+  const availableRatio = getAvailableRatio(available, balance);
+  const activityLabel = lastActivity === "-" ? "暂无活动" : lastActivity;
+
   return (
-    <div className="border-t px-4 py-3 first:border-t-0 md:border-t-0">
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{label}</span>
-        <Icon className="size-4" />
-      </div>
-      <div className="mt-1 text-sm font-semibold tracking-normal">{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">最低 {formatCredits(min)} 积分</div>
-    </div>
+    <Card data-testid="tenant-billing-account-card" className="overflow-hidden shadow-none">
+      <CardHeader className="flex-row items-start justify-between gap-3 border-b bg-muted/20 p-4">
+        <div className="min-w-0">
+          <CardTitle className="text-sm">账户余额</CardTitle>
+          <CardDescription className="mt-1 text-xs">
+            当前租户可用于短信、视频转文本和 AI 服务扣费的积分。
+          </CardDescription>
+        </div>
+        <Badge variant={status.variant} className="w-fit shrink-0">
+          {status.label}
+        </Badge>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="px-4 py-4">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground">当前可用</div>
+              <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                <span className="text-2xl font-semibold tracking-normal tabular-nums">
+                  {formatCredits(available)}
+                </span>
+                <span className="text-sm text-muted-foreground">积分</span>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground md:text-right">
+              最近活动 {activityLabel}
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>可用率</span>
+              <span className="tabular-nums">{availableRatio}%</span>
+            </div>
+            <Progress
+              value={availableRatio}
+              className="mt-2 h-1.5 bg-muted [&>div]:bg-accent"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span className="tabular-nums">总余额 {formatCredits(balance)}</span>
+              <span className="tabular-nums">冻结 {formatCredits(frozen)}</span>
+            </div>
+          </div>
+        </div>
+        <Separator />
+        <div data-testid="tenant-billing-account-metrics" className="grid divide-y md:grid-cols-4 md:divide-x md:divide-y-0">
+          {metrics.map((metric) => (
+            <AccountMetricCell key={metric.label} {...metric} />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function FeaturePricingCard({ items }: { items: PricingItem[] }) {
+  return (
+    <Card data-testid="tenant-billing-pricing-card" className="overflow-hidden shadow-none">
+      <CardHeader className="border-b bg-muted/20 p-4">
+        <CardTitle className="text-sm">功能计费</CardTitle>
+        <CardDescription className="mt-1 text-xs">
+          当前价格口径，实际账单会保留生成时的价格快照。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="divide-y">
+          {items.map((item) => (
+            <FeaturePriceRow key={item.label} {...item} />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -172,8 +238,57 @@ function BillingLockProducts({
   );
 }
 
+function AccountMetricCell({
+  label,
+  value,
+  helper,
+  icon: Icon,
+}: AccountMetric) {
+  return (
+    <div className="min-w-0 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{label}</span>
+        <Icon className="size-4 shrink-0" />
+      </div>
+      <div className="mt-1 truncate text-base font-semibold tracking-normal tabular-nums">
+        {value}
+      </div>
+      <div className="mt-1 truncate text-xs text-muted-foreground">{helper}</div>
+    </div>
+  );
+}
+
+function FeaturePriceRow({
+  label,
+  value,
+  min,
+  icon: Icon,
+}: PricingItem) {
+  return (
+    <div className="flex items-start gap-3 px-4 py-3">
+      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <Icon className="size-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm font-medium">{label}</div>
+          <Badge variant="outline" className="shrink-0 tabular-nums">
+            最低 {formatCredits(min)}
+          </Badge>
+        </div>
+        <div className="mt-1 text-sm font-semibold tracking-normal">{value}</div>
+      </div>
+    </div>
+  );
+}
+
 function formatCredits(value: number | null | undefined) {
   return Number(value || 0).toLocaleString("zh-CN");
+}
+
+function toFiniteNumber(value: number | null | undefined) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -186,4 +301,12 @@ function formatFen(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function getAvailableRatio(availableCredits: number, balanceCredits: number) {
+  if (balanceCredits <= 0) {
+    return availableCredits > 0 ? 100 : 0;
+  }
+
+  return Math.min(100, Math.max(0, Math.round((availableCredits / balanceCredits) * 100)));
 }
