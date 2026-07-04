@@ -28,8 +28,7 @@ describe("Tenant billing page layout", () => {
     expect(page).not.toContain("@/components/ui/card");
     expect(sections).toContain("@/components/ui/card");
     expect(sections).toContain("@/components/ui/progress");
-    expect(page).toContain("账户与计费");
-    expect(page).toContain("功能计费");
+    expect(sections).toContain("功能计费");
     expect(page).toContain("积分流水");
     expect(sections).toContain('data-testid="tenant-billing-account-card"');
     expect(sections).toContain('data-testid="tenant-billing-pricing-card"');

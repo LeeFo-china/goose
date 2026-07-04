@@ -240,20 +240,6 @@ export default async function TenantBillingPage() {
       ) : null}
 
       <section data-testid="tenant-billing-account-section" className="shrink-0">
-        <div className="mb-3 flex flex-col justify-between gap-2 md:flex-row md:items-end">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-semibold tracking-normal">账户与计费</h2>
-              <Badge variant={status.variant}>{status.label}</Badge>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              先看账户可用情况，再看功能计费规则。
-            </p>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            价格按账单生成时的快照结算
-          </div>
-        </div>
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
           <AccountOverviewCard
             availableCredits={account.available_credits}
