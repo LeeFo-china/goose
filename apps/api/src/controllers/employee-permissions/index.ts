@@ -18,7 +18,9 @@ class EmployeePermissionsController extends TenantBaseController {
 
   @Get("/auth/me/permissions")
   async getMyPermissions(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredAuthContext(request, {
+      allowedWhenBillingLocked: true,
+    });
     return ResponseHandler.success(authContext);
   }
 
