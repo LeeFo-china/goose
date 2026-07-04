@@ -94,6 +94,15 @@ export const PERMISSION_CODE_VALUES = [
   'platform.payment.config.read',
   'platform.payment.config.manage',
   'platform.billing.recharge_product.manage',
+  'platform.partner.read',
+  'platform.partner.manage',
+  'platform.partner.level.manage',
+  'platform.partner.binding.manage',
+  'platform.partner.revenue.read',
+  'platform.partner.revenue.manage',
+  'platform.partner.commission.read',
+  'platform.partner.commission.manage',
+  'platform.partner.settlement.manage',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -345,6 +354,42 @@ export const PermissionCodeConfig: Record<
   'platform.billing.recharge_product.manage': {
     label: '管理积分充值套餐',
     module: 'platform_billing',
+  },
+  'platform.partner.read': {
+    label: '查看城市合伙人',
+    module: 'platform_partner',
+  },
+  'platform.partner.manage': {
+    label: '管理城市合伙人',
+    module: 'platform_partner',
+  },
+  'platform.partner.level.manage': {
+    label: '管理合伙人等级',
+    module: 'platform_partner',
+  },
+  'platform.partner.binding.manage': {
+    label: '管理合伙人装企绑定',
+    module: 'platform_partner',
+  },
+  'platform.partner.revenue.read': {
+    label: '查看合伙人平台收入',
+    module: 'platform_partner',
+  },
+  'platform.partner.revenue.manage': {
+    label: '管理合伙人平台收入',
+    module: 'platform_partner',
+  },
+  'platform.partner.commission.read': {
+    label: '查看合伙人佣金',
+    module: 'platform_partner',
+  },
+  'platform.partner.commission.manage': {
+    label: '管理合伙人佣金',
+    module: 'platform_partner',
+  },
+  'platform.partner.settlement.manage': {
+    label: '管理合伙人结算',
+    module: 'platform_partner',
   },
   'project_referral.read': {
     label: '查看介绍费',

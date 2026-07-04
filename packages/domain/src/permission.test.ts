@@ -98,4 +98,52 @@ describe("finance receivable permissions", () => {
       module: "platform_billing",
     });
   });
+
+  test("exposes city partner platform permissions in domain constants", () => {
+    const expectedPermissions = {
+      "platform.partner.read": {
+        label: "查看城市合伙人",
+        module: "platform_partner",
+      },
+      "platform.partner.manage": {
+        label: "管理城市合伙人",
+        module: "platform_partner",
+      },
+      "platform.partner.level.manage": {
+        label: "管理合伙人等级",
+        module: "platform_partner",
+      },
+      "platform.partner.binding.manage": {
+        label: "管理合伙人装企绑定",
+        module: "platform_partner",
+      },
+      "platform.partner.revenue.read": {
+        label: "查看合伙人平台收入",
+        module: "platform_partner",
+      },
+      "platform.partner.revenue.manage": {
+        label: "管理合伙人平台收入",
+        module: "platform_partner",
+      },
+      "platform.partner.commission.read": {
+        label: "查看合伙人佣金",
+        module: "platform_partner",
+      },
+      "platform.partner.commission.manage": {
+        label: "管理合伙人佣金",
+        module: "platform_partner",
+      },
+      "platform.partner.settlement.manage": {
+        label: "管理合伙人结算",
+        module: "platform_partner",
+      },
+    } as const;
+
+    for (const code of Object.keys(expectedPermissions) as Array<
+      keyof typeof expectedPermissions
+    >) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
+    }
+  });
 });
