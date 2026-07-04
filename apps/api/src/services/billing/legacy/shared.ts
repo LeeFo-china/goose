@@ -16,6 +16,7 @@ import type { SmsSendLogRecord } from "@/repositories/sms-send-logs";
 import type { SocialVideoTranscriptionRecord } from "@/repositories/social-video-transcriptions";
 import type {
   BillingDateRangeQuery,
+  BillingSubscriptionInvoiceQuery,
   BillingEventQuery,
   BillingAiUsageStatsQuery,
   BillingLedgerQuery,
@@ -123,6 +124,7 @@ export type {
   SmsSendLogRecord,
   SocialVideoTranscriptionRecord,
   BillingDateRangeQuery,
+  BillingSubscriptionInvoiceQuery,
   BillingEventQuery,
   BillingAiUsageStatsQuery,
   BillingLedgerQuery,

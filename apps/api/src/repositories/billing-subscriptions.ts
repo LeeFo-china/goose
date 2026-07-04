@@ -31,6 +31,35 @@ export type TenantBillingSubscriptionRecord = {
   updated_at: string;
 };
 
+export type TenantBillingPlanRecord = {
+  id: string;
+  code: string;
+  name: string;
+  period: "monthly";
+  monthly_fee_credits: number;
+  reminder_days_before_due: number;
+  enabled: boolean;
+  version: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TenantSubscriptionLedgerRecord = {
+  id: string;
+  tenant_id: string;
+  direction: "in" | "out" | "freeze" | "unfreeze";
+  change_credits: number;
+  balance_after: number;
+  frozen_after: number;
+  event_type: string;
+  source_type: string | null;
+  source_id: string | null;
+  source_no: string | null;
+  remark: string | null;
+  created_at: string | null;
+};
+
 export type TenantSubscriptionInvoiceRecord = {
   id: string;
   tenant_id: string;
@@ -51,6 +80,11 @@ export type TenantSubscriptionInvoiceRecord = {
   created_at: string;
   updated_at: string;
 };
+
+export type TenantSubscriptionInvoiceWithLedgerRecord =
+  TenantSubscriptionInvoiceRecord & {
+    ledger?: TenantSubscriptionLedgerRecord | null;
+  };
 
 export type TenantSubscriptionOpenInvoiceRecord = Pick<
   TenantSubscriptionInvoiceRecord,
@@ -137,6 +171,7 @@ type UntypedTable = {
 type UntypedClient = {
   from: (
     table:
+      | "tenant_billing_plans"
       | "tenant_billing_subscriptions"
       | "tenant_subscription_invoices",
   ) => UntypedTable;
@@ -147,6 +182,24 @@ type UntypedClient = {
     args: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: unknown }>;
 };
+
+const INVOICE_WITH_LEDGER_SELECT = `
+  *,
+  ledger:tenant_credit_ledger!tenant_subscription_invoices_ledger_id_fkey(
+    id,
+    tenant_id,
+    direction,
+    change_credits,
+    balance_after,
+    frozen_after,
+    event_type,
+    source_type,
+    source_id,
+    source_no,
+    remark,
+    created_at
+  )
+`;
 
 export class BillingSubscriptionRepository {
   private from(table: Parameters<UntypedClient["from"]>[0]) {
@@ -174,6 +227,19 @@ export class BillingSubscriptionRepository {
     }
 
     return (data as TenantBillingSubscriptionRecord | null) ?? null;
+  }
+
+  async findPlanById(planId: string) {
+    const { data, error } = await this.from("tenant_billing_plans")
+      .select("*")
+      .eq("id", planId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询租户系统使用费方案失败", error);
+    }
+
+    return (data as TenantBillingPlanRecord | null) ?? null;
   }
 
   async getLockStateByTenantId(
@@ -223,6 +289,82 @@ export class BillingSubscriptionRepository {
     }
 
     return (data as TenantSubscriptionOpenInvoiceRecord | null) ?? null;
+  }
+
+  async findOpenInvoiceDetailByTenantId(
+    tenantId: string,
+  ): Promise<TenantSubscriptionInvoiceWithLedgerRecord | null> {
+    const { data, error } = await this.from("tenant_subscription_invoices")
+      .select(INVOICE_WITH_LEDGER_SELECT)
+      .eq("tenant_id", tenantId)
+      .in("status", ["reminded", "past_due", "failed"])
+      .order("due_at", { ascending: true })
+      .range(0, 0)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询待处理订阅账单详情失败", error);
+    }
+
+    return (data as TenantSubscriptionInvoiceWithLedgerRecord | null) ?? null;
+  }
+
+  async listInvoicesByTenantId(input: {
+    tenantId: string;
+    page: number;
+    pageSize: number;
+    status?: TenantSubscriptionInvoiceStatus;
+  }): Promise<{
+    list: TenantSubscriptionInvoiceWithLedgerRecord[];
+    pagination: {
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const { page, pageSize, from, to } = normalizeSubscriptionPageRange(input);
+    let request = this.from("tenant_subscription_invoices")
+      .select(INVOICE_WITH_LEDGER_SELECT, { count: "exact" })
+      .eq("tenant_id", input.tenantId)
+      .order("due_at", { ascending: false })
+      .range(from, to);
+
+    if (input.status) {
+      request = request.eq("status", input.status);
+    }
+
+    const { data, error, count } = await request;
+    if (error) {
+      throw Errors.dbError("查询租户系统使用费账单失败", error);
+    }
+
+    return {
+      list: (data ?? []) as TenantSubscriptionInvoiceWithLedgerRecord[],
+      pagination: {
+        page,
+        pageSize,
+        total: count ?? 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    };
+  }
+
+  async findInvoiceByTenantId(input: {
+    tenantId: string;
+    invoiceId: string;
+  }): Promise<TenantSubscriptionInvoiceWithLedgerRecord | null> {
+    const { data, error } = await this.from("tenant_subscription_invoices")
+      .select(INVOICE_WITH_LEDGER_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.invoiceId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询租户系统使用费账单详情失败", error);
+    }
+
+    return (data as TenantSubscriptionInvoiceWithLedgerRecord | null) ?? null;
   }
 
   async listInvoicesDueForReminder(input: {

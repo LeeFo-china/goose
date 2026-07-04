@@ -92,6 +92,7 @@ describe("billing subscription repository contract", () => {
     expect(markInvoiceRemindedSource).toContain('.eq("status", "upcoming")');
     expect(markInvoiceRemindedSource).toContain(".maybeSingle()");
   });
+
 });
 
 describe("normalizeSubscriptionPageRange", () => {
@@ -350,6 +351,7 @@ describe("BillingSubscriptionService", () => {
     expect(repository.recoverAfterRecharge).toHaveBeenCalledWith("tenant-1");
     expect(repository.getLockStateByTenantId).toHaveBeenCalledWith("tenant-1");
   });
+
 });
 
 function readLatestTenantSubscriptionBillingMigration() {
@@ -378,6 +380,14 @@ async function importBillingSubscriptionRepository() {
 const fixedNow = new Date("2026-07-03T04:00:00.000Z");
 
 const repository = {
+  findSubscriptionByTenantId: mock(async () => null),
+  findPlanById: mock(async () => null),
+  findOpenInvoiceDetailByTenantId: mock(async () => null),
+  listInvoicesByTenantId: mock(async () => ({
+    list: [],
+    pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+  })),
+  findInvoiceByTenantId: mock(async () => null),
   listInvoicesDueForReminder: mock(
     async (): Promise<TenantSubscriptionInvoiceRecord[]> => [],
   ),
@@ -408,7 +418,9 @@ async function createService() {
   return new BillingSubscriptionService({ repository });
 }
 
-function invoice(id: string): TenantSubscriptionInvoiceRecord {
+function invoice(
+  id: string,
+): TenantSubscriptionInvoiceRecord {
   return {
     id,
     tenant_id: "tenant-1",

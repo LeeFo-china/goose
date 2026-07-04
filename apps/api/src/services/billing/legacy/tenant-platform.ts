@@ -16,6 +16,7 @@ import {
   percentileDisc,
   type AuthContext,
   type BillingDateRangeQuery,
+  type BillingSubscriptionInvoiceQuery,
   type BillingEventQuery,
   type BillingAiUsageStatsQuery,
   type BillingLedgerQuery,
@@ -137,6 +138,29 @@ export async function getTenantFeatureEstimates(this: any, authContext: AuthCont
         min_charge_credits: Math.max(aiInput?.min_charge_credits || 0, aiOutput?.min_charge_credits || 0),
       },
     };
+  }
+
+export async function getTenantSubscription(this: any, authContext: AuthContext) {
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    return billingSubscriptionService.getTenantSubscription(tenantId);
+  }
+
+export async function listTenantSubscriptionInvoices(
+    this: any,
+    query: BillingSubscriptionInvoiceQuery,
+    authContext: AuthContext,
+  ) {
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    return billingSubscriptionService.listTenantInvoices(tenantId, query);
+  }
+
+export async function getTenantSubscriptionInvoice(
+    this: any,
+    invoiceId: string,
+    authContext: AuthContext,
+  ) {
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    return billingSubscriptionService.getTenantInvoice(tenantId, invoiceId);
   }
 
 export async function getPlatformSummary(this: any, authContext: AuthContext) {

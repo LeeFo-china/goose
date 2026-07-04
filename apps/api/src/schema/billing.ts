@@ -12,6 +12,14 @@ export const BillingPricingRuleParamSchema = z.object({
 export const BillingDirectionSchema = z.enum(["in", "out", "freeze", "unfreeze"]);
 export const BillingAccountStatusSchema = z.enum(["active", "suspended", "closed"]);
 export const BillingPricingScopeSchema = z.enum(["platform_default", "tenant_override"]);
+export const BillingSubscriptionInvoiceStatusSchema = z.enum([
+  "upcoming",
+  "reminded",
+  "paid",
+  "past_due",
+  "failed",
+  "void",
+]);
 const BooleanQuerySchema = z.preprocess((value) => {
   if (value === true || value === "true" || value === "1") return true;
   if (value === false || value === "false" || value === "0") return false;
@@ -39,6 +47,14 @@ export const BillingTenantListQuerySchema = PaginationQuerySchema.extend({
 export const BillingDateRangeQuerySchema = z.object({
   start_date: z.string().trim().max(30, "开始时间格式非法").optional(),
   end_date: z.string().trim().max(30, "结束时间格式非法").optional(),
+});
+
+export const BillingSubscriptionInvoiceQuerySchema = PaginationQuerySchema.extend({
+  status: BillingSubscriptionInvoiceStatusSchema.optional(),
+});
+
+export const BillingSubscriptionInvoiceParamSchema = z.object({
+  id: z.uuid("无效的系统使用费账单 ID"),
 });
 
 export const BillingManualRechargeSchema = z.object({
@@ -116,6 +132,8 @@ export type BillingPricingRuleParam = z.infer<typeof BillingPricingRuleParamSche
 export type BillingLedgerQuery = z.infer<typeof BillingLedgerQuerySchema>;
 export type BillingTenantListQuery = z.infer<typeof BillingTenantListQuerySchema>;
 export type BillingDateRangeQuery = z.infer<typeof BillingDateRangeQuerySchema>;
+export type BillingSubscriptionInvoiceQuery = z.infer<typeof BillingSubscriptionInvoiceQuerySchema>;
+export type BillingSubscriptionInvoiceParam = z.infer<typeof BillingSubscriptionInvoiceParamSchema>;
 export type BillingManualRechargeInput = z.infer<typeof BillingManualRechargeSchema>;
 export type BillingPricingRuleQuery = z.infer<typeof BillingPricingRuleQuerySchema>;
 export type BillingPricingRuleCreateInput = z.infer<typeof BillingPricingRuleCreateSchema>;

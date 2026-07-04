@@ -3,6 +3,9 @@ import {
   getTenantSummary,
   listTenantLedger,
   getTenantFeatureEstimates,
+  getTenantSubscription,
+  listTenantSubscriptionInvoices,
+  getTenantSubscriptionInvoice,
   getPlatformSummary,
   listPlatformTenants,
   manualRecharge,
@@ -57,6 +60,9 @@ class BillingService {
   getTenantSummary = getTenantSummary;
   listTenantLedger = listTenantLedger;
   getTenantFeatureEstimates = getTenantFeatureEstimates;
+  getTenantSubscription = getTenantSubscription;
+  listTenantSubscriptionInvoices = listTenantSubscriptionInvoices;
+  getTenantSubscriptionInvoice = getTenantSubscriptionInvoice;
   getPlatformSummary = getPlatformSummary;
   listPlatformTenants = listPlatformTenants;
   manualRecharge = manualRecharge;
