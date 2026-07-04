@@ -2,32 +2,40 @@ import { redirect } from "next/navigation";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  AlertTriangle,
   BrainCircuit,
   Clock3,
   LockKeyhole,
   MessageSquareText,
-  ShoppingCart,
   Video,
   WalletCards,
-  type LucideIcon,
 } from "lucide-react";
-import { TenantRechargeOrderButton } from "@/components/billing/tenant-recharge-actions";
+import {
+  AccountStat,
+  BillingLockedPanel,
+  PriceLine,
+  ledgerDirectionClassName,
+  ledgerSourceLabel,
+} from "./billing-page-sections";
 import type {
-  BillingLedger,
   BillingLedgerListData,
   TenantBillingSummary,
   TenantFeatureEstimates,
-  TenantRechargeProduct,
   TenantRechargeProductListData,
 } from "@/components/billing/billing-types";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+import { cn } from "@/lib/utils";
 
 const emptySummary: TenantBillingSummary = {
   account: {
@@ -130,13 +138,6 @@ function directionLabel(direction: string) {
   return labels[direction] || direction;
 }
 
-function formatFen(value: number) {
-  return `￥${(Number(value || 0) / 100).toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 function hasPermission(
   session: Awaited<ReturnType<typeof getAdminSession>>,
   permissionCode: string,
@@ -206,7 +207,7 @@ export default async function TenantBillingPage() {
   const lastActivity = formatDateTime(account.last_activity_at || account.updated_at);
 
   return (
-    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-auto lg:overflow-hidden">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-4 overflow-hidden">
       <div className="flex shrink-0 flex-col justify-between gap-3 md:flex-row md:items-end">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -217,7 +218,7 @@ export default async function TenantBillingPage() {
             查看当前租户积分余额、近期扣费和主要功能的计费口径。
           </p>
         </div>
-        <div className="flex w-fit items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
+        <div className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
           <Clock3 className="size-4" />
           最近活动 {lastActivity}
         </div>
@@ -236,265 +237,127 @@ export default async function TenantBillingPage() {
         />
       ) : null}
 
-      <Card className="shrink-0 overflow-hidden shadow-none">
-        <CardHeader className="border-b bg-muted/20 p-4">
-          <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle>账户概览</CardTitle>
-                <Badge variant={status.variant}>{status.label}</Badge>
-              </div>
-              <CardDescription className="mt-1">
-                可用余额、冻结额度和当前功能计费口径集中展示。
-              </CardDescription>
+      <section className="shrink-0 overflow-hidden border-y bg-background/40">
+        <div className="flex flex-col justify-between gap-3 px-4 py-3 lg:flex-row lg:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-semibold tracking-normal">账户与计费</h2>
+              <Badge variant={status.variant}>{status.label}</Badge>
             </div>
-            <div className="rounded-md border bg-background px-3 py-2 text-sm">
-              <div className="text-xs text-muted-foreground">当前可用</div>
-              <div className="mt-1 text-lg font-semibold tabular-nums">
-                {formatCredits(account.available_credits)} 积分
-              </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              可用余额、冻结额度和当前功能计费口径集中展示。
+            </p>
+          </div>
+          <div className="text-sm lg:text-right">
+            <div className="text-xs text-muted-foreground">当前可用</div>
+            <div className="mt-1 text-lg font-semibold tabular-nums">
+              {formatCredits(account.available_credits)} 积分
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="grid divide-y md:grid-cols-4 md:divide-x md:divide-y-0">
-            {accountStats.map((item) => (
-              <AccountStat key={item.label} {...item} />
+        </div>
+        <Separator />
+        <div className="grid divide-y md:grid-cols-4 md:divide-x md:divide-y-0">
+          {accountStats.map((item) => (
+            <AccountStat key={item.label} {...item} />
+          ))}
+        </div>
+        <Separator />
+        <div className="grid lg:grid-cols-[13rem_minmax(0,1fr)]">
+          <div className="px-4 py-3">
+            <h2 className="text-sm font-semibold tracking-normal">功能计费</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              账单生成时会保存价格快照。
+            </p>
+          </div>
+          <div className="grid border-t md:grid-cols-3 md:divide-x lg:border-l lg:border-t-0">
+            {priceLines.map((item) => (
+              <PriceLine key={item.label} {...item} />
             ))}
           </div>
-          <Separator />
-          <div className="grid lg:grid-cols-[13rem_minmax(0,1fr)]">
-            <div className="border-b px-4 py-3 lg:border-b-0 lg:border-r">
-              <CardTitle className="text-sm">功能计费</CardTitle>
-              <CardDescription className="mt-1 text-xs">
-                账单生成时会保存价格快照。
-              </CardDescription>
-            </div>
-            <div className="grid md:grid-cols-3 md:divide-x">
-              {priceLines.map((item) => (
-                <PriceLine key={item.label} {...item} />
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card className="flex min-h-[18rem] flex-1 flex-col overflow-hidden shadow-none lg:min-h-0">
-        <CardHeader className="shrink-0 border-b bg-muted/20 p-4">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-y bg-background/40">
+        <div className="shrink-0 px-4 py-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <CardTitle>积分流水</CardTitle>
-              <CardDescription className="mt-1">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold tracking-normal">积分流水</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
                 租户最近的充值、扣费、冻结和解冻记录。
-              </CardDescription>
+              </p>
             </div>
-            <Badge variant="outline" className="w-fit tabular-nums">
+            <Badge variant="outline" className="w-fit shrink-0 tabular-nums">
               最近 {ledgerResult.data.list.length} 条 / 共 {ledgerResult.data.pagination.total} 条
             </Badge>
           </div>
-        </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-          <div data-testid="tenant-billing-ledger-viewport" className="min-h-0 flex-1 overflow-auto">
-            <Table className="table-fixed" containerClassName="min-w-[780px] overflow-visible">
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead className="w-[150px]">时间</TableHead>
-                  <TableHead className="w-[118px]">类型</TableHead>
-                  <TableHead>来源</TableHead>
-                  <TableHead className="w-[128px] text-right">积分</TableHead>
-                  <TableHead className="w-[128px] text-right">余额</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ledgerResult.data.list.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(item.created_at)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="whitespace-nowrap">{directionLabel(item.direction)}</Badge>
-                      <div className="mt-1 text-xs text-muted-foreground">{item.event_type}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="min-w-0 truncate" title={ledgerSourceLabel(item)}>
-                        {ledgerSourceLabel(item)}
+        </div>
+        <Separator />
+        <div data-testid="tenant-billing-ledger-viewport" className="min-h-0 flex-1 overflow-auto">
+          <Table className="table-fixed" containerClassName="min-w-[780px] overflow-visible">
+            <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableRow>
+                <TableHead className="w-[150px]">时间</TableHead>
+                <TableHead className="w-[118px]">类型</TableHead>
+                <TableHead>来源</TableHead>
+                <TableHead className="w-[128px] text-right">积分</TableHead>
+                <TableHead className="w-[128px] text-right">余额</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ledgerResult.data.list.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(item.created_at)}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="whitespace-nowrap">{directionLabel(item.direction)}</Badge>
+                    <div className="mt-1 text-xs text-muted-foreground">{item.event_type}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="min-w-0 truncate" title={ledgerSourceLabel(item)}>
+                      {ledgerSourceLabel(item)}
+                    </div>
+                    {item.remark ? (
+                      <div className="mt-1 min-w-0 truncate text-xs text-muted-foreground" title={item.remark}>
+                        {item.remark}
                       </div>
-                      {item.remark ? (
-                        <div className="mt-1 min-w-0 truncate text-xs text-muted-foreground" title={item.remark}>
-                          {item.remark}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className={`text-right font-medium tabular-nums ${ledgerDirectionClassName(item.direction)}`}>
-                      {formatCredits(item.change_credits)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCredits(item.balance_after)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {!ledgerResult.data.list.length ? (
-              <div
-                data-testid="tenant-billing-ledger-empty"
-                className="flex h-24 items-center justify-center border-t text-sm text-muted-foreground"
-              >
-                暂无积分流水
-              </div>
-            ) : null}
-          </div>
-          <div className="shrink-0 border-t bg-card px-4 py-3 text-sm text-muted-foreground">
-            <span className="tabular-nums">
-              当前显示 {ledgerResult.data.list.length} 条，接口返回第 {ledgerResult.data.pagination.page} / {Math.max(1, ledgerResult.data.pagination.totalPages)} 页
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function AccountStat({
-  label,
-  value,
-  helper,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-  icon: LucideIcon;
-}) {
-  return (
-    <div className="px-4 py-3">
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{label}</span>
-        <Icon className="size-4" />
-      </div>
-      <div className="mt-1 text-2xl font-semibold tracking-normal tabular-nums">{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
-    </div>
-  );
-}
-
-function PriceLine({
-  label,
-  value,
-  min,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  min: number;
-  icon: LucideIcon;
-}) {
-  return (
-    <div className="border-t px-4 py-3 first:border-t-0 md:border-t-0">
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{label}</span>
-        <Icon className="size-4" />
-      </div>
-      <div className="mt-1 text-sm font-semibold tracking-normal">{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">最低 {formatCredits(min)} 积分</div>
-    </div>
-  );
-}
-
-function BillingLockedPanel({
-  canRecharge,
-  lock,
-  productError,
-  products,
-}: {
-  canRecharge: boolean;
-  lock: TenantBillingSummary["subscription_lock"];
-  productError: string | null;
-  products: TenantRechargeProduct[];
-}) {
-  return (
-    <Card className="shrink-0 border-warning/60 bg-warning/5 shadow-none">
-      <CardHeader className="border-b border-warning/30 p-4">
-        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <AlertTriangle className="size-5 text-warning-foreground" />
-              <CardTitle>系统使用费待缴纳</CardTitle>
-              <Badge variant="warning">已锁定</Badge>
-            </div>
-            <CardDescription className="mt-1">
-              当前租户积分不足，业务功能已暂停。充值到账后系统会自动补扣欠费并恢复使用。
-            </CardDescription>
-          </div>
-          {lock.locked_at ? (
-            <Badge variant="outline" className="w-fit">
-              锁定时间 {formatDateTime(lock.locked_at)}
-            </Badge>
+                    ) : null}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right font-medium tabular-nums",
+                      ledgerDirectionClassName(item.direction),
+                    )}
+                  >
+                    {formatCredits(item.change_credits)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCredits(item.balance_after)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {!ledgerResult.data.list.length ? (
+            <Empty
+              data-testid="tenant-billing-ledger-empty"
+              className="h-40 rounded-none border-0 border-t p-6"
+            >
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <WalletCards />
+                </EmptyMedia>
+                <EmptyTitle className="text-sm">暂无积分流水</EmptyTitle>
+                <EmptyDescription>
+                  充值、扣费、冻结和解冻记录会显示在这里。
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : null}
         </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-          <div className="border-b px-4 py-3 lg:border-b-0 lg:border-r">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <ShoppingCart className="size-4" />
-              购买积分
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {canRecharge
-                ? "选择套餐后创建支付订单。"
-                : "请联系具备积分充值权限的管理员处理。"}
-            </p>
-            {lock.reason ? (
-              <p className="mt-3 text-xs text-muted-foreground">
-                原因：{lock.reason}
-              </p>
-            ) : null}
-          </div>
-          <div className="min-w-0">
-            {productError ? (
-              <div className="px-4 py-3 text-sm text-destructive">
-                {productError}
-              </div>
-            ) : !canRecharge ? (
-              <div className="px-4 py-3 text-sm text-muted-foreground">
-                当前账号没有积分充值权限。
-              </div>
-            ) : products.length ? (
-              <div className="divide-y">
-                {products.map((product) => (
-                  <div
-                    key={product.code}
-                    className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{product.title}</span>
-                        <Badge variant="outline">{product.code}</Badge>
-                      </div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {formatFen(product.amount_fen)}，到账 {formatCredits(product.credits + product.bonus_credits)} 积分
-                      </div>
-                    </div>
-                    <TenantRechargeOrderButton product={product} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="px-4 py-3 text-sm text-muted-foreground">
-                暂无可用充值套餐。
-              </div>
-            )}
-          </div>
+        <Separator />
+        <div className="shrink-0 px-4 py-3 text-sm text-muted-foreground">
+          <span className="tabular-nums">
+            当前显示 {ledgerResult.data.list.length} 条，接口返回第 {ledgerResult.data.pagination.page} / {Math.max(1, ledgerResult.data.pagination.totalPages)} 页
+          </span>
         </div>
-      </CardContent>
-    </Card>
+      </section>
+    </div>
   );
-}
-
-function ledgerSourceLabel(item: BillingLedger) {
-  return [item.source_type, item.source_id].filter(Boolean).join(" / ") || item.order_no || "-";
-}
-
-function ledgerDirectionClassName(direction: string) {
-  if (direction === "out" || direction === "freeze") return "text-destructive";
-  if (direction === "in" || direction === "unfreeze") return "text-success";
-
-  return "";
 }
