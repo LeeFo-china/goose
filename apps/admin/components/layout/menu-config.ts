@@ -48,6 +48,7 @@ export const platformNavGroups: AdminMenuGroup[] = [
     items: [
       { href: "/dashboard", label: "平台概览", icon: LayoutDashboard },
       { href: "/platform/tenants", label: "平台租户", icon: Building2 },
+      { href: "/platform/partners", label: "城市合伙人", icon: Users },
       { href: "/platform/devices", label: "设备资产", icon: Camera },
       { href: "/platform/leads", label: "平台线索", icon: Inbox },
       { href: "/platform/picture-library", label: "图片资料库", icon: Images },
