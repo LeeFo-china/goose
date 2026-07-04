@@ -149,11 +149,15 @@ describe("workflowTemplateService expense_approval", () => {
     ).toMatchObject({
       title: "出纳打款",
       config: {
-        assignee_rule: "role",
-        assignee_id: "finance_base",
         assignee_permission_code: "expense_request.pay",
         required_permissions: ["expense_request.pay"],
       },
+    });
+    expect(
+      template.graph.nodes.find((node) => node.node_key === "payment")?.config,
+    ).not.toMatchObject({
+      assignee_rule: "role",
+      assignee_id: "finance_base",
     });
     expect(
       template.graph.nodes.find((node) => node.node_key === "rejected"),

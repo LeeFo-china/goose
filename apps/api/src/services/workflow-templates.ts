@@ -243,8 +243,6 @@ class WorkflowTemplateService {
           }),
           this.node("payment", "approval", "expense_approval", "出纳打款", "对应费用当前步骤：待打款。", 740, 180, 40, ["expense_request.pay"], {
             approval_type: "expense_approval",
-            assignee_rule: "role",
-            assignee_id: "finance_base",
             assignee_permission_code: "expense_request.pay",
             approve_mode: "any",
           }),
