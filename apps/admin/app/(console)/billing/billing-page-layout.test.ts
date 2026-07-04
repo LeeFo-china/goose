@@ -18,6 +18,7 @@ describe("Tenant billing page layout", () => {
     expect(page).toContain('data-testid="tenant-billing-account-section"');
     expect(page).toContain('data-testid="tenant-billing-ledger-card"');
     expect(page).toContain("flex min-h-0 flex-1 flex-col overflow-hidden shadow-none");
+    expect(page).toContain('CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0"');
     expect(page).toContain('data-testid="tenant-billing-ledger-viewport"');
     expect(page).toContain("min-h-0 flex-1 overflow-auto");
   });
@@ -43,6 +44,19 @@ describe("Tenant billing page layout", () => {
     expect(page).toContain('data-testid="tenant-billing-ledger-empty"');
     expect(page).not.toContain("grid divide-y md:grid-cols-4 md:divide-x md:divide-y-0");
     expect(page).not.toContain("colSpan={5}");
+  });
+
+  test("localizes ledger event types in the tenant billing ledger", () => {
+    const page = readTenantBillingPage();
+
+    expect(page).toContain("function ledgerEventTypeLabel(eventType: string)");
+    expect(page).toContain("manual_recharge: \"人工积分充值\"");
+    expect(page).toContain("wechat_recharge: \"微信支付积分充值\"");
+    expect(page).toContain("billing_charge: \"功能服务扣费\"");
+    expect(page).toContain("subscription_monthly_fee: \"系统月度使用费\"");
+    expect(page).toContain("subscription_monthly: \"系统月度使用费\"");
+    expect(page).toContain("ledgerEventTypeLabel(item.event_type)");
+    expect(page).not.toContain("{item.event_type}");
   });
 
   test("renders subscription lock state while keeping recharge actions available", () => {

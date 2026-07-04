@@ -145,6 +145,20 @@ function directionLabel(direction: string) {
   return labels[direction] || direction;
 }
 
+function ledgerEventTypeLabel(eventType: string) {
+  const labels: Record<string, string> = {
+    manual_recharge: "人工积分充值",
+    wechat_recharge: "微信支付积分充值",
+    billing_charge: "功能服务扣费",
+    subscription_monthly_fee: "系统月度使用费",
+    subscription_monthly: "系统月度使用费",
+    billing_refund: "服务扣费退回",
+    billing_freeze: "积分冻结",
+    billing_unfreeze: "积分解冻",
+  };
+  return labels[eventType] || eventType;
+}
+
 function hasPermission(
   session: Awaited<ReturnType<typeof getAdminSession>>,
   permissionCode: string,
@@ -279,7 +293,7 @@ export default async function TenantBillingPage() {
             {ledgerResult.data.pagination.total} 条
           </Badge>
         </CardHeader>
-        <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
+        <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
           <div
             data-testid="tenant-billing-ledger-viewport"
             className="min-h-0 flex-1 overflow-auto"
@@ -308,7 +322,7 @@ export default async function TenantBillingPage() {
                         {directionLabel(item.direction)}
                       </Badge>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {item.event_type}
+                        {ledgerEventTypeLabel(item.event_type)}
                       </div>
                     </TableCell>
                     <TableCell>
