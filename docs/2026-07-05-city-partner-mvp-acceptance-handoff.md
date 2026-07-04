@@ -64,9 +64,9 @@ worktree：`.worktrees/city-partner-mvp`
 以下验证需要可用 Supabase 环境：
 
 - `supabase migration list` 远端对齐验证。
-  - 当前失败原因：缺少正确的 `SUPABASE_DB_PASSWORD`，远端 Postgres 认证失败。
+  - 当前失败原因：环境变量 `SUPABASE_DB_PASSWORD` 已存在，但值不正确，远端 Postgres 认证失败。
 - `supabase migration list --local` 本地对齐验证。
-  - 当前失败原因：本地 Supabase/Postgres 未启动，Docker daemon 不可用。
+  - 当前失败原因：本地 Supabase/Postgres 未启动，Docker daemon 不可用；本机也未找到名为 `Docker` 的应用可启动。
 - 真实数据库写入 smoke：
   - 新建合伙人。
   - 启用合伙人。
@@ -113,6 +113,6 @@ worktree：`.worktrees/city-partner-mvp`
 在 merge 回 `main` 前，至少需要满足以下条件之一：
 
 - 提供正确 `SUPABASE_DB_PASSWORD` 后完成 `supabase migration list` 远端对齐检查。
-- 或启动本地 Supabase/Docker 后完成本地 migration apply/list 验证。
+- 或安装/启动本地 Docker 与 Supabase 后完成本地 migration apply/list 验证。
 
 如果急需先合并代码，必须在合并记录中明确标记：数据库 migration 对齐和真实写入 smoke 尚未在当前环境完成。
