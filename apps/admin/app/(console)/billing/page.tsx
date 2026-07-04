@@ -25,13 +25,20 @@ import type {
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -253,87 +260,114 @@ export default async function TenantBillingPage() {
         </div>
       </section>
 
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-y bg-background/40">
-        <div className="shrink-0 px-4 py-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold tracking-normal">积分流水</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                租户最近的充值、扣费、冻结和解冻记录。
-              </p>
-            </div>
-            <Badge variant="outline" className="w-fit shrink-0 tabular-nums">
-              最近 {ledgerResult.data.list.length} 条 / 共 {ledgerResult.data.pagination.total} 条
-            </Badge>
+      <Card
+        data-testid="tenant-billing-ledger-card"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none"
+      >
+        <CardHeader className="shrink-0 flex-row items-start justify-between gap-3 border-b bg-muted/20 p-4">
+          <div className="min-w-0">
+            <CardTitle className="text-sm">积分流水</CardTitle>
+            <CardDescription className="mt-1 text-xs">
+              租户最近的充值、扣费、冻结和解冻记录。
+            </CardDescription>
           </div>
-        </div>
-        <Separator />
-        <div data-testid="tenant-billing-ledger-viewport" className="min-h-0 flex-1 overflow-auto">
-          <Table className="table-fixed" containerClassName="min-w-[780px] overflow-visible">
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              <TableRow>
-                <TableHead className="w-[150px]">时间</TableHead>
-                <TableHead className="w-[118px]">类型</TableHead>
-                <TableHead>来源</TableHead>
-                <TableHead className="w-[128px] text-right">积分</TableHead>
-                <TableHead className="w-[128px] text-right">余额</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ledgerResult.data.list.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(item.created_at)}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="whitespace-nowrap">{directionLabel(item.direction)}</Badge>
-                    <div className="mt-1 text-xs text-muted-foreground">{item.event_type}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="min-w-0 truncate" title={ledgerSourceLabel(item)}>
-                      {ledgerSourceLabel(item)}
-                    </div>
-                    {item.remark ? (
-                      <div className="mt-1 min-w-0 truncate text-xs text-muted-foreground" title={item.remark}>
-                        {item.remark}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-medium tabular-nums",
-                      ledgerDirectionClassName(item.direction),
-                    )}
-                  >
-                    {formatCredits(item.change_credits)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCredits(item.balance_after)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {!ledgerResult.data.list.length ? (
-            <Empty
-              data-testid="tenant-billing-ledger-empty"
-              className="h-40 rounded-none border-0 border-t p-6"
+          <Badge
+            variant="outline"
+            className="w-fit shrink-0 tabular-nums"
+          >
+            最近 {ledgerResult.data.list.length} 条 / 共{" "}
+            {ledgerResult.data.pagination.total} 条
+          </Badge>
+        </CardHeader>
+        <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
+          <div
+            data-testid="tenant-billing-ledger-viewport"
+            className="min-h-0 flex-1 overflow-auto"
+          >
+            <Table
+              className="table-fixed"
+              containerClassName="min-w-[780px] overflow-visible"
             >
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <WalletCards />
-                </EmptyMedia>
-                <EmptyTitle className="text-sm">暂无积分流水</EmptyTitle>
-                <EmptyDescription>
-                  充值、扣费、冻结和解冻记录会显示在这里。
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : null}
-        </div>
-        <Separator />
-        <div className="shrink-0 px-4 py-3 text-sm text-muted-foreground">
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead className="w-[150px]">时间</TableHead>
+                  <TableHead className="w-[118px]">类型</TableHead>
+                  <TableHead>来源</TableHead>
+                  <TableHead className="w-[128px] text-right">积分</TableHead>
+                  <TableHead className="w-[128px] text-right">余额</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ledgerResult.data.list.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {formatDateTime(item.created_at)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="whitespace-nowrap">
+                        {directionLabel(item.direction)}
+                      </Badge>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {item.event_type}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div
+                        className="min-w-0 truncate"
+                        title={ledgerSourceLabel(item)}
+                      >
+                        {ledgerSourceLabel(item)}
+                      </div>
+                      {item.remark ? (
+                        <div
+                          className="mt-1 min-w-0 truncate text-xs text-muted-foreground"
+                          title={item.remark}
+                        >
+                          {item.remark}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium tabular-nums",
+                        ledgerDirectionClassName(item.direction),
+                      )}
+                    >
+                      {formatCredits(item.change_credits)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatCredits(item.balance_after)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {!ledgerResult.data.list.length ? (
+              <Empty
+                data-testid="tenant-billing-ledger-empty"
+                className="h-40 rounded-none border-0 border-t p-6"
+              >
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <WalletCards />
+                  </EmptyMedia>
+                  <EmptyTitle className="text-sm">暂无积分流水</EmptyTitle>
+                  <EmptyDescription>
+                    充值、扣费、冻结和解冻记录会显示在这里。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : null}
+          </div>
+        </CardContent>
+        <CardFooter className="shrink-0 border-t px-4 py-3 text-sm text-muted-foreground">
           <span className="tabular-nums">
-            当前显示 {ledgerResult.data.list.length} 条，接口返回第 {ledgerResult.data.pagination.page} / {Math.max(1, ledgerResult.data.pagination.totalPages)} 页
+            当前显示 {ledgerResult.data.list.length} 条，接口返回第{" "}
+            {ledgerResult.data.pagination.page} /{" "}
+            {Math.max(1, ledgerResult.data.pagination.totalPages)} 页
           </span>
-        </div>
-      </section>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

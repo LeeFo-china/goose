@@ -16,16 +16,16 @@ describe("Tenant billing page layout", () => {
     expect(page).toContain("h-[calc(100vh-6.5625rem)]");
     expect(page).toContain("min-h-0 flex-col gap-4 overflow-hidden");
     expect(page).toContain('data-testid="tenant-billing-account-section"');
-    expect(page).toContain("flex min-h-0 flex-1 flex-col overflow-hidden border-y bg-background/40");
+    expect(page).toContain('data-testid="tenant-billing-ledger-card"');
+    expect(page).toContain("flex min-h-0 flex-1 flex-col overflow-hidden shadow-none");
     expect(page).toContain('data-testid="tenant-billing-ledger-viewport"');
     expect(page).toContain("min-h-0 flex-1 overflow-auto");
   });
 
-  test("uses lightweight shadcn cards for account overview and pricing", () => {
+  test("uses lightweight shadcn cards for account overview, pricing, and ledger", () => {
     const page = readTenantBillingPage();
     const sections = readTenantBillingSections();
 
-    expect(page).not.toContain("@/components/ui/card");
     expect(sections).toContain("@/components/ui/card");
     expect(sections).toContain("@/components/ui/progress");
     expect(sections).toContain("功能计费");
@@ -35,7 +35,10 @@ describe("Tenant billing page layout", () => {
     expect(sections).toContain('data-testid="tenant-billing-account-metrics"');
     expect(sections).toContain("shadow-none");
     expect(sections).toContain("可用率");
-    expect(page).toContain("Separator");
+    expect(page).toContain("@/components/ui/card");
+    expect(page).toContain("CardHeader");
+    expect(page).toContain("CardContent");
+    expect(page).toContain("CardFooter");
     expect(page).toContain("Empty");
     expect(page).toContain('data-testid="tenant-billing-ledger-empty"');
     expect(page).not.toContain("grid divide-y md:grid-cols-4 md:divide-x md:divide-y-0");
