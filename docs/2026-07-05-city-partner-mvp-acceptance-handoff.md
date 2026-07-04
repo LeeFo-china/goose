@@ -58,25 +58,36 @@ worktree：`.worktrees/city-partner-mvp`
 - Admin 路由 smoke 通过：
   - `GET /platform/partners` 未登录 307 到 `/login`
   - `GET /platform/partners?tab=revenue` 未登录 307 到 `/login`
+- Supabase 远端 migration 已应用并对齐：
+  - `supabase db push --dry-run --db-url <SUPABASE_DB_DIRECT_URL>` 确认仅推送 `20260704193000_create_city_partner_mvp.sql`。
+  - `supabase db push --db-url <SUPABASE_DB_DIRECT_URL> --yes` 已应用 `20260704193000_create_city_partner_mvp.sql`。
+  - `supabase migration list --db-url <SUPABASE_DB_DIRECT_URL>` 显示 `20260704193000` Local/Remote 均存在。
+- 远端数据库只读 smoke 通过：
+  - 8 张城市合伙人相关表存在。
+  - 5 个关键唯一/查询索引存在。
+  - 3 个合伙人等级种子存在。
+  - 默认线索服务费率为 `250 bps = 2.5%`。
+  - 结算周期为 `monthly`，结算方式为 `manual`。
+- 远端数据库写入 smoke 通过：
+  - 在单个 `DO` 块中创建合伙人、邀请码、装企绑定、线索服务费收入、分佣台账、月结批次和结算明细。
+  - 同一 smoke 中更新台账为结算中、批次为已打款、台账为已结算。
+  - smoke 末尾按反向依赖顺序删除测试数据。
+  - 后续残留检查确认 `smoke_partners/smoke_invite_codes/smoke_bindings/smoke_revenue_events/smoke_settlement_batches` 均为 `0`。
 
-## 未完成的环境验证
+## 数据库安全提示
 
-以下验证需要可用 Supabase 环境：
+Supabase CLI 在查询远端库时报告 `rls_disabled` critical advisory。现有库中大量表未启用 RLS，其中包含本次新增的：
 
-- `supabase migration list` 远端对齐验证。
-  - 当前失败原因：环境变量 `SUPABASE_DB_PASSWORD` 已存在，但值不正确，远端 Postgres 认证失败。
-- `supabase migration list --local` 本地对齐验证。
-  - 当前失败原因：本地 Supabase/Postgres 未启动，Docker daemon 不可用；本机也未找到名为 `Docker` 的应用可启动。
-- 真实数据库写入 smoke：
-  - 新建合伙人。
-  - 启用合伙人。
-  - 生成邀请码。
-  - 手工绑定装企。
-  - 同步充值收入。
-  - 录入线索服务费。
-  - 生成分佣台账。
-  - 创建月结批次。
-  - 标记人工打款。
+- `platform_partner_levels`
+- `platform_partners`
+- `platform_partner_invite_codes`
+- `tenant_partner_bindings`
+- `platform_revenue_events`
+- `partner_commission_ledger`
+- `partner_settlement_batches`
+- `partner_settlement_items`
+
+本次未自动启用 RLS，因为启用 RLS 但未配套 policy 会阻断现有访问路径。后续应单独设计并通过 migration 管理 RLS/policy。
 
 ## 官网下一阶段边界
 
@@ -108,11 +119,6 @@ worktree：`.worktrees/city-partner-mvp`
 - 租户入驻提交：支持传入合伙人邀请码。
 - 租户开通成功后：服务端自动创建有效绑定。
 
-## Merge 前置条件
+## Merge 状态
 
-在 merge 回 `main` 前，至少需要满足以下条件之一：
-
-- 提供正确 `SUPABASE_DB_PASSWORD` 后完成 `supabase migration list` 远端对齐检查。
-- 或安装/启动本地 Docker 与 Supabase 后完成本地 migration apply/list 验证。
-
-如果急需先合并代码，必须在合并记录中明确标记：数据库 migration 对齐和真实写入 smoke 尚未在当前环境完成。
+数据库 migration 对齐和真实写入 smoke 已完成，可 merge 回 `main`。
