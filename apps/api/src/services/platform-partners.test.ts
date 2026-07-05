@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type {
   PlatformPartnerInviteCodeRecord,
   PlatformPartnerLevelRecord,
+  PlatformPartnerMemberRecord,
   PlatformPartnerRecord,
   TenantPartnerBindingRecord,
 } from "@/repositories/platform-partners";
@@ -72,6 +73,13 @@ describe("city partner MVP migration", () => {
     expect(sql).toContain("'platform.partner.settlement.manage'");
     expect(sql).toContain("WHERE roles.code = 'platform_admin'");
     expect(sql).toContain("roles.tenant_id IS NULL");
+  });
+
+  test("adds member status remark storage for management actions", () => {
+    const sql = readAllMigrations();
+
+    expect(sql).toContain("ALTER TABLE public.platform_partner_members");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS remark text NULL");
   });
 });
 
@@ -193,6 +201,48 @@ const inviteCode = {
   updated_at: "2026-07-04T10:00:00.000Z",
 } satisfies PlatformPartnerInviteCodeRecord;
 
+const pendingPartner = {
+  ...activePartner,
+  status: "pending",
+} satisfies PlatformPartnerRecord;
+
+const disabledPartner = {
+  ...activePartner,
+  status: "terminated",
+} satisfies PlatformPartnerRecord;
+
+const partnerMember = {
+  id: "00000000-0000-4000-8000-000000000601",
+  partner_id: activePartner.id,
+  auth_user_id: null,
+  name: "李四",
+  phone: "13900139000",
+  role: "owner",
+  status: "pending_bind",
+  remark: null,
+  created_by_employee_id: "employee-platform",
+  updated_by_employee_id: "employee-platform",
+  created_at: "2026-07-05T10:00:00.000Z",
+  updated_at: "2026-07-05T10:00:00.000Z",
+  partner: {
+    id: activePartner.id,
+    name: activePartner.name,
+    status: activePartner.status,
+  },
+} satisfies PlatformPartnerMemberRecord;
+
+const boundDisabledPartnerMember = {
+  ...partnerMember,
+  status: "disabled", remark: "离职停用",
+  auth_user_id: "00000000-0000-4000-8000-000000000701",
+} satisfies PlatformPartnerMemberRecord;
+
+const memberCreateInput = { name: "李四", phone: "13900139000", role: "operator" } as const;
+const memberCreatePayload = {
+  partner_id: activePartner.id, ...memberCreateInput, status: "pending_bind",
+  created_by_employee_id: "employee-platform", updated_by_employee_id: "employee-platform",
+} as const;
+
 const tenantEmployeeAuthContext = {
   ...tenantAuthContext,
   authUserId: "auth-tenant",
@@ -229,6 +279,10 @@ const repository = {
     list: [],
     pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
   })),
+  listPartnerMembers: mock(async () => [partnerMember]),
+  createPartnerMember: mock(async () => partnerMember),
+  findPartnerMemberById: mock(async () => partnerMember),
+  updatePartnerMemberStatus: mock(async () => boundDisabledPartnerMember),
 };
 
 async function createService() {
@@ -375,5 +429,71 @@ describe("PlatformPartnersService", () => {
       code: "TENANT_PARTNER_BINDING_EXISTS",
     });
     expect(repository.createTenantBinding).not.toHaveBeenCalled();
+  });
+
+  test("lists partner members after validating partner exists", async () => {
+    const service = await createService();
+    const result = await service.listPartnerMembers(platformAuthContext, activePartner.id);
+    expect(repository.findPartnerById).toHaveBeenCalledWith(activePartner.id);
+    expect(repository.listPartnerMembers).toHaveBeenCalledWith(activePartner.id);
+    expect(result).toEqual([partnerMember]);
+  });
+
+  test("rejects non-platform admins when listing partner members", async () => {
+    const service = await createService();
+    await expect(service.listPartnerMembers(tenantAuthContext, activePartner.id))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(repository.findPartnerById).not.toHaveBeenCalled();
+    expect(repository.listPartnerMembers).not.toHaveBeenCalled();
+  });
+
+  for (const [status, partner] of [["active", activePartner], ["pending", pendingPartner]] as const) {
+    test(`creates partner member for ${status} partner without auth user`, async () => {
+      repository.findPartnerById.mockImplementationOnce(async () => partner);
+      const service = await createService();
+      await service.createPartnerMember(platformAuthContext, activePartner.id, memberCreateInput);
+      expect(repository.createPartnerMember).toHaveBeenCalledWith(memberCreatePayload);
+    });
+  }
+
+  test("requires partner manage permission when creating partner members", async () => {
+    const service = await createService();
+    await expect(
+      service.createPartnerMember(
+        { ...platformAuthContext, permissions: [] },
+        activePartner.id,
+        memberCreateInput,
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(repository.createPartnerMember).not.toHaveBeenCalled();
+  });
+
+  for (const [status, partner] of [["suspended", suspendedPartner], ["terminated", disabledPartner]] as const) {
+    test(`rejects member creation for ${status} partners`, async () => {
+      repository.findPartnerById.mockImplementationOnce(async () => partner);
+      const service = await createService();
+      await expect(service.createPartnerMember(platformAuthContext, activePartner.id, memberCreateInput))
+        .rejects.toMatchObject({ statusCode: 400 });
+      expect(repository.createPartnerMember).not.toHaveBeenCalled();
+    });
+  }
+
+  test("updates member status with reason without touching auth user binding", async () => {
+    const service = await createService();
+    await service.updatePartnerMemberStatus(platformAuthContext, partnerMember.id, { status: "disabled", reason: "离职停用" });
+    expect(repository.findPartnerMemberById).toHaveBeenCalledWith(partnerMember.id);
+    expect(repository.updatePartnerMemberStatus).toHaveBeenCalledWith(partnerMember.id, {
+      status: "disabled", updated_by_employee_id: "employee-platform", remark: "离职停用",
+    });
+    expect(repository.updatePartner).not.toHaveBeenCalled();
+  });
+
+  test("requires partner manage permission when updating member status", async () => {
+    const service = await createService();
+    await expect(service.updatePartnerMemberStatus({ ...platformAuthContext, permissions: [] }, partnerMember.id, {
+      status: "disabled", reason: "离职停用",
+    })).rejects.toMatchObject({ statusCode: 403 });
+    expect(repository.findPartnerMemberById).not.toHaveBeenCalled();
+    expect(repository.updatePartnerMemberStatus).not.toHaveBeenCalled();
   });
 });

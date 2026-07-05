@@ -6,6 +6,9 @@ import {
   PlatformPartnerInviteCodeParamSchema,
   PlatformPartnerInviteCodeCreateSchema,
   PlatformPartnerListQuerySchema,
+  PlatformPartnerMemberCreateSchema,
+  PlatformPartnerMemberIdParamSchema,
+  PlatformPartnerMemberStatusUpdateSchema,
   PlatformPartnerStatusUpdateSchema,
   PlatformPartnerUpdateSchema,
   TenantPartnerBindingCreateSchema,
@@ -137,6 +140,61 @@ class PlatformPartnersController extends PlatformBaseController {
     const data = await platformPartnersService.updatePartnerStatus(
       authContext,
       paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/partners/:id/members")
+  async listPartnerMembers(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformPartnerIdParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await platformPartnersService.listPartnerMembers(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/partners/:id/members")
+  async createPartnerMember(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformPartnerIdParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = PlatformPartnerMemberCreateSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformPartnersService.createPartnerMember(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Patch("/platform/partner-members/:memberId/status")
+  async updatePartnerMemberStatus(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformPartnerMemberIdParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = PlatformPartnerMemberStatusUpdateSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformPartnersService.updatePartnerMemberStatus(
+      authContext,
+      paramsResult.data.memberId,
       bodyResult.data,
     );
     return ResponseHandler.success(data);

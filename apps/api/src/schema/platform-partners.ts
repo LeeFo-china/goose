@@ -48,6 +48,21 @@ export const PlatformPartnerStatusUpdateSchema = z.object({
   reason: z.string().trim().min(1, "状态变更原因不能为空").max(300, "状态变更原因不能超过 300 个字符"),
 }).strict();
 
+export const PlatformPartnerMemberCreateSchema = z.object({
+  name: z.string().trim().min(1, "成员姓名不能为空").max(60, "成员姓名不能超过 60 个字符"),
+  phone: z.string().trim().min(6, "手机号不能为空").max(30, "手机号不能超过 30 个字符"),
+  role: z.enum(["owner", "operator"]).default("owner"),
+}).strict();
+
+export const PlatformPartnerMemberStatusUpdateSchema = z.object({
+  status: z.enum(["pending_bind", "active", "disabled"]),
+  reason: z.string().trim().min(1, "状态变更原因不能为空").max(300, "状态变更原因不能超过 300 个字符"),
+}).strict();
+
+export const PlatformPartnerMemberIdParamSchema = z.object({
+  memberId: z.uuid("无效的合伙人成员 ID"),
+});
+
 export const PlatformPartnerInviteCodeCreateSchema = z.object({
   region_code: z.string().trim().max(12, "区域编码不能超过 12 个字符").optional(),
   campaign_code: z.string().trim().max(80, "活动编码不能超过 80 个字符").optional(),
@@ -87,6 +102,10 @@ export type PlatformPartnerUpdateInput =
   z.infer<typeof PlatformPartnerUpdateSchema>;
 export type PlatformPartnerStatusUpdateInput =
   z.infer<typeof PlatformPartnerStatusUpdateSchema>;
+export type PlatformPartnerMemberCreateInput =
+  z.infer<typeof PlatformPartnerMemberCreateSchema>;
+export type PlatformPartnerMemberStatusUpdateInput =
+  z.infer<typeof PlatformPartnerMemberStatusUpdateSchema>;
 export type PlatformPartnerInviteCodeCreateInput =
   z.infer<typeof PlatformPartnerInviteCodeCreateSchema>;
 export type PlatformPartnerInviteCodeResolveInput =

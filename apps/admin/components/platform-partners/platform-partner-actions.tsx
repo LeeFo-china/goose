@@ -48,7 +48,7 @@ import { requestBackendJson } from "@/lib/backend-client";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 type Option = { value: string; label: string };
-type FieldConfig = {
+export type FieldConfig = {
   name: string;
   label: string;
   type?: "text" | "number" | "date" | "datetime-local" | "textarea" | "select";
@@ -67,6 +67,7 @@ type MutationDialogButtonProps = {
   fields?: FieldConfig[];
   fallbackMessage: string;
   endpoint: string | ((formData: FormData) => string);
+  method?: "POST" | "PATCH";
   buildPayload?: (formData: FormData) => Record<string, unknown>;
 };
 
@@ -307,7 +308,7 @@ export function MarkSettlementPaidButton({
   );
 }
 
-function MutationDialogButton({
+export function MutationDialogButton({
   title,
   description,
   trigger,
@@ -315,6 +316,7 @@ function MutationDialogButton({
   fields = [],
   fallbackMessage,
   endpoint,
+  method = "POST",
   buildPayload = () => ({}),
 }: MutationDialogButtonProps) {
   const router = useRouter();
@@ -331,7 +333,7 @@ function MutationDialogButton({
         await requestBackendJson(
           typeof endpoint === "function" ? endpoint(formData) : endpoint,
           {
-            method: "POST",
+            method,
             body: JSON.stringify(cleanPayload(buildPayload(formData))),
             fallbackMessage,
           },
@@ -383,6 +385,7 @@ function DialogField({ field }: { field: FieldConfig }) {
         id={id}
         name={field.name}
         label={field.label}
+        defaultValue={field.defaultValue}
         options={field.options ?? []}
       />
     );
@@ -405,14 +408,20 @@ function DialogSelectField({
   id,
   name,
   label,
+  defaultValue,
   options,
 }: {
   id: string;
   name: string;
   label: string;
+  defaultValue?: string;
   options: Option[];
 }) {
-  const [value, setValue] = useState(options[0]?.value ?? "");
+  const [value, setValue] = useState(
+    options.some((option) => option.value === defaultValue)
+      ? defaultValue ?? ""
+      : options[0]?.value ?? "",
+  );
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -435,7 +444,7 @@ function DialogSelectField({
   );
 }
 
-function stringField(formData: FormData, key: string) {
+export function stringField(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
 }

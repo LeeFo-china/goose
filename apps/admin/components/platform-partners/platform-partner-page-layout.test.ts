@@ -29,6 +29,7 @@ describe("Platform partner operation page", () => {
     expect(source).toContain("TabsContent");
     expect(tabsSource).toContain("申请线索");
     expect(tabsSource).toContain("合伙人");
+    expect(tabsSource).toContain("登录成员");
     expect(tabsSource).toContain("装企绑定");
     expect(tabsSource).toContain("平台收入");
     expect(tabsSource).toContain("分佣台账");
@@ -40,15 +41,36 @@ describe("Platform partner operation page", () => {
   test("exposes the MVP operation actions through backend endpoints", () => {
     const source = `${readSource("./platform-partner-actions.tsx")}\n${
       readSource("./platform-partner-application-actions.tsx")
+    }\n${
+      readSource("./platform-partner-member-actions.tsx")
     }`;
 
     expect(source).toContain("/platform/partner-applications/${application.id}/approve");
     expect(source).toContain("/platform/partner-applications/${application.id}/status");
     expect(source).toContain("/platform/partners");
+    expect(source).toContain("/platform/partners/${partner.id}/members");
+    expect(source).toContain("/platform/partner-members/${member.id}/status");
     expect(source).toContain("/platform/partner-bindings");
     expect(source).toContain("/platform/partner-revenue/lead-service-fees");
     expect(source).toContain("/platform/partner-revenue/recharge-events/sync");
     expect(source).toContain("/platform/partner-settlements/monthly-batches");
     expect(source).toContain("/platform/partner-settlements/${batch.id}/mark-paid");
+  });
+
+  test("adds partner member tab fetch, actions, and required table columns", () => {
+    const pageSource = readSource("../../app/(console)/platform/partners/page.tsx");
+    const tableSource = readSource("./platform-partner-tables.tsx");
+    const actionSource = `${readSource("./platform-partner-actions.tsx")}\n${
+      readSource("./platform-partner-member-actions.tsx")
+    }`;
+
+    expect(pageSource).toContain("tab === \"members\"");
+    expect(pageSource).toContain("/platform/partners/${memberPartnerId}/members");
+    expect(pageSource).toContain("PlatformPartnerMembersTable");
+    expect(actionSource).toContain("CreatePartnerMemberButton");
+    expect(actionSource).toContain("UpdatePartnerMemberStatusButton");
+    for (const column of ["合伙人", "姓名", "手机号", "角色", "绑定状态", "微信绑定", "创建时间", "操作"]) {
+      expect(tableSource).toContain(column);
+    }
   });
 });

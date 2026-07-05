@@ -7,6 +7,11 @@ export type PlatformPartnerStatus =
   | "suspended"
   | "terminated";
 
+export type PlatformPartnerMemberStatus =
+  | "pending_bind"
+  | "active"
+  | "disabled";
+
 export type PlatformPartnerLevelRecord = {
   id: string;
   code: string;
@@ -61,6 +66,38 @@ export type PlatformPartnerStatusRecordInput = {
   status: PlatformPartnerStatus;
   updated_by_employee_id: string;
   change_reason: string;
+};
+
+export type PlatformPartnerMemberRecord = {
+  id: string;
+  partner_id: string;
+  auth_user_id: string | null;
+  name: string;
+  phone: string;
+  role: "owner" | "operator";
+  status: PlatformPartnerMemberStatus;
+  remark: string | null;
+  created_by_employee_id: string | null;
+  updated_by_employee_id: string | null;
+  created_at: string;
+  updated_at: string;
+  partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
+};
+
+export type PlatformPartnerMemberCreateRecordInput = {
+  partner_id: string;
+  name: string;
+  phone: string;
+  role: "owner" | "operator";
+  status: "pending_bind";
+  created_by_employee_id: string;
+  updated_by_employee_id: string;
+};
+
+export type PlatformPartnerMemberStatusRecordInput = {
+  status: PlatformPartnerMemberStatus;
+  updated_by_employee_id: string;
+  remark: string;
 };
 
 export type PlatformPartnerInviteCodeRecord = {
@@ -134,6 +171,7 @@ type UntypedTable = {
   contains: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
   range: (...args: unknown[]) => UntypedTable;
+  limit: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
   single: () => Promise<{ data: unknown; error: unknown }>;
   then: Promise<{
@@ -146,6 +184,7 @@ type UntypedTable = {
 type PartnerTable =
   | "platform_partner_levels"
   | "platform_partners"
+  | "platform_partner_members"
   | "platform_partner_invite_codes"
   | "tenant_partner_bindings";
 
@@ -167,6 +206,11 @@ const BINDING_SELECT = [
 const INVITE_CODE_SELECT = [
   "*",
   "partner:platform_partners!platform_partner_invite_codes_partner_id_fkey(id, name, status, region_codes, level:platform_partner_levels!platform_partners_level_id_fkey(code, name))",
+].join(", ");
+
+const MEMBER_SELECT = [
+  "*",
+  "partner:platform_partners!platform_partner_members_partner_id_fkey(id, name, status)",
 ].join(", ");
 
 class PlatformPartnersRepository {
@@ -262,6 +306,57 @@ class PlatformPartnersRepository {
 
     if (error) throw Errors.dbError("更新城市合伙人状态失败", error);
     return data as PlatformPartnerRecord;
+  }
+
+  async listPartnerMembers(partnerId: string) {
+    const { data, error } = await this.from("platform_partner_members")
+      .select(MEMBER_SELECT)
+      .eq("partner_id", partnerId)
+      .order("created_at", { ascending: false })
+      // Single partner login members are an internal auxiliary list and are
+      // expected to stay below 50; keep a hard cap instead of full pagination.
+      .limit(50);
+
+    if (error) throw Errors.dbError("查询合伙人成员失败", error);
+    return (data ?? []) as PlatformPartnerMemberRecord[];
+  }
+
+  async createPartnerMember(input: PlatformPartnerMemberCreateRecordInput) {
+    const { data, error } = await this.from("platform_partner_members")
+      .insert(input)
+      .select(MEMBER_SELECT)
+      .single();
+
+    if (error) throw Errors.dbError("创建合伙人成员失败", error);
+    return data as PlatformPartnerMemberRecord;
+  }
+
+  async findPartnerMemberById(memberId: string) {
+    const { data, error } = await this.from("platform_partner_members")
+      .select(MEMBER_SELECT)
+      .eq("id", memberId)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询合伙人成员失败", error);
+    return (data as PlatformPartnerMemberRecord | null) ?? null;
+  }
+
+  async updatePartnerMemberStatus(
+    memberId: string,
+    input: PlatformPartnerMemberStatusRecordInput,
+  ) {
+    const { data, error } = await this.from("platform_partner_members")
+      .update({
+        status: input.status,
+        updated_by_employee_id: input.updated_by_employee_id,
+        remark: input.remark,
+      })
+      .eq("id", memberId)
+      .select(MEMBER_SELECT)
+      .single();
+
+    if (error) throw Errors.dbError("更新合伙人成员状态失败", error);
+    return data as PlatformPartnerMemberRecord;
   }
 
   async createInviteCode(input: PlatformPartnerInviteCodeCreateRecordInput) {

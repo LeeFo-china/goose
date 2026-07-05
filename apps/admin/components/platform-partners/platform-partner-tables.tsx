@@ -8,15 +8,19 @@ import {
   CreateInviteCodeButton,
   MarkSettlementPaidButton,
 } from "@/components/platform-partners/platform-partner-actions";
+import { UpdatePartnerMemberStatusButton } from "@/components/platform-partners/platform-partner-member-actions";
 import {
   commissionStatusOptions,
   optionLabel,
+  partnerMemberRoleOptions,
+  partnerMemberStatusOptions,
   partnerStatusOptions,
   revenueStatusOptions,
   revenueTypeOptions,
   settlementStatusOptions,
   type PartnerCommissionLedgerRecord,
   type PartnerSettlementBatchRecord,
+  type PlatformPartnerMemberRecord,
   type PlatformPartnerRecord,
   type PlatformRevenueEventRecord,
   type TenantPartnerBindingRecord,
@@ -110,6 +114,61 @@ const bindingColumns: ColumnDef<TenantPartnerBindingRecord>[] = [
     header: "绑定时间",
     cell: ({ row }) => formatDate(row.original.bound_at),
     meta: { cellClassName: "whitespace-nowrap text-muted-foreground" },
+  },
+];
+
+const memberColumns: ColumnDef<PlatformPartnerMemberRecord>[] = [
+  {
+    id: "partner",
+    header: "合伙人",
+    cell: ({ row }) => row.original.partner?.name ?? row.original.partner_id,
+  },
+  {
+    accessorKey: "name",
+    header: "姓名",
+    cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+  },
+  {
+    accessorKey: "phone",
+    header: "手机号",
+    cell: ({ row }) => row.original.phone,
+    meta: { cellClassName: "whitespace-nowrap" },
+  },
+  {
+    accessorKey: "role",
+    header: "角色",
+    cell: ({ row }) => optionLabel(partnerMemberRoleOptions, row.original.role),
+  },
+  {
+    accessorKey: "status",
+    header: "绑定状态",
+    cell: ({ row }) => (
+      <StatusBadge
+        value={optionLabel(partnerMemberStatusOptions, row.original.status)}
+        tone={row.original.status}
+      />
+    ),
+  },
+  {
+    accessorKey: "auth_user_id",
+    header: "微信绑定",
+    cell: ({ row }) => row.original.auth_user_id ? "已绑定" : "未绑定",
+  },
+  {
+    accessorKey: "created_at",
+    header: "创建时间",
+    cell: ({ row }) => formatDate(row.original.created_at),
+    meta: { cellClassName: "whitespace-nowrap text-muted-foreground" },
+  },
+  {
+    id: "actions",
+    header: "操作",
+    cell: ({ row }) => (
+      <div className="flex justify-end">
+        <UpdatePartnerMemberStatusButton member={row.original} />
+      </div>
+    ),
+    meta: { headerClassName: "text-right", cellClassName: "text-right" },
   },
 ];
 
@@ -261,6 +320,10 @@ export function TenantPartnerBindingsTable({ list }: { list: TenantPartnerBindin
   return <PartnerDataTable columns={bindingColumns} data={list} emptyText="还没有装企绑定记录" minWidth="min-w-[980px]" />;
 }
 
+export function PlatformPartnerMembersTable({ list }: { list: PlatformPartnerMemberRecord[] }) {
+  return <PartnerDataTable columns={memberColumns} data={list} emptyText="还没有登录成员" minWidth="min-w-[1080px]" />;
+}
+
 export function PlatformRevenueEventsTable({ list }: { list: PlatformRevenueEventRecord[] }) {
   return <PartnerDataTable columns={revenueColumns} data={list} emptyText="还没有平台收入事件" minWidth="min-w-[1120px]" />;
 }
@@ -299,9 +362,9 @@ function PartnerDataTable<TData>({
 function StatusBadge({ value, tone }: { value: string; tone: string }) {
   const variant = tone === "active" || tone === "confirmed" || tone === "available" || tone === "paid"
     ? "success"
-    : tone === "pending" || tone === "reviewing" || tone === "settling"
+    : tone === "pending" || tone === "pending_bind" || tone === "reviewing" || tone === "settling"
       ? "warning"
-      : tone === "suspended" || tone === "blocked" || tone === "failed"
+      : tone === "suspended" || tone === "disabled" || tone === "blocked" || tone === "failed"
         ? "danger"
         : "outline";
   return <Badge variant={variant}>{value}</Badge>;

@@ -3,6 +3,8 @@ import {
   platformPartnersRepository,
   type PlatformPartnerCreateRecordInput,
   type PlatformPartnerInviteCodeWithPartnerRecord,
+  type PlatformPartnerMemberCreateRecordInput,
+  type PlatformPartnerMemberStatusRecordInput,
   type PlatformPartnerRecord,
   type PlatformPartnerStatusRecordInput,
   type PlatformPartnerUpdateRecordInput,
@@ -10,6 +12,8 @@ import {
 } from "@/repositories/platform-partners";
 import type {
   PlatformPartnerCreateInput,
+  PlatformPartnerMemberCreateInput,
+  PlatformPartnerMemberStatusUpdateInput,
   PlatformPartnerInviteCodeResolveInput,
   PlatformPartnerInviteCodeCreateInput,
   PlatformPartnerListQuery,
@@ -29,6 +33,10 @@ type PlatformPartnersRepositoryPort = Pick<
   | "createPartner"
   | "updatePartner"
   | "updatePartnerStatus"
+  | "listPartnerMembers"
+  | "createPartnerMember"
+  | "findPartnerMemberById"
+  | "updatePartnerMemberStatus"
   | "createInviteCode"
   | "listInviteCodes"
   | "findInviteCodeByCode"
@@ -117,6 +125,58 @@ export class PlatformPartnersService {
       updated_by_employee_id: employeeId,
       change_reason: input.reason,
     } satisfies PlatformPartnerStatusRecordInput);
+  }
+
+  async listPartnerMembers(authContext: AuthContext, partnerId: string) {
+    this.assertPlatformAdmin(authContext);
+    await this.requirePartner(partnerId);
+    return this.repository.listPartnerMembers(partnerId);
+  }
+
+  async createPartnerMember(
+    authContext: AuthContext,
+    partnerId: string,
+    input: PlatformPartnerMemberCreateInput,
+  ) {
+    this.assertCanManagePartners(authContext);
+    const employeeId = this.requireEmployeeId(authContext);
+    const partner = await this.requirePartner(partnerId);
+    if (partner.status !== "active" && partner.status !== "pending") {
+      throw Errors.badRequest("只有待审核或启用状态的合伙人可以创建登录成员");
+    }
+
+    return this.repository.createPartnerMember({
+      partner_id: partnerId,
+      name: input.name,
+      phone: input.phone,
+      role: input.role,
+      status: "pending_bind",
+      created_by_employee_id: employeeId,
+      updated_by_employee_id: employeeId,
+    } satisfies PlatformPartnerMemberCreateRecordInput);
+  }
+
+  async updatePartnerMemberStatus(
+    authContext: AuthContext,
+    memberId: string,
+    input: PlatformPartnerMemberStatusUpdateInput,
+  ) {
+    this.assertCanManagePartners(authContext);
+    const employeeId = this.requireEmployeeId(authContext);
+    const member = await this.repository.findPartnerMemberById(memberId);
+    if (!member) {
+      throw Errors.business(
+        404,
+        "合伙人成员不存在",
+        "PLATFORM_PARTNER_MEMBER_NOT_FOUND",
+      );
+    }
+
+    return this.repository.updatePartnerMemberStatus(memberId, {
+      status: input.status,
+      updated_by_employee_id: employeeId,
+      remark: input.reason,
+    } satisfies PlatformPartnerMemberStatusRecordInput);
   }
 
   async createInviteCode(

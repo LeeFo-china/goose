@@ -12,6 +12,11 @@ export type PlatformPartnerApplicationStatus =
   | "approved"
   | "rejected";
 
+export type PlatformPartnerMemberStatus =
+  | "pending_bind"
+  | "active"
+  | "disabled";
+
 export type PlatformPartnerLevel = {
   id: string;
   code: string;
@@ -68,6 +73,22 @@ export type PlatformPartnerApplicationRecord = {
   created_at: string;
   updated_at: string;
   converted_partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
+};
+
+export type PlatformPartnerMemberRecord = {
+  id: string;
+  partner_id: string;
+  auth_user_id: string | null;
+  name: string;
+  phone: string;
+  role: "owner" | "operator";
+  status: PlatformPartnerMemberStatus;
+  remark: string | null;
+  created_by_employee_id: string | null;
+  updated_by_employee_id: string | null;
+  created_at: string;
+  updated_at: string;
+  partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
 };
 
 export type TenantPartnerBindingRecord = {
@@ -171,6 +192,17 @@ export const applicationStatusOptions = [
   { value: "reviewing", label: "跟进中" },
   { value: "approved", label: "已通过" },
   { value: "rejected", label: "已驳回" },
+] as const;
+
+export const partnerMemberRoleOptions = [
+  { value: "owner", label: "负责人" },
+  { value: "operator", label: "运营" },
+] as const;
+
+export const partnerMemberStatusOptions = [
+  { value: "pending_bind", label: "待绑定" },
+  { value: "active", label: "已启用" },
+  { value: "disabled", label: "已停用" },
 ] as const;
 
 export const revenueTypeOptions = [

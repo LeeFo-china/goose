@@ -21,6 +21,7 @@ import {
 export type PartnerPageTab =
   | "applications"
   | "partners"
+  | "members"
   | "bindings"
   | "revenue"
   | "commissions"
@@ -29,6 +30,7 @@ export type PartnerPageTab =
 export const PARTNER_TABS: ReadonlyArray<{ value: PartnerPageTab; label: string }> = [
   { value: "applications", label: "申请线索" },
   { value: "partners", label: "合伙人" },
+  { value: "members", label: "登录成员" },
   { value: "bindings", label: "装企绑定" },
   { value: "revenue", label: "平台收入" },
   { value: "commissions", label: "分佣台账" },
@@ -61,6 +63,7 @@ export function buildPartnerHref(input: {
   tab?: PartnerPageTab;
   pageSize?: number;
   partnerPageSize?: number;
+  memberPageSize?: number;
   bindingPageSize?: number;
   revenuePageSize?: number;
   commissionPageSize?: number;
@@ -69,6 +72,7 @@ export function buildPartnerHref(input: {
   const params = new URLSearchParams();
   if (input.tab && input.tab !== "applications") params.set("tab", input.tab);
   if (input.partnerPageSize) params.set("partnerPageSize", String(input.partnerPageSize));
+  if (input.memberPageSize) params.set("memberPageSize", String(input.memberPageSize));
   if (input.bindingPageSize) params.set("bindingPageSize", String(input.bindingPageSize));
   if (input.revenuePageSize) params.set("revenuePageSize", String(input.revenuePageSize));
   if (input.commissionPageSize) params.set("commissionPageSize", String(input.commissionPageSize));
@@ -149,6 +153,14 @@ export function PlatformPartnerFilters({
           />
           <TextFilter name="tenant_id" label="租户 ID" placeholder="租户 UUID" defaultValue={tenantId} />
         </>
+      ) : null}
+      {tab === "members" ? (
+        <FilterSelect
+          label="合伙人"
+          name="partner_id"
+          defaultValue={partnerId}
+          options={partnerOptions}
+        />
       ) : null}
       {tab === "revenue" ? (
         <>

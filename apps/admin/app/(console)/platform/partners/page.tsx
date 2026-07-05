@@ -11,6 +11,7 @@ import {
   CreateSettlementBatchButton,
   SyncRechargeRevenueButton,
 } from "@/components/platform-partners/platform-partner-actions";
+import { CreatePartnerMemberButton } from "@/components/platform-partners/platform-partner-member-actions";
 import {
   buildPartnerHref,
   normalizeApplicationStatus,
@@ -24,6 +25,7 @@ import { PlatformPartnerApplicationsTable } from "@/components/platform-partners
 import {
   PartnerCommissionLedgersTable,
   PartnerSettlementBatchesTable,
+  PlatformPartnerMembersTable,
   PlatformPartnersTable,
   PlatformRevenueEventsTable,
   TenantPartnerBindingsTable,
@@ -34,6 +36,7 @@ import type {
   PartnerSettlementBatchRecord,
   PlatformPartnerApplicationRecord,
   PlatformPartnerLevel,
+  PlatformPartnerMemberRecord,
   PlatformPartnerRecord,
   PlatformRevenueEventRecord,
   TenantPartnerBindingRecord,
@@ -47,6 +50,8 @@ type SearchParams = Promise<{
   applicationPageSize?: string;
   partnerPage?: string;
   partnerPageSize?: string;
+  memberPage?: string;
+  memberPageSize?: string;
   bindingPage?: string;
   bindingPageSize?: string;
   revenuePage?: string;
@@ -76,6 +81,19 @@ const emptyPagination = (page: number, pageSize: number): PlatformListPagination
 
 function emptyList<T>(page: number, pageSize: number): ListData<T> {
   return { list: [], pagination: emptyPagination(page, pageSize) };
+}
+
+function listFromArray<T>(items: T[], page: number, pageSize: number): ListData<T> {
+  const from = (page - 1) * pageSize;
+  return {
+    list: items.slice(from, from + pageSize),
+    pagination: {
+      page,
+      pageSize,
+      total: items.length,
+      totalPages: items.length ? Math.ceil(items.length / pageSize) : 0,
+    },
+  };
 }
 
 function readPositiveInteger(value: string | undefined, fallback: number) {
@@ -129,6 +147,8 @@ export default async function PlatformPartnersPage({
   const applicationPageSize = normalizePlatformListPageSize(params.applicationPageSize);
   const partnerPage = readPositiveInteger(params.partnerPage, 1);
   const partnerPageSize = normalizePlatformListPageSize(params.partnerPageSize);
+  const memberPage = readPositiveInteger(params.memberPage, 1);
+  const memberPageSize = normalizePlatformListPageSize(params.memberPageSize);
   const bindingPage = readPositiveInteger(params.bindingPage, 1);
   const bindingPageSize = normalizePlatformListPageSize(params.bindingPageSize);
   const revenuePage = readPositiveInteger(params.revenuePage, 1);
@@ -158,6 +178,9 @@ export default async function PlatformPartnersPage({
       emptyList<PlatformPartnerRecord>(1, 100),
     )
     : { data: emptyList<PlatformPartnerRecord>(1, 100), error: null };
+  const activePartners = partnerOptionsResult.data.list;
+  const memberPartnerId = partnerId || activePartners[0]?.id || "";
+  const memberPartner = activePartners.find((partner) => partner.id === memberPartnerId) ?? null;
 
   const applicationResult = tab === "applications" && hasPlatformAccess
     ? await fetchBackend<ListData<PlatformPartnerApplicationRecord>>(
@@ -182,6 +205,20 @@ export default async function PlatformPartnersPage({
       emptyList<PlatformPartnerRecord>(partnerPage, partnerPageSize),
     )
     : { data: emptyList<PlatformPartnerRecord>(partnerPage, partnerPageSize), error: null };
+  const memberRawResult = tab === "members" && hasPlatformAccess && memberPartnerId
+    ? await fetchBackend<PlatformPartnerMemberRecord[]>(
+      `/platform/partners/${memberPartnerId}/members`,
+      [],
+    )
+    : { data: [], error: null };
+  const memberResult = {
+    data: listFromArray<PlatformPartnerMemberRecord>(
+      memberRawResult.data,
+      memberPage,
+      memberPageSize,
+    ),
+    error: memberRawResult.error,
+  };
   const bindingResult = tab === "bindings" && hasPlatformAccess
     ? await fetchBackend<ListData<TenantPartnerBindingRecord>>(
       `/platform/partner-bindings?${buildQuery({
@@ -234,6 +271,7 @@ export default async function PlatformPartnersPage({
   const activePagination = activeList(tab, {
     applications: applicationResult.data,
     partners: partnerResult.data,
+    members: memberResult.data,
     bindings: bindingResult.data,
     revenue: revenueResult.data,
     commissions: commissionResult.data,
@@ -242,6 +280,7 @@ export default async function PlatformPartnersPage({
   const activeCount = activeList(tab, {
     applications: applicationResult.data,
     partners: partnerResult.data,
+    members: memberResult.data,
     bindings: bindingResult.data,
     revenue: revenueResult.data,
     commissions: commissionResult.data,
@@ -252,11 +291,11 @@ export default async function PlatformPartnersPage({
     || partnerOptionsResult.error
     || applicationResult.error
     || partnerResult.error
+    || memberResult.error
     || bindingResult.error
     || revenueResult.error
     || commissionResult.error
     || settlementResult.error;
-  const activePartners = partnerOptionsResult.data.list;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -265,7 +304,7 @@ export default async function PlatformPartnersPage({
           title="城市合伙人"
           description="管理区域合伙人、装企归属、平台收入分成、分佣台账和人工月结。"
           titleMeta={<Badge variant="outline">月结 / 人工打款</Badge>}
-          action={hasPlatformAccess ? actionForTab(tab, levelsResult.data, activePartners) : null}
+          action={hasPlatformAccess ? actionForTab(tab, levelsResult.data, activePartners, memberPartner) : null}
           error={activeError}
           tabs={
             <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
@@ -283,7 +322,7 @@ export default async function PlatformPartnersPage({
               partnerStatus={partnerStatus}
               keyword={keyword}
               regionCode={regionCode}
-              partnerId={partnerId}
+              partnerId={tab === "members" ? memberPartnerId : partnerId}
               tenantId={tenantId}
               revenueType={revenueType}
               revenueStatus={revenueStatus}
@@ -308,6 +347,9 @@ export default async function PlatformPartnersPage({
           <TabsContent value="partners" className="m-0 min-h-full">
             <PlatformPartnersTable list={partnerResult.data.list} />
           </TabsContent>
+          <TabsContent value="members" className="m-0 min-h-full">
+            <PlatformPartnerMembersTable list={memberResult.data.list} />
+          </TabsContent>
           <TabsContent value="bindings" className="m-0 min-h-full">
             <TenantPartnerBindingsTable list={bindingResult.data.list} />
           </TabsContent>
@@ -330,9 +372,13 @@ function actionForTab(
   tab: PartnerPageTab,
   levels: PlatformPartnerLevel[],
   partners: PlatformPartnerRecord[],
+  memberPartner: PlatformPartnerRecord | null,
 ) {
   if (tab === "applications") return null;
   if (tab === "partners") return <CreatePartnerButton levels={levels} />;
+  if (tab === "members") {
+    return memberPartner ? <CreatePartnerMemberButton partner={memberPartner} /> : null;
+  }
   if (tab === "bindings") return <CreateBindingButton partners={partners} />;
   if (tab === "revenue") {
     return (
@@ -357,6 +403,7 @@ function activeList(
 
 function pageKeyForTab(tab: PartnerPageTab) {
   if (tab === "applications") return "applicationPage";
+  if (tab === "members") return "memberPage";
   if (tab === "bindings") return "bindingPage";
   if (tab === "revenue") return "revenuePage";
   if (tab === "commissions") return "commissionPage";
@@ -366,6 +413,7 @@ function pageKeyForTab(tab: PartnerPageTab) {
 
 function pageSizeKeyForTab(tab: PartnerPageTab) {
   if (tab === "applications") return "applicationPageSize";
+  if (tab === "members") return "memberPageSize";
   if (tab === "bindings") return "bindingPageSize";
   if (tab === "revenue") return "revenuePageSize";
   if (tab === "commissions") return "commissionPageSize";
@@ -375,6 +423,7 @@ function pageSizeKeyForTab(tab: PartnerPageTab) {
 
 function unitForTab(tab: PartnerPageTab) {
   if (tab === "applications") return "条申请";
+  if (tab === "members") return "位成员";
   if (tab === "bindings") return "条绑定";
   if (tab === "revenue") return "条收入";
   if (tab === "commissions") return "条分佣";
