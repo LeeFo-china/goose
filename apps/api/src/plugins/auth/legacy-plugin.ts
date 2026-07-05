@@ -16,9 +16,11 @@ import {
   sendUnauthorized,
 } from "./legacy/responses";
 import {
+  isPartnerPortalRoute,
   isPublicRoute,
   isPureVisitorPayload,
   isVisitorSessionRoute,
+  shouldBypassAuth,
 } from "./legacy/routes";
 import { logAuthStage } from "./legacy/timing";
 import {
@@ -33,6 +35,10 @@ const authPlugin = (app: FastifyInstance) => {
     const method = request.method.toUpperCase();
 
     const authorization = request.headers.authorization;
+
+    if (shouldBypassAuth(method, url)) {
+      return;
+    }
 
     if (isPublicRoute(method, url) && !authorization) {
       return;
@@ -71,6 +77,22 @@ const authPlugin = (app: FastifyInstance) => {
         logAuthReject(request, "unsupported_visitor_route", {
           tokenType: payload.token_type,
           visitorId: payload.visitor_id,
+        });
+        return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
+      }
+
+      request.user = payload;
+      return;
+    }
+
+    if (payload.token_type === "platform_partner") {
+      if (!isPartnerPortalRoute(method, url)) {
+        const error = Errors.unauthorized(
+          "城市合伙人令牌不支持该操作",
+          ErrorCodes.TOKEN_INVALID,
+        );
+        logAuthReject(request, "unsupported_token_type", {
+          tokenType: payload.token_type,
         });
         return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
       }

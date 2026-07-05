@@ -31,6 +31,10 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (isPartnerAuthRoute(method, url)) {
+    return true;
+  }
+
   if (
     (method === "GET" || method === "HEAD") &&
     url.startsWith("/partner-onboarding/invite-codes/")
@@ -141,6 +145,28 @@ export function isPublicRoute(method: string, url: string) {
   }
 
   return false;
+}
+
+export function isPartnerAuthRoute(method: string, url: string) {
+  return (
+    method === "POST" &&
+    (
+      url === "/partner/auth/login" ||
+      url === "/partner/auth/send-code" ||
+      url === "/partner/auth/bind-phone"
+    )
+  );
+}
+
+export function shouldBypassAuth(method: string, url: string) {
+  return isPartnerAuthRoute(method, url);
+}
+
+export function isPartnerPortalRoute(method: string, url: string) {
+  return (
+    (method === "GET" || method === "HEAD") &&
+    url === "/partner/auth/me"
+  );
 }
 
 export function isVisitorSessionRoute(method: string, url: string) {

@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { isPublicRoute, isVisitorSessionRoute } from "./routes";
+import {
+  isPartnerAuthRoute,
+  isPartnerPortalRoute,
+  isPublicRoute,
+  isVisitorSessionRoute,
+  shouldBypassAuth,
+} from "./routes";
 
 describe("isVisitorSessionRoute", () => {
   test("allows visitor sessions to submit wechat rebind requests only", () => {
@@ -27,5 +33,29 @@ describe("auth public route allowlist", () => {
       "POST",
       "/platform/partner-applications/00000000-0000-4000-8000-000000000001/approve",
     )).toBe(false);
+  });
+
+  test("bypasses partner auth public routes even when a token is present", () => {
+    expect(isPartnerAuthRoute("POST", "/partner/auth/login")).toBe(true);
+    expect(isPartnerAuthRoute("POST", "/partner/auth/send-code")).toBe(true);
+    expect(isPartnerAuthRoute("POST", "/partner/auth/bind-phone")).toBe(true);
+    expect(isPartnerAuthRoute("GET", "/partner/auth/me")).toBe(false);
+
+    expect(shouldBypassAuth("POST", "/partner/auth/login")).toBe(true);
+    expect(shouldBypassAuth("GET", "/partner/auth/me")).toBe(false);
+  });
+
+  test("scopes platform partner tokens to partner portal routes", () => {
+    expect(isPartnerPortalRoute("GET", "/partner/auth/me")).toBe(true);
+    expect(isPartnerPortalRoute("HEAD", "/partner/auth/me")).toBe(true);
+
+    expect(isPartnerPortalRoute("POST", "/partner/auth/me")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/partner/dashboard/summary")).toBe(false);
+    expect(isPartnerPortalRoute("POST", "/partner/dashboard/summary")).toBe(false);
+    expect(isPartnerPortalRoute("DELETE", "/partner/dashboard/summary")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/partner/invite-codes")).toBe(false);
+    expect(isPartnerPortalRoute("POST", "/partner/invite-codes")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/ai/decoration-qa/suggestions")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/platform/partners")).toBe(false);
   });
 });

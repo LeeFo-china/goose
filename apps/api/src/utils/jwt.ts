@@ -4,7 +4,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 
 export type JwtPayload = {
   sub?: string;
-  token_type?: "auth" | "visitor_session" | "h5_marketing";
+  token_type?: "auth" | "visitor_session" | "h5_marketing" | "platform_partner";
   openid?: string;
   unionid?: string | null;
   visitor_id?: string;
@@ -14,6 +14,7 @@ export type JwtPayload = {
   tenant_slug?: string | null;
   employee_id?: string | null;
   customer_id?: string | null;
+  partner_id?: string | null;
   verified_phone?: string | null;
   iat?: number;
   exp?: number;
