@@ -27,6 +27,14 @@ function readCityPartnerMigration() {
   return readFileSync(join(migrationDir, file as string), "utf8");
 }
 
+function readAllMigrations() {
+  return readdirSync(migrationDir)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(join(migrationDir, name), "utf8"))
+    .join("\n");
+}
+
 describe("city partner MVP migration", () => {
   test("creates partner, revenue, commission, and settlement tables", () => {
     const sql = readCityPartnerMigration();
@@ -48,6 +56,22 @@ describe("city partner MVP migration", () => {
     expect(sql).toContain("'certified_partner'");
     expect(sql).toContain("'city_partner'");
     expect(sql).toContain("'city_operation_center'");
+  });
+
+  test("registers platform partner permissions for platform admins", () => {
+    const sql = readAllMigrations();
+
+    expect(sql).toContain("'platform.partner.read'");
+    expect(sql).toContain("'platform.partner.manage'");
+    expect(sql).toContain("'platform.partner.level.manage'");
+    expect(sql).toContain("'platform.partner.binding.manage'");
+    expect(sql).toContain("'platform.partner.revenue.read'");
+    expect(sql).toContain("'platform.partner.revenue.manage'");
+    expect(sql).toContain("'platform.partner.commission.read'");
+    expect(sql).toContain("'platform.partner.commission.manage'");
+    expect(sql).toContain("'platform.partner.settlement.manage'");
+    expect(sql).toContain("WHERE roles.code = 'platform_admin'");
+    expect(sql).toContain("roles.tenant_id IS NULL");
   });
 });
 
