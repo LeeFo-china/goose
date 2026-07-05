@@ -175,8 +175,44 @@ POST /platform/partner-applications/:id/approve
 - 审核通过并创建合伙人。
 - 驳回申请。
 
+## 官网一期页面
+
+公开页面：
+
+```text
+/partners
+```
+
+定位：
+
+- 第一版官网聚焦“城市合伙人招募”。
+- 首屏说明区域代理商或独立业务合伙人在本地运营平台、拓展装修公司入驻。
+- 页面明确平台利益边界：合伙人只参与平台收入分成，装修公司自己的业务收支独立。
+- 页面说明当前收入点：装修公司充值消费、客户线索成交返点，线索服务费默认 2.5%。
+- 页面说明第一期采用人工月结，不在官网承诺固定等级比例。
+
+前端文件：
+
+```text
+apps/admin/app/(site)/partners/page.tsx
+apps/admin/components/official-site/partner-application-form.tsx
+apps/admin/public/partner-hero-renovation.png
+```
+
+公开提交代理：
+
+```text
+apps/admin/app/api/public/partner-applications/route.ts
+```
+
+说明：
+
+- 官网表单提交到 `POST /api/public/partner-applications`。
+- Next 代理再转发到后端 `POST /public/partner-applications`。
+- 该代理不读取后台登录 token，只代理城市合伙人公开申请接口。
+- 表单会采集 `source_url`、`utm_source`、`utm_medium`、`utm_campaign`。
+
 ## 后续建议
 
-- 官网前端落地页接入 `POST /public/partner-applications`。
 - 如果公开提交量上来，需要增加验证码、IP 限流或风控策略。
 - 如果审批并发风险变高，应把“创建合伙人 + 更新申请状态”下沉为数据库 RPC 事务。
