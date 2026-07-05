@@ -1,3 +1,5 @@
+import type { FastifyRequest } from "fastify";
+import { z } from "zod";
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
@@ -30,13 +32,14 @@ import {
   resolveStoredFileUrl,
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
-import { z } from "zod";
 
 export type CustomerPropertyPayload =
   | CreateCustomerSchemaType["property"]
   | UpdateCustomerSchemaType["property"];
 
 export type CustomerRowForResponse = CustomerCoreRow;
+
+type CustomerDetailRequestContext = Pick<FastifyRequest, "id" | "log">;
 
 export const CustomerPhoneActionBodySchema = z.object({
   scene: z.string().trim().max(80, "场景过长").optional(),
@@ -306,9 +309,30 @@ export abstract class CustomerBaseController extends TenantBaseController<
       phonePrivacyContext?: CustomerPhonePrivacyContext;
       authContext?: AuthContext;
       tenantId: string;
+      request?: CustomerDetailRequestContext;
     },
   ) {
     const tenantId = options.tenantId;
+    const workflowStatePromise = options.authContext
+      ? workflowSubjectsService.getState(options.authContext, {
+        subjectType: "customer",
+        subjectId: customer.id,
+      }).catch((error) => {
+        if (options.request) {
+          options.request.log.warn(
+            {
+              requestId: options.request.id,
+              err: error,
+              tenantId,
+              customerId: customer.id,
+              employeeId: options.authContext?.employeeId ?? null,
+            },
+            "[customer-detail] workflow_state load failed",
+          );
+        }
+        return { workflow_state: null };
+      })
+      : Promise.resolve(null);
     const [
       primaryProperty,
       properties,
@@ -332,12 +356,7 @@ export abstract class CustomerBaseController extends TenantBaseController<
           customerIds: [customer.id],
         })
         : Promise.resolve(new Map<string, CustomerSourceSummary>()),
-      options.authContext
-        ? workflowSubjectsService.getState(options.authContext, {
-          subjectType: "customer",
-          subjectId: customer.id,
-        })
-        : Promise.resolve(null),
+      workflowStatePromise,
     ]);
 
     return {

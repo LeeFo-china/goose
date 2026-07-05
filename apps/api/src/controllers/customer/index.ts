@@ -120,6 +120,7 @@ class CustomerController extends CustomerBaseController {
           ),
           authContext,
           tenantId: authContext.tenantId,
+          request,
         },
       ),
     );
@@ -199,6 +200,7 @@ class CustomerController extends CustomerBaseController {
         ),
         authContext,
         tenantId: authContext.tenantId,
+        request,
       }),
     );
   };
@@ -315,6 +317,7 @@ class CustomerController extends CustomerBaseController {
         ),
         authContext,
         tenantId: authContext.tenantId,
+        request,
       }),
     );
   };

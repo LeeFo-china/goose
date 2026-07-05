@@ -91,6 +91,7 @@ class CustomerExtrasController extends CustomerBaseController {
         phonePrivacyContext,
         authContext,
         tenantId: authContext.tenantId,
+        request,
       },
     );
 

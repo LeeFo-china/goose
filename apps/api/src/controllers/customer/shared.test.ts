@@ -5,6 +5,7 @@ const getCustomerPropertySummaries = mock(async () => []);
 const getLatestFollowUpMap = mock(async () => new Map());
 const getCustomerSourceSummaryMap = mock(async () => new Map());
 const getFollowUpState = mock(() => "none");
+const warnLog = mock(() => undefined);
 const getState = mock(async () => ({
   workflow_state: {
     subject_type: "customer",
@@ -86,6 +87,7 @@ describe("CustomerBaseController.buildCustomerDetailResponse", () => {
     getCustomerSourceSummaryMap.mockClear();
     getFollowUpState.mockClear();
     getState.mockClear();
+    warnLog.mockClear();
   });
 
   test("includes accessible customer workflow state for detail responses", async () => {
@@ -144,5 +146,63 @@ describe("CustomerBaseController.buildCustomerDetailResponse", () => {
         }),
       ],
     });
+  });
+
+  test("keeps customer detail available when workflow state loading fails", async () => {
+    getState.mockImplementationOnce(async () => {
+      throw new Error("查询流程待办失败");
+    });
+
+    class TestCustomerController extends CustomerBaseController {
+      buildDetail(
+        customer: Record<string, unknown>,
+        options: Record<string, unknown>,
+      ) {
+        return this.buildCustomerDetailResponse(customer as never, options as never);
+      }
+    }
+
+    const controller = new TestCustomerController();
+
+    const response = await controller.buildDetail(
+      {
+        id: "customer-1",
+        name: "苏有朋",
+        phone: "13200001003",
+        status: "potential",
+        owner_id: "employee-1",
+        owner: { id: "employee-1", name: "珠珠", phone: "18800001002" },
+        avatar: null,
+        douyin_screenshot_images: [],
+      },
+      {
+        tenantId: "tenant-1",
+        authContext: {
+          tenantId: "tenant-1",
+          employeeId: "employee-1",
+          roleCodes: [],
+          permissions: [{ code: "customer.update" }],
+        },
+        request: {
+          id: "request-1",
+          log: {
+            warn: warnLog,
+          },
+        },
+      },
+    );
+
+    expect(response.id).toBe("customer-1");
+    expect(response.workflow_state).toBeNull();
+    expect(warnLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: "request-1",
+        tenantId: "tenant-1",
+        customerId: "customer-1",
+        employeeId: "employee-1",
+        err: expect.any(Error),
+      }),
+      "[customer-detail] workflow_state load failed",
+    );
   });
 });
