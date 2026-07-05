@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type {
+  PlatformPartnerApplicationStatus,
   PlatformPartnerRecord,
   PlatformPartnerStatus,
 } from "@/components/platform-partners/platform-partner-types";
 import {
+  applicationStatusOptions,
   commissionStatusOptions,
   partnerStatusOptions,
   revenueStatusOptions,
@@ -17,6 +19,7 @@ import {
 } from "@/components/platform-partners/platform-partner-types";
 
 export type PartnerPageTab =
+  | "applications"
   | "partners"
   | "bindings"
   | "revenue"
@@ -24,6 +27,7 @@ export type PartnerPageTab =
   | "settlements";
 
 export const PARTNER_TABS: ReadonlyArray<{ value: PartnerPageTab; label: string }> = [
+  { value: "applications", label: "申请线索" },
   { value: "partners", label: "合伙人" },
   { value: "bindings", label: "装企绑定" },
   { value: "revenue", label: "平台收入" },
@@ -34,7 +38,15 @@ export const PARTNER_TABS: ReadonlyArray<{ value: PartnerPageTab; label: string 
 export function normalizePartnerTab(value: string | undefined): PartnerPageTab {
   return PARTNER_TABS.some((tab) => tab.value === value)
     ? value as PartnerPageTab
-    : "partners";
+    : "applications";
+}
+
+export function normalizeApplicationStatus(
+  value: string | undefined,
+): PlatformPartnerApplicationStatus | "" {
+  return applicationStatusOptions.some((option) => option.value === value)
+    ? value as PlatformPartnerApplicationStatus
+    : "";
 }
 
 export function normalizePartnerStatus(
@@ -55,7 +67,7 @@ export function buildPartnerHref(input: {
   settlementPageSize?: number;
 }) {
   const params = new URLSearchParams();
-  if (input.tab && input.tab !== "partners") params.set("tab", input.tab);
+  if (input.tab && input.tab !== "applications") params.set("tab", input.tab);
   if (input.partnerPageSize) params.set("partnerPageSize", String(input.partnerPageSize));
   if (input.bindingPageSize) params.set("bindingPageSize", String(input.bindingPageSize));
   if (input.revenuePageSize) params.set("revenuePageSize", String(input.revenuePageSize));
@@ -68,8 +80,10 @@ export function buildPartnerHref(input: {
 
 export function PlatformPartnerFilters({
   tab,
+  applicationStatus,
   partnerStatus,
   keyword,
+  regionCode,
   partnerId,
   tenantId,
   revenueType,
@@ -79,8 +93,10 @@ export function PlatformPartnerFilters({
   partners,
 }: {
   tab: PartnerPageTab;
+  applicationStatus: string;
   partnerStatus: string;
   keyword: string;
+  regionCode: string;
   partnerId: string;
   tenantId: string;
   revenueType: string;
@@ -99,7 +115,19 @@ export function PlatformPartnerFilters({
       action="/platform/partners"
       className="flex flex-wrap items-end gap-3"
     >
-      {tab !== "partners" ? <input type="hidden" name="tab" value={tab} /> : null}
+      {tab !== "applications" ? <input type="hidden" name="tab" value={tab} /> : null}
+      {tab === "applications" ? (
+        <>
+          <TextFilter name="keyword" label="关键词" placeholder="申请主体、联系人、手机号" defaultValue={keyword} />
+          <FilterSelect
+            label="状态"
+            name="application_status"
+            defaultValue={applicationStatus}
+            options={[...applicationStatusOptions]}
+          />
+          <TextFilter name="region_code" label="区域编码" placeholder="如 411500" defaultValue={regionCode} />
+        </>
+      ) : null}
       {tab === "partners" ? (
         <>
           <TextFilter name="keyword" label="关键词" placeholder="合伙人、联系人、手机号" defaultValue={keyword} />
