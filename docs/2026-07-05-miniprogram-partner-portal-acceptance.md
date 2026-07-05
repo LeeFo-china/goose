@@ -29,13 +29,26 @@ gooes 本仓库已完成后端/admin 契约；小程序团队只需修改 `/User
 
 ## 已验证
 
-- API service/route tests passed.
+- API focused tests passed: `48 pass`.
 - API typecheck passed.
 - Admin typecheck passed.
+- API/admin file-size checks passed.
 - 迁移文件已通过 contract tests。
+- `supabase db push --dry-run` 确认待应用 migration 为：
+  - `20260705190000_create_platform_partner_members.sql`
+  - `20260705191000_create_platform_partner_member_binding_rpc.sql`
+  - `20260705192000_create_partner_dashboard_summary_rpc.sql`
+  - `20260705203000_add_platform_partner_member_remark.sql`
+- 已执行 `supabase db push --db-url "$SUPABASE_DB_DIRECT_URL" --yes` 应用上述 4 个 migration。
+- 已执行 `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"`，确认 Local/Remote 对齐到 `20260705203000`。
+- 已执行远端只读 schema smoke，确认：
+  - `platform_partner_members` 表存在。
+  - `platform_partner_members.remark` 列存在。
+  - `claim_platform_partner_member_binding` RPC 存在。
+  - `get_partner_dashboard_monthly_summary` RPC 存在并可返回空数据 0 汇总。
+  - 关键索引存在：成员手机号/微信绑定索引、租户绑定列表索引、佣金列表索引、结算批次列表索引。
 
-## 待 Task 6 验证
+## 剩余说明
 
-- 远端应用 migration 前需执行 `supabase migration list` 确认 Local/Remote 状态。
-- 应用 migration 后需再次执行 `supabase migration list` 验证 Local/Remote 对齐。
-- 远端 migration 应用和生产数据状态不在 Task 5 docs commit 范围内。
+- 未写入业务测试数据；小程序真实登录、短信验证码和页面联调需要小程序团队在 orange 对接后验收。
+- Supabase CLI 在远端只读查询时提示现有数据库多张表未启用 RLS，其中包含本次新增的 `platform_partner_members`。本仓库当前后端使用 service role 通过 API 控制权限，未在本任务中直接启用 RLS；RLS/policy 需要单独设计 migration，不能直接一键启用以免阻断现有业务。
