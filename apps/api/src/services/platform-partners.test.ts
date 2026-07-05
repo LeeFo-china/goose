@@ -143,6 +143,11 @@ const existingBinding = {
   updated_at: "2026-07-04T10:00:00.000Z",
 } satisfies TenantPartnerBindingRecord;
 
+const otherPartnerBinding = {
+  ...existingBinding,
+  partner_id: "00000000-0000-4000-8000-000000000202",
+} satisfies TenantPartnerBindingRecord;
+
 const createdBinding = {
   ...existingBinding,
   id: "00000000-0000-4000-8000-000000000401",
@@ -164,6 +169,16 @@ const inviteCode = {
   updated_at: "2026-07-04T10:00:00.000Z",
 } satisfies PlatformPartnerInviteCodeRecord;
 
+const tenantEmployeeAuthContext = {
+  ...tenantAuthContext,
+  authUserId: "auth-tenant",
+  employeeId: "employee-tenant-admin",
+  tenantId: existingBinding.tenant_id,
+  tenantName: "晴天装饰",
+  tenantSlug: "qingtian",
+  tenantStatus: "active",
+} satisfies AuthContext;
+
 const repository = {
   listPartners: mock(async () => ({
     list: [activePartner],
@@ -176,6 +191,14 @@ const repository = {
   updatePartnerStatus: mock(async (): Promise<PlatformPartnerRecord> => suspendedPartner),
   createInviteCode: mock(async (): Promise<PlatformPartnerInviteCodeRecord> => inviteCode),
   listInviteCodes: mock(async () => []),
+  findInviteCodeByCode: mock(
+    async (): Promise<(PlatformPartnerInviteCodeRecord & {
+      partner: PlatformPartnerRecord | null;
+    }) | null> => ({
+      ...inviteCode,
+      partner: activePartner,
+    }),
+  ),
   findActiveTenantBinding: mock(async (): Promise<TenantPartnerBindingRecord | null> => null),
   createTenantBinding: mock(async (): Promise<TenantPartnerBindingRecord> => createdBinding),
   listTenantBindings: mock(async () => ({
@@ -248,6 +271,85 @@ describe("PlatformPartnersService", () => {
       },
     );
     expect(repository.updatePartner).not.toHaveBeenCalled();
+    expect(repository.createTenantBinding).not.toHaveBeenCalled();
+  });
+
+  test("resolves active invite code for mini-program onboarding", async () => {
+    const service = await createService();
+
+    const result = await service.resolveInviteCode({ code: " cp-411500-0001 " });
+
+    expect(repository.findInviteCodeByCode).toHaveBeenCalledWith("CP-411500-0001");
+    expect(result).toEqual({
+      invite_code: {
+        id: inviteCode.id,
+        code: inviteCode.code,
+        region_code: inviteCode.region_code,
+        campaign_code: inviteCode.campaign_code,
+        expires_at: inviteCode.expires_at,
+      },
+      partner: {
+        id: activePartner.id,
+        name: activePartner.name,
+        status: activePartner.status,
+        region_codes: activePartner.region_codes,
+        level: {
+          code: level.code,
+          name: level.name,
+        },
+      },
+      onboarding: {
+        can_bind: true,
+        binding_source_type: "invite_code",
+      },
+    });
+  });
+
+  test("binds current tenant by invite code without trusting tenant_id from client", async () => {
+    const service = await createService();
+
+    await service.bindTenantByInviteCode(tenantEmployeeAuthContext, {
+      invite_code: inviteCode.code,
+      source_id: "scene=partner-onboarding",
+    });
+
+    expect(repository.createTenantBinding).toHaveBeenCalledWith({
+      tenant_id: existingBinding.tenant_id,
+      partner_id: activePartner.id,
+      invite_code_id: inviteCode.id,
+      source_type: "invite_code",
+      source_id: "scene=partner-onboarding",
+      changed_by_employee_id: "employee-tenant-admin",
+      change_reason: "装企小程序扫码入驻自动绑定",
+    });
+  });
+
+  test("returns existing binding for repeated invite-code binding to same partner", async () => {
+    repository.findActiveTenantBinding.mockImplementationOnce(async () => existingBinding);
+    const service = await createService();
+
+    const result = await service.bindTenantByInviteCode(tenantEmployeeAuthContext, {
+      invite_code: inviteCode.code,
+    });
+
+    expect(result.created).toBe(false);
+    expect(result.idempotent).toBe(true);
+    expect(result.binding).toEqual(existingBinding);
+    expect(repository.createTenantBinding).not.toHaveBeenCalled();
+  });
+
+  test("rejects invite-code binding when tenant is already bound to another partner", async () => {
+    repository.findActiveTenantBinding.mockImplementationOnce(async () => otherPartnerBinding);
+    const service = await createService();
+
+    await expect(
+      service.bindTenantByInviteCode(tenantEmployeeAuthContext, {
+        invite_code: inviteCode.code,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "TENANT_PARTNER_BINDING_EXISTS",
+    });
     expect(repository.createTenantBinding).not.toHaveBeenCalled();
   });
 });
