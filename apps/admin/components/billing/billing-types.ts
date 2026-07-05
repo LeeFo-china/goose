@@ -95,6 +95,153 @@ export type BillingPricingRuleListData = {
   pagination: Pagination;
 };
 
+export type PlatformWechatPayConfigView = {
+  id: string;
+  provider: "wechat_pay";
+  principal_type: "platform";
+  merchant_mode: "direct_merchant";
+  merchant_name: string | null;
+  merchant_id: string | null;
+  app_id: string | null;
+  encrypted_config_ref: string | null;
+  serial_no_masked: string | null;
+  notify_url: string | null;
+  enabled_channels: string[];
+  status: "pending" | "active" | "disabled" | "suspended";
+  validation_status: "unchecked" | "valid" | "invalid";
+  last_validated_at: string | null;
+  has_encrypted_config_ref: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformWechatPayConfigResult = {
+  configured: boolean;
+  can_manage: boolean;
+  config: PlatformWechatPayConfigView | null;
+};
+
+export type PlatformRechargeProduct = {
+  id: string;
+  code: string;
+  title: string;
+  amount_fen: number;
+  credits: number;
+  bonus_credits: number;
+  enabled: boolean;
+  sort_order: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformRechargeProductListData = {
+  list: PlatformRechargeProduct[];
+  pagination: Pagination;
+};
+
+export type TenantRechargeProduct = {
+  code: string;
+  title: string;
+  amount_fen: number;
+  credits: number;
+  bonus_credits: number;
+};
+
+export type TenantRechargeProductListData = {
+  list: TenantRechargeProduct[];
+  pagination: Pagination;
+};
+
+export type TenantRechargeOrder = {
+  id: string;
+  tenant_id: string;
+  order_no: string;
+  package_code: string | null;
+  amount_fen: number;
+  credits: number;
+  bonus_credits: number;
+  channel: string;
+  status: "pending" | "paid" | "closed" | "refunded";
+  paid_at: string | null;
+  paid_amount_fen: number;
+  out_trade_no: string | null;
+  prepay_id: string | null;
+  transaction_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TenantRechargeOrderCreateResult = {
+  idempotent: boolean;
+  order: TenantRechargeOrder;
+  product: TenantRechargeProduct | null;
+  payment_request: Record<string, string> | null;
+};
+
+export type PlatformRechargeOrder = {
+  id: string;
+  tenant_id: string;
+  order_no: string;
+  package_code: string | null;
+  credits: number;
+  bonus_credits: number;
+  amount_fen: number;
+  paid_amount_fen: number;
+  status: "pending" | "paid" | "closed" | "refunded";
+  out_trade_no: string | null;
+  transaction_id: string | null;
+  paid_at: string | null;
+  created_at: string;
+  tenant?: {
+    id: string;
+    name: string | null;
+    slug: string | null;
+  } | null;
+};
+
+export type PlatformRechargeOrderListData = {
+  list: PlatformRechargeOrder[];
+  pagination: Pagination;
+};
+
+export type PlatformRechargeNotification = {
+  id: string;
+  tenant_id: string;
+  credit_order_id: string | null;
+  notify_id: string;
+  event_type: string;
+  resource_type: string | null;
+  raw_payload: Record<string, unknown>;
+  signature_valid: boolean;
+  processed: boolean;
+  processed_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformRechargeAuditLog = {
+  id: string;
+  action: string;
+  actor_employee_id: string | null;
+  actor_user_id: string | null;
+  target_tenant_id: string | null;
+  resource_type: string;
+  resource_id: string | null;
+  resource_label: string | null;
+  status: string;
+  summary: string | null;
+  metadata: unknown;
+  created_at: string;
+};
+
+export type PlatformRechargeOrderDetailData = {
+  order: PlatformRechargeOrder;
+  notifications: PlatformRechargeNotification[];
+  audit_logs: PlatformRechargeAuditLog[];
+};
+
 export type BillingEvent = {
   id: string;
   tenant_id: string;
@@ -215,6 +362,12 @@ export type TenantBillingSummary = {
     metric_code: string;
     credits: number;
   }>;
+  subscription_lock: {
+    locked: boolean;
+    reason: string | null;
+    locked_at: string | null;
+    last_invoice_id: string | null;
+  };
 };
 
 export type TenantFeatureEstimates = {

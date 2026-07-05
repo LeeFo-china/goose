@@ -52,15 +52,17 @@ export function AdminShell({
   }, []);
 
   useLayoutEffect(() => {
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-    const previousBodyOverflow = document.body.style.overflow;
+    const root = document.documentElement;
+    const previousScrollLock = root.getAttribute("data-admin-shell-scroll-lock");
 
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
+    root.setAttribute("data-admin-shell-scroll-lock", "true");
 
     return () => {
-      document.documentElement.style.overflow = previousHtmlOverflow;
-      document.body.style.overflow = previousBodyOverflow;
+      if (previousScrollLock === null) {
+        root.removeAttribute("data-admin-shell-scroll-lock");
+      } else {
+        root.setAttribute("data-admin-shell-scroll-lock", previousScrollLock);
+      }
     };
   }, []);
 
@@ -138,7 +140,7 @@ export function AdminShell({
                 preferences={preferences}
                 onChange={setPreferences}
               />
-              <NotificationMenu />
+              {!isPlatformMode ? <NotificationMenu /> : null}
               <LogoutButton />
             </div>
           </div>

@@ -3,6 +3,11 @@ import {
   getFinanceReconciliationProjectTotals,
   type FinanceReconciliationProjectTotals,
 } from "@/repositories/finance-reconciliation-project-summary";
+import {
+  listFinanceReconciliationExpenseRows,
+  type FinanceReconciliationExpenseLedgerRow,
+  type FinanceReconciliationExpenseSettlementRow,
+} from "@/repositories/finance-reconciliation-expenses";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 const DEFAULT_SOURCE_LIMIT = 5_000;
@@ -38,12 +43,15 @@ export type FinanceReconciliationLedgerRow = {
   amount: number;
   occurred_at: string | null;
   payment_id: string | null;
+  legacy_payment_ledger_marked_at?: string | null;
 };
 
 export type FinanceReconciliationCandidateRows = {
   receivables: FinanceReconciliationReceivableRow[];
   payments: FinanceReconciliationPaymentRow[];
   ledgers: FinanceReconciliationLedgerRow[];
+  expenseSettlements: FinanceReconciliationExpenseSettlementRow[];
+  expenseLedgers: FinanceReconciliationExpenseLedgerRow[];
 };
 
 type CandidateQueryInput = {
@@ -87,6 +95,7 @@ type LedgerDbRow = {
   amount: number | string | null;
   occurred_at: string | null;
   payment_id: string | null;
+  legacy_payment_ledger_marked_at?: string | null;
   project?: ProjectRelation | null;
 };
 
@@ -106,10 +115,11 @@ class FinanceReconciliationRepository {
     input: CandidateQueryInput,
   ): Promise<FinanceReconciliationCandidateRows> {
     const sourceLimit = input.sourceLimit ?? DEFAULT_SOURCE_LIMIT;
-    const [receivableRows, paymentRows, ledgerRows] = await Promise.all([
+    const [receivableRows, paymentRows, ledgerRows, expenseRows] = await Promise.all([
       this.listReceivableRows(input, sourceLimit),
       this.listPaymentRows(input, sourceLimit),
       this.listLedgerRows(input, sourceLimit),
+      listFinanceReconciliationExpenseRows(input, sourceLimit),
     ]);
     const [allocationsByPayment, allocationsByReceivable, ledgerByPayment] =
       await Promise.all([
@@ -160,7 +170,10 @@ class FinanceReconciliationRepository {
         amount: normalizeMoney(row.amount),
         occurred_at: row.occurred_at,
         payment_id: row.payment_id,
+        legacy_payment_ledger_marked_at: row.legacy_payment_ledger_marked_at,
       })),
+      expenseSettlements: expenseRows.expenseSettlements,
+      expenseLedgers: expenseRows.expenseLedgers,
     };
   }
 
@@ -249,11 +262,13 @@ class FinanceReconciliationRepository {
         amount,
         occurred_at,
         payment_id,
+        legacy_payment_ledger_marked_at,
         project:projects(id, name)
       `)
       .eq("tenant_id", input.tenantId)
       .eq("direction", "in")
       .eq("entry_type", "project_payment")
+      .is("legacy_payment_ledger_marked_at", null)
       .gte("occurred_at", `${input.dateFrom}T00:00:00.000Z`)
       .lte("occurred_at", `${input.dateTo}T23:59:59.999Z`)
       .order("occurred_at", { ascending: false })
@@ -281,6 +296,7 @@ class FinanceReconciliationRepository {
       .select("payment_id, receivable_plan_id, amount")
       .eq("tenant_id", input.tenantId)
       .in("payment_id", input.paymentIds)
+      .is("reversed_at", null)
       .limit(input.sourceLimit);
 
     if (error) {
@@ -301,6 +317,7 @@ class FinanceReconciliationRepository {
       .select("payment_id, receivable_plan_id, amount")
       .eq("tenant_id", input.tenantId)
       .in("receivable_plan_id", input.receivableIds)
+      .is("reversed_at", null)
       .limit(input.sourceLimit);
 
     if (error) {
@@ -357,3 +374,7 @@ function normalizeMoney(value: unknown): number {
 export const financeReconciliationRepository =
   new FinanceReconciliationRepository();
 export type { FinanceReconciliationProjectTotals };
+export type {
+  FinanceReconciliationExpenseLedgerRow,
+  FinanceReconciliationExpenseSettlementRow,
+};

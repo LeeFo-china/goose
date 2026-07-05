@@ -16,6 +16,7 @@ import {
   percentileDisc,
   type AuthContext,
   type BillingDateRangeQuery,
+  type BillingSubscriptionInvoiceQuery,
   type BillingEventQuery,
   type BillingAiUsageStatsQuery,
   type BillingLedgerQuery,
@@ -36,6 +37,7 @@ import {
   type BillingSocialVideoShadowRow,
   type ShadowBillingContext,
 } from './shared';
+import { billingSubscriptionService } from '@/services/billing-subscriptions';
 
 export async function getTenantAccount(this: any, authContext: AuthContext) {
     const tenantId = accessPolicyService.assertTenantContext(authContext);
@@ -44,22 +46,25 @@ export async function getTenantAccount(this: any, authContext: AuthContext) {
 
 export async function getTenantSummary(this: any, query: BillingDateRangeQuery, authContext: AuthContext) {
     const tenantId = accessPolicyService.assertTenantContext(authContext);
-    const account = await billingRepository.ensureAccount(tenantId);
-    const ledger = await billingRepository.listLedger({
-      page: 1,
-      pageSize: 100,
-      tenantId,
-      start_date: query.start_date,
-      end_date: query.end_date,
-    });
-    const events = await billingRepository.listBillingEvents({
-      page: 1,
-      pageSize: 1000,
-      tenantId,
-      startDate: query.start_date,
-      endDate: query.end_date,
-      statuses: ["charged", "estimated"],
-    });
+    const [account, ledger, events, subscriptionLock] = await Promise.all([
+      billingRepository.ensureAccount(tenantId),
+      billingRepository.listLedger({
+        page: 1,
+        pageSize: 100,
+        tenantId,
+        start_date: query.start_date,
+        end_date: query.end_date,
+      }),
+      billingRepository.listBillingEvents({
+        page: 1,
+        pageSize: 1000,
+        tenantId,
+        startDate: query.start_date,
+        endDate: query.end_date,
+        statuses: ["charged", "estimated"],
+      }),
+      billingSubscriptionService.getTenantLockState(tenantId),
+    ]);
 
     return {
       account,
@@ -74,6 +79,19 @@ export async function getTenantSummary(this: any, query: BillingDateRangeQuery, 
         available_credits: account.available_credits,
       },
       metrics: groupByMetric(events.list),
+      subscription_lock: subscriptionLock.locked
+        ? {
+          locked: true,
+          reason: subscriptionLock.reason,
+          locked_at: subscriptionLock.locked_at,
+          last_invoice_id: subscriptionLock.last_invoice_id,
+        }
+        : {
+          locked: false,
+          reason: null,
+          locked_at: null,
+          last_invoice_id: null,
+        },
     };
   }
 
@@ -120,6 +138,29 @@ export async function getTenantFeatureEstimates(this: any, authContext: AuthCont
         min_charge_credits: Math.max(aiInput?.min_charge_credits || 0, aiOutput?.min_charge_credits || 0),
       },
     };
+  }
+
+export async function getTenantSubscription(this: any, authContext: AuthContext) {
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    return billingSubscriptionService.getTenantSubscription(tenantId);
+  }
+
+export async function listTenantSubscriptionInvoices(
+    this: any,
+    query: BillingSubscriptionInvoiceQuery,
+    authContext: AuthContext,
+  ) {
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    return billingSubscriptionService.listTenantInvoices(tenantId, query);
+  }
+
+export async function getTenantSubscriptionInvoice(
+    this: any,
+    invoiceId: string,
+    authContext: AuthContext,
+  ) {
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    return billingSubscriptionService.getTenantInvoice(tenantId, invoiceId);
   }
 
 export async function getPlatformSummary(this: any, authContext: AuthContext) {

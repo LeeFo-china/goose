@@ -125,7 +125,7 @@ export function validateSettingValue(record: SystemSettingRecord, value: string 
   }
 
   if (record.value_type === "boolean" && !["true", "false"].includes(value.toLowerCase())) {
-    throw Errors.badRequest("配置值必须是 true 或 false");
+    throw Errors.badRequest("配置值必须选择是或否");
   }
 
   if (record.value_type === "json") {

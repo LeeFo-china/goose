@@ -8,6 +8,9 @@ export const FINANCE_RECONCILIATION_EXCEPTION_CODE_VALUES = [
   "payment_unallocated",
   "allocation_amount_mismatch",
   "receivable_paid_amount_mismatch",
+  "expense_paid_without_ledger",
+  "expense_paid_amount_mismatch",
+  "expense_ledger_without_category",
 ] as const;
 
 export const FINANCE_RECONCILIATION_LEVEL_VALUES = [
@@ -35,6 +38,9 @@ export const FINANCE_RECONCILIATION_ACTION_VALUES = [
   "ignore",
   "resolve",
   "reopen",
+  "generate_expense_ledger",
+  "update_expense_ledger_category",
+  "record_expense_amount_mismatch_review",
 ] as const;
 
 export const FinanceReconciliationExceptionCodeSchema = z.enum(
@@ -79,12 +85,35 @@ export const FinanceReconciliationExceptionListQuerySchema =
     actor_employee_id: z.uuid("请选择有效的处理人").optional(),
   });
 
+export const FinanceReconciliationOperatingStatsQuerySchema = z.object({
+  date_from: OptionalDateSchema,
+  date_to: OptionalDateSchema,
+  project_id: z.uuid("请选择有效的项目").optional(),
+  exception_code: FinanceReconciliationExceptionCodeSchema.optional(),
+  level: FinanceReconciliationLevelSchema.optional(),
+  direction: FinanceReconciliationDirectionSchema.optional(),
+  status: FinanceReconciliationStatusSchema.optional(),
+  actor_employee_id: z.uuid("请选择有效的处理人").optional(),
+});
+
 export const CreateFinanceReconciliationExceptionActionSchema = z.object({
   action: FinanceReconciliationActionSchema,
   remark: z.string()
     .trim()
     .min(1, "请填写处理备注")
     .max(500, "处理备注不能超过 500 个字符"),
+  cost_category_id: z.uuid("请选择有效的成本分类").optional(),
+}).superRefine((value, context) => {
+  if (
+    value.action === "update_expense_ledger_category" &&
+    !value.cost_category_id
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["cost_category_id"],
+      message: "请选择成本分类",
+    });
+  }
 });
 
 export const FinanceReconciliationExceptionFingerprintParamsSchema = z.object({
@@ -109,6 +138,9 @@ export type FinanceReconciliationAction =
   (typeof FINANCE_RECONCILIATION_ACTION_VALUES)[number];
 export type FinanceReconciliationExceptionListQuery = z.infer<
   typeof FinanceReconciliationExceptionListQuerySchema
+>;
+export type FinanceReconciliationOperatingStatsQuery = z.infer<
+  typeof FinanceReconciliationOperatingStatsQuerySchema
 >;
 export type FinanceReconciliationExceptionActionListQuery = z.infer<
   typeof FinanceReconciliationExceptionActionListQuerySchema

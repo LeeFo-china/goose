@@ -1,5 +1,6 @@
 import { buildProjectAcceptanceTodos } from "./builders-acceptance";
 import { buildCustomerFollowUpTodos, buildProjectLogTodos } from "./builders-basic";
+import { buildBillingPaymentTodos } from "./builders-billing";
 import { buildExpenseRequestTodos } from "./builders-expense";
 import { buildCustomerServiceTicketTodos } from "./builders-ticket";
 import { buildWorkflowTaskTodos } from "./builders-workflow";
@@ -20,6 +21,7 @@ async function buildTodos(authContext: AuthContext) {
     projectAcceptances,
     customerServiceTickets,
     workflowTasks,
+    billingPayments,
   ] = await Promise.all([
     buildCustomerFollowUpTodos(authContext),
     buildProjectLogTodos(authContext),
@@ -27,6 +29,7 @@ async function buildTodos(authContext: AuthContext) {
     buildProjectAcceptanceTodos(authContext),
     buildCustomerServiceTicketTodos(authContext),
     buildWorkflowTaskTodos(authContext),
+    buildBillingPaymentTodos(authContext),
   ]);
 
   return sortTodos([
@@ -36,6 +39,7 @@ async function buildTodos(authContext: AuthContext) {
     ...projectAcceptances,
     ...customerServiceTickets,
     ...workflowTasks,
+    ...billingPayments,
   ]);
 }
 

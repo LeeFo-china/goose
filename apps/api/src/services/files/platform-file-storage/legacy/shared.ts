@@ -34,6 +34,7 @@ export type PlatformUploadScene =
   | "h5_marketing_page"
   | "project_acceptance"
   | "project_payment"
+  | "wechat_pay_applyment"
   | "picture_library"
   | "picture_comment";
 

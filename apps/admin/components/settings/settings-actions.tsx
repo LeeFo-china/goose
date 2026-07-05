@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, RotateCcw, Save, TestTube2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { FileAccessPolicyEditor } from "@/components/settings/settings-file-access-policy-editor";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import {
   sourceBadge,
@@ -12,11 +13,16 @@ import {
 import { requestBackendJson } from "@/lib/backend-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -64,10 +70,6 @@ async function testTencentLbsWebservice() {
   });
 }
 
-function formatValue(value: string | null) {
-  return value && value.trim() ? value : "-";
-}
-
 function getSettingPlaceholder(setting: SystemSetting) {
   if (setting.key === "CUSTOMER_SERVICE_WORKING_HOURS") {
     return "例如：周一至周日 09:00-18:00";
@@ -82,7 +84,65 @@ const smsChannelModeLabels: Record<string, string> = {
   tenant_tencent: "自有腾讯云短信通道",
 };
 
-import { FileAccessPolicyEditor } from "@/components/settings/settings-file-access-policy-editor";
+type SettingSelectOption = {
+  value: string;
+  label: string;
+};
+
+const settingSelectOptions: Record<string, SettingSelectOption[]> = {
+  SMS_PROVIDER: [
+    { value: "mock", label: "模拟发送" },
+    { value: "disabled", label: "禁用发送" },
+    { value: "aliyun", label: "阿里云短信" },
+    { value: "tencent", label: "腾讯云短信" },
+  ],
+  SMS_CHANNEL_MODE: Object.entries(smsChannelModeLabels).map(([value, label]) => ({
+    value,
+    label,
+  })),
+  PROJECT_ACCEPTANCE_SMS_LINK_TYPE: [
+    { value: "scheme", label: "小程序短链" },
+    { value: "url_link", label: "微信直达链接" },
+  ],
+  WECHAT_MINIPROGRAM_ENV_VERSION: [
+    { value: "release", label: "正式版" },
+    { value: "trial", label: "体验版" },
+    { value: "develop", label: "开发版" },
+  ],
+  PLATFORM_STORAGE_PROVIDER: [
+    { value: "supabase_storage", label: "旧版对象存储" },
+    { value: "tencent_cos", label: "腾讯云对象存储" },
+  ],
+  SOCIAL_VIDEO_TRANSCRIPTION_PROVIDER: [
+    { value: "tencent_asr", label: "腾讯云语音识别" },
+    { value: "apify", label: "Apify 直接转写" },
+  ],
+  PICTURE_COMMENT_DEFAULT_STATUS: [
+    { value: "visible", label: "立即展示" },
+    { value: "pending", label: "进入待处理" },
+  ],
+};
+
+function getSettingSelectOptions(setting: SystemSetting) {
+  return settingSelectOptions[setting.key];
+}
+
+function valueTypeLabel(valueType: SystemSetting["value_type"]) {
+  if (valueType === "number") return "数字";
+  if (valueType === "boolean") return "开关";
+  if (valueType === "json") return "结构化数据";
+  return "文本";
+}
+
+function formatDisplayValue(setting: SystemSetting, value: string | null) {
+  if (!value?.trim()) return "-";
+  if (setting.value_type === "boolean") {
+    if (value === "true") return "是";
+    if (value === "false") return "否";
+  }
+  const options = getSettingSelectOptions(setting);
+  return options?.find((option) => option.value === value)?.label || value;
+}
 
 export function SettingEditor({ setting }: { setting: SystemSetting }) {
   if (setting.key === "PLATFORM_FILE_ACCESS_POLICY") {
@@ -124,34 +184,44 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
   }
 
   return (
-    <div className="grid gap-4 border-t px-5 py-4 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-center">
+    <div className="grid gap-4 border-b px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <div className="font-medium">{setting.name}</div>
           {sourceBadge(setting)}
           {setting.is_secret ? <Badge variant="warning">敏感</Badge> : null}
-          <Badge variant="outline">{setting.value_type}</Badge>
+          <Badge variant="outline">{valueTypeLabel(setting.value_type)}</Badge>
         </div>
         <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{setting.key}</div>
         {setting.description ? (
           <p className="mt-2 text-sm text-muted-foreground">{setting.description}</p>
         ) : null}
         <div className="mt-2 text-xs text-muted-foreground">
-          当前生效值：<span className="break-all font-mono">{formatValue(setting.effective_value)}</span>
+          当前生效值：<span className="break-all">{formatDisplayValue(setting, setting.effective_value)}</span>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor={`setting-${setting.key}`}>数据库配置值</Label>
-        {setting.key === "SMS_CHANNEL_MODE" ? (
-          <Select value={value || "platform"} onValueChange={setValue}>
+      <Field data-invalid={Boolean(error) || undefined}>
+        <FieldLabel htmlFor={`setting-${setting.key}`}>数据库配置值</FieldLabel>
+        {getSettingSelectOptions(setting) ? (
+          <Select
+            value={value || "__empty__"}
+            onValueChange={(nextValue) =>
+              setValue(nextValue === "__empty__" ? "" : nextValue)
+            }
+          >
             <SelectTrigger id={`setting-${setting.key}`}>
-              <SelectValue placeholder="选择短信通道模式" />
+              <SelectValue placeholder="选择配置值" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="platform">{smsChannelModeLabels.platform}</SelectItem>
-              <SelectItem value="tenant_aliyun">{smsChannelModeLabels.tenant_aliyun}</SelectItem>
-              <SelectItem value="tenant_tencent">{smsChannelModeLabels.tenant_tencent}</SelectItem>
+              <SelectGroup>
+                <SelectItem value="__empty__">继承环境变量或默认值</SelectItem>
+                {getSettingSelectOptions(setting)?.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         ) : setting.is_secret ? (
@@ -169,9 +239,11 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
               <SelectValue placeholder="继承环境变量或默认值" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__empty__">继承环境变量或默认值</SelectItem>
-              <SelectItem value="true">true</SelectItem>
-              <SelectItem value="false">false</SelectItem>
+              <SelectGroup>
+                <SelectItem value="__empty__">继承环境变量或默认值</SelectItem>
+                <SelectItem value="true">是</SelectItem>
+                <SelectItem value="false">否</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         ) : setting.value_type === "json" || setting.key.includes("PROMPT") ? (
@@ -191,9 +263,12 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
             placeholder={getSettingPlaceholder(setting)}
           />
         )}
+        <FieldDescription>
+          {setting.effective_scope === "tenant" ? "租户覆盖值，留空保存可清空。" : "平台配置值，留空保存将回退环境变量或默认值。"}
+        </FieldDescription>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {saved ? <StatusAlert tone="success">已保存</StatusAlert> : null}
-      </div>
+      </Field>
 
       <div className="flex gap-2 lg:items-center lg:justify-end">
         <Button type="button" variant="outline" onClick={reset} disabled={pending || !dirty}>
@@ -238,8 +313,8 @@ export function SocialVideoTranscriptionTester() {
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="social-video-test-url">抖音视频链接</Label>
+        <Field data-invalid={Boolean(error) || undefined}>
+          <FieldLabel htmlFor="social-video-test-url">抖音视频链接</FieldLabel>
           <Textarea
             id="social-video-test-url"
             rows={3}
@@ -247,6 +322,7 @@ export function SocialVideoTranscriptionTester() {
             onChange={(event) => setUrl(event.target.value)}
             placeholder="粘贴抖音分享链接或完整分享口令"
           />
+          <FieldDescription>支持抖音分享链接、短链或完整分享口令。</FieldDescription>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           {result ? (
             <StatusAlert tone="success">
@@ -254,11 +330,11 @@ export function SocialVideoTranscriptionTester() {
                 <div>识别成功，文本长度 {result.text_length ?? result.text?.length ?? 0}，分段 {result.segment_count ?? 0}。</div>
                 {result.title ? <div className="line-clamp-2">标题：{result.title}</div> : null}
                 {result.text ? <div className="line-clamp-3">文本：{result.text}</div> : null}
-                {result.run_id ? <div className="break-all font-mono text-xs">Run: {result.run_id}</div> : null}
+                {result.run_id ? <div className="break-all text-xs">运行编号：{result.run_id}</div> : null}
               </div>
             </StatusAlert>
           ) : null}
-        </div>
+        </Field>
 
         <div className="flex gap-2 lg:items-center lg:justify-end">
           <Button type="button" onClick={submit} disabled={pending || !url.trim()}>
@@ -292,9 +368,9 @@ export function TencentLbsConfigTester() {
     <div className="border-t bg-muted/20 px-5 py-4">
       <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-start">
         <div className="min-w-0">
-          <div className="font-medium">WebService 配置测试</div>
+          <div className="font-medium">腾讯位置服务接口测试</div>
           <p className="mt-2 text-sm text-muted-foreground">
-            使用当前 WebService Key 和 SecretKey/SK 调用腾讯行政区划接口，验证签名和配额配置是否可用。
+            使用当前服务端密钥和签名校验密钥调用腾讯行政区划接口，验证签名和配额配置是否可用。
           </p>
         </div>
 
@@ -305,15 +381,15 @@ export function TencentLbsConfigTester() {
               <div className="flex flex-col gap-1">
                 <div>{result.ok ? "腾讯位置服务调用成功" : `腾讯位置服务返回异常：${result.message}`}</div>
                 <div className="break-all text-xs">
-                  status={result.status}，request_id={result.request_id || "-"}
+                  状态码：{result.status}，请求编号：{result.request_id || "-"}
                 </div>
                 <div className="text-xs">
                   行政区划层级数量：{result.level_counts.length ? result.level_counts.join(" / ") : "-"}
                 </div>
                 <div className="text-xs">
-                  WebService Key：{result.has_webservice_key ? "已配置" : "未配置"}，
-                  WebService SK：{result.has_webservice_sk ? "已配置" : "未配置"}，
-                  小程序 Key：{result.has_miniprogram_key ? "已配置" : "未配置"}
+                  服务端密钥：{result.has_webservice_key ? "已配置" : "未配置"}，
+                  签名校验密钥：{result.has_webservice_sk ? "已配置" : "未配置"}，
+                  小程序密钥：{result.has_miniprogram_key ? "已配置" : "未配置"}
                 </div>
               </div>
             </StatusAlert>

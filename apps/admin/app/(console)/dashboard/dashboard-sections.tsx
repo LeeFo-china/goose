@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { PlatformOverviewData, TenantOverviewData } from "./dashboard-data";
 
+const DASHBOARD_SHELL_CLASS =
+  "flex h-full min-h-0 flex-col gap-4 overflow-hidden";
+
 function formatNumber(value?: number | null) {
   return new Intl.NumberFormat("zh-CN").format(value || 0);
 }
@@ -70,7 +73,7 @@ export function PlatformAdminDashboard({
   ];
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className={DASHBOARD_SHELL_CLASS}>
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">平台概览</h1>
@@ -181,7 +184,7 @@ export function TenantAdminDashboard({
   ];
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className={DASHBOARD_SHELL_CLASS}>
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">租户概览</h1>

@@ -21,6 +21,23 @@ export type FinanceLedgerEntryInput = {
   metadata?: Record<string, unknown>;
 };
 
+export type FinanceLedgerRecord = FinanceLedgerEntryInput & {
+  id: string;
+  currency?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  payment_linked_at?: string | null;
+  payment_linked_by?: string | null;
+  payment_link_reason?: string | null;
+  payment_link_previous_payment_id?: string | null;
+  legacy_payment_ledger_marked_at?: string | null;
+  legacy_payment_ledger_marked_by?: string | null;
+  legacy_payment_ledger_reason?: string | null;
+  project?: unknown;
+  cost_category?: unknown;
+  handler?: unknown;
+};
+
 class FinanceLedgerRepository {
   private select = `
     *,
@@ -43,6 +60,18 @@ class FinanceLedgerRepository {
 
     if (query.project_id) {
       request = request.eq("project_id", query.project_id);
+    }
+    if (query.ledger_id) {
+      request = request.eq("id", query.ledger_id);
+    }
+    if (query.payment_id) {
+      request = request.eq("payment_id", query.payment_id);
+    }
+    if (query.expense_request_id) {
+      request = request.eq("expense_request_id", query.expense_request_id);
+    }
+    if (query.expense_settlement_id) {
+      request = request.eq("expense_settlement_id", query.expense_settlement_id);
     }
     if (query.cost_category_id) {
       request = request.eq("cost_category_id", query.cost_category_id);
@@ -93,6 +122,109 @@ class FinanceLedgerRepository {
 
     if (error) {
       throw Errors.dbError("写入财务台账失败", error);
+    }
+
+    return data;
+  }
+
+  async findProjectPaymentByPaymentId(input: {
+    tenantId: string;
+    paymentId: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("finance_ledger_entries")
+      .select(this.select)
+      .eq("tenant_id", input.tenantId)
+      .eq("payment_id", input.paymentId)
+      .eq("entry_type", "project_payment")
+      .limit(1);
+
+    if (error) {
+      throw Errors.dbError("查询项目收款台账失败", error);
+    }
+
+    return data?.[0] ?? null;
+  }
+
+  async findById(input: {
+    tenantId: string;
+    ledgerId: string;
+  }): Promise<FinanceLedgerRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("finance_ledger_entries")
+      .select(this.select)
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.ledgerId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询财务台账失败", error);
+    }
+
+    return (data as unknown as FinanceLedgerRecord | null) ?? null;
+  }
+
+  async linkProjectPayment(input: {
+    tenantId: string;
+    ledgerId: string;
+    paymentId: string;
+    employeeId: string;
+    reason: string;
+    previousPaymentId: string | null;
+    metadata: Record<string, unknown>;
+  }) {
+    const now = new Date().toISOString();
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("finance_ledger_entries")
+      .update({
+        payment_id: input.paymentId,
+        payment_linked_at: now,
+        payment_linked_by: input.employeeId,
+        payment_link_reason: input.reason,
+        payment_link_previous_payment_id: input.previousPaymentId,
+        metadata: input.metadata,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.ledgerId)
+      .select(this.select)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("关联收款台账失败", error);
+    }
+    if (!data) {
+      throw Errors.business(404, "财务台账不存在", "FINANCE_LEDGER_NOT_FOUND");
+    }
+
+    return data;
+  }
+
+  async markLegacyProjectPayment(input: {
+    tenantId: string;
+    ledgerId: string;
+    employeeId: string;
+    reason: string;
+    metadata: Record<string, unknown>;
+  }) {
+    const now = new Date().toISOString();
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("finance_ledger_entries")
+      .update({
+        legacy_payment_ledger_marked_at: now,
+        legacy_payment_ledger_marked_by: input.employeeId,
+        legacy_payment_ledger_reason: input.reason,
+        metadata: input.metadata,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.ledgerId)
+      .select(this.select)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("标记历史收款台账失败", error);
+    }
+    if (!data) {
+      throw Errors.business(404, "财务台账不存在", "FINANCE_LEDGER_NOT_FOUND");
     }
 
     return data;

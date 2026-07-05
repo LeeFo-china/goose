@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   CircleDollarSign,
   Clapperboard,
+  FileCheck2,
   GitBranch,
   Inbox,
   Images,
@@ -24,6 +25,7 @@ import {
   TerminalSquare,
   Users,
   RefreshCw,
+  WalletCards,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,12 +48,14 @@ export const platformNavGroups: AdminMenuGroup[] = [
     items: [
       { href: "/dashboard", label: "平台概览", icon: LayoutDashboard },
       { href: "/platform/tenants", label: "平台租户", icon: Building2 },
+      { href: "/platform/partners", label: "城市合伙人", icon: Users },
       { href: "/platform/devices", label: "设备资产", icon: Camera },
       { href: "/platform/leads", label: "平台线索", icon: Inbox },
       { href: "/platform/picture-library", label: "图片资料库", icon: Images },
       { href: "/platform/marketing-pages", label: "H5 活动页", icon: Megaphone },
       { href: "/platform/usage", label: "用量统计", icon: BarChart3 },
       { href: "/platform/billing", label: "计费中心", icon: CircleDollarSign },
+      { href: "/platform/wechat-pay/applyments", label: "支付进件", icon: FileCheck2 },
       { href: "/platform/ai-models", label: "AI 模型路由", icon: Bot },
       { href: "/platform/audit-logs", label: "平台审计", icon: ScrollText },
       { href: "/platform/identity-diagnostics", label: "身份排障", icon: SearchCheck },
@@ -131,6 +135,19 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "应收计划",
         icon: CalendarClock,
         permission: "finance.receivable.view",
+      },
+      {
+        href: "/finance/wechat-pay",
+        label: "微信支付",
+        icon: WalletCards,
+        permission: "wechat_pay.config.read",
+        activeMatch: "exact",
+      },
+      {
+        href: "/finance/wechat-pay/applyment",
+        label: "支付开通",
+        icon: FileCheck2,
+        permission: "wechat_pay.applyment.read",
       },
       {
         href: "/expenses",

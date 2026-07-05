@@ -16,7 +16,13 @@ export async function ensureAccount(this: any, tenantId: string) {
     throw Errors.dbError("初始化租户积分账户失败", error);
   }
 
-  return data as BillingAccountBalance;
+  if (!data || typeof data !== "object" || !("account" in data)) {
+    throw Errors.dbError("初始化租户积分账户返回格式异常", {
+      reason: "missing_account",
+    });
+  }
+
+  return (data as { account: BillingAccountBalance }).account;
 }
 
 export async function getAccountByTenantId(this: any, tenantId: string) {

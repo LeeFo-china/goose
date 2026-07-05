@@ -8,7 +8,14 @@ import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { sourceBadge, updateSetting } from "@/components/settings/settings-mutation-shared";
 
@@ -60,6 +67,13 @@ const defaultFileAccessPolicy: FileAccessPolicy = {
     panorama_tiles: { access_mode: "public", signed_url_ttl_seconds: 0 },
   },
 };
+
+function valueTypeLabel(valueType: SystemSetting["value_type"]) {
+  if (valueType === "number") return "数字";
+  if (valueType === "boolean") return "开关";
+  if (valueType === "json") return "结构化数据";
+  return "文本";
+}
 
 function parseFileAccessPolicy(value: string | null | undefined): FileAccessPolicy {
   if (!value?.trim()) return defaultFileAccessPolicy;
@@ -169,7 +183,7 @@ export function FileAccessPolicyEditor({ setting }: { setting: SystemSetting }) 
         <div className="flex flex-wrap items-center gap-2">
           <div className="font-medium">{setting.name}</div>
           {sourceBadge(setting)}
-          <Badge variant="outline">{setting.value_type}</Badge>
+          <Badge variant="outline">{valueTypeLabel(setting.value_type)}</Badge>
         </div>
         <div className="break-all font-mono text-xs text-muted-foreground">{setting.key}</div>
         <p className="text-sm text-muted-foreground">{setting.description}</p>
@@ -201,8 +215,10 @@ export function FileAccessPolicyEditor({ setting }: { setting: SystemSetting }) 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="signed">签名 URL</SelectItem>
-                    <SelectItem value="public">公开 URL</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="signed">签名链接</SelectItem>
+                      <SelectItem value="public">公开链接</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </TableCell>

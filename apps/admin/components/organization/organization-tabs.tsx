@@ -10,6 +10,7 @@ import type {
   Pagination,
 } from "@/components/organization/organization-types";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type OrganizationTab = "departments";
 
@@ -87,51 +88,50 @@ export function OrganizationTabs({
         </div>
       ) : null}
 
-      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-        <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="flex overflow-x-auto">
-              {tabs.map((tab) => {
-                const active = tab.value === activeTab;
-                const Icon = tab.icon;
+      <Tabs value={activeTab} className="flex min-h-0 flex-1 flex-col">
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+          <CardHeader className="shrink-0 border-b bg-card px-4 py-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <TabsList className="h-auto w-full justify-start overflow-x-auto md:w-auto">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
 
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    className={[
-                      "inline-flex h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-0 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-                      tab.value !== tabs[0]?.value ? "ml-5" : "",
-                      active ? "border-primary text-foreground" : "",
-                    ].filter(Boolean).join(" ")}
-                    aria-pressed={active}
-                  >
-                    <Icon data-icon="inline-start" />
-                    {tab.label}
-                  </button>
-                );
-              })}
+                  return (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="gap-2 whitespace-nowrap"
+                    >
+                      <Icon data-icon="inline-start" />
+                      {tab.label}
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+              <div className="flex flex-wrap gap-2 pb-3 text-xs text-muted-foreground md:pb-0">
+                <span className="tabular-nums">部门 {departments.pagination.total}</span>
+                <span className="tabular-nums">已启用 {enabledDepartmentCodes.length}</span>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 pb-3 text-xs text-muted-foreground md:pb-0">
-              <span className="tabular-nums">部门 {departments.pagination.total}</span>
-              <span className="tabular-nums">已启用 {enabledDepartmentCodes.length}</span>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-          {activeTab === "departments" ? (
-            <DepartmentsClientShell
-              departments={departments.list}
-              departmentPostRuleConfig={localDepartmentPostRuleConfig}
-              pagination={departments.pagination}
-              code={departmentCode}
-              keyword={departmentKeyword}
-              enabledDepartmentCodes={enabledDepartmentCodes}
-              onDepartmentPostRuleConfigChange={updateDepartmentPostConfig}
-            />
-          ) : null}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+            <TabsContent
+              value="departments"
+              className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
+            >
+              <DepartmentsClientShell
+                departments={departments.list}
+                departmentPostRuleConfig={localDepartmentPostRuleConfig}
+                pagination={departments.pagination}
+                code={departmentCode}
+                keyword={departmentKeyword}
+                enabledDepartmentCodes={enabledDepartmentCodes}
+                onDepartmentPostRuleConfigChange={updateDepartmentPostConfig}
+              />
+            </TabsContent>
+          </CardContent>
+        </Card>
+      </Tabs>
     </div>
   );
 }

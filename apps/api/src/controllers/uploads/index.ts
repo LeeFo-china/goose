@@ -37,6 +37,7 @@ const DIRECT_UPLOAD_SCENES = [
   "h5_marketing_page",
   "project_acceptance",
   "project_payment",
+  "wechat_pay_applyment",
   "picture_library",
   "picture_comment",
 ] as const;
@@ -480,7 +481,12 @@ class UploadController extends BaseController {
   }
 
   private getMaxUploadFileSize(scene: UploadScene) {
-    return scene === "h5_marketing_page" || scene === "picture_library" || scene === "picture_comment"
+    return [
+      "h5_marketing_page",
+      "picture_library",
+      "picture_comment",
+      "wechat_pay_applyment",
+    ].includes(scene)
       ? H5_MARKETING_MAX_UPLOAD_FILE_SIZE
       : DEFAULT_MAX_UPLOAD_FILE_SIZE;
   }
@@ -488,7 +494,5 @@ class UploadController extends BaseController {
   private hasUploadIdentity(user: JwtPayload | undefined): user is JwtPayload {
     return Boolean(user?.sub || (user?.token_type === "visitor_session" && user.visitor_id));
   }
-
 }
-
 export default new UploadController();

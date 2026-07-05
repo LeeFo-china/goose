@@ -29,6 +29,11 @@ export const PROJECT_RECEIVABLE_EVENT_TYPE_VALUES = [
   "adjusted",
   "canceled",
   "follow_up",
+  "adjust_due_date",
+  "cancel_receivable",
+  "allocate_payment",
+  "adjust_allocation",
+  "reverse_allocation",
 ] as const;
 
 const OptionalBooleanQuerySchema = z.preprocess((value) => {
@@ -43,6 +48,7 @@ const OptionalBooleanQuerySchema = z.preprocess((value) => {
 }, z.boolean({ message: "布尔参数必须是 true 或 false" }).optional());
 
 const ReceivableQueryBaseSchema = PaginationQuerySchema.extend({
+  receivable_plan_id: z.uuid("请选择有效的应收计划").optional(),
   status: z.enum(PROJECT_RECEIVABLE_STATUS_VALUES, {
     message: "无效的应收状态",
   }).optional(),
@@ -71,6 +77,9 @@ export const ProjectReceivableListQuerySchema = ReceivableQueryBaseSchema;
 
 const MoneyAmountSchema = z.coerce.number("金额必须是数字")
   .positive("金额必须大于 0");
+
+const AllocationAmountSchema = z.coerce.number("核销金额必须是数字")
+  .positive("核销金额必须大于 0");
 
 const OptionalEmployeeIdSchema = z.preprocess((value) => {
   if (value === "" || value === null) return undefined;
@@ -116,9 +125,38 @@ export const CancelFinanceReceivableSchema = z.object({
   reason: z.string().trim().min(1, "请输入取消原因").max(500, "取消原因不能超过 500 个字符"),
 });
 
+export const AdjustFinanceReceivableDueDateSchema = z.object({
+  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "应收日期格式必须为 YYYY-MM-DD"),
+  reason: z.string().trim()
+    .min(1, "请输入调整原因")
+    .max(500, "调整原因不能超过 500 个字符"),
+});
+
 export const CreateFinanceReceivableFollowUpSchema = z.object({
   note: z.string().trim().min(1, "请输入跟进内容").max(500, "跟进内容不能超过 500 个字符"),
   next_follow_up_at: OptionalTimestampSchema,
+});
+
+export const CreateFinanceReceivableAllocationSchema = z.object({
+  payment_id: z.uuid("请选择有效的收款记录"),
+  amount: AllocationAmountSchema,
+  reason: z.string().trim()
+    .min(1, "请输入核销原因")
+    .max(500, "核销原因不能超过 500 个字符"),
+  idempotency_key: z.uuid("核销幂等键必须是有效 UUID").optional(),
+});
+
+export const UpdateFinanceReceivableAllocationSchema = z.object({
+  amount: AllocationAmountSchema,
+  reason: z.string().trim()
+    .min(1, "请输入调整原因")
+    .max(500, "调整原因不能超过 500 个字符"),
+});
+
+export const ReverseFinanceReceivableAllocationSchema = z.object({
+  reason: z.string().trim()
+    .min(1, "请输入撤销原因")
+    .max(500, "撤销原因不能超过 500 个字符"),
 });
 
 export const FinanceReceivableEventListQuerySchema = PaginationQuerySchema;
@@ -146,8 +184,20 @@ export type UpdateFinanceReceivableInput = z.infer<
 export type CancelFinanceReceivableInput = z.infer<
   typeof CancelFinanceReceivableSchema
 >;
+export type AdjustFinanceReceivableDueDateInput = z.infer<
+  typeof AdjustFinanceReceivableDueDateSchema
+>;
 export type CreateFinanceReceivableFollowUpInput = z.infer<
   typeof CreateFinanceReceivableFollowUpSchema
+>;
+export type CreateFinanceReceivableAllocationInput = z.infer<
+  typeof CreateFinanceReceivableAllocationSchema
+>;
+export type UpdateFinanceReceivableAllocationInput = z.infer<
+  typeof UpdateFinanceReceivableAllocationSchema
+>;
+export type ReverseFinanceReceivableAllocationInput = z.infer<
+  typeof ReverseFinanceReceivableAllocationSchema
 >;
 export type FinanceReceivableEventListQuery = z.infer<
   typeof FinanceReceivableEventListQuerySchema

@@ -51,6 +51,11 @@ import SocialVideoController from "@/controllers/social-video";
 import PlatformLeadsController from "@/controllers/platform-leads";
 import PlatformLocationController from "@/controllers/platform-location";
 import PlatformTenantsController from "@/controllers/platform-tenants";
+import PlatformPartnersController from "@/controllers/platform-partners";
+import PlatformPartnerApplicationsController from "@/controllers/platform-partner-applications";
+import PlatformPartnerRevenueController from "@/controllers/platform-partner-revenue";
+import PlatformPaymentConfigsController from "@/controllers/platform-payment-configs";
+import PlatformWechatPayApplymentsController from "@/controllers/platform-wechat-pay-applyments";
 import PlatformAuditLogsController from "@/controllers/platform-audit-logs";
 import AdministrativeAreasController from "@/controllers/administrative-areas";
 import TenantShareLinksController from "@/controllers/tenant-share-links";
@@ -61,6 +66,8 @@ import VisitorProjectsController from "@/controllers/visitor-projects";
 import NotificationsController from "@/controllers/notifications";
 import UsageController from "@/controllers/usage";
 import BillingController from "@/controllers/billing";
+import BillingRechargeController from "@/controllers/billing-recharge";
+import PlatformBillingRechargeController from "@/controllers/platform-billing-recharge";
 import FinanceController from "@/controllers/finance";
 import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
@@ -69,6 +76,7 @@ import VisitorPictureLibraryController from "@/controllers/visitor-picture-libra
 import WorkflowController from "@/controllers/workflows";
 import WorkflowSubjectsController from "@/controllers/workflow-subjects";
 import WorkflowTasksController from "@/controllers/workflow-tasks";
+import WechatPayCallbacksController from "@/controllers/wechat-pay-callbacks";
 
 const fullCrudRoutes = {
   list: true,
@@ -119,6 +127,11 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   PlatformLeadsController.registerExtraRoutes(app);
   PlatformLocationController.registerExtraRoutes(app);
   PlatformTenantsController.registerExtraRoutes(app);
+  PlatformPartnersController.registerExtraRoutes(app);
+  PlatformPartnerApplicationsController.registerExtraRoutes(app);
+  PlatformPartnerRevenueController.registerExtraRoutes(app);
+  PlatformPaymentConfigsController.registerExtraRoutes(app);
+  PlatformWechatPayApplymentsController.registerExtraRoutes(app);
   PlatformAuditLogsController.registerExtraRoutes(app);
   AdministrativeAreasController.registerExtraRoutes(app);
   TenantShareLinksController.registerExtraRoutes(app);
@@ -130,12 +143,15 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   UsageController.registerExtraRoutes(app);
   FinanceController.registerExtraRoutes(app);
   BillingController.registerExtraRoutes(app);
+  BillingRechargeController.registerExtraRoutes(app);
+  PlatformBillingRechargeController.registerExtraRoutes(app);
   UserAuthEventsController.registerExtraRoutes(app);
   IdentityDiagnosticsController.registerExtraRoutes(app);
   PictureLibraryController.registerExtraRoutes(app);
   VisitorPictureLibraryController.registerExtraRoutes(app);
   WorkflowSubjectsController.registerExtraRoutes(app);
   WorkflowTasksController.registerExtraRoutes(app);
+  WechatPayCallbacksController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);

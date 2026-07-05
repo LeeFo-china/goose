@@ -11,6 +11,8 @@ import {
   BillingPricingRuleQuerySchema,
   BillingPricingRuleUpdateSchema,
   BillingShadowRunSchema,
+  BillingSubscriptionInvoiceParamSchema,
+  BillingSubscriptionInvoiceQuerySchema,
   BillingTenantListQuerySchema,
   BillingTenantParamSchema,
 } from "@/schema/billing";
@@ -25,16 +27,22 @@ class BillingController extends BaseController {
     super("tenant_credit_accounts");
   }
 
+  private async getBillingAllowedAuthContext(request: FastifyRequest) {
+    return authorizationService.getRequiredAuthContext(request.user?.sub, {
+      allowedWhenBillingLocked: true,
+    });
+  }
+
   @Get("/billing/account")
   async getTenantAccount(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const data = await billingService.getTenantAccount(authContext);
     return ResponseHandler.success(data);
   }
 
   @Get("/billing/summary")
   async getTenantSummary(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = BillingDateRangeQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -44,7 +52,7 @@ class BillingController extends BaseController {
 
   @Get("/billing/ledger")
   async listTenantLedger(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = BillingLedgerQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -54,8 +62,43 @@ class BillingController extends BaseController {
 
   @Get("/billing/feature-estimates")
   async getTenantFeatureEstimates(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getBillingAllowedAuthContext(request);
     const data = await billingService.getTenantFeatureEstimates(authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/billing/subscription")
+  async getTenantSubscription(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const data = await billingService.getTenantSubscription(authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/billing/subscription-invoices")
+  async listTenantSubscriptionInvoices(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const queryResult = BillingSubscriptionInvoiceQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await billingService.listTenantSubscriptionInvoices(
+      queryResult.data,
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/billing/subscription-invoices/:id")
+  async getTenantSubscriptionInvoice(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const paramsResult = BillingSubscriptionInvoiceParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await billingService.getTenantSubscriptionInvoice(
+      paramsResult.data.id,
+      authContext,
+    );
     return ResponseHandler.success(data);
   }
 

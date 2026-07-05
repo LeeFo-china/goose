@@ -127,7 +127,7 @@ describe("Platform list page layout", () => {
     expect(tabsStart).toBeGreaterThanOrEqual(0);
     expect(listHeaderStart).toBeGreaterThan(tabsStart);
     expect(filtersStart).toBeGreaterThan(listHeaderStart);
-    expect(tabsSource).toContain("<TabsList>");
+    expect(tabsSource).toContain("<TabsList");
     expect(tabsSource).not.toContain('className="w-full justify-start overflow-x-auto"');
     expect(listHeaderSource).toContain('activeTab === "health"');
     expect(listHeaderSource).toContain(": null}");
@@ -137,21 +137,81 @@ describe("Platform list page layout", () => {
     expect(source).not.toContain("共 {assets.pagination.total} 张");
   });
 
-  test("keeps platform usage tabs standard and removes the usage list header copy", () => {
+  test("keeps platform usage tabs inside the shadcn workspace", () => {
     const source = readSource("../../app/(console)/platform/usage/page.tsx");
     const tabsStart = source.indexOf("tabs={");
     const listHeaderStart = source.indexOf("listHeader=", tabsStart);
     const filtersStart = source.indexOf("filters=", tabsStart);
     const tabsSource = source.slice(tabsStart, listHeaderStart === -1 ? filtersStart : listHeaderStart);
+    const listHeaderSource = source.slice(listHeaderStart, filtersStart);
 
     expect(tabsStart).toBeGreaterThanOrEqual(0);
+    expect(listHeaderStart).toBeGreaterThan(tabsStart);
     expect(filtersStart).toBeGreaterThan(tabsStart);
-    expect(tabsSource).toContain("<TabsList>");
-    expect(tabsSource).not.toContain('className="w-full justify-start overflow-x-auto"');
-    expect(source).not.toContain("listHeader=");
+    expect(tabsSource).toContain("<TabsList");
+    expect(tabsSource).toContain("USAGE_TABS.map");
+    expect(source).toContain("用量概览");
+    expect(source).toContain("AI 明细");
+    expect(source).toContain("短信明细");
+    expect(source).toContain("短视频明细");
+    expect(tabsSource).toContain('className="w-full justify-start overflow-x-auto overflow-y-hidden"');
+    expect(tabsSource).toContain('className="shrink-0"');
+    expect(listHeaderSource).toContain('tab === "summary"');
+    expect(listHeaderSource).toContain("<UsageSummaryCards");
+    expect(source).toContain('<TabsContent value="summary" className="m-0 min-h-full"');
+    expect(source).toContain('<TabsContent value="ai" className="m-0 min-h-full"');
+    expect(source).toContain('<TabsContent value="sms" className="m-0 min-h-full"');
+    expect(source).toContain('<TabsContent value="social_video" className="m-0 min-h-full"');
+    expect(source).not.toContain("summary={<UsageSummaryCards");
     expect(source).not.toContain("<CardTitle>平台用量</CardTitle>");
     expect(source).not.toContain("当前页合计。平台全量成本结算后续可由日汇总任务生成。");
     expect(source).not.toContain("共 {activePagination.total} {unit}");
+  });
+
+  test("keeps platform usage filters on shadcn controls without grid placeholders", () => {
+    const source = readSource("../../components/usage/usage-list-actions.tsx");
+
+    expect(source).toContain("@/components/ui/select");
+    expect(source).toContain("<Select");
+    expect(source).toContain("<SelectGroup>");
+    expect(source).toContain("<SelectItem");
+    expect(source).toContain("<SelectTrigger");
+    expect(source).toContain("<SelectValue");
+    expect(source).toContain("grid grid-cols-2 gap-2");
+    expect(source).toContain("xl:grid-cols-[160px_160px_minmax(220px,1fr)_180px_160px_72px]");
+    expect(source).toContain('const filterSelectClassName = "h-9 min-w-0 bg-card shadow-none";');
+    expect(source).toContain("className={filterSelectClassName}");
+    expect(source).not.toContain("@/components/admin/form-select");
+    expect(source).not.toContain("<FormSelect");
+    expect(source).not.toContain("<div />");
+  });
+
+  test("keeps platform usage overview as a compact shadcn data strip", () => {
+    const source = readSource("../../components/usage/usage-summary-cards.tsx");
+
+    expect(source).toContain("@/components/ui/badge");
+    expect(source).toContain("@/components/ui/separator");
+    expect(source).toContain('data-testid="usage-overview-panel"');
+    expect(source).toContain("overflow-x-auto");
+    expect(source).toContain("grid-flow-col");
+    expect(source).not.toContain("@/components/ui/card");
+    expect(source).not.toContain("<Card");
+  });
+
+  test("keeps tenant usage page in the same fixed shadcn workspace", () => {
+    const source = readSource("../../app/(console)/usage/page.tsx");
+
+    expect(source).toContain("h-[calc(100vh-6.5625rem)]");
+    expect(source).toContain("min-h-0 flex-col gap-5 overflow-hidden");
+    expect(source).toContain("TabsList");
+    expect(source).toContain("TabsTrigger");
+    expect(source).toContain("TabsContent");
+    expect(source).toContain('className="w-full justify-start overflow-x-auto overflow-y-hidden"');
+    expect(source).toContain("tenant-usage-list-table-viewport");
+    expect(source).toContain("flex min-h-0 flex-1 flex-col overflow-hidden shadow-none");
+    expect(source).toContain('tab === "summary" ? <UsageSummaryCards');
+    expect(source).not.toContain("UsageTabsNav");
+    expect(source).not.toContain("<CardTitle>本租户用量</CardTitle>");
   });
 
   test("keeps billing center tabs standard and removes the billing list header copy", () => {

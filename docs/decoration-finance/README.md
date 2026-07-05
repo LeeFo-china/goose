@@ -38,6 +38,51 @@
 - [2026-06-29-phase7-1-post-release-smoke.md](./2026-06-29-phase7-1-post-release-smoke.md)：Phase 7.1 合入 main 后的发布后只读 smoke、GitHub Actions 观察和 Admin/小程序回执。
 - [2026-06-29-phase7-2-admin-ux-post-release-smoke.md](./2026-06-29-phase7-2-admin-ux-post-release-smoke.md)：Phase 7.2 Admin 对账体验合入 main 后的发布后只读 smoke 记录。
 - [2026-06-29-phase7-3-reconciliation-correction-entry-plan.md](./2026-06-29-phase7-3-reconciliation-correction-entry-plan.md)：Phase 7.3 对账异常修正入口计划，明确只做人工引导、不自动修账。
+- [2026-06-29-phase7-3-reconciliation-correction-entry-smoke.md](./2026-06-29-phase7-3-reconciliation-correction-entry-smoke.md)：Phase 7.3 对账异常修正入口实施与只读 smoke 记录。
+- [2026-06-29-phase7-3-post-release-smoke.md](./2026-06-29-phase7-3-post-release-smoke.md)：Phase 7.3 合入 main 后的发布后只读 smoke、Admin 和小程序回执。
+- [2026-06-29-phase7-4-manual-correction-closure-plan.md](./2026-06-29-phase7-4-manual-correction-closure-plan.md)：Phase 7.4 单据级人工修正闭环计划，明确先做人工修正能力、不做自动修账。
+- [2026-06-29-phase7-4-manual-allocation-smoke.md](./2026-06-29-phase7-4-manual-allocation-smoke.md)：Phase 7.4 人工收款核销入口实施与 smoke 记录，包含 migration 核验、API 写入 smoke、Admin 只读 smoke 和小程序边界。
+- [2026-06-29-phase7-4-post-release-smoke.md](./2026-06-29-phase7-4-post-release-smoke.md)：Phase 7.4 人工核销合入 main 后的发布后 smoke，包含 migration list 验证口径、API/Admin 只读核验和后续任务顺序。
+- [2026-06-29-phase7-4-payment-ledger-repair-smoke.md](./2026-06-29-phase7-4-payment-ledger-repair-smoke.md)：Phase 7.4 收款台账补生成实施与 smoke 记录，覆盖 `payment_without_ledger` 精确跳转、Admin 补生成入口、API 防重和 migration 验证。
+- [2026-06-30-phase7-4-ledger-legacy-repair-smoke.md](./2026-06-30-phase7-4-ledger-legacy-repair-smoke.md)：Phase 7.4 历史收款台账修正实施与 smoke 记录，覆盖 `ledger_without_payment` 精确跳转、关联 confirmed payment、标记历史和异常关闭。
+- [2026-06-30-phase7-4-ledger-legacy-repair-post-release-smoke.md](./2026-06-30-phase7-4-ledger-legacy-repair-post-release-smoke.md)：Phase 7.4 历史收款台账修正合入 main 后的发布后 smoke，覆盖 migration、API 只读核验、Admin 精确跳转和小程序边界。
+- [2026-06-30-phase7-4-summary.md](./2026-06-30-phase7-4-summary.md)：Phase 7.4 财务人工修正闭环总结，汇总人工核销、补生成台账、历史台账关联/标记、Admin/API/小程序边界和后续审计视图方向。
+- [2026-06-30-phase7-5-finance-correction-audit.md](./2026-06-30-phase7-5-finance-correction-audit.md)：Phase 7.5 财务修正审计视图，覆盖统一只读审计 API、Admin 修正审计 tab、权限和小程序边界。
+- [2026-06-30-phase7-5-post-release-smoke.md](./2026-06-30-phase7-5-post-release-smoke.md)：Phase 7.5 财务修正审计合入 main 后的发布后 smoke，覆盖 API 只读聚合、Admin 页面和小程序边界。
+- [2026-06-30-phase7-5-1-generated-ledger-audit.md](./2026-06-30-phase7-5-1-generated-ledger-audit.md)：Phase 7.5.1 补生成项目收款台账纳入修正审计，覆盖 API operation、Admin 筛选和小程序边界。
+- [2026-06-30-phase7-6-reconciliation-operating-stats.md](./2026-06-30-phase7-6-reconciliation-operating-stats.md)：Phase 7.6 财务对账运营统计，覆盖只读统计 API、Admin 运营统计区和小程序边界。
+- [2026-06-30-phase7-6-post-release-smoke.md](./2026-06-30-phase7-6-post-release-smoke.md)：Phase 7.6 财务对账运营统计发布后只读 smoke 记录。
+- [2026-06-30-phase7-6-rag-sync-dry-run-investigation.md](./2026-06-30-phase7-6-rag-sync-dry-run-investigation.md)：Phase 7.6 RAG sync dry-run / upload 失败核查，确认实际失败为 LightRAG 409 已存在文档。
+- [2026-06-30-phase7-7-7-8-expense-reconciliation-summary.md](./2026-06-30-phase7-7-7-8-expense-reconciliation-summary.md)：Phase 7.7/7.8 费用侧对账异常、项目级对账摘要增强、Admin 对接和小程序边界。
+- [2026-06-30-phase7-7-7-8-post-release-smoke.md](./2026-06-30-phase7-7-7-8-post-release-smoke.md)：Phase 7.7/7.8 发布后只读 smoke，覆盖费用异常、费用台账跳转和项目详情对账摘要。
+- [2026-06-30-rag-sync-409-resolution.md](./2026-06-30-rag-sync-409-resolution.md)：RAG sync 409 修复记录，说明同源旧文档删除后重传策略和验证结果。
+- [2026-06-30-phase7-9-expense-reconciliation-correction-plan.md](./2026-06-30-phase7-9-expense-reconciliation-correction-plan.md)：Phase 7.9 费用对账修正闭环计划，覆盖费用未入账、金额不一致和缺成本分类。
+- [2026-06-30-phase7-9-post-release-smoke.md](./2026-06-30-phase7-9-post-release-smoke.md)：Phase 7.9 发布后只读 smoke，覆盖费用异常详情、修正动作、修正审计、Admin 处理抽屉和 migration 阻塞记录。
+- [2026-06-30-phase8-finance-reporting-closing-prd.md](./2026-06-30-phase8-finance-reporting-closing-prd.md)：Phase 8 财务报表与月度结账 PRD，定义月度经营总览、项目排行、成本分类、应收账龄、结账快照和导出。
+- [2026-06-30-phase8-task0-baseline.md](./2026-06-30-phase8-task0-baseline.md)：Phase 8 Task 0 基线核查，记录 migration 连接口径、已有 API/Admin 页面、索引和权限缺口。
+- [2026-06-30-phase8-task1-5-implementation-smoke.md](./2026-06-30-phase8-task1-5-implementation-smoke.md)：Phase 8 Task 1-5 执行记录，覆盖月度总览 API、Admin 财务报表、结账快照、migration 和 smoke 结果。
+- [2026-06-30-phase8-post-release-smoke.md](./2026-06-30-phase8-post-release-smoke.md)：Phase 8 Task 1-5 合入 main 后的发布后 smoke 记录，覆盖 API、Admin 页面、RAG 同步和只读边界。
+- [2026-06-30-phase8-task6-10-next-plan.md](./2026-06-30-phase8-task6-10-next-plan.md)：Phase 8 后半段 Task 6-10 计划，覆盖结账写操作受控、快照差异、导出、专项报表、审计闭环和小程序边界。
+- [2026-06-30-phase8-task6-10-implementation-smoke.md](./2026-06-30-phase8-task6-10-implementation-smoke.md)：Phase 8 Task 6-10 执行记录，覆盖专项报表 API、CSV 导出、Admin 页面和结账受控写 smoke。
+- [2026-06-30-phase8-task6-10-miniprogram-boundary.md](./2026-06-30-phase8-task6-10-miniprogram-boundary.md)：Phase 8 Task 6-10 小程序边界说明，明确本轮小程序无必改。
+- [2026-06-30-phase8-1-snapshot-diff-audit-smoke.md](./2026-06-30-phase8-1-snapshot-diff-audit-smoke.md)：Phase 8.1 结账快照差异与修正审计闭环 smoke，覆盖 API 新字段、Admin 展示、当月审计跳转和小程序边界。
+- [2026-06-30-phase8-1-post-release-smoke.md](./2026-06-30-phase8-1-post-release-smoke.md)：Phase 8.1 合入 main 后发布后只读 smoke，覆盖 API 新字段、Admin 页面、修正审计 month 筛选和只读边界。
+- [2026-06-30-phase8-2-difference-sources-plan.md](./2026-06-30-phase8-2-difference-sources-plan.md)：Phase 8.2 结账差异来源追溯计划，定义差异来源 API、Admin 页面、修正审计联动和小程序边界。
+- [2026-06-30-phase8-2-difference-sources-smoke.md](./2026-06-30-phase8-2-difference-sources-smoke.md)：Phase 8.2 月度差异来源追溯 smoke，覆盖 API、Admin 页面、审计跳转和只读边界。
+- [2026-06-30-phase8-2-post-release-smoke.md](./2026-06-30-phase8-2-post-release-smoke.md)：Phase 8.2 发布后 smoke 和非空差异来源样本，覆盖真实应收计划来源、Admin 非空页和摘要加固。
+- [2026-06-30-phase8-3-difference-resolution-plan.md](./2026-06-30-phase8-3-difference-resolution-plan.md)：Phase 8.3 月结差异处理闭环 PRD 与计划，定义差异处理记录、API、Admin 和 smoke 验收口径。
+- [2026-06-30-phase8-3-difference-resolution-smoke.md](./2026-06-30-phase8-3-difference-resolution-smoke.md)：Phase 8.3 月结差异处理闭环 smoke，覆盖 migration、API、Admin 页面和小程序边界。
+- [2026-07-01-phase8-3-post-release-smoke.md](./2026-07-01-phase8-3-post-release-smoke.md)：Phase 8.3 发布后真实非空差异处理闭环 smoke，覆盖 pending、confirmed、resolved、Admin 行内动作和 summary 筛选。
+- [2026-06-30-wechat-pay-integration-prd.md](./2026-06-30-wechat-pay-integration-prd.md)：微信支付接入 PRD，明确租户独立商户优先、支付订单、回调幂等、workflow 对接、对账异常和小程序边界。
+- [2026-07-01-phase9-wechat-pay-task0-baseline.md](./2026-07-01-phase9-wechat-pay-task0-baseline.md)：Phase 9 微信支付接入 Task 0 基线核查，确认复用 `tenant_payment_configs`、新增订单/通知表、workflow/payment/ledger 对接边界和小程序影响。
+- [2026-07-01-phase9-wechat-pay-task1-migration-smoke.md](./2026-07-01-phase9-wechat-pay-task1-migration-smoke.md)：Phase 9 微信支付 Task 1 migration 与权限 smoke，覆盖 `tenant_payment_configs` 扩展、微信支付订单/通知表、权限、远端应用和小程序边界。
+- [2026-07-01-phase9-wechat-pay-task2-config-admin-smoke.md](./2026-07-01-phase9-wechat-pay-task2-config-admin-smoke.md)：Phase 9 微信支付 Task 2 配置 API 与 Admin 配置页 smoke，覆盖租户商户配置读写、权限、脱敏展示、校验状态和小程序边界。
+- [2026-07-01-phase9-wechat-pay-task3-orders-handoff.md](./2026-07-01-phase9-wechat-pay-task3-orders-handoff.md)：Phase 9 微信支付 Task 3 订单 API、Admin 只读页和小程序 handoff，明确 pending 订单创建、幂等、权限、应收校验和 Task 4 前不拉起真实支付。
+- [2026-07-01-phase9-payment-principal-submerchant-plan.md](./2026-07-01-phase9-payment-principal-submerchant-plan.md)：Phase 9 支付主体与租户特约商户管理方案，明确平台直连收款、租户服务商子商户收款、`sub_mchid` 申请维护、AppID 绑定和小程序边界。
+- [2026-07-01-phase9-submerchant-onboarding-model-smoke.md](./2026-07-01-phase9-submerchant-onboarding-model-smoke.md)：Phase 9 租户特约商户进件模型 smoke，覆盖 `tenant_payment_configs` 进件/AppID 绑定字段、API/Admin 配置扩展、验证命令和小程序边界。
+- [2026-07-01-phase9-wechat-pay-onboarding-application-prd.md](./2026-07-01-phase9-wechat-pay-onboarding-application-prd.md)：Phase 9 微信支付开通申请流程 PRD，定义租户提交申请、平台人工进件、`sub_mchid` 回填、AppID 绑定、配置激活和真实小额支付 smoke 前置条件。
+- [2026-07-01-phase9-wechat-pay-task4-prepay-primitives.md](./2026-07-01-phase9-wechat-pay-task4-prepay-primitives.md)：Phase 9 微信支付 Task 4 前置，覆盖 API v3 请求签名、小程序支付参数签名、直连/服务商 JSAPI 请求体构造和 `payer_openid` 支持。
+- [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。

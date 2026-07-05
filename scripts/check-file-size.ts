@@ -7,6 +7,8 @@ const stagedOnly = args.has("--staged");
 const API_SOURCE_RE = /^apps\/api\/src\/.*\.(ts|tsx|js|jsx|mjs|cjs)$/;
 const ADMIN_SOURCE_RE = /^apps\/admin\/.*\.(ts|tsx)$/;
 const ADMIN_EXCLUDED_RE = /^apps\/admin\/(\.next|dist|node_modules)\//;
+const STAGED_SOURCE_PATHS = ["apps/api/src", "apps/admin"];
+const GIT_DIFF_MAX_BUFFER = 32 * 1024 * 1024;
 
 const changedFiles = stagedOnly ? getStagedFiles() : [];
 const shouldCheckApi =
@@ -33,11 +35,21 @@ if (shouldCheckAdmin) {
 function getStagedFiles() {
   const output = execFileSync(
     "git",
-    ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
-    { encoding: "utf8" },
+    [
+      "-c",
+      "core.quotepath=false",
+      "diff",
+      "--cached",
+      "--name-only",
+      "-z",
+      "--diff-filter=ACMR",
+      "--",
+      ...STAGED_SOURCE_PATHS,
+    ],
+    { encoding: "utf8", maxBuffer: GIT_DIFF_MAX_BUFFER },
   );
   return output
-    .split("\n")
+    .split("\0")
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((filePath) => existsSync(filePath));

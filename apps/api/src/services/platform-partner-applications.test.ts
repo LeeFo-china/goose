@@ -1,0 +1,327 @@
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import type {
+  PlatformPartnerApplicationRecord,
+  PlatformPartnerApplicationStatus,
+} from "@/repositories/platform-partner-applications";
+import type {
+  PlatformPartnerLevelRecord,
+  PlatformPartnerRecord,
+} from "@/repositories/platform-partners";
+import type { AuthContext } from "@/services/authorization";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+const migrationDir = join(
+  import.meta.dir,
+  "../../../../supabase/migrations",
+);
+
+function readPartnerApplicationsMigration() {
+  const file = readdirSync(migrationDir)
+    .filter((name) => name.endsWith("_create_partner_applications.sql"))
+    .sort()
+    .at(-1);
+  expect(file).toBeTruthy();
+  return readFileSync(join(migrationDir, file as string), "utf8");
+}
+
+describe("partner applications migration", () => {
+  test("creates official website partner application table and indexes", () => {
+    const sql = readPartnerApplicationsMigration();
+
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.platform_partner_applications");
+    expect(sql).toContain("application_no text NOT NULL UNIQUE");
+    expect(sql).toContain("converted_partner_id uuid NULL REFERENCES public.platform_partners(id)");
+    expect(sql).toContain("status IN ('submitted', 'reviewing', 'approved', 'rejected')");
+    expect(sql).toContain("platform_partner_applications_status_created_idx");
+    expect(sql).toContain("platform_partner_applications_phone_created_idx");
+    expect(sql).toContain("platform_partner_applications_region_codes_idx");
+  });
+});
+
+const platformAuthContext = {
+  authUserId: "auth-platform",
+  employeeId: "employee-platform",
+  tenantId: null,
+  tenantName: null,
+  tenantSlug: null,
+  tenantStatus: null,
+  isPlatformAdmin: true,
+  employeeName: "平台超管",
+  employeeStatus: "active",
+  departmentId: null,
+  tenantDepartmentId: null,
+  departmentCode: null,
+  departmentName: null,
+  postId: null,
+  postName: null,
+  avatar: null,
+  roleCodes: ["platform_admin"],
+  roles: [],
+  permissions: [{ code: "platform.partner.manage", scope: "all" }],
+} satisfies AuthContext;
+
+const tenantAuthContext = {
+  ...platformAuthContext,
+  isPlatformAdmin: false,
+  roleCodes: [],
+  permissions: [],
+} satisfies AuthContext;
+
+const level = {
+  id: "00000000-0000-4000-8000-000000000101",
+  code: "city_partner",
+  name: "城市合伙人",
+  status: "active",
+  tenant_recharge_commission_bps: 1500,
+  lead_service_fee_commission_bps: 3500,
+  lead_service_fee_default_rate_bps: 250,
+  settlement_cycle: "monthly",
+  settlement_method: "manual",
+  requirements: {},
+  sort_order: 20,
+  version: 1,
+  effective_at: "2026-07-05T10:00:00.000Z",
+  expired_at: null,
+  created_at: "2026-07-05T10:00:00.000Z",
+  updated_at: "2026-07-05T10:00:00.000Z",
+} satisfies PlatformPartnerLevelRecord;
+
+const application = {
+  id: "00000000-0000-4000-8000-000000000601",
+  application_no: "CPA-20260705-0001",
+  applicant_name: "信阳星河装饰运营中心",
+  subject_type: "company",
+  contact_name: "李经理",
+  phone: "13800138000",
+  region_codes: ["411500"],
+  region_name: "河南省信阳市",
+  business_description: "本地装修公司渠道资源",
+  resource_description: "10 家意向装企",
+  message: "希望代理信阳市场",
+  source_channel: "official_website",
+  source_url: "https://www.goodcms.cn/partners",
+  utm_source: "website",
+  utm_medium: null,
+  utm_campaign: null,
+  status: "submitted",
+  reviewed_by_employee_id: null,
+  reviewed_at: null,
+  review_remark: null,
+  converted_partner_id: null,
+  metadata: {},
+  created_at: "2026-07-05T10:00:00.000Z",
+  updated_at: "2026-07-05T10:00:00.000Z",
+} satisfies PlatformPartnerApplicationRecord;
+
+const partner = {
+  id: "00000000-0000-4000-8000-000000000201",
+  name: application.applicant_name,
+  subject_type: "company",
+  contact_name: application.contact_name,
+  phone: application.phone,
+  status: "pending",
+  level_id: level.id,
+  region_codes: application.region_codes,
+  contract_status: "pending",
+  settlement_account_status: "pending",
+  settlement_account: {},
+  remark: "官网申请审核通过",
+  created_by_employee_id: "employee-platform",
+  updated_by_employee_id: "employee-platform",
+  created_at: "2026-07-05T10:00:00.000Z",
+  updated_at: "2026-07-05T10:00:00.000Z",
+  level,
+} satisfies PlatformPartnerRecord;
+
+const approvedApplication = {
+  ...application,
+  status: "approved" as PlatformPartnerApplicationStatus,
+  reviewed_by_employee_id: "employee-platform",
+  reviewed_at: "2026-07-05T10:10:00.000Z",
+  review_remark: "官网申请审核通过",
+  converted_partner_id: partner.id,
+  converted_partner: {
+    id: partner.id,
+    name: partner.name,
+    status: partner.status,
+  },
+} satisfies PlatformPartnerApplicationRecord;
+
+const applicationRepository = {
+  createApplication: mock(async (): Promise<PlatformPartnerApplicationRecord> => application),
+  listApplications: mock(async () => ({
+    list: [application],
+    pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+  })),
+  findApplicationById: mock(async (): Promise<PlatformPartnerApplicationRecord | null> => application),
+  updateApplicationStatus: mock(async (): Promise<PlatformPartnerApplicationRecord> => ({
+    ...application,
+    status: "reviewing",
+    reviewed_by_employee_id: "employee-platform",
+  })),
+  markApplicationApproved: mock(async (): Promise<PlatformPartnerApplicationRecord> => approvedApplication),
+};
+
+const partnerRepository = {
+  createPartner: mock(async (): Promise<PlatformPartnerRecord> => partner),
+};
+
+async function createService() {
+  const { PlatformPartnerApplicationsService } = await import(
+    "./platform-partner-applications"
+  );
+  return new PlatformPartnerApplicationsService({
+    applicationRepository,
+    partnerRepository,
+  });
+}
+
+describe("PlatformPartnerApplicationsService", () => {
+  beforeEach(() => {
+    for (const fn of Object.values(applicationRepository)) fn.mockClear();
+    for (const fn of Object.values(partnerRepository)) fn.mockClear();
+    applicationRepository.findApplicationById.mockImplementation(async () => application);
+    applicationRepository.markApplicationApproved.mockImplementation(async () => approvedApplication);
+  });
+
+  test("creates official website partner application as submitted", async () => {
+    const service = await createService();
+
+    await service.submitPublicApplication({
+      applicant_name: " 信阳星河装饰运营中心 ",
+      subject_type: "company",
+      contact_name: "李经理",
+      phone: "13800138000",
+      region_codes: ["411500"],
+      region_name: "河南省信阳市",
+      business_description: "本地装修公司渠道资源",
+      resource_description: "10 家意向装企",
+      message: "希望代理信阳市场",
+      source_channel: "official_website",
+      source_url: "https://www.goodcms.cn/partners",
+      utm_source: "website",
+      agree_privacy: true,
+    });
+
+    expect(applicationRepository.createApplication).toHaveBeenCalledWith({
+      application_no: expect.stringMatching(/^CPA-\d{8}-/),
+      applicant_name: "信阳星河装饰运营中心",
+      subject_type: "company",
+      contact_name: "李经理",
+      phone: "13800138000",
+      region_codes: ["411500"],
+      region_name: "河南省信阳市",
+      business_description: "本地装修公司渠道资源",
+      resource_description: "10 家意向装企",
+      message: "希望代理信阳市场",
+      source_channel: "official_website",
+      source_url: "https://www.goodcms.cn/partners",
+      utm_source: "website",
+      utm_medium: null,
+      utm_campaign: null,
+      status: "submitted",
+      metadata: {},
+    });
+  });
+
+  test("lists applications only for platform admins", async () => {
+    const service = await createService();
+
+    await expect(
+      service.listApplications(tenantAuthContext, { page: 1, pageSize: 20 }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    await service.listApplications(platformAuthContext, {
+      page: 1,
+      pageSize: 20,
+      status: "submitted",
+      keyword: "星河",
+    });
+
+    expect(applicationRepository.listApplications).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 20,
+      status: "submitted",
+      keyword: "星河",
+      region_code: undefined,
+    });
+  });
+
+  test("updates application status with platform partner manage permission", async () => {
+    const service = await createService();
+
+    await service.updateApplicationStatus(platformAuthContext, application.id, {
+      status: "reviewing",
+      review_remark: "已电话沟通",
+    });
+
+    expect(applicationRepository.updateApplicationStatus).toHaveBeenCalledWith(
+      application.id,
+      {
+        status: "reviewing",
+        reviewed_by_employee_id: "employee-platform",
+        review_remark: "已电话沟通",
+      },
+    );
+  });
+
+  test("approves application and converts it to pending platform partner", async () => {
+    const service = await createService();
+
+    const result = await service.approveApplication(platformAuthContext, application.id, {
+      level_id: level.id,
+      review_remark: "官网申请审核通过",
+    });
+
+    expect(partnerRepository.createPartner).toHaveBeenCalledWith({
+      name: application.applicant_name,
+      subject_type: application.subject_type,
+      contact_name: application.contact_name,
+      phone: application.phone,
+      status: "pending",
+      level_id: level.id,
+      region_codes: application.region_codes,
+      contract_status: "pending",
+      settlement_account_status: "pending",
+      settlement_account: {},
+      remark: "官网申请审核通过",
+      created_by_employee_id: "employee-platform",
+      updated_by_employee_id: "employee-platform",
+    });
+    expect(applicationRepository.markApplicationApproved).toHaveBeenCalledWith(
+      application.id,
+      {
+        converted_partner_id: partner.id,
+        reviewed_by_employee_id: "employee-platform",
+        review_remark: "官网申请审核通过",
+      },
+    );
+    expect(result.partner).toEqual(partner);
+    expect(result.application).toEqual(approvedApplication);
+    expect(result.created).toBe(true);
+  });
+
+  test("returns existing partner when approved application is converted again", async () => {
+    applicationRepository.findApplicationById.mockImplementationOnce(
+      async () => ({
+        ...approvedApplication,
+        converted_partner: partner,
+      }),
+    );
+    const service = await createService();
+
+    const result = await service.approveApplication(platformAuthContext, application.id, {
+      level_id: level.id,
+    });
+
+    expect(partnerRepository.createPartner).not.toHaveBeenCalled();
+    expect(result.created).toBe(false);
+    expect(result.idempotent).toBe(true);
+    expect(result.partner).toEqual(partner);
+  });
+});

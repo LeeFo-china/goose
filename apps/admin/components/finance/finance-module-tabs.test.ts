@@ -17,4 +17,20 @@ describe("FinanceModuleTabs", () => {
       href: "/finance/reports",
     });
   });
+
+  test("includes correction audits as a finance module tab", () => {
+    expect(FINANCE_MODULE_TABS).toContainEqual({
+      value: "audits",
+      label: "修正审计",
+      href: "/finance/audits",
+    });
+  });
+
+  test("includes wechat pay config as a finance module tab", () => {
+    expect(FINANCE_MODULE_TABS).toContainEqual({
+      value: "wechat-pay",
+      label: "微信支付",
+      href: "/finance/wechat-pay",
+    });
+  });
 });

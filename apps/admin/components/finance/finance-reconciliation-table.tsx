@@ -15,6 +15,7 @@ import {
   financeReconciliationDirectionLabel,
   financeReconciliationExceptionLabel,
   financeReconciliationLevelMeta,
+  financeReconciliationPrimaryActionLabel,
   financeReconciliationStatusMeta,
 } from "@/components/finance/finance-reconciliation-utils";
 import { Badge } from "@/components/ui/badge";
@@ -173,7 +174,7 @@ function ReconciliationRowActions({
     <div className="flex justify-end gap-1">
       <Button asChild variant="ghost" size="sm" className="h-8 px-2">
         <Link href={financeReconciliationActionHref(row.action.target)}>
-          {row.action.label || "查看"}
+          {financeReconciliationPrimaryActionLabel(row.action.label)}
           <ArrowUpRight data-icon="inline-end" />
         </Link>
       </Button>

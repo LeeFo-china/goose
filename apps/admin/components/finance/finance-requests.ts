@@ -6,6 +6,11 @@ import {
   type FinanceProjectSummaryListData,
   type FinanceProjectSummaryResult,
 } from "./finance-project-summary-types";
+import {
+  buildFinanceLedgerSearchParams,
+  normalizeFinanceLedgerPage,
+  normalizeFinanceLedgerPageSize,
+} from "./finance-ledger-query-utils";
 
 export type {
   FinanceProjectOperatingSummary,
@@ -27,6 +32,19 @@ export type FinanceLedgerRecord = {
   cost_category_id?: string | null;
   direction: "in" | "out";
   entry_type: string;
+  payment_id?: string | null;
+  expense_request_id?: string | null;
+  expense_settlement_id?: string | null;
+  payment_linked_at?: string | null;
+  payment_linked_by?: string | null;
+  payment_link_reason?: string | null;
+  payment_link_previous_payment_id?: string | null;
+  legacy_payment_ledger_marked_at?: string | null;
+  legacy_payment_ledger_marked_by?: string | null;
+  legacy_payment_ledger_reason?: string | null;
+  source_type?: string | null;
+  source_id?: string | null;
+  workflow_task_id?: string | null;
   amount: number | string | null;
   occurred_at: string | null;
   summary: string | null;
@@ -89,6 +107,56 @@ export type FinanceReceivableRecord = {
   created_at: string | null;
   updated_at: string | null;
   project?: { id: string; name: string | null; status: string | null } | null;
+};
+
+export type FinanceReceivableAllocationRecord = {
+  id: string;
+  payment_id: string;
+  receivable_plan_id: string;
+  amount: number;
+  allocated_at: string | null;
+  allocated_by_name: string | null;
+  source_type: string;
+  source_id: string | null;
+  reversed_at?: string | null;
+  reversed_by?: string | null;
+  reverse_reason?: string | null;
+  payment?: {
+    id: string;
+    amount: number;
+    type: string | null;
+    pay_date: string | null;
+    status: string | null;
+    remark?: string | null;
+  } | null;
+};
+
+export type FinanceReceivablePaymentCandidate = {
+  id: string;
+  amount: number;
+  allocated_amount: number;
+  remaining_amount: number;
+  type: string | null;
+  pay_date: string | null;
+  remark: string | null;
+};
+
+export type FinanceReceivableAllocationPlan = Pick<
+  FinanceReceivableRecord,
+  "id" | "project_id" | "payment_type" | "title" | "amount" | "paid_amount" | "due_date" | "status"
+> & {
+  remaining_amount: number;
+};
+
+export type FinanceReceivableAllocationContext = {
+  receivable_plan: FinanceReceivableAllocationPlan;
+  allocations: FinanceReceivableAllocationRecord[];
+  payments: FinanceReceivablePaymentCandidate[];
+};
+
+export type FinanceReceivableAllocationMutationResult = {
+  allocation: FinanceReceivableAllocationRecord;
+  receivable_plan: FinanceReceivableAllocationPlan;
 };
 
 export type FinanceReceivableSummary = {
@@ -162,6 +230,11 @@ export async function fetchFinanceLedger(query: {
   pageSize?: number;
   project_id?: string;
   direction?: string;
+  entry_type?: string;
+  ledger_id?: string;
+  payment_id?: string;
+  expense_request_id?: string;
+  expense_settlement_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;
 }): Promise<FinanceLedgerResult> {
@@ -182,14 +255,11 @@ export async function fetchFinanceLedger(query: {
     };
   }
 
-  const params = new URLSearchParams({
-    page: String(page),
-    pageSize: String(pageSize),
+  const params = buildFinanceLedgerSearchParams({
+    ...query,
+    page,
+    pageSize,
   });
-  appendOptionalParam(params, "project_id", query.project_id);
-  appendOptionalParam(params, "direction", query.direction);
-  appendOptionalParam(params, "cost_category_id", query.cost_category_id);
-  appendOptionalParam(params, "unallocated_only", query.unallocated_only);
 
   try {
     const response = await fetch(buildBackendUrl(`/finance/ledger?${params}`), {
@@ -232,6 +302,7 @@ export async function fetchFinanceReceivables(query: {
   payment_type?: string;
   source_type?: string;
   owner_employee_id?: string;
+  receivable_plan_id?: string;
   project_id?: string;
   due_date_from?: string;
   due_date_to?: string;
@@ -260,6 +331,7 @@ export async function fetchFinanceReceivables(query: {
   appendOptionalParam(params, "payment_type", query.payment_type);
   appendOptionalParam(params, "source_type", query.source_type);
   appendOptionalParam(params, "owner_employee_id", query.owner_employee_id);
+  appendOptionalParam(params, "receivable_plan_id", query.receivable_plan_id);
   appendOptionalParam(params, "project_id", query.project_id);
   appendOptionalParam(params, "due_date_from", query.due_date_from);
   appendOptionalParam(params, "due_date_to", query.due_date_to);
@@ -373,17 +445,6 @@ export async function fetchFinanceProjectSummaries(query: {
       error: error instanceof Error ? error.message : "项目经营汇总加载失败",
     };
   }
-}
-
-function normalizeFinanceLedgerPage(value: number | undefined) {
-  const page = Number(value || 1);
-  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-}
-
-function normalizeFinanceLedgerPageSize(value: number | undefined) {
-  const pageSize = Number(value || FINANCE_LEDGER_PAGE_SIZE);
-  if (!Number.isFinite(pageSize) || pageSize <= 0) return FINANCE_LEDGER_PAGE_SIZE;
-  return Math.min(Math.floor(pageSize), 100);
 }
 
 function appendOptionalParam(

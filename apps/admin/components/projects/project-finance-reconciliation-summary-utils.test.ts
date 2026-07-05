@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildProjectReconciliationChecks,
   buildProjectReconciliationExceptionHref,
+  projectReconciliationLevelLabel,
 } from "./project-finance-reconciliation-summary-utils";
 
 describe("project finance reconciliation summary", () => {
@@ -69,5 +70,12 @@ describe("project finance reconciliation summary", () => {
     expect(buildProjectReconciliationExceptionHref("project-1")).toBe(
       "/finance/reconciliation?project_id=project-1&status=open",
     );
+  });
+
+  test("maps highest exception level labels", () => {
+    expect(projectReconciliationLevelLabel("danger")).toBe("高风险");
+    expect(projectReconciliationLevelLabel("warning")).toBe("预警");
+    expect(projectReconciliationLevelLabel("info")).toBe("提示");
+    expect(projectReconciliationLevelLabel(null)).toBe("无");
   });
 });

@@ -5,6 +5,9 @@ import type {
   BillingLedgerListData,
   BillingPlatformSummary,
   BillingPricingRuleListData,
+  PlatformRechargeOrderListData,
+  PlatformRechargeProductListData,
+  PlatformWechatPayConfigResult,
   BillingTenantListData,
 } from "@/components/billing/billing-types";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
@@ -20,6 +23,8 @@ export type SearchParams = Promise<{
   rulePageSize?: string;
   eventPage?: string;
   eventPageSize?: string;
+  rechargeOrderPage?: string;
+  rechargeOrderPageSize?: string;
   tab?: string;
   tenantKeyword?: string;
   tenantStatus?: string;
@@ -49,12 +54,14 @@ export type SearchParams = Promise<{
   ledgerKeyword?: string;
   ledgerStartDate?: string;
   ledgerEndDate?: string;
+  rechargeOrderStatus?: string;
+  rechargeOrderKeyword?: string;
 }>;
 
-export type BillingTab = "tenants" | "events" | "ai" | "pricing" | "ledger";
+export type BillingTab = "tenants" | "events" | "ai" | "pricing" | "ledger" | "recharge";
 export type QueryValue = string | number | boolean | undefined;
 
-export const billingTabs: BillingTab[] = ["tenants", "events", "ai", "pricing", "ledger"];
+export const billingTabs: BillingTab[] = ["tenants", "events", "ai", "pricing", "ledger", "recharge"];
 
 export const emptySummary: BillingPlatformSummary = {
   tenant_count: 0,
@@ -92,6 +99,12 @@ export const emptyAiFilterOptions: BillingAiUsageFilterOptions = {
   models: [],
 };
 
+export const emptyPlatformWechatPayConfig: PlatformWechatPayConfigResult = {
+  configured: false,
+  can_manage: false,
+  config: null,
+};
+
 export { normalizePlatformListPageSize };
 
 export function emptyTenantList(page: number, pageSize: number): BillingTenantListData {
@@ -117,6 +130,20 @@ export function emptyPricingList(page: number, pageSize: number): BillingPricing
 }
 
 export function emptyEventList(page: number, pageSize: number): BillingEventListData {
+  return {
+    list: [],
+    pagination: { page, pageSize, total: 0, totalPages: 0 },
+  };
+}
+
+export function emptyRechargeProductList(): PlatformRechargeProductListData {
+  return {
+    list: [],
+    pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
+  };
+}
+
+export function emptyRechargeOrderList(page: number, pageSize: number): PlatformRechargeOrderListData {
   return {
     list: [],
     pagination: { page, pageSize, total: 0, totalPages: 0 },

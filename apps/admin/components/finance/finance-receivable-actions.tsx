@@ -3,7 +3,15 @@
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PaymentTypeConfig } from "@gooes/domain";
-import { Edit3, Loader2, MessageSquarePlus, Plus, Trash2 } from "lucide-react";
+import {
+  CalendarClock,
+  Edit3,
+  Loader2,
+  MessageSquarePlus,
+  Plus,
+  ReceiptText,
+  Trash2,
+} from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,10 +24,18 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FinanceReceivableAllocationDialog } from "./finance-receivable-allocation-dialog";
 import type { FinanceReceivableRecord } from "./finance-requests";
 import { requestBackendJson } from "@/lib/backend-client";
 
-type DialogMode = "create" | "edit" | "cancel" | "follow_up";
+type DialogMode =
+  | "create"
+  | "edit"
+  | "adjust_due_date"
+  | "cancel"
+  | "follow_up"
+  | "allocate";
+type ReceivableDialogMode = Exclude<DialogMode, "allocate">;
 
 const PAYMENT_TYPES = ["deposit", "stage_1", "stage_2", "stage_3", "add_on"] as const;
 
@@ -59,10 +75,32 @@ export function FinanceReceivableRowActions({
         size="sm"
         className="h-8 px-2"
         disabled={readonly}
+        onClick={() => setMode("allocate")}
+      >
+        <ReceiptText data-icon="inline-start" />
+        核销
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2"
+        disabled={readonly}
         onClick={() => setMode("edit")}
       >
         <Edit3 data-icon="inline-start" />
         调整
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2"
+        disabled={readonly}
+        onClick={() => setMode("adjust_due_date")}
+      >
+        <CalendarClock data-icon="inline-start" />
+        延期
       </Button>
       <Button
         type="button"
@@ -86,7 +124,12 @@ export function FinanceReceivableRowActions({
         <Trash2 data-icon="inline-start" />
         取消
       </Button>
-      {mode ? (
+      {mode === "allocate" ? (
+        <FinanceReceivableAllocationDialog
+          row={row}
+          onClose={() => setMode(null)}
+        />
+      ) : mode ? (
         <FinanceReceivableDialog
           mode={mode}
           row={row}
@@ -102,7 +145,7 @@ function FinanceReceivableDialog({
   row,
   onClose,
 }: {
-  mode: DialogMode;
+  mode: ReceivableDialogMode;
   row?: FinanceReceivableRecord;
   onClose: () => void;
 }) {
@@ -203,6 +246,24 @@ function FinanceReceivableDialog({
               />
             </>
           ) : null}
+          {mode === "adjust_due_date" ? (
+            <>
+              <LabeledInput
+                label="新的应收日期"
+                name="due_date"
+                type="date"
+                required
+                defaultValue={row?.due_date}
+                disabled={pending}
+              />
+              <Textarea
+                name="reason"
+                required
+                disabled={pending}
+                placeholder="请输入调整原因"
+              />
+            </>
+          ) : null}
           {mode === "cancel" ? (
             <Textarea
               name="reason"
@@ -269,27 +330,35 @@ function LabeledInput(props: {
   );
 }
 
-function dialogTitle(mode: DialogMode) {
+function dialogTitle(mode: ReceivableDialogMode) {
   if (mode === "create") return "新增应收";
   if (mode === "edit") return "调整应收";
+  if (mode === "adjust_due_date") return "调整到期日";
   if (mode === "cancel") return "取消应收";
   return "登记跟进";
 }
 
-function dialogMethod(mode: DialogMode) {
-  return mode === "edit" ? "PATCH" : "POST";
+function dialogMethod(mode: ReceivableDialogMode) {
+  return mode === "edit" || mode === "adjust_due_date" ? "PATCH" : "POST";
 }
 
-function dialogPath(mode: DialogMode, id?: string) {
+function dialogPath(mode: ReceivableDialogMode, id?: string) {
   if (mode === "create") return "/finance/receivables";
   if (!id) return "/finance/receivables";
+  if (mode === "adjust_due_date") return `/finance/receivables/${id}/due-date`;
   if (mode === "cancel") return `/finance/receivables/${id}/cancel`;
   if (mode === "follow_up") return `/finance/receivables/${id}/follow-ups`;
   return `/finance/receivables/${id}`;
 }
 
-function buildPayload(mode: DialogMode, form: FormData) {
+function buildPayload(mode: ReceivableDialogMode, form: FormData) {
   if (mode === "cancel") return { reason: read(form, "reason") };
+  if (mode === "adjust_due_date") {
+    return {
+      due_date: read(form, "due_date"),
+      reason: read(form, "reason"),
+    };
+  }
   if (mode === "follow_up") {
     return {
       note: read(form, "note"),

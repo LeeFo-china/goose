@@ -5,7 +5,11 @@ import type {
   FinanceReconciliationExceptionCode,
 } from "@/schema/finance-reconciliation";
 
-export type FinanceReconciliationSubjectType = "receivable" | "payment" | "ledger";
+export type FinanceReconciliationSubjectType =
+  | "receivable"
+  | "payment"
+  | "ledger"
+  | "expense_settlement";
 
 export type FinanceReconciliationActionRecord = {
   id: string;

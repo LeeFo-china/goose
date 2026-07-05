@@ -3,6 +3,8 @@ import { ScrollText } from "lucide-react";
 import { FinanceFilterSelectField } from "@/components/finance/finance-filter-controls";
 import { FinanceModuleTabs } from "@/components/finance/finance-module-tabs";
 import { fetchFinanceCostCategories } from "@/components/finance/finance-cost-budget-requests";
+import { FinanceMissingPaymentLedgerPanel } from "@/components/finance/finance-missing-payment-ledger-panel";
+import { buildFinanceLedgerPageHref } from "@/components/finance/finance-ledger-query-utils";
 import { FinanceLedgerTable } from "@/components/finance/finance-ledger-table";
 import { fetchFinanceLedger } from "@/components/finance/finance-requests";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -16,6 +18,11 @@ type FinanceLedgerPageSearchParams = {
   page?: string;
   project_id?: string;
   direction?: string;
+  entry_type?: string;
+  ledger_id?: string;
+  payment_id?: string;
+  expense_request_id?: string;
+  expense_settlement_id?: string;
   cost_category_id?: string;
   unallocated_only?: string;
 };
@@ -31,28 +38,22 @@ const UNALLOCATED_OPTIONS = [
   { value: "true", label: "仅未归集" },
 ];
 
-function normalizePage(value: string | undefined) {
-  const page = Number(value || 1);
-  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-}
+const ENTRY_TYPE_OPTIONS = [
+  { value: "", label: "全部流水类型" },
+  { value: "project_payment", label: "项目收款" },
+  { value: "expense_settlement", label: "费用结算" },
+  { value: "refund", label: "退款" },
+  { value: "adjustment", label: "调整" },
+];
 
 function clean(value: string | undefined) {
   const normalized = value?.trim();
   return normalized || undefined;
 }
 
-function ledgerPageHref(page: number, filters: FinanceLedgerPageSearchParams) {
-  const params = new URLSearchParams({ page: String(page) });
-  append(params, "project_id", filters.project_id);
-  append(params, "direction", filters.direction);
-  append(params, "cost_category_id", filters.cost_category_id);
-  append(params, "unallocated_only", filters.unallocated_only);
-  return `/finance/ledger?${params}`;
-}
-
-function append(params: URLSearchParams, key: string, value: string | undefined) {
-  const normalized = clean(value);
-  if (normalized) params.set(key, normalized);
+function normalizePage(value: string | undefined) {
+  const page = Number(value || 1);
+  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
 function hasPermission(
@@ -76,6 +77,11 @@ export default async function FinanceLedgerPage({
   const page = normalizePage(params.page);
   const projectId = clean(params.project_id);
   const direction = clean(params.direction);
+  const entryType = clean(params.entry_type);
+  const ledgerId = clean(params.ledger_id);
+  const paymentId = clean(params.payment_id);
+  const expenseRequestId = clean(params.expense_request_id);
+  const expenseSettlementId = clean(params.expense_settlement_id);
   const costCategoryId = clean(params.cost_category_id);
   const unallocatedOnly = clean(params.unallocated_only);
   const [data, categories, session] = await Promise.all([
@@ -84,6 +90,11 @@ export default async function FinanceLedgerPage({
       pageSize: 20,
       project_id: projectId,
       direction,
+      entry_type: entryType,
+      ledger_id: ledgerId,
+      payment_id: paymentId,
+      expense_request_id: expenseRequestId,
+      expense_settlement_id: expenseSettlementId,
       cost_category_id: costCategoryId,
       unallocated_only: unallocatedOnly,
     }),
@@ -93,6 +104,10 @@ export default async function FinanceLedgerPage({
   const canManageAllocation = hasPermission(
     session,
     "finance.cost-allocation.manage",
+  );
+  const canManageReconciliation = hasPermission(
+    session,
+    "finance.reconciliation.manage",
   );
   const canGoPrev = data.pagination.page > 1;
   const canGoNext = data.pagination.totalPages > 0 &&
@@ -123,10 +138,30 @@ export default async function FinanceLedgerPage({
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           <form
             action="/finance/ledger"
-            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[10rem_12rem_minmax(12rem,18rem)_auto] xl:items-end"
+            className="shrink-0 grid gap-3 border-b bg-card p-4 md:grid-cols-2 xl:grid-cols-[10rem_11rem_12rem_minmax(12rem,18rem)_auto] xl:items-end"
           >
             {projectId ? (
               <input type="hidden" name="project_id" value={projectId} />
+            ) : null}
+            {paymentId ? (
+              <input type="hidden" name="payment_id" value={paymentId} />
+            ) : null}
+            {expenseRequestId ? (
+              <input
+                type="hidden"
+                name="expense_request_id"
+                value={expenseRequestId}
+              />
+            ) : null}
+            {expenseSettlementId ? (
+              <input
+                type="hidden"
+                name="expense_settlement_id"
+                value={expenseSettlementId}
+              />
+            ) : null}
+            {ledgerId ? (
+              <input type="hidden" name="ledger_id" value={ledgerId} />
             ) : null}
             <FinanceFilterSelectField
               id="ledger-direction-filter"
@@ -141,6 +176,13 @@ export default async function FinanceLedgerPage({
               label="归集状态"
               value={unallocatedOnly}
               options={UNALLOCATED_OPTIONS}
+            />
+            <FinanceFilterSelectField
+              id="ledger-entry-type-filter"
+              name="entry_type"
+              label="流水类型"
+              value={entryType}
+              options={ENTRY_TYPE_OPTIONS}
             />
             <FinanceFilterSelectField
               id="ledger-cost-category-filter"
@@ -172,11 +214,15 @@ export default async function FinanceLedgerPage({
               <StatusAlert>{data.error}</StatusAlert>
             </div>
           ) : null}
+          {paymentId && !data.error && data.list.length === 0 ? (
+            <FinanceMissingPaymentLedgerPanel paymentId={paymentId} />
+          ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
             <FinanceLedgerTable
               rows={data.list}
               costCategories={categories.list}
               canManageAllocation={canManageAllocation}
+              canManageReconciliation={canManageReconciliation}
             />
           </div>
           <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
@@ -194,7 +240,12 @@ export default async function FinanceLedgerPage({
                 asChild={canGoPrev}
               >
                 {canGoPrev ? (
-                  <Link href={ledgerPageHref(data.pagination.page - 1, params)}>
+                  <Link
+                    href={buildFinanceLedgerPageHref(
+                      data.pagination.page - 1,
+                      params,
+                    )}
+                  >
                     上一页
                   </Link>
                 ) : (
@@ -208,7 +259,12 @@ export default async function FinanceLedgerPage({
                 asChild={canGoNext}
               >
                 {canGoNext ? (
-                  <Link href={ledgerPageHref(data.pagination.page + 1, params)}>
+                  <Link
+                    href={buildFinanceLedgerPageHref(
+                      data.pagination.page + 1,
+                      params,
+                    )}
+                  >
                     下一页
                   </Link>
                 ) : (

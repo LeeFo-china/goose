@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Loader2, MessageSquareText } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -10,17 +10,20 @@ import {
   TencentLbsConfigTester,
   updateSetting,
 } from "@/components/settings/settings-actions";
+import { PlatformPaymentSettingsPanel } from "@/components/settings/platform-payment-settings-panel";
+import type { PlatformWechatPayProfileListResult } from "@/components/settings/platform-payment-settings-types";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type SettingsGroup = {
   code: string;
@@ -33,6 +36,7 @@ type SettingsGroup = {
 type SettingsTabsProps = {
   groups: SettingsGroup[];
   isPlatformMode?: boolean;
+  paymentProfiles?: PlatformWechatPayProfileListResult;
 };
 
 function normalizeGroup(groups: SettingsGroup[], value: string | null) {
@@ -80,6 +84,14 @@ function findSetting(settings: SystemSetting[], key: string) {
 
 function countMissing(settings: SystemSetting[]) {
   return settings.filter((setting) => setting.source === "empty").length;
+}
+
+function groupStatusVariant(group: SettingsGroup) {
+  return group.emptyCount > 0 ? "warning" : "success";
+}
+
+function groupStatusLabel(group: SettingsGroup) {
+  return group.emptyCount > 0 ? `未配置 ${group.emptyCount}` : "配置完整";
 }
 
 function TenantSmsSettingsPanel({ settings }: { settings: SystemSetting[] }) {
@@ -139,9 +151,11 @@ function TenantSmsSettingsPanel({ settings }: { settings: SystemSetting[] }) {
                 <SelectValue placeholder="选择短信通道" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="platform">{smsChannelModeLabels.platform}</SelectItem>
-                <SelectItem value="tenant_aliyun">{smsChannelModeLabels.tenant_aliyun}</SelectItem>
-                <SelectItem value="tenant_tencent">{smsChannelModeLabels.tenant_tencent}</SelectItem>
+                <SelectGroup>
+                  <SelectItem value="platform">{smsChannelModeLabels.platform}</SelectItem>
+                  <SelectItem value="tenant_aliyun">{smsChannelModeLabels.tenant_aliyun}</SelectItem>
+                  <SelectItem value="tenant_tencent">{smsChannelModeLabels.tenant_tencent}</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
             <div className="text-sm text-muted-foreground">
@@ -191,7 +205,17 @@ function TenantSmsSettingsPanel({ settings }: { settings: SystemSetting[] }) {
   );
 }
 
-export function SettingsTabs({ groups, isPlatformMode = false }: SettingsTabsProps) {
+const emptyPaymentProfiles: PlatformWechatPayProfileListResult = {
+  can_manage: false,
+  profiles: [],
+  error: null,
+};
+
+export function SettingsTabs({
+  groups,
+  isPlatformMode = false,
+  paymentProfiles = emptyPaymentProfiles,
+}: SettingsTabsProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -199,8 +223,6 @@ export function SettingsTabs({ groups, isPlatformMode = false }: SettingsTabsPro
 
   const activeGroupCode = normalizeGroup(groups, searchParams.get("group"));
   const activeGroup = groups.find((group) => group.code === activeGroupCode) || groups[0];
-
-  const tabItems = useMemo(() => groups, [groups]);
 
   function switchGroup(groupCode: string) {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -221,78 +243,94 @@ export function SettingsTabs({ groups, isPlatformMode = false }: SettingsTabsPro
   }
 
   return (
-    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-      <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="flex overflow-x-auto">
-            {tabItems.map((group) => {
-              const active = group.code === activeGroup.code;
-              return (
-                <button
-                  key={group.code}
-                  type="button"
-                  className={cn(
-                    "inline-flex h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-0 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-60",
-                    group.code !== tabItems[0]?.code && "ml-5",
-                    active && "border-primary text-foreground",
-                  )}
-                  onClick={() => switchGroup(group.code)}
-                  disabled={pending}
-                  aria-pressed={active}
-                >
-                  {pending && active ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-                  <span>{group.label}</span>
-                  <Badge variant={active ? "secondary" : "outline"}>{group.settings.length}</Badge>
-                  {group.emptyCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 text-xs">
-                      <AlertCircle className="size-3" />
-                      {group.emptyCount}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex flex-wrap gap-2 pb-3 text-xs text-muted-foreground md:pb-0">
-            <span>{activeGroup.settings.length} 项配置</span>
-            <span>{activeGroup.secretCount} 项敏感配置</span>
-            <span>{activeGroup.emptyCount} 项未配置</span>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="min-h-0 flex-1 overflow-auto p-0">
-        {!isPlatformMode && activeGroup.code === "sms" ? (
-          <div className="flex flex-col gap-3 p-4">
-            <TenantSmsSettingsPanel settings={activeGroup.settings} />
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-row items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
-              <div>
-                <CardTitle className="text-base">{activeGroup.label}</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {activeGroup.settings.length} 项配置，{activeGroup.secretCount} 项敏感配置，{activeGroup.emptyCount} 项未配置。
-                </p>
-              </div>
-              <Badge variant={activeGroup.emptyCount > 0 ? "warning" : "success"}>
-                {activeGroup.emptyCount > 0 ? `未配置 ${activeGroup.emptyCount}` : "配置完整"}
+    <Tabs
+      value={activeGroup.code}
+      onValueChange={switchGroup}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 gap-3 border-b bg-card px-4 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="text-base">{activeGroup.label}</CardTitle>
+              <CardDescription className="mt-1">
+                {activeGroup.settings.length} 项配置，{activeGroup.secretCount} 项敏感配置，
+                {activeGroup.emptyCount} 项未配置。
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={groupStatusVariant(activeGroup)}>
+                {groupStatusLabel(activeGroup)}
               </Badge>
-            </div>
-            <div>
-              {activeGroup.code === "social_video" ? (
-                <SocialVideoTranscriptionTester />
+              {activeGroup.secretCount > 0 ? (
+                <Badge variant="warning">
+                  敏感项 <span className="tabular-nums">{activeGroup.secretCount}</span>
+                </Badge>
               ) : null}
-              {activeGroup.code === "tencent_lbs" ? (
-                <TencentLbsConfigTester />
-              ) : null}
-              {activeGroup.settings.map((setting) => (
-                <SettingEditor key={setting.key} setting={setting} />
-              ))}
             </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          </div>
+
+          <div className="-mx-4 overflow-x-auto px-4">
+            <TabsList className="h-auto min-w-max justify-start rounded-none border-0 border-b bg-transparent p-0 text-muted-foreground">
+              {groups.map((group) => {
+                const active = group.code === activeGroup.code;
+
+                return (
+                  <TabsTrigger
+                    key={group.code}
+                    value={group.code}
+                    disabled={pending}
+                    className="gap-2 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-3 py-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
+                  >
+                    {pending && active ? (
+                      <Loader2 className="animate-spin" data-icon="inline-start" />
+                    ) : null}
+                    <span>{group.label}</span>
+                    <Badge variant={active ? "secondary" : "outline"}>
+                      <span className="tabular-nums">{group.settings.length}</span>
+                    </Badge>
+                    {group.emptyCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-xs">
+                        <AlertCircle />
+                        <span className="tabular-nums">{group.emptyCount}</span>
+                      </span>
+                    ) : null}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </div>
+        </CardHeader>
+
+        <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
+          <TabsContent
+            value={activeGroup.code}
+            className="m-0 h-full min-h-0 overflow-auto data-[state=inactive]:hidden"
+          >
+            {!isPlatformMode && activeGroup.code === "sms" ? (
+              <div className="flex flex-col gap-3 p-4">
+                <TenantSmsSettingsPanel settings={activeGroup.settings} />
+              </div>
+            ) : isPlatformMode && activeGroup.code === "payment" ? (
+              <PlatformPaymentSettingsPanel paymentProfiles={paymentProfiles} />
+            ) : (
+              <>
+                <div>
+                  {activeGroup.code === "social_video" ? (
+                    <SocialVideoTranscriptionTester />
+                  ) : null}
+                  {activeGroup.code === "tencent_lbs" ? (
+                    <TencentLbsConfigTester />
+                  ) : null}
+                  {activeGroup.settings.map((setting) => (
+                    <SettingEditor key={setting.key} setting={setting} />
+                  ))}
+                </div>
+              </>
+            )}
+          </TabsContent>
+        </CardContent>
+      </Card>
+    </Tabs>
   );
 }

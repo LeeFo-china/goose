@@ -37,6 +37,21 @@ export function buildFinanceReconciliationSearchParams(
   return params;
 }
 
+export function buildFinanceReconciliationStatsSearchParams(
+  query: FinanceReconciliationQuery,
+) {
+  const params = new URLSearchParams();
+  appendOptionalParam(params, "date_from", query.date_from);
+  appendOptionalParam(params, "date_to", query.date_to);
+  appendOptionalParam(params, "project_id", query.project_id);
+  appendOptionalParam(params, "exception_code", query.exception_code);
+  appendOptionalParam(params, "level", query.level);
+  appendOptionalParam(params, "direction", query.direction);
+  appendOptionalParam(params, "status", query.status);
+  appendOptionalParam(params, "actor_employee_id", query.actor_employee_id);
+  return params;
+}
+
 export function financeReconciliationLevelMeta(
   level: FinanceReconciliationLevel | string | null | undefined,
 ) {
@@ -74,6 +89,11 @@ export function financeReconciliationActionLabel(
   if (action === "ignore") return "标记忽略";
   if (action === "resolve") return "标记人工闭环";
   if (action === "reopen") return "重新打开";
+  if (action === "generate_expense_ledger") return "补生成支出台账";
+  if (action === "update_expense_ledger_category") return "补成本分类";
+  if (action === "record_expense_amount_mismatch_review") {
+    return "记录金额复核";
+  }
   return action || "处理";
 }
 
@@ -98,12 +118,21 @@ export function financeReconciliationExceptionLabel(
   if (code === "receivable_paid_amount_mismatch") {
     return "应收已收不一致";
   }
+  if (code === "expense_paid_without_ledger") return "费用未入账";
+  if (code === "expense_paid_amount_mismatch") return "费用入账金额不一致";
+  if (code === "expense_ledger_without_category") return "费用缺成本分类";
   return code || "-";
 }
 
 export function financeReconciliationActionHref(value: string | null | undefined) {
   if (!value) return "/finance/reconciliation";
   return value.startsWith("/") ? value : "/finance/reconciliation";
+}
+
+export function financeReconciliationPrimaryActionLabel(
+  value: string | null | undefined,
+) {
+  return value?.trim() || "去处理";
 }
 
 function normalizePage(value: number | undefined) {

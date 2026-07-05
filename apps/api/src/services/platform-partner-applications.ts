@@ -1,0 +1,238 @@
+import { Errors } from "@/errors/error-factory";
+import {
+  platformPartnerApplicationsRepository,
+  type PlatformPartnerApplicationApprovedRecordInput,
+  type PlatformPartnerApplicationCreateRecordInput,
+  type PlatformPartnerApplicationRecord,
+  type PlatformPartnerApplicationStatusRecordInput,
+} from "@/repositories/platform-partner-applications";
+import {
+  platformPartnersRepository,
+  type PlatformPartnerCreateRecordInput,
+} from "@/repositories/platform-partners";
+import type {
+  ApprovePlatformPartnerApplicationInput,
+  PlatformPartnerApplicationListQuery,
+  SubmitPlatformPartnerApplicationInput,
+  UpdatePlatformPartnerApplicationStatusInput,
+} from "@/schema/platform-partner-applications";
+import type { AuthContext } from "@/services/authorization";
+
+type PlatformPartnerApplicationsRepositoryPort = Pick<
+  typeof platformPartnerApplicationsRepository,
+  | "createApplication"
+  | "listApplications"
+  | "findApplicationById"
+  | "updateApplicationStatus"
+  | "markApplicationApproved"
+>;
+
+type PlatformPartnersRepositoryPort = Pick<
+  typeof platformPartnersRepository,
+  "createPartner"
+>;
+
+type PlatformPartnerApplicationsServiceDependencies = {
+  applicationRepository?: PlatformPartnerApplicationsRepositoryPort;
+  partnerRepository?: PlatformPartnersRepositoryPort;
+};
+
+const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
+const DEFAULT_SOURCE_CHANNEL = "official_website";
+
+export class PlatformPartnerApplicationsService {
+  private readonly applicationRepository: PlatformPartnerApplicationsRepositoryPort;
+  private readonly partnerRepository: PlatformPartnersRepositoryPort;
+
+  constructor(
+    dependencies: PlatformPartnerApplicationsServiceDependencies = {},
+  ) {
+    this.applicationRepository =
+      dependencies.applicationRepository ?? platformPartnerApplicationsRepository;
+    this.partnerRepository =
+      dependencies.partnerRepository ?? platformPartnersRepository;
+  }
+
+  async submitPublicApplication(input: SubmitPlatformPartnerApplicationInput) {
+    return this.applicationRepository.createApplication({
+      application_no: this.buildApplicationNo(),
+      applicant_name: input.applicant_name.trim(),
+      subject_type: input.subject_type,
+      contact_name: input.contact_name.trim(),
+      phone: input.phone.trim(),
+      region_codes: input.region_codes,
+      region_name: input.region_name ?? null,
+      business_description: input.business_description ?? null,
+      resource_description: input.resource_description ?? null,
+      message: input.message ?? null,
+      source_channel: input.source_channel || DEFAULT_SOURCE_CHANNEL,
+      source_url: input.source_url ?? null,
+      utm_source: input.utm_source ?? null,
+      utm_medium: input.utm_medium ?? null,
+      utm_campaign: input.utm_campaign ?? null,
+      status: "submitted",
+      metadata: {},
+    } satisfies PlatformPartnerApplicationCreateRecordInput);
+  }
+
+  async listApplications(
+    authContext: AuthContext,
+    query: PlatformPartnerApplicationListQuery,
+  ) {
+    this.assertPlatformAdmin(authContext);
+    return this.applicationRepository.listApplications({
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+      keyword: query.keyword,
+      region_code: query.region_code,
+    });
+  }
+
+  async getApplication(authContext: AuthContext, applicationId: string) {
+    this.assertPlatformAdmin(authContext);
+    return this.requireApplication(applicationId);
+  }
+
+  async updateApplicationStatus(
+    authContext: AuthContext,
+    applicationId: string,
+    input: UpdatePlatformPartnerApplicationStatusInput,
+  ) {
+    this.assertCanManagePartners(authContext);
+    const employeeId = this.requireEmployeeId(authContext);
+    const application = await this.requireApplication(applicationId);
+    if (application.status === "approved") {
+      throw Errors.business(
+        409,
+        "已通过申请不能再修改审核状态",
+        "PARTNER_APPLICATION_ALREADY_APPROVED",
+      );
+    }
+
+    return this.applicationRepository.updateApplicationStatus(
+      applicationId,
+      {
+        status: input.status,
+        reviewed_by_employee_id: employeeId,
+        review_remark: input.review_remark ?? null,
+      } satisfies PlatformPartnerApplicationStatusRecordInput,
+    );
+  }
+
+  async approveApplication(
+    authContext: AuthContext,
+    applicationId: string,
+    input: ApprovePlatformPartnerApplicationInput,
+  ) {
+    this.assertCanManagePartners(authContext);
+    const employeeId = this.requireEmployeeId(authContext);
+    const application = await this.requireApplication(applicationId);
+
+    if (application.converted_partner_id && application.converted_partner) {
+      return {
+        application,
+        partner: application.converted_partner,
+        created: false,
+        idempotent: true,
+      };
+    }
+
+    if (application.status === "rejected") {
+      throw Errors.business(
+        409,
+        "已驳回申请不能直接通过",
+        "PARTNER_APPLICATION_REJECTED",
+      );
+    }
+
+    const reviewRemark = input.review_remark ?? "官网申请审核通过";
+    const partner = await this.partnerRepository.createPartner({
+      name: input.partner_name ?? application.applicant_name,
+      subject_type: application.subject_type,
+      contact_name: application.contact_name,
+      phone: application.phone,
+      status: "pending",
+      level_id: input.level_id,
+      region_codes: input.region_codes?.length
+        ? input.region_codes
+        : application.region_codes,
+      contract_status: "pending",
+      settlement_account_status: "pending",
+      settlement_account: {},
+      remark: reviewRemark,
+      created_by_employee_id: employeeId,
+      updated_by_employee_id: employeeId,
+    } satisfies PlatformPartnerCreateRecordInput);
+
+    const approvedApplication =
+      await this.applicationRepository.markApplicationApproved(
+        applicationId,
+        {
+          converted_partner_id: partner.id,
+          reviewed_by_employee_id: employeeId,
+          review_remark: reviewRemark,
+        } satisfies PlatformPartnerApplicationApprovedRecordInput,
+      );
+
+    return {
+      application: approvedApplication,
+      partner,
+      created: true,
+      idempotent: false,
+    };
+  }
+
+  private async requireApplication(applicationId: string) {
+    const application = await this.applicationRepository.findApplicationById(
+      applicationId,
+    );
+    if (!application) {
+      throw Errors.business(
+        404,
+        "城市合伙人申请不存在",
+        "PARTNER_APPLICATION_NOT_FOUND",
+      );
+    }
+    return application;
+  }
+
+  private assertCanManagePartners(authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+    if (!this.hasPermission(authContext, PARTNER_MANAGE_PERMISSION)) {
+      throw Errors.forbidden();
+    }
+  }
+
+  private assertPlatformAdmin(authContext: AuthContext) {
+    if (!authContext.isPlatformAdmin) {
+      throw Errors.forbidden();
+    }
+  }
+
+  private hasPermission(authContext: AuthContext, permissionCode: string) {
+    return authContext.permissions.some((permission) =>
+      permission.code === permissionCode
+    );
+  }
+
+  private requireEmployeeId(authContext: AuthContext) {
+    if (!authContext.employeeId) {
+      throw Errors.forbidden();
+    }
+    return authContext.employeeId;
+  }
+
+  private buildApplicationNo() {
+    const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    const suffix = `${Date.now().toString(36)}${
+      Math.random().toString(36).slice(2, 6)
+    }`.toUpperCase();
+    return `CPA-${date}-${suffix}`;
+  }
+}
+
+export const platformPartnerApplicationsService =
+  new PlatformPartnerApplicationsService();
+
+export type { PlatformPartnerApplicationRecord };

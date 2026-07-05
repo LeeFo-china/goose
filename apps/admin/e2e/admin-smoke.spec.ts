@@ -192,6 +192,11 @@ test.describe("admin smoke", () => {
       await permissionLink.click();
       await expect(page).toHaveURL(/\/roles\/[^/?]+\/permissions$/);
       await expect(page.getByRole("heading", { name: "配置角色权限" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "展开全部" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "收起全部" })).toBeVisible();
+      await expect(page.getByText("本次变更：")).toBeVisible();
+      await expect(page.getByText(/\d+ 个资源/).first()).toBeVisible();
+      await expect(page.getByText(/\d+ 个权限点/).first()).toBeVisible();
       await expect(page.getByRole("button", { name: "保存权限" })).toBeVisible();
     } else {
       await expect(page.getByText("还没有创建角色")).toBeVisible();
@@ -262,14 +267,55 @@ test.describe("admin smoke", () => {
     await expect(page.getByRole("tab", { name: "AI 明细" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "短信明细" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "短视频明细" })).toBeVisible();
+    await expect.poll(async () =>
+      page.getByRole("tablist").evaluate((element) => getComputedStyle(element).overflowY)
+    ).toBe("hidden");
+  });
+
+  test("租户用量页移动端保持固定工作区和内部列表滚动", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoAdminPage(page, "/usage?tab=social_video");
+
+    await expect(page.getByRole("heading", { name: "用量统计" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "短视频明细" })).toBeVisible();
+
+    const listViewport = page.getByTestId("tenant-usage-list-table-viewport");
+    await expect(listViewport).toBeVisible();
+    await expect.poll(async () =>
+      listViewport.evaluate((element) => element.clientHeight)
+    ).toBeGreaterThanOrEqual(120);
+    await expect.poll(async () =>
+      page.evaluate(() => document.documentElement.scrollHeight - document.documentElement.clientHeight)
+    ).toBeLessThanOrEqual(1);
   });
 
   test("平台用量页租户账号展示访问提示", async ({ page }) => {
     await gotoAdminPage(page, "/platform/usage");
 
     await expect(page.getByRole("heading", { name: "用量统计" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "平台用量" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "用量概览" })).toBeVisible();
+    await expect(page.getByTestId("usage-overview-panel")).toBeVisible();
     await expect(page.getByText("当前账号不是平台超管，无法访问平台用量统计")).toBeVisible();
+    await expect.poll(async () =>
+      page.getByRole("tablist").evaluate((element) => getComputedStyle(element).overflowY)
+    ).toBe("hidden");
+  });
+
+  test("平台用量页移动端保持固定工作区和内部列表滚动", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoAdminPage(page, "/platform/usage?tab=social_video");
+
+    await expect(page.getByRole("heading", { name: "用量统计" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "短视频明细" })).toBeVisible();
+
+    const listViewport = page.getByTestId("platform-usage-list-table-viewport");
+    await expect(listViewport).toBeVisible();
+    await expect.poll(async () =>
+      listViewport.evaluate((element) => element.clientHeight)
+    ).toBeGreaterThanOrEqual(120);
+    await expect.poll(async () =>
+      page.evaluate(() => document.documentElement.scrollHeight - document.documentElement.clientHeight)
+    ).toBeLessThanOrEqual(1);
   });
 
   test("营销活动页 H5 线索入口可渲染", async ({ page }) => {

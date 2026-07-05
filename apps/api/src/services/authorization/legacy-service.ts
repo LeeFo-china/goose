@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { permissionRepository } from "@/repositories/permissions";
+import { billingSubscriptionService } from "@/services/billing-subscriptions";
 import {
   buildAuthContext,
   type EmployeePermissionContextRecord,
@@ -8,8 +9,27 @@ import {
 import { AuthContextCache } from "./legacy/context-cache";
 import type { AuthContext } from "./legacy/types";
 
-class AuthorizationService {
+type BillingSubscriptionServicePort = Pick<
+  typeof billingSubscriptionService,
+  "getTenantLockState"
+>;
+
+export type GetRequiredAuthContextOptions = {
+  allowedWhenBillingLocked?: boolean;
+};
+
+export type AuthorizationServiceDependencies = {
+  billingSubscriptionService?: BillingSubscriptionServicePort;
+};
+
+export class AuthorizationService {
   private cache = new AuthContextCache();
+  private readonly billingSubscriptionService: BillingSubscriptionServicePort;
+
+  constructor(dependencies: AuthorizationServiceDependencies = {}) {
+    this.billingSubscriptionService =
+      dependencies.billingSubscriptionService ?? billingSubscriptionService;
+  }
 
   async getAuthContextByAuthUserId(authUserId: string): Promise<AuthContext> {
     const cached = this.cache.getByAuthUserId(authUserId);
@@ -183,7 +203,42 @@ class AuthorizationService {
     }
   }
 
-  async getRequiredAuthContext(authUserId?: string | null) {
+  private async assertBillingAvailable(
+    authContext: AuthContext,
+    options: GetRequiredAuthContextOptions,
+  ) {
+    if (
+      !authContext.employeeId ||
+      authContext.isPlatformAdmin ||
+      !authContext.tenantId
+    ) {
+      return;
+    }
+
+    const lockState = await this.billingSubscriptionService.getTenantLockState(
+      authContext.tenantId,
+    );
+    if (!lockState.locked || options.allowedWhenBillingLocked) {
+      return;
+    }
+
+    throw Errors.business(
+      402,
+      "租户积分不足，系统已锁定",
+      ErrorCodes.TENANT_BILLING_LOCKED,
+      {
+        tenant_id: authContext.tenantId,
+        lock_reason: lockState.reason,
+        locked_at: lockState.locked_at,
+        last_invoice_id: lockState.last_invoice_id,
+      },
+    );
+  }
+
+  async getRequiredAuthContext(
+    authUserId?: string | null,
+    options: GetRequiredAuthContextOptions = {},
+  ) {
     if (!authUserId) {
       throw Errors.unauthorized();
     }
@@ -191,6 +246,7 @@ class AuthorizationService {
     const authContext = await this.getAuthContextByAuthUserId(authUserId);
 
     this.assertTenantAvailable(authContext);
+    await this.assertBillingAvailable(authContext, options);
     return authContext;
   }
 }

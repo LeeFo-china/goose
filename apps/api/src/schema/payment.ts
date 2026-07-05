@@ -72,8 +72,13 @@ export const PaymentListQuerySchema = PaginationQuerySchema.extend({
   }).optional(),
 });
 
+export const GeneratePaymentLedgerSchema = z.object({
+  reason: z.string().trim().min(1, "请填写补生成原因").max(500, "原因不能超过 500 个字符"),
+});
+
 // 导出类型
 export type PaymentType = z.infer<typeof PaymentBaseSchema>;
 export type CreatePaymentInput = z.infer<typeof CreatePaymentSchema>;
 export type UpdatePaymentInput = z.infer<typeof UpdatePaymentSchema>;
 export type PaymentListQuery = z.infer<typeof PaymentListQuerySchema>;
+export type GeneratePaymentLedgerInput = z.infer<typeof GeneratePaymentLedgerSchema>;

@@ -10,40 +10,56 @@ import {
 import {
   FinanceLedgerListQuerySchema,
   FinanceProjectSummaryListQuerySchema,
+  LinkFinanceLedgerPaymentSchema,
+  MarkLegacyFinanceLedgerSchema,
 } from "@/schema/finance";
-import { FinanceOperatingReportQuerySchema } from "@/schema/finance-reports";
+import {
+  FinanceCorrectionAuditListQuerySchema,
+} from "@/schema/finance-correction-audits";
+import {
+  CloseFinanceClosingPeriodSchema,
+  CreateFinanceClosingDraftSchema,
+  FinanceClosingPeriodListQuerySchema,
+  ReopenFinanceClosingPeriodSchema,
+} from "@/schema/finance-closing";
+import {
+  FinanceMonthlyOverviewQuerySchema,
+  FinanceOperatingReportQuerySchema,
+} from "@/schema/finance-reports";
 import {
   CreateFinanceReconciliationExceptionActionSchema,
   FinanceReconciliationExceptionActionListQuerySchema,
   FinanceReconciliationExceptionFingerprintParamsSchema,
   FinanceReconciliationExceptionListQuerySchema,
+  FinanceReconciliationOperatingStatsQuerySchema,
 } from "@/schema/finance-reconciliation";
-import {
-  CancelFinanceReceivableSchema,
-  CreateFinanceReceivableFollowUpSchema,
-  CreateFinanceReceivableSchema,
-  FinanceReceivableEventListQuerySchema,
-  FinanceReceivableListQuerySchema,
-  UpdateFinanceReceivableSchema,
-} from "@/schema/finance-receivables";
 import { financeCostCategoryService } from "@/services/finance-cost-categories";
+import { financeClosingPeriodService } from "@/services/finance-closing-periods";
+import { financeCorrectionAuditService } from "@/services/finance-correction-audits";
 import { financeLedgerService } from "@/services/finance-ledger";
+import { financeMonthlyOverviewService } from "@/services/finance-monthly-overview";
 import { financeOperatingReportService } from "@/services/finance-operating-report";
 import { financeProjectSummaryService } from "@/services/finance-project-summary";
 import { financeReconciliationService } from "@/services/finance-reconciliation";
 import { projectCostBudgetService } from "@/services/project-cost-budgets";
-import { projectReceivablesService } from "@/services/project-receivables";
-import {
-  projectReceivableOperationsService,
-} from "@/services/project-receivables-operations";
-import { Get, Patch, Post, Put } from "@/utils/decorators/route";
+import { Get, Patch, Post, Put, registerRoutes } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import financeReceivablesController from "./receivables-controller";
+import financeReportsController from "./reports-controller";
+import financeWechatPayController from "./wechat-pay-controller";
 
 class FinanceController extends TenantBaseController {
   constructor() {
     super("finance");
   }
+
+  public override registerExtraRoutes = (fastify: FastifyInstance) => {
+    registerRoutes(fastify, this);
+    financeReceivablesController.registerExtraRoutes(fastify);
+    financeReportsController.registerExtraRoutes(fastify);
+    financeWechatPayController.registerExtraRoutes(fastify);
+  };
 
   @Get("/finance/ledger")
   async listLedger(request: FastifyRequest, reply: FastifyReply) {
@@ -74,6 +90,42 @@ class FinanceController extends TenantBaseController {
     }
 
     const data = await financeReconciliationService.listExceptions(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reconciliation/operating-stats")
+  async getReconciliationOperatingStats(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceReconciliationOperatingStatsQuerySchema
+      .safeParse(request.query);
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeReconciliationService.getOperatingStats(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/correction-audits")
+  async listCorrectionAudits(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceCorrectionAuditListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeCorrectionAuditService.listAudits(
       authContext,
       queryResult.data,
     );
@@ -116,6 +168,25 @@ class FinanceController extends TenantBaseController {
       authContext,
       paramsResult.data.fingerprint,
       bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reconciliation/exceptions/:fingerprint")
+  async getReconciliationExceptionDetail(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult =
+      FinanceReconciliationExceptionFingerprintParamsSchema.safeParse(
+        request.params,
+      );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await financeReconciliationService.getExceptionDetail(
+      authContext,
+      paramsResult.data.fingerprint,
     );
     return ResponseHandler.success(data);
   }
@@ -165,42 +236,16 @@ class FinanceController extends TenantBaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get("/finance/receivables")
-  async listReceivables(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const queryResult = FinanceReceivableListQuerySchema.safeParse(request.query);
-    if (!queryResult.success) {
-      throw Errors.fromZod(queryResult.error);
-    }
-
-    const data = await projectReceivablesService.listReceivables(
-      authContext,
-      queryResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/finance/receivables")
-  async createReceivable(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const bodyResult = CreateFinanceReceivableSchema.safeParse(request.body);
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableOperationsService
-      .createManualReceivable(authContext, bodyResult.data);
-    return ResponseHandler.success(data);
-  }
-
-  @Patch("/finance/receivables/:id")
-  async updateReceivable(request: FastifyRequest, reply: FastifyReply) {
+  @Post("/finance/ledger/:id/link-payment")
+  async linkLedgerPayment(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const bodyResult = UpdateFinanceReceivableSchema.safeParse(request.body);
+    const bodyResult = LinkFinanceLedgerPaymentSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
-    const data = await projectReceivableOperationsService.updateReceivable(
+    const data = await financeLedgerService.linkProjectPayment(
       authContext,
       idVerify.data.id,
       bodyResult.data,
@@ -208,57 +253,22 @@ class FinanceController extends TenantBaseController {
     return ResponseHandler.success(data);
   }
 
-  @Post("/finance/receivables/:id/cancel")
-  async cancelReceivable(request: FastifyRequest, reply: FastifyReply) {
+  @Post("/finance/ledger/:id/mark-legacy-payment")
+  async markLedgerLegacyPayment(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
     const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const bodyResult = CancelFinanceReceivableSchema.safeParse(request.body);
+    const bodyResult = MarkLegacyFinanceLedgerSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
-    const data = await projectReceivableOperationsService.cancelReceivable(
+    const data = await financeLedgerService.markLegacyProjectPayment(
       authContext,
       idVerify.data.id,
       bodyResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/finance/receivables/:id/follow-ups")
-  async createReceivableFollowUp(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const bodyResult = CreateFinanceReceivableFollowUpSchema.safeParse(
-      request.body,
-    );
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-
-    const data = await projectReceivableOperationsService.createFollowUp(
-      authContext,
-      idVerify.data.id,
-      bodyResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Get("/finance/receivables/:id/events")
-  async listReceivableEvents(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const queryResult = FinanceReceivableEventListQuerySchema.safeParse(
-      request.query,
-    );
-    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
-
-    const data = await projectReceivableOperationsService.listEvents(
-      authContext,
-      idVerify.data.id,
-      queryResult.data,
     );
     return ResponseHandler.success(data);
   }
@@ -293,6 +303,93 @@ class FinanceController extends TenantBaseController {
     const data = await financeOperatingReportService.getOperatingReport(
       authContext,
       queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/reports/monthly-overview")
+  async getMonthlyOverview(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceMonthlyOverviewQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeMonthlyOverviewService.getMonthlyOverview(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/finance/closing-periods")
+  async listClosingPeriods(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = FinanceClosingPeriodListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await financeClosingPeriodService.listPeriods(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/closing-periods")
+  async createClosingDraft(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const bodyResult = CreateFinanceClosingDraftSchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeClosingPeriodService.createDraftSnapshot(
+      authContext,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/closing-periods/:id/close")
+  async closeClosingPeriod(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = CloseFinanceClosingPeriodSchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeClosingPeriodService.closePeriod(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/finance/closing-periods/:id/reopen")
+  async reopenClosingPeriod(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = ReopenFinanceClosingPeriodSchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await financeClosingPeriodService.reopenPeriod(
+      authContext,
+      idVerify.data.id,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }

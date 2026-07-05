@@ -16,6 +16,7 @@ import {
   buildProjectReconciliationChecks,
   projectReconciliationStatusLabel,
   projectReconciliationStatusVariant,
+  projectReconciliationLevelLabel,
   type ProjectFinanceReconciliationSummary,
   type ProjectReconciliationCheckItem,
 } from "./project-finance-reconciliation-summary-utils";
@@ -29,6 +30,9 @@ function emptySummary(projectId: string): ProjectFinanceReconciliationSummary {
     ledger_income_amount: 0,
     expense_paid_amount: 0,
     ledger_expense_amount: 0,
+    income_ledger_consistent: true,
+    payment_allocation_consistent: true,
+    expense_ledger_consistent: true,
     exception_count: 0,
     danger_count: 0,
     warning_count: 0,
@@ -37,6 +41,9 @@ function emptySummary(projectId: string): ProjectFinanceReconciliationSummary {
     ignored_exception_count: 0,
     resolved_exception_count: 0,
     latest_exception_at: null,
+    latest_exception_code: null,
+    latest_exception_title: null,
+    highest_exception_level: null,
     latest_action_at: null,
     latest_action_remark: null,
     latest_actor_employee_name: null,
@@ -123,6 +130,14 @@ export function ProjectFinanceReconciliationSummaryPanel({
         <span>
           最近异常：{formatFinanceDateTime(summary.latest_exception_at)}
         </span>
+        <span>
+          最高等级：{projectReconciliationLevelLabel(summary.highest_exception_level)}
+        </span>
+        {summary.latest_exception_title ? (
+          <span className="truncate">
+            最新类型：{summary.latest_exception_title}
+          </span>
+        ) : null}
         <span>应收总额：{formatFinanceMoney(summary.receivable_amount)}</span>
         <span>
           最近处理：{summary.latest_action_at

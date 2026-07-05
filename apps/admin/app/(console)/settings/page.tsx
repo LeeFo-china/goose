@@ -1,7 +1,9 @@
 import { SlidersHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
+import type { PlatformWechatPayProfileListResult } from "@/components/settings/platform-payment-settings-types";
 import type { SystemSetting } from "@/components/settings/settings-types";
+import { Badge } from "@/components/ui/badge";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
@@ -20,9 +22,30 @@ const groupLabels: Record<string, string> = {
   ai: "AI 配置",
   social_video: "短视频识别",
   tencent_lbs: "腾讯位置",
+  location: "定位匹配",
   notify: "通知配置",
   wechat: "微信配置",
+  payment: "支付配置",
+  picture_library: "图片资料库",
+  visitor: "访客配置",
 };
+
+const groupOrder = [
+  "sms",
+  "customer_service",
+  "storage",
+  "tencent_lbs",
+  "location",
+  "ai",
+  "social_video",
+  "ezviz",
+  "tencent_iot_video",
+  "wechat",
+  "payment",
+  "notify",
+  "picture_library",
+  "visitor",
+];
 
 async function fetchSettings(token: string) {
   const response = await fetch(buildBackendUrl("/admin/system-settings"), {
@@ -33,8 +56,27 @@ async function fetchSettings(token: string) {
   return payload.data as SettingsData;
 }
 
-async function getSettingsData() {
-  const token = await getAdminToken();
+const emptyPlatformPaymentProfiles: PlatformWechatPayProfileListResult = {
+  can_manage: false,
+  profiles: [],
+  error: null,
+};
+
+async function fetchPlatformPaymentProfiles(token: string) {
+  const response = await fetch(
+    buildBackendUrl("/platform/payment/wechat-pay/profiles"),
+    {
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
+  );
+  const payload = await parseBackendJson<PlatformWechatPayProfileListResult>(
+    response,
+  );
+  return payload.data as PlatformWechatPayProfileListResult;
+}
+
+async function getSettingsData(token: string | null) {
   if (!token) {
     return {
       list: [] as SystemSetting[],
@@ -59,13 +101,59 @@ async function getSettingsData() {
   }
 }
 
+async function getPlatformPaymentProfilesData(
+  token: string | null,
+  isPlatformMode: boolean,
+) {
+  if (!isPlatformMode) return emptyPlatformPaymentProfiles;
+  if (!token) {
+    return {
+      ...emptyPlatformPaymentProfiles,
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    return {
+      ...await fetchPlatformPaymentProfiles(token),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ...emptyPlatformPaymentProfiles,
+      error: error instanceof Error ? error.message : "平台支付配置加载失败",
+    };
+  }
+}
+
+function SettingsHeaderMetric({
+  label,
+  value,
+  variant = "outline",
+}: {
+  label: string;
+  value: number;
+  variant?: "outline" | "secondary" | "warning" | "danger";
+}) {
+  return (
+    <Badge variant={variant} className="gap-1.5">
+      <span>{label}</span>
+      <span className="tabular-nums">{value}</span>
+    </Badge>
+  );
+}
+
 export default async function SettingsPage() {
-  const [session, settingsResult] = await Promise.all([
+  const [session, token] = await Promise.all([
     getAdminSession(),
-    getSettingsData(),
+    getAdminToken(),
+  ]);
+  const isPlatformMode = isPlatformOnlySession(session);
+  const [settingsResult, paymentProfiles] = await Promise.all([
+    getSettingsData(token),
+    getPlatformPaymentProfilesData(token, isPlatformMode),
   ]);
   const { list, groups, error } = settingsResult;
-  const isPlatformMode = isPlatformOnlySession(session);
   const databaseCount = list.filter((item) => item.source === "database").length;
   const envCount = list.filter((item) => item.source === "env").length;
   const emptyCount = list.filter((item) => item.source === "empty").length;
@@ -75,46 +163,63 @@ export default async function SettingsPage() {
   const groupEntries = Object.entries(groups)
     .map(([groupCode, settings]) => ({
       code: groupCode,
-      label: groupLabels[groupCode] || groupCode,
+      label: groupLabels[groupCode] || "其他配置",
       settings,
       emptyCount: settings.filter((item) => item.source === "empty").length,
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {
-      const order = ["sms", "customer_service", "storage", "tencent_lbs", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "notify"];
-      const leftOrder = order.indexOf(left.code);
-      const rightOrder = order.indexOf(right.code);
-      return (leftOrder === -1 ? order.length : leftOrder) - (rightOrder === -1 ? order.length : rightOrder);
+      const leftOrder = groupOrder.indexOf(left.code);
+      const rightOrder = groupOrder.indexOf(right.code);
+      return (leftOrder === -1 ? groupOrder.length : leftOrder) - (rightOrder === -1 ? groupOrder.length : rightOrder);
     });
 
   return (
-    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <div className="shrink-0 flex min-w-0 items-start gap-3">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-4 overflow-hidden">
+      <div className="flex shrink-0 min-w-0 items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
           <SlidersHorizontal aria-hidden="true" className="size-4" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-normal">
             {isPlatformMode ? "平台系统配置" : "租户系统配置"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
             {isPlatformMode
               ? "平台级能力由平台统一维护，包含短信网关、监控接入、AI、微信、短视频识别和通知配置。密钥类配置加密存储并保留环境变量回退。"
               : "租户端可维护短信通道、客服入口等租户配置。继承平台配置时不展示平台密钥、签名和模板信息。"}
           </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span>配置项 {list.length}</span>
-            <span>{isPlatformMode ? `数据库覆盖 ${databaseCount}` : `租户覆盖 ${tenantOverrideCount}`}</span>
-            <span>{isPlatformMode ? `环境变量回退 ${envCount}` : `继承平台 ${tenantInheritedCount}`}</span>
-            <span>未配置 {emptyCount}</span>
-            <span>敏感项 {secretCount}</span>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <SettingsHeaderMetric label="配置项" value={list.length} variant="secondary" />
+            <SettingsHeaderMetric
+              label={isPlatformMode ? "数据库覆盖" : "租户覆盖"}
+              value={isPlatformMode ? databaseCount : tenantOverrideCount}
+            />
+            <SettingsHeaderMetric
+              label={isPlatformMode ? "环境变量回退" : "继承平台"}
+              value={isPlatformMode ? envCount : tenantInheritedCount}
+            />
+            <SettingsHeaderMetric
+              label="未配置"
+              value={emptyCount}
+              variant={emptyCount > 0 ? "warning" : "outline"}
+            />
+            <SettingsHeaderMetric
+              label="敏感项"
+              value={secretCount}
+              variant={secretCount > 0 ? "warning" : "outline"}
+            />
           </div>
         </div>
       </div>
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <SettingsTabs groups={groupEntries} isPlatformMode={isPlatformMode} />
+      <SettingsTabs
+        groups={groupEntries}
+        isPlatformMode={isPlatformMode}
+        paymentProfiles={paymentProfiles}
+      />
     </div>
   );
 }

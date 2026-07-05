@@ -3,6 +3,8 @@ import type {
 } from "@/repositories/finance-reconciliation-actions";
 import type {
   FinanceReconciliationCandidateRows,
+  FinanceReconciliationExpenseLedgerRow,
+  FinanceReconciliationExpenseSettlementRow,
   FinanceReconciliationLedgerRow,
   FinanceReconciliationPaymentRow,
   FinanceReconciliationReceivableRow,
@@ -54,6 +56,12 @@ export function buildFinanceReconciliationExceptions(
     ),
     ...candidates.payments.flatMap((row) => buildPaymentExceptions(row)),
     ...candidates.ledgers.flatMap((row) => buildLedgerExceptions(row)),
+    ...(candidates.expenseSettlements || []).flatMap((row) =>
+      buildExpenseSettlementExceptions(row)
+    ),
+    ...(candidates.expenseLedgers || []).flatMap((row) =>
+      buildExpenseLedgerExceptions(row)
+    ),
   ].sort(compareExceptions);
 }
 
@@ -83,7 +91,11 @@ function buildReceivableExceptions(
       description: `${row.title ?? "应收计划"}已到期未结清，剩余 ${formatMoney(remainingAmount)}。`,
       amount: remainingAmount,
       occurred_at: dueAt,
-      action: receivableAction(row.project_id),
+      action: receivableAction(row.project_id, {
+        status: "overdue",
+        receivablePlanId: row.id,
+        key: "open_receivable_overdue",
+      }),
     });
   }
 
@@ -136,7 +148,7 @@ function buildPaymentExceptions(
         `收款 ${formatMoney(row.amount)} 已确认，但未找到对应项目收款入账流水。`,
       amount: row.amount,
       occurred_at: occurredAt,
-      action: receivableAction(projectId),
+      action: projectPaymentLedgerAction(projectId, row.id),
     });
   }
 
@@ -195,7 +207,90 @@ function buildLedgerExceptions(
     description: `项目收款流水 ${formatMoney(row.amount)} 缺少 payment 关联。`,
     amount: row.amount,
     occurred_at: row.occurred_at ?? new Date(0).toISOString(),
-    action: ledgerAction(row.project_id),
+    action: ledgerAction(row.project_id, row.id),
+  }];
+}
+
+function buildExpenseSettlementExceptions(
+  row: FinanceReconciliationExpenseSettlementRow,
+): FinanceReconciliationException[] {
+  const exceptions: FinanceReconciliationException[] = [];
+  const occurredAt = row.paid_at ?? new Date(0).toISOString();
+
+  if (row.paid_amount > MONEY_TOLERANCE && row.ledger_amount <= MONEY_TOLERANCE) {
+    exceptions.push({
+      ...baseException("expense_paid_without_ledger", "expense_settlement", row.id),
+      id: row.id,
+      project_id: row.project_id,
+      project_name: row.project_name,
+      level: "danger",
+      direction: "expense",
+      title: "费用已打款未入账",
+      description:
+        `费用${row.title ? `「${row.title}」` : ""}已打款 ${formatMoney(row.paid_amount)}，但未找到对应支出台账。`,
+      amount: row.paid_amount,
+      occurred_at: occurredAt,
+      action: expenseLedgerAction({
+        projectId: row.project_id,
+        expenseRequestId: row.expense_request_id,
+        expenseSettlementId: row.id,
+      }),
+    });
+  }
+
+  const ledgerDiff = roundMoney(Math.abs(row.paid_amount - row.ledger_amount));
+  if (
+    ledgerDiff > MONEY_TOLERANCE &&
+    row.ledger_amount > MONEY_TOLERANCE
+  ) {
+    exceptions.push({
+      ...baseException(
+        "expense_paid_amount_mismatch",
+        "expense_settlement",
+        row.id,
+      ),
+      id: row.id,
+      project_id: row.project_id,
+      project_name: row.project_name,
+      level: "danger",
+      direction: "expense",
+      title: "费用打款与支出台账金额不一致",
+      description:
+        `费用打款 ${formatMoney(row.paid_amount)}，支出台账合计 ${formatMoney(row.ledger_amount)}。`,
+      amount: ledgerDiff,
+      occurred_at: occurredAt,
+      action: expenseLedgerAction({
+        projectId: row.project_id,
+        expenseRequestId: row.expense_request_id,
+        expenseSettlementId: row.id,
+      }),
+    });
+  }
+
+  return exceptions;
+}
+
+function buildExpenseLedgerExceptions(
+  row: FinanceReconciliationExpenseLedgerRow,
+): FinanceReconciliationException[] {
+  if (row.cost_category_id) return [];
+
+  return [{
+    ...baseException("expense_ledger_without_category", "ledger", row.id),
+    id: row.id,
+    project_id: row.project_id,
+    project_name: row.project_name,
+    level: "info",
+    direction: "expense",
+    title: "支出台账缺少成本分类",
+    description: `支出台账 ${formatMoney(row.amount)} 未归集到成本分类。`,
+    amount: row.amount,
+    occurred_at: row.occurred_at ?? new Date(0).toISOString(),
+    action: expenseLedgerAction({
+      projectId: row.project_id,
+      ledgerId: row.id,
+      unallocatedOnly: true,
+    }),
   }];
 }
 
@@ -227,24 +322,83 @@ function compareExceptions(
     left.id.localeCompare(right.id);
 }
 
-function receivableAction(projectId: string | null) {
+function receivableAction(
+  projectId: string | null,
+  filters: {
+    status?: string;
+    receivablePlanId?: string;
+    key?: string;
+  } = {},
+) {
+  const params = new URLSearchParams();
+  appendParam(params, "project_id", projectId);
+  appendParam(params, "status", filters.status);
+  appendParam(params, "receivable_plan_id", filters.receivablePlanId);
   return {
-    key: "open_payment",
-    label: "查看应收",
-    target: projectId
-      ? `/finance/receivables?project_id=${projectId}`
-      : "/finance/receivables",
+    key: filters.key ?? "open_receivables",
+    label: "去处理",
+    target: buildTarget("/finance/receivables", params),
   };
 }
 
-function ledgerAction(projectId: string | null) {
+function ledgerAction(projectId: string | null, ledgerId: string) {
+  const params = new URLSearchParams();
+  appendParam(params, "project_id", projectId);
+  params.set("direction", "in");
+  params.set("entry_type", "project_payment");
+  params.set("ledger_id", ledgerId);
   return {
     key: "open_ledger",
-    label: "查看台账",
-    target: projectId
-      ? `/finance/ledger?project_id=${projectId}&direction=in`
-      : "/finance/ledger?direction=in",
+    label: "去处理",
+    target: buildTarget("/finance/ledger", params),
   };
+}
+
+function projectPaymentLedgerAction(projectId: string | null, paymentId: string) {
+  const params = new URLSearchParams();
+  appendParam(params, "project_id", projectId);
+  params.set("direction", "in");
+  params.set("entry_type", "project_payment");
+  params.set("payment_id", paymentId);
+  return {
+    key: "open_project_payment_ledger",
+    label: "去处理",
+    target: buildTarget("/finance/ledger", params),
+  };
+}
+
+function expenseLedgerAction(input: {
+  projectId: string | null;
+  expenseRequestId?: string | null;
+  expenseSettlementId?: string | null;
+  ledgerId?: string | null;
+  unallocatedOnly?: boolean;
+}) {
+  const params = new URLSearchParams();
+  appendParam(params, "project_id", input.projectId);
+  params.set("direction", "out");
+  params.set("entry_type", "expense_settlement");
+  appendParam(params, "ledger_id", input.ledgerId);
+  appendParam(params, "expense_request_id", input.expenseRequestId);
+  appendParam(params, "expense_settlement_id", input.expenseSettlementId);
+  if (input.unallocatedOnly) params.set("unallocated_only", "true");
+  return {
+    key: input.unallocatedOnly
+      ? "open_unallocated_expense_ledger"
+      : "open_expense_ledger",
+    label: "去处理",
+    target: buildTarget("/finance/ledger", params),
+  };
+}
+
+function appendParam(params: URLSearchParams, key: string, value: string | null | undefined) {
+  const normalized = value?.trim();
+  if (normalized) params.set(key, normalized);
+}
+
+function buildTarget(path: string, params: URLSearchParams) {
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 function toDateTime(date: string | null) {

@@ -3,6 +3,7 @@ node_modules
 .pnpm-store/
 
 .vscode
+.pay.config
 
 # local Codex workspace files
 .codex/skills/backend/SKILL.md

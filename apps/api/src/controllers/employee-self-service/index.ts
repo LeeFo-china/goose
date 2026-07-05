@@ -14,7 +14,10 @@ const EmployeePersonalizationQuerySchema = z.object({
 
 class EmployeeSelfServiceController extends TenantBaseController {
   private readonly bootstrapHandler = new EmployeeBootstrapHandler({
-    getRequiredTenantContext: (request) => this.getRequiredTenantContext(request),
+    getRequiredTenantContext: (request) =>
+      this.getRequiredTenantContext(request, {
+        allowedWhenBillingLocked: true,
+      }),
   });
 
   constructor() {

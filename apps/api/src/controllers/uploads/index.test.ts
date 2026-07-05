@@ -116,6 +116,30 @@ const buildRequest = (body: Record<string, unknown>): FastifyRequest =>
   }) as FastifyRequest;
 
 describe("UploadController project payment direct upload", () => {
+  test("allows tenant wechat pay applyment material upload without project id", async () => {
+    const { default: controller } = await import("./index");
+
+    await controller.initDirectCosUpload(
+      buildRequest({
+        scene: "wechat_pay_applyment",
+        filename: "license.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 120000,
+      }),
+      {} as never,
+    );
+
+    expect(canAccessProject).not.toHaveBeenCalled();
+    expect(createDirectUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scene: "wechat_pay_applyment",
+        projectId: undefined,
+        tenantId,
+        employeeId,
+      }),
+    );
+  });
+
   test("allows finance project payment direct upload init", async () => {
     const { default: controller } = await import("./index");
 

@@ -27,6 +27,17 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (method === "POST" && url === "/public/partner-applications") {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD") &&
+    url.startsWith("/partner-onboarding/invite-codes/")
+  ) {
+    return true;
+  }
+
   if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaigns/")) {
     return true;
   }
@@ -96,6 +107,13 @@ export function isPublicRoute(method: string, url: string) {
     && url.startsWith("/public/tenants/")
     && url.includes("/marketing-pages/")
     && (url.endsWith("/leads") || url.endsWith("/events"))
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && url === "/pay/wechat/callback"
   ) {
     return true;
   }

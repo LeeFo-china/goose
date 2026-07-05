@@ -1,6 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "../../authorization";
 
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
 const emptyTaskPage = {
   list: [],
   pagination: {
@@ -146,6 +150,20 @@ mock.module("@/repositories/task-center", () => ({
     listExpenseRequestsByIds: mock(async () => []),
     listProjectAcceptanceTodos: mock(async () => []),
     listCustomerServiceTicketTodos: mock(async () => []),
+  },
+}));
+
+const findOpenInvoiceByTenantId = mock(async () => ({
+  id: "invoice-1",
+  tenant_id: "tenant-1",
+  amount_credits: 1000,
+  due_at: "2026-07-10T00:00:00.000Z",
+  status: "reminded",
+}));
+
+mock.module("@/repositories/billing-subscriptions", () => ({
+  billingSubscriptionRepository: {
+    findOpenInvoiceByTenantId,
   },
 }));
 
@@ -303,6 +321,32 @@ describe("taskCenterService workflow todos", () => {
         workflow_business_domain: "customer_status",
         workflow_business_action: "start_following",
       },
+    });
+  });
+
+  test("includes billing payment due todos for recharge admins", async () => {
+    const { taskCenterService } = await import("../../task-center");
+
+    const result = await taskCenterService.listTodos({
+      ...authContext,
+      permissions: [{ code: "billing.recharge.create", scope: "all" }],
+    }, {
+      page: 1,
+      pageSize: 20,
+      status: "pending",
+      type: "billing_payment_due",
+    });
+
+    expect(findOpenInvoiceByTenantId).toHaveBeenCalledWith("tenant-1");
+    expect(result.list).toHaveLength(1);
+    expect(result.list[0]).toMatchObject({
+      id: "billing_invoice:invoice-1",
+      type: "billing_payment_due",
+      title: "系统使用费待充值",
+      action_label: "去充值",
+      target_type: "billing",
+      target_id: "invoice-1",
+      target_url: "/billing",
     });
   });
 });
