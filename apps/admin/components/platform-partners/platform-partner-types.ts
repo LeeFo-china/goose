@@ -6,6 +6,12 @@ export type PlatformPartnerStatus =
   | "suspended"
   | "terminated";
 
+export type PlatformPartnerApplicationStatus =
+  | "submitted"
+  | "reviewing"
+  | "approved"
+  | "rejected";
+
 export type PlatformPartnerLevel = {
   id: string;
   code: string;
@@ -35,6 +41,33 @@ export type PlatformPartnerRecord = {
   created_at: string;
   updated_at: string;
   level?: PlatformPartnerLevel | null;
+};
+
+export type PlatformPartnerApplicationRecord = {
+  id: string;
+  application_no: string;
+  applicant_name: string;
+  subject_type: "personal" | "individual_business" | "company";
+  contact_name: string;
+  phone: string;
+  region_codes: string[];
+  region_name: string | null;
+  business_description: string | null;
+  resource_description: string | null;
+  message: string | null;
+  source_channel: string;
+  source_url: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  status: PlatformPartnerApplicationStatus;
+  reviewed_by_employee_id: string | null;
+  reviewed_at: string | null;
+  review_remark: string | null;
+  converted_partner_id: string | null;
+  created_at: string;
+  updated_at: string;
+  converted_partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
 };
 
 export type TenantPartnerBindingRecord = {
@@ -131,6 +164,13 @@ export const partnerStatusOptions = [
   { value: "active", label: "启用" },
   { value: "suspended", label: "暂停" },
   { value: "terminated", label: "终止" },
+] as const;
+
+export const applicationStatusOptions = [
+  { value: "submitted", label: "待跟进" },
+  { value: "reviewing", label: "跟进中" },
+  { value: "approved", label: "已通过" },
+  { value: "rejected", label: "已驳回" },
 ] as const;
 
 export const revenueTypeOptions = [

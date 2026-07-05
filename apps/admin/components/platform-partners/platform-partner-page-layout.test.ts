@@ -27,6 +27,7 @@ describe("Platform partner operation page", () => {
     expect(source).toContain("TabsList");
     expect(source).toContain("TabsTrigger");
     expect(source).toContain("TabsContent");
+    expect(tabsSource).toContain("申请线索");
     expect(tabsSource).toContain("合伙人");
     expect(tabsSource).toContain("装企绑定");
     expect(tabsSource).toContain("平台收入");
@@ -37,8 +38,12 @@ describe("Platform partner operation page", () => {
   });
 
   test("exposes the MVP operation actions through backend endpoints", () => {
-    const source = readSource("./platform-partner-actions.tsx");
+    const source = `${readSource("./platform-partner-actions.tsx")}\n${
+      readSource("./platform-partner-application-actions.tsx")
+    }`;
 
+    expect(source).toContain("/platform/partner-applications/${application.id}/approve");
+    expect(source).toContain("/platform/partner-applications/${application.id}/status");
     expect(source).toContain("/platform/partners");
     expect(source).toContain("/platform/partner-bindings");
     expect(source).toContain("/platform/partner-revenue/lead-service-fees");
