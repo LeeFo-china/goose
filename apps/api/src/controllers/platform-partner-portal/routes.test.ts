@@ -20,6 +20,12 @@ describe("PlatformPartnerPortalController routes", () => {
       { method: "POST", path: "/partner/auth/send-code" },
       { method: "POST", path: "/partner/auth/bind-phone" },
       { method: "GET", path: "/partner/auth/me" },
+      { method: "GET", path: "/partner/dashboard/summary" },
+      { method: "GET", path: "/partner/invite-codes" },
+      { method: "GET", path: "/partner/dashboard/tenants" },
+      { method: "GET", path: "/partner/dashboard/revenue-events" },
+      { method: "GET", path: "/partner/dashboard/commission-ledger" },
+      { method: "GET", path: "/partner/dashboard/settlements" },
     ]);
   });
 });

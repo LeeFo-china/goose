@@ -2,6 +2,11 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  PartnerDashboardCommissionLedgerListQuerySchema,
+  PartnerDashboardRevenueEventListQuerySchema,
+  PartnerDashboardSettlementListQuerySchema,
+  PartnerDashboardSummaryQuerySchema,
+  PartnerDashboardTenantListQuerySchema,
   PartnerAuthBindPhoneSchema,
   PartnerAuthLoginSchema,
   PartnerAuthSendCodeSchema,
@@ -54,6 +59,72 @@ class PlatformPartnerPortalController extends BaseController {
   @Get("/partner/auth/me")
   async me(request: FastifyRequest, reply: FastifyReply) {
     const data = await platformPartnerPortalService.me(request.user);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/partner/dashboard/summary")
+  async summary(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = PartnerDashboardSummaryQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await platformPartnerPortalService.summary(
+      request.user,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/partner/invite-codes")
+  async inviteCodes(request: FastifyRequest, reply: FastifyReply) {
+    const data = await platformPartnerPortalService.listInviteCodes(request.user);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/partner/dashboard/tenants")
+  async tenants(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = PartnerDashboardTenantListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await platformPartnerPortalService.listTenants(
+      request.user,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/partner/dashboard/revenue-events")
+  async revenueEvents(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = PartnerDashboardRevenueEventListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await platformPartnerPortalService.listRevenueEvents(
+      request.user,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/partner/dashboard/commission-ledger")
+  async commissionLedger(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = PartnerDashboardCommissionLedgerListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await platformPartnerPortalService.listCommissionLedger(
+      request.user,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/partner/dashboard/settlements")
+  async settlements(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = PartnerDashboardSettlementListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await platformPartnerPortalService.listSettlements(
+      request.user,
+      queryResult.data,
+    );
     return ResponseHandler.success(data);
   }
 }

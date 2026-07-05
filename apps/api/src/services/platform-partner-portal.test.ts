@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { PlatformPartnerPortalService as PlatformPartnerPortalServiceClass } from "@/services/platform-partner-portal";
+import type { PartnerAuthResponse, PlatformPartnerPortalService as PlatformPartnerPortalServiceClass } from "@/services/platform-partner-portal";
 import type {
   PlatformPartnerMemberRecord,
   PlatformPartnerPortalRepositoryPort,
@@ -14,15 +14,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const activePartner = {
   id: "00000000-0000-4000-8000-000000000201",
-  name: "信阳城市合伙人",
-  status: "active",
-  region_codes: ["411500"],
-  level: {
-    id: "00000000-0000-4000-8000-000000000101",
-    code: "city",
-    name: "城市合伙人",
-    status: "active",
-  },
+  name: "信阳城市合伙人", status: "active", region_codes: ["411500"],
+  level: { id: "00000000-0000-4000-8000-000000000101", code: "city", name: "城市合伙人", status: "active" },
 } satisfies PlatformPartnerRecord;
 
 const activeMember = {
@@ -35,6 +28,20 @@ const activeMember = {
   status: "active",
   partner: activePartner,
 } satisfies PlatformPartnerMemberRecord;
+
+const partnerUser = { sub: activeMember.auth_user_id!, roles: ["platform_partner"], partner_id: activePartner.id };
+const userWithoutPartner = { sub: activeMember.auth_user_id!, roles: ["platform_partner"] };
+const otherPartnerId = "00000000-0000-4000-8000-000000000999";
+const emptyPage = (page = 1, pageSize = 20) => ({ list: [], pagination: { page, pageSize, total: 0, totalPages: 0 } });
+const emptySummary = () => ({ tenant_count: 0, revenue_event_count: 0, revenue_amount_fen: 0, paid_amount_fen: 0, commission_amount_fen: 0, available_commission_amount_fen: 0, settled_commission_amount_fen: 0, settlement_batch_count: 0, settlement_total_amount_fen: 0, paid_settlement_amount_fen: 0 });
+const expectedAuthContext = {
+  user_id: activeMember.auth_user_id,
+  roles: ["platform_partner"] as ["platform_partner"],
+  authMode: "platform_partner" as const,
+  member: { id: activeMember.id, partner_id: activePartner.id, name: "张三", phone: "13800138000", role: "owner", status: "active" },
+  partner: { id: activePartner.id, name: activePartner.name, status: "active", region_codes: ["411500"], level: { code: "city", name: "城市合伙人" } },
+  level: { id: activePartner.level.id, code: "city", name: "城市合伙人", status: "active" },
+} satisfies Omit<PartnerAuthResponse, "token">;
 
 function createRepository(
   overrides: Partial<PlatformPartnerPortalRepositoryPort> = {},
@@ -49,6 +56,12 @@ function createRepository(
     }),
     bindMemberAuthUser: async () => activeMember,
     findPartnerById: async () => activePartner,
+    listInviteCodes: async () => [],
+    listTenantBindings: async () => emptyPage(),
+    listRevenueEvents: async () => emptyPage(),
+    listCommissionLedgers: async () => emptyPage(),
+    listSettlementBatches: async () => emptyPage(),
+    getMonthlySummary: async () => emptySummary(),
     ...overrides,
   };
 }
@@ -62,19 +75,11 @@ async function createService(
 
   return new PlatformPartnerPortalService({
     repository: createRepository(),
-    wechatSessionResolver: async () => ({
-      openid: "wx-openid",
-      unionid: "wx-unionid",
-    }),
-    authUserResolver: async () => ({
-      userId: "00000000-0000-4000-8000-000000000401",
-      isNewUser: false,
-    }),
+    wechatSessionResolver: async () => ({ openid: "wx-openid", unionid: "wx-unionid" }),
+    authUserResolver: async () => ({ userId: activeMember.auth_user_id!, isNewUser: false }),
     oauthIdentityEnsurer: async () => undefined,
     tokenSigner: () => "signed-token",
-    smsService: {
-      sendCode: async () => undefined,
-    },
+    smsService: { sendCode: async () => undefined },
     ...overrides,
   });
 }
@@ -90,19 +95,21 @@ describe("platform partner portal migration", () => {
     expect(existsSync(migrationPath)).toBe(true);
 
     const sql = readFileSync(migrationPath, "utf8");
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.platform_partner_members");
-    expect(sql).toContain("partner_id uuid NOT NULL REFERENCES public.platform_partners(id)");
-    expect(sql).toContain("auth_user_id uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL");
-    expect(sql).toContain("DROP CONSTRAINT IF EXISTS sms_verification_codes_scene_check");
-    expect(sql).toContain("'bind_customer'::text");
-    expect(sql).toContain("'bind_employee'::text");
-    expect(sql).toContain("'admin_login'::text");
-    expect(sql).toContain("'rebind_wechat'::text");
-    expect(sql).toContain("'bind_platform_partner'::text");
-    expect(sql).toContain("tr_platform_partner_members_updated_at");
-    expect(sql).toContain("platform_partner_members_partner_phone_idx");
-    expect(sql).toContain("platform_partner_members_auth_user_status_idx");
-    expect(sql).toContain("platform_partner_members_partner_status_idx");
+    for (const fragment of [
+      "CREATE TABLE IF NOT EXISTS public.platform_partner_members",
+      "partner_id uuid NOT NULL REFERENCES public.platform_partners(id)",
+      "auth_user_id uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL",
+      "DROP CONSTRAINT IF EXISTS sms_verification_codes_scene_check",
+      "'bind_customer'::text",
+      "'bind_employee'::text",
+      "'admin_login'::text",
+      "'rebind_wechat'::text",
+      "'bind_platform_partner'::text",
+      "tr_platform_partner_members_updated_at",
+      "platform_partner_members_partner_phone_idx",
+      "platform_partner_members_auth_user_status_idx",
+      "platform_partner_members_partner_status_idx",
+    ]) expect(sql).toContain(fragment);
   });
 
   test("creates atomic partner member binding RPC and uniqueness indexes", () => {
@@ -114,16 +121,49 @@ describe("platform partner portal migration", () => {
 
     expect(existsSync(migrationPath)).toBe(true);
     const sql = readFileSync(migrationPath, "utf8");
-    expect(sql).toContain("claim_platform_partner_member_binding");
-    expect(sql).toContain("FOR UPDATE SKIP LOCKED");
-    expect(sql).toContain("platform_partner_members_auth_user_active_unique_idx");
-    expect(sql).toContain("platform_partner_members_phone_active_unique_idx");
-    expect(sql).toContain("sms_invalid");
-    expect(sql).toContain("member_already_bound");
-    expect(sql).toContain("REVOKE ALL ON FUNCTION public.claim_platform_partner_member_binding");
-    expect(sql).toContain("GRANT EXECUTE ON FUNCTION public.claim_platform_partner_member_binding");
-    expect(sql).toContain("TO service_role");
+    for (const fragment of [
+      "claim_platform_partner_member_binding",
+      "FOR UPDATE SKIP LOCKED",
+      "platform_partner_members_auth_user_active_unique_idx",
+      "platform_partner_members_phone_active_unique_idx",
+      "sms_invalid",
+      "member_already_bound",
+      "REVOKE ALL ON FUNCTION public.claim_platform_partner_member_binding",
+      "GRANT EXECUTE ON FUNCTION public.claim_platform_partner_member_binding",
+      "TO service_role",
+    ]) expect(sql).toContain(fragment);
     expect(sql).not.toContain("p_now");
+  });
+
+  test("creates partner dashboard monthly summary RPC", () => {
+    const migrationsDir = join(import.meta.dir, "../../../../supabase/migrations");
+    const migrationPath = join(
+      migrationsDir,
+      "20260705192000_create_partner_dashboard_summary_rpc.sql",
+    );
+
+    expect(existsSync(migrationPath)).toBe(true);
+    const sql = readFileSync(migrationPath, "utf8");
+    for (const fragment of [
+      "get_partner_dashboard_monthly_summary",
+      "p_partner_id uuid",
+      "partner_id = p_partner_id",
+      "count(*)",
+      "coalesce(sum(",
+      "filter (where status = 'available')",
+      "filter (where status = 'paid')",
+      "partner_settlement_batches_partner_created_idx",
+      "tenant_partner_bindings_partner_bound_idx",
+      "partner_commission_ledger_partner_created_idx",
+      "bound_at DESC",
+      "created_at DESC",
+      "REVOKE ALL ON FUNCTION public.get_partner_dashboard_monthly_summary",
+      "FROM PUBLIC",
+      "FROM anon",
+      "FROM authenticated",
+      "GRANT EXECUTE ON FUNCTION public.get_partner_dashboard_monthly_summary",
+      "TO service_role",
+    ]) expect(sql).toContain(fragment);
   });
 });
 
@@ -136,36 +176,7 @@ describe("PlatformPartnerPortalService", () => {
       request: {} as never,
     });
 
-    expect(result).toEqual({
-      token: "signed-token",
-      user_id: activeMember.auth_user_id,
-      roles: ["platform_partner"],
-      authMode: "platform_partner",
-      member: {
-        id: activeMember.id,
-        partner_id: activePartner.id,
-        name: "张三",
-        phone: "13800138000",
-        role: "owner",
-        status: "active",
-      },
-      partner: {
-        id: activePartner.id,
-        name: activePartner.name,
-        status: "active",
-        region_codes: ["411500"],
-        level: {
-          code: "city",
-          name: "城市合伙人",
-        },
-      },
-      level: {
-        id: activePartner.level.id,
-        code: "city",
-        name: "城市合伙人",
-        status: "active",
-      },
-    });
+    expect(result).toEqual({ token: "signed-token", ...expectedAuthContext });
   });
 
   test("login rejects WeChat auth user without bound partner member", async () => {
@@ -296,41 +307,9 @@ describe("PlatformPartnerPortalService", () => {
   test("me returns member, partner, and level context", async () => {
     const service = await createService();
 
-    const result = await service.me({
-      sub: activeMember.auth_user_id!,
-      roles: ["platform_partner"],
-      partner_id: activePartner.id,
-    });
+    const result = await service.me(partnerUser);
 
-    expect(result).toEqual({
-      user_id: activeMember.auth_user_id,
-      roles: ["platform_partner"],
-      authMode: "platform_partner",
-      member: {
-        id: activeMember.id,
-        partner_id: activePartner.id,
-        name: "张三",
-        phone: "13800138000",
-        role: "owner",
-        status: "active",
-      },
-      partner: {
-        id: activePartner.id,
-        name: activePartner.name,
-        status: "active",
-        region_codes: ["411500"],
-        level: {
-          code: "city",
-          name: "城市合伙人",
-        },
-      },
-      level: {
-        id: activePartner.level.id,
-        code: "city",
-        name: "城市合伙人",
-        status: "active",
-      },
-    });
+    expect(result).toEqual(expectedAuthContext);
   });
 
   test("me rejects disabled bound member", async () => {
@@ -363,6 +342,156 @@ describe("PlatformPartnerPortalService", () => {
     })).rejects.toMatchObject({
       statusCode: 403,
       code: "PARTNER_AUTH_REQUIRED",
+    });
+  });
+
+  test("listTenants scopes query to token partner and forwards pagination", async () => {
+    let receivedInput: unknown = null;
+    const service = await createService({
+      repository: createRepository({
+        listTenantBindings: async (input) => {
+          receivedInput = input;
+          return {
+            list: [],
+            pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
+          };
+        },
+      }),
+    });
+
+    await service.listTenants(
+      {
+        sub: activeMember.auth_user_id!,
+        roles: ["platform_partner"],
+        partner_id: activePartner.id,
+      },
+      { page: 2, pageSize: 30, status: "active" },
+    );
+
+    expect(receivedInput).toEqual({
+      partnerId: activePartner.id,
+      page: 2,
+      pageSize: 30,
+      status: "active",
+    });
+  });
+
+  test("dashboard methods reject platform partner tokens without partner_id", async () => {
+    const service = await createService();
+    const calls = [
+      () => service.summary(userWithoutPartner, {}),
+      () => service.listInviteCodes(userWithoutPartner),
+      () => service.listTenants(userWithoutPartner, { page: 1, pageSize: 20 }),
+      () => service.listRevenueEvents(userWithoutPartner, { page: 1, pageSize: 20 }),
+      () => service.listCommissionLedger(userWithoutPartner, { page: 1, pageSize: 20 }),
+      () => service.listSettlements(userWithoutPartner, { page: 1, pageSize: 20 }),
+    ];
+
+    for (const call of calls) {
+      await expect(call()).rejects.toMatchObject({
+        statusCode: 403,
+        code: "PARTNER_AUTH_REQUIRED",
+      });
+    }
+  });
+
+  test("dashboard methods always scope repository calls to token partner", async () => {
+    const received: Array<[string, string | undefined]> = [];
+    const service = await createService({
+      repository: createRepository({
+        getMonthlySummary: async (input) => {
+          received.push(["summary", input.partnerId]);
+          return emptySummary();
+        },
+        listInviteCodes: async (partnerId) => {
+          received.push(["inviteCodes", partnerId]);
+          return [];
+        },
+        listTenantBindings: async (input) => {
+          received.push(["tenants", input.partnerId]);
+          return emptyPage(input.page, input.pageSize);
+        },
+        listRevenueEvents: async (input) => {
+          received.push(["revenueEvents", input.partnerId]);
+          return emptyPage(input.page, input.pageSize);
+        },
+        listCommissionLedgers: async (input) => {
+          received.push(["commissionLedger", input.partnerId]);
+          return emptyPage(input.page, input.pageSize);
+        },
+        listSettlementBatches: async (input) => {
+          received.push(["settlements", input.partnerId]);
+          return emptyPage(input.page, input.pageSize);
+        },
+      }),
+    });
+    const maliciousQuery = { page: 1, pageSize: 20, partnerId: otherPartnerId } as unknown as { page: number; pageSize: number };
+
+    await service.summary(partnerUser, {});
+    await service.listInviteCodes(partnerUser);
+    await service.listTenants(partnerUser, maliciousQuery);
+    await service.listRevenueEvents(partnerUser, maliciousQuery);
+    await service.listCommissionLedger(partnerUser, maliciousQuery);
+    await service.listSettlements(partnerUser, maliciousQuery);
+
+    expect(received).toEqual([
+      ["summary", activePartner.id],
+      ["inviteCodes", activePartner.id],
+      ["tenants", activePartner.id],
+      ["revenueEvents", activePartner.id],
+      ["commissionLedger", activePartner.id],
+      ["settlements", activePartner.id],
+    ]);
+  });
+
+  test("listRevenueEvents converts month into timestamp range for repository", async () => {
+    let receivedInput: unknown = null;
+    const service = await createService({
+      repository: createRepository({
+        listRevenueEvents: async (input) => {
+          receivedInput = input;
+          return emptyPage(input.page, input.pageSize);
+        },
+      }),
+    });
+
+    await service.listRevenueEvents(partnerUser, {
+      page: 3,
+      pageSize: 40,
+      month: "2026-11",
+      status: "confirmed",
+    });
+
+    expect(receivedInput).toEqual({
+      partnerId: activePartner.id,
+      page: 3,
+      pageSize: 40,
+      status: "confirmed",
+      revenue_type: undefined,
+      startDate: "2026-11-01T00:00:00.000Z",
+      endDate: "2026-12-01T00:00:00.000Z",
+    });
+    expect(receivedInput).not.toHaveProperty("month");
+  });
+
+  test("summary converts month into an inclusive-exclusive range", async () => {
+    let receivedInput: unknown = null;
+    const service = await createService({
+      repository: createRepository({
+        getMonthlySummary: async (input) => {
+          receivedInput = input;
+          return emptySummary();
+        },
+      }),
+    });
+
+    await service.summary(partnerUser, { month: "2026-02" });
+
+    expect(receivedInput).toEqual({
+      partnerId: activePartner.id,
+      month: "2026-02",
+      startDate: "2026-02-01T00:00:00.000Z",
+      endDate: "2026-03-01T00:00:00.000Z",
     });
   });
 });

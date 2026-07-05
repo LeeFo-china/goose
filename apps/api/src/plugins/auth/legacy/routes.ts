@@ -8,6 +8,16 @@ const publicRoutes = new Set([
   "/admin/auth/login",
 ]);
 
+const partnerPortalRoutes = new Set([
+  "/partner/auth/me",
+  "/partner/dashboard/summary",
+  "/partner/invite-codes",
+  "/partner/dashboard/tenants",
+  "/partner/dashboard/revenue-events",
+  "/partner/dashboard/commission-ledger",
+  "/partner/dashboard/settlements",
+]);
+
 export function isPublicRoute(method: string, url: string) {
   if (publicRoutes.has(url)) {
     return true;
@@ -165,7 +175,7 @@ export function shouldBypassAuth(method: string, url: string) {
 export function isPartnerPortalRoute(method: string, url: string) {
   return (
     (method === "GET" || method === "HEAD") &&
-    url === "/partner/auth/me"
+    partnerPortalRoutes.has(url)
   );
 }
 

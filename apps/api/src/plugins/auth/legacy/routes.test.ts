@@ -46,15 +46,27 @@ describe("auth public route allowlist", () => {
   });
 
   test("scopes platform partner tokens to partner portal routes", () => {
-    expect(isPartnerPortalRoute("GET", "/partner/auth/me")).toBe(true);
-    expect(isPartnerPortalRoute("HEAD", "/partner/auth/me")).toBe(true);
+    const partnerPortalRoutes = [
+      "/partner/auth/me",
+      "/partner/dashboard/summary",
+      "/partner/invite-codes",
+      "/partner/dashboard/tenants",
+      "/partner/dashboard/revenue-events",
+      "/partner/dashboard/commission-ledger",
+      "/partner/dashboard/settlements",
+    ];
+
+    for (const route of partnerPortalRoutes) {
+      expect(isPartnerPortalRoute("GET", route)).toBe(true);
+      expect(isPartnerPortalRoute("HEAD", route)).toBe(true);
+      expect(isPartnerPortalRoute("POST", route)).toBe(false);
+      expect(isPartnerPortalRoute("DELETE", route)).toBe(false);
+    }
 
     expect(isPartnerPortalRoute("POST", "/partner/auth/me")).toBe(false);
-    expect(isPartnerPortalRoute("GET", "/partner/dashboard/summary")).toBe(false);
-    expect(isPartnerPortalRoute("POST", "/partner/dashboard/summary")).toBe(false);
-    expect(isPartnerPortalRoute("DELETE", "/partner/dashboard/summary")).toBe(false);
-    expect(isPartnerPortalRoute("GET", "/partner/invite-codes")).toBe(false);
-    expect(isPartnerPortalRoute("POST", "/partner/invite-codes")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/partner/dashboard")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/partner/dashboard/unknown")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/partner/invite-codes/extra")).toBe(false);
     expect(isPartnerPortalRoute("GET", "/ai/decoration-qa/suggestions")).toBe(false);
     expect(isPartnerPortalRoute("GET", "/platform/partners")).toBe(false);
   });

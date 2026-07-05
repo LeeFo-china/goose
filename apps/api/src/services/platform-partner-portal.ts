@@ -6,6 +6,13 @@ import {
   type PlatformPartnerPortalRepositoryPort,
   type PlatformPartnerRecord,
 } from "@/repositories/platform-partner-portal";
+import type {
+  PartnerDashboardCommissionLedgerListQuery,
+  PartnerDashboardRevenueEventListQuery,
+  PartnerDashboardSettlementListQuery,
+  PartnerDashboardSummaryQuery,
+  PartnerDashboardTenantListQuery,
+} from "@/schema/platform-partner-portal";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import { userIdentityService } from "@/services/user-identities";
 import {
@@ -23,35 +30,24 @@ const PLATFORM_PARTNER_ROLE = "platform_partner";
 const SMS_SCENE = "bind_platform_partner";
 
 export type PartnerAuthMemberPayload = {
-  id: string;
-  partner_id: string;
-  name: string;
-  phone: string;
+  id: string; partner_id: string; name: string; phone: string;
   role: PlatformPartnerMemberRecord["role"];
   status: PlatformPartnerMemberRecord["status"];
 };
 
 export type PartnerAuthLevelPayload = {
-  id: string;
-  code: string;
-  name: string;
-  status: string;
+  id: string; code: string; name: string; status: string;
 };
 
 export type PartnerAuthPartnerPayload = {
-  id: string;
-  name: string;
+  id: string; name: string;
   status: PlatformPartnerRecord["status"];
   region_codes: string[];
-  level: {
-    code: string;
-    name: string;
-  } | null;
+  level: { code: string; name: string } | null;
 };
 
 export type PartnerAuthResponse = {
-  token: string;
-  user_id: string;
+  token: string; user_id: string;
   roles: [typeof PLATFORM_PARTNER_ROLE];
   authMode: "platform_partner";
   member: PartnerAuthMemberPayload;
@@ -60,24 +56,6 @@ export type PartnerAuthResponse = {
 };
 
 export type PartnerAuthMeResponse = Omit<PartnerAuthResponse, "token">;
-
-export interface PlatformPartnerPortalServicePort {
-  login(input: {
-    code: string;
-    request?: FastifyRequest;
-  }): Promise<PartnerAuthResponse>;
-  sendCode(input: {
-    phone: string;
-    requestIp: string | null;
-  }): Promise<{ success: true }>;
-  bindPhone(input: {
-    code: string;
-    phone: string;
-    sms_code: string;
-    request?: FastifyRequest;
-  }): Promise<PartnerAuthResponse>;
-  me(user?: JwtPayload): Promise<PartnerAuthMeResponse>;
-}
 
 type WechatSessionResolver = (code: string) => Promise<{
   openid?: string;
@@ -110,7 +88,7 @@ type PlatformPartnerPortalServiceDependencies = {
   smsService?: SmsServicePort;
 };
 
-export class PlatformPartnerPortalService implements PlatformPartnerPortalServicePort {
+export class PlatformPartnerPortalService {
   private readonly repository: PlatformPartnerPortalRepositoryPort;
   private readonly wechatSessionResolver: WechatSessionResolver;
   private readonly authUserResolver: AuthUserResolver;
@@ -201,17 +179,13 @@ export class PlatformPartnerPortalService implements PlatformPartnerPortalServic
   }
 
   async me(user?: JwtPayload) {
-    if (
-      !user?.sub ||
-      !user.partner_id ||
-      !Array.isArray(user.roles) ||
-      !user.roles.includes(PLATFORM_PARTNER_ROLE)
-    ) {
+    const partnerUser = this.requirePartnerUser(user);
+    if (!user?.sub) {
       throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
     }
 
     const member = await this.repository.findMemberByAuthUserId(user.sub);
-    if (!member || member.partner_id !== user.partner_id) {
+    if (!member || member.partner_id !== partnerUser.partnerId) {
       throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
     }
 
@@ -225,6 +199,103 @@ export class PlatformPartnerPortalService implements PlatformPartnerPortalServic
       partner: this.serializePartner(member.partner!),
       level: this.serializeLevel(member.partner!),
     } satisfies PartnerAuthMeResponse;
+  }
+
+  async summary(user: JwtPayload | undefined, query: PartnerDashboardSummaryQuery) {
+    const partnerUser = this.requirePartnerUser(user);
+    const range = this.resolveMonthRange(query.month);
+    const metrics = await this.repository.getMonthlySummary({
+      partnerId: partnerUser.partnerId,
+      month: range.month,
+      startDate: range.startDate,
+      endDate: range.endDate,
+    });
+
+    return { month: range.month, range: { start: range.startDate, end: range.endDate }, metrics };
+  }
+
+  async listInviteCodes(user: JwtPayload | undefined) {
+    const partnerUser = this.requirePartnerUser(user);
+    return this.repository.listInviteCodes(partnerUser.partnerId);
+  }
+
+  async listTenants(
+    user: JwtPayload | undefined,
+    query: PartnerDashboardTenantListQuery,
+  ) {
+    const partnerUser = this.requirePartnerUser(user);
+    return this.repository.listTenantBindings({
+      page: query.page, pageSize: query.pageSize, status: query.status, partnerId: partnerUser.partnerId,
+    });
+  }
+
+  async listRevenueEvents(
+    user: JwtPayload | undefined,
+    query: PartnerDashboardRevenueEventListQuery,
+  ) {
+    const partnerUser = this.requirePartnerUser(user);
+    const range = query.month ? this.resolveMonthRange(query.month) : null;
+    return this.repository.listRevenueEvents({
+      partnerId: partnerUser.partnerId,
+      page: query.page, pageSize: query.pageSize,
+      revenue_type: query.revenue_type,
+      status: query.status,
+      startDate: range?.startDate,
+      endDate: range?.endDate,
+    });
+  }
+
+  async listCommissionLedger(
+    user: JwtPayload | undefined,
+    query: PartnerDashboardCommissionLedgerListQuery,
+  ) {
+    const partnerUser = this.requirePartnerUser(user);
+    return this.repository.listCommissionLedgers({
+      page: query.page, pageSize: query.pageSize, status: query.status, partnerId: partnerUser.partnerId,
+    });
+  }
+
+  async listSettlements(
+    user: JwtPayload | undefined,
+    query: PartnerDashboardSettlementListQuery,
+  ) {
+    const partnerUser = this.requirePartnerUser(user);
+    return this.repository.listSettlementBatches({
+      page: query.page, pageSize: query.pageSize, status: query.status, partnerId: partnerUser.partnerId,
+    });
+  }
+
+  private requirePartnerUser(user?: JwtPayload) {
+    const partnerId = typeof user?.partner_id === "string"
+      ? user.partner_id.trim()
+      : "";
+    if (
+      !partnerId ||
+      !Array.isArray(user?.roles) ||
+      !user.roles.includes(PLATFORM_PARTNER_ROLE)
+    ) {
+      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
+    }
+
+    return { partnerId };
+  }
+
+  private resolveMonthRange(month?: string) {
+    const normalizedMonth = month ?? new Date().toISOString().slice(0, 7);
+    const match = normalizedMonth.match(/^(\d{4})-(\d{2})$/);
+    if (!match) throw Errors.badRequest("月份格式必须为 YYYY-MM");
+
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+    if (monthIndex < 0 || monthIndex > 11) {
+      throw Errors.badRequest("月份格式必须为 YYYY-MM");
+    }
+
+    return {
+      month: normalizedMonth,
+      startDate: new Date(Date.UTC(year, monthIndex, 1)).toISOString(),
+      endDate: new Date(Date.UTC(year, monthIndex + 1, 1)).toISOString(),
+    };
   }
 
   private assertBindingClaimed(
@@ -331,14 +402,7 @@ export class PlatformPartnerPortalService implements PlatformPartnerPortalServic
   }
 
   private serializeMember(member: PlatformPartnerMemberRecord): PartnerAuthMemberPayload {
-    return {
-      id: member.id,
-      partner_id: member.partner_id,
-      name: member.name,
-      phone: member.phone,
-      role: member.role,
-      status: member.status,
-    };
+    return { id: member.id, partner_id: member.partner_id, name: member.name, phone: member.phone, role: member.role, status: member.status };
   }
 
   private serializePartner(partner: PlatformPartnerRecord): PartnerAuthPartnerPayload {
@@ -358,12 +422,7 @@ export class PlatformPartnerPortalService implements PlatformPartnerPortalServic
 
   private serializeLevel(partner: PlatformPartnerRecord): PartnerAuthLevelPayload | null {
     return partner.level
-      ? {
-        id: partner.level.id,
-        code: partner.level.code,
-        name: partner.level.name,
-        status: partner.level.status,
-      }
+      ? { id: partner.level.id, code: partner.level.code, name: partner.level.name, status: partner.level.status }
       : null;
   }
 }
