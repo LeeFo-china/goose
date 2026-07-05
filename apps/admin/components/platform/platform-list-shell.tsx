@@ -23,6 +23,8 @@ import {
   PLATFORM_LIST_TABLE_ROW_HEIGHT,
 } from "@/components/platform/platform-list-page-size";
 
+const PLATFORM_LIST_OVERLAY_RESIZE_SETTLE_MS = 800;
+
 export type PlatformListPagination = {
   page: number;
   pageSize: number;
@@ -74,6 +76,7 @@ export function PlatformListPageShell({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const tableViewportRef = useRef<HTMLDivElement | null>(null);
+  const overlayResizeGuardUntilRef = useRef(0);
   const [tableRowHeight, setTableRowHeight] = useState(rowHeight);
   const visibleCount = currentCount ?? Math.min(pagination.pageSize, pagination.total);
   const totalPages = Math.max(1, pagination.totalPages || 1);
@@ -113,6 +116,13 @@ export function PlatformListPageShell({
     const syncPageSize = () => {
       window.cancelAnimationFrame(frameId);
       frameId = window.requestAnimationFrame(() => {
+        const now = window.performance.now();
+        if (isPageInteractionLockedByOverlay()) {
+          overlayResizeGuardUntilRef.current = now + PLATFORM_LIST_OVERLAY_RESIZE_SETTLE_MS;
+          return;
+        }
+        if (now < overlayResizeGuardUntilRef.current) return;
+
         const viewportHeight = viewport.clientHeight;
         if (!viewportHeight) return;
 
@@ -127,18 +137,20 @@ export function PlatformListPageShell({
           rowHeight,
           scrollbarHeight,
         });
+        const hasExplicitPageSize = new URLSearchParams(window.location.search).has(pageSizeKey);
+        const rowPageSize = hasExplicitPageSize ? pagination.pageSize : nextPageSize;
         const nextRowHeight = calculatePlatformListRowHeight({
           viewportHeight,
           headerHeight: measuredHeaderHeight,
           scrollbarHeight,
-          pageSize: nextPageSize,
+          pageSize: rowPageSize,
           minRowHeight: rowHeight,
         });
 
         setTableRowHeight((current) =>
           current === nextRowHeight ? current : nextRowHeight
         );
-        if (nextPageSize === pagination.pageSize) return;
+        if (hasExplicitPageSize || nextPageSize === pagination.pageSize) return;
 
         const nextTotalPages = Math.max(1, Math.ceil(pagination.total / nextPageSize));
         const nextPage = Math.min(pagination.page, nextTotalPages);
@@ -165,6 +177,7 @@ export function PlatformListPageShell({
     pagination.page,
     pagination.pageSize,
     pagination.total,
+    pageSizeKey,
     pending,
     rowHeight,
   ]);
@@ -262,4 +275,11 @@ function measureHorizontalScrollbarHeight(viewport: HTMLElement) {
   if (!(scroller instanceof HTMLElement)) return 0;
 
   return Math.max(0, scroller.offsetHeight - scroller.clientHeight);
+}
+
+function isPageInteractionLockedByOverlay() {
+  if (typeof document === "undefined") return false;
+
+  return document.body.dataset.scrollLocked === "1"
+    || document.querySelector('[role="listbox"][data-state="open"]') !== null;
 }

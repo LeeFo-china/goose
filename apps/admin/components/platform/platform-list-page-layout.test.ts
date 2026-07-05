@@ -74,6 +74,19 @@ describe("Platform list page layout", () => {
     expect(shell).toContain("router.push");
   });
 
+  test("does not auto-resize platform list pagination while Radix overlays lock the page", () => {
+    const shell = readSource("./platform-list-shell.tsx");
+
+    expect(shell).toContain("isPageInteractionLockedByOverlay");
+    expect(shell).toContain("overlayResizeGuardUntilRef");
+    expect(shell).toContain("PLATFORM_LIST_OVERLAY_RESIZE_SETTLE_MS");
+    expect(shell).toContain("now < overlayResizeGuardUntilRef.current");
+    expect(shell).toContain("hasExplicitPageSize");
+    expect(shell).toContain("new URLSearchParams(window.location.search).has(pageSizeKey)");
+    expect(shell).toContain('document.body.dataset.scrollLocked === "1"');
+    expect(shell).toContain('[role="listbox"][data-state="open"]');
+  });
+
   test("moves all target platform lists into the project-style workspace", () => {
     for (const page of platformPages) {
       const source = readSource(page.layoutPath);
