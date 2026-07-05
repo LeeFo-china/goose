@@ -34,6 +34,15 @@ export const PlatformPartnerIdParamSchema = z.object({
   id: z.uuid("无效的合伙人 ID"),
 });
 
+export const PlatformPartnerInviteCodeParamSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(1, "邀请码不能为空")
+    .max(120, "邀请码不能超过 120 个字符")
+    .transform((value) => value.toUpperCase()),
+});
+
 export const PlatformPartnerStatusUpdateSchema = z.object({
   status: PlatformPartnerStatusSchema,
   reason: z.string().trim().min(1, "状态变更原因不能为空").max(300, "状态变更原因不能超过 300 个字符"),
@@ -54,6 +63,16 @@ export const TenantPartnerBindingCreateSchema = z.object({
   change_reason: z.string().trim().min(1, "绑定原因不能为空").max(300, "绑定原因不能超过 300 个字符"),
 }).strict();
 
+export const TenantPartnerInviteBindingCreateSchema = z.object({
+  invite_code: z
+    .string()
+    .trim()
+    .min(1, "邀请码不能为空")
+    .max(120, "邀请码不能超过 120 个字符")
+    .transform((value) => value.toUpperCase()),
+  source_id: z.string().trim().max(120, "来源 ID 不能超过 120 个字符").optional(),
+}).strict();
+
 export const TenantPartnerBindingListQuerySchema =
   PaginationQuerySchema.extend({
     partner_id: z.uuid("无效的合伙人 ID").optional(),
@@ -70,7 +89,11 @@ export type PlatformPartnerStatusUpdateInput =
   z.infer<typeof PlatformPartnerStatusUpdateSchema>;
 export type PlatformPartnerInviteCodeCreateInput =
   z.infer<typeof PlatformPartnerInviteCodeCreateSchema>;
+export type PlatformPartnerInviteCodeResolveInput =
+  z.infer<typeof PlatformPartnerInviteCodeParamSchema>;
 export type TenantPartnerBindingCreateInput =
   z.infer<typeof TenantPartnerBindingCreateSchema>;
+export type TenantPartnerInviteBindingCreateInput =
+  z.infer<typeof TenantPartnerInviteBindingCreateSchema>;
 export type TenantPartnerBindingListQuery =
   z.infer<typeof TenantPartnerBindingListQuerySchema>;

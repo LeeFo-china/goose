@@ -1,7 +1,18 @@
 # 城市合伙人官网申请 MVP 交接文档
 
 日期：2026-07-05
-分支：`feature/partner-applications-mvp`
+落地分支：`main`
+
+## 主线状态与 dev 验收
+
+- 已合并并推送到 `main`。
+- dev 部署：GitHub Actions `Deploy Dev` run `28727592370` 成功。
+- 页面 smoke：`GET https://admin-dev.goodcms.cn/partners` 返回 `200`。
+- 公开提交 smoke：
+  - `POST https://admin-dev.goodcms.cn/api/public/partner-applications` 返回 `200`。
+  - 验收申请编号：`CPA-20260705-MR77KS0FCDL2`。
+  - dev 库查询确认 `platform_partner_applications.status = submitted`。
+- 修复记录：公开申请接口必须在 API 全局 auth 白名单中放行 `POST /public/partner-applications`，否则官网代理会收到 `401 TOKEN_MISSING`。
 
 ## 实现范围
 
@@ -211,6 +222,36 @@ apps/admin/app/api/public/partner-applications/route.ts
 - Next 代理再转发到后端 `POST /public/partner-applications`。
 - 该代理不读取后台登录 token，只代理城市合伙人公开申请接口。
 - 表单会采集 `source_url`、`utm_source`、`utm_medium`、`utm_campaign`。
+
+## 官网访问策略
+
+第一期建议把官网作为 Admin Next 应用中的公开站点路由交付，但生产域名不要暴露完整后台。
+
+dev 访问：
+
+```text
+https://admin-dev.goodcms.cn/partners
+```
+
+生产建议：
+
+```text
+https://www.goodcms.cn/partners
+```
+
+反代策略：
+
+- `www.goodcms.cn` 只放行：
+  - `/partners`
+  - `/_next/*`
+  - `/logo.png`
+  - `/icon.png`
+  - `/partner-hero-renovation.png`
+  - `/api/public/partner-applications`
+- `/api/public/partner-applications` 继续走 Admin Next 同源代理，再转后端 `POST /public/partner-applications`。
+- `admin.goodcms.cn` 继续作为超管后台入口，保留 `/login`、`/platform/*` 等后台路由。
+- `www.goodcms.cn` 不建议直接暴露 `/login`、`/dashboard`、`/platform/*`。这些路径应返回 `404` 或跳转到 `/partners`，避免官网域名变成后台入口。
+- 如果第一期暂未配置 `www.goodcms.cn` 证书和 Nginx，可先用 `admin.goodcms.cn/partners` 做内测，不对外投放。
 
 ## 后续建议
 

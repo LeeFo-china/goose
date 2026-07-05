@@ -79,6 +79,15 @@ export type PlatformPartnerInviteCodeRecord = {
   updated_at: string;
 };
 
+export type PlatformPartnerInviteCodeWithPartnerRecord =
+  PlatformPartnerInviteCodeRecord & {
+    partner?: (
+      Pick<PlatformPartnerRecord, "id" | "name" | "status" | "region_codes"> & {
+        level?: Pick<PlatformPartnerLevelRecord, "code" | "name"> | null;
+      }
+    ) | null;
+  };
+
 export type PlatformPartnerInviteCodeCreateRecordInput = {
   partner_id: string;
   code: string;
@@ -112,7 +121,7 @@ export type TenantPartnerBindingCreateRecordInput = {
   invite_code_id?: string | null;
   source_type: "invite_code" | "manual" | "lead_source";
   source_id?: string | null;
-  changed_by_employee_id: string;
+  changed_by_employee_id: string | null;
   change_reason: string;
 };
 
@@ -153,6 +162,11 @@ const BINDING_SELECT = [
   "*",
   "partner:platform_partners!tenant_partner_bindings_partner_id_fkey(id, name, status)",
   "tenant:tenants!tenant_partner_bindings_tenant_id_fkey(id, name, slug)",
+].join(", ");
+
+const INVITE_CODE_SELECT = [
+  "*",
+  "partner:platform_partners!platform_partner_invite_codes_partner_id_fkey(id, name, status, region_codes, level:platform_partner_levels!platform_partners_level_id_fkey(code, name))",
 ].join(", ");
 
 class PlatformPartnersRepository {
@@ -268,6 +282,16 @@ class PlatformPartnersRepository {
 
     if (error) throw Errors.dbError("查询合伙人邀请码失败", error);
     return (data ?? []) as PlatformPartnerInviteCodeRecord[];
+  }
+
+  async findInviteCodeByCode(code: string) {
+    const { data, error } = await this.from("platform_partner_invite_codes")
+      .select(INVITE_CODE_SELECT)
+      .eq("code", code)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询合伙人邀请码失败", error);
+    return (data as PlatformPartnerInviteCodeWithPartnerRecord | null) ?? null;
   }
 
   async findActiveTenantBinding(tenantId: string) {

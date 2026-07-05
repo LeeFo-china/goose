@@ -3,11 +3,13 @@ import { Errors } from "@/errors/error-factory";
 import {
   PlatformPartnerCreateSchema,
   PlatformPartnerIdParamSchema,
+  PlatformPartnerInviteCodeParamSchema,
   PlatformPartnerInviteCodeCreateSchema,
   PlatformPartnerListQuerySchema,
   PlatformPartnerStatusUpdateSchema,
   PlatformPartnerUpdateSchema,
   TenantPartnerBindingCreateSchema,
+  TenantPartnerInviteBindingCreateSchema,
   TenantPartnerBindingListQuerySchema,
 } from "@/schema/platform-partners";
 import { platformPartnersService } from "@/services/platform-partners";
@@ -18,6 +20,34 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 class PlatformPartnersController extends PlatformBaseController {
   constructor() {
     super("platform-partners");
+  }
+
+  @Get("/partner-onboarding/invite-codes/:code")
+  async resolveInviteCode(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = PlatformPartnerInviteCodeParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await platformPartnersService.resolveInviteCode(
+      paramsResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/partner-onboarding/tenant-binding")
+  async bindTenantByInviteCode(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const bodyResult = TenantPartnerInviteBindingCreateSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformPartnersService.bindTenantByInviteCode(
+      authContext,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
   }
 
   @Get("/platform/partners")

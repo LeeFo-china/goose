@@ -31,6 +31,13 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    (method === "GET" || method === "HEAD") &&
+    url.startsWith("/partner-onboarding/invite-codes/")
+  ) {
+    return true;
+  }
+
   if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaigns/")) {
     return true;
   }

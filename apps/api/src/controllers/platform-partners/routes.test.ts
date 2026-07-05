@@ -17,6 +17,8 @@ describe("PlatformPartnersController routes", () => {
     controller.registerExtraRoutes(fastify as never);
 
     expect(routes).toEqual([
+      { method: "GET", path: "/partner-onboarding/invite-codes/:code" },
+      { method: "POST", path: "/partner-onboarding/tenant-binding" },
       { method: "GET", path: "/platform/partners" },
       { method: "POST", path: "/platform/partners" },
       { method: "GET", path: "/platform/partners/levels" },

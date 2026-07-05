@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   platformPartnersRepository,
   type PlatformPartnerCreateRecordInput,
+  type PlatformPartnerInviteCodeWithPartnerRecord,
   type PlatformPartnerRecord,
   type PlatformPartnerStatusRecordInput,
   type PlatformPartnerUpdateRecordInput,
@@ -9,11 +10,13 @@ import {
 } from "@/repositories/platform-partners";
 import type {
   PlatformPartnerCreateInput,
+  PlatformPartnerInviteCodeResolveInput,
   PlatformPartnerInviteCodeCreateInput,
   PlatformPartnerListQuery,
   PlatformPartnerStatusUpdateInput,
   PlatformPartnerUpdateInput,
   TenantPartnerBindingCreateInput,
+  TenantPartnerInviteBindingCreateInput,
   TenantPartnerBindingListQuery,
 } from "@/schema/platform-partners";
 import type { AuthContext } from "@/services/authorization";
@@ -28,6 +31,7 @@ type PlatformPartnersRepositoryPort = Pick<
   | "updatePartnerStatus"
   | "createInviteCode"
   | "listInviteCodes"
+  | "findInviteCodeByCode"
   | "findActiveTenantBinding"
   | "createTenantBinding"
   | "listTenantBindings"
@@ -39,6 +43,7 @@ type PlatformPartnersServiceDependencies = {
 
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const BINDING_MANAGE_PERMISSION = "platform.partner.binding.manage";
+const INVITE_BINDING_CHANGE_REASON = "装企小程序扫码入驻自动绑定";
 
 export class PlatformPartnersService {
   private readonly repository: PlatformPartnersRepositoryPort;
@@ -142,6 +147,11 @@ export class PlatformPartnersService {
     return this.repository.listInviteCodes(partnerId);
   }
 
+  async resolveInviteCode(input: PlatformPartnerInviteCodeResolveInput) {
+    const inviteCode = await this.requireAvailableInviteCode(input.code);
+    return this.buildInviteCodeOnboardingPayload(inviteCode);
+  }
+
   async createTenantBinding(
     authContext: AuthContext,
     input: TenantPartnerBindingCreateInput,
@@ -170,6 +180,53 @@ export class PlatformPartnersService {
     } satisfies TenantPartnerBindingCreateRecordInput);
   }
 
+  async bindTenantByInviteCode(
+    authContext: AuthContext,
+    input: TenantPartnerInviteBindingCreateInput,
+  ) {
+    const tenantId = this.requireTenantId(authContext);
+    const inviteCode = await this.requireAvailableInviteCode(input.invite_code);
+    const existingBinding = await this.repository.findActiveTenantBinding(tenantId);
+    if (existingBinding) {
+      if (existingBinding.partner_id === inviteCode.partner_id) {
+        return {
+          ...this.buildInviteCodeOnboardingPayload(inviteCode),
+          binding: existingBinding,
+          created: false,
+          idempotent: true,
+        };
+      }
+
+      throw Errors.business(
+        409,
+        "该租户已绑定其他城市合伙人",
+        "TENANT_PARTNER_BINDING_EXISTS",
+        {
+          tenant_id: tenantId,
+          existing_partner_id: existingBinding.partner_id,
+          requested_partner_id: inviteCode.partner_id,
+        },
+      );
+    }
+
+    const binding = await this.repository.createTenantBinding({
+      tenant_id: tenantId,
+      partner_id: inviteCode.partner_id,
+      invite_code_id: inviteCode.id,
+      source_type: "invite_code",
+      source_id: input.source_id ?? null,
+      changed_by_employee_id: authContext.employeeId,
+      change_reason: INVITE_BINDING_CHANGE_REASON,
+    } satisfies TenantPartnerBindingCreateRecordInput);
+
+    return {
+      ...this.buildInviteCodeOnboardingPayload(inviteCode),
+      binding,
+      created: true,
+      idempotent: false,
+    };
+  }
+
   async listTenantBindings(
     authContext: AuthContext,
     query: TenantPartnerBindingListQuery,
@@ -181,6 +238,78 @@ export class PlatformPartnersService {
       partner_id: query.partner_id,
       tenant_id: query.tenant_id,
     });
+  }
+
+  private async requireAvailableInviteCode(code: string) {
+    const normalizedCode = this.normalizeInviteCode(code);
+    const inviteCode = await this.repository.findInviteCodeByCode(normalizedCode);
+    if (!inviteCode || inviteCode.status !== "active") {
+      throw Errors.business(
+        404,
+        "合伙人邀请码不存在或已失效",
+        "PARTNER_INVITE_CODE_UNAVAILABLE",
+      );
+    }
+
+    if (
+      inviteCode.expires_at &&
+      new Date(inviteCode.expires_at).getTime() <= Date.now()
+    ) {
+      throw Errors.business(
+        410,
+        "合伙人邀请码已过期",
+        "PARTNER_INVITE_CODE_EXPIRED",
+      );
+    }
+
+    if (!inviteCode.partner || inviteCode.partner.status !== "active") {
+      throw Errors.business(
+        409,
+        "城市合伙人当前不可绑定",
+        "PARTNER_INVITE_PARTNER_UNAVAILABLE",
+      );
+    }
+
+    return inviteCode;
+  }
+
+  private buildInviteCodeOnboardingPayload(
+    inviteCode: PlatformPartnerInviteCodeWithPartnerRecord,
+  ) {
+    const partner = inviteCode.partner;
+    if (!partner) {
+      throw Errors.business(
+        409,
+        "城市合伙人当前不可绑定",
+        "PARTNER_INVITE_PARTNER_UNAVAILABLE",
+      );
+    }
+
+    return {
+      invite_code: {
+        id: inviteCode.id,
+        code: inviteCode.code,
+        region_code: inviteCode.region_code,
+        campaign_code: inviteCode.campaign_code,
+        expires_at: inviteCode.expires_at,
+      },
+      partner: {
+        id: partner.id,
+        name: partner.name,
+        status: partner.status,
+        region_codes: partner.region_codes,
+        level: partner.level
+          ? {
+            code: partner.level.code,
+            name: partner.level.name,
+          }
+          : null,
+      },
+      onboarding: {
+        can_bind: true,
+        binding_source_type: "invite_code" as const,
+      },
+    };
   }
 
   private async requirePartner(partnerId: string) {
@@ -226,6 +355,21 @@ export class PlatformPartnersService {
       throw Errors.forbidden();
     }
     return authContext.employeeId;
+  }
+
+  private requireTenantId(authContext: AuthContext) {
+    if (!authContext.tenantId) {
+      throw Errors.business(
+        403,
+        "当前操作必须在租户上下文中执行",
+        "TENANT_CONTEXT_REQUIRED",
+      );
+    }
+    return authContext.tenantId;
+  }
+
+  private normalizeInviteCode(code: string) {
+    return code.trim().toUpperCase();
   }
 
   private buildInviteCode(

@@ -16,6 +16,11 @@ describe("auth public route allowlist", () => {
     expect(isPublicRoute("POST", "/public/partner-applications")).toBe(true);
   });
 
+  test("allows mini-program partner invite code lookup without a token", () => {
+    expect(isPublicRoute("GET", "/partner-onboarding/invite-codes/CP-411500-ABC")).toBe(true);
+    expect(isPublicRoute("POST", "/partner-onboarding/tenant-binding")).toBe(false);
+  });
+
   test("keeps platform partner application review routes protected", () => {
     expect(isPublicRoute("GET", "/platform/partner-applications")).toBe(false);
     expect(isPublicRoute(
