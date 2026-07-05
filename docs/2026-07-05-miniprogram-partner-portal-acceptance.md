@@ -29,7 +29,7 @@ gooes 本仓库已完成后端/admin 契约；小程序团队只需修改 `/User
 
 ## 已验证
 
-- API focused tests passed: `48 pass`.
+- API focused tests passed: `52 pass`.
 - API typecheck passed.
 - Admin typecheck passed.
 - API/admin file-size checks passed.
@@ -41,10 +41,14 @@ gooes 本仓库已完成后端/admin 契约；小程序团队只需修改 `/User
   - `20260705203000_add_platform_partner_member_remark.sql`
 - 已执行 `supabase db push --db-url "$SUPABASE_DB_DIRECT_URL" --yes` 应用上述 4 个 migration。
 - 已执行 `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"`，确认 Local/Remote 对齐到 `20260705203000`。
+- 已执行安全补丁 migration dry-run 和 apply：
+  - `20260705204000_harden_platform_partner_member_binding_rpc.sql`
+- 已再次执行 `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"`，确认 Local/Remote 对齐到 `20260705204000`。
 - 已执行远端只读 schema smoke，确认：
   - `platform_partner_members` 表存在。
   - `platform_partner_members.remark` 列存在。
   - `claim_platform_partner_member_binding` RPC 存在。
+  - `claim_platform_partner_member_binding` RPC 已包含 partner 状态检查和 `partner_unavailable` 返回分支。
   - `get_partner_dashboard_monthly_summary` RPC 存在并可返回空数据 0 汇总。
   - 关键索引存在：成员手机号/微信绑定索引、租户绑定列表索引、佣金列表索引、结算批次列表索引。
 
