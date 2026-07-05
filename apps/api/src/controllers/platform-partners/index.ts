@@ -8,6 +8,7 @@ import {
   PlatformPartnerListQuerySchema,
   PlatformPartnerMemberCreateSchema,
   PlatformPartnerMemberIdParamSchema,
+  PlatformPartnerMemberListQuerySchema,
   PlatformPartnerMemberStatusUpdateSchema,
   PlatformPartnerStatusUpdateSchema,
   PlatformPartnerUpdateSchema,
@@ -152,10 +153,15 @@ class PlatformPartnersController extends PlatformBaseController {
       request.params || {},
     );
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const queryResult = PlatformPartnerMemberListQuerySchema.safeParse(
+      request.query || {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await platformPartnersService.listPartnerMembers(
       authContext,
       paramsResult.data.id,
+      queryResult.data,
     );
     return ResponseHandler.success(data);
   }

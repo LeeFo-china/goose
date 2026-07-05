@@ -13,6 +13,7 @@ import {
 import type {
   PlatformPartnerCreateInput,
   PlatformPartnerMemberCreateInput,
+  PlatformPartnerMemberListQuery,
   PlatformPartnerMemberStatusUpdateInput,
   PlatformPartnerInviteCodeResolveInput,
   PlatformPartnerInviteCodeCreateInput,
@@ -127,10 +128,18 @@ export class PlatformPartnersService {
     } satisfies PlatformPartnerStatusRecordInput);
   }
 
-  async listPartnerMembers(authContext: AuthContext, partnerId: string) {
+  async listPartnerMembers(
+    authContext: AuthContext,
+    partnerId: string,
+    query: PlatformPartnerMemberListQuery,
+  ) {
     this.assertPlatformAdmin(authContext);
     await this.requirePartner(partnerId);
-    return this.repository.listPartnerMembers(partnerId);
+    return this.repository.listPartnerMembers({
+      partnerId,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
   }
 
   async createPartnerMember(

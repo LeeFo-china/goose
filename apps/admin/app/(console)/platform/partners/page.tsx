@@ -83,19 +83,6 @@ function emptyList<T>(page: number, pageSize: number): ListData<T> {
   return { list: [], pagination: emptyPagination(page, pageSize) };
 }
 
-function listFromArray<T>(items: T[], page: number, pageSize: number): ListData<T> {
-  const from = (page - 1) * pageSize;
-  return {
-    list: items.slice(from, from + pageSize),
-    pagination: {
-      page,
-      pageSize,
-      total: items.length,
-      totalPages: items.length ? Math.ceil(items.length / pageSize) : 0,
-    },
-  };
-}
-
 function readPositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -205,20 +192,15 @@ export default async function PlatformPartnersPage({
       emptyList<PlatformPartnerRecord>(partnerPage, partnerPageSize),
     )
     : { data: emptyList<PlatformPartnerRecord>(partnerPage, partnerPageSize), error: null };
-  const memberRawResult = tab === "members" && hasPlatformAccess && memberPartnerId
-    ? await fetchBackend<PlatformPartnerMemberRecord[]>(
-      `/platform/partners/${memberPartnerId}/members`,
-      [],
+  const memberResult = tab === "members" && hasPlatformAccess && memberPartnerId
+    ? await fetchBackend<ListData<PlatformPartnerMemberRecord>>(
+      `/platform/partners/${memberPartnerId}/members?${buildQuery({
+        page: memberPage,
+        pageSize: memberPageSize,
+      })}`,
+      emptyList<PlatformPartnerMemberRecord>(memberPage, memberPageSize),
     )
-    : { data: [], error: null };
-  const memberResult = {
-    data: listFromArray<PlatformPartnerMemberRecord>(
-      memberRawResult.data,
-      memberPage,
-      memberPageSize,
-    ),
-    error: memberRawResult.error,
-  };
+    : { data: emptyList<PlatformPartnerMemberRecord>(memberPage, memberPageSize), error: null };
   const bindingResult = tab === "bindings" && hasPlatformAccess
     ? await fetchBackend<ListData<TenantPartnerBindingRecord>>(
       `/platform/partner-bindings?${buildQuery({

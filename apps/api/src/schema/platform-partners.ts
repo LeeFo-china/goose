@@ -54,6 +54,8 @@ export const PlatformPartnerMemberCreateSchema = z.object({
   role: z.enum(["owner", "operator"]).default("owner"),
 }).strict();
 
+export const PlatformPartnerMemberListQuerySchema = PaginationQuerySchema;
+
 export const PlatformPartnerMemberStatusUpdateSchema = z.object({
   status: z.enum(["pending_bind", "active", "disabled"]),
   reason: z.string().trim().min(1, "状态变更原因不能为空").max(300, "状态变更原因不能超过 300 个字符"),
@@ -104,6 +106,8 @@ export type PlatformPartnerStatusUpdateInput =
   z.infer<typeof PlatformPartnerStatusUpdateSchema>;
 export type PlatformPartnerMemberCreateInput =
   z.infer<typeof PlatformPartnerMemberCreateSchema>;
+export type PlatformPartnerMemberListQuery =
+  z.infer<typeof PlatformPartnerMemberListQuerySchema>;
 export type PlatformPartnerMemberStatusUpdateInput =
   z.infer<typeof PlatformPartnerMemberStatusUpdateSchema>;
 export type PlatformPartnerInviteCodeCreateInput =

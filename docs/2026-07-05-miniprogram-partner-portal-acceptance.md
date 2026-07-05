@@ -29,7 +29,7 @@ gooes 本仓库已完成后端/admin 契约；小程序团队只需修改 `/User
 
 ## 已验证
 
-- API focused tests passed: `55 pass`.
+- API focused tests passed: `56 pass`.
 - API typecheck passed.
 - Admin typecheck passed.
 - API/admin file-size checks passed.
@@ -37,6 +37,8 @@ gooes 本仓库已完成后端/admin 契约；小程序团队只需修改 `/User
 - 安全复审后已补充 stale token 回归测试，确认成员禁用、合伙人停用、
   token partner 与当前绑定成员不一致时，所有合伙人门户看板读接口都会拒绝访问，
   且不会进入数据列表查询。
+- 代码复审后已将 `GET /platform/partners/:id/members` 改为后端分页，
+  支持 `page=1&pageSize=20`，`pageSize` 最大 100，避免本地数组分页隐藏第 51 条之后的数据。
 - `supabase db push --dry-run` 确认待应用 migration 为：
   - `20260705190000_create_platform_partner_members.sql`
   - `20260705191000_create_platform_partner_member_binding_rpc.sql`
@@ -47,13 +49,16 @@ gooes 本仓库已完成后端/admin 契约；小程序团队只需修改 `/User
 - 已执行安全补丁 migration dry-run 和 apply：
   - `20260705204000_harden_platform_partner_member_binding_rpc.sql`
 - 已再次执行 `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"`，确认 Local/Remote 对齐到 `20260705204000`。
+- 已执行成员分页索引 migration dry-run 和 apply：
+  - `20260705205000_add_platform_partner_members_pagination_index.sql`
+- 已再次执行 `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"`，确认 Local/Remote 对齐到 `20260705205000`。
 - 已执行远端只读 schema smoke，确认：
   - `platform_partner_members` 表存在。
   - `platform_partner_members.remark` 列存在。
   - `claim_platform_partner_member_binding` RPC 存在。
   - `claim_platform_partner_member_binding` RPC 已包含 partner 状态检查和 `partner_unavailable` 返回分支。
   - `get_partner_dashboard_monthly_summary` RPC 存在并可返回空数据 0 汇总。
-  - 关键索引存在：成员手机号/微信绑定索引、租户绑定列表索引、佣金列表索引、结算批次列表索引。
+  - 关键索引存在：成员手机号/微信绑定索引、成员列表分页索引、租户绑定列表索引、佣金列表索引、结算批次列表索引。
 
 ## 剩余说明
 

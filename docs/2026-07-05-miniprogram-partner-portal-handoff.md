@@ -35,7 +35,7 @@
 
 已实现的超管合伙人成员管理接口：
 
-- `GET /platform/partners/:id/members`
+- `GET /platform/partners/:id/members?page=1&pageSize=20`
 - `POST /platform/partners/:id/members`
 - `PATCH /platform/partner-members/:memberId/status`
 

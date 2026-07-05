@@ -308,17 +308,26 @@ class PlatformPartnersRepository {
     return data as PlatformPartnerRecord;
   }
 
-  async listPartnerMembers(partnerId: string) {
-    const { data, error } = await this.from("platform_partner_members")
-      .select(MEMBER_SELECT)
-      .eq("partner_id", partnerId)
+  async listPartnerMembers(input: {
+    partnerId: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+    const { data, error, count } = await this.from("platform_partner_members")
+      .select(MEMBER_SELECT, { count: "exact" })
+      .eq("partner_id", input.partnerId)
       .order("created_at", { ascending: false })
-      // Single partner login members are an internal auxiliary list and are
-      // expected to stay below 50; keep a hard cap instead of full pagination.
-      .limit(50);
+      .range(from, to);
 
     if (error) throw Errors.dbError("查询合伙人成员失败", error);
-    return (data ?? []) as PlatformPartnerMemberRecord[];
+    return this.buildPage<PlatformPartnerMemberRecord>(
+      data,
+      count,
+      input.page,
+      input.pageSize,
+    );
   }
 
   async createPartnerMember(input: PlatformPartnerMemberCreateRecordInput) {

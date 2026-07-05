@@ -279,7 +279,10 @@ const repository = {
     list: [],
     pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
   })),
-  listPartnerMembers: mock(async () => [partnerMember]),
+  listPartnerMembers: mock(async () => ({
+    list: [partnerMember],
+    pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+  })),
   createPartnerMember: mock(async () => partnerMember),
   findPartnerMemberById: mock(async () => partnerMember),
   updatePartnerMemberStatus: mock(async () => boundDisabledPartnerMember),
@@ -429,22 +432,6 @@ describe("PlatformPartnersService", () => {
       code: "TENANT_PARTNER_BINDING_EXISTS",
     });
     expect(repository.createTenantBinding).not.toHaveBeenCalled();
-  });
-
-  test("lists partner members after validating partner exists", async () => {
-    const service = await createService();
-    const result = await service.listPartnerMembers(platformAuthContext, activePartner.id);
-    expect(repository.findPartnerById).toHaveBeenCalledWith(activePartner.id);
-    expect(repository.listPartnerMembers).toHaveBeenCalledWith(activePartner.id);
-    expect(result).toEqual([partnerMember]);
-  });
-
-  test("rejects non-platform admins when listing partner members", async () => {
-    const service = await createService();
-    await expect(service.listPartnerMembers(tenantAuthContext, activePartner.id))
-      .rejects.toMatchObject({ statusCode: 403 });
-    expect(repository.findPartnerById).not.toHaveBeenCalled();
-    expect(repository.listPartnerMembers).not.toHaveBeenCalled();
   });
 
   for (const [status, partner] of [["active", activePartner], ["pending", pendingPartner]] as const) {

@@ -31,6 +31,20 @@ describe("platform partner portal migration", () => {
     ]) expect(sql).toContain(fragment);
   });
 
+  test("adds partner member pagination index", () => {
+    const migrationPath = join(
+      migrationsDir,
+      "20260705205000_add_platform_partner_members_pagination_index.sql",
+    );
+
+    expect(existsSync(migrationPath)).toBe(true);
+    const sql = readFileSync(migrationPath, "utf8");
+    for (const fragment of [
+      "platform_partner_members_partner_created_idx",
+      "ON public.platform_partner_members(partner_id, created_at DESC)",
+    ]) expect(sql).toContain(fragment);
+  });
+
   test("creates atomic partner member binding RPC and uniqueness indexes", () => {
     const migrationPath = join(
       migrationsDir,
