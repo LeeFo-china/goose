@@ -7,6 +7,7 @@ export const SMS_SCENE_VALUES = [
   'bind_employee',
   'admin_login',
   'rebind_wechat',
+  'bind_platform_partner',
 ] as const;
 
 export type SmsScene = (typeof SMS_SCENE_VALUES)[number];
