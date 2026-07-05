@@ -14,16 +14,11 @@ import type {
   PartnerDashboardTenantListQuery,
 } from "@/schema/platform-partner-portal";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
-import { userIdentityService } from "@/services/user-identities";
 import {
-  createWechatVisitorUser,
-  getOrCreateAuthUser,
-  getWeChatSession,
-} from "@/services/wechat-auth-legacy/identity";
-import {
-  runAuthBackgroundTask,
-  serializeBackgroundError,
-} from "@/services/wechat-auth-legacy/common";
+  defaultAuthUserResolver,
+  defaultOauthIdentityEnsurer,
+  defaultWechatSessionResolver,
+} from "@/services/platform-partner-portal-auth-dependencies";
 import { signToken, type JwtPayload } from "@/utils/jwt";
 
 const PLATFORM_PARTNER_ROLE = "platform_partner";
@@ -179,30 +174,20 @@ export class PlatformPartnerPortalService {
   }
 
   async me(user?: JwtPayload) {
-    const partnerUser = this.requirePartnerUser(user);
-    if (!user?.sub) {
-      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
-    }
-
-    const member = await this.repository.findMemberByAuthUserId(user.sub);
-    if (!member || member.partner_id !== partnerUser.partnerId) {
-      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
-    }
-
-    this.assertUsableMember(member);
+    const partnerUser = await this.requireCurrentPartnerMember(user);
 
     return {
-      user_id: user.sub,
+      user_id: partnerUser.userId,
       roles: [PLATFORM_PARTNER_ROLE],
       authMode: "platform_partner",
-      member: this.serializeMember(member),
-      partner: this.serializePartner(member.partner!),
-      level: this.serializeLevel(member.partner!),
+      member: this.serializeMember(partnerUser.member),
+      partner: this.serializePartner(partnerUser.member.partner!),
+      level: this.serializeLevel(partnerUser.member.partner!),
     } satisfies PartnerAuthMeResponse;
   }
 
   async summary(user: JwtPayload | undefined, query: PartnerDashboardSummaryQuery) {
-    const partnerUser = this.requirePartnerUser(user);
+    const partnerUser = await this.requireCurrentPartnerMember(user);
     const range = this.resolveMonthRange(query.month);
     const metrics = await this.repository.getMonthlySummary({
       partnerId: partnerUser.partnerId,
@@ -215,7 +200,7 @@ export class PlatformPartnerPortalService {
   }
 
   async listInviteCodes(user: JwtPayload | undefined) {
-    const partnerUser = this.requirePartnerUser(user);
+    const partnerUser = await this.requireCurrentPartnerMember(user);
     return this.repository.listInviteCodes(partnerUser.partnerId);
   }
 
@@ -223,7 +208,7 @@ export class PlatformPartnerPortalService {
     user: JwtPayload | undefined,
     query: PartnerDashboardTenantListQuery,
   ) {
-    const partnerUser = this.requirePartnerUser(user);
+    const partnerUser = await this.requireCurrentPartnerMember(user);
     return this.repository.listTenantBindings({
       page: query.page, pageSize: query.pageSize, status: query.status, partnerId: partnerUser.partnerId,
     });
@@ -233,7 +218,7 @@ export class PlatformPartnerPortalService {
     user: JwtPayload | undefined,
     query: PartnerDashboardRevenueEventListQuery,
   ) {
-    const partnerUser = this.requirePartnerUser(user);
+    const partnerUser = await this.requireCurrentPartnerMember(user);
     const range = query.month ? this.resolveMonthRange(query.month) : null;
     return this.repository.listRevenueEvents({
       partnerId: partnerUser.partnerId,
@@ -249,7 +234,7 @@ export class PlatformPartnerPortalService {
     user: JwtPayload | undefined,
     query: PartnerDashboardCommissionLedgerListQuery,
   ) {
-    const partnerUser = this.requirePartnerUser(user);
+    const partnerUser = await this.requireCurrentPartnerMember(user);
     return this.repository.listCommissionLedgers({
       page: query.page, pageSize: query.pageSize, status: query.status, partnerId: partnerUser.partnerId,
     });
@@ -259,10 +244,25 @@ export class PlatformPartnerPortalService {
     user: JwtPayload | undefined,
     query: PartnerDashboardSettlementListQuery,
   ) {
-    const partnerUser = this.requirePartnerUser(user);
+    const partnerUser = await this.requireCurrentPartnerMember(user);
     return this.repository.listSettlementBatches({
       page: query.page, pageSize: query.pageSize, status: query.status, partnerId: partnerUser.partnerId,
     });
+  }
+
+  private async requireCurrentPartnerMember(user?: JwtPayload) {
+    const partnerUser = this.requirePartnerUser(user);
+    if (!user?.sub) {
+      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
+    }
+
+    const member = await this.repository.findMemberByAuthUserId(user.sub);
+    if (!member || member.partner_id !== partnerUser.partnerId) {
+      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
+    }
+
+    this.assertUsableMember(member);
+    return { ...partnerUser, userId: user.sub, member };
   }
 
   private requirePartnerUser(user?: JwtPayload) {
@@ -434,66 +434,6 @@ export class PlatformPartnerPortalService {
       ? { id: partner.level.id, code: partner.level.code, name: partner.level.name, status: partner.level.status }
       : null;
   }
-}
-
-async function defaultWechatSessionResolver(code: string) {
-  return getWeChatSession.call({}, code);
-}
-
-async function defaultAuthUserResolver(input: {
-  request?: FastifyRequest;
-  openid: string;
-  unionid?: string | null;
-}) {
-  const request = input.request ?? createFallbackRequest();
-  const context = {
-    serializeBackgroundError,
-    runAuthBackgroundTask,
-    createWechatVisitorUser,
-  };
-  const resolution = await getOrCreateAuthUser.call(
-    context,
-    request,
-    input.openid,
-    input.unionid ?? undefined,
-    { allowVisitorSession: false },
-  );
-
-  if (resolution.kind !== "auth_user") {
-    throw Errors.unauthorized();
-  }
-
-  return {
-    userId: resolution.userId,
-    isNewUser: resolution.isNewUser,
-  };
-}
-
-async function defaultOauthIdentityEnsurer(input: {
-  userId: string;
-  openid: string;
-  unionid?: string | null;
-}) {
-  await userIdentityService.syncOauthIdentityBestEffort({
-    userId: input.userId,
-    platform: "wechat_mini",
-    openid: input.openid,
-    unionid: input.unionid ?? null,
-    source: "platform_partner_portal_auth",
-  });
-
-  const activeIdentity = await userIdentityService.findActiveOauthIdentity({
-    platform: "wechat_mini",
-    openid: input.openid,
-  });
-  if (activeIdentity?.user_id !== input.userId) {
-    throw Errors.dbError("同步微信登录凭证失败");
-  }
-}
-
-function createFallbackRequest() {
-  const log = { info: () => undefined, warn: () => undefined, error: () => undefined };
-  return { id: "partner-portal-auth", log } as unknown as FastifyRequest;
 }
 
 export const platformPartnerPortalService = new PlatformPartnerPortalService();

@@ -29,11 +29,14 @@ gooes 本仓库已完成后端/admin 契约；小程序团队只需修改 `/User
 
 ## 已验证
 
-- API focused tests passed: `52 pass`.
+- API focused tests passed: `55 pass`.
 - API typecheck passed.
 - Admin typecheck passed.
 - API/admin file-size checks passed.
 - 迁移文件已通过 contract tests。
+- 安全复审后已补充 stale token 回归测试，确认成员禁用、合伙人停用、
+  token partner 与当前绑定成员不一致时，所有合伙人门户看板读接口都会拒绝访问，
+  且不会进入数据列表查询。
 - `supabase db push --dry-run` 确认待应用 migration 为：
   - `20260705190000_create_platform_partner_members.sql`
   - `20260705191000_create_platform_partner_member_binding_rpc.sql`
