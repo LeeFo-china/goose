@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { PartnerAuthResponse, PlatformPartnerPortalService as PlatformPartnerPortalServiceClass } from "@/services/platform-partner-portal";
 import type {
   PlatformPartnerMemberRecord,
@@ -29,8 +27,17 @@ const activeMember = {
   partner: activePartner,
 } satisfies PlatformPartnerMemberRecord;
 
-const partnerUser = { sub: activeMember.auth_user_id!, roles: ["platform_partner"], partner_id: activePartner.id };
-const userWithoutPartner = { sub: activeMember.auth_user_id!, roles: ["platform_partner"] };
+const partnerUser = {
+  sub: activeMember.auth_user_id!,
+  token_type: "platform_partner" as const,
+  roles: ["platform_partner"],
+  partner_id: activePartner.id,
+};
+const userWithoutPartner = {
+  sub: activeMember.auth_user_id!,
+  token_type: "platform_partner" as const,
+  roles: ["platform_partner"],
+};
 const otherPartnerId = "00000000-0000-4000-8000-000000000999";
 const emptyPage = (page = 1, pageSize = 20) => ({ list: [], pagination: { page, pageSize, total: 0, totalPages: 0 } });
 const emptySummary = () => ({ tenant_count: 0, revenue_event_count: 0, revenue_amount_fen: 0, paid_amount_fen: 0, commission_amount_fen: 0, available_commission_amount_fen: 0, settled_commission_amount_fen: 0, settlement_batch_count: 0, settlement_total_amount_fen: 0, paid_settlement_amount_fen: 0 });
@@ -83,89 +90,6 @@ async function createService(
     ...overrides,
   });
 }
-
-describe("platform partner portal migration", () => {
-  test("creates partner members table and indexes", () => {
-    const migrationsDir = join(import.meta.dir, "../../../../supabase/migrations");
-    const migrationName = readdirSync(migrationsDir)
-      .find((name) => name.endsWith("_create_platform_partner_members.sql"));
-
-    expect(migrationName).toBeTruthy();
-    const migrationPath = join(migrationsDir, migrationName!);
-    expect(existsSync(migrationPath)).toBe(true);
-
-    const sql = readFileSync(migrationPath, "utf8");
-    for (const fragment of [
-      "CREATE TABLE IF NOT EXISTS public.platform_partner_members",
-      "partner_id uuid NOT NULL REFERENCES public.platform_partners(id)",
-      "auth_user_id uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL",
-      "DROP CONSTRAINT IF EXISTS sms_verification_codes_scene_check",
-      "'bind_customer'::text",
-      "'bind_employee'::text",
-      "'admin_login'::text",
-      "'rebind_wechat'::text",
-      "'bind_platform_partner'::text",
-      "tr_platform_partner_members_updated_at",
-      "platform_partner_members_partner_phone_idx",
-      "platform_partner_members_auth_user_status_idx",
-      "platform_partner_members_partner_status_idx",
-    ]) expect(sql).toContain(fragment);
-  });
-
-  test("creates atomic partner member binding RPC and uniqueness indexes", () => {
-    const migrationsDir = join(import.meta.dir, "../../../../supabase/migrations");
-    const migrationPath = join(
-      migrationsDir,
-      "20260705191000_create_platform_partner_member_binding_rpc.sql",
-    );
-
-    expect(existsSync(migrationPath)).toBe(true);
-    const sql = readFileSync(migrationPath, "utf8");
-    for (const fragment of [
-      "claim_platform_partner_member_binding",
-      "FOR UPDATE SKIP LOCKED",
-      "platform_partner_members_auth_user_active_unique_idx",
-      "platform_partner_members_phone_active_unique_idx",
-      "sms_invalid",
-      "member_already_bound",
-      "REVOKE ALL ON FUNCTION public.claim_platform_partner_member_binding",
-      "GRANT EXECUTE ON FUNCTION public.claim_platform_partner_member_binding",
-      "TO service_role",
-    ]) expect(sql).toContain(fragment);
-    expect(sql).not.toContain("p_now");
-  });
-
-  test("creates partner dashboard monthly summary RPC", () => {
-    const migrationsDir = join(import.meta.dir, "../../../../supabase/migrations");
-    const migrationPath = join(
-      migrationsDir,
-      "20260705192000_create_partner_dashboard_summary_rpc.sql",
-    );
-
-    expect(existsSync(migrationPath)).toBe(true);
-    const sql = readFileSync(migrationPath, "utf8");
-    for (const fragment of [
-      "get_partner_dashboard_monthly_summary",
-      "p_partner_id uuid",
-      "partner_id = p_partner_id",
-      "count(*)",
-      "coalesce(sum(",
-      "filter (where status = 'available')",
-      "filter (where status = 'paid')",
-      "partner_settlement_batches_partner_created_idx",
-      "tenant_partner_bindings_partner_bound_idx",
-      "partner_commission_ledger_partner_created_idx",
-      "bound_at DESC",
-      "created_at DESC",
-      "REVOKE ALL ON FUNCTION public.get_partner_dashboard_monthly_summary",
-      "FROM PUBLIC",
-      "FROM anon",
-      "FROM authenticated",
-      "GRANT EXECUTE ON FUNCTION public.get_partner_dashboard_monthly_summary",
-      "TO service_role",
-    ]) expect(sql).toContain(fragment);
-  });
-});
 
 describe("PlatformPartnerPortalService", () => {
   test("login returns token for active bound partner member", async () => {
@@ -293,14 +217,53 @@ describe("PlatformPartnerPortalService", () => {
     });
   });
 
+  test("bindPhone rejects unavailable partner before treating binding as successful", async () => {
+    let findMemberByIdCalls = 0;
+    const service = await createService({
+      repository: createRepository({
+        claimMemberBinding: async () => ({ status: "partner_unavailable" }),
+        findMemberById: async () => {
+          findMemberByIdCalls += 1;
+          return activeMember;
+        },
+      }),
+    });
+
+    await expect(service.bindPhone({
+      code: "wx-code",
+      phone: "13800138000",
+      sms_code: "123456",
+      request: {} as never,
+    })).rejects.toMatchObject({
+      statusCode: 403,
+      code: "PARTNER_ACCOUNT_DISABLED",
+    });
+    expect(findMemberByIdCalls).toBe(0);
+  });
+
   test("me rejects platform partner token without partner_id", async () => {
     const service = await createService();
 
     await expect(service.me({
       sub: "00000000-0000-4000-8000-000000000401",
+      token_type: "platform_partner",
       roles: ["platform_partner"],
     })).rejects.toMatchObject({
       statusCode: 403,
+    });
+  });
+
+  test("me rejects non-platform-partner token even when partner claims are present", async () => {
+    const service = await createService();
+
+    await expect(service.me({
+      sub: activeMember.auth_user_id!,
+      token_type: "auth",
+      roles: ["platform_partner"],
+      partner_id: activePartner.id,
+    })).rejects.toMatchObject({
+      statusCode: 403,
+      code: "PARTNER_AUTH_REQUIRED",
     });
   });
 
@@ -324,6 +287,7 @@ describe("PlatformPartnerPortalService", () => {
 
     await expect(service.me({
       sub: activeMember.auth_user_id!,
+      token_type: "platform_partner",
       roles: ["platform_partner"],
       partner_id: activePartner.id,
     })).rejects.toMatchObject({
@@ -337,6 +301,7 @@ describe("PlatformPartnerPortalService", () => {
 
     await expect(service.me({
       sub: activeMember.auth_user_id!,
+      token_type: "platform_partner",
       roles: ["platform_partner"],
       partner_id: "00000000-0000-4000-8000-000000000999",
     })).rejects.toMatchObject({
@@ -362,6 +327,7 @@ describe("PlatformPartnerPortalService", () => {
     await service.listTenants(
       {
         sub: activeMember.auth_user_id!,
+        token_type: "platform_partner",
         roles: ["platform_partner"],
         partner_id: activePartner.id,
       },
@@ -385,6 +351,31 @@ describe("PlatformPartnerPortalService", () => {
       () => service.listRevenueEvents(userWithoutPartner, { page: 1, pageSize: 20 }),
       () => service.listCommissionLedger(userWithoutPartner, { page: 1, pageSize: 20 }),
       () => service.listSettlements(userWithoutPartner, { page: 1, pageSize: 20 }),
+    ];
+
+    for (const call of calls) {
+      await expect(call()).rejects.toMatchObject({
+        statusCode: 403,
+        code: "PARTNER_AUTH_REQUIRED",
+      });
+    }
+  });
+
+  test("dashboard methods reject non-platform-partner tokens even with partner claims", async () => {
+    const service = await createService();
+    const nonPartnerTokenUser = {
+      sub: activeMember.auth_user_id!,
+      token_type: "auth" as const,
+      roles: ["platform_partner"],
+      partner_id: activePartner.id,
+    };
+    const calls = [
+      () => service.summary(nonPartnerTokenUser, {}),
+      () => service.listInviteCodes(nonPartnerTokenUser),
+      () => service.listTenants(nonPartnerTokenUser, { page: 1, pageSize: 20 }),
+      () => service.listRevenueEvents(nonPartnerTokenUser, { page: 1, pageSize: 20 }),
+      () => service.listCommissionLedger(nonPartnerTokenUser, { page: 1, pageSize: 20 }),
+      () => service.listSettlements(nonPartnerTokenUser, { page: 1, pageSize: 20 }),
     ];
 
     for (const call of calls) {

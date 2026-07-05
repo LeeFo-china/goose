@@ -497,9 +497,11 @@ GET /partner/dashboard/settlements?page=1&pageSize=20&status=paid
 | HTTP | code | 场景 |
 | --- | --- | --- |
 | 400 | `VALIDATION_ERROR` | 请求体或查询参数格式错误，例如 `pageSize > 100`。 |
+| 401 | `TOKEN_MISSING` | 缺少 `Authorization` 头。 |
+| 401 | `TOKEN_EXPIRED` | token 已过期，需要重新登录。 |
 | 401 | `PARTNER_WECHAT_NOT_BOUND` | 当前微信用户未绑定合伙人身份，应进入手机号绑定流程或提示联系平台。 |
 | 401 | `SMS_CODE_INVALID` | 验证码错误或过期。 |
-| 403 | `PARTNER_AUTH_REQUIRED` | token 缺失、过期、角色不是 `platform_partner` 或缺少 `partner_id`。 |
+| 403 | `PARTNER_AUTH_REQUIRED` | token 类型不是 `platform_partner`、角色不是 `platform_partner` 或缺少 `partner_id`。 |
 | 403 | `PARTNER_ACCOUNT_DISABLED` | 合伙人成员或合伙人不可用。 |
 | 404 | `PARTNER_MEMBER_NOT_FOUND` | 未找到可绑定的合伙人成员。 |
 | 409 | `PARTNER_MEMBER_ALREADY_BOUND` | 当前手机号已绑定其他微信用户。 |

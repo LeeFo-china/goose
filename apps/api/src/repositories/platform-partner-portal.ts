@@ -56,6 +56,7 @@ export type PlatformPartnerMemberBindingClaimResult =
   | { status: "bound"; memberId: string }
   | { status: "sms_invalid" }
   | { status: "member_not_found" }
+  | { status: "partner_unavailable" }
   | { status: "member_already_bound"; memberId?: string | null };
 
 type UntypedTable = {
@@ -237,7 +238,8 @@ class PlatformPartnerPortalRepository implements PlatformPartnerPortalRepository
 
     if (
       record.status === "sms_invalid" ||
-      record.status === "member_not_found"
+      record.status === "member_not_found" ||
+      record.status === "partner_unavailable"
     ) {
       return { status: record.status } as const;
     }

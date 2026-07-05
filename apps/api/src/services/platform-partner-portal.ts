@@ -271,6 +271,7 @@ export class PlatformPartnerPortalService {
       : "";
     if (
       !partnerId ||
+      user?.token_type !== "platform_partner" ||
       !Array.isArray(user?.roles) ||
       !user.roles.includes(PLATFORM_PARTNER_ROLE)
     ) {
@@ -314,6 +315,14 @@ export class PlatformPartnerPortalService {
         404,
         "未找到可绑定的合伙人成员",
         "PARTNER_MEMBER_NOT_FOUND",
+      );
+    }
+
+    if (claim.status === "partner_unavailable") {
+      throw Errors.business(
+        403,
+        "合伙人账号不可用",
+        "PARTNER_ACCOUNT_DISABLED",
       );
     }
 
@@ -483,16 +492,8 @@ async function defaultOauthIdentityEnsurer(input: {
 }
 
 function createFallbackRequest() {
-  const log = {
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-  };
-
-  return {
-    id: "partner-portal-auth",
-    log,
-  } as unknown as FastifyRequest;
+  const log = { info: () => undefined, warn: () => undefined, error: () => undefined };
+  return { id: "partner-portal-auth", log } as unknown as FastifyRequest;
 }
 
 export const platformPartnerPortalService = new PlatformPartnerPortalService();
