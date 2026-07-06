@@ -305,6 +305,33 @@ The Phase 5H seed script was updated to match the current tenant organization
 model: it writes `tenant_departments`, assigns employees through
 `tenant_department_id`, and uses the current `/project-logs/projects` route.
 
+## Function Search Path Follow-up
+
+Applied migration:
+
+```text
+supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
+applied: 20260706123000_fix_function_search_path.sql
+```
+
+The migration pins `search_path = public` for the four functions reported by
+Supabase Security Advisor:
+
+```text
+public.update_updated_at_column()
+public.workflow_edge_condition_matches(jsonb, jsonb)
+public.search_finance_project_risk_ids(uuid, integer, integer, text, text, text, text, boolean, boolean, boolean, numeric, numeric)
+public.list_latest_finance_reconciliation_exception_actions(uuid, text[])
+```
+
+Post-change evidence:
+
+```text
+pg_proc.proconfig for all four functions: search_path=public
+supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL": Local/Remote aligned through 20260706123000
+supabase db advisors --db-url "$SUPABASE_DB_DIRECT_URL" --type security --level warn: No issues found
+```
+
 ## Rollback Notes
 
 The rollback must be a new migration. If direct API regressions appear, first
