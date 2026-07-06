@@ -1,4 +1,5 @@
 import { PaginationQuerySchema } from "@/schema/request";
+import { PlatformPartnerPhoneSchema } from "@/schema/platform-partner-phone";
 import { z } from "zod";
 
 export const PlatformPartnerApplicationStatusSchema = z.enum([
@@ -40,7 +41,7 @@ export const SubmitPlatformPartnerApplicationSchema = z.object({
   applicant_name: z.string().trim().min(1, "申请主体不能为空").max(120, "申请主体不能超过 120 个字符"),
   subject_type: z.enum(["personal", "individual_business", "company"]),
   contact_name: z.string().trim().min(1, "联系人不能为空").max(60, "联系人不能超过 60 个字符"),
-  phone: z.string().trim().min(6, "联系电话不能为空").max(30, "联系电话不能超过 30 个字符"),
+  phone: PlatformPartnerPhoneSchema,
   region_codes: RegionCodesSchema,
   region_name: OptionalTextSchema(120, "意向区域不能超过 120 个字符"),
   business_description: OptionalTextSchema(1000, "业务基础不能超过 1000 个字符"),

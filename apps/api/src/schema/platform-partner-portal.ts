@@ -1,4 +1,5 @@
 import { PaginationQuerySchema } from "@/schema/request";
+import { PlatformPartnerPhoneSchema } from "@/schema/platform-partner-phone";
 import { z } from "zod";
 
 export const PartnerAuthLoginSchema = z.object({
@@ -6,7 +7,7 @@ export const PartnerAuthLoginSchema = z.object({
 }).strict();
 
 export const PartnerAuthSendCodeSchema = z.object({
-  phone: z.string().trim().min(6, "手机号不能为空").max(30, "手机号不能超过 30 个字符"),
+  phone: PlatformPartnerPhoneSchema,
 }).strict();
 
 export const PartnerAuthBindPhoneSchema = PartnerAuthSendCodeSchema.extend({

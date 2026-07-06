@@ -56,6 +56,9 @@ export type FieldConfig = {
   description?: string;
   required?: boolean;
   defaultValue?: string;
+  inputMode?: "numeric";
+  maxLength?: number;
+  pattern?: string;
   options?: Option[];
 };
 
@@ -98,7 +101,14 @@ export function CreatePartnerButton({
           ],
         },
         { name: "contact_name", label: "联系人", required: true },
-        { name: "phone", label: "联系电话", required: true },
+        {
+          name: "phone",
+          label: "联系电话",
+          required: true,
+          inputMode: "numeric",
+          maxLength: 11,
+          pattern: "1[3-9][0-9]{9}",
+        },
         {
           name: "level_id",
           label: "合伙人等级",
@@ -397,7 +407,7 @@ function DialogField({ field }: { field: FieldConfig }) {
       {field.type === "textarea" ? (
         <Textarea id={id} name={field.name} placeholder={field.placeholder} required={field.required} defaultValue={field.defaultValue} />
       ) : (
-        <Input id={id} name={field.name} type={field.type ?? "text"} placeholder={field.placeholder} required={field.required} defaultValue={field.defaultValue} step={field.type === "number" ? "0.01" : undefined} />
+        <Input id={id} name={field.name} type={field.type ?? "text"} placeholder={field.placeholder} required={field.required} defaultValue={field.defaultValue} step={field.type === "number" ? "0.01" : undefined} inputMode={field.inputMode} maxLength={field.maxLength} pattern={field.pattern} />
       )}
       {field.description ? <FieldDescription>{field.description}</FieldDescription> : null}
     </Field>
