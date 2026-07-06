@@ -9,6 +9,7 @@ import {
 import {
   platformPartnersRepository,
   type PlatformPartnerCreateRecordInput,
+  type PlatformPartnerMemberCreateRecordInput,
 } from "@/repositories/platform-partners";
 import type {
   ApprovePlatformPartnerApplicationInput,
@@ -29,7 +30,7 @@ type PlatformPartnerApplicationsRepositoryPort = Pick<
 
 type PlatformPartnersRepositoryPort = Pick<
   typeof platformPartnersRepository,
-  "createPartner"
+  "createPartner" | "createPartnerMember"
 >;
 
 type PlatformPartnerApplicationsServiceDependencies = {
@@ -164,6 +165,16 @@ export class PlatformPartnerApplicationsService {
       created_by_employee_id: employeeId,
       updated_by_employee_id: employeeId,
     } satisfies PlatformPartnerCreateRecordInput);
+
+    await this.partnerRepository.createPartnerMember({
+      partner_id: partner.id,
+      name: application.contact_name,
+      phone: application.phone,
+      role: "owner",
+      status: "pending_bind",
+      created_by_employee_id: employeeId,
+      updated_by_employee_id: employeeId,
+    } satisfies PlatformPartnerMemberCreateRecordInput);
 
     const approvedApplication =
       await this.applicationRepository.markApplicationApproved(

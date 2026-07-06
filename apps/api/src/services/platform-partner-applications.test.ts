@@ -7,6 +7,7 @@ import type {
 } from "@/repositories/platform-partner-applications";
 import type {
   PlatformPartnerLevelRecord,
+  PlatformPartnerMemberRecord,
   PlatformPartnerRecord,
 } from "@/repositories/platform-partners";
 import type { AuthContext } from "@/services/authorization";
@@ -152,6 +153,26 @@ const approvedApplication = {
   },
 } satisfies PlatformPartnerApplicationRecord;
 
+const pendingBindMember = {
+  id: "00000000-0000-4000-8000-000000000701",
+  partner_id: partner.id,
+  auth_user_id: null,
+  name: application.contact_name,
+  phone: application.phone,
+  role: "owner",
+  status: "pending_bind",
+  remark: null,
+  created_by_employee_id: "employee-platform",
+  updated_by_employee_id: "employee-platform",
+  created_at: "2026-07-05T10:10:00.000Z",
+  updated_at: "2026-07-05T10:10:00.000Z",
+  partner: {
+    id: partner.id,
+    name: partner.name,
+    status: partner.status,
+  },
+} satisfies PlatformPartnerMemberRecord;
+
 const applicationRepository = {
   createApplication: mock(async (): Promise<PlatformPartnerApplicationRecord> => application),
   listApplications: mock(async () => ({
@@ -169,6 +190,7 @@ const applicationRepository = {
 
 const partnerRepository = {
   createPartner: mock(async (): Promise<PlatformPartnerRecord> => partner),
+  createPartnerMember: mock(async (): Promise<PlatformPartnerMemberRecord> => pendingBindMember),
 };
 
 async function createService() {
@@ -290,6 +312,15 @@ describe("PlatformPartnerApplicationsService", () => {
       settlement_account_status: "pending",
       settlement_account: {},
       remark: "官网申请审核通过",
+      created_by_employee_id: "employee-platform",
+      updated_by_employee_id: "employee-platform",
+    });
+    expect(partnerRepository.createPartnerMember).toHaveBeenCalledWith({
+      partner_id: partner.id,
+      name: application.contact_name,
+      phone: application.phone,
+      role: "owner",
+      status: "pending_bind",
       created_by_employee_id: "employee-platform",
       updated_by_employee_id: "employee-platform",
     });

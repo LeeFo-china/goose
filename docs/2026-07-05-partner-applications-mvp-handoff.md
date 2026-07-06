@@ -166,9 +166,24 @@ POST /platform/partner-applications/:id/approve
 
 - 创建 `platform_partners`。
 - 新合伙人状态为 `pending`。
+- 自动创建一个 owner 登录成员：
+  - `name = contact_name`
+  - `phone = phone`
+  - `status = pending_bind`
 - 将申请状态更新为 `approved`。
 - 写入 `converted_partner_id`。
-- 对已转换申请重复调用时，按幂等成功返回，不重复创建合伙人。
+- 对已转换申请重复调用时，按幂等成功返回，不重复创建合伙人，也不重复创建成员。
+
+### 审核通过后的微信绑定
+
+网站端申请默认没有小程序微信身份，不能直接绑定微信。审核通过后，后台会根据申请联系人和手机号预置
+`pending_bind` 合伙人成员。申请人需要打开小程序，在城市合伙人入口使用同一个手机号收验证码并绑定微信。
+
+小程序端申请第一版也可以先复用这个口径：提交申请后等待平台审核；审核通过后，申请人使用申请手机号完成
+`/partner/auth/send-code` 和 `/partner/auth/bind-phone`，绑定成功后进入合伙人工作台。
+
+后续如果要让“小程序提交申请”在审核通过后直接绑定当前微信，需要另补申请记录中的 `auth_user_id/openid`
+归属字段或 `metadata` 写入规则，本次不扩大到该闭环。
 
 ## Admin 页面
 
