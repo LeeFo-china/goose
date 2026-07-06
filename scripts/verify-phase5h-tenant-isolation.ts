@@ -49,7 +49,7 @@ const listChecks: ListCheck[] = [
   { name: "project acceptance list is tenant-scoped", path: "/project-acceptances?page=1&pageSize=50" },
   {
     name: "project logs project list is tenant-scoped",
-    path: "/project_logs/projects?project_id=:TENANT_OWN_PROJECT_ID&page=1&pageSize=50",
+    path: "/project-logs/projects?project_id=:TENANT_OWN_PROJECT_ID&page=1&pageSize=50",
     fixtures: ["TENANT_OWN_PROJECT_ID"],
   },
   { name: "camera project groups are tenant-scoped", path: "/project-cameras/projects?page=1&pageSize=20" },

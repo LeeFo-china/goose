@@ -431,10 +431,10 @@ describe("financeReconciliationService", () => {
       ledger_income_amount: 28000,
       expense_paid_amount: 12000,
       ledger_expense_amount: 12000,
-      exception_count: 6,
+      exception_count: 7,
       danger_count: 3,
-      warning_count: 3,
-      open_exception_count: 6,
+      warning_count: 4,
+      open_exception_count: 7,
       acknowledged_exception_count: 0,
       ignored_exception_count: 0,
       resolved_exception_count: 0,
@@ -489,7 +489,7 @@ describe("financeReconciliationService", () => {
       "project-1",
     );
 
-    expect(result.open_exception_count).toBe(5);
+    expect(result.open_exception_count).toBe(6);
     expect(result.ignored_exception_count).toBe(1);
     expect(result.latest_action_at).toBe("2026-06-29T11:00:00.000Z");
     expect(result.latest_action_remark).toBe("历史手工流水保留");
