@@ -9,6 +9,8 @@
 
 2026-07-06 只读复核 orange 后确认：小程序侧已经存在财务工作台基线页面、服务封装、类型定义、首页入口和权限判断。本文档后续口径从“新增页面建议”调整为“当前实现交接 + 联调验收 + 剩余补齐项”。
 
+2026-07-06 收到 orange 小程序提交 `2c0f320 feat(finance): 完善财务工作台应收跟进` 后复核：小程序侧已补齐应收“逾期/待跟进”筛选、`next_follow_up_at` 可选提交、顶部本页计数文案和财务工作台契约 smoke。gooes 后端当前接口契约匹配，无需新增后端接口即可进入真实数据联调。
+
 首期目标是让财务人员在手机上处理高频、时效性强的事项：
 
 - 项目收款确认。
@@ -130,12 +132,12 @@ finance.view
    - 月度收入、支出、毛利、未收、逾期、对账异常数。
    - 点击“查看项目风险”进入项目财务摘要列表。
 
-当前实现差异需要在联调时确认：
+当前 orange `2c0f320` 后的实现状态：
 
-- 应收列表当前固定使用 `overdue_only=true`，尚未提供 `follow_up_due_only=true` 切换。
-- 应收跟进弹窗当前只提交 `note`，类型层已支持 `next_follow_up_at`，但 UI 尚未提供下次跟进时间选择。
+- 应收列表已提供“逾期/待跟进”筛选，分别发送 `overdue_only=true` 和 `follow_up_due_only=true`。
+- 应收跟进弹窗已支持可选 `next_follow_up_at`，有值时按 ISO 时间字符串提交。
 - 概览中的项目风险当前使用 `risk_level=danger&include_analytics=false`，适合作为移动端首屏高风险清单；如果要做全量排行，需要另设入口并处理 `analytics.scope.truncated` 提示。
-- 顶部“待财务审核/待出纳打款”当前来自 expense_request 当前页筛选计数；如果产品要求全局精确数量，需要后端提供任务汇总或小程序增加明确过滤请求，不能把当前页数量当全量统计。
+- 顶部费用数量已改为“本页待财务审核/本页待出纳打款”。如果产品要求全局精确数量，需要后端提供任务汇总或小程序增加明确过滤请求，不能把当前页数量当全量统计。
 
 ## 4. 后端接口使用建议
 
@@ -290,7 +292,7 @@ POST /finance/receivables/:id/follow-ups
 }
 ```
 
-orange 当前 `CreateFinanceReceivableFollowUpPayload` 类型已包含 `next_follow_up_at?: string | null`，但弹窗暂未提供输入控件；首期只提交 `note` 也符合后端可选字段要求。
+orange 当前 `CreateFinanceReceivableFollowUpPayload` 类型已包含 `next_follow_up_at?: string | null`，`2c0f320` 后弹窗也已提供可选下次跟进时间；未选择时不传该字段，符合后端可选字段要求。
 
 权限注意：
 
@@ -501,4 +503,31 @@ orange 当前已经落地小程序“财务工作台”基线，复用了现有�
 
 移动端首期只处理高频事项：收款确认、费用财务审核、出纳打款、逾期应收查看和跟进、月度关键指标只读查看。成本配置、预算配置、台账修复、对账补账、月结、报表导出仍留在 Admin。
 
-小程序团队下一步重点是联调验收：确认入口权限、待办跳转、收款/费用 action、应收跟进 403/409 刷新、分页边界和无权限态。产品侧如要求下次跟进时间或全量精确统计，再补 `next_follow_up_at` UI 和统计接口/查询策略。gooes 本次没有改后端接口，也没有改 orange。
+小程序团队下一步重点是联调验收：确认入口权限、待办跳转、收款/费用 action、应收跟进 403/409 刷新、分页边界、无权限态，以及 `next_follow_up_at` 保存后能进入待跟进列表。产品侧如要求顶部展示全量精确数量，再补统计接口或明确统计字段。gooes 本次没有改后端接口，也没有改 orange。
+
+## 10. orange 首期完成后的后端复核口径
+
+针对 orange `2c0f320` 提出的联调确认项，gooes 后端当前实现如下：
+
+1. `GET /finance/receivables` 支持 `overdue_only` 和 `follow_up_due_only`：
+   - `overdue_only=true`：筛选 `due_date < tenantToday` 且状态属于未收齐状态。
+   - `follow_up_due_only=true`：筛选 `next_follow_up_at <= tenantTodayT23:59:59.999Z` 且状态属于未收齐状态。
+   - orange 当前互斥发送两个筛选，符合首期设计；如果两个参数同时为 true，后端会按交集过滤。
+2. `POST /finance/receivables/:id/follow-ups` 支持可选 `next_follow_up_at`：
+   - `note` 必填，最多 500 字。
+   - `next_follow_up_at` 必须是 ISO datetime；`null`、空字符串或不传会按未设置处理。
+   - 保存后会更新应收计划的 `latest_follow_up_at`、`latest_follow_up_note`、`next_follow_up_at`，并写入 `follow_up` 事件。
+3. 应收跟进权限和错误：
+   - 缺少 `finance.receivable.manage` 返回 403。
+   - 已取消应收返回 409 `RECEIVABLE_CANCELED`。
+   - 已收齐应收返回 409 `RECEIVABLE_PAID`。
+4. workflow task/action：
+   - `/workflow-tasks` 列表按当前员工、角色码、权限码和项目过程权限过滤。
+   - `POST /workflow-tasks/:taskId/complete` 会再次校验 task/action 可访问性。
+   - 收款确认 action 使用 `business_domain=payment_collection`、`business_action=confirm_payment`。
+   - 费用审核 action 使用 `approve/reject`，出纳打款 action 使用 `pay`。
+   - 已处理或当前节点变化会返回 409，例如 `WORKFLOW_TASK_NOT_PENDING`、`WORKFLOW_NODE_NOT_CURRENT`。
+5. 顶部全量精确统计：
+   - 后端当前没有为小程序财务工作台提供单独的全量待审核/待打款统计字段。
+   - orange 改成“本页待财务审核/本页待出纳打款”是正确处理。
+   - 如后续产品要求全量精确数量，应由后端新增汇总接口或在 task center 增加明确统计字段，不建议小程序自行分页聚合。
