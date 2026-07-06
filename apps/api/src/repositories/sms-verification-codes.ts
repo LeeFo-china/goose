@@ -12,6 +12,7 @@ export type SmsVerificationCodeRow = {
   verified_at: string | null;
   created_at: string;
   request_ip: string | null;
+  request_device: string | null;
 };
 
 class SmsVerificationCodeRepository {
@@ -39,12 +40,57 @@ class SmsVerificationCodeRepository {
     return (data || null) as { id: string; created_at: string } | null;
   }
 
+  async findRecentByRequestIpScene(input: {
+    requestIp: string;
+    scene: SmsScene;
+    since: string;
+  }) {
+    const { data, error } = await this.adminClient
+      .from("sms_verification_codes")
+      .select("id, created_at")
+      .eq("request_ip", input.requestIp)
+      .eq("scene", input.scene)
+      .gte("created_at", input.since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询验证码 IP 发送记录失败", error);
+    }
+
+    return (data || null) as { id: string; created_at: string } | null;
+  }
+
+  async findRecentByRequestDeviceScene(input: {
+    requestDevice: string;
+    scene: SmsScene;
+    since: string;
+  }) {
+    const { data, error } = await this.adminClient
+      .from("sms_verification_codes")
+      .select("id, created_at")
+      .eq("request_device", input.requestDevice)
+      .eq("scene", input.scene)
+      .gte("created_at", input.since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询验证码设备发送记录失败", error);
+    }
+
+    return (data || null) as { id: string; created_at: string } | null;
+  }
+
   async createPending(input: {
     phone: string;
     scene: SmsScene;
     code: string;
     expiredAt: string;
     requestIp: string | null;
+    requestDevice?: string | null;
   }) {
     const { error } = await this.adminClient.from("sms_verification_codes").insert({
       phone: input.phone,
@@ -53,6 +99,7 @@ class SmsVerificationCodeRepository {
       status: "pending",
       expired_at: input.expiredAt,
       request_ip: input.requestIp,
+      request_device: input.requestDevice ?? null,
     }).select("id");
 
     if (error) {
@@ -87,7 +134,7 @@ class SmsVerificationCodeRepository {
   }) {
     const { data, error } = await this.adminClient
       .from("sms_verification_codes")
-      .select("id, phone, scene, code, status, expired_at, verified_at, created_at, request_ip")
+      .select("id, phone, scene, code, status, expired_at, verified_at, created_at, request_ip, request_device")
       .eq("phone", input.phone)
       .eq("scene", input.scene)
       .eq("code", input.code)
@@ -108,17 +155,23 @@ class SmsVerificationCodeRepository {
     let lastError: unknown = null;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const { error } = await this.adminClient
+      const { data, error } = await this.adminClient
         .from("sms_verification_codes")
         .update({
           status: "verified",
           verified_at: new Date().toISOString(),
         })
         .eq("id", id)
-        .select("id");
+        .eq("status", "pending")
+        .select("id")
+        .maybeSingle();
 
-      if (!error) {
+      if (!error && data) {
         return;
+      }
+
+      if (!error && !data) {
+        throw Errors.business(400, "验证码错误或已过期", "SMS_CODE_INVALID");
       }
 
       lastError = error;

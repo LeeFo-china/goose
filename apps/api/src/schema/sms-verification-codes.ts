@@ -24,6 +24,7 @@ export const SmsVerificationCodeSchema = z.object({
     z.string().datetime("无效的创建时间"),
   ).optional(),
   request_ip: z.string().trim().nullable().optional(),
+  request_device: z.string().trim().max(160, "设备标识不能超过 160 个字符").nullable().optional(),
 });
 
 export const CreateSmsVerificationCodeSchema = SmsVerificationCodeSchema.omit({

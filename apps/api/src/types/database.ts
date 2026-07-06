@@ -5871,6 +5871,7 @@ export type Database = {
           expired_at: string
           id: string
           phone: string
+          request_device: string | null
           request_ip: string | null
           scene: string
           status: string
@@ -5882,6 +5883,7 @@ export type Database = {
           expired_at: string
           id?: string
           phone: string
+          request_device?: string | null
           request_ip?: string | null
           scene: string
           status?: string
@@ -5893,6 +5895,7 @@ export type Database = {
           expired_at?: string
           id?: string
           phone?: string
+          request_device?: string | null
           request_ip?: string | null
           scene?: string
           status?: string

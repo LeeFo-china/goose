@@ -4,6 +4,7 @@ import {
   ApprovePlatformPartnerApplicationSchema,
   PlatformPartnerApplicationIdParamSchema,
   PlatformPartnerApplicationListQuerySchema,
+  PlatformPartnerApplicationSendCodeSchema,
   SubmitPlatformPartnerApplicationSchema,
   UpdatePlatformPartnerApplicationStatusSchema,
 } from "@/schema/platform-partner-applications";
@@ -11,10 +12,32 @@ import { platformPartnerApplicationsService } from "@/services/platform-partner-
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import type { z } from "zod";
 
 class PlatformPartnerApplicationsController extends PlatformBaseController {
   constructor() {
     super("platform-partner-applications");
+  }
+
+  @Post("/public/partner-applications/send-code")
+  async sendPublicApplicationCode(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const bodyResult = PlatformPartnerApplicationSendCodeSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) {
+      throw this.createPublicApplicationValidationError(bodyResult.error);
+    }
+
+    const data = await platformPartnerApplicationsService
+      .sendPublicApplicationCode({
+        ...bodyResult.data,
+        requestIp: request.ip ?? null,
+        requestDevice: this.getRequestDevice(request),
+      });
+    return ResponseHandler.success(data);
   }
 
   @Post("/public/partner-applications")
@@ -25,11 +48,55 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
     const bodyResult = SubmitPlatformPartnerApplicationSchema.safeParse(
       request.body || {},
     );
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    if (!bodyResult.success) {
+      throw this.createPublicApplicationValidationError(bodyResult.error);
+    }
 
     const data = await platformPartnerApplicationsService
       .submitPublicApplication(bodyResult.data);
     return ResponseHandler.success(data);
+  }
+
+  private createPublicApplicationValidationError(error: z.ZodError) {
+    const field = error.issues[0]?.path[0];
+    if (field === "phone") {
+      return Errors.business(
+        400,
+        "请输入正确手机号",
+        "INVALID_PHONE",
+        error.issues,
+      );
+    }
+
+    if (field === "sms_code") {
+      return Errors.business(
+        400,
+        "验证码错误或已过期",
+        "SMS_CODE_INVALID",
+        error.issues,
+      );
+    }
+
+    return Errors.fromZod(error);
+  }
+
+  private getRequestDevice(request: FastifyRequest) {
+    const headerNames = [
+      "x-device-id",
+      "x-visitor-device-id",
+      "x-client-device-id",
+      "x-client-id",
+    ];
+
+    for (const headerName of headerNames) {
+      const rawValue = request.headers[headerName];
+      const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+      if (typeof value !== "string") continue;
+      const normalized = value.trim();
+      if (normalized) return normalized.slice(0, 160);
+    }
+
+    return null;
   }
 
   @Get("/platform/partner-applications")

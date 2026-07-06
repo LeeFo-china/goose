@@ -65,9 +65,11 @@ type UntypedTable = {
   insert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
+  in: (...args: unknown[]) => UntypedTable;
   or: (...args: unknown[]) => UntypedTable;
   contains: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
+  limit: (...args: unknown[]) => UntypedTable;
   range: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
   single: () => Promise<{ data: unknown; error: unknown }>;
@@ -100,6 +102,19 @@ class PlatformPartnerApplicationsRepository {
 
     if (error) throw Errors.dbError("提交城市合伙人申请失败", error);
     return data as PlatformPartnerApplicationRecord;
+  }
+
+  async findActiveApplicationByPhone(phone: string) {
+    const { data, error } = await this.from("platform_partner_applications")
+      .select(APPLICATION_SELECT)
+      .eq("phone", phone)
+      .in("status", ["submitted", "reviewing", "approved"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询城市合伙人重复申请失败", error);
+    return (data as PlatformPartnerApplicationRecord | null) ?? null;
   }
 
   async listApplications(query: PlatformPartnerApplicationListQuery) {

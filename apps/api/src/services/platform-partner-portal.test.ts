@@ -87,7 +87,9 @@ async function createService(
     authUserResolver: async () => ({ userId: activeMember.auth_user_id!, isNewUser: false }),
     oauthIdentityEnsurer: async () => undefined,
     tokenSigner: () => "signed-token",
-    smsService: { sendCode: async () => undefined },
+    smsService: {
+      sendCode: async () => ({ success: true as const, cooldown_seconds: 60 }),
+    },
     ...overrides,
   });
 }

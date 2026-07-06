@@ -37,7 +37,13 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
-  if (method === "POST" && url === "/public/partner-applications") {
+  if (
+    method === "POST" &&
+    (
+      url === "/public/partner-applications" ||
+      url === "/public/partner-applications/send-code"
+    )
+  ) {
     return true;
   }
 

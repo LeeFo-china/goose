@@ -21,9 +21,9 @@ const migrationDir = join(
   "../../../../supabase/migrations",
 );
 
-function readPartnerApplicationsMigration() {
+function readMigration(suffix: string) {
   const file = readdirSync(migrationDir)
-    .filter((name) => name.endsWith("_create_partner_applications.sql"))
+    .filter((name) => name.endsWith(suffix))
     .sort()
     .at(-1);
   expect(file).toBeTruthy();
@@ -32,7 +32,7 @@ function readPartnerApplicationsMigration() {
 
 describe("partner applications migration", () => {
   test("creates official website partner application table and indexes", () => {
-    const sql = readPartnerApplicationsMigration();
+    const sql = readMigration("_create_partner_applications.sql");
 
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.platform_partner_applications");
     expect(sql).toContain("application_no text NOT NULL UNIQUE");
@@ -41,6 +41,14 @@ describe("partner applications migration", () => {
     expect(sql).toContain("platform_partner_applications_status_created_idx");
     expect(sql).toContain("platform_partner_applications_phone_created_idx");
     expect(sql).toContain("platform_partner_applications_region_codes_idx");
+  });
+
+  test("extends SMS verification storage for partner applications", () => {
+    const sql = readMigration("_partner_application_phone_verification.sql");
+
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS request_device text NULL");
+    expect(sql).toContain("'partner_application'::text");
+    expect(sql).toContain("sms_verification_codes_scene_device_created_idx");
   });
 });
 
@@ -175,6 +183,7 @@ const pendingBindMember = {
 
 const applicationRepository = {
   createApplication: mock(async (): Promise<PlatformPartnerApplicationRecord> => application),
+  findActiveApplicationByPhone: mock(async (): Promise<PlatformPartnerApplicationRecord | null> => null),
   listApplications: mock(async () => ({
     list: [application],
     pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
@@ -193,6 +202,25 @@ const partnerRepository = {
   createPartnerMember: mock(async (): Promise<PlatformPartnerMemberRecord> => pendingBindMember),
 };
 
+const verificationCode = {
+  id: "00000000-0000-4000-8000-000000000801",
+  phone: application.phone, scene: "partner_application", code: "123456",
+  status: "pending", expired_at: "2026-07-05T10:05:00.000Z",
+  verified_at: null, created_at: "2026-07-05T10:00:00.000Z",
+  request_ip: null, request_device: null,
+} as const;
+
+const smsService = {
+  sendCode: mock(async () => ({
+    success: true as const,
+    cooldown_seconds: 60,
+  })),
+  findValidPending: mock(async (): Promise<typeof verificationCode | null> =>
+    verificationCode
+  ),
+  markVerified: mock(async () => undefined),
+};
+
 async function createService() {
   const { PlatformPartnerApplicationsService } = await import(
     "./platform-partner-applications"
@@ -200,6 +228,7 @@ async function createService() {
   return new PlatformPartnerApplicationsService({
     applicationRepository,
     partnerRepository,
+    smsService,
   });
 }
 
@@ -207,8 +236,32 @@ describe("PlatformPartnerApplicationsService", () => {
   beforeEach(() => {
     for (const fn of Object.values(applicationRepository)) fn.mockClear();
     for (const fn of Object.values(partnerRepository)) fn.mockClear();
+    for (const fn of Object.values(smsService)) fn.mockClear();
     applicationRepository.findApplicationById.mockImplementation(async () => application);
+    applicationRepository.findActiveApplicationByPhone.mockImplementation(async () => null);
     applicationRepository.markApplicationApproved.mockImplementation(async () => approvedApplication);
+    smsService.findValidPending.mockImplementation(async () => verificationCode);
+  });
+
+  test("sends mini-program public application verification code", async () => {
+    const service = await createService();
+
+    const result = await service.sendPublicApplicationCode({
+      phone: application.phone,
+      requestIp: "127.0.0.1",
+      requestDevice: "mini-device-1",
+    });
+
+    expect(result).toEqual({ success: true, cooldown_seconds: 60 });
+    expect(applicationRepository.findActiveApplicationByPhone).toHaveBeenCalledWith(
+      application.phone,
+    );
+    expect(smsService.sendCode).toHaveBeenCalledWith({
+      phone: application.phone,
+      scene: "partner_application",
+      requestIp: "127.0.0.1",
+      requestDevice: "mini-device-1",
+    });
   });
 
   test("creates official website partner application as submitted", async () => {
@@ -249,6 +302,92 @@ describe("PlatformPartnerApplicationsService", () => {
       status: "submitted",
       metadata: {},
     });
+  });
+
+  test("verifies and consumes SMS code before creating mini-program application", async () => {
+    const service = await createService();
+
+    await service.submitPublicApplication({
+      applicant_name: "信阳星河装饰运营中心",
+      subject_type: "company",
+      contact_name: "李经理",
+      phone: application.phone,
+      sms_code: "123456",
+      region_codes: ["411500"],
+      region_name: "河南省信阳市",
+      resource_description: "10 家意向装企",
+      source_channel: "mini_program",
+      agree_privacy: true,
+    });
+
+    expect(smsService.findValidPending).toHaveBeenCalledWith({
+      phone: application.phone,
+      scene: "partner_application",
+      code: "123456",
+    });
+    expect(smsService.markVerified).toHaveBeenCalledWith(verificationCode.id);
+    expect(applicationRepository.createApplication).toHaveBeenCalled();
+  });
+
+  test("requires SMS code for mini-program application submission", async () => {
+    const service = await createService();
+
+    await expect(service.submitPublicApplication({
+      applicant_name: "信阳星河装饰运营中心",
+      subject_type: "company",
+      contact_name: "李经理",
+      phone: application.phone,
+      region_codes: ["411500"],
+      source_channel: "mini_program",
+      agree_privacy: true,
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "SMS_CODE_REQUIRED",
+    });
+    expect(applicationRepository.createApplication).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid mini-program application SMS code", async () => {
+    smsService.findValidPending.mockImplementationOnce(async () => null);
+    const service = await createService();
+
+    await expect(service.submitPublicApplication({
+      applicant_name: "信阳星河装饰运营中心",
+      subject_type: "company",
+      contact_name: "李经理",
+      phone: application.phone,
+      sms_code: "000000",
+      region_codes: ["411500"],
+      source_channel: "mini_program",
+      agree_privacy: true,
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "SMS_CODE_INVALID",
+    });
+    expect(applicationRepository.createApplication).not.toHaveBeenCalled();
+  });
+
+  test("rejects duplicated active application by phone", async () => {
+    applicationRepository.findActiveApplicationByPhone.mockImplementationOnce(
+      async () => application,
+    );
+    const service = await createService();
+
+    await expect(service.submitPublicApplication({
+      applicant_name: "信阳星河装饰运营中心",
+      subject_type: "company",
+      contact_name: "李经理",
+      phone: application.phone,
+      sms_code: "123456",
+      region_codes: ["411500"],
+      source_channel: "mini_program",
+      agree_privacy: true,
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "PARTNER_APPLICATION_DUPLICATED",
+    });
+    expect(smsService.markVerified).not.toHaveBeenCalled();
+    expect(applicationRepository.createApplication).not.toHaveBeenCalled();
   });
 
   test("lists applications only for platform admins", async () => {

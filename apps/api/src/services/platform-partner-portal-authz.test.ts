@@ -118,7 +118,9 @@ async function createService(member: PlatformPartnerMemberRecord) {
       }),
       oauthIdentityEnsurer: async () => undefined,
       tokenSigner: () => "signed-token",
-      smsService: { sendCode: async () => undefined },
+      smsService: {
+        sendCode: async () => ({ success: true as const, cooldown_seconds: 60 }),
+      },
     }),
     getReadCalls: () => readCalls,
   };

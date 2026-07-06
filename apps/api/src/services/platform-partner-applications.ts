@@ -18,10 +18,12 @@ import type {
   UpdatePlatformPartnerApplicationStatusInput,
 } from "@/schema/platform-partner-applications";
 import type { AuthContext } from "@/services/authorization";
+import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 
 type PlatformPartnerApplicationsRepositoryPort = Pick<
   typeof platformPartnerApplicationsRepository,
   | "createApplication"
+  | "findActiveApplicationByPhone"
   | "listApplications"
   | "findApplicationById"
   | "updateApplicationStatus"
@@ -36,14 +38,24 @@ type PlatformPartnersRepositoryPort = Pick<
 type PlatformPartnerApplicationsServiceDependencies = {
   applicationRepository?: PlatformPartnerApplicationsRepositoryPort;
   partnerRepository?: PlatformPartnersRepositoryPort;
+  smsService?: Pick<
+    typeof smsVerificationCodeService,
+    "sendCode" | "findValidPending" | "markVerified"
+  >;
 };
 
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const DEFAULT_SOURCE_CHANNEL = "official_website";
+const MINI_PROGRAM_SOURCE_CHANNEL = "mini_program";
+const PARTNER_APPLICATION_SMS_SCENE = "partner_application";
 
 export class PlatformPartnerApplicationsService {
   private readonly applicationRepository: PlatformPartnerApplicationsRepositoryPort;
   private readonly partnerRepository: PlatformPartnersRepositoryPort;
+  private readonly smsService: Pick<
+    typeof smsVerificationCodeService,
+    "sendCode" | "findValidPending" | "markVerified"
+  >;
 
   constructor(
     dependencies: PlatformPartnerApplicationsServiceDependencies = {},
@@ -52,15 +64,41 @@ export class PlatformPartnerApplicationsService {
       dependencies.applicationRepository ?? platformPartnerApplicationsRepository;
     this.partnerRepository =
       dependencies.partnerRepository ?? platformPartnersRepository;
+    this.smsService = dependencies.smsService ?? smsVerificationCodeService;
+  }
+
+  async sendPublicApplicationCode(input: {
+    phone: string;
+    requestIp: string | null;
+    requestDevice?: string | null;
+  }) {
+    const phone = input.phone.trim();
+    await this.assertNoActiveApplicationByPhone(phone);
+
+    return this.smsService.sendCode({
+      phone,
+      scene: PARTNER_APPLICATION_SMS_SCENE,
+      requestIp: input.requestIp,
+      requestDevice: input.requestDevice ?? null,
+    });
   }
 
   async submitPublicApplication(input: SubmitPlatformPartnerApplicationInput) {
+    const phone = input.phone.trim();
+    await this.assertNoActiveApplicationByPhone(phone);
+    if (this.requiresSmsVerification(input)) {
+      await this.verifyApplicationSmsCode({
+        phone,
+        code: input.sms_code,
+      });
+    }
+
     return this.applicationRepository.createApplication({
       application_no: this.buildApplicationNo(),
       applicant_name: input.applicant_name.trim(),
       subject_type: input.subject_type,
       contact_name: input.contact_name.trim(),
-      phone: input.phone.trim(),
+      phone,
       region_codes: input.region_codes,
       region_name: input.region_name ?? null,
       business_description: input.business_description ?? null,
@@ -206,6 +244,46 @@ export class PlatformPartnerApplicationsService {
       );
     }
     return application;
+  }
+
+  private requiresSmsVerification(input: SubmitPlatformPartnerApplicationInput) {
+    return input.source_channel === MINI_PROGRAM_SOURCE_CHANNEL;
+  }
+
+  private async verifyApplicationSmsCode(input: {
+    phone: string;
+    code?: string;
+  }) {
+    if (!input.code) {
+      throw Errors.business(400, "请输入验证码", "SMS_CODE_REQUIRED");
+    }
+
+    const verificationCode = await this.smsService.findValidPending({
+      phone: input.phone,
+      scene: PARTNER_APPLICATION_SMS_SCENE,
+      code: input.code,
+    });
+    if (!verificationCode) {
+      throw Errors.business(
+        400,
+        "验证码错误或已过期",
+        "SMS_CODE_INVALID",
+      );
+    }
+
+    await this.smsService.markVerified(verificationCode.id);
+  }
+
+  private async assertNoActiveApplicationByPhone(phone: string) {
+    const existingApplication =
+      await this.applicationRepository.findActiveApplicationByPhone(phone);
+    if (existingApplication) {
+      throw Errors.business(
+        409,
+        "该手机号已提交申请，请等待审核",
+        "PARTNER_APPLICATION_DUPLICATED",
+      );
+    }
   }
 
   private assertCanManagePartners(authContext: AuthContext) {
