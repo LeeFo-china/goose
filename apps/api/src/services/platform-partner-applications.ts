@@ -153,7 +153,7 @@ export class PlatformPartnerApplicationsService {
       subject_type: application.subject_type,
       contact_name: application.contact_name,
       phone: application.phone,
-      status: "pending",
+      status: "active",
       level_id: input.level_id,
       region_codes: input.region_codes?.length
         ? input.region_codes

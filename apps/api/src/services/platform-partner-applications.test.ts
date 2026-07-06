@@ -125,7 +125,7 @@ const partner = {
   subject_type: "company",
   contact_name: application.contact_name,
   phone: application.phone,
-  status: "pending",
+  status: "active",
   level_id: level.id,
   region_codes: application.region_codes,
   contract_status: "pending",
@@ -292,7 +292,7 @@ describe("PlatformPartnerApplicationsService", () => {
     );
   });
 
-  test("approves application and converts it to pending platform partner", async () => {
+  test("approves application and converts it to immediately bindable platform partner", async () => {
     const service = await createService();
 
     const result = await service.approveApplication(platformAuthContext, application.id, {
@@ -305,7 +305,7 @@ describe("PlatformPartnerApplicationsService", () => {
       subject_type: application.subject_type,
       contact_name: application.contact_name,
       phone: application.phone,
-      status: "pending",
+      status: "active",
       level_id: level.id,
       region_codes: application.region_codes,
       contract_status: "pending",

@@ -20,8 +20,8 @@
 
 - 官网只提交申请线索，不直接创建正式合伙人。
 - 超管后台在城市合伙人运营页新增“申请线索”tab。
-- 审核通过后创建 `platform_partners` 记录，初始状态为 `pending`。
-- 合伙人启用、邀请码生成、装企绑定、收入分佣仍走现有城市合伙人运营页。
+- 审核通过后创建 `platform_partners` 记录，初始状态为 `active`，申请人可立即用申请手机号在小程序绑定微信。
+- 邀请码生成、装企绑定、收入分佣仍走现有城市合伙人运营页。
 
 ## 数据库
 
@@ -165,7 +165,7 @@ POST /platform/partner-applications/:id/approve
 行为：
 
 - 创建 `platform_partners`。
-- 新合伙人状态为 `pending`。
+- 新合伙人状态为 `active`，用于支持“审核通过 = 立即可绑定登录”。
 - 自动创建一个 owner 登录成员：
   - `name = contact_name`
   - `phone = phone`
