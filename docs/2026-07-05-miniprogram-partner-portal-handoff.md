@@ -20,8 +20,15 @@
 
 后端已实现独立的合伙人登录成员模型、微信首次绑定、合伙人 token、服务端按 token `partner_id` 强制隔离的 partner portal 接口。
 
+`POST /auth` 也会识别已绑定城市合伙人成员的微信用户。小程序 landing 可以继续只做微信静默登录和身份分流：
+
+- 已绑定城市合伙人成员且成员/合伙人可用时，`POST /auth` 直接返回 `platform_partner` 身份。
+- 未绑定客户、员工、城市合伙人的微信，`POST /auth` 继续返回 `platform_visitor`，由访客首页承接手机号验证码绑定。
+- 城市合伙人手机号绑定仍使用 `/partner/auth/send-code` 和 `/partner/auth/bind-phone`，不重做绑定接口。
+
 已实现的小程序合伙人接口：
 
+- `POST /auth`（已绑定城市合伙人微信时直接分流为 `platform_partner`）
 - `POST /partner/auth/login`
 - `POST /partner/auth/send-code`
 - `POST /partner/auth/bind-phone`
@@ -72,6 +79,7 @@ JWT payload 关键字段：
     "token": "jwt",
     "user_id": "auth-user-id",
     "roles": ["platform_partner"],
+    "mode": "platform_partner",
     "authMode": "platform_partner",
     "member": {
       "id": "member-id",
@@ -111,6 +119,26 @@ JWT payload 关键字段：
 ## 登录与绑定流程
 
 ### 已绑定微信登录
+
+landing 静默登录优先调用统一登录接口：
+
+```http
+POST /auth
+```
+
+如果当前微信已绑定可用的城市合伙人成员，响应体中的 `data` 会直接包含：
+
+- `token`
+- `mode: "platform_partner"`
+- `authMode: "platform_partner"`
+- `roles: ["platform_partner"]`
+- `member`
+- `partner`
+- `level`
+
+如果当前微信没有绑定客户、员工、城市合伙人成员，`POST /auth` 继续返回 `platform_visitor`。
+
+访客首页中的“城市合伙人”身份验证入口继续使用：
 
 ```http
 POST /partner/auth/login
@@ -653,14 +681,16 @@ orange 端需要新增独立分包：
 
 合伙人打开小程序：
 
-1. 小程序进入合伙人入口。
+1. 小程序进入 landing。
 2. `Taro.login()` 获取 `code`。
-3. `POST /partner/auth/login`。
-4. 如果微信已绑定合伙人成员，保存 token、roles、authMode、member、partner、level。
-5. 如果未绑定，进入手机号验证码绑定：`POST /partner/auth/send-code`、`POST /partner/auth/bind-phone`。
-6. 跳转 `packagePartner/pages/dashboard/index`。
-7. 页面调用 `GET /partner/dashboard/summary`。
-8. 列表页按需调用 tenants、revenue-events、commission-ledger、settlements。
+3. `POST /auth` 做静默身份分流。
+4. 如果 `/auth` 返回 `platform_partner`，保存 token、roles、mode、authMode、member、partner、level，跳转 `packagePartner/pages/dashboard/index`。
+5. 如果 `/auth` 返回 `platform_visitor`，进入访客首页。
+6. 用户在访客首页选择“城市合伙人”后，调用 `POST /partner/auth/login`。
+7. 如果微信未绑定合伙人成员，进入手机号验证码绑定：`POST /partner/auth/send-code`、`POST /partner/auth/bind-phone`。
+8. 绑定成功后保存 token、roles、mode、authMode、member、partner、level，跳转 `packagePartner/pages/dashboard/index`。
+9. 页面调用 `GET /partner/dashboard/summary`。
+10. 列表页按需调用 tenants、revenue-events、commission-ledger、settlements。
 
 装企扫码入驻：
 
@@ -673,6 +703,8 @@ orange 端需要新增独立分包：
 ## 小程序验收清单
 
 - 未绑定合伙人身份的微信用户点击合伙人入口，提示联系平台开通或进入手机号绑定流程。
+- 已绑定合伙人成员的微信用户，landing 调 `POST /auth` 后直接进入合伙人看板。
+- 未绑定客户、员工、城市合伙人的微信用户，landing 调 `POST /auth` 后进入访客首页。
 - 已录入平台预留手机号的合伙人，可通过手机号验证码首次绑定微信。
 - 已绑定其他微信的手机号，不能被新微信覆盖。
 - 停用合伙人成员或合伙人不能进入看板。

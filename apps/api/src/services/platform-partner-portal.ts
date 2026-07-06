@@ -44,6 +44,7 @@ export type PartnerAuthPartnerPayload = {
 export type PartnerAuthResponse = {
   token: string; user_id: string;
   roles: [typeof PLATFORM_PARTNER_ROLE];
+  mode: "platform_partner";
   authMode: "platform_partner";
   member: PartnerAuthMemberPayload;
   partner: PartnerAuthPartnerPayload;
@@ -118,6 +119,25 @@ export class PlatformPartnerPortalService {
     return this.buildAuthResponse(member, resolution.userId, resolution.openid, resolution.unionid);
   }
 
+  async loginResolvedAuthUser(input: {
+    userId: string;
+    openid?: string;
+    unionid?: string | null;
+  }) {
+    const member = await this.repository.findMemberByAuthUserId(input.userId);
+    if (!member) {
+      return null;
+    }
+
+    this.assertUsableMember(member);
+    return this.buildAuthResponse(
+      member,
+      input.userId,
+      input.openid,
+      input.unionid ?? null,
+    );
+  }
+
   async sendCode(input: {
     phone: string;
     requestIp: string | null;
@@ -179,6 +199,7 @@ export class PlatformPartnerPortalService {
     return {
       user_id: partnerUser.userId,
       roles: [PLATFORM_PARTNER_ROLE],
+      mode: "platform_partner",
       authMode: "platform_partner",
       member: this.serializeMember(partnerUser.member),
       partner: this.serializePartner(partnerUser.member.partner!),
@@ -403,6 +424,7 @@ export class PlatformPartnerPortalService {
       token,
       user_id: userId,
       roles: [PLATFORM_PARTNER_ROLE],
+      mode: "platform_partner",
       authMode: "platform_partner",
       member: this.serializeMember(member),
       partner: this.serializePartner(member.partner),

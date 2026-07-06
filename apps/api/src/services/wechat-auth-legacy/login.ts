@@ -25,6 +25,7 @@ import { projectSer } from "@/services/projects";
 import { getDecorationQaSuggestions } from "@/services/decoration-qa";
 import { userIdentityService } from "@/services/user-identities";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
+import { platformPartnerPortalService } from "@/services/platform-partner-portal";
 import { wechatAuthIdentityService } from "@/services/wechat-auth-identities";
 import { wechatAuthRoleService } from "@/services/wechat-auth-roles";
 import {
@@ -172,6 +173,20 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
     isVisitorOnly: loginMembershipState.memberships.length === 0,
     memberships: loginMembershipState.memberships,
   };
+  const partnerLogin = await platformPartnerPortalService.loginResolvedAuthUser({
+    userId,
+    openid: wxData.openid,
+    unionid: wxData.unionid ?? null,
+  });
+  if (partnerLogin) {
+    this.clearVisitorOnlyAuthUserCache(userId);
+    request.log.info(
+      { requestId: request.id, userId, totalMs: Date.now() - startedAt },
+      "[auth] resolved platform partner login context",
+    );
+    return ResponseHandler.success(partnerLogin, "登录成功");
+  }
+
   if (visitorState.isVisitorOnly) {
     this.setCachedVisitorOnlyAuthUser(userId);
   } else {

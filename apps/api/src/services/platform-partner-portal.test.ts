@@ -44,6 +44,7 @@ const emptySummary = () => ({ tenant_count: 0, revenue_event_count: 0, revenue_a
 const expectedAuthContext = {
   user_id: activeMember.auth_user_id,
   roles: ["platform_partner"] as ["platform_partner"],
+  mode: "platform_partner" as const,
   authMode: "platform_partner" as const,
   member: { id: activeMember.id, partner_id: activePartner.id, name: "张三", phone: "13800138000", role: "owner", status: "active" },
   partner: { id: activePartner.id, name: activePartner.name, status: "active", region_codes: ["411500"], level: { code: "city", name: "城市合伙人" } },
