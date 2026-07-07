@@ -1,4 +1,5 @@
 import type { FastifyRequest } from "fastify";
+import { createHash } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
 import {
   platformPartnerPortalRepository,
@@ -12,6 +13,7 @@ import type {
   PartnerDashboardSettlementListQuery,
   PartnerDashboardSummaryQuery,
   PartnerDashboardTenantListQuery,
+  PartnerAuthUnbindWechatInput,
 } from "@/schema/platform-partner-portal";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import {
@@ -24,10 +26,11 @@ import {
   bindPlatformPartnerMemberWithoutSmsCode,
 } from "@/services/platform-partner-portal-binding";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
-import { signToken, type JwtPayload } from "@/utils/jwt";
+import { signToken, signVisitorSessionToken, type JwtPayload } from "@/utils/jwt";
 
 const PLATFORM_PARTNER_ROLE = "platform_partner";
 const SMS_SCENE = "bind_platform_partner";
+const UNBIND_SMS_SCENE = "unbind_platform_partner";
 
 export type PartnerAuthMemberPayload = {
   id: string; partner_id: string; name: string; phone: string;
@@ -80,12 +83,19 @@ type SmsServicePort = Pick<
   "sendCode"
 >;
 
+type VisitorSessionSigner = (input: {
+  openid: string;
+  unionid?: string | null;
+  visitorId: string;
+}) => string;
+
 type PlatformPartnerPortalServiceDependencies = {
   repository?: PlatformPartnerPortalRepositoryPort;
   wechatSessionResolver?: WechatSessionResolver;
   authUserResolver?: AuthUserResolver;
   oauthIdentityEnsurer?: OauthIdentityEnsurer;
   tokenSigner?: (payload: Omit<JwtPayload, "iat" | "exp">) => string;
+  visitorSessionSigner?: VisitorSessionSigner;
   smsService?: SmsServicePort;
 };
 
@@ -95,6 +105,7 @@ export class PlatformPartnerPortalService {
   private readonly authUserResolver: AuthUserResolver;
   private readonly oauthIdentityEnsurer: OauthIdentityEnsurer;
   private readonly tokenSigner: (payload: Omit<JwtPayload, "iat" | "exp">) => string;
+  private readonly visitorSessionSigner: VisitorSessionSigner;
   private readonly smsService: SmsServicePort;
 
   constructor(dependencies: PlatformPartnerPortalServiceDependencies = {}) {
@@ -103,6 +114,12 @@ export class PlatformPartnerPortalService {
     this.authUserResolver = dependencies.authUserResolver ?? defaultAuthUserResolver;
     this.oauthIdentityEnsurer = dependencies.oauthIdentityEnsurer ?? defaultOauthIdentityEnsurer;
     this.tokenSigner = dependencies.tokenSigner ?? signToken;
+    this.visitorSessionSigner = dependencies.visitorSessionSigner ?? ((input) =>
+      signVisitorSessionToken({
+        openid: input.openid,
+        unionid: input.unionid ?? undefined,
+        visitor_id: input.visitorId,
+      }));
     this.smsService = dependencies.smsService ?? smsVerificationCodeService;
   }
 
@@ -216,6 +233,41 @@ export class PlatformPartnerPortalService {
       resolution.openid,
       resolution.unionid,
     );
+  }
+
+  async sendUnbindCode(user: JwtPayload | undefined, requestIp: string | null) {
+    const partnerUser = await this.requireCurrentPartnerMember(user);
+    await this.smsService.sendCode({
+      phone: partnerUser.member.phone,
+      scene: UNBIND_SMS_SCENE,
+      requestIp,
+    });
+
+    return { success: true as const };
+  }
+
+  async unbindWechat(user: JwtPayload | undefined, input: PartnerAuthUnbindWechatInput) {
+    const partnerUser = await this.requireCurrentPartnerMember(user);
+    const claimMemberUnbind = this.repository.claimMemberUnbind;
+    if (!claimMemberUnbind) {
+      throw Errors.dbError("解绑合伙人成员微信失败", {
+        message: "claimMemberUnbind repository method is not configured",
+      });
+    }
+
+    const claim = await claimMemberUnbind({
+      memberId: partnerUser.member.id,
+      authUserId: partnerUser.userId,
+      partnerId: partnerUser.partnerId,
+      code: input.sms_code.trim(),
+    });
+    this.assertUnbindClaimed(claim);
+
+    return {
+      success: true as const,
+      message: "微信绑定已解除",
+      auth: this.buildVisitorAuthResponse(user),
+    };
   }
 
   async me(user?: JwtPayload) {
@@ -377,6 +429,58 @@ export class PlatformPartnerPortalService {
       "该合伙人成员已绑定其他微信",
       "PARTNER_MEMBER_ALREADY_BOUND",
     );
+  }
+
+  private assertUnbindClaimed(
+    claim: Awaited<ReturnType<NonNullable<PlatformPartnerPortalRepositoryPort["claimMemberUnbind"]>>>,
+  ): asserts claim is { status: "unbound"; memberId: string } {
+    if (claim.status === "unbound") {
+      return;
+    }
+
+    if (claim.status === "sms_invalid") {
+      throw Errors.business(401, "验证码错误或已过期", "SMS_CODE_INVALID");
+    }
+
+    if (claim.status === "partner_unavailable") {
+      throw Errors.business(
+        403,
+        "合伙人账号不可用",
+        "PARTNER_ACCOUNT_DISABLED",
+      );
+    }
+
+    throw Errors.business(
+      409,
+      "当前微信未绑定该合伙人成员",
+      "PARTNER_MEMBER_NOT_BOUND",
+    );
+  }
+
+  private buildVisitorAuthResponse(user?: JwtPayload) {
+    const openid = typeof user?.openid === "string" ? user.openid.trim() : "";
+    if (!openid) {
+      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
+    }
+
+    const visitorId = this.buildVisitorSessionId(openid);
+    return {
+      mode: "platform_visitor",
+      authMode: "platform_visitor",
+      token: this.visitorSessionSigner({
+        openid,
+        unionid: user?.unionid ?? null,
+        visitorId,
+      }),
+      user_id: null,
+      visitor_id: visitorId,
+      roles: ["visitor"],
+      is_new_user: false,
+    };
+  }
+
+  private buildVisitorSessionId(openid: string) {
+    return `wechat_visitor_${createHash("sha256").update(openid).digest("hex").slice(0, 32)}`;
   }
 
   private async resolveWechatAuthUser(input: {

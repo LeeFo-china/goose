@@ -24,6 +24,11 @@ export const PartnerAuthBindPhoneSchema = PartnerAuthSendCodeSchema.extend({
   sms_code: OptionalSmsCodeSchema,
 }).strict();
 
+export const PartnerAuthUnbindWechatSchema = z.object({
+  sms_code: z.string().trim().length(6, "验证码必须为 6 位"),
+  confirm: z.literal(true),
+}).strict();
+
 export const PartnerDashboardSummaryQuerySchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, "月份格式必须为 YYYY-MM").optional(),
 });
@@ -66,6 +71,8 @@ export const PartnerDashboardSettlementListQuerySchema =
 export type PartnerAuthLoginInput = z.infer<typeof PartnerAuthLoginSchema>;
 export type PartnerAuthSendCodeInput = z.infer<typeof PartnerAuthSendCodeSchema>;
 export type PartnerAuthBindPhoneInput = z.infer<typeof PartnerAuthBindPhoneSchema>;
+export type PartnerAuthUnbindWechatInput =
+  z.infer<typeof PartnerAuthUnbindWechatSchema>;
 export type PartnerDashboardSummaryQuery =
   z.infer<typeof PartnerDashboardSummaryQuerySchema>;
 export type PartnerDashboardTenantListQuery =

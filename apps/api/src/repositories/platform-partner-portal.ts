@@ -42,6 +42,7 @@ export interface PlatformPartnerPortalRepositoryPort {
   findMemberById(memberId: string): Promise<PlatformPartnerMemberRecord | null>;
   findBindableMemberByPhone(phone: string): Promise<PlatformPartnerMemberRecord | null>;
   claimMemberBinding(input: { phone: string; code: string; authUserId: string }): Promise<PlatformPartnerMemberBindingClaimResult>;
+  claimMemberUnbind?(input: { memberId: string; authUserId: string; partnerId: string; code: string }): Promise<PlatformPartnerMemberUnbindClaimResult>;
   bindMemberAuthUser(memberId: string, authUserId: string): Promise<PlatformPartnerMemberRecord>;
   findPartnerById(partnerId: string): Promise<PlatformPartnerRecord | null>;
   listInviteCodes(partnerId: string): Promise<PlatformPartnerInviteCodeRecord[]>;
@@ -58,6 +59,13 @@ export type PlatformPartnerMemberBindingClaimResult =
   | { status: "member_not_found" }
   | { status: "partner_unavailable" }
   | { status: "member_already_bound"; memberId?: string | null };
+
+export type PlatformPartnerMemberUnbindClaimResult =
+  | { status: "unbound"; memberId: string }
+  | { status: "sms_invalid"; memberId?: string | null }
+  | { status: "member_not_found" }
+  | { status: "partner_unavailable"; memberId?: string | null }
+  | { status: "member_not_bound"; memberId?: string | null };
 
 type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
@@ -245,6 +253,64 @@ class PlatformPartnerPortalRepository implements PlatformPartnerPortalRepository
     }
 
     throw Errors.dbError("绑定合伙人成员失败", {
+      message: `unknown claim status: ${record.status}`,
+    });
+  }
+
+  async claimMemberUnbind(input: {
+    memberId: string;
+    authUserId: string;
+    partnerId: string;
+    code: string;
+  }) {
+    const { data, error } = await this.rpc(
+      "unbind_platform_partner_member_binding",
+      {
+        p_member_id: input.memberId,
+        p_auth_user_id: input.authUserId,
+        p_partner_id: input.partnerId,
+        p_code: input.code,
+      },
+    );
+
+    if (error) throw Errors.dbError("解绑合伙人成员微信失败", error);
+
+    const [record] = (data || []) as Array<{
+      status: PlatformPartnerMemberUnbindClaimResult["status"];
+      member_id: string | null;
+    }>;
+    if (!record) {
+      throw Errors.dbError("解绑合伙人成员微信失败", {
+        message: "unbind_platform_partner_member_binding returned no rows",
+      });
+    }
+
+    if (record.status === "unbound") {
+      if (!record.member_id) {
+        throw Errors.dbError("解绑合伙人成员微信失败", {
+          message: "unbind_platform_partner_member_binding returned unbound without member_id",
+        });
+      }
+
+      return { status: "unbound", memberId: record.member_id } as const;
+    }
+
+    if (
+      record.status === "sms_invalid" ||
+      record.status === "partner_unavailable" ||
+      record.status === "member_not_bound"
+    ) {
+      return {
+        status: record.status,
+        memberId: record.member_id,
+      } as const;
+    }
+
+    if (record.status === "member_not_found") {
+      return { status: "member_not_found" } as const;
+    }
+
+    throw Errors.dbError("解绑合伙人成员微信失败", {
       message: `unknown claim status: ${record.status}`,
     });
   }

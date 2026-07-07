@@ -10,6 +10,7 @@ import {
   PartnerAuthBindPhoneSchema,
   PartnerAuthLoginSchema,
   PartnerAuthSendCodeSchema,
+  PartnerAuthUnbindWechatSchema,
 } from "@/schema/platform-partner-portal";
 import { platformPartnerPortalService } from "@/services/platform-partner-portal";
 import { Get, Post } from "@/utils/decorators/route";
@@ -53,6 +54,27 @@ class PlatformPartnerPortalController extends BaseController {
       ...bodyResult.data,
       request,
     });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/partner/auth/unbind-code")
+  async sendUnbindCode(request: FastifyRequest, reply: FastifyReply) {
+    const data = await platformPartnerPortalService.sendUnbindCode(
+      request.user,
+      request.ip ?? null,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/partner/auth/unbind-wechat")
+  async unbindWechat(request: FastifyRequest, reply: FastifyReply) {
+    const bodyResult = PartnerAuthUnbindWechatSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformPartnerPortalService.unbindWechat(
+      request.user,
+      bodyResult.data,
+    );
     return ResponseHandler.success(data);
   }
 

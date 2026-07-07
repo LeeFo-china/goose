@@ -179,6 +179,16 @@ export function shouldBypassAuth(method: string, url: string) {
 }
 
 export function isPartnerPortalRoute(method: string, url: string) {
+  if (
+    method === "POST" &&
+    (
+      url === "/partner/auth/unbind-code" ||
+      url === "/partner/auth/unbind-wechat"
+    )
+  ) {
+    return true;
+  }
+
   return (
     (method === "GET" || method === "HEAD") &&
     partnerPortalRoutes.has(url)

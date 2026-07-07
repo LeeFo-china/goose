@@ -40,10 +40,19 @@ describe("auth public route allowlist", () => {
     expect(isPartnerAuthRoute("POST", "/partner/auth/login")).toBe(true);
     expect(isPartnerAuthRoute("POST", "/partner/auth/send-code")).toBe(true);
     expect(isPartnerAuthRoute("POST", "/partner/auth/bind-phone")).toBe(true);
+    expect(isPartnerAuthRoute("POST", "/partner/auth/unbind-code")).toBe(false);
+    expect(isPartnerAuthRoute("POST", "/partner/auth/unbind-wechat")).toBe(false);
     expect(isPartnerAuthRoute("GET", "/partner/auth/me")).toBe(false);
 
     expect(shouldBypassAuth("POST", "/partner/auth/login")).toBe(true);
+    expect(shouldBypassAuth("POST", "/partner/auth/unbind-code")).toBe(false);
+    expect(shouldBypassAuth("POST", "/partner/auth/unbind-wechat")).toBe(false);
     expect(shouldBypassAuth("GET", "/partner/auth/me")).toBe(false);
+  });
+
+  test("keeps partner unbind routes protected from public access", () => {
+    expect(isPublicRoute("POST", "/partner/auth/unbind-code")).toBe(false);
+    expect(isPublicRoute("POST", "/partner/auth/unbind-wechat")).toBe(false);
   });
 
   test("scopes platform partner tokens to partner portal routes", () => {
@@ -70,5 +79,12 @@ describe("auth public route allowlist", () => {
     expect(isPartnerPortalRoute("GET", "/partner/invite-codes/extra")).toBe(false);
     expect(isPartnerPortalRoute("GET", "/ai/decoration-qa/suggestions")).toBe(false);
     expect(isPartnerPortalRoute("GET", "/platform/partners")).toBe(false);
+  });
+
+  test("allows platform partner tokens to access partner unbind routes", () => {
+    expect(isPartnerPortalRoute("POST", "/partner/auth/unbind-code")).toBe(true);
+    expect(isPartnerPortalRoute("POST", "/partner/auth/unbind-wechat")).toBe(true);
+    expect(isPartnerPortalRoute("GET", "/partner/auth/unbind-code")).toBe(false);
+    expect(isPartnerPortalRoute("HEAD", "/partner/auth/unbind-wechat")).toBe(false);
   });
 });

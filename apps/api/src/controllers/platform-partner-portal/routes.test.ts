@@ -19,6 +19,8 @@ describe("PlatformPartnerPortalController routes", () => {
       { method: "POST", path: "/partner/auth/login" },
       { method: "POST", path: "/partner/auth/send-code" },
       { method: "POST", path: "/partner/auth/bind-phone" },
+      { method: "POST", path: "/partner/auth/unbind-code" },
+      { method: "POST", path: "/partner/auth/unbind-wechat" },
       { method: "GET", path: "/partner/auth/me" },
       { method: "GET", path: "/partner/dashboard/summary" },
       { method: "GET", path: "/partner/invite-codes" },
