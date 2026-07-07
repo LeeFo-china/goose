@@ -361,6 +361,12 @@ Authorization: Bearer <platform_partner token>
 - `SMS_CODE_INVALID`
 - `PARTNER_UNBIND_CONFIRM_REQUIRED`
 
+联调测试验证码策略：
+
+- 生产和正式联调默认必须校验 `sms_code`。
+- 当后端环境开启 `AUTH_PHONE_LOGIN_WITHOUT_CODE=true` 时，`POST /partner/auth/unbind-wechat` 可不传 `sms_code` 或传空字符串，后端会按当前 token 识别的合伙人成员执行解绑。
+- 即使开启测试免验证码，后端仍会校验当前 token 必须是 `platform_partner`，且当前成员、合伙人状态必须可用。
+
 ### 5. 重新绑定到新微信
 
 旧微信已自助解绑后，新微信不需要新增接口，继续使用现有接口：
@@ -462,7 +468,7 @@ Authorization: Bearer <platform_visitor 或其他有效 auth token>
 行为：
 
 - 后端从 token 获取新微信对应 `auth_user_id`。
-- 校验手机号验证码。
+- 校验手机号验证码；当后端环境开启 `AUTH_PHONE_LOGIN_WITHOUT_CODE=true` 时，可不传 `sms_code` 或传空字符串，后端跳过短信记录校验。
 - 按手机号查找当前 active 合伙人成员和所属 active 合伙人。
 - 该成员必须已经绑定旧 `auth_user_id`，且旧 `auth_user_id` 不能等于当前新 `auth_user_id`。
 - 同一成员只能有一条 pending 换绑申请。

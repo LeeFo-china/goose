@@ -4,7 +4,10 @@ import type {
   PlatformPartnerPortalRepositoryPort,
   PlatformPartnerRecord,
 } from "@/repositories/platform-partner-portal";
-import { PartnerAuthBindPhoneSchema } from "@/schema/platform-partner-portal";
+import {
+  PartnerAuthBindPhoneSchema,
+  PartnerAuthUnbindWechatSchema,
+} from "@/schema/platform-partner-portal";
 import type { PartnerAuthResponse } from "@/services/platform-partner-portal";
 import { withPhoneLoginWithoutCodeFlag } from "@/services/platform-partner-portal-test-helpers";
 
@@ -79,6 +82,7 @@ function createRepository(
     claimMemberBinding: async () => ({ status: "bound", memberId: activeMember.id }),
     claimMemberUnbind: async () => ({ status: "unbound", memberId: activeMember.id }),
     bindMemberAuthUser: async () => activeMember,
+    unbindMemberAuthUser: async () => ({ status: "unbound", memberId: activeMember.id }),
     findPartnerById: async () => activePartner,
     listInviteCodes: async () => [],
     listTenantBindings: async () => emptyPage(),
@@ -137,6 +141,17 @@ describe("PlatformPartnerPortalService system-test phone login bypass", () => {
       code: "wx-code",
       phone: "13800138000",
       sms_code: "",
+    }).success).toBe(true);
+  });
+
+  test("unbind schema accepts omitted SMS code for system-test bypass", () => {
+    expect(PartnerAuthUnbindWechatSchema.safeParse({
+      confirm: true,
+    }).success).toBe(true);
+
+    expect(PartnerAuthUnbindWechatSchema.safeParse({
+      sms_code: "",
+      confirm: true,
     }).success).toBe(true);
   });
 
@@ -214,6 +229,45 @@ describe("PlatformPartnerPortalService system-test phone login bypass", () => {
         code: "PARTNER_MEMBER_ALREADY_BOUND",
       });
       expect(bindCalls).toBe(0);
+    });
+  });
+
+  test("skips SMS claim and unbinds current member when bypass is enabled", async () => {
+    await withPhoneLoginWithoutCodeFlag("true", async () => {
+      let claimCalls = 0;
+      let unbindCalls = 0;
+      const service = await createService(createRepository({
+        claimMemberUnbind: async () => {
+          claimCalls += 1;
+          return { status: "sms_invalid", memberId: activeMember.id };
+        },
+        unbindMemberAuthUser: async (input) => {
+          unbindCalls += 1;
+          expect(input).toEqual({
+            memberId: activeMember.id,
+            authUserId: activeMember.auth_user_id,
+            partnerId: activePartner.id,
+          });
+          return { status: "unbound", memberId: activeMember.id };
+        },
+      }));
+
+      const result = await service.unbindWechat({
+        token_type: "platform_partner",
+        sub: activeMember.auth_user_id!,
+        partner_id: activePartner.id,
+        openid: "wx-openid",
+        unionid: "wx-unionid",
+        roles: ["platform_partner"],
+      }, {
+        sms_code: "",
+        confirm: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.auth.mode).toBe("platform_visitor");
+      expect(claimCalls).toBe(0);
+      expect(unbindCalls).toBe(1);
     });
   });
 });

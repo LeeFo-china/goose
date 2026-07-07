@@ -82,6 +82,7 @@ async function createService(member: PlatformPartnerMemberRecord) {
     claimMemberBinding: async () => ({ status: "bound", memberId: member.id }),
     claimMemberUnbind: async () => ({ status: "unbound", memberId: member.id }),
     bindMemberAuthUser: async () => member,
+    unbindMemberAuthUser: async () => ({ status: "unbound", memberId: member.id }),
     findPartnerById: async () => member.partner ?? null,
     listInviteCodes: async () => {
       readCalls += 1;

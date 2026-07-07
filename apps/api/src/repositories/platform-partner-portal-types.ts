@@ -42,6 +42,7 @@ export interface PlatformPartnerPortalRepositoryPort {
   claimMemberBinding(input: { phone: string; code: string; authUserId: string }): Promise<PlatformPartnerMemberBindingClaimResult>;
   claimMemberUnbind(input: { memberId: string; authUserId: string; partnerId: string; code: string }): Promise<PlatformPartnerMemberUnbindClaimResult>;
   bindMemberAuthUser(memberId: string, authUserId: string): Promise<PlatformPartnerMemberRecord>;
+  unbindMemberAuthUser(input: { memberId: string; authUserId: string; partnerId: string }): Promise<PlatformPartnerMemberUnbindClaimResult>;
   findPartnerById(partnerId: string): Promise<PlatformPartnerRecord | null>;
   listInviteCodes(partnerId: string): Promise<PlatformPartnerInviteCodeRecord[]>;
   listTenantBindings(input: PartnerTenantBindingListInput): Promise<PageResult<TenantPartnerBindingRecord>>;

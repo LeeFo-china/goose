@@ -21,6 +21,7 @@ import {
 import { assertUsablePlatformPartnerMember } from "@/services/platform-partner-portal-binding";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
+import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import type { JwtPayload } from "@/utils/jwt";
 
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
@@ -111,17 +112,25 @@ export class PlatformPartnerMemberRebindService {
   ) {
     const phone = input.phone.trim();
     const member = await this.requireBoundMemberByPhone(phone);
-    const verificationCode = await this.smsService.findValidPending({
-      phone,
-      scene: REBIND_SMS_SCENE,
-      code: input.sms_code.trim(),
-    });
-    if (!verificationCode) {
-      throw Errors.business(
-        400,
-        "验证码错误或已过期",
-        "SMS_CODE_INVALID",
-      );
+    const smsCode = input.sms_code?.trim() || "";
+    let verificationCode: Awaited<ReturnType<SmsServicePort["findValidPending"]>> = null;
+    if (!isPhoneLoginWithoutCodeEnabled()) {
+      if (!smsCode) {
+        throw Errors.business(400, "请输入验证码", "SMS_CODE_REQUIRED");
+      }
+
+      verificationCode = await this.smsService.findValidPending({
+        phone,
+        scene: REBIND_SMS_SCENE,
+        code: smsCode,
+      });
+      if (!verificationCode) {
+        throw Errors.business(
+          400,
+          "验证码错误或已过期",
+          "SMS_CODE_INVALID",
+        );
+      }
     }
 
     const duplicate = await this.repository.findPendingDuplicateByMemberId(
@@ -153,7 +162,9 @@ export class PlatformPartnerMemberRebindService {
       applicantName: normalizeNullableText(input.applicant_name),
       reason: normalizeNullableText(input.reason),
     });
-    await this.smsService.markVerified(verificationCode.id);
+    if (verificationCode) {
+      await this.smsService.markVerified(verificationCode.id);
+    }
 
     return {
       id: record.id,

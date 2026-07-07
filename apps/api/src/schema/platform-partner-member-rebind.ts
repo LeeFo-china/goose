@@ -12,6 +12,15 @@ const OptionalTextSchema = (max: number, message: string) =>
     z.string().trim().max(max, message).optional(),
   );
 
+const OptionalSmsCodeSchema = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === "string" && value.trim() === "") return undefined;
+    return value;
+  },
+  z.string().trim().length(6, "验证码必须为 6 位").optional(),
+);
+
 export const PlatformPartnerMemberRebindStatusSchema = z.enum([
   "pending",
   "approved",
@@ -29,7 +38,7 @@ export const PlatformPartnerMemberRebindSendCodeSchema = z.object({
 
 export const CreatePlatformPartnerMemberRebindRequestSchema = z.object({
   phone: PlatformPartnerPhoneSchema,
-  sms_code: z.string().trim().length(6, "验证码必须为 6 位"),
+  sms_code: OptionalSmsCodeSchema,
   applicant_name: OptionalTextSchema(80, "申请人姓名不能超过 80 个字符"),
   reason: OptionalTextSchema(500, "换绑原因不能超过 500 个字符"),
 }).strict();

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { PlatformPartnerPortalService as PlatformPartnerPortalServiceClass } from "@/services/platform-partner-portal";
 import { PartnerAuthUnbindWechatSchema } from "@/schema/platform-partner-portal";
 import type {
@@ -72,6 +72,7 @@ function createRepository(
     claimMemberBinding: async () => ({ status: "bound", memberId: activeMember.id }),
     claimMemberUnbind: async () => ({ status: "unbound", memberId: activeMember.id }),
     bindMemberAuthUser: async () => activeMember,
+    unbindMemberAuthUser: async () => ({ status: "unbound", memberId: activeMember.id }),
     findPartnerById: async () => activePartner,
     listInviteCodes: async () => [],
     listTenantBindings: async () => emptyPage(),
@@ -105,11 +106,14 @@ async function createService(
 }
 
 describe("PartnerAuthUnbindWechatSchema", () => {
-  test("requires a trimmed 6 digit sms code and explicit confirmation", () => {
+  test("accepts optional trimmed SMS code and requires explicit confirmation", () => {
     expect(PartnerAuthUnbindWechatSchema.parse({
       sms_code: " 123456 ",
       confirm: true,
     })).toEqual({ sms_code: "123456", confirm: true });
+    expect(PartnerAuthUnbindWechatSchema.parse({
+      confirm: true,
+    })).toEqual({ confirm: true });
 
     expect(() => PartnerAuthUnbindWechatSchema.parse({
       sms_code: "12345",
@@ -123,6 +127,10 @@ describe("PartnerAuthUnbindWechatSchema", () => {
 });
 
 describe("PlatformPartnerPortalService unbind", () => {
+  beforeEach(() => {
+    delete process.env.AUTH_PHONE_LOGIN_WITHOUT_CODE;
+  });
+
   test("sendUnbindCode sends an unbind SMS to the current member phone", async () => {
     const sends: Array<{ phone: string; scene: string; requestIp: string | null }> = [];
     const service = await createService({

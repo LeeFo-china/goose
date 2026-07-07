@@ -62,6 +62,7 @@ function createRepository(
     claimMemberBinding: async () => ({ status: "bound", memberId: activeMember.id }),
     claimMemberUnbind: async () => ({ status: "unbound", memberId: activeMember.id }),
     bindMemberAuthUser: async () => activeMember,
+    unbindMemberAuthUser: async () => ({ status: "unbound", memberId: activeMember.id }),
     findPartnerById: async () => activePartner,
     listInviteCodes: async () => [],
     listTenantBindings: async () => emptyPage(),

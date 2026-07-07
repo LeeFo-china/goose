@@ -220,11 +220,31 @@ export class PlatformPartnerPortalService {
 
   async unbindWechat(user: JwtPayload | undefined, input: PartnerAuthUnbindWechatInput) {
     const partnerUser = await this.requireCurrentPartnerMember(user);
+    if (isPhoneLoginWithoutCodeEnabled()) {
+      const claim = await this.repository.unbindMemberAuthUser({
+        memberId: partnerUser.member.id,
+        authUserId: partnerUser.userId,
+        partnerId: partnerUser.partnerId,
+      });
+      this.assertUnbindClaimed(claim);
+
+      return {
+        success: true as const,
+        message: "微信绑定已解除",
+        auth: buildPartnerVisitorAuthResponse(user, this.visitorSessionSigner),
+      };
+    }
+
+    const smsCode = input.sms_code?.trim() || "";
+    if (!smsCode) {
+      throw Errors.business(400, "请输入验证码", "SMS_CODE_REQUIRED");
+    }
+
     const claim = await this.repository.claimMemberUnbind({
       memberId: partnerUser.member.id,
       authUserId: partnerUser.userId,
       partnerId: partnerUser.partnerId,
-      code: input.sms_code.trim(),
+      code: smsCode,
     });
     this.assertUnbindClaimed(claim);
 

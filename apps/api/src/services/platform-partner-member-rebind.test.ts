@@ -9,6 +9,7 @@ import type {
   PlatformPartnerRecord,
 } from "@/repositories/platform-partner-portal";
 import type { AuthContext } from "@/services/authorization";
+import { withPhoneLoginWithoutCodeFlag } from "@/services/platform-partner-portal-test-helpers";
 import type { JwtPayload } from "@/utils/jwt";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -175,6 +176,7 @@ describe("platform partner member rebind migration", () => {
 
 describe("PlatformPartnerMemberRebindService", () => {
   beforeEach(() => {
+    delete process.env.AUTH_PHONE_LOGIN_WITHOUT_CODE;
     for (const fn of Object.values(repository)) fn.mockClear();
     for (const fn of Object.values(smsService)) fn.mockClear();
     authUserResolver.mockClear();
@@ -259,6 +261,36 @@ describe("PlatformPartnerMemberRebindService", () => {
       code: "SMS_CODE_INVALID",
     });
     expect(repository.createRequest).not.toHaveBeenCalled();
+  });
+
+  test("createRequest skips SMS verification when system-test bypass is enabled", async () => {
+    await withPhoneLoginWithoutCodeFlag("true", async () => {
+      smsService.findValidPending.mockImplementation(async () => null);
+      const service = await createService();
+
+      const result = await service.createRequest(visitorUser, {
+        phone: member.phone,
+        sms_code: "",
+        applicant_name: "新微信申请人",
+      });
+
+      expect(smsService.findValidPending).not.toHaveBeenCalled();
+      expect(smsService.markVerified).not.toHaveBeenCalled();
+      expect(repository.createRequest).toHaveBeenCalledWith({
+        partnerId: partner.id,
+        memberId: member.id,
+        phone: member.phone,
+        oldAuthUserId: member.auth_user_id,
+        newAuthUserId: pendingRequest.new_auth_user_id,
+        applicantName: "新微信申请人",
+        reason: null,
+      });
+      expect(result).toEqual({
+        id: pendingRequest.id,
+        status: "pending",
+        message: "换绑申请已提交，请等待平台审核",
+      });
+    });
   });
 
   test("approve verifies state and transfers only partner member binding", async () => {

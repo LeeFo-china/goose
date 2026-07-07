@@ -222,6 +222,61 @@ class PlatformPartnerPortalRepository implements PlatformPartnerPortalRepository
     return data as PlatformPartnerMemberRecord;
   }
 
+  async unbindMemberAuthUser(input: {
+    memberId: string;
+    authUserId: string;
+    partnerId: string;
+  }) {
+    const { data, error } = await this.from("platform_partner_members")
+      .update({
+        auth_user_id: null,
+        status: "pending_bind",
+      })
+      .eq("id", input.memberId)
+      .eq("auth_user_id", input.authUserId)
+      .eq("partner_id", input.partnerId)
+      .eq("status", "active")
+      .select(MEMBER_SELECT)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("解绑合伙人成员微信失败", error);
+    if (data) {
+      return {
+        status: "unbound",
+        memberId: (data as PlatformPartnerMemberRecord).id,
+      } as const;
+    }
+
+    const currentMember = await this.findMemberById(input.memberId);
+    if (!currentMember) {
+      return { status: "member_not_found" } as const;
+    }
+
+    if (
+      currentMember.partner_id !== input.partnerId ||
+      currentMember.auth_user_id !== input.authUserId
+    ) {
+      return {
+        status: "member_not_bound",
+        memberId: currentMember.id,
+      } as const;
+    }
+
+    if (
+      currentMember.status !== "active" ||
+      currentMember.partner?.status !== "active"
+    ) {
+      return {
+        status: "partner_unavailable",
+        memberId: currentMember.id,
+      } as const;
+    }
+
+    throw Errors.dbError("解绑合伙人成员微信失败", {
+      message: "platform partner member unbind update affected no rows",
+    });
+  }
+
   async findPartnerById(partnerId: string) {
     const { data, error } = await this.from("platform_partners")
       .select(PARTNER_SELECT)

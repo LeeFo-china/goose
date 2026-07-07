@@ -25,7 +25,7 @@ export const PartnerAuthBindPhoneSchema = PartnerAuthSendCodeSchema.extend({
 }).strict();
 
 export const PartnerAuthUnbindWechatSchema = z.object({
-  sms_code: z.string().trim().length(6, "验证码必须为 6 位"),
+  sms_code: OptionalSmsCodeSchema,
   confirm: z.literal(true),
 }).strict();
 
