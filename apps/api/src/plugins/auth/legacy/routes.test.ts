@@ -10,10 +10,15 @@ import {
 describe("isVisitorSessionRoute", () => {
   test("allows visitor sessions to submit wechat rebind requests only", () => {
     expect(isVisitorSessionRoute("POST", "/auth/wechat-rebind-requests")).toBe(true);
+    expect(isVisitorSessionRoute("POST", "/partner/auth/rebind-code")).toBe(true);
+    expect(isVisitorSessionRoute("POST", "/partner/auth/rebind-requests")).toBe(true);
 
     expect(isVisitorSessionRoute("GET", "/employee/auth/wechat-rebind-requests")).toBe(false);
     expect(isVisitorSessionRoute("POST", "/employee/auth/wechat-rebind-requests/request-id/approve")).toBe(false);
     expect(isVisitorSessionRoute("POST", "/employee/auth/wechat-rebind-requests/request-id/reject")).toBe(false);
+    expect(isVisitorSessionRoute("GET", "/platform/partner-member-rebind-requests")).toBe(false);
+    expect(isVisitorSessionRoute("POST", "/platform/partner-member-rebind-requests/request-id/approve")).toBe(false);
+    expect(isVisitorSessionRoute("POST", "/platform/partner-member-rebind-requests/request-id/reject")).toBe(false);
   });
 
   test("allows visitor sessions to list and switch auth identities", () => {
@@ -51,6 +56,8 @@ describe("auth public route allowlist", () => {
     expect(isPartnerAuthRoute("POST", "/partner/auth/login")).toBe(true);
     expect(isPartnerAuthRoute("POST", "/partner/auth/send-code")).toBe(true);
     expect(isPartnerAuthRoute("POST", "/partner/auth/bind-phone")).toBe(true);
+    expect(isPartnerAuthRoute("POST", "/partner/auth/rebind-code")).toBe(false);
+    expect(isPartnerAuthRoute("POST", "/partner/auth/rebind-requests")).toBe(false);
     expect(isPartnerAuthRoute("POST", "/partner/auth/unbind-code")).toBe(false);
     expect(isPartnerAuthRoute("POST", "/partner/auth/unbind-wechat")).toBe(false);
     expect(isPartnerAuthRoute("GET", "/partner/auth/me")).toBe(false);

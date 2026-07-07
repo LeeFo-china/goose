@@ -36,6 +36,8 @@ export const PlatformAuditLogActionSchema = z.enum([
   "picture_health_category_cover_repair",
   "wechat_rebind_approve",
   "wechat_rebind_reject",
+  "platform_partner_member_rebind_approve",
+  "platform_partner_member_rebind_reject",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);

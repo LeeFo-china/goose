@@ -3,7 +3,7 @@
 日期：2026-07-07
 当前仓库：`/Users/leefo/Public/work/gooes`
 小程序仓库：`/Users/leefo/Public/work/orange`（本次只读参考，不修改）
-状态：Phase 1 后端接口已实现，待发布联调环境后小程序端对接
+状态：Phase 1 自助解绑/身份切换已实现；Phase 2 旧微信不可用时人工换绑后端与 admin 审核已实现，待发布联调环境后小程序端对接
 
 ## 目标
 
@@ -417,7 +417,7 @@ Authorization: Bearer <platform_visitor 或其他有效 auth token>
 
 - 后端按手机号查找 active 合伙人成员。
 - 该成员必须已经绑定旧 `auth_user_id`。
-- 使用 `rebind_wechat` 或新增 `rebind_platform_partner` 场景发送验证码。
+- 使用 `rebind_platform_partner` 场景发送验证码。
 - 对手机号、IP、auth user 做限流。
 
 错误码：
@@ -452,7 +452,7 @@ Authorization: Bearer <platform_visitor 或其他有效 auth token>
   "data": {
     "id": "request-id",
     "status": "pending",
-    "message": "换绑申请已提交，平台审核通过后可使用当前微信登录"
+    "message": "换绑申请已提交，请等待平台审核"
   }
 }
 ```
@@ -475,13 +475,14 @@ Authorization: Bearer <platform_visitor 或其他有效 auth token>
 - `PARTNER_MEMBER_NOT_BOUND`
 - `PARTNER_ACCOUNT_DISABLED`
 - `PARTNER_REBIND_REQUEST_DUPLICATED`
+- `PARTNER_REBIND_SAME_WECHAT`
 
 ### 8. 超管审核合伙人成员换绑
 
 列表：
 
 ```http
-GET /platform/partner-member-rebind-requests?status=pending&page=1&pageSize=20
+GET /platform/partner-member-rebind-requests?status=pending&page=1&pageSize=20&keyword=13800138000&partner_id=partner-id
 ```
 
 审核通过：
@@ -516,7 +517,7 @@ POST /platform/partner-member-rebind-requests/:id/reject
 
 - 申请必须仍为 `pending`。
 - 成员手机号必须仍匹配。
-- 成员必须仍是 active 或 pending_bind 允许状态。
+- 成员必须仍为 `active` 且未停用。
 - 所属合伙人必须 active。
 - 成员当前 `auth_user_id` 必须仍等于申请记录中的 `old_auth_user_id`。
 - 新 `auth_user_id` 不能已绑定其他未停用的合伙人成员。
@@ -530,6 +531,12 @@ POST /platform/partner-member-rebind-requests/:id/reject
 - 默认 `page=1&pageSize=20`。
 - `pageSize` 最大 `100`。
 
+admin 入口：
+
+- 超管平台侧 `/platform/partners` 新增 `换绑审核` tab。
+- 支持按合伙人、状态、关键词过滤。
+- 行内支持详情、通过、驳回。
+
 ## 推荐数据库变更
 
 所有数据库变更必须通过 migration。
@@ -539,7 +546,7 @@ POST /platform/partner-member-rebind-requests/:id/reject
 扩展 `sms_verification_codes.scene` 约束，新增：
 
 - `unbind_platform_partner`
-- `rebind_platform_partner`，如果决定不复用现有 `rebind_wechat`
+- `rebind_platform_partner`
 
 ### 2. 合伙人换绑申请表
 
@@ -595,6 +602,16 @@ POST /platform/partner-member-rebind-requests/:id/reject
 - `apps/api/src/services/platform-partner-member-rebind-requests.ts`
 - `apps/api/src/repositories/platform-partner-member-rebind-requests.ts`
 - `supabase/migrations/*_platform_partner_member_unbind_rebind.sql`
+
+实际落地文件：
+
+- `apps/api/src/schema/platform-partner-member-rebind.ts`
+- `apps/api/src/controllers/platform-partner-member-rebind-requests/index.ts`
+- `apps/api/src/services/platform-partner-member-rebind.ts`
+- `apps/api/src/repositories/platform-partner-member-rebind.ts`
+- `supabase/migrations/20260707183000_platform_partner_member_rebind_requests.sql`
+- `apps/admin/app/(console)/platform/partners/page.tsx`
+- `apps/admin/components/platform-partners/platform-partner-member-rebind-table.tsx`
 
 最小验证：
 
@@ -754,20 +771,26 @@ orange 目前已有：
 
 ## 和小程序端同步的短版话术
 
-这次不是重做城市合伙人登录，而是在现有合伙人绑定基础上补齐三类能力：
+这次不是重做城市合伙人登录，而是在现有合伙人绑定基础上补齐四类能力：
 
 1. 合伙人成员自助解绑微信。
 2. 旧微信可用时，解绑后用新微信走现有 `send-code + bind-phone` 重新绑定。
 3. 同一微信多身份时，支持访客、客户、员工、城市合伙人之间手动切换。
+4. 旧微信不可用时，新微信在访客态提交平台人工换绑申请，超管审核通过后可登录城市合伙人。
 
-第一期后端建议新增：
+已实现接口：
 
 - `GET /auth/identities`
 - `POST /auth/switch`
 - `POST /auth/switch/visitor`
 - `POST /partner/auth/unbind-code`
 - `POST /partner/auth/unbind-wechat`
+- `POST /partner/auth/rebind-code`
+- `POST /partner/auth/rebind-requests`
+- `GET /platform/partner-member-rebind-requests`
+- `POST /platform/partner-member-rebind-requests/:id/approve`
+- `POST /platform/partner-member-rebind-requests/:id/reject`
 
 小程序侧需要新增“账号与身份”入口，提供身份切换、返回访客首页、解绑微信。解绑成功后后端会返回 `platform_visitor` auth，小程序保存后直接进访客首页。
 
-旧微信不可用的换绑属于第二期，需要新增平台级换绑申请和超管审核，不要直接复用客户/员工的 `wechat_rebind_requests`，因为那套表和权限强依赖租户。
+旧微信不可用时，小程序用当前 visitor/auth token 调 `rebind-code` 和 `rebind-requests`。前端不传 `partner_id`、`member_id`、`auth_user_id`。审核通过后用户再次打开小程序或重新 `/auth`，后端会识别为 `platform_partner`。

@@ -291,6 +291,16 @@ export function isVisitorSessionRoute(method: string, url: string) {
   }
 
   if (
+    method === "POST" &&
+    (
+      url === "/partner/auth/rebind-code" ||
+      url === "/partner/auth/rebind-requests"
+    )
+  ) {
+    return true;
+  }
+
+  if (
     (method === "GET" || method === "HEAD")
     && (url === "/front/projects" || url.startsWith("/front/projects/"))
   ) {

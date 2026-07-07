@@ -34,6 +34,7 @@ describe("Platform partner operation page", () => {
     expect(tabsSource).toContain("平台收入");
     expect(tabsSource).toContain("分佣台账");
     expect(tabsSource).toContain("月结批次");
+    expect(tabsSource).toContain("换绑审核");
     expect(source).not.toContain("listHeader=");
     expect(source).not.toContain("当前筛选：");
   });
@@ -43,6 +44,8 @@ describe("Platform partner operation page", () => {
       readSource("./platform-partner-application-actions.tsx")
     }\n${
       readSource("./platform-partner-member-actions.tsx")
+    }\n${
+      readSource("./platform-partner-member-rebind-table.tsx")
     }`;
 
     expect(source).toContain("/platform/partner-applications/${application.id}/approve");
@@ -55,6 +58,8 @@ describe("Platform partner operation page", () => {
     expect(source).toContain("/platform/partner-revenue/recharge-events/sync");
     expect(source).toContain("/platform/partner-settlements/monthly-batches");
     expect(source).toContain("/platform/partner-settlements/${batch.id}/mark-paid");
+    expect(source).toContain("/platform/partner-member-rebind-requests/${request.id}/approve");
+    expect(source).toContain("/platform/partner-member-rebind-requests/${request.id}/reject");
   });
 
   test("adds partner member tab fetch, actions, and required table columns", () => {
@@ -70,6 +75,18 @@ describe("Platform partner operation page", () => {
     expect(actionSource).toContain("CreatePartnerMemberButton");
     expect(actionSource).toContain("UpdatePartnerMemberStatusButton");
     for (const column of ["合伙人", "姓名", "手机号", "角色", "绑定状态", "微信绑定", "创建时间", "操作"]) {
+      expect(tableSource).toContain(column);
+    }
+  });
+
+  test("adds partner member rebind review tab fetch, actions, and columns", () => {
+    const pageSource = readSource("../../app/(console)/platform/partners/page.tsx");
+    const tableSource = readSource("./platform-partner-member-rebind-table.tsx");
+
+    expect(pageSource).toContain("tab === \"rebindRequests\"");
+    expect(pageSource).toContain("/platform/partner-member-rebind-requests?");
+    expect(pageSource).toContain("PlatformPartnerMemberRebindTable");
+    for (const column of ["合伙人", "成员", "申请人", "状态", "提交时间", "操作"]) {
       expect(tableSource).toContain(column);
     }
   });

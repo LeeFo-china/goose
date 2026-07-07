@@ -15,6 +15,7 @@ import { CreatePartnerMemberButton } from "@/components/platform-partners/platfo
 import {
   buildPartnerHref,
   normalizeApplicationStatus,
+  normalizePartnerMemberRebindStatus,
   normalizePartnerStatus,
   normalizePartnerTab,
   PARTNER_TABS,
@@ -22,6 +23,7 @@ import {
   type PartnerPageTab,
 } from "@/components/platform-partners/platform-partner-filters";
 import { PlatformPartnerApplicationsTable } from "@/components/platform-partners/platform-partner-application-table";
+import { PlatformPartnerMemberRebindTable } from "@/components/platform-partners/platform-partner-member-rebind-table";
 import {
   PartnerCommissionLedgersTable,
   PartnerSettlementBatchesTable,
@@ -37,6 +39,7 @@ import type {
   PlatformPartnerApplicationRecord,
   PlatformPartnerLevel,
   PlatformPartnerMemberRecord,
+  PlatformPartnerMemberRebindRecord,
   PlatformPartnerRecord,
   PlatformRevenueEventRecord,
   TenantPartnerBindingRecord,
@@ -60,7 +63,10 @@ type SearchParams = Promise<{
   commissionPageSize?: string;
   settlementPage?: string;
   settlementPageSize?: string;
+  rebindPage?: string;
+  rebindPageSize?: string;
   application_status?: string;
+  rebind_status?: string;
   status?: string;
   keyword?: string;
   region_code?: string;
@@ -144,7 +150,10 @@ export default async function PlatformPartnersPage({
   const commissionPageSize = normalizePlatformListPageSize(params.commissionPageSize);
   const settlementPage = readPositiveInteger(params.settlementPage, 1);
   const settlementPageSize = normalizePlatformListPageSize(params.settlementPageSize);
+  const rebindPage = readPositiveInteger(params.rebindPage, 1);
+  const rebindPageSize = normalizePlatformListPageSize(params.rebindPageSize);
   const applicationStatus = normalizeApplicationStatus(params.application_status);
+  const rebindStatus = normalizePartnerMemberRebindStatus(params.rebind_status);
   const partnerStatus = normalizePartnerStatus(params.status);
   const keyword = cleanParam(params.keyword);
   const regionCode = cleanParam(params.region_code);
@@ -249,6 +258,18 @@ export default async function PlatformPartnersPage({
       emptyList<PartnerSettlementBatchRecord>(settlementPage, settlementPageSize),
     )
     : { data: emptyList<PartnerSettlementBatchRecord>(settlementPage, settlementPageSize), error: null };
+  const rebindResult = tab === "rebindRequests" && hasPlatformAccess
+    ? await fetchBackend<ListData<PlatformPartnerMemberRebindRecord>>(
+      `/platform/partner-member-rebind-requests?${buildQuery({
+        page: rebindPage,
+        pageSize: rebindPageSize,
+        status: rebindStatus,
+        partner_id: partnerId,
+        keyword,
+      })}`,
+      emptyList<PlatformPartnerMemberRebindRecord>(rebindPage, rebindPageSize),
+    )
+    : { data: emptyList<PlatformPartnerMemberRebindRecord>(rebindPage, rebindPageSize), error: null };
 
   const activePagination = activeList(tab, {
     applications: applicationResult.data,
@@ -258,6 +279,7 @@ export default async function PlatformPartnersPage({
     revenue: revenueResult.data,
     commissions: commissionResult.data,
     settlements: settlementResult.data,
+    rebindRequests: rebindResult.data,
   }).pagination;
   const activeCount = activeList(tab, {
     applications: applicationResult.data,
@@ -267,6 +289,7 @@ export default async function PlatformPartnersPage({
     revenue: revenueResult.data,
     commissions: commissionResult.data,
     settlements: settlementResult.data,
+    rebindRequests: rebindResult.data,
   }).list.length;
   const activeError = accessError
     || levelsResult.error
@@ -277,7 +300,8 @@ export default async function PlatformPartnersPage({
     || bindingResult.error
     || revenueResult.error
     || commissionResult.error
-    || settlementResult.error;
+    || settlementResult.error
+    || rebindResult.error;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -310,6 +334,7 @@ export default async function PlatformPartnersPage({
               revenueStatus={revenueStatus}
               commissionStatus={commissionStatus}
               settlementStatus={settlementStatus}
+              rebindStatus={rebindStatus}
               partners={activePartners}
             />
           }
@@ -344,6 +369,9 @@ export default async function PlatformPartnersPage({
           <TabsContent value="settlements" className="m-0 min-h-full">
             <PartnerSettlementBatchesTable list={settlementResult.data.list} />
           </TabsContent>
+          <TabsContent value="rebindRequests" className="m-0 min-h-full">
+            <PlatformPartnerMemberRebindTable list={rebindResult.data.list} />
+          </TabsContent>
         </PlatformListPageShell>
       </Tabs>
     </div>
@@ -373,6 +401,7 @@ function actionForTab(
   if (tab === "commissions" || tab === "settlements") {
     return <CreateSettlementBatchButton partners={partners} />;
   }
+  if (tab === "rebindRequests") return null;
   return null;
 }
 
@@ -390,6 +419,7 @@ function pageKeyForTab(tab: PartnerPageTab) {
   if (tab === "revenue") return "revenuePage";
   if (tab === "commissions") return "commissionPage";
   if (tab === "settlements") return "settlementPage";
+  if (tab === "rebindRequests") return "rebindPage";
   return "partnerPage";
 }
 
@@ -400,6 +430,7 @@ function pageSizeKeyForTab(tab: PartnerPageTab) {
   if (tab === "revenue") return "revenuePageSize";
   if (tab === "commissions") return "commissionPageSize";
   if (tab === "settlements") return "settlementPageSize";
+  if (tab === "rebindRequests") return "rebindPageSize";
   return "partnerPageSize";
 }
 
@@ -410,5 +441,6 @@ function unitForTab(tab: PartnerPageTab) {
   if (tab === "revenue") return "条收入";
   if (tab === "commissions") return "条分佣";
   if (tab === "settlements") return "个月结批次";
+  if (tab === "rebindRequests") return "条换绑申请";
   return "个合伙人";
 }

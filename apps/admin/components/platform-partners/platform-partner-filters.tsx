@@ -7,11 +7,13 @@ import { Input } from "@/components/ui/input";
 import type {
   PlatformPartnerApplicationStatus,
   PlatformPartnerRecord,
+  PlatformPartnerMemberRebindStatus,
   PlatformPartnerStatus,
 } from "@/components/platform-partners/platform-partner-types";
 import {
   applicationStatusOptions,
   commissionStatusOptions,
+  partnerMemberRebindStatusOptions,
   partnerStatusOptions,
   revenueStatusOptions,
   revenueTypeOptions,
@@ -25,7 +27,8 @@ export type PartnerPageTab =
   | "bindings"
   | "revenue"
   | "commissions"
-  | "settlements";
+  | "settlements"
+  | "rebindRequests";
 
 export const PARTNER_TABS: ReadonlyArray<{ value: PartnerPageTab; label: string }> = [
   { value: "applications", label: "申请线索" },
@@ -35,6 +38,7 @@ export const PARTNER_TABS: ReadonlyArray<{ value: PartnerPageTab; label: string 
   { value: "revenue", label: "平台收入" },
   { value: "commissions", label: "分佣台账" },
   { value: "settlements", label: "月结批次" },
+  { value: "rebindRequests", label: "换绑审核" },
 ];
 
 export function normalizePartnerTab(value: string | undefined): PartnerPageTab {
@@ -59,6 +63,14 @@ export function normalizePartnerStatus(
     : "";
 }
 
+export function normalizePartnerMemberRebindStatus(
+  value: string | undefined,
+): PlatformPartnerMemberRebindStatus | "" {
+  return partnerMemberRebindStatusOptions.some((option) => option.value === value)
+    ? value as PlatformPartnerMemberRebindStatus
+    : "";
+}
+
 export function buildPartnerHref(input: {
   tab?: PartnerPageTab;
   pageSize?: number;
@@ -68,6 +80,7 @@ export function buildPartnerHref(input: {
   revenuePageSize?: number;
   commissionPageSize?: number;
   settlementPageSize?: number;
+  rebindPageSize?: number;
 }) {
   const params = new URLSearchParams();
   if (input.tab && input.tab !== "applications") params.set("tab", input.tab);
@@ -77,6 +90,7 @@ export function buildPartnerHref(input: {
   if (input.revenuePageSize) params.set("revenuePageSize", String(input.revenuePageSize));
   if (input.commissionPageSize) params.set("commissionPageSize", String(input.commissionPageSize));
   if (input.settlementPageSize) params.set("settlementPageSize", String(input.settlementPageSize));
+  if (input.rebindPageSize) params.set("rebindPageSize", String(input.rebindPageSize));
   if (input.pageSize) params.set("pageSize", String(input.pageSize));
   const query = params.toString();
   return query ? `/platform/partners?${query}` : "/platform/partners";
@@ -94,6 +108,7 @@ export function PlatformPartnerFilters({
   revenueStatus,
   commissionStatus,
   settlementStatus,
+  rebindStatus,
   partners,
 }: {
   tab: PartnerPageTab;
@@ -107,6 +122,7 @@ export function PlatformPartnerFilters({
   revenueStatus: string;
   commissionStatus: string;
   settlementStatus: string;
+  rebindStatus: string;
   partners: PlatformPartnerRecord[];
 }) {
   const partnerOptions = partners.map((partner) => ({
@@ -222,6 +238,23 @@ export function PlatformPartnerFilters({
             defaultValue={settlementStatus}
             options={[...settlementStatusOptions]}
           />
+        </>
+      ) : null}
+      {tab === "rebindRequests" ? (
+        <>
+          <FilterSelect
+            label="合伙人"
+            name="partner_id"
+            defaultValue={partnerId}
+            options={partnerOptions}
+          />
+          <FilterSelect
+            label="状态"
+            name="rebind_status"
+            defaultValue={rebindStatus}
+            options={[...partnerMemberRebindStatusOptions]}
+          />
+          <TextFilter name="keyword" label="关键词" placeholder="手机号、申请人、原因" defaultValue={keyword} />
         </>
       ) : null}
       <div className="ml-auto flex gap-2">

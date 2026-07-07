@@ -12,6 +12,11 @@ import {
   PartnerAuthSendCodeSchema,
   PartnerAuthUnbindWechatSchema,
 } from "@/schema/platform-partner-portal";
+import {
+  CreatePlatformPartnerMemberRebindRequestSchema,
+  PlatformPartnerMemberRebindSendCodeSchema,
+} from "@/schema/platform-partner-member-rebind";
+import { platformPartnerMemberRebindService } from "@/services/platform-partner-member-rebind";
 import { platformPartnerPortalService } from "@/services/platform-partner-portal";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -54,6 +59,37 @@ class PlatformPartnerPortalController extends BaseController {
       ...bodyResult.data,
       request,
     });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/partner/auth/rebind-code")
+  async sendRebindCode(request: FastifyRequest, reply: FastifyReply) {
+    const bodyResult = PlatformPartnerMemberRebindSendCodeSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformPartnerMemberRebindService.sendRebindCode({
+      ...bodyResult.data,
+      requestIp: request.ip ?? null,
+      requestDevice: getRequestDevice(request),
+    });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/partner/auth/rebind-requests")
+  async createRebindRequest(request: FastifyRequest, reply: FastifyReply) {
+    const bodyResult =
+      CreatePlatformPartnerMemberRebindRequestSchema.safeParse(
+        request.body || {},
+      );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformPartnerMemberRebindService.createRequest(
+      request.user,
+      bodyResult.data,
+      request,
+    );
     return ResponseHandler.success(data);
   }
 
@@ -149,6 +185,25 @@ class PlatformPartnerPortalController extends BaseController {
     );
     return ResponseHandler.success(data);
   }
+}
+
+function getRequestDevice(request: FastifyRequest) {
+  const headerNames = [
+    "x-device-id",
+    "x-visitor-device-id",
+    "x-client-device-id",
+    "x-client-id",
+  ];
+
+  for (const headerName of headerNames) {
+    const rawValue = request.headers[headerName];
+    const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+    if (typeof value !== "string") continue;
+    const normalized = value.trim();
+    if (normalized) return normalized.slice(0, 160);
+  }
+
+  return null;
 }
 
 export default new PlatformPartnerPortalController();

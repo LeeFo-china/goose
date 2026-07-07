@@ -17,6 +17,12 @@ export type PlatformPartnerMemberStatus =
   | "active"
   | "disabled";
 
+export type PlatformPartnerMemberRebindStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "cancelled";
+
 export type PlatformPartnerLevel = {
   id: string;
   code: string;
@@ -88,6 +94,25 @@ export type PlatformPartnerMemberRecord = {
   updated_by_employee_id: string | null;
   created_at: string;
   updated_at: string;
+  partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
+};
+
+export type PlatformPartnerMemberRebindRecord = {
+  id: string;
+  partner_id: string;
+  member_id: string;
+  phone: string;
+  old_auth_user_id: string;
+  new_auth_user_id: string;
+  applicant_name: string | null;
+  reason: string | null;
+  status: PlatformPartnerMemberRebindStatus;
+  reviewer_employee_id: string | null;
+  review_comment: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  member?: PlatformPartnerMemberRecord | null;
   partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
 };
 
@@ -203,6 +228,13 @@ export const partnerMemberStatusOptions = [
   { value: "pending_bind", label: "待绑定" },
   { value: "active", label: "已启用" },
   { value: "disabled", label: "已停用" },
+] as const;
+
+export const partnerMemberRebindStatusOptions = [
+  { value: "pending", label: "待审核" },
+  { value: "approved", label: "已通过" },
+  { value: "rejected", label: "已驳回" },
+  { value: "cancelled", label: "已取消" },
 ] as const;
 
 export const revenueTypeOptions = [

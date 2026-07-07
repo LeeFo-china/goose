@@ -42,6 +42,10 @@ export function getTemplateConfigKey(input: {
     return `${prefix}_BIND_CUSTOMER`;
   }
 
+  if (input.purpose === "rebind_platform_partner") {
+    return `${prefix}_BIND_CUSTOMER`;
+  }
+
   if (input.purpose === "rebind_wechat") {
     return `${prefix}_BIND_CUSTOMER`;
   }
