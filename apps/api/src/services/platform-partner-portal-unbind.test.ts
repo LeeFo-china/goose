@@ -136,7 +136,7 @@ describe("PlatformPartnerPortalService unbind", () => {
 
     const result = await service.sendUnbindCode(partnerUser, "127.0.0.1");
 
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ success: true, cooldown_seconds: 60 });
     expect(sends).toEqual([{
       phone: activeMember.phone,
       scene: "unbind_platform_partner",

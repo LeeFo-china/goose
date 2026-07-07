@@ -59,10 +59,8 @@ function createRepository(
     findMemberByAuthUserId: async () => activeMember,
     findMemberById: async () => activeMember,
     findBindableMemberByPhone: async () => activeMember,
-    claimMemberBinding: async () => ({
-      status: "bound",
-      memberId: activeMember.id,
-    }),
+    claimMemberBinding: async () => ({ status: "bound", memberId: activeMember.id }),
+    claimMemberUnbind: async () => ({ status: "unbound", memberId: activeMember.id }),
     bindMemberAuthUser: async () => activeMember,
     findPartnerById: async () => activePartner,
     listInviteCodes: async () => [],

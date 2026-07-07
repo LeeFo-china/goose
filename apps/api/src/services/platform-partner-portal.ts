@@ -1,11 +1,9 @@
 import type { FastifyRequest } from "fastify";
-import { createHash } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
 import {
   platformPartnerPortalRepository,
   type PlatformPartnerMemberRecord,
   type PlatformPartnerPortalRepositoryPort,
-  type PlatformPartnerRecord,
 } from "@/repositories/platform-partner-portal";
 import type {
   PartnerDashboardCommissionLedgerListQuery,
@@ -25,41 +23,23 @@ import {
   assertUsablePlatformPartnerMember,
   bindPlatformPartnerMemberWithoutSmsCode,
 } from "@/services/platform-partner-portal-binding";
+import {
+  buildPartnerAuthResponse,
+  buildPartnerVisitorAuthResponse,
+  PLATFORM_PARTNER_ROLE,
+  serializeLevel,
+  serializeMember,
+  serializePartner,
+  type PartnerAuthMeResponse,
+  type PartnerAuthResponse,
+  type VisitorSessionSigner,
+} from "@/services/platform-partner-portal-auth-payloads";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { signToken, signVisitorSessionToken, type JwtPayload } from "@/utils/jwt";
 
-const PLATFORM_PARTNER_ROLE = "platform_partner";
 const SMS_SCENE = "bind_platform_partner";
 const UNBIND_SMS_SCENE = "unbind_platform_partner";
-
-export type PartnerAuthMemberPayload = {
-  id: string; partner_id: string; name: string; phone: string;
-  role: PlatformPartnerMemberRecord["role"];
-  status: PlatformPartnerMemberRecord["status"];
-};
-
-export type PartnerAuthLevelPayload = {
-  id: string; code: string; name: string; status: string;
-};
-
-export type PartnerAuthPartnerPayload = {
-  id: string; name: string;
-  status: PlatformPartnerRecord["status"];
-  region_codes: string[];
-  level: { code: string; name: string } | null;
-};
-
-export type PartnerAuthResponse = {
-  token: string; user_id: string;
-  roles: [typeof PLATFORM_PARTNER_ROLE];
-  mode: "platform_partner";
-  authMode: "platform_partner";
-  member: PartnerAuthMemberPayload;
-  partner: PartnerAuthPartnerPayload;
-  level: PartnerAuthLevelPayload | null;
-};
-
-export type PartnerAuthMeResponse = Omit<PartnerAuthResponse, "token">;
+export type { PartnerAuthMeResponse, PartnerAuthResponse };
 
 type WechatSessionResolver = (code: string) => Promise<{
   openid?: string;
@@ -82,12 +62,6 @@ type SmsServicePort = Pick<
   typeof smsVerificationCodeService,
   "sendCode"
 >;
-
-type VisitorSessionSigner = (input: {
-  openid: string;
-  unionid?: string | null;
-  visitorId: string;
-}) => string;
 
 type PlatformPartnerPortalServiceDependencies = {
   repository?: PlatformPartnerPortalRepositoryPort;
@@ -237,25 +211,16 @@ export class PlatformPartnerPortalService {
 
   async sendUnbindCode(user: JwtPayload | undefined, requestIp: string | null) {
     const partnerUser = await this.requireCurrentPartnerMember(user);
-    await this.smsService.sendCode({
+    return this.smsService.sendCode({
       phone: partnerUser.member.phone,
       scene: UNBIND_SMS_SCENE,
       requestIp,
     });
-
-    return { success: true as const };
   }
 
   async unbindWechat(user: JwtPayload | undefined, input: PartnerAuthUnbindWechatInput) {
     const partnerUser = await this.requireCurrentPartnerMember(user);
-    const claimMemberUnbind = this.repository.claimMemberUnbind;
-    if (!claimMemberUnbind) {
-      throw Errors.dbError("解绑合伙人成员微信失败", {
-        message: "claimMemberUnbind repository method is not configured",
-      });
-    }
-
-    const claim = await claimMemberUnbind({
+    const claim = await this.repository.claimMemberUnbind({
       memberId: partnerUser.member.id,
       authUserId: partnerUser.userId,
       partnerId: partnerUser.partnerId,
@@ -266,7 +231,7 @@ export class PlatformPartnerPortalService {
     return {
       success: true as const,
       message: "微信绑定已解除",
-      auth: this.buildVisitorAuthResponse(user),
+      auth: buildPartnerVisitorAuthResponse(user, this.visitorSessionSigner),
     };
   }
 
@@ -278,9 +243,9 @@ export class PlatformPartnerPortalService {
       roles: [PLATFORM_PARTNER_ROLE],
       mode: "platform_partner",
       authMode: "platform_partner",
-      member: this.serializeMember(partnerUser.member),
-      partner: this.serializePartner(partnerUser.member.partner!),
-      level: this.serializeLevel(partnerUser.member.partner!),
+      member: serializeMember(partnerUser.member),
+      partner: serializePartner(partnerUser.member.partner!),
+      level: serializeLevel(partnerUser.member.partner!),
     } satisfies PartnerAuthMeResponse;
   }
 
@@ -432,7 +397,7 @@ export class PlatformPartnerPortalService {
   }
 
   private assertUnbindClaimed(
-    claim: Awaited<ReturnType<NonNullable<PlatformPartnerPortalRepositoryPort["claimMemberUnbind"]>>>,
+    claim: Awaited<ReturnType<PlatformPartnerPortalRepositoryPort["claimMemberUnbind"]>>,
   ): asserts claim is { status: "unbound"; memberId: string } {
     if (claim.status === "unbound") {
       return;
@@ -455,32 +420,6 @@ export class PlatformPartnerPortalService {
       "当前微信未绑定该合伙人成员",
       "PARTNER_MEMBER_NOT_BOUND",
     );
-  }
-
-  private buildVisitorAuthResponse(user?: JwtPayload) {
-    const openid = typeof user?.openid === "string" ? user.openid.trim() : "";
-    if (!openid) {
-      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
-    }
-
-    const visitorId = this.buildVisitorSessionId(openid);
-    return {
-      mode: "platform_visitor",
-      authMode: "platform_visitor",
-      token: this.visitorSessionSigner({
-        openid,
-        unionid: user?.unionid ?? null,
-        visitorId,
-      }),
-      user_id: null,
-      visitor_id: visitorId,
-      roles: ["visitor"],
-      is_new_user: false,
-    };
-  }
-
-  private buildVisitorSessionId(openid: string) {
-    return `wechat_visitor_${createHash("sha256").update(openid).digest("hex").slice(0, 32)}`;
   }
 
   private async resolveWechatAuthUser(input: {
@@ -523,59 +462,13 @@ export class PlatformPartnerPortalService {
     openid?: string,
     unionid?: string | null,
   ): PartnerAuthResponse {
-    if (!member.partner) {
-      throw Errors.business(
-        403,
-        "合伙人账号不可用",
-        "PARTNER_ACCOUNT_DISABLED",
-      );
-    }
-
-    const token = this.tokenSigner({
-      sub: userId,
-      token_type: "platform_partner",
-      login_channel: "wechat",
-      roles: [PLATFORM_PARTNER_ROLE],
-      partner_id: member.partner_id,
+    return buildPartnerAuthResponse({
+      member,
+      userId,
       openid,
-      unionid: unionid ?? null,
+      unionid,
+      tokenSigner: this.tokenSigner,
     });
-
-    return {
-      token,
-      user_id: userId,
-      roles: [PLATFORM_PARTNER_ROLE],
-      mode: "platform_partner",
-      authMode: "platform_partner",
-      member: this.serializeMember(member),
-      partner: this.serializePartner(member.partner),
-      level: this.serializeLevel(member.partner),
-    };
-  }
-
-  private serializeMember(member: PlatformPartnerMemberRecord): PartnerAuthMemberPayload {
-    return { id: member.id, partner_id: member.partner_id, name: member.name, phone: member.phone, role: member.role, status: member.status };
-  }
-
-  private serializePartner(partner: PlatformPartnerRecord): PartnerAuthPartnerPayload {
-    return {
-      id: partner.id,
-      name: partner.name,
-      status: partner.status,
-      region_codes: partner.region_codes,
-      level: partner.level
-        ? {
-          code: partner.level.code,
-          name: partner.level.name,
-        }
-        : null,
-    };
-  }
-
-  private serializeLevel(partner: PlatformPartnerRecord): PartnerAuthLevelPayload | null {
-    return partner.level
-      ? { id: partner.level.id, code: partner.level.code, name: partner.level.name, status: partner.level.status }
-      : null;
   }
 }
 
