@@ -8,6 +8,7 @@ export const SMS_SCENE_VALUES = [
   'admin_login',
   'rebind_wechat',
   'bind_platform_partner',
+  'unbind_platform_partner',
   'partner_application',
 ] as const;
 

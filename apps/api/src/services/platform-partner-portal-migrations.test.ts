@@ -91,6 +91,23 @@ describe("platform partner portal migration", () => {
     ]) expect(sql).toContain(fragment);
   });
 
+  test("creates atomic partner member unbind RPC and SMS scene", () => {
+    const migrationPath = join(
+      migrationsDir,
+      "20260707160000_platform_partner_unbind_identity_switch.sql",
+    );
+
+    expect(existsSync(migrationPath)).toBe(true);
+    const sql = readFileSync(migrationPath, "utf8");
+    expect(sql).toContain("'unbind_platform_partner'::text");
+    expect(sql).toContain(
+      "CREATE OR REPLACE FUNCTION public.unbind_platform_partner_member_binding",
+    );
+    expect(sql).toContain(
+      "GRANT EXECUTE ON FUNCTION public.unbind_platform_partner_member_binding",
+    );
+  });
+
   test("creates partner dashboard monthly summary RPC", () => {
     const migrationPath = join(
       migrationsDir,
