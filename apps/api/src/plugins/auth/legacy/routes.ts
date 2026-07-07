@@ -12,6 +12,7 @@ const partnerPortalRoutes = new Set([
   "/partner/auth/me",
   "/partner/dashboard/summary",
   "/partner/invite-codes",
+  "/partner/invite-code/default",
   "/partner/dashboard/tenants",
   "/partner/dashboard/revenue-events",
   "/partner/dashboard/commission-ledger",

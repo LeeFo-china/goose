@@ -267,6 +267,52 @@ GET /partner/dashboard/summary?month=2026-07
 
 ### 专属邀请码
 
+小程序“专属邀请码”页应调用默认入口接口。这个页面是合伙人的获客入口，
+不是后台配置列表；后端会保证 active 合伙人拿到一个可用邀请二维码。
+
+```http
+GET /partner/invite-code/default
+Authorization: Bearer <platform_partner token>
+```
+
+说明：
+
+- 小程序不传 `partner_id` / `member_id` / `auth_user_id`。
+- 后端根据当前 `platform_partner` token 识别 `partner_id`。
+- 如果当前合伙人已有 active 且未过期的邀请码，直接复用。
+- 如果没有可用邀请码，后端会幂等创建默认邀请码。
+- 只有 active 合伙人和 active 成员可以获取默认邀请码。
+
+成功响应：
+
+```json
+{
+  "data": {
+    "invite_code": "CP-411500-000000000201",
+    "status": "active",
+    "region_code": "411500",
+    "expires_at": null,
+    "qr_code_content_type": "image/png",
+    "qr_code_image_base64": "data:image/png;base64,..."
+  }
+}
+```
+
+错误处理：
+
+- `PARTNER_AUTH_REQUIRED`：登录态不是城市合伙人身份，回到登录/访客态。
+- `PARTNER_ACCOUNT_DISABLED`：合伙人或成员不可用，提示账号不可用。
+- `PARTNER_INVITE_CODE_SCENE_TOO_LONG`：邀请码超出小程序码 scene 长度限制。
+
+Smoke：
+
+1. 已绑定 active 合伙人首次进入页面，能直接看到二维码。
+2. 连续多次进入页面，返回同一个 `invite_code`，不会产生多条默认码。
+3. 已有 active 邀请码时，接口复用已有记录。
+4. suspended / terminated 合伙人访问时返回账号不可用。
+
+历史列表接口仍保留：
+
 ```http
 GET /partner/invite-codes
 ```
@@ -275,6 +321,7 @@ GET /partner/invite-codes
 
 - 只返回当前合伙人自己的邀请码。
 - 该接口为辅助入口，后端最多返回最近 `50` 条。
+- 小程序“专属邀请码”主页面不再依赖该接口判断是否展示空态。
 
 成功响应：
 
@@ -624,6 +671,7 @@ export const PartnerService = {
   me: () => api.get('/partner/auth/me'),
   summary: (params?: { month?: string }) =>
     api.get('/partner/dashboard/summary', params),
+  defaultInviteCode: () => api.get('/partner/invite-code/default'),
   inviteCodes: () => api.get('/partner/invite-codes'),
   tenants: (params?: Record<string, unknown>) =>
     api.get('/partner/dashboard/tenants', params),

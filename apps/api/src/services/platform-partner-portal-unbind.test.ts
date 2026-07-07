@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { PlatformPartnerPortalService as PlatformPartnerPortalServiceClass } from "@/services/platform-partner-portal";
 import { PartnerAuthUnbindWechatSchema } from "@/schema/platform-partner-portal";
+import { createTestPartnerInviteCode } from "@/services/platform-partner-portal-test-helpers";
 import type {
   PlatformPartnerMemberRecord,
   PlatformPartnerPortalRepositoryPort,
@@ -75,6 +76,7 @@ function createRepository(
     unbindMemberAuthUser: async () => ({ status: "unbound", memberId: activeMember.id }),
     findPartnerById: async () => activePartner,
     listInviteCodes: async () => [],
+    createInviteCode: async (input) => createTestPartnerInviteCode(input),
     listTenantBindings: async () => emptyPage(),
     listRevenueEvents: async () => emptyPage(),
     listCommissionLedgers: async () => emptyPage(),

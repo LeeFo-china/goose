@@ -8,6 +8,7 @@ import type {
   PlatformRevenueEventStatus,
 } from "@/repositories/platform-partner-revenue";
 import type {
+  PlatformPartnerInviteCodeCreateRecordInput,
   PlatformPartnerInviteCodeRecord,
   PlatformPartnerLevelRecord,
   PlatformPartnerRecord as BasePlatformPartnerRecord,
@@ -45,6 +46,7 @@ export interface PlatformPartnerPortalRepositoryPort {
   unbindMemberAuthUser(input: { memberId: string; authUserId: string; partnerId: string }): Promise<PlatformPartnerMemberUnbindClaimResult>;
   findPartnerById(partnerId: string): Promise<PlatformPartnerRecord | null>;
   listInviteCodes(partnerId: string): Promise<PlatformPartnerInviteCodeRecord[]>;
+  createInviteCode(input: PlatformPartnerInviteCodeCreateRecordInput): Promise<PlatformPartnerInviteCodeRecord>;
   listTenantBindings(input: PartnerTenantBindingListInput): Promise<PageResult<TenantPartnerBindingRecord>>;
   listRevenueEvents(input: PartnerRevenueEventListInput): Promise<PageResult<PlatformRevenueEventRecord>>;
   listCommissionLedgers(input: PartnerCommissionLedgerListInput): Promise<PageResult<PartnerCommissionLedgerRecord>>;
@@ -68,6 +70,7 @@ export type PlatformPartnerMemberUnbindClaimResult =
 
 export type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
+  insert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable; neq: (...args: unknown[]) => UntypedTable;
   gte: (...args: unknown[]) => UntypedTable; lt: (...args: unknown[]) => UntypedTable;

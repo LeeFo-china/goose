@@ -26,6 +26,7 @@ describe("PlatformPartnerPortalController routes", () => {
       { method: "GET", path: "/partner/auth/me" },
       { method: "GET", path: "/partner/dashboard/summary" },
       { method: "GET", path: "/partner/invite-codes" },
+      { method: "GET", path: "/partner/invite-code/default" },
       { method: "GET", path: "/partner/dashboard/tenants" },
       { method: "GET", path: "/partner/dashboard/revenue-events" },
       { method: "GET", path: "/partner/dashboard/commission-ledger" },

@@ -23,12 +23,13 @@ import {
   type UntypedClient,
   type UntypedTable,
 } from "@/repositories/platform-partner-portal-types";
+import { isPostgresUniqueViolation } from "@/repositories/repository-errors";
 import type {
   PartnerCommissionLedgerRecord,
   PartnerSettlementBatchRecord,
   PlatformRevenueEventRecord,
 } from "@/repositories/platform-partner-revenue";
-import type { PlatformPartnerInviteCodeRecord, TenantPartnerBindingRecord } from "@/repositories/platform-partners";
+import type { PlatformPartnerInviteCodeCreateRecordInput, PlatformPartnerInviteCodeRecord, TenantPartnerBindingRecord } from "@/repositories/platform-partners";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 export type * from "@/repositories/platform-partner-portal-types";
@@ -297,6 +298,52 @@ class PlatformPartnerPortalRepository implements PlatformPartnerPortalRepository
 
     if (error) throw Errors.dbError("查询合伙人邀请码失败", error);
     return (data ?? []) as PlatformPartnerInviteCodeRecord[];
+  }
+
+  async createInviteCode(input: PlatformPartnerInviteCodeCreateRecordInput) {
+    const { data, error } = await this.from("platform_partner_invite_codes")
+      .insert(input)
+      .select(INVITE_CODE_SELECT)
+      .single();
+
+    if (error) {
+      if (isPostgresUniqueViolation(error)) {
+        const existing = await this.findInviteCodeByCode(input.code);
+        if (existing?.partner_id === input.partner_id) {
+          if (existing.status !== "active" || existing.expires_at) {
+            return this.activateInviteCode(input.code, input.partner_id);
+          }
+
+          return existing;
+        }
+      }
+
+      throw Errors.dbError("创建合伙人邀请码失败", error);
+    }
+
+    return data as PlatformPartnerInviteCodeRecord;
+  }
+
+  private async findInviteCodeByCode(code: string) {
+    const { data, error } = await this.from("platform_partner_invite_codes")
+      .select(INVITE_CODE_SELECT)
+      .eq("code", code)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询合伙人邀请码失败", error);
+    return (data as PlatformPartnerInviteCodeRecord | null) ?? null;
+  }
+
+  private async activateInviteCode(code: string, partnerId: string) {
+    const { data, error } = await this.from("platform_partner_invite_codes")
+      .update({ status: "active", expires_at: null })
+      .eq("code", code)
+      .eq("partner_id", partnerId)
+      .select(INVITE_CODE_SELECT)
+      .single();
+
+    if (error) throw Errors.dbError("恢复合伙人邀请码失败", error);
+    return data as PlatformPartnerInviteCodeRecord;
   }
 
   async listTenantBindings(input: PartnerTenantBindingListInput) {

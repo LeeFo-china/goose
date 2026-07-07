@@ -131,7 +131,7 @@ export type PlatformPartnerInviteCodeCreateRecordInput = {
   region_code?: string | null;
   campaign_code?: string | null;
   expires_at?: string | null;
-  created_by_employee_id: string;
+  created_by_employee_id: string | null;
 };
 
 export type TenantPartnerBindingRecord = {

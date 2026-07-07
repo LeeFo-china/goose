@@ -138,6 +138,14 @@ class PlatformPartnerPortalController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/partner/invite-code/default")
+  async defaultInviteCode(request: FastifyRequest, reply: FastifyReply) {
+    const data = await platformPartnerPortalService.getDefaultInviteCode(
+      request.user,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Get("/partner/dashboard/tenants")
   async tenants(request: FastifyRequest, reply: FastifyReply) {
     const queryResult = PartnerDashboardTenantListQuerySchema.safeParse(request.query || {});

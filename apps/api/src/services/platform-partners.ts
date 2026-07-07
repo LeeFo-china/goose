@@ -25,6 +25,11 @@ import type {
   TenantPartnerBindingListQuery,
 } from "@/schema/platform-partners";
 import type { AuthContext } from "@/services/authorization";
+import {
+  buildPartnerInviteCampaignCode,
+  buildPartnerInviteCodeScene,
+  normalizePartnerInviteCode,
+} from "@/services/platform-partner-invite-code-utils";
 import { systemSettingsService } from "@/services/system-settings";
 import { wechatOpenLinkService } from "@/services/wechat-open-link";
 
@@ -56,7 +61,6 @@ const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const BINDING_MANAGE_PERMISSION = "platform.partner.binding.manage";
 const INVITE_BINDING_CHANGE_REASON = "装企小程序扫码入驻自动绑定";
 const DEFAULT_PARTNER_ONBOARDING_PAGE = "pages/visitor/index";
-const WECHAT_SCENE_MAX_LENGTH = 32;
 
 export class PlatformPartnersService {
   private readonly repository: PlatformPartnersRepositoryPort;
@@ -209,7 +213,7 @@ export class PlatformPartnersService {
       partner_id: partnerId,
       code,
       region_code: input.region_code ?? null,
-      campaign_code: this.buildInviteCampaignCode(code),
+      campaign_code: buildPartnerInviteCampaignCode(code),
       expires_at: input.expires_at ?? null,
       created_by_employee_id: employeeId,
     });
@@ -236,7 +240,7 @@ export class PlatformPartnersService {
     );
     const buffer = await wechatOpenLinkService.generateUnlimitedCode({
       page,
-      scene: this.buildInviteCodeScene(inviteCode.code),
+      scene: buildPartnerInviteCodeScene(inviteCode.code),
       envVersion,
     });
 
@@ -337,7 +341,7 @@ export class PlatformPartnersService {
   }
 
   private async requireAvailableInviteCode(code: string) {
-    const normalizedCode = this.normalizeInviteCode(code);
+    const normalizedCode = normalizePartnerInviteCode(code);
     const inviteCode = await this.repository.findInviteCodeByCode(normalizedCode);
     if (!inviteCode || inviteCode.status !== "active") {
       throw Errors.business(
@@ -475,23 +479,6 @@ export class PlatformPartnersService {
     const region = regionCode ?? partner.region_codes[0] ?? "all";
     const suffix = Date.now().toString(36).toUpperCase();
     return `CP-${region}-${suffix}`;
-  }
-
-  private buildInviteCampaignCode(inviteCode: string) {
-    return inviteCode.replace(/^CP-/, "PIC-");
-  }
-
-  private buildInviteCodeScene(code: string) {
-    const normalizedCode = this.normalizeInviteCode(code);
-    if (normalizedCode.length > WECHAT_SCENE_MAX_LENGTH) {
-      throw Errors.business(
-        400,
-        "邀请码过长，无法生成小程序码",
-        "PARTNER_INVITE_CODE_SCENE_TOO_LONG",
-      );
-    }
-
-    return normalizedCode;
   }
 }
 

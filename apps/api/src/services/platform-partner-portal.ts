@@ -34,6 +34,17 @@ import {
   type PartnerAuthResponse,
   type VisitorSessionSigner,
 } from "@/services/platform-partner-portal-auth-payloads";
+import type {
+  AuthUserResolver,
+  OauthIdentityEnsurer,
+  PlatformPartnerPortalServiceDependencies,
+  WechatSessionResolver,
+} from "@/services/platform-partner-portal-dependencies";
+import {
+  generatePartnerInviteCodeQrcode,
+  getDefaultPartnerInviteCode,
+  type PartnerInviteCodeQrcodeGenerator,
+} from "@/services/platform-partner-portal-invite-codes";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { signToken, signVisitorSessionToken, type JwtPayload } from "@/utils/jwt";
 
@@ -41,37 +52,10 @@ const SMS_SCENE = "bind_platform_partner";
 const UNBIND_SMS_SCENE = "unbind_platform_partner";
 export type { PartnerAuthMeResponse, PartnerAuthResponse };
 
-type WechatSessionResolver = (code: string) => Promise<{
-  openid?: string;
-  unionid?: string | null;
-}>;
-
-type AuthUserResolver = (input: {
-  request?: FastifyRequest;
-  openid: string;
-  unionid?: string | null;
-}) => Promise<{ userId: string; isNewUser: boolean }>;
-
-type OauthIdentityEnsurer = (input: {
-  userId: string;
-  openid: string;
-  unionid?: string | null;
-}) => Promise<void>;
-
 type SmsServicePort = Pick<
   typeof smsVerificationCodeService,
   "sendCode"
 >;
-
-type PlatformPartnerPortalServiceDependencies = {
-  repository?: PlatformPartnerPortalRepositoryPort;
-  wechatSessionResolver?: WechatSessionResolver;
-  authUserResolver?: AuthUserResolver;
-  oauthIdentityEnsurer?: OauthIdentityEnsurer;
-  tokenSigner?: (payload: Omit<JwtPayload, "iat" | "exp">) => string;
-  visitorSessionSigner?: VisitorSessionSigner;
-  smsService?: SmsServicePort;
-};
 
 export class PlatformPartnerPortalService {
   private readonly repository: PlatformPartnerPortalRepositoryPort;
@@ -81,6 +65,7 @@ export class PlatformPartnerPortalService {
   private readonly tokenSigner: (payload: Omit<JwtPayload, "iat" | "exp">) => string;
   private readonly visitorSessionSigner: VisitorSessionSigner;
   private readonly smsService: SmsServicePort;
+  private readonly inviteCodeQrcodeGenerator: PartnerInviteCodeQrcodeGenerator;
 
   constructor(dependencies: PlatformPartnerPortalServiceDependencies = {}) {
     this.repository = dependencies.repository ?? platformPartnerPortalRepository;
@@ -95,6 +80,8 @@ export class PlatformPartnerPortalService {
         visitor_id: input.visitorId,
       }));
     this.smsService = dependencies.smsService ?? smsVerificationCodeService;
+    this.inviteCodeQrcodeGenerator =
+      dependencies.inviteCodeQrcodeGenerator ?? generatePartnerInviteCodeQrcode;
   }
 
   async login(input: {
@@ -285,6 +272,15 @@ export class PlatformPartnerPortalService {
   async listInviteCodes(user: JwtPayload | undefined) {
     const partnerUser = await this.requireCurrentPartnerMember(user);
     return this.repository.listInviteCodes(partnerUser.partnerId);
+  }
+
+  async getDefaultInviteCode(user: JwtPayload | undefined) {
+    const partnerUser = await this.requireCurrentPartnerMember(user);
+    return getDefaultPartnerInviteCode({
+      partner: partnerUser.member.partner!,
+      repository: this.repository,
+      qrcodeGenerator: this.inviteCodeQrcodeGenerator,
+    });
   }
 
   async listTenants(

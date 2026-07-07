@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PlatformPartnerPortalService as PlatformPartnerPortalServiceClass } from "@/services/platform-partner-portal";
+import { createTestPartnerInviteCode } from "@/services/platform-partner-portal-test-helpers";
 import type {
   PageResult,
   PlatformPartnerMemberRecord,
@@ -88,6 +89,7 @@ async function createService(member: PlatformPartnerMemberRecord) {
       readCalls += 1;
       return [];
     },
+    createInviteCode: async (input) => createTestPartnerInviteCode(input),
     listTenantBindings: async (input) => {
       readCalls += 1;
       return emptyPage(input.page, input.pageSize);

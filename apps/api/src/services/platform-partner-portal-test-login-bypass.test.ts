@@ -9,11 +9,15 @@ import {
   PartnerAuthUnbindWechatSchema,
 } from "@/schema/platform-partner-portal";
 import type { PartnerAuthResponse } from "@/services/platform-partner-portal";
-import { withPhoneLoginWithoutCodeFlag } from "@/services/platform-partner-portal-test-helpers";
+import {
+  createTestPartnerInviteCode,
+  withPhoneLoginWithoutCodeFlag,
+} from "@/services/platform-partner-portal-test-helpers";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+process.env.JWT_SECRET ??= "test-jwt-secret";
 
 const activePartner = {
   id: "00000000-0000-4000-8000-000000000201",
@@ -85,6 +89,7 @@ function createRepository(
     unbindMemberAuthUser: async () => ({ status: "unbound", memberId: activeMember.id }),
     findPartnerById: async () => activePartner,
     listInviteCodes: async () => [],
+    createInviteCode: async (input) => createTestPartnerInviteCode(input),
     listTenantBindings: async () => emptyPage(),
     listRevenueEvents: async () => emptyPage(),
     listCommissionLedgers: async () => emptyPage(),
