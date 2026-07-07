@@ -31,14 +31,16 @@
 - `POST /partner/auth/bind-phone` 通过申请手机号和验证码绑定当前微信。
 - `GET /partner/auth/me` 返回当前合伙人身份。
 - `/partner/dashboard/*` 看板接口按 token 中的 `partner_id` 隔离数据。
-- 客户和员工已有自助解绑、旧微信不可用时人工换绑的参考模式。
+- `GET /auth/identities`、`POST /auth/switch`、`POST /auth/switch/visitor` 已支持多身份切换。
+- `POST /partner/auth/unbind-code`、`POST /partner/auth/unbind-wechat` 已支持旧微信可用时自助解绑。
+- `POST /partner/auth/rebind-code`、`POST /partner/auth/rebind-requests` 已支持旧微信不可用时提交平台人工换绑申请。
+- `/platform/partners?tab=rebindRequests` 已支持超管查看、通过、驳回合伙人成员换绑申请。
 
-当前缺口：
+保留边界：
 
-- 没有 `POST /partner/auth/unbind-wechat`。
-- 没有合伙人旧微信不可用时的平台级换绑申请表和审核接口。
-- `/auth` 目前偏向直接分流到一个身份，没有独立的“可切换身份列表”和“切换身份签发 token”接口。
-- 现有 `wechat_rebind_requests` 表强依赖 `tenant_id`、`customer/employee` 和租户员工审核，不适合直接承载平台级合伙人成员换绑。
+- 客户和员工的旧微信不可用换绑仍使用租户侧 `wechat_rebind_requests`。
+- 合伙人成员换绑使用独立 `platform_partner_member_rebind_requests`，不复用租户侧换绑表。
+- 小程序端任何合伙人身份接口都不传 `partner_id` 决定数据范围。
 
 ## 推荐方案
 
