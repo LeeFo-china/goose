@@ -12,10 +12,7 @@ import {
   buildPartnerInviteCodeScene,
   isPartnerInviteCodeAvailable,
 } from "@/services/platform-partner-invite-code-utils";
-import { systemSettingsService } from "@/services/system-settings";
-import { wechatOpenLinkService } from "@/services/wechat-open-link";
-
-const DEFAULT_PARTNER_ONBOARDING_PAGE = "pages/visitor/index";
+export { generatePartnerInviteCodeQrcode } from "@/services/platform-partner-invite-qrcode";
 
 export type PartnerInviteCodeQrcodeGenerator = (input: {
   scene: string;
@@ -46,28 +43,6 @@ export async function getDefaultPartnerInviteCode(input: DefaultInviteCodeInput)
       qrcode.buffer.toString("base64")
     }`,
   };
-}
-
-export async function generatePartnerInviteCodeQrcode(input: {
-  scene: string;
-}) {
-  const page = await systemSettingsService.getString(
-    "WECHAT_PARTNER_ONBOARDING_PAGE",
-    DEFAULT_PARTNER_ONBOARDING_PAGE,
-  );
-  const envVersion = wechatOpenLinkService.normalizeEnvVersion(
-    await systemSettingsService.getString(
-      "WECHAT_MINIPROGRAM_ENV_VERSION",
-      "release",
-    ),
-  );
-  const buffer = await wechatOpenLinkService.generateUnlimitedCode({
-    page,
-    scene: input.scene,
-    envVersion,
-  });
-
-  return { buffer, contentType: "image/png" as const };
 }
 
 async function getOrCreateDefaultInviteCode(input: DefaultInviteCodeInput) {

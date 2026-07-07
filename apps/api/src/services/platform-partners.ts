@@ -30,8 +30,7 @@ import {
   buildPartnerInviteCodeScene,
   normalizePartnerInviteCode,
 } from "@/services/platform-partner-invite-code-utils";
-import { systemSettingsService } from "@/services/system-settings";
-import { wechatOpenLinkService } from "@/services/wechat-open-link";
+import { generatePartnerInviteCodeQrcode } from "@/services/platform-partner-invite-qrcode";
 
 export type PlatformPartnersRepositoryPort = Pick<
   typeof platformPartnersRepository,
@@ -48,6 +47,7 @@ export type PlatformPartnersRepositoryPort = Pick<
   | "createInviteCode"
   | "listInviteCodes"
   | "findInviteCodeByCode"
+  | "incrementInviteCodeCounts"
   | "findActiveTenantBinding"
   | "createTenantBinding"
   | "listTenantBindings"
@@ -60,7 +60,6 @@ type PlatformPartnersServiceDependencies = {
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const BINDING_MANAGE_PERMISSION = "platform.partner.binding.manage";
 const INVITE_BINDING_CHANGE_REASON = "装企小程序扫码入驻自动绑定";
-const DEFAULT_PARTNER_ONBOARDING_PAGE = "pages/visitor/index";
 
 export class PlatformPartnersService {
   private readonly repository: PlatformPartnersRepositoryPort;
@@ -228,27 +227,17 @@ export class PlatformPartnersService {
   async getInviteCodeQrcode(authContext: AuthContext, code: string) {
     this.assertPlatformAdmin(authContext);
     const inviteCode = await this.requireAvailableInviteCode(code);
-    const page = await systemSettingsService.getString(
-      "WECHAT_PARTNER_ONBOARDING_PAGE",
-      DEFAULT_PARTNER_ONBOARDING_PAGE,
-    );
-    const envVersion = wechatOpenLinkService.normalizeEnvVersion(
-      await systemSettingsService.getString(
-        "WECHAT_MINIPROGRAM_ENV_VERSION",
-        "release",
-      ),
-    );
-    const buffer = await wechatOpenLinkService.generateUnlimitedCode({
-      page,
+    return generatePartnerInviteCodeQrcode({
       scene: buildPartnerInviteCodeScene(inviteCode.code),
-      envVersion,
     });
-
-    return { buffer, contentType: "image/png" };
   }
 
   async resolveInviteCode(input: PlatformPartnerInviteCodeResolveInput) {
     const inviteCode = await this.requireAvailableInviteCode(input.code);
+    await this.repository.incrementInviteCodeCounts({
+      inviteCodeId: inviteCode.id,
+      scan_count: 1,
+    });
     return this.buildInviteCodeOnboardingPayload(inviteCode);
   }
 
@@ -318,6 +307,11 @@ export class PlatformPartnersService {
       changed_by_employee_id: authContext.employeeId,
       change_reason: INVITE_BINDING_CHANGE_REASON,
     } satisfies TenantPartnerBindingCreateRecordInput);
+    await this.repository.incrementInviteCodeCounts({
+      inviteCodeId: inviteCode.id,
+      submitted_count: 1,
+      approved_count: 1,
+    });
 
     return {
       ...this.buildInviteCodeOnboardingPayload(inviteCode),

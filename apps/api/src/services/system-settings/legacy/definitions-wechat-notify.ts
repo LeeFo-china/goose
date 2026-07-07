@@ -64,6 +64,15 @@ export const DEFINITIONS_WECHAT_NOTIFY: SettingDefinition[] = [  {
     defaultValue: "pages/visitor/index",
   },
   {
+    key: "WECHAT_MINIPROGRAM_QRCODE_CHECK_PATH",
+    groupCode: "wechat",
+    name: "微信小程序码校验页面路径",
+    description: "生成城市合伙人专属小程序码时是否校验 page 已发布存在。",
+    valueType: "boolean",
+    envNames: ["WECHAT_MINIPROGRAM_QRCODE_CHECK_PATH"],
+    defaultValue: "true",
+  },
+  {
     key: "CUSTOMER_LOG_SHARE_TARGET_ASSIST_COUNT",
     groupCode: "wechat",
     name: "助力目标人数",

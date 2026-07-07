@@ -81,6 +81,7 @@ describe("city partner MVP migration", () => {
     expect(sql).toContain("ALTER TABLE public.platform_partner_members");
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS remark text NULL");
   });
+
 });
 
 const platformAuthContext = {
@@ -273,6 +274,7 @@ const repository = {
       partner: activePartner,
     }),
   ),
+  incrementInviteCodeCounts: mock(async () => undefined),
   findActiveTenantBinding: mock(async (): Promise<TenantPartnerBindingRecord | null> => null),
   createTenantBinding: mock(async (): Promise<TenantPartnerBindingRecord> => createdBinding),
   listTenantBindings: mock(async () => ({

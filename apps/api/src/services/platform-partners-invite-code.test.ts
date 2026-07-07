@@ -99,6 +99,7 @@ function createRepository(
     },
     listInviteCodes: async () => [],
     findInviteCodeByCode: async () => ({ ...inviteCode, partner: activePartner }),
+    incrementInviteCodeCounts: async () => undefined,
     findActiveTenantBinding: async () => null,
     createTenantBinding: async () => {
       throw new Error("unused");

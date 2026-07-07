@@ -126,6 +126,7 @@ const repository = {
   createInviteCode: mock(async () => inviteCode),
   listInviteCodes: mock(async () => []),
   findInviteCodeByCode: mock(async () => ({ ...inviteCode, partner: activePartner })),
+  incrementInviteCodeCounts: mock(async () => undefined),
   findActiveTenantBinding: mock(async (): Promise<TenantPartnerBindingRecord | null> => null),
   createTenantBinding: mock(async (): Promise<TenantPartnerBindingRecord> => tenantBinding),
   listTenantBindings: mock(async () => ({

@@ -16,6 +16,7 @@ type MiniProgramCodeInput = {
   page: string;
   scene: string;
   envVersion: "release" | "trial" | "develop";
+  checkPath: boolean;
 };
 
 type MiniProgramUrlLinkInput = MiniProgramOpenLinkInput & {
@@ -30,6 +31,15 @@ function normalizeEnvVersion(value: string): "release" | "trial" | "develop" {
   }
 
   return "release";
+}
+
+export function buildUnlimitedCodePayload(input: MiniProgramCodeInput) {
+  return {
+    scene: input.scene,
+    page: input.page,
+    check_path: input.checkPath,
+    env_version: input.envVersion,
+  };
 }
 
 async function getWechatAccessToken() {
@@ -130,12 +140,7 @@ class WechatOpenLinkService {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          scene: input.scene,
-          page: input.page,
-          check_path: false,
-          env_version: input.envVersion,
-        }),
+        body: JSON.stringify(buildUnlimitedCodePayload(input)),
       },
     );
     const contentType = response.headers.get("content-type") || "";

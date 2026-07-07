@@ -134,6 +134,13 @@ export type PlatformPartnerInviteCodeCreateRecordInput = {
   created_by_employee_id: string | null;
 };
 
+export type PlatformPartnerInviteCodeCounterDeltaInput = {
+  inviteCodeId: string;
+  scan_count?: number;
+  submitted_count?: number;
+  approved_count?: number;
+};
+
 export type TenantPartnerBindingRecord = {
   id: string;
   tenant_id: string;
@@ -190,6 +197,10 @@ type PartnerTable =
 
 type UntypedClient = {
   from: (table: PartnerTable) => UntypedTable;
+  rpc: (
+    functionName: "increment_platform_partner_invite_code_counts",
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
 };
 
 const PARTNER_SELECT = [
@@ -396,6 +407,20 @@ class PlatformPartnersRepository {
 
     if (error) throw Errors.dbError("查询合伙人邀请码失败", error);
     return (data as PlatformPartnerInviteCodeWithPartnerRecord | null) ?? null;
+  }
+
+  async incrementInviteCodeCounts(
+    input: PlatformPartnerInviteCodeCounterDeltaInput,
+  ) {
+    const { error } = await (SupabaseDB.getAdminClient() as unknown as UntypedClient)
+      .rpc("increment_platform_partner_invite_code_counts", {
+        p_invite_code_id: input.inviteCodeId,
+        p_scan_count: input.scan_count ?? 0,
+        p_submitted_count: input.submitted_count ?? 0,
+        p_approved_count: input.approved_count ?? 0,
+      });
+
+    if (error) throw Errors.dbError("更新合伙人邀请码统计失败", error);
   }
 
   async findActiveTenantBinding(tenantId: string) {
