@@ -15,11 +15,9 @@ import { signToken, signVisitorSessionToken, type JwtPayload } from "@/utils/jwt
 import { isEmployeeOperableStatus } from "@gooes/domain";
 
 type TokenSigner = (payload: Omit<JwtPayload, "iat" | "exp">) => string;
-type VisitorSessionSigner = (input: {
-  openid: string;
-  unionid?: string | null;
-  visitorId: string;
-}) => string;
+type VisitorSessionSigner = (
+  input: { openid: string; unionid?: string | null; visitorId: string },
+) => string;
 
 type IdentityOption =
   | {
@@ -192,7 +190,7 @@ export class AuthIdentitySwitchService {
         ...partnerMembers
           .filter((member) => member.partner?.status === "active" && member.status === "active")
           .map((member) => this.buildPartnerOption(member)),
-        ...this.buildEmployeeOptions(employeeMemberships, employees),
+        ...this.buildEmployeeOptions(authUserId, employeeMemberships, employees),
         ...this.buildCustomerOptions(customerMemberships, customers),
       ],
     };
@@ -280,6 +278,7 @@ export class AuthIdentitySwitchService {
   }
 
   private buildEmployeeOptions(
+    authUserId: string,
     memberships: BusinessMembershipRecord[],
     employees: EmployeeIdentityOptionRecord[],
   ): IdentityOption[] {
@@ -294,6 +293,7 @@ export class AuthIdentitySwitchService {
         !tenant?.id ||
         tenant.status !== "active" ||
         !isEmployeeOperableStatus(employee.status) ||
+        employee.user_id !== authUserId ||
         !membershipKeys.has(`${employee.tenant_id}:${employee.id}`)
       ) {
         return [];

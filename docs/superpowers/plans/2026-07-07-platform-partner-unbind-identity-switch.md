@@ -16,8 +16,9 @@
 
 This plan implements Phase 1 only:
 
-- `GET /auth/identity-options`
-- `POST /auth/switch-identity`
+- `GET /auth/identities`
+- `POST /auth/switch`
+- `POST /auth/switch/visitor`
 - `POST /partner/auth/unbind-code`
 - `POST /partner/auth/unbind-wechat`
 
@@ -584,13 +585,13 @@ import { authIdentitySwitchService } from "@/services/auth-identity-switch";
 Add methods:
 
 ```ts
-  @Get("/auth/identity-options")
+  @Get("/auth/identities")
   async identityOptions(request: FastifyRequest, reply: FastifyReply) {
     const data = await authIdentitySwitchService.listOptions(request.user);
     return ResponseHandler.success(data);
   }
 
-  @Post("/auth/switch-identity")
+  @Post("/auth/switch")
   async switchIdentity(request: FastifyRequest, reply: FastifyReply) {
     const bodyResult = SwitchIdentitySchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -598,6 +599,15 @@ Add methods:
     const data = await authIdentitySwitchService.switchIdentity(
       request.user,
       bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/auth/switch/visitor")
+  async switchToVisitor(request: FastifyRequest, reply: FastifyReply) {
+    const data = await authIdentitySwitchService.switchIdentity(
+      request.user,
+      { target_mode: "platform_visitor" },
     );
     return ResponseHandler.success(data);
   }
@@ -612,17 +622,20 @@ In `apps/api/src/plugins/auth/legacy/routes.ts`, add:
 ```ts
   if (
     (method === "GET" || method === "HEAD") &&
-    url === "/auth/identity-options"
+    url === "/auth/identities"
   ) {
     return true;
   }
 
-  if (method === "POST" && url === "/auth/switch-identity") {
+  if (
+    method === "POST" &&
+    (url === "/auth/switch" || url === "/auth/switch/visitor")
+  ) {
     return true;
   }
 ```
 
-to `isVisitorSessionRoute()`, because visitor sessions must be able to open the switcher and switch into a bound business identity.
+to shared identity switch route classification used by both `isVisitorSessionRoute()` and `isPartnerPortalRoute()`, because visitor sessions must be able to open the switcher and `platform_partner` tokens must be able to switch back to visitor/customer/employee.
 
 - [ ] **Step 7: Run targeted verification**
 
@@ -714,8 +727,9 @@ After Tasks 1-4 pass, update the handoff doc status from “后端接口待实�
 
 Make sure the doc lists these Phase 1 endpoints as implemented:
 
-- `GET /auth/identity-options`
-- `POST /auth/switch-identity`
+- `GET /auth/identities`
+- `POST /auth/switch`
+- `POST /auth/switch/visitor`
 - `POST /partner/auth/unbind-code`
 - `POST /partner/auth/unbind-wechat`
 

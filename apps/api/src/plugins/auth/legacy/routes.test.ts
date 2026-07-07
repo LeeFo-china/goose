@@ -17,12 +17,14 @@ describe("isVisitorSessionRoute", () => {
   });
 
   test("allows visitor sessions to list and switch auth identities", () => {
-    expect(isVisitorSessionRoute("GET", "/auth/identity-options")).toBe(true);
-    expect(isVisitorSessionRoute("HEAD", "/auth/identity-options")).toBe(true);
-    expect(isVisitorSessionRoute("POST", "/auth/switch-identity")).toBe(true);
+    expect(isVisitorSessionRoute("GET", "/auth/identities")).toBe(true);
+    expect(isVisitorSessionRoute("HEAD", "/auth/identities")).toBe(true);
+    expect(isVisitorSessionRoute("POST", "/auth/switch")).toBe(true);
+    expect(isVisitorSessionRoute("POST", "/auth/switch/visitor")).toBe(true);
 
-    expect(isVisitorSessionRoute("DELETE", "/auth/identity-options")).toBe(false);
-    expect(isVisitorSessionRoute("GET", "/auth/switch-identity")).toBe(false);
+    expect(isVisitorSessionRoute("DELETE", "/auth/identities")).toBe(false);
+    expect(isVisitorSessionRoute("GET", "/auth/switch")).toBe(false);
+    expect(isVisitorSessionRoute("GET", "/auth/switch/visitor")).toBe(false);
   });
 });
 
@@ -95,5 +97,16 @@ describe("auth public route allowlist", () => {
     expect(isPartnerPortalRoute("POST", "/partner/auth/unbind-wechat")).toBe(true);
     expect(isPartnerPortalRoute("GET", "/partner/auth/unbind-code")).toBe(false);
     expect(isPartnerPortalRoute("HEAD", "/partner/auth/unbind-wechat")).toBe(false);
+  });
+
+  test("allows platform partner tokens to list and switch auth identities", () => {
+    expect(isPartnerPortalRoute("GET", "/auth/identities")).toBe(true);
+    expect(isPartnerPortalRoute("HEAD", "/auth/identities")).toBe(true);
+    expect(isPartnerPortalRoute("POST", "/auth/switch")).toBe(true);
+    expect(isPartnerPortalRoute("POST", "/auth/switch/visitor")).toBe(true);
+
+    expect(isPartnerPortalRoute("DELETE", "/auth/identities")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/auth/switch")).toBe(false);
+    expect(isPartnerPortalRoute("GET", "/auth/switch/visitor")).toBe(false);
   });
 });

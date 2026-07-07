@@ -178,6 +178,17 @@ export function shouldBypassAuth(method: string, url: string) {
   return isPartnerAuthRoute(method, url);
 }
 
+function isAuthIdentitySwitchRoute(method: string, url: string) {
+  if ((method === "GET" || method === "HEAD") && url === "/auth/identities") {
+    return true;
+  }
+
+  return (
+    method === "POST" &&
+    (url === "/auth/switch" || url === "/auth/switch/visitor")
+  );
+}
+
 export function isPartnerPortalRoute(method: string, url: string) {
   if (
     method === "POST" &&
@@ -186,6 +197,10 @@ export function isPartnerPortalRoute(method: string, url: string) {
       url === "/partner/auth/unbind-wechat"
     )
   ) {
+    return true;
+  }
+
+  if (isAuthIdentitySwitchRoute(method, url)) {
     return true;
   }
 
@@ -267,14 +282,7 @@ export function isVisitorSessionRoute(method: string, url: string) {
     return true;
   }
 
-  if (
-    (method === "GET" || method === "HEAD")
-    && url === "/auth/identity-options"
-  ) {
-    return true;
-  }
-
-  if (method === "POST" && url === "/auth/switch-identity") {
+  if (isAuthIdentitySwitchRoute(method, url)) {
     return true;
   }
 

@@ -184,6 +184,23 @@ describe("AuthIdentitySwitchService", () => {
     );
   });
 
+  test("does not list employee identities that belong to another auth user", async () => {
+    const service = await createService({
+      repository: createRepository({
+        listEmployeesByIds: async () => [{
+          ...activeEmployee,
+          user_id: "00000000-0000-4000-8000-000000009999",
+        }],
+      }),
+    });
+
+    const result = await service.listOptions(user);
+
+    expect(result.identities.some((item) =>
+      item.mode === "tenant_employee" && item.employee_id === employeeId
+    )).toBe(false);
+  });
+
   test("switching to platform visitor returns visitor auth response", async () => {
     const service = await createService({
       visitorSessionSigner: (input: Parameters<NonNullable<AuthIdentitySwitchServiceDependencies["visitorSessionSigner"]>>[0]) => {

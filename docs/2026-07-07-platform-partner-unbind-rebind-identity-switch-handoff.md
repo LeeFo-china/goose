@@ -3,7 +3,7 @@
 日期：2026-07-07
 当前仓库：`/Users/leefo/Public/work/gooes`
 小程序仓库：`/Users/leefo/Public/work/orange`（本次只读参考，不修改）
-状态：方案与小程序对接契约，后端接口待实现后再进入联调
+状态：Phase 1 后端接口已实现，待发布联调环境后小程序端对接
 
 ## 目标
 
@@ -76,7 +76,7 @@
 ### 1. 查询可切换身份
 
 ```http
-GET /auth/identity-options
+GET /auth/identities
 Authorization: Bearer <任意有效 auth token>
 ```
 
@@ -148,7 +148,7 @@ Authorization: Bearer <任意有效 auth token>
 ### 2. 切换身份
 
 ```http
-POST /auth/switch-identity
+POST /auth/switch
 Authorization: Bearer <任意有效 auth token>
 ```
 
@@ -168,6 +168,15 @@ Authorization: Bearer <任意有效 auth token>
   "target_mode": "platform_visitor"
 }
 ```
+
+也可以使用专用接口返回访客首页：
+
+```http
+POST /auth/switch/visitor
+Authorization: Bearer <任意有效 auth token>
+```
+
+请求体可为空，响应与 `POST /auth/switch` 切到 `platform_visitor` 一致。
 
 切到员工：
 
@@ -592,8 +601,8 @@ POST /platform/partner-member-rebind-requests/:id/reject
 - 单测覆盖自助解绑不会删除客户/员工 OAuth identity。
 - 单测覆盖解绑后 `/partner/auth/me` 返回 `PARTNER_AUTH_REQUIRED`。
 - 单测覆盖解绑后新微信可通过现有 `bind-phone` 绑定。
-- 单测覆盖同一微信同时有客户、员工、城市合伙人身份时，`identity-options` 全部返回。
-- 单测覆盖 `switch-identity` 返回目标身份 token。
+- 单测覆盖同一微信同时有客户、员工、城市合伙人身份时，`identities` 全部返回。
+- 单测覆盖 `switch` 返回目标身份 token。
 - migration 应用后执行 `supabase migration list` 确认 Local/Remote 对齐。
 
 ## 小程序对接清单
@@ -620,8 +629,9 @@ orange 目前已有：
 
 建议新增 `src/services/identity.ts`：
 
-- `getIdentityOptions() -> GET /auth/identity-options`
-- `switchIdentity(payload) -> POST /auth/switch-identity`
+- `getIdentityOptions() -> GET /auth/identities`
+- `switchIdentity(payload) -> POST /auth/switch`
+- `switchToVisitor() -> POST /auth/switch/visitor`
 
 切换成功后调用现有 `AuthService.persistAuthResponse(auth)`，再按 `dispatchByAuthMode(auth)` 跳转。
 
@@ -645,7 +655,7 @@ orange 目前已有：
 
 ### 4. 身份切换页
 
-身份切换页从 `GET /auth/identity-options` 渲染身份列表：
+身份切换页从 `GET /auth/identities` 渲染身份列表：
 
 - 访客首页。
 - 客户身份。
@@ -654,7 +664,7 @@ orange 目前已有：
 
 点击任一身份：
 
-1. 调 `POST /auth/switch-identity`。
+1. 访客首页调 `POST /auth/switch/visitor`；其他身份调 `POST /auth/switch`。
 2. 保存返回 auth。
 3. 用现有 `dispatchByAuthMode` 跳转。
 
@@ -710,7 +720,7 @@ orange 目前已有：
 
 预期：
 
-- `GET /auth/identity-options` 返回访客、客户、员工、城市合伙人。
+- `GET /auth/identities` 返回访客、客户、员工、城市合伙人。
 - 切到访客后进入访客首页。
 - 切回城市合伙人后进入合伙人工作台。
 - 切到客户或员工后进入对应工作台。
@@ -752,8 +762,9 @@ orange 目前已有：
 
 第一期后端建议新增：
 
-- `GET /auth/identity-options`
-- `POST /auth/switch-identity`
+- `GET /auth/identities`
+- `POST /auth/switch`
+- `POST /auth/switch/visitor`
 - `POST /partner/auth/unbind-code`
 - `POST /partner/auth/unbind-wechat`
 

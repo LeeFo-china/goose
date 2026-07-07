@@ -137,7 +137,7 @@ export class WeChatController extends BaseController {
     return verifyRole.call(this, request, reply);
   }
 
-  @Get("/auth/identity-options")
+  @Get("/auth/identities")
   async listIdentityOptions(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = await this.getAuthUserIdForRoleVerification(request);
     const data = await authIdentitySwitchService.listOptions({
@@ -148,7 +148,7 @@ export class WeChatController extends BaseController {
     return reply.send(ResponseHandler.success(data));
   }
 
-  @Post("/auth/switch-identity")
+  @Post("/auth/switch")
   async switchIdentity(request: FastifyRequest, reply: FastifyReply) {
     const parsed = SwitchIdentitySchema.safeParse(request.body);
     if (!parsed.success) {
@@ -162,6 +162,20 @@ export class WeChatController extends BaseController {
         sub: authUserId,
       },
       parsed.data,
+    );
+
+    return reply.send(ResponseHandler.success(data));
+  }
+
+  @Post("/auth/switch/visitor")
+  async switchToVisitor(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = await this.getAuthUserIdForRoleVerification(request);
+    const data = await authIdentitySwitchService.switchIdentity(
+      {
+        ...request.user,
+        sub: authUserId,
+      },
+      { target_mode: "platform_visitor" },
     );
 
     return reply.send(ResponseHandler.success(data));
