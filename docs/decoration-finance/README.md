@@ -85,6 +85,7 @@
 - [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
+- [2026-07-07-miniprogram-finance-receivables-complete-smoke.md](./2026-07-07-miniprogram-finance-receivables-complete-smoke.md)：小程序财务应收 read-only 和 complete 写入联调归档，覆盖样本准备、收款确认、应收核销、allocation、ledger 和 workflow 推进复核。
 - [2026-06-16-miniprogram-real-integration-plan.md](./2026-06-16-miniprogram-real-integration-plan.md)：小程序真实联调执行计划，包含 gooes 和 orange 的任务拆分。
 - [2026-06-16-miniprogram-integration-acceptance.md](./2026-06-16-miniprogram-integration-acceptance.md)：小程序财务收款联调验收记录。
 - `payment-provider-wechat-pay.md`：后续微信支付商户配置、回调、幂等和 workflow 自动推进设计。
