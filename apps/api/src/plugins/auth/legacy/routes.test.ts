@@ -15,6 +15,15 @@ describe("isVisitorSessionRoute", () => {
     expect(isVisitorSessionRoute("POST", "/employee/auth/wechat-rebind-requests/request-id/approve")).toBe(false);
     expect(isVisitorSessionRoute("POST", "/employee/auth/wechat-rebind-requests/request-id/reject")).toBe(false);
   });
+
+  test("allows visitor sessions to list and switch auth identities", () => {
+    expect(isVisitorSessionRoute("GET", "/auth/identity-options")).toBe(true);
+    expect(isVisitorSessionRoute("HEAD", "/auth/identity-options")).toBe(true);
+    expect(isVisitorSessionRoute("POST", "/auth/switch-identity")).toBe(true);
+
+    expect(isVisitorSessionRoute("DELETE", "/auth/identity-options")).toBe(false);
+    expect(isVisitorSessionRoute("GET", "/auth/switch-identity")).toBe(false);
+  });
 });
 
 describe("auth public route allowlist", () => {

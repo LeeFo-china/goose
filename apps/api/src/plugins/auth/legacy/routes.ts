@@ -267,6 +267,17 @@ export function isVisitorSessionRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    (method === "GET" || method === "HEAD")
+    && url === "/auth/identity-options"
+  ) {
+    return true;
+  }
+
+  if (method === "POST" && url === "/auth/switch-identity") {
+    return true;
+  }
+
   if (method === "POST" && url === "/auth/wechat-rebind-requests") {
     return true;
   }

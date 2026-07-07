@@ -1,5 +1,9 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
+import { Errors } from "@/errors/error-factory";
+import { SwitchIdentitySchema } from "@/schema/auth-identity-switch";
+import { authIdentitySwitchService } from "@/services/auth-identity-switch";
+import { ResponseHandler } from "@/utils/response";
 import { Get, Post } from "@/utils/decorators/route";
 import {
   buildEmployeeLoginContext,
@@ -131,6 +135,36 @@ export class WeChatController extends BaseController {
   @Post("/auth/verify-role")
   async verifyRole(request: FastifyRequest, reply: FastifyReply) {
     return verifyRole.call(this, request, reply);
+  }
+
+  @Get("/auth/identity-options")
+  async listIdentityOptions(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = await this.getAuthUserIdForRoleVerification(request);
+    const data = await authIdentitySwitchService.listOptions({
+      ...request.user,
+      sub: authUserId,
+    });
+
+    return reply.send(ResponseHandler.success(data));
+  }
+
+  @Post("/auth/switch-identity")
+  async switchIdentity(request: FastifyRequest, reply: FastifyReply) {
+    const parsed = SwitchIdentitySchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw Errors.fromZod(parsed.error);
+    }
+
+    const authUserId = await this.getAuthUserIdForRoleVerification(request);
+    const data = await authIdentitySwitchService.switchIdentity(
+      {
+        ...request.user,
+        sub: authUserId,
+      },
+      parsed.data,
+    );
+
+    return reply.send(ResponseHandler.success(data));
   }
 
   @Post("/customer/auth/select-tenant")
