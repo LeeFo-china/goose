@@ -10,9 +10,18 @@ export const PartnerAuthSendCodeSchema = z.object({
   phone: PlatformPartnerPhoneSchema,
 }).strict();
 
+const OptionalSmsCodeSchema = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === "string" && value.trim() === "") return undefined;
+    return value;
+  },
+  z.string().trim().length(6, "验证码必须为 6 位").optional(),
+);
+
 export const PartnerAuthBindPhoneSchema = PartnerAuthSendCodeSchema.extend({
   code: z.string().trim().min(1, "缺少微信登录 code"),
-  sms_code: z.string().trim().length(6, "验证码必须为 6 位"),
+  sms_code: OptionalSmsCodeSchema,
 }).strict();
 
 export const PartnerDashboardSummaryQuerySchema = z.object({

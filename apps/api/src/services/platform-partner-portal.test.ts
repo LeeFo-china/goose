@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PartnerAuthResponse, PlatformPartnerPortalService as PlatformPartnerPortalServiceClass } from "@/services/platform-partner-portal";
+import { withPhoneLoginWithoutCodeFlag } from "@/services/platform-partner-portal-test-helpers";
 import type {
   PlatformPartnerMemberRecord,
   PlatformPartnerPortalRepositoryPort,
@@ -185,63 +186,69 @@ describe("PlatformPartnerPortalService", () => {
   });
 
   test("bindPhone rejects invalid SMS code", async () => {
-    const service = await createService({
-      repository: createRepository({
-        claimMemberBinding: async () => ({ status: "sms_invalid" }),
-      }),
-    });
+    await withPhoneLoginWithoutCodeFlag(undefined, async () => {
+      const service = await createService({
+        repository: createRepository({
+          claimMemberBinding: async () => ({ status: "sms_invalid" }),
+        }),
+      });
 
-    await expect(service.bindPhone({
-      code: "wx-code",
-      phone: "13800138000",
-      sms_code: "123456",
-      request: {} as never,
-    })).rejects.toMatchObject({
-      statusCode: 401,
-      code: "SMS_CODE_INVALID",
+      await expect(service.bindPhone({
+        code: "wx-code",
+        phone: "13800138000",
+        sms_code: "123456",
+        request: {} as never,
+      })).rejects.toMatchObject({
+        statusCode: 401,
+        code: "SMS_CODE_INVALID",
+      });
     });
   });
 
   test("bindPhone rejects member bound to another auth user", async () => {
-    const service = await createService({
-      repository: createRepository({
-        claimMemberBinding: async () => ({ status: "member_already_bound" }),
-      }),
-    });
+    await withPhoneLoginWithoutCodeFlag(undefined, async () => {
+      const service = await createService({
+        repository: createRepository({
+          claimMemberBinding: async () => ({ status: "member_already_bound" }),
+        }),
+      });
 
-    await expect(service.bindPhone({
-      code: "wx-code",
-      phone: "13800138000",
-      sms_code: "123456",
-      request: {} as never,
-    })).rejects.toMatchObject({
-      statusCode: 409,
-      code: "PARTNER_MEMBER_ALREADY_BOUND",
+      await expect(service.bindPhone({
+        code: "wx-code",
+        phone: "13800138000",
+        sms_code: "123456",
+        request: {} as never,
+      })).rejects.toMatchObject({
+        statusCode: 409,
+        code: "PARTNER_MEMBER_ALREADY_BOUND",
+      });
     });
   });
 
   test("bindPhone rejects unavailable partner before treating binding as successful", async () => {
-    let findMemberByIdCalls = 0;
-    const service = await createService({
-      repository: createRepository({
-        claimMemberBinding: async () => ({ status: "partner_unavailable" }),
-        findMemberById: async () => {
-          findMemberByIdCalls += 1;
-          return activeMember;
-        },
-      }),
-    });
+    await withPhoneLoginWithoutCodeFlag(undefined, async () => {
+      let findMemberByIdCalls = 0;
+      const service = await createService({
+        repository: createRepository({
+          claimMemberBinding: async () => ({ status: "partner_unavailable" }),
+          findMemberById: async () => {
+            findMemberByIdCalls += 1;
+            return activeMember;
+          },
+        }),
+      });
 
-    await expect(service.bindPhone({
-      code: "wx-code",
-      phone: "13800138000",
-      sms_code: "123456",
-      request: {} as never,
-    })).rejects.toMatchObject({
-      statusCode: 403,
-      code: "PARTNER_ACCOUNT_DISABLED",
+      await expect(service.bindPhone({
+        code: "wx-code",
+        phone: "13800138000",
+        sms_code: "123456",
+        request: {} as never,
+      })).rejects.toMatchObject({
+        statusCode: 403,
+        code: "PARTNER_ACCOUNT_DISABLED",
+      });
+      expect(findMemberByIdCalls).toBe(0);
     });
-    expect(findMemberByIdCalls).toBe(0);
   });
 
   test("me rejects platform partner token without partner_id", async () => {

@@ -19,6 +19,11 @@ import {
   defaultOauthIdentityEnsurer,
   defaultWechatSessionResolver,
 } from "@/services/platform-partner-portal-auth-dependencies";
+import {
+  assertUsablePlatformPartnerMember,
+  bindPlatformPartnerMemberWithoutSmsCode,
+} from "@/services/platform-partner-portal-binding";
+import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { signToken, type JwtPayload } from "@/utils/jwt";
 
 const PLATFORM_PARTNER_ROLE = "platform_partner";
@@ -164,13 +169,33 @@ export class PlatformPartnerPortalService {
   async bindPhone(input: {
     code: string;
     phone: string;
-    sms_code: string;
+    sms_code?: string;
     request?: FastifyRequest;
   }) {
     const resolution = await this.resolveWechatAuthUser(input);
+    if (isPhoneLoginWithoutCodeEnabled()) {
+      const boundMember = await bindPlatformPartnerMemberWithoutSmsCode({
+        repository: this.repository,
+        phone: input.phone,
+        authUserId: resolution.userId,
+      });
+
+      return this.buildAuthResponse(
+        boundMember,
+        resolution.userId,
+        resolution.openid,
+        resolution.unionid,
+      );
+    }
+
+    const smsCode = input.sms_code?.trim() || "";
+    if (!smsCode) {
+      throw Errors.business(400, "请输入验证码", "SMS_CODE_REQUIRED");
+    }
+
     const claim = await this.repository.claimMemberBinding({
       phone: input.phone,
-      code: input.sms_code,
+      code: smsCode,
       authUserId: resolution.userId,
     });
     this.assertBindingClaimed(claim);
@@ -385,15 +410,7 @@ export class PlatformPartnerPortalService {
     member: PlatformPartnerMemberRecord,
     options: { allowPendingBind?: boolean } = {},
   ) {
-    const isAllowedMemberStatus = member.status === "active" ||
-      (options.allowPendingBind === true && member.status === "pending_bind");
-    if (!isAllowedMemberStatus || !member.partner || member.partner.status !== "active") {
-      throw Errors.business(
-        403,
-        "合伙人账号不可用",
-        "PARTNER_ACCOUNT_DISABLED",
-      );
-    }
+    assertUsablePlatformPartnerMember(member, options);
   }
 
   private buildAuthResponse(
