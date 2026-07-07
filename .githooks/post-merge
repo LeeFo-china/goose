@@ -13,9 +13,17 @@ if [ ! -f "$RAG_DIR/scripts/post-commit-rag-sync.mjs" ]; then
   exit 0
 fi
 
+GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || exit 0
+LOG_FILE="$GIT_COMMON_DIR/rag-sync.log"
+
 (
   cd "$REPO_ROOT" || exit 0
+  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] post-merge force sync start"
   LIGHTRAG_MCP_DIR="$RAG_DIR" node scripts/post-commit-rag-sync.mjs --force
-) || echo "[gooes-rag-sync] non-blocking failure: post-merge force sync failed"
+  STATUS=$?
+  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] post-merge force sync exit=$STATUS"
+) >>"$LOG_FILE" 2>&1 </dev/null &
+
+echo "[gooes-rag-sync] scheduled post-merge force sync; log: $LOG_FILE"
 
 exit 0

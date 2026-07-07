@@ -6,17 +6,23 @@ BRANCH="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)"
 if [ "$BRANCH" = "main" ] && [ "${GOOES_RAG_SYNC:-}" != "0" ]; then
   RAG_DIR="${LIGHTRAG_MCP_DIR:-/Users/leefo/Public/work/mcp/rag}"
   if [ -f "$RAG_DIR/scripts/post-commit-rag-sync.mjs" ]; then
+    GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || exit 0
+    RAG_LOG_FILE="$GIT_COMMON_DIR/rag-sync.log"
     (
       cd "$REPO_ROOT" || exit 0
+      echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] post-commit sync start"
       LIGHTRAG_MCP_DIR="$RAG_DIR" node scripts/post-commit-rag-sync.mjs
-    ) || echo "[gooes-rag-sync] non-blocking failure: post-commit sync failed"
+      STATUS=$?
+      echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] post-commit sync exit=$STATUS"
+    ) >>"$RAG_LOG_FILE" 2>&1 </dev/null &
+    echo "[gooes-rag-sync] scheduled post-commit sync; log: $RAG_LOG_FILE"
   else
     echo "[gooes-rag-sync] skip: shared runner not found at $RAG_DIR/scripts/post-commit-rag-sync.mjs"
   fi
 fi
 
 GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || exit 0
-LOG_FILE="$GIT_COMMON_DIR/codegraph-sync.log"
+CODEGRAPH_LOG_FILE="$GIT_COMMON_DIR/codegraph-sync.log"
 CODEGRAPH_BIN="$(command -v codegraph || true)"
 
 [ -n "$CODEGRAPH_BIN" ] || exit 0
@@ -24,4 +30,4 @@ CODEGRAPH_BIN="$(command -v codegraph || true)"
 (
   cd "$REPO_ROOT" || exit 0
   "$CODEGRAPH_BIN" sync --quiet .
-) >>"$LOG_FILE" 2>&1 &
+) >>"$CODEGRAPH_LOG_FILE" 2>&1 &
