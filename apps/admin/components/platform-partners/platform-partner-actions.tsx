@@ -132,33 +132,6 @@ export function CreatePartnerButton({
   );
 }
 
-export function CreateInviteCodeButton({
-  partner,
-}: {
-  partner: PlatformPartnerRecord;
-}) {
-  return (
-    <MutationDialogButton
-      title="生成专属邀请码"
-      description={`为「${partner.name}」生成装企入驻绑定入口。`}
-      trigger={<Button type="button" size="sm" variant="outline"><Link2 data-icon="inline-start" />邀请码</Button>}
-      submitLabel="生成"
-      fallbackMessage="生成合伙人邀请码失败"
-      endpoint={`/platform/partners/${partner.id}/invite-codes`}
-      fields={[
-        { name: "region_code", label: "区域编码", placeholder: partner.region_codes[0] ?? "可不填" },
-        { name: "campaign_code", label: "活动编码" },
-        { name: "expires_at", label: "过期时间", type: "datetime-local" },
-      ]}
-      buildPayload={(formData) => ({
-        region_code: optionalString(formData, "region_code"),
-        campaign_code: optionalString(formData, "campaign_code"),
-        expires_at: optionalDateTime(formData, "expires_at"),
-      })}
-    />
-  );
-}
-
 export function CreateBindingButton({
   partners,
 }: {

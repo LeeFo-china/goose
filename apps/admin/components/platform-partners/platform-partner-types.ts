@@ -97,6 +97,22 @@ export type PlatformPartnerMemberRecord = {
   partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
 };
 
+export type PlatformPartnerInviteCodeRecord = {
+  id: string;
+  partner_id: string;
+  code: string;
+  region_code: string | null;
+  campaign_code: string | null;
+  status: "active" | "disabled" | "expired";
+  scan_count: number;
+  submitted_count: number;
+  approved_count: number;
+  expires_at: string | null;
+  created_by_employee_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PlatformPartnerMemberRebindRecord = {
   id: string;
   partner_id: string;

@@ -25,8 +25,10 @@ import type {
   TenantPartnerBindingListQuery,
 } from "@/schema/platform-partners";
 import type { AuthContext } from "@/services/authorization";
+import { systemSettingsService } from "@/services/system-settings";
+import { wechatOpenLinkService } from "@/services/wechat-open-link";
 
-type PlatformPartnersRepositoryPort = Pick<
+export type PlatformPartnersRepositoryPort = Pick<
   typeof platformPartnersRepository,
   | "listPartners"
   | "findPartnerById"
@@ -53,6 +55,8 @@ type PlatformPartnersServiceDependencies = {
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const BINDING_MANAGE_PERMISSION = "platform.partner.binding.manage";
 const INVITE_BINDING_CHANGE_REASON = "装企小程序扫码入驻自动绑定";
+const DEFAULT_PARTNER_ONBOARDING_PAGE = "pages/visitor/index";
+const WECHAT_SCENE_MAX_LENGTH = 32;
 
 export class PlatformPartnersService {
   private readonly repository: PlatformPartnersRepositoryPort;
@@ -200,11 +204,12 @@ export class PlatformPartnersService {
       throw Errors.badRequest("只有启用状态的合伙人可以生成邀请码");
     }
 
+    const code = this.buildInviteCode(partner, input.region_code);
     return this.repository.createInviteCode({
       partner_id: partnerId,
-      code: this.buildInviteCode(partner, input.region_code),
+      code,
       region_code: input.region_code ?? null,
-      campaign_code: input.campaign_code ?? null,
+      campaign_code: this.buildInviteCampaignCode(code),
       expires_at: input.expires_at ?? null,
       created_by_employee_id: employeeId,
     });
@@ -214,6 +219,28 @@ export class PlatformPartnersService {
     this.assertPlatformAdmin(authContext);
     await this.requirePartner(partnerId);
     return this.repository.listInviteCodes(partnerId);
+  }
+
+  async getInviteCodeQrcode(authContext: AuthContext, code: string) {
+    this.assertPlatformAdmin(authContext);
+    const inviteCode = await this.requireAvailableInviteCode(code);
+    const page = await systemSettingsService.getString(
+      "WECHAT_PARTNER_ONBOARDING_PAGE",
+      DEFAULT_PARTNER_ONBOARDING_PAGE,
+    );
+    const envVersion = wechatOpenLinkService.normalizeEnvVersion(
+      await systemSettingsService.getString(
+        "WECHAT_MINIPROGRAM_ENV_VERSION",
+        "release",
+      ),
+    );
+    const buffer = await wechatOpenLinkService.generateUnlimitedCode({
+      page,
+      scene: this.buildInviteCodeScene(inviteCode.code),
+      envVersion,
+    });
+
+    return { buffer, contentType: "image/png" };
   }
 
   async resolveInviteCode(input: PlatformPartnerInviteCodeResolveInput) {
@@ -448,6 +475,23 @@ export class PlatformPartnersService {
     const region = regionCode ?? partner.region_codes[0] ?? "all";
     const suffix = Date.now().toString(36).toUpperCase();
     return `CP-${region}-${suffix}`;
+  }
+
+  private buildInviteCampaignCode(inviteCode: string) {
+    return inviteCode.replace(/^CP-/, "PIC-");
+  }
+
+  private buildInviteCodeScene(code: string) {
+    const normalizedCode = this.normalizeInviteCode(code);
+    if (normalizedCode.length > WECHAT_SCENE_MAX_LENGTH) {
+      throw Errors.business(
+        400,
+        "邀请码过长，无法生成小程序码",
+        "PARTNER_INVITE_CODE_SCENE_TOO_LONG",
+      );
+    }
+
+    return normalizedCode;
   }
 }
 

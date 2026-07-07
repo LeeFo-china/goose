@@ -241,6 +241,24 @@ class PlatformPartnersController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/platform/partner-invite-codes/:code/qrcode")
+  async getInviteCodeQrcode(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformPartnerInviteCodeParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await platformPartnersService.getInviteCodeQrcode(
+      authContext,
+      paramsResult.data.code,
+    );
+    return reply
+      .header("cache-control", "no-store")
+      .type(data.contentType)
+      .send(data.buffer);
+  }
+
   @Get("/platform/partner-bindings")
   async listTenantBindings(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredPlatformAdminContext(request);

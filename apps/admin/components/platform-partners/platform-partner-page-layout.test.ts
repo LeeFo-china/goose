@@ -62,6 +62,22 @@ describe("Platform partner operation page", () => {
     expect(source).toContain("/platform/partner-member-rebind-requests/${request.id}/reject");
   });
 
+  test("generates partner invite codes without manual campaign code input", () => {
+    const source = readSource("./platform-partner-invite-actions.tsx");
+    const inviteCodeSection = source.slice(
+      source.indexOf("export function CreateInviteCodeButton"),
+      source.indexOf("function stringField"),
+    );
+
+    expect(inviteCodeSection).toContain("生成专属邀请码");
+    expect(inviteCodeSection).toContain("region_code");
+    expect(inviteCodeSection).toContain("expires_at");
+    expect(inviteCodeSection).toContain("/api/backend/platform/partner-invite-codes/");
+    expect(inviteCodeSection).toContain("<img");
+    expect(inviteCodeSection).not.toContain("活动编码");
+    expect(inviteCodeSection).not.toContain("campaign_code");
+  });
+
   test("adds partner member tab fetch, actions, and required table columns", () => {
     const pageSource = readSource("../../app/(console)/platform/partners/page.tsx");
     const tableSource = readSource("./platform-partner-tables.tsx");

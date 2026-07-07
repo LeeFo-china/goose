@@ -30,6 +30,7 @@ describe("PlatformPartnersController routes", () => {
       { method: "PATCH", path: "/platform/partner-members/:memberId/status" },
       { method: "POST", path: "/platform/partners/:id/invite-codes" },
       { method: "GET", path: "/platform/partners/:id/invite-codes" },
+      { method: "GET", path: "/platform/partner-invite-codes/:code/qrcode" },
       { method: "GET", path: "/platform/partner-bindings" },
       { method: "POST", path: "/platform/partner-bindings" },
     ]);

@@ -4,10 +4,8 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
-import {
-  CreateInviteCodeButton,
-  MarkSettlementPaidButton,
-} from "@/components/platform-partners/platform-partner-actions";
+import { MarkSettlementPaidButton } from "@/components/platform-partners/platform-partner-actions";
+import { CreateInviteCodeButton } from "@/components/platform-partners/platform-partner-invite-actions";
 import { UpdatePartnerMemberStatusButton } from "@/components/platform-partners/platform-partner-member-actions";
 import {
   commissionStatusOptions,

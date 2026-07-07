@@ -12,6 +12,12 @@ type MiniProgramOpenLinkInput = {
   envVersion: "release" | "trial" | "develop";
 };
 
+type MiniProgramCodeInput = {
+  page: string;
+  scene: string;
+  envVersion: "release" | "trial" | "develop";
+};
+
 type MiniProgramUrlLinkInput = MiniProgramOpenLinkInput & {
   expireAt: Date;
 };
@@ -115,6 +121,39 @@ class WechatOpenLinkService {
     }
 
     return data.url_link;
+  }
+
+  async generateUnlimitedCode(input: MiniProgramCodeInput) {
+    const accessToken = await getWechatAccessToken();
+    const response = await fetch(
+      `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${encodeURIComponent(accessToken)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scene: input.scene,
+          page: input.page,
+          check_path: false,
+          env_version: input.envVersion,
+        }),
+      },
+    );
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok) {
+      throw Errors.dbError("生成微信小程序码失败", { status: response.status });
+    }
+
+    if (contentType.includes("application/json")) {
+      const result = await response.json();
+      throw Errors.dbError("生成微信小程序码失败", result);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) {
+      throw Errors.dbError("生成微信小程序码失败");
+    }
+
+    return buffer;
   }
 }
 

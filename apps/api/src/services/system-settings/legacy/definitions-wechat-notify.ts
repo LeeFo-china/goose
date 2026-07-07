@@ -55,6 +55,15 @@ export const DEFINITIONS_WECHAT_NOTIFY: SettingDefinition[] = [  {
     defaultValue: "release",
   },
   {
+    key: "WECHAT_PARTNER_ONBOARDING_PAGE",
+    groupCode: "wechat",
+    name: "合伙人扫码入驻页路径",
+    description: "城市合伙人专属小程序码进入的小程序页面路径。",
+    valueType: "string",
+    envNames: ["WECHAT_PARTNER_ONBOARDING_PAGE"],
+    defaultValue: "pages/visitor/index",
+  },
+  {
     key: "CUSTOMER_LOG_SHARE_TARGET_ASSIST_COUNT",
     groupCode: "wechat",
     name: "助力目标人数",

@@ -68,7 +68,6 @@ export const PlatformPartnerMemberIdParamSchema = z.object({
 
 export const PlatformPartnerInviteCodeCreateSchema = z.object({
   region_code: z.string().trim().max(12, "区域编码不能超过 12 个字符").optional(),
-  campaign_code: z.string().trim().max(80, "活动编码不能超过 80 个字符").optional(),
   expires_at: z.string().datetime("过期时间格式无效").optional(),
 }).strict();
 
