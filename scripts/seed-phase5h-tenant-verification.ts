@@ -4,6 +4,13 @@ import { resolve } from "node:path";
 
 type AnyRecord = Record<string, unknown>;
 
+type DepartmentTemplate = {
+  id: string;
+  code: string;
+  default_name: string;
+  sort: number | null;
+};
+
 const fixture = {
   tenantA: "51111111-1111-4111-8111-111111111111",
   tenantB: "52222222-2222-4222-8222-222222222222",
@@ -182,7 +189,7 @@ async function cleanup() {
   await removeByIds("employees", [fixture.employeeA, fixture.employeeB]);
   await removeByIds("roles", [fixture.roleA, fixture.roleB]);
   await removeByIds("posts", [fixture.postA, fixture.postB]);
-  await removeByIds("departments", [fixture.departmentA, fixture.departmentB]);
+  await removeByIds("tenant_departments", [fixture.departmentA, fixture.departmentB]);
   await removeByIds("tenants", [fixture.tenantA, fixture.tenantB]);
 }
 
@@ -239,10 +246,24 @@ async function grantAllPermissions() {
   await insert("role_permissions", rows);
 }
 
+async function findDepartmentTemplate() {
+  const templates = await restJson<DepartmentTemplate[]>(
+    "department_templates",
+    "?select=id,code,default_name,sort&enabled=eq.true&order=sort.asc&limit=1",
+  );
+  const template = templates[0];
+  if (!template) {
+    throw new Error("no enabled department template found");
+  }
+
+  return template;
+}
+
 async function seed() {
   await cleanup();
   const now = new Date().toISOString();
   const uniqueSuffix = Date.now();
+  const departmentTemplate = await findDepartmentTemplate();
   fixture.authUserA = await createAuthUser("phase5h-tenant-a");
   fixture.authUserB = await createAuthUser("phase5h-tenant-b");
 
@@ -265,9 +286,25 @@ async function seed() {
     },
   ]);
 
-  await insert("departments", [
-    { id: fixture.departmentA, tenant_id: fixture.tenantA, code: "ADMIN", name: "行政人事部" },
-    { id: fixture.departmentB, tenant_id: fixture.tenantB, code: "ADMIN", name: "行政人事部" },
+  await insert("tenant_departments", [
+    {
+      id: fixture.departmentA,
+      tenant_id: fixture.tenantA,
+      template_id: departmentTemplate.id,
+      code: departmentTemplate.code,
+      alias_name: "5H 验收部门 A",
+      enabled: true,
+      sort: departmentTemplate.sort ?? 0,
+    },
+    {
+      id: fixture.departmentB,
+      tenant_id: fixture.tenantB,
+      template_id: departmentTemplate.id,
+      code: departmentTemplate.code,
+      alias_name: "5H 验收部门 B",
+      enabled: true,
+      sort: departmentTemplate.sort ?? 0,
+    },
   ]);
 
   await insert("posts", [
@@ -286,7 +323,7 @@ async function seed() {
       id: fixture.employeeA,
       tenant_id: fixture.tenantA,
       user_id: fixture.authUserA,
-      department_id: fixture.departmentA,
+      tenant_department_id: fixture.departmentA,
       post_id: fixture.postA,
       name: "5H 验收员工 A",
       phone: "19000005001",
@@ -296,7 +333,7 @@ async function seed() {
       id: fixture.employeeB,
       tenant_id: fixture.tenantB,
       user_id: fixture.authUserB,
-      department_id: fixture.departmentB,
+      tenant_department_id: fixture.departmentB,
       post_id: fixture.postB,
       name: "5H 验收员工 B",
       phone: "19000005002",
@@ -337,8 +374,6 @@ async function seed() {
       customer_id: fixture.customerA,
       name: "5H 验收项目 A",
       status: "constructing",
-      supervisor_id: fixture.employeeA,
-      designer_id: fixture.employeeA,
       address: "5H A 租户测试地址",
     },
     {
@@ -347,8 +382,6 @@ async function seed() {
       customer_id: fixture.customerB,
       name: "5H 验收项目 B",
       status: "constructing",
-      supervisor_id: fixture.employeeB,
-      designer_id: fixture.employeeB,
       address: "5H B 租户测试地址",
     },
   ]);
@@ -361,7 +394,6 @@ async function seed() {
       project_id: fixture.projectA,
       mode: "reimbursement",
       status: "pending",
-      current_step: "manager_review",
       request_no: `PHASE5H-A-${uniqueSuffix}`,
       title: "5H 验收费用 A",
       total_amount: 100,
@@ -377,7 +409,6 @@ async function seed() {
       project_id: fixture.projectB,
       mode: "reimbursement",
       status: "pending",
-      current_step: "manager_review",
       request_no: `PHASE5H-B-${uniqueSuffix}`,
       title: "5H 验收费用 B",
       total_amount: 200,

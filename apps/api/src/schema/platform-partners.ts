@@ -1,4 +1,5 @@
 import { PaginationQuerySchema } from "@/schema/request";
+import { PlatformPartnerPhoneSchema } from "@/schema/platform-partner-phone";
 import { z } from "zod";
 
 export const PlatformPartnerStatusSchema = z.enum([
@@ -18,7 +19,7 @@ export const PlatformPartnerCreateSchema = z.object({
   name: z.string().trim().min(1, "合伙人名称不能为空").max(120, "合伙人名称不能超过 120 个字符"),
   subject_type: z.enum(["personal", "individual_business", "company"]),
   contact_name: z.string().trim().min(1, "联系人不能为空").max(60, "联系人不能超过 60 个字符"),
-  phone: z.string().trim().min(6, "手机号不能为空").max(30, "手机号不能超过 30 个字符"),
+  phone: PlatformPartnerPhoneSchema,
   level_id: z.uuid("无效的合伙人等级 ID"),
   region_codes: z.array(z.string().trim().min(1).max(12)).default([]),
   contract_status: z.string().trim().max(40).default("pending"),
@@ -50,7 +51,7 @@ export const PlatformPartnerStatusUpdateSchema = z.object({
 
 export const PlatformPartnerMemberCreateSchema = z.object({
   name: z.string().trim().min(1, "成员姓名不能为空").max(60, "成员姓名不能超过 60 个字符"),
-  phone: z.string().trim().min(6, "手机号不能为空").max(30, "手机号不能超过 30 个字符"),
+  phone: PlatformPartnerPhoneSchema,
   role: z.enum(["owner", "operator"]).default("owner"),
 }).strict();
 

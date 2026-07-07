@@ -24,7 +24,14 @@ export function CreatePartnerMemberButton({
 }) {
   const fields: FieldConfig[] = [
     { name: "name", label: "姓名", required: true },
-    { name: "phone", label: "手机号", required: true },
+    {
+      name: "phone",
+      label: "手机号",
+      required: true,
+      inputMode: "numeric",
+      maxLength: 11,
+      pattern: "1[3-9][0-9]{9}",
+    },
     {
       name: "role",
       label: "角色",

@@ -1,4 +1,5 @@
 import { PaginationQuerySchema } from "@/schema/request";
+import { PlatformPartnerPhoneSchema } from "@/schema/platform-partner-phone";
 import { z } from "zod";
 
 export const PlatformPartnerApplicationStatusSchema = z.enum([
@@ -36,20 +37,15 @@ const RegionCodesSchema = z
   .max(20, "意向区域不能超过 20 个")
   .default([]);
 
-const PartnerApplicationPhoneSchema = z
-  .string()
-  .trim()
-  .regex(/^1[3-9]\d{9}$/, "手机号格式不正确");
-
 export const PlatformPartnerApplicationSendCodeSchema = z.object({
-  phone: PartnerApplicationPhoneSchema,
+  phone: PlatformPartnerPhoneSchema,
 }).strict();
 
 export const SubmitPlatformPartnerApplicationSchema = z.object({
   applicant_name: z.string().trim().min(1, "申请主体不能为空").max(120, "申请主体不能超过 120 个字符"),
   subject_type: z.enum(["personal", "individual_business", "company"]),
   contact_name: z.string().trim().min(1, "联系人不能为空").max(60, "联系人不能超过 60 个字符"),
-  phone: PartnerApplicationPhoneSchema,
+  phone: PlatformPartnerPhoneSchema,
   sms_code: z.string().trim().regex(/^\d{4,6}$/, "验证码格式不正确").optional(),
   region_codes: RegionCodesSchema,
   region_name: OptionalTextSchema(120, "意向区域不能超过 120 个字符"),

@@ -90,6 +90,16 @@ SupabaseDB.getAdminClient()
 
 普通 publish-key client 只允许用于明确的 public/anon/RLS 场景，并且代码旁必须说明原因。
 
+## Supabase RLS 边界
+
+Supabase RLS 用作数据库直连面的防线，不替代 API 层权限模型。业务接口仍必须先经过 Fastify auth、`AuthContext`、租户上下文和权限点校验，再通过 `SupabaseDB.getAdminClient()` 访问数据库。
+
+`public` schema 业务表默认启用 RLS 且不配置宽泛的 anon/authenticated 表级 policy。`public` schema 函数默认撤销 anon/authenticated 的直接 `EXECUTE`，只保留 service_role 给后端 API 使用。
+
+公开访问优先通过经过审计的 API 暴露；如未来确实需要 direct Supabase RPC，必须单独记录函数名、入参边界和 abuse 防护。除非对应文档明确说明 public/RLS 场景，业务代码不得新增 `SupabaseDB.getClient()`。
+
+本阶段不启用 `FORCE ROW LEVEL SECURITY`。如果未来小程序或后台直接使用 Supabase 用户会话访问表，需要先设计包含 `tenant_id`、`employee_id` 和权限 claims 的 JWT/RLS 合同，再新增细粒度 policy。
+
 ## 当前遗留风险
 
 - `get_project_create_page_data` 已改为后台鉴权接口，要求 `project.create` 后经 service/repository 调 RPC。

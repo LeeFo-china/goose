@@ -144,9 +144,11 @@ export function PartnerApplicationForm() {
           <Input
             id="phone"
             name="phone"
-            placeholder="手机号或微信同号"
+            placeholder="11 位手机号"
             required
-            maxLength={30}
+            inputMode="numeric"
+            maxLength={11}
+            pattern="1[3-9][0-9]{9}"
           />
         </Field>
         <Field className="md:col-span-2">
