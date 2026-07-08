@@ -20,6 +20,10 @@ describe("RAG sync hook runner", () => {
     expect(source).toContain("spawn(");
     expect(source).toContain("killChildTree");
     expect(source).toContain("exit=timeout");
+    expect(source).toContain("uncaughtException");
+    expect(source).toContain("unhandledRejection");
+    expect(source).toContain("SIGHUP");
+    expect(source).toContain("exit=signal:");
   });
 
   test("git hooks schedule the guarded runner through nohup", () => {

@@ -19,10 +19,12 @@ const VALID_EVENTS = new Set(['post-commit', 'post-merge', 'manual-recovery']);
 const EVENT_LABELS = { 'post-commit': 'post-commit', 'post-merge': 'post-merge', 'manual-recovery': 'manual recovery' };
 const TIMEOUT_EXIT = 'timeout';
 const TIMEOUT_EXIT_LOG_TOKEN = 'exit=timeout';
+const SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'];
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const repoRoot = resolve(__dirname, '..');
+const runnerStartedAt = Date.now();
 const argv = process.argv.slice(2);
 const event = readFlagValue(argv, '--event') || 'manual-recovery';
 const force = argv.includes('--force');
@@ -34,6 +36,11 @@ const gitCommonDir = execGit(['rev-parse', '--path-format=absolute', '--git-comm
 const logFile = resolve(gitCommonDir, 'rag-sync.log');
 const lockFile = resolve(gitCommonDir, 'rag-sync.lock');
 const label = `${EVENT_LABELS[event] || event}${force ? ' force' : ''} sync`;
+let lockOwned = false;
+let finished = false;
+let activeChildPid = null;
+
+installFatalHandlers();
 
 if (!VALID_EVENTS.has(event)) {
   appendLog(`[${timestamp()}] ${label} exit=invalid-event event=${event}`);
@@ -66,19 +73,16 @@ if (!lock.acquired) {
   );
   process.exit(0);
 }
+lockOwned = true;
 
 appendLog(`[${timestamp()}] ${label} start pid=${process.pid} timeout_ms=${timeoutMs}`);
 
 try {
   const result = await runSyncWithTimeout();
   const exitText = result.logToken || `exit=${result.exit}`;
-  appendLog(
-    `[${timestamp()}] ${label} ${exitText} duration_ms=${result.durationMs}`,
-  );
+  finish(`${exitText} duration_ms=${result.durationMs}`);
 } catch (error) {
-  appendLog(`[${timestamp()}] ${label} exit=runner-error error=${formatError(error)}`);
-} finally {
-  releaseLock();
+  finish(`exit=runner-error error=${formatError(error)} duration_ms=${elapsedMs()}`);
 }
 
 process.exit(0);
@@ -99,6 +103,7 @@ function runSyncWithTimeout() {
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    activeChildPid = child.pid || null;
     let timedOut = false;
     let killTimer = null;
 
@@ -122,6 +127,7 @@ function runSyncWithTimeout() {
     }, timeoutMs);
 
     child.on('close', (status, signal) => {
+      activeChildPid = null;
       clearTimeout(timeout);
       if (killTimer) {
         clearTimeout(killTimer);
@@ -139,6 +145,43 @@ function runSyncWithTimeout() {
       resolvePromise({ exit: String(status ?? 0), durationMs });
     });
   });
+}
+
+function installFatalHandlers() {
+  process.once('uncaughtException', (error) => {
+    finish(`exit=uncaught-exception error=${formatError(error)} duration_ms=${elapsedMs()}`);
+    process.exit(0);
+  });
+
+  process.once('unhandledRejection', (reason) => {
+    finish(`exit=unhandled-rejection error=${formatError(reason)} duration_ms=${elapsedMs()}`);
+    process.exit(0);
+  });
+
+  for (const signal of SIGNALS) {
+    process.once(signal, () => {
+      if (activeChildPid) {
+        killChildTree(activeChildPid, 'SIGTERM');
+      }
+      finish(`exit=signal:${signal} duration_ms=${elapsedMs()}`);
+      process.exit(0);
+    });
+  }
+}
+
+function finish(details) {
+  if (finished) {
+    return;
+  }
+  finished = true;
+
+  try {
+    appendLog(`[${timestamp()}] ${label} ${details}`);
+  } finally {
+    if (lockOwned) {
+      releaseLock();
+    }
+  }
 }
 
 function acquireLock() {
@@ -177,6 +220,7 @@ function releaseLock() {
   if (existing.pid === process.pid) {
     rmSync(lockFile, { force: true });
   }
+  lockOwned = false;
 }
 
 function readLock() {
@@ -291,6 +335,10 @@ function appendLogChunk(chunk) {
 
 function timestamp() {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function elapsedMs() {
+  return Date.now() - runnerStartedAt;
 }
 
 function formatError(error) {
