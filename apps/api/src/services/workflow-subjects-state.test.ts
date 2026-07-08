@@ -1,4 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { WorkflowTaskWithInstanceRow } from "@/repositories/workflow-tasks";
+import type { WorkflowTaskActionPayload } from "@/services/workflow-task-actions";
+import type { WorkflowSubjectType } from "@gooes/domain";
 
 const subjectState = {
   id: "state-1",
@@ -83,7 +86,9 @@ const listAccessibleTasks = mock(async () => ({
   }],
   pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
 }));
-const listPendingByInstance = mock(async () => []);
+const listPendingByInstance = mock(
+  async (): Promise<WorkflowTaskWithInstanceRow[]> => [],
+);
 const getGraph = mock(async () => ({
   definition: { workflow_key: "construction_main", category: "construction" },
   nodes: [{
@@ -98,18 +103,24 @@ const getGraph = mock(async () => ({
 }));
 const listRuntimeInstanceNodes = mock(async () => []);
 const listProjectAssignmentsForRuntime = mock(async () => []);
-const buildWorkflowTaskActionPayloads = mock(async () => [{
-  key: "complete_procedure",
-  label: "完成木工",
-  business_domain: "project_procedure",
-  business_action: "complete_procedure",
-  requires_reason: false,
-  task_id: "task-1",
-  node_key: "procedure_woodwork",
-  node_type: "procedure",
-  disabled: false,
-  output_fields: [],
-}]);
+const buildWorkflowTaskActionPayloads = mock(
+  async (_input: {
+    tenantId: string;
+    subjectType: WorkflowSubjectType;
+    tasks: WorkflowTaskWithInstanceRow[];
+  }): Promise<WorkflowTaskActionPayload[]> => [{
+    key: "complete_procedure",
+    label: "完成木工",
+    business_domain: "project_procedure",
+    business_action: "complete_procedure",
+    requires_reason: false,
+    task_id: "task-1",
+    node_key: "procedure_woodwork",
+    node_type: "procedure",
+    disabled: false,
+    output_fields: [],
+  }],
+);
 
 mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
@@ -415,5 +426,68 @@ describe("workflowSubjectsService state performance", () => {
 
     expect(result.workflow_state?.actions).toEqual([]);
     expect(result.workflow_state?.timeline_nodes[0]?.actions).toEqual([]);
+  });
+
+  test("loads accessible actions from pending instance tasks when runtime instance is known", async () => {
+    const employeeTask: WorkflowTaskWithInstanceRow = {
+      id: "task-employee", tenant_id: "tenant-1", instance_id: "instance-1",
+      instance_node_id: null, definition_id: "definition-1", version_id: "version-1",
+      node_id: "node-woodwork", node_key: "procedure_woodwork", node_type: "procedure",
+      title: "员工任务", status: "pending", assignee_employee_id: "employee-1",
+      assignee_role_code: null, assignee_permission_code: null, assignee_employee: null,
+      due_at: null, completed_by: null, completed_at: null,
+      created_at: "2026-06-24T00:00:00.000Z",
+      updated_at: "2026-06-24T00:00:00.000Z",
+      instance: {
+        id: "instance-1", subject_type: "project", subject_id: "project-1",
+        status: "running", current_node_key: "procedure_woodwork",
+        current_node_snapshot: null,
+      },
+    };
+    const roleTask = { ...employeeTask, id: "task-role", title: "角色任务", assignee_employee_id: null, assignee_role_code: "project" };
+    const permissionTask = { ...employeeTask, id: "task-permission", title: "权限任务", assignee_employee_id: null, assignee_permission_code: "project.read" };
+    const otherEmployeeTask = { ...employeeTask, id: "task-other-employee", title: "其他员工任务", assignee_employee_id: "employee-2" };
+
+    getSubjectStateWithRuntime.mockClear();
+    listAccessibleTasks.mockClear();
+    listAccessibleTasks.mockImplementationOnce(async () => {
+      throw new Error("should not use relation-filtered task query");
+    });
+    listPendingByInstance.mockClear();
+    listPendingByInstance.mockImplementationOnce(async () => [employeeTask, roleTask, permissionTask, otherEmployeeTask]);
+    buildWorkflowTaskActionPayloads.mockClear();
+    buildWorkflowTaskActionPayloads.mockImplementationOnce(async (input) =>
+      input.tasks.map((task): WorkflowTaskActionPayload => ({
+        key: `action-${task.id}`,
+        label: task.title,
+        business_domain: "project_procedure",
+        business_action: "complete_procedure",
+        requires_reason: false,
+        task_id: task.id,
+        node_key: task.node_key,
+        node_type: task.node_type,
+        disabled: false,
+        output_fields: [],
+      }))
+    );
+
+    const { workflowSubjectsService } = await import("./workflow-subjects");
+
+    const result = await workflowSubjectsService.getState(authContext as never, {
+      subjectType: "project",
+      subjectId: "project-1",
+    });
+
+    expect(listPendingByInstance).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      instanceId: "instance-1",
+    });
+    expect(listAccessibleTasks).not.toHaveBeenCalled();
+    const actionBuilderInput = buildWorkflowTaskActionPayloads.mock.calls[0]?.[0];
+    expect(actionBuilderInput?.tasks.map((task) => task.id)).toEqual([
+      "task-employee", "task-role", "task-permission",
+    ]);
+    expect(result.workflow_state?.actions.map((action) => action.task_id))
+      .toEqual(["task-employee", "task-role", "task-permission"]);
   });
 });

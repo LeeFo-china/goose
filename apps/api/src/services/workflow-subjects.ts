@@ -1,5 +1,9 @@
 import { Errors } from "@/errors/error-factory";
-import { workflowTaskRepository } from "@/repositories/workflow-tasks";
+import {
+  workflowTaskRepository,
+  type WorkflowTaskWithInstanceRow,
+} from "@/repositories/workflow-tasks";
+import { buildWorkflowTaskAssigneeScope } from "@/repositories/workflow-tasks-direct";
 import type { WorkflowSubjectStateRow } from "@/repositories/workflow-subject-states";
 import type {
   WorkflowSubjectStateParams,
@@ -147,25 +151,34 @@ class WorkflowSubjectsService {
   ): Promise<WorkflowTaskActionPayload[]> {
     const tenantId = this.assertTenantId(authContext);
     const subjectId = params.subjectId.trim();
-    const tasks = await workflowTaskRepository.listAccessibleTasks({
-      tenantId,
-      employeeId: authContext.employeeId,
-      roleCodes: authContext.roleCodes,
-      permissionCodes: authContext.permissions.map((permission) =>
-        permission.code
-      ),
-      status: "pending",
-      subjectType: params.subjectType,
-      subjectId,
-      ...(params.instanceId ? { instanceId: params.instanceId } : {}),
-      page: 1,
-      pageSize: 100,
-    });
+    const tasks = params.instanceId
+      ? (await workflowTaskRepository.listPendingByInstance({
+        tenantId,
+        instanceId: params.instanceId,
+      })).filter((task) =>
+        isWorkflowTaskForSubject(task, {
+          subjectType: params.subjectType,
+          subjectId,
+        }) && isWorkflowTaskAccessibleToAuthContext(task, authContext)
+      )
+      : (await workflowTaskRepository.listAccessibleTasks({
+        tenantId,
+        employeeId: authContext.employeeId,
+        roleCodes: authContext.roleCodes,
+        permissionCodes: authContext.permissions.map((permission) =>
+          permission.code
+        ),
+        status: "pending",
+        subjectType: params.subjectType,
+        subjectId,
+        page: 1,
+        pageSize: 100,
+      })).list;
 
     return buildWorkflowTaskActionPayloads({
       tenantId,
       subjectType: params.subjectType,
-      tasks: tasks.list,
+      tasks,
     });
   }
 
@@ -353,6 +366,43 @@ class WorkflowSubjectsService {
 
     return tenantId;
   }
+}
+
+function isWorkflowTaskForSubject(
+  task: WorkflowTaskWithInstanceRow,
+  params: Pick<WorkflowSubjectStateParams, "subjectType"> & {
+    subjectId: string;
+  },
+): boolean {
+  return task.instance?.subject_type === params.subjectType &&
+    task.instance.subject_id === params.subjectId;
+}
+
+function isWorkflowTaskAccessibleToAuthContext(
+  task: WorkflowTaskWithInstanceRow,
+  authContext: AuthContext,
+): boolean {
+  const { employeeId, roleCodes, permissionCodes } =
+    buildWorkflowTaskAssigneeScope({
+      employeeId: authContext.employeeId,
+      roleCodes: authContext.roleCodes,
+      permissionCodes: authContext.permissions.map((permission) =>
+        permission.code
+      ),
+    });
+
+  if (task.assignee_employee_id) {
+    return Boolean(employeeId && task.assignee_employee_id === employeeId);
+  }
+
+  const hasRoleAssignee = Boolean(task.assignee_role_code);
+  const hasPermissionAssignee = Boolean(task.assignee_permission_code);
+  if (!hasRoleAssignee && !hasPermissionAssignee) return true;
+
+  return (!task.assignee_role_code ||
+    roleCodes.includes(task.assignee_role_code)) &&
+    (!task.assignee_permission_code ||
+      permissionCodes.includes(task.assignee_permission_code));
 }
 
 export const workflowSubjectsService = new WorkflowSubjectsService();
