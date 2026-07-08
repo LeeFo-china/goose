@@ -90,6 +90,52 @@ export const TenantPartnerInviteBindingCreateSchema = z.object({
   source_id: z.string().trim().max(120, "来源 ID 不能超过 120 个字符").optional(),
 }).strict();
 
+const PartnerTenantOnboardingInviteCodeSchema = z
+  .string()
+  .trim()
+  .min(1, "邀请码不能为空")
+  .max(120, "邀请码不能超过 120 个字符")
+  .transform((value) => value.toUpperCase());
+
+const PartnerTenantOnboardingPhoneSchema = z
+  .string()
+  .trim()
+  .regex(/^1[3-9]\d{9}$/, "手机号格式不正确");
+
+const PartnerTenantOnboardingTextSchema = (max: number, message: string) =>
+  z.preprocess((value) => {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === "string" && value.trim() === "") return undefined;
+    return value;
+  }, z.string().trim().max(max, message).optional());
+
+export const PartnerTenantOnboardingSendCodeSchema = z.object({
+  phone: PartnerTenantOnboardingPhoneSchema,
+  request_device: PartnerTenantOnboardingTextSchema(120, "设备标识不能超过 120 个字符"),
+}).strict();
+
+export const PartnerTenantOnboardingSubmitSchema = z.object({
+  invite_code: PartnerTenantOnboardingInviteCodeSchema,
+  company_name: z.string().trim().min(1, "请输入装修公司名称").max(100, "装修公司名称不能超过 100 个字符"),
+  admin_name: z.string().trim().min(1, "请输入管理员姓名").max(50, "管理员姓名不能超过 50 个字符"),
+  admin_phone: PartnerTenantOnboardingPhoneSchema,
+  sms_code: z.string().trim().regex(/^\d{4,6}$/, "验证码格式不正确"),
+  region_code: PartnerTenantOnboardingTextSchema(20, "区域编码不能超过 20 个字符"),
+  region_name: PartnerTenantOnboardingTextSchema(80, "区域名称不能超过 80 个字符"),
+  address: PartnerTenantOnboardingTextSchema(200, "公司地址不能超过 200 个字符"),
+  location: z.object({
+    title: PartnerTenantOnboardingTextSchema(120, "地址标题不能超过 120 个字符"),
+    poi_id: PartnerTenantOnboardingTextSchema(120, "POI ID 不能超过 120 个字符"),
+    province: PartnerTenantOnboardingTextSchema(40, "地址省份不能超过 40 个字符"),
+    city: PartnerTenantOnboardingTextSchema(40, "地址城市不能超过 40 个字符"),
+    district: PartnerTenantOnboardingTextSchema(40, "地址区县不能超过 40 个字符"),
+    adcode: PartnerTenantOnboardingTextSchema(20, "地址行政区划代码不能超过 20 个字符"),
+    latitude: z.coerce.number("地址纬度必须是数字").min(-90).max(90).optional(),
+    longitude: z.coerce.number("地址经度必须是数字").min(-180).max(180).optional(),
+  }).strict().optional(),
+  source_id: z.string().trim().max(120, "来源 ID 不能超过 120 个字符").optional(),
+}).strict();
+
 export const TenantPartnerBindingListQuerySchema =
   PaginationQuerySchema.extend({
     partner_id: z.uuid("无效的合伙人 ID").optional(),
@@ -118,5 +164,9 @@ export type TenantPartnerBindingCreateInput =
   z.infer<typeof TenantPartnerBindingCreateSchema>;
 export type TenantPartnerInviteBindingCreateInput =
   z.infer<typeof TenantPartnerInviteBindingCreateSchema>;
+export type PartnerTenantOnboardingSendCodeInput =
+  z.infer<typeof PartnerTenantOnboardingSendCodeSchema>;
+export type PartnerTenantOnboardingSubmitInput =
+  z.infer<typeof PartnerTenantOnboardingSubmitSchema>;
 export type TenantPartnerBindingListQuery =
   z.infer<typeof TenantPartnerBindingListQuerySchema>;

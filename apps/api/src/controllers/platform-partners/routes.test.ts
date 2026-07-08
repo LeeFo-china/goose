@@ -19,6 +19,8 @@ describe("PlatformPartnersController routes", () => {
     expect(routes).toEqual([
       { method: "GET", path: "/partner-onboarding/invite-codes/:code" },
       { method: "POST", path: "/partner-onboarding/tenant-binding" },
+      { method: "POST", path: "/partner-onboarding/tenant-applications/send-code" },
+      { method: "POST", path: "/partner-onboarding/tenant-applications" },
       { method: "GET", path: "/platform/partners" },
       { method: "POST", path: "/platform/partners" },
       { method: "GET", path: "/platform/partners/levels" },

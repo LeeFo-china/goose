@@ -44,6 +44,12 @@ describe("auth public route allowlist", () => {
     expect(isPublicRoute("POST", "/partner-onboarding/tenant-binding")).toBe(false);
   });
 
+  test("allows partner tenant onboarding submissions without a token", () => {
+    expect(isPublicRoute("POST", "/partner-onboarding/tenant-applications/send-code")).toBe(true);
+    expect(isPublicRoute("POST", "/partner-onboarding/tenant-applications")).toBe(true);
+    expect(isPublicRoute("GET", "/partner-onboarding/tenant-applications")).toBe(false);
+  });
+
   test("keeps platform partner application review routes protected", () => {
     expect(isPublicRoute("GET", "/platform/partner-applications")).toBe(false);
     expect(isPublicRoute(

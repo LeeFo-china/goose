@@ -11,6 +11,7 @@ export const SMS_SCENE_VALUES = [
   'unbind_platform_partner',
   'rebind_platform_partner',
   'partner_application',
+  'partner_tenant_onboarding',
 ] as const;
 
 export type SmsScene = (typeof SMS_SCENE_VALUES)[number];

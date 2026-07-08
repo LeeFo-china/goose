@@ -54,6 +54,10 @@ export function getTemplateConfigKey(input: {
     return `${prefix}_BIND_CUSTOMER`;
   }
 
+  if (input.purpose === "partner_tenant_onboarding") {
+    return `${prefix}_BIND_CUSTOMER`;
+  }
+
   if (input.purpose === "admin_login") {
     return `${prefix}_ADMIN_LOGIN`;
   }

@@ -11,11 +11,14 @@ import {
   PlatformPartnerMemberListQuerySchema,
   PlatformPartnerMemberStatusUpdateSchema,
   PlatformPartnerStatusUpdateSchema,
+  PartnerTenantOnboardingSendCodeSchema,
+  PartnerTenantOnboardingSubmitSchema,
   PlatformPartnerUpdateSchema,
   TenantPartnerBindingCreateSchema,
   TenantPartnerInviteBindingCreateSchema,
   TenantPartnerBindingListQuerySchema,
 } from "@/schema/platform-partners";
+import { platformPartnerTenantOnboardingService } from "@/services/platform-partner-tenant-onboarding";
 import { platformPartnersService } from "@/services/platform-partners";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -51,6 +54,36 @@ class PlatformPartnersController extends PlatformBaseController {
       authContext,
       bodyResult.data,
     );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/partner-onboarding/tenant-applications/send-code")
+  async sendTenantOnboardingCode(request: FastifyRequest, reply: FastifyReply) {
+    const bodyResult = PartnerTenantOnboardingSendCodeSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data =
+      await platformPartnerTenantOnboardingService.sendPublicTenantOnboardingCode({
+        phone: bodyResult.data.phone,
+        requestIp: request.ip ?? null,
+        requestDevice: bodyResult.data.request_device ?? null,
+      });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/partner-onboarding/tenant-applications")
+  async submitTenantOnboarding(request: FastifyRequest, reply: FastifyReply) {
+    const bodyResult = PartnerTenantOnboardingSubmitSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data =
+      await platformPartnerTenantOnboardingService.submitPublicTenantOnboarding(
+        bodyResult.data,
+      );
     return ResponseHandler.success(data);
   }
 

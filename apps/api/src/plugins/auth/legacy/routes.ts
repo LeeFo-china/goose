@@ -59,6 +59,16 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    method === "POST" &&
+    (
+      url === "/partner-onboarding/tenant-applications/send-code" ||
+      url === "/partner-onboarding/tenant-applications"
+    )
+  ) {
+    return true;
+  }
+
   if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaigns/")) {
     return true;
   }
