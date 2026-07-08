@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { navigateAfterAdminLogin } from "@/components/login-form-navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -78,8 +79,7 @@ export function LoginForm() {
       if (!response.ok || payload.success === false) {
         throw new Error(getPayloadMessage(payload, "登录失败"));
       }
-      router.replace("/dashboard");
-      router.refresh();
+      navigateAfterAdminLogin(router);
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");
     } finally {

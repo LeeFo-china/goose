@@ -8,6 +8,23 @@ import {
   AdminAuthPhoneSchema,
 } from "@/schema/admin-auth";
 import { adminAuthService } from "@/services/admin-auth";
+import {
+  createAdminAuthLoginTimingSteps,
+  logAdminAuthLoginTiming,
+} from "@/services/admin-auth-login-timing";
+
+function getErrorStatusCode(error: unknown) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "statusCode" in error &&
+    typeof error.statusCode === "number"
+  ) {
+    return error.statusCode;
+  }
+
+  return 500;
+}
 
 class AdminAuthController extends BaseController {
   constructor() {
@@ -32,9 +49,26 @@ class AdminAuthController extends BaseController {
     const bodyResult = AdminAuthLoginSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
-    const result = await adminAuthService.login(bodyResult.data);
+    const startedAt = Date.now();
+    const timingSteps = createAdminAuthLoginTimingSteps();
+    let statusCode = 200;
 
-    return ResponseHandler.success(result, "登录成功");
+    try {
+      const result = await adminAuthService.login(bodyResult.data, {
+        timingSteps,
+      });
+
+      return ResponseHandler.success(result, "登录成功");
+    } catch (error) {
+      statusCode = getErrorStatusCode(error);
+      throw error;
+    } finally {
+      logAdminAuthLoginTiming(request, {
+        startedAt,
+        statusCode,
+        steps: timingSteps,
+      });
+    }
   }
 
   @Get("/admin/auth/me")

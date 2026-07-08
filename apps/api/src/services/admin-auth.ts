@@ -12,8 +12,29 @@ import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { getJwtExpiresAt, signToken } from "@/utils/jwt";
 import { isEmployeeOperableStatus } from "@gooes/domain";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
+import {
+  measureAdminAuthLoginStep,
+  type AdminAuthLoginTimingStep,
+  type AdminAuthLoginTimingSteps,
+} from "@/services/admin-auth-login-timing";
 
 const ADMIN_LOGIN_SCENE = "admin_login" as const;
+
+type AdminAuthLoginOptions = {
+  timingSteps?: AdminAuthLoginTimingSteps;
+};
+
+async function measureLoginStep<T>(
+  options: AdminAuthLoginOptions | undefined,
+  step: AdminAuthLoginTimingStep,
+  callback: () => Promise<T> | T,
+): Promise<T> {
+  if (!options?.timingSteps) {
+    return await callback();
+  }
+
+  return measureAdminAuthLoginStep(options.timingSteps, step, callback);
+}
 
 function generateVerificationCode() {
   return String(randomInt(100000, 1000000));
@@ -92,8 +113,15 @@ function serializeEmployeeRecord(employee: AdminAuthEmployeeRecord) {
 }
 
 class AdminAuthService {
-  private async getSingleActiveEmployeeByPhone(phone: string) {
-    const employees = await adminAuthRepository.findEmployeeByPhone(phone);
+  private async getSingleActiveEmployeeByPhone(
+    phone: string,
+    options?: AdminAuthLoginOptions,
+  ) {
+    const employees = await measureLoginStep(
+      options,
+      "find_employee_ms",
+      () => adminAuthRepository.findEmployeeByPhone(phone),
+    );
 
     if (employees.length === 0) {
       throw Errors.business(
@@ -124,7 +152,11 @@ class AdminAuthService {
       );
     }
 
-    const authContext = await authorizationService.getAuthContextByEmployeeId(employee.id);
+    const authContext = await measureLoginStep(
+      options,
+      "employee_auth_context_ms",
+      () => authorizationService.getAuthContextByEmployeeId(employee.id),
+    );
     authorizationService.assertTenantAvailable(authContext);
 
     return employee;
@@ -173,11 +205,17 @@ class AdminAuthService {
     return { success: true };
   }
 
-  async login(input: {
-    phone: string;
-    code?: string;
-  }) {
-    const employee = await this.getSingleActiveEmployeeByPhone(input.phone);
+  async login(
+    input: {
+      phone: string;
+      code?: string;
+    },
+    options: AdminAuthLoginOptions = {},
+  ) {
+    const employee = await this.getSingleActiveEmployeeByPhone(
+      input.phone,
+      options,
+    );
     const skipCodeVerification = isPhoneLoginWithoutCodeEnabled();
     const code = input.code?.trim() || "";
     let verificationCode: { id: string } | null = null;
@@ -191,12 +229,16 @@ class AdminAuthService {
         );
       }
 
-      verificationCode = await adminAuthRepository.findValidVerificationCode({
-        phone: input.phone,
-        scene: ADMIN_LOGIN_SCENE,
-        code,
-        now: new Date().toISOString(),
-      });
+      verificationCode = await measureLoginStep(
+        options,
+        "verification_code_ms",
+        () => adminAuthRepository.findValidVerificationCode({
+          phone: input.phone,
+          scene: ADMIN_LOGIN_SCENE,
+          code,
+          now: new Date().toISOString(),
+        }),
+      );
 
       if (!verificationCode) {
         throw Errors.business(
@@ -209,36 +251,49 @@ class AdminAuthService {
 
     let authUserId = employee.user_id;
     if (!authUserId) {
-      authUserId = await adminAuthRepository.createAdminAuthUser({
-        employeeId: employee.id,
-        phone: input.phone,
-        name: employee.name,
-      });
-      await adminAuthRepository.bindEmployeeAuthUser({
-        employeeId: employee.id,
-        authUserId,
-      });
+      authUserId = await measureLoginStep(
+        options,
+        "admin_auth_user_ms",
+        async () => {
+          const createdAuthUserId = await adminAuthRepository.createAdminAuthUser({
+            employeeId: employee.id,
+            phone: input.phone,
+            name: employee.name,
+          });
+          await adminAuthRepository.bindEmployeeAuthUser({
+            employeeId: employee.id,
+            authUserId: createdAuthUserId,
+          });
+          return createdAuthUserId;
+        },
+      );
       authorizationService.invalidateAuthContext({
         authUserId,
         employeeId: employee.id,
       });
     }
 
-    await userIdentityService.syncBusinessMembershipBestEffort({
-      userId: authUserId,
-      tenantId: employee.tenant_id,
-      identityType: "employee",
-      identityId: employee.id,
-      deactivateOtherSameType: true,
-      source: "admin_web_login",
-    });
+    await measureLoginStep(options, "business_membership_sync_ms", () =>
+      userIdentityService.syncBusinessMembershipBestEffort({
+        userId: authUserId,
+        tenantId: employee.tenant_id,
+        identityType: "employee",
+        identityId: employee.id,
+        deactivateOtherSameType: true,
+        source: "admin_web_login",
+      }),
+    );
 
     if (verificationCode) {
-      await adminAuthRepository.markVerificationCodeVerified(verificationCode.id);
+      await measureLoginStep(options, "verification_mark_ms", () =>
+        adminAuthRepository.markVerificationCodeVerified(verificationCode.id),
+      );
     }
 
-    const authContext = await authorizationService.getAuthContextByAuthUserId(
-      authUserId,
+    const authContext = await measureLoginStep(
+      options,
+      "session_auth_context_ms",
+      () => authorizationService.getAuthContextByAuthUserId(authUserId),
     );
     authorizationService.assertTenantAvailable(authContext);
 
