@@ -29,7 +29,8 @@ BEGIN
   WHERE project.id = v_project_id::uuid;
 
   IF v_tenant_id IS NULL THEN
-    RAISE EXCEPTION 'Target test project not found: %', v_project_id;
+    RAISE NOTICE 'Target test project not found, skip workflow replay data reset: %', v_project_id;
+    RETURN;
   END IF;
 
   SELECT definition.id
