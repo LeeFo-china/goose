@@ -66,7 +66,7 @@ export function PlatformPaymentSettingsPanel({
         }
         className="flex min-h-0 flex-col gap-4"
       >
-        <div className="-mx-4 overflow-x-auto px-4">
+        <div className="-mx-4 overflow-x-auto overflow-y-hidden px-4">
           <TabsList className="h-auto min-w-max justify-start rounded-none border-0 border-b bg-transparent p-0 text-muted-foreground">
             {profiles.map((profile) => (
               <TabsTrigger

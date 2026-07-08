@@ -44,7 +44,23 @@ describe("platform payment settings panel", () => {
     expect(tabsSource).toContain("groupStatusLabel");
     expect(tabsSource).toContain("min-w-max justify-start rounded-none border-0 border-b bg-transparent");
     expect(tabsSource).toContain("data-[state=active]:border-primary");
+    expect(tabsSource).toContain(
+      'className="-mx-4 overflow-x-auto overflow-y-hidden px-4"',
+    );
+    expect(tabsSource).not.toContain(
+      'className="-mx-4 overflow-x-auto px-4"',
+    );
     expect(tabsSource).not.toContain("h-auto w-full justify-start overflow-x-auto md:w-auto");
+  });
+
+  test("settings and payment tab scroll containers do not expose vertical scrollbars", () => {
+    const settingsTabsSource = readSource("./settings-tabs.tsx");
+    const paymentPanelSource = readSource("./platform-payment-settings-panel.tsx");
+
+    for (const source of [settingsTabsSource, paymentPanelSource]) {
+      expect(source).toContain("overflow-x-auto overflow-y-hidden");
+      expect(source).not.toContain('className="-mx-4 overflow-x-auto px-4"');
+    }
   });
 
   test("payment panel uses shadcn form controls and certificate upload interactions", () => {
