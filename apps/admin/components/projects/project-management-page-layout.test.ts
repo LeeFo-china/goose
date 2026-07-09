@@ -101,6 +101,17 @@ describe("Project management page layout", () => {
     expect(page).not.toContain('query.set("workflow_summary", "compact")');
   });
 
+  test("renders a left icon for the project detail menu item", () => {
+    const mutations = readFileSync(
+      new URL("./project-mutations.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(mutations).toMatch(
+      /<Link href={projectDetailHref\(project\.id, "acceptances"\)}>\s*<Eye \/>\s*详情\s*<\/Link>/,
+    );
+  });
+
   test("keeps the workflow column focused on the connected workflow title", () => {
     const table = readFileSync(
       new URL("./projects-table.tsx", import.meta.url),
