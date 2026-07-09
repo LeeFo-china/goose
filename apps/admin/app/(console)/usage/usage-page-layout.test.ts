@@ -17,7 +17,7 @@ describe("Tenant usage page layout", () => {
     expect(page).toContain("data-testid=\"tenant-usage-list-table-viewport\"");
     expect(page).toContain("UsageOverviewPanel");
     expect(page).toContain("UsageTabsNav");
-    expect(page).toContain("tabsListClassName=\"w-full shrink-0 justify-start overflow-x-auto md:w-auto\"");
+    expect(page).toContain("tabsListClassName=\"w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden md:w-auto\"");
     expect(page).toContain("tabsTriggerClassName=\"px-2 sm:px-3\"");
     expect(page).not.toContain("<UsageSummaryCards data={summaryResult.data} />");
     expect(page).not.toContain("grid gap-3 p-4 md:grid-cols-3");

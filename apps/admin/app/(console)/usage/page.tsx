@@ -173,7 +173,7 @@ export default async function TenantUsagePage({
               socialVideoStatus={socialVideoStatus}
               socialVideoBillable={socialVideoBillable}
               summaryLabel="用量概览"
-              tabsListClassName="w-full shrink-0 justify-start overflow-x-auto md:w-auto"
+              tabsListClassName="w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden md:w-auto"
               tabsTriggerClassName="px-2 sm:px-3"
             />
           </div>
