@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { SupabaseDB } from "@/utils/supabase";
 import {
   buildWorkflowTaskAssigneeScope,
   listAccessiblePendingByProjectIdsViaDirectSql,
@@ -82,6 +83,17 @@ type WorkflowTransitionLogListInput = {
   pageSize?: number;
 };
 
+type WorkflowTaskRpcRow = WorkflowTaskWithInstanceRow & {
+  total_count?: number | string | bigint | null;
+};
+
+type UntypedRpcClient = {
+  rpc: (
+    name: string,
+    params: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
+};
+
 const WORKFLOW_TASK_SELECT = [
   "id",
   "tenant_id",
@@ -128,23 +140,15 @@ const WORKFLOW_TRANSITION_LOG_SELECT = [
 ].join(", ");
 
 class WorkflowTaskRepository {
-  private directSqlUnavailable = false;
-
   async listAccessibleTasks(
     input: WorkflowTaskListInput,
   ): Promise<WorkflowTaskListResult> {
-    const assigneeFilter = this.buildAssigneeFilter(input);
     const page = input.page ?? 1;
     const pageSize = Math.min(input.pageSize ?? 20, 100);
     const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    if (!assigneeFilter) {
-      return this.emptyList(page, pageSize);
-    }
 
     const directSql = getDirectPostgresSql();
-    if (directSql && !this.directSqlUnavailable) {
+    if (directSql) {
       try {
         return await listAccessibleTasksViaDirectSql({
           input,
@@ -154,44 +158,12 @@ class WorkflowTaskRepository {
           sql: directSql,
         });
       } catch {
-        this.directSqlUnavailable = true;
+        // Fall through to the RPC path. A transient direct connection failure
+        // must not permanently push the process onto the PostgREST fallback.
       }
     }
 
-    let request = workflowTable("workflow_tasks")
-      .select(WORKFLOW_TASK_SELECT, { count: "exact" })
-      .eq("tenant_id", input.tenantId)
-      .eq("status", input.status ?? "pending")
-      .or(assigneeFilter);
-
-    if (input.subjectType) {
-      request = request.eq("instance.subject_type", input.subjectType);
-    }
-    if (input.subjectId) {
-      request = request.eq("instance.subject_id", input.subjectId);
-    }
-    if (input.instanceId) {
-      request = request.eq("instance_id", input.instanceId);
-    }
-
-    const { data, error, count } = await request
-      .order("updated_at", { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      throw Errors.dbError("查询流程待办失败", error);
-    }
-
-    const total = count ?? 0;
-    return {
-      list: (data ?? []) as WorkflowTaskWithInstanceRow[],
-      pagination: {
-        page,
-        pageSize,
-        total,
-        totalPages: total ? Math.ceil(total / pageSize) : 0,
-      },
-    };
+    return this.listAccessibleTasksViaRpc(input, page, pageSize);
   }
 
   async findById(input: {
@@ -272,7 +244,7 @@ class WorkflowTaskRepository {
 
     const limit = Math.min(input.limit ?? projectIds.length * 100, 10_000);
     const directSql = getDirectPostgresSql();
-    if (directSql && !this.directSqlUnavailable) {
+    if (directSql) {
       try {
         return await listAccessiblePendingByProjectIdsViaDirectSql({
           ...input,
@@ -281,25 +253,16 @@ class WorkflowTaskRepository {
           sql: directSql,
         });
       } catch {
-        this.directSqlUnavailable = true;
+        // Fall through to the RPC path. Keep direct SQL eligible for the next
+        // request so a transient failure cannot permanently enable long REST filters.
       }
     }
 
-    const { data, error } = await workflowTable("workflow_tasks")
-      .select(WORKFLOW_TASK_SELECT)
-      .eq("tenant_id", input.tenantId)
-      .eq("status", "pending")
-      .eq("instance.subject_type", "project")
-      .in("instance.subject_id", projectIds)
-      .or(assigneeFilter)
-      .order("created_at", { ascending: true })
-      .limit(limit);
-
-    if (error) {
-      throw Errors.dbError("批量查询项目流程待办失败", error);
-    }
-
-    return (data ?? []) as WorkflowTaskWithInstanceRow[];
+    return this.listAccessiblePendingByProjectIdsViaRpc({
+      ...input,
+      projectIds,
+      limit,
+    });
   }
 
   async assignPendingTask(input: {
@@ -382,6 +345,86 @@ class WorkflowTaskRepository {
     );
 
     return filters.length > 0 ? filters.join(",") : null;
+  }
+
+  private rpcClient(): UntypedRpcClient {
+    return SupabaseDB.getAdminClient() as unknown as UntypedRpcClient;
+  }
+
+  private async listAccessibleTasksViaRpc(
+    input: WorkflowTaskListInput,
+    page: number,
+    pageSize: number,
+  ): Promise<WorkflowTaskListResult> {
+    const { employeeId, roleCodes, permissionCodes } =
+      buildWorkflowTaskAssigneeScope(input);
+    const { data, error } = await this.rpcClient().rpc(
+      "list_accessible_workflow_tasks",
+      {
+        p_tenant_id: input.tenantId,
+        p_employee_id: employeeId ?? null,
+        p_role_codes: roleCodes,
+        p_permission_codes: permissionCodes,
+        p_status: input.status ?? "pending",
+        p_subject_type: input.subjectType ?? null,
+        p_subject_id: input.subjectId ?? null,
+        p_instance_id: input.instanceId ?? null,
+        p_page: page,
+        p_page_size: pageSize,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("查询流程待办失败", error);
+    }
+
+    const rows = (data ?? []) as WorkflowTaskRpcRow[];
+    const total = Number(rows[0]?.total_count ?? 0);
+    return {
+      list: this.toWorkflowTaskRows(rows),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: total ? Math.ceil(total / pageSize) : 0,
+      },
+    };
+  }
+
+  private async listAccessiblePendingByProjectIdsViaRpc(input: {
+    tenantId: string;
+    employeeId?: string | null;
+    roleCodes?: string[];
+    permissionCodes?: string[];
+    projectIds: string[];
+    limit: number;
+  }): Promise<WorkflowTaskWithInstanceRow[]> {
+    const { employeeId, roleCodes, permissionCodes } =
+      buildWorkflowTaskAssigneeScope(input);
+    const { data, error } = await this.rpcClient().rpc(
+      "list_accessible_project_workflow_tasks",
+      {
+        p_tenant_id: input.tenantId,
+        p_employee_id: employeeId ?? null,
+        p_role_codes: roleCodes,
+        p_permission_codes: permissionCodes,
+        p_project_ids: input.projectIds,
+        p_limit: input.limit,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("批量查询项目流程待办失败", error);
+    }
+
+    return this.toWorkflowTaskRows((data ?? []) as WorkflowTaskRpcRow[]);
+  }
+
+  private toWorkflowTaskRows(rows: WorkflowTaskRpcRow[]): WorkflowTaskWithInstanceRow[] {
+    return rows.map((row) => {
+      const { total_count: _totalCount, ...task } = row;
+      return task;
+    });
   }
 
   private emptyList(page: number, pageSize: number): WorkflowTaskListResult {

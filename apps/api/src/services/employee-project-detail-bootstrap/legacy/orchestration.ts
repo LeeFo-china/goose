@@ -178,7 +178,10 @@ export async function getBootstrap(this: any, input: {
       subjectType: "project",
       subjectId: input.projectId,
     }),
-  );
+  ).catch((error: unknown) => {
+    partialErrors.push(this.toPartialError("workflow_state", error));
+    return [];
+  });
   const bundle = await this.measure("bootstrap_data_ms", timings, () =>
     projectSer.getEmployeeProjectBootstrapBundle({
       authContext: input.authContext,
@@ -247,17 +250,30 @@ export async function getBootstrap(this: any, input: {
     this.toPublicPermissions(basePermissions),
     constructionStages,
   );
+  const workflowSubjectId = typeof project.id === "string" ? project.id : input.projectId;
   const workflowStateResult = await this.measure(
     "workflow_state_ms",
     timings,
-    () => workflowSubjectsService.getState(
-      input.authContext,
-      {
-        subjectType: "project",
-        subjectId: typeof project.id === "string" ? project.id : input.projectId,
-      },
-      { workflowProgress, actionsPromise: workflowActionsPromise },
-    ),
+    async () => {
+      try {
+        return await workflowSubjectsService.getState(
+          input.authContext,
+          {
+            subjectType: "project",
+            subjectId: workflowSubjectId,
+          },
+          { workflowProgress, actionsPromise: workflowActionsPromise },
+        );
+      } catch (error) {
+        partialErrors.push(this.toPartialError("workflow_state", error));
+        return {
+          workflow_state: buildFallbackWorkflowState({
+            projectId: workflowSubjectId,
+            workflowProgress,
+          }),
+        };
+      }
+    },
   );
   const workflowState = workflowStateResult.workflow_state;
   const enrichedWorkflowOutputs = enrichWorkflowOutputsForBootstrap({
@@ -301,6 +317,35 @@ export async function getBootstrap(this: any, input: {
     server_time: new Date().toISOString(),
     partial_errors: partialErrors,
     timings,
+  };
+}
+
+function buildFallbackWorkflowState(input: {
+  projectId: string;
+  workflowProgress: WorkflowProgressResult;
+}): ProjectWorkflowState {
+  const progress = input.workflowProgress;
+  if (progress.source === "missing_runtime" || !progress.instance_id) {
+    return null;
+  }
+
+  return {
+    subject_type: "project",
+    subject_id: input.projectId,
+    instance_id: progress.instance_id,
+    instance_status: progress.instance_status,
+    current_node_key: progress.current_node_key,
+    current_node_title: progress.current_node_title,
+    current_group_key: progress.current_group_key,
+    current_group_label: progress.current_group_label,
+    current_group_order: progress.current_group_order,
+    current_business_kind: progress.current_business_kind,
+    pending_task_count: progress.pending_task_count,
+    actions: [],
+    timeline_nodes: progress.timeline_nodes.map((node) => ({
+      ...node,
+      actions: [],
+    })),
   };
 }
 

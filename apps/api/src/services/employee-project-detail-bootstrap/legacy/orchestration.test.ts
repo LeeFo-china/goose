@@ -4,6 +4,28 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let bundleResolved = false;
 let workflowStartedBeforeBundleResolved = false;
+const loadAccessibleActions = mock(async () => [] as unknown[]);
+const getWorkflowState = mock(async (
+  _authContext: unknown,
+  _params: unknown,
+  options?: { actionsPromise?: Promise<unknown[]> },
+) => {
+  const actions = options?.actionsPromise ? await options.actionsPromise : [];
+  return {
+    workflow_state: {
+      subject_type: "project",
+      subject_id: "project-1",
+      instance_id: "instance-1",
+      instance_status: "running",
+      current_node_key: "procedure_woodwork",
+      current_node_title: "木工",
+      current_business_kind: "procedure_template",
+      pending_task_count: actions.length,
+      actions,
+      timeline_nodes: [],
+    },
+  };
+});
 
 const getEmployeeProjectBootstrapBundle = mock(async () => {
   await sleep(20);
@@ -94,23 +116,89 @@ mock.module("@/services/project-workflow-progress", () => ({
 
 mock.module("@/services/workflow-subjects", () => ({
   workflowSubjectsService: {
-    loadAccessibleActions: mock(async () => []),
-    getState: mock(async () => ({
-      workflow_state: {
-        subject_type: "project",
-        subject_id: "project-1",
-        instance_id: "instance-1",
-        instance_status: "running",
-        current_node_key: "procedure_woodwork",
-        current_node_title: "木工",
-        current_business_kind: "procedure_template",
-        pending_task_count: 1,
-        actions: [],
-        timeline_nodes: [],
-      },
-    })),
+    loadAccessibleActions,
+    getState: getWorkflowState,
   },
 }));
+
+function createBootstrapContext() {
+  const timings = {
+    bootstrap_data_ms: 0,
+    project_ms: 0,
+    permissions_ms: 0,
+    members_ms: 0,
+    workflow_progress_ms: 0,
+    workflow_actions_ms: 0,
+    workflow_state_ms: 0,
+    construction_stages_ms: 0,
+    logs_ms: 0,
+    calendar_ms: 0,
+  };
+  return {
+    createEmptyTimings: () => timings,
+    measure: async (step: keyof typeof timings, target: typeof timings, loader: () => Promise<unknown>) => {
+      const startedAt = Date.now();
+      try {
+        return await loader();
+      } finally {
+        target[step] = Date.now() - startedAt;
+      }
+    },
+    buildPermissionsFromKnownData: mock(async () => ({
+      employee_id: "employee-1",
+      can_read_project: true,
+      can_update_project: true,
+      can_manage_project_team: true,
+      can_create_project_log: true,
+      can_access_project_acceptance: true,
+      can_view_project_referral: false,
+      can_manage_project_referral: false,
+      internal_can_create_acceptance: true,
+      internal_can_manage_acceptance: true,
+      scopes: {
+        project_update: "all",
+        project_log_create: "all",
+        project_acceptance_manage: "all",
+      },
+    })),
+    toPublicPermissions: (permissions: unknown) => permissions,
+    completePermissionsByStages: (permissions: unknown) => permissions,
+    buildLogsFromBundle: mock(() => ({
+      rows: [],
+      pagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
+      commentSummaries: new Map(),
+    })),
+    buildWorkflowBlockingReason: mock(() => null),
+    buildNextAction: mock(() => null),
+    buildProjectLogEntry: mock(() => ({
+      can_create: true,
+      writable_stage: null,
+      blocked_reason: null,
+      next_action: null,
+    })),
+    toPartialError: mock((module: string, error: unknown) => ({
+      module,
+      code: null,
+      message: error instanceof Error ? error.message : "failed",
+    })),
+  };
+}
+
+const bootstrapInput = {
+  authContext: {
+    tenantId: "tenant-1",
+    employeeId: "employee-1",
+    permissions: [{ code: "project.read", scope: "all" }],
+    roleCodes: [],
+  },
+  projectId: "project-1",
+  query: {
+    log_page_size: 5,
+    include_calendar: false,
+    include_referral_summary: false,
+    include_cameras_summary: false,
+  },
+} as never;
 
 describe("employee project detail bootstrap orchestration", () => {
   test("starts workflow progress while bootstrap bundle is still loading", async () => {
@@ -118,85 +206,40 @@ describe("employee project detail bootstrap orchestration", () => {
     workflowStartedBeforeBundleResolved = false;
     getEmployeeProjectBootstrapBundle.mockClear();
     getProjectProgress.mockClear();
+    loadAccessibleActions.mockClear();
+    loadAccessibleActions.mockImplementation(async () => []);
+    getWorkflowState.mockClear();
 
     const { getBootstrap } = await import("./orchestration");
-    const timings = {
-      bootstrap_data_ms: 0,
-      project_ms: 0,
-      permissions_ms: 0,
-      members_ms: 0,
-      workflow_progress_ms: 0,
-      workflow_actions_ms: 0,
-      workflow_state_ms: 0,
-      construction_stages_ms: 0,
-      logs_ms: 0,
-      calendar_ms: 0,
-    };
-    const context = {
-      createEmptyTimings: () => timings,
-      measure: async (step: keyof typeof timings, target: typeof timings, loader: () => Promise<unknown>) => {
-        const startedAt = Date.now();
-        try {
-          return await loader();
-        } finally {
-          target[step] = Date.now() - startedAt;
-        }
-      },
-      buildPermissionsFromKnownData: mock(async () => ({
-        employee_id: "employee-1",
-        can_read_project: true,
-        can_update_project: true,
-        can_manage_project_team: true,
-        can_create_project_log: true,
-        can_access_project_acceptance: true,
-        can_view_project_referral: false,
-        can_manage_project_referral: false,
-        internal_can_create_acceptance: true,
-        internal_can_manage_acceptance: true,
-        scopes: {
-          project_update: "all",
-          project_log_create: "all",
-          project_acceptance_manage: "all",
-        },
-      })),
-      toPublicPermissions: (permissions: unknown) => permissions,
-      completePermissionsByStages: (permissions: unknown) => permissions,
-      buildLogsFromBundle: mock(() => ({
-        rows: [],
-        pagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
-        commentSummaries: new Map(),
-      })),
-      buildWorkflowBlockingReason: mock(() => null),
-      buildNextAction: mock(() => null),
-      buildProjectLogEntry: mock(() => ({
-        can_create: true,
-        writable_stage: null,
-        blocked_reason: null,
-        next_action: null,
-      })),
-      toPartialError: mock(() => ({
-        module: "workflow_progress",
-        code: null,
-        message: "failed",
-      })),
-    };
+    const context = createBootstrapContext();
 
-    await getBootstrap.call(context, {
-      authContext: {
-        tenantId: "tenant-1",
-        employeeId: "employee-1",
-        permissions: [{ code: "project.read", scope: "all" }],
-        roleCodes: [],
-      },
-      projectId: "project-1",
-      query: {
-        log_page_size: 5,
-        include_calendar: false,
-        include_referral_summary: false,
-        include_cameras_summary: false,
-      },
-    } as never);
+    await getBootstrap.call(context, bootstrapInput);
 
     expect(workflowStartedBeforeBundleResolved).toBe(true);
+  });
+
+  test("keeps project detail available when workflow actions fail", async () => {
+    bundleResolved = false;
+    workflowStartedBeforeBundleResolved = false;
+    getEmployeeProjectBootstrapBundle.mockClear();
+    getProjectProgress.mockClear();
+    loadAccessibleActions.mockClear();
+    loadAccessibleActions.mockImplementationOnce(async () => {
+      throw new Error("查询流程待办失败");
+    });
+    getWorkflowState.mockClear();
+
+    const { getBootstrap } = await import("./orchestration");
+    const context = createBootstrapContext();
+
+    const result = await getBootstrap.call(context, bootstrapInput);
+
+    expect(result.project.id).toBe("project-1");
+    expect(result.workflow_state?.actions).toEqual([]);
+    expect(result.partial_errors).toContainEqual({
+      module: "workflow_state",
+      code: null,
+      message: "查询流程待办失败",
+    });
   });
 });

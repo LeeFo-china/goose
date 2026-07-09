@@ -4,6 +4,7 @@ const orCalls: string[] = [];
 const eqCalls: Array<readonly [string, unknown]> = [];
 const selectCalls: string[] = [];
 const updateCalls: unknown[] = [];
+const rpcCalls: Array<{ name: string; params: Record<string, unknown> }> = [];
 let lastOperation: "select" | "update" | null = null;
 let directSql: DirectSqlMock | null = null;
 
@@ -25,6 +26,26 @@ function createDirectSqlMock(rows: unknown[]): DirectSqlMock {
       const fragment = { strings: Array.from(first), values };
       if (fragment.strings.join(" ").includes("FROM public.workflow_tasks")) {
         directSqlQueries.push(fragment);
+        return Promise.resolve(rows);
+      }
+      return fragment;
+    }
+
+    return { strings: ["IN"], values: [first] };
+  }) as DirectSqlMock;
+}
+
+function createFlakyDirectSqlMock(rows: unknown[]): DirectSqlMock {
+  let taskQueryCount = 0;
+  return ((first: TemplateStringsArray | unknown[], ...values: unknown[]) => {
+    if ("raw" in first) {
+      const fragment = { strings: Array.from(first), values };
+      if (fragment.strings.join(" ").includes("FROM public.workflow_tasks")) {
+        directSqlQueries.push(fragment);
+        taskQueryCount += 1;
+        if (taskQueryCount === 1) {
+          return Promise.reject(new Error("temporary direct sql failure"));
+        }
         return Promise.resolve(rows);
       }
       return fragment;
@@ -110,6 +131,16 @@ mock.module("@/utils/supabase", () => ({
   SupabaseDB: {
     getAdminClient: () => ({
       from: () => new WorkflowTasksQuery(),
+      rpc: async (name: string, params: Record<string, unknown>) => {
+        rpcCalls.push({ name, params });
+        return {
+          data: [{
+            ...directWorkflowTaskRow(),
+            total_count: 1,
+          }],
+          error: null,
+        };
+      },
     }),
   },
 }));
@@ -119,11 +150,12 @@ mock.module("@/utils/postgres-direct", () => ({
 }));
 
 describe("workflowTaskRepository", () => {
-  test("matches role and permission assignees as separate or combined constraints", async () => {
+  test("passes role and permission assignees to the accessible tasks RPC", async () => {
     orCalls.length = 0;
     eqCalls.length = 0;
     selectCalls.length = 0;
     updateCalls.length = 0;
+    rpcCalls.length = 0;
     directSqlQueries.length = 0;
     directSql = null;
     lastOperation = null;
@@ -136,20 +168,25 @@ describe("workflowTaskRepository", () => {
       permissionCodes: ["finance.payment.confirm"],
     });
 
-    expect(orCalls[0]).toBe([
-      "assignee_employee_id.eq.employee-1",
-      "and(assignee_employee_id.is.null,assignee_role_code.in.(finance),assignee_permission_code.is.null)",
-      "and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.in.(finance.payment.confirm))",
-      "and(assignee_employee_id.is.null,assignee_role_code.in.(finance),assignee_permission_code.in.(finance.payment.confirm))",
-      "and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.is.null)",
-    ].join(","));
+    expect(orCalls).toHaveLength(0);
+    expect(rpcCalls).toEqual([{
+      name: "list_accessible_workflow_tasks",
+      params: expect.objectContaining({
+        p_tenant_id: "tenant-1",
+        p_employee_id: "employee-1",
+        p_role_codes: ["finance"],
+        p_permission_codes: ["finance.payment.confirm"],
+        p_status: "pending",
+      }),
+    }]);
   });
 
-  test("can restrict accessible tasks to the selected runtime instance", async () => {
+  test("can restrict accessible tasks RPC to the selected runtime instance", async () => {
     orCalls.length = 0;
     eqCalls.length = 0;
     selectCalls.length = 0;
     updateCalls.length = 0;
+    rpcCalls.length = 0;
     directSqlQueries.length = 0;
     directSql = null;
     lastOperation = null;
@@ -163,7 +200,15 @@ describe("workflowTaskRepository", () => {
       instanceId: "instance-current",
     });
 
-    expect(eqCalls).toContainEqual(["instance_id", "instance-current"]);
+    expect(orCalls).toHaveLength(0);
+    expect(rpcCalls).toEqual([{
+      name: "list_accessible_workflow_tasks",
+      params: expect.objectContaining({
+        p_subject_type: "project",
+        p_subject_id: "project-1",
+        p_instance_id: "instance-current",
+      }),
+    }]);
   });
 
   test("selects an id after assigning a pending task so the update request returns", async () => {
@@ -171,6 +216,7 @@ describe("workflowTaskRepository", () => {
     eqCalls.length = 0;
     selectCalls.length = 0;
     updateCalls.length = 0;
+    rpcCalls.length = 0;
     directSqlQueries.length = 0;
     directSql = null;
     lastOperation = null;
@@ -198,6 +244,7 @@ describe("workflowTaskRepository", () => {
     eqCalls.length = 0;
     selectCalls.length = 0;
     updateCalls.length = 0;
+    rpcCalls.length = 0;
     directSqlQueries.length = 0;
     directSql = createDirectSqlMock([directWorkflowTaskRow()]);
     lastOperation = null;
@@ -226,6 +273,7 @@ describe("workflowTaskRepository", () => {
     eqCalls.length = 0;
     selectCalls.length = 0;
     updateCalls.length = 0;
+    rpcCalls.length = 0;
     directSqlQueries.length = 0;
     directSql = createDirectSqlMock([directWorkflowTaskRow()]);
     lastOperation = null;
@@ -246,5 +294,119 @@ describe("workflowTaskRepository", () => {
     expect(directSqlQueries).toHaveLength(1);
     expect(orCalls).toHaveLength(0);
     expect(result[0]?.id).toBe("task-1");
+  });
+
+  test("uses RPC fallback instead of long PostgREST filters when direct SQL is unavailable", async () => {
+    orCalls.length = 0;
+    eqCalls.length = 0;
+    selectCalls.length = 0;
+    updateCalls.length = 0;
+    rpcCalls.length = 0;
+    directSqlQueries.length = 0;
+    directSql = null;
+    lastOperation = null;
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    const result = await workflowTaskRepository.listAccessibleTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      roleCodes: ["system_admin"],
+      permissionCodes: Array.from(
+        { length: 103 },
+        (_, index) => `system.permission_${index}`,
+      ),
+      subjectType: "project",
+      subjectId: "project-1",
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(orCalls).toHaveLength(0);
+    expect(rpcCalls).toEqual([{
+      name: "list_accessible_workflow_tasks",
+      params: expect.objectContaining({
+        p_tenant_id: "tenant-1",
+        p_employee_id: "employee-1",
+        p_role_codes: ["system_admin"],
+        p_subject_type: "project",
+        p_subject_id: "project-1",
+        p_page: 1,
+        p_page_size: 20,
+      }),
+    }]);
+    expect(result.list[0]?.id).toBe("task-1");
+    expect(result.pagination.total).toBe(1);
+  });
+
+  test("uses RPC fallback for project workflow summaries when direct SQL is unavailable", async () => {
+    orCalls.length = 0;
+    eqCalls.length = 0;
+    selectCalls.length = 0;
+    updateCalls.length = 0;
+    rpcCalls.length = 0;
+    directSqlQueries.length = 0;
+    directSql = null;
+    lastOperation = null;
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    const result = await workflowTaskRepository.listAccessiblePendingByProjectIds({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      roleCodes: ["system_admin"],
+      permissionCodes: Array.from(
+        { length: 103 },
+        (_, index) => `system.permission_${index}`,
+      ),
+      projectIds: ["project-1"],
+      limit: 100,
+    });
+
+    expect(orCalls).toHaveLength(0);
+    expect(rpcCalls).toEqual([{
+      name: "list_accessible_project_workflow_tasks",
+      params: expect.objectContaining({
+        p_tenant_id: "tenant-1",
+        p_employee_id: "employee-1",
+        p_role_codes: ["system_admin"],
+        p_project_ids: ["project-1"],
+        p_limit: 100,
+      }),
+    }]);
+    expect(result[0]?.id).toBe("task-1");
+  });
+
+  test("does not permanently disable direct SQL after a transient failure", async () => {
+    orCalls.length = 0;
+    eqCalls.length = 0;
+    selectCalls.length = 0;
+    updateCalls.length = 0;
+    rpcCalls.length = 0;
+    directSqlQueries.length = 0;
+    directSql = createFlakyDirectSqlMock([directWorkflowTaskRow()]);
+    lastOperation = null;
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    const fallbackResult = await workflowTaskRepository.listAccessibleTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      roleCodes: ["finance"],
+      permissionCodes: ["finance.payment.confirm"],
+      page: 1,
+      pageSize: 20,
+    });
+    const recoveredResult = await workflowTaskRepository.listAccessibleTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      roleCodes: ["finance"],
+      permissionCodes: ["finance.payment.confirm"],
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(orCalls).toHaveLength(0);
+    expect(rpcCalls).toHaveLength(1);
+    expect(directSqlQueries).toHaveLength(2);
+    expect(fallbackResult.list[0]?.id).toBe("task-1");
+    expect(recoveredResult.list[0]?.id).toBe("task-1");
   });
 });
