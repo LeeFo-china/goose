@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import { Loader2, Workflow } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  workflowAttributeLabel,
+  workflowAttributeValue,
+  workflowInstanceStatusLabel,
+  workflowNodeStatusLabel,
+  workflowNodeTitle,
+} from "@/components/workflows/workflow-display-labels";
 import { requestBackendJson } from "@/lib/backend-client";
 
 type WorkflowSubjectType = "customer" | "project" | "expense_request" | "procedure";
@@ -99,22 +106,17 @@ export type WorkflowSubjectTimelineResponse = {
   };
 };
 
-function statusLabel(status: string | null) {
-  const labels: Record<string, string> = {
-    running: "运行中",
-    completed: "已完成",
-    canceled: "已取消",
-    failed: "异常",
-  };
-  return status ? labels[status] || status : "未启动";
-}
-
 function timelineNodeTitle(node: WorkflowSubjectTimelineNode) {
-  return node.display?.label || node.node_title || node.title || node.node_key || "-";
+  return workflowNodeTitle({
+    displayLabel: node.display?.label,
+    nodeKey: node.node_key,
+    nodeTitle: node.node_title,
+    title: node.title,
+  });
 }
 
 function timelineNodeStatusLabel(node: WorkflowSubjectTimelineNode) {
-  return node.display?.status_label || node.status || "待处理";
+  return workflowNodeStatusLabel(node.status, node.display?.status_label);
 }
 
 function timelineNodeStatusVariant(node: WorkflowSubjectTimelineNode) {
@@ -126,22 +128,13 @@ function timelineNodeStatusVariant(node: WorkflowSubjectTimelineNode) {
   return "outline" as const;
 }
 
-function formatAttributeValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "";
-  if (typeof value === "boolean") return value ? "是" : "否";
-  if (Array.isArray(value)) {
-    return value
-      .map(formatAttributeValue)
-      .filter(Boolean)
-      .join("、");
-  }
-  if (typeof value === "object") return "";
-  return String(value);
-}
-
 function timelineNodeAttributes(node: WorkflowSubjectTimelineNode) {
   return Object.entries(node.attributes || {})
-    .map(([key, value]) => ({ key, value: formatAttributeValue(value) }))
+    .map(([key, value], index) => ({
+      key,
+      label: workflowAttributeLabel(key, index),
+      value: workflowAttributeValue(value),
+    }))
     .filter((item) => item.value);
 }
 
@@ -190,7 +183,7 @@ export function WorkflowSubjectStatePanel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <Workflow className="size-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Workflow 状态</span>
+          <span className="text-sm font-semibold">流程状态</span>
         </div>
         {loading ? (
           <Badge variant="secondary">
@@ -199,14 +192,18 @@ export function WorkflowSubjectStatePanel({
           </Badge>
         ) : (
           <Badge variant={state?.instance_status === "failed" ? "danger" : "outline"}>
-            {statusLabel(state?.instance_status ?? null)}
+            {workflowInstanceStatusLabel(state?.instance_status ?? null)}
           </Badge>
         )}
       </div>
       <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
         <div>
           <span className="text-foreground">当前节点：</span>
-          {state?.current_node_title || state?.current_node_key || "-"}
+          {workflowNodeTitle({
+            fallback: "-",
+            nodeKey: state?.current_node_key,
+            nodeTitle: state?.current_node_title,
+          })}
         </div>
         <div>
           <span className="text-foreground">待办：</span>
@@ -231,9 +228,6 @@ export function WorkflowSubjectStatePanel({
                     <div className="truncate text-sm font-medium">
                       {index + 1}. {timelineNodeTitle(node)}
                     </div>
-                    <div className="mt-0.5 break-all text-xs text-muted-foreground">
-                      {node.node_key}
-                    </div>
                   </div>
                   <Badge variant={timelineNodeStatusVariant(node)}>
                     {timelineNodeStatusLabel(node)}
@@ -243,7 +237,7 @@ export function WorkflowSubjectStatePanel({
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {attributes.map((item) => (
                       <Badge key={item.key} variant="outline">
-                        {item.key}: {item.value}
+                        {item.label}: {item.value}
                       </Badge>
                     ))}
                   </div>
@@ -254,7 +248,7 @@ export function WorkflowSubjectStatePanel({
         </div>
       ) : (
         <div className="mt-3 rounded-md border bg-background p-3 text-xs text-muted-foreground">
-          后端未返回完整 workflow 节点序列，仅展示当前节点摘要。
+          后端未返回完整流程节点序列，仅展示当前节点摘要。
         </div>
       )}
     </section>
