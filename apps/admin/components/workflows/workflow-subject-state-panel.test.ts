@@ -13,5 +13,10 @@ describe("WorkflowSubjectStatePanel timeline contract", () => {
     expect(source).toContain("attributes");
     expect(source).toContain("actions?");
     expect(source).toContain("display?.label");
+    expect(source).toContain("workflowNodeTitle");
+    expect(source).toContain("workflowNodeStatusLabel");
+    expect(source).not.toContain("Workflow 状态");
+    expect(source).not.toContain("workflow 节点");
+    expect(source).not.toContain("node.node_key}</div>");
   });
 });

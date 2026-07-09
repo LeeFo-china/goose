@@ -16,6 +16,14 @@ import type { CustomerRecord, CustomerStatusActionItem } from "@/components/cust
 import { customerStatusBadgeVariant, customerStatusLabel, formatDateTime, formatPropertySummary, getPrimaryCustomerProperty, requestCustomer } from "@/components/customers/customer-mutation-shared";
 import { DesignProjectBeforeStatusDialog } from "@/components/customers/design-project-before-status-dialog";
 import {
+  workflowActionDisplayLabel,
+  workflowActionLabel,
+  workflowInstanceStatusLabel,
+  workflowNodeTitle,
+  workflowSubjectTypeLabel,
+  workflowTransitionNodeLabel,
+} from "@/components/workflows/workflow-display-labels";
+import {
   WorkflowSubjectStatePanel,
   type WorkflowSubjectAction,
   type WorkflowSubjectState,
@@ -31,16 +39,6 @@ type CustomerPanelActionItem = CustomerStatusActionItem & {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function workflowInstanceStatusLabel(status: string | null | undefined) {
-  const labels: Record<string, string> = {
-    running: "运行中",
-    completed: "已完成",
-    canceled: "已取消",
-    failed: "异常",
-  };
-  return status ? labels[status] || status : "未启动";
 }
 
 function getWorkflowLogReason(item: WorkflowSubjectTimelineItem) {
@@ -114,7 +112,7 @@ export function CustomerStatusPanel({
       return;
     }
 
-    throw new Error("缺少可执行的 workflow 待办");
+    throw new Error("缺少可执行的流程待办");
   }
 
   function submitAction() {
@@ -140,9 +138,21 @@ export function CustomerStatusPanel({
   const primaryProperty = getPrimaryCustomerProperty(customer);
   const propertyName = formatPropertySummary(primaryProperty) ||
     [customer.community, customer.building_info].filter(Boolean).join(" ");
-  const workflowNodeLabel = workflowState?.current_node_title ||
-    workflowState?.current_node_key ||
-    null;
+  const workflowNodeLabel = workflowNodeTitle({
+    nodeKey: workflowState?.current_node_key,
+    nodeTitle: workflowState?.current_node_title,
+  });
+  const workflowNodeLabelMap = new Map(
+    (workflowState?.timeline_nodes || []).map((node) => [
+      node.node_key,
+      workflowNodeTitle({
+        displayLabel: node.display?.label,
+        nodeKey: node.node_key,
+        nodeTitle: node.node_title,
+        title: node.title,
+      }),
+    ]),
+  );
 
   return (
     <section className="rounded-md border bg-muted/20 p-4">
@@ -204,7 +214,7 @@ export function CustomerStatusPanel({
           <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
             <div>
               <span className="text-foreground">对象：</span>
-              {workflowState.subject_type}
+              {workflowSubjectTypeLabel(workflowState.subject_type)}
             </div>
             <div>
               <span className="text-foreground">当前节点：</span>
@@ -217,7 +227,7 @@ export function CustomerStatusPanel({
           </div>
         ) : (
           <p className="mt-2 text-xs text-muted-foreground">
-            暂无流程运行时投影，等待 workflow subject state 同步。
+            暂无流程运行时投影，等待流程状态同步。
           </p>
         )}
       </div>
@@ -249,13 +259,13 @@ export function CustomerStatusPanel({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                     <Badge variant="outline">
-                      {item.source_node_key || "开始"}
+                      {workflowTransitionNodeLabel(item.source_node_key, workflowNodeLabelMap, "开始")}
                     </Badge>
                     <ArrowRight />
                     <Badge variant="outline">
-                      {item.target_node_key || "结束"}
+                      {workflowTransitionNodeLabel(item.target_node_key, workflowNodeLabelMap, "结束")}
                     </Badge>
-                    <span>{item.action || "complete"}</span>
+                    <span>{workflowActionLabel(item.action)}</span>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {formatDateTime(item.created_at)}
@@ -354,7 +364,7 @@ function mapCustomerWorkflowAction(
 
   return {
     action: action.business_action,
-    label: action.label,
+    label: workflowActionDisplayLabel(action.label, action.business_action),
     from_status: transition.fromStatus,
     to_status: transition.toStatus,
     requires_reason: action.requires_reason,
