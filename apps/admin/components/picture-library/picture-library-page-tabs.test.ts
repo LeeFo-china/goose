@@ -22,4 +22,13 @@ describe("Picture library page tabs", () => {
     expect(page).not.toContain("aria-pressed");
     expect(page).not.toContain("<button");
   });
+
+  test("gives every direct TabsContent child a stable key", () => {
+    const page = readPictureLibraryPage();
+
+    expect(page).toContain('<TabsContent key="assets"');
+    expect(page).toContain('<TabsContent key="categories"');
+    expect(page).toContain('<TabsContent key="comments"');
+    expect(page).toContain('<TabsContent key="health"');
+  });
 });
