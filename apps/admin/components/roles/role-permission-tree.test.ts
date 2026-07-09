@@ -43,18 +43,47 @@ const permissions: PermissionRecord[] = [
     action: "confirm",
     description: null,
   },
+  {
+    id: "project-acceptance-read",
+    code: "project_acceptance.read",
+    name: "查看项目验收",
+    module: "project_acceptance",
+    resource: "project_acceptance",
+    action: "read",
+    description: null,
+  },
+  {
+    id: "project-log-create",
+    code: "project_log.create",
+    name: "新建施工日志",
+    module: "project_log",
+    resource: "project_log",
+    action: "create",
+    description: null,
+  },
+  {
+    id: "wechat-pay-config-read",
+    code: "wechat_pay.config.read",
+    name: "查看微信支付配置",
+    module: "wechat_pay",
+    resource: "settings",
+    action: "read",
+    description: null,
+  },
 ];
 
 describe("role permission tree", () => {
-  test("groups permissions by module and resource with selection counts", () => {
+  test("groups permissions by tenant-facing business category and resource", () => {
     const selected: Record<string, AccessScope> = {
       "customer-read": "self",
       "customer-phone-copy": "all",
+      "project-acceptance-read": "department",
+      "wechat-pay-config-read": "all",
     };
 
     const tree = buildPermissionTree(permissions, selected);
 
-    expect(tree).toHaveLength(2);
+    expect(tree).toHaveLength(3);
     expect(tree[0].key).toBe("customer");
     expect(tree[0].label).toBe("客户管理");
     expect(tree[0].selected).toBe(2);
@@ -66,7 +95,16 @@ describe("role permission tree", () => {
     expect(tree[0].resources[0].label).toBe("客户");
     expect(tree[0].resources[0].selected).toBe(1);
     expect(tree[0].resources[0].total).toBe(2);
-    expect(tree[1].label).toBe("财务管理");
+    expect(tree[1].key).toBe("project_delivery");
+    expect(tree[1].label).toBe("项目履约");
+    expect(tree[1].resources.map((resource) => resource.label)).toEqual([
+      "项目验收",
+      "施工日志",
+    ]);
+    expect(tree[2].key).toBe("finance");
+    expect(tree[2].label).toBe("费用与财务");
+    expect(tree[2].selected).toBe(1);
+    expect(tree[2].total).toBe(2);
   });
 
   test("returns checkbox states for full, partial and empty groups", () => {

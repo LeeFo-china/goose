@@ -18,7 +18,7 @@ import {
   type RoleRecord,
 } from "@/components/roles/role-mutation-shared";
 import {
-  getModuleLabel,
+  getPermissionGroup,
   getPermissionSearchText,
   permissionFilterOptions,
   type PermissionFilter,
@@ -77,7 +77,7 @@ export function RolePermissionsEditor({
   const [initialSelected, setInitialSelected] = useState<Record<string, AccessScope>>({});
   const [keyword, setKeyword] = useState("");
   const [permissionFilter, setPermissionFilter] = useState<PermissionFilter>("all");
-  const [activeModule, setActiveModule] = useState("all");
+  const [activeCategory, setActiveCategory] = useState("all");
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [expandedResources, setExpandedResources] = useState<Record<string, boolean>>({});
 
@@ -105,7 +105,7 @@ export function RolePermissionsEditor({
         setInitialSelected(nextSelected);
         setKeyword("");
         setPermissionFilter("all");
-        setActiveModule("all");
+        setActiveCategory("all");
         setExpandedModules({});
         setExpandedResources({});
       })
@@ -208,35 +208,47 @@ export function RolePermissionsEditor({
 
   const selectedCount = Object.keys(selected).length;
   const normalizedKeyword = keyword.trim().toLowerCase();
-  const moduleSummaries = useMemo(() => {
+  const categorySummaries = useMemo(() => {
     const map = new Map<string, {
-      module: string;
+      key: string;
+      label: string;
+      order: number;
       total: number;
       selected: number;
     }>();
     for (const permission of permissions) {
-      const module = permission.module || "未分组";
-      const summary = map.get(module) || { module, total: 0, selected: 0 };
+      const group = getPermissionGroup(permission);
+      const summary = map.get(group.key) || {
+        key: group.key,
+        label: group.label,
+        order: group.order,
+        total: 0,
+        selected: 0,
+      };
       summary.total += 1;
       if (selected[permission.id]) summary.selected += 1;
-      map.set(module, summary);
+      map.set(group.key, summary);
     }
 
-    return Array.from(map.values());
+    return Array.from(map.values()).sort((first, second) => {
+      const orderDiff = first.order - second.order;
+
+      return orderDiff || first.label.localeCompare(second.label, "zh-Hans-CN");
+    });
   }, [permissions, selected]);
   const visiblePermissions = useMemo(
     () =>
       permissions.filter((permission) => {
         const isSelected = Boolean(selected[permission.id]);
-        const moduleKey = permission.module || "未分组";
-        if (activeModule !== "all" && moduleKey !== activeModule) return false;
+        const categoryKey = getPermissionGroup(permission).key;
+        if (activeCategory !== "all" && categoryKey !== activeCategory) return false;
         if (permissionFilter === "selected" && !isSelected) return false;
         if (permissionFilter === "unselected" && isSelected) return false;
         if (!normalizedKeyword) return true;
 
         return getPermissionSearchText(permission).includes(normalizedKeyword);
       }),
-    [activeModule, normalizedKeyword, permissionFilter, permissions, selected],
+    [activeCategory, normalizedKeyword, permissionFilter, permissions, selected],
   );
   const visibleSelectedCount = visiblePermissions.filter((item) => selected[item.id]).length;
   const permissionTree = useMemo(
@@ -293,7 +305,7 @@ export function RolePermissionsEditor({
                   value={keyword}
                   disabled={pending || loading}
                   className="h-9 pr-9 pl-9"
-                  placeholder="搜索权限名称、模块、资源或编码"
+                  placeholder="搜索权限名称、分类、资源或编码"
                   onChange={(event) => setKeyword(event.target.value)}
                 />
                 {keyword ? (
@@ -372,28 +384,28 @@ export function RolePermissionsEditor({
             <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
               <Button
                 type="button"
-                variant={activeModule === "all" ? "secondary" : "outline"}
+                variant={activeCategory === "all" ? "secondary" : "outline"}
                 size="sm"
                 className="h-8 shrink-0"
                 disabled={pending || loading}
-                onClick={() => setActiveModule("all")}
+                onClick={() => setActiveCategory("all")}
               >
-                全部模块
+                全部分类
                 <span className="text-muted-foreground">
                   {selectedCount}/{permissions.length}
                 </span>
               </Button>
-              {moduleSummaries.map((summary) => (
+              {categorySummaries.map((summary) => (
                 <Button
-                  key={summary.module}
+                  key={summary.key}
                   type="button"
-                  variant={activeModule === summary.module ? "secondary" : "outline"}
+                  variant={activeCategory === summary.key ? "secondary" : "outline"}
                   size="sm"
                   className="h-8 shrink-0"
                   disabled={pending || loading}
-                  onClick={() => setActiveModule(summary.module)}
+                  onClick={() => setActiveCategory(summary.key)}
                 >
-                  {getModuleLabel(summary.module)}
+                  {summary.label}
                   <span className="text-muted-foreground">
                     {summary.selected}/{summary.total}
                   </span>

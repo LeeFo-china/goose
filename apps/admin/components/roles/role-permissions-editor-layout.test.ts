@@ -16,7 +16,7 @@ function readTreeViewSource() {
 }
 
 describe("role permissions editor layout", () => {
-  test("renders permissions as a module-resource tree instead of a flat module list", () => {
+  test("renders permissions as business categories instead of technical module tabs", () => {
     const editor = readEditorSource();
     const treeView = readTreeViewSource();
 
@@ -28,6 +28,11 @@ describe("role permissions editor layout", () => {
     expect(editor).toContain("收起全部");
     expect(editor).toContain("撤销变更");
     expect(editor).toContain("本次变更");
+    expect(editor).toContain("getPermissionGroup");
+    expect(editor).toContain("全部分类");
+    expect(editor).not.toContain("全部模块");
+    expect(editor).not.toContain("const module = permission.module ||");
+    expect(editor).not.toContain("const moduleKey = permission.module ||");
     expect(editor).not.toContain("groupedPermissions = visiblePermissions.reduce");
     expect(editor).not.toContain("全选本组");
     expect(editor).not.toContain("pageSize=200");

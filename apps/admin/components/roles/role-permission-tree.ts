@@ -1,6 +1,6 @@
 import type { AccessScope, PermissionRecord } from "./role-mutation-shared";
 import {
-  getModuleLabel,
+  getPermissionGroup,
   getPermissionResourceLabel,
 } from "./role-permission-display";
 
@@ -36,9 +36,11 @@ export function buildPermissionTree(
   selected: Record<string, AccessScope>,
 ): PermissionModuleGroup[] {
   const moduleMap = new Map<string, PermissionModuleGroup>();
+  const moduleOrderMap = new Map<string, number>();
 
   for (const permission of permissions) {
-    const module = permission.module || "未分组";
+    const permissionGroup = getPermissionGroup(permission);
+    const module = permissionGroup.key;
     const resource = permission.resource || "未分组";
     const resourceKey = `${module}::${resource}`;
     let moduleGroup = moduleMap.get(module);
@@ -47,12 +49,13 @@ export function buildPermissionTree(
       moduleGroup = {
         key: module,
         module,
-        label: getModuleLabel(module),
+        label: permissionGroup.label,
         resources: [],
         total: 0,
         selected: 0,
       };
       moduleMap.set(module, moduleGroup);
+      moduleOrderMap.set(module, permissionGroup.order);
     }
 
     let resourceGroup = moduleGroup.resources.find((item) => item.key === resourceKey);
@@ -78,7 +81,12 @@ export function buildPermissionTree(
     }
   }
 
-  return Array.from(moduleMap.values());
+  return Array.from(moduleMap.values()).sort((first, second) => {
+    const orderDiff = (moduleOrderMap.get(first.key) ?? 900)
+      - (moduleOrderMap.get(second.key) ?? 900);
+
+    return orderDiff || first.label.localeCompare(second.label, "zh-Hans-CN");
+  });
 }
 
 export function getPermissionGroupCheckState(
