@@ -400,16 +400,16 @@ export default async function PlatformPictureLibraryPage({
           tableViewportTestId="platform-picture-library-list-table-viewport"
           unit={activeUnit}
         >
-          <TabsContent value="assets" className="m-0 data-[state=inactive]:hidden">
+          <TabsContent key="assets" value="assets" className="m-0 data-[state=inactive]:hidden">
             <PictureAssetsTable assets={assets.list} categories={categories} />
           </TabsContent>
-          <TabsContent value="categories" className="m-0 data-[state=inactive]:hidden">
+          <TabsContent key="categories" value="categories" className="m-0 data-[state=inactive]:hidden">
             <PictureCategoryTable categories={categories} assets={assets.list} />
           </TabsContent>
-          <TabsContent value="comments" className="m-0 data-[state=inactive]:hidden">
+          <TabsContent key="comments" value="comments" className="m-0 data-[state=inactive]:hidden">
             <PictureCommentsTable comments={comments.list} />
           </TabsContent>
-          <TabsContent value="health" className="m-0 data-[state=inactive]:hidden">
+          <TabsContent key="health" value="health" className="m-0 data-[state=inactive]:hidden">
             <PictureLibraryHealthCard health={health} />
           </TabsContent>
         </PlatformListPageShell>
