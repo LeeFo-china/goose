@@ -1,15 +1,92 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Loader2, MessageSquareText, Share2, Tags } from "lucide-react";
+import {
+  CalendarClock,
+  Loader2,
+  MessageSquareText,
+  Share2,
+  Tags,
+  UserRound,
+} from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { CustomerFollowUpRecord, CustomerRecord, CustomerSourceRecord } from "@/components/customers/customer-mutation-types";
-import { formatDate, formatDateTime, getSourceBadges, ownerName, requestCustomer, sourceActorName, sourceOptions, SourceTags } from "@/components/customers/customer-mutation-shared";
+import {
+  customerDedupeResultLabel,
+  customerFollowUpStateMeta,
+  customerOriginLabel,
+  customerSourceDisplayLabel,
+  customerSourceLabel,
+  customerStatusMeta,
+} from "@/components/customers/customer-detail-display";
+import type {
+  CustomerFollowUpRecord,
+  CustomerRecord,
+  CustomerSourceRecord,
+  PropertySummary,
+} from "@/components/customers/customer-mutation-types";
+import {
+  formatDateTime,
+  getSourceBadges,
+  ownerName,
+  requestCustomer,
+  sourceActorName,
+  SourceTags,
+} from "@/components/customers/customer-mutation-shared";
 import { CustomerStatusPanel } from "@/components/customers/customer-status-panel";
 import { PropertyLocationStatus } from "@/components/properties/property-location-status";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+function primaryProperty(customer: CustomerRecord): PropertySummary | null {
+  return customer.properties?.find((property) => property.is_primary)
+    || customer.properties?.[0]
+    || null;
+}
+
+function propertyText(customer: CustomerRecord) {
+  const property = primaryProperty(customer);
+  return [
+    property?.community || customer.community,
+    property?.building_info || customer.building_info,
+  ].filter(Boolean).join("，") || "-";
+}
+
+function InfoItem({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: ReactNode;
+  description?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-md border bg-background p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="min-w-0 break-words text-sm font-medium">{value || "-"}</div>
+      {description ? (
+        <div className="min-w-0 break-words text-xs text-muted-foreground">
+          {description}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function CustomerDetailDialog({
   customer: initialCustomer,
@@ -31,6 +108,9 @@ export function CustomerDetailDialog({
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [followUpsError, setFollowUpsError] = useState("");
   const [sourcesError, setSourcesError] = useState("");
+  const statusMeta = customerStatusMeta(customer.status);
+  const followUpMeta = customerFollowUpStateMeta(customer.follow_up_state);
+  const latestSource = customer.latest_source || customer.source_summary?.latest_source || null;
 
   useEffect(() => {
     setCustomer(initialCustomer);
@@ -95,31 +175,72 @@ export function CustomerDetailDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[88vh] max-w-[820px] overflow-hidden p-0">
+      <DialogContent className="max-h-[88vh] max-w-[860px] overflow-hidden p-0">
         <DialogHeader className="border-b p-5 text-left">
           <div>
-            <DialogTitle>{customer.name || "未命名客户"}</DialogTitle>
-            <DialogDescription>{customer.id}</DialogDescription>
+            <DialogTitle>客户详情</DialogTitle>
+            <DialogDescription className="break-all">
+              客户编号：{customer.id}
+            </DialogDescription>
           </div>
         </DialogHeader>
         <div className="flex max-h-[calc(88vh-82px)] flex-col gap-5 overflow-y-auto p-5">
-          <div className="grid gap-3 md:grid-cols-4">
-            <InfoItem label="手机号" value={customer.phone || customer.phone_masked || "-"} />
-            <InfoItem label="负责人" value={ownerName(customer.owner)} />
-            <InfoItem label="来源" value={sourceOptions.find(([value]) => value === customer.source)?.[1] || customer.source || "-"} />
-            <InfoItem label="创建时间" value={formatDate(customer.created_at)} />
-            <InfoItem label="最近跟进" value={formatDateTime(customer.last_follow_at)} />
-            <InfoItem label="下次跟进" value={formatDateTime(customer.next_follow_at)} />
-            <InfoItem label="主小区" value={customer.community || "-"} />
-            <InfoItem label="楼栋门牌" value={customer.building_info || "-"} />
-            <InfoItem label="面积" value={customer.area != null ? `${customer.area}㎡` : "-"} />
-            <InfoItem label="户型" value={customer.layout || "-"} />
-          </div>
+          <Card className="shadow-none">
+            <CardHeader className="border-b bg-muted/20">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                <div>
+                  <CardTitle>客户摘要</CardTitle>
+                  <CardDescription>
+                    查看客户身份、负责人、来源和跟进安排。
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                  <Badge variant={followUpMeta.variant}>{followUpMeta.label}</Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 p-5">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                  <UserRound className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="break-words text-lg font-semibold">
+                    {customer.name || "未命名客户"}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span>手机号：{customer.phone || customer.phone_masked || "-"}</span>
+                    <span>负责人：{ownerName(customer.owner)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <InfoItem
+                  label="客户来源"
+                  value={customerSourceLabel(customer.source)}
+                />
+                <InfoItem
+                  label="创建渠道"
+                  value={customerOriginLabel(customer.customer_origin)}
+                />
+                <InfoItem
+                  label="主房产"
+                  value={propertyText(customer)}
+                />
+                <InfoItem
+                  label="下次跟进"
+                  value={formatDateTime(customer.next_follow_at)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           <CustomerStatusPanel
             customer={customer}
             onChanged={refreshCustomer}
           />
-          {customer.latest_source || getSourceBadges(customer).length > 0 ? (
+          {latestSource || getSourceBadges(customer).length > 0 ? (
             <section className="rounded-md border bg-muted/20 p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-sm font-semibold">
@@ -131,11 +252,13 @@ export function CustomerDetailDialog({
               <div className="grid gap-3 md:grid-cols-3">
                 <InfoItem
                   label="最近来源"
-                  value={customer.latest_source?.display_label || customer.source_summary?.latest_source?.display_label || "-"}
+                  value={latestSource
+                    ? customerSourceDisplayLabel(latestSource)
+                    : customerSourceLabel(customer.source)}
                 />
                 <InfoItem
                   label="来源时间"
-                  value={formatDateTime(customer.latest_source?.created_at || customer.source_summary?.latest_source?.created_at)}
+                  value={formatDateTime(latestSource?.created_at)}
                 />
                 <InfoItem
                   label="来源总数"
@@ -151,8 +274,8 @@ export function CustomerDetailDialog({
             </div>
             {sourcesError ? <StatusAlert>{sourcesError}</StatusAlert> : null}
             {sourcesLoading ? (
-              <div className="flex h-24 items-center justify-center rounded-md border text-sm text-muted-foreground">
-                <Loader2 className="mr-2 animate-spin" />
+              <div className="flex h-24 items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground">
+                <Loader2 className="animate-spin" />
                 正在加载来源记录
               </div>
             ) : sources.length > 0 ? (
@@ -163,7 +286,7 @@ export function CustomerDetailDialog({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <Share2 />
-                        {item.display_label || item.source}
+                        {customerSourceDisplayLabel(item)}
                       </div>
                       <span className="text-xs text-muted-foreground">
                         {formatDateTime(item.created_at)}
@@ -176,7 +299,7 @@ export function CustomerDetailDialog({
                     </div>
                     <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
                       <div>操作人：{sourceActorName(item)}</div>
-                      <div>去重：{item.dedupe_result || "-"}</div>
+                      <div>去重：{customerDedupeResultLabel(item.dedupe_result)}</div>
                       <div>平台线索：{item.platform_lead?.name || item.platform_lead?.phone || "-"}</div>
                     </div>
                   </div>
@@ -195,8 +318,8 @@ export function CustomerDetailDialog({
             </div>
             {followUpsError ? <StatusAlert>{followUpsError}</StatusAlert> : null}
             {followUpsLoading ? (
-              <div className="flex h-28 items-center justify-center rounded-md border text-sm text-muted-foreground">
-                <Loader2 className="mr-2 size-4 animate-spin" />
+              <div className="flex h-28 items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground">
+                <Loader2 className="animate-spin" />
                 正在加载跟进记录
               </div>
             ) : followUps.length > 0 ? (
@@ -250,7 +373,7 @@ export function CustomerDetailDialog({
                   <div className="mt-1 text-sm text-muted-foreground">
                     {[property.building_info, property.layout, property.area != null ? `${property.area}㎡` : null]
                       .filter(Boolean)
-                      .join(" · ") || "-"}
+                      .join("，") || "-"}
                   </div>
                   <PropertyLocationStatus
                     property={property}
@@ -269,7 +392,7 @@ export function CustomerDetailDialog({
             <section>
               <h3 className="mb-3 text-sm font-semibold">抖音截图</h3>
               <div className="flex flex-col gap-2">
-                {customer.douyin_screenshot_images.map((image) => (
+                {customer.douyin_screenshot_images.map((image, index) => (
                   <a
                     key={image}
                     href={image}
@@ -277,7 +400,7 @@ export function CustomerDetailDialog({
                     rel="noreferrer"
                     className="block truncate rounded-md border p-3 text-sm text-primary"
                   >
-                    {image}
+                    查看截图 {index + 1}
                   </a>
                 ))}
               </div>
@@ -286,14 +409,5 @@ export function CustomerDetailDialog({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function InfoItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border bg-background p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-sm font-medium">{value}</div>
-    </div>
   );
 }
