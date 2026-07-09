@@ -4,12 +4,14 @@ import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState, useTran
 import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { buildPictureAssetCreatePayload } from "@/components/picture-library/picture-asset-dialog-utils";
 import { requestPictureLibraryJson } from "@/components/picture-library/picture-library-requests";
 import type {
   PictureAssetRecord,
   PictureCategoryRecord,
 } from "@/components/picture-library/picture-library-types";
 import { getAssetPreviewUrl } from "@/components/picture-library/picture-library-utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,9 +38,11 @@ import {
   validateUploadFile,
 } from "@/lib/cos-direct-upload";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
+import { cn } from "@/lib/utils";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_PREVIEW_TILE_COUNT = 4;
 
 export type PictureAssetDialogMode = "create" | "edit";
 
@@ -68,9 +72,13 @@ export function PictureAssetDialog({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [progressText, setProgressText] = useState("");
+  const busy = pending || submitting;
+  const selectedFileCount = files.length;
   const selectedCategoryIds = useMemo(
     () => new Set((asset?.categories || []).map((item) => item.id)),
     [asset],
@@ -79,50 +87,65 @@ export function PictureAssetDialog({
   useEffect(() => {
     if (!open) return;
     setError("");
-    setFile(null);
-    setPreviewUrl(asset ? getAssetPreviewUrl(asset) : "");
+    setFiles([]);
+    setProgressText("");
   }, [asset, open]);
 
   useEffect(() => {
-    if (!file) return undefined;
-    const nextPreviewUrl = URL.createObjectURL(file);
-    setPreviewUrl(nextPreviewUrl);
-    return () => URL.revokeObjectURL(nextPreviewUrl);
-  }, [file]);
+    if (files.length === 0) {
+      setPreviewUrls(asset ? [getAssetPreviewUrl(asset)].filter(Boolean) : []);
+      return undefined;
+    }
+
+    const previewLimit = files.length > MAX_PREVIEW_TILE_COUNT
+      ? MAX_PREVIEW_TILE_COUNT - 1
+      : MAX_PREVIEW_TILE_COUNT;
+    const nextPreviewUrls = files.slice(0, previewLimit).map((item) => URL.createObjectURL(item));
+    setPreviewUrls(nextPreviewUrls);
+    return () => {
+      nextPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [asset, files]);
 
   function close() {
-    if (pending) return;
+    if (busy) return;
     setError("");
     onOpenChange(false);
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const selectedFile = event.target.files?.[0] ?? null;
-    if (!selectedFile) {
-      setFile(null);
-      setPreviewUrl(asset ? getAssetPreviewUrl(asset) : "");
+    const selectedFiles = Array.from(event.target.files ?? []);
+    if (selectedFiles.length === 0) {
+      setFiles([]);
       return;
     }
 
     try {
-      validateUploadFile(selectedFile, {
-        allowedTypes: ALLOWED_IMAGE_TYPES,
-        maxSizeBytes: MAX_IMAGE_SIZE_BYTES,
-        typeMessage: "仅支持 jpg、png、webp 图片",
-        sizeMessage: "单张图片不能超过 5MB",
+      selectedFiles.forEach((selectedFile) => {
+        validateUploadFile(selectedFile, {
+          allowedTypes: ALLOWED_IMAGE_TYPES,
+          maxSizeBytes: MAX_IMAGE_SIZE_BYTES,
+          typeMessage: "仅支持 jpg、png、webp 图片",
+          sizeMessage: "单张图片不能超过 5MB",
+        });
       });
       setError("");
-      setFile(selectedFile);
+      setFiles(selectedFiles);
     } catch (err) {
       event.target.value = "";
-      setFile(null);
-      setError(err instanceof Error ? err.message : "图片文件不符合要求");
+      setFiles([]);
+      const message = err instanceof Error ? err.message : "图片文件不符合要求";
+      const invalidFile = selectedFiles.find((item) =>
+        item.size > MAX_IMAGE_SIZE_BYTES || !ALLOWED_IMAGE_TYPES.has(item.type)
+      );
+      setError(`${invalidFile?.name || "图片文件"}：${message}`);
     }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (mode === "create" && !file) {
+    const filesToUpload = files;
+    if (mode === "create" && filesToUpload.length === 0) {
       setError("请选择要上传的图片");
       return;
     }
@@ -137,30 +160,73 @@ export function PictureAssetDialog({
     };
 
     setError("");
-    startTransition(async () => {
-      try {
-        const payload = mode === "create"
-          ? {
-            ...basePayload,
-            file_object_id: await uploadPictureFile(file as File),
-          }
-          : basePayload;
+    setProgressText("");
+    startTransition(() => {
+      void submitPictureAsset(basePayload, filesToUpload);
+    });
+  }
+
+  async function submitPictureAsset(
+    basePayload: {
+      title: string;
+      description: string | null;
+      sort_order: number;
+      status: string;
+      category_ids: string[];
+    },
+    filesToUpload: File[],
+  ) {
+    setSubmitting(true);
+    let createdCount = 0;
+    try {
+      if (mode === "create") {
+        for (const [index, selectedFile] of filesToUpload.entries()) {
+          const itemLabel = `${index + 1}/${filesToUpload.length}`;
+          setProgressText(`正在上传 ${itemLabel}：${selectedFile.name}`);
+          const fileObjectId = await uploadPictureFile(selectedFile);
+          setProgressText(`正在创建 ${itemLabel}：${selectedFile.name}`);
+          await requestPictureLibraryJson(
+            "/platform/picture-library/assets",
+            {
+              method: "POST",
+              body: JSON.stringify(buildPictureAssetCreatePayload({
+                basePayload,
+                fileName: selectedFile.name,
+                fileObjectId,
+                index,
+                total: filesToUpload.length,
+              })),
+              fallbackMessage: "保存图片失败",
+            },
+          );
+          createdCount += 1;
+        }
+      } else {
         await requestPictureLibraryJson(
-          mode === "create"
-            ? "/platform/picture-library/assets"
-            : `/platform/picture-library/assets/${asset?.id}`,
+          `/platform/picture-library/assets/${asset?.id}`,
           {
-            method: mode === "create" ? "POST" : "PATCH",
-            body: JSON.stringify(payload),
+            method: "PATCH",
+            body: JSON.stringify(basePayload),
             fallbackMessage: "保存图片失败",
           },
         );
-        onOpenChange(false);
-        refreshAfterDialogClose(router);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "保存图片失败");
       }
-    });
+
+      setProgressText("");
+      onOpenChange(false);
+      refreshAfterDialogClose(router);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "保存图片失败";
+      setProgressText("");
+      if (createdCount > 0) {
+        setError(`已创建 ${createdCount} 张，${message}`);
+        refreshAfterDialogClose(router);
+      } else {
+        setError(message);
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function uploadPictureFile(input: File) {
@@ -175,6 +241,8 @@ export function PictureAssetDialog({
     }
     return result.fileId;
   }
+
+  const previewOverflowCount = selectedFileCount - previewUrls.length;
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
@@ -196,8 +264,27 @@ export function PictureAssetDialog({
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <div className="grid gap-4 md:grid-cols-[180px_1fr]">
             <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md border bg-muted">
-              {previewUrl ? (
-                <img src={previewUrl} alt="图片预览" className="size-full object-cover" />
+              {previewUrls.length > 0 ? (
+                <div
+                  className={cn(
+                    "grid size-full gap-1 p-1",
+                    previewUrls.length > 1 ? "grid-cols-2" : "grid-cols-1",
+                  )}
+                >
+                  {previewUrls.map((previewUrl, index) => (
+                    <div
+                      key={`${previewUrl}-${index}`}
+                      className="min-w-0 overflow-hidden rounded bg-background"
+                    >
+                      <img src={previewUrl} alt="图片预览" className="size-full object-cover" />
+                    </div>
+                  ))}
+                  {previewOverflowCount > 0 ? (
+                    <div className="flex min-w-0 items-center justify-center rounded bg-background text-sm text-muted-foreground">
+                      +{previewOverflowCount}
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 <span className="text-sm text-muted-foreground">等待选择图片</span>
               )}
@@ -210,22 +297,49 @@ export function PictureAssetDialog({
                     id="picture-library-file"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
-                    disabled={pending}
+                    disabled={busy}
                     required
+                    multiple
                     onChange={handleFileChange}
                   />
-                  <FieldDescription>支持 jpg、png、webp，单张不超过 5MB。</FieldDescription>
+                  <FieldDescription>支持 jpg、png、webp，单张不超过 5MB，可一次选择多张。</FieldDescription>
+                  {files.length > 0 ? (
+                    <div className="flex flex-col gap-2 rounded-md border bg-muted/40 p-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">已选 {files.length} 张</Badge>
+                        <span className="text-xs text-muted-foreground">将逐张上传并创建资料库图片</span>
+                      </div>
+                      <div className="flex max-h-24 flex-col gap-1 overflow-auto">
+                        {files.slice(0, 6).map((item) => (
+                          <span
+                            key={`${item.name}-${item.size}`}
+                            className="truncate text-xs"
+                            title={item.name}
+                          >
+                            {item.name}
+                          </span>
+                        ))}
+                        {files.length > 6 ? (
+                          <span className="text-xs text-muted-foreground">还有 {files.length - 6} 张未显示</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  {progressText ? <FieldDescription>{progressText}</FieldDescription> : null}
                 </Field>
               ) : null}
               <Field>
-                <FieldLabel htmlFor={`${mode}-picture-title`}>标题</FieldLabel>
+                <FieldLabel htmlFor={`${mode}-picture-title`}>
+                  {mode === "create" ? "标题（选填）" : "标题"}
+                </FieldLabel>
                 <Input
                   id={`${mode}-picture-title`}
                   name="title"
                   defaultValue={asset?.title || ""}
                   maxLength={120}
-                  required
-                  disabled={pending}
+                  required={mode === "edit"}
+                  disabled={busy}
+                  placeholder={mode === "create" ? "留空则使用文件名" : undefined}
                 />
               </Field>
               <Field>
@@ -235,7 +349,7 @@ export function PictureAssetDialog({
                   name="description"
                   defaultValue={asset?.description || ""}
                   maxLength={1000}
-                  disabled={pending}
+                  disabled={busy}
                 />
               </Field>
             </FieldGroup>
@@ -244,7 +358,7 @@ export function PictureAssetDialog({
           <div className="grid gap-3 md:grid-cols-2">
             <Field>
               <FieldLabel>状态</FieldLabel>
-              <Select name="status" defaultValue={asset?.status || "draft"} disabled={pending}>
+              <Select name="status" defaultValue={asset?.status || "draft"} disabled={busy}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -266,7 +380,7 @@ export function PictureAssetDialog({
                 min={0}
                 max={999999}
                 defaultValue={asset?.sort_order ?? 100}
-                disabled={pending}
+                disabled={busy}
               />
             </Field>
           </div>
@@ -280,7 +394,7 @@ export function PictureAssetDialog({
                     name="category_ids"
                     value={category.id}
                     defaultChecked={selectedCategoryIds.has(category.id)}
-                    disabled={pending || category.status !== "active"}
+                    disabled={busy || category.status !== "active"}
                   />
                   <span className="truncate">{category.name}</span>
                 </label>
@@ -292,12 +406,12 @@ export function PictureAssetDialog({
           </Field>
 
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={pending} onClick={close}>
+            <Button type="button" variant="outline" disabled={busy} onClick={close}>
               取消
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-              保存
+            <Button type="submit" disabled={busy}>
+              {busy ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              {mode === "create" && selectedFileCount > 1 ? `保存 ${selectedFileCount} 张` : "保存"}
             </Button>
           </DialogFooter>
         </form>
