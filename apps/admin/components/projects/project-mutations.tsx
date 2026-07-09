@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Edit3, Loader2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ClipboardCheck, Edit3, Eye, Loader2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,6 +100,7 @@ export function ProjectRowActions({
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href={projectDetailHref(project.id, "acceptances")}>
+                <Eye />
                 详情
               </Link>
             </DropdownMenuItem>
