@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import { getDirectPostgresSql } from "@/utils/postgres-direct";
 import { SupabaseDB } from "@/utils/supabase";
+import { executeCancellableSqlQuery } from "@/utils/cancellable-sql-query";
 import type { CustomerSelfServiceProjectLogRow } from "./customer-self-service";
 
 export type CustomerProjectDetailLogRow = CustomerSelfServiceProjectLogRow & {
@@ -12,18 +13,34 @@ export type CustomerProjectDetailLogRow = CustomerSelfServiceProjectLogRow & {
   my_rating: number | string | null;
 };
 
-class CustomerProjectDetailLogsRepository {
-  private directSqlUnavailable = false;
+type RepositoryDependencies = {
+  getDirectSql?: typeof getDirectPostgresSql;
+  getAdminClient?: typeof SupabaseDB.getAdminClient;
+};
 
-  private async listLogsViaDirectSql(input: {
-    tenantId: string;
-    customerId: string;
-    projectId: string;
-    pageSize: number;
-  }) {
-    const directSql = getDirectPostgresSql();
-    if (!directSql) throw new Error("direct postgres is not configured");
-    const rows = await directSql`
+type ListLogsInput = {
+  tenantId: string;
+  customerId: string;
+  projectId: string;
+  pageSize: number;
+  signal?: AbortSignal;
+};
+
+export class CustomerProjectDetailLogsRepository {
+  private directSqlUnavailable = false;
+  private readonly getDirectSql: typeof getDirectPostgresSql;
+  private readonly getAdminClient: typeof SupabaseDB.getAdminClient;
+
+  constructor(dependencies: RepositoryDependencies = {}) {
+    this.getDirectSql = dependencies.getDirectSql ?? getDirectPostgresSql;
+    this.getAdminClient = dependencies.getAdminClient ?? (() => SupabaseDB.getAdminClient());
+  }
+
+  private async listLogsViaDirectSql(
+    directSql: NonNullable<ReturnType<typeof getDirectPostgresSql>>,
+    input: ListLogsInput,
+  ) {
+    const query = directSql`
       SELECT *
       FROM public.list_customer_project_detail_logs(
         ${input.tenantId}::uuid,
@@ -32,16 +49,12 @@ class CustomerProjectDetailLogsRepository {
         ${input.pageSize}::integer
       )
     `;
+    const rows = await executeCancellableSqlQuery(query, input.signal);
     return rows as CustomerProjectDetailLogRow[];
   }
 
-  private async listLogsViaSupabaseRpc(input: {
-    tenantId: string;
-    customerId: string;
-    projectId: string;
-    pageSize: number;
-  }) {
-    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+  private async listLogsViaSupabaseRpc(input: ListLogsInput) {
+    const request = this.getAdminClient().rpc(
       "list_customer_project_detail_logs",
       {
         p_tenant_id: input.tenantId,
@@ -50,20 +63,20 @@ class CustomerProjectDetailLogsRepository {
         p_page_size: input.pageSize,
       },
     );
+    const { data, error } = await (input.signal
+      ? request.abortSignal(input.signal)
+      : request);
     if (error) throw Errors.dbError("查询客户项目日志摘要失败", error);
     return (data || []) as CustomerProjectDetailLogRow[];
   }
 
-  async listLogs(input: {
-    tenantId: string;
-    customerId: string;
-    projectId: string;
-    pageSize: number;
-  }) {
-    if (getDirectPostgresSql() && !this.directSqlUnavailable) {
+  async listLogs(input: ListLogsInput) {
+    const directSql = this.getDirectSql();
+    if (directSql && !this.directSqlUnavailable) {
       try {
-        return await this.listLogsViaDirectSql(input);
+        return await this.listLogsViaDirectSql(directSql, input);
       } catch {
+        input.signal?.throwIfAborted();
         this.directSqlUnavailable = true;
       }
     }
