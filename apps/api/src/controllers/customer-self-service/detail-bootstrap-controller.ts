@@ -17,6 +17,7 @@ import {
   logCustomerProjectDetailTiming,
   measureCustomerProjectDetailStep,
 } from "@/utils/customer-project-detail-timing";
+import { withAbortableModuleTimeout } from "@/utils/abortable-module-timeout";
 import { Get } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { loadCustomerProjectWorkflowProgress } from "./detail-bootstrap-workflow-progress";
@@ -38,27 +39,11 @@ class CustomerProjectDetailBootstrapController
   extends CustomerSelfServiceProjectBaseController {
   private withOptionalModuleTimeout<T>(
     module: string,
-    promise: Promise<T>,
+    load: (signal: AbortSignal) => Promise<T> | T,
     timeoutMs = OPTIONAL_MODULE_TIMEOUT_MS,
+    cancelSupported = false,
   ) {
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-    const timeoutPromise = new Promise<T>((_, reject) => {
-      timeout = setTimeout(() => {
-        reject(Errors.business(
-          504,
-          `${module} 模块加载超时`,
-          ErrorCodes.INTERNAL_ERROR,
-          { module, timeout_ms: timeoutMs },
-        ));
-      }, timeoutMs);
-    });
-
-    return Promise.race([
-      promise.finally(() => {
-        if (timeout) clearTimeout(timeout);
-      }),
-      timeoutPromise,
-    ]);
+    return withAbortableModuleTimeout({ module, timeoutMs, cancelSupported, load });
   }
 
   private buildPartialError(module: string, error: unknown): PartialError {
@@ -160,18 +145,21 @@ class CustomerProjectDetailBootstrapController
           projectId: project.id,
           customerId: customer!.id,
           tenantId: projectTenantId,
+          optionalModuleDetails: error instanceof AppError ? error.details : undefined,
         },
         "[customer-project-detail] optional module failed",
       );
     };
 
-    const logsPromise = this.withOptionalModuleTimeout("logs", this.loadLogs({
-      customerId: customer!.id,
-      pageSize: queryResult.data.log_page_size,
-      projectId: project.id,
-      tenantId: projectTenantId,
-      steps,
-    }), DETAIL_LOGS_TIMEOUT_MS).catch((error) => {
+    const logsPromise = this.withOptionalModuleTimeout("logs", (signal) =>
+      this.loadLogs({
+        customerId: customer!.id,
+        pageSize: queryResult.data.log_page_size,
+        projectId: project.id,
+        tenantId: projectTenantId,
+        steps,
+        signal,
+      }), DETAIL_LOGS_TIMEOUT_MS, Boolean(projectTenantId)).catch((error) => {
       addPartialError("logs", error);
       return {
         list: [],
@@ -191,7 +179,7 @@ class CustomerProjectDetailBootstrapController
     );
     const customerServicePromise = this.withOptionalModuleTimeout(
       "customer_service",
-      measureCustomerProjectDetailStep(
+      () => measureCustomerProjectDetailStep(
         steps,
         "customer_service_ms",
         () => customerServiceConfigService.getCustomerServiceConfig(projectTenantId),
@@ -203,7 +191,7 @@ class CustomerProjectDetailBootstrapController
     const acceptancesPromise = queryResult.data.include_acceptances
       ? this.withOptionalModuleTimeout(
         "acceptances",
-        measureCustomerProjectDetailStep(
+        (signal) => measureCustomerProjectDetailStep(
           steps,
           "acceptances_ms",
           () => projectAcceptanceService.listCustomerAcceptances(
@@ -213,10 +201,11 @@ class CustomerProjectDetailBootstrapController
               tenantId: request.user?.tenant_id ?? null,
               customerId: request.user?.customer_id ?? null,
             },
-            { responseMode: "summary" },
+            { responseMode: "summary", signal },
           ),
         ),
         DETAIL_ACCEPTANCES_TIMEOUT_MS,
+        true,
       ).catch((error) => {
         addPartialError("acceptances", error);
         return null;
@@ -233,7 +222,7 @@ class CustomerProjectDetailBootstrapController
       ? workflowProgressPromise.then((workflowProgress) =>
         this.withOptionalModuleTimeout(
           "construction_stages",
-          measureCustomerProjectDetailStep(
+          () => measureCustomerProjectDetailStep(
             steps,
             "construction_stages_ms",
             () => projectTenantId
@@ -260,7 +249,7 @@ class CustomerProjectDetailBootstrapController
     const campaignSummaryPromise = queryResult.data.include_campaigns
       ? this.withOptionalModuleTimeout(
         "campaign_summary",
-        this.loadCampaignSummary(authUserId, project.id, request, steps),
+        (signal) => this.loadCampaignSummary(authUserId, project.id, request, steps, signal),
       )
         .catch((error) => {
           if (!this.isOptionalCampaignMiss(error)) {
@@ -272,7 +261,7 @@ class CustomerProjectDetailBootstrapController
     const appointmentRewardPromise = queryResult.data.include_campaigns
       ? this.withOptionalModuleTimeout(
         "appointment_reward_campaign",
-        this.loadAppointmentReward(authUserId, project.id, request, steps),
+        (signal) => this.loadAppointmentReward(authUserId, project.id, request, steps, signal),
       )
         .catch((error) => {
           if (!this.isOptionalCampaignMiss(error)) {
@@ -353,6 +342,7 @@ class CustomerProjectDetailBootstrapController
     projectId: string;
     tenantId: string | null;
     steps: ReturnType<typeof createCustomerProjectDetailTimingSteps>;
+    signal: AbortSignal;
   }) {
     if (input.tenantId) {
       const logs = await measureCustomerProjectDetailStep(
@@ -363,6 +353,7 @@ class CustomerProjectDetailBootstrapController
           tenantId: input.tenantId!,
           customerId: input.customerId,
           pageSize: input.pageSize,
+          signal: input.signal,
         }),
       );
       return {
@@ -439,6 +430,7 @@ class CustomerProjectDetailBootstrapController
     projectId: string,
     request: FastifyRequest,
     steps: ReturnType<typeof createCustomerProjectDetailTimingSteps>,
+    signal: AbortSignal,
   ) {
     return measureCustomerProjectDetailStep(
       steps,
@@ -448,10 +440,12 @@ class CustomerProjectDetailBootstrapController
         const hasEntry = await customerCampaignBootstrapService.hasShareAssistEntry({
           projectId,
           tenantId,
+          signal,
         });
         if (hasEntry === false) {
           return this.buildDisabledShareCampaignSummary(projectId);
         }
+        signal.throwIfAborted();
         return customerProjectLogShareService.getCustomerProjectCampaignSummary(
           authUserId,
           projectId,
@@ -469,6 +463,7 @@ class CustomerProjectDetailBootstrapController
     projectId: string,
     request: FastifyRequest,
     steps: ReturnType<typeof createCustomerProjectDetailTimingSteps>,
+    signal: AbortSignal,
   ) {
     return measureCustomerProjectDetailStep(
       steps,
@@ -479,10 +474,12 @@ class CustomerProjectDetailBootstrapController
           await customerCampaignBootstrapService.hasAppointmentRewardEntry({
             projectId,
             tenantId,
+            signal,
           });
         if (hasEntry === false) {
           return this.buildDisabledAppointmentRewardCampaign(projectId);
         }
+        signal.throwIfAborted();
         return customerProjectLogShareService.getCustomerAppointmentRewardCampaign(
           authUserId,
           projectId,

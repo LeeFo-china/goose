@@ -25,6 +25,9 @@ const getOwnedProject = mock(async () => ({
 }));
 
 const listLogs = mock(async () => []);
+const listCustomerAcceptances = mock(async () => ({ list: [], pagination: {} }));
+const hasShareAssistEntry = mock(async () => false);
+const hasAppointmentRewardEntry = mock(async () => false);
 const getCustomerServiceConfig = mock(async () => null);
 const listProjectMembers = mock(async () => [
   {
@@ -125,7 +128,7 @@ mock.module("@/services/project-workflow-progress", () => ({
 
 mock.module("@/services/project-acceptances", () => ({
   projectAcceptanceService: {
-    listCustomerAcceptances: mock(async () => ({ list: [], pagination: {} })),
+    listCustomerAcceptances,
   },
 }));
 
@@ -138,7 +141,8 @@ mock.module("@/services/construction-stage-status", () => ({
 
 mock.module("@/services/customer-campaign-bootstrap", () => ({
   customerCampaignBootstrapService: {
-    hasShareAssistEntry: mock(async () => false),
+    hasShareAssistEntry,
+    hasAppointmentRewardEntry,
   },
 }));
 
@@ -181,9 +185,9 @@ describe("customer project detail bootstrap team fields", () => {
     const response = await testController.getCustomerProjectDetailBootstrap({
       params: { id: projectId },
       query: {
-        include_acceptances: false,
+        include_acceptances: true,
         include_stages: false,
-        include_campaigns: false,
+        include_campaigns: true,
         debug_timing: true,
       },
       user: {
@@ -209,6 +213,21 @@ describe("customer project detail bootstrap team fields", () => {
         }),
       }),
       "[customer-project-detail] timing",
+    );
+    expect(listLogs).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(listCustomerAcceptances).toHaveBeenCalledWith(
+      "auth-user-1",
+      expect.any(Object),
+      expect.any(Object),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(hasShareAssistEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(hasAppointmentRewardEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 
     expect(response.data.project.members?.map((item) => ({
