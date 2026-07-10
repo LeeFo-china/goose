@@ -24,6 +24,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
+import { invalidateProjectWorkflowProgress } from "@/services/project-workflow-progress-invalidation";
 import { resolveWorkflowKey } from "@/services/workflow-key";
 import {
   activateWorkflowVersion,
@@ -331,6 +332,7 @@ class WorkflowService {
     if (!result.ok) {
       this.throwRuntimeStartError(result);
     }
+    invalidateProjectWorkflowProgress({ tenantId, subjectType: input.subject_type, subjectId: input.subject_id.trim() });
 
     return result;
   }
@@ -365,6 +367,7 @@ class WorkflowService {
     if (!result.ok) {
       this.throwRuntimeCompleteError(result);
     }
+    invalidateProjectWorkflowProgress({ tenantId, subjectType: result.instance.subject_type, subjectId: result.instance.subject_id });
 
     return result;
   }
@@ -393,6 +396,7 @@ class WorkflowService {
     if (!result.ok) {
       this.throwRuntimeRebuildError(result);
     }
+    if (!input.dry_run) invalidateProjectWorkflowProgress({ tenantId, subjectType: input.subject_type, subjectId: input.subject_id.trim() });
 
     return result;
   }

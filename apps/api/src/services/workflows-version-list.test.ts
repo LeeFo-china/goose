@@ -1,15 +1,15 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   WorkflowDefinitionRow,
   WorkflowVersionRow,
 } from "@/repositories/workflows";
 import type { AuthContext } from "@/services/authorization";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
 
+const invalidateProjectProgress = spyOn(projectWorkflowProgressService, "invalidateProject").mockImplementation(() => undefined);
 const NOW = "2026-06-19T00:00:00.000Z";
-
 const assertTenantId = mock((_authContext: AuthContext) => "tenant-1");
 const assertPermission = mock((_authContext: AuthContext, _permission: string) => undefined);
-
 const getDefinitionById = mock(async () => definition());
 const getDraftGraph = mock(async () => draftGraph());
 const publishDefinition = mock(async (input: {
@@ -74,7 +74,9 @@ const archiveRuntimeInstance = mock(async (
   archived_by: input.archivedBy ?? null,
   archive_reason: input.archiveReason ?? null,
 }));
-
+const startRuntimeInstance = mock(async () => ({ ok: true as const, instance: runtimeInstance({ id: "instance-1", status: "running" }), currentNode: {}, task: null }));
+const completeRuntimeNode = mock(async () => ({ ok: true as const, instance: runtimeInstance({ id: "instance-1", status: "running" }), completedNode: {}, nextNode: null, task: null }));
+const rebuildRuntimeInstance = mock(async () => ({ ok: true as const, instance: runtimeInstance({ id: "instance-1", status: "running" }), archivedInstanceIds: [] }));
 mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
     assertTenantId,
@@ -93,6 +95,9 @@ mock.module("@/repositories/workflows", () => ({
     listVersions,
     listRunningInstanceCountsByVersion,
     updateVersionStatus,
+    startRuntimeInstance,
+    completeRuntimeNode,
+    rebuildRuntimeInstance,
   },
 }));
 
@@ -156,6 +161,10 @@ describe("workflowService.listVersions", () => {
       status: "completed",
     }));
     archiveRuntimeInstance.mockClear();
+    startRuntimeInstance.mockClear();
+    completeRuntimeNode.mockClear();
+    rebuildRuntimeInstance.mockClear();
+    invalidateProjectProgress.mockClear();
     archiveRuntimeInstance.mockImplementation(async (input) => runtimeInstance({
       id: input.instanceId,
       status: "completed",
@@ -294,6 +303,24 @@ describe("workflowService.listVersions", () => {
     });
     expect(result.status).toBe("completed");
     expect(result.archived_at).toBe(NOW);
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
+  });
+
+  test("invalidates project runtime start and applied rebuild but not dry-run", async () => {
+    const { workflowService } = await import("./workflows");
+    await workflowService.startRuntimeInstance(authContext(), "definition-1", { subject_type: "project", subject_id: "project-1", context: {} });
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
+
+    invalidateProjectProgress.mockClear();
+    await workflowService.completeRuntimeNode(authContext(), "definition-1", "instance-1", { node_key: "manual_review", action: "complete", output: {} });
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
+
+    invalidateProjectProgress.mockClear();
+    const rebuild = { subject_type: "project" as const, subject_id: "project-1", reason: "修复流程", context: {}, delete_completed_instances: false };
+    await workflowService.rebuildRuntimeInstance(authContext(), "definition-1", { ...rebuild, dry_run: true });
+    expect(invalidateProjectProgress).not.toHaveBeenCalled();
+    await workflowService.rebuildRuntimeInstance(authContext(), "definition-1", { ...rebuild, dry_run: false });
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
   });
 });
 

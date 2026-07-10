@@ -5,19 +5,16 @@ import {
   type WorkflowInstanceRow,
 } from "@/repositories/workflows";
 import type { AuthContext } from "@/services/authorization";
-import {
-  resolveProjectConstructionWorkflowDefinition,
-} from "@/services/project-construction-workflow-selection";
+import { resolveProjectConstructionWorkflowDefinition } from "@/services/project-construction-workflow-selection";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import type { ProjectStatus, ProjectStatusAction } from "@gooes/domain";
 
 const PROJECT_SIGNING_WORKFLOW_KEYS = ["project_signing", "project_main"] as const;
 const PROJECT_CONSTRUCTION_WORKFLOW_KEYS = ["construction_main"] as const;
-const PROJECT_WORKFLOW_KEYS = [
-  ...PROJECT_SIGNING_WORKFLOW_KEYS,
-  ...PROJECT_CONSTRUCTION_WORKFLOW_KEYS,
-] as const;
+const PROJECT_WORKFLOW_KEYS = [...PROJECT_SIGNING_WORKFLOW_KEYS,
+  ...PROJECT_CONSTRUCTION_WORKFLOW_KEYS] as const;
 type ProjectWorkflowKey = typeof PROJECT_WORKFLOW_KEYS[number];
 
 export type ProjectWorkflowRuntimeMetadata = {
@@ -53,9 +50,7 @@ type SyncProjectCreatedInput = {
 };
 
 class ProjectWorkflowRuntimeService {
-  async syncProjectCreated(
-    input: SyncProjectCreatedInput,
-  ): Promise<ProjectWorkflowRuntimeMetadata> {
+  async syncProjectCreated(input: SyncProjectCreatedInput): Promise<ProjectWorkflowRuntimeMetadata> {
     try {
       const definition = await this.findActiveProjectWorkflow(
         input.tenantId,
@@ -113,6 +108,7 @@ class ProjectWorkflowRuntimeService {
         definitionId: definition.id,
         instanceId: result.instance.id,
       });
+      projectWorkflowProgressService.invalidateProject({ tenantId: input.tenantId, projectId: input.projectId });
 
       return {
         status: "started",
@@ -134,7 +130,11 @@ class ProjectWorkflowRuntimeService {
     input: ApplyProjectWorkflowEffectInput,
   ): Promise<ProjectWorkflowRuntimeMetadata> {
     try {
-      return await this.applyWorkflowEffectUnsafe(input);
+      const metadata = await this.applyWorkflowEffectUnsafe(input);
+      if (metadata.status === "started" || metadata.status === "advanced") {
+        projectWorkflowProgressService.invalidateProject({ tenantId: input.tenantId, projectId: input.projectId });
+      }
+      return metadata;
     } catch (error) {
       return {
         status: "failed",

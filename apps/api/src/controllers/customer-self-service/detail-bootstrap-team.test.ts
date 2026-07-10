@@ -3,6 +3,7 @@ import { describe, expect, mock, test } from "bun:test";
 const projectId = "2d710a84-1045-4750-8dfd-51a0f463a4db";
 const customerId = "customer-1";
 const tenantId = "tenant-1";
+const logInfo = mock(() => undefined);
 
 const getOwnedProject = mock(async () => ({
   id: projectId,
@@ -24,6 +25,9 @@ const getOwnedProject = mock(async () => ({
 }));
 
 const listLogs = mock(async () => []);
+const listCustomerAcceptances = mock(async () => ({ list: [], pagination: {} }));
+const hasShareAssistEntry = mock(async () => false);
+const hasAppointmentRewardEntry = mock(async () => false);
 const getCustomerServiceConfig = mock(async () => null);
 const listProjectMembers = mock(async () => [
   {
@@ -124,7 +128,7 @@ mock.module("@/services/project-workflow-progress", () => ({
 
 mock.module("@/services/project-acceptances", () => ({
   projectAcceptanceService: {
-    listCustomerAcceptances: mock(async () => ({ list: [], pagination: {} })),
+    listCustomerAcceptances,
   },
 }));
 
@@ -137,7 +141,8 @@ mock.module("@/services/construction-stage-status", () => ({
 
 mock.module("@/services/customer-campaign-bootstrap", () => ({
   customerCampaignBootstrapService: {
-    hasShareAssistEntry: mock(async () => false),
+    hasShareAssistEntry,
+    hasAppointmentRewardEntry,
   },
 }));
 
@@ -154,6 +159,9 @@ describe("customer project detail bootstrap team fields", () => {
     const testController = controller as unknown as {
       getCustomerProjectDetailBootstrap: (request: unknown) => Promise<{
         data: {
+          debug_timing?: {
+            workflow_steps?: Record<string, number>;
+          };
           project: {
             designer?: unknown;
             supervisor?: unknown;
@@ -177,9 +185,10 @@ describe("customer project detail bootstrap team fields", () => {
     const response = await testController.getCustomerProjectDetailBootstrap({
       params: { id: projectId },
       query: {
-        include_acceptances: false,
+        include_acceptances: true,
         include_stages: false,
-        include_campaigns: false,
+        include_campaigns: true,
+        debug_timing: true,
       },
       user: {
         tenant_id: tenantId,
@@ -187,10 +196,39 @@ describe("customer project detail bootstrap team fields", () => {
       },
       id: "req-test",
       log: {
-        info: mock(() => undefined),
+        info: logInfo,
         warn: mock(() => undefined),
       },
     });
+
+    expect(response.data.debug_timing?.workflow_steps).toMatchObject({
+      subject_state_runtime_ms: 0,
+      graph_ms: 0,
+      projection_ms: 0,
+    });
+    expect(logInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflow_steps: expect.objectContaining({
+          subject_state_runtime_ms: 0,
+        }),
+      }),
+      "[customer-project-detail] timing",
+    );
+    expect(listLogs).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(listCustomerAcceptances).toHaveBeenCalledWith(
+      "auth-user-1",
+      expect.any(Object),
+      expect.any(Object),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(hasShareAssistEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(hasAppointmentRewardEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
 
     expect(response.data.project.members?.map((item) => ({
       role_code: item.role_code,

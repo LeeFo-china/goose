@@ -3,14 +3,34 @@ import {
   customerProjectDetailRepository,
   type CustomerProjectAccessRow,
 } from "@/repositories/customer-project-detail";
+import { ExpiringInFlightCache } from "@/utils/expiring-in-flight-cache";
 
 const PROJECT_ACCESS_CACHE_TTL_MS = 10_000;
+type CustomerProjectDetailRepository = Pick<
+  typeof customerProjectDetailRepository,
+  "findOwnedProject" | "findOwnedProjectAccess"
+>;
+type OwnedProject = NonNullable<
+  Awaited<ReturnType<CustomerProjectDetailRepository["findOwnedProject"]>>
+>;
 
-class CustomerProjectDetailService {
+export class CustomerProjectDetailService {
   private accessCache = new Map<string, {
     expiresAt: number;
     value: CustomerProjectAccessRow | null;
   }>();
+  private readonly detailCache: ExpiringInFlightCache<string, OwnedProject>;
+  private readonly repository: CustomerProjectDetailRepository;
+
+  constructor(options: {
+    repository?: CustomerProjectDetailRepository;
+    detailCacheTtlMs?: number;
+  } = {}) {
+    this.repository = options.repository ?? customerProjectDetailRepository;
+    this.detailCache = new ExpiringInFlightCache({
+      ttlMs: options.detailCacheTtlMs ?? 5_000,
+    });
+  }
 
   private getAccessCacheKey(input: {
     tenantId: string;
@@ -37,16 +57,21 @@ class CustomerProjectDetailService {
     customerId: string;
     projectId: string;
   }) {
-    const project = await customerProjectDetailRepository.findOwnedProject(input);
-    if (!project) throw Errors.notFound("项目不存在");
-    this.setAccessCache({
-      ...input,
-      value: {
-        id: project.id,
-        tenant_id: project.tenant_id ?? null,
+    return this.detailCache.getOrCreate(
+      this.getAccessCacheKey(input),
+      async () => {
+        const project = await this.repository.findOwnedProject(input);
+        if (!project) throw Errors.notFound("项目不存在");
+        this.setAccessCache({
+          ...input,
+          value: {
+            id: project.id,
+            tenant_id: project.tenant_id ?? null,
+          },
+        });
+        return project;
       },
-    });
-    return project;
+    );
   }
 
   async getOwnedProjectAccess(input: {
@@ -62,7 +87,7 @@ class CustomerProjectDetailService {
     }
     if (cached) this.accessCache.delete(cacheKey);
 
-    const project = await customerProjectDetailRepository.findOwnedProjectAccess(input);
+    const project = await this.repository.findOwnedProjectAccess(input);
     this.setAccessCache({
       ...input,
       value: project,

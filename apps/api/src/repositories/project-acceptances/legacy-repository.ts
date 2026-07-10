@@ -44,6 +44,8 @@ import {
   listCustomers,
   getTenantById,
 } from "./legacy/people";
+import { getDirectPostgresSql } from "@/utils/postgres-direct";
+import { SupabaseDB } from "@/utils/supabase";
 
 export type {
   ProjectAcceptanceActionRow,
@@ -60,9 +62,22 @@ export type {
 } from "./legacy/shared";
 export type { ProjectAcceptanceDetailGraphRow } from "./legacy/acceptances";
 
-class ProjectAcceptanceRepository {
+type ProjectAcceptanceRepositoryDependencies = {
+  getDirectSql?: typeof getDirectPostgresSql;
+  getAdminClient?: typeof SupabaseDB.getAdminClient;
+};
+
+export class ProjectAcceptanceRepository {
   private acceptanceDetailListDirectSqlUnavailable = false;
   private acceptanceDetailDirectSqlUnavailable = false;
+  private customerAcceptanceSummaryDirectSqlUnavailable = false;
+  private readonly getDirectSql: typeof getDirectPostgresSql;
+  private readonly getAdminClient: typeof SupabaseDB.getAdminClient;
+
+  constructor(dependencies: ProjectAcceptanceRepositoryDependencies = {}) {
+    this.getDirectSql = dependencies.getDirectSql ?? getDirectPostgresSql;
+    this.getAdminClient = dependencies.getAdminClient ?? (() => SupabaseDB.getAdminClient());
+  }
 
   listTemplates = listTemplates;
   getTemplateById = getTemplateById;

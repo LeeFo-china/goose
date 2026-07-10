@@ -7,25 +7,36 @@ type CachedCampaignEntry = {
   value: boolean;
 };
 
-class CustomerCampaignBootstrapService {
+type CustomerCampaignBootstrapRepository = Pick<
+  typeof customerCampaignBootstrapRepository,
+  "hasMatchingMarketingCampaign" | "hasActiveLegacyShareConfig"
+>;
+
+export class CustomerCampaignBootstrapService {
   private campaignEntryCache = new Map<string, CachedCampaignEntry>();
+
+  constructor(private readonly repository: CustomerCampaignBootstrapRepository) {}
 
   async hasShareAssistEntry(input: {
     tenantId: string | null;
     projectId: string;
+    signal?: AbortSignal;
   }) {
+    input.signal?.throwIfAborted();
     const cacheKey = this.buildCacheKey("share_assist", input);
     const cached = this.getCachedEntry(cacheKey);
     if (cached !== null) return cached;
 
     const [marketingCampaign, legacyConfig] = await Promise.all([
-      customerCampaignBootstrapRepository.hasMatchingMarketingCampaign({
+      this.repository.hasMatchingMarketingCampaign({
         campaignType: "share_assist",
         projectId: input.projectId,
         tenantId: input.tenantId,
+        signal: input.signal,
       }),
-      customerCampaignBootstrapRepository.hasActiveLegacyShareConfig(input.projectId),
+      this.repository.hasActiveLegacyShareConfig(input.projectId, input.signal),
     ]);
+    input.signal?.throwIfAborted();
 
     if (marketingCampaign === null || legacyConfig === null) return null;
     const hasEntry = marketingCampaign || legacyConfig;
@@ -36,16 +47,20 @@ class CustomerCampaignBootstrapService {
   async hasAppointmentRewardEntry(input: {
     tenantId: string | null;
     projectId: string;
+    signal?: AbortSignal;
   }) {
+    input.signal?.throwIfAborted();
     const cacheKey = this.buildCacheKey("appointment_reward", input);
     const cached = this.getCachedEntry(cacheKey);
     if (cached !== null) return cached;
 
-    const hasEntry = await customerCampaignBootstrapRepository.hasMatchingMarketingCampaign({
+    const hasEntry = await this.repository.hasMatchingMarketingCampaign({
       campaignType: "appointment_reward",
       projectId: input.projectId,
       tenantId: input.tenantId,
+      signal: input.signal,
     });
+    input.signal?.throwIfAborted();
     if (hasEntry !== null) this.setCachedEntry(cacheKey, hasEntry);
     return hasEntry;
   }
@@ -76,4 +91,4 @@ class CustomerCampaignBootstrapService {
 }
 
 export const customerCampaignBootstrapService =
-  new CustomerCampaignBootstrapService();
+  new CustomerCampaignBootstrapService(customerCampaignBootstrapRepository);

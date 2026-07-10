@@ -251,6 +251,8 @@ describe("buildProjectWorkflowProgressProjection", () => {
     })).toEqual({
       source: "missing_runtime",
       instance_id: null,
+      workflow_definition_id: null,
+      workflow_title: null,
       instance_status: null,
       current_node_key: null,
       current_node_title: null,

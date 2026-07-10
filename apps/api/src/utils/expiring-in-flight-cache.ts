@@ -1,0 +1,96 @@
+type FulfilledEntry<Value> = {
+  expiresAt: number;
+  value: Value;
+};
+
+type GetOrCreateOptions<Value> = {
+  shouldCache?: (value: Value) => boolean;
+};
+
+export type ExpiringCacheReadStatus = "loaded" | "in_flight" | "hit";
+
+export class ExpiringInFlightCache<Key, Value> {
+  private readonly fulfilled = new Map<Key, FulfilledEntry<Value>>();
+  private readonly inFlight = new Map<Key, Promise<Value>>();
+  private readonly ttlMs: number;
+  private readonly maxEntries: number;
+
+  constructor(options: { ttlMs: number; maxEntries?: number }) {
+    this.ttlMs = options.ttlMs;
+    this.maxEntries = Math.max(1, Math.floor(options.maxEntries ?? 500));
+  }
+
+  getOrCreate(
+    key: Key,
+    loader: () => Promise<Value>,
+    options: GetOrCreateOptions<Value> = {},
+  ): Promise<Value> {
+    return this.getOrCreateWithStatus(key, loader, options)
+      .then((result) => result.value);
+  }
+
+  getOrCreateWithStatus(
+    key: Key,
+    loader: () => Promise<Value>,
+    options: GetOrCreateOptions<Value> = {},
+  ): Promise<{ value: Value; status: ExpiringCacheReadStatus }> {
+    const cached = this.fulfilled.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      this.fulfilled.delete(key);
+      this.fulfilled.set(key, cached);
+      return Promise.resolve({ value: cached.value, status: "hit" });
+    }
+    if (cached) this.fulfilled.delete(key);
+
+    const pending = this.inFlight.get(key);
+    if (pending) {
+      return pending.then((value) => ({ value, status: "in_flight" }));
+    }
+
+    const request = Promise.resolve()
+      .then(loader)
+      .then((value) => {
+        if (
+          this.inFlight.get(key) === request &&
+          (options.shouldCache?.(value) ?? true)
+        ) {
+          this.setFulfilled(key, {
+            expiresAt: Date.now() + this.ttlMs,
+            value,
+          });
+        }
+        return value;
+      })
+      .finally(() => {
+        if (this.inFlight.get(key) === request) {
+          this.inFlight.delete(key);
+        }
+      });
+    this.inFlight.set(key, request);
+    return request.then((value) => ({ value, status: "loaded" }));
+  }
+
+  invalidate(key: Key): void {
+    this.fulfilled.delete(key);
+    this.inFlight.delete(key);
+  }
+
+  clear(): void {
+    this.fulfilled.clear();
+    this.inFlight.clear();
+  }
+
+  private setFulfilled(key: Key, entry: FulfilledEntry<Value>): void {
+    const now = Date.now();
+    for (const [cachedKey, cached] of this.fulfilled) {
+      if (cached.expiresAt <= now) this.fulfilled.delete(cachedKey);
+    }
+    this.fulfilled.delete(key);
+    while (this.fulfilled.size >= this.maxEntries) {
+      const oldest = this.fulfilled.keys().next();
+      if (oldest.done) break;
+      this.fulfilled.delete(oldest.value);
+    }
+    this.fulfilled.set(key, entry);
+  }
+}

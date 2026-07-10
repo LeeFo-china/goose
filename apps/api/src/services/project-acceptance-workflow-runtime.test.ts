@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
 
+const invalidateProjectProgress = spyOn(projectWorkflowProgressService, "invalidateProject").mockImplementation(() => undefined);
 const definition = {
   id: "definition-1",
   tenant_id: "tenant-1",
@@ -268,13 +270,10 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
     markProcedureCompletedByStage.mockClear();
     getGraph.mockClear();
     getRuntimeInstanceById.mockClear();
-    getRuntimeInstanceById.mockImplementation(async () => ({
-      status: "completed",
-      current_node_key: "procedure_installation",
-      current_node_id: "node-1",
-    }));
+    getRuntimeInstanceById.mockImplementation(async () => ({ status: "completed", current_node_key: "procedure_installation", current_node_id: "node-1" }));
     listStageLogEvidence.mockClear();
     listStageLogEvidence.mockImplementation(async () => []);
+    invalidateProjectProgress.mockClear();
   });
 
   test("skips workflow completion when customer confirms the procedure before a payment gate", async () => {
@@ -312,6 +311,7 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
       definitionId: "definition-1",
       instanceId: "instance-1",
     });
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
   });
 
   test("uses the project running workflow instance even when workflow key is dynamic", async () => {
@@ -393,6 +393,7 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
       definitionId: "definition-1",
       instanceId: "instance-1",
     });
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
   });
 
   test("does not re-check procedure log requirements when customer confirms acceptance", async () => {
