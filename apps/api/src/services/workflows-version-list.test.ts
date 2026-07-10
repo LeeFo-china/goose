@@ -1,9 +1,12 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   WorkflowDefinitionRow,
   WorkflowVersionRow,
 } from "@/repositories/workflows";
 import type { AuthContext } from "@/services/authorization";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
+
+const invalidateProjectProgress = spyOn(projectWorkflowProgressService, "invalidateProject").mockImplementation(() => undefined);
 
 const NOW = "2026-06-19T00:00:00.000Z";
 
@@ -156,6 +159,7 @@ describe("workflowService.listVersions", () => {
       status: "completed",
     }));
     archiveRuntimeInstance.mockClear();
+    invalidateProjectProgress.mockClear();
     archiveRuntimeInstance.mockImplementation(async (input) => runtimeInstance({
       id: input.instanceId,
       status: "completed",
@@ -294,6 +298,7 @@ describe("workflowService.listVersions", () => {
     });
     expect(result.status).toBe("completed");
     expect(result.archived_at).toBe(NOW);
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
   });
 });
 

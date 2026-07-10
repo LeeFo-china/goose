@@ -8,6 +8,7 @@ import {
   type WorkflowRuntimeCompleteNodeResult,
 } from "@/repositories/workflows";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
+import { invalidateProjectWorkflowProgress } from "@/services/project-workflow-progress-invalidation";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import {
   projectProcedureAssignmentCompletionSyncService,
@@ -102,6 +103,7 @@ class ProjectAcceptanceWorkflowRuntimeService {
           definitionId: definition.id,
           instanceId: instance.id,
         });
+        invalidateProjectWorkflowProgress({ tenantId: input.tenantId, subjectType: "project", subjectId: input.projectId });
 
         return {
           status: "already_advanced",
@@ -173,6 +175,7 @@ class ProjectAcceptanceWorkflowRuntimeService {
       definitionId: definition.id,
       instanceId: result.instance.id,
     });
+    invalidateProjectWorkflowProgress({ tenantId: input.tenantId, subjectType: "project", subjectId: input.projectId });
 
     return {
       status: "advanced",

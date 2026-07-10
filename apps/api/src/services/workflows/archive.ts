@@ -3,6 +3,7 @@ import { workflowRepository } from "@/repositories/workflows";
 import type { WorkflowRuntimeArchiveInput } from "@/schema/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { invalidateProjectWorkflowProgress } from "@/services/project-workflow-progress-invalidation";
 
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
 
@@ -155,13 +156,15 @@ export async function archiveWorkflowRuntimeInstance(
     return instance;
   }
 
-  return workflowRepository.archiveRuntimeInstance({
+  const archived = await workflowRepository.archiveRuntimeInstance({
     tenantId,
     definitionId,
     instanceId,
     archivedBy: authContext.employeeId,
     archiveReason: input.reason?.trim() || null,
   });
+  invalidateProjectWorkflowProgress({ tenantId, subjectType: instance.subject_type, subjectId: instance.subject_id });
+  return archived;
 }
 
 function assertManagePermission(authContext: AuthContext) {
