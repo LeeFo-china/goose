@@ -11,9 +11,11 @@ export class ExpiringInFlightCache<Key, Value> {
   private readonly fulfilled = new Map<Key, FulfilledEntry<Value>>();
   private readonly inFlight = new Map<Key, Promise<Value>>();
   private readonly ttlMs: number;
+  private readonly maxEntries: number;
 
-  constructor(options: { ttlMs: number }) {
+  constructor(options: { ttlMs: number; maxEntries?: number }) {
     this.ttlMs = options.ttlMs;
+    this.maxEntries = Math.max(1, Math.floor(options.maxEntries ?? 500));
   }
 
   getOrCreate(
@@ -23,6 +25,8 @@ export class ExpiringInFlightCache<Key, Value> {
   ): Promise<Value> {
     const cached = this.fulfilled.get(key);
     if (cached && cached.expiresAt > Date.now()) {
+      this.fulfilled.delete(key);
+      this.fulfilled.set(key, cached);
       return Promise.resolve(cached.value);
     }
     if (cached) this.fulfilled.delete(key);
@@ -37,7 +41,7 @@ export class ExpiringInFlightCache<Key, Value> {
           this.inFlight.get(key) === request &&
           (options.shouldCache?.(value) ?? true)
         ) {
-          this.fulfilled.set(key, {
+          this.setFulfilled(key, {
             expiresAt: Date.now() + this.ttlMs,
             value,
           });
@@ -61,5 +65,19 @@ export class ExpiringInFlightCache<Key, Value> {
   clear(): void {
     this.fulfilled.clear();
     this.inFlight.clear();
+  }
+
+  private setFulfilled(key: Key, entry: FulfilledEntry<Value>): void {
+    const now = Date.now();
+    for (const [cachedKey, cached] of this.fulfilled) {
+      if (cached.expiresAt <= now) this.fulfilled.delete(cachedKey);
+    }
+    this.fulfilled.delete(key);
+    while (this.fulfilled.size >= this.maxEntries) {
+      const oldest = this.fulfilled.keys().next();
+      if (oldest.done) break;
+      this.fulfilled.delete(oldest.value);
+    }
+    this.fulfilled.set(key, entry);
   }
 }

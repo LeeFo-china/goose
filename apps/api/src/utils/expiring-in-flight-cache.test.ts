@@ -139,4 +139,39 @@ describe("ExpiringInFlightCache", () => {
 
     expect(loader).toHaveBeenCalledTimes(4);
   });
+
+  test("evicts the least recently used fulfilled entry at capacity", async () => {
+    const loader = mock(async (id: string) => ({ id, loaded: crypto.randomUUID() }));
+    const cache = new ExpiringInFlightCache<string, { id: string; loaded: string }>({
+      ttlMs: 5_000,
+      maxEntries: 2,
+    });
+
+    const first = await cache.getOrCreate("project-1", () => loader("project-1"));
+    await cache.getOrCreate("project-2", () => loader("project-2"));
+    await cache.getOrCreate("project-1", () => loader("project-1"));
+    await cache.getOrCreate("project-3", () => loader("project-3"));
+    const refreshed = await cache.getOrCreate("project-2", () => loader("project-2"));
+
+    expect(refreshed.loaded).not.toBe(first.loaded);
+    expect(loader).toHaveBeenCalledTimes(4);
+  });
+
+  test("prunes expired one-off entries before capacity eviction", async () => {
+    const loader = mock(async (id: string) => ({ id }));
+    const cache = new ExpiringInFlightCache<string, { id: string }>({
+      ttlMs: 10,
+      maxEntries: 2,
+    });
+
+    await cache.getOrCreate("expired", () => loader("expired"));
+    await Bun.sleep(6);
+    const live = await cache.getOrCreate("live", () => loader("live"));
+    await Bun.sleep(6);
+    await cache.getOrCreate("new", () => loader("new"));
+    const stillLive = await cache.getOrCreate("live", () => loader("live"));
+
+    expect(stillLive).toBe(live);
+    expect(loader).toHaveBeenCalledTimes(3);
+  });
 });
