@@ -3,6 +3,7 @@ import { describe, expect, mock, test } from "bun:test";
 const projectId = "2d710a84-1045-4750-8dfd-51a0f463a4db";
 const customerId = "customer-1";
 const tenantId = "tenant-1";
+const logInfo = mock(() => undefined);
 
 const getOwnedProject = mock(async () => ({
   id: projectId,
@@ -154,6 +155,9 @@ describe("customer project detail bootstrap team fields", () => {
     const testController = controller as unknown as {
       getCustomerProjectDetailBootstrap: (request: unknown) => Promise<{
         data: {
+          debug_timing?: {
+            workflow_steps?: Record<string, number>;
+          };
           project: {
             designer?: unknown;
             supervisor?: unknown;
@@ -180,6 +184,7 @@ describe("customer project detail bootstrap team fields", () => {
         include_acceptances: false,
         include_stages: false,
         include_campaigns: false,
+        debug_timing: true,
       },
       user: {
         tenant_id: tenantId,
@@ -187,10 +192,24 @@ describe("customer project detail bootstrap team fields", () => {
       },
       id: "req-test",
       log: {
-        info: mock(() => undefined),
+        info: logInfo,
         warn: mock(() => undefined),
       },
     });
+
+    expect(response.data.debug_timing?.workflow_steps).toMatchObject({
+      subject_state_runtime_ms: 0,
+      graph_ms: 0,
+      projection_ms: 0,
+    });
+    expect(logInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflow_steps: expect.objectContaining({
+          subject_state_runtime_ms: 0,
+        }),
+      }),
+      "[customer-project-detail] timing",
+    );
 
     expect(response.data.project.members?.map((item) => ({
       role_code: item.role_code,

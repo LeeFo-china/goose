@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { createProjectWorkflowProgressTimingSteps } from "@/services/project-workflow-progress-timing";
 import { createCustomerProjectDetailTimingSteps } from "@/utils/customer-project-detail-timing";
 
 const getProjectProgress = mock(async () => ({
@@ -59,16 +60,22 @@ describe("loadCustomerProjectWorkflowProgress", () => {
       "./detail-bootstrap-workflow-progress"
     );
     const addPartialError = mock(() => undefined);
+    const workflowSteps = createProjectWorkflowProgressTimingSteps();
 
     const progress = await loadCustomerProjectWorkflowProgress({
       projectId: "project-1",
       tenantId: "tenant-1",
       steps: createCustomerProjectDetailTimingSteps(),
+      workflowSteps,
       addPartialError,
     });
 
     expect(progress.source).toBe("workflow_runtime");
     expect(progress.timeline_nodes.length).toBe(2);
+    expect(getProjectProgress).toHaveBeenCalledWith(
+      { tenantId: "tenant-1", projectId: "project-1" },
+      { timing: workflowSteps },
+    );
     expect(addPartialError).not.toHaveBeenCalled();
   });
 });

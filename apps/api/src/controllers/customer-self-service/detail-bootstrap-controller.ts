@@ -11,6 +11,7 @@ import { customerServiceConfigService } from "@/services/customer-service-config
 import { customerSelfServiceService } from "@/services/customer-self-service";
 import { projectAcceptanceService } from "@/services/project-acceptances";
 import { toCustomerProjectWorkflowProgress } from "@/services/project-workflow-progress";
+import { createProjectWorkflowProgressTimingSteps } from "@/services/project-workflow-progress-timing";
 import {
   createCustomerProjectDetailTimingSteps,
   logCustomerProjectDetailTiming,
@@ -120,6 +121,7 @@ class CustomerProjectDetailBootstrapController
   async getCustomerProjectDetailBootstrap(request: FastifyRequest) {
     const startedAt = Date.now();
     const steps = createCustomerProjectDetailTimingSteps();
+    const workflowSteps = createProjectWorkflowProgressTimingSteps();
     const authUserId = await measureCustomerProjectDetailStep(
       steps,
       "auth_context_ms",
@@ -224,6 +226,7 @@ class CustomerProjectDetailBootstrapController
       projectId: project.id,
       tenantId: projectTenantId,
       steps,
+      workflowSteps,
       addPartialError,
     });
     const stagesPromise = queryResult.data.include_stages
@@ -321,7 +324,6 @@ class CustomerProjectDetailBootstrapController
         server_time: new Date().toISOString(),
       }),
     );
-
     logCustomerProjectDetailTiming(request, {
       route: "GET /customer/projects/:id/detail-bootstrap",
       startedAt,
@@ -334,13 +336,14 @@ class CustomerProjectDetailBootstrapController
         include_stages: queryResult.data.include_stages,
         include_campaigns: queryResult.data.include_campaigns,
       },
+      extra: { workflow_steps: workflowSteps },
       steps,
     });
 
     return ResponseHandler.success(this.withDebugTiming(
       payload,
       queryResult.data.debug_timing,
-      { auth_steps: this.getAuthTimingSteps(request), steps },
+      { auth_steps: this.getAuthTimingSteps(request), steps, workflow_steps: workflowSteps },
     ));
   }
 
