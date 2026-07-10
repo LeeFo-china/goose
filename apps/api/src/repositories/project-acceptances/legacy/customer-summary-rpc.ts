@@ -1,5 +1,6 @@
-import { Errors, SupabaseDB } from "./shared";
+import { Errors } from "./shared";
 import { getDirectPostgresSql } from "@/utils/postgres-direct";
+import { executeCancellableSqlQuery } from "@/utils/cancellable-sql-query";
 import type { ProjectAcceptanceRow, ProjectAcceptanceStatus, ProjectLogStageCode } from "./shared";
 
 type CustomerAcceptanceSummaryRpcRow = ProjectAcceptanceRow & {
@@ -15,11 +16,12 @@ export async function listCustomerProjectAcceptanceSummaries(this: any, input: {
   pageSize: number;
   status?: ProjectAcceptanceStatus;
   stageCode?: ProjectLogStageCode;
+  signal?: AbortSignal;
 }) {
-  const directSql = getDirectPostgresSql();
+  const directSql = this.getDirectSql() as ReturnType<typeof getDirectPostgresSql>;
   if (directSql && !this.customerAcceptanceSummaryDirectSqlUnavailable) {
     try {
-      const rows = await directSql`
+      const query = directSql`
         SELECT *
         FROM public.list_customer_project_acceptance_summaries(
           ${input.tenantId}::uuid,
@@ -31,15 +33,17 @@ export async function listCustomerProjectAcceptanceSummaries(this: any, input: {
           ${input.stageCode ?? null}::text
         )
       `;
+      const rows = await executeCancellableSqlQuery(query, input.signal);
       return buildCustomerAcceptanceSummaryResult(
         rows as CustomerAcceptanceSummaryRpcRow[],
       );
     } catch {
+      input.signal?.throwIfAborted();
       this.customerAcceptanceSummaryDirectSqlUnavailable = true;
     }
   }
 
-  const { data, error } = await SupabaseDB.getAdminClient().rpc(
+  const request = this.getAdminClient().rpc(
     "list_customer_project_acceptance_summaries",
     {
       p_tenant_id: input.tenantId,
@@ -51,6 +55,9 @@ export async function listCustomerProjectAcceptanceSummaries(this: any, input: {
       p_stage_code: input.stageCode ?? null,
     },
   );
+  const { data, error } = await (input.signal
+    ? request.abortSignal(input.signal)
+    : request);
 
   if (error) throw Errors.dbError("查询客户项目验收摘要失败", error);
   return buildCustomerAcceptanceSummaryResult(

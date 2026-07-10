@@ -213,6 +213,7 @@ export async function listCustomerAcceptances(this: any,
     options?: {
       responseMode?: "summary" | "detail";
       timing?: ProjectAcceptanceTimingSteps;
+      signal?: AbortSignal;
     },
   ) {
     const responseMode = options?.responseMode ?? "detail";
@@ -227,14 +228,19 @@ export async function listCustomerAcceptances(this: any,
       return cached;
     }
 
-    const inFlight = this.customerAcceptanceListInFlight.get(cacheKey);
-    if (inFlight) {
-      return inFlight;
+    const load = () => responseMode === "summary"
+      ? this.loadCustomerAcceptanceSummaries(authUserId, query, scope, options)
+      : this.loadCustomerAcceptances(authUserId, query, scope, options);
+    if (options?.signal) {
+      const result = await load();
+      this.setCachedCustomerAcceptanceList(cacheKey, result);
+      return result;
     }
 
-    const request = (responseMode === "summary"
-      ? this.loadCustomerAcceptanceSummaries(authUserId, query, scope, options)
-      : this.loadCustomerAcceptances(authUserId, query, scope, options))
+    const inFlight = this.customerAcceptanceListInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
+
+    const request = load()
       .then((result: CustomerAcceptanceListResult) => {
         this.setCachedCustomerAcceptanceList(cacheKey, result);
         return result;
@@ -261,7 +267,7 @@ export async function loadCustomerAcceptances(this: any,
       tenantId?: string | null;
       customerId?: string | null;
     },
-    options?: { timing?: ProjectAcceptanceTimingSteps },
+    options?: { timing?: ProjectAcceptanceTimingSteps; signal?: AbortSignal },
   ): Promise<CustomerAcceptanceListResult> {
     const timing = options?.timing;
     const customerPromise = measureProjectAcceptanceTiming(

@@ -25,7 +25,7 @@ export async function loadCustomerAcceptanceSummaries(this: any,
       tenantId?: string | null;
       customerId?: string | null;
     },
-    options?: { timing?: ProjectAcceptanceTimingSteps },
+    options?: { timing?: ProjectAcceptanceTimingSteps; signal?: AbortSignal },
   ) {
     const timing = options?.timing;
     let customerId = scope?.customerId ?? null;
@@ -54,6 +54,7 @@ export async function loadCustomerAcceptanceSummaries(this: any,
         pageSize: query.pageSize,
         status: query.status,
         stageCode: query.stage_code,
+        signal: options?.signal,
       }),
     );
 
