@@ -77,6 +77,8 @@ const archiveRuntimeInstance = mock(async (
   archived_by: input.archivedBy ?? null,
   archive_reason: input.archiveReason ?? null,
 }));
+const startRuntimeInstance = mock(async () => ({ ok: true as const, instance: runtimeInstance({ id: "instance-1", status: "running" }), currentNode: {}, task: null }));
+const rebuildRuntimeInstance = mock(async () => ({ ok: true as const, instance: runtimeInstance({ id: "instance-1", status: "running" }), archivedInstanceIds: [] }));
 
 mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
@@ -96,6 +98,8 @@ mock.module("@/repositories/workflows", () => ({
     listVersions,
     listRunningInstanceCountsByVersion,
     updateVersionStatus,
+    startRuntimeInstance,
+    rebuildRuntimeInstance,
   },
 }));
 
@@ -159,6 +163,8 @@ describe("workflowService.listVersions", () => {
       status: "completed",
     }));
     archiveRuntimeInstance.mockClear();
+    startRuntimeInstance.mockClear();
+    rebuildRuntimeInstance.mockClear();
     invalidateProjectProgress.mockClear();
     archiveRuntimeInstance.mockImplementation(async (input) => runtimeInstance({
       id: input.instanceId,
@@ -298,6 +304,21 @@ describe("workflowService.listVersions", () => {
     });
     expect(result.status).toBe("completed");
     expect(result.archived_at).toBe(NOW);
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
+  });
+
+  test("invalidates project runtime start and applied rebuild but not dry-run", async () => {
+    const { workflowService } = await import("./workflows");
+    await workflowService.startRuntimeInstance(authContext(), "definition-1", {
+      subject_type: "project", subject_id: "project-1", context: {},
+    });
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
+
+    invalidateProjectProgress.mockClear();
+    const rebuild = { subject_type: "project" as const, subject_id: "project-1", reason: "修复流程", context: {}, delete_completed_instances: false };
+    await workflowService.rebuildRuntimeInstance(authContext(), "definition-1", { ...rebuild, dry_run: true });
+    expect(invalidateProjectProgress).not.toHaveBeenCalled();
+    await workflowService.rebuildRuntimeInstance(authContext(), "definition-1", { ...rebuild, dry_run: false });
     expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
   });
 });
