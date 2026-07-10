@@ -15,6 +15,7 @@ import {
   projectProcedureAssignmentService,
   type ProcedureAssignmentRow,
 } from "@/services/project-procedure-assignments";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
 import { workflowTaskCustomerBridge } from "@/services/workflow-task-customer-bridge";
 import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-bridge";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
@@ -165,7 +166,10 @@ class WorkflowTaskService {
         action: input.action,
         output,
       });
-      if (paymentBridged) return paymentBridged;
+      if (paymentBridged) {
+        this.invalidateProjectProgress(tenantId, task.instance.subject_id);
+        return paymentBridged;
+      }
 
       const definition = await workflowRepository.getDefinitionById(
         task.definition_id,
@@ -204,7 +208,10 @@ class WorkflowTaskService {
         reason: input.reason ?? null,
         output,
       });
-      if (bridged) return bridged;
+      if (bridged) {
+        this.invalidateProjectProgress(tenantId, task.instance.subject_id);
+        return bridged;
+      }
     }
 
     await assertRuntimeNodeCompletionAllowed({
@@ -255,6 +262,9 @@ class WorkflowTaskService {
       definitionId: task.definition_id,
       instanceId: task.instance_id,
     });
+    if (task.instance.subject_type === "project") {
+      this.invalidateProjectProgress(tenantId, task.instance.subject_id);
+    }
 
     return {
       result,
@@ -269,6 +279,10 @@ class WorkflowTaskService {
     }
 
     return tenantId;
+  }
+
+  private invalidateProjectProgress(tenantId: string, projectId: string) {
+    projectWorkflowProgressService.invalidateProject({ tenantId, projectId });
   }
 
   private async isTaskAccessible(

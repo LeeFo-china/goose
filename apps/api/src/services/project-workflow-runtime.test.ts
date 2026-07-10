@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
 
 type RuntimeInstanceFixture = {
   id: string;
@@ -96,6 +97,10 @@ const completeRuntimeNode = mock(async (): Promise<CompleteRuntimeNodeFixture> =
   task: null,
 }));
 const syncFromRuntimeInstance = mock(async () => null);
+const invalidateProjectProgress = spyOn(
+  projectWorkflowProgressService,
+  "invalidateProject",
+).mockImplementation(() => undefined);
 const getRuntimeInstanceById = mock(async () => ({
   status: "completed",
   current_node_key: "pending_start",
@@ -174,6 +179,7 @@ beforeEach(() => {
   startRuntimeInstance.mockClear();
   completeRuntimeNode.mockClear();
   syncFromRuntimeInstance.mockClear();
+  invalidateProjectProgress.mockClear();
   getRuntimeInstanceById.mockClear();
   findProjectById.mockClear();
   findProjectById.mockImplementation(async () => null);
@@ -223,6 +229,10 @@ describe("projectWorkflowRuntimeService", () => {
       definition_id: "definition-1",
       instance_id: "instance-1",
       current_node_key: "designing",
+    });
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
     });
   });
 
@@ -290,6 +300,10 @@ describe("projectWorkflowRuntimeService", () => {
       definition_id: "construction-definition-1",
       instance_id: "construction-instance-1",
       current_node_key: "started",
+    });
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
     });
   });
 
@@ -426,5 +440,9 @@ describe("projectWorkflowRuntimeService", () => {
       nodeKey: "final_acceptance",
       action: "start_acceptance",
     }));
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+    });
   });
 });

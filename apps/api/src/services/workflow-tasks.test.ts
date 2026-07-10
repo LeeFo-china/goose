@@ -1,5 +1,6 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
 
 const completeRuntimeNode = mock(async () => ({
   ok: true,
@@ -14,9 +15,10 @@ const completeExpenseBridge = mock(async () => null);
 const shouldRequireAssignmentForTask = mock(() => false);
 const markProcedureCompleted = mock(async () => null);
 const canAccessProject = mock(async () => true);
+const invalidateProjectProgress = spyOn(projectWorkflowProgressService, "invalidateProject")
+  .mockImplementation(() => undefined);
 const shouldRequireProjectWorkflowRebuild = mock((input: {
-  workflowKey?: string | null;
-  nodeKey: string;
+  workflowKey?: string | null; nodeKey: string;
 }) =>
   input.workflowKey !== "project_signing" &&
   ["designing", "proposal_confirmed", "signed", "design_finalized", "pending_start"]
@@ -274,12 +276,11 @@ describe("workflowTaskService", () => {
 
   test("allows procedure completion permission to advance procedure tasks", async () => {
     const { workflowTaskService } = await import("./workflow-tasks");
-    findById.mockImplementationOnce(async () =>
-      procedureTask as unknown as typeof paymentTask
-    );
+    findById.mockImplementationOnce(async () => procedureTask as unknown as typeof paymentTask);
     completePaymentBridge.mockImplementationOnce(async () => null);
     completeProjectBridge.mockImplementationOnce(async () => null);
     completeRuntimeNode.mockClear();
+    invalidateProjectProgress.mockClear();
 
     const result = await workflowTaskService.completeTask(
       authContext({
@@ -305,13 +306,12 @@ describe("workflowTaskService", () => {
         action: "complete_procedure",
       }),
     );
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
   });
 
   test("denies procedure completion when project scope is not visible", async () => {
     const { workflowTaskService } = await import("./workflow-tasks");
-    findById.mockImplementationOnce(async () =>
-      procedureTask as unknown as typeof paymentTask
-    );
+    findById.mockImplementationOnce(async () => procedureTask as unknown as typeof paymentTask);
     canAccessProject.mockImplementationOnce(async () => false);
     completeRuntimeNode.mockClear();
 
@@ -335,11 +335,10 @@ describe("workflowTaskService", () => {
 
   test("rejects stale pending task before running business bridges", async () => {
     const { workflowTaskService } = await import("./workflow-tasks");
-    findById.mockImplementationOnce(async () =>
-      stalePaymentTask as unknown as typeof paymentTask
-    );
+    findById.mockImplementationOnce(async () => stalePaymentTask as unknown as typeof paymentTask);
     completePaymentBridge.mockClear();
     completeRuntimeNode.mockClear();
+    invalidateProjectProgress.mockClear();
 
     await expect(
       workflowTaskService.completeTask(
@@ -367,6 +366,7 @@ describe("workflowTaskService", () => {
 
     expect(completePaymentBridge).not.toHaveBeenCalled();
     expect(completeRuntimeNode).not.toHaveBeenCalled();
+    expect(invalidateProjectProgress).not.toHaveBeenCalled();
   });
 
   test("routes project payment collection completion through payment bridge", async () => {
@@ -380,6 +380,7 @@ describe("workflowTaskService", () => {
       payment: { id: "payment-1" },
       workflow_state: null,
     }));
+    invalidateProjectProgress.mockClear();
 
     const result = await workflowTaskService.completeTask(
       authContext({
@@ -432,13 +433,12 @@ describe("workflowTaskService", () => {
       }),
     );
     expect(completeRuntimeNode).not.toHaveBeenCalled();
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
   });
 
   test("falls back to generic runtime completion for customer design node", async () => {
     const { workflowTaskService } = await import("./workflow-tasks");
-    findById.mockImplementationOnce(async () =>
-      customerDesignTask as unknown as typeof paymentTask
-    );
+    findById.mockImplementationOnce(async () => customerDesignTask as unknown as typeof paymentTask);
     completeRuntimeNode.mockClear();
 
     const result = await workflowTaskService.completeTask(
@@ -466,9 +466,7 @@ describe("workflowTaskService", () => {
 
   test("requires rebuild before completing legacy project signing node", async () => {
     const { workflowTaskService } = await import("./workflow-tasks");
-    findById.mockImplementationOnce(async () =>
-      legacyProjectDesigningTask as unknown as typeof paymentTask
-    );
+    findById.mockImplementationOnce(async () => legacyProjectDesigningTask as unknown as typeof paymentTask);
     getDefinitionById.mockImplementationOnce(async () => ({
       id: "legacy-definition-1",
       workflow_key: "construction_main",
