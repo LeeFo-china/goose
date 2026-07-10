@@ -47,4 +47,18 @@ describe("executeCancellableSqlQuery", () => {
 
     expect(query.cancel).not.toHaveBeenCalled();
   });
+
+  test("rejects without an uncaught exception when cancel throws", async () => {
+    const controller = new AbortController();
+    const cancelFailure = new Error("cancel failed");
+    const query = cancellablePromise(new Promise<never>(() => undefined), () => {
+      throw cancelFailure;
+    });
+
+    const result = executeCancellableSqlQuery(query, controller.signal);
+    controller.abort("deadline");
+
+    await expect(result).rejects.toBe(cancelFailure);
+    expect(query.cancel).toHaveBeenCalledTimes(1);
+  });
 });

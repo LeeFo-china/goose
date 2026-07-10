@@ -12,11 +12,21 @@ export async function executeCancellableSqlQuery<Value>(
     signal.throwIfAborted();
   }
 
-  const cancelQuery = () => query.cancel();
-  signal.addEventListener("abort", cancelQuery, { once: true });
-  try {
-    return await query;
-  } finally {
-    signal.removeEventListener("abort", cancelQuery);
-  }
+  return await new Promise<Value>((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener("abort", cancelQuery);
+    const cancelQuery = () => {
+      cleanup();
+      try {
+        query.cancel();
+        reject(signal.reason);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    signal.addEventListener("abort", cancelQuery, { once: true });
+    Promise.resolve(query).then(
+      (value) => { cleanup(); resolve(value); },
+      (error) => { cleanup(); reject(error); },
+    );
+  });
 }
