@@ -219,7 +219,7 @@ scripts/dev/seed-dev.sql
 执行方式：
 
 ```bash
-ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
+ssh gooes-dev \
   'set -a; . /opt/gooes-dev/docker/.env.dev.db; psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1' \
   < scripts/dev/seed-dev.sql
 ```

@@ -59,7 +59,7 @@ scripts/dev/seed-dev.sql
 后端或运维需要重置 dev 基础数据时执行：
 
 ```bash
-ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
+ssh gooes-dev \
   'set -a; . /opt/gooes-dev/docker/.env.dev.db; psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1' \
   < scripts/dev/seed-dev.sql
 ```
