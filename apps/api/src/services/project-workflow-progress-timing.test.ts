@@ -9,8 +9,13 @@ describe("project workflow progress timing", () => {
   test("creates every timing step with a zero value", () => {
     const steps = createProjectWorkflowProgressTimingSteps();
 
-    expect(Object.keys(steps)).toEqual([...projectWorkflowProgressTimingStepKeys]);
-    expect(Object.values(steps).every((value) => value === 0)).toBe(true);
+    expect(Object.keys(steps)).toEqual([
+      ...projectWorkflowProgressTimingStepKeys,
+      "cache_status",
+    ]);
+    expect(steps.cache_status).toBe("not_requested");
+    expect(projectWorkflowProgressTimingStepKeys.every((key) => steps[key] === 0))
+      .toBe(true);
   });
 
   test("records a fulfilled step and returns its value", async () => {

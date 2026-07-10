@@ -5,6 +5,7 @@ import {
   type GetProjectProgressOptions,
   type ProjectWorkflowProgress,
 } from "./project-workflow-progress";
+import { createProjectWorkflowProgressTimingSteps } from "./project-workflow-progress-timing";
 
 const progress = (
   source: ProjectWorkflowProgress["source"] = "workflow_runtime",
@@ -65,6 +66,32 @@ describe("ProjectWorkflowProgressService cache", () => {
 
     expect(service.loader).toHaveBeenCalledTimes(1);
     expect(first).toBe(second);
+  });
+
+  test("copies shared timings to an in-flight joiner and marks cache hits", async () => {
+    let release: ((value: ProjectWorkflowProgress) => void) | undefined;
+    const service = new TestProjectWorkflowProgressService();
+    service.loader.mockImplementation((_input, options) => {
+      if (options.timing) options.timing.graph_ms = 17;
+      return new Promise<ProjectWorkflowProgress>((resolve) => { release = resolve; });
+    });
+    const input = { tenantId: "tenant-1", projectId: "project-1" };
+    const firstTiming = createProjectWorkflowProgressTimingSteps();
+    const joinerTiming = createProjectWorkflowProgressTimingSteps();
+
+    const firstPromise = service.getProjectProgress(input, { timing: firstTiming });
+    await Promise.resolve();
+    const joinerPromise = service.getProjectProgress(input, { timing: joinerTiming });
+    await Promise.resolve();
+    release?.(progress());
+    await Promise.all([firstPromise, joinerPromise]);
+
+    expect(firstTiming).toMatchObject({ cache_status: "loaded", graph_ms: 17 });
+    expect(joinerTiming).toMatchObject({ cache_status: "in_flight", graph_ms: 17 });
+
+    const hitTiming = createProjectWorkflowProgressTimingSteps();
+    await service.getProjectProgress(input, { timing: hitTiming });
+    expect(hitTiming).toMatchObject({ cache_status: "hit", graph_ms: 0 });
   });
 
   test("reuses a successful value within the configured ttl", async () => {

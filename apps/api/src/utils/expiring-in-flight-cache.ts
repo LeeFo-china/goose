@@ -7,6 +7,8 @@ type GetOrCreateOptions<Value> = {
   shouldCache?: (value: Value) => boolean;
 };
 
+export type ExpiringCacheReadStatus = "loaded" | "in_flight" | "hit";
+
 export class ExpiringInFlightCache<Key, Value> {
   private readonly fulfilled = new Map<Key, FulfilledEntry<Value>>();
   private readonly inFlight = new Map<Key, Promise<Value>>();
@@ -23,16 +25,27 @@ export class ExpiringInFlightCache<Key, Value> {
     loader: () => Promise<Value>,
     options: GetOrCreateOptions<Value> = {},
   ): Promise<Value> {
+    return this.getOrCreateWithStatus(key, loader, options)
+      .then((result) => result.value);
+  }
+
+  getOrCreateWithStatus(
+    key: Key,
+    loader: () => Promise<Value>,
+    options: GetOrCreateOptions<Value> = {},
+  ): Promise<{ value: Value; status: ExpiringCacheReadStatus }> {
     const cached = this.fulfilled.get(key);
     if (cached && cached.expiresAt > Date.now()) {
       this.fulfilled.delete(key);
       this.fulfilled.set(key, cached);
-      return Promise.resolve(cached.value);
+      return Promise.resolve({ value: cached.value, status: "hit" });
     }
     if (cached) this.fulfilled.delete(key);
 
     const pending = this.inFlight.get(key);
-    if (pending) return pending;
+    if (pending) {
+      return pending.then((value) => ({ value, status: "in_flight" }));
+    }
 
     const request = Promise.resolve()
       .then(loader)
@@ -54,7 +67,7 @@ export class ExpiringInFlightCache<Key, Value> {
         }
       });
     this.inFlight.set(key, request);
-    return request;
+    return request.then((value) => ({ value, status: "loaded" }));
   }
 
   invalidate(key: Key): void {

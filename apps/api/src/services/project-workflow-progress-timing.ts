@@ -13,16 +13,25 @@ export const projectWorkflowProgressTimingStepKeys = [
 export type ProjectWorkflowProgressTimingStep =
   (typeof projectWorkflowProgressTimingStepKeys)[number];
 
+export type ProjectWorkflowProgressCacheStatus =
+  | "not_requested"
+  | "loaded"
+  | "in_flight"
+  | "hit";
+
 export type ProjectWorkflowProgressTimingSteps = Record<
   ProjectWorkflowProgressTimingStep,
   number
->;
+> & { cache_status: ProjectWorkflowProgressCacheStatus };
 
 export function createProjectWorkflowProgressTimingSteps():
   ProjectWorkflowProgressTimingSteps {
-  return Object.fromEntries(
+  return {
+    ...Object.fromEntries(
     projectWorkflowProgressTimingStepKeys.map((key) => [key, 0]),
-  ) as ProjectWorkflowProgressTimingSteps;
+    ),
+    cache_status: "not_requested",
+  } as ProjectWorkflowProgressTimingSteps;
 }
 
 export async function measureProjectWorkflowProgressStep<Value>(

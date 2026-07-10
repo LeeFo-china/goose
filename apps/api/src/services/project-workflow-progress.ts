@@ -33,7 +33,7 @@ import {
   type ProjectWorkflowProgressTimingStep,
   type ProjectWorkflowProgressTimingSteps,
 } from "@/services/project-workflow-progress-timing";
-import { ExpiringInFlightCache } from "@/utils/expiring-in-flight-cache";
+import { ProjectWorkflowProgressReadCache } from "@/services/project-workflow-progress-read-cache";
 import type { WorkflowBusinessKind, WorkflowInstanceStatus } from "@gooes/domain";
 
 export {
@@ -203,21 +203,21 @@ export function buildProjectWorkflowProgressProjection(
 }
 
 export class ProjectWorkflowProgressService {
-  private readonly progressCache: ExpiringInFlightCache<string, ProjectWorkflowProgress>;
+  private readonly progressCache: ProjectWorkflowProgressReadCache<ProjectWorkflowProgress>;
   constructor(options: { cacheTtlMs?: number } = {}) {
-    this.progressCache = new ExpiringInFlightCache({ ttlMs: options.cacheTtlMs ?? 5_000 });
+    this.progressCache = new ProjectWorkflowProgressReadCache(options.cacheTtlMs ?? 5_000);
   }
   async getProjectProgress(
     input: GetProjectProgressInput,
     options: GetProjectProgressOptions = {},
   ): Promise<ProjectWorkflowProgress> {
-    return this.progressCache.getOrCreate(
-      [input.tenantId, input.projectId].join(":"),
-      () => this.loadProjectProgress(input, options),
-      { shouldCache: (value) => value.source !== "unavailable" },
-    );
+    return this.progressCache.getOrCreate({
+      key: [input.tenantId, input.projectId].join(":"),
+      timing: options.timing,
+      load: (timing) => this.loadProjectProgress(input, { ...options, timing }),
+      shouldCache: (value) => value.source !== "unavailable",
+    });
   }
-
   invalidateProject(input: GetProjectProgressInput): void {
     this.progressCache.invalidate([input.tenantId, input.projectId].join(":"));
   }
