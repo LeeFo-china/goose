@@ -16,8 +16,11 @@ const project = (id = "project-1") => ({
 });
 
 function createService(options: { detailCacheTtlMs?: number } = {}) {
+  const findOwnedProject = mock(
+    async (): Promise<ReturnType<typeof project> | null> => project(),
+  );
   const repository = {
-    findOwnedProject: mock(async () => project()),
+    findOwnedProject,
     findOwnedProjectAccess: mock(async () => ({
       id: "project-1",
       tenant_id: "tenant-1",

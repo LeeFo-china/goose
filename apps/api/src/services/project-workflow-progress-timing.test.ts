@@ -9,7 +9,7 @@ describe("project workflow progress timing", () => {
   test("creates every timing step with a zero value", () => {
     const steps = createProjectWorkflowProgressTimingSteps();
 
-    expect(Object.keys(steps)).toEqual(projectWorkflowProgressTimingStepKeys);
+    expect(Object.keys(steps)).toEqual([...projectWorkflowProgressTimingStepKeys]);
     expect(Object.values(steps).every((value) => value === 0)).toBe(true);
   });
 

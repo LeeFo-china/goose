@@ -60,7 +60,7 @@ export type {
   WorkflowTimelineNodeAttributes,
   WorkflowTimelineNodeDisplay,
 } from "@/services/project-workflow-timeline-contract";
-export { enrichWorkflowTimelineNodesWithConstructionStages };
+export { enrichWorkflowTimelineNodesWithConstructionStages } from "@/services/project-workflow-timeline-contract";
 
 export type ProjectWorkflowProgress = {
   source: WorkflowProgressSource;
