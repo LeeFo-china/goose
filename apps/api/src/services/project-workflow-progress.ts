@@ -18,9 +18,7 @@ import {
 import {
   buildWorkflowTimelineNodeContract,
   buildWorkflowTimelineNodeGroup,
-  enrichWorkflowTimelineNodesWithConstructionStages,
   orderWorkflowTimelineGraphNodes,
-  type ConstructionStagesForWorkflowTimeline,
   type WorkflowTimelineNode,
   type WorkflowTimelineNodeCompletion,
   type WorkflowTimelineNodeGroup,
@@ -30,12 +28,18 @@ import {
   FINAL_ACCEPTANCE_STAGE_CODE,
   isFinalAcceptanceReportWorkflowNode,
 } from "@/services/project-final-acceptance-workflow";
+import {
+  measureProjectWorkflowProgressStep,
+  type ProjectWorkflowProgressTimingStep,
+  type ProjectWorkflowProgressTimingSteps,
+} from "@/services/project-workflow-progress-timing";
 import type { WorkflowBusinessKind, WorkflowInstanceStatus } from "@gooes/domain";
 
 export {
   buildUnavailableProjectWorkflowProgress,
   toCustomerProjectWorkflowProgress,
 } from "@/services/project-workflow-progress-empty";
+export { enrichProjectWorkflowProgressWithConstructionStages } from "@/services/project-workflow-progress-construction-stages";
 
 type JsonObject = Record<string, unknown>;
 
@@ -118,6 +122,9 @@ type GetProjectProgressInput = {
   tenantId: string;
   projectId: string;
 };
+type GetProjectProgressOptions = {
+  timing?: ProjectWorkflowProgressTimingSteps;
+};
 
 export function buildProjectWorkflowProgressProjection(
   input: BuildProjectWorkflowProgressProjectionInput,
@@ -197,6 +204,7 @@ export function buildProjectWorkflowProgressProjection(
 class ProjectWorkflowProgressService {
   async getProjectProgress(
     input: GetProjectProgressInput,
+    options: GetProjectProgressOptions = {},
   ): Promise<ProjectWorkflowProgress> {
     const { workflowSubjectStateService } = await import(
       "@/services/workflow-subject-state"
@@ -206,43 +214,55 @@ class ProjectWorkflowProgressService {
     const { projectProcedureAssignmentService } = await import(
       "@/services/project-procedure-assignments"
     );
+    const measure = <Value>(
+      step: ProjectWorkflowProgressTimingStep,
+      callback: () => Promise<Value> | Value,
+    ) => measureProjectWorkflowProgressStep(options.timing, step, callback);
 
     const { subjectState, runtimeInstance } =
-      await workflowSubjectStateService.getSubjectStateWithRuntime({
-        tenantId: input.tenantId,
-        subjectType: "project",
-        subjectId: input.projectId,
-      });
+      await measure(
+        "subject_state_runtime_ms",
+        () => workflowSubjectStateService.getSubjectStateWithRuntime({
+          tenantId: input.tenantId,
+          subjectType: "project",
+          subjectId: input.projectId,
+        }),
+      );
 
     if (!runtimeInstance) {
-      return buildProjectWorkflowProgressProjection({
-        subjectState,
-        runtimeInstance: null,
-        graph: null,
-        pendingActions: [],
-      });
+      return measure("projection_ms", () =>
+        buildProjectWorkflowProgressProjection({
+          subjectState,
+          runtimeInstance: null,
+          graph: null,
+          pendingActions: [],
+        }));
     }
 
     const [graph, pendingTasks, runtimeNodes, procedureAssignments] = await Promise.all([
-      workflowRepository.getGraph({
-        tenantId: input.tenantId,
-        definitionId: runtimeInstance.definition_id,
-        versionId: runtimeInstance.version_id,
-      }),
-      workflowTaskRepository.listPendingByInstance({
-        tenantId: input.tenantId,
-        instanceId: runtimeInstance.id,
-      }),
-      workflowRepository.listRuntimeInstanceNodes({
-        tenantId: input.tenantId,
-        definitionId: runtimeInstance.definition_id,
-        instanceId: runtimeInstance.id,
-      }),
-      projectProcedureAssignmentService.listProjectAssignmentsForRuntime({
-        tenantId: input.tenantId,
-        projectId: input.projectId,
-        workflowInstanceId: runtimeInstance.id,
-      }),
+      measure("graph_ms", () =>
+        workflowRepository.getGraph({
+          tenantId: input.tenantId,
+          definitionId: runtimeInstance.definition_id,
+          versionId: runtimeInstance.version_id,
+        })),
+      measure("pending_tasks_ms", () =>
+        workflowTaskRepository.listPendingByInstance({
+          tenantId: input.tenantId,
+          instanceId: runtimeInstance.id,
+        })),
+      measure("runtime_nodes_ms", () =>
+        workflowRepository.listRuntimeInstanceNodes({
+          tenantId: input.tenantId,
+          definitionId: runtimeInstance.definition_id,
+          instanceId: runtimeInstance.id,
+        })),
+      measure("procedure_assignments_ms", () =>
+        projectProcedureAssignmentService.listProjectAssignmentsForRuntime({
+          tenantId: input.tenantId,
+          projectId: input.projectId,
+          workflowInstanceId: runtimeInstance.id,
+        })),
     ]);
     const workflowGraph = graph
       ? {
@@ -253,53 +273,37 @@ class ProjectWorkflowProgressService {
       : null;
     const [pendingActions, enrichedGraph, completedNodeActors] =
       await Promise.all([
-        buildWorkflowTaskActionPayloads({
-          tenantId: input.tenantId,
-          subjectType: "project",
-          tasks: pendingTasks,
-        }),
-        enrichWorkflowGraphWithFinanceReviewersForTenant({
-          tenantId: input.tenantId,
-          graph: workflowGraph,
-        }),
-        buildFinanceConfirmationActorsForTenant({
-          tenantId: input.tenantId,
-          runtimeNodes,
-        }),
+        measure("task_actions_ms", () =>
+          buildWorkflowTaskActionPayloads({
+            tenantId: input.tenantId,
+            subjectType: "project",
+            tasks: pendingTasks,
+          })),
+        measure("finance_reviewers_ms", () =>
+          enrichWorkflowGraphWithFinanceReviewersForTenant({
+            tenantId: input.tenantId,
+            graph: workflowGraph,
+          })),
+        measure("completed_node_actors_ms", () =>
+          buildFinanceConfirmationActorsForTenant({
+            tenantId: input.tenantId,
+            runtimeNodes,
+          })),
       ]);
 
-    return buildProjectWorkflowProgressProjection({
-      subjectState,
-      runtimeInstance,
-      graph: enrichedGraph,
-      completedNodeKeys: runtimeNodes
-        .filter((node) => node.status === "completed")
-        .map((node) => node.node_key),
-      completedNodeActors,
-      procedureAssignments,
-      pendingActions,
-    });
+    return measure("projection_ms", () =>
+      buildProjectWorkflowProgressProjection({
+        subjectState,
+        runtimeInstance,
+        graph: enrichedGraph,
+        completedNodeKeys: runtimeNodes
+          .filter((node) => node.status === "completed")
+          .map((node) => node.node_key),
+        completedNodeActors,
+        procedureAssignments,
+        pendingActions,
+      }));
   }
-}
-
-export function enrichProjectWorkflowProgressWithConstructionStages(
-  progress: ProjectWorkflowProgress,
-  constructionStages: ConstructionStagesForWorkflowTimeline | null | undefined,
-): ProjectWorkflowProgress {
-  const timelineNodes = enrichWorkflowTimelineNodesWithConstructionStages(
-    progress.timeline_nodes,
-    constructionStages,
-  );
-  const currentTimelineActions = progress.current_node_key
-    ? timelineNodes.find((node) => node.node_key === progress.current_node_key)
-      ?.actions
-    : undefined;
-
-  return {
-    ...progress,
-    timeline_nodes: timelineNodes,
-    actions: currentTimelineActions ?? progress.actions,
-  };
 }
 
 export function buildWorkflowTimelineNodes(input: {
