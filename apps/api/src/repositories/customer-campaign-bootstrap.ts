@@ -1,22 +1,34 @@
 import { getDirectPostgresSql } from "@/utils/postgres-direct";
+import { executeCancellableSqlQuery } from "@/utils/cancellable-sql-query";
 
 type CampaignType = "share_assist" | "appointment_reward";
 
 type HasMatchRow = { has_match: boolean };
 
-class CustomerCampaignBootstrapRepository {
+type RepositoryDependencies = {
+  getDirectSql?: typeof getDirectPostgresSql;
+};
+
+export class CustomerCampaignBootstrapRepository {
   private directSqlUnavailable = false;
+  private readonly getDirectSql: typeof getDirectPostgresSql;
+
+  constructor(dependencies: RepositoryDependencies = {}) {
+    this.getDirectSql = dependencies.getDirectSql ?? getDirectPostgresSql;
+  }
 
   async hasMatchingMarketingCampaign(input: {
     tenantId: string | null;
     projectId: string;
     campaignType: CampaignType;
+    signal?: AbortSignal;
   }) {
-    if (!getDirectPostgresSql() || this.directSqlUnavailable) return null;
+    input.signal?.throwIfAborted();
+    if (!this.getDirectSql() || this.directSqlUnavailable) return null;
 
     try {
-      const directSql = getDirectPostgresSql()!;
-      const rows = await directSql`
+      const directSql = this.getDirectSql()!;
+      const query = directSql`
         SELECT EXISTS (
           SELECT 1
           FROM public.marketing_campaigns AS campaign
@@ -61,19 +73,22 @@ class CustomerCampaignBootstrapRepository {
           LIMIT 1
         ) AS has_match
       `;
+      const rows = await executeCancellableSqlQuery(query, input.signal);
       return Boolean((rows[0] as HasMatchRow | undefined)?.has_match);
     } catch {
+      input.signal?.throwIfAborted();
       this.directSqlUnavailable = true;
       return null;
     }
   }
 
-  async hasActiveLegacyShareConfig(projectId: string) {
-    if (!getDirectPostgresSql() || this.directSqlUnavailable) return null;
+  async hasActiveLegacyShareConfig(projectId: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    if (!this.getDirectSql() || this.directSqlUnavailable) return null;
 
     try {
-      const directSql = getDirectPostgresSql()!;
-      const rows = await directSql`
+      const directSql = this.getDirectSql()!;
+      const query = directSql`
         SELECT EXISTS (
           SELECT 1
           FROM public.project_share_campaign_configs AS config
@@ -92,8 +107,10 @@ class CustomerCampaignBootstrapRepository {
           LIMIT 1
         ) AS has_match
       `;
+      const rows = await executeCancellableSqlQuery(query, signal);
       return Boolean((rows[0] as HasMatchRow | undefined)?.has_match);
     } catch {
+      signal?.throwIfAborted();
       this.directSqlUnavailable = true;
       return null;
     }
