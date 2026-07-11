@@ -21,17 +21,16 @@ describe("settings localization", () => {
     expect(source).not.toContain("label: groupLabels[groupCode] || groupCode");
   });
 
-  test("renders settings summary with shadcn badge metrics", () => {
-    const source = readFileSync(
-      new URL("../../app/(console)/settings/page.tsx", import.meta.url),
-      "utf8",
-    );
+  test("separates platform metrics from the tenant header", () => {
+    const source = readSource("./settings-page-header.tsx");
 
+    expect(source).toContain("PlatformSettingsHeader");
     expect(source).toContain("SettingsHeaderMetric");
     expect(source).toContain('import { Badge } from "@/components/ui/badge"');
     expect(source).toContain('label="配置项"');
     expect(source).toContain('label="未配置"');
-    expect(source).not.toContain("text-xs text-muted-foreground");
+    expect(source).toContain("TenantSettingsHeader");
+    expect(source).toContain("管理本租户使用的短信服务和客服入口");
   });
 
   test("uses Chinese labels for platform settings interactions", () => {
