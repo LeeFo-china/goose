@@ -11,6 +11,7 @@ import { buildBackendUrl } from "./backend";
 import { readPreviewSession } from "./preview-session";
 
 const PUBLIC_CACHE_SECONDS = 300;
+export const SITE_CONTENT_PUBLIC_TIMEOUT_MS = 8_000;
 export const SITE_CONTENT_PREVIEW_TIMEOUT_MS = 5_000;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const COLLECTIONS: Record<SiteContentType, "articles" | "cases" | "cities"> = {
@@ -46,10 +47,12 @@ interface PublicListOptions {
   readonly page?: number;
   readonly pageSize?: number;
   readonly fetcher?: Fetcher;
+  readonly timeoutMs?: number;
 }
 
 interface PublicDetailOptions {
   readonly fetcher?: Fetcher;
+  readonly timeoutMs?: number;
 }
 
 interface PreviewHeadersInput {
@@ -72,13 +75,20 @@ export class SiteContentApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly requestId?: string;
+  readonly category: "timeout" | "network" | "upstream";
 
-  constructor(status: number, code: string, requestId?: string) {
+  constructor(
+    status: number,
+    code: string,
+    requestId?: string,
+    category: "timeout" | "network" | "upstream" = "upstream",
+  ) {
     super("官网内容服务暂时不可用");
     this.name = "SiteContentApiError";
     this.status = status;
     this.code = code;
     this.requestId = requestId;
+    this.category = category;
   }
 }
 
@@ -93,13 +103,13 @@ export async function getPublicSiteContentList(
   }
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   const path = `/public/site/${COLLECTIONS[contentType]}?${params.toString()}`;
-  const response = await (options.fetcher ?? fetch)(buildBackendUrl(path), {
+  const response = await fetchPublicResponse(buildBackendUrl(path), {
     method: "GET",
     next: {
       revalidate: PUBLIC_CACHE_SECONDS,
       tags: [`site-content:${contentType}`],
     },
-  } as NextRequestInit);
+  } as NextRequestInit, options.fetcher, options.timeoutMs);
   const data = await parseApiData(response, SiteContentPublicListSchema);
   if (data.list.some((item) => item.contentType !== contentType)) {
     throw new Error("官网内容响应格式无效");
@@ -114,13 +124,13 @@ export async function getPublicSiteContentDetail(
 ): Promise<SiteContentPublicDetail> {
   if (!SLUG_PATTERN.test(slug) || slug.length > 200) throw new Error("官网内容 slug 无效");
   const path = `/public/site/${COLLECTIONS[contentType]}/${encodeURIComponent(slug)}`;
-  const response = await (options.fetcher ?? fetch)(buildBackendUrl(path), {
+  const response = await fetchPublicResponse(buildBackendUrl(path), {
     method: "GET",
     next: {
       revalidate: PUBLIC_CACHE_SECONDS,
       tags: [`site-content-path:${contentType}:${slug}`],
     },
-  } as NextRequestInit);
+  } as NextRequestInit, options.fetcher, options.timeoutMs);
   const detail = await parseApiData(response, SiteContentPublicDetailSchema);
   if (detail.contentType !== contentType) {
     throw new Error("官网内容响应格式无效");
@@ -230,6 +240,32 @@ async function parseApiData<T>(response: Response, schema: z.ZodType<T>): Promis
   const result = schema.safeParse(envelope.data);
   if (!result.success) throw new Error("官网内容响应格式无效");
   return result.data;
+}
+
+async function fetchPublicResponse(
+  url: string,
+  init: NextRequestInit,
+  fetcher: Fetcher = fetch,
+  timeoutMs = SITE_CONTENT_PUBLIC_TIMEOUT_MS,
+): Promise<Response> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("官网内容超时配置无效");
+  }
+  try {
+    return await fetcher(url, {
+      ...init,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    const isTimeout = error instanceof DOMException
+      && (error.name === "TimeoutError" || error.name === "AbortError");
+    throw new SiteContentApiError(
+      isTimeout ? 504 : 502,
+      isTimeout ? "SITE_CONTENT_UPSTREAM_TIMEOUT" : "SITE_CONTENT_UPSTREAM_UNAVAILABLE",
+      undefined,
+      isTimeout ? "timeout" : "network",
+    );
+  }
 }
 
 async function parseEnvelope(response: Response) {

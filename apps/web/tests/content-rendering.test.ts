@@ -176,6 +176,30 @@ describe("public content rendering behavior", () => {
     });
   });
 
+  test("bounds public list and detail fetches with stable timeout and network errors", async () => {
+    const hangingFetcher = (_input: string | URL | Request, init?: RequestInit): Promise<Response> =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+
+    await expect(getPublicSiteContentList("article", {
+      fetcher: hangingFetcher,
+      timeoutMs: 5,
+    })).rejects.toMatchObject({
+      status: 504,
+      code: "SITE_CONTENT_UPSTREAM_TIMEOUT",
+      category: "timeout",
+    });
+    await expect(getPublicSiteContentDetail("city", "shanghai", {
+      fetcher: async () => Promise.reject(new TypeError("network down")),
+      timeoutMs: 5,
+    })).rejects.toMatchObject({
+      status: 502,
+      code: "SITE_CONTENT_UPSTREAM_UNAVAILABLE",
+      category: "network",
+    });
+  });
+
   test("rejects a public detail from the wrong endpoint type", async () => {
     const fetcher = async (): Promise<Response> => Response.json({
       data: {

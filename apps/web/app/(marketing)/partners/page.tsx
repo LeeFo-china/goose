@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/partners",
   },
+  openGraph: {
+    title: "城市合伙人招募",
+    description:
+      "了解鹅班长城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
+    url: "/partners",
+  },
 };
 
 export default function PartnersPage(): React.JSX.Element {

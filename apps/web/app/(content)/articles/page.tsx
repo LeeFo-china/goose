@@ -18,9 +18,16 @@ interface ArticlesPageProps {
 
 export async function generateMetadata({ searchParams }: ArticlesPageProps): Promise<Metadata> {
   const page = await resolveContentListPage(searchParams);
+  const canonical = buildContentListCanonical("/articles", page);
+  const title = page === 1 ? PAGE_METADATA.title : `${PAGE_METADATA.title} - 第 ${page} 页`;
+  const description = page === 1
+    ? PAGE_METADATA.description
+    : `${PAGE_METADATA.description} 当前为第 ${page} 页。`;
   return {
-    ...PAGE_METADATA,
-    alternates: { canonical: buildContentListCanonical("/articles", page) },
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: { title, description, url: canonical },
   };
 }
 

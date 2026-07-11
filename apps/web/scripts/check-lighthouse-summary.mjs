@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-const webRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+import { computeReleaseQualityDigests, webRoot } from "./release-quality-digest.mjs";
+
 const summary = JSON.parse(readFileSync(join(webRoot, "lighthouse-summary.json"), "utf8"));
 const expectedPaths = [
   "/",
@@ -19,6 +19,7 @@ const expectedThresholds = {
   tbtMs: 200,
   cls: 0.1,
 };
+const currentDigests = computeReleaseQualityDigests();
 const thresholds = summary.thresholds ?? {};
 const routes = Array.isArray(summary.routes) ? summary.routes : [];
 const failures = [];
@@ -26,6 +27,12 @@ const failures = [];
 if (summary.lighthouseVersion !== "12.8.2" || summary.profile !== "mobile") {
   failures.push("Lighthouse 版本或 profile 不正确");
 }
+if (summary.baseUrl !== "http://127.0.0.1:3020") failures.push("Lighthouse baseUrl 不正确");
+if (!Number.isFinite(Date.parse(summary.generatedAt))) failures.push("Lighthouse generatedAt 不正确");
+if (!summary.buildId) failures.push("Lighthouse buildId 缺失");
+if (summary.sourceDigest !== currentDigests.sourceDigest) failures.push("Lighthouse 源码摘要已过期");
+if (summary.fixtureDigest !== currentDigests.fixtureDigest) failures.push("Lighthouse fixture 摘要已过期");
+if (summary.revision !== summary.sourceDigest) failures.push("Lighthouse 运行 revision 与源码摘要不一致");
 if (JSON.stringify(thresholds) !== JSON.stringify(expectedThresholds)) {
   failures.push("Lighthouse 阈值不正确");
 }

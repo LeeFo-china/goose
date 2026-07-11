@@ -78,6 +78,20 @@ test("dynamic metadata stays inside head for Chrome and Lighthouse user agents",
   }
 });
 
+test("marketing and page-two lists do not inherit the home Open Graph URL", async ({ page }) => {
+  await page.goto("/products");
+  await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", /\/products$/);
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", /产品能力/);
+
+  await page.goto("/articles?page=2");
+  await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
+    "content",
+    /\/articles\?page=2$/,
+  );
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", /第 2 页/);
+  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute("content", /第 2 页/);
+});
+
 test("robots allows the public site while excluding private surfaces", async ({ request }) => {
   const response = await request.get("/robots.txt");
   const body = await response.text();

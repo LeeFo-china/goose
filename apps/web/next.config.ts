@@ -6,6 +6,7 @@ const appDir = dirname(fileURLToPath(import.meta.url));
 const buildRevision = process.env.GOOES_BUILD_SHA ?? "unknown";
 
 const nextConfig: NextConfig = {
+  // SEO 稳定性优先：等待动态 metadata 后再输出 HTML，避免普通 Chrome/Lighthouse 把标签放进 body。
   htmlLimitedBots: /.*/,
   poweredByHeader: false,
   output: "standalone",
