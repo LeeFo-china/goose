@@ -109,8 +109,10 @@ jobs:
           test -d "${DEPLOY_DIR}"
           sudo cp "${DEPLOY_DIR}/docker-compose.api.yml" "${DEPLOY_DIR}/docker-compose.api.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
           sudo cp "${DEPLOY_DIR}/docker-compose.admin.yml" "${DEPLOY_DIR}/docker-compose.admin.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
+          sudo cp "${DEPLOY_DIR}/docker-compose.web.yml" "${DEPLOY_DIR}/docker-compose.web.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
           sudo install -m 0644 deploy/docker-compose.api.yml "${DEPLOY_DIR}/docker-compose.api.yml"
           sudo install -m 0644 deploy/docker-compose.admin.yml "${DEPLOY_DIR}/docker-compose.admin.yml"
+          sudo install -m 0644 deploy/docker-compose.web.yml "${DEPLOY_DIR}/docker-compose.web.yml"
 
       - name: Login to Tencent CCR
         env:
@@ -133,14 +135,14 @@ jobs:
           normalize_services() {
             local raw="${RELEASE_SERVICE//[[:space:]]/}"
             if [ "$raw" = "all" ]; then
-              echo "api admin social-video-worker cos-reconcile-worker"
+              echo "api admin web social-video-worker cos-reconcile-worker"
               return
             fi
             local normalized=()
             IFS=',' read -ra requested <<< "$raw"
             for item in "${requested[@]}"; do
               case "$item" in
-                api|admin|social-video-worker|cos-reconcile-worker)
+                api|admin|web|social-video-worker|cos-reconcile-worker)
                   normalized+=("$item")
                   ;;
                 "")
@@ -159,12 +161,13 @@ jobs:
             case "$item" in
               api) compose_services+=("gooes-api") ;;
               admin) compose_services+=("gooes-admin") ;;
+              web) compose_services+=("gooes-web") ;;
               social-video-worker) compose_services+=("gooes-social-video-worker") ;;
               cos-reconcile-worker) compose_services+=("gooes-cos-reconcile-worker") ;;
             esac
           done < <(normalize_services)
           services="${compose_services[*]}"
-          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers pull ${services}
+          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers pull ${services}
 
       - name: Recreate services
         run: |
@@ -181,7 +184,7 @@ jobs:
             IFS=',' read -ra requested <<< "${RELEASE_SERVICE//[[:space:]]/}"
             for item in "${requested[@]}"; do
               case "$item" in
-                api|admin|social-video-worker|cos-reconcile-worker|"") ;;
+                api|admin|web|social-video-worker|cos-reconcile-worker|"") ;;
                 *)
                   echo "Unknown service: $item"
                   exit 1
@@ -191,16 +194,21 @@ jobs:
           }
           validate_services
           if service_selected api; then
-            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-api
+            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers up -d --no-deps --force-recreate gooes-api
           fi
           if service_selected social-video-worker; then
-            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-social-video-worker
+            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers up -d --no-deps --force-recreate gooes-social-video-worker
           fi
           if service_selected cos-reconcile-worker; then
-            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-cos-reconcile-worker
+            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers up -d --no-deps --force-recreate gooes-cos-reconcile-worker
           fi
           if service_selected admin; then
-            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-admin
+            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers up -d --no-deps --force-recreate gooes-admin
+          fi
+          # Migration apply/list verification is an external mandatory gate. Web is
+          # recreated only after the API service above has completed successfully.
+          if service_selected web; then
+            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers up -d --no-deps --force-recreate gooes-web
           fi
 
       - name: Check container health
@@ -234,6 +242,7 @@ jobs:
           if service_selected social-video-worker; then check_container gooes-social-video-worker; fi
           if service_selected cos-reconcile-worker; then check_container gooes-cos-reconcile-worker; fi
           if service_selected admin; then check_container gooes-admin; fi
+          if service_selected web; then check_container gooes-web; fi
 
       - name: Check public endpoints
         run: |
@@ -247,6 +256,9 @@ jobs:
           fi
           if service_selected admin; then
             curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://admin.goodcms.cn/login
+          fi
+          if service_selected web; then
+            curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://www.goodcms.cn/partners
           fi
 
       - name: Deployment summary

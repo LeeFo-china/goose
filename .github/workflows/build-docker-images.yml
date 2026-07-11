@@ -41,6 +41,8 @@ jobs:
             image_repo: goose-social-video-worker
           - service: admin
             image_repo: goose-admin
+          - service: web
+            image_repo: goose-web
 
     steps:
       - name: Checkout repository
@@ -172,6 +174,17 @@ jobs:
                 -f docker/admin.Dockerfile \
                 --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api.goodcms.cn \
                 --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5.goodcms.cn \
+                --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                --build-arg BUILD_CREATED="${BUILD_CREATED}" \
+                -t "$BRANCH_IMAGE" \
+                -t "$SHA_IMAGE" \
+                .
+              ;;
+            web)
+              docker build \
+                -f docker/web.Dockerfile \
                 --build-arg BUILD_SHA="${GITHUB_SHA}" \
                 --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
                 --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \

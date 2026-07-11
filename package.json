@@ -64,6 +64,7 @@
     "web:build": "pnpm --dir apps/web build",
     "web:check": "pnpm --dir apps/web check",
     "web:test": "pnpm --dir apps/web test",
+    "web:verify:standalone-css": "pnpm --dir apps/web verify:standalone-css",
     "web:start": "pnpm --dir apps/web start",
     "gen": "supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > apps/api/src/types/database.ts"
   }

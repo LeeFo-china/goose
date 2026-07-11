@@ -68,6 +68,40 @@ services:
     networks:
       - gooes_dev
 
+  gooes-web-dev:
+    image: ${GOOES_WEB_IMAGE:?set GOOES_WEB_IMAGE}
+    container_name: gooes-web-dev
+    restart: unless-stopped
+    env_file:
+      - ./.env.dev.common
+    environment:
+      NODE_ENV: production
+      PORT: 3020
+      HOSTNAME: 0.0.0.0
+      GOOES_API_BASE_URL: http://gooes-api-dev:3000
+    ports:
+      - "127.0.0.1:13020:3020"
+    depends_on:
+      gooes-api-dev:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e 'fetch(\"http://127.0.0.1:3020/partners\").then((r) => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))'",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - gooes_dev
+
   gooes-social-video-worker-dev:
     image: ${GOOES_SOCIAL_VIDEO_WORKER_IMAGE:?set GOOES_SOCIAL_VIDEO_WORKER_IMAGE}
     container_name: gooes-social-video-worker-dev

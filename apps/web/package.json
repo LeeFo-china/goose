@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "pnpm run typecheck",
     "test": "bun test tests",
-    "test:e2e": "env -u NO_COLOR playwright test"
+    "test:e2e": "env -u NO_COLOR playwright test",
+    "verify:standalone-css": "node scripts/verify-standalone-css.mjs"
   },
   "dependencies": {
     "@gooes/domain": "workspace:*",
