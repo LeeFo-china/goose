@@ -4,7 +4,11 @@ import { Separator } from "@/components/ui/separator";
 
 const footerLinks = [
   { href: "/", label: "返回首页" },
+  { href: "/products", label: "产品" },
+  { href: "/solutions", label: "解决方案" },
+  { href: "/cases", label: "案例" },
   { href: "/partners", label: "城市合伙人" },
+  { href: "/about", label: "关于我们" },
 ] as const;
 
 export function SiteFooter(): React.JSX.Element {

@@ -33,9 +33,21 @@ export function MobileNavigation(): React.JSX.Element {
             </Button>
           </DialogClose>
           <DialogClose asChild>
+            <Button asChild variant="ghost"><Link href="/products">产品</Link></Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button asChild variant="ghost"><Link href="/solutions">解决方案</Link></Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button asChild variant="ghost"><Link href="/cases">案例</Link></Button>
+          </DialogClose>
+          <DialogClose asChild>
             <Button asChild variant="ghost">
               <Link href="/partners">城市合伙人</Link>
             </Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button asChild variant="ghost"><Link href="/about">关于我们</Link></Button>
           </DialogClose>
         </nav>
       </DialogContent>

@@ -25,7 +25,19 @@ export function SiteHeader(): React.JSX.Element {
             <Link href="/">首页</Link>
           </Button>
           <Button asChild size="sm" variant="ghost">
+            <Link href="/products">产品</Link>
+          </Button>
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/solutions">解决方案</Link>
+          </Button>
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/cases">案例</Link>
+          </Button>
+          <Button asChild size="sm" variant="ghost">
             <Link href="/partners">城市合伙人</Link>
+          </Button>
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/about">关于我们</Link>
           </Button>
           <ThemeToggle />
         </nav>
