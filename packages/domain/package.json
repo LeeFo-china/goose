@@ -16,6 +16,9 @@
     "README.md"
   ],
   "sideEffects": false,
+  "dependencies": {
+    "zod": "^4.4.2"
+  },
   "scripts": {
     "clean": "rm -rf dist *.tgz",
     "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm && tsc -p tsconfig.json",

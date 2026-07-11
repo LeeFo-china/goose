@@ -2,6 +2,30 @@ import { describe, expect, test } from "bun:test";
 import { PermissionCodeConfig, PERMISSION_CODE_VALUES } from "./permission";
 
 describe("finance receivable permissions", () => {
+  test("exposes platform site content permissions", () => {
+    const expectedPermissions = {
+      "platform.site_content.read": {
+        label: "查看官网内容",
+        module: "platform_site_content",
+      },
+      "platform.site_content.manage": {
+        label: "管理官网内容",
+        module: "platform_site_content",
+      },
+      "platform.site_content.publish": {
+        label: "发布官网内容",
+        module: "platform_site_content",
+      },
+    } as const;
+
+    for (const code of Object.keys(expectedPermissions) as Array<
+      keyof typeof expectedPermissions
+    >) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
+    }
+  });
+
   test("exposes receivable permissions in domain permission constants", () => {
     expect(PERMISSION_CODE_VALUES).toContain("finance.receivable.view");
     expect(PERMISSION_CODE_VALUES).toContain("finance.receivable.manage");
