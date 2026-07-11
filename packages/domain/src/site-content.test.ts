@@ -5,10 +5,80 @@ import {
   SiteContentDraftBlockSchema,
   SiteContentDraftBlocksSchema,
   SiteContentDraftSchema,
+  SiteContentPublicBlocksSchema,
   SiteContentPublicDetailSchema,
   SiteContentPublicListSchema,
   SiteContentPublicSummarySchema,
+  type SiteContentDraftBlock,
+  type SiteContentPublicDetail,
+  type SiteContentPublicSummary,
 } from './index';
+
+type Assert<Condition extends true> = Condition;
+type IsNever<Value> = [Value] extends [never] ? true : false;
+type SensitivePublicKey =
+  | 'created_by'
+  | 'created_by_employee_id'
+  | 'status'
+  | 'draft'
+  | 'history'
+  | 'versions';
+type DetailExtendsSummary = Assert<
+  SiteContentPublicDetail extends SiteContentPublicSummary ? true : false
+>;
+type PublicDtoHasNoSensitiveKeys = Assert<
+  IsNever<
+    Extract<
+      keyof SiteContentPublicSummary | keyof SiteContentPublicDetail,
+      SensitivePublicKey
+    >
+  >
+>;
+
+const narrowDraftBlock = (block: SiteContentDraftBlock): string => {
+  switch (block.type) {
+    case 'paragraph':
+      return block.text;
+    case 'heading':
+      return `${block.level}:${block.text}`;
+    case 'image':
+      return block.fileId;
+    case 'quote':
+      return block.attribution ?? block.text;
+    case 'list':
+      return block.items[0] ?? '';
+    case 'callout':
+      return `${block.tone}:${block.title}`;
+    case 'metrics':
+      return block.items[0]?.label ?? '';
+    case 'gallery':
+      return block.images[0]?.fileId ?? '';
+    default: {
+      const exhaustiveBlock: never = block;
+      return exhaustiveBlock;
+    }
+  }
+};
+
+const assertPublicDtoCompileTimeContract = (
+  detail: SiteContentPublicDetail,
+): SiteContentPublicSummary => {
+  const summary: SiteContentPublicSummary = detail;
+  // @ts-expect-error Public DTO must not expose creator identity.
+  void detail.created_by;
+  // @ts-expect-error Public DTO must not expose internal status.
+  void detail.status;
+  // @ts-expect-error Public DTO must not expose draft content.
+  void detail.draft;
+  // @ts-expect-error Public DTO must not expose version history.
+  void detail.versions;
+  return summary;
+};
+
+void (null as unknown as DetailExtendsSummary);
+void (null as unknown as PublicDtoHasNoSensitiveKeys);
+void narrowDraftBlock;
+void assertPublicDtoCompileTimeContract;
 
 const publicAsset = {
   fileId: '550e8400-e29b-41d4-a716-446655440000',
@@ -125,6 +195,30 @@ describe('site content domain', () => {
         })),
       ).success,
     ).toBe(false);
+  });
+
+  test('bounds aggregate draft and public block payloads by UTF-8 bytes', () => {
+    const repeatedItem = '中'.repeat(1_800);
+    const listBlock = {
+      type: 'list',
+      style: 'unordered',
+      items: Array.from({ length: 50 }, () => repeatedItem),
+    };
+    const withinLimit = [listBlock];
+    const overLimit = [listBlock, listBlock];
+
+    expect(SiteContentDraftBlocksSchema.safeParse(withinLimit).success).toBe(
+      true,
+    );
+    expect(SiteContentDraftBlocksSchema.safeParse(overLimit).success).toBe(
+      false,
+    );
+    expect(SiteContentPublicBlocksSchema.safeParse(withinLimit).success).toBe(
+      true,
+    );
+    expect(SiteContentPublicBlocksSchema.safeParse(overLimit).success).toBe(
+      false,
+    );
   });
 
   test('draft contract only accepts trusted file IDs for cover and blocks', () => {
@@ -276,5 +370,71 @@ describe('site content domain', () => {
         created_by: '550e8400-e29b-41d4-a716-446655440002',
       }).success,
     ).toBe(false);
+  });
+
+  test('rejects contradictory pagination and accepts a legal final page', () => {
+    const contradictoryPages = [
+      {
+        list: Array.from({ length: 3 }, () => publicSummary),
+        pagination: { page: 1, pageSize: 2, total: 3, totalPages: 2 },
+      },
+      {
+        list: [publicSummary],
+        pagination: { page: 1, pageSize: 20, total: 21, totalPages: 1 },
+      },
+      {
+        list: [publicSummary],
+        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      },
+      {
+        list: [],
+        pagination: { page: 2, pageSize: 20, total: 0, totalPages: 0 },
+      },
+      {
+        list: [publicSummary],
+        pagination: { page: 3, pageSize: 20, total: 21, totalPages: 2 },
+      },
+      {
+        list: [],
+        pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      },
+      {
+        list: [publicSummary, publicSummary],
+        pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      },
+      {
+        list: Array.from({ length: 6 }, () => publicSummary),
+        pagination: { page: 2, pageSize: 20, total: 25, totalPages: 2 },
+      },
+      {
+        list: [publicSummary],
+        pagination: { page: 1, pageSize: 20, total: 25, totalPages: 2 },
+      },
+      {
+        list: [publicSummary],
+        pagination: { page: 2, pageSize: 20, total: 25, totalPages: 2 },
+      },
+      {
+        list: [publicSummary],
+        pagination: { page: 1, pageSize: 20, total: 40, totalPages: 2 },
+      },
+    ];
+
+    for (const value of contradictoryPages) {
+      expect(SiteContentPublicListSchema.safeParse(value).success).toBe(false);
+    }
+
+    expect(
+      SiteContentPublicListSchema.safeParse({
+        list: Array.from({ length: 5 }, () => publicSummary),
+        pagination: { page: 2, pageSize: 20, total: 25, totalPages: 2 },
+      }).success,
+    ).toBe(true);
+    expect(
+      SiteContentPublicListSchema.safeParse({
+        list: [],
+        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      }).success,
+    ).toBe(true);
   });
 });

@@ -20,8 +20,10 @@ export const SITE_CONTENT_DRAFT_BLOCK_TYPE_VALUES = [
 ] as const;
 
 const MAX_BLOCK_COUNT = 100;
+const MAX_BLOCKS_UTF8_BYTES = 512 * 1024;
 const MAX_TEXT_LENGTH = 20_000;
 const MAX_SHORT_TEXT_LENGTH = 300;
+const MAX_LIST_ITEM_LENGTH = 2_000;
 const MAX_LIST_ITEM_COUNT = 50;
 const MAX_METRIC_COUNT = 24;
 const MAX_GALLERY_IMAGE_COUNT = 50;
@@ -32,8 +34,17 @@ const NonEmptyShortTextSchema = z
   .min(1)
   .max(MAX_SHORT_TEXT_LENGTH);
 const NonEmptyTextSchema = z.string().trim().min(1).max(MAX_TEXT_LENGTH);
+const NonEmptyListItemSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_LIST_ITEM_LENGTH);
 const FileIdSchema = z.uuid();
 const HttpUrlSchema = z.url({ protocol: /^https?$/ }).max(2_048);
+const utf8Encoder = new TextEncoder();
+
+const getSerializedUtf8ByteLength = (value: unknown): number =>
+  utf8Encoder.encode(JSON.stringify(value)).byteLength;
 
 const SiteContentDraftImageSchema = z.strictObject({
   fileId: FileIdSchema,
@@ -67,7 +78,7 @@ export const SiteContentDraftBlockSchema = z.discriminatedUnion('type', [
     type: z.literal('list'),
     style: z.enum(['ordered', 'unordered']),
     items: z
-      .array(NonEmptyTextSchema)
+      .array(NonEmptyListItemSchema)
       .min(1)
       .max(MAX_LIST_ITEM_COUNT),
   }),
@@ -92,7 +103,15 @@ export const SiteContentDraftBlockSchema = z.discriminatedUnion('type', [
 
 export const SiteContentDraftBlocksSchema = z
   .array(SiteContentDraftBlockSchema)
-  .max(MAX_BLOCK_COUNT);
+  .max(MAX_BLOCK_COUNT)
+  .superRefine((blocks, context) => {
+    if (getSerializedUtf8ByteLength(blocks) > MAX_BLOCKS_UTF8_BYTES) {
+      context.addIssue({
+        code: 'custom',
+        message: '内容块总大小不能超过 512 KiB',
+      });
+    }
+  });
 
 export const SiteContentDraftSchema = z.strictObject({
   title: NonEmptyShortTextSchema,
@@ -135,7 +154,7 @@ export const SiteContentPublicBlockSchema = z.discriminatedUnion('type', [
     type: z.literal('list'),
     style: z.enum(['ordered', 'unordered']),
     items: z
-      .array(NonEmptyTextSchema)
+      .array(NonEmptyListItemSchema)
       .min(1)
       .max(MAX_LIST_ITEM_COUNT),
   }),
@@ -160,7 +179,15 @@ export const SiteContentPublicBlockSchema = z.discriminatedUnion('type', [
 
 export const SiteContentPublicBlocksSchema = z
   .array(SiteContentPublicBlockSchema)
-  .max(MAX_BLOCK_COUNT);
+  .max(MAX_BLOCK_COUNT)
+  .superRefine((blocks, context) => {
+    if (getSerializedUtf8ByteLength(blocks) > MAX_BLOCKS_UTF8_BYTES) {
+      context.addIssue({
+        code: 'custom',
+        message: '内容块总大小不能超过 512 KiB',
+      });
+    }
+  });
 
 export const SiteContentPublicSummarySchema = z.strictObject({
   id: z.uuid(),
@@ -190,6 +217,76 @@ export const SiteContentPaginationSchema = z.strictObject({
 export const SiteContentPublicListSchema = z.strictObject({
   list: z.array(SiteContentPublicSummarySchema).max(100),
   pagination: SiteContentPaginationSchema,
+}).superRefine(({ list, pagination }, context) => {
+  const { page, pageSize, total, totalPages } = pagination;
+  const expectedTotalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+
+  if (totalPages !== expectedTotalPages) {
+    context.addIssue({
+      code: 'custom',
+      path: ['pagination', 'totalPages'],
+      message: '总页数与总条数不一致',
+    });
+  }
+
+  if (list.length > pageSize) {
+    context.addIssue({
+      code: 'custom',
+      path: ['list'],
+      message: '列表条数不能超过每页条数',
+    });
+  }
+
+  if (total === 0) {
+    if (page !== 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pagination', 'page'],
+        message: '空列表页码必须为 1',
+      });
+    }
+    if (list.length !== 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['list'],
+        message: '总条数为 0 时列表必须为空',
+      });
+    }
+    return;
+  }
+
+  if (page > expectedTotalPages) {
+    context.addIssue({
+      code: 'custom',
+      path: ['pagination', 'page'],
+      message: '页码不能超过总页数',
+    });
+  }
+  if (list.length === 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['list'],
+      message: '总条数大于 0 时列表不能为空',
+    });
+  }
+  if (list.length > total) {
+    context.addIssue({
+      code: 'custom',
+      path: ['list'],
+      message: '列表条数不能超过总条数',
+    });
+  }
+  if (page <= expectedTotalPages) {
+    const remainingItemCount = total - (page - 1) * pageSize;
+    const expectedItemCount = Math.min(pageSize, remainingItemCount);
+    if (list.length !== expectedItemCount) {
+      context.addIssue({
+        code: 'custom',
+        path: ['list'],
+        message: '列表条数必须与当前页应返回条数一致',
+      });
+    }
+  }
 });
 
 export type SiteContentType = (typeof SITE_CONTENT_TYPE_VALUES)[number];

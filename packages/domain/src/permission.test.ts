@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { PermissionCodeConfig, PERMISSION_CODE_VALUES } from "./permission";
 
-describe("finance receivable permissions", () => {
+describe("domain permissions", () => {
   test("exposes platform site content permissions", () => {
     const expectedPermissions = {
       "platform.site_content.read": {

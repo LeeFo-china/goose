@@ -21,7 +21,8 @@
   },
   "scripts": {
     "clean": "rm -rf dist *.tgz",
-    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm && tsc -p tsconfig.json",
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm --external zod && tsc -p tsconfig.json && node ./scripts/verify-build.mjs",
+    "verify:packed-consumer": "node ./scripts/verify-packed-consumer.mjs",
     "prepack": "bun run clean && bun run build"
   },
   "publishConfig": {

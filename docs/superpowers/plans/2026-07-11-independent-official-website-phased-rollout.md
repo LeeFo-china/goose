@@ -604,7 +604,7 @@ Run:
 ```bash
 bun test packages/domain/src/site-content.test.ts packages/domain/src/permission.test.ts
 pnpm --dir packages/domain exec tsc -p tsconfig.json --noEmit
-bun --cwd packages/domain run build
+bun run --cwd packages/domain build
 ```
 
 Expected: all exit 0.
