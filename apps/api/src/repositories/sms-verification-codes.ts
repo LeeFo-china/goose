@@ -40,26 +40,23 @@ class SmsVerificationCodeRepository {
     return (data || null) as { id: string; created_at: string } | null;
   }
 
-  async findRecentByRequestIpScene(input: {
+  async countRecentByRequestIpScene(input: {
     requestIp: string;
     scene: SmsScene;
     since: string;
   }) {
-    const { data, error } = await this.adminClient
+    const { count, error } = await this.adminClient
       .from("sms_verification_codes")
-      .select("id, created_at")
+      .select("id", { count: "exact", head: true })
       .eq("request_ip", input.requestIp)
       .eq("scene", input.scene)
-      .gte("created_at", input.since)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .gte("created_at", input.since);
 
     if (error) {
       throw Errors.dbError("查询验证码 IP 发送记录失败", error);
     }
 
-    return (data || null) as { id: string; created_at: string } | null;
+    return count ?? 0;
   }
 
   async findRecentByRequestDeviceScene(input: {

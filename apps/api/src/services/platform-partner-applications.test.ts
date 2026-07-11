@@ -259,8 +259,9 @@ describe("PlatformPartnerApplicationsService", () => {
     expect(smsService.sendCode).toHaveBeenCalledWith({
       phone: application.phone,
       scene: "partner_application",
-      requestIp: null,
+      requestIp: "127.0.0.1",
       requestDevice: "mini-device-1",
+      requestIpLimit: 5,
     });
   });
 

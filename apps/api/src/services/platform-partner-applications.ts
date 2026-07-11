@@ -48,6 +48,9 @@ const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const DEFAULT_SOURCE_CHANNEL = "official_website";
 const MINI_PROGRAM_SOURCE_CHANNEL = "mini_program";
 const PARTNER_APPLICATION_SMS_SCENE = "partner_application";
+// The website shares one BFF IP, so allow low normal traffic while retaining
+// a hard window cap against cookie deletion and phone rotation.
+const PARTNER_APPLICATION_REQUEST_IP_LIMIT = 5;
 
 export class PlatformPartnerApplicationsService {
   private readonly applicationRepository: PlatformPartnerApplicationsRepositoryPort;
@@ -79,10 +82,9 @@ export class PlatformPartnerApplicationsService {
     return this.smsService.sendCode({
       phone,
       scene: PARTNER_APPLICATION_SMS_SCENE,
-      // A stable first-party device keeps phone+device cooldowns independent
-      // without grouping every website visitor under the BFF's shared IP.
-      requestIp: requestDevice ? null : input.requestIp,
+      requestIp: input.requestIp,
       requestDevice,
+      requestIpLimit: PARTNER_APPLICATION_REQUEST_IP_LIMIT,
     });
   }
 
