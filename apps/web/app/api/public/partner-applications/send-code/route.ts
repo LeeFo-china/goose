@@ -1,5 +1,8 @@
-import { proxyPublicPost } from "@/lib/backend";
+import { proxyVisitorPublicPost } from "@/lib/backend";
 
 export async function POST(request: Request): Promise<Response> {
-  return proxyPublicPost(request, "/public/partner-applications/send-code");
+  return proxyVisitorPublicPost(
+    request,
+    "/public/partner-applications/send-code",
+  );
 }

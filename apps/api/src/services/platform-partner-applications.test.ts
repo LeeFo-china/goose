@@ -249,7 +249,7 @@ describe("PlatformPartnerApplicationsService", () => {
     const result = await service.sendPublicApplicationCode({
       phone: application.phone,
       requestIp: "127.0.0.1",
-      requestDevice: "mini-device-1",
+      requestDevice: " mini-device-1 ",
     });
 
     expect(result).toEqual({ success: true, cooldown_seconds: 60 });
@@ -259,7 +259,7 @@ describe("PlatformPartnerApplicationsService", () => {
     expect(smsService.sendCode).toHaveBeenCalledWith({
       phone: application.phone,
       scene: "partner_application",
-      requestIp: "127.0.0.1",
+      requestIp: null,
       requestDevice: "mini-device-1",
     });
   });

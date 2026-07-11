@@ -73,13 +73,16 @@ export class PlatformPartnerApplicationsService {
     requestDevice?: string | null;
   }) {
     const phone = input.phone.trim();
+    const requestDevice = input.requestDevice?.trim() || null;
     await this.assertNoActiveApplicationByPhone(phone);
 
     return this.smsService.sendCode({
       phone,
       scene: PARTNER_APPLICATION_SMS_SCENE,
-      requestIp: input.requestIp,
-      requestDevice: input.requestDevice ?? null,
+      // A stable first-party device keeps phone+device cooldowns independent
+      // without grouping every website visitor under the BFF's shared IP.
+      requestIp: requestDevice ? null : input.requestIp,
+      requestDevice,
     });
   }
 
