@@ -41,16 +41,17 @@ jobs:
       - name: Verify Local and Remote migration history
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          NO_COLOR: "1"
+          TERM: dumb
         run: |
           set -euo pipefail
           test -n "${SUPABASE_DB_URL}"
           corepack enable
           corepack prepare pnpm@10.33.0 --activate
           pnpm dlx supabase@2.99.0 migration list \
-            --db-url "${SUPABASE_DB_URL}" \
-            --output-format json > migration-history.json
+            --db-url "${SUPABASE_DB_URL}" > migration-history.txt
           node scripts/verify-migration-history.mjs \
-            migration-history.json "${{ inputs.migration_version }}" \
+            migration-history.txt supabase/migrations "${{ inputs.migration_version }}" \
             > migration-evidence.json
 
       - name: Verify API revision and health
