@@ -479,8 +479,22 @@ git add apps/web docker/web.Dockerfile deploy .github/workflows
 git commit -m "ci(web): 增加独立官网部署流水线"
 ```
 
+- [ ] **Step 8: 按 migration → API → Web 顺序部署 dev**
+
+阶段一验证码限流依赖新增 RPC，部署顺序是强制门禁，不得并行或颠倒：
+
+1. plan 并 review `20260711120000_reserve_sms_verification_code.sql`，确认待执行内容后通过批准的 migration 流程 apply；禁止手动在远端执行 DDL。
+2. 运行 `supabase migration list`，确认该 migration 的 Local/Remote 已对齐且无 failed migration。
+3. 仅在 migration 成功后部署包含 `c44ab26` 的 API；migration 未成功时禁止部署新 API。
+4. 在 dev 完成验证码 smoke：单次发送成功；同 IP 6 路并发最多 5 路成功；同 phone 双路、同 device 双路均最多 1 路成功。
+5. API 和验证码 smoke 全部通过后再部署 Web，并访问 `/partners` 验证申请闭环。
+
+失败或回滚时，API 可回滚到 `815d5fca`；新增数据库函数保持不动，不影响旧 API。禁止为了回滚手动在远端 `DROP FUNCTION`。未来如需移除函数，必须新建 forward migration，经 review/apply 后执行。
+
 ### 阶段一验收门
 
+- [ ] `20260711120000_reserve_sms_verification_code.sql` 已成功 apply，`supabase migration list` 显示 Local/Remote 对齐；否则不得部署包含 `c44ab26` 的 API。
+- [ ] dev 验证码并发 smoke 通过：同 IP 6 路最多成功 5 路，同 phone/device 双路最多成功 1 路。
 - [ ] 部署 `www-dev.goodcms.cn`，连续访问 `/partners` 3 次均为 200。
 - [ ] 发送验证码和提交申请各完成一次真实 dev smoke，Admin 可看到新申请。
 - [ ] 手机 390px、平板 768px、桌面 1440px 截图通过设计预检。
