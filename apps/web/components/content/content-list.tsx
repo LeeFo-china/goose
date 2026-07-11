@@ -19,6 +19,7 @@ export function ContentList({
   basePath,
 }: ContentListProps): React.JSX.Element {
   const { page, total, totalPages } = data.pagination;
+  const firstCoverIndex = data.list.findIndex((item) => Boolean(item.cover));
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-24">
@@ -34,7 +35,11 @@ export function ContentList({
       {data.list.length > 0 ? (
         <div className="mt-12 grid grid-cols-1 gap-x-8 gap-y-14 md:grid-cols-2 lg:mt-16">
           {data.list.map((item, index) => (
-            <ContentCard content={item} key={item.id} priority={index === 0} />
+            <ContentCard
+              content={item}
+              key={item.id}
+              priority={index === firstCoverIndex}
+            />
           ))}
         </div>
       ) : (

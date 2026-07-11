@@ -52,7 +52,8 @@ describe("public CMS page contract", () => {
     const list = readSource("components/content/content-list.tsx");
     const card = readSource("components/content/content-card.tsx");
 
-    expect(list).toContain("priority={index === 0}");
+    expect(list).toContain("firstCoverIndex = data.list.findIndex");
+    expect(list).toContain("priority={index === firstCoverIndex}");
     expect(card).toContain('loading={priority ? "eager" : "lazy"}');
     expect(card).toContain('fetchPriority={priority ? "high" : "auto"}');
     expect(card).toContain("sizes={CONTENT_CARD_IMAGE_SIZES}");

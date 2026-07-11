@@ -5,6 +5,7 @@ import type { SiteContentPublicBlock } from "@gooes/domain";
 
 import { ContentBlockRenderer } from "@/components/content/content-block-renderer";
 import { ContentCard } from "@/components/content/content-card";
+import { ContentList } from "@/components/content/content-list";
 import { serializeJsonLd } from "@/components/content/content-structured-data";
 import {
   getPublicSiteContentDetail,
@@ -217,5 +218,54 @@ describe("public content rendering behavior", () => {
     expect(priorityHtml).toContain('sizes="(min-width: 1280px) 528px');
     expect(deferredHtml).toContain('loading="lazy"');
     expect(deferredHtml).toContain('fetchPriority="auto"');
+  });
+
+  test("prioritizes the first available cover when the first row has none", () => {
+    const metadata = {
+      category: "项目管理",
+      author: "内容编辑",
+      displayPublishedAt: "2026-07-12T08:00:00+08:00",
+    };
+    const html = renderToStaticMarkup(createElement(ContentList, {
+      basePath: "/articles",
+      title: "装修经营文章",
+      description: "内容列表",
+      data: {
+        list: [
+          {
+            id: "77777777-7777-4777-8777-777777777777",
+            contentType: "article",
+            slug: "without-cover",
+            title: "无封面文章",
+            summary: "第一条没有封面",
+            cover: null,
+            publishedAt: "2026-07-12T08:00:00+08:00",
+            metadata,
+          },
+          {
+            id: "88888888-8888-4888-8888-888888888888",
+            contentType: "article",
+            slug: "with-cover",
+            title: "有封面文章",
+            summary: "第二条是首个有封面的内容",
+            cover: {
+              fileId: "99999999-9999-4999-8999-999999999999",
+              src: "https://cdn.example.com/first-visible-cover.jpg",
+              alt: "首个可见封面",
+              width: 1600,
+              height: 1000,
+            },
+            publishedAt: "2026-07-12T08:00:00+08:00",
+            metadata,
+          },
+        ],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+      },
+    }));
+
+    expect(html).toContain('src="https://cdn.example.com/first-visible-cover.jpg"');
+    expect(html).toContain('loading="eager"');
+    expect(html).toContain('fetchPriority="high"');
+    expect(html.match(/<img[^>]*fetchPriority="high"/g)).toHaveLength(1);
   });
 });
