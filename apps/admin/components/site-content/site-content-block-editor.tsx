@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { SiteContentDraftBlock } from "@gooes/domain";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 
@@ -41,15 +41,21 @@ export function SiteContentBlockEditor({
   blocks,
   disabled,
   onChange,
+  onUploadStateChange,
 }: {
   blocks: SiteContentDraftBlock[];
   disabled?: boolean;
   onChange: (blocks: SiteContentDraftBlock[]) => void;
+  onUploadStateChange?: (uploadId: string, uploading: boolean) => void;
 }) {
   const [nextType, setNextType] = useState<SiteContentDraftBlock["type"]>("paragraph");
-  const [openItems, setOpenItems] = useState(() => new Set<number>([0]));
+  const nextClientKey = useRef(blocks.length);
+  const [clientKeys, setClientKeys] = useState(() => blocks.map((_, index) => `block-${index}`));
+  const [openItems, setOpenItems] = useState(() => new Set<string>(clientKeys[0] ? [clientKeys[0]] : []));
 
-  function replace(index: number, block: SiteContentDraftBlock) {
+  function replace(clientKey: string, block: SiteContentDraftBlock) {
+    const index = clientKeys.indexOf(clientKey);
+    if (index < 0) return;
     onChange(blocks.map((item, itemIndex) => itemIndex === index ? block : item));
   }
 
@@ -57,14 +63,28 @@ export function SiteContentBlockEditor({
     const target = index + offset;
     if (target < 0 || target >= blocks.length) return;
     const next = [...blocks];
+    const nextKeys = [...clientKeys];
     [next[index], next[target]] = [next[target]!, next[index]!];
+    [nextKeys[index], nextKeys[target]] = [nextKeys[target]!, nextKeys[index]!];
+    setClientKeys(nextKeys);
     onChange(next);
   }
 
   function add() {
-    const nextIndex = blocks.length;
+    const clientKey = `block-${nextClientKey.current++}`;
+    setClientKeys((current) => [...current, clientKey]);
     onChange([...blocks, createEmptySiteContentBlock(nextType)]);
-    setOpenItems((current) => new Set(current).add(nextIndex));
+    setOpenItems((current) => new Set(current).add(clientKey));
+  }
+
+  function remove(index: number, clientKey: string) {
+    setClientKeys((current) => current.filter((key) => key !== clientKey));
+    setOpenItems((current) => {
+      const next = new Set(current);
+      next.delete(clientKey);
+      return next;
+    });
+    onChange(blocks.filter((_, itemIndex) => itemIndex !== index));
   }
 
   return (
@@ -91,11 +111,12 @@ export function SiteContentBlockEditor({
 
       <div className="flex flex-col gap-3">
         {blocks.map((block, index) => {
-          const isOpen = openItems.has(index);
+          const clientKey = clientKeys[index] ?? `block-fallback-${index}`;
+          const isOpen = openItems.has(clientKey);
           return (
-            <Collapsible key={`${block.type}-${index}`} open={isOpen} onOpenChange={(open) => setOpenItems((current) => {
+            <Collapsible key={clientKey} open={isOpen} onOpenChange={(open) => setOpenItems((current) => {
               const next = new Set(current);
-              if (open) next.add(index); else next.delete(index);
+              if (open) next.add(clientKey); else next.delete(clientKey);
               return next;
             })}>
               <div className="rounded-md border bg-background">
@@ -108,12 +129,12 @@ export function SiteContentBlockEditor({
                   </CollapsibleTrigger>
                   <Button type="button" variant="ghost" size="icon" disabled={disabled || index === 0} aria-label="上移内容块" onClick={() => move(index, -1)}><ChevronUp /></Button>
                   <Button type="button" variant="ghost" size="icon" disabled={disabled || index === blocks.length - 1} aria-label="下移内容块" onClick={() => move(index, 1)}><ChevronDown /></Button>
-                  <Button type="button" variant="ghost" size="icon" disabled={disabled} aria-label="删除内容块" onClick={() => onChange(blocks.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
+                  <Button type="button" variant="ghost" size="icon" disabled={disabled} aria-label="删除内容块" onClick={() => remove(index, clientKey)}><Trash2 /></Button>
                 </div>
                 <CollapsibleContent>
                   <Separator />
                   <div className="p-4">
-                    <SiteContentBlockFields id={`site-content-block-${index}`} block={block} disabled={disabled} onChange={(nextBlock) => replace(index, nextBlock)} />
+                    <SiteContentBlockFields id={`site-content-${clientKey}`} block={block} disabled={disabled} onUploadStateChange={onUploadStateChange} onChange={(nextBlock) => replace(clientKey, nextBlock)} />
                   </div>
                 </CollapsibleContent>
               </div>

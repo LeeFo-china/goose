@@ -11,6 +11,7 @@ import {
   getSiteContentErrorMessage,
   mutateSiteContentPublication,
 } from "@/components/site-content/site-content-api";
+import { parseSiteContentPreviewUrl } from "@/components/site-content/site-content-preview";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -144,7 +145,13 @@ export function SiteContentActions({
     setPreviewError("");
     try {
       const { previewUrl } = await createSiteContentPreview(id, latestVersionId);
-      previewWindow.location.replace(previewUrl);
+      const safePreviewUrl = parseSiteContentPreviewUrl(previewUrl);
+      if (!safePreviewUrl) {
+        previewWindow.close();
+        setPreviewError("后端返回的预览地址无效，仅允许 HTTP(S) 绝对地址");
+        return;
+      }
+      previewWindow.location.replace(safePreviewUrl);
     } catch (error) {
       previewWindow.close();
       setPreviewError(getSiteContentErrorMessage(error, "生成预览地址失败，请检查官网地址配置"));

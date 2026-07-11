@@ -1,9 +1,11 @@
 "use client";
 
 import type { SiteContentDraftBlock } from "@gooes/domain";
+import { Trash2 } from "lucide-react";
 
 import { FormSelect } from "@/components/admin/form-select";
 import { SiteContentImageField } from "@/components/site-content/site-content-image-field";
+import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,11 +34,13 @@ export function SiteContentBlockFields({
   block,
   disabled,
   onChange,
+  onUploadStateChange,
 }: {
   id: string;
   block: SiteContentDraftBlock;
   disabled?: boolean;
   onChange: (block: SiteContentDraftBlock) => void;
+  onUploadStateChange?: (uploadId: string, uploading: boolean) => void;
 }) {
   if (block.type === "paragraph") {
     return (
@@ -63,7 +67,7 @@ export function SiteContentBlockFields({
   }
 
   if (block.type === "image") {
-    return <SiteContentImageField id={id} value={block} disabled={disabled} onChange={(image) => onChange({ type: "image", ...image })} />;
+    return <SiteContentImageField id={id} value={block} disabled={disabled} onUploadingChange={(uploading) => onUploadStateChange?.(`${id}:image`, uploading)} onChange={(image) => onChange({ type: "image", ...image })} />;
   }
 
   if (block.type === "quote") {
@@ -121,7 +125,13 @@ export function SiteContentBlockFields({
   return (
     <FieldGroup>
       {block.images.map((image, index) => (
-        <SiteContentImageField key={`${id}-${index}`} id={`${id}-${index}`} value={image} disabled={disabled} onChange={(nextImage) => onChange({ ...block, images: block.images.map((item, itemIndex) => itemIndex === index ? nextImage : item) })} />
+        <div key={`${id}-${index}`} className="flex flex-col gap-3 border-b pb-4 last:border-b-0 last:pb-0">
+          <SiteContentImageField id={`${id}-${index}`} value={image} disabled={disabled} onUploadingChange={(uploading) => onUploadStateChange?.(`${id}:gallery:${index}`, uploading)} onChange={(nextImage) => onChange({ ...block, images: block.images.map((item, itemIndex) => itemIndex === index ? nextImage : item) })} />
+          <Button type="button" variant="ghost" className="self-start" disabled={disabled || block.images.length <= 1} onClick={() => onChange({ ...block, images: block.images.filter((_, itemIndex) => itemIndex !== index) })}>
+            <Trash2 data-icon="inline-start" />
+            删除画廊图片
+          </Button>
+        </div>
       ))}
       <button type="button" className="self-start text-sm font-medium text-foreground underline underline-offset-4 disabled:opacity-50" disabled={disabled} onClick={() => onChange({ ...block, images: [...block.images, { fileId: "", alt: "" }] })}>添加画廊图片</button>
     </FieldGroup>

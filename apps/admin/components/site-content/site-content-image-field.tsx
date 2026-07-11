@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Loader2 } from "lucide-react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -19,6 +19,7 @@ export function SiteContentImageField({
   disabled,
   error,
   hideAlt = false,
+  onUploadingChange,
 }: {
   id: string;
   value: { fileId: string; alt: string };
@@ -26,15 +27,40 @@ export function SiteContentImageField({
   disabled?: boolean;
   error?: string;
   hideAlt?: boolean;
+  onUploadingChange?: (uploading: boolean) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
+  const onChangeRef = useRef(onChange);
+  const onUploadingChangeRef = useRef(onUploadingChange);
+  const uploadActiveRef = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  onChangeRef.current = onChange;
+  onUploadingChangeRef.current = onUploadingChange;
+
+  function notifyUploading(nextUploading: boolean) {
+    if (uploadActiveRef.current === nextUploading) return;
+    uploadActiveRef.current = nextUploading;
+    onUploadingChangeRef.current?.(nextUploading);
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (uploadActiveRef.current) {
+        uploadActiveRef.current = false;
+        onUploadingChangeRef.current?.(false);
+      }
+    };
+  }, []);
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
     setUploadError("");
     setUploading(true);
+    notifyUploading(true);
     try {
       validateUploadFile(file, {
         allowedTypes: IMAGE_TYPES,
@@ -48,16 +74,26 @@ export function SiteContentImageField({
         initFallbackMessage: "初始化官网图片直传失败",
         completeFallbackMessage: "登记官网图片失败",
       });
-      if (!result.fileId) throw new Error("图片上传成功但未返回文件 ID");
-      onChange({
-        fileId: result.fileId,
-        alt: hideAlt ? "" : value.alt || file.name.replace(/\.[^.]+$/, ""),
-      });
+      if (!result.fileId) {
+        if (mountedRef.current) setUploadError("图片上传成功但未返回文件 ID");
+        return;
+      }
+      if (mountedRef.current) {
+        onChangeRef.current({
+          fileId: result.fileId,
+          alt: hideAlt ? "" : value.alt || file.name.replace(/\.[^.]+$/, ""),
+        });
+      }
     } catch (uploadFailure) {
-      setUploadError(uploadFailure instanceof Error ? uploadFailure.message : "上传图片失败");
+      if (mountedRef.current) {
+        setUploadError(uploadFailure instanceof Error ? uploadFailure.message : "上传图片失败");
+      }
     } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
+      notifyUploading(false);
+      if (mountedRef.current) {
+        setUploading(false);
+        if (inputRef.current) inputRef.current.value = "";
+      }
     }
   }
 

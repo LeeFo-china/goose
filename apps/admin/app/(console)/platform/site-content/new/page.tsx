@@ -8,12 +8,16 @@ import { isPlatformOnlySession } from "@/lib/session-mode";
 export default async function NewSiteContentPage() {
   const session = await getAdminSession();
   if (!session) redirect("/login");
-  if (!isPlatformOnlySession(session) || !hasSiteContentPermission(session.permissions, "platform.site_content.read")) notFound();
+  if (
+    !isPlatformOnlySession(session)
+    || !hasSiteContentPermission(session.permissions, "platform.site_content.read")
+    || !hasSiteContentPermission(session.permissions, "platform.site_content.manage")
+  ) notFound();
 
   return (
     <SiteContentEditor
       canRead
-      canManage={hasSiteContentPermission(session.permissions, "platform.site_content.manage")}
+      canManage
       canPublish={hasSiteContentPermission(session.permissions, "platform.site_content.publish")}
     />
   );
