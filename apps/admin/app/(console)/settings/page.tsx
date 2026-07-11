@@ -1,9 +1,13 @@
-import { SlidersHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { SettingsTabs } from "@/components/settings/settings-tabs";
 import type { PlatformWechatPayProfileListResult } from "@/components/settings/platform-payment-settings-types";
+import {
+  PlatformSettingsHeader,
+  TenantSettingsHeader,
+} from "@/components/settings/settings-page-header";
+import { SettingsTabs } from "@/components/settings/settings-tabs";
+import { countTenantGroupMissing } from "@/components/settings/tenant-settings-status";
 import type { SystemSetting } from "@/components/settings/settings-types";
-import { Badge } from "@/components/ui/badge";
+import { TenantSettingsWorkspace } from "@/components/settings/tenant-settings-workspace";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
@@ -126,23 +130,6 @@ async function getPlatformPaymentProfilesData(
   }
 }
 
-function SettingsHeaderMetric({
-  label,
-  value,
-  variant = "outline",
-}: {
-  label: string;
-  value: number;
-  variant?: "outline" | "secondary" | "warning" | "danger";
-}) {
-  return (
-    <Badge variant={variant} className="gap-1.5">
-      <span>{label}</span>
-      <span className="tabular-nums">{value}</span>
-    </Badge>
-  );
-}
-
 export default async function SettingsPage() {
   const [session, token] = await Promise.all([
     getAdminSession(),
@@ -158,14 +145,14 @@ export default async function SettingsPage() {
   const envCount = list.filter((item) => item.source === "env").length;
   const emptyCount = list.filter((item) => item.source === "empty").length;
   const secretCount = list.filter((item) => item.is_secret).length;
-  const tenantOverrideCount = list.filter((item) => item.effective_scope === "tenant").length;
-  const tenantInheritedCount = list.filter((item) => item.effective_scope === "platform").length;
   const groupEntries = Object.entries(groups)
     .map(([groupCode, settings]) => ({
       code: groupCode,
       label: groupLabels[groupCode] || "其他配置",
       settings,
-      emptyCount: settings.filter((item) => item.source === "empty").length,
+      emptyCount: isPlatformMode
+        ? settings.filter((item) => item.source === "empty").length
+        : countTenantGroupMissing(groupCode, settings),
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {
@@ -176,50 +163,29 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-4 overflow-hidden">
-      <div className="flex shrink-0 min-w-0 items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-          <SlidersHorizontal aria-hidden="true" className="size-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold tracking-normal">
-            {isPlatformMode ? "平台系统配置" : "租户系统配置"}
-          </h1>
-          <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
-            {isPlatformMode
-              ? "平台级能力由平台统一维护，包含短信网关、监控接入、AI、微信、短视频识别和通知配置。密钥类配置加密存储并保留环境变量回退。"
-              : "租户端可维护短信通道、客服入口等租户配置。继承平台配置时不展示平台密钥、签名和模板信息。"}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <SettingsHeaderMetric label="配置项" value={list.length} variant="secondary" />
-            <SettingsHeaderMetric
-              label={isPlatformMode ? "数据库覆盖" : "租户覆盖"}
-              value={isPlatformMode ? databaseCount : tenantOverrideCount}
-            />
-            <SettingsHeaderMetric
-              label={isPlatformMode ? "环境变量回退" : "继承平台"}
-              value={isPlatformMode ? envCount : tenantInheritedCount}
-            />
-            <SettingsHeaderMetric
-              label="未配置"
-              value={emptyCount}
-              variant={emptyCount > 0 ? "warning" : "outline"}
-            />
-            <SettingsHeaderMetric
-              label="敏感项"
-              value={secretCount}
-              variant={secretCount > 0 ? "warning" : "outline"}
-            />
-          </div>
-        </div>
-      </div>
-
-      {error ? <StatusAlert>{error}</StatusAlert> : null}
-
-      <SettingsTabs
-        groups={groupEntries}
-        isPlatformMode={isPlatformMode}
-        paymentProfiles={paymentProfiles}
-      />
+      {isPlatformMode ? (
+        <>
+          <PlatformSettingsHeader
+            totalCount={list.length}
+            databaseCount={databaseCount}
+            envCount={envCount}
+            emptyCount={emptyCount}
+            secretCount={secretCount}
+          />
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+          <SettingsTabs
+            groups={groupEntries}
+            isPlatformMode
+            paymentProfiles={paymentProfiles}
+          />
+        </>
+      ) : (
+        <>
+          <TenantSettingsHeader groups={groupEntries} />
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+          <TenantSettingsWorkspace groups={groupEntries} />
+        </>
+      )}
     </div>
   );
 }
