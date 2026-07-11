@@ -33,8 +33,8 @@ export function ContentList({
 
       {data.list.length > 0 ? (
         <div className="mt-12 grid grid-cols-1 gap-x-8 gap-y-14 md:grid-cols-2 lg:mt-16">
-          {data.list.map((item) => (
-            <ContentCard content={item} key={item.id} />
+          {data.list.map((item, index) => (
+            <ContentCard content={item} key={item.id} priority={index === 0} />
           ))}
         </div>
       ) : (

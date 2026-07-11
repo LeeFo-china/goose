@@ -2,11 +2,16 @@ import type { Metadata } from "next";
 import { unstable_noStore as noStore } from "next/cache";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import type { SiteContentPublicDetail, SiteContentType } from "@gooes/domain";
+import type {
+  SiteContentPublicDetail,
+  SiteContentPublicList,
+  SiteContentType,
+} from "@gooes/domain";
 
 import {
   SiteContentApiError,
   getPublicSiteContentDetail,
+  getPublicSiteContentList,
 } from "@/lib/site-content-api";
 import {
   getPreviewSiteContentForServerPath,
@@ -24,6 +29,35 @@ export type SiteContentPageDetail = SiteContentPublicDetail & {
   readonly preview?: boolean;
   readonly versionId?: string;
 };
+
+type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+interface SiteContentListPageOptions {
+  readonly fetcher?: Fetcher;
+}
+
+export async function getSiteContentListForPage(
+  contentType: Exclude<SiteContentType, "city">,
+  page: number,
+  options: SiteContentListPageOptions = {},
+): Promise<SiteContentPublicList> {
+  try {
+    return await getPublicSiteContentList(contentType, {
+      page,
+      pageSize: 20,
+      fetcher: options.fetcher,
+    });
+  } catch (error) {
+    if (
+      error instanceof SiteContentApiError
+      && error.status === 400
+      && error.code === "SITE_CONTENT_PAGE_OUT_OF_RANGE"
+    ) {
+      notFound();
+    }
+    throw error;
+  }
+}
 
 export const getSiteContentDetailForPage = cache(
   async (contentType: SiteContentType, slug: string): Promise<SiteContentPageDetail> => {
@@ -86,4 +120,18 @@ export function parseContentListPage(
   if (typeof value !== "string" || !/^\d+$/.test(value)) return 1;
   const page = Number(value);
   return Number.isSafeInteger(page) && page >= 1 ? page : 1;
+}
+
+export async function resolveContentListPage(
+  searchParams: Promise<Record<string, string | string[] | undefined>>,
+): Promise<number> {
+  const query = await searchParams;
+  return parseContentListPage(query.page);
+}
+
+export function buildContentListCanonical(
+  basePath: "/articles" | "/cases",
+  page: number,
+): string {
+  return page === 1 ? basePath : `${basePath}?page=${page}`;
 }

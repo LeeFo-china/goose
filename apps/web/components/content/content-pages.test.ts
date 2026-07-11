@@ -18,9 +18,13 @@ describe("public CMS page contract", () => {
     const cityDetail = readSource("app/(content)/cities/[slug]/page.tsx");
 
     expect(articles).toContain("searchParams: Promise");
-    expect(articles).toContain('getPublicSiteContentList("article"');
+    expect(articles).toContain("generateMetadata");
+    expect(articles).toContain('getSiteContentListForPage("article"');
+    expect(articles).toContain('buildContentListCanonical("/articles"');
     expect(cases).toContain("searchParams: Promise");
-    expect(cases).toContain('getPublicSiteContentList("case"');
+    expect(cases).toContain("generateMetadata");
+    expect(cases).toContain('getSiteContentListForPage("case"');
+    expect(cases).toContain('buildContentListCanonical("/cases"');
 
     for (const source of [articleDetail, caseDetail, cityDetail]) {
       expect(source).toContain("generateMetadata");
@@ -35,6 +39,23 @@ describe("public CMS page contract", () => {
     expect(pageData).toContain("noStore()");
     expect(pageData).toContain("SiteContentApiError");
     expect(pageData).toContain("notFound()");
+  });
+
+  test("maps only the stable out-of-range code to not found", () => {
+    const pageData = readSource("lib/site-content-page.ts");
+
+    expect(pageData).toContain('error.code === "SITE_CONTENT_PAGE_OUT_OF_RANGE"');
+    expect(pageData).toContain("error.status === 400");
+  });
+
+  test("marks only the first list cover as high priority", () => {
+    const list = readSource("components/content/content-list.tsx");
+    const card = readSource("components/content/content-card.tsx");
+
+    expect(list).toContain("priority={index === 0}");
+    expect(card).toContain('loading={priority ? "eager" : "lazy"}');
+    expect(card).toContain('fetchPriority={priority ? "high" : "auto"}');
+    expect(card).toContain("sizes={CONTENT_CARD_IMAGE_SIZES}");
   });
 
   test("emits safe typed JSON-LD for every detail type", () => {

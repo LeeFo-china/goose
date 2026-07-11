@@ -1,7 +1,20 @@
 import Link from "next/link";
 import type { SiteContentPublicSummary } from "@gooes/domain";
 
-export function ContentCard({ content }: { readonly content: SiteContentPublicSummary }): React.JSX.Element {
+const CONTENT_CARD_IMAGE_SIZES = [
+  "(min-width: 1280px) 528px",
+  "(min-width: 1024px) calc(50vw - 48px)",
+  "(min-width: 768px) calc(50vw - 40px)",
+  "(min-width: 640px) calc(100vw - 48px)",
+  "calc(100vw - 32px)",
+].join(", ");
+
+interface ContentCardProps {
+  readonly content: SiteContentPublicSummary;
+  readonly priority?: boolean;
+}
+
+export function ContentCard({ content, priority = false }: ContentCardProps): React.JSX.Element {
   const collection = content.contentType === "article" ? "articles" : content.contentType === "case" ? "cases" : "cities";
   const meta = getSummaryMeta(content);
 
@@ -16,8 +29,10 @@ export function ContentCard({ content }: { readonly content: SiteContentPublicSu
             alt={content.cover.alt}
             className="aspect-[16/10] h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:transition-none"
             decoding="async"
+            fetchPriority={priority ? "high" : "auto"}
             height={content.cover.height}
-            loading="lazy"
+            loading={priority ? "eager" : "lazy"}
+            sizes={CONTENT_CARD_IMAGE_SIZES}
             src={content.cover.src}
             width={content.cover.width}
           />

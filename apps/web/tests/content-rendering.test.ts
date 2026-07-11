@@ -4,12 +4,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SiteContentPublicBlock } from "@gooes/domain";
 
 import { ContentBlockRenderer } from "@/components/content/content-block-renderer";
+import { ContentCard } from "@/components/content/content-card";
 import { serializeJsonLd } from "@/components/content/content-structured-data";
 import {
   getPublicSiteContentDetail,
   getPublicSiteContentList,
 } from "@/lib/site-content-api";
-import { parseContentListPage } from "@/lib/site-content-page";
+import {
+  buildContentListCanonical,
+  getSiteContentListForPage,
+  parseContentListPage,
+} from "@/lib/site-content-page";
 
 describe("public content rendering behavior", () => {
   test("renders all approved blocks as escaped semantic markup", () => {
@@ -145,5 +150,72 @@ describe("public content rendering behavior", () => {
     expect(
       getPublicSiteContentDetail("article", "wrong-detail-type", { fetcher }),
     ).rejects.toThrow("官网内容响应格式无效");
+  });
+
+  test("builds a page-aware canonical without duplicating page one", () => {
+    expect(buildContentListCanonical("/articles", 1)).toBe("/articles");
+    expect(buildContentListCanonical("/articles", 3)).toBe("/articles?page=3");
+    expect(buildContentListCanonical("/cases", 2)).toBe("/cases?page=2");
+  });
+
+  test("maps only the stable out-of-range API error to a 404", async () => {
+    const outOfRangeFetcher = async (): Promise<Response> => Response.json(
+      {
+        success: false,
+        message: "请求页码超出官网内容范围",
+        code: "SITE_CONTENT_PAGE_OUT_OF_RANGE",
+      },
+      { status: 400 },
+    );
+    const otherBadRequestFetcher = async (): Promise<Response> => Response.json(
+      {
+        success: false,
+        message: "参数错误",
+        code: "SITE_CONTENT_QUERY_INVALID",
+      },
+      { status: 400 },
+    );
+
+    expect(
+      getSiteContentListForPage("article", 2, { fetcher: outOfRangeFetcher }),
+    ).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" });
+    expect(
+      getSiteContentListForPage("article", 2, { fetcher: otherBadRequestFetcher }),
+    ).rejects.toMatchObject({ status: 400, code: "SITE_CONTENT_QUERY_INVALID" });
+  });
+
+  test("prioritizes only the first visible list cover and declares its layout sizes", () => {
+    const content = {
+      id: "55555555-5555-4555-8555-555555555555",
+      contentType: "article" as const,
+      slug: "priority-cover",
+      title: "首屏图片优先级",
+      summary: "验证列表首图加载策略",
+      cover: {
+        fileId: "66666666-6666-4666-8666-666666666666",
+        src: "https://cdn.example.com/priority.jpg",
+        alt: "装修项目客厅",
+        width: 1600,
+        height: 1000,
+      },
+      publishedAt: "2026-07-12T08:00:00+08:00",
+      metadata: {
+        category: "项目管理",
+        author: "内容编辑",
+        displayPublishedAt: "2026-07-12T08:00:00+08:00",
+      },
+    };
+    const priorityHtml = renderToStaticMarkup(
+      createElement(ContentCard, { content, priority: true }),
+    );
+    const deferredHtml = renderToStaticMarkup(
+      createElement(ContentCard, { content, priority: false }),
+    );
+
+    expect(priorityHtml).toContain('loading="eager"');
+    expect(priorityHtml).toContain('fetchPriority="high"');
+    expect(priorityHtml).toContain('sizes="(min-width: 1280px) 528px');
+    expect(deferredHtml).toContain('loading="lazy"');
+    expect(deferredHtml).toContain('fetchPriority="auto"');
   });
 });
