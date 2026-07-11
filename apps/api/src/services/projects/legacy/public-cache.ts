@@ -38,8 +38,15 @@ export async function listPublicProjects(this: any): Promise<Array<Record<string
     }
 
     if (!this.publicProjectsInFlight) {
-        this.publicProjectsInFlight = projectRepository.listPublicProjects()
-            .then((rows: Array<Record<string, unknown>>) => this.attachPrimaryAssignees(rows))
+        // Temporary bridge until scoped service cache is wired in Task 3:
+        // keep legacy callers from fetching a global public-project list.
+        this.publicProjectsInFlight = projectRepository.listPublicProjects({
+            tenantIds: [],
+            preferredTenantId: null,
+            page: 1,
+            pageSize: 20,
+        })
+            .then((result) => this.attachPrimaryAssignees(result.rows))
             .then((rows: Array<Record<string, unknown>>) => {
                 rows.forEach((row: Record<string, unknown>) => this.seedPublicProjectDetailCache(row));
                 this.publicProjectsCache = {
