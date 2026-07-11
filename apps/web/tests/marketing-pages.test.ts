@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 
-import { AboutSections } from "@/components/official-site/about-sections";
-import { HomeSections } from "@/components/official-site/home-sections";
-import { MARKETING_CTA } from "@/components/official-site/marketing-cta";
-import { ProductSections } from "@/components/official-site/product-sections";
-import { SolutionSections } from "@/components/official-site/solution-sections";
+import { MARKETING_CTA } from "../components/official-site/marketing-cta";
 
 const root = new URL("../", import.meta.url);
 
@@ -45,11 +39,21 @@ describe("official website marketing pages", () => {
 
   test("keeps marketing sections on the shared CTA contract", () => {
     const sectionSources = pages.map(({ section }) => read(section));
+    const ctaKeys = new Set<string>();
 
     for (const source of sectionSources) {
       expect(source).toContain("MARKETING_CTA");
       expect(source).not.toMatch(/href="\/(?:products|solutions|cases|partners|about)(?:#apply)?"/);
+      const links = [...source.matchAll(/<Link\b[\s\S]*?<\/Link>/g)].map(([link]) => link);
+      for (const link of links) {
+        const href = link.match(/href=\{MARKETING_CTA\.(\w+)\.href\}/);
+        expect(href).not.toBeNull();
+        const key = href?.[1] ?? "";
+        expect(link).toContain(`{MARKETING_CTA.${key}.label}`);
+        ctaKeys.add(key);
+      }
     }
+    expect([...ctaKeys].sort()).toEqual(Object.keys(MARKETING_CTA).sort());
     expect(Object.values(MARKETING_CTA).map(({ href }) => href)).toEqual([
       "/products",
       "/solutions",
@@ -61,35 +65,25 @@ describe("official website marketing pages", () => {
   });
 
   test("uses one stable CTA label for every marketing target", () => {
-    const html = [HomeSections, ProductSections, SolutionSections, AboutSections]
-      .map((component) => renderToStaticMarkup(createElement(component)))
-      .join("\n");
-    const expected = new Map([
-      ["/products", "查看产品能力"],
-      ["/solutions", "查看解决方案"],
-      ["/cases", "查看项目案例"],
-      ["/partners", "了解城市合伙人"],
-      ["/about", "了解产品边界"],
-      ["/partners#apply", "提交合作咨询"],
-    ]);
-
-    for (const [href, label] of expected) {
-      const matches = [...html.matchAll(new RegExp(`<a[^>]+href="${href}"[^>]*>(.*?)</a>`, "g"))];
-      expect(matches.length).toBeGreaterThan(0);
-      for (const match of matches) {
-        expect(match[1]?.replace(/<[^>]+>/g, "").trim()).toBe(label);
-      }
-    }
+    expect(MARKETING_CTA).toEqual({
+      products: { href: "/products", label: "查看产品能力" },
+      solutions: { href: "/solutions", label: "查看解决方案" },
+      cases: { href: "/cases", label: "查看项目案例" },
+      partners: { href: "/partners", label: "了解城市合伙人" },
+      about: { href: "/about", label: "了解产品边界" },
+      contact: { href: "/partners#apply", label: "提交合作咨询" },
+    });
   });
 
   test("makes the existing partner application the sole official contact entry", () => {
-    const html = renderToStaticMarkup(createElement(AboutSections));
+    const source = read("components/official-site/about-sections.tsx");
 
-    expect(html).toContain("目前官网唯一官方业务联系入口");
-    expect(html).toContain("产品合作、装企接入、城市合作及其他业务咨询");
-    expect(html).toContain('href="/partners#apply"');
-    expect(html).not.toMatch(/\b1[3-9]\d{9}\b/);
-    expect(html).not.toMatch(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/);
+    expect(source).toContain("目前官网唯一官方业务联系入口");
+    expect(source).toContain("产品合作、装企接入、城市合作及其他业务咨询");
+    expect(source).toContain("MARKETING_CTA.contact.href");
+    expect(source).toContain("MARKETING_CTA.contact.label");
+    expect(source).not.toMatch(/\b1[3-9]\d{9}\b/);
+    expect(source).not.toMatch(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/);
   });
 
   test("rejects template scaffolding and unsafe marketing markup", () => {

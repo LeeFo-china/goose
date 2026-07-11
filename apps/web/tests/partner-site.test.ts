@@ -516,7 +516,7 @@ describe("city partner public site", () => {
     }
   });
 
-  test("adds only the live partner route to desktop and mobile navigation", () => {
+  test("keeps every live marketing route in desktop and mobile navigation", () => {
     const desktopNavigation = readWebFile(
       "components/official-site/site-header.tsx",
     );
@@ -524,12 +524,14 @@ describe("city partner public site", () => {
       "components/official-site/mobile-navigation.tsx",
     );
 
-    expect(desktopNavigation).toContain('href="/partners"');
+    for (const route of ["products", "solutions", "cases", "partners", "about"]) {
+      expect(desktopNavigation).toContain(`href="/${route}"`);
+      expect(mobileNavigation).toContain(`href="/${route}"`);
+    }
     expect(desktopNavigation).toContain("城市合伙人");
-    expect(mobileNavigation).toContain('href="/partners"');
     expect(mobileNavigation).toContain("城市合伙人");
-    expect(`${desktopNavigation}\n${mobileNavigation}`).not.toMatch(
-      /href="\/(?:products|solutions|cases|articles|about)"/,
+    expect(`${desktopNavigation}\n${mobileNavigation}`).not.toContain(
+      'href="/articles"',
     );
   });
 
