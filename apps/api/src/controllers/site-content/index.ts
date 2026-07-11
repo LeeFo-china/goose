@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SiteContentType } from "@gooes/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -17,6 +16,7 @@ import {
   UpdateSiteContentEntrySchema,
 } from "@/schema/site-content";
 import { siteContentService } from "@/services/site-content";
+import { verifySiteContentPreviewRequest } from "@/services/site-content-preview-signature";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 
@@ -176,12 +176,25 @@ class SiteContentController extends PlatformBaseController {
     const secret = process.env.GOOES_PREVIEW_SHARED_SECRET?.trim();
     const rawSignature = request.headers["x-gooes-preview-signature"];
     const signature = Array.isArray(rawSignature) ? rawSignature[0] : rawSignature;
-    if (!secret || secret.length < 32 || typeof signature !== "string" || !/^[0-9a-f]{64}$/.test(signature)) {
-      throw Errors.business(401, "Preview 内部签名无效", "INVALID_PREVIEW_SIGNATURE");
-    }
-    const expected = createHmac("sha256", secret).update(JSON.stringify(payload)).digest();
-    const received = Buffer.from(signature, "hex");
-    if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+    const rawTimestamp = request.headers["x-gooes-preview-timestamp"];
+    const timestamp = Array.isArray(rawTimestamp) ? rawTimestamp[0] : rawTimestamp;
+    const path = request.url.split("?")[0] ?? request.url;
+    const body = request.method.toUpperCase() === "GET" || request.method.toUpperCase() === "HEAD"
+      ? ""
+      : JSON.stringify(payload);
+    // Task8 Web BFF must sign timestamp + uppercase method + exact path + SHA256(body).
+    if (
+      !secret || secret.length < 32 || typeof signature !== "string" || typeof timestamp !== "string"
+      || !verifySiteContentPreviewRequest({
+        secret,
+        signature,
+        timestamp,
+        method: request.method,
+        path,
+        body,
+        nowSeconds: Math.floor(Date.now() / 1000),
+      })
+    ) {
       throw Errors.business(401, "Preview 内部签名无效", "INVALID_PREVIEW_SIGNATURE");
     }
   }

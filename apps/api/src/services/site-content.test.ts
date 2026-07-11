@@ -76,7 +76,10 @@ function dependencies(options: {
     status: "published";
     published_at: string;
     published_version_id: string;
-    published_version: Omit<typeof version, "content_blocks"> & { content_blocks: unknown };
+    published_version: Omit<typeof version, "content_blocks" | "metadata"> & {
+      content_blocks: unknown;
+      metadata: unknown;
+    };
   })>;
   consumePreviewToken?: () => Promise<null | { entry_id: string; version_id: string; expires_at: string; consumed_at: string }>;
   revalidate?: () => Promise<{ requestId?: string }>;
@@ -97,11 +100,10 @@ function dependencies(options: {
   const repository = {
     listPublic: mock(options.listPublic ?? (async () => ({ list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }))),
     findPublic: mock(findPublic),
-    listAdmin: mock(async () => ({ list: [entry], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } })),
+    listAdmin: mock(async () => ({ list: [{ ...entry, title: version.title }], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } })),
     findEntry: mock(options.findEntry ?? (async () => entry)),
-    createEntry: mock(async () => entry),
+    createEntryWithVersion: mock(async () => ({ entry, version })),
     updateEntry: mock(async () => entry),
-    deleteDraftEntry: mock(async () => true),
     listVersions: mock(async () => ({ list: [version], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } })),
     findVersion: mock(async () => version),
     createVersion: mock(async () => version),
@@ -197,6 +199,8 @@ describe("SiteContentService", () => {
     const result = await service.getPublic("article", entry.slug);
 
     expect(result.cover?.src).toBe("https://cdn.goodcms.cn/cover.jpg");
+    expect(result.metadata).toEqual(version.metadata);
+    expect(result.publishedAt).toBe("2026-07-12T08:00:00+08:00");
     expect(result.blocks[0]).toMatchObject({ type: "image", asset: { src: "https://cdn.goodcms.cn/body.jpg" } });
     expect(JSON.stringify(result)).not.toContain("created_by");
     expect(JSON.stringify(result)).not.toContain("published_version_id");
@@ -214,6 +218,7 @@ describe("SiteContentService", () => {
           title: version.title,
           summary: version.summary,
           cover_file_id: version.cover_file_id,
+          metadata: version.metadata,
           content_blocks: [{ type: "html", html: "must not be selected" }],
         },
       }],
@@ -233,7 +238,7 @@ describe("SiteContentService", () => {
       status: "published" as const,
       published_at: "2026-07-12T01:00:00.000Z",
       published_version_id: version.id,
-      published_version: { id: version.id, title: version.title, summary: version.summary, cover_file_id: null },
+      published_version: { title: version.title, summary: version.summary, cover_file_id: null, metadata: version.metadata },
     };
     const legalLastPage = dependencies({ listPublic: async () => ({
       list: [summary],
@@ -280,14 +285,23 @@ describe("SiteContentService", () => {
     });
     await expect(new SiteContentService(invalidUrl).getPublic("article", entry.slug))
       .rejects.toMatchObject({ code: "SITE_CONTENT_ASSET_UNAVAILABLE" });
+
+    const invalidMetadata = dependencies({ findPublic: async () => ({
+      ...entry,
+      status: "published" as const,
+      published_at: "2026-07-12T01:00:00.000Z",
+      published_version_id: version.id,
+      published_version: { ...version, metadata: { cityName: "杭州" } },
+    }) });
+    await expect(new SiteContentService(invalidMetadata).getPublic("article", entry.slug))
+      .rejects.toMatchObject({ code: "SITE_CONTENT_DATA_INVALID" });
   });
 
-  test("compensates a new draft entry when its first version fails", async () => {
+  test("creates the entry and first version through one atomic repository call", async () => {
     const deps = dependencies();
-    deps.repository.createVersion.mockImplementationOnce(async () => { throw new Error("version failed"); });
     const service = new SiteContentService(deps);
 
-    await expect(service.createEntry(auth(["platform.site_content.manage"]), {
+    await service.createEntry(auth(["platform.site_content.manage"]), {
       contentType: "article",
       slug: entry.slug,
       version: {
@@ -295,8 +309,13 @@ describe("SiteContentService", () => {
         blocks: [],
         metadata: { category: "行业观察", author: "古德", displayPublishedAt: "2026-07-12T08:00:00+08:00" },
       },
-    })).rejects.toThrow("version failed");
-    expect(deps.repository.deleteDraftEntry).toHaveBeenCalledWith(entry.id);
+    });
+    expect(deps.repository.createEntryWithVersion).toHaveBeenCalledWith(expect.objectContaining({
+      contentType: "article",
+      slug: entry.slug,
+      actorId: "actor-id",
+    }));
+    expect(deps.repository.createVersion).not.toHaveBeenCalled();
   });
 
   test("uses the repository concurrency boundary when creating the next version", async () => {
@@ -334,7 +353,7 @@ describe("SiteContentService", () => {
 
     expect(deps.repository.publish).toHaveBeenCalledWith(entry.id, version.id, "actor-id");
     expect(result.cache_revalidation).toEqual({ status: "failed" });
-    expect(deps.audit.recordBestEffort).toHaveBeenCalledTimes(2);
+    expect(deps.audit.recordBestEffort).toHaveBeenCalledTimes(1);
     expect(deps.audit.recordBestEffort).toHaveBeenLastCalledWith(expect.objectContaining({
       status: "failure",
       metadata: expect.objectContaining({ operation: "publish_revalidation_failed" }),
@@ -350,8 +369,8 @@ describe("SiteContentService", () => {
     await service.archive(context, entry.id);
 
     expect(deps.repository.rollback).toHaveBeenCalled();
-    expect(deps.repository.archive).toHaveBeenCalledWith(entry.id);
-    expect(deps.audit.recordBestEffort).toHaveBeenCalledTimes(2);
+    expect(deps.repository.archive).toHaveBeenCalledWith(entry.id, "actor-id");
+    expect(deps.audit.recordBestEffort).not.toHaveBeenCalled();
   });
 
   test("keeps archive successful and auditable when cache revalidation fails", async () => {

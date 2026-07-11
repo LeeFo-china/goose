@@ -38,6 +38,10 @@ export const PlatformAuditLogActionSchema = z.enum([
   "wechat_rebind_reject",
   "platform_partner_member_rebind_approve",
   "platform_partner_member_rebind_reject",
+  "site_content_create",
+  "site_content_publish",
+  "site_content_rollback",
+  "site_content_archive",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);

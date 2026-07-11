@@ -1,7 +1,11 @@
 import {
   SITE_CONTENT_STATUS_VALUES,
   SITE_CONTENT_TYPE_VALUES,
+  SiteContentArticleMetadataSchema,
+  SiteContentCaseMetadataSchema,
+  SiteContentCityMetadataSchema,
   SiteContentDraftSchema,
+  SiteContentMetadataSchema,
 } from "@gooes/domain";
 import { z } from "zod";
 
@@ -14,35 +18,12 @@ const SlugSchema = z
   .max(200, "内容 slug 不能超过 200 个字符")
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "内容 slug 格式无效");
 
-const ShortTextSchema = z.string().trim().min(1).max(300);
-
-export const SiteContentArticleMetadataSchema = z.strictObject({
-  category: ShortTextSchema,
-  author: ShortTextSchema,
-  displayPublishedAt: z.iso.datetime({ offset: true }),
-});
-
-export const SiteContentCaseMetadataSchema = z.strictObject({
-  city: ShortTextSchema,
-  areaSquareMeters: z.number().positive().max(100_000),
-  decorationType: ShortTextSchema,
-  metrics: z
-    .array(z.strictObject({ label: ShortTextSchema, value: ShortTextSchema }))
-    .max(24)
-    .default([]),
-});
-
-export const SiteContentCityMetadataSchema = z.strictObject({
-  administrativeCode: z.string().trim().regex(/^\d{6,12}$/, "行政区编码格式无效"),
-  cityName: ShortTextSchema,
-  localServiceIntroduction: z.string().trim().min(1).max(5_000),
-});
-
-export const SiteContentMetadataSchema = z.union([
+export {
   SiteContentArticleMetadataSchema,
   SiteContentCaseMetadataSchema,
   SiteContentCityMetadataSchema,
-]);
+  SiteContentMetadataSchema,
+};
 
 export const SiteContentIdParamSchema = z.strictObject({
   id: z.uuid("无效的官网内容 ID"),

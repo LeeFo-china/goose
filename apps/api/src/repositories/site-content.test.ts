@@ -21,7 +21,6 @@ function createClient(results: DatabaseResult[]) {
     select(...args: [string, { count?: "exact" }?]) { return this.chain("select", args); }
     insert(...args: [unknown]) { return this.chain("insert", args); }
     update(...args: [unknown]) { return this.chain("update", args); }
-    delete() { return this.chain("delete", []); }
     eq(...args: [string, unknown]) { return this.chain("eq", args); }
     neq(...args: [string, unknown]) { return this.chain("neq", args); }
     is(...args: [string, null]) { return this.chain("is", args); }
@@ -66,7 +65,7 @@ describe("SiteContentRepository query boundaries", () => {
     expect(calls).toContainEqual({ method: "range", args: [20, 39] });
     const select = calls.find((call) => call.method === "select");
     expect(select?.args[0]).toBe(
-      "id,content_type,slug,published_at,published_version:site_content_versions!site_content_published_version_fk(title,summary,cover_file_id)",
+      "id,content_type,slug,published_at,published_version:site_content_versions!site_content_published_version_fk(title,summary,cover_file_id,metadata)",
     );
     expect(String(select?.args[0])).not.toContain("created_by");
     expect(String(select?.args[0])).not.toContain("content_blocks");
@@ -87,7 +86,7 @@ describe("SiteContentRepository query boundaries", () => {
     expect(calls).toContainEqual({ method: "eq", args: ["slug", "hangzhou-home"] });
     expect(calls).toContainEqual({ method: "eq", args: ["status", "published"] });
     expect(calls.find((call) => call.method === "select")?.args[0]).toBe(
-      "id,content_type,slug,published_at,published_version:site_content_versions!site_content_published_version_fk(title,summary,cover_file_id,content_blocks,seo_title,seo_description,canonical_url)",
+      "id,content_type,slug,published_at,published_version:site_content_versions!site_content_published_version_fk(title,summary,cover_file_id,metadata,content_blocks,seo_title,seo_description,canonical_url)",
     );
   });
 
@@ -105,6 +104,55 @@ describe("SiteContentRepository query boundaries", () => {
       [0, 19],
       [20, 29],
     ]);
+    expect(calls).toContainEqual({ method: "from", args: ["site_content_admin_list"] });
+    expect(calls.find((call) => call.method === "select")?.args[0]).toContain("title");
+  });
+
+  test("creates an entry and first version through one atomic RPC", async () => {
+    const { client, calls } = createClient([{
+      data: { entry: { id: "entry-id" }, version: { id: "version-id", version_no: 1 } },
+      error: null,
+    }]);
+    const repository = new SiteContentRepository(client);
+    const result = await repository.createEntryWithVersion({
+      contentType: "article",
+      slug: "first-article",
+      version: {
+        title: "文章",
+        blocks: [],
+        metadata: { category: "行业", author: "运营", displayPublishedAt: "2026-07-12T08:00:00+08:00" },
+      },
+      actorId: "actor-id",
+    });
+    expect(result.version).toMatchObject({ version_no: 1 });
+    expect(calls.filter((call) => call.method === "rpc").map((call) => call.args[0]))
+      .toEqual(["create_site_content_entry_with_version"]);
+  });
+
+  test("maps only the site content slug unique constraint to a conflict", async () => {
+    const conflict = createClient([{ data: null, error: {
+      code: "23505", constraint: "site_content_entries_content_type_slug_key",
+    } }]);
+    await expect(new SiteContentRepository(conflict.client).createEntryWithVersion({
+      contentType: "article", slug: "first-article",
+      version: { title: "文章", blocks: [], metadata: { category: "行业", author: "运营", displayPublishedAt: "2026-07-12T08:00:00+08:00" } },
+      actorId: "actor-id",
+    })).rejects.toMatchObject({ code: "SITE_CONTENT_SLUG_CONFLICT" });
+
+    const otherUnique = createClient([{ data: null, error: { code: "23505", constraint: "other_key" } }]);
+    await expect(new SiteContentRepository(otherUnique.client).createEntryWithVersion({
+      contentType: "article", slug: "first-article",
+      version: { title: "文章", blocks: [], metadata: { category: "行业", author: "运营", displayPublishedAt: "2026-07-12T08:00:00+08:00" } },
+      actorId: "actor-id",
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
+
+    const updateConflict = createClient([{ data: null, error: {
+      code: "23505", constraint: "site_content_entries_content_type_slug_key",
+    } }]);
+    await expect(new SiteContentRepository(updateConflict.client).updateEntry(
+      "entry-id",
+      { slug: "first-article" },
+    )).rejects.toMatchObject({ code: "SITE_CONTENT_SLUG_CONFLICT" });
   });
 
   test("guards slug updates atomically against concurrently published rows", async () => {
@@ -214,8 +262,9 @@ describe("SiteContentRepository query boundaries", () => {
     const { client, calls } = createClient([{ data: null, error: null }]);
     const repository = new SiteContentRepository(client);
 
-    await expect(repository.archive("entry-id")).resolves.toBeNull();
-    expect(calls.some((call) => call.method === "maybeSingle")).toBe(true);
-    expect(calls.some((call) => call.method === "single")).toBe(false);
+    await expect(repository.archive("entry-id", "actor-id")).resolves.toBeNull();
+    expect(calls).toContainEqual({ method: "rpc", args: ["archive_site_content", {
+      p_entry_id: "entry-id", p_actor_id: "actor-id",
+    }] });
   });
 });

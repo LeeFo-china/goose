@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -46,13 +45,9 @@ describe("SiteContentController routes", () => {
       await expect(controller.consumePreviewToken({
         headers: { "x-gooes-preview-signature": "bad" },
         body: { token: "plain-preview-token" },
+        method: "POST",
+        url: "/internal/site-content/preview/consume",
       } as never, {} as never)).rejects.toMatchObject({ code: "INVALID_PREVIEW_SIGNATURE" });
-
-      const body = { token: "plain-preview-token" };
-      const signature = createHmac("sha256", process.env.GOOES_PREVIEW_SHARED_SECRET)
-        .update(JSON.stringify(body))
-        .digest("hex");
-      expect(signature).toHaveLength(64);
     } finally {
       if (previous === undefined) delete process.env.GOOES_PREVIEW_SHARED_SECRET;
       else process.env.GOOES_PREVIEW_SHARED_SECRET = previous;

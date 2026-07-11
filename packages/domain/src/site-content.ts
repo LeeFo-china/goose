@@ -27,6 +27,7 @@ const MAX_LIST_ITEM_LENGTH = 2_000;
 const MAX_LIST_ITEM_COUNT = 50;
 const MAX_METRIC_COUNT = 24;
 const MAX_GALLERY_IMAGE_COUNT = 50;
+const MAX_REFERENCED_IMAGE_COUNT = 100;
 
 const NonEmptyShortTextSchema = z
   .string()
@@ -105,6 +106,13 @@ export const SiteContentDraftBlocksSchema = z
   .array(SiteContentDraftBlockSchema)
   .max(MAX_BLOCK_COUNT)
   .superRefine((blocks, context) => {
+    const imageCount = blocks.reduce(
+      (count, block) => count + (block.type === 'image' ? 1 : block.type === 'gallery' ? block.images.length : 0),
+      0,
+    );
+    if (imageCount > MAX_REFERENCED_IMAGE_COUNT) {
+      context.addIssue({ code: 'custom', message: '内容图片引用不能超过 100 个' });
+    }
     if (getSerializedUtf8ByteLength(blocks) > MAX_BLOCKS_UTF8_BYTES) {
       context.addIssue({
         code: 'custom',
@@ -122,6 +130,31 @@ export const SiteContentDraftSchema = z.strictObject({
   seoDescription: z.string().trim().min(1).max(1_000).nullable().optional(),
   canonicalUrl: HttpUrlSchema.nullable().optional(),
 });
+
+export const SiteContentArticleMetadataSchema = z.strictObject({
+  category: NonEmptyShortTextSchema,
+  author: NonEmptyShortTextSchema,
+  displayPublishedAt: z.iso.datetime({ offset: true }),
+});
+
+export const SiteContentCaseMetadataSchema = z.strictObject({
+  city: NonEmptyShortTextSchema,
+  areaSquareMeters: z.number().positive().max(100_000),
+  decorationType: NonEmptyShortTextSchema,
+  metrics: z.array(SiteContentMetricSchema).max(MAX_METRIC_COUNT).default([]),
+});
+
+export const SiteContentCityMetadataSchema = z.strictObject({
+  administrativeCode: z.string().trim().regex(/^\d{6,12}$/),
+  cityName: NonEmptyShortTextSchema,
+  localServiceIntroduction: z.string().trim().min(1).max(5_000),
+});
+
+export const SiteContentMetadataSchema = z.union([
+  SiteContentArticleMetadataSchema,
+  SiteContentCaseMetadataSchema,
+  SiteContentCityMetadataSchema,
+]);
 
 export const SiteContentPublicAssetSchema = z.strictObject({
   fileId: FileIdSchema,
@@ -181,6 +214,13 @@ export const SiteContentPublicBlocksSchema = z
   .array(SiteContentPublicBlockSchema)
   .max(MAX_BLOCK_COUNT)
   .superRefine((blocks, context) => {
+    const imageCount = blocks.reduce(
+      (count, block) => count + (block.type === 'image' ? 1 : block.type === 'gallery' ? block.images.length : 0),
+      0,
+    );
+    if (imageCount > MAX_REFERENCED_IMAGE_COUNT) {
+      context.addIssue({ code: 'custom', message: '内容图片引用不能超过 100 个' });
+    }
     if (getSerializedUtf8ByteLength(blocks) > MAX_BLOCKS_UTF8_BYTES) {
       context.addIssue({
         code: 'custom',
@@ -189,23 +229,49 @@ export const SiteContentPublicBlocksSchema = z
     }
   });
 
-export const SiteContentPublicSummarySchema = z.strictObject({
+const SiteContentPublicSummaryShape = {
   id: z.uuid(),
-  contentType: z.enum(SITE_CONTENT_TYPE_VALUES),
   slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(200),
   title: NonEmptyShortTextSchema,
   summary: z.string().trim().min(1).max(1_000).nullable(),
   cover: SiteContentPublicAssetSchema.nullable(),
   publishedAt: z.iso.datetime({ offset: true }),
+};
+
+const SiteContentPublicArticleSummarySchema = z.strictObject({
+  ...SiteContentPublicSummaryShape,
+  contentType: z.literal('article'),
+  metadata: SiteContentArticleMetadataSchema,
+});
+const SiteContentPublicCaseSummarySchema = z.strictObject({
+  ...SiteContentPublicSummaryShape,
+  contentType: z.literal('case'),
+  metadata: SiteContentCaseMetadataSchema,
+});
+const SiteContentPublicCitySummarySchema = z.strictObject({
+  ...SiteContentPublicSummaryShape,
+  contentType: z.literal('city'),
+  metadata: SiteContentCityMetadataSchema,
 });
 
-export const SiteContentPublicDetailSchema =
-  SiteContentPublicSummarySchema.extend({
+export const SiteContentPublicSummarySchema = z.discriminatedUnion('contentType', [
+  SiteContentPublicArticleSummarySchema,
+  SiteContentPublicCaseSummarySchema,
+  SiteContentPublicCitySummarySchema,
+]);
+
+const SiteContentPublicDetailShape = {
     seoTitle: z.string().trim().min(1).max(300).nullable(),
     seoDescription: z.string().trim().min(1).max(1_000).nullable(),
     canonicalUrl: HttpUrlSchema.nullable(),
     blocks: SiteContentPublicBlocksSchema,
-  });
+};
+
+export const SiteContentPublicDetailSchema = z.discriminatedUnion('contentType', [
+  SiteContentPublicArticleSummarySchema.extend(SiteContentPublicDetailShape),
+  SiteContentPublicCaseSummarySchema.extend(SiteContentPublicDetailShape),
+  SiteContentPublicCitySummarySchema.extend(SiteContentPublicDetailShape),
+]);
 
 export const SiteContentPaginationSchema = z.strictObject({
   page: z.number().int().positive(),
@@ -298,6 +364,10 @@ export type SiteContentDraftBlocks = z.infer<
   typeof SiteContentDraftBlocksSchema
 >;
 export type SiteContentDraft = z.infer<typeof SiteContentDraftSchema>;
+export type SiteContentArticleMetadata = z.infer<typeof SiteContentArticleMetadataSchema>;
+export type SiteContentCaseMetadata = z.infer<typeof SiteContentCaseMetadataSchema>;
+export type SiteContentCityMetadata = z.infer<typeof SiteContentCityMetadataSchema>;
+export type SiteContentMetadata = z.infer<typeof SiteContentMetadataSchema>;
 export type SiteContentPublicAsset = z.infer<
   typeof SiteContentPublicAssetSchema
 >;

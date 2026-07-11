@@ -5,6 +5,9 @@ import {
   SiteContentDraftBlockSchema,
   SiteContentDraftBlocksSchema,
   SiteContentDraftSchema,
+  SiteContentArticleMetadataSchema,
+  SiteContentCaseMetadataSchema,
+  SiteContentCityMetadataSchema,
   SiteContentPublicBlocksSchema,
   SiteContentPublicDetailSchema,
   SiteContentPublicListSchema,
@@ -96,6 +99,11 @@ const publicSummary = {
   summary: '文章摘要',
   cover: publicAsset,
   publishedAt: '2026-07-11T08:00:00.000Z',
+  metadata: {
+    category: '行业观察',
+    author: '古德',
+    displayPublishedAt: '2026-07-11T08:00:00.000Z',
+  },
 };
 
 describe('site content domain', () => {
@@ -219,6 +227,52 @@ describe('site content domain', () => {
     expect(SiteContentPublicBlocksSchema.safeParse(overLimit).success).toBe(
       false,
     );
+  });
+
+  test('limits every document to 100 referenced block images', () => {
+    const image = {
+      fileId: '550e8400-e29b-41d4-a716-446655440000',
+      alt: '案例图',
+    };
+    const publicImage = publicAsset;
+    expect(SiteContentDraftBlocksSchema.safeParse([
+      { type: 'gallery', images: Array.from({ length: 50 }, () => image) },
+      { type: 'gallery', images: Array.from({ length: 50 }, () => image) },
+    ]).success).toBe(true);
+    expect(SiteContentDraftBlocksSchema.safeParse([
+      { type: 'image', ...image },
+      { type: 'gallery', images: Array.from({ length: 50 }, () => image) },
+      { type: 'gallery', images: Array.from({ length: 50 }, () => image) },
+    ]).success).toBe(false);
+    expect(SiteContentPublicBlocksSchema.safeParse([
+      { type: 'image', asset: publicImage },
+      { type: 'gallery', images: Array.from({ length: 50 }, () => publicImage) },
+      { type: 'gallery', images: Array.from({ length: 50 }, () => publicImage) },
+    ]).success).toBe(false);
+  });
+
+  test('exports strict content-type metadata and public discriminants', () => {
+    expect(SiteContentArticleMetadataSchema.safeParse(publicSummary.metadata).success).toBe(true);
+    expect(SiteContentCaseMetadataSchema.safeParse({
+      city: '杭州', areaSquareMeters: 128, decorationType: '全案', metrics: [],
+    }).success).toBe(true);
+    expect(SiteContentCityMetadataSchema.safeParse({
+      administrativeCode: '330100', cityName: '杭州', localServiceIntroduction: '本地服务',
+    }).success).toBe(true);
+    expect(SiteContentPublicSummarySchema.safeParse({
+      ...publicSummary,
+      contentType: 'case',
+    }).success).toBe(false);
+    expect(SiteContentPublicSummarySchema.safeParse({
+      ...publicSummary,
+      contentType: 'case',
+      metadata: { city: '杭州', areaSquareMeters: 128, decorationType: '全案', metrics: [] },
+    }).success).toBe(true);
+    expect(SiteContentPublicSummarySchema.safeParse({
+      ...publicSummary,
+      contentType: 'city',
+      metadata: { administrativeCode: '330100', cityName: '杭州', localServiceIntroduction: '本地服务' },
+    }).success).toBe(true);
   });
 
   test('draft contract only accepts trusted file IDs for cover and blocks', () => {

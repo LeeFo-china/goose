@@ -21,7 +21,6 @@ export interface SiteContentQuery extends PromiseLike<DatabaseResult> {
   select(columns: string, options?: { count?: "exact" }): SiteContentQuery;
   insert(value: unknown): SiteContentQuery;
   update(value: unknown): SiteContentQuery;
-  delete(): SiteContentQuery;
   eq(column: string, value: unknown): SiteContentQuery;
   neq(column: string, value: unknown): SiteContentQuery;
   is(column: string, value: null): SiteContentQuery;
@@ -37,7 +36,7 @@ export interface SiteContentQuery extends PromiseLike<DatabaseResult> {
 
 export interface SiteContentDatabaseClient {
   from(table: string): SiteContentQuery;
-  rpc(name: string, args: Record<string, string>): PromiseLike<DatabaseResult>;
+  rpc(name: string, args: Record<string, unknown>): PromiseLike<DatabaseResult>;
 }
 
 export type SiteContentEntryRecord = {
@@ -51,6 +50,10 @@ export type SiteContentEntryRecord = {
   updated_at: string;
 };
 
+export type SiteContentAdminListRecord = SiteContentEntryRecord & {
+  title: string | null;
+};
+
 export type SiteContentVersionRecord = {
   id: string;
   entry_id: string;
@@ -62,7 +65,7 @@ export type SiteContentVersionRecord = {
   seo_title: string | null;
   seo_description: string | null;
   canonical_url: string | null;
-  metadata: Record<string, unknown>;
+  metadata: unknown;
   created_by: string | null;
   created_at: string;
 };
@@ -72,6 +75,7 @@ export type SiteContentPublicSummaryVersionRecord = Pick<
   | "title"
   | "summary"
   | "cover_file_id"
+  | "metadata"
 >;
 
 export type SiteContentPublicDetailVersionRecord = SiteContentPublicSummaryVersionRecord & Pick<
@@ -113,10 +117,11 @@ export type SitePreviewTokenRecord = {
 
 const ENTRY_SELECT =
   "id,content_type,slug,status,published_version_id,published_at,created_at,updated_at";
+const ADMIN_LIST_SELECT = `${ENTRY_SELECT},title`;
 const PUBLIC_ENTRY_SELECT = "id,content_type,slug,published_at";
 const VERSION_SELECT =
   "id,entry_id,version_no,title,summary,cover_file_id,content_blocks,seo_title,seo_description,canonical_url,metadata,created_by,created_at";
-const PUBLIC_SUMMARY_VERSION_SELECT = "title,summary,cover_file_id";
+const PUBLIC_SUMMARY_VERSION_SELECT = "title,summary,cover_file_id,metadata";
 const PUBLIC_DETAIL_VERSION_SELECT =
   `${PUBLIC_SUMMARY_VERSION_SELECT},content_blocks,seo_title,seo_description,canonical_url`;
 const PUBLIC_SUMMARY_SELECT = `${PUBLIC_ENTRY_SELECT},published_version:site_content_versions!site_content_published_version_fk(${PUBLIC_SUMMARY_VERSION_SELECT})`;
@@ -144,6 +149,13 @@ function buildPage<T>(data: unknown, count: number | null | undefined, page: num
 function dbErrorCode(error: unknown): string | null {
   if (typeof error !== "object" || error === null || !("code" in error)) return null;
   return typeof error.code === "string" ? error.code : null;
+}
+
+function isSlugConflict(error: unknown) {
+  if (dbErrorCode(error) !== "23505" || typeof error !== "object" || error === null) return false;
+  const text = JSON.stringify(error);
+  return text.includes("site_content_entries_content_type_slug_key")
+    || (text.includes("content_type") && text.includes("slug"));
 }
 
 export class SiteContentRepository {
@@ -180,19 +192,19 @@ export class SiteContentRepository {
   async listAdmin(query: SiteContentListQuery) {
     const { from, to } = pageRange(query.page, query.pageSize);
     let request = this.client
-      .from("site_content_entries")
-      .select(ENTRY_SELECT, { count: "exact" })
+      .from("site_content_admin_list")
+      .select(ADMIN_LIST_SELECT, { count: "exact" })
       .order("updated_at", { ascending: false })
       .range(from, to);
     if (query.contentType) request = request.eq("content_type", query.contentType);
     if (query.status) request = request.eq("status", query.status);
     if (query.keyword) {
       const keyword = query.keyword.replace(/[,()]/g, " ").trim();
-      if (keyword) request = request.or(`slug.ilike.%${keyword}%`);
+      if (keyword) request = request.or(`slug.ilike.%${keyword}%,title.ilike.%${keyword}%`);
     }
     const { data, error, count } = await request;
     if (error) throw Errors.dbError("查询官网内容列表失败", error);
-    return buildPage<SiteContentEntryRecord>(data, count, query.page, query.pageSize);
+    return buildPage<SiteContentAdminListRecord>(data, count, query.page, query.pageSize);
   }
 
   async findEntry(entryId: string) {
@@ -205,14 +217,35 @@ export class SiteContentRepository {
     return (data as SiteContentEntryRecord | null) ?? null;
   }
 
-  async createEntry(input: { contentType: SiteContentType; slug: string }) {
-    const { data, error } = await this.client
-      .from("site_content_entries")
-      .insert({ content_type: input.contentType, slug: input.slug })
-      .select(ENTRY_SELECT)
-      .single();
-    if (error) throw Errors.dbError("创建官网内容失败", error);
-    return data as SiteContentEntryRecord;
+  async createEntryWithVersion(input: {
+    contentType: SiteContentType;
+    slug: string;
+    version: CreateSiteContentVersionInput;
+    actorId: string;
+  }) {
+    const { data, error } = await this.client.rpc("create_site_content_entry_with_version", {
+      p_content_type: input.contentType,
+      p_slug: input.slug,
+      p_title: input.version.title,
+      p_summary: input.version.summary ?? null,
+      p_cover_file_id: input.version.coverFileId ?? null,
+      p_content_blocks: input.version.blocks,
+      p_seo_title: input.version.seoTitle ?? null,
+      p_seo_description: input.version.seoDescription ?? null,
+      p_canonical_url: input.version.canonicalUrl ?? null,
+      p_metadata: input.version.metadata ?? {},
+      p_actor_id: input.actorId,
+    });
+    if (error) {
+      if (isSlugConflict(error)) {
+        throw Errors.business(409, "官网内容 slug 已存在", "SITE_CONTENT_SLUG_CONFLICT");
+      }
+      throw Errors.dbError("创建官网内容及首版本失败", error);
+    }
+    if (typeof data !== "object" || data === null || !("entry" in data) || !("version" in data)) {
+      throw Errors.dbError("创建官网内容及首版本返回无效");
+    }
+    return data as { entry: SiteContentEntryRecord; version: SiteContentVersionRecord };
   }
 
   async updateEntry(entryId: string, input: { slug?: string }) {
@@ -223,7 +256,12 @@ export class SiteContentRepository {
       .neq("status", "published")
       .select(ENTRY_SELECT)
       .maybeSingle();
-    if (error) throw Errors.dbError("更新官网内容失败", error);
+    if (error) {
+      if (isSlugConflict(error)) {
+        throw Errors.business(409, "官网内容 slug 已存在", "SITE_CONTENT_SLUG_CONFLICT");
+      }
+      throw Errors.dbError("更新官网内容失败", error);
+    }
     if (!data) {
       throw Errors.business(
         409,
@@ -232,17 +270,6 @@ export class SiteContentRepository {
       );
     }
     return data as SiteContentEntryRecord;
-  }
-
-  async deleteDraftEntry(entryId: string) {
-    const { error } = await this.client
-      .from("site_content_entries")
-      .delete()
-      .eq("id", entryId)
-      .eq("status", "draft")
-      .is("published_version_id", null);
-    if (error) throw Errors.dbError("清理官网内容空草稿失败", error);
-    return true;
   }
 
   async listVersions(entryId: string, query: { page: number; pageSize: number }) {
@@ -338,13 +365,12 @@ export class SiteContentRepository {
     return data as SiteContentEntryRecord;
   }
 
-  async archive(entryId: string) {
-    const { data, error } = await this.client
-      .from("site_content_entries")
-      .update({ status: "archived" })
-      .eq("id", entryId)
-      .select(ENTRY_SELECT)
-      .maybeSingle();
+  async archive(entryId: string, actorId: string) {
+    const { data, error } = await this.client.rpc("archive_site_content", {
+      p_entry_id: entryId,
+      p_actor_id: actorId,
+    });
+    if (error && dbErrorCode(error) === "P0002") return null;
     if (error) throw Errors.dbError("归档官网内容失败", error);
     return (data as SiteContentEntryRecord | null) ?? null;
   }

@@ -791,7 +791,7 @@ Controller 只做 safeParse、读取平台上下文、调用 service、`Response
 Run:
 
 ```bash
-(cd apps/api && bun test src/schema/site-content.test.ts src/repositories/site-content.test.ts src/services/site-content.test.ts src/controllers/site-content/routes.test.ts src/repositories/platform-audit-logs-site-content.test.ts src/plugins/auth/legacy/routes.test.ts)
+(cd apps/api && bun test src/schema/site-content.test.ts src/repositories/site-content.test.ts src/repositories/site-content-migration.test.ts src/services/site-content.test.ts src/services/site-content-preview-signature.test.ts src/controllers/site-content/routes.test.ts src/repositories/platform-audit-logs-site-content.test.ts src/plugins/auth/legacy/routes.test.ts)
 bun run api:check
 ```
 

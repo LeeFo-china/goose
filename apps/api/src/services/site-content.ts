@@ -26,9 +26,6 @@ import {
   type SiteContentVersionRecord,
 } from "@/repositories/site-content";
 import {
-  SiteContentArticleMetadataSchema,
-  SiteContentCaseMetadataSchema,
-  SiteContentCityMetadataSchema,
   type CreateSiteContentEntryInput,
   type CreateSiteContentVersionInput,
   type SiteContentListQuery,
@@ -43,6 +40,10 @@ import {
   webSiteContentRevalidator,
   type SiteContentRevalidatorPort,
 } from "@/services/site-content-web-gateway";
+import {
+  getSiteContentMetadataSchema,
+  parsePublicSiteContentMetadata,
+} from "@/services/site-content-metadata";
 
 type SiteContentRepositoryPort = Pick<
   SiteContentRepository,
@@ -50,9 +51,8 @@ type SiteContentRepositoryPort = Pick<
   | "findPublic"
   | "listAdmin"
   | "findEntry"
-  | "createEntry"
+  | "createEntryWithVersion"
   | "updateEntry"
-  | "deleteDraftEntry"
   | "listVersions"
   | "findVersion"
   | "createVersion"
@@ -149,16 +149,13 @@ export class SiteContentService {
     this.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
     await this.assertAssetsAvailable(input.version);
-    const entry = await this.repository.createEntry({ contentType: input.contentType, slug: input.slug });
-    let version: SiteContentVersionRecord;
-    try {
-      version = await this.repository.createVersion(entry.id, input.version, actorId);
-    } catch (error) {
-      await this.repository.deleteDraftEntry(entry.id).catch(() => false);
-      throw error;
-    }
-    await this.recordAudit(authContext, entry, "create", "创建官网内容", { versionId: version.id });
-    return { entry, latestVersion: version };
+    const created = await this.repository.createEntryWithVersion({
+      contentType: input.contentType,
+      slug: input.slug,
+      version: input.version,
+      actorId,
+    });
+    return { entry: created.entry, latestVersion: created.version };
   }
 
   async updateEntry(authContext: AuthContext, entryId: string, input: UpdateSiteContentEntryInput) {
@@ -196,37 +193,29 @@ export class SiteContentService {
   async publish(authContext: AuthContext, entryId: string, versionId: string): Promise<PublishSiteContentResult> {
     this.accessPolicy.assertPermission(authContext, PUBLISH_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
-    const before = await this.requireEntry(entryId);
+    await this.requireEntry(entryId);
     await this.requireOwnedVersion(entryId, versionId);
     const published = await this.repository.publish(entryId, versionId, actorId);
-    await this.recordAudit(authContext, published, "publish", "发布官网内容", {
-      beforeVersionId: before.published_version_id,
-      afterVersionId: versionId,
-    });
     return this.finishPublication(authContext, published, "publish_revalidation_failed", "发布官网内容缓存失效失败");
   }
 
   async rollback(authContext: AuthContext, entryId: string, versionId: string): Promise<PublishSiteContentResult> {
     this.accessPolicy.assertPermission(authContext, PUBLISH_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
-    const before = await this.requireEntry(entryId);
+    await this.requireEntry(entryId);
     await this.requireOwnedVersion(entryId, versionId);
     const rolledBack = await this.repository.rollback(entryId, versionId, actorId);
-    await this.recordAudit(authContext, rolledBack, "rollback", "回滚官网内容", {
-      beforeVersionId: before.published_version_id,
-      afterVersionId: versionId,
-    });
     return this.finishPublication(authContext, rolledBack, "rollback_revalidation_failed", "回滚官网内容缓存失效失败");
   }
 
   async archive(authContext: AuthContext, entryId: string) {
     this.accessPolicy.assertPermission(authContext, PUBLISH_PERMISSION);
+    const actorId = this.requireEmployeeId(authContext);
     await this.requireEntry(entryId);
-    const entry = await this.repository.archive(entryId);
+    const entry = await this.repository.archive(entryId, actorId);
     if (!entry) {
       throw Errors.business(404, "官网内容不存在", "SITE_CONTENT_NOT_FOUND");
     }
-    await this.recordAudit(authContext, entry, "archive", "归档官网内容");
     return this.finishPublication(
       authContext,
       entry,
@@ -336,26 +325,39 @@ export class SiteContentService {
 
   private toPublicSummary(record: SiteContentPublicSummaryRecord, assets: Map<string, SiteContentPublicAsset>): SiteContentPublicSummary {
     const version = this.requirePublishedVersion(record);
-    return SiteContentPublicSummarySchema.parse({
+    const metadata = parsePublicSiteContentMetadata(record.content_type, version.metadata);
+    const result = SiteContentPublicSummarySchema.safeParse({
       id: record.id,
       contentType: record.content_type,
       slug: record.slug,
       title: version.title,
       summary: version.summary,
       cover: version.cover_file_id ? this.withAlt(this.requireAsset(assets, version.cover_file_id), version.title) : null,
-      publishedAt: record.published_at as string,
+      publishedAt: record.content_type === "article"
+        && "displayPublishedAt" in metadata
+        ? metadata.displayPublishedAt
+        : record.published_at,
+      metadata,
     });
+    if (!result.success) {
+      throw Errors.business(500, "官网公开内容数据不合法", "SITE_CONTENT_DATA_INVALID", result.error.issues);
+    }
+    return result.data;
   }
 
   private toPublicDetail(record: SiteContentPublicDetailRecord, assets: Map<string, SiteContentPublicAsset>): SiteContentPublicDetail {
     const version = this.requirePublishedVersion(record);
-    return SiteContentPublicDetailSchema.parse({
+    const result = SiteContentPublicDetailSchema.safeParse({
       ...this.toPublicSummary(record, assets),
       seoTitle: version.seo_title,
       seoDescription: version.seo_description,
       canonicalUrl: version.canonical_url,
       blocks: this.parseStoredBlocks(version.content_blocks).map((block) => this.toPublicBlock(block, assets)),
     });
+    if (!result.success) {
+      throw Errors.business(500, "官网公开内容数据不合法", "SITE_CONTENT_DATA_INVALID", result.error.issues);
+    }
+    return result.data;
   }
 
   private toPreviewDetail(entry: SiteContentEntryRecord, version: SiteContentVersionRecord, assets: Map<string, SiteContentPublicAsset>) {
@@ -460,11 +462,7 @@ export class SiteContentService {
   }
 
   private assertMetadataMatchesType(contentType: SiteContentType, metadata: unknown) {
-    const schema = contentType === "article"
-      ? SiteContentArticleMetadataSchema
-      : contentType === "case"
-        ? SiteContentCaseMetadataSchema
-        : SiteContentCityMetadataSchema;
+    const schema = getSiteContentMetadataSchema(contentType);
     const result = schema.safeParse(metadata);
     if (!result.success) throw Errors.fromZod(result.error);
   }
