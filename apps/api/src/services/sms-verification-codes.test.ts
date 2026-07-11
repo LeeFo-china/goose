@@ -1,7 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 
-import { SmsVerificationCodeService } from "@/services/sms-verification-codes";
 import type { SmsScene } from "@gooes/domain";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+const serviceModule = import("@/services/sms-verification-codes");
 
 interface SmsRecord {
   phone: string;
@@ -10,52 +15,56 @@ interface SmsRecord {
   scene: SmsScene;
 }
 
-function createHarness() {
+async function createHarness() {
+  const { SmsVerificationCodeService } = await serviceModule;
   const records: SmsRecord[] = [];
   const repository = {
-    findRecentByPhoneScene(input: { phone: string; scene: SmsScene }) {
-      return Promise.resolve(
-        records.find(
-          (record) => record.phone === input.phone && record.scene === input.scene,
-        ) ?? null,
-      );
-    },
-    countRecentByRequestIpScene(input: {
-      requestIp: string;
-      scene: SmsScene;
-    }) {
-      return Promise.resolve(
-        records.filter(
-          (record) =>
-            record.requestIp === input.requestIp && record.scene === input.scene,
-        ).length,
-      );
-    },
-    findRecentByRequestDeviceScene(input: {
-      requestDevice: string;
-      scene: SmsScene;
-    }) {
-      return Promise.resolve(
-        records.find(
-          (record) =>
-            record.requestDevice === input.requestDevice &&
-            record.scene === input.scene,
-        ) ?? null,
-      );
-    },
-    createPending(input: {
+    reservePending(input: {
       phone: string;
       requestDevice?: string | null;
       requestIp: string | null;
+      requestIpLimit: number;
       scene: SmsScene;
     }) {
+      const limitedDimension: "phone" | "request_device" | "request_ip" | null =
+        records.some(
+          (record) => record.phone === input.phone && record.scene === input.scene,
+        )
+          ? "phone"
+          : input.requestDevice &&
+              records.some(
+                (record) =>
+                  record.requestDevice === input.requestDevice &&
+                  record.scene === input.scene,
+              )
+            ? "request_device"
+            : input.requestIp &&
+                records.filter(
+                  (record) =>
+                    record.requestIp === input.requestIp &&
+                    record.scene === input.scene,
+                ).length >= input.requestIpLimit
+              ? "request_ip"
+              : null;
+      if (limitedDimension) {
+        return Promise.resolve({
+          reserved: false as const,
+          id: null,
+          limitedDimension,
+        });
+      }
+
       records.push({
         phone: input.phone,
         requestDevice: input.requestDevice ?? null,
         requestIp: input.requestIp,
         scene: input.scene,
       });
-      return Promise.resolve();
+      return Promise.resolve({
+        reserved: true as const,
+        id: `00000000-0000-4000-8000-${String(records.length).padStart(12, "0")}`,
+        limitedDimension: null,
+      });
     },
     deletePendingByPhoneSceneCode() {
       return Promise.resolve();
@@ -85,47 +94,53 @@ function sendInput(
   };
 }
 
-describe("SmsVerificationCodeService rate limits", () => {
-  test("allows five partner applications per shared IP and rejects the sixth", async () => {
-    const { send, service } = createHarness();
+function fulfilledCount(results: PromiseSettledResult<unknown>[]): number {
+  return results.filter((result) => result.status === "fulfilled").length;
+}
 
-    for (let index = 0; index < 5; index += 1) {
-      await service.sendCode(sendInput(index, { requestIpLimit: 5 }));
-    }
+describe("SmsVerificationCodeService atomic rate limits", () => {
+  test("allows at most five concurrent partner applications per shared IP", async () => {
+    const { send, service } = await createHarness();
+    const results = await Promise.allSettled(
+      Array.from({ length: 6 }, (_, index) =>
+        service.sendCode(sendInput(index, { requestIpLimit: 5 })),
+      ),
+    );
 
-    await expect(
-      service.sendCode(sendInput(5, { requestIpLimit: 5 })),
-    ).rejects.toMatchObject({
-      statusCode: 429,
-      code: "SMS_CODE_RATE_LIMITED",
-    });
+    expect(fulfilledCount(results)).toBe(5);
     expect(send).toHaveBeenCalledTimes(5);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({
+      reason: { statusCode: 429, code: "SMS_CODE_RATE_LIMITED" },
+    });
   });
 
-  test("still rejects a repeated phone or device within the window", async () => {
-    const phoneHarness = createHarness();
-    await phoneHarness.service.sendCode(sendInput(0, { requestIpLimit: 5 }));
-    await expect(
+  test("allows at most one concurrent request for the same phone or device", async () => {
+    const phoneHarness = await createHarness();
+    const phoneResults = await Promise.allSettled([
+      phoneHarness.service.sendCode(sendInput(0, { requestIpLimit: 5 })),
       phoneHarness.service.sendCode(
         sendInput(1, { phone: "13800000000", requestIpLimit: 5 }),
       ),
-    ).rejects.toMatchObject({ statusCode: 429 });
+    ]);
+    expect(fulfilledCount(phoneResults)).toBe(1);
 
-    const deviceHarness = createHarness();
-    await deviceHarness.service.sendCode(sendInput(0, { requestIpLimit: 5 }));
-    await expect(
+    const deviceHarness = await createHarness();
+    const deviceResults = await Promise.allSettled([
+      deviceHarness.service.sendCode(sendInput(0, { requestIpLimit: 5 })),
       deviceHarness.service.sendCode(
         sendInput(1, { requestDevice: "device-0", requestIpLimit: 5 }),
       ),
-    ).rejects.toMatchObject({ statusCode: 429 });
+    ]);
+    expect(fulfilledCount(deviceResults)).toBe(1);
   });
 
   test("keeps the default IP limit at one for other scenes", async () => {
-    const { service } = createHarness();
-    await service.sendCode(sendInput(0, { scene: "bind_customer" }));
-
-    await expect(
+    const { service } = await createHarness();
+    const results = await Promise.allSettled([
+      service.sendCode(sendInput(0, { scene: "bind_customer" })),
       service.sendCode(sendInput(1, { scene: "bind_customer" })),
-    ).rejects.toMatchObject({ statusCode: 429 });
+    ]);
+
+    expect(fulfilledCount(results)).toBe(1);
   });
 });
