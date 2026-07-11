@@ -4,6 +4,8 @@ import { ArrowRight, CircleCheck, CircleX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
+import { MARKETING_CTA } from "./marketing-cta";
+
 const boundaries = [
   ["我们提供", "围绕装修经营和项目交付的业务记录、协作流程与权限工具。"],
   ["我们不替代", "装企自身的合同责任、专业判断、现场管理与法定验收义务。"],
@@ -17,7 +19,7 @@ export function AboutSections(): React.JSX.Element {
           <p className="font-medium text-muted-foreground">关于鹅班长</p>
           <h1 className="max-w-xl text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-6xl">让装修业务过程<br className="hidden sm:block" />更清楚、更可靠</h1>
           <p className="max-w-xl text-base leading-8 text-muted-foreground">我们把分散在客户沟通、项目现场和经营核对中的记录，组织成可追踪的业务链路。</p>
-          <Button asChild className="self-start" size="lg"><Link href="/products">了解产品能力<ArrowRight data-icon="inline-end" /></Link></Button>
+          <Button asChild className="self-start" size="lg"><Link href={MARKETING_CTA.products.href}>{MARKETING_CTA.products.label}<ArrowRight data-icon="inline-end" /></Link></Button>
         </div>
         <div className="relative min-h-[24rem] overflow-hidden rounded-lg lg:min-h-[36rem]">
           <Image alt="装修项目各方在毛坯住宅内共同核对图纸" className="object-cover object-center" fill priority sizes="(min-width: 1024px) 58vw, 100vw" src="/home-project-meeting.png" />
@@ -44,10 +46,10 @@ export function AboutSections(): React.JSX.Element {
       <section className="mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)] lg:px-8 lg:py-24">
         <div className="flex flex-col gap-6">
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">联系与合作</h2>
-          <p className="max-w-2xl leading-8 text-muted-foreground">城市合作请通过城市合伙人页面提交主体、城市与资源信息。其他业务联系渠道和主体信息，以官网后续公开内容及实际运营沟通为准。</p>
+          <p className="max-w-2xl leading-8 text-muted-foreground">目前官网唯一官方业务联系入口是城市合伙人页面的合作申请表。产品合作、装企接入、城市合作及其他业务咨询，均可在业务说明或留言中注明诉求，平台运营将按提交信息回访。</p>
           <div className="flex flex-wrap gap-3">
-            <Button asChild><Link href="/partners">提交城市合作申请</Link></Button>
-            <Button asChild variant="outline"><Link href="/solutions">查看解决方案</Link></Button>
+            <Button asChild><Link href={MARKETING_CTA.contact.href}>{MARKETING_CTA.contact.label}</Link></Button>
+            <Button asChild variant="outline"><Link href={MARKETING_CTA.solutions.href}>{MARKETING_CTA.solutions.label}</Link></Button>
           </div>
         </div>
         <div className="flex flex-col gap-5 border-t pt-8 lg:border-t-0 lg:border-l lg:pl-12 lg:pt-0">

@@ -4,6 +4,8 @@ import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
+import { MARKETING_CTA } from "./marketing-cta";
+
 const solutions = [
   ["装企经营", "客户来源和项目结果分散", "让客户档案、项目推进和经营记录保持关联。"],
   ["项目交付", "现场信息回传慢，问题缺少归属", "按项目沉淀施工、验收与整改过程。"],
@@ -19,7 +21,7 @@ export function SolutionSections(): React.JSX.Element {
           <p className="font-medium text-muted-foreground">解决方案</p>
           <h1 className="max-w-xl text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-6xl">从实际问题出发<br className="hidden sm:block" />建立协作链路</h1>
           <p className="max-w-xl text-base leading-8 text-muted-foreground">先确认经营和交付中的断点，再选择需要连接的人员、记录与动作。</p>
-          <Button asChild className="self-start" size="lg"><Link href="/products">核对产品能力<ArrowRight data-icon="inline-end" /></Link></Button>
+          <Button asChild className="self-start" size="lg"><Link href={MARKETING_CTA.products.href}>{MARKETING_CTA.products.label}<ArrowRight data-icon="inline-end" /></Link></Button>
         </div>
         <div className="relative min-h-[46dvh] overflow-hidden lg:min-h-full">
           <Image alt="装修施工团队在住宅工地核对图纸与现场进度" className="object-cover object-[62%_center]" fill priority sizes="(min-width: 1024px) 58vw, 100vw" src="/partner-hero-construction-team.png" />
@@ -47,7 +49,7 @@ export function SolutionSections(): React.JSX.Element {
           <div className="flex flex-col justify-center gap-6">
             <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">城市合作有独立的申请与审核流程</h2>
             <p className="leading-8 text-muted-foreground">官网公开合作边界、收益依据和申请流程。提交申请不等于自动开通身份，平台运营会进行后续沟通。</p>
-            <Button asChild className="self-start" variant="outline"><Link href="/partners">了解城市合伙人<ArrowRight data-icon="inline-end" /></Link></Button>
+            <Button asChild className="self-start" variant="outline"><Link href={MARKETING_CTA.partners.href}>{MARKETING_CTA.partners.label}<ArrowRight data-icon="inline-end" /></Link></Button>
           </div>
         </div>
       </section>

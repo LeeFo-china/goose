@@ -4,6 +4,8 @@ import { ArrowRight, BadgeCheck, Banknote, ClipboardList, Megaphone, UsersRound,
 
 import { Button } from "@/components/ui/button";
 
+import { MARKETING_CTA } from "./marketing-cta";
+
 const capabilities = [
   { icon: UsersRound, title: "客户", description: "统一保留线索、房产、跟进与转项目过程。" },
   { icon: ClipboardList, title: "项目", description: "围绕项目组织成员、阶段、任务和关键状态。" },
@@ -21,7 +23,7 @@ export function ProductSections(): React.JSX.Element {
           <p className="font-medium text-muted-foreground">产品能力</p>
           <h1 className="max-w-xl text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-6xl">围绕装修工作流<br className="hidden sm:block" />组织每一条记录</h1>
           <p className="max-w-xl text-base leading-8 text-muted-foreground">客户、项目与现场工作使用同一业务上下文，减少重复录入和信息断点。</p>
-          <Button asChild className="self-start" size="lg"><Link href="/solutions">查看业务解决方案<ArrowRight data-icon="inline-end" /></Link></Button>
+          <Button asChild className="self-start" size="lg"><Link href={MARKETING_CTA.solutions.href}>{MARKETING_CTA.solutions.label}<ArrowRight data-icon="inline-end" /></Link></Button>
         </div>
         <div className="relative min-h-[24rem] overflow-hidden rounded-lg lg:min-h-[36rem]">
           <Image alt="施工负责人在现场通过平板核对装修项目记录" className="object-cover object-center" fill priority sizes="(min-width: 1024px) 58vw, 100vw" src="/product-site-record.png" />
@@ -55,8 +57,8 @@ export function ProductSections(): React.JSX.Element {
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">记录不是终点，下一步行动才是</h2>
           <p className="leading-8 text-muted-foreground">阶段变化、验收问题与费用信息都要回到明确的负责人和处理路径。具体可用能力以实际开通模块和权限为准。</p>
           <div className="flex flex-wrap gap-3">
-            <Button asChild><Link href="/cases">查看项目案例</Link></Button>
-            <Button asChild variant="outline"><Link href="/about">了解产品边界</Link></Button>
+            <Button asChild><Link href={MARKETING_CTA.cases.href}>{MARKETING_CTA.cases.label}</Link></Button>
+            <Button asChild variant="outline"><Link href={MARKETING_CTA.about.href}>{MARKETING_CTA.about.label}</Link></Button>
           </div>
         </div>
       </section>

@@ -5,6 +5,8 @@ import { ArrowRight, ClipboardCheck, HardHat, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
+import { MARKETING_CTA } from "./marketing-cta";
+
 const workflow = [
   ["客户进入", "线索、房产和沟通记录归到同一客户档案。"],
   ["项目推进", "合同后的阶段、人员与待办沿项目持续更新。"],
@@ -26,10 +28,10 @@ export function HomeSections(): React.JSX.Element {
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <Link href="/products">查看产品能力<ArrowRight data-icon="inline-end" /></Link>
+              <Link href={MARKETING_CTA.products.href}>{MARKETING_CTA.products.label}<ArrowRight data-icon="inline-end" /></Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="/solutions">按业务问题了解方案</Link>
+              <Link href={MARKETING_CTA.solutions.href}>{MARKETING_CTA.solutions.label}</Link>
             </Button>
           </div>
         </div>
@@ -74,7 +76,7 @@ export function HomeSections(): React.JSX.Element {
           <div className="flex flex-col justify-center gap-6">
             <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">现场发生的事，经营端当天能看见</h2>
             <p className="text-base leading-8 text-muted-foreground">施工记录、节点验收和项目费用围绕同一个项目组织，负责人可以从异常回到原始记录。</p>
-            <Button asChild className="self-start" variant="outline"><Link href="/cases">查看项目案例<ArrowRight data-icon="inline-end" /></Link></Button>
+            <Button asChild className="self-start" variant="outline"><Link href={MARKETING_CTA.cases.href}>{MARKETING_CTA.cases.label}<ArrowRight data-icon="inline-end" /></Link></Button>
           </div>
         </div>
       </section>
@@ -84,7 +86,7 @@ export function HomeSections(): React.JSX.Element {
           <p className="font-medium text-muted-foreground">城市合作</p>
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">本地资源有归属，合作收益有依据</h2>
           <p className="max-w-xl leading-8 text-muted-foreground">城市合伙人拓展装企后，平台记录绑定关系、收入和结算依据，合作边界先公开再申请。</p>
-          <Button asChild className="self-start" variant="outline"><Link href="/partners">了解城市合伙人<ArrowRight data-icon="inline-end" /></Link></Button>
+          <Button asChild className="self-start" variant="outline"><Link href={MARKETING_CTA.partners.href}>{MARKETING_CTA.partners.label}<ArrowRight data-icon="inline-end" /></Link></Button>
         </div>
         <div className="flex flex-col justify-between gap-8 border-t pt-8 lg:border-t-0 lg:border-l lg:pl-12 lg:pt-0">
           <div>
@@ -92,8 +94,8 @@ export function HomeSections(): React.JSX.Element {
             <p className="mt-4 max-w-xl leading-8 text-muted-foreground">产品页说明能力与工作流，关于页说明我们提供什么、不替代什么。</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button asChild><Link href="/products">查看产品能力</Link></Button>
-            <Button asChild variant="ghost"><Link href="/about">了解产品边界</Link></Button>
+            <Button asChild><Link href={MARKETING_CTA.products.href}>{MARKETING_CTA.products.label}</Link></Button>
+            <Button asChild variant="ghost"><Link href={MARKETING_CTA.about.href}>{MARKETING_CTA.about.label}</Link></Button>
           </div>
         </div>
       </section>
