@@ -32,7 +32,10 @@ describe("tenant settings workspace", () => {
   });
 
   test("progressively discloses tenant SMS provider settings", () => {
-    const source = readSource("./tenant-sms-settings-panel.tsx");
+    const source = [
+      readSource("./tenant-sms-settings-panel.tsx"),
+      readSource("./tenant-settings-status.ts"),
+    ].join("\n");
 
     expect(source).toContain("继承平台短信通道");
     expect(source).toContain("自有阿里云短信通道");
@@ -52,5 +55,14 @@ describe("tenant settings workspace", () => {
     expect(source).toContain("bg-muted/25");
     expect(source).toContain("Array.from({ length: 2 })");
     expect(source).not.toContain("Array.from({ length: 5 })");
+  });
+
+  test("counts only settings required by the active tenant SMS channel", () => {
+    const pageSource = readSource("../../app/(console)/settings/page.tsx");
+
+    expect(pageSource).toContain("countTenantGroupMissing");
+    expect(pageSource).toContain(
+      "countTenantGroupMissing(groupCode, settings)",
+    );
   });
 });

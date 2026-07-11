@@ -5,6 +5,7 @@ import {
   TenantSettingsHeader,
 } from "@/components/settings/settings-page-header";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
+import { countTenantGroupMissing } from "@/components/settings/tenant-settings-status";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { TenantSettingsWorkspace } from "@/components/settings/tenant-settings-workspace";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
@@ -149,7 +150,9 @@ export default async function SettingsPage() {
       code: groupCode,
       label: groupLabels[groupCode] || "其他配置",
       settings,
-      emptyCount: settings.filter((item) => item.source === "empty").length,
+      emptyCount: isPlatformMode
+        ? settings.filter((item) => item.source === "empty").length
+        : countTenantGroupMissing(groupCode, settings),
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {

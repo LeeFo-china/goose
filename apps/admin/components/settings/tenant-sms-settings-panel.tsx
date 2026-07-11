@@ -13,6 +13,10 @@ import {
   SettingEditor,
   updateSetting,
 } from "@/components/settings/settings-actions";
+import {
+  getTenantSmsProviderSettings,
+  tenantSmsModeLabels,
+} from "@/components/settings/tenant-settings-status";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -28,37 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-const smsChannelModeLabels: Record<string, string> = {
-  platform: "继承平台短信通道",
-  tenant_aliyun: "自有阿里云短信通道",
-  tenant_tencent: "自有腾讯云短信通道",
-};
-
-const aliyunSmsKeys = new Set([
-  "ALIBABA_CLOUD_ACCESS_KEY_ID",
-  "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
-  "ALIYUN_SMS_SIGN_NAME",
-  "ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER",
-  "ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE",
-  "ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN",
-  "ALIYUN_SMS_TEMPLATE_CODE_PROJECT_ACCEPTANCE",
-  "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
-]);
-
-const tencentSmsKeys = new Set([
-  "TENCENT_SMS_SECRET_ID",
-  "TENCENT_SMS_SECRET_KEY",
-  "TENCENT_SMS_REGION",
-  "TENCENT_SMS_ENDPOINT",
-  "TENCENT_SMS_SDK_APP_ID",
-  "TENCENT_SMS_SIGN_NAME",
-  "TENCENT_SMS_TEMPLATE_ID_BIND_CUSTOMER",
-  "TENCENT_SMS_TEMPLATE_ID_BIND_EMPLOYEE",
-  "TENCENT_SMS_TEMPLATE_ID_ADMIN_LOGIN",
-  "TENCENT_SMS_TEMPLATE_ID_PROJECT_ACCEPTANCE",
-  "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
-]);
 
 function findSetting(settings: SystemSetting[], key: string) {
   return settings.find((setting) => setting.key === key) || null;
@@ -109,12 +82,7 @@ export function TenantSmsSettingsPanel({
     setMode(initialMode);
   }, [initialMode]);
 
-  const configSettings = settings.filter((setting) => {
-    if (setting.key === "SMS_CHANNEL_MODE") return false;
-    if (mode === "tenant_aliyun") return aliyunSmsKeys.has(setting.key);
-    if (mode === "tenant_tencent") return tencentSmsKeys.has(setting.key);
-    return false;
-  });
+  const configSettings = getTenantSmsProviderSettings(settings, mode);
   const missingCount = countMissing(configSettings);
 
   function changeMode(nextMode: string) {
@@ -165,13 +133,13 @@ export function TenantSmsSettingsPanel({
             <SelectContent>
               <SelectGroup>
                 <SelectItem value="platform">
-                  {smsChannelModeLabels.platform}
+                  {tenantSmsModeLabels.platform}
                 </SelectItem>
                 <SelectItem value="tenant_aliyun">
-                  {smsChannelModeLabels.tenant_aliyun}
+                  {tenantSmsModeLabels.tenant_aliyun}
                 </SelectItem>
                 <SelectItem value="tenant_tencent">
-                  {smsChannelModeLabels.tenant_tencent}
+                  {tenantSmsModeLabels.tenant_tencent}
                 </SelectItem>
               </SelectGroup>
             </SelectContent>
