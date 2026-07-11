@@ -94,6 +94,23 @@ function parseMetadata(contentType: SiteContentType, metadata: Record<string, un
   return SiteContentCityMetadataSchema.parse(metadata);
 }
 
+function formatCaseMetrics(value: unknown) {
+  if (!Array.isArray(value)) return "";
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const label = "label" in item && typeof item.label === "string" ? item.label : "";
+    const metricValue = "value" in item && typeof item.value === "string" ? item.value : "";
+    return [`${label}|${metricValue}`];
+  }).join("\n");
+}
+
+function parseCaseMetrics(value: string) {
+  return value.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+    const [label, ...valueParts] = line.split("|");
+    return { label: label?.trim() || "", value: valueParts.join("|").trim() };
+  });
+}
+
 function buildVersionPayload(values: SiteContentEditorValues): SiteContentVersionPayload {
   const draft = SiteContentDraftSchema.parse({
     title: values.title,
@@ -197,7 +214,7 @@ export function SiteContentEditor({
                 <Field data-invalid={Boolean(form.formState.errors.slug)}><FieldLabel htmlFor="site-content-slug">slug</FieldLabel><Input id="site-content-slug" {...form.register("slug")} disabled={pending || !canManage || detail?.entry.status === "published"} aria-invalid={Boolean(form.formState.errors.slug)} placeholder="example-content-slug" /><FieldDescription>{detail?.entry.status === "published" ? "已发布内容需先归档，才能修改 slug。" : "用于公开页面路径，只支持小写字母、数字和连字符。"}</FieldDescription><FieldError errors={[form.formState.errors.slug]} /></Field>
                 <Field className="md:col-span-2" data-invalid={Boolean(form.formState.errors.title)}><FieldLabel htmlFor="site-content-title">标题</FieldLabel><Input id="site-content-title" {...form.register("title")} disabled={pending || !canManage} aria-invalid={Boolean(form.formState.errors.title)} /><FieldError errors={[form.formState.errors.title]} /></Field>
                 <Controller name="summary" control={form.control} render={({ field, fieldState }) => <Field className="md:col-span-2" data-invalid={fieldState.invalid}><FieldLabel htmlFor="site-content-summary">摘要</FieldLabel><Textarea id="site-content-summary" rows={3} value={field.value ?? ""} disabled={pending || !canManage} aria-invalid={fieldState.invalid} onChange={(event) => field.onChange(event.target.value || null)} /><FieldError errors={[fieldState.error]} /></Field>} />
-                <Controller name="coverFileId" control={form.control} render={({ field }) => <div className="md:col-span-2"><SiteContentImageField id="site-content-cover" value={{ fileId: field.value ?? "", alt: form.watch("title") }} disabled={pending || !canManage} onChange={(image) => field.onChange(image.fileId || null)} /></div>} />
+                <Controller name="coverFileId" control={form.control} render={({ field }) => <div className="md:col-span-2"><SiteContentImageField id="site-content-cover" value={{ fileId: field.value ?? "", alt: "" }} hideAlt disabled={pending || !canManage} onChange={(image) => field.onChange(image.fileId || null)} /></div>} />
               </FieldGroup>
             </section>
 
@@ -231,7 +248,7 @@ function MetadataFields({ contentType, metadata, disabled, onChange }: { content
       <div><h2 id="site-content-metadata-heading" className="text-base font-semibold">类型元数据</h2><p className="mt-1 text-sm text-muted-foreground">字段随文章、案例或城市页类型固定。</p></div>
       <FieldGroup className="grid gap-4 md:grid-cols-2">
         {contentType === "article" ? <><Field><FieldLabel htmlFor="article-category">分类</FieldLabel><Input id="article-category" value={String(metadata.category ?? "")} disabled={disabled} onChange={(event) => onChange("category", event.target.value)} /></Field><Field><FieldLabel htmlFor="article-author">作者</FieldLabel><Input id="article-author" value={String(metadata.author ?? "")} disabled={disabled} onChange={(event) => onChange("author", event.target.value)} /></Field><Field className="md:col-span-2"><FieldLabel htmlFor="article-published-at">展示发布时间（ISO 8601）</FieldLabel><Input id="article-published-at" value={String(metadata.displayPublishedAt ?? "")} disabled={disabled} placeholder="2026-07-12T08:00:00.000+08:00" onChange={(event) => onChange("displayPublishedAt", event.target.value)} /></Field></> : null}
-        {contentType === "case" ? <><Field><FieldLabel htmlFor="case-city">城市</FieldLabel><Input id="case-city" value={String(metadata.city ?? "")} disabled={disabled} onChange={(event) => onChange("city", event.target.value)} /></Field><Field><FieldLabel htmlFor="case-area">面积（㎡）</FieldLabel><Input id="case-area" type="number" min="0.01" step="0.01" value={Number(metadata.areaSquareMeters ?? 0)} disabled={disabled} onChange={(event) => onChange("areaSquareMeters", event.target.valueAsNumber)} /></Field><Field className="md:col-span-2"><FieldLabel htmlFor="case-type">装修类型</FieldLabel><Input id="case-type" value={String(metadata.decorationType ?? "")} disabled={disabled} onChange={(event) => onChange("decorationType", event.target.value)} /></Field></> : null}
+        {contentType === "case" ? <><Field><FieldLabel htmlFor="case-city">城市</FieldLabel><Input id="case-city" value={String(metadata.city ?? "")} disabled={disabled} onChange={(event) => onChange("city", event.target.value)} /></Field><Field><FieldLabel htmlFor="case-area">面积（㎡）</FieldLabel><Input id="case-area" type="number" min="0.01" step="0.01" value={Number(metadata.areaSquareMeters ?? 0)} disabled={disabled} onChange={(event) => onChange("areaSquareMeters", event.target.valueAsNumber)} /></Field><Field className="md:col-span-2"><FieldLabel htmlFor="case-type">装修类型</FieldLabel><Input id="case-type" value={String(metadata.decorationType ?? "")} disabled={disabled} onChange={(event) => onChange("decorationType", event.target.value)} /></Field><Field className="md:col-span-2"><FieldLabel htmlFor="case-metrics">案例指标（每行“名称|数值”）</FieldLabel><Textarea id="case-metrics" rows={5} value={formatCaseMetrics(metadata.metrics)} disabled={disabled} onChange={(event) => onChange("metrics", parseCaseMetrics(event.target.value))} /><FieldDescription>例如“工期|90 天”。最多 24 项，名称和数值均为必填。</FieldDescription></Field></> : null}
         {contentType === "city" ? <><Field><FieldLabel htmlFor="city-code">行政区划代码</FieldLabel><Input id="city-code" inputMode="numeric" value={String(metadata.administrativeCode ?? "")} disabled={disabled} onChange={(event) => onChange("administrativeCode", event.target.value)} /></Field><Field><FieldLabel htmlFor="city-name">城市名称</FieldLabel><Input id="city-name" value={String(metadata.cityName ?? "")} disabled={disabled} onChange={(event) => onChange("cityName", event.target.value)} /></Field><Field className="md:col-span-2"><FieldLabel htmlFor="city-introduction">本地服务介绍</FieldLabel><Textarea id="city-introduction" rows={5} value={String(metadata.localServiceIntroduction ?? "")} disabled={disabled} onChange={(event) => onChange("localServiceIntroduction", event.target.value)} /></Field></> : null}
       </FieldGroup>
     </section>

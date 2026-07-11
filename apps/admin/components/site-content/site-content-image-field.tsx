@@ -18,12 +18,14 @@ export function SiteContentImageField({
   onChange,
   disabled,
   error,
+  hideAlt = false,
 }: {
   id: string;
   value: { fileId: string; alt: string };
   onChange: (value: { fileId: string; alt: string }) => void;
   disabled?: boolean;
   error?: string;
+  hideAlt?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -47,7 +49,10 @@ export function SiteContentImageField({
         completeFallbackMessage: "登记官网图片失败",
       });
       if (!result.fileId) throw new Error("图片上传成功但未返回文件 ID");
-      onChange({ fileId: result.fileId, alt: value.alt || file.name.replace(/\.[^.]+$/, "") });
+      onChange({
+        fileId: result.fileId,
+        alt: hideAlt ? "" : value.alt || file.name.replace(/\.[^.]+$/, ""),
+      });
     } catch (uploadFailure) {
       setUploadError(uploadFailure instanceof Error ? uploadFailure.message : "上传图片失败");
     } finally {
@@ -88,20 +93,26 @@ export function SiteContentImageField({
             {uploading ? "上传中" : "上传图片"}
           </Button>
         </div>
-        <FieldDescription>内容只保存 fileId 和替代文本，不保存 URL 或图片尺寸。</FieldDescription>
+        <FieldDescription>
+          {hideAlt
+            ? "封面只保存 fileId，封面替代文本由公开渲染策略生成。"
+            : "内容只保存 fileId 和替代文本，不保存 URL 或图片尺寸。"}
+        </FieldDescription>
         <FieldError>{error}</FieldError>
       </Field>
-      <Field data-invalid={!value.alt.trim()}>
-        <FieldLabel htmlFor={`${id}-alt`}>替代文本</FieldLabel>
-        <Input
-          id={`${id}-alt`}
-          value={value.alt}
-          disabled={disabled || uploading}
-          aria-invalid={!value.alt.trim()}
-          placeholder="描述图片传达的内容"
-          onChange={(event) => onChange({ ...value, alt: event.target.value })}
-        />
-      </Field>
+      {!hideAlt ? (
+        <Field data-invalid={!value.alt.trim()}>
+          <FieldLabel htmlFor={`${id}-alt`}>替代文本</FieldLabel>
+          <Input
+            id={`${id}-alt`}
+            value={value.alt}
+            disabled={disabled || uploading}
+            aria-invalid={!value.alt.trim()}
+            placeholder="描述图片传达的内容"
+            onChange={(event) => onChange({ ...value, alt: event.target.value })}
+          />
+        </Field>
+      ) : null}
     </div>
   );
 }

@@ -129,15 +129,24 @@ export function SiteContentActions({
 
   async function preview() {
     if (!latestVersionId) return;
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      setPreviewError("浏览器阻止了预览窗口，请允许本站打开新窗口后重试");
+      return;
+    }
+    previewWindow.opener = null;
+    const referrerPolicy = previewWindow.document.createElement("meta");
+    referrerPolicy.name = "referrer";
+    referrerPolicy.content = "no-referrer";
+    previewWindow.document.head.append(referrerPolicy);
+    previewWindow.document.title = "正在生成预览";
     setPreviewPending(true);
     setPreviewError("");
     try {
       const { previewUrl } = await createSiteContentPreview(id, latestVersionId);
-      const previewWindow = window.open(previewUrl, "_blank", "noopener,noreferrer");
-      if (!previewWindow) {
-        setPreviewError("浏览器阻止了预览窗口，请允许本站打开新窗口后重试");
-      }
+      previewWindow.location.replace(previewUrl);
     } catch (error) {
+      previewWindow.close();
       setPreviewError(getSiteContentErrorMessage(error, "生成预览地址失败，请检查官网地址配置"));
     } finally {
       setPreviewPending(false);

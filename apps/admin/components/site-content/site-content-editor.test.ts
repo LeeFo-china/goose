@@ -55,6 +55,17 @@ describe("官网内容后台合同", () => {
     expect(editor.toLowerCase()).not.toContain("html editor");
   });
 
+  test("案例指标可编辑，封面不收集会被丢弃的替代文本", () => {
+    const editor = read("components/site-content/site-content-editor.tsx");
+    const imageField = read("components/site-content/site-content-image-field.tsx");
+
+    expect(editor).toContain('htmlFor="case-metrics"');
+    expect(editor).toContain('onChange("metrics"');
+    expect(editor).toContain("hideAlt");
+    expect(imageField).toContain("hideAlt?: boolean");
+    expect(imageField).toContain("封面替代文本由公开渲染策略生成");
+  });
+
   test("预览和高风险动作遵循权限与确认合同", () => {
     const actions = [
       read("components/site-content/site-content-actions.tsx"),
@@ -63,7 +74,10 @@ describe("官网内容后台合同", () => {
     const versions = read("components/site-content/site-content-version-panel.tsx");
 
     expect(actions).toContain("preview-token");
-    expect(actions).toContain("window.open(previewUrl, \"_blank\", \"noopener,noreferrer\")");
+    expect(actions).toContain('window.open("about:blank", "_blank")');
+    expect(actions).toContain("previewWindow.opener = null");
+    expect(actions).toContain("previewWindow.location.replace(previewUrl)");
+    expect(actions).toContain("previewWindow.close()");
     expect(actions).toContain("AlertDialog");
     expect(actions).toContain("cache_revalidation.status === \"failed\"");
     expect(actions).toContain("platform.site_content.publish");
