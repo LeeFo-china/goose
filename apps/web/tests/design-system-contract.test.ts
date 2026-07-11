@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 const root = new URL("../", import.meta.url);
@@ -244,5 +244,18 @@ describe("official website design system contract", () => {
       '@/components/ui/dialog',
     );
     expect(allSource).not.toMatch(/from ["']~\//);
+  });
+
+  test("keeps every UI source compatible with the configured Tailwind 3 compiler", () => {
+    const uiDirectory = new URL("components/ui/", root);
+    const allUiSource = readdirSync(uiDirectory)
+      .filter((file) => file.endsWith(".tsx"))
+      .map((file) => read(`components/ui/${file}`))
+      .join("\n");
+
+    expect(allUiSource).not.toMatch(/(?:^|\s)@container(?:\/[^\s"']+)?/);
+    expect(allUiSource).not.toMatch(/@(?:sm|md|lg|xl|2xl)\//);
+    expect(allUiSource).not.toContain("has-data-");
+    expect(allUiSource).not.toMatch(/nth-last-\d/);
   });
 });
