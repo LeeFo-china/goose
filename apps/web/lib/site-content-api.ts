@@ -98,7 +98,11 @@ export async function getPublicSiteContentList(
       tags: [`site-content:${contentType}`],
     },
   } as NextRequestInit);
-  return parseApiData(response, SiteContentPublicListSchema);
+  const data = await parseApiData(response, SiteContentPublicListSchema);
+  if (data.list.some((item) => item.contentType !== contentType)) {
+    throw new Error("官网内容响应格式无效");
+  }
+  return data;
 }
 
 export async function getPublicSiteContentDetail(
@@ -115,7 +119,11 @@ export async function getPublicSiteContentDetail(
       tags: [`site-content-path:${contentType}:${slug}`],
     },
   } as NextRequestInit);
-  return parseApiData(response, SiteContentPublicDetailSchema);
+  const detail = await parseApiData(response, SiteContentPublicDetailSchema);
+  if (detail.contentType !== contentType) {
+    throw new Error("官网内容响应格式无效");
+  }
+  return detail;
 }
 
 export function buildPreviewInternalHeaders(input: PreviewHeadersInput): Headers {
