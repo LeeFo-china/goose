@@ -453,14 +453,12 @@ jobs:
           REMOTE_GOOES_API_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-api:${IMAGE_TAG}"
           REMOTE_GOOES_ADMIN_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-admin:${IMAGE_TAG}"
           REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-social-video-worker:${IMAGE_TAG}"
+          source "${RUNNER_WORKSPACE}/source/scripts/prepare-site-content-deployment-secrets.sh" "${DEPLOY_SERVICES}"
           PROXY_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_PROXY_SHARED_SECRET}" | base64 -w0)"
           PREVIEW_SECRET_BASE64="$(printf '%s' "${GOOES_PREVIEW_SHARED_SECRET}" | base64 -w0)"
           PREVIEW_SESSION_SECRET_BASE64="$(printf '%s' "${GOOES_PREVIEW_SESSION_SECRET}" | base64 -w0)"
           REVALIDATE_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_REVALIDATE_SHARED_SECRET}" | base64 -w0)"
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
-          test "${#GOOES_PREVIEW_SHARED_SECRET}" -ge 32
-          test "${#GOOES_PREVIEW_SESSION_SECRET}" -ge 32
-          test "${#GOOES_WEB_REVALIDATE_SHARED_SECRET}" -ge 32
           test -n "${PROXY_SECRET_BASE64}${PREVIEW_SECRET_BASE64}${PREVIEW_SESSION_SECRET_BASE64}${REVALIDATE_SECRET_BASE64}"
 
           scp -i "${DEV_DEPLOY_KEY_PATH}" \
@@ -605,14 +603,12 @@ jobs:
           CCR_NAMESPACE="${{ vars.TENCENT_CCR_NAMESPACE }}"
           test -n "${CCR_NAMESPACE}"
           REMOTE_GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-web:${GITHUB_SHA}"
+          source "${RUNNER_WORKSPACE}/source/scripts/prepare-site-content-deployment-secrets.sh" web
           PROXY_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_PROXY_SHARED_SECRET}" | base64 -w0)"
           PREVIEW_SECRET_BASE64="$(printf '%s' "${GOOES_PREVIEW_SHARED_SECRET}" | base64 -w0)"
           PREVIEW_SESSION_SECRET_BASE64="$(printf '%s' "${GOOES_PREVIEW_SESSION_SECRET}" | base64 -w0)"
           REVALIDATE_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_REVALIDATE_SHARED_SECRET}" | base64 -w0)"
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
-          test "${#GOOES_PREVIEW_SHARED_SECRET}" -ge 32
-          test "${#GOOES_PREVIEW_SESSION_SECRET}" -ge 32
-          test "${#GOOES_WEB_REVALIDATE_SHARED_SECRET}" -ge 32
           test -n "${PROXY_SECRET_BASE64}${PREVIEW_SECRET_BASE64}${PREVIEW_SESSION_SECRET_BASE64}${REVALIDATE_SECRET_BASE64}"
 
           scp -i "${DEV_DEPLOY_KEY_PATH}" \
@@ -690,11 +686,9 @@ jobs:
           set -euo pipefail
           echo "WEB_ROLLBACK_STATUS=rollback_failed" >> "${GITHUB_ENV}"
           echo "WEB_DEPLOY_STAGE=rollback_failed" >> "${GITHUB_ENV}"
+          source "${RUNNER_WORKSPACE}/source/scripts/prepare-site-content-deployment-secrets.sh" web
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           PROXY_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_PROXY_SHARED_SECRET}" | base64 -w0)"
-          test "${#GOOES_PREVIEW_SHARED_SECRET}" -ge 32
-          test "${#GOOES_PREVIEW_SESSION_SECRET}" -ge 32
-          test "${#GOOES_WEB_REVALIDATE_SHARED_SECRET}" -ge 32
           PREVIEW_SECRET_BASE64="$(printf '%s' "${GOOES_PREVIEW_SHARED_SECRET}" | base64 -w0)"
           PREVIEW_SESSION_SECRET_BASE64="$(printf '%s' "${GOOES_PREVIEW_SESSION_SECRET}" | base64 -w0)"
           REVALIDATE_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_REVALIDATE_SHARED_SECRET}" | base64 -w0)"

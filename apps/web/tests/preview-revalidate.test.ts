@@ -20,6 +20,7 @@ import {
 } from "../lib/site-content-preview";
 import { createPreviewHandler } from "../lib/preview-route";
 import {
+  buildRevalidationCanonical,
   MAX_REVALIDATION_BODY_BYTES,
   createRevalidateHandler,
 } from "../lib/revalidate-route";
@@ -91,6 +92,16 @@ describe("site content API client", () => {
   test("validates public detail DTOs and rejects dirty upstream data", async () => {
     const validFetcher: typeof fetch = Object.assign(async () => apiResponse(articleDetail()), { preconnect: fetch.preconnect });
     expect((await getPublicSiteContentDetail("article", "safe-article", { fetcher: validFetcher })).id).toBe(entryId);
+    let detailInit: RequestInit | undefined;
+    const taggedFetcher: typeof fetch = Object.assign(async (_input: string | URL | Request, init?: RequestInit) => {
+      detailInit = init;
+      return apiResponse(articleDetail());
+    }, { preconnect: fetch.preconnect });
+    await getPublicSiteContentDetail("article", "safe-article", { fetcher: taggedFetcher });
+    expect(detailInit?.next).toEqual({
+      revalidate: 300,
+      tags: ["site-content-path:article:safe-article"],
+    });
 
     const dirtyFetcher: typeof fetch = Object.assign(async () => apiResponse({ ...articleDetail(), created_by: "secret" }), { preconnect: fetch.preconnect });
     await expect(getPublicSiteContentDetail("article", "safe-article", { fetcher: dirtyFetcher }))
@@ -152,6 +163,7 @@ describe("preview internal signing and session", () => {
     const token = "sensitive-preview-token-that-must-not-leak";
     const handler = createPreviewHandler({
       fetcher: Object.assign(async (_input: string | URL | Request, init?: RequestInit) => {
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
         expect(init?.headers).toBeInstanceOf(Headers);
         expect((init?.headers as Headers).get("x-gooes-preview-signature")).toMatch(/^[0-9a-f]{64}$/);
         return apiResponse({ entryId, versionId, path: "/articles/safe-article", expiresAt: "2026-07-12T10:10:00.000Z" });
@@ -240,6 +252,7 @@ describe("preview internal signing and session", () => {
       nowMs: 1_783_821_600_001,
     }))?.versionId).toBe(versionId);
     expect(init?.cache).toBe("no-store");
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(await getPreviewSiteContentForPath("/articles/other", {
       sessionValue: session,
       sessionSecret,
@@ -260,6 +273,21 @@ describe("preview internal signing and session", () => {
       fetcher: wrongEntryFetcher,
       nowMs: 1_783_821_600_001,
     })).rejects.toThrow("Preview 内容与会话不匹配");
+  });
+
+  test("preview activation times out safely without retaining an old session", async () => {
+    const response = await createPreviewHandler({
+      fetcher: Object.assign(async (_input: string | URL | Request, init?: RequestInit) => {
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        throw init?.signal?.reason ?? new DOMException("timeout", "TimeoutError");
+      }, { preconnect: fetch.preconnect }),
+      previewSecret,
+      sessionSecret,
+      nowMs: 1_783_821_600_000,
+    })(new Request(`https://www.goodcms.cn/api/preview?token=${"x".repeat(43)}`));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/preview-error");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 
   test("server helper reads the signed cookie and applies fixed noindex metadata", async () => {
@@ -299,10 +327,50 @@ describe("preview internal signing and session", () => {
       })).toBeNull();
     }
     expect(fetchCalls).toBe(1);
+
+    const unavailable = getPreviewSiteContentForServerPath("/articles/safe-article", {
+      cookieStore: { get: () => ({ value: session }) },
+      sessionSecret,
+      previewSecret,
+      fetcher: Object.assign(async () => { throw new DOMException("timeout", "TimeoutError"); }, { preconnect: fetch.preconnect }),
+      nowMs: 1_783_821_600_001,
+    });
+    await expect(unavailable).rejects.toMatchObject({
+      name: "SiteContentApiError",
+      code: "SITE_CONTENT_PREVIEW_UNAVAILABLE",
+    });
   });
 });
 
 describe("preview deployment configuration", () => {
+  test("requires real secrets only for selected API or Web services", () => {
+    const repositoryRoot = new URL("../../../", import.meta.url).pathname;
+    const script = `${repositoryRoot}scripts/prepare-site-content-deployment-secrets.sh`;
+    const run = (services: string, env: Record<string, string> = {}) => Bun.spawnSync({
+      cmd: ["bash", "-c", `set -e; source "${script}" "${services}"; printf '%s|%s|%s' "$GOOES_PREVIEW_SHARED_SECRET" "$GOOES_PREVIEW_SESSION_SECRET" "$GOOES_WEB_REVALIDATE_SHARED_SECRET"`],
+      env: { PATH: process.env.PATH ?? "", ...env },
+    });
+    const admin = run("admin");
+    expect(admin.exitCode).toBe(0);
+    expect(admin.stdout.toString()).toContain("unused-not-deployed-");
+    expect(run("api").exitCode).toBe(1);
+    const api = run("api", {
+      GOOES_PREVIEW_SHARED_SECRET: previewSecret,
+      GOOES_WEB_REVALIDATE_SHARED_SECRET: revalidationSecret,
+    });
+    expect(api.exitCode).toBe(0);
+    expect(api.stdout.toString()).toContain("unused-not-deployed-session-");
+    expect(run("web", {
+      GOOES_PREVIEW_SHARED_SECRET: previewSecret,
+      GOOES_WEB_REVALIDATE_SHARED_SECRET: revalidationSecret,
+    }).exitCode).toBe(1);
+    expect(run("web", {
+      GOOES_PREVIEW_SHARED_SECRET: previewSecret,
+      GOOES_PREVIEW_SESSION_SECRET: sessionSecret,
+      GOOES_WEB_REVALIDATE_SHARED_SECRET: revalidationSecret,
+    }).exitCode).toBe(0);
+  });
+
   test("wires server-only preview and revalidation secrets for Web and API", () => {
     const repositoryRoot = new URL("../../../", import.meta.url);
     const files = [
@@ -329,17 +397,18 @@ describe("preview deployment configuration", () => {
       expect(devWorkflow).toContain(`secrets.${secret}`);
       expect(devWorkflow).toContain(`export ${secret}=`);
     }
+    expect(devWorkflow).toContain("prepare-site-content-deployment-secrets.sh");
     const productionWorkflow = readFileSync(
       new URL(".github/workflows/deploy-docker-services.yml", repositoryRoot),
       "utf8",
     );
+    expect(productionWorkflow).toContain("prepare-site-content-deployment-secrets.sh");
     for (const secret of [
       "GOOES_PREVIEW_SHARED_SECRET",
       "GOOES_PREVIEW_SESSION_SECRET",
       "GOOES_WEB_REVALIDATE_SHARED_SECRET",
     ]) {
       expect(productionWorkflow).toContain(`secrets.${secret}`);
-      expect(productionWorkflow).toContain(`test "\${#${secret}}" -ge 32`);
     }
   });
 
@@ -355,12 +424,18 @@ describe("preview deployment configuration", () => {
 });
 
 describe("revalidation webhook", () => {
-  function signedRequest(body: string, signature?: string): Request {
-    return new Request("https://www.goodcms.cn/api/revalidate", {
+  const nowSeconds = 1_783_821_600;
+  function signedRequest(body: string, options: {
+    signature?: string;
+    timestamp?: string;
+    path?: string;
+  } = {}): Request {
+    return new Request(`https://www.goodcms.cn${options.path ?? "/api/revalidate"}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(signature ? { "x-gooes-revalidation-signature": signature } : {}),
+        ...(options.signature ? { "x-gooes-revalidation-signature": options.signature } : {}),
+        ...(options.timestamp ? { "x-gooes-revalidation-timestamp": options.timestamp } : {}),
       },
       body,
     });
@@ -369,48 +444,111 @@ describe("revalidation webhook", () => {
   const validPayload = {
     entryId,
     paths: ["/articles/safe-article"],
-    tags: [`site-content:${entryId}`, "site-content:article"],
+    tags: ["site-content:article", "site-content-path:article:safe-article"],
   };
+
+  function signature(body: string, timestamp = String(nowSeconds), path = "/api/revalidate") {
+    return createHmac("sha256", revalidationSecret)
+      .update(buildRevalidationCanonical({ timestamp, method: "POST", path, body }))
+      .digest("hex");
+  }
 
   test("verifies HMAC over the exact raw body with timing-safe comparison", async () => {
     const body = JSON.stringify(validPayload);
     const calls: string[] = [];
     const handler = createRevalidateHandler({
       secret: revalidationSecret,
+      nowMs: nowSeconds * 1_000,
       revalidatePath: (path) => calls.push(`path:${path}`),
       revalidateTag: (tag) => calls.push(`tag:${tag}`),
     });
     expect((await handler(signedRequest(body))).status).toBe(401);
-    expect((await handler(signedRequest(body, "0".repeat(64)))).status).toBe(401);
+    expect((await handler(signedRequest(body, { signature: "0".repeat(64), timestamp: String(nowSeconds) }))).status).toBe(401);
 
-    const signature = createHmac("sha256", revalidationSecret).update(body).digest("hex");
-    const response = await handler(signedRequest(body, signature));
+    const signed = signature(body);
+    const response = await handler(signedRequest(body, { signature: signed, timestamp: String(nowSeconds) }));
     expect(response.status).toBe(200);
     expect(calls).toEqual([
-      `tag:site-content:${entryId}`,
       "tag:site-content:article",
+      "tag:site-content-path:article:safe-article",
       "path:/articles/safe-article",
     ]);
 
     const spacedBody = JSON.stringify(validPayload, null, 2);
-    expect((await handler(signedRequest(spacedBody, signature))).status).toBe(401);
+    expect((await handler(signedRequest(spacedBody, { signature: signed, timestamp: String(nowSeconds) }))).status).toBe(401);
+  });
+
+  test("rejects stale, future, wrong-path and wrong-body signatures", async () => {
+    const body = JSON.stringify(validPayload);
+    const handler = createRevalidateHandler({
+      secret: revalidationSecret,
+      nowMs: nowSeconds * 1_000,
+      revalidatePath: () => undefined,
+      revalidateTag: () => undefined,
+    });
+    for (const timestamp of [String(nowSeconds - 301), String(nowSeconds + 301)]) {
+      expect((await handler(signedRequest(body, {
+        timestamp,
+        signature: signature(body, timestamp),
+      }))).status).toBe(401);
+    }
+    expect((await handler(signedRequest(body, {
+      timestamp: String(nowSeconds),
+      path: "/api/revalidate/other",
+      signature: signature(body),
+    }))).status).toBe(401);
+    expect((await handler(signedRequest(`${body} `, {
+      timestamp: String(nowSeconds),
+      signature: signature(body),
+    }))).status).toBe(401);
+  });
+
+  test("binds every same-type path to its own cache tag", async () => {
+    const payload = {
+      entryId,
+      paths: ["/articles/safe-article", "/articles/second-article"],
+      tags: [
+        "site-content:article",
+        "site-content-path:article:safe-article",
+        "site-content-path:article:second-article",
+      ],
+    };
+    const calls: string[] = [];
+    const handler = createRevalidateHandler({
+      secret: revalidationSecret,
+      nowMs: nowSeconds * 1_000,
+      revalidatePath: (path) => calls.push(`path:${path}`),
+      revalidateTag: (tag) => calls.push(`tag:${tag}`),
+    });
+    const body = JSON.stringify(payload);
+    expect((await handler(signedRequest(body, {
+      signature: signature(body),
+      timestamp: String(nowSeconds),
+    }))).status).toBe(200);
+    expect(calls).toContain("tag:site-content-path:article:second-article");
+    const missingTagBody = JSON.stringify({ ...payload, tags: payload.tags.slice(0, 2) });
+    expect((await handler(signedRequest(missingTagBody, {
+      signature: signature(missingTagBody),
+      timestamp: String(nowSeconds),
+    }))).status).toBe(400);
   });
 
   test("enforces the 32 KiB streaming byte boundary including multibyte input", async () => {
     const handler = createRevalidateHandler({
       secret: revalidationSecret,
+      nowMs: nowSeconds * 1_000,
       revalidatePath: () => undefined,
       revalidateTag: () => undefined,
     });
     const exactBytes = " ".repeat(MAX_REVALIDATION_BODY_BYTES - 2);
     const exactBody = `{${exactBytes}}`;
-    const exactSignature = createHmac("sha256", revalidationSecret).update(exactBody).digest("hex");
-    expect((await handler(signedRequest(exactBody, exactSignature))).status).toBe(400);
+    const exactSignature = signature(exactBody);
+    expect((await handler(signedRequest(exactBody, { signature: exactSignature, timestamp: String(nowSeconds) }))).status).toBe(400);
 
     const oversizedBody = `"${"鹅".repeat(Math.ceil(MAX_REVALIDATION_BODY_BYTES / 3))}"`;
-    const oversizedSignature = createHmac("sha256", revalidationSecret).update(oversizedBody).digest("hex");
+    const oversizedSignature = signature(oversizedBody);
     expect(new TextEncoder().encode(oversizedBody).byteLength).toBeGreaterThan(MAX_REVALIDATION_BODY_BYTES);
-    expect((await handler(signedRequest(oversizedBody, oversizedSignature))).status).toBe(413);
+    expect((await handler(signedRequest(oversizedBody, { signature: oversizedSignature, timestamp: String(nowSeconds) }))).status).toBe(413);
   });
 
   test.each([
@@ -423,12 +561,13 @@ describe("revalidation webhook", () => {
     "/partners",
   ])("rejects unsafe invalidation path %s", async (path) => {
     const body = JSON.stringify({ ...validPayload, paths: [path] });
-    const signature = createHmac("sha256", revalidationSecret).update(body).digest("hex");
+    const signed = signature(body);
     const response = await createRevalidateHandler({
       secret: revalidationSecret,
+      nowMs: nowSeconds * 1_000,
       revalidatePath: () => { throw new Error("must not run"); },
       revalidateTag: () => { throw new Error("must not run"); },
-    })(signedRequest(body, signature));
+    })(signedRequest(body, { signature: signed, timestamp: String(nowSeconds) }));
     expect(response.status).toBe(400);
   });
 
@@ -438,17 +577,18 @@ describe("revalidation webhook", () => {
       { ...validPayload, entryId: "not-a-uuid" },
       { ...validPayload, tags: ["other:tag"] },
       { ...validPayload, tags: Array.from({ length: 21 }, (_, index) => `site-content:${index}`) },
-      { ...validPayload, tags: ["site-content:123e4567-e89b-42d3-a456-426614174099", "site-content:article"] },
-      { ...validPayload, tags: [`site-content:${entryId}`, "site-content:case"] },
-      { ...validPayload, paths: ["/articles/safe-article", "/cases/safe-case"], tags: [`site-content:${entryId}`, "site-content:article", "site-content:case"] },
+      { ...validPayload, tags: ["site-content:article", "site-content-path:article:other"] },
+      { ...validPayload, tags: ["site-content:case", "site-content-path:case:safe-article"] },
+      { ...validPayload, paths: ["/articles/safe-article", "/cases/safe-case"], tags: ["site-content:article", "site-content-path:article:safe-article"] },
     ]) {
       const body = JSON.stringify(payload);
-      const signature = createHmac("sha256", revalidationSecret).update(body).digest("hex");
+      const signed = signature(body);
       expect((await createRevalidateHandler({
         secret: revalidationSecret,
+        nowMs: nowSeconds * 1_000,
         revalidatePath: () => undefined,
         revalidateTag: () => undefined,
-      })(signedRequest(body, signature))).status).toBe(400);
+      })(signedRequest(body, { signature: signed, timestamp: String(nowSeconds) }))).status).toBe(400);
     }
   });
 });

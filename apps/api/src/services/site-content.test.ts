@@ -353,6 +353,11 @@ describe("SiteContentService", () => {
     const result = await service.publish(auth(["platform.site_content.publish"]), entry.id, version.id);
 
     expect(deps.repository.publish).toHaveBeenCalledWith(entry.id, version.id, "actor-id");
+    expect(deps.revalidator.revalidate).toHaveBeenCalledWith({
+      entryId: entry.id,
+      paths: ["/articles/first-article"],
+      tags: ["site-content:article", "site-content-path:article:first-article"],
+    });
     expect(result.cache_revalidation).toEqual({ status: "failed" });
     expect(deps.audit.recordBestEffort).toHaveBeenCalledTimes(1);
     expect(deps.audit.recordBestEffort).toHaveBeenLastCalledWith(expect.objectContaining({

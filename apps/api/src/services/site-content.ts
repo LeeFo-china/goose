@@ -273,7 +273,10 @@ export class SiteContentService {
       const result = await this.revalidator.revalidate({
         entryId: entry.id,
         paths: [buildSiteContentPublicPath(entry)],
-        tags: [`site-content:${entry.id}`, `site-content:${entry.content_type}`],
+        tags: [
+          `site-content:${entry.content_type}`,
+          `site-content-path:${entry.content_type}:${entry.slug}`,
+        ],
       });
       cacheRevalidation = { status: "succeeded", ...(result.requestId ? { requestId: result.requestId } : {}) };
     } catch {

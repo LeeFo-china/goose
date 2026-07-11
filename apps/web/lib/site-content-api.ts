@@ -11,6 +11,7 @@ import { buildBackendUrl } from "./backend";
 import { readPreviewSession } from "./preview-session";
 
 const PUBLIC_CACHE_SECONDS = 300;
+export const SITE_CONTENT_PREVIEW_TIMEOUT_MS = 5_000;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const COLLECTIONS: Record<SiteContentType, "articles" | "cases" | "cities"> = {
   article: "articles",
@@ -92,7 +93,10 @@ export async function getPublicSiteContentList(
   const path = `/public/site/${COLLECTIONS[contentType]}?${params.toString()}`;
   const response = await (options.fetcher ?? fetch)(buildBackendUrl(path), {
     method: "GET",
-    next: { revalidate: PUBLIC_CACHE_SECONDS, tags: [`site-content:${contentType}`] },
+    next: {
+      revalidate: PUBLIC_CACHE_SECONDS,
+      tags: [`site-content:${contentType}`],
+    },
   } as NextRequestInit);
   return parseApiData(response, SiteContentPublicListSchema);
 }
@@ -106,7 +110,10 @@ export async function getPublicSiteContentDetail(
   const path = `/public/site/${COLLECTIONS[contentType]}/${encodeURIComponent(slug)}`;
   const response = await (options.fetcher ?? fetch)(buildBackendUrl(path), {
     method: "GET",
-    next: { revalidate: PUBLIC_CACHE_SECONDS, tags: [`site-content:${contentType}`] },
+    next: {
+      revalidate: PUBLIC_CACHE_SECONDS,
+      tags: [`site-content-path:${contentType}:${slug}`],
+    },
   } as NextRequestInit);
   return parseApiData(response, SiteContentPublicDetailSchema);
 }
@@ -145,12 +152,18 @@ export async function consumeSitePreviewToken(input: {
     body,
   });
   headers.set("content-type", "application/json");
-  const response = await (input.fetcher ?? fetch)(buildBackendUrl(path), {
-    method: "POST",
-    headers,
-    body,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await (input.fetcher ?? fetch)(buildBackendUrl(path), {
+      method: "POST",
+      headers,
+      body,
+      cache: "no-store",
+      signal: AbortSignal.timeout(SITE_CONTENT_PREVIEW_TIMEOUT_MS),
+    });
+  } catch {
+    throw new SiteContentApiError(502, "SITE_CONTENT_PREVIEW_UNAVAILABLE");
+  }
   return parseApiData(response, PreviewTokenResultSchema);
 }
 
@@ -174,11 +187,17 @@ export async function getPreviewSiteContentForPath(
     path: internalPath,
     body: "",
   });
-  const response = await (options.fetcher ?? fetch)(buildBackendUrl(internalPath), {
-    method: "GET",
-    headers,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await (options.fetcher ?? fetch)(buildBackendUrl(internalPath), {
+      method: "GET",
+      headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(SITE_CONTENT_PREVIEW_TIMEOUT_MS),
+    });
+  } catch {
+    throw new SiteContentApiError(502, "SITE_CONTENT_PREVIEW_UNAVAILABLE");
+  }
   const envelope = await parseEnvelope(response);
   const raw = envelope.data;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {

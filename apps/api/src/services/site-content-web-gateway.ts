@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { SiteContentType } from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
@@ -11,10 +11,29 @@ export type SiteContentRevalidatorPort = {
   }): Promise<{ requestId?: string }>;
 };
 
-class WebSiteContentRevalidator implements SiteContentRevalidatorPort {
+type RevalidationGatewayDependencies = {
+  endpoint?: string;
+  secret?: string;
+  nowMs?: number;
+  fetcher?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+};
+
+export function buildSiteContentRevalidationCanonical(input: {
+  timestamp: string;
+  method: string;
+  path: string;
+  body: string;
+}) {
+  const bodyHash = createHash("sha256").update(input.body).digest("hex");
+  return [input.timestamp, input.method.toUpperCase(), input.path, bodyHash].join("\n");
+}
+
+export class WebSiteContentRevalidator implements SiteContentRevalidatorPort {
+  constructor(private readonly dependencies: RevalidationGatewayDependencies = {}) {}
+
   async revalidate(input: { entryId: string; paths: string[]; tags: string[] }) {
-    const endpoint = process.env.GOOES_WEB_REVALIDATE_URL?.trim();
-    const secret = process.env.GOOES_WEB_REVALIDATE_SHARED_SECRET?.trim();
+    const endpoint = this.dependencies.endpoint ?? process.env.GOOES_WEB_REVALIDATE_URL?.trim();
+    const secret = this.dependencies.secret ?? process.env.GOOES_WEB_REVALIDATE_SHARED_SECRET?.trim();
     if (!endpoint || !secret || secret.length < 32) {
       throw Errors.business(
         503,
@@ -22,13 +41,37 @@ class WebSiteContentRevalidator implements SiteContentRevalidatorPort {
         "SITE_CONTENT_REVALIDATION_UNAVAILABLE",
       );
     }
+    let endpointUrl: URL;
+    try {
+      endpointUrl = new URL(endpoint);
+    } catch {
+      throw Errors.business(503, "官网缓存失效服务未配置", "SITE_CONTENT_REVALIDATION_UNAVAILABLE");
+    }
+    if (
+      !["http:", "https:"].includes(endpointUrl.protocol)
+      || endpointUrl.username
+      || endpointUrl.password
+      || endpointUrl.search
+      || endpointUrl.hash
+      || endpointUrl.pathname !== "/api/revalidate"
+    ) {
+      throw Errors.business(503, "官网缓存失效服务未配置", "SITE_CONTENT_REVALIDATION_UNAVAILABLE");
+    }
     const body = JSON.stringify(input);
-    const signature = createHmac("sha256", secret).update(body).digest("hex");
-    const response = await fetch(endpoint, {
+    const timestamp = String(Math.floor((this.dependencies.nowMs ?? Date.now()) / 1_000));
+    const canonical = buildSiteContentRevalidationCanonical({
+      timestamp,
+      method: "POST",
+      path: endpointUrl.pathname,
+      body,
+    });
+    const signature = createHmac("sha256", secret).update(canonical).digest("hex");
+    const response = await (this.dependencies.fetcher ?? fetch)(endpointUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         "x-gooes-revalidation-signature": signature,
+        "x-gooes-revalidation-timestamp": timestamp,
       },
       body,
       signal: AbortSignal.timeout(5_000),
