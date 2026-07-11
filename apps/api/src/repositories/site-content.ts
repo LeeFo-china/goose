@@ -69,7 +69,6 @@ export type SiteContentVersionRecord = {
 
 export type SiteContentPublicSummaryVersionRecord = Pick<
   SiteContentVersionRecord,
-  | "id"
   | "title"
   | "summary"
   | "cover_file_id"
@@ -117,7 +116,7 @@ const ENTRY_SELECT =
 const PUBLIC_ENTRY_SELECT = "id,content_type,slug,published_at";
 const VERSION_SELECT =
   "id,entry_id,version_no,title,summary,cover_file_id,content_blocks,seo_title,seo_description,canonical_url,metadata,created_by,created_at";
-const PUBLIC_SUMMARY_VERSION_SELECT = "id,title,summary,cover_file_id";
+const PUBLIC_SUMMARY_VERSION_SELECT = "title,summary,cover_file_id";
 const PUBLIC_DETAIL_VERSION_SELECT =
   `${PUBLIC_SUMMARY_VERSION_SELECT},content_blocks,seo_title,seo_description,canonical_url`;
 const PUBLIC_SUMMARY_SELECT = `${PUBLIC_ENTRY_SELECT},published_version:site_content_versions!site_content_published_version_fk(${PUBLIC_SUMMARY_VERSION_SELECT})`;
@@ -345,9 +344,9 @@ export class SiteContentRepository {
       .update({ status: "archived" })
       .eq("id", entryId)
       .select(ENTRY_SELECT)
-      .single();
+      .maybeSingle();
     if (error) throw Errors.dbError("归档官网内容失败", error);
-    return data as SiteContentEntryRecord;
+    return (data as SiteContentEntryRecord | null) ?? null;
   }
 
   async createPreviewToken(input: {

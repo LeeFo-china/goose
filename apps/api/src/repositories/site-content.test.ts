@@ -65,6 +65,9 @@ describe("SiteContentRepository query boundaries", () => {
     expect(calls).toContainEqual({ method: "order", args: ["published_at", { ascending: false }] });
     expect(calls).toContainEqual({ method: "range", args: [20, 39] });
     const select = calls.find((call) => call.method === "select");
+    expect(select?.args[0]).toBe(
+      "id,content_type,slug,published_at,published_version:site_content_versions!site_content_published_version_fk(title,summary,cover_file_id)",
+    );
     expect(String(select?.args[0])).not.toContain("created_by");
     expect(String(select?.args[0])).not.toContain("content_blocks");
     expect(String(select?.args[0])).not.toContain("seo_title");
@@ -83,6 +86,9 @@ describe("SiteContentRepository query boundaries", () => {
     expect(calls).toContainEqual({ method: "eq", args: ["content_type", "case"] });
     expect(calls).toContainEqual({ method: "eq", args: ["slug", "hangzhou-home"] });
     expect(calls).toContainEqual({ method: "eq", args: ["status", "published"] });
+    expect(calls.find((call) => call.method === "select")?.args[0]).toBe(
+      "id,content_type,slug,published_at,published_version:site_content_versions!site_content_published_version_fk(title,summary,cover_file_id,content_blocks,seo_title,seo_description,canonical_url)",
+    );
   });
 
   test("admin and version histories are always paginated", async () => {
@@ -202,5 +208,14 @@ describe("SiteContentRepository query boundaries", () => {
       "publish_site_content",
       "rollback_site_content",
     ]);
+  });
+
+  test("returns null when an archive target disappears concurrently", async () => {
+    const { client, calls } = createClient([{ data: null, error: null }]);
+    const repository = new SiteContentRepository(client);
+
+    await expect(repository.archive("entry-id")).resolves.toBeNull();
+    expect(calls.some((call) => call.method === "maybeSingle")).toBe(true);
+    expect(calls.some((call) => call.method === "single")).toBe(false);
   });
 });

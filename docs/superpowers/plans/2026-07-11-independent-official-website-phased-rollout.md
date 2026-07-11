@@ -757,7 +757,7 @@ expect(routes).toEqual([
 
 - [ ] **Step 2: 运行失败测试**
 
-Run: `bun test apps/api/src/schema/site-content.test.ts apps/api/src/controllers/site-content/routes.test.ts`
+Run: `(cd apps/api && bun test src/schema/site-content.test.ts src/controllers/site-content/routes.test.ts)`
 
 Expected: FAIL because files do not exist.
 
@@ -791,7 +791,7 @@ Controller 只做 safeParse、读取平台上下文、调用 service、`Response
 Run:
 
 ```bash
-bun test apps/api/src/schema/site-content.test.ts apps/api/src/repositories/site-content.test.ts apps/api/src/services/site-content.test.ts apps/api/src/controllers/site-content/routes.test.ts
+(cd apps/api && bun test src/schema/site-content.test.ts src/repositories/site-content.test.ts src/services/site-content.test.ts src/controllers/site-content/routes.test.ts src/repositories/platform-audit-logs-site-content.test.ts src/plugins/auth/legacy/routes.test.ts)
 bun run api:check
 ```
 

@@ -80,17 +80,20 @@ function dependencies(options: {
   })>;
   consumePreviewToken?: () => Promise<null | { entry_id: string; version_id: string; expires_at: string; consumed_at: string }>;
   revalidate?: () => Promise<{ requestId?: string }>;
-  findEntry?: () => Promise<typeof entry | (Omit<typeof entry, "status" | "published_version_id" | "published_at"> & {
+  findEntry?: () => Promise<null | typeof entry | (Omit<typeof entry, "status" | "published_version_id" | "published_at"> & {
     status: "published";
     published_version_id: string;
     published_at: string;
   })>;
   previewBaseUrl?: string;
+  archive?: () => Promise<(Omit<typeof entry, "status"> & { status: "archived" }) | null>;
 } = {}) {
   const findPublic: NonNullable<typeof options.findPublic> =
     options.findPublic ?? (async () => null);
   const consumePreviewToken: NonNullable<typeof options.consumePreviewToken> =
     options.consumePreviewToken ?? (async () => ({ entry_id: entry.id, version_id: version.id, expires_at: "2026-07-12T10:10:00.000Z", consumed_at: "2026-07-12T10:00:00.000Z" }));
+  const archive: NonNullable<typeof options.archive> =
+    options.archive ?? (async () => ({ ...entry, status: "archived" as const }));
   const repository = {
     listPublic: mock(options.listPublic ?? (async () => ({ list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }))),
     findPublic: mock(findPublic),
@@ -105,7 +108,7 @@ function dependencies(options: {
     findPublicAssets: mock(options.findPublicAssets ?? (async () => assets)),
     publish: mock(async () => ({ ...entry, status: "published" as const, published_version_id: version.id, published_at: "2026-07-12T01:00:00.000Z" })),
     rollback: mock(async () => ({ ...entry, status: "published" as const, published_version_id: version.id, published_at: "2026-07-12T01:00:00.000Z" })),
-    archive: mock(async () => ({ ...entry, status: "archived" as const })),
+    archive: mock(archive),
     createPreviewToken: mock(async () => ({ id: "token-id" })),
     consumePreviewToken: mock(consumePreviewToken),
   };
@@ -363,6 +366,21 @@ describe("SiteContentService", () => {
       status: "failure",
       metadata: expect.objectContaining({ operation: "archive_revalidation_failed" }),
     }));
+  });
+
+  test("maps missing archive entries before and during the conditional update to a stable 404", async () => {
+    const missingBefore = dependencies({ findEntry: async () => null });
+    await expect(new SiteContentService(missingBefore).archive(
+      auth(["platform.site_content.publish"]),
+      entry.id,
+    )).rejects.toMatchObject({ code: "SITE_CONTENT_NOT_FOUND" });
+    expect(missingBefore.repository.archive).not.toHaveBeenCalled();
+
+    const removedConcurrently = dependencies({ archive: async () => null });
+    await expect(new SiteContentService(removedConcurrently).archive(
+      auth(["platform.site_content.publish"]),
+      entry.id,
+    )).rejects.toMatchObject({ code: "SITE_CONTENT_NOT_FOUND" });
   });
 
   test("keeps rollback successful and records its cache failure operation", async () => {

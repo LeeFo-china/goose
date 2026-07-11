@@ -38,6 +38,10 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (isPublicSiteContentRoute(method, url)) {
+    return true;
+  }
+
   if (
     method === "POST" &&
     (
@@ -187,7 +191,23 @@ export function isPartnerAuthRoute(method: string, url: string) {
 }
 
 export function shouldBypassAuth(method: string, url: string) {
-  return isPartnerAuthRoute(method, url);
+  return isPartnerAuthRoute(method, url) || isInternalSiteContentPreviewRoute(method, url);
+}
+
+function isPublicSiteContentRoute(method: string, url: string) {
+  if (method !== "GET" && method !== "HEAD") return false;
+  if (url === "/public/site/articles" || url === "/public/site/cases") return true;
+  return /^\/public\/site\/(?:articles|cases|cities)\/[^/]+$/.test(url);
+}
+
+function isInternalSiteContentPreviewRoute(method: string, url: string) {
+  if (method === "POST" && url === "/internal/site-content/preview/consume") {
+    return true;
+  }
+  return (
+    (method === "GET" || method === "HEAD")
+    && /^\/internal\/site-content\/versions\/[^/]+\/preview$/.test(url)
+  );
 }
 
 function isAuthIdentitySwitchRoute(method: string, url: string) {

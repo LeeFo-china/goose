@@ -221,7 +221,11 @@ export class SiteContentService {
 
   async archive(authContext: AuthContext, entryId: string) {
     this.accessPolicy.assertPermission(authContext, PUBLISH_PERMISSION);
+    await this.requireEntry(entryId);
     const entry = await this.repository.archive(entryId);
+    if (!entry) {
+      throw Errors.business(404, "官网内容不存在", "SITE_CONTENT_NOT_FOUND");
+    }
     await this.recordAudit(authContext, entry, "archive", "归档官网内容");
     return this.finishPublication(
       authContext,
