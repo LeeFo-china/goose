@@ -1,0 +1,64 @@
+{
+  "lighthouseVersion": "12.8.2",
+  "profile": "mobile",
+  "thresholds": {
+    "performance": 85,
+    "accessibility": 95,
+    "seo": 95,
+    "lcpMs": 2500,
+    "tbtMs": 200,
+    "cls": 0.1
+  },
+  "routes": [
+    {
+      "path": "/",
+      "samples": 1,
+      "performance": 97,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2465,
+      "tbtMs": 21,
+      "cls": 0
+    },
+    {
+      "path": "/partners",
+      "samples": 1,
+      "performance": 98,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2363,
+      "tbtMs": 15,
+      "cls": 0
+    },
+    {
+      "path": "/articles/e2e-article",
+      "samples": 1,
+      "performance": 99,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2018,
+      "tbtMs": 13,
+      "cls": 0
+    },
+    {
+      "path": "/cases/e2e-case",
+      "samples": 1,
+      "performance": 99,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2018,
+      "tbtMs": 14,
+      "cls": 0
+    },
+    {
+      "path": "/cities/shanghai",
+      "samples": 3,
+      "performance": 99,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2020,
+      "tbtMs": 16,
+      "cls": 0
+    }
+  ]
+}

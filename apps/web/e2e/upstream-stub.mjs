@@ -54,6 +54,30 @@ const citySummary = {
   },
 };
 
+const allContentFixtures = [
+  ...articleSummaries.map((summary) => ({ status: "published", summary })),
+  { status: "published", summary: caseSummary },
+  { status: "published", summary: citySummary },
+  {
+    status: "draft",
+    summary: {
+      ...articleSummaries[0],
+      id: "40000000-0000-4000-8000-000000000001",
+      slug: "draft-article",
+      title: "不应公开的草稿文章",
+    },
+  },
+  {
+    status: "archived",
+    summary: {
+      ...caseSummary,
+      id: "50000000-0000-4000-8000-000000000001",
+      slug: "archived-case",
+      title: "不应公开的归档案例",
+    },
+  },
+];
+
 const articleDetail = {
   ...articleSummaries[0],
   seoTitle: null,
@@ -103,16 +127,22 @@ function listPage(list, requestUrl) {
   };
 }
 
+function publishedSummaries(contentType) {
+  return allContentFixtures
+    .filter((entry) => entry.status === "published" && entry.summary.contentType === contentType)
+    .map((entry) => entry.summary);
+}
+
 function fixtureFor(requestUrl, requestBody) {
   const { pathname } = requestUrl;
   if (pathname === "/public/site/articles") {
-    return envelope(listPage(articleSummaries, requestUrl));
+    return envelope(listPage(publishedSummaries("article"), requestUrl));
   }
   if (pathname === "/public/site/cases") {
-    return envelope(listPage([caseSummary], requestUrl));
+    return envelope(listPage(publishedSummaries("case"), requestUrl));
   }
   if (pathname === "/public/site/cities") {
-    return envelope(listPage([citySummary], requestUrl));
+    return envelope(listPage(publishedSummaries("city"), requestUrl));
   }
   if (pathname === "/public/site/articles/e2e-article") return envelope(articleDetail);
   if (pathname === "/public/site/cases/e2e-case") return envelope(caseDetail);

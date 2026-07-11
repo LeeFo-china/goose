@@ -8,10 +8,12 @@
     "build": "next build && node scripts/sync-standalone-assets.mjs",
     "start": "PORT=${PORT:-3020} HOSTNAME=${GOOES_WEB_HOSTNAME:-127.0.0.1} node .next/standalone/apps/web/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "pnpm run typecheck && pnpm run check:visible-copy",
+    "check": "pnpm run typecheck && pnpm run check:visible-copy && pnpm run check:lighthouse-summary",
+    "check:lighthouse-summary": "node scripts/check-lighthouse-summary.mjs",
     "check:visible-copy": "node scripts/check-visible-copy.mjs",
+    "lighthouse:gate": "node scripts/run-lighthouse-gate.mjs",
     "test": "bun test tests",
-    "test:e2e": "env -u NO_COLOR playwright test",
+    "test:e2e": "node scripts/run-playwright-e2e.mjs",
     "verify:standalone-css": "node scripts/verify-standalone-css.mjs"
   },
   "dependencies": {

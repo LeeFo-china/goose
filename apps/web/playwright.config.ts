@@ -22,9 +22,9 @@ export default defineConfig({
           reuseExistingServer: !process.env.CI,
         },
         {
-          command: "GOOES_WEB_DIST_DIR=.next-e2e GOOES_API_BASE_URL=http://127.0.0.1:3900 GOOES_WEB_PROXY_SHARED_SECRET=e2e-shared-secret GOOES_PREVIEW_SHARED_SECRET=e2e-preview-shared-secret-that-is-long GOOES_PREVIEW_SESSION_SECRET=e2e-preview-session-secret-that-is-long pnpm dev",
+          command: "GOOES_API_BASE_URL=http://127.0.0.1:3900 GOOES_WEB_PROXY_SHARED_SECRET=e2e-shared-secret GOOES_PREVIEW_SHARED_SECRET=e2e-preview-shared-secret-that-is-long GOOES_PREVIEW_SESSION_SECRET=e2e-preview-session-secret-that-is-long pnpm dev",
           url: baseURL,
-          reuseExistingServer: !process.env.CI,
+          reuseExistingServer: false,
           timeout: 120_000,
         },
       ],

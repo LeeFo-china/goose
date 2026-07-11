@@ -51,12 +51,31 @@ test("sitemap includes every paginated published article and core static route",
     "/cases",
     "/articles/e2e-article-101",
     "/cases/e2e-case",
+    "/cities/shanghai",
   ]) {
     expect(body).toContain(`https://www.goodcms.cn${path}`);
   }
   expect(body).not.toContain("draft-article");
   expect(body).not.toContain("archived-case");
   expect(body).not.toContain("/portal/");
+});
+
+test("dynamic metadata stays inside head for Chrome and Lighthouse user agents", async ({ request }) => {
+  for (const userAgent of [
+    "Mozilla/5.0 Chrome/136.0.0.0 Safari/537.36",
+    "Mozilla/5.0 Chrome-Lighthouse/12.8.2",
+  ]) {
+    const response = await request.get("/cities/shanghai", {
+      headers: { "user-agent": userAgent },
+    });
+    const html = await response.text();
+    const head = html.match(/<head>([\s\S]*?)<\/head>/)?.[1] ?? "";
+
+    expect(head).toContain("上海装修协作服务");
+    expect(head).toContain('name="description"');
+    expect(head).toContain('rel="canonical"');
+    expect(head).toContain('property="og:title"');
+  }
 });
 
 test("robots allows the public site while excluding private surfaces", async ({ request }) => {

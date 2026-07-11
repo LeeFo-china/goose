@@ -89,9 +89,11 @@ describe("official website release quality contract", () => {
 
     try {
       const entries = await sitemap();
-      expect(entries.map((entry) => entry.url)).toContain(
+      expect(entries.map((entry) => entry.url)).toEqual(expect.arrayContaining([
         "https://www.goodcms.cn/articles/article-page-two",
-      );
+        "https://www.goodcms.cn/cases/case-page-one",
+        "https://www.goodcms.cn/cities/city-page-one",
+      ]));
       expect(requested).toHaveLength(4);
       expect(requested.every((url) => url.includes("pageSize=100"))).toBe(true);
     } finally {
@@ -133,6 +135,18 @@ describe("official website release quality contract", () => {
     expect(source).toContain('"/cases"');
   });
 
+  test("keeps unpublished sitemap bait out of public E2E fixtures", () => {
+    const stub = read("e2e/upstream-stub.mjs");
+
+    expect(stub).toContain("allContentFixtures");
+    expect(stub).toContain('status: "published"');
+    expect(stub).toContain('status: "draft"');
+    expect(stub).toContain('status: "archived"');
+    expect(stub).toContain('entry.status === "published"');
+    expect(stub).toContain('slug: "draft-article"');
+    expect(stub).toContain('slug: "archived-case"');
+  });
+
   test("provides a generated default Open Graph image and complete root metadata", () => {
     const layout = read("app/layout.tsx");
     const image = read("app/opengraph-image.tsx");
@@ -158,8 +172,48 @@ describe("official website release quality contract", () => {
   test("isolates E2E data cache from local and production builds", () => {
     const nextConfig = read("next.config.ts");
     const playwrightConfig = read("playwright.config.ts");
+    const runner = read("scripts/run-playwright-e2e.mjs");
 
-    expect(nextConfig).toContain("GOOES_WEB_DIST_DIR");
-    expect(playwrightConfig).toContain("GOOES_WEB_DIST_DIR=.next-e2e");
+    expect(nextConfig).not.toContain("distDir");
+    expect(nextConfig).not.toContain("GOOES_WEB_DIST_DIR");
+    expect(playwrightConfig).toContain("reuseExistingServer: false");
+    expect(playwrightConfig).not.toContain("next-e2e");
+    expect(runner).toContain('rmSync(join(webRoot, ".next")');
+    expect(runner).toContain('"next-env.d.ts"');
+    expect(runner).toContain('"tsconfig.json"');
+    expect(runner).toContain("createHash");
+  });
+
+  test("blocks streaming metadata for every user agent", () => {
+    const nextConfig = read("next.config.ts");
+
+    expect(nextConfig).toContain("htmlLimitedBots: /.*/");
+  });
+
+  test("checks a reproducible five-route Lighthouse summary", () => {
+    const packageJson = read("package.json");
+    const runner = read("scripts/run-lighthouse-gate.mjs");
+    const checker = read("scripts/check-lighthouse-summary.mjs");
+    const summary = JSON.parse(read("lighthouse-summary.json") || "null") as {
+      routes?: Array<{ path?: string }>;
+    } | null;
+
+    expect(packageJson).toContain("lighthouse:gate");
+    expect(packageJson).toContain("check:lighthouse-summary");
+    expect(packageJson).toContain("pnpm run check:lighthouse-summary");
+    expect(runner).toContain("lighthouse@12.8.2");
+    expect(runner).toContain("performance: 85");
+    expect(runner).toContain("accessibility: 95");
+    expect(runner).toContain("seo: 95");
+    expect(runner).toContain("lcpMs: 2_500");
+    expect(runner).toContain("cityRuns = 3");
+    expect(checker).toContain("lighthouse-summary.json");
+    expect(summary?.routes?.map((route) => route.path)).toEqual([
+      "/",
+      "/partners",
+      "/articles/e2e-article",
+      "/cases/e2e-case",
+      "/cities/shanghai",
+    ]);
   });
 });

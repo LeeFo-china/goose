@@ -6,7 +6,7 @@ const appDir = dirname(fileURLToPath(import.meta.url));
 const buildRevision = process.env.GOOES_BUILD_SHA ?? "unknown";
 
 const nextConfig: NextConfig = {
-  distDir: process.env.GOOES_WEB_DIST_DIR?.trim() || ".next",
+  htmlLimitedBots: /.*/,
   poweredByHeader: false,
   output: "standalone",
   outputFileTracingRoot: join(appDir, "../.."),
