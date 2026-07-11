@@ -54,6 +54,32 @@ export type PlatformReleaseDispatchAuditRecord = Pick<
   actor_employee: EmployeeLite | null;
 };
 
+type PlatformAuditFilterRequest<Request> = {
+  eq(column: string, value: string): Request;
+  or(filters: string): Request;
+};
+
+export function applyPlatformAuditLogFilters<T extends PlatformAuditFilterRequest<T>>(
+  initialRequest: T,
+  query: PlatformAuditLogListQuery,
+): T {
+  let request = initialRequest;
+  if (query.action) request = request.eq("action", query.action);
+  if (query.status) request = request.eq("status", query.status);
+  if (query.target_tenant_id) request = request.eq("target_tenant_id", query.target_tenant_id);
+  if (query.resource_type) request = request.eq("resource_type", query.resource_type);
+  if (query.resource_id) request = request.eq("resource_id", query.resource_id);
+  if (query.keyword) {
+    const keyword = query.keyword.replace(/[,()]/g, " ").trim();
+    if (keyword) {
+      request = request.or(
+        `action.ilike.%${keyword}%,resource_type.ilike.%${keyword}%,resource_label.ilike.%${keyword}%,summary.ilike.%${keyword}%`,
+      );
+    }
+  }
+  return request;
+}
+
 class PlatformAuditLogRepository {
   private client = SupabaseDB.getAdminClient();
 
@@ -93,31 +119,7 @@ class PlatformAuditLogRepository {
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, to);
-
-    if (query.action) {
-      request = request.eq("action", query.action);
-    }
-
-    if (query.status) {
-      request = request.eq("status", query.status);
-    }
-
-    if (query.target_tenant_id) {
-      request = request.eq("target_tenant_id", query.target_tenant_id);
-    }
-
-    if (query.resource_type) {
-      request = request.eq("resource_type", query.resource_type);
-    }
-
-    if (query.keyword) {
-      const keyword = query.keyword.replace(/[,()]/g, " ").trim();
-      if (keyword) {
-        request = request.or(
-          `action.ilike.%${keyword}%,resource_type.ilike.%${keyword}%,resource_label.ilike.%${keyword}%,summary.ilike.%${keyword}%`,
-        );
-      }
-    }
+    request = applyPlatformAuditLogFilters(request, query);
 
     const { data, error, count } = await request;
     if (error) {
