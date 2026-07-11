@@ -39,6 +39,7 @@ const requiredTokens = [
   "accent-foreground",
   "destructive",
   "destructive-foreground",
+  "destructive-text",
   "success",
   "success-foreground",
   "warning",
@@ -67,6 +68,12 @@ interface Oklch {
   readonly lightness: number;
 }
 
+interface LinearSrgb {
+  readonly blue: number;
+  readonly green: number;
+  readonly red: number;
+}
+
 function getToken(cssBlock: string, token: string): Oklch {
   const match = cssBlock.match(
     new RegExp(`--${token}:\\s*([01](?:\\.\\d+)?)\\s+(\\d+(?:\\.\\d+)?)\\s+(\\d+)`),
@@ -81,16 +88,22 @@ function getToken(cssBlock: string, token: string): Oklch {
   };
 }
 
-function relativeLuminance({ lightness, chroma, hue }: Oklch): number {
+function toLinearSrgb({ lightness, chroma, hue }: Oklch): LinearSrgb {
   const radians = (hue * Math.PI) / 180;
   const a = chroma * Math.cos(radians);
   const b = chroma * Math.sin(radians);
   const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
   const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
   const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const red = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-  const green = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-  const blue = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+  return {
+    red: 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    green: -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    blue: -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  };
+}
+
+function relativeLuminance(color: Oklch): number {
+  const { red, green, blue } = toLinearSrgb(color);
 
   return (
     0.2126 * Math.min(1, Math.max(0, red)) +
@@ -137,6 +150,9 @@ describe("official website design system contract", () => {
     expect(config).toContain('oklch(var(--background) / <alpha-value>)');
     expect(config).toContain('oklch(var(--success) / <alpha-value>)');
     expect(config).toContain('oklch(var(--warning) / <alpha-value>)');
+    expect(config).toContain(
+      'text: "oklch(var(--destructive-text) / <alpha-value>)"',
+    );
     expect(config).not.toContain("hsl(var(--");
   });
 
@@ -152,6 +168,41 @@ describe("official website design system contract", () => {
         ).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+
+  test("uses a separate in-gamut destructive text role on every neutral surface", () => {
+    const css = read("app/globals.css");
+    const alert = read("components/ui/alert.tsx");
+    const button = read("components/ui/button.tsx");
+    const field = read("components/ui/field.tsx");
+    const rootBlock = css.match(/:root\s*\{([^}]+)\}/)?.[1] ?? "";
+    const darkBlock = css.match(/\.dark\s*\{([^}]+)\}/)?.[1] ?? "";
+
+    for (const block of [rootBlock, darkBlock]) {
+      const destructiveText = getToken(block, "destructive-text");
+      const linearSrgb = toLinearSrgb(destructiveText);
+
+      for (const surface of ["background", "card", "popover"]) {
+        expect(
+          contrastRatio(getToken(block, surface), destructiveText),
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+      for (const channel of Object.values(linearSrgb)) {
+        expect(channel).toBeGreaterThanOrEqual(0);
+        expect(channel).toBeLessThanOrEqual(1);
+      }
+    }
+
+    expect(button).toContain(
+      "bg-destructive text-destructive-foreground",
+    );
+    expect(alert).toContain("text-destructive-text");
+    expect(alert).toContain("[&>svg]:text-destructive-text");
+    expect(field).toContain("data-[invalid=true]:text-destructive-text");
+    expect(field).toContain('cn("text-destructive-text text-sm');
+    expect([alert, field].join("\n")).not.toMatch(
+      /text-destructive(?=\s|["'])/,
+    );
   });
 
   test("keeps control boundaries and focus indicators visible in both themes", () => {
@@ -193,6 +244,10 @@ describe("official website design system contract", () => {
     expect(mobileNavigation).toMatch(
       /<DialogTrigger[\s\S]*?<Button[^>]*className="h-11"/,
     );
+    expect(dialog).toContain("right-0.5 top-0.5");
+    expect(dialog).toContain("size-11");
+    expect(dialog).toContain("[&_svg]:size-4");
+    expect(dialog).not.toContain("right-4 top-4");
   });
 
   test("keeps the shell server-rendered and composes header, main, and footer", () => {

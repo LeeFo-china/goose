@@ -28,6 +28,7 @@ const config: Config = {
           DEFAULT: "oklch(var(--destructive) / <alpha-value>)",
           foreground:
             "oklch(var(--destructive-foreground) / <alpha-value>)",
+          text: "oklch(var(--destructive-text) / <alpha-value>)",
         },
         success: {
           DEFAULT: "oklch(var(--success) / <alpha-value>)",

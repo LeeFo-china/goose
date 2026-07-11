@@ -19,6 +19,7 @@
   --accent-foreground: 0.18 0.01 84;
   --destructive: 0.52 0.21 27;
   --destructive-foreground: 0.98 0 0;
+  --destructive-text: 0.52 0.18 27;
   --success: 0.48 0.12 148;
   --success-foreground: 0.98 0 0;
   --warning: 0.78 0.16 83;
@@ -48,6 +49,7 @@
   --accent-foreground: 0.17 0.01 84;
   --destructive: 0.57 0.2 27;
   --destructive-foreground: 0.98 0 0;
+  --destructive-text: 0.68 0.16 27;
   --success: 0.68 0.14 148;
   --success-foreground: 0.16 0 0;
   --warning: 0.82 0.16 83;
