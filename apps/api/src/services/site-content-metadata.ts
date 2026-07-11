@@ -1,4 +1,5 @@
 import type { SiteContentType } from "@gooes/domain";
+import { SiteContentPublicDetailSchema } from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
 import {
@@ -24,6 +25,19 @@ export function parsePublicSiteContentMetadata(
     throw Errors.business(
       500,
       "官网内容元数据不合法",
+      "SITE_CONTENT_DATA_INVALID",
+      result.error.issues,
+    );
+  }
+  return result.data;
+}
+
+export function parsePublicSiteContentDetail(value: unknown) {
+  const result = SiteContentPublicDetailSchema.safeParse(value);
+  if (!result.success) {
+    throw Errors.business(
+      500,
+      "官网公开内容数据不合法",
       "SITE_CONTENT_DATA_INVALID",
       result.error.issues,
     );

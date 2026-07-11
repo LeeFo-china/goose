@@ -1,6 +1,10 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
-import type { SiteContentPublicSummaryRecord } from "@/repositories/site-content";
+import type {
+  SiteContentEntryRecord,
+  SiteContentPublicSummaryRecord,
+  SiteContentVersionRecord,
+} from "@/repositories/site-content";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -83,11 +87,8 @@ function dependencies(options: {
   })>;
   consumePreviewToken?: () => Promise<null | { entry_id: string; version_id: string; expires_at: string; consumed_at: string }>;
   revalidate?: () => Promise<{ requestId?: string }>;
-  findEntry?: () => Promise<null | typeof entry | (Omit<typeof entry, "status" | "published_version_id" | "published_at"> & {
-    status: "published";
-    published_version_id: string;
-    published_at: string;
-  })>;
+  findEntry?: () => Promise<SiteContentEntryRecord | null>;
+  findVersion?: () => Promise<SiteContentVersionRecord | null>;
   previewBaseUrl?: string;
   archive?: () => Promise<(Omit<typeof entry, "status"> & { status: "archived" }) | null>;
 } = {}) {
@@ -105,7 +106,7 @@ function dependencies(options: {
     createEntryWithVersion: mock(async () => ({ entry, version })),
     updateEntry: mock(async () => entry),
     listVersions: mock(async () => ({ list: [version], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } })),
-    findVersion: mock(async () => version),
+    findVersion: mock(options.findVersion ?? (async () => version)),
     createVersion: mock(async () => version),
     findPublicAssets: mock(options.findPublicAssets ?? (async () => assets)),
     publish: mock(async () => ({ ...entry, status: "published" as const, published_version_id: version.id, published_at: "2026-07-12T01:00:00.000Z" })),
@@ -445,5 +446,45 @@ describe("SiteContentService", () => {
 
     await expect(service.consumePreviewToken("x".repeat(43))).rejects.toMatchObject({ code: "INVALID_OR_EXPIRED_PREVIEW_TOKEN" });
     expect(deps.repository.consumePreviewToken).toHaveBeenCalledWith("x".repeat(43), "2026-07-12T10:00:00.000Z");
+  });
+
+  test("builds draft previews from the public detail metadata contract", async () => {
+    const deps = dependencies();
+    const result = await new SiteContentService(deps).getPreviewVersion(version.id);
+
+    expect(result).toMatchObject({
+      contentType: "article",
+      metadata: version.metadata,
+      publishedAt: "2026-07-12T08:00:00+08:00",
+      preview: true,
+      versionId: version.id,
+    });
+    expect(JSON.stringify(result)).not.toContain("created_by");
+  });
+
+  test("uses version creation time for unpublished case previews", async () => {
+    const caseEntry: SiteContentEntryRecord = { ...entry, content_type: "case" };
+    const caseVersion: SiteContentVersionRecord = {
+      ...version,
+      content_blocks: [],
+      cover_file_id: null,
+      metadata: { city: "杭州", areaSquareMeters: 128, decorationType: "全案", metrics: [] },
+    };
+    const deps = dependencies({
+      findEntry: async () => caseEntry,
+      findVersion: async () => caseVersion,
+    });
+
+    const result = await new SiteContentService(deps).getPreviewVersion(version.id);
+    expect(result.publishedAt).toBe(version.created_at);
+    expect(result.metadata).toMatchObject({ city: "杭州" });
+  });
+
+  test("rejects dirty preview metadata through the public detail schema", async () => {
+    const deps = dependencies({
+      findVersion: async () => ({ ...version, metadata: { cityName: "杭州" } }),
+    });
+    await expect(new SiteContentService(deps).getPreviewVersion(version.id))
+      .rejects.toMatchObject({ code: "SITE_CONTENT_DATA_INVALID" });
   });
 });

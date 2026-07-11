@@ -10,7 +10,6 @@ import type {
 import {
   SiteContentDraftBlocksSchema,
   SiteContentPublicAssetSchema,
-  SiteContentPublicDetailSchema,
   SiteContentPublicListSchema,
   SiteContentPublicSummarySchema,
 } from "@gooes/domain";
@@ -42,6 +41,7 @@ import {
 } from "@/services/site-content-web-gateway";
 import {
   getSiteContentMetadataSchema,
+  parsePublicSiteContentDetail,
   parsePublicSiteContentMetadata,
 } from "@/services/site-content-metadata";
 
@@ -347,35 +347,36 @@ export class SiteContentService {
 
   private toPublicDetail(record: SiteContentPublicDetailRecord, assets: Map<string, SiteContentPublicAsset>): SiteContentPublicDetail {
     const version = this.requirePublishedVersion(record);
-    const result = SiteContentPublicDetailSchema.safeParse({
+    return parsePublicSiteContentDetail({
       ...this.toPublicSummary(record, assets),
       seoTitle: version.seo_title,
       seoDescription: version.seo_description,
       canonicalUrl: version.canonical_url,
       blocks: this.parseStoredBlocks(version.content_blocks).map((block) => this.toPublicBlock(block, assets)),
     });
-    if (!result.success) {
-      throw Errors.business(500, "官网公开内容数据不合法", "SITE_CONTENT_DATA_INVALID", result.error.issues);
-    }
-    return result.data;
   }
 
   private toPreviewDetail(entry: SiteContentEntryRecord, version: SiteContentVersionRecord, assets: Map<string, SiteContentPublicAsset>) {
-    return {
+    const metadata = parsePublicSiteContentMetadata(entry.content_type, version.metadata);
+    const publishedAt = entry.content_type === "article"
+      && "displayPublishedAt" in metadata
+      ? metadata.displayPublishedAt
+      : entry.published_at ?? version.created_at;
+    const detail = parsePublicSiteContentDetail({
       id: entry.id,
       contentType: entry.content_type,
       slug: entry.slug,
       title: version.title,
       summary: version.summary,
       cover: version.cover_file_id ? this.withAlt(this.requireAsset(assets, version.cover_file_id), version.title) : null,
-      publishedAt: entry.published_at,
+      publishedAt,
+      metadata,
       seoTitle: version.seo_title,
       seoDescription: version.seo_description,
       canonicalUrl: version.canonical_url,
       blocks: this.parseStoredBlocks(version.content_blocks).map((block) => this.toPublicBlock(block, assets)),
-      preview: true as const,
-      versionId: version.id,
-    };
+    });
+    return { ...detail, preview: true as const, versionId: version.id };
   }
 
   private toPublicBlock(block: SiteContentDraftBlock, assets: Map<string, SiteContentPublicAsset>): SiteContentPublicBlock {
