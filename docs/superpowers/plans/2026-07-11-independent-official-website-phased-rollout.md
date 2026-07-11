@@ -499,8 +499,9 @@ git commit -m "ci(web): 增加独立官网部署流水线"
 4. 只选择 `web` 手动 dispatch，并填写：
    `migration_version=20260711120000`、`verified_commit_sha=<当前 GITHUB_SHA>`、
    `sms_smoke_confirmation=API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED`。
-5. 任一证据缺失或 SHA 不一致时流水线 fail closed。push 只构建并推送 Web 镜像，
-   不重建或检查 Web 容器；生产 `all` 明确拒绝，必须按 API-only、Web-only 分阶段执行。
+5. 任一证据缺失或 SHA 不一致时 Web-only 流水线 fail closed。push 只构建并推送
+   Web 镜像，不重建或检查 Web 容器；生产 `all` 继续发布 API、Admin 和 workers，
+   同时构建 Web 镜像但从部署集合排除 Web。Web 必须另行执行 gated Web-only 发布。
 
 失败或回滚时，API 可回滚到 `815d5fca`；新增数据库函数保持不动，不影响旧 API。禁止为了回滚手动在远端 `DROP FUNCTION`。未来如需移除函数，必须新建 forward migration，经 review/apply 后执行。
 

@@ -60,7 +60,7 @@ jobs:
               esac
             done
           fi
-          if [ "${normalized}" = ",all," ] || [[ "${normalized}" == *",web,"* ]]; then
+          if [[ "${normalized}" == *",web,"* ]]; then
             test "${normalized}" = ",web," || {
               echo "Web must be built and deployed separately after API health and SMS smoke evidence."
               exit 1
@@ -68,6 +68,13 @@ jobs:
             test "${INPUT_MIGRATION_VERSION}" = "20260711120000"
             test "${INPUT_VERIFIED_COMMIT_SHA}" = "${GITHUB_SHA}"
             test "${INPUT_SMS_SMOKE_CONFIRMATION}" = "API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
+          fi
+          if [ "${normalized}" = ",all," ]; then
+            {
+              echo "### Production all-service behavior"
+              echo ""
+              echo "Web image will be built, but the reusable deploy excludes Web until a gated web-only request."
+            } >> "${GITHUB_STEP_SUMMARY}"
           fi
 
   build:

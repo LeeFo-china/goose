@@ -48,10 +48,12 @@ describe("web deployment hard gates", () => {
     const gate = sliceStep(production, "Validate web deployment gate", "Sync compose fragments");
     const pull = sliceStep(production, "Pull latest images", "Recreate services");
     const recreate = sliceStep(production, "Recreate services", "Check container health");
-    expect(gate).toContain('test "${INPUT_MIGRATION_VERSION}" = "20260711120000"');
-    expect(gate).toContain('test "${INPUT_VERIFIED_COMMIT_SHA}" = "${SOURCE_SHA}"');
-    expect(gate).toContain("API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED");
-    expect(gate).toContain('test "${normalized}" = ",web,"');
+    expect(gate).toContain("scripts/resolve-web-deployment.mjs");
+    expect(gate).toContain('"${INPUT_MIGRATION_VERSION}"');
+    expect(gate).toContain('"${INPUT_VERIFIED_COMMIT_SHA}"');
+    expect(gate).toContain('"${INPUT_SMS_SMOKE_CONFIRMATION}"');
+    expect(gate).toContain('"${SOURCE_SHA}"');
+    expect(gate).toContain('echo "DEPLOY_SERVICES=${DEPLOY_SERVICES}"');
     expect(pull).toContain("gooes-web");
     expect(recreate).toContain("gooes-web");
     expect(production.indexOf("Validate web deployment gate")).toBeLessThan(production.indexOf("gooes-web"));
@@ -65,5 +67,16 @@ describe("web deployment hard gates", () => {
     expect(production).toContain("migration_version:");
     expect(production).toContain("verified_commit_sha:");
     expect(production).toContain("sms_smoke_confirmation:");
+  });
+
+  test("all builds web while normalized deployment keeps every legacy service", () => {
+    const matrix = build.slice(build.indexOf("matrix:"), build.indexOf("steps:", build.indexOf("matrix:")));
+    const pull = sliceStep(production, "Pull latest images", "Recreate services");
+    expect(matrix).toContain("service: web");
+    expect(build).toContain("github.event.inputs.service == 'all'");
+    expect(pull).toContain("for item in ${DEPLOY_SERVICES}");
+    for (const service of ["api", "admin", "social-video-worker", "cos-reconcile-worker"]) {
+      expect(pull).toContain(`${service}) compose_services+=`);
+    }
   });
 });

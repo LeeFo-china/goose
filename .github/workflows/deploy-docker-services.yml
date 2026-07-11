@@ -136,24 +136,17 @@ jobs:
           INPUT_SMS_SMOKE_CONFIRMATION: ${{ inputs.sms_smoke_confirmation || github.event.inputs.sms_smoke_confirmation || '' }}
         run: |
           set -euo pipefail
-          normalized=",${RELEASE_SERVICE//[[:space:]]/},"
-          if [ "${normalized}" != ",all," ]; then
-            IFS=',' read -ra requested <<< "${RELEASE_SERVICE//[[:space:]]/}"
-            for service in "${requested[@]}"; do
-              case "$service" in
-                api|admin|web|social-video-worker|cos-reconcile-worker|"") ;;
-                *) echo "Unknown service: $service"; exit 1 ;;
-              esac
-            done
-          fi
-          if [ "${normalized}" = ",all," ] || [[ "${normalized}" == *",web,"* ]]; then
-            test "${normalized}" = ",web," || {
-              echo "Web must be deployed separately after API health and SMS smoke evidence."
-              exit 1
-            }
-            test "${INPUT_MIGRATION_VERSION}" = "20260711120000"
-            test "${INPUT_VERIFIED_COMMIT_SHA}" = "${SOURCE_SHA}"
-            test "${INPUT_SMS_SMOKE_CONFIRMATION}" = "API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
+          DEPLOY_SERVICES="$(node "${RUNNER_WORKSPACE}/source/scripts/resolve-web-deployment.mjs" \
+            "${RELEASE_SERVICE}" \
+            "${INPUT_MIGRATION_VERSION}" \
+            "${INPUT_VERIFIED_COMMIT_SHA}" \
+            "${INPUT_SMS_SMOKE_CONFIRMATION}" \
+            "${SOURCE_SHA}")"
+          test -n "${DEPLOY_SERVICES}"
+          echo "DEPLOY_SERVICES=${DEPLOY_SERVICES}" >> "${GITHUB_ENV}"
+          echo "Resolved production deploy services: ${DEPLOY_SERVICES}"
+          if [ "${RELEASE_SERVICE//[[:space:]]/}" = "all" ]; then
+            echo "Web image may be built by the caller, but Web is excluded from the default all deployment." >> "${GITHUB_STEP_SUMMARY}"
           fi
 
       - name: Sync compose fragments
@@ -186,32 +179,8 @@ jobs:
         run: |
           set -euo pipefail
           cd "${DEPLOY_DIR}"
-          normalize_services() {
-            local raw="${RELEASE_SERVICE//[[:space:]]/}"
-            if [ "$raw" = "all" ]; then
-              echo "api admin web social-video-worker cos-reconcile-worker"
-              return
-            fi
-            local normalized=()
-            IFS=',' read -ra requested <<< "$raw"
-            for item in "${requested[@]}"; do
-              case "$item" in
-                api|admin|web|social-video-worker|cos-reconcile-worker)
-                  normalized+=("$item")
-                  ;;
-                "")
-                  ;;
-                *)
-                  echo "Unknown service: $item"
-                  exit 1
-                  ;;
-              esac
-            done
-            printf '%s\n' "${normalized[@]}"
-          }
-
           compose_services=()
-          while IFS= read -r item; do
+          for item in ${DEPLOY_SERVICES}; do
             case "$item" in
               api) compose_services+=("gooes-api") ;;
               admin) compose_services+=("gooes-admin") ;;
@@ -219,7 +188,7 @@ jobs:
               social-video-worker) compose_services+=("gooes-social-video-worker") ;;
               cos-reconcile-worker) compose_services+=("gooes-cos-reconcile-worker") ;;
             esac
-          done < <(normalize_services)
+          done
           services="${compose_services[*]}"
           docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers pull ${services}
 
@@ -227,26 +196,9 @@ jobs:
         run: |
           set -euo pipefail
           cd "${DEPLOY_DIR}"
-          normalized=",${RELEASE_SERVICE//[[:space:]]/},"
           service_selected() {
-            [ "$normalized" = ",all," ] || [[ "$normalized" == *",$1,"* ]]
+            [[ " ${DEPLOY_SERVICES} " == *" $1 "* ]]
           }
-          validate_services() {
-            if [ "$normalized" = ",all," ]; then
-              return
-            fi
-            IFS=',' read -ra requested <<< "${RELEASE_SERVICE//[[:space:]]/}"
-            for item in "${requested[@]}"; do
-              case "$item" in
-                api|admin|web|social-video-worker|cos-reconcile-worker|"") ;;
-                *)
-                  echo "Unknown service: $item"
-                  exit 1
-                  ;;
-              esac
-            done
-          }
-          validate_services
           if service_selected api; then
             docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers up -d --no-deps --force-recreate gooes-api
           fi
@@ -259,8 +211,6 @@ jobs:
           if service_selected admin; then
             docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers up -d --no-deps --force-recreate gooes-admin
           fi
-          # Migration apply/list verification is an external mandatory gate. Web is
-          # recreated only after the API service above has completed successfully.
           if service_selected web; then
             docker compose -f docker-compose.api.yml -f docker-compose.admin.yml -f docker-compose.web.yml --profile workers up -d --no-deps --force-recreate gooes-web
           fi
@@ -288,9 +238,8 @@ jobs:
             exit 1
           }
 
-          normalized=",${RELEASE_SERVICE//[[:space:]]/},"
           service_selected() {
-            [ "$normalized" = ",all," ] || [[ "$normalized" == *",$1,"* ]]
+            [[ " ${DEPLOY_SERVICES} " == *" $1 "* ]]
           }
           if service_selected api; then check_container gooes-api; fi
           if service_selected social-video-worker; then check_container gooes-social-video-worker; fi
@@ -301,9 +250,8 @@ jobs:
       - name: Check public endpoints
         run: |
           set -euo pipefail
-          normalized=",${RELEASE_SERVICE//[[:space:]]/},"
           service_selected() {
-            [ "$normalized" = ",all," ] || [[ "$normalized" == *",$1,"* ]]
+            [[ " ${DEPLOY_SERVICES} " == *" $1 "* ]]
           }
           if service_selected api; then
             curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://api.goodcms.cn/
@@ -319,6 +267,10 @@ jobs:
         run: |
           set -euo pipefail
           cd "${DEPLOY_DIR}"
+          echo "Deployed services: ${DEPLOY_SERVICES}" >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${RELEASE_SERVICE//[[:space:]]/}" = "all" ]; then
+            echo "Web was not deployed; the build workflow still builds its image. Use a gated web-only request." >> "${GITHUB_STEP_SUMMARY}"
+          fi
           docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | grep -E 'gooes-|NAMES'
 
       - name: Cleanup unused Docker artifacts
