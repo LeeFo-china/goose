@@ -3,36 +3,92 @@
 @tailwind utilities;
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 0 0% 9%;
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 9%;
-  --primary: 0 0% 9%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 0 0% 96%;
-  --secondary-foreground: 0 0% 9%;
-  --muted: 0 0% 96%;
-  --muted-foreground: 0 0% 45%;
-  --accent: 0 0% 96%;
-  --accent-foreground: 0 0% 9%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 90%;
-  --input: 0 0% 90%;
-  --ring: 0 0% 9%;
-  --radius: 0.5rem;
-  --font-sans: "PingFang SC", "Microsoft YaHei", sans-serif;
+  --background: 0.985 0 0;
+  --foreground: 0.16 0 0;
+  --card: 1 0 0;
+  --card-foreground: 0.16 0 0;
+  --popover: 1 0 0;
+  --popover-foreground: 0.16 0 0;
+  --primary: 0.16 0 0;
+  --primary-foreground: 0.88 0.15 84;
+  --secondary: 0.935 0 0;
+  --secondary-foreground: 0.2 0 0;
+  --muted: 0.95 0 0;
+  --muted-foreground: 0.42 0 0;
+  --accent: 0.9 0.12 86;
+  --accent-foreground: 0.18 0.01 84;
+  --destructive: 0.52 0.21 27;
+  --destructive-foreground: 0.98 0 0;
+  --success: 0.48 0.12 148;
+  --success-foreground: 0.98 0 0;
+  --warning: 0.78 0.16 83;
+  --warning-foreground: 0.18 0.01 84;
+  --border: 0.86 0 0;
+  --input: 0.62 0 0;
+  --ring: 0.25 0 0;
+  --radius: 0.75rem;
+  --font-sans: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.dark {
+  --background: 0.145 0 0;
+  --foreground: 0.94 0 0;
+  --card: 0.185 0 0;
+  --card-foreground: 0.94 0 0;
+  --popover: 0.2 0 0;
+  --popover-foreground: 0.94 0 0;
+  --primary: 0.82 0.17 84;
+  --primary-foreground: 0.17 0.01 84;
+  --secondary: 0.25 0 0;
+  --secondary-foreground: 0.92 0 0;
+  --muted: 0.23 0 0;
+  --muted-foreground: 0.72 0 0;
+  --accent: 0.82 0.17 84;
+  --accent-foreground: 0.17 0.01 84;
+  --destructive: 0.64 0.2 27;
+  --destructive-foreground: 0.98 0 0;
+  --success: 0.68 0.14 148;
+  --success-foreground: 0.16 0 0;
+  --warning: 0.82 0.16 83;
+  --warning-foreground: 0.17 0.01 84;
+  --border: 0.32 0 0;
+  --input: 0.55 0 0;
+  --ring: 0.82 0.17 84;
 }
 
 * {
-  border-color: hsl(var(--border));
+  border-color: oklch(var(--border));
+}
+
+html {
+  background: oklch(var(--background));
 }
 
 body {
-  min-height: 100vh;
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
+  min-height: 100dvh;
+  background: oklch(var(--background));
+  color: oklch(var(--foreground));
   font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
