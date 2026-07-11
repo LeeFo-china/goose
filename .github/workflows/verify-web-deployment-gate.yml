@@ -38,6 +38,21 @@ jobs:
           test "$(git rev-parse HEAD)" = "${{ inputs.commit_sha }}"
           test -f supabase/migrations/20260711120000_reserve_sms_verification_code.sql
 
+      - name: Verify Local and Remote migration history
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_URL}"
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm dlx supabase@2.99.0 migration list \
+            --db-url "${SUPABASE_DB_URL}" \
+            --output-format json > migration-history.json
+          node scripts/verify-migration-history.mjs \
+            migration-history.json "${{ inputs.migration_version }}" \
+            > migration-evidence.json
+
       - name: Verify API revision and health
         env:
           TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
@@ -76,7 +91,8 @@ jobs:
             --arg sha "${{ inputs.commit_sha }}" \
             --arg migration "${{ inputs.migration_version }}" \
             --slurpfile smoke web-gate-smoke.json \
-            '{conclusion:"success", environment:$environment, commit_sha:$sha, migration_version:$migration} + $smoke[0]' \
+            --slurpfile migrationEvidence migration-evidence.json \
+            '{conclusion:"success", environment:$environment, commit_sha:$sha, migration_version:$migration} + $smoke[0] + $migrationEvidence[0]' \
             > web-deployment-gate-receipt.json
 
       - uses: actions/upload-artifact@v4

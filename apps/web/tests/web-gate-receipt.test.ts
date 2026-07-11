@@ -18,6 +18,13 @@ function verify(overrides: Record<string, unknown> = {}) {
     ip_concurrency_passed: true,
     phone_concurrency_passed: true,
     device_concurrency_passed: true,
+    single_reservation_passed: true,
+    single_success_count: 1,
+    ip_success_count: 5,
+    phone_success_count: 1,
+    device_success_count: 1,
+    migration_history_aligned: true,
+    target_migration_present: true,
     ...overrides,
   }));
   return Bun.spawnSync(["node", script, file, "production", "abc123", "20260711120000"], { stderr: "pipe" });
@@ -33,5 +40,10 @@ describe("web gate receipt", () => {
     { commit_sha: "wrong" },
     { migration_version: "wrong" },
     { ip_concurrency_passed: false },
+    { single_success_count: 0 },
+    { ip_success_count: 0 },
+    { migration_history_aligned: false },
+    { migration_history_aligned: undefined },
+    { target_migration_present: false },
   ])("rejects invalid receipt %#", (overrides) => expect(verify(overrides).exitCode).toBe(1));
 });

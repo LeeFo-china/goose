@@ -1,5 +1,7 @@
 import { smsVerificationCodeRepository } from "@/repositories/sms-verification-codes";
 
+import { evaluateWebGateSmokeCounts } from "./web-deployment-gate-smoke-result";
+
 const reservedIds: string[] = [];
 const seed = Date.now().toString().slice(-7);
 const now = new Date();
@@ -28,6 +30,7 @@ function phone(index: number): string {
 
 async function main(): Promise<void> {
 try {
+  const singleResult = await reserve(phone(30), "192.0.2.209", `gate-single-${seed}`);
   const ipResults = await Promise.all(
     Array.from({ length: 6 }, (_, index) => reserve(phone(index), "192.0.2.210", `gate-ip-${seed}-${index}`)),
   );
@@ -39,12 +42,13 @@ try {
     reserve(phone(21), "192.0.2.213", `gate-device-${seed}`),
     reserve(phone(22), "192.0.2.214", `gate-device-${seed}`),
   ]);
-  const receipt = {
-    ip_concurrency_passed: ipResults.filter(Boolean).length <= 5,
-    phone_concurrency_passed: phoneResults.filter(Boolean).length <= 1,
-    device_concurrency_passed: deviceResults.filter(Boolean).length <= 1,
-  };
-  if (!Object.values(receipt).every(Boolean)) process.exitCode = 1;
+  const receipt = evaluateWebGateSmokeCounts({
+    single: Number(singleResult),
+    ip: ipResults.filter(Boolean).length,
+    phone: phoneResults.filter(Boolean).length,
+    device: deviceResults.filter(Boolean).length,
+  });
+  if (!receipt.passed) process.exitCode = 1;
   console.log(JSON.stringify(receipt));
 } finally {
   await Promise.all(reservedIds.map((id) => smsVerificationCodeRepository.deletePendingById(id)));
