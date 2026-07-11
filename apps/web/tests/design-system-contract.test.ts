@@ -258,4 +258,26 @@ describe("official website design system contract", () => {
     expect(allUiSource).not.toContain("has-data-");
     expect(allUiSource).not.toMatch(/nth-last-\d/);
   });
+
+  test("keeps responsive fields relative to their nearest FieldGroup container", () => {
+    const field = read("components/ui/field.tsx");
+    const css = read("app/globals.css");
+    const responsiveBranch =
+      field.match(/responsive:\s*\[([\s\S]*?)\n\s*\],\n\s*\},/)?.[1] ?? "";
+
+    expect(field).toContain('data-slot="field-group"');
+    expect(responsiveBranch).toContain("flex-col");
+    expect(responsiveBranch).toContain("[&>*]:w-full");
+    expect(responsiveBranch).not.toContain("md:");
+    expect(css).toMatch(
+      /\[data-slot=["']field-group["']\]\s*\{[^}]*container-name:\s*field-group;[^}]*container-type:\s*inline-size;/,
+    );
+    expect(css).toContain("@container field-group (min-width: 28rem)");
+    expect(css).toContain(
+      '[data-slot="field"][data-orientation="responsive"]',
+    );
+    expect(css).toMatch(
+      /:has\(\s*>\s*\[data-slot=["']field-content["']\]\s*\)/,
+    );
+  });
 });
