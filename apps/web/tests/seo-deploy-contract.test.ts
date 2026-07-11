@@ -88,7 +88,12 @@ describe("phase one SEO and standalone deployment", () => {
     expect(build).toContain("service: web");
     expect(build).toContain("docker/web.Dockerfile");
     expect(deploy).toContain("gooes-web");
-    expect(deploy).toContain("https://www.goodcms.cn/partners");
+    expect(deploy).toContain("http://127.0.0.1:3020");
+    expect(deploy).toContain("Host: www.goodcms.cn");
+    expect(deploy).toContain('smoke_url "/partners"');
+    expect(deploy).not.toContain(
+      "curl -fsS -D - -o /dev/null --retry 5 --retry-delay 3 https://www.goodcms.cn/partners",
+    );
     expect(workflows).toContain("Unknown service");
     expect(dev).toContain("gate_run_id");
     expect(build).toContain("gate_run_id");

@@ -17,6 +17,10 @@ on:
         description: "Successful Verify Web Deployment Gate workflow run ID"
         required: false
         type: string
+      web_smoke_content_path:
+        description: "Published /articles, /cases, or /cities detail path for pre-cutover loopback smoke"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -39,6 +43,7 @@ jobs:
       build_services: ${{ steps.resolve.outputs.build_services }}
     env:
       INPUT_GATE_RUN_ID: ${{ github.event.inputs.gate_run_id }}
+      INPUT_WEB_SMOKE_CONTENT_PATH: ${{ github.event.inputs.web_smoke_content_path }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate service selection and web gate
@@ -55,6 +60,10 @@ jobs:
               exit 1
             }
             [[ "${INPUT_GATE_RUN_ID}" =~ ^[0-9]+$ ]]
+            [[ "${INPUT_WEB_SMOKE_CONTENT_PATH}" =~ ^/(articles|cases|cities)/[a-z0-9]+([a-z0-9-]*[a-z0-9])?$ ]] || {
+              echo "Web deploy requires a published content detail path such as /articles/example."
+              exit 1
+            }
           fi
           if [ "${normalized}" = ",all," ]; then
             {
@@ -257,4 +266,5 @@ jobs:
       service: ${{ github.event.inputs.service || 'all' }}
       built_image_sha: ${{ github.sha }}
       gate_run_id: ${{ github.event.inputs.gate_run_id }}
+      web_smoke_content_path: ${{ github.event.inputs.web_smoke_content_path }}
     secrets: inherit

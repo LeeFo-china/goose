@@ -62,7 +62,11 @@ describe("Web rollback workflows", () => {
     expect(workflow).toContain("WEB_DEPLOY_STAGE=gate_rejected");
     expect(workflow).toContain("WEB_DEPLOY_STAGE=gate_validated");
     expect(workflow).toContain("WEB_DEPLOY_STAGE=deploying");
-    expect(workflow).toContain("WEB_DEPLOY_STAGE=success");
+    expect(workflow).toContain(
+      workflow === dev
+        ? "WEB_DEPLOY_STAGE=success"
+        : "WEB_DEPLOY_STAGE=container_ready_for_manual_cutover",
+    );
     expect(workflow).toContain("WEB_DEPLOY_STAGE=rollback_failed");
     expect(workflow).toContain("WEB_DEPLOY_STAGE=rolled_back");
     const summary = step(workflow, workflow === dev ? "Write dev deployment summary" : "Deployment summary");

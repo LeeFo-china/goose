@@ -22,6 +22,11 @@ on:
         required: false
         default: ""
         type: string
+      web_smoke_content_path:
+        description: "Published content detail path used only for loopback smoke"
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       service:
@@ -31,6 +36,10 @@ on:
         type: string
       gate_run_id:
         description: "Successful Verify Web Deployment Gate workflow run ID"
+        required: false
+        type: string
+      web_smoke_content_path:
+        description: "Published /articles, /cases, or /cities detail path for pre-cutover loopback smoke"
         required: false
         type: string
 
@@ -123,6 +132,7 @@ jobs:
         env:
           INPUT_BUILT_IMAGE_SHA: ${{ inputs.built_image_sha || '' }}
           INPUT_GATE_RUN_ID: ${{ inputs.gate_run_id || github.event.inputs.gate_run_id || '' }}
+          INPUT_WEB_SMOKE_CONTENT_PATH: ${{ inputs.web_smoke_content_path || github.event.inputs.web_smoke_content_path || '' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -148,9 +158,14 @@ jobs:
             gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
             node "${RUNNER_WORKSPACE}/source/scripts/verify-web-gate-receipt.mjs" \
               "${receipt_dir}/web-deployment-gate-receipt.json" production "${SOURCE_SHA}" 20260711120000
+            [[ "${INPUT_WEB_SMOKE_CONTENT_PATH}" =~ ^/(articles|cases|cities)/[a-z0-9]+([a-z0-9-]*[a-z0-9])?$ ]] || {
+              echo "Web deploy requires a published content detail path such as /articles/example."
+              exit 1
+            }
             echo "GOOES_WEB_IMAGE=${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/goose-web:${SOURCE_SHA}" >> "${GITHUB_ENV}"
             echo "COMPOSE_FILES=-f docker-compose.web.yml" >> "${GITHUB_ENV}"
             echo "COMPOSE_ENV_FILE=.env.web" >> "${GITHUB_ENV}"
+            echo "WEB_SMOKE_CONTENT_PATH=${INPUT_WEB_SMOKE_CONTENT_PATH}" >> "${GITHUB_ENV}"
             echo "WEB_DEPLOY_STAGE=gate_validated" >> "${GITHUB_ENV}"
           else
             echo "COMPOSE_FILES=-f docker-compose.api.yml -f docker-compose.admin.yml" >> "${GITHUB_ENV}"
@@ -292,7 +307,7 @@ jobs:
             test "${revision}" = "${SOURCE_SHA}"
           fi
 
-      - name: Check public endpoints
+      - name: Check public endpoints and pre-cutover Web loopback
         run: |
           set -euo pipefail
           service_selected() {
@@ -305,11 +320,28 @@ jobs:
             curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://admin.goodcms.cn/login
           fi
           if service_selected web; then
-            headers="$(curl -fsS -D - -o /dev/null --retry 5 --retry-delay 3 https://www.goodcms.cn/partners)"
-            printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
-            printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${SOURCE_SHA}"
+            smoke_url() {
+              path="$1"
+              headers="$(curl -fsS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+                --retry 5 --retry-delay 3 "http://127.0.0.1:3020${path}")"
+              printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
+              printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${SOURCE_SHA}"
+            }
+            smoke_url "/"
+            smoke_url "/partners"
+            smoke_url "/sitemap.xml"
+            smoke_url "${WEB_SMOKE_CONTENT_PATH}"
+            preview_headers="$(curl -sS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+              "http://127.0.0.1:3020/api/preview")"
+            printf '%s' "${preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303'
+            printf '%s' "${preview_headers}" | grep -iq '^location: /preview-error'
+            printf '%s' "${preview_headers}" | grep -iq '^cache-control: no-store'
             echo "WEB_ROLLBACK_STATUS=not_requested" >> "${GITHUB_ENV}"
-            echo "WEB_DEPLOY_STAGE=success" >> "${GITHUB_ENV}"
+            echo "WEB_DEPLOY_STAGE=container_ready_for_manual_cutover" >> "${GITHUB_ENV}"
+            {
+              echo "Web container passed loopback smoke with Host www.goodcms.cn."
+              echo "This workflow does not install or reload production Nginx. Follow the reviewed cutover runbook manually."
+            } >> "${GITHUB_STEP_SUMMARY}"
           fi
 
       - name: Roll back production web
@@ -336,7 +368,8 @@ jobs:
           done
           test "${health}" = healthy
           test "${revision}" = "${WEB_OLD_REVISION}"
-          headers="$(curl -fsS -D - -o /dev/null --retry 5 --retry-delay 3 https://www.goodcms.cn/partners)"
+          headers="$(curl -fsS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+            --retry 5 --retry-delay 3 http://127.0.0.1:3020/partners)"
           printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
           printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}"
           echo "WEB_ROLLBACK_STATUS=success" >> "${GITHUB_ENV}"
