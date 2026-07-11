@@ -167,6 +167,7 @@ export const EMPLOYEE_PROJECT_BOOTSTRAP_SELECT = `
 
 export const PUBLIC_PROJECT_LIST_SELECT = `
   id,
+  tenant_id,
   name,
   status,
   budget,
@@ -206,6 +207,7 @@ export const PUBLIC_PROJECT_LIST_SELECT = `
 
 export const PUBLIC_PROJECT_DETAIL_SELECT = `
   id,
+  tenant_id,
   name,
   status,
   budget,
@@ -239,6 +241,23 @@ export const PUBLIC_PROJECT_DETAIL_SELECT = `
     location_confirmed_at
   )
 `;
+
+export type PublicProjectListQuery = {
+  tenantIds: string[];
+  preferredTenantId: string | null;
+  page: number;
+  pageSize: number;
+};
+
+export type PublicProjectListResult = {
+  rows: Array<Record<string, unknown>>;
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
 
 export type ProjectCoreListFilters = {
   tenantId: string;

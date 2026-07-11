@@ -27,38 +27,105 @@ import {
     type ProjectListResult,
     type ProjectMemberCandidateQueryType,
     type ProjectPrimaryAssignee,
+    type PublicProjectListResult,
     type PublicProjectMembers,
     type UpdateProjectInput,
 } from "./shared";
+import {
+    assertPublicProjectInAudience,
+    type PublicProjectAudienceScope,
+} from "./public-audience-scope";
 
-export async function listPublicProjects(this: any): Promise<Array<Record<string, unknown>>> {
-    const now = Date.now();
-    if (this.publicProjectsCache && this.publicProjectsCache.expiresAt > now) {
-        return this.publicProjectsCache.rows;
+export type PublicProjectListServiceInput = {
+    scope: PublicProjectAudienceScope;
+    page: number;
+    pageSize: number;
+};
+
+export function buildPublicProjectListCacheKey(input: {
+    tenantIds: string[];
+    preferredTenantId: string | null;
+    page: number;
+    pageSize: number;
+}): string {
+    return JSON.stringify({
+        tenantIds: [...new Set(input.tenantIds.filter(Boolean))].sort(),
+        preferredTenantId: input.preferredTenantId,
+        page: input.page,
+        pageSize: input.pageSize,
+    });
+}
+
+export async function listPublicProjects(
+    this: any,
+): Promise<Array<Record<string, unknown>>>;
+export async function listPublicProjects(
+    this: any,
+    input: PublicProjectListServiceInput,
+): Promise<PublicProjectListResult>;
+export async function listPublicProjects(
+    this: any,
+    input?: PublicProjectListServiceInput,
+): Promise<Array<Record<string, unknown>> | PublicProjectListResult> {
+    if (!input) {
+        return [];
     }
 
-    if (!this.publicProjectsInFlight) {
-        this.publicProjectsInFlight = projectRepository.listPublicProjects()
-            .then((rows: Array<Record<string, unknown>>) => this.attachPrimaryAssignees(rows))
-            .then((rows: Array<Record<string, unknown>>) => {
-                rows.forEach((row: Record<string, unknown>) => this.seedPublicProjectDetailCache(row));
-                this.publicProjectsCache = {
-                    rows,
-                    expiresAt: Date.now() + PUBLIC_PROJECTS_CACHE_TTL_MS,
-                };
-                return rows;
-            })
-            .finally(() => {
-                this.publicProjectsInFlight = null;
-            });
+    if (input.scope.tenantIds.length === 0) {
+        return createEmptyPublicProjectListResult(input);
     }
 
-    return this.publicProjectsInFlight;
+    const cacheKey = buildPublicProjectListCacheKey({
+        tenantIds: input.scope.tenantIds,
+        preferredTenantId: input.scope.preferredTenantId,
+        page: input.page,
+        pageSize: input.pageSize,
+    });
+    const cached = this.getCachedValue(this.publicProjectListCache, cacheKey);
+    if (cached) {
+        return cached;
+    }
+
+    const inFlight = this.publicProjectListInFlight.get(cacheKey);
+    if (inFlight) {
+        return inFlight;
+    }
+
+    const request = projectRepository.listPublicProjects({
+        tenantIds: input.scope.tenantIds,
+        preferredTenantId: input.scope.preferredTenantId,
+        page: input.page,
+        pageSize: input.pageSize,
+    })
+        .then(async (result: PublicProjectListResult) => {
+            const rows = await this.attachPrimaryAssignees(result.rows);
+            rows.forEach((row: Record<string, unknown>) => this.seedPublicProjectDetailCache(row));
+
+            const value = {
+                rows,
+                pagination: result.pagination,
+            };
+            this.setCachedValue(
+                this.publicProjectListCache,
+                cacheKey,
+                value,
+                PUBLIC_PROJECTS_CACHE_TTL_MS,
+            );
+            return value;
+        })
+        .finally(() => {
+            if (this.publicProjectListInFlight.get(cacheKey) === request) {
+                this.publicProjectListInFlight.delete(cacheKey);
+            }
+        });
+
+    this.publicProjectListInFlight.set(cacheKey, request);
+    return request;
 }
 
 export function invalidatePublicProjectsCache(this: any) {
-    this.publicProjectsCache = null;
-    this.publicProjectsInFlight = null;
+    this.publicProjectListCache.clear();
+    this.publicProjectListInFlight.clear();
 }
 
 export function getCachedValue<T>(this: any,
@@ -227,6 +294,18 @@ export async function getPublicProjectDetail(this: any, projectId: string): Prom
     return request;
 }
 
+export async function getPublicProjectDetailInAudience(this: any, input: {
+    projectId: string;
+    scope: PublicProjectAudienceScope;
+}): Promise<Record<string, unknown>> {
+    const project = await this.getPublicProjectDetail(input.projectId);
+    assertPublicProjectInAudience(
+        input.scope,
+        typeof project.tenant_id === "string" ? project.tenant_id : null,
+    );
+    return project;
+}
+
 export async function listPublicProjectLogs(this: any, projectId: string): Promise<Array<Record<string, unknown>>> {
     await this.getPublicProjectDetail(projectId);
 
@@ -318,7 +397,11 @@ export async function prewarmPublicProjectDetailData(this: any, input?: {
     projects?: Array<Record<string, unknown>>;
     limit?: number;
 }): Promise<void> {
-    const projects: Array<Record<string, unknown>> = input?.projects ?? await this.listPublicProjects();
+    if (!input?.projects) {
+        return;
+    }
+
+    const projects: Array<Record<string, unknown>> = input.projects;
     const projectIds = projects
         .map((item) => typeof item.id === "string" ? item.id : null)
         .filter((item): item is string => Boolean(item))
@@ -333,4 +416,18 @@ export async function prewarmPublicProjectDetailData(this: any, input?: {
             ]);
         }),
     );
+}
+
+function createEmptyPublicProjectListResult(
+    input: PublicProjectListServiceInput,
+): PublicProjectListResult {
+    return {
+        rows: [],
+        pagination: {
+            page: input.page,
+            pageSize: input.pageSize,
+            total: 0,
+            totalPages: 0,
+        },
+    };
 }

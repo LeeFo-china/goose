@@ -156,20 +156,12 @@ export function prewarmEmployeeAuthContext(this: any,
 
 export function prewarmVisitorHomeData(this: any, request: FastifyRequest) {
   this.runAuthBackgroundTask(request, "prewarm_visitor_home_data", async () => {
-    const publicProjectsPromise = projectSer.listPublicProjects();
-    const suggestionsPromise = getDecorationQaSuggestions({
+    await getDecorationQaSuggestions({
       query: {
         scene: "visitor",
         refresh: false,
       },
     });
-    const publicProjects = await publicProjectsPromise;
-    await Promise.allSettled([
-      suggestionsPromise,
-      projectSer.prewarmPublicProjectDetailData({
-        projects: publicProjects,
-      }),
-    ]);
   });
 }
 

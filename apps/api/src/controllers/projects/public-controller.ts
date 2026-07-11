@@ -13,6 +13,15 @@ import { ProjectBaseController } from "./shared";
 const VISITOR_PROJECT_CONSULTATION_ENABLED_KEY =
   "VISITOR_PROJECT_CONSULTATION_ENABLED";
 
+export const PublicProjectsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
+  pageSize: z.coerce.number()
+    .int()
+    .min(1, "每页条数必须大于 0")
+    .max(100, "每页条数不能超过 100")
+    .default(20),
+});
+
 const PublicProjectLogsQuerySchema = z.object({
   page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
   pageSize: z.coerce.number()
@@ -25,11 +34,19 @@ const PublicProjectLogsQuerySchema = z.object({
 class PublicProjectsController extends ProjectBaseController {
   @Get("/front/projects")
   async getPublicProjects(request: FastifyRequest) {
-    const projects = await projectSer.listPublicProjects();
+    const queryResult = PublicProjectsQuerySchema.safeParse(request.query ?? {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const scope = await projectSer.resolvePublicProjectAudienceScope(request.user);
+    const result = await projectSer.listPublicProjects({
+      scope,
+      page: queryResult.data.page,
+      pageSize: queryResult.data.pageSize,
+    });
 
-    return ResponseHandler.success(
-      projects.map((item) => serializeProjectListItem(item)),
-    );
+    return ResponseHandler.success({
+      list: result.rows.map((item) => serializeProjectListItem(item)),
+      pagination: result.pagination,
+    });
   }
 
   @Get("/front/projects/:id/logs")
@@ -43,7 +60,8 @@ class PublicProjectsController extends ProjectBaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const visibilityStartedAt = Date.now();
-    await projectSer.getPublicProjectDetail(projectId);
+    const scope = await projectSer.resolvePublicProjectAudienceScope(request.user);
+    await projectSer.getPublicProjectDetailInAudience({ projectId, scope });
     const visibilityMs = Date.now() - visibilityStartedAt;
 
     const logsStartedAt = Date.now();
@@ -89,7 +107,11 @@ class PublicProjectsController extends ProjectBaseController {
     const projectId = idVerify.data.id;
 
     const detailStartedAt = Date.now();
-    const project = await projectSer.getPublicProjectDetail(projectId);
+    const scope = await projectSer.resolvePublicProjectAudienceScope(request.user);
+    const project = await projectSer.getPublicProjectDetailInAudience({
+      projectId,
+      scope,
+    });
     const detailMs = Date.now() - detailStartedAt;
 
     const tenantId = this.getPublicProjectTenantId(project);

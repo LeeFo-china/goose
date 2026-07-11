@@ -40,6 +40,8 @@ export type {
   ProjectCreateCustomerFilters,
   ProjectCreateEmployeeFilters,
   ProjectCreatePropertyFilters,
+  PublicProjectListQuery,
+  PublicProjectListResult,
 } from "./legacy/shared";
 
 class ProjectRepository {

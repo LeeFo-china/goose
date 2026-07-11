@@ -2,6 +2,7 @@ import {
     type CacheEntry,
     type EmployeeProjectBootstrapBundle,
     type ProjectListResult,
+    type PublicProjectListResult,
     type PublicProjectMembers,
     type StaleCacheEntry,
 } from "./legacy/shared";
@@ -37,11 +38,15 @@ import {
     invalidatePublicProjectCache,
     getRequiredPublicProjectVisibility,
     getPublicProjectDetail,
+    getPublicProjectDetailInAudience,
     listPublicProjectLogs,
     listPublicProjectLogsPage,
     listPublicProjectMembers,
     prewarmPublicProjectDetailData,
 } from "./legacy/public-cache";
+import {
+    resolvePublicProjectAudienceScope,
+} from "./legacy/public-audience-scope";
 import {
     listProjectCreateCustomers,
     listProjectCreateConstructionWorkflows,
@@ -86,11 +91,8 @@ class ProjectService {
         "constructing",
         "acceptance",
     ] as const;
-    private publicProjectsCache: {
-        expiresAt: number;
-        rows: Array<Record<string, unknown>>;
-    } | null = null;
-    private publicProjectsInFlight: Promise<Array<Record<string, unknown>>> | null = null;
+    private publicProjectListCache = new Map<string, CacheEntry<PublicProjectListResult>>();
+    private publicProjectListInFlight = new Map<string, Promise<PublicProjectListResult>>();
     private publicProjectDetailCache = new Map<string, CacheEntry<Record<string, unknown>>>();
     private publicProjectDetailInFlight = new Map<string, Promise<Record<string, unknown>>>();
     private publicProjectLogsCache = new Map<string, CacheEntry<Array<Record<string, unknown>>>>();
@@ -135,6 +137,8 @@ class ProjectService {
     invalidatePublicProjectCache = invalidatePublicProjectCache;
     getRequiredPublicProjectVisibility = getRequiredPublicProjectVisibility;
     getPublicProjectDetail = getPublicProjectDetail;
+    getPublicProjectDetailInAudience = getPublicProjectDetailInAudience;
+    resolvePublicProjectAudienceScope = resolvePublicProjectAudienceScope;
     listPublicProjectLogs = listPublicProjectLogs;
     listPublicProjectLogsPage = listPublicProjectLogsPage;
     listPublicProjectMembers = listPublicProjectMembers;

@@ -16,6 +16,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import {
     projectRepository,
     type EmployeeProjectBootstrapBundle,
+    type PublicProjectListResult,
 } from "@/repositories/projects";
 import {
     workflowRepository,
@@ -117,6 +118,7 @@ export type {
     ProjectCreateSelectPropertyQueryType,
     ProjectMemberCandidateQueryType,
     EmployeeProjectBootstrapBundle,
+    PublicProjectListResult,
     ProjectPrimaryAssignee,
     DepartmentCode,
     ProjectMemberRoleCode,
