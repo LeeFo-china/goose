@@ -37,30 +37,29 @@ describe("platform payment settings panel", () => {
     );
   });
 
-  test("settings tabs use shadcn line-style navigation and header summary", () => {
+  test("settings tabs use shadcn vertical navigation and header summary", () => {
     const tabsSource = readSource("./settings-tabs.tsx");
 
     expect(tabsSource).toContain("CardDescription");
     expect(tabsSource).toContain("groupStatusLabel");
-    expect(tabsSource).toContain("min-w-max justify-start rounded-none border-0 border-b bg-transparent");
+    expect(tabsSource).toContain('orientation="vertical"');
+    expect(tabsSource).toContain('aria-label="系统配置分组"');
+    expect(tabsSource).toContain("lg:grid-cols-[15rem_minmax(0,1fr)]");
     expect(tabsSource).toContain("data-[state=active]:border-primary");
-    expect(tabsSource).toContain(
-      'className="-mx-4 overflow-x-auto overflow-y-hidden px-4"',
-    );
     expect(tabsSource).not.toContain(
-      'className="-mx-4 overflow-x-auto px-4"',
+      "min-w-max justify-start rounded-none border-0 border-b bg-transparent",
     );
-    expect(tabsSource).not.toContain("h-auto w-full justify-start overflow-x-auto md:w-auto");
   });
 
-  test("settings and payment tab scroll containers do not expose vertical scrollbars", () => {
+  test("settings sidebar scrolls vertically while payment tabs only scroll horizontally", () => {
     const settingsTabsSource = readSource("./settings-tabs.tsx");
     const paymentPanelSource = readSource("./platform-payment-settings-panel.tsx");
 
-    for (const source of [settingsTabsSource, paymentPanelSource]) {
-      expect(source).toContain("overflow-x-auto overflow-y-hidden");
-      expect(source).not.toContain('className="-mx-4 overflow-x-auto px-4"');
-    }
+    expect(settingsTabsSource).toContain("lg:overflow-y-auto");
+    expect(paymentPanelSource).toContain("overflow-x-auto overflow-y-hidden");
+    expect(paymentPanelSource).not.toContain(
+      'className="-mx-4 overflow-x-auto px-4"',
+    );
   });
 
   test("payment panel uses shadcn form controls and certificate upload interactions", () => {
