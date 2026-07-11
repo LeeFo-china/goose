@@ -14,7 +14,9 @@ FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
+ARG BUILD_SHA=unknown
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV GOOES_BUILD_SHA=$BUILD_SHA
 
 RUN corepack enable && \
   corepack prepare pnpm@10.33.0 --activate && \
@@ -51,7 +53,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3020
 ENV HOSTNAME=0.0.0.0
 
-COPY --from=builder /app/apps/web/.next/standalone ./
+RUN groupadd --gid 10001 gooes && useradd --uid 10001 --gid 10001 --no-create-home gooes
+
+COPY --from=builder --chown=10001:10001 /app/apps/web/.next/standalone ./
+
+USER 10001:10001
 
 EXPOSE 3020
 

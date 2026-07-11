@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { buildSignedClientIpHeaders } from "./proxy-client-ip";
+
 export const MAX_PUBLIC_BODY_BYTES = 32 * 1024;
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 8_000;
@@ -60,6 +62,10 @@ export async function proxyPublicPost(
   backendPath: string,
   options: ProxyPublicPostOptions = {},
 ): Promise<Response> {
+  const proxySecret = process.env.GOOES_WEB_PROXY_SHARED_SECRET;
+  if (process.env.NODE_ENV === "production" && !proxySecret) {
+    return proxyConfigurationErrorResponse();
+  }
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_PUBLIC_BODY_BYTES) {
     await cancelBody(request.body);
@@ -90,7 +96,7 @@ export async function proxyPublicPost(
   try {
     const backendResponse = await fetch(buildBackendUrl(backendPath), {
       method: "POST",
-      headers: buildPublicHeaders(request, options.visitorDeviceId),
+      headers: buildPublicHeaders(request, options.visitorDeviceId, proxySecret),
       body: toArrayBuffer(requestBody.bytes),
       cache: "no-store",
       redirect: "manual",
@@ -180,6 +186,7 @@ async function readBody(
 function buildPublicHeaders(
   request: Request,
   visitorDeviceId?: string,
+  proxySecret = process.env.GOOES_WEB_PROXY_SHARED_SECRET,
 ): Headers {
   const headers = new Headers();
 
@@ -189,6 +196,13 @@ function buildPublicHeaders(
     if (value) headers.set(headerName, value);
   }
   if (visitorDeviceId) headers.set("x-visitor-device-id", visitorDeviceId);
+  if (proxySecret) {
+    const signedClientIpHeaders = buildSignedClientIpHeaders(
+      request.headers.get("x-real-ip"),
+      proxySecret,
+    );
+    for (const [name, value] of signedClientIpHeaders) headers.set(name, value);
+  }
 
   return headers;
 }
@@ -247,6 +261,17 @@ function backendUnavailableResponse(): Response {
       success: false,
       message: "后端服务未连接，请稍后再试",
       code: "BACKEND_UNAVAILABLE",
+    },
+    { status: 502 },
+  );
+}
+
+function proxyConfigurationErrorResponse(): Response {
+  return NextResponse.json(
+    {
+      success: false,
+      message: "官网代理配置错误，请稍后再试",
+      code: "PROXY_CONFIGURATION_ERROR",
     },
     { status: 502 },
   );

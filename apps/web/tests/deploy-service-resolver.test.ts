@@ -11,7 +11,7 @@ function resolve(
   smoke = "",
 ): ReturnType<typeof Bun.spawnSync> {
   return Bun.spawnSync(
-    ["node", script, service, migration, verifiedSha, smoke, currentSha],
+    ["node", script, "deploy", service, migration, verifiedSha, smoke, currentSha],
     { stderr: "pipe", stdout: "pipe" },
   );
 }
@@ -31,12 +31,6 @@ describe("production deploy service resolver", () => {
     expect(result.stdout?.toString().trim()).toBe("web");
   });
 
-  test("fails closed when web-only evidence is missing", () => {
-    const result = resolve("web");
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr?.toString() ?? "").toContain("Web deployment gate rejected");
-  });
-
   test("rejects mixed web deployments even with valid evidence", () => {
     const result = resolve(
       "api,web",
@@ -52,5 +46,17 @@ describe("production deploy service resolver", () => {
     const result = resolve("api,unknown");
     expect(result.exitCode).toBe(1);
     expect(result.stderr?.toString() ?? "").toContain("Unknown service: unknown");
+  });
+
+  test("normalizes build all, whitespace, duplicates and worker image aliases", () => {
+    const all = Bun.spawnSync(["node", script, "build", "all "]);
+    const selected = Bun.spawnSync([
+      "node",
+      script,
+      "build",
+      "api, admin,,api,cos-reconcile-worker",
+    ]);
+    expect(all.stdout?.toString().trim()).toBe("api admin web social-video-worker");
+    expect(selected.stdout?.toString().trim()).toBe("api admin");
   });
 });

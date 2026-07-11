@@ -15,10 +15,17 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
-    : {
-        command: "pnpm dev",
-        url: baseURL,
-        reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
-      },
+    : [
+        {
+          command: "node e2e/upstream-stub.mjs",
+          url: "http://127.0.0.1:3900",
+          reuseExistingServer: !process.env.CI,
+        },
+        {
+          command: "GOOES_API_BASE_URL=http://127.0.0.1:3900 GOOES_WEB_PROXY_SHARED_SECRET=e2e-shared-secret pnpm dev",
+          url: baseURL,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+        },
+      ],
 });

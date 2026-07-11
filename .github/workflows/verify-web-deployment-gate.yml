@@ -1,0 +1,87 @@
+name: Verify Web Deployment Gate
+run-name: Verify web gate ${{ inputs.target_environment }} ${{ inputs.commit_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Approved deployment environment"
+        required: true
+        type: choice
+        options: [development, production]
+      commit_sha:
+        description: "API commit already deployed and healthy"
+        required: true
+        type: string
+      migration_version:
+        description: "Applied migration version"
+        required: true
+        default: "20260711120000"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    environment: ${{ inputs.target_environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+
+      - name: Verify immutable inputs
+        run: |
+          set -euo pipefail
+          test "${{ inputs.migration_version }}" = "20260711120000"
+          test "$(git rev-parse HEAD)" = "${{ inputs.commit_sha }}"
+          test -f supabase/migrations/20260711120000_reserve_sms_verification_code.sql
+
+      - name: Verify API revision and health
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+          DEV_DEPLOY_HOST: 43.165.126.30
+          DEV_DEPLOY_USER: ubuntu
+          DEV_DEPLOY_KEY_PATH: /home/ubuntu/.ssh/goose-old-us.pem
+        run: |
+          set -euo pipefail
+          if [ "${TARGET_ENVIRONMENT}" = development ]; then
+            ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+              "test \"\$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' gooes-api-dev)\" = '${{ inputs.commit_sha }}'"
+            curl --noproxy '*' -fsS https://api-dev.goodcms.cn/ >/dev/null
+          else
+            test "$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api)" = "${{ inputs.commit_sha }}"
+            curl -fsS https://api.goodcms.cn/ >/dev/null
+          fi
+
+      - name: Run isolated atomic reservation smoke
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISH: ${{ secrets.SUPABASE_PUBLISH }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile --filter @gooes/api... --filter @gooes/domain...
+          cd apps/api
+          bun src/scripts/web-deployment-gate-smoke.ts > ../../web-gate-smoke.json
+
+      - name: Create immutable gate receipt
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg environment "${{ inputs.target_environment }}" \
+            --arg sha "${{ inputs.commit_sha }}" \
+            --arg migration "${{ inputs.migration_version }}" \
+            --slurpfile smoke web-gate-smoke.json \
+            '{conclusion:"success", environment:$environment, commit_sha:$sha, migration_version:$migration} + $smoke[0]' \
+            > web-deployment-gate-receipt.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-deployment-gate-receipt
+          path: web-deployment-gate-receipt.json
+          if-no-files-found: error
+          retention-days: 14

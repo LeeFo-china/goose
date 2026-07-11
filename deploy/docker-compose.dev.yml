@@ -10,6 +10,7 @@ services:
       SERVICE_NAME: gooes-api-dev
       NODE_ENV: ${GOOES_API_NODE_ENV:-production}
       PORT: ${GOOES_API_PORT:-3000}
+      GOOES_WEB_PROXY_SHARED_SECRET: ${GOOES_WEB_PROXY_SHARED_SECRET:?set GOOES_WEB_PROXY_SHARED_SECRET}
     command: ["bun", "src/app.ts"]
     ports:
       - "${GOOES_API_BIND_HOST:-127.0.0.1}:${GOOES_API_HOST_PORT:-13000}:${GOOES_API_PORT:-3000}"
@@ -79,6 +80,8 @@ services:
       PORT: 3020
       HOSTNAME: 0.0.0.0
       GOOES_API_BASE_URL: http://gooes-api-dev:3000
+      GOOES_SITE_ENV: development
+      GOOES_WEB_PROXY_SHARED_SECRET: ${GOOES_WEB_PROXY_SHARED_SECRET:?set GOOES_WEB_PROXY_SHARED_SECRET}
     ports:
       - "127.0.0.1:13020:3020"
     depends_on:
@@ -88,7 +91,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "node -e 'fetch(\"http://127.0.0.1:3020/partners\").then((r) => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))'",
+          "node -e 'fetch(\"http://127.0.0.1:3020/partners\").then((r) => process.exit(r.status === 200 && r.headers.get(\"x-gooes-service\") === \"web\" ? 0 : 1)).catch(() => process.exit(1))'",
         ]
       interval: 30s
       timeout: 5s

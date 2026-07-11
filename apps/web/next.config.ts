@@ -3,11 +3,23 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const appDir = dirname(fileURLToPath(import.meta.url));
+const buildRevision = process.env.GOOES_BUILD_SHA ?? "unknown";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   output: "standalone",
   outputFileTracingRoot: join(appDir, "../.."),
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Gooes-Service", value: "web" },
+          { key: "X-Gooes-Revision", value: buildRevision },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

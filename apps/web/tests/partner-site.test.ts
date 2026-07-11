@@ -279,6 +279,37 @@ describe("city partner public site", () => {
     }
   });
 
+  test("fails closed when the production proxy signing secret is missing", async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalSecret = process.env.GOOES_WEB_PROXY_SHARED_SECRET;
+    const originalFetch = globalThis.fetch;
+    let fetched = false;
+    Reflect.set(process.env, "NODE_ENV", "production");
+    delete process.env.GOOES_WEB_PROXY_SHARED_SECRET;
+    globalThis.fetch = Object.assign(async () => {
+      fetched = true;
+      return new Response();
+    }, { preconnect: originalFetch.preconnect });
+    try {
+      const response = await proxyPublicPost(
+        new Request("https://www.goodcms.cn/api/public/partner-applications", {
+          method: "POST",
+          body: "{}",
+        }),
+        "/public/partner-applications",
+      );
+      expect(response.status).toBe(502);
+      expect(await response.json()).toMatchObject({ code: "PROXY_CONFIGURATION_ERROR" });
+      expect(fetched).toBe(false);
+    } finally {
+      if (originalNodeEnv === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
+      else Reflect.set(process.env, "NODE_ENV", originalNodeEnv);
+      if (originalSecret === undefined) delete process.env.GOOES_WEB_PROXY_SHARED_SECRET;
+      else process.env.GOOES_WEB_PROXY_SHARED_SECRET = originalSecret;
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("normalizes an upstream timeout to the stable 502 response", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = Object.assign(

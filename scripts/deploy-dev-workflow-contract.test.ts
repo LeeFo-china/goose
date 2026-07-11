@@ -43,7 +43,7 @@ describe("deploy-dev workflow", () => {
     expect(gatedDeployStepStart).toBeGreaterThan(checkStepStart);
     expect(gatedCheckStepStart).toBeGreaterThan(gatedDeployStepStart);
     expect(gatedDeployStep).toContain(
-      'REMOTE_GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-web:${IMAGE_TAG}"',
+      'REMOTE_GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-web:${GITHUB_SHA}"',
     );
     expect(
       gatedDeployStep.match(/GOOES_WEB_IMAGE='\$\{REMOTE_GOOES_WEB_IMAGE\}'/g),

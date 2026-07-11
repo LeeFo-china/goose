@@ -25,6 +25,10 @@ on:
         description: "For web only: type API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
         required: false
         type: string
+      gate_run_id:
+        description: "Successful Verify Web Deployment Gate workflow run ID"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -42,32 +46,29 @@ jobs:
   validate-request:
     name: Validate production deployment request
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    outputs:
+      build_services: ${{ steps.resolve.outputs.build_services }}
     env:
       INPUT_MIGRATION_VERSION: ${{ github.event.inputs.migration_version }}
       INPUT_VERIFIED_COMMIT_SHA: ${{ github.event.inputs.verified_commit_sha }}
       INPUT_SMS_SMOKE_CONFIRMATION: ${{ github.event.inputs.sms_smoke_confirmation }}
+      INPUT_GATE_RUN_ID: ${{ github.event.inputs.gate_run_id }}
     steps:
+      - uses: actions/checkout@v4
       - name: Validate service selection and web gate
+        id: resolve
         run: |
           set -euo pipefail
           normalized=",${RELEASE_SERVICE//[[:space:]]/},"
-          if [ "${normalized}" != ",all," ]; then
-            IFS=',' read -ra requested <<< "${RELEASE_SERVICE//[[:space:]]/}"
-            for service in "${requested[@]}"; do
-              case "$service" in
-                api|admin|web|social-video-worker|cos-reconcile-worker|"") ;;
-                *) echo "Unknown service: $service"; exit 1 ;;
-              esac
-            done
-          fi
+          BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${RELEASE_SERVICE}")"
+          test -n "${BUILD_SERVICES}"
+          echo "build_services=${BUILD_SERVICES}" >> "${GITHUB_OUTPUT}"
           if [[ "${normalized}" == *",web,"* ]]; then
             test "${normalized}" = ",web," || {
               echo "Web must be built and deployed separately after API health and SMS smoke evidence."
               exit 1
             }
-            test "${INPUT_MIGRATION_VERSION}" = "20260711120000"
-            test "${INPUT_VERIFIED_COMMIT_SHA}" = "${GITHUB_SHA}"
-            test "${INPUT_SMS_SMOKE_CONFIRMATION}" = "API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
+            [[ "${INPUT_GATE_RUN_ID}" =~ ^[0-9]+$ ]]
           fi
           if [ "${normalized}" = ",all," ]; then
             {
@@ -97,7 +98,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -144,7 +145,7 @@ jobs:
           fi
 
       - name: Ensure Docker daemon
-        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         run: |
           set -euo pipefail
           if ! command -v docker >/dev/null 2>&1; then
@@ -156,7 +157,7 @@ jobs:
           docker version
 
       - name: Check permission boundaries
-        if: ${{ matrix.service == 'api' && (github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), ',api,') || contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,')) }}
+        if: ${{ matrix.service == 'api' && contains(format(' {0} ', needs.validate-request.outputs.build_services), ' api ') }}
         run: |
           set -euo pipefail
           cd "${RUNNER_WORKSPACE}/source"
@@ -169,7 +170,7 @@ jobs:
           fi
 
       - name: Login to Tencent CCR
-        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         env:
           TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
@@ -184,7 +185,7 @@ jobs:
           exit 1
 
       - name: Build and push image
-        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         env:
           IMAGE_REPO: ${{ matrix.image_repo }}
           SERVICE: ${{ matrix.service }}
@@ -254,7 +255,7 @@ jobs:
           docker push "$SHA_IMAGE"
 
       - name: Cleanup build leftovers
-        if: ${{ always() && (github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api')) }}
+        if: ${{ always() && contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         run: |
           set -euo pipefail
           docker container prune -f || true
@@ -271,4 +272,6 @@ jobs:
       migration_version: ${{ github.event.inputs.migration_version }}
       verified_commit_sha: ${{ github.event.inputs.verified_commit_sha }}
       sms_smoke_confirmation: ${{ github.event.inputs.sms_smoke_confirmation }}
+      built_image_sha: ${{ github.sha }}
+      gate_run_id: ${{ github.event.inputs.gate_run_id }}
     secrets: inherit

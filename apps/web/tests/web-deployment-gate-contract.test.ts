@@ -28,9 +28,9 @@ describe("web deployment hard gates", () => {
   test("requires exact dev evidence before the dedicated web deploy step", () => {
     const gate = sliceStep(dev, "Validate gated dev web deployment", "Deploy gated dev web");
     const deploy = sliceStep(dev, "Deploy gated dev web", "Check gated dev web");
-    expect(gate).toContain('test "${INPUT_MIGRATION_VERSION}" = "20260711120000"');
-    expect(gate).toContain('test "${INPUT_VERIFIED_COMMIT_SHA}" = "${GITHUB_SHA}"');
-    expect(gate).toContain('test "${INPUT_SMS_SMOKE_CONFIRMATION}" = "API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"');
+    expect(gate).toContain("Verify Web Deployment Gate");
+    expect(gate).toContain("verify-web-gate-receipt.mjs");
+    expect(gate).toContain('"${GITHUB_SHA}" 20260711120000');
     expect(gate).toContain('test "${INPUT_SERVICE}" = "web"');
     expect(deploy).toContain("gooes-web-dev");
     expect(dev.indexOf("Validate gated dev web deployment")).toBeLessThan(dev.indexOf("Deploy gated dev web"));
@@ -73,7 +73,8 @@ describe("web deployment hard gates", () => {
     const matrix = build.slice(build.indexOf("matrix:"), build.indexOf("steps:", build.indexOf("matrix:")));
     const pull = sliceStep(production, "Pull latest images", "Recreate services");
     expect(matrix).toContain("service: web");
-    expect(build).toContain("github.event.inputs.service == 'all'");
+    expect(build).toContain("resolve-web-deployment.mjs build");
+    expect(build).toContain("needs.validate-request.outputs.build_services");
     expect(pull).toContain("for item in ${DEPLOY_SERVICES}");
     for (const service of ["api", "admin", "social-video-worker", "cos-reconcile-worker"]) {
       expect(pull).toContain(`${service}) compose_services+=`);

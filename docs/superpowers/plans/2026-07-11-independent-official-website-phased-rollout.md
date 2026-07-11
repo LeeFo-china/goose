@@ -422,7 +422,7 @@ test("partner page is indexable and submits through the proxy", async ({ page })
 
 - [ ] **Step 2: 运行 E2E 并确认失败**
 
-Run: `pnpm --dir apps/web test:e2e -- --grep "partner page"`
+Run: `pnpm --dir apps/web test:e2e --grep "partner page"`
 
 Expected: FAIL until Playwright config and SEO files exist.
 
@@ -496,12 +496,23 @@ git commit -m "ci(web): 增加独立官网部署流水线"
 2. 只选择 `api` 部署当前提交 SHA，等待 API container health 和公开 health 通过。
 3. 针对同一提交 SHA 人工执行并记录验证码 smoke：单次发送成功、同 IP 6 路最多
    5 路成功、同 phone 双路和同 device 双路均最多 1 路成功。
-4. 只选择 `web` 手动 dispatch，并填写：
-   `migration_version=20260711120000`、`verified_commit_sha=<当前 GITHUB_SHA>`、
-   `sms_smoke_confirmation=API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED`。
+4. 手动运行 `Verify Web Deployment Gate`，选择受保护 environment，绑定当前提交 SHA
+   和 `migration_version=20260711120000`。该 workflow 验证 API revision/health，直接
+   调用原子 reservation RPC 完成隔离并发 smoke、清理测试 reservation，并上传不可变
+   receipt artifact。随后只选择 `web` 运行 build workflow，填写成功的 `gate_run_id`；
+   deploy workflow 会通过 GitHub API 核对 run conclusion、workflow 名称、SHA 和 receipt。
 5. 任一证据缺失或 SHA 不一致时 Web-only 流水线 fail closed。push 只构建并推送
    Web 镜像，不重建或检查 Web 容器；生产 `all` 继续发布 API、Admin 和 workers，
    同时构建 Web 镜像但从部署集合排除 Web。Web 必须另行执行 gated Web-only 发布。
+   Web 只拉取当前 SHA tag，并核对容器 OCI revision 与公网 service/revision 响应头；
+   任一健康或 smoke 失败自动恢复部署前镜像，回滚 tag 至少保留 7 天。
+
+部署前必须在 API 与 Web 的同一目标环境配置同一个高熵
+`GOOES_WEB_PROXY_SHARED_SECRET`，不得写入仓库或日志。Nginx 在 loopback Web 入口覆盖
+`X-Real-IP`，Next BFF 校验 IP 后生成带时间戳的 HMAC 内部头，API 只接受签名有效且
+未过期的客户端 IP；裸 `X-Forwarded-For` 永不作为限流来源。门禁 workflow 使用隔离的
+phone/device/IP 直接调用原子 reservation RPC，验证多客户端 IP、同 IP 6 路最多 5 路、
+同 phone/device 双路最多 1 路并清理 reservation；真实短信仍只在人工 dev 验收中发送。
 
 失败或回滚时，API 可回滚到 `815d5fca`；新增数据库函数保持不动，不影响旧 API。禁止为了回滚手动在远端 `DROP FUNCTION`。未来如需移除函数，必须新建 forward migration，经 review/apply 后执行。
 
