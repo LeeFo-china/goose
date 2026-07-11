@@ -70,6 +70,32 @@ describe("official website release quality contract", () => {
     expect(findings).not.toContainEqual(expect.objectContaining({ rule: "em-dash" }));
   });
 
+  test("scans only attributes and object properties that JSX makes visible", () => {
+    const findings = scanVisibleCopySource(`
+      const copy = { title: "Scroll to explore", internal: "内部—不渲染" };
+      const unused = { title: "未渲染—对象" };
+      export function Sample() {
+        return <>
+          <Card title="卡片—标题" description="描述—文案" aria-label="忽略—aria" className="忽略—样式" />
+          <img alt="图片—说明" src="/hero—asset.jpg" />
+          <input title="输入—提示" placeholder="占位—文案" name="field—name" value="值—行为" />
+          <p>{copy.title}</p>
+        </>;
+      }
+    `);
+
+    expect(findings.filter((finding) => finding.rule === "em-dash").map((finding) => finding.text))
+      .toEqual(["卡片—标题", "描述—文案", "图片—说明", "输入—提示", "占位—文案"]);
+    expect(findings).toContainEqual(expect.objectContaining({ rule: "scroll-cue" }));
+    expect(findings).toContainEqual(expect.objectContaining({ rule: "placeholder-as-label" }));
+    expect(JSON.stringify(findings)).not.toContain("未渲染—对象");
+    expect(JSON.stringify(findings)).not.toContain("忽略—aria");
+    expect(JSON.stringify(findings)).not.toContain("忽略—样式");
+    expect(JSON.stringify(findings)).not.toContain("hero—asset");
+    expect(JSON.stringify(findings)).not.toContain("field—name");
+    expect(JSON.stringify(findings)).not.toContain("值—行为");
+  });
+
   test("walks every public collection page with pageSize 100", async () => {
     const originalFetch = globalThis.fetch;
     const requested: string[] = [];
@@ -335,6 +361,19 @@ describe("official website release quality contract", () => {
     expect(runner).toContain("computeReleaseQualityDigests");
     expect(checker).toContain("lighthouse-summary.json");
     expect(checker).toContain("computeReleaseQualityDigests");
+    const digest = read("scripts/release-quality-digest.mjs");
+    for (const script of [
+      "sync-standalone-assets.mjs",
+      "run-lighthouse-gate.mjs",
+      "check-lighthouse-summary.mjs",
+      "release-quality-digest.mjs",
+      "check-visible-copy.mjs",
+      "run-playwright-e2e.mjs",
+      "verify-standalone-css.mjs",
+    ]) {
+      expect(digest).toContain(script);
+    }
+    expect(digest).not.toContain("lighthouse-summary.json");
     expect(summary?.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
     expect(summary?.baseUrl).toBe("http://127.0.0.1:3020");
     expect(summary?.sourceDigest).toMatch(/^[a-f0-9]{64}$/u);

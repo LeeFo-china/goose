@@ -12,6 +12,15 @@ const publicRoots = [
 ];
 const ignoredDirectories = new Set(["api", "ui"]);
 const placeholderTags = new Set(["input", "textarea", "Input", "Textarea", "SelectValue"]);
+const intrinsicVisibleAttributes = new Set(["alt", "title", "placeholder"]);
+const componentVisibleProperties = new Set([
+  "title",
+  "description",
+  "label",
+  "emptyText",
+  "heading",
+  "subtitle",
+]);
 const rules = {
   "em-dash": /[—–]/u,
   "scroll-cue": /\bScroll(?:\s+to\s+explore)?\b/iu,
@@ -76,7 +85,7 @@ function collectVariables(sourceFile) {
 function extractVisibleCandidates(sourceFile, variables) {
   const candidates = [];
   const visit = (node) => {
-    if (ts.isJsxElement(node) || ts.isJsxFragment(node)) {
+    if (ts.isJsxElement(node) || ts.isJsxFragment(node) || ts.isJsxSelfClosingElement(node)) {
       collectJsx(node, new Map(), candidates, sourceFile, variables);
       return;
     }
@@ -87,6 +96,13 @@ function extractVisibleCandidates(sourceFile, variables) {
 }
 
 function collectJsx(node, bindings, candidates, sourceFile, variables) {
+  if (ts.isJsxSelfClosingElement(node)) {
+    collectVisibleAttributes(node, bindings, candidates, sourceFile, variables);
+    return;
+  }
+  if (ts.isJsxElement(node)) {
+    collectVisibleAttributes(node.openingElement, bindings, candidates, sourceFile, variables);
+  }
   for (const child of node.children) {
     if (ts.isJsxText(child)) {
       addCandidate(candidates, child.text, child.getStart(sourceFile));
@@ -94,6 +110,24 @@ function collectJsx(node, bindings, candidates, sourceFile, variables) {
       collectExpression(child.expression, bindings, candidates, sourceFile, variables);
     } else if (ts.isJsxElement(child) || ts.isJsxFragment(child)) {
       collectJsx(child, bindings, candidates, sourceFile, variables);
+    } else if (ts.isJsxSelfClosingElement(child)) {
+      collectJsx(child, bindings, candidates, sourceFile, variables);
+    }
+  }
+}
+
+function collectVisibleAttributes(element, bindings, candidates, sourceFile, variables) {
+  const tag = element.tagName.getText(sourceFile);
+  const visibleNames = /^[a-z]/u.test(tag)
+    ? intrinsicVisibleAttributes
+    : componentVisibleProperties;
+  for (const attribute of element.attributes.properties) {
+    if (!ts.isJsxAttribute(attribute) || !visibleNames.has(attribute.name.text)
+      || !attribute.initializer) continue;
+    if (ts.isStringLiteral(attribute.initializer)) {
+      addCandidate(candidates, attribute.initializer.text, attribute.initializer.getStart(sourceFile));
+    } else if (ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression) {
+      collectExpression(attribute.initializer.expression, bindings, candidates, sourceFile, variables);
     }
   }
 }
@@ -118,7 +152,17 @@ function collectExpression(expression, bindings, candidates, sourceFile, variabl
   }
   if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
     const values = bindings.get(node.expression.text)?.get(node.name.text);
-    if (values) for (const value of values) addCandidate(candidates, value.text, value.index);
+    if (values) {
+      for (const value of values) addCandidate(candidates, value.text, value.index);
+      return;
+    }
+    const initializer = variables.get(node.expression.text);
+    const value = initializer && ts.isObjectLiteralExpression(initializer)
+      ? objectPropertyValue(initializer, node.name.text)
+      : null;
+    if (value && (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))) {
+      addCandidate(candidates, value.text, value.getStart(sourceFile));
+    }
     return;
   }
   if (ts.isTemplateExpression(node)) {
@@ -144,9 +188,18 @@ function collectExpression(expression, bindings, candidates, sourceFile, variabl
     collectMapExpression(node, bindings, candidates, sourceFile, variables);
     return;
   }
-  if (ts.isJsxElement(node) || ts.isJsxFragment(node)) {
+  if (ts.isJsxElement(node) || ts.isJsxFragment(node) || ts.isJsxSelfClosingElement(node)) {
     collectJsx(node, bindings, candidates, sourceFile, variables);
   }
+}
+
+function objectPropertyValue(object, propertyName) {
+  for (const property of object.properties) {
+    if (ts.isPropertyAssignment(property) && propertyNameText(property.name) === propertyName) {
+      return unwrapExpression(property.initializer);
+    }
+  }
+  return null;
 }
 
 function collectMapExpression(call, bindings, candidates, sourceFile, variables) {
