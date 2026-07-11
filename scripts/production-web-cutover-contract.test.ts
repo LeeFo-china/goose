@@ -75,9 +75,26 @@ describe("production official website cutover contracts", () => {
 
     expect(rollbackStart).toBeGreaterThanOrEqual(0);
     expect(rollbackEnd).toBeGreaterThan(rollbackStart);
-    expect(rollbackStep).toContain("http://127.0.0.1:3020/partners");
+    expect(rollbackStep).toContain("set -euo pipefail");
+    expect(rollbackStep.indexOf("WEB_ROLLBACK_STATUS=rollback_failed")).toBeLessThan(
+      rollbackStep.indexOf('smoke_rollback_url "/"'),
+    );
+    expect(rollbackStep).toContain('smoke_rollback_url "/"');
+    expect(rollbackStep).toContain('smoke_rollback_url "/partners"');
+    expect(rollbackStep).toContain('smoke_rollback_url "/sitemap.xml"');
+    expect(rollbackStep).toContain(
+      'smoke_rollback_url "${WEB_SMOKE_CONTENT_PATH}"',
+    );
     expect(rollbackStep).toContain('Host: www.goodcms.cn');
+    expect(rollbackStep).toContain("http://127.0.0.1:3020/api/preview");
+    expect(rollbackStep).toContain("^x-gooes-revision: ${WEB_OLD_REVISION}");
+    expect(rollbackStep).toContain("^HTTP/[^ ]+ 303");
+    expect(rollbackStep).toContain("^location: /preview-error");
+    expect(rollbackStep).toContain("^cache-control: no-store");
     expect(rollbackStep).not.toContain("https://www.goodcms.cn/partners");
+    expect(rollbackStep.indexOf("WEB_ROLLBACK_STATUS=success")).toBeGreaterThan(
+      rollbackStep.indexOf("^cache-control: no-store"),
+    );
   });
 
   test("documents a manual, reversible cutover with an observation gate", () => {

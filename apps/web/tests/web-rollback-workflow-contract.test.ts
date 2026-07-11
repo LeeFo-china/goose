@@ -48,6 +48,31 @@ describe("Web rollback workflows", () => {
     );
   });
 
+  test("production rollback repeats the complete pre-cutover loopback smoke", () => {
+    const rollback = step(production, "Roll back production web");
+
+    expect(rollback).toContain("set -euo pipefail");
+    expect(rollback.indexOf("WEB_ROLLBACK_STATUS=rollback_failed")).toBeLessThan(
+      rollback.indexOf('smoke_rollback_url "/"'),
+    );
+    for (const path of [
+      'smoke_rollback_url "/"',
+      'smoke_rollback_url "/partners"',
+      'smoke_rollback_url "/sitemap.xml"',
+      'smoke_rollback_url "${WEB_SMOKE_CONTENT_PATH}"',
+    ]) {
+      expect(rollback).toContain(path);
+    }
+    expect(rollback).toContain("http://127.0.0.1:3020/api/preview");
+    expect(rollback).toContain("x-gooes-revision: ${WEB_OLD_REVISION}");
+    expect(rollback).toContain("^HTTP/[^ ]+ 303");
+    expect(rollback).toContain("^location: /preview-error");
+    expect(rollback).toContain("^cache-control: no-store");
+    expect(rollback.indexOf("WEB_ROLLBACK_STATUS=success")).toBeGreaterThan(
+      rollback.indexOf("^cache-control: no-store"),
+    );
+  });
+
   test.each([dev, production])("reports the final Web revision and tag from container inspection", (workflow) => {
     const summary = step(workflow, workflow === dev ? "Write dev deployment summary" : "Deployment summary");
     expect(summary).toContain("docker inspect");

@@ -368,10 +368,22 @@ jobs:
           done
           test "${health}" = healthy
           test "${revision}" = "${WEB_OLD_REVISION}"
-          headers="$(curl -fsS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
-            --retry 5 --retry-delay 3 http://127.0.0.1:3020/partners)"
-          printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
-          printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}"
+          smoke_rollback_url() {
+            path="$1"
+            headers="$(curl -fsS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+              --retry 5 --retry-delay 3 "http://127.0.0.1:3020${path}")"
+            printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
+            printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}"
+          }
+          smoke_rollback_url "/"
+          smoke_rollback_url "/partners"
+          smoke_rollback_url "/sitemap.xml"
+          smoke_rollback_url "${WEB_SMOKE_CONTENT_PATH}"
+          preview_headers="$(curl -sS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+            "http://127.0.0.1:3020/api/preview")"
+          printf '%s' "${preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303'
+          printf '%s' "${preview_headers}" | grep -iq '^location: /preview-error'
+          printf '%s' "${preview_headers}" | grep -iq '^cache-control: no-store'
           echo "WEB_ROLLBACK_STATUS=success" >> "${GITHUB_ENV}"
           echo "WEB_ROLLED_BACK=true" >> "${GITHUB_ENV}"
           echo "WEB_DEPLOY_STAGE=rolled_back" >> "${GITHUB_ENV}"
