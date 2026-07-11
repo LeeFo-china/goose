@@ -21,6 +21,7 @@ describe("SiteContentController routes", () => {
       { method: "GET", path: "/public/site/articles/:slug" },
       { method: "GET", path: "/public/site/cases" },
       { method: "GET", path: "/public/site/cases/:slug" },
+      { method: "GET", path: "/public/site/cities" },
       { method: "GET", path: "/public/site/cities/:slug" },
       { method: "GET", path: "/platform/site-content" },
       { method: "POST", path: "/platform/site-content" },

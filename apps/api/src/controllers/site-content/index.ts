@@ -45,6 +45,11 @@ class SiteContentController extends PlatformBaseController {
     return this.getPublic("case", request);
   }
 
+  @Get("/public/site/cities")
+  async listPublicCities(request: FastifyRequest, reply: FastifyReply) {
+    return this.listPublic("city", request);
+  }
+
   @Get("/public/site/cities/:slug")
   async getPublicCity(request: FastifyRequest, reply: FastifyReply) {
     return this.getPublic("city", request);
