@@ -53,6 +53,15 @@ describe("city partner public site", () => {
     expect(hero).not.toMatch(/(?:sm|md|lg):grid-cols-3/);
   });
 
+  test("keeps revenue terms as valid definition-list groups", () => {
+    const revenue = readWebFile("components/official-site/partner-revenue.tsx");
+
+    expect(revenue).not.toContain("<Separator");
+    expect(revenue).toMatch(
+      /revenueDetails\.map[\s\S]*?<div[^>]*>[\s\S]*?<dt[\s\S]*?<dd[\s\S]*?<\/div>/,
+    );
+  });
+
   test("provides accessible optional SMS and application submission states", () => {
     const form = [
       "components/official-site/partner-application-form.tsx",

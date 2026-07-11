@@ -124,6 +124,58 @@ describe("public content rendering behavior", () => {
     ).rejects.toThrow("官网内容响应格式无效");
   });
 
+  test("reads the paginated public city collection for sitemap discovery", async () => {
+    const fetcher = async (input: string | URL | Request): Promise<Response> => {
+      expect(String(input)).toContain("/public/site/cities?page=1&pageSize=100");
+      return Response.json({
+        data: {
+          list: [{
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            contentType: "city",
+            slug: "shanghai",
+            title: "上海装修协作服务",
+            summary: "上海城市服务",
+            cover: null,
+            publishedAt: "2026-07-12T08:00:00+08:00",
+            metadata: {
+              administrativeCode: "310000",
+              cityName: "上海",
+              localServiceIntroduction: "为上海装修企业提供项目协作服务。",
+            },
+          }],
+          pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
+        },
+        message: "ok",
+      });
+    };
+
+    const result = await getPublicSiteContentList("city", {
+      page: 1,
+      pageSize: 100,
+      fetcher,
+    });
+
+    expect(result.list[0]?.contentType).toBe("city");
+  });
+
+  test("preserves the upstream requestId on public API failures", async () => {
+    const fetcher = async (): Promise<Response> => Response.json(
+      {
+        success: false,
+        message: "内容服务暂时不可用",
+        code: "SITE_CONTENT_UPSTREAM_ERROR",
+        requestId: "request-sitemap-1",
+      },
+      { status: 503 },
+    );
+
+    await expect(getPublicSiteContentList("article", { fetcher })).rejects.toMatchObject({
+      status: 503,
+      code: "SITE_CONTENT_UPSTREAM_ERROR",
+      requestId: "request-sitemap-1",
+    });
+  });
+
   test("rejects a public detail from the wrong endpoint type", async () => {
     const fetcher = async (): Promise<Response> => Response.json({
       data: {

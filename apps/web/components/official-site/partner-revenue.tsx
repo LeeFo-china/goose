@@ -1,5 +1,3 @@
-import { Separator } from "@/components/ui/separator";
-
 const revenueDetails = [
   {
     label: "收益范围",
@@ -32,17 +30,17 @@ export function PartnerRevenue(): React.JSX.Element {
         </div>
 
         <dl className="flex flex-col rounded-lg border bg-card px-5 sm:px-6">
-          {revenueDetails.map((detail, index) => (
-            <div key={detail.label}>
-              {index > 0 ? <Separator /> : null}
-              <div className="flex flex-col gap-2 py-5 sm:grid sm:grid-cols-[8rem_1fr] sm:gap-5">
-                <dt className="text-sm font-medium text-muted-foreground">
-                  {detail.label}
-                </dt>
-                <dd className="text-sm font-medium leading-6 sm:text-base">
-                  {detail.value}
-                </dd>
-              </div>
+          {revenueDetails.map((detail) => (
+            <div
+              className="flex flex-col gap-2 border-t py-5 first:border-t-0 sm:grid sm:grid-cols-[8rem_1fr] sm:gap-5"
+              key={detail.label}
+            >
+              <dt className="text-sm font-medium text-muted-foreground">
+                {detail.label}
+              </dt>
+              <dd className="text-sm font-medium leading-6 sm:text-base">
+                {detail.value}
+              </dd>
             </div>
           ))}
         </dl>

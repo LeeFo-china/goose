@@ -10,7 +10,7 @@ function read(root: URL, path: string): string {
 }
 
 describe("phase one SEO and standalone deployment", () => {
-  test("publishes only phase one routes with explicit indexability metadata", () => {
+  test("publishes core routes and discovers paginated public content", () => {
     const layout = read(webRoot, "app/layout.tsx");
     const partners = read(webRoot, "app/(marketing)/partners/page.tsx");
     const sitemap = read(webRoot, "app/sitemap.ts");
@@ -20,9 +20,13 @@ describe("phase one SEO and standalone deployment", () => {
     expect(layout).toContain("template:");
     expect(layout).toContain("canonical:");
     expect(partners).toContain("canonical:");
-    expect(sitemap.match(/new URL\(/g)).toHaveLength(2);
-    expect(sitemap).toContain('new URL("/"');
-    expect(sitemap).toContain('new URL("/partners"');
+    for (const path of ["/", "/products", "/solutions", "/about", "/partners", "/articles", "/cases"]) {
+      expect(sitemap).toContain(`"${path}"`);
+    }
+    expect(sitemap).toContain("SITEMAP_PAGE_SIZE = 100");
+    expect(sitemap).toContain("getPublicSiteContentList");
+    expect(sitemap).toContain('city: "cities"');
+    expect(sitemap).toContain("requestId");
     expect(robots).toContain('disallow: ["/api/", "/portal/"]');
   });
 

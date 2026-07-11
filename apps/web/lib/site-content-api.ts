@@ -71,17 +71,19 @@ interface PreviewFetchOptions {
 export class SiteContentApiError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly requestId?: string;
 
-  constructor(status: number, code: string) {
+  constructor(status: number, code: string, requestId?: string) {
     super("官网内容服务暂时不可用");
     this.name = "SiteContentApiError";
     this.status = status;
     this.code = code;
+    this.requestId = requestId;
   }
 }
 
 export async function getPublicSiteContentList(
-  contentType: Exclude<SiteContentType, "city">,
+  contentType: SiteContentType,
   options: PublicListOptions = {},
 ) {
   const page = options.page ?? 1;
@@ -242,6 +244,7 @@ async function parseEnvelope(response: Response) {
     throw new SiteContentApiError(
       response.status,
       errorEnvelope.success ? errorEnvelope.data.code : "SITE_CONTENT_UPSTREAM_ERROR",
+      errorEnvelope.success ? errorEnvelope.data.requestId : undefined,
     );
   }
   const envelope = ApiEnvelopeSchema.safeParse(payload);
