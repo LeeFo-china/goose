@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { bytesToArrayBuffer, readBoundedBody, type BodyReadResult } from "./bounded-body";
 import { buildSignedClientIpHeaders } from "./proxy-client-ip";
 
 export const MAX_PUBLIC_BODY_BYTES = 32 * 1024;
@@ -20,11 +21,6 @@ interface ProxyPublicPostOptions {
   readonly upstreamTimeoutMs?: number;
   readonly visitorDeviceId?: string;
 }
-
-type BodyReadSuccess = { readonly status: "ok"; readonly bytes: Uint8Array };
-type BodyReadResult =
-  | BodyReadSuccess
-  | { readonly status: "too_large" };
 
 export function getBackendBaseUrl(): string {
   return (
@@ -74,7 +70,7 @@ export async function proxyPublicPost(
 
   let requestBody: BodyReadResult;
   try {
-    requestBody = await readBody(request.body, MAX_PUBLIC_BODY_BYTES);
+    requestBody = await readBoundedBody(request.body, MAX_PUBLIC_BODY_BYTES);
   } catch {
     return NextResponse.json(
       {
@@ -97,13 +93,13 @@ export async function proxyPublicPost(
     const backendResponse = await fetch(buildBackendUrl(backendPath), {
       method: "POST",
       headers: buildPublicHeaders(request, options.visitorDeviceId, proxySecret),
-      body: toArrayBuffer(requestBody.bytes),
+      body: bytesToArrayBuffer(requestBody.bytes),
       cache: "no-store",
       redirect: "manual",
       signal: abortController.signal,
     });
 
-    const responseBody = await readBody(
+    const responseBody = await readBoundedBody(
       backendResponse.body,
       undefined,
       abortController.signal,
@@ -113,7 +109,7 @@ export async function proxyPublicPost(
     const contentType = backendResponse.headers.get("content-type");
     if (contentType) responseHeaders.set("content-type", contentType);
 
-    return new NextResponse(toArrayBuffer(responseBody.bytes), {
+    return new NextResponse(bytesToArrayBuffer(responseBody.bytes), {
       status: backendResponse.status,
       headers: responseHeaders,
     });
@@ -122,65 +118,6 @@ export async function proxyPublicPost(
   } finally {
     clearTimeout(timeout);
   }
-}
-
-function readBody(
-  body: ReadableStream<Uint8Array> | null,
-  maxBytes: undefined,
-  signal?: AbortSignal,
-): Promise<BodyReadSuccess>;
-function readBody(
-  body: ReadableStream<Uint8Array> | null,
-  maxBytes: number,
-  signal?: AbortSignal,
-): Promise<BodyReadResult>;
-async function readBody(
-  body: ReadableStream<Uint8Array> | null,
-  maxBytes?: number,
-  signal?: AbortSignal,
-): Promise<BodyReadResult> {
-  if (!body) return { status: "ok", bytes: new Uint8Array() };
-
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  let rejectOnAbort: ((reason?: unknown) => void) | undefined;
-  const aborted = new Promise<never>((_, reject) => {
-    rejectOnAbort = reject;
-  });
-  const handleAbort = () => {
-    rejectOnAbort?.(signal?.reason);
-    void reader.cancel(signal?.reason).catch(() => undefined);
-  };
-  signal?.addEventListener("abort", handleAbort, { once: true });
-
-  try {
-    while (true) {
-      if (signal?.aborted) throw signal.reason;
-      const { done, value } = await (signal
-        ? Promise.race([reader.read(), aborted])
-        : reader.read());
-      if (done) break;
-      byteLength += value.byteLength;
-      if (maxBytes !== undefined && byteLength > maxBytes) {
-        await reader.cancel().catch(() => undefined);
-        return { status: "too_large" };
-      }
-      chunks.push(value);
-    }
-  } finally {
-    signal?.removeEventListener("abort", handleAbort);
-    reader.releaseLock();
-  }
-
-  const bytes = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return { status: "ok", bytes };
 }
 
 function buildPublicHeaders(
@@ -236,12 +173,6 @@ function buildVisitorCookie(request: Request, visitorId: string): string {
 
 async function cancelBody(body: ReadableStream<Uint8Array> | null): Promise<void> {
   await body?.cancel().catch(() => undefined);
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  return copy.buffer;
 }
 
 function payloadTooLargeResponse(): Response {

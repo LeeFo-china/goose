@@ -189,9 +189,15 @@ jobs:
       - name: Pull latest images
         env:
           GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
+          GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
+          GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
+          GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
         run: |
           set -euo pipefail
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
+          test "${#GOOES_PREVIEW_SHARED_SECRET}" -ge 32
+          test "${#GOOES_PREVIEW_SESSION_SECRET}" -ge 32
+          test "${#GOOES_WEB_REVALIDATE_SHARED_SECRET}" -ge 32
           cd "${DEPLOY_DIR}"
           compose_services=()
           for item in ${DEPLOY_SERVICES}; do
@@ -209,9 +215,15 @@ jobs:
       - name: Recreate services
         env:
           GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
+          GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
+          GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
+          GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
         run: |
           set -euo pipefail
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
+          test "${#GOOES_PREVIEW_SHARED_SECRET}" -ge 32
+          test "${#GOOES_PREVIEW_SESSION_SECRET}" -ge 32
+          test "${#GOOES_WEB_REVALIDATE_SHARED_SECRET}" -ge 32
           cd "${DEPLOY_DIR}"
           if [[ " ${DEPLOY_SERVICES} " == *" web "* ]]; then
             echo "WEB_DEPLOY_STAGE=deploying" >> "${GITHUB_ENV}"
@@ -308,9 +320,15 @@ jobs:
         if: ${{ failure() && env.WEB_ROLLBACK_READY == 'true' }}
         env:
           GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
+          GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
+          GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
+          GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
         run: |
           set -euo pipefail
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
+          test "${#GOOES_PREVIEW_SHARED_SECRET}" -ge 32
+          test "${#GOOES_PREVIEW_SESSION_SECRET}" -ge 32
+          test "${#GOOES_WEB_REVALIDATE_SHARED_SECRET}" -ge 32
           echo "WEB_ROLLBACK_STATUS=rollback_failed" >> "${GITHUB_ENV}"
           echo "WEB_DEPLOY_STAGE=rollback_failed" >> "${GITHUB_ENV}"
           cd "${DEPLOY_DIR}"

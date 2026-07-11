@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/preview-error",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "no-store" },
+        ],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Gooes-Service", value: "web" },

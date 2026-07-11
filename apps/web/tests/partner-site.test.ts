@@ -90,6 +90,7 @@ describe("city partner public site", () => {
 
   test("keeps both public proxies bounded, credential-free, and transparent", () => {
     const backend = readWebFile("lib/backend.ts");
+    const boundedBody = readWebFile("lib/bounded-body.ts");
     const applicationProxy = readWebFile(
       "app/api/public/partner-applications/route.ts",
     );
@@ -99,8 +100,8 @@ describe("city partner public site", () => {
     const proxies = `${backend}\n${applicationProxy}\n${sendCodeProxy}`;
 
     expect(backend).toContain("32 * 1024");
-    expect(backend).toContain("getReader()");
-    expect(backend).toContain("reader.cancel()");
+    expect(boundedBody).toContain("getReader()");
+    expect(boundedBody).toContain("reader.cancel()");
     expect(backend).toContain('"accept"');
     expect(backend).toContain('"content-type"');
     expect(backend).toContain('"x-device-id"');
