@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
 import { MARKETING_CTA } from "../components/official-site/marketing-cta";
+import {
+  isSiteNavigationActive,
+  SITE_NAVIGATION,
+} from "../components/official-site/site-navigation";
 
 const root = new URL("../", import.meta.url);
 
@@ -97,10 +101,38 @@ describe("official website marketing pages", () => {
   });
 
   test("keeps core navigation available on desktop and mobile", () => {
-    const navigation = `${read("components/official-site/site-header.tsx")}\n${read("components/official-site/mobile-navigation.tsx")}`;
+    const header = read("components/official-site/site-header.tsx");
+    const desktop = read("components/official-site/desktop-navigation.tsx");
+    const mobile = read("components/official-site/mobile-navigation.tsx");
 
-    for (const route of ["/products", "/solutions", "/cases", "/partners", "/about"]) {
-      expect(navigation).toContain(`href="${route}"`);
+    expect(header).toContain("<DesktopNavigation />");
+    expect(header).not.toContain("usePathname");
+    for (const source of [desktop, mobile]) {
+      expect(source).toContain("usePathname");
+      expect(source).toContain("SITE_NAVIGATION.map");
+      expect(source).toContain("isSiteNavigationActive(pathname, item.href)");
+      expect(source).toContain('aria-current={isActive ? "page" : undefined}');
+      expect(source).toContain('variant={isActive ? "secondary" : "ghost"}');
     }
+  });
+
+  test("matches the home route exactly and sections through their child paths", () => {
+    expect(isSiteNavigationActive("/", "/")).toBe(true);
+    expect(isSiteNavigationActive("/products", "/")).toBe(false);
+    expect(isSiteNavigationActive("/cases", "/cases")).toBe(true);
+    expect(isSiteNavigationActive("/cases/apartment-renovation", "/cases")).toBe(true);
+    expect(isSiteNavigationActive("/solutions", "/solutions")).toBe(true);
+    expect(isSiteNavigationActive("/solutions-extra", "/solutions")).toBe(false);
+  });
+
+  test("defines one shared route list with a distinct mobile home label", () => {
+    expect(SITE_NAVIGATION).toEqual([
+      { href: "/", label: "首页", mobileLabel: "返回首页" },
+      { href: "/products", label: "产品" },
+      { href: "/solutions", label: "解决方案" },
+      { href: "/cases", label: "案例" },
+      { href: "/partners", label: "城市合伙人" },
+      { href: "/about", label: "关于我们" },
+    ]);
   });
 });

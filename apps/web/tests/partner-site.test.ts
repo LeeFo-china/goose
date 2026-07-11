@@ -517,22 +517,23 @@ describe("city partner public site", () => {
   });
 
   test("keeps every live marketing route in desktop and mobile navigation", () => {
+    const navigationConfig = readWebFile(
+      "components/official-site/site-navigation.ts",
+    );
     const desktopNavigation = readWebFile(
-      "components/official-site/site-header.tsx",
+      "components/official-site/desktop-navigation.tsx",
     );
     const mobileNavigation = readWebFile(
       "components/official-site/mobile-navigation.tsx",
     );
 
     for (const route of ["products", "solutions", "cases", "partners", "about"]) {
-      expect(desktopNavigation).toContain(`href="/${route}"`);
-      expect(mobileNavigation).toContain(`href="/${route}"`);
+      expect(navigationConfig).toContain(`href: "/${route}"`);
     }
-    expect(desktopNavigation).toContain("城市合伙人");
-    expect(mobileNavigation).toContain("城市合伙人");
-    expect(`${desktopNavigation}\n${mobileNavigation}`).not.toContain(
-      'href="/articles"',
-    );
+    expect(navigationConfig).toContain("城市合伙人");
+    expect(desktopNavigation).toContain("SITE_NAVIGATION.map");
+    expect(mobileNavigation).toContain("SITE_NAVIGATION.map");
+    expect(navigationConfig).not.toContain('href: "/articles"');
   });
 
   test("documents verified asset dimensions, cropping, and unresolved rights", () => {

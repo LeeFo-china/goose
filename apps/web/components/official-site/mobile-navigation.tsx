@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +14,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+import {
+  isSiteNavigationActive,
+  SITE_NAVIGATION,
+} from "./site-navigation";
+
 export function MobileNavigation(): React.JSX.Element {
+  const pathname = usePathname();
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -27,28 +35,18 @@ export function MobileNavigation(): React.JSX.Element {
           <DialogDescription>访问鹅班长官网公开页面。</DialogDescription>
         </DialogHeader>
         <nav aria-label="移动端导航" className="flex flex-col gap-2">
-          <DialogClose asChild>
-            <Button asChild variant="ghost">
-              <Link href="/">返回首页</Link>
-            </Button>
-          </DialogClose>
-          <DialogClose asChild>
-            <Button asChild variant="ghost"><Link href="/products">产品</Link></Button>
-          </DialogClose>
-          <DialogClose asChild>
-            <Button asChild variant="ghost"><Link href="/solutions">解决方案</Link></Button>
-          </DialogClose>
-          <DialogClose asChild>
-            <Button asChild variant="ghost"><Link href="/cases">案例</Link></Button>
-          </DialogClose>
-          <DialogClose asChild>
-            <Button asChild variant="ghost">
-              <Link href="/partners">城市合伙人</Link>
-            </Button>
-          </DialogClose>
-          <DialogClose asChild>
-            <Button asChild variant="ghost"><Link href="/about">关于我们</Link></Button>
-          </DialogClose>
+          {SITE_NAVIGATION.map((item) => {
+            const isActive = isSiteNavigationActive(pathname, item.href);
+            return (
+              <DialogClose asChild key={item.href}>
+                <Button asChild variant={isActive ? "secondary" : "ghost"}>
+                  <Link aria-current={isActive ? "page" : undefined} href={item.href}>
+                    {item.mobileLabel ?? item.label}
+                  </Link>
+                </Button>
+              </DialogClose>
+            );
+          })}
         </nav>
       </DialogContent>
     </Dialog>

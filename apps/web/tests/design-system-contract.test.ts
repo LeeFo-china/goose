@@ -292,17 +292,22 @@ describe("official website design system contract", () => {
 
   test("uses a compact single-line desktop header and accessible Dialog mobile nav", () => {
     const header = read("components/official-site/site-header.tsx");
+    const desktopNavigation = read(
+      "components/official-site/desktop-navigation.tsx",
+    );
     const mobileNavigation = read(
       "components/official-site/mobile-navigation.tsx",
     );
 
     expect(header).toMatch(/h-(?:16|18)|max-h-18/);
-    expect(header).toContain("whitespace-nowrap");
+    expect(header).toContain("DesktopNavigation");
+    expect(desktopNavigation).toContain("whitespace-nowrap");
     expect(mobileNavigation).toContain("Dialog");
     expect(mobileNavigation).toContain("DialogTitle");
     expect(mobileNavigation).toContain("DialogTrigger");
     expect(mobileNavigation).toContain("asChild");
     expect(header).not.toMatch(/h-screen|z-\[|z-\d+/);
+    expect(desktopNavigation).not.toMatch(/h-screen|z-\[|z-\d+/);
     expect(mobileNavigation).not.toMatch(/h-screen|z-\[|z-\d+/);
   });
 
