@@ -18,10 +18,11 @@ describe("Web rollback workflows", () => {
     expect(workflow).toContain("x-gooes-revision: ${WEB_OLD_REVISION}");
   });
 
-  test.each([dev, production])("keeps one rollback tag after successful deployment", (workflow) => {
-    expect(workflow).toContain("Prune old successful");
-    expect(workflow).toContain("awk '/^gooes-web:rollback-/'");
-    expect(workflow).toContain("tail -n +2");
+  test.each([dev, production])("keeps rollback tags for at least seven days", (workflow) => {
+    expect(workflow).toContain("ROLLBACK_CREATED_AT");
+    expect(workflow).toContain("WEB_ROLLBACK_TAG");
+    expect(workflow).toContain("cleanup-web-rollback-images.sh");
+    expect(workflow).toContain("WEB_ROLLBACK_CLEANUP_STATUS=warning");
     expect(workflow).not.toContain("docker image prune -a");
   });
 });

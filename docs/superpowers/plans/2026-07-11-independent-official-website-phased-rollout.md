@@ -398,6 +398,7 @@ git commit -m "feat(web): 迁移城市合伙人公开页面"
 - Create: `apps/web/playwright.config.ts`
 - Create: `apps/web/e2e/partner-application.spec.ts`
 - Create: `apps/web/scripts/{sync-standalone-assets.mjs,verify-standalone-css.mjs}`
+- Create: `scripts/cleanup-web-rollback-images.sh`
 - Create: `docker/web.Dockerfile`
 - Create: `deploy/docker-compose.web.yml`
 - Create: `deploy/nginx/gooes-web-dev.conf`
@@ -454,6 +455,8 @@ gooes-web-dev:
 在三个 workflow 的 service 校验、matrix、compose 映射、健康检查和域名 smoke 中增加 `web`。dev 受影响路径增加 `apps/web/**`、`docker/web.Dockerfile`；生产 smoke 使用 `https://www.goodcms.cn/partners`，dev smoke 使用 `https://www-dev.goodcms.cn/partners`。
 
 `deploy/nginx/gooes-web-dev.conf` 固定代理 `www-dev.goodcms.cn` 到 `127.0.0.1:13020`，转发 `Host`、`X-Real-IP`、`X-Forwarded-For` 和 `X-Forwarded-Proto`，并为 `/_next/static/` 设置 immutable 缓存。安装到服务器前先备份 `/etc/nginx/sites-enabled/reverse-proxy`，执行 `nginx -t` 后才 reload。
+
+Web 部署前的回滚 tag 必须写入创建时 epoch，并在 dev/prod workflow 间使用同一清理 helper。成功部署后只删除明确超过 7 天且未被当前 Web 容器使用的新版回滚 tag；7 天边界、旧格式和畸形 tag 一律保留并记录 skip。清理失败只在部署摘要中警告，不得把已经验证成功的部署改判为失败。
 
 - [ ] **Step 6: 本地验证**
 

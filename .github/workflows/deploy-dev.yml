@@ -601,14 +601,17 @@ jobs:
             "docker inspect -f '{{.Image}}' gooes-web-dev 2>/dev/null || true")"
           echo "WEB_ROLLBACK_STATUS=not_available" >> "${GITHUB_ENV}"
           if [ -n "${old_image_id}" ]; then
+            ROLLBACK_CREATED_AT="$(date +%s)"
+            WEB_ROLLBACK_TAG="gooes-web:rollback-${GITHUB_RUN_ID}-${ROLLBACK_CREATED_AT}"
             old_revision="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
               "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
               "docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' gooes-web-dev")"
             [[ "${old_revision}" =~ ^[a-f0-9]{40}$ ]]
             ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
               "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-              "docker tag '${old_image_id}' 'gooes-web:rollback-${GITHUB_RUN_ID}'"
+              "docker tag '${old_image_id}' '${WEB_ROLLBACK_TAG}'"
             echo "WEB_ROLLBACK_READY=true" >> "${GITHUB_ENV}"
+            echo "WEB_ROLLBACK_TAG=${WEB_ROLLBACK_TAG}" >> "${GITHUB_ENV}"
             echo "WEB_OLD_REVISION=${old_revision}" >> "${GITHUB_ENV}"
             echo "WEB_ROLLBACK_STATUS=available" >> "${GITHUB_ENV}"
           fi
@@ -660,7 +663,7 @@ jobs:
             "set -euo pipefail
              cd '${DEV_DEPLOY_DIR}'
              export GOOES_WEB_PROXY_SHARED_SECRET=\$(printf '%s' '${PROXY_SECRET_BASE64}' | base64 -d)
-             GOOES_WEB_IMAGE='gooes-web:rollback-${GITHUB_RUN_ID}' \
+             GOOES_WEB_IMAGE='${WEB_ROLLBACK_TAG}' \
              docker compose -f docker-compose.web-dev.yml up -d --no-deps --force-recreate gooes-web-dev"
           ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
@@ -678,15 +681,19 @@ jobs:
           echo "WEB_ROLLBACK_STATUS=success" >> "${GITHUB_ENV}"
           echo "WEB_ROLLED_BACK=true" >> "${GITHUB_ENV}"
 
-      - name: Prune old successful dev web rollback tags
+      - name: Clean up expired dev web rollback tags
         if: ${{ success() && env.WEB_DEPLOY_APPROVED == 'true' }}
         run: |
           set -euo pipefail
-          ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
+          if ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-            "docker images --format '{{.Repository}}:{{.Tag}}' \
-             | awk '/^gooes-web:rollback-/' | sort -r | tail -n +2 \
-             | xargs -r docker rmi"
+            "WEB_CONTAINER_NAME=gooes-web-dev bash -s" \
+            < "${RUNNER_WORKSPACE}/source/scripts/cleanup-web-rollback-images.sh"; then
+            echo "WEB_ROLLBACK_CLEANUP_STATUS=success" >> "${GITHUB_ENV}"
+          else
+            echo "::warning::Failed to clean expired dev Web rollback tags; deployment remains successful."
+            echo "WEB_ROLLBACK_CLEANUP_STATUS=warning" >> "${GITHUB_ENV}"
+          fi
 
       - name: Cleanup dev server Docker artifacts
         if: ${{ always() }}
@@ -749,6 +756,7 @@ jobs:
             echo "| Build services | \`${BUILD_SERVICES:-none}\` |"
             echo "| Automatic deploy services | \`${DEPLOY_SERVICES:-none}\` |"
             echo "| Web rollback status | ${WEB_ROLLBACK_STATUS:-not_requested} |"
+            echo "| Web rollback cleanup | ${WEB_ROLLBACK_CLEANUP_STATUS:-not_run} |"
             echo "| Duration | ${elapsed_seconds}s |"
             echo ""
             echo "### Service status"
