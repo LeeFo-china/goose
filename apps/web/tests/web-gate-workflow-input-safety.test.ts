@@ -5,6 +5,13 @@ const repositoryRoot = new URL("../../../", import.meta.url);
 const workflowPath = new URL(".github/workflows/verify-web-deployment-gate.yml", repositoryRoot);
 const validator = new URL("scripts/validate-web-gate-inputs.mjs", repositoryRoot).pathname;
 
+function namedStep(workflow: string, name: string): string {
+  const start = workflow.indexOf(`- name: ${name}`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const next = workflow.indexOf("\n      - name:", start + 1);
+  return workflow.slice(start, next < 0 ? undefined : next);
+}
+
 describe("web gate workflow input safety", () => {
   test("never interpolates workflow inputs directly into a run block", () => {
     const lines = readFileSync(workflowPath, "utf8").split("\n");
@@ -33,5 +40,42 @@ describe("web gate workflow input safety", () => {
     ]) {
       expect(Bun.spawnSync(["node", validator, ...args]).exitCode).toBe(1);
     }
+  });
+
+  test("exposes the proxy secret only to steps that run compose or the signed probe", () => {
+    const gate = readFileSync(workflowPath, "utf8");
+    const production = readFileSync(
+      new URL(".github/workflows/deploy-docker-services.yml", repositoryRoot),
+      "utf8",
+    );
+    const development = readFileSync(
+      new URL(".github/workflows/deploy-dev.yml", repositoryRoot),
+      "utf8",
+    );
+
+    expect(gate.slice(gate.indexOf("  verify:"), gate.indexOf("    steps:"))).not.toContain(
+      "GOOES_WEB_PROXY_SHARED_SECRET",
+    );
+    expect(production.slice(production.indexOf("  deploy:"), production.indexOf("    steps:"))).not.toContain(
+      "GOOES_WEB_PROXY_SHARED_SECRET",
+    );
+    expect(namedStep(gate, "Verify API revision and health")).toContain(
+      "GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}",
+    );
+    expect(namedStep(gate, "Run isolated atomic reservation smoke")).not.toContain(
+      "GOOES_WEB_PROXY_SHARED_SECRET",
+    );
+    expect(namedStep(production, "Pull latest images")).toContain(
+      "GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}",
+    );
+    expect(namedStep(production, "Recreate services")).toContain(
+      "GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}",
+    );
+    expect(namedStep(production, "Roll back production web")).toContain(
+      "GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}",
+    );
+    expect(namedStep(development, "Deploy dev services")).toContain(
+      "GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}",
+    );
   });
 });

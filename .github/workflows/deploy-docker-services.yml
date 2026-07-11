@@ -52,8 +52,6 @@ jobs:
   deploy:
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
     environment: production
-    env:
-      GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
 
     steps:
       - name: Guard production runner
@@ -61,7 +59,6 @@ jobs:
           set -euo pipefail
           test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
           test -d "${DEPLOY_DIR}"
-          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
 
       - name: Checkout compose files
         env:
@@ -187,8 +184,11 @@ jobs:
           exit 1
 
       - name: Pull latest images
+        env:
+          GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
         run: |
           set -euo pipefail
+          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           cd "${DEPLOY_DIR}"
           compose_services=()
           for item in ${DEPLOY_SERVICES}; do
@@ -204,8 +204,11 @@ jobs:
           docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers pull ${services}
 
       - name: Recreate services
+        env:
+          GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
         run: |
           set -euo pipefail
+          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           cd "${DEPLOY_DIR}"
           if [[ " ${DEPLOY_SERVICES} " == *" web "* ]]; then
             old_image_id="$(docker inspect -f '{{.Image}}' gooes-web 2>/dev/null || true)"
@@ -298,8 +301,11 @@ jobs:
 
       - name: Roll back production web
         if: ${{ failure() && env.WEB_ROLLBACK_READY == 'true' }}
+        env:
+          GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
         run: |
           set -euo pipefail
+          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           echo "WEB_ROLLBACK_STATUS=rollback_failed" >> "${GITHUB_ENV}"
           cd "${DEPLOY_DIR}"
           GOOES_WEB_IMAGE="${WEB_ROLLBACK_TAG}" \
@@ -337,7 +343,17 @@ jobs:
           cd "${DEPLOY_DIR}"
           echo "Deployed services: ${DEPLOY_SERVICES:-none}" >> "${GITHUB_STEP_SUMMARY}"
           echo "Web rollback status: ${WEB_ROLLBACK_STATUS:-not_requested}" >> "${GITHUB_STEP_SUMMARY}"
-          echo "Web rollback cleanup: ${WEB_ROLLBACK_CLEANUP_STATUS:-not_run}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Web rollback cleanup (>168h / 7 days): ${WEB_ROLLBACK_CLEANUP_STATUS:-not_run}" >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${DEPLOY_SERVICES:-}" = "web" ]; then
+            web_revision="${SOURCE_SHA}"
+            web_tag="${GOOES_WEB_IMAGE}"
+            if [ "${WEB_ROLLBACK_STATUS:-}" = "success" ]; then
+              web_revision="${WEB_OLD_REVISION}"
+              web_tag="${WEB_ROLLBACK_TAG}"
+            fi
+            echo "Web final revision: ${web_revision}" >> "${GITHUB_STEP_SUMMARY}"
+            echo "Web final tag: ${web_tag}" >> "${GITHUB_STEP_SUMMARY}"
+          fi
           if [ "${RELEASE_SERVICE//[[:space:]]/}" = "all" ]; then
             echo "Web was not deployed; the build workflow still builds its image. Use a gated web-only request." >> "${GITHUB_STEP_SUMMARY}"
           fi

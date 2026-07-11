@@ -11,7 +11,10 @@ import {
 import { platformPartnerApplicationsService } from "@/services/platform-partner-applications";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import { resolveTrustedClientIp } from "@/utils/trusted-proxy-client-ip";
+import {
+  resolveRequiredTrustedClientIp,
+  resolveTrustedClientIp,
+} from "@/utils/trusted-proxy-client-ip";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 
@@ -61,7 +64,7 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
   @Post("/public/partner-applications/proxy-ip-check")
   async checkPublicProxyIp(request: FastifyRequest, reply: FastifyReply) {
     return ResponseHandler.success({
-      client_ip: resolveTrustedClientIp(request),
+      client_ip: resolveRequiredTrustedClientIp(request),
     });
   }
 

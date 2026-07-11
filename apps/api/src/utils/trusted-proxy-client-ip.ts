@@ -12,6 +12,14 @@ interface RequestLike {
   readonly ip?: string;
 }
 
+function invalidInternalClientIpSignature() {
+  return Errors.business(
+    400,
+    "内部客户端 IP 签名无效",
+    "INVALID_INTERNAL_CLIENT_IP_SIGNATURE",
+  );
+}
+
 function firstHeader(headers: Record<string, HeaderValue>, name: string): string {
   const value = headers[name];
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
@@ -54,13 +62,15 @@ export function resolveTrustedClientIp(
   const hasInternalHeaders = internalHeaderNames.some((name) => name in request.headers);
   if (!hasInternalHeaders) return request.ip ?? null;
 
+  return resolveRequiredTrustedClientIp(request, secret, now);
+}
+
+export function resolveRequiredTrustedClientIp(
+  request: RequestLike,
+  secret = process.env.GOOES_WEB_PROXY_SHARED_SECRET,
+  now = Date.now(),
+): string {
   const verifiedIp = verifySignedClientIp(request.headers, secret, now);
-  if (!verifiedIp) {
-    throw Errors.business(
-      400,
-      "内部客户端 IP 签名无效",
-      "INVALID_INTERNAL_CLIENT_IP_SIGNATURE",
-    );
-  }
+  if (!verifiedIp) throw invalidInternalClientIpSignature();
   return verifiedIp;
 }

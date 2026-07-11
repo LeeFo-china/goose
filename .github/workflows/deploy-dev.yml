@@ -656,6 +656,7 @@ jobs:
           GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
         run: |
           set -euo pipefail
+          echo "WEB_ROLLBACK_STATUS=rollback_failed" >> "${GITHUB_ENV}"
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           PROXY_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_PROXY_SHARED_SECRET}" | base64 -w0)"
           ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
@@ -756,7 +757,7 @@ jobs:
             echo "| Build services | \`${BUILD_SERVICES:-none}\` |"
             echo "| Automatic deploy services | \`${DEPLOY_SERVICES:-none}\` |"
             echo "| Web rollback status | ${WEB_ROLLBACK_STATUS:-not_requested} |"
-            echo "| Web rollback cleanup | ${WEB_ROLLBACK_CLEANUP_STATUS:-not_run} |"
+            echo "| Web rollback cleanup (>168h / 7 days) | ${WEB_ROLLBACK_CLEANUP_STATUS:-not_run} |"
             echo "| Duration | ${elapsed_seconds}s |"
             echo ""
             echo "### Service status"
@@ -812,9 +813,14 @@ jobs:
 
           if [ "${WEB_DEPLOY_APPROVED:-}" = "true" ]; then
             image="${TENCENT_CCR_REGISTRY}/${namespace}/goose-web:${GITHUB_SHA}"
+            revision="${GITHUB_SHA}"
+            if [ "${WEB_ROLLBACK_STATUS:-}" = "success" ]; then
+              image="${WEB_ROLLBACK_TAG}"
+              revision="${WEB_OLD_REVISION}"
+            fi
             runtime_status="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
               -o StrictHostKeyChecking=no \
               "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
               "docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true" | xargs || true)"
-            echo "| web | gooes-web-dev | \`${image}\` | ${runtime_status:-not found} |" >> "${GITHUB_STEP_SUMMARY}"
+            echo "| web | gooes-web-dev | \`${image}\` (revision \`${revision}\`) | ${runtime_status:-not found} |" >> "${GITHUB_STEP_SUMMARY}"
           fi

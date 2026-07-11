@@ -30,7 +30,6 @@ jobs:
       GATE_ENVIRONMENT: ${{ inputs.target_environment }}
       GATE_COMMIT_SHA: ${{ inputs.commit_sha }}
       GATE_MIGRATION_VERSION: ${{ inputs.migration_version }}
-      GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,7 +41,6 @@ jobs:
           node scripts/validate-web-gate-inputs.mjs \
             "${GATE_ENVIRONMENT}" "${GATE_COMMIT_SHA}" "${GATE_MIGRATION_VERSION}"
           test "$(git rev-parse HEAD)" = "${GATE_COMMIT_SHA}"
-          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           test -f supabase/migrations/20260711120000_reserve_sms_verification_code.sql
 
       - name: Verify Local and Remote migration history
@@ -63,11 +61,13 @@ jobs:
 
       - name: Verify API revision and health
         env:
+          GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
           DEV_DEPLOY_HOST: 43.165.126.30
           DEV_DEPLOY_USER: ubuntu
           DEV_DEPLOY_KEY_PATH: /home/ubuntu/.ssh/goose-old-us.pem
         run: |
           set -euo pipefail
+          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           expected_secret_hash="$(printf '%s\n' "${GOOES_WEB_PROXY_SHARED_SECRET}" | sha256sum | awk '{print $1}')"
           case "${GATE_ENVIRONMENT}" in
           development)
