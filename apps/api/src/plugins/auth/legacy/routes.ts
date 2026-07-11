@@ -42,6 +42,7 @@ export function isPublicRoute(method: string, url: string) {
     method === "POST" &&
     (
       url === "/public/partner-applications" ||
+      url === "/public/partner-applications/proxy-ip-check" ||
       url === "/public/partner-applications/send-code"
     )
   ) {

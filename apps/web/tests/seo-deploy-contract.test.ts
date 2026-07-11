@@ -76,6 +76,7 @@ describe("phase one SEO and standalone deployment", () => {
     const dev = read(repositoryRoot, ".github/workflows/deploy-dev.yml");
     const build = read(repositoryRoot, ".github/workflows/build-docker-images.yml");
     const deploy = read(repositoryRoot, ".github/workflows/deploy-docker-services.yml");
+    const gate = read(repositoryRoot, ".github/workflows/verify-web-deployment-gate.yml");
     const workflows = `${dev}\n${build}\n${deploy}`;
     expect(dev).toContain('"apps/web/**"');
     expect(dev).toContain('"docker/web.Dockerfile"');
@@ -85,8 +86,9 @@ describe("phase one SEO and standalone deployment", () => {
     expect(deploy).toContain("gooes-web");
     expect(deploy).toContain("https://www.goodcms.cn/partners");
     expect(workflows).toContain("Unknown service");
-    expect(dev).toContain("migration_version");
-    expect(dev).toContain("verified_commit_sha");
-    expect(dev).toContain("API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED");
+    expect(dev).toContain("gate_run_id");
+    expect(build).toContain("gate_run_id");
+    expect(deploy).toContain("gate_run_id");
+    expect(gate).toContain("migration_version");
   });
 });

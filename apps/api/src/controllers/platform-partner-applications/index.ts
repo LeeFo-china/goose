@@ -58,6 +58,13 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Post("/public/partner-applications/proxy-ip-check")
+  async checkPublicProxyIp(request: FastifyRequest, reply: FastifyReply) {
+    return ResponseHandler.success({
+      client_ip: resolveTrustedClientIp(request),
+    });
+  }
+
   private createPublicApplicationValidationError(error: z.ZodError) {
     const field = error.issues[0]?.path[0];
     if (field === "phone") {

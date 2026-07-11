@@ -13,18 +13,6 @@ on:
         required: true
         default: all
         type: string
-      migration_version:
-        description: "For web only: applied migration version"
-        required: false
-        type: string
-      verified_commit_sha:
-        description: "For web only: API health and SMS smoke commit SHA"
-        required: false
-        type: string
-      sms_smoke_confirmation:
-        description: "For web only: type API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
-        required: false
-        type: string
       gate_run_id:
         description: "Successful Verify Web Deployment Gate workflow run ID"
         required: false
@@ -50,9 +38,6 @@ jobs:
     outputs:
       build_services: ${{ steps.resolve.outputs.build_services }}
     env:
-      INPUT_MIGRATION_VERSION: ${{ github.event.inputs.migration_version }}
-      INPUT_VERIFIED_COMMIT_SHA: ${{ github.event.inputs.verified_commit_sha }}
-      INPUT_SMS_SMOKE_CONFIRMATION: ${{ github.event.inputs.sms_smoke_confirmation }}
       INPUT_GATE_RUN_ID: ${{ github.event.inputs.gate_run_id }}
     steps:
       - uses: actions/checkout@v4
@@ -270,9 +255,6 @@ jobs:
     uses: ./.github/workflows/deploy-docker-services.yml
     with:
       service: ${{ github.event.inputs.service || 'all' }}
-      migration_version: ${{ github.event.inputs.migration_version }}
-      verified_commit_sha: ${{ github.event.inputs.verified_commit_sha }}
-      sms_smoke_confirmation: ${{ github.event.inputs.sms_smoke_confirmation }}
       built_image_sha: ${{ github.sha }}
       gate_run_id: ${{ github.event.inputs.gate_run_id }}
     secrets: inherit

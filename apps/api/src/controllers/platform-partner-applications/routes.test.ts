@@ -19,6 +19,7 @@ describe("PlatformPartnerApplicationsController routes", () => {
     expect(routes).toEqual([
       { method: "POST", path: "/public/partner-applications/send-code" },
       { method: "POST", path: "/public/partner-applications" },
+      { method: "POST", path: "/public/partner-applications/proxy-ip-check" },
       { method: "GET", path: "/platform/partner-applications" },
       { method: "GET", path: "/platform/partner-applications/:id" },
       { method: "PATCH", path: "/platform/partner-applications/:id/status" },

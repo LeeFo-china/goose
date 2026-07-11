@@ -29,4 +29,14 @@ describe("trusted Web proxy client IP", () => {
   test("falls back to Fastify request IP instead of trusting raw forwarding headers", () => {
     expect(resolveTrustedClientIp({ ip: "127.0.0.1", headers: { "x-forwarded-for": "203.0.113.99" } }, secret, now)).toBe("127.0.0.1");
   });
+
+  test("fails closed for forged, expired, or secretless internal headers", () => {
+    for (const [headers, configuredSecret] of [
+      [{ ...signedHeaders("203.0.113.8"), "x-gooes-client-ip-signature": "00" }, secret],
+      [signedHeaders("203.0.113.8", "1719999000"), secret],
+      [signedHeaders("203.0.113.8"), undefined],
+    ] as const) {
+      expect(() => resolveTrustedClientIp({ ip: "127.0.0.1", headers }, configuredSecret, now)).toThrow();
+    }
+  });
 });

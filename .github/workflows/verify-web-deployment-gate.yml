@@ -26,6 +26,11 @@ jobs:
   verify:
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
     environment: ${{ inputs.target_environment }}
+    env:
+      GATE_ENVIRONMENT: ${{ inputs.target_environment }}
+      GATE_COMMIT_SHA: ${{ inputs.commit_sha }}
+      GATE_MIGRATION_VERSION: ${{ inputs.migration_version }}
+      GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,8 +39,10 @@ jobs:
       - name: Verify immutable inputs
         run: |
           set -euo pipefail
-          test "${{ inputs.migration_version }}" = "20260711120000"
-          test "$(git rev-parse HEAD)" = "${{ inputs.commit_sha }}"
+          node scripts/validate-web-gate-inputs.mjs \
+            "${GATE_ENVIRONMENT}" "${GATE_COMMIT_SHA}" "${GATE_MIGRATION_VERSION}"
+          test "$(git rev-parse HEAD)" = "${GATE_COMMIT_SHA}"
+          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           test -f supabase/migrations/20260711120000_reserve_sms_verification_code.sql
 
       - name: Verify Local and Remote migration history
@@ -51,25 +58,49 @@ jobs:
           pnpm dlx supabase@2.99.0 migration list \
             --db-url "${SUPABASE_DB_URL}" > migration-history.txt
           node scripts/verify-migration-history.mjs \
-            migration-history.txt supabase/migrations "${{ inputs.migration_version }}" \
+            migration-history.txt supabase/migrations "${GATE_MIGRATION_VERSION}" \
             > migration-evidence.json
 
       - name: Verify API revision and health
         env:
-          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
           DEV_DEPLOY_HOST: 43.165.126.30
           DEV_DEPLOY_USER: ubuntu
           DEV_DEPLOY_KEY_PATH: /home/ubuntu/.ssh/goose-old-us.pem
         run: |
           set -euo pipefail
-          if [ "${TARGET_ENVIRONMENT}" = development ]; then
+          expected_secret_hash="$(printf '%s\n' "${GOOES_WEB_PROXY_SHARED_SECRET}" | sha256sum | awk '{print $1}')"
+          case "${GATE_ENVIRONMENT}" in
+          development)
             ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-              "test \"\$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' gooes-api-dev)\" = '${{ inputs.commit_sha }}'"
+              "test \"\$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' gooes-api-dev)\" = '${GATE_COMMIT_SHA}'"
+            remote_hash_line="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+              "docker exec gooes-api-dev printenv GOOES_WEB_PROXY_SHARED_SECRET | sha256sum")"
+            actual_secret_hash="$(awk '{print $1}' <<< "${remote_hash_line}")"
             curl --noproxy '*' -fsS https://api-dev.goodcms.cn/ >/dev/null
-          else
-            test "$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api)" = "${{ inputs.commit_sha }}"
+            api_url=https://api-dev.goodcms.cn
+            ;;
+          production)
+            test "$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api)" = "${GATE_COMMIT_SHA}"
+            actual_secret_hash="$(docker exec gooes-api printenv GOOES_WEB_PROXY_SHARED_SECRET | sha256sum | awk '{print $1}')"
             curl -fsS https://api.goodcms.cn/ >/dev/null
-          fi
+            api_url=https://api.goodcms.cn
+            ;;
+          *) exit 1 ;;
+          esac
+          test "${actual_secret_hash}" = "${expected_secret_hash}"
+          probe_ip=192.0.2.230
+          timestamp="$(date +%s)"
+          signature="$(PROBE_IP="${probe_ip}" PROBE_TIMESTAMP="${timestamp}" node -e '
+            const { createHmac } = require("node:crypto");
+            process.stdout.write(createHmac("sha256", process.env.GOOES_WEB_PROXY_SHARED_SECRET)
+              .update(`${process.env.PROBE_TIMESTAMP}.${process.env.PROBE_IP}`).digest("hex"));
+          ')"
+          response="$(curl -fsS -X POST \
+            -H "x-gooes-client-ip: ${probe_ip}" \
+            -H "x-gooes-client-ip-timestamp: ${timestamp}" \
+            -H "x-gooes-client-ip-signature: ${signature}" \
+            "${api_url}/public/partner-applications/proxy-ip-check")"
+          test "$(jq -r '.data.client_ip' <<< "${response}")" = "${probe_ip}"
 
       - name: Run isolated atomic reservation smoke
         env:
@@ -85,12 +116,16 @@ jobs:
           bun src/scripts/web-deployment-gate-smoke.ts > ../../web-gate-smoke.json
 
       - name: Create immutable gate receipt
+        env:
+          RECEIPT_ENVIRONMENT: ${{ inputs.target_environment }}
+          RECEIPT_COMMIT_SHA: ${{ inputs.commit_sha }}
+          RECEIPT_MIGRATION_VERSION: ${{ inputs.migration_version }}
         run: |
           set -euo pipefail
           jq -n \
-            --arg environment "${{ inputs.target_environment }}" \
-            --arg sha "${{ inputs.commit_sha }}" \
-            --arg migration "${{ inputs.migration_version }}" \
+            --arg environment "${RECEIPT_ENVIRONMENT}" \
+            --arg sha "${RECEIPT_COMMIT_SHA}" \
+            --arg migration "${RECEIPT_MIGRATION_VERSION}" \
             --slurpfile smoke web-gate-smoke.json \
             --slurpfile migrationEvidence migration-evidence.json \
             '{conclusion:"success", environment:$environment, commit_sha:$sha, migration_version:$migration} + $smoke[0] + $migrationEvidence[0]' \

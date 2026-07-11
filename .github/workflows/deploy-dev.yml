@@ -39,18 +39,6 @@ on:
           - web
           - social-video-worker
           - cos-reconcile-worker
-      migration_version:
-        description: "For web only: applied migration version"
-        required: false
-        type: string
-      verified_commit_sha:
-        description: "For web only: API health and SMS smoke commit SHA"
-        required: false
-        type: string
-      sms_smoke_confirmation:
-        description: "For web only: type API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
-        required: false
-        type: string
       gate_run_id:
         description: "Successful Verify Web Deployment Gate workflow run ID"
         required: false
@@ -76,6 +64,7 @@ jobs:
   deploy-dev:
     name: Deploy dev
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    environment: development
 
     steps:
       - name: Guard runner
@@ -461,6 +450,7 @@ jobs:
           REMOTE_GOOES_ADMIN_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-admin:${IMAGE_TAG}"
           REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-social-video-worker:${IMAGE_TAG}"
           PROXY_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_PROXY_SHARED_SECRET}" | base64 -w0)"
+          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           test -n "${PROXY_SECRET_BASE64}"
 
           scp -i "${DEV_DEPLOY_KEY_PATH}" \
@@ -569,9 +559,6 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.service == 'web' }}
         env:
           INPUT_SERVICE: ${{ github.event.inputs.service }}
-          INPUT_MIGRATION_VERSION: ${{ github.event.inputs.migration_version }}
-          INPUT_VERIFIED_COMMIT_SHA: ${{ github.event.inputs.verified_commit_sha }}
-          INPUT_SMS_SMOKE_CONFIRMATION: ${{ github.event.inputs.sms_smoke_confirmation }}
           INPUT_GATE_RUN_ID: ${{ github.event.inputs.gate_run_id }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -601,6 +588,7 @@ jobs:
           test -n "${CCR_NAMESPACE}"
           REMOTE_GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-web:${GITHUB_SHA}"
           PROXY_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_PROXY_SHARED_SECRET}" | base64 -w0)"
+          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           test -n "${PROXY_SECRET_BASE64}"
 
           scp -i "${DEV_DEPLOY_KEY_PATH}" \
@@ -611,11 +599,18 @@ jobs:
           old_image_id="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
             "docker inspect -f '{{.Image}}' gooes-web-dev 2>/dev/null || true")"
+          echo "WEB_ROLLBACK_STATUS=not_available" >> "${GITHUB_ENV}"
           if [ -n "${old_image_id}" ]; then
+            old_revision="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
+              "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+              "docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' gooes-web-dev")"
+            [[ "${old_revision}" =~ ^[a-f0-9]{40}$ ]]
             ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
               "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
               "docker tag '${old_image_id}' 'gooes-web:rollback-${GITHUB_RUN_ID}'"
             echo "WEB_ROLLBACK_READY=true" >> "${GITHUB_ENV}"
+            echo "WEB_OLD_REVISION=${old_revision}" >> "${GITHUB_ENV}"
+            echo "WEB_ROLLBACK_STATUS=available" >> "${GITHUB_ENV}"
           fi
 
           ssh -i "${DEV_DEPLOY_KEY_PATH}" \
@@ -634,6 +629,7 @@ jobs:
         if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}
         run: |
           set -euo pipefail
+          echo "WEB_ROLLBACK_STATUS=rollback_failed" >> "${GITHUB_ENV}"
           ssh -i "${DEV_DEPLOY_KEY_PATH}" \
             -o StrictHostKeyChecking=no \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
@@ -649,6 +645,7 @@ jobs:
           headers="$(curl --noproxy '*' -fsS -D - -o /dev/null --retry 8 --retry-delay 3 https://www-dev.goodcms.cn/partners)"
           printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
           printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${GITHUB_SHA}"
+          echo "WEB_ROLLBACK_STATUS=not_requested" >> "${GITHUB_ENV}"
 
       - name: Roll back gated dev web
         if: ${{ failure() && env.WEB_ROLLBACK_READY == 'true' }}
@@ -656,6 +653,7 @@ jobs:
           GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
         run: |
           set -euo pipefail
+          test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           PROXY_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_PROXY_SHARED_SECRET}" | base64 -w0)"
           ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
@@ -664,7 +662,31 @@ jobs:
              export GOOES_WEB_PROXY_SHARED_SECRET=\$(printf '%s' '${PROXY_SECRET_BASE64}' | base64 -d)
              GOOES_WEB_IMAGE='gooes-web:rollback-${GITHUB_RUN_ID}' \
              docker compose -f docker-compose.web-dev.yml up -d --no-deps --force-recreate gooes-web-dev"
+          ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+            "set -euo pipefail
+             for _ in \$(seq 1 60); do
+               health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true)
+               revision=\$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' gooes-web-dev 2>/dev/null || true)
+               if [ \"\$health\" = healthy ] && [ \"\$revision\" = '${WEB_OLD_REVISION}' ]; then exit 0; fi
+               sleep 5
+             done
+             exit 1"
+          headers="$(curl --noproxy '*' -fsS -D - -o /dev/null --retry 8 --retry-delay 3 https://www-dev.goodcms.cn/partners)"
+          printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
+          printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}"
+          echo "WEB_ROLLBACK_STATUS=success" >> "${GITHUB_ENV}"
           echo "WEB_ROLLED_BACK=true" >> "${GITHUB_ENV}"
+
+      - name: Prune old successful dev web rollback tags
+        if: ${{ success() && env.WEB_DEPLOY_APPROVED == 'true' }}
+        run: |
+          set -euo pipefail
+          ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+            "docker images --format '{{.Repository}}:{{.Tag}}' \
+             | awk '/^gooes-web:rollback-/' | sort -r | tail -n +2 \
+             | xargs -r docker rmi"
 
       - name: Cleanup dev server Docker artifacts
         if: ${{ always() }}
@@ -726,7 +748,7 @@ jobs:
             echo "| Commit | \`${short_sha}\` |"
             echo "| Build services | \`${BUILD_SERVICES:-none}\` |"
             echo "| Automatic deploy services | \`${DEPLOY_SERVICES:-none}\` |"
-            echo "| Web rolled back | ${WEB_ROLLED_BACK:-false} |"
+            echo "| Web rollback status | ${WEB_ROLLBACK_STATUS:-not_requested} |"
             echo "| Duration | ${elapsed_seconds}s |"
             echo ""
             echo "### Service status"
@@ -781,7 +803,7 @@ jobs:
           done
 
           if [ "${WEB_DEPLOY_APPROVED:-}" = "true" ]; then
-            image="${TENCENT_CCR_REGISTRY}/${namespace}/goose-web:${IMAGE_TAG}"
+            image="${TENCENT_CCR_REGISTRY}/${namespace}/goose-web:${GITHUB_SHA}"
             runtime_status="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
               -o StrictHostKeyChecking=no \
               "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \

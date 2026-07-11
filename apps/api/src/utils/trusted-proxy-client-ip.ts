@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 
+import { Errors } from "@/errors/error-factory";
+
 const MAX_CLOCK_SKEW_SECONDS = 60;
 
 type HeaderValue = string | string[] | undefined;
@@ -44,5 +46,21 @@ export function resolveTrustedClientIp(
   secret = process.env.GOOES_WEB_PROXY_SHARED_SECRET,
   now = Date.now(),
 ): string | null {
-  return verifySignedClientIp(request.headers, secret, now) ?? request.ip ?? null;
+  const internalHeaderNames = [
+    "x-gooes-client-ip",
+    "x-gooes-client-ip-timestamp",
+    "x-gooes-client-ip-signature",
+  ];
+  const hasInternalHeaders = internalHeaderNames.some((name) => name in request.headers);
+  if (!hasInternalHeaders) return request.ip ?? null;
+
+  const verifiedIp = verifySignedClientIp(request.headers, secret, now);
+  if (!verifiedIp) {
+    throw Errors.business(
+      400,
+      "内部客户端 IP 签名无效",
+      "INVALID_INTERNAL_CLIENT_IP_SIGNATURE",
+    );
+  }
+  return verifiedIp;
 }

@@ -36,6 +36,7 @@ describe("isVisitorSessionRoute", () => {
 describe("auth public route allowlist", () => {
   test("allows official partner application submissions without a token", () => {
     expect(isPublicRoute("POST", "/public/partner-applications")).toBe(true);
+    expect(isPublicRoute("POST", "/public/partner-applications/proxy-ip-check")).toBe(true);
     expect(isPublicRoute("POST", "/public/partner-applications/send-code")).toBe(true);
   });
 

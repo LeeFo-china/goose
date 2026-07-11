@@ -9,6 +9,7 @@ services:
       SERVICE_NAME: gooes-api
       NODE_ENV: production
       PORT: ${GOOES_API_PORT:-3000}
+      GOOES_WEB_PROXY_SHARED_SECRET: ${GOOES_WEB_PROXY_SHARED_SECRET:?set GOOES_WEB_PROXY_SHARED_SECRET}
     command: ["bun", "src/app.ts"]
     ports:
       - "${GOOES_API_BIND_HOST:-127.0.0.1}:${GOOES_API_HOST_PORT:-3000}:${GOOES_API_PORT:-3000}"

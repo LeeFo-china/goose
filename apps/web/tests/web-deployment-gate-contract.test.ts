@@ -49,9 +49,8 @@ describe("web deployment hard gates", () => {
     const pull = sliceStep(production, "Pull latest images", "Recreate services");
     const recreate = sliceStep(production, "Recreate services", "Check container health");
     expect(gate).toContain("scripts/resolve-web-deployment.mjs");
-    expect(gate).toContain('"${INPUT_MIGRATION_VERSION}"');
-    expect(gate).toContain('"${INPUT_VERIFIED_COMMIT_SHA}"');
-    expect(gate).toContain('"${INPUT_SMS_SMOKE_CONFIRMATION}"');
+    expect(gate).toContain('"${INPUT_GATE_RUN_ID}"');
+    expect(gate).toContain("verify-web-gate-receipt.mjs");
     expect(gate).toContain('"${SOURCE_SHA}"');
     expect(gate).toContain('echo "DEPLOY_SERVICES=${DEPLOY_SERVICES}"');
     expect(pull).toContain("gooes-web");
@@ -60,13 +59,13 @@ describe("web deployment hard gates", () => {
   });
 
   test("passes production gate evidence through the reusable workflow", () => {
-    expect(build).toContain("migration_version:");
-    expect(build).toContain("verified_commit_sha:");
-    expect(build).toContain("sms_smoke_confirmation:");
-    expect(build).toContain("migration_version: ${{ github.event.inputs.migration_version }}");
-    expect(production).toContain("migration_version:");
-    expect(production).toContain("verified_commit_sha:");
-    expect(production).toContain("sms_smoke_confirmation:");
+    expect(build).toContain("gate_run_id:");
+    expect(build).toContain("gate_run_id: ${{ github.event.inputs.gate_run_id }}");
+    expect(production).toContain("gate_run_id:");
+    expect(production).toContain("verify-web-gate-receipt.mjs");
+    expect(`${build}\n${production}`).not.toMatch(
+      /(?:verified_commit_sha|sms_smoke_confirmation):/,
+    );
   });
 
   test("all builds web while normalized deployment keeps every legacy service", () => {

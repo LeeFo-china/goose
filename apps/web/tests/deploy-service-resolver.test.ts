@@ -1,17 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 const script = new URL("../../../scripts/resolve-web-deployment.mjs", import.meta.url).pathname;
-const currentSha = "0123456789abcdef";
-const confirmation = "API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED";
-
-function resolve(
-  service: string,
-  migration = "",
-  verifiedSha = "",
-  smoke = "",
-): ReturnType<typeof Bun.spawnSync> {
+function resolve(service: string): ReturnType<typeof Bun.spawnSync> {
   return Bun.spawnSync(
-    ["node", script, "deploy", service, migration, verifiedSha, smoke, currentSha],
+    ["node", script, "deploy", service],
     { stderr: "pipe", stdout: "pipe" },
   );
 }
@@ -25,19 +17,14 @@ describe("production deploy service resolver", () => {
     );
   });
 
-  test("allows web-only deployment with evidence bound to the current SHA", () => {
-    const result = resolve("web", "20260711120000", currentSha, confirmation);
+  test("allows a normalized web-only deployment request", () => {
+    const result = resolve("web");
     expect(result.exitCode).toBe(0);
     expect(result.stdout?.toString().trim()).toBe("web");
   });
 
-  test("rejects mixed web deployments even with valid evidence", () => {
-    const result = resolve(
-      "api,web",
-      "20260711120000",
-      currentSha,
-      confirmation,
-    );
+  test("rejects mixed web deployments", () => {
+    const result = resolve("api,web");
     expect(result.exitCode).toBe(1);
     expect(result.stderr?.toString() ?? "").toContain("Web must be deployed separately");
   });

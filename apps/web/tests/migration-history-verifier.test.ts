@@ -1,11 +1,16 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 const script = new URL("../../../scripts/verify-migration-history.mjs", import.meta.url).pathname;
 const target = "20260711120000";
 const older = "20260710120000";
+const roots: string[] = [];
+
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { force: true, recursive: true });
+});
 
 function table(rows: string[], ansi = false): string {
   const header = " Local          | Remote         | Time (UTC)";
@@ -20,6 +25,7 @@ function table(rows: string[], ansi = false): string {
 
 function verify(history: string, localVersions = [older, target]) {
   const root = mkdtempSync(join(tmpdir(), "migration-history-"));
+  roots.push(root);
   const migrations = join(root, "migrations");
   const historyFile = join(root, "history.txt");
   mkdirSync(migrations);
