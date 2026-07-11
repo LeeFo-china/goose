@@ -133,7 +133,9 @@ export function SiteContentBlockFields({
           </Button>
         </div>
       ))}
-      <button type="button" className="self-start text-sm font-medium text-foreground underline underline-offset-4 disabled:opacity-50" disabled={disabled} onClick={() => onChange({ ...block, images: [...block.images, { fileId: "", alt: "" }] })}>添加画廊图片</button>
+      <Button type="button" variant="outline" className="self-start" disabled={disabled} onClick={() => onChange({ ...block, images: [...block.images, { fileId: "", alt: "" }] })}>
+        添加画廊图片
+      </Button>
     </FieldGroup>
   );
 }

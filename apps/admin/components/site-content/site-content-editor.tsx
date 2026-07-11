@@ -31,6 +31,10 @@ import {
   SiteContentEditorSchema,
   SiteContentSlugSchema,
 } from "@/components/site-content/site-content-editor-schema";
+import {
+  resolveSiteContentEditorTab,
+  type SiteContentEditorTab,
+} from "@/components/site-content/site-content-editor-state";
 import { SiteContentImageField } from "@/components/site-content/site-content-image-field";
 import type { SiteContentDetail } from "@/components/site-content/site-content-types";
 import { SiteContentVersionPanel } from "@/components/site-content/site-content-version-panel";
@@ -124,6 +128,7 @@ export function SiteContentEditor({
   const [savedSlug, setSavedSlug] = useState(detail?.entry.slug ?? "");
   const [slugError, setSlugError] = useState("");
   const [activeUploads, setActiveUploads] = useState<Set<string>>(() => new Set());
+  const [editorTab, setEditorTab] = useState<SiteContentEditorTab>("editor");
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const form = useForm<SiteContentEditorValues>({
@@ -219,10 +224,10 @@ export function SiteContentEditor({
       {error ? <StatusAlert>{error}</StatusAlert> : null}
       {!canManage ? <StatusAlert tone="warning" title="只读模式">当前账号没有 platform.site_content.manage 权限，可以查看和预览，但不能保存草稿。</StatusAlert> : null}
 
-      <Tabs defaultValue="editor" className="min-h-0">
+      <Tabs value={editorTab} className="min-h-0" onValueChange={(value) => setEditorTab((current) => resolveSiteContentEditorTab(current, value === "versions" ? "versions" : "editor", isUploading))}>
         <TabsList className="h-auto justify-start rounded-none border-0 border-b bg-transparent p-0">
           <TabsTrigger value="editor" className="rounded-none border-0 border-b-2 border-transparent px-0 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">内容编辑</TabsTrigger>
-          {detail ? <TabsTrigger value="versions" className="ml-5 rounded-none border-0 border-b-2 border-transparent px-0 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">版本历史</TabsTrigger> : null}
+          {detail ? <TabsTrigger value="versions" disabled={isUploading} className="ml-5 rounded-none border-0 border-b-2 border-transparent px-0 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">版本历史</TabsTrigger> : null}
         </TabsList>
         <TabsContent value="editor" className="mt-5">
           <form className="flex flex-col gap-6" onSubmit={form.handleSubmit(submit, () => setError("表单校验未通过，请检查标记字段和内容块"))}>
@@ -243,7 +248,7 @@ export function SiteContentEditor({
 
             <section className="flex flex-col gap-4" aria-labelledby="site-content-block-heading">
               <div><h2 id="site-content-block-heading" className="text-base font-semibold">页面内容</h2><p className="mt-1 text-sm text-muted-foreground">仅支持八类白名单内容块，可折叠、上移、下移和删除。</p></div>
-              <Controller name="blocks" control={form.control} render={({ field, fieldState }) => <Field data-invalid={fieldState.invalid}><SiteContentBlockEditor blocks={field.value} disabled={pending || isUploading || !canManage} onUploadStateChange={handleUploadStateChange} onChange={field.onChange} /><FieldError errors={[fieldState.error]} /></Field>} />
+              <Controller name="blocks" control={form.control} render={({ field, fieldState }) => <Field data-invalid={fieldState.invalid}><SiteContentBlockEditor blocks={field.value} disabled={pending || !canManage} uploadLocked={isUploading} onUploadStateChange={handleUploadStateChange} onChange={field.onChange} /><FieldError errors={[fieldState.error]} /></Field>} />
             </section>
 
             <Separator />

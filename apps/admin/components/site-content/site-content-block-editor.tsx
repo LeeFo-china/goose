@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 
 import { FormSelect } from "@/components/admin/form-select";
 import { SiteContentBlockFields } from "@/components/site-content/site-content-block-fields";
+import { resolveSiteContentOpenState } from "@/components/site-content/site-content-editor-state";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -40,11 +41,13 @@ export function createEmptySiteContentBlock(type: SiteContentDraftBlock["type"])
 export function SiteContentBlockEditor({
   blocks,
   disabled,
+  uploadLocked,
   onChange,
   onUploadStateChange,
 }: {
   blocks: SiteContentDraftBlock[];
   disabled?: boolean;
+  uploadLocked?: boolean;
   onChange: (blocks: SiteContentDraftBlock[]) => void;
   onUploadStateChange?: (uploadId: string, uploading: boolean) => void;
 }) {
@@ -92,9 +95,9 @@ export function SiteContentBlockEditor({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="w-full sm:max-w-xs">
           <label className="mb-2 block text-sm font-medium" htmlFor="site-content-next-block">内容块类型</label>
-          <FormSelect id="site-content-next-block" value={nextType} options={blockOptions} disabled={disabled} onChange={(value) => setNextType(value as SiteContentDraftBlock["type"])} />
+          <FormSelect id="site-content-next-block" value={nextType} options={blockOptions} disabled={disabled || uploadLocked} onChange={(value) => setNextType(value as SiteContentDraftBlock["type"])} />
         </div>
-        <Button type="button" variant="outline" disabled={disabled} onClick={add}>
+        <Button type="button" variant="outline" disabled={disabled || uploadLocked} onClick={add}>
           <Plus data-icon="inline-start" />
           添加内容块
         </Button>
@@ -115,21 +118,23 @@ export function SiteContentBlockEditor({
           const isOpen = openItems.has(clientKey);
           return (
             <Collapsible key={clientKey} open={isOpen} onOpenChange={(open) => setOpenItems((current) => {
+              const nextOpen = resolveSiteContentOpenState(current.has(clientKey), open, Boolean(uploadLocked));
+              if (nextOpen === current.has(clientKey)) return current;
               const next = new Set(current);
-              if (open) next.add(clientKey); else next.delete(clientKey);
+              if (nextOpen) next.add(clientKey); else next.delete(clientKey);
               return next;
             })}>
               <div className="rounded-md border bg-background">
                 <div className="flex min-w-0 items-center gap-2 px-3 py-2">
                   <CollapsibleTrigger asChild>
-                    <Button type="button" variant="ghost" className="min-w-0 flex-1 justify-start" aria-label={`${isOpen ? "收起" : "展开"}${blockLabels[block.type]}`}>
+                    <Button type="button" variant="ghost" className="min-w-0 flex-1 justify-start" disabled={uploadLocked} aria-label={`${isOpen ? "收起" : "展开"}${blockLabels[block.type]}`}>
                       {isOpen ? <ChevronUp data-icon="inline-start" /> : <ChevronDown data-icon="inline-start" />}
                       <span className="truncate">{index + 1}. {blockLabels[block.type]}</span>
                     </Button>
                   </CollapsibleTrigger>
-                  <Button type="button" variant="ghost" size="icon" disabled={disabled || index === 0} aria-label="上移内容块" onClick={() => move(index, -1)}><ChevronUp /></Button>
-                  <Button type="button" variant="ghost" size="icon" disabled={disabled || index === blocks.length - 1} aria-label="下移内容块" onClick={() => move(index, 1)}><ChevronDown /></Button>
-                  <Button type="button" variant="ghost" size="icon" disabled={disabled} aria-label="删除内容块" onClick={() => remove(index, clientKey)}><Trash2 /></Button>
+                  <Button type="button" variant="ghost" size="icon" disabled={disabled || uploadLocked || index === 0} aria-label="上移内容块" onClick={() => move(index, -1)}><ChevronUp /></Button>
+                  <Button type="button" variant="ghost" size="icon" disabled={disabled || uploadLocked || index === blocks.length - 1} aria-label="下移内容块" onClick={() => move(index, 1)}><ChevronDown /></Button>
+                  <Button type="button" variant="ghost" size="icon" disabled={disabled || uploadLocked} aria-label="删除内容块" onClick={() => remove(index, clientKey)}><Trash2 /></Button>
                 </div>
                 <CollapsibleContent>
                   <Separator />

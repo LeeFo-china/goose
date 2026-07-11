@@ -7,6 +7,10 @@ import {
   SiteContentEditorSchema,
 } from "./site-content-editor-schema";
 import { parseSiteContentPreviewUrl } from "./site-content-preview";
+import {
+  resolveSiteContentEditorTab,
+  resolveSiteContentOpenState,
+} from "./site-content-editor-state";
 
 const root = new URL("../../", import.meta.url);
 
@@ -72,6 +76,14 @@ describe("官网内容后台合同", () => {
     expect(parseSiteContentPreviewUrl("ftp://example.com/file")).toBeNull();
     expect(parseSiteContentPreviewUrl("/relative-preview")).toBeNull();
     expect(parseSiteContentPreviewUrl(123)).toBeNull();
+  });
+
+  test("上传锁保持当前折叠和编辑器 Tab 状态", () => {
+    expect(resolveSiteContentOpenState(true, false, true)).toBe(true);
+    expect(resolveSiteContentOpenState(false, true, true)).toBe(false);
+    expect(resolveSiteContentOpenState(true, false, false)).toBe(false);
+    expect(resolveSiteContentEditorTab("editor", "versions", true)).toBe("editor");
+    expect(resolveSiteContentEditorTab("editor", "versions", false)).toBe("versions");
   });
 
   test("只在平台模式展示有读取权限的入口", () => {
@@ -147,6 +159,20 @@ describe("官网内容后台合同", () => {
     expect(imageField).toContain("onChangeRef.current");
   });
 
+  test("上传锁独立阻止折叠和版本 Tab 卸载上传组件", () => {
+    const editor = read("components/site-content/site-content-editor.tsx");
+    const blocks = read("components/site-content/site-content-block-editor.tsx");
+    const state = read("components/site-content/site-content-editor-state.ts");
+
+    expect(blocks).toContain("uploadLocked");
+    expect(blocks).toContain("resolveSiteContentOpenState");
+    expect(editor).toContain("resolveSiteContentEditorTab");
+    expect(editor).toContain('value={editorTab}');
+    expect(editor).toContain('disabled={isUploading}');
+    expect(state).toContain("resolveSiteContentOpenState");
+    expect(state).toContain("resolveSiteContentEditorTab");
+  });
+
   test("slug 独立保存且版本保存不再隐式更新 slug", () => {
     const editor = read("components/site-content/site-content-editor.tsx");
 
@@ -166,6 +192,8 @@ describe("官网内容后台合同", () => {
     expect(editor).toContain("aria-invalid");
     expect(blockFields).toContain("删除画廊图片");
     expect(blockFields).toContain("block.images.length <= 1");
+    expect(blockFields).toContain("<Button");
+    expect(blockFields).toContain("添加画廊图片");
     expect(newPage).toContain("platform.site_content.manage");
     expect(newPage).toContain("notFound()");
   });
