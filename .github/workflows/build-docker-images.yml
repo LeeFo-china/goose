@@ -60,10 +60,8 @@ jobs:
               exit 1
             }
             [[ "${INPUT_GATE_RUN_ID}" =~ ^[0-9]+$ ]]
-            [[ "${INPUT_WEB_SMOKE_CONTENT_PATH}" =~ ^/(articles|cases|cities)/[a-z0-9]+([a-z0-9-]*[a-z0-9])?$ ]] || {
-              echo "Web deploy requires a published content detail path such as /articles/example."
-              exit 1
-            }
+            node scripts/validate-web-smoke-content-path.mjs \
+              "${INPUT_WEB_SMOKE_CONTENT_PATH}"
           fi
           if [ "${normalized}" = ",all," ]; then
             {

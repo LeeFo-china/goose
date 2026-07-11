@@ -41,14 +41,20 @@
 同时备份当前非 secret 配置：
 
 ```bash
-timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+set -euo pipefail
+TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+BACKUP_PATH="/etc/nginx/sites-enabled/reverse-proxy.bak.${TIMESTAMP}"
 sudo install -m 0644 \
   /etc/nginx/sites-enabled/reverse-proxy \
-  "/etc/nginx/sites-enabled/reverse-proxy.bak.${timestamp}"
-sha256sum "/etc/nginx/sites-enabled/reverse-proxy.bak.${timestamp}"
+  "${BACKUP_PATH}"
+EXPECTED_BACKUP_SHA256="$(sha256sum "${BACKUP_PATH}" | awk '{print $1}')"
+printf 'BACKUP_PATH=%s\nEXPECTED_BACKUP_SHA256=%s\n' \
+  "${BACKUP_PATH}" "${EXPECTED_BACKUP_SHA256}"
 ```
 
-备份文件不得包含 `.env`、证书私钥、basic-auth 密码文件或导出的 secret。
+将输出的绝对 `BACKUP_PATH` 与 `EXPECTED_BACKUP_SHA256` 原样保存到发布记录；后续安装
+失败恢复和人工回滚均从记录复制，禁止重新推算。备份文件不得包含 `.env`、证书私钥、
+basic-auth 密码文件或导出的 secret。
 
 ## 4. 部署 Web，但不切域名
 
@@ -95,14 +101,26 @@ sha256sum "/etc/nginx/sites-enabled/reverse-proxy.bak.${timestamp}"
 已记录后，才可安装已双人复核的完整候选文件。
 
 ```bash
-sudo install -m 0644 /path/to/reviewed/reverse-proxy.candidate \
-  /etc/nginx/sites-enabled/reverse-proxy
-sudo nginx -t
-sudo systemctl reload nginx
+set -euo pipefail
+TARGET_PATH=/etc/nginx/sites-enabled/reverse-proxy
+BACKUP_PATH=/etc/nginx/sites-enabled/reverse-proxy.bak.20260712T000000Z
+EXPECTED_BACKUP_SHA256='<从发布记录复制 64 位 SHA-256>'
+CANDIDATE_PATH=/path/to/reviewed/reverse-proxy.candidate
+
+test -r "${BACKUP_PATH}"
+printf '%s  %s\n' "${EXPECTED_BACKUP_SHA256}" "${BACKUP_PATH}" | sha256sum -c -
+sudo install -m 0644 "${CANDIDATE_PATH}" "${TARGET_PATH}"
+if ! (sudo nginx -t && sudo systemctl reload nginx); then
+  sudo install -m 0644 "${BACKUP_PATH}" "${TARGET_PATH}"
+  sudo nginx -t && sudo systemctl reload nginx
+  exit 1
+fi
 ```
 
-`nginx -t` 非零时禁止 reload，立即将备份恢复到目标路径，再次执行 `nginx -t`。
-禁止使用 restart 代替 reload，禁止用 `|| true` 忽略语法错误。
+候选配置的 `nginx -t` 或 reload 任一失败都会恢复已校验 checksum 的备份，再执行
+`nginx -t && reload`；备份恢复后的语法检查失败时不会 reload，并由严格模式终止。
+禁止把 `nginx -t` 和 reload 写成无条件顺序命令，禁止使用 restart 代替 reload，也禁止
+用 `|| true` 忽略错误。
 
 ## 7. 切流 smoke
 
@@ -153,11 +171,15 @@ curl -fsSI https://admin.goodcms.cn/platform/partners
 回滚只恢复上一份 Nginx 非 secret 配置，使 `/partners` 重新由旧 Admin 提供：
 
 ```bash
-sudo install -m 0644 \
-  "/etc/nginx/sites-enabled/reverse-proxy.bak.${timestamp}" \
-  /etc/nginx/sites-enabled/reverse-proxy
-sudo nginx -t
-sudo systemctl reload nginx
+set -euo pipefail
+TARGET_PATH=/etc/nginx/sites-enabled/reverse-proxy
+BACKUP_PATH=/etc/nginx/sites-enabled/reverse-proxy.bak.20260712T000000Z
+EXPECTED_BACKUP_SHA256='<从发布记录复制 64 位 SHA-256>'
+
+test -r "${BACKUP_PATH}"
+printf '%s  %s\n' "${EXPECTED_BACKUP_SHA256}" "${BACKUP_PATH}" | sha256sum -c -
+sudo install -m 0644 "${BACKUP_PATH}" "${TARGET_PATH}"
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 随后验证旧 `admin.goodcms.cn/partners`、Admin 登录、API 与 H5。记录回滚时间、原因、

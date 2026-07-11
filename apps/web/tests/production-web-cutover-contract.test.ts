@@ -1,12 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-const repoFile = (path: string) => new URL(`../${path}`, import.meta.url);
+const repositoryRoot = new URL("../../../", import.meta.url);
+const repoFile = (path: string) => new URL(path, repositoryRoot);
 const readRepoFile = (path: string) => readFileSync(repoFile(path), "utf8");
 
 describe("production official website cutover contracts", () => {
   test("keeps the legacy Admin partner surface until the observation gate closes", () => {
-    expect(existsSync(repoFile("apps/admin/app/(site)/partners/page.tsx"))).toBe(true);
+    expect(
+      existsSync(repoFile("apps/admin/app/(site)/partners/page.tsx")),
+    ).toBe(true);
     expect(
       existsSync(
         repoFile("apps/admin/components/official-site/partner-application-form.tsx"),
@@ -45,8 +48,12 @@ describe("production official website cutover contracts", () => {
   });
 
   test("deploys Web behind loopback smoke without mutating production Nginx", () => {
-    const buildWorkflow = readRepoFile(".github/workflows/build-docker-images.yml");
-    const deployWorkflow = readRepoFile(".github/workflows/deploy-docker-services.yml");
+    const buildWorkflow = readRepoFile(
+      ".github/workflows/build-docker-images.yml",
+    );
+    const deployWorkflow = readRepoFile(
+      ".github/workflows/deploy-docker-services.yml",
+    );
 
     expect(buildWorkflow).toContain("web_smoke_content_path:");
     expect(buildWorkflow).toContain(
@@ -61,12 +68,26 @@ describe("production official website cutover contracts", () => {
     expect(deployWorkflow).toContain('smoke_url "/sitemap.xml"');
     expect(deployWorkflow).toContain('smoke_url "${WEB_SMOKE_CONTENT_PATH}"');
     expect(deployWorkflow).toContain("http://127.0.0.1:3020/api/preview");
+    expect(deployWorkflow).toContain("--connect-timeout 5 --max-time 30");
+    expect(deployWorkflow).toContain("tr -d '\\r'");
+    expect(deployWorkflow).toContain("^HTTP/[^ ]+ 200$");
+    expect(deployWorkflow).toContain("^HTTP/[^ ]+ 303$");
+    expect(deployWorkflow).toContain("^location: /preview-error$");
+    expect(deployWorkflow).toContain("^cache-control: no-store$");
+    expect(deployWorkflow).toContain("timeout-minutes: 5");
+    expect(
+      deployWorkflow.match(/--connect-timeout 5 --max-time 30/g),
+    ).toHaveLength(4);
+    expect(deployWorkflow.match(/\^HTTP\/\[\^ \]\+ 200\$/g)).toHaveLength(2);
+    expect(deployWorkflow.match(/\^HTTP\/\[\^ \]\+ 303\$/g)).toHaveLength(2);
     expect(deployWorkflow).not.toMatch(/(?:install|cp).*gooes-web\.conf/);
     expect(deployWorkflow).not.toMatch(/(?:systemctl\s+reload|nginx\s+-s)/);
   });
 
   test("verifies an automatic Web image rollback through loopback before cutover", () => {
-    const deployWorkflow = readRepoFile(".github/workflows/deploy-docker-services.yml");
+    const deployWorkflow = readRepoFile(
+      ".github/workflows/deploy-docker-services.yml",
+    );
     const rollbackStart = deployWorkflow.indexOf("- name: Roll back production web");
     const rollbackEnd = deployWorkflow.indexOf(
       "- name: Clean up expired production web rollback tags",
@@ -88,13 +109,42 @@ describe("production official website cutover contracts", () => {
     expect(rollbackStep).toContain('Host: www.goodcms.cn');
     expect(rollbackStep).toContain("http://127.0.0.1:3020/api/preview");
     expect(rollbackStep).toContain("^x-gooes-revision: ${WEB_OLD_REVISION}");
-    expect(rollbackStep).toContain("^HTTP/[^ ]+ 303");
-    expect(rollbackStep).toContain("^location: /preview-error");
-    expect(rollbackStep).toContain("^cache-control: no-store");
+    expect(rollbackStep).toContain("^HTTP/[^ ]+ 303$");
+    expect(rollbackStep).toContain("^location: /preview-error$");
+    expect(rollbackStep).toContain("^cache-control: no-store$");
+    expect(rollbackStep).toContain("--connect-timeout 5 --max-time 30");
+    expect(rollbackStep).toContain("tr -d '\\r'");
+    expect(rollbackStep).toContain("^HTTP/[^ ]+ 200$");
+    expect(rollbackStep).toContain("timeout-minutes: 10");
     expect(rollbackStep).not.toContain("https://www.goodcms.cn/partners");
     expect(rollbackStep.indexOf("WEB_ROLLBACK_STATUS=success")).toBeGreaterThan(
-      rollbackStep.indexOf("^cache-control: no-store"),
+      rollbackStep.indexOf("^cache-control: no-store$"),
     );
+  });
+
+  test("validates a bounded Domain-compatible published content slug", () => {
+    const buildWorkflow = readRepoFile(
+      ".github/workflows/build-docker-images.yml",
+    );
+    const deployWorkflow = readRepoFile(
+      ".github/workflows/deploy-docker-services.yml",
+    );
+    const validator = repoFile("scripts/validate-web-smoke-content-path.mjs").pathname;
+
+    expect(buildWorkflow).toContain("validate-web-smoke-content-path.mjs");
+    expect(deployWorkflow).toContain("validate-web-smoke-content-path.mjs");
+    expect(
+      Bun.spawnSync(["node", validator, "/articles/valid-slug"]).exitCode,
+    ).toBe(0);
+    expect(
+      Bun.spawnSync(["node", validator, `/articles/${"a".repeat(200)}`]).exitCode,
+    ).toBe(0);
+    expect(
+      Bun.spawnSync(["node", validator, "/articles/invalid--slug"]).exitCode,
+    ).toBe(1);
+    expect(
+      Bun.spawnSync(["node", validator, `/articles/${"a".repeat(201)}`]).exitCode,
+    ).toBe(1);
   });
 
   test("documents a manual, reversible cutover with an observation gate", () => {
@@ -116,6 +166,11 @@ describe("production official website cutover contracts", () => {
       "不回滚 CMS",
       "至少一个完整发布周期",
       "apps/admin/app/(site)/partners/page.tsx",
+      "set -euo pipefail",
+      "BACKUP_PATH=/etc/nginx/sites-enabled/reverse-proxy.bak.",
+      "EXPECTED_BACKUP_SHA256",
+      "sha256sum -c",
+      "sudo nginx -t && sudo systemctl reload nginx",
     ]) {
       expect(runbook).toContain(requiredText);
     }

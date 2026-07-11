@@ -65,11 +65,13 @@ describe("Web rollback workflows", () => {
     }
     expect(rollback).toContain("http://127.0.0.1:3020/api/preview");
     expect(rollback).toContain("x-gooes-revision: ${WEB_OLD_REVISION}");
-    expect(rollback).toContain("^HTTP/[^ ]+ 303");
-    expect(rollback).toContain("^location: /preview-error");
-    expect(rollback).toContain("^cache-control: no-store");
+    expect(rollback).toContain("tr -d '\\r'");
+    expect(rollback).toContain("^HTTP/[^ ]+ 200$");
+    expect(rollback).toContain("^HTTP/[^ ]+ 303$");
+    expect(rollback).toContain("^location: /preview-error$");
+    expect(rollback).toContain("^cache-control: no-store$");
     expect(rollback.indexOf("WEB_ROLLBACK_STATUS=success")).toBeGreaterThan(
-      rollback.indexOf("^cache-control: no-store"),
+      rollback.indexOf("^cache-control: no-store$"),
     );
   });
 

@@ -158,10 +158,8 @@ jobs:
             gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
             node "${RUNNER_WORKSPACE}/source/scripts/verify-web-gate-receipt.mjs" \
               "${receipt_dir}/web-deployment-gate-receipt.json" production "${SOURCE_SHA}" 20260711120000
-            [[ "${INPUT_WEB_SMOKE_CONTENT_PATH}" =~ ^/(articles|cases|cities)/[a-z0-9]+([a-z0-9-]*[a-z0-9])?$ ]] || {
-              echo "Web deploy requires a published content detail path such as /articles/example."
-              exit 1
-            }
+            node "${RUNNER_WORKSPACE}/source/scripts/validate-web-smoke-content-path.mjs" \
+              "${INPUT_WEB_SMOKE_CONTENT_PATH}"
             echo "GOOES_WEB_IMAGE=${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/goose-web:${SOURCE_SHA}" >> "${GITHUB_ENV}"
             echo "COMPOSE_FILES=-f docker-compose.web.yml" >> "${GITHUB_ENV}"
             echo "COMPOSE_ENV_FILE=.env.web" >> "${GITHUB_ENV}"
@@ -308,6 +306,7 @@ jobs:
           fi
 
       - name: Check public endpoints and pre-cutover Web loopback
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           service_selected() {
@@ -322,20 +321,25 @@ jobs:
           if service_selected web; then
             smoke_url() {
               path="$1"
-              headers="$(curl -fsS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+              headers="$(curl -fsS --connect-timeout 5 --max-time 30 \
+                -H 'Host: www.goodcms.cn' -D - -o /dev/null \
                 --retry 5 --retry-delay 3 "http://127.0.0.1:3020${path}")"
-              printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
-              printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${SOURCE_SHA}"
+              normalized_headers="$(printf '%s' "${headers}" | tr -d '\r')"
+              printf '%s' "${normalized_headers}" | grep -Eq '^HTTP/[^ ]+ 200$'
+              printf '%s' "${normalized_headers}" | grep -iq '^x-gooes-service: web$'
+              printf '%s' "${normalized_headers}" | grep -iq "^x-gooes-revision: ${SOURCE_SHA}$"
             }
             smoke_url "/"
             smoke_url "/partners"
             smoke_url "/sitemap.xml"
             smoke_url "${WEB_SMOKE_CONTENT_PATH}"
-            preview_headers="$(curl -sS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+            preview_headers="$(curl -sS --connect-timeout 5 --max-time 30 \
+              -H 'Host: www.goodcms.cn' -D - -o /dev/null \
               "http://127.0.0.1:3020/api/preview")"
-            printf '%s' "${preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303'
-            printf '%s' "${preview_headers}" | grep -iq '^location: /preview-error'
-            printf '%s' "${preview_headers}" | grep -iq '^cache-control: no-store'
+            normalized_preview_headers="$(printf '%s' "${preview_headers}" | tr -d '\r')"
+            printf '%s' "${normalized_preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303$'
+            printf '%s' "${normalized_preview_headers}" | grep -iq '^location: /preview-error$'
+            printf '%s' "${normalized_preview_headers}" | grep -iq '^cache-control: no-store$'
             echo "WEB_ROLLBACK_STATUS=not_requested" >> "${GITHUB_ENV}"
             echo "WEB_DEPLOY_STAGE=container_ready_for_manual_cutover" >> "${GITHUB_ENV}"
             {
@@ -346,6 +350,7 @@ jobs:
 
       - name: Roll back production web
         if: ${{ failure() && env.WEB_ROLLBACK_READY == 'true' }}
+        timeout-minutes: 10
         env:
           GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
           GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
@@ -370,20 +375,25 @@ jobs:
           test "${revision}" = "${WEB_OLD_REVISION}"
           smoke_rollback_url() {
             path="$1"
-            headers="$(curl -fsS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+            headers="$(curl -fsS --connect-timeout 5 --max-time 30 \
+              -H 'Host: www.goodcms.cn' -D - -o /dev/null \
               --retry 5 --retry-delay 3 "http://127.0.0.1:3020${path}")"
-            printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
-            printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}"
+            normalized_headers="$(printf '%s' "${headers}" | tr -d '\r')"
+            printf '%s' "${normalized_headers}" | grep -Eq '^HTTP/[^ ]+ 200$'
+            printf '%s' "${normalized_headers}" | grep -iq '^x-gooes-service: web$'
+            printf '%s' "${normalized_headers}" | grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}$"
           }
           smoke_rollback_url "/"
           smoke_rollback_url "/partners"
           smoke_rollback_url "/sitemap.xml"
           smoke_rollback_url "${WEB_SMOKE_CONTENT_PATH}"
-          preview_headers="$(curl -sS -H 'Host: www.goodcms.cn' -D - -o /dev/null \
+          preview_headers="$(curl -sS --connect-timeout 5 --max-time 30 \
+            -H 'Host: www.goodcms.cn' -D - -o /dev/null \
             "http://127.0.0.1:3020/api/preview")"
-          printf '%s' "${preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303'
-          printf '%s' "${preview_headers}" | grep -iq '^location: /preview-error'
-          printf '%s' "${preview_headers}" | grep -iq '^cache-control: no-store'
+          normalized_preview_headers="$(printf '%s' "${preview_headers}" | tr -d '\r')"
+          printf '%s' "${normalized_preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303$'
+          printf '%s' "${normalized_preview_headers}" | grep -iq '^location: /preview-error$'
+          printf '%s' "${normalized_preview_headers}" | grep -iq '^cache-control: no-store$'
           echo "WEB_ROLLBACK_STATUS=success" >> "${GITHUB_ENV}"
           echo "WEB_ROLLED_BACK=true" >> "${GITHUB_ENV}"
           echo "WEB_DEPLOY_STAGE=rolled_back" >> "${GITHUB_ENV}"
