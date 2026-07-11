@@ -65,6 +65,7 @@ describe("auth public route allowlist", () => {
       "/public/site/articles/first-article",
       "/public/site/cases",
       "/public/site/cases/hangzhou-home",
+      "/public/site/cities",
       "/public/site/cities/hangzhou",
     ];
 
@@ -77,7 +78,6 @@ describe("auth public route allowlist", () => {
     }
 
     for (const route of [
-      "/public/site/cities",
       "/public/site/articles/first-article/extra",
       "/public/site/articles-extra",
       "/public/site/article/first-article",

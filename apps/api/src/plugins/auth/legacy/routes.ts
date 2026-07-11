@@ -196,7 +196,11 @@ export function shouldBypassAuth(method: string, url: string) {
 
 function isPublicSiteContentRoute(method: string, url: string) {
   if (method !== "GET" && method !== "HEAD") return false;
-  if (url === "/public/site/articles" || url === "/public/site/cases") return true;
+  if (
+    url === "/public/site/articles"
+    || url === "/public/site/cases"
+    || url === "/public/site/cities"
+  ) return true;
   return /^\/public\/site\/(?:articles|cases|cities)\/[^/]+$/.test(url);
 }
 
