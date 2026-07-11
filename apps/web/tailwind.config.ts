@@ -13,6 +13,7 @@ const config: Config = {
         border: "oklch(var(--border) / <alpha-value>)",
         input: "oklch(var(--input) / <alpha-value>)",
         ring: "oklch(var(--ring) / <alpha-value>)",
+        overlay: "oklch(var(--overlay) / <alpha-value>)",
         background: "oklch(var(--background) / <alpha-value>)",
         foreground: "oklch(var(--foreground) / <alpha-value>)",
         primary: {

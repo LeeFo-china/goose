@@ -48,6 +48,19 @@ const requiredTokens = [
   "ring",
 ] as const;
 
+const semanticTextPairs = [
+  ["background", "foreground"],
+  ["card", "card-foreground"],
+  ["popover", "popover-foreground"],
+  ["primary", "primary-foreground"],
+  ["secondary", "secondary-foreground"],
+  ["accent", "accent-foreground"],
+  ["destructive", "destructive-foreground"],
+  ["success", "success-foreground"],
+  ["warning", "warning-foreground"],
+  ["muted", "muted-foreground"],
+] as const;
+
 interface Oklch {
   readonly chroma: number;
   readonly hue: number;
@@ -127,7 +140,21 @@ describe("official website design system contract", () => {
     expect(config).not.toContain("hsl(var(--");
   });
 
-  test("keeps text, primary actions, focus rings, and input boundaries accessible", () => {
+  test("keeps every semantic text pair accessible in both themes", () => {
+    const css = read("app/globals.css");
+    const rootBlock = css.match(/:root\s*\{([^}]+)\}/)?.[1] ?? "";
+    const darkBlock = css.match(/\.dark\s*\{([^}]+)\}/)?.[1] ?? "";
+
+    for (const block of [rootBlock, darkBlock]) {
+      for (const [surface, foreground] of semanticTextPairs) {
+        expect(
+          contrastRatio(getToken(block, surface), getToken(block, foreground)),
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  test("keeps control boundaries and focus indicators visible in both themes", () => {
     const css = read("app/globals.css");
     const rootBlock = css.match(/:root\s*\{([^}]+)\}/)?.[1] ?? "";
     const darkBlock = css.match(/\.dark\s*\{([^}]+)\}/)?.[1] ?? "";
@@ -135,12 +162,37 @@ describe("official website design system contract", () => {
     for (const block of [rootBlock, darkBlock]) {
       const background = getToken(block, "background");
 
-      expect(contrastRatio(background, getToken(block, "foreground"))).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(background, getToken(block, "muted-foreground"))).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(getToken(block, "primary"), getToken(block, "primary-foreground"))).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(background, getToken(block, "ring"))).toBeGreaterThanOrEqual(3);
       expect(contrastRatio(background, getToken(block, "input"))).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(background, getToken(block, "ring"))).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  test("uses a theme-specific semantic scrim for overlays", () => {
+    const css = read("app/globals.css");
+    const config = read("tailwind.config.ts");
+    const dialog = read("components/ui/dialog.tsx");
+    const rootBlock = css.match(/:root\s*\{([^}]+)\}/)?.[1] ?? "";
+    const darkBlock = css.match(/\.dark\s*\{([^}]+)\}/)?.[1] ?? "";
+
+    getToken(rootBlock, "overlay");
+    getToken(darkBlock, "overlay");
+    expect(config).toContain('overlay: "oklch(var(--overlay) / <alpha-value>)"');
+    expect(dialog).toContain("bg-overlay/70");
+    expect(dialog).not.toContain("bg-foreground/70");
+  });
+
+  test("localizes Dialog close copy and keeps mobile controls at least 44px tall", () => {
+    const dialog = read("components/ui/dialog.tsx");
+    const toggle = read("components/theme-toggle.tsx");
+    const mobileNavigation = read(
+      "components/official-site/mobile-navigation.tsx",
+    );
+
+    expect(dialog).toContain('<span className="sr-only">关闭</span>');
+    expect(toggle).toContain('className="h-11 md:h-9"');
+    expect(mobileNavigation).toMatch(
+      /<DialogTrigger[\s\S]*?<Button[^>]*className="h-11"/,
+    );
   });
 
   test("keeps the shell server-rendered and composes header, main, and footer", () => {

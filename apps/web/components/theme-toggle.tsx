@@ -31,6 +31,7 @@ export function ThemeToggle(): React.JSX.Element {
   return (
     <Button
       aria-label={`当前主题：${label}，切换到${themeLabels[nextTheme]}`}
+      className="h-11 md:h-9"
       onClick={() => setTheme(nextTheme)}
       size="sm"
       type="button"

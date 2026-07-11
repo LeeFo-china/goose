@@ -26,6 +26,7 @@
   --border: 0.86 0 0;
   --input: 0.62 0 0;
   --ring: 0.25 0 0;
+  --overlay: 0.16 0 0;
   --radius: 0.75rem;
   --font-sans: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
@@ -45,7 +46,7 @@
   --muted-foreground: 0.72 0 0;
   --accent: 0.82 0.17 84;
   --accent-foreground: 0.17 0.01 84;
-  --destructive: 0.64 0.2 27;
+  --destructive: 0.57 0.2 27;
   --destructive-foreground: 0.98 0 0;
   --success: 0.68 0.14 148;
   --success-foreground: 0.16 0 0;
@@ -54,6 +55,7 @@
   --border: 0.32 0 0;
   --input: 0.55 0 0;
   --ring: 0.82 0.17 84;
+  --overlay: 0.08 0 0;
 }
 
 @layer components {

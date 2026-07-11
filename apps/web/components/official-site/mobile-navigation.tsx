@@ -17,7 +17,7 @@ export function MobileNavigation(): React.JSX.Element {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
+        <Button className="h-11" size="sm" variant="outline">
           打开菜单
         </Button>
       </DialogTrigger>
