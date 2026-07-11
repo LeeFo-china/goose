@@ -4,24 +4,25 @@ import { fileURLToPath } from "node:url";
 
 const webDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const standaloneWebDir = join(webDir, ".next", "standalone", "apps", "web");
+const staticDir = join(webDir, ".next", "static");
 
-const copies = [
-  {
-    from: join(webDir, ".next", "static"),
-    to: join(standaloneWebDir, ".next", "static"),
-  },
-  {
-    from: join(webDir, "public"),
-    to: join(standaloneWebDir, "public"),
-  },
-];
+if (!existsSync(standaloneWebDir)) {
+  throw new Error(`Missing required standalone output: ${standaloneWebDir}`);
+}
 
-for (const { from, to } of copies) {
-  if (!existsSync(from) || !existsSync(standaloneWebDir)) {
-    continue;
-  }
+if (!existsSync(staticDir)) {
+  throw new Error(`Missing required static assets: ${staticDir}`);
+}
 
+const copyDirectory = (from, to) => {
   rmSync(to, { force: true, recursive: true });
   mkdirSync(dirname(to), { recursive: true });
   cpSync(from, to, { recursive: true });
+};
+
+copyDirectory(staticDir, join(standaloneWebDir, ".next", "static"));
+
+const publicDir = join(webDir, "public");
+if (existsSync(publicDir)) {
+  copyDirectory(publicDir, join(standaloneWebDir, "public"));
 }
