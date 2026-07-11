@@ -489,6 +489,19 @@ git commit -m "ci(web): 增加独立官网部署流水线"
 4. 在 dev 完成验证码 smoke：单次发送成功；同 IP 6 路并发最多 5 路成功；同 phone 双路、同 device 双路均最多 1 路成功。
 5. API 和验证码 smoke 全部通过后再部署 Web，并访问 `/partners` 验证申请闭环。
 
+流水线强制采用分阶段发布，禁止在同一次请求中部署 API 和 Web：
+
+1. 通过批准的 migration workflow apply，并以 `supabase migration list` 保存
+   `20260711120000` Local/Remote 对齐证据。
+2. 只选择 `api` 部署当前提交 SHA，等待 API container health 和公开 health 通过。
+3. 针对同一提交 SHA 人工执行并记录验证码 smoke：单次发送成功、同 IP 6 路最多
+   5 路成功、同 phone 双路和同 device 双路均最多 1 路成功。
+4. 只选择 `web` 手动 dispatch，并填写：
+   `migration_version=20260711120000`、`verified_commit_sha=<当前 GITHUB_SHA>`、
+   `sms_smoke_confirmation=API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED`。
+5. 任一证据缺失或 SHA 不一致时流水线 fail closed。push 只构建并推送 Web 镜像，
+   不重建或检查 Web 容器；生产 `all` 明确拒绝，必须按 API-only、Web-only 分阶段执行。
+
 失败或回滚时，API 可回滚到 `815d5fca`；新增数据库函数保持不动，不影响旧 API。禁止为了回滚手动在远端 `DROP FUNCTION`。未来如需移除函数，必须新建 forward migration，经 review/apply 后执行。
 
 ### 阶段一验收门

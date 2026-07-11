@@ -13,6 +13,18 @@ on:
         required: true
         default: all
         type: string
+      migration_version:
+        description: "For web only: applied migration version"
+        required: false
+        type: string
+      verified_commit_sha:
+        description: "For web only: API health and SMS smoke commit SHA"
+        required: false
+        type: string
+      sms_smoke_confirmation:
+        description: "For web only: type API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -27,7 +39,39 @@ env:
   RELEASE_SERVICE: ${{ github.event.inputs.service || 'all' }}
 
 jobs:
+  validate-request:
+    name: Validate production deployment request
+    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    env:
+      INPUT_MIGRATION_VERSION: ${{ github.event.inputs.migration_version }}
+      INPUT_VERIFIED_COMMIT_SHA: ${{ github.event.inputs.verified_commit_sha }}
+      INPUT_SMS_SMOKE_CONFIRMATION: ${{ github.event.inputs.sms_smoke_confirmation }}
+    steps:
+      - name: Validate service selection and web gate
+        run: |
+          set -euo pipefail
+          normalized=",${RELEASE_SERVICE//[[:space:]]/},"
+          if [ "${normalized}" != ",all," ]; then
+            IFS=',' read -ra requested <<< "${RELEASE_SERVICE//[[:space:]]/}"
+            for service in "${requested[@]}"; do
+              case "$service" in
+                api|admin|web|social-video-worker|cos-reconcile-worker|"") ;;
+                *) echo "Unknown service: $service"; exit 1 ;;
+              esac
+            done
+          fi
+          if [ "${normalized}" = ",all," ] || [[ "${normalized}" == *",web,"* ]]; then
+            test "${normalized}" = ",web," || {
+              echo "Web must be built and deployed separately after API health and SMS smoke evidence."
+              exit 1
+            }
+            test "${INPUT_MIGRATION_VERSION}" = "20260711120000"
+            test "${INPUT_VERIFIED_COMMIT_SHA}" = "${GITHUB_SHA}"
+            test "${INPUT_SMS_SMOKE_CONFIRMATION}" = "API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
+          fi
+
   build:
+    needs: validate-request
     name: Build ${{ matrix.service }}
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
     strategy:
@@ -217,4 +261,7 @@ jobs:
     uses: ./.github/workflows/deploy-docker-services.yml
     with:
       service: ${{ github.event.inputs.service || 'all' }}
+      migration_version: ${{ github.event.inputs.migration_version }}
+      verified_commit_sha: ${{ github.event.inputs.verified_commit_sha }}
+      sms_smoke_confirmation: ${{ github.event.inputs.sms_smoke_confirmation }}
     secrets: inherit

@@ -85,6 +85,8 @@ describe("phase one SEO and standalone deployment", () => {
     expect(deploy).toContain("gooes-web");
     expect(deploy).toContain("https://www.goodcms.cn/partners");
     expect(workflows).toContain("Unknown service");
-    expect(dev).toContain("migration");
+    expect(dev).toContain("migration_version");
+    expect(dev).toContain("verified_commit_sha");
+    expect(dev).toContain("API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED");
   });
 });

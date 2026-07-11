@@ -39,6 +39,18 @@ on:
           - web
           - social-video-worker
           - cos-reconcile-worker
+      migration_version:
+        description: "For web only: applied migration version"
+        required: false
+        type: string
+      verified_commit_sha:
+        description: "For web only: API health and SMS smoke commit SHA"
+        required: false
+        type: string
+      sms_smoke_confirmation:
+        description: "For web only: type API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -200,12 +212,37 @@ jobs:
 
           if [ -z "${SERVICES}" ]; then
             echo "No dev service matched changed files; exiting."
-            echo "SERVICES=" >> "${GITHUB_ENV}"
+            echo "BUILD_SERVICES=" >> "${GITHUB_ENV}"
+            echo "DEPLOY_SERVICES=" >> "${GITHUB_ENV}"
             exit 0
           fi
 
-          echo "Resolved dev services: ${SERVICES}"
-          echo "SERVICES=${SERVICES}" >> "${GITHUB_ENV}"
+          remove_service() {
+            excluded="$1"
+            shift
+            for service in "$@"; do
+              if [ "$service" != "$excluded" ]; then printf '%s ' "$service"; fi
+            done
+          }
+
+          BUILD_SERVICES="${SERVICES}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${INPUT_SERVICE}" = "web" ]; then
+              DEPLOY_SERVICES=""
+            else
+              DEPLOY_SERVICES="${SERVICES}"
+            fi
+          else
+            DEPLOY_SERVICES="$(remove_service web ${SERVICES})"
+            if [[ " ${SERVICES} " == *" web "* ]]; then
+              echo "Web image will be built, but deployment requires a gated manual dispatch."
+            fi
+          fi
+
+          echo "Resolved build services: ${BUILD_SERVICES}"
+          echo "Resolved automatic deploy services: ${DEPLOY_SERVICES:-none}"
+          echo "BUILD_SERVICES=${BUILD_SERVICES}" >> "${GITHUB_ENV}"
+          echo "DEPLOY_SERVICES=${DEPLOY_SERVICES}" >> "${GITHUB_ENV}"
 
       - name: Checkout repository
         env:
@@ -261,7 +298,7 @@ jobs:
           docker version
 
       - name: Check permission boundaries
-        if: ${{ env.SERVICES != '' }}
+        if: ${{ env.BUILD_SERVICES != '' }}
         run: |
           set -euo pipefail
           cd "${RUNNER_WORKSPACE}/source"
@@ -290,14 +327,14 @@ jobs:
       - name: Build and push dev images
         run: |
           set -euo pipefail
-          if [ -z "${SERVICES:-}" ]; then
+          if [ -z "${BUILD_SERVICES:-}" ]; then
             echo "No dev services to build."
             exit 0
           fi
           cd "${RUNNER_WORKSPACE}/source"
 
           built_images=""
-          for SERVICE in ${SERVICES}; do
+          for SERVICE in ${BUILD_SERVICES}; do
             case "$SERVICE" in
               api|cos-reconcile-worker)
                 IMAGE_REPO=goose-api
@@ -407,7 +444,7 @@ jobs:
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${SERVICES:-}" ]; then
+          if [ -z "${DEPLOY_SERVICES:-}" ]; then
             echo "No dev services to deploy."
             exit 0
           fi
@@ -416,7 +453,6 @@ jobs:
           test -n "${CCR_NAMESPACE}"
           REMOTE_GOOES_API_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-api:${IMAGE_TAG}"
           REMOTE_GOOES_ADMIN_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-admin:${IMAGE_TAG}"
-          REMOTE_GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-web:${IMAGE_TAG}"
           REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-social-video-worker:${IMAGE_TAG}"
 
           scp -i "${DEV_DEPLOY_KEY_PATH}" \
@@ -425,16 +461,13 @@ jobs:
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}:${DEV_DEPLOY_DIR}/docker-compose.dev.yml"
 
           COMPOSE_SERVICES=""
-          for SERVICE in ${SERVICES}; do
+          for SERVICE in ${DEPLOY_SERVICES}; do
             case "$SERVICE" in
               api)
                 COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-api-dev"
                 ;;
               admin)
                 COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-admin-dev"
-                ;;
-              web)
-                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-web-dev"
                 ;;
               social-video-worker)
                 COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-social-video-worker-dev"
@@ -457,24 +490,22 @@ jobs:
              printf '%s' '${TENCENT_CCR_PASSWORD}' | docker login '${TENCENT_CCR_REGISTRY}' -u '${TENCENT_CCR_USERNAME}' --password-stdin
              GOOES_API_IMAGE='${REMOTE_GOOES_API_IMAGE}' \
              GOOES_ADMIN_IMAGE='${REMOTE_GOOES_ADMIN_IMAGE}' \
-             GOOES_WEB_IMAGE='${REMOTE_GOOES_WEB_IMAGE}' \
              GOOES_SOCIAL_VIDEO_WORKER_IMAGE='${REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE}' \
              docker compose -f docker-compose.dev.yml --profile workers pull ${COMPOSE_SERVICES}
              GOOES_API_IMAGE='${REMOTE_GOOES_API_IMAGE}' \
              GOOES_ADMIN_IMAGE='${REMOTE_GOOES_ADMIN_IMAGE}' \
-             GOOES_WEB_IMAGE='${REMOTE_GOOES_WEB_IMAGE}' \
              GOOES_SOCIAL_VIDEO_WORKER_IMAGE='${REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE}' \
              docker compose -f docker-compose.dev.yml --profile workers up -d --no-deps --force-recreate ${COMPOSE_SERVICES}"
 
       - name: Check dev services
         run: |
           set -euo pipefail
-          if [ -z "${SERVICES:-}" ]; then
+          if [ -z "${DEPLOY_SERVICES:-}" ]; then
             echo "No dev services to check."
             exit 0
           fi
 
-          for SERVICE in ${SERVICES}; do
+          for SERVICE in ${DEPLOY_SERVICES}; do
             case "$SERVICE" in
               api)
                 COMPOSE_SERVICE=gooes-api-dev
@@ -483,10 +514,6 @@ jobs:
               admin)
                 COMPOSE_SERVICE=gooes-admin-dev
                 URL=https://admin-dev.goodcms.cn/login
-                ;;
-              web)
-                COMPOSE_SERVICE=gooes-web-dev
-                URL=https://www-dev.goodcms.cn/partners
                 ;;
               social-video-worker)
                 COMPOSE_SERVICE=gooes-social-video-worker-dev
@@ -528,6 +555,65 @@ jobs:
               curl --noproxy '*' -fsS -o /dev/null --retry 8 --retry-delay 3 "$URL"
             fi
           done
+
+      - name: Validate gated dev web deployment
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.service == 'web' }}
+        env:
+          INPUT_SERVICE: ${{ github.event.inputs.service }}
+          INPUT_MIGRATION_VERSION: ${{ github.event.inputs.migration_version }}
+          INPUT_VERIFIED_COMMIT_SHA: ${{ github.event.inputs.verified_commit_sha }}
+          INPUT_SMS_SMOKE_CONFIRMATION: ${{ github.event.inputs.sms_smoke_confirmation }}
+        run: |
+          set -euo pipefail
+          test "${INPUT_SERVICE}" = "web"
+          test "${INPUT_MIGRATION_VERSION}" = "20260711120000"
+          test "${INPUT_VERIFIED_COMMIT_SHA}" = "${GITHUB_SHA}"
+          test "${INPUT_SMS_SMOKE_CONFIRMATION}" = "API_HEALTH_AND_SMS_CONCURRENCY_SMOKE_PASSED"
+          echo "WEB_DEPLOY_APPROVED=true" >> "${GITHUB_ENV}"
+
+      - name: Deploy gated dev web
+        if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}
+        env:
+          TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
+          TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CCR_NAMESPACE="${{ vars.TENCENT_CCR_NAMESPACE }}"
+          test -n "${CCR_NAMESPACE}"
+          REMOTE_GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-web:${IMAGE_TAG}"
+
+          scp -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${RUNNER_WORKSPACE}/source/deploy/docker-compose.dev.yml" \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}:${DEV_DEPLOY_DIR}/docker-compose.dev.yml"
+
+          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+            "set -euo pipefail
+             cd '${DEV_DEPLOY_DIR}'
+             printf '%s' '${TENCENT_CCR_PASSWORD}' | docker login '${TENCENT_CCR_REGISTRY}' -u '${TENCENT_CCR_USERNAME}' --password-stdin
+             GOOES_WEB_IMAGE='${REMOTE_GOOES_WEB_IMAGE}' \
+             docker compose -f docker-compose.dev.yml pull gooes-web-dev
+             GOOES_WEB_IMAGE='${REMOTE_GOOES_WEB_IMAGE}' \
+             docker compose -f docker-compose.dev.yml up -d --no-deps --force-recreate gooes-web-dev"
+
+      - name: Check gated dev web
+        if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}
+        run: |
+          set -euo pipefail
+          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+            "set -euo pipefail
+             for _ in \$(seq 1 60); do
+               health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true)
+               if [ \"\$health\" = healthy ]; then exit 0; fi
+               sleep 5
+             done
+             docker logs --tail 120 gooes-web-dev || true
+             exit 1"
+          curl --noproxy '*' -fsS -o /dev/null --retry 8 --retry-delay 3 https://www-dev.goodcms.cn/partners
 
       - name: Cleanup dev server Docker artifacts
         if: ${{ always() }}
@@ -587,7 +673,8 @@ jobs:
             echo "| Event | ${GITHUB_EVENT_NAME} |"
             echo "| Branch | ${GITHUB_REF_NAME} |"
             echo "| Commit | \`${short_sha}\` |"
-            echo "| Services | \`${SERVICES:-none}\` |"
+            echo "| Build services | \`${BUILD_SERVICES:-none}\` |"
+            echo "| Automatic deploy services | \`${DEPLOY_SERVICES:-none}\` |"
             echo "| Duration | ${elapsed_seconds}s |"
             echo ""
             echo "### Service status"
@@ -596,12 +683,12 @@ jobs:
             echo "| --- | --- | --- | --- |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-          if [ -z "${SERVICES:-}" ]; then
+          if [ -z "${DEPLOY_SERVICES:-}" ] && [ "${WEB_DEPLOY_APPROVED:-}" != "true" ]; then
             echo "| none | - | - | no matched service |" >> "${GITHUB_STEP_SUMMARY}"
             exit 0
           fi
 
-          for SERVICE in ${SERVICES}; do
+          for SERVICE in ${DEPLOY_SERVICES:-}; do
             case "$SERVICE" in
               api)
                 container=gooes-api-dev
@@ -610,10 +697,6 @@ jobs:
               admin)
                 container=gooes-admin-dev
                 image_repo=goose-admin
-                ;;
-              web)
-                container=gooes-web-dev
-                image_repo=goose-web
                 ;;
               social-video-worker)
                 container=gooes-social-video-worker-dev
@@ -644,3 +727,12 @@ jobs:
 
             echo "| ${SERVICE} | ${container} | \`${image}\` | ${runtime_status} |" >> "${GITHUB_STEP_SUMMARY}"
           done
+
+          if [ "${WEB_DEPLOY_APPROVED:-}" = "true" ]; then
+            image="${TENCENT_CCR_REGISTRY}/${namespace}/goose-web:${IMAGE_TAG}"
+            runtime_status="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+              -o StrictHostKeyChecking=no \
+              "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+              "docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true" | xargs || true)"
+            echo "| web | gooes-web-dev | \`${image}\` | ${runtime_status:-not found} |" >> "${GITHUB_STEP_SUMMARY}"
+          fi
