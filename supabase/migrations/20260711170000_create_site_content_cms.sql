@@ -14,7 +14,17 @@ CREATE TABLE public.site_content_entries (
   published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (content_type, slug)
+  UNIQUE (content_type, slug),
+  CONSTRAINT site_content_entries_publication_state_check
+    CHECK (
+      (
+        (published_version_id IS NULL AND published_at IS NULL)
+        OR
+        (published_version_id IS NOT NULL AND published_at IS NOT NULL)
+      )
+      AND (status <> 'published' OR published_version_id IS NOT NULL)
+      AND (status <> 'draft' OR published_version_id IS NULL)
+    )
 );
 
 CREATE TABLE public.site_content_versions (
@@ -84,7 +94,11 @@ REVOKE ALL ON TABLE public.site_content_versions FROM PUBLIC, anon, authenticate
 REVOKE ALL ON TABLE public.site_preview_tokens FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.site_content_entries TO service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.site_content_versions TO service_role;
+-- Version rows are immutable through the application role. Entry deletion may
+-- still remove its history through the declared FK ON DELETE CASCADE; direct
+-- version mutation is not part of the service_role contract.
+REVOKE UPDATE, DELETE ON TABLE public.site_content_versions FROM service_role;
+GRANT SELECT, INSERT ON TABLE public.site_content_versions TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.site_preview_tokens TO service_role;
 
 CREATE OR REPLACE FUNCTION public.publish_site_content(
@@ -231,6 +245,9 @@ TO service_role;
 
 COMMENT ON TABLE public.site_content_entries
 IS 'Official website content identities and current publication pointers.';
+COMMENT ON CONSTRAINT site_content_entries_publication_state_check
+ON public.site_content_entries
+IS 'Draft entries have no publication pointer; published entries require one; archived entries may retain or omit a complete publication pair.';
 COMMENT ON TABLE public.site_content_versions
 IS 'Immutable draft and publication history for official website content.';
 COMMENT ON TABLE public.site_preview_tokens
