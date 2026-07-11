@@ -113,17 +113,11 @@ export class SmsVerificationCodeRepository {
     });
   }
 
-  async deletePendingByPhoneSceneCode(input: {
-    phone: string;
-    scene: SmsScene;
-    code: string;
-  }) {
+  async deletePendingById(reservationId: string) {
     const { error } = await this.adminClient
       .from("sms_verification_codes")
       .delete()
-      .eq("phone", input.phone)
-      .eq("scene", input.scene)
-      .eq("code", input.code)
+      .eq("id", reservationId)
       .eq("status", "pending")
       .select("id");
 

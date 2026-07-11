@@ -21,11 +21,7 @@ interface SmsVerificationCodeRepositoryPort {
     requestDevice?: string | null;
     requestIpLimit: number;
   }): Promise<SmsReservationResult>;
-  deletePendingByPhoneSceneCode(input: {
-    phone: string;
-    scene: SmsScene;
-    code: string;
-  }): Promise<void>;
+  deletePendingById(reservationId: string): Promise<void>;
 }
 
 interface SmsVerificationCodeServiceDependencies {
@@ -82,11 +78,7 @@ export class SmsVerificationCodeService {
     try {
       await this.send(input.phone, code, input.scene);
     } catch (smsError) {
-      await this.repository.deletePendingByPhoneSceneCode({
-        phone: input.phone,
-        scene: input.scene,
-        code,
-      });
+      await this.repository.deletePendingById(reservation.id);
 
       throw Errors.dbError("发送验证码失败", smsError);
     }

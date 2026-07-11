@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 
+import { Errors } from "@/errors/error-factory";
 import type { SmsScene } from "@gooes/domain";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -66,7 +67,7 @@ async function createHarness() {
         limitedDimension: null,
       });
     },
-    deletePendingByPhoneSceneCode() {
+    deletePendingById() {
       return Promise.resolve();
     },
   };
@@ -142,5 +143,57 @@ describe("SmsVerificationCodeService atomic rate limits", () => {
     ]);
 
     expect(fulfilledCount(results)).toBe(1);
+  });
+
+  test("cleans up only the current reservation when SMS sending fails", async () => {
+    const { SmsVerificationCodeService } = await serviceModule;
+    const reservationId = "00000000-0000-4000-8000-000000000123";
+    const smsFailure = new Error("SMS provider rejected");
+    const deletePendingById = mock(async () => undefined);
+    const service = new SmsVerificationCodeService({
+      repository: {
+        reservePending: async () => ({
+          reserved: true,
+          id: reservationId,
+          limitedDimension: null,
+        }),
+        deletePendingById,
+      },
+      send: async () => {
+        throw smsFailure;
+      },
+    });
+
+    await expect(service.sendCode(sendInput(0))).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "发送验证码失败",
+      details: smsFailure,
+    });
+    expect(deletePendingById).toHaveBeenCalledWith(reservationId);
+  });
+
+  test("propagates cleanup database failures instead of hiding pending residue", async () => {
+    const { SmsVerificationCodeService } = await serviceModule;
+    const cleanupFailure = Errors.dbError("清理验证码失败", {
+      message: "database unavailable",
+    });
+    const service = new SmsVerificationCodeService({
+      repository: {
+        reservePending: async () => ({
+          reserved: true,
+          id: "00000000-0000-4000-8000-000000000124",
+          limitedDimension: null,
+        }),
+        deletePendingById: async () => {
+          throw cleanupFailure;
+        },
+      },
+      send: async () => {
+        throw new Error("SMS provider rejected");
+      },
+    });
+
+    await expect(service.sendCode(sendInput(0))).rejects.toBe(cleanupFailure);
   });
 });
