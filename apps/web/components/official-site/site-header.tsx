@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { MobileNavigation } from "@/components/official-site/mobile-navigation";
@@ -9,9 +10,10 @@ export function SiteHeader(): React.JSX.Element {
     <header className="border-b bg-background">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6 lg:px-8">
         <Link
-          className="shrink-0 rounded-md font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex shrink-0 items-center gap-2 rounded-md font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
           href="/"
         >
+          <Image alt="" height={32} priority src="/logo.png" width={32} />
           鹅班长
         </Link>
 
@@ -21,6 +23,9 @@ export function SiteHeader(): React.JSX.Element {
         >
           <Button asChild size="sm" variant="ghost">
             <Link href="/">首页</Link>
+          </Button>
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/partners">城市合伙人</Link>
           </Button>
           <ThemeToggle />
         </nav>

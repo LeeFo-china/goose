@@ -4,6 +4,7 @@ import { Separator } from "@/components/ui/separator";
 
 const footerLinks = [
   { href: "/", label: "返回首页" },
+  { href: "/partners", label: "城市合伙人" },
 ] as const;
 
 export function SiteFooter(): React.JSX.Element {
