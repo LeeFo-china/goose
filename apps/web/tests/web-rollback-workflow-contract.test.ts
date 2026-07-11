@@ -1,5 +1,8 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 
 const root = new URL("../../../", import.meta.url);
 const dev = readFileSync(new URL(".github/workflows/deploy-dev.yml", root), "utf8");
@@ -7,6 +10,11 @@ const production = readFileSync(
   new URL(".github/workflows/deploy-docker-services.yml", root),
   "utf8",
 );
+const roots: string[] = [];
+
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
 
 function step(workflow: string, name: string): string {
   const start = workflow.indexOf(`- name: ${name}`);
@@ -40,15 +48,66 @@ describe("Web rollback workflows", () => {
     );
   });
 
-  test.each([
-    [dev, "GITHUB_SHA"],
-    [production, "SOURCE_SHA"],
-  ])("reports the final Web revision and tag from rollback status", (workflow, newRevision) => {
+  test.each([dev, production])("reports the final Web revision and tag from container inspection", (workflow) => {
     const summary = step(workflow, workflow === dev ? "Write dev deployment summary" : "Deployment summary");
-    expect(summary).toContain('WEB_ROLLBACK_STATUS:-');
-    expect(summary).toContain("WEB_OLD_REVISION");
-    expect(summary).toContain("WEB_ROLLBACK_TAG");
-    expect(summary).toContain(newRevision);
+    expect(summary).toContain("docker inspect");
+    expect(summary).toContain("GOOES_WEB_IMAGE:-not_set");
+    expect(summary).not.toContain('web_revision="${SOURCE_SHA}"');
+    expect(summary).not.toContain('revision="${GITHUB_SHA}"');
     expect(summary).toMatch(/168h|7 days/);
+  });
+
+  test.each([dev, production])("tracks deployment stages and inspects the actual Web container", (workflow) => {
+    expect(workflow).toContain("WEB_DEPLOY_STAGE=initial");
+    expect(workflow).toContain("WEB_DEPLOY_STAGE=gate_rejected");
+    expect(workflow).toContain("WEB_DEPLOY_STAGE=gate_validated");
+    expect(workflow).toContain("WEB_DEPLOY_STAGE=deploying");
+    expect(workflow).toContain("WEB_DEPLOY_STAGE=success");
+    expect(workflow).toContain("WEB_DEPLOY_STAGE=rollback_failed");
+    expect(workflow).toContain("WEB_DEPLOY_STAGE=rolled_back");
+    const summary = step(workflow, workflow === dev ? "Write dev deployment summary" : "Deployment summary");
+    expect(summary).not.toContain("set -euo pipefail");
+    expect(summary).toContain("docker inspect");
+    expect(summary).toContain("not_running");
+    expect(summary).toContain("unknown");
+    expect(summary).toContain("WEB_DEPLOY_STAGE:-initial");
+    expect(summary).toContain("GOOES_WEB_IMAGE:-not_set");
+  });
+
+  test("production summary survives an early rejected gate with no Web container", () => {
+    const root = mkdtempSync(join(tmpdir(), "web-summary-"));
+    roots.push(root);
+    const summaryPath = join(root, "summary.md");
+    const docker = join(root, "docker");
+    writeFileSync(
+      docker,
+      `#!/usr/bin/env bash
+if [ "$1" = ps ] && [ "$2" = -aq ]; then exit 0; fi
+if [ "$1" = ps ]; then printf '%s\\n' NAMES; exit 0; fi
+exit 1
+`,
+    );
+    chmodSync(docker, 0o755);
+    const summaryScript = step(production, "Deployment summary")
+      .split("run: |\n")[1]
+      ?.replaceAll("${{ job.status }}", "failure")
+      .replace(/^ {10}/gm, "") ?? "exit 2";
+    const result = spawnSync("bash", ["-c", summaryScript], {
+      encoding: "utf8",
+      env: {
+        NODE_ENV: "test",
+        PATH: `${root}:${process.env.PATH}`,
+        GITHUB_STEP_SUMMARY: summaryPath,
+        WEB_DEPLOY_STAGE: "gate_rejected",
+        DEPLOY_SERVICES: "web",
+      },
+    });
+
+    expect(result.status).toBe(0);
+    const rendered = readFileSync(summaryPath, "utf8");
+    expect(rendered).toContain("gate_rejected");
+    expect(rendered).toContain("not_deployed");
+    expect(rendered).toContain("not_running");
+    expect(rendered).toContain("not_set");
   });
 });

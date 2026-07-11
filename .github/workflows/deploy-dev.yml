@@ -77,6 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "DEPLOY_STARTED_AT=$(date +%s)" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=initial" >> "${GITHUB_ENV}"
 
       - name: Resolve services
         env:
@@ -415,7 +416,7 @@ jobs:
           disk_before="${disk_used}/${disk_size} used, ${disk_avail} avail, ${disk_pct}"
           docker container prune -f || true
           docker image prune -f || true
-          docker builder prune -f --filter "until=24h" || true
+          docker builder prune -f --filter "until=168h" || true
           disk_after_line="$(df -h / | sed -n '2p')"
           read -r _ disk_size disk_used disk_avail disk_pct _ <<< "${disk_after_line}"
           disk_after="${disk_used}/${disk_size} used, ${disk_avail} avail, ${disk_pct}"
@@ -425,7 +426,7 @@ jobs:
             echo ""
             echo "| Host | Before | After | Policy |"
             echo "| --- | --- | --- | --- |"
-            echo "| ${RUNNER_NAME} | ${disk_before} | ${disk_after} | containers + dangling images + build cache older than 24h |"
+            echo "| ${RUNNER_NAME} | ${disk_before} | ${disk_after} | containers + dangling images + build cache older than 168h / 7 days |"
             echo ""
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -563,6 +564,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          echo "WEB_DEPLOY_STAGE=gate_rejected" >> "${GITHUB_ENV}"
           test "${INPUT_SERVICE}" = "web"
           [[ "${INPUT_GATE_RUN_ID}" =~ ^[0-9]+$ ]]
           run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_GATE_RUN_ID}")"
@@ -575,6 +577,7 @@ jobs:
           node "${RUNNER_WORKSPACE}/source/scripts/verify-web-gate-receipt.mjs" \
             "${receipt_dir}/web-deployment-gate-receipt.json" development "${GITHUB_SHA}" 20260711120000
           echo "WEB_DEPLOY_APPROVED=true" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=gate_validated" >> "${GITHUB_ENV}"
 
       - name: Deploy gated dev web
         if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}
@@ -600,6 +603,7 @@ jobs:
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
             "docker inspect -f '{{.Image}}' gooes-web-dev 2>/dev/null || true")"
           echo "WEB_ROLLBACK_STATUS=not_available" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=deploying" >> "${GITHUB_ENV}"
           if [ -n "${old_image_id}" ]; then
             ROLLBACK_CREATED_AT="$(date +%s)"
             WEB_ROLLBACK_TAG="gooes-web:rollback-${GITHUB_RUN_ID}-${ROLLBACK_CREATED_AT}"
@@ -649,6 +653,7 @@ jobs:
           printf '%s' "${headers}" | grep -iq '^x-gooes-service: web'
           printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${GITHUB_SHA}"
           echo "WEB_ROLLBACK_STATUS=not_requested" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=success" >> "${GITHUB_ENV}"
 
       - name: Roll back gated dev web
         if: ${{ failure() && env.WEB_ROLLBACK_READY == 'true' }}
@@ -657,6 +662,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "WEB_ROLLBACK_STATUS=rollback_failed" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=rollback_failed" >> "${GITHUB_ENV}"
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           PROXY_SECRET_BASE64="$(printf '%s' "${GOOES_WEB_PROXY_SHARED_SECRET}" | base64 -w0)"
           ssh -i "${DEV_DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=no \
@@ -681,6 +687,7 @@ jobs:
           printf '%s' "${headers}" | grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}"
           echo "WEB_ROLLBACK_STATUS=success" >> "${GITHUB_ENV}"
           echo "WEB_ROLLED_BACK=true" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=rolled_back" >> "${GITHUB_ENV}"
 
       - name: Clean up expired dev web rollback tags
         if: ${{ success() && env.WEB_DEPLOY_APPROVED == 'true' }}
@@ -731,7 +738,7 @@ jobs:
             echo ""
             echo "| Host | Before | After | Policy |"
             echo "| --- | --- | --- | --- |"
-            echo "| ${DEV_DEPLOY_HOST} | ${disk_before:-unknown} | ${disk_after:-unknown} | containers + unused images + build cache older than 24h; no volume prune |"
+            echo "| ${DEV_DEPLOY_HOST} | ${disk_before:-unknown} | ${disk_after:-unknown} | containers + unused images + build cache older than 168h / 7 days; no volume prune |"
             echo ""
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -740,10 +747,41 @@ jobs:
       - name: Write dev deployment summary
         if: ${{ always() }}
         run: |
-          set -euo pipefail
-          elapsed_seconds=$(( $(date +%s) - ${DEPLOY_STARTED_AT:-$(date +%s)} ))
-          short_sha="${GITHUB_SHA:0:12}"
+          set +e
+          summary_file="${GITHUB_STEP_SUMMARY:-/dev/null}"
+          now="$(date +%s 2>/dev/null || echo 0)"
+          started_at="${DEPLOY_STARTED_AT:-${now}}"
+          if [[ "${now}" =~ ^[0-9]+$ && "${started_at}" =~ ^[0-9]+$ ]]; then
+            elapsed_seconds=$(( now - started_at ))
+          else
+            elapsed_seconds=unknown
+          fi
+          commit_sha="${GITHUB_SHA:-unknown}"
+          short_sha="${commit_sha:0:12}"
           namespace="${{ vars.TENCENT_CCR_NAMESPACE }}"
+          web_stage="${WEB_DEPLOY_STAGE:-initial}"
+          web_result="${web_stage}"
+          if [ "${web_stage}" = "gate_rejected" ]; then web_result=not_deployed; fi
+          web_revision=unknown
+          web_tag="${GOOES_WEB_IMAGE:-not_set}"
+          web_runtime=unknown
+
+          if [ -r "${DEV_DEPLOY_KEY_PATH:-}" ] && [ -n "${DEV_DEPLOY_HOST:-}" ] && [ -n "${DEV_DEPLOY_USER:-}" ]; then
+            web_inspect="$(ssh -i "${DEV_DEPLOY_KEY_PATH:-}" -o StrictHostKeyChecking=no \
+              "${DEV_DEPLOY_USER:-unknown}@${DEV_DEPLOY_HOST:-unknown}" \
+              "container_ids=\$(docker ps -aq --filter 'name=^/gooes-web-dev$' 2>/dev/null) || { echo 'unknown|unknown|unknown'; exit 0; }
+               if [ -z \"\${container_ids}\" ]; then
+                 echo 'not_running|not_set|not_running'
+               else
+                 docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}|{{.Config.Image}}|{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || echo 'unknown|unknown|unknown'
+               fi" 2>/dev/null)"
+            if [ $? -eq 0 ] && [ -n "${web_inspect}" ]; then
+              IFS='|' read -r inspected_revision inspected_tag inspected_runtime <<< "${web_inspect}"
+              web_revision="${inspected_revision:-unknown}"
+              web_tag="${inspected_tag:-unknown}"
+              web_runtime="${inspected_runtime:-unknown}"
+            fi
+          fi
 
           {
             echo "## Deploy Dev Summary"
@@ -751,24 +789,27 @@ jobs:
             echo "| Field | Value |"
             echo "| --- | --- |"
             echo "| Result | ${{ job.status }} |"
-            echo "| Event | ${GITHUB_EVENT_NAME} |"
-            echo "| Branch | ${GITHUB_REF_NAME} |"
+            echo "| Event | ${GITHUB_EVENT_NAME:-unknown} |"
+            echo "| Branch | ${GITHUB_REF_NAME:-unknown} |"
             echo "| Commit | \`${short_sha}\` |"
             echo "| Build services | \`${BUILD_SERVICES:-none}\` |"
             echo "| Automatic deploy services | \`${DEPLOY_SERVICES:-none}\` |"
+            echo "| Web deployment stage | ${web_stage:-initial} |"
+            echo "| Web deployment result | ${web_result:-unknown} |"
             echo "| Web rollback status | ${WEB_ROLLBACK_STATUS:-not_requested} |"
             echo "| Web rollback cleanup (>168h / 7 days) | ${WEB_ROLLBACK_CLEANUP_STATUS:-not_run} |"
+            echo "| Web final revision | ${web_revision:-unknown} |"
+            echo "| Web final tag | ${web_tag:-not_set} |"
             echo "| Duration | ${elapsed_seconds}s |"
             echo ""
             echo "### Service status"
             echo ""
             echo "| Service | Container | Image | Runtime status |"
             echo "| --- | --- | --- | --- |"
-          } >> "${GITHUB_STEP_SUMMARY}"
+          } >> "${summary_file}" 2>/dev/null || true
 
           if [ -z "${DEPLOY_SERVICES:-}" ] && [ "${WEB_DEPLOY_APPROVED:-}" != "true" ]; then
-            echo "| none | - | - | no matched service |" >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
+            echo "| none | - | - | no matched service |" >> "${summary_file}" 2>/dev/null || true
           fi
 
           for SERVICE in ${DEPLOY_SERVICES:-}; do
@@ -795,11 +836,11 @@ jobs:
                 ;;
             esac
 
-            image="${TENCENT_CCR_REGISTRY}/${namespace}/${image_repo}:${IMAGE_TAG}"
-            if [ -r "${DEV_DEPLOY_KEY_PATH}" ]; then
-              runtime_status="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+            image="${TENCENT_CCR_REGISTRY:-not_set}/${namespace:-not_set}/${image_repo}:${IMAGE_TAG:-not_set}"
+            if [ -r "${DEV_DEPLOY_KEY_PATH:-}" ]; then
+              runtime_status="$(ssh -i "${DEV_DEPLOY_KEY_PATH:-}" \
                 -o StrictHostKeyChecking=no \
-                "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+                "${DEV_DEPLOY_USER:-unknown}@${DEV_DEPLOY_HOST:-unknown}" \
                 "docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' '${container}' 2>/dev/null || true" | xargs || true)"
             else
               runtime_status="deploy key unavailable"
@@ -808,19 +849,10 @@ jobs:
               runtime_status="not found"
             fi
 
-            echo "| ${SERVICE} | ${container} | \`${image}\` | ${runtime_status} |" >> "${GITHUB_STEP_SUMMARY}"
+            echo "| ${SERVICE} | ${container} | \`${image}\` | ${runtime_status} |" >> "${summary_file}" 2>/dev/null || true
           done
 
-          if [ "${WEB_DEPLOY_APPROVED:-}" = "true" ]; then
-            image="${TENCENT_CCR_REGISTRY}/${namespace}/goose-web:${GITHUB_SHA}"
-            revision="${GITHUB_SHA}"
-            if [ "${WEB_ROLLBACK_STATUS:-}" = "success" ]; then
-              image="${WEB_ROLLBACK_TAG}"
-              revision="${WEB_OLD_REVISION}"
-            fi
-            runtime_status="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
-              -o StrictHostKeyChecking=no \
-              "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-              "docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true" | xargs || true)"
-            echo "| web | gooes-web-dev | \`${image}\` (revision \`${revision}\`) | ${runtime_status:-not found} |" >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${web_stage:-initial}" != "initial" ] || [ "${WEB_DEPLOY_APPROVED:-}" = "true" ]; then
+            echo "| web | gooes-web-dev | \`${web_tag:-not_set}\` (revision \`${web_revision:-unknown}\`) | ${web_runtime:-unknown} |" >> "${summary_file}" 2>/dev/null || true
           fi
+          exit 0

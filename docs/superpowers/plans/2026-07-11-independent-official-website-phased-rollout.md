@@ -456,7 +456,7 @@ gooes-web-dev:
 
 `deploy/nginx/gooes-web-dev.conf` 固定代理 `www-dev.goodcms.cn` 到 `127.0.0.1:13020`，转发 `Host`、`X-Real-IP`、`X-Forwarded-For` 和 `X-Forwarded-Proto`，并为 `/_next/static/` 设置 immutable 缓存。安装到服务器前先备份 `/etc/nginx/sites-enabled/reverse-proxy`，执行 `nginx -t` 后才 reload。
 
-Web 部署前的回滚 tag 必须写入创建时 epoch，并在 dev/prod workflow 间使用同一清理 helper。成功部署后只删除明确超过 7 天、无容器引用且未被当前 Web 容器使用的新版回滚 tag，以及同镜像的 40 位 SHA Web tag；7 天边界、main/dev、其他仓库和无法识别的 tag 一律保留。旧格式回滚 tag 因没有可信时间证据不自动删除，必须安排一次性人工审计。清理失败只在部署摘要中警告，不得把已经验证成功的部署改判为失败。
+Web 部署前的回滚 tag 必须写入创建时 epoch，并在 dev/prod workflow 间使用同一清理 helper。回滚 tag 仅在成功 Web 发布后机会式清理：只删除明确超过 7 天、无容器引用且未被当前 Web 容器使用的新版回滚 tag，以及同镜像的 40 位 SHA Web tag；超过 7 天的 tag 可能保留到下一次成功 Web 发布或由人工运维清理，不承诺定时删除。7 天边界、main/dev、其他仓库和无法识别的 tag 一律保留。旧格式回滚 tag 因没有可信时间证据不自动删除，必须安排一次性人工审计。清理失败只在部署摘要中警告，不得把已经验证成功的部署改判为失败。
 
 - [ ] **Step 6: 本地验证**
 
