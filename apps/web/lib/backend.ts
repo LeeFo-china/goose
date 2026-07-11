@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 export const MAX_PUBLIC_BODY_BYTES = 32 * 1024;
-export const MAX_PUBLIC_RESPONSE_BYTES = 256 * 1024;
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 8_000;
 const VISITOR_COOKIE_NAME = "gooes_visitor_device_id";
@@ -20,8 +19,9 @@ interface ProxyPublicPostOptions {
   readonly visitorDeviceId?: string;
 }
 
-type BoundedBodyResult =
-  | { readonly status: "ok"; readonly bytes: Uint8Array }
+type BodyReadSuccess = { readonly status: "ok"; readonly bytes: Uint8Array };
+type BodyReadResult =
+  | BodyReadSuccess
   | { readonly status: "too_large" };
 
 export function getBackendBaseUrl(): string {
@@ -66,9 +66,9 @@ export async function proxyPublicPost(
     return payloadTooLargeResponse();
   }
 
-  let requestBody: BoundedBodyResult;
+  let requestBody: BodyReadResult;
   try {
-    requestBody = await readBoundedBody(request.body, MAX_PUBLIC_BODY_BYTES);
+    requestBody = await readBody(request.body, MAX_PUBLIC_BODY_BYTES);
   } catch {
     return NextResponse.json(
       {
@@ -97,25 +97,11 @@ export async function proxyPublicPost(
       signal: abortController.signal,
     });
 
-    const declaredResponseLength = Number(
-      backendResponse.headers.get("content-length"),
-    );
-    if (
-      Number.isFinite(declaredResponseLength) &&
-      declaredResponseLength > MAX_PUBLIC_RESPONSE_BYTES
-    ) {
-      await cancelBody(backendResponse.body);
-      return backendUnavailableResponse();
-    }
-
-    const responseBody = await readBoundedBody(
+    const responseBody = await readBody(
       backendResponse.body,
-      MAX_PUBLIC_RESPONSE_BYTES,
+      undefined,
       abortController.signal,
     );
-    if (responseBody.status === "too_large") {
-      return backendUnavailableResponse();
-    }
 
     const responseHeaders = new Headers();
     const contentType = backendResponse.headers.get("content-type");
@@ -126,19 +112,27 @@ export async function proxyPublicPost(
       headers: responseHeaders,
     });
   } catch {
-    return abortController.signal.aborted
-      ? backendTimeoutResponse()
-      : backendUnavailableResponse();
+    return backendUnavailableResponse();
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function readBoundedBody(
+function readBody(
+  body: ReadableStream<Uint8Array> | null,
+  maxBytes: undefined,
+  signal?: AbortSignal,
+): Promise<BodyReadSuccess>;
+function readBody(
   body: ReadableStream<Uint8Array> | null,
   maxBytes: number,
   signal?: AbortSignal,
-): Promise<BoundedBodyResult> {
+): Promise<BodyReadResult>;
+async function readBody(
+  body: ReadableStream<Uint8Array> | null,
+  maxBytes?: number,
+  signal?: AbortSignal,
+): Promise<BodyReadResult> {
   if (!body) return { status: "ok", bytes: new Uint8Array() };
 
   const reader = body.getReader();
@@ -162,7 +156,7 @@ async function readBoundedBody(
         : reader.read());
       if (done) break;
       byteLength += value.byteLength;
-      if (byteLength > maxBytes) {
+      if (maxBytes !== undefined && byteLength > maxBytes) {
         await reader.cancel().catch(() => undefined);
         return { status: "too_large" };
       }
@@ -255,16 +249,5 @@ function backendUnavailableResponse(): Response {
       code: "BACKEND_UNAVAILABLE",
     },
     { status: 502 },
-  );
-}
-
-function backendTimeoutResponse(): Response {
-  return NextResponse.json(
-    {
-      success: false,
-      message: "后端服务响应超时，请稍后再试",
-      code: "BACKEND_TIMEOUT",
-    },
-    { status: 504 },
   );
 }

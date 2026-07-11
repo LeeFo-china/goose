@@ -279,7 +279,7 @@ describe("city partner public site", () => {
     }
   });
 
-  test("times out an unresponsive upstream with a stable 504 response", async () => {
+  test("normalizes an upstream timeout to the stable 502 response", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = Object.assign(
       async (_input: URL | RequestInfo, options?: RequestInit) =>
@@ -301,8 +301,10 @@ describe("city partner public site", () => {
         { upstreamTimeoutMs: 5 },
       );
 
-      expect(response.status).toBe(504);
-      expect(await response.json()).toMatchObject({ code: "BACKEND_TIMEOUT" });
+      expect(response.status).toBe(502);
+      expect(await response.json()).toMatchObject({
+        code: "BACKEND_UNAVAILABLE",
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -342,21 +344,24 @@ describe("city partner public site", () => {
 
       expect(response).not.toBe("did-not-time-out");
       if (response === "did-not-time-out") return;
-      expect(response.status).toBe(504);
+      expect(response.status).toBe(502);
       expect(wasCancelled).toBe(true);
-      expect(await response.json()).toMatchObject({ code: "BACKEND_TIMEOUT" });
+      expect(await response.json()).toMatchObject({
+        code: "BACKEND_UNAVAILABLE",
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  test("bounds and cancels an oversized upstream response", async () => {
+  test("preserves a large upstream response without rewriting its status", async () => {
     const originalFetch = globalThis.fetch;
     let wasCancelled = false;
     const responseBody = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(new Uint8Array(180 * 1024));
         controller.enqueue(new Uint8Array(180 * 1024));
+        controller.close();
       },
       cancel() {
         wasCancelled = true;
@@ -376,11 +381,9 @@ describe("city partner public site", () => {
         "/public/partner-applications",
       );
 
-      expect(response.status).toBe(502);
-      expect(wasCancelled).toBe(true);
-      expect(await response.json()).toMatchObject({
-        code: "BACKEND_UNAVAILABLE",
-      });
+      expect(response.status).toBe(200);
+      expect(wasCancelled).toBe(false);
+      expect((await response.arrayBuffer()).byteLength).toBe(360 * 1024);
     } finally {
       globalThis.fetch = originalFetch;
     }
