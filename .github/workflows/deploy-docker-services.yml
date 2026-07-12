@@ -143,7 +143,7 @@ jobs:
             }
             [[ "${INPUT_GATE_RUN_ID}" =~ ^[0-9]+$ ]]
             run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_GATE_RUN_ID}")"
-            test "$(jq -r '.name' <<< "${run_json}")" = "Verify Production Web Deployment Gate"
+            test "$(jq -r '.path' <<< "${run_json}")" = ".github/workflows/verify-production-web-deployment-gate.yml"
             test "$(jq -r '.event' <<< "${run_json}")" = "workflow_dispatch"
             test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
             test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
