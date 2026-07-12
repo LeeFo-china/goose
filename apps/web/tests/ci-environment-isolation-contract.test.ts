@@ -56,6 +56,9 @@ describe("CI environment isolation", () => {
       expect(workflow).not.toContain("chmod 666 /var/run/docker.sock");
       expect(workflow).not.toMatch(/docker (?:container|image|builder|system) prune/);
     }
+    const deploy = readWorkflow("deploy-docker-services.yml");
+    expect(deploy).toContain("确认部署生产环境");
+    expect(deploy).toContain('test "${GITHUB_REF_NAME}" = "main"');
   });
 
   test("does not build application images in deployment workflows", () => {
