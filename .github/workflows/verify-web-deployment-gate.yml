@@ -70,6 +70,7 @@ jobs:
 
           if ! checkout_attempt direct; then
             echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
+            rm -f "${SOURCE_DIR}/.git/shallow.lock" "${SOURCE_DIR}/.git/index.lock"
             if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
               checkout_attempt proxy
             else
