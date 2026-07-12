@@ -395,9 +395,10 @@ describe("preview deployment configuration", () => {
       "GOOES_WEB_REVALIDATE_SHARED_SECRET",
     ]) {
       expect(devWorkflow).toContain(`secrets.${secret}`);
-      expect(devWorkflow).toContain(`export ${secret}=`);
     }
     expect(devWorkflow).toContain("prepare-site-content-deployment-secrets.sh");
+    expect(devWorkflow).toContain('source scripts/prepare-site-content-deployment-secrets.sh');
+    expect(devWorkflow).not.toContain("DEV_DEPLOY_KEY_PATH");
     const productionWorkflow = readFileSync(
       new URL(".github/workflows/deploy-docker-services.yml", repositoryRoot),
       "utf8",

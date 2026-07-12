@@ -69,6 +69,7 @@ jobs:
     needs: validate-request
     name: Build ${{ matrix.service }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     environment: ${{ inputs.target_environment }}
     strategy:
       fail-fast: true
