@@ -29,24 +29,24 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DEV_DEPLOY_HOST: 43.165.126.30
-  DEV_DEPLOY_USER: ubuntu
-  DEV_DEPLOY_KEY_PATH: /home/ubuntu/.ssh/goose-old-us.pem
   DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db
   DEV_PROJECT_REF: fclnkyatvfvmzgzdqlba
+  DEV_DB_HOST: api-dev.goodcms.cn
   BLOCKED_PROJECT_REFS: unqhypivjkpwldhufpjc
+  BLOCKED_DB_HOSTS: api.goodcms.cn 1.13.20.39
 
 jobs:
   migrate-dev:
     name: Migrate dev database
-    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
+    environment: development
 
     steps:
       - name: Guard runner
         run: |
           set -euo pipefail
-          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
-          test -r "${DEV_DEPLOY_KEY_PATH}"
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+          test -r "${DEV_DB_ENV_FILE}"
 
       - name: Checkout repository
         env:
@@ -103,15 +103,11 @@ jobs:
           tar -czf "${archive}" supabase/migrations
           echo "MIGRATIONS_ARCHIVE=${archive}" >> "${GITHUB_ENV}"
 
-      - name: Copy migrations to dev server
+      - name: Prepare local migration archive
         run: |
           set -euo pipefail
-          remote_archive="/tmp/gooes-dev-migrations-${GITHUB_RUN_ID}.tgz"
-          scp -i "${DEV_DEPLOY_KEY_PATH}" \
-            -o StrictHostKeyChecking=no \
-            "${MIGRATIONS_ARCHIVE}" \
-            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}:${remote_archive}"
-          echo "REMOTE_MIGRATIONS_ARCHIVE=${remote_archive}" >> "${GITHUB_ENV}"
+          test -r "${MIGRATIONS_ARCHIVE}"
+          echo "REMOTE_MIGRATIONS_ARCHIVE=${MIGRATIONS_ARCHIVE}" >> "${GITHUB_ENV}"
 
       - name: Run dev migration
         env:
@@ -121,16 +117,7 @@ jobs:
           set -euo pipefail
           report_file="/tmp/gooes-dev-migrate-report-${GITHUB_RUN_ID}.env"
 
-          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
-            -o StrictHostKeyChecking=no \
-            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-            "MIGRATE_MODE='${MIGRATE_MODE}' \
-             CONFIRM_DEV_PROJECT_REF='${CONFIRM_DEV_PROJECT_REF}' \
-             DEV_PROJECT_REF='${DEV_PROJECT_REF}' \
-             BLOCKED_PROJECT_REFS='${BLOCKED_PROJECT_REFS}' \
-             DEV_DB_ENV_FILE='${DEV_DB_ENV_FILE}' \
-             REMOTE_MIGRATIONS_ARCHIVE='${REMOTE_MIGRATIONS_ARCHIVE}' \
-             bash -s" <<'REMOTE' | tee "${report_file}"
+          (
           set -euo pipefail
 
           if [ "${CONFIRM_DEV_PROJECT_REF}" != "${DEV_PROJECT_REF}" ]; then
@@ -157,8 +144,17 @@ jobs:
             exit 1
           fi
 
-          if [[ "${SUPABASE_DB_URL}" != *"${DEV_PROJECT_REF}"* ]]; then
-            echo "error=supabase_db_url_not_dev_project"
+          db_host="$(SUPABASE_DB_URL="${SUPABASE_DB_URL}" python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          print(urlparse(os.environ["SUPABASE_DB_URL"]).hostname or "")
+          PY
+          )"
+
+          if [ "${db_host}" != "${DEV_DB_HOST}" ]; then
+            echo "error=supabase_db_host_not_dev"
+            echo "db_host=${db_host}"
             exit 1
           fi
 
@@ -166,6 +162,14 @@ jobs:
             if [[ "${SUPABASE_DB_URL}" == *"${blocked_ref}"* ]]; then
               echo "error=supabase_db_url_points_to_blocked_project"
               echo "blocked_project_ref=${blocked_ref}"
+              exit 1
+            fi
+          done
+
+          for blocked_host in ${BLOCKED_DB_HOSTS:-}; do
+            if [ "${db_host}" = "${blocked_host}" ]; then
+              echo "error=supabase_db_host_is_blocked"
+              echo "blocked_db_host=${blocked_host}"
               exit 1
             fi
           done
@@ -246,7 +250,7 @@ jobs:
           echo "applied_versions=${applied_versions[*]:-}"
           echo "tenant_count=${tenant_count}"
           echo "permission_count=${permission_count}"
-          REMOTE
+          ) | tee "${report_file}"
 
           {
             echo "MIGRATE_MODE_RESULT=$(awk -F= '/^mode=/{print $2; exit}' "${report_file}")"

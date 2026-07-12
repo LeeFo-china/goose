@@ -1,266 +1,130 @@
 name: Deploy Dev
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('Dev deploy {0}', github.event.inputs.service) || github.event.head_commit.message }}
+run-name: Dev deploy ${{ inputs.service }} ${{ inputs.commit_sha }}
 
-# Builds dev images, pushes them to Tencent CCR, then recreates the matching
-# service on VM-0-11-ubuntu. Push events auto-detect affected services; manual
-# runs deploy the selected service.
+# Deployment-only workflow. Images are built by Build Docker Images on a
+# GitHub-hosted runner and consumed here by immutable commit SHA.
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/deploy-dev.yml"
-      - "deploy/docker-compose.dev.yml"
-      - ".dockerignore"
-      - "docker/api.Dockerfile"
-      - "docker/admin.Dockerfile"
-      - "docker/social-video-worker.Dockerfile"
-      - "apps/api/**"
-      - "apps/admin/**"
-      - "packages/domain/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "tsconfig.base.json"
   workflow_dispatch:
     inputs:
       service:
         description: "Service to deploy"
         required: true
         type: choice
-        options:
-          - api
-          - admin
-          - social-video-worker
-          - cos-reconcile-worker
+        options: [api, admin, web, social-video-worker, cos-reconcile-worker]
+      commit_sha:
+        description: "Exact 40-character commit SHA already built for development"
+        required: true
+        type: string
+      build_run_id:
+        description: "Successful Build Docker Images run ID"
+        required: true
+        type: string
+      gate_run_id:
+        description: "Successful Verify Development Web Deployment Gate run ID (Web only)"
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: deploy-dev-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.service || github.ref }}
+  group: deploy-dev-${{ inputs.service }}
   cancel-in-progress: true
 
 env:
-  IMAGE_TAG: dev
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
-  DEV_DEPLOY_HOST: 43.165.126.30
-  DEV_DEPLOY_USER: ubuntu
-  DEV_DEPLOY_KEY_PATH: /home/ubuntu/.ssh/goose-old-us.pem
   DEV_DEPLOY_DIR: /opt/gooes-dev/docker
+  SOURCE_SHA: ${{ inputs.commit_sha }}
+  RELEASE_SERVICE: ${{ inputs.service }}
 
 jobs:
   deploy-dev:
     name: Deploy dev
-    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
+    environment: development
 
     steps:
-      - name: Guard runner
+      - name: Guard development runner
         run: |
           set -euo pipefail
-          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
-          test -r "${DEV_DEPLOY_KEY_PATH}"
-
-      - name: Mark deployment start
-        run: |
-          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+          test -d "${DEV_DEPLOY_DIR}"
+          [[ "${SOURCE_SHA}" =~ ^[a-f0-9]{40}$ ]]
           echo "DEPLOY_STARTED_AT=$(date +%s)" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=initial" >> "${GITHUB_ENV}"
 
       - name: Resolve services
-        env:
-          INPUT_SERVICE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.service || '' }}
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            SERVICES="${INPUT_SERVICE}"
-          else
-            SERVICES="$(
-              python3 - <<'PY'
-          import json
-          import os
-          import sys
-          import urllib.request
-          from pathlib import Path
-
-          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-          files = set()
-          for commit in event.get("commits", []):
-              for key in ("added", "modified", "removed"):
-                  files.update(commit.get(key, []))
-          head_commit = event.get("head_commit") or {}
-          for key in ("added", "modified", "removed"):
-              files.update(head_commit.get(key, []))
-
-          if not files:
-              repo = os.environ.get("GITHUB_REPOSITORY")
-              sha = event.get("after") or os.environ.get("GITHUB_SHA")
-              token = os.environ.get("GITHUB_TOKEN")
-              if repo and sha and token:
-                  url = f"https://api.github.com/repos/{repo}/commits/{sha}"
-                  request = urllib.request.Request(
-                      url,
-                      headers={
-                          "Accept": "application/vnd.github+json",
-                          "Authorization": f"Bearer {token}",
-                          "X-GitHub-Api-Version": "2022-11-28",
-                      },
-                  )
-                  try:
-                      with urllib.request.urlopen(request, timeout=20) as response:
-                          payload = json.loads(response.read().decode("utf-8"))
-                      files.update(file.get("filename", "") for file in payload.get("files", []))
-                  except Exception as exc:
-                      print(f"::warning::Failed to load changed files from GitHub API: {exc}", file=sys.stderr)
-
-          services = []
-
-          def add(service):
-              if service not in services:
-                  services.append(service)
-
-          def touches(prefix):
-              return any(path.startswith(prefix) for path in files)
-
-          def exact(name):
-              return name in files
-
-          def any_exact(names):
-              return any(name in files for name in names)
-
-          def any_contains(*parts):
-              return any(all(part in path for part in parts) for path in files)
-
-          shared_build_files = {
-              ".dockerignore",
-              "package.json",
-              "pnpm-lock.yaml",
-              "pnpm-workspace.yaml",
-              "tsconfig.base.json",
-          }
-
-          if any_exact(shared_build_files) or touches("packages/domain/") or exact("deploy/docker-compose.dev.yml"):
-              add("api")
-              add("admin")
-              add("social-video-worker")
-              add("cos-reconcile-worker")
-
-          if exact(".github/workflows/deploy-dev.yml"):
-              add("api")
-
-          if touches("apps/admin/") or exact("docker/admin.Dockerfile"):
-              add("admin")
-
-          if touches("apps/api/") or exact("docker/api.Dockerfile"):
-              add("api")
-
-          if (
-              exact("docker/social-video-worker.Dockerfile")
-              or any_contains("apps/api/src/workers/", "social-video")
-              or any_contains("apps/api/src/services/", "social-video")
-              or any_contains("apps/api/src/repositories/", "social-video")
-              or any_contains("apps/api/src/controllers/", "social-video")
-              or any_contains("apps/api/src/schema/", "social-video")
-          ):
-              add("social-video-worker")
-
-          if (
-              exact("apps/api/src/workers/project-log-comment-cos-reconcile-worker.ts")
-              or any_contains("apps/api/src/services/", "files")
-              or any_contains("apps/api/src/services/", "uploads")
-              or any_contains("apps/api/src/controllers/", "uploads")
-          ):
-              add("cos-reconcile-worker")
-
-          if not files:
-              print("::warning::No changed files were available for push event; deploying all dev services.", file=sys.stderr)
-              add("api")
-              add("admin")
-              add("social-video-worker")
-              add("cos-reconcile-worker")
-
-          print("Changed files:", " ".join(sorted(files)) or "(none)", file=sys.stderr)
-          print(" ".join(services))
-          PY
-            )"
-          fi
-
-          if [ -z "${SERVICES}" ]; then
-            echo "No dev service matched changed files; exiting."
-            echo "SERVICES=" >> "${GITHUB_ENV}"
-            exit 0
-          fi
-
-          echo "Resolved dev services: ${SERVICES}"
-          echo "SERVICES=${SERVICES}" >> "${GITHUB_ENV}"
+          case "${RELEASE_SERVICE}" in
+            api) DEPLOY_SERVICES=api; MANIFEST_SERVICE=api ;;
+            admin) DEPLOY_SERVICES=admin; MANIFEST_SERVICE=admin ;;
+            web) DEPLOY_SERVICES=web; MANIFEST_SERVICE=web ;;
+            social-video-worker) DEPLOY_SERVICES=social-video-worker; MANIFEST_SERVICE=social-video-worker ;;
+            cos-reconcile-worker) DEPLOY_SERVICES=cos-reconcile-worker; MANIFEST_SERVICE=api ;;
+            *) echo "Unknown service: ${RELEASE_SERVICE}"; exit 1 ;;
+          esac
+          echo "DEPLOY_SERVICES=${DEPLOY_SERVICES}" >> "${GITHUB_ENV}"
+          echo "MANIFEST_SERVICE=${MANIFEST_SERVICE}" >> "${GITHUB_ENV}"
 
       - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          clean: true
+
+      - name: Validate immutable build evidence
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          INPUT_BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          SOURCE_DIR="${RUNNER_WORKSPACE}/source"
-          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          [[ "${INPUT_BUILD_RUN_ID}" =~ ^[0-9]+$ ]]
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_BUILD_RUN_ID}")"
+          test "$(jq -r '.name' <<< "${run_json}")" = "Build Docker Images"
+          test "$(jq -r '.event' <<< "${run_json}")" = "workflow_dispatch"
+          test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
+          test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
+          receipt_dir="${RUNNER_TEMP}/image-manifest-${INPUT_BUILD_RUN_ID}"
+          rm -rf "${receipt_dir}"
+          gh run download "${INPUT_BUILD_RUN_ID}" \
+            -n "image-manifest-${MANIFEST_SERVICE}" -D "${receipt_dir}"
+          manifest="${receipt_dir}/image-manifest-${MANIFEST_SERVICE}.json"
+          test "$(jq -r '.commit_sha' "${manifest}")" = "${SOURCE_SHA}"
+          test "$(jq -r '.target_environment' "${manifest}")" = development
+          [[ "$(jq -r '.digest' "${manifest}")" =~ ^sha256:[a-f0-9]{64}$ ]]
 
-          checkout_attempt() {
-            mode="$1"
-            if [ "$mode" = "proxy" ]; then
-              export HTTPS_PROXY=socks5h://127.0.0.1:18080
-              export HTTP_PROXY=socks5h://127.0.0.1:18080
-              export ALL_PROXY=socks5h://127.0.0.1:18080
-              export https_proxy="$HTTPS_PROXY"
-              export http_proxy="$HTTP_PROXY"
-              export all_proxy="$ALL_PROXY"
-              git_timeout=180
-            else
-              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
-              git_timeout=45
-            fi
-
-            if [ ! -d "${SOURCE_DIR}/.git" ]; then
-              rm -rf "${SOURCE_DIR}" || return 1
-              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
-            fi
-            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
-            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}" || return 1
-            git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}" || return 1
-            git -C "${SOURCE_DIR}" clean -fdx || return 1
-          }
-
-          if ! checkout_attempt direct; then
-            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
-            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
-              checkout_attempt proxy
-            else
-              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
-              exit 1
-            fi
-          fi
-
-      - name: Ensure Docker daemon
+      - name: Validate gated dev web deployment
+        if: ${{ inputs.service == 'web' }}
+        env:
+          INPUT_SERVICE: ${{ inputs.service }}
+          INPUT_GATE_RUN_ID: ${{ inputs.gate_run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          sudo systemctl enable --now docker
-          sudo chmod 666 /var/run/docker.sock
-          docker version
+          echo "WEB_DEPLOY_STAGE=gate_rejected" >> "${GITHUB_ENV}"
+          test "${INPUT_SERVICE}" = "web"
+          [[ "${INPUT_GATE_RUN_ID}" =~ ^[0-9]+$ ]]
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_GATE_RUN_ID}")"
+          test "$(jq -r '.name' <<< "${run_json}")" = "Verify Development Web Deployment Gate"
+          test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
+          test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
+          receipt_dir="${RUNNER_TEMP}/web-gate-${INPUT_GATE_RUN_ID}"
+          rm -rf "${receipt_dir}"
+          gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
+          node scripts/verify-web-gate-receipt.mjs \
+            "${receipt_dir}/web-deployment-gate-receipt.json" development "${SOURCE_SHA}" 20260711120000
+          echo "WEB_DEPLOY_APPROVED=true" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=gate_validated" >> "${GITHUB_ENV}"
 
-      - name: Check permission boundaries
-        if: ${{ env.SERVICES != '' }}
+      - name: Sync compose files
         run: |
           set -euo pipefail
-          cd "${RUNNER_WORKSPACE}/source"
-          if command -v bun >/dev/null 2>&1; then
-            bun scripts/check-permission-boundaries.ts
-          elif [ -x "${HOME}/.bun/bin/bun" ]; then
-            "${HOME}/.bun/bin/bun" scripts/check-permission-boundaries.ts
-          else
-            docker run --rm -v "$PWD:/repo" -w /repo oven/bun:1.2.23-alpine bun scripts/check-permission-boundaries.ts
-          fi
+          sudo install -m 0644 deploy/docker-compose.dev.yml "${DEV_DEPLOY_DIR}/docker-compose.dev.yml"
+          sudo install -m 0644 deploy/docker-compose.web-dev.yml "${DEV_DEPLOY_DIR}/docker-compose.web-dev.yml"
 
       - name: Login to Tencent CCR
         env:
@@ -268,350 +132,163 @@ jobs:
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
           set -euo pipefail
-          for i in 1 2 3 4 5; do
-            if printf '%s' "$TENCENT_CCR_PASSWORD" | docker login "$TENCENT_CCR_REGISTRY" -u "$TENCENT_CCR_USERNAME" --password-stdin; then
-              exit 0
-            fi
-            sleep $((i * 5))
-          done
-          exit 1
-
-      - name: Build and push dev images
-        run: |
-          set -euo pipefail
-          if [ -z "${SERVICES:-}" ]; then
-            echo "No dev services to build."
-            exit 0
-          fi
-          cd "${RUNNER_WORKSPACE}/source"
-
-          built_images=""
-          for SERVICE in ${SERVICES}; do
-            case "$SERVICE" in
-              api|cos-reconcile-worker)
-                IMAGE_REPO=goose-api
-                DOCKERFILE=docker/api.Dockerfile
-                ;;
-              social-video-worker)
-                IMAGE_REPO=goose-social-video-worker
-                DOCKERFILE=docker/social-video-worker.Dockerfile
-                ;;
-              admin)
-                IMAGE_REPO=goose-admin
-                DOCKERFILE=docker/admin.Dockerfile
-                ;;
-              *)
-                echo "Unknown service: $SERVICE"
-                exit 1
-                ;;
-            esac
-
-            if [[ " ${built_images} " == *" ${IMAGE_REPO} "* ]]; then
-              echo "Image ${IMAGE_REPO} already built for this run; skipping duplicate build."
-              continue
-            fi
-
-            IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
-            DEV_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
-            SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
-            BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-            case "$SERVICE" in
-              admin)
-                docker build \
-                  -f "$DOCKERFILE" \
-                  --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api-dev.goodcms.cn \
-                  --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5-dev.goodcms.cn \
-                  --build-arg BUILD_SHA="${GITHUB_SHA}" \
-                  --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
-                  --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
-                  --build-arg BUILD_CREATED="${BUILD_CREATED}" \
-                  -t "$DEV_IMAGE" \
-                  -t "$SHA_IMAGE" \
-                  .
-                ;;
-              social-video-worker)
-                docker build \
-                  -f "$DOCKERFILE" \
-                  --build-arg ALPINE_MIRROR=https://mirrors.tencent.com/alpine \
-                  --build-arg BUILD_SHA="${GITHUB_SHA}" \
-                  --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
-                  --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
-                  --build-arg BUILD_CREATED="${BUILD_CREATED}" \
-                  -t "$DEV_IMAGE" \
-                  -t "$SHA_IMAGE" \
-                  .
-                ;;
-              *)
-                docker build \
-                  -f "$DOCKERFILE" \
-                  --build-arg BUILD_SHA="${GITHUB_SHA}" \
-                  --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
-                  --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
-                  --build-arg BUILD_CREATED="${BUILD_CREATED}" \
-                  -t "$DEV_IMAGE" \
-                  -t "$SHA_IMAGE" \
-                  .
-                ;;
-            esac
-
-            docker push "$DEV_IMAGE"
-            docker push "$SHA_IMAGE"
-            built_images="${built_images} ${IMAGE_REPO}"
-          done
-
-      - name: Cleanup dev build leftovers
-        if: ${{ always() }}
-        run: |
-          set -euo pipefail
-          disk_before_line="$(df -h / | sed -n '2p')"
-          read -r _ disk_size disk_used disk_avail disk_pct _ <<< "${disk_before_line}"
-          disk_before="${disk_used}/${disk_size} used, ${disk_avail} avail, ${disk_pct}"
-          docker container prune -f || true
-          docker image prune -f || true
-          docker builder prune -f --filter "until=24h" || true
-          disk_after_line="$(df -h / | sed -n '2p')"
-          read -r _ disk_size disk_used disk_avail disk_pct _ <<< "${disk_after_line}"
-          disk_after="${disk_used}/${disk_size} used, ${disk_avail} avail, ${disk_pct}"
-
-          {
-            echo "### Dev build runner cleanup"
-            echo ""
-            echo "| Host | Before | After | Policy |"
-            echo "| --- | --- | --- | --- |"
-            echo "| ${RUNNER_NAME} | ${disk_before} | ${disk_after} | containers + dangling images + build cache older than 24h |"
-            echo ""
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-          df -h /
-          docker system df || true
+          printf '%s' "${TENCENT_CCR_PASSWORD}" | docker login "${TENCENT_CCR_REGISTRY}" \
+            -u "${TENCENT_CCR_USERNAME}" --password-stdin
 
       - name: Deploy dev services
+        if: ${{ inputs.service != 'web' }}
         env:
-          TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
-          TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
+          GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
+          GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
+          GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
+          GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
         run: |
           set -euo pipefail
-          if [ -z "${SERVICES:-}" ]; then
-            echo "No dev services to deploy."
-            exit 0
-          fi
-
-          CCR_NAMESPACE="${{ vars.TENCENT_CCR_NAMESPACE }}"
-          test -n "${CCR_NAMESPACE}"
-          REMOTE_GOOES_API_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-api:${IMAGE_TAG}"
-          REMOTE_GOOES_ADMIN_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-admin:${IMAGE_TAG}"
-          REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-social-video-worker:${IMAGE_TAG}"
-
-          scp -i "${DEV_DEPLOY_KEY_PATH}" \
-            -o StrictHostKeyChecking=no \
-            "${RUNNER_WORKSPACE}/source/deploy/docker-compose.dev.yml" \
-            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}:${DEV_DEPLOY_DIR}/docker-compose.dev.yml"
-
-          COMPOSE_SERVICES=""
-          for SERVICE in ${SERVICES}; do
-            case "$SERVICE" in
-              api)
-                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-api-dev"
-                ;;
-              admin)
-                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-admin-dev"
-                ;;
-              social-video-worker)
-                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-social-video-worker-dev"
-                ;;
-              cos-reconcile-worker)
-                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-cos-reconcile-worker-dev"
-                ;;
-              *)
-                echo "Unknown service: $SERVICE"
-                exit 1
-                ;;
-            esac
-          done
-
-          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
-            -o StrictHostKeyChecking=no \
-            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-            "set -euo pipefail
-             cd '${DEV_DEPLOY_DIR}'
-             printf '%s' '${TENCENT_CCR_PASSWORD}' | docker login '${TENCENT_CCR_REGISTRY}' -u '${TENCENT_CCR_USERNAME}' --password-stdin
-             GOOES_API_IMAGE='${REMOTE_GOOES_API_IMAGE}' \
-             GOOES_ADMIN_IMAGE='${REMOTE_GOOES_ADMIN_IMAGE}' \
-             GOOES_SOCIAL_VIDEO_WORKER_IMAGE='${REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE}' \
-             docker compose -f docker-compose.dev.yml --profile workers pull ${COMPOSE_SERVICES}
-             GOOES_API_IMAGE='${REMOTE_GOOES_API_IMAGE}' \
-             GOOES_ADMIN_IMAGE='${REMOTE_GOOES_ADMIN_IMAGE}' \
-             GOOES_SOCIAL_VIDEO_WORKER_IMAGE='${REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE}' \
-             docker compose -f docker-compose.dev.yml --profile workers up -d --no-deps --force-recreate ${COMPOSE_SERVICES}"
+          source scripts/prepare-site-content-deployment-secrets.sh "${DEPLOY_SERVICES}"
+          image_base="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}"
+          export GOOES_API_IMAGE="${image_base}/goose-api:${SOURCE_SHA}"
+          export GOOES_ADMIN_IMAGE="${image_base}/goose-admin:${SOURCE_SHA}"
+          export GOOES_WEB_IMAGE="${image_base}/goose-web:${SOURCE_SHA}"
+          export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${image_base}/goose-social-video-worker:${SOURCE_SHA}"
+          case "${RELEASE_SERVICE}" in
+            api) compose_service=gooes-api-dev ;;
+            admin) compose_service=gooes-admin-dev ;;
+            social-video-worker) compose_service=gooes-social-video-worker-dev ;;
+            cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev ;;
+          esac
+          cd "${DEV_DEPLOY_DIR}"
+          docker compose -f docker-compose.dev.yml --profile workers pull "${compose_service}"
+          docker compose -f docker-compose.dev.yml --profile workers up -d --no-deps --force-recreate "${compose_service}"
 
       - name: Check dev services
+        if: ${{ inputs.service != 'web' }}
         run: |
           set -euo pipefail
-          if [ -z "${SERVICES:-}" ]; then
-            echo "No dev services to check."
-            exit 0
-          fi
-
-          for SERVICE in ${SERVICES}; do
-            case "$SERVICE" in
-              api)
-                COMPOSE_SERVICE=gooes-api-dev
-                URL=https://api-dev.goodcms.cn/
-                ;;
-              admin)
-                COMPOSE_SERVICE=gooes-admin-dev
-                URL=https://admin-dev.goodcms.cn/login
-                ;;
-              social-video-worker)
-                COMPOSE_SERVICE=gooes-social-video-worker-dev
-                URL=
-                ;;
-              cos-reconcile-worker)
-                COMPOSE_SERVICE=gooes-cos-reconcile-worker-dev
-                URL=
-                ;;
-              *)
-                echo "Unknown service: $SERVICE"
-                exit 1
-                ;;
-            esac
-
-            ssh -i "${DEV_DEPLOY_KEY_PATH}" \
-              -o StrictHostKeyChecking=no \
-              "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-              "set -euo pipefail
-               for _ in \$(seq 1 60); do
-                 state=\$(docker inspect -f '{{.State.Status}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
-                 health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
-                 if [ \"\$health\" = healthy ] || { [ -z \"\$health\" ] && [ \"\$state\" = running ]; }; then
-                   echo '${COMPOSE_SERVICE}' is \${health:-\$state}
-                   exit 0
-                 fi
-               if [ \"\$state\" = exited ] || [ \"\$state\" = dead ]; then
-                   break
-                 fi
-                 sleep 5
-               done
-               state=\$(docker inspect -f '{{.State.Status}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
-               health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
-               echo '${COMPOSE_SERVICE}' state=\$state health=\$health
-               docker logs --tail 120 '${COMPOSE_SERVICE}' || true
-               exit 1"
-
-            if [ -n "$URL" ]; then
-              curl --noproxy '*' -fsS -o /dev/null --retry 8 --retry-delay 3 "$URL"
-            fi
+          case "${RELEASE_SERVICE}" in
+            api) container=gooes-api-dev; url=https://api-dev.goodcms.cn/ ;;
+            admin) container=gooes-admin-dev; url=https://admin-dev.goodcms.cn/login ;;
+            social-video-worker) container=gooes-social-video-worker-dev; url= ;;
+            cos-reconcile-worker) container=gooes-cos-reconcile-worker-dev; url= ;;
+          esac
+          for _ in $(seq 1 60); do
+            state="$(docker inspect -f '{{.State.Status}}' "${container}" 2>/dev/null || true)"
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${container}" 2>/dev/null || true)"
+            revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${container}" 2>/dev/null || true)"
+            if [ "${revision}" = "${SOURCE_SHA}" ] && { [ "${health}" = healthy ] || { [ -z "${health}" ] && [ "${state}" = running ]; }; }; then break; fi
+            sleep 5
           done
+          test "${revision}" = "${SOURCE_SHA}"
+          if [ -n "${url}" ]; then curl -fsS --retry 8 --retry-delay 3 -o /dev/null "${url}"; fi
 
-      - name: Cleanup dev server Docker artifacts
-        if: ${{ always() }}
+      - name: Deploy gated dev web
+        if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}
+        env:
+          GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
+          GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
+          GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
+          GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
         run: |
           set -euo pipefail
-          if [ ! -r "${DEV_DEPLOY_KEY_PATH}" ]; then
-            echo "Dev deploy key is unavailable; skipping remote Docker cleanup."
-            exit 0
+          source scripts/prepare-site-content-deployment-secrets.sh web
+          export GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/goose-web:${SOURCE_SHA}"
+          old_image_id="$(docker inspect -f '{{.Image}}' gooes-web-dev 2>/dev/null || true)"
+          echo "WEB_ROLLBACK_STATUS=not_available" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=deploying" >> "${GITHUB_ENV}"
+          if [ -n "${old_image_id}" ]; then
+            ROLLBACK_CREATED_AT="$(date +%s)"
+            WEB_ROLLBACK_TAG="gooes-web:rollback-${GITHUB_RUN_ID}-${ROLLBACK_CREATED_AT}"
+            old_revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web-dev)"
+            [[ "${old_revision}" =~ ^[a-f0-9]{40}$ ]]
+            docker tag "${old_image_id}" "${WEB_ROLLBACK_TAG}"
+            echo "WEB_ROLLBACK_READY=true" >> "${GITHUB_ENV}"
+            echo "WEB_ROLLBACK_TAG=${WEB_ROLLBACK_TAG}" >> "${GITHUB_ENV}"
+            echo "WEB_OLD_REVISION=${old_revision}" >> "${GITHUB_ENV}"
           fi
+          cd "${DEV_DEPLOY_DIR}"
+          docker compose -f docker-compose.web-dev.yml pull gooes-web-dev
+          docker compose -f docker-compose.web-dev.yml up -d --no-deps --force-recreate gooes-web-dev
 
-          cleanup_report="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
-            -o StrictHostKeyChecking=no \
-            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-            "set -euo pipefail
-             disk_before_line=\$(df -h / | sed -n '2p')
-             set -- \$disk_before_line
-             disk_before=\"\$3/\$2 used, \$4 avail, \$5\"
-             docker container prune -f || true
-             docker image prune -a -f || true
-             docker builder prune -a -f --filter 'until=24h' || true
-             disk_after_line=\$(df -h / | sed -n '2p')
-             set -- \$disk_after_line
-             disk_after=\"\$3/\$2 used, \$4 avail, \$5\"
-             printf 'before=%s\n' \"\$disk_before\"
-             printf 'after=%s\n' \"\$disk_after\"
-             df -h /
-             docker system df || true")"
+      - name: Check gated dev web
+        if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}
+        run: |
+          set -euo pipefail
+          echo "WEB_ROLLBACK_STATUS=rollback_failed" >> "${GITHUB_ENV}"
+          for _ in $(seq 1 60); do
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true)"
+            revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web-dev 2>/dev/null || true)"
+            if [ "${health}" = healthy ] && [ "${revision}" = "${SOURCE_SHA}" ]; then break; fi
+            sleep 5
+          done
+          test "${health}" = healthy
+          test "${revision}" = "${SOURCE_SHA}"
+          headers="$(curl -fsS -D - -o /dev/null --retry 8 --retry-delay 3 https://www-dev.goodcms.cn/partners)"
+          grep -iq '^x-gooes-service: web' <<< "${headers}"
+          grep -iq "^x-gooes-revision: ${SOURCE_SHA}" <<< "${headers}"
+          echo "WEB_ROLLBACK_STATUS=not_requested" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=success" >> "${GITHUB_ENV}"
 
-          disk_before="$(printf '%s\n' "${cleanup_report}" | awk -F= '/^before=/{print $2; exit}')"
-          disk_after="$(printf '%s\n' "${cleanup_report}" | awk -F= '/^after=/{print $2; exit}')"
+      - name: Roll back gated dev web
+        if: ${{ failure() && env.WEB_ROLLBACK_READY == 'true' }}
+        env:
+          GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
+          GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
+          GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
+          GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
+        run: |
+          set -euo pipefail
+          echo "WEB_ROLLBACK_STATUS=rollback_failed" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=rollback_failed" >> "${GITHUB_ENV}"
+          source scripts/prepare-site-content-deployment-secrets.sh web
+          export GOOES_WEB_IMAGE="${WEB_ROLLBACK_TAG}"
+          cd "${DEV_DEPLOY_DIR}"
+          docker compose -f docker-compose.web-dev.yml up -d --no-deps --force-recreate gooes-web-dev
+          for _ in $(seq 1 60); do
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true)"
+            revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web-dev 2>/dev/null || true)"
+            if [ "${health}" = healthy ] && [ "${revision}" = "${WEB_OLD_REVISION}" ]; then break; fi
+            sleep 5
+          done
+          test "${health}" = healthy
+          test "${revision}" = "${WEB_OLD_REVISION}"
+          headers="$(curl -fsS -D - -o /dev/null https://www-dev.goodcms.cn/partners)"
+          grep -iq '^x-gooes-service: web' <<< "${headers}"
+          grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}" <<< "${headers}"
+          echo "WEB_ROLLBACK_STATUS=success" >> "${GITHUB_ENV}"
+          echo "WEB_DEPLOY_STAGE=rolled_back" >> "${GITHUB_ENV}"
 
-          {
-            echo "### Dev server cleanup"
-            echo ""
-            echo "| Host | Before | After | Policy |"
-            echo "| --- | --- | --- | --- |"
-            echo "| ${DEV_DEPLOY_HOST} | ${disk_before:-unknown} | ${disk_after:-unknown} | containers + unused images + build cache older than 24h; no volume prune |"
-            echo ""
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-          printf '%s\n' "${cleanup_report}"
+      - name: Clean up expired dev web rollback tags
+        if: ${{ success() && env.WEB_DEPLOY_APPROVED == 'true' }}
+        run: |
+          set -euo pipefail
+          if WEB_CONTAINER_NAME=gooes-web-dev bash scripts/cleanup-web-rollback-images.sh; then
+            echo "WEB_ROLLBACK_CLEANUP_STATUS=success" >> "${GITHUB_ENV}"
+          else
+            echo "::warning::Failed to clean expired dev Web rollback tags."
+            echo "WEB_ROLLBACK_CLEANUP_STATUS=warning" >> "${GITHUB_ENV}"
+          fi
 
       - name: Write dev deployment summary
         if: ${{ always() }}
         run: |
-          set -euo pipefail
-          elapsed_seconds=$(( $(date +%s) - ${DEPLOY_STARTED_AT:-$(date +%s)} ))
-          short_sha="${GITHUB_SHA:0:12}"
-          namespace="${{ vars.TENCENT_CCR_NAMESPACE }}"
-
+          set +e
+          web_stage="${WEB_DEPLOY_STAGE:-initial}"
+          web_revision=not_running
+          web_tag="${GOOES_WEB_IMAGE:-not_set}"
+          if docker ps -aq --filter 'name=^/gooes-web-dev$' | grep -q .; then
+            web_revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web-dev 2>/dev/null || echo unknown)"
+            web_tag="$(docker inspect -f '{{.Config.Image}}' gooes-web-dev 2>/dev/null || echo unknown)"
+          fi
           {
             echo "## Deploy Dev Summary"
             echo ""
             echo "| Field | Value |"
             echo "| --- | --- |"
             echo "| Result | ${{ job.status }} |"
-            echo "| Event | ${GITHUB_EVENT_NAME} |"
-            echo "| Branch | ${GITHUB_REF_NAME} |"
-            echo "| Commit | \`${short_sha}\` |"
-            echo "| Services | \`${SERVICES:-none}\` |"
-            echo "| Duration | ${elapsed_seconds}s |"
-            echo ""
-            echo "### Service status"
-            echo ""
-            echo "| Service | Container | Image | Runtime status |"
-            echo "| --- | --- | --- | --- |"
+            echo "| Commit | \`${SOURCE_SHA}\` |"
+            echo "| Service | \`${DEPLOY_SERVICES:-unknown}\` |"
+            echo "| Web stage | ${web_stage} |"
+            echo "| Web revision | ${web_revision} |"
+            echo "| Web image | ${web_tag} |"
+            echo "| Rollback cleanup | ${WEB_ROLLBACK_CLEANUP_STATUS:-not_run}; retention 168h / 7 days |"
           } >> "${GITHUB_STEP_SUMMARY}"
-
-          if [ -z "${SERVICES:-}" ]; then
-            echo "| none | - | - | no matched service |" >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
-          fi
-
-          for SERVICE in ${SERVICES}; do
-            case "$SERVICE" in
-              api)
-                container=gooes-api-dev
-                image_repo=goose-api
-                ;;
-              admin)
-                container=gooes-admin-dev
-                image_repo=goose-admin
-                ;;
-              social-video-worker)
-                container=gooes-social-video-worker-dev
-                image_repo=goose-social-video-worker
-                ;;
-              cos-reconcile-worker)
-                container=gooes-cos-reconcile-worker-dev
-                image_repo=goose-api
-                ;;
-              *)
-                container="$SERVICE"
-                image_repo="unknown"
-                ;;
-            esac
-
-            image="${TENCENT_CCR_REGISTRY}/${namespace}/${image_repo}:${IMAGE_TAG}"
-            if [ -r "${DEV_DEPLOY_KEY_PATH}" ]; then
-              runtime_status="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
-                -o StrictHostKeyChecking=no \
-                "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-                "docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' '${container}' 2>/dev/null || true" | xargs || true)"
-            else
-              runtime_status="deploy key unavailable"
-            fi
-            if [ -z "${runtime_status}" ]; then
-              runtime_status="not found"
-            fi
-
-            echo "| ${SERVICE} | ${container} | \`${image}\` | ${runtime_status} |" >> "${GITHUB_STEP_SUMMARY}"
-          done
+          exit 0

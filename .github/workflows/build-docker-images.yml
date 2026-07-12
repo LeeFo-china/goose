@@ -1,35 +1,75 @@
 name: Build Docker Images
-run-name: Production deploy ${{ github.event.inputs.service || 'all' }}
+run-name: Build ${{ inputs.target_environment }} ${{ inputs.service || 'all' }}
 
-# Manually builds all production business images on the Tencent Cloud
-# self-hosted runner, publishes them to Tencent CCR, then deploys once after
-# every image succeeds.
+# Builds immutable application images on GitHub-hosted runners and publishes
+# them to Tencent CCR. Deployment is intentionally handled by environment-
+# specific workflows after this workflow succeeds.
 
 on:
   workflow_dispatch:
     inputs:
+      target_environment:
+        description: "Image configuration target"
+        required: true
+        default: development
+        type: choice
+        options:
+          - development
+          - production
       service:
-        description: "Service(s) to build and deploy. Use all or comma-separated values like api,admin"
+        description: "Service(s) to build. Use all or comma-separated values like api,admin"
         required: true
         default: all
         type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: build-docker-images-main
   cancel-in-progress: true
 
 env:
-  IMAGE_TAG: main
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
   RELEASE_SERVICE: ${{ github.event.inputs.service || 'all' }}
+  TARGET_ENVIRONMENT: ${{ github.event.inputs.target_environment }}
 
 jobs:
+  validate-request:
+    name: Validate image build request
+    runs-on: ubuntu-24.04
+    outputs:
+      build_services: ${{ steps.resolve.outputs.build_services }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate service selection and web gate
+        id: resolve
+        run: |
+          set -euo pipefail
+          normalized=",${RELEASE_SERVICE//[[:space:]]/},"
+          BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${RELEASE_SERVICE}")"
+          test -n "${BUILD_SERVICES}"
+          echo "build_services=${BUILD_SERVICES}" >> "${GITHUB_OUTPUT}"
+          if [[ "${normalized}" == *",web,"* ]]; then
+            test "${normalized}" = ",web," || {
+              echo "Web must be built separately so its immutable evidence stays unambiguous."
+              exit 1
+            }
+          fi
+          if [ "${normalized}" = ",all," ]; then
+            {
+              echo "### Production all-service behavior"
+              echo ""
+              echo "Web image will be built, but the reusable deploy excludes Web until a gated web-only request."
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
   build:
+    needs: validate-request
     name: Build ${{ matrix.service }}
-    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.target_environment }}
     strategy:
       fail-fast: true
       max-parallel: 1
@@ -41,72 +81,26 @@ jobs:
             image_repo: goose-social-video-worker
           - service: admin
             image_repo: goose-admin
+          - service: web
+            image_repo: goose-web
 
     steps:
       - name: Checkout repository
-        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
+        uses: actions/checkout@v4
+
+      - name: Verify Docker toolchain
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         run: |
           set -euo pipefail
-          SOURCE_DIR="${RUNNER_WORKSPACE}/source"
-          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
-
-          checkout_attempt() {
-            mode="$1"
-            if [ "$mode" = "proxy" ]; then
-              export HTTPS_PROXY=socks5h://127.0.0.1:18080
-              export HTTP_PROXY=socks5h://127.0.0.1:18080
-              export ALL_PROXY=socks5h://127.0.0.1:18080
-              export https_proxy="$HTTPS_PROXY"
-              export http_proxy="$HTTP_PROXY"
-              export all_proxy="$ALL_PROXY"
-              git_timeout=180
-            else
-              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
-              git_timeout=45
-            fi
-
-            if [ ! -d "${SOURCE_DIR}/.git" ]; then
-              rm -rf "${SOURCE_DIR}" || return 1
-              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
-            fi
-            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
-            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}" || return 1
-            git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}" || return 1
-            git -C "${SOURCE_DIR}" clean -fdx || return 1
-          }
-
-          if ! checkout_attempt direct; then
-            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
-            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
-              checkout_attempt proxy
-            else
-              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
-              exit 1
-            fi
-          fi
-
-      - name: Ensure Docker daemon
-        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
-        run: |
-          set -euo pipefail
-          if ! command -v docker >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y docker.io
-          fi
-          sudo systemctl enable --now docker
-          sudo chmod 666 /var/run/docker.sock
           docker version
+          docker buildx version
 
       - name: Check permission boundaries
-        if: ${{ matrix.service == 'api' && (github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), ',api,') || contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,')) }}
+        if: ${{ matrix.service == 'api' && contains(format(' {0} ', needs.validate-request.outputs.build_services), ' api ') }}
         run: |
           set -euo pipefail
-          cd "${RUNNER_WORKSPACE}/source"
+          cd "${GITHUB_WORKSPACE}"
           if command -v bun >/dev/null 2>&1; then
             bun scripts/check-permission-boundaries.ts
           elif [ -x "${HOME}/.bun/bin/bun" ]; then
@@ -116,7 +110,7 @@ jobs:
           fi
 
       - name: Login to Tencent CCR
-        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         env:
           TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
@@ -131,15 +125,23 @@ jobs:
           exit 1
 
       - name: Build and push image
-        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         env:
           IMAGE_REPO: ${{ matrix.image_repo }}
           SERVICE: ${{ matrix.service }}
         run: |
           set -euo pipefail
-          cd "${RUNNER_WORKSPACE}/source"
+          cd "${GITHUB_WORKSPACE}"
           IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
-          BRANCH_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
+          if [ "${TARGET_ENVIRONMENT}" = "development" ]; then
+            BRANCH_IMAGE="${IMAGE_BASE}:dev"
+            ADMIN_API_URL=https://api-dev.goodcms.cn
+            ADMIN_H5_URL=https://h5-dev.goodcms.cn
+          else
+            BRANCH_IMAGE="${IMAGE_BASE}:main"
+            ADMIN_API_URL=https://api.goodcms.cn
+            ADMIN_H5_URL=https://h5.goodcms.cn
+          fi
           SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
           BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -170,8 +172,19 @@ jobs:
             admin)
               docker build \
                 -f docker/admin.Dockerfile \
-                --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api.goodcms.cn \
-                --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5.goodcms.cn \
+                --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL="${ADMIN_API_URL}" \
+                --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL="${ADMIN_H5_URL}" \
+                --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                --build-arg BUILD_CREATED="${BUILD_CREATED}" \
+                -t "$BRANCH_IMAGE" \
+                -t "$SHA_IMAGE" \
+                .
+              ;;
+            web)
+              docker build \
+                -f docker/web.Dockerfile \
                 --build-arg BUILD_SHA="${GITHUB_SHA}" \
                 --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
                 --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
@@ -189,19 +202,22 @@ jobs:
           docker push "$BRANCH_IMAGE"
           docker push "$SHA_IMAGE"
 
-      - name: Cleanup build leftovers
-        if: ${{ always() && (github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api')) }}
-        run: |
-          set -euo pipefail
-          docker container prune -f || true
-          docker image prune -f || true
-          docker builder prune -f --filter "until=24h" || true
-          df -h /
-          docker system df || true
+          digest="$(docker buildx imagetools inspect "$SHA_IMAGE" | awk '/^Digest:/ {print $2; exit}')"
+          [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          jq -n \
+            --arg service "${SERVICE}" \
+            --arg image "${SHA_IMAGE}" \
+            --arg digest "${digest}" \
+            --arg commit_sha "${GITHUB_SHA}" \
+            --arg environment "${TARGET_ENVIRONMENT}" \
+            '{service:$service,image:$image,digest:$digest,commit_sha:$commit_sha,target_environment:$environment}' \
+            > "image-manifest-${SERVICE}.json"
 
-  deploy:
-    needs: build
-    uses: ./.github/workflows/deploy-docker-services.yml
-    with:
-      service: ${{ github.event.inputs.service || 'all' }}
-    secrets: inherit
+      - name: Upload image manifest
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-manifest-${{ matrix.service }}
+          path: image-manifest-${{ matrix.service }}.json
+          if-no-files-found: error
+          retention-days: 30
