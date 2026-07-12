@@ -32,6 +32,7 @@ describe("CI environment isolation", () => {
   test("builds images on a GitHub-hosted runner and publishes immutable evidence", () => {
     const workflow = readWorkflow("build-docker-images.yml");
     expect(workflow).toContain("runs-on: ubuntu-24.04");
+    expect(workflow).toContain("max-parallel: 4");
     expect(workflow).toContain("docker build");
     expect(workflow).toContain("${GITHUB_SHA}");
     expect(workflow).toContain("image-manifest");
