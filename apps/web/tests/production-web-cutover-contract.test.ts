@@ -55,9 +55,9 @@ describe("production official website cutover contracts", () => {
       ".github/workflows/deploy-docker-services.yml",
     );
 
-    expect(buildWorkflow).toContain("web_smoke_content_path:");
-    expect(buildWorkflow).toContain(
-      "web_smoke_content_path: ${{ github.event.inputs.web_smoke_content_path }}",
+    expect(buildWorkflow).toContain("image-manifest-${SERVICE}.json");
+    expect(buildWorkflow).not.toContain(
+      "uses: ./.github/workflows/deploy-docker-services.yml",
     );
     expect(deployWorkflow).toContain("web_smoke_content_path:");
     expect(deployWorkflow).toContain("WEB_SMOKE_CONTENT_PATH");
@@ -131,7 +131,7 @@ describe("production official website cutover contracts", () => {
     );
     const validator = repoFile("scripts/validate-web-smoke-content-path.mjs").pathname;
 
-    expect(buildWorkflow).toContain("validate-web-smoke-content-path.mjs");
+    expect(buildWorkflow).not.toContain("validate-web-smoke-content-path.mjs");
     expect(deployWorkflow).toContain("validate-web-smoke-content-path.mjs");
     expect(
       Bun.spawnSync(["node", validator, "/articles/valid-slug"]).exitCode,

@@ -82,8 +82,8 @@ describe("phase one SEO and standalone deployment", () => {
     const deploy = read(repositoryRoot, ".github/workflows/deploy-docker-services.yml");
     const gate = read(repositoryRoot, ".github/workflows/verify-web-deployment-gate.yml");
     const workflows = `${dev}\n${build}\n${deploy}`;
-    expect(dev).toContain('"apps/web/**"');
-    expect(dev).toContain('"docker/web.Dockerfile"');
+    expect(dev).toContain("options: [api, admin, web");
+    expect(dev).toContain("goose-web:${SOURCE_SHA}");
     expect(dev).toContain("https://www-dev.goodcms.cn/partners");
     expect(build).toContain("service: web");
     expect(build).toContain("docker/web.Dockerfile");
@@ -96,7 +96,7 @@ describe("phase one SEO and standalone deployment", () => {
     );
     expect(workflows).toContain("Unknown service");
     expect(dev).toContain("gate_run_id");
-    expect(build).toContain("gate_run_id");
+    expect(build).toContain("image-manifest-${SERVICE}.json");
     expect(deploy).toContain("gate_run_id");
     expect(gate).toContain("migration_version");
   });

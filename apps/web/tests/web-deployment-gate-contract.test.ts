@@ -17,20 +17,20 @@ const sliceStep = (workflow: string, name: string, nextName: string): string => 
 };
 
 describe("web deployment hard gates", () => {
-  test("builds web on dev pushes but excludes it from automatic deployment", () => {
+  test("keeps development deployment separate from immutable image builds", () => {
     const resolve = sliceStep(dev, "Resolve services", "Checkout repository");
-    expect(resolve).toContain('add("web")');
-    expect(resolve).toContain('BUILD_SERVICES="${SERVICES}"');
-    expect(resolve).toContain('DEPLOY_SERVICES="$(remove_service web');
-    expect(resolve).toContain("Web image will be built, but deployment requires a gated manual dispatch");
+    expect(resolve).toContain("DEPLOY_SERVICES=web");
+    expect(resolve).toContain("MANIFEST_SERVICE=web");
+    expect(dev).toContain("build_run_id:");
+    expect(dev).not.toContain("docker build");
   });
 
   test("requires exact dev evidence before the dedicated web deploy step", () => {
     const gate = sliceStep(dev, "Validate gated dev web deployment", "Deploy gated dev web");
     const deploy = sliceStep(dev, "Deploy gated dev web", "Check gated dev web");
-    expect(gate).toContain("Verify Web Deployment Gate");
+    expect(gate).toContain("Verify Development Web Deployment Gate");
     expect(gate).toContain("verify-web-gate-receipt.mjs");
-    expect(gate).toContain('"${GITHUB_SHA}" 20260711120000');
+    expect(gate).toContain('"${SOURCE_SHA}" 20260711120000');
     expect(gate).toContain('test "${INPUT_SERVICE}" = "web"');
     expect(deploy).toContain("gooes-web-dev");
     expect(dev.indexOf("Validate gated dev web deployment")).toBeLessThan(dev.indexOf("Deploy gated dev web"));
@@ -38,7 +38,7 @@ describe("web deployment hard gates", () => {
 
   test("does not let normal dev deploy or health steps report web success", () => {
     const deploy = sliceStep(dev, "Deploy dev services", "Check dev services");
-    const check = sliceStep(dev, "Check dev services", "Validate gated dev web deployment");
+    const check = sliceStep(dev, "Check dev services", "Deploy gated dev web");
     expect(deploy).not.toContain("gooes-web-dev");
     expect(deploy).not.toContain("REMOTE_GOOES_WEB_IMAGE");
     expect(check).not.toContain("www-dev.goodcms.cn/partners");
@@ -58,9 +58,9 @@ describe("web deployment hard gates", () => {
     expect(production.indexOf("Validate web deployment gate")).toBeLessThan(production.indexOf("gooes-web"));
   });
 
-  test("passes production gate evidence through the reusable workflow", () => {
-    expect(build).toContain("gate_run_id:");
-    expect(build).toContain("gate_run_id: ${{ github.event.inputs.gate_run_id }}");
+  test("keeps build evidence and production gate evidence independent", () => {
+    expect(build).toContain("image-manifest-${SERVICE}.json");
+    expect(build).not.toContain("uses: ./.github/workflows/deploy-docker-services.yml");
     expect(production).toContain("gate_run_id:");
     expect(production).toContain("verify-web-gate-receipt.mjs");
     expect(`${build}\n${production}`).not.toMatch(
