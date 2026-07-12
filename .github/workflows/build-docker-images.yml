@@ -72,7 +72,7 @@ jobs:
     environment: ${{ inputs.target_environment }}
     strategy:
       fail-fast: true
-      max-parallel: 1
+      max-parallel: 4
       matrix:
         include:
           - service: api
