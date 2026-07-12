@@ -27,12 +27,21 @@ on:
         required: false
         default: ""
         type: string
+      confirm_text:
+        description: "Required production deployment confirmation"
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       service:
         description: "Service(s) to deploy. Use all or comma-separated values like api,admin"
         required: true
         default: all
+        type: string
+      confirm_text:
+        description: "Type 确认部署生产环境"
+        required: true
         type: string
       gate_run_id:
         description: "Successful Verify Web Deployment Gate workflow run ID"
@@ -56,6 +65,7 @@ env:
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
   SOURCE_SHA: ${{ github.sha }}
   RELEASE_SERVICE: ${{ inputs.service || github.event.inputs.service || 'all' }}
+  RELEASE_CONFIRM_TEXT: ${{ inputs.confirm_text || github.event.inputs.confirm_text || '' }}
 
 jobs:
   deploy:
@@ -68,6 +78,8 @@ jobs:
           set -euo pipefail
           echo "WEB_DEPLOY_STAGE=initial" >> "${GITHUB_ENV}"
           test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          test "${GITHUB_REF_NAME}" = "main"
+          test "${RELEASE_CONFIRM_TEXT}" = "确认部署生产环境"
           test -d "${DEPLOY_DIR}"
 
       - name: Checkout compose files
