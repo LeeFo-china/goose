@@ -68,6 +68,9 @@ describe("phase one SEO and standalone deployment", () => {
   test("routes the dev domain with forwarded headers and immutable assets", () => {
     const nginx = read(repositoryRoot, "deploy/nginx/gooes-web-dev.conf");
     expect(nginx).toContain("server_name www-dev.goodcms.cn");
+    expect(nginx).toContain("listen 443 ssl");
+    expect(nginx).toContain("/etc/letsencrypt/live/api-dev.goodcms.cn/fullchain.pem");
+    expect(nginx).toContain("return 301 https://$host$request_uri");
     expect(nginx).toContain("proxy_pass http://127.0.0.1:13020");
     for (const header of ["Host", "X-Real-IP", "X-Forwarded-For", "X-Forwarded-Proto"]) {
       expect(nginx).toContain(`proxy_set_header ${header}`);
