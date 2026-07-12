@@ -31,9 +31,54 @@ jobs:
       GATE_COMMIT_SHA: ${{ inputs.commit_sha }}
       GATE_MIGRATION_VERSION: ${{ inputs.migration_version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit_sha }}
+      - name: Checkout verified commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_DIR="${GITHUB_WORKSPACE}"
+          cd "${RUNNER_TEMP}"
+          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
+
+          checkout_attempt() {
+            mode="$1"
+            if [ "$mode" = "proxy" ]; then
+              export HTTPS_PROXY=socks5h://127.0.0.1:18080
+              export HTTP_PROXY=socks5h://127.0.0.1:18080
+              export ALL_PROXY=socks5h://127.0.0.1:18080
+              export https_proxy="$HTTPS_PROXY"
+              export http_proxy="$HTTP_PROXY"
+              export all_proxy="$ALL_PROXY"
+              git_timeout=180
+            else
+              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
+              git_timeout=45
+            fi
+
+            if [ ! -d "${SOURCE_DIR}/.git" ]; then
+              rm -rf "${SOURCE_DIR}" || return 1
+              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
+            fi
+            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
+            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GATE_COMMIT_SHA}" || return 1
+            git -C "${SOURCE_DIR}" checkout --force "${GATE_COMMIT_SHA}" || return 1
+            git -C "${SOURCE_DIR}" clean -fdx || return 1
+          }
+
+          if ! checkout_attempt direct; then
+            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
+            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
+              checkout_attempt proxy
+            else
+              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
+              exit 1
+            fi
+          fi
+
+          cd "${SOURCE_DIR}"
 
       - name: Verify immutable inputs
         run: |
