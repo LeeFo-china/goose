@@ -27,7 +27,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: build-docker-images-main
+  group: build-docker-images-${{ inputs.target_environment }}-${{ inputs.service }}
   cancel-in-progress: true
 
 env:
