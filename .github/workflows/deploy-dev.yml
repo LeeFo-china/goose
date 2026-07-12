@@ -75,6 +75,11 @@ jobs:
           ref: ${{ inputs.commit_sha }}
           clean: true
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
       - name: Validate immutable build evidence
         env:
           INPUT_BUILD_RUN_ID: ${{ inputs.build_run_id }}
