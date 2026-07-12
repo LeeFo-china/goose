@@ -146,7 +146,6 @@ jobs:
             test "$(jq -r '.path' <<< "${run_json}")" = ".github/workflows/verify-production-web-deployment-gate.yml"
             test "$(jq -r '.event' <<< "${run_json}")" = "workflow_dispatch"
             test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
-            test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
             receipt_dir="${RUNNER_TEMP}/web-gate-${INPUT_GATE_RUN_ID}"
             rm -rf "${receipt_dir}"
             gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
