@@ -1,15 +1,7 @@
-name: Verify Production Web Deployment Gate Core
-run-name: Verify production web gate ${{ inputs.commit_sha }}
+name: Verify Development Web Deployment Gate
+run-name: Verify development web gate ${{ inputs.commit_sha }}
 
 on:
-  workflow_call:
-    inputs:
-      commit_sha:
-        required: true
-        type: string
-      migration_version:
-        required: true
-        type: string
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -25,64 +17,39 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: verify-development-web-deployment-gate
+  cancel-in-progress: false
+
 jobs:
   verify:
-    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
-    environment: production
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
+    environment: development
     env:
-      GATE_ENVIRONMENT: production
+      GATE_ENVIRONMENT: development
       GATE_COMMIT_SHA: ${{ inputs.commit_sha }}
       GATE_MIGRATION_VERSION: ${{ inputs.migration_version }}
     steps:
-      - name: Checkout verified commit
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Guard development runner
         run: |
           set -euo pipefail
-          SOURCE_DIR="${GITHUB_WORKSPACE}"
-          cd "${RUNNER_TEMP}"
-          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+          test -r /opt/gooes-dev/docker/.env.dev.db
 
-          checkout_attempt() {
-            mode="$1"
-            if [ "$mode" = "proxy" ]; then
-              export HTTPS_PROXY=socks5h://127.0.0.1:18080
-              export HTTP_PROXY=socks5h://127.0.0.1:18080
-              export ALL_PROXY=socks5h://127.0.0.1:18080
-              export https_proxy="$HTTPS_PROXY"
-              export http_proxy="$HTTP_PROXY"
-              export all_proxy="$ALL_PROXY"
-              git_timeout=180
-            else
-              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
-              git_timeout=45
-            fi
+      - name: Checkout verified commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          clean: true
 
-            if [ ! -d "${SOURCE_DIR}/.git" ]; then
-              rm -rf "${SOURCE_DIR}" || return 1
-              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
-            fi
-            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
-            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GATE_COMMIT_SHA}" || return 1
-            git -C "${SOURCE_DIR}" checkout --force "${GATE_COMMIT_SHA}" || return 1
-            git -C "${SOURCE_DIR}" clean -fdx || return 1
-          }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
 
-          if ! checkout_attempt direct; then
-            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
-            rm -f "${SOURCE_DIR}/.git/shallow.lock" "${SOURCE_DIR}/.git/index.lock"
-            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
-              checkout_attempt proxy
-            else
-              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
-              exit 1
-            fi
-          fi
-
-          cd "${SOURCE_DIR}"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.2"
 
       - name: Verify immutable inputs
         run: |
@@ -94,12 +61,14 @@ jobs:
 
       - name: Verify Local and Remote migration history
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           NO_COLOR: "1"
           TERM: dumb
         run: |
           set -euo pipefail
-          test -n "${SUPABASE_DB_URL}"
+          set -a
+          . /opt/gooes-dev/docker/.env.dev.db
+          set +a
+          test -n "${SUPABASE_DB_URL:-}"
           corepack enable
           corepack prepare pnpm@10.33.0 --activate
           pnpm dlx supabase@2.99.0 migration list \
@@ -114,12 +83,11 @@ jobs:
         run: |
           set -euo pipefail
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
+          test "$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api-dev)" = "${GATE_COMMIT_SHA}"
           expected_secret_hash="$(printf '%s\n' "${GOOES_WEB_PROXY_SHARED_SECRET}" | sha256sum | awk '{print $1}')"
-          test "$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api)" = "${GATE_COMMIT_SHA}"
-          actual_secret_hash="$(docker exec gooes-api printenv GOOES_WEB_PROXY_SHARED_SECRET | sha256sum | awk '{print $1}')"
-          curl -fsS https://api.goodcms.cn/ >/dev/null
-          api_url=https://api.goodcms.cn
+          actual_secret_hash="$(docker exec gooes-api-dev printenv GOOES_WEB_PROXY_SHARED_SECRET | sha256sum | awk '{print $1}')"
           test "${actual_secret_hash}" = "${expected_secret_hash}"
+          curl -fsS https://api-dev.goodcms.cn/ >/dev/null
           probe_ip=192.0.2.230
           timestamp="$(date +%s)"
           signature="$(PROBE_IP="${probe_ip}" PROBE_TIMESTAMP="${timestamp}" node -e '
@@ -131,7 +99,7 @@ jobs:
             -H "x-gooes-client-ip: ${probe_ip}" \
             -H "x-gooes-client-ip-timestamp: ${timestamp}" \
             -H "x-gooes-client-ip-signature: ${signature}" \
-            "${api_url}/public/partner-applications/proxy-ip-check")"
+            https://api-dev.goodcms.cn/public/partner-applications/proxy-ip-check)"
           test "$(jq -r '.data.client_ip' <<< "${response}")" = "${probe_ip}"
 
       - name: Run isolated atomic reservation smoke
@@ -149,13 +117,12 @@ jobs:
 
       - name: Create immutable gate receipt
         env:
-          RECEIPT_ENVIRONMENT: production
           RECEIPT_COMMIT_SHA: ${{ inputs.commit_sha }}
           RECEIPT_MIGRATION_VERSION: ${{ inputs.migration_version }}
         run: |
           set -euo pipefail
           jq -n \
-            --arg environment "${RECEIPT_ENVIRONMENT}" \
+            --arg environment development \
             --arg sha "${RECEIPT_COMMIT_SHA}" \
             --arg migration "${RECEIPT_MIGRATION_VERSION}" \
             --slurpfile smoke web-gate-smoke.json \

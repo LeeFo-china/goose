@@ -1,0 +1,35 @@
+name: Verify Production Web Deployment Gate
+run-name: Verify production web gate ${{ inputs.commit_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "API commit already deployed and healthy"
+        required: true
+        type: string
+      migration_version:
+        description: "Applied migration version"
+        required: true
+        default: "20260711120000"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  authorize-runner:
+    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
+    steps:
+      - name: Guard production runner
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+
+  verify:
+    needs: authorize-runner
+    uses: ./.github/workflows/verify-web-deployment-gate.yml
+    with:
+      commit_sha: ${{ inputs.commit_sha }}
+      migration_version: ${{ inputs.migration_version }}
+    secrets: inherit

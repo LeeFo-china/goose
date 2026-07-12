@@ -36,7 +36,7 @@ env:
 jobs:
   migrate-production:
     name: Migrate production database
-    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
 
     steps:
       - name: Guard production runner
