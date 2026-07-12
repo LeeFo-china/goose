@@ -163,7 +163,7 @@ jobs:
             '{conclusion:"success", environment:$environment, commit_sha:$sha, migration_version:$migration} + $smoke[0] + $migrationEvidence[0]' \
             > web-deployment-gate-receipt.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: web-deployment-gate-receipt
           path: web-deployment-gate-receipt.json

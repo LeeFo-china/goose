@@ -63,4 +63,17 @@ describe("CI environment isolation", () => {
       expect(readWorkflow(name)).not.toContain("docker build");
     }
   });
+
+  test("uses Node 24 based official GitHub actions", () => {
+    for (const name of [
+      "build-docker-images.yml",
+      "deploy-dev.yml",
+      "verify-dev-web-deployment-gate.yml",
+      "verify-web-deployment-gate.yml",
+    ]) {
+      expect(readWorkflow(name)).not.toMatch(
+        /actions\/(?:checkout|setup-node|upload-artifact)@v4/,
+      );
+    }
+  });
 });

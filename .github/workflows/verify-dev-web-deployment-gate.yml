@@ -37,12 +37,12 @@ jobs:
           test -r /opt/gooes-dev/docker/.env.dev.db
 
       - name: Checkout verified commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.commit_sha }}
           clean: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
 
@@ -129,7 +129,7 @@ jobs:
             '{conclusion:"success", environment:$environment, commit_sha:$sha, migration_version:$migration} + $smoke[0] + $migrationEvidence[0]' \
             > web-deployment-gate-receipt.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: web-deployment-gate-receipt
           path: web-deployment-gate-receipt.json
