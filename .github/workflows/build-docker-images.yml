@@ -42,7 +42,7 @@ jobs:
     outputs:
       build_services: ${{ steps.resolve.outputs.build_services }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Validate service selection and web gate
         id: resolve
         run: |
@@ -88,7 +88,7 @@ jobs:
     steps:
       - name: Checkout repository
         if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Verify Docker toolchain
         if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
@@ -216,7 +216,7 @@ jobs:
 
       - name: Upload image manifest
         if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: image-manifest-${{ matrix.service }}
           path: image-manifest-${{ matrix.service }}.json

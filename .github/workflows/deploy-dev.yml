@@ -70,7 +70,7 @@ jobs:
           echo "MANIFEST_SERVICE=${MANIFEST_SERVICE}" >> "${GITHUB_ENV}"
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.commit_sha }}
           clean: true
