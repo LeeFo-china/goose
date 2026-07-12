@@ -28,7 +28,7 @@ describe("web deployment hard gates", () => {
   test("requires exact dev evidence before the dedicated web deploy step", () => {
     const gate = sliceStep(dev, "Validate gated dev web deployment", "Deploy gated dev web");
     const deploy = sliceStep(dev, "Deploy gated dev web", "Check gated dev web");
-    expect(gate).toContain("Verify Development Web Deployment Gate");
+    expect(gate).toContain("verify-dev-web-deployment-gate.yml");
     expect(gate).toContain("verify-web-gate-receipt.mjs");
     expect(gate).toContain('"${SOURCE_SHA}" 20260711120000');
     expect(gate).toContain('test "${INPUT_SERVICE}" = "web"');
