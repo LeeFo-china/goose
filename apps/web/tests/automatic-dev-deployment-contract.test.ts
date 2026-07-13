@@ -36,7 +36,7 @@ describe("automatic development image build contract", () => {
 
   test("never cancels an in-flight main push build with a narrower diff", () => {
     expect(workflow).toContain(
-      "cancel-in-progress: ${{ github.event_name != 'push' }}",
+      "cancel-in-progress: ${{ github.event_name != 'push' || inputs.target_environment != '' || inputs.service != '' }}",
     );
   });
 
@@ -44,7 +44,7 @@ describe("automatic development image build contract", () => {
     const validateJob = sliceBetween("  validate-request:", "  build:");
     const resolveStep = sliceBetween(
       "- name: Resolve build plan",
-      "- name: Upload development build plan",
+      "- name: Upload immutable build plan",
     );
 
     expect(validateJob).toContain("fetch-depth: 0");
@@ -62,7 +62,7 @@ describe("automatic development image build contract", () => {
   test("uses a direct conservative fallback when the before commit is unavailable", () => {
     const resolveStep = sliceBetween(
       "- name: Resolve build plan",
-      "- name: Upload development build plan",
+      "- name: Upload immutable build plan",
     );
 
     expect(resolveStep).toMatch(/\^0\{40\}\$/);
@@ -83,12 +83,16 @@ describe("automatic development image build contract", () => {
 
   test("publishes one durable build-plan artifact after successful resolution", () => {
     const uploadStep = sliceBetween(
-      "- name: Upload development build plan",
+      "- name: Upload immutable build plan",
       "  build:",
     );
 
     expect(uploadStep).toContain("uses: actions/upload-artifact@v6");
-    expect(uploadStep).toContain("name: dev-build-plan");
+    expect(uploadStep).toContain(
+      "name: ${{ steps.resolve.outputs.target_environment == 'production' && 'production-build-plan' || 'dev-build-plan' }}",
+    );
+    expect(uploadStep).toContain("production-build-plan");
+    expect(uploadStep).toContain("dev-build-plan");
     expect(uploadStep).toContain("path: build-plan.json");
     expect(uploadStep).toContain("if-no-files-found: error");
     expect(uploadStep).toContain("retention-days: 30");

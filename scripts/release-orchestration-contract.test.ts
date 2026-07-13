@@ -30,6 +30,14 @@ function resolve(mode: string, services: string): ReturnType<typeof Bun.spawnSyn
   });
 }
 
+function sliceWorkflowJob(workflow: string, job: string, nextJob: string): string {
+  const start = workflow.indexOf(`  ${job}:`);
+  const end = workflow.indexOf(`  ${nextJob}:`, start + 1);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  return workflow.slice(start, end);
+}
+
 describe("admin release service resolver", () => {
   test.each([
     ["requested", "all", "api,admin,social-video-worker,cos-reconcile-worker"],
@@ -166,6 +174,9 @@ describe("development orchestrator", () => {
   });
 
   test("builds, verifies migrations, and deploys API before remaining services", () => {
+    const deployApi = sliceWorkflowJob(releaseDevWorkflow, "deploy-api", "api-ready");
+    const deployRest = sliceWorkflowJob(releaseDevWorkflow, "deploy-rest", "rest-ready");
+
     expect(releaseDevWorkflow).toContain("uses: ./.github/workflows/build-docker-images.yml");
     expect(releaseDevWorkflow).toContain("target_environment: development");
     expect(releaseDevWorkflow).toContain("uses: ./.github/workflows/verify-dev-migration-history.yml");
@@ -173,22 +184,26 @@ describe("development orchestrator", () => {
     expect(releaseDevWorkflow).toContain(
       "artifact_name: auto-predeploy-migration-${{ github.sha }}",
     );
-    expect(releaseDevWorkflow).toContain("uses: ./.github/workflows/deploy-dev.yml");
-    expect(
-      releaseDevWorkflow.match(/uses: \.\/\.github\/workflows\/deploy-dev\.yml/g),
-    ).toHaveLength(2);
     expect(releaseDevWorkflow).toContain("max-parallel: 1");
     expect(releaseDevWorkflow.indexOf("deploy-api:")).toBeLessThan(
       releaseDevWorkflow.indexOf("deploy-rest:"),
     );
-    expect(releaseDevWorkflow.match(/evidence_mode: same_run/g)).toHaveLength(2);
-    expect(
-      releaseDevWorkflow.match(
-        /expected_build_workflow_path: \.github\/workflows\/release-dev\.yml/g,
-      ),
-    ).toHaveLength(2);
-    expect(releaseDevWorkflow.match(/build_run_id: \$\{\{ github\.run_id \}\}/g)).toHaveLength(2);
-    expect(releaseDevWorkflow.match(/expected_build_event: workflow_dispatch/g)).toHaveLength(2);
+    for (const [job, service] of [
+      [deployApi, "api"],
+      [deployRest, "${{ matrix.service }}"],
+    ]) {
+      expect(job).toContain("uses: ./.github/workflows/deploy-dev.yml");
+      expect(job).toContain(`service: ${service}`);
+      expect(job).toContain("commit_sha: ${{ github.sha }}");
+      expect(job).toContain("build_run_id: ${{ github.run_id }}");
+      expect(job).toContain("expected_build_event: workflow_dispatch");
+      expect(job).toContain("evidence_mode: same_run");
+      expect(job).toContain(
+        "expected_build_workflow_path: .github/workflows/release-dev.yml",
+      );
+    }
+    expect(deployRest).toContain("needs: [prepare, api-ready]");
+    expect(deployRest).toContain("max-parallel: 1");
   });
 
   test("propagates required job results and reports release semantics", () => {
@@ -220,56 +235,115 @@ describe("development orchestrator", () => {
     expect(deployDevWorkflow).toContain(
       "default: .github/workflows/build-docker-images.yml",
     );
-    const splitStart = deployDevWorkflow.indexOf('case "${EVIDENCE_MODE}" in');
-    const sameRunStart = deployDevWorkflow.indexOf("same_run)", splitStart);
-    const completedRunStart = deployDevWorkflow.indexOf("completed_run)", sameRunStart);
-    const splitEnd = deployDevWorkflow.indexOf(
+    const evidenceStart = deployDevWorkflow.indexOf(
+      "- name: Validate immutable build evidence",
+    );
+    const evidenceEnd = deployDevWorkflow.indexOf(
+      "- name: Validate gated dev web deployment",
+      evidenceStart,
+    );
+    const evidence = deployDevWorkflow.slice(evidenceStart, evidenceEnd);
+    const splitStart = evidence.indexOf('case "${EVIDENCE_MODE}" in');
+    const sameRunStart = evidence.indexOf("same_run)", splitStart);
+    const completedRunStart = evidence.indexOf("completed_run)", sameRunStart);
+    const splitEnd = evidence.indexOf(
       "\n          esac\n          receipt_dir=",
       completedRunStart,
     );
-    const manifestStart = deployDevWorkflow.indexOf('receipt_dir="${RUNNER_TEMP}', splitEnd);
+    const manifestStart = evidence.indexOf('receipt_dir="${RUNNER_TEMP}', splitEnd);
+    const sameRun = evidence.slice(sameRunStart, completedRunStart);
+    const completedRun = evidence.slice(completedRunStart, splitEnd);
+    const manifestEvidence = evidence.slice(splitEnd);
 
+    expect(evidenceStart).toBeGreaterThanOrEqual(0);
+    expect(evidenceEnd).toBeGreaterThan(evidenceStart);
     expect(splitStart).toBeGreaterThanOrEqual(0);
     expect(sameRunStart).toBeGreaterThan(splitStart);
     expect(completedRunStart).toBeGreaterThan(sameRunStart);
     expect(splitEnd).toBeGreaterThan(completedRunStart);
     expect(manifestStart).toBeGreaterThan(splitEnd);
-    expect(deployDevWorkflow).toContain(".path | split(\"@\")[0]");
-    expect(deployDevWorkflow).toContain(
-      'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/release-dev.yml"',
-    );
-    expect(deployDevWorkflow).toContain(
-      'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/build-docker-images.yml"',
-    );
-    expect(deployDevWorkflow).toContain(
+    expect(sameRun).toContain(
       'test "${INPUT_BUILD_RUN_ID}" = "${GITHUB_RUN_ID}"',
     );
-    expect(deployDevWorkflow).toContain(
+    expect(sameRun).toContain(
+      'current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"',
+    );
+    expect(sameRun).toContain(
+      'test "$(jq -r \'.path | split("@")[0]\' <<< "${current_run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
+    );
+    expect(sameRun).toContain(
+      'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/release-dev.yml"',
+    );
+    expect(sameRun).toContain(
       'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_dispatch',
     );
-    expect(deployDevWorkflow).toContain(
+    expect(sameRun).toContain(
       'test "$(jq -r \'.head_sha\' <<< "${current_run_json}")" = "${SOURCE_SHA}"',
     );
-    expect(deployDevWorkflow).toContain("*) exit 1 ;;");
-    expect(deployDevWorkflow).toContain(
+    expect(sameRun).toContain('test "${EXPECTED_BUILD_EVENT}" = workflow_dispatch');
+
+    expect(completedRun).toContain(
+      'run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_BUILD_RUN_ID}")"',
+    );
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.path | split("@")[0]\' <<< "${run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
+    );
+    expect(completedRun).toContain(
+      'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/build-docker-images.yml"',
+    );
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.event\' <<< "${run_json}")" = "${EXPECTED_BUILD_EVENT}"',
+    );
+    expect(completedRun).toContain(
       'test "$(jq -r \'.conclusion\' <<< "${run_json}")" = success',
     );
-    expect(deployDevWorkflow).toContain(
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.head_sha\' <<< "${run_json}")" = "${SOURCE_SHA}"',
+    );
+    expect(evidence).toContain("*) exit 1 ;;");
+    expect(manifestEvidence).toContain(
+      'receipt_dir="${RUNNER_TEMP}/image-manifest-${INPUT_BUILD_RUN_ID}"',
+    );
+    expect(manifestEvidence).toContain(
       'test "$(jq -r \'.commit_sha\' "${manifest}")" = "${SOURCE_SHA}"',
     );
-    expect(deployDevWorkflow).toContain(
+    expect(manifestEvidence).toContain(
       'test "$(jq -r \'.target_environment\' "${manifest}")" = development',
     );
+    expect(manifestEvidence).toContain('^sha256:[a-f0-9]{64}$');
   });
 
   test("keeps every automatic deployment on completed build-run evidence", () => {
-    expect(autoDeployDevWorkflow.match(/uses: \.\/\.github\/workflows\/deploy-dev\.yml/g)).toHaveLength(3);
-    expect(autoDeployDevWorkflow.match(/evidence_mode: completed_run/g)).toHaveLength(3);
-    expect(
-      autoDeployDevWorkflow.match(
-        /expected_build_workflow_path: \.github\/workflows\/build-docker-images\.yml/g,
-      ),
-    ).toHaveLength(3);
+    const deployApi = sliceWorkflowJob(autoDeployDevWorkflow, "deploy-api", "api-ready");
+    const deployRest = sliceWorkflowJob(autoDeployDevWorkflow, "deploy-rest", "rest-ready");
+    const deployWeb = sliceWorkflowJob(autoDeployDevWorkflow, "deploy-web", "summary");
+
+    for (const [job, service] of [
+      [deployApi, "api"],
+      [deployRest, "${{ matrix.service }}"],
+      [deployWeb, "web"],
+    ]) {
+      expect(job).toContain("uses: ./.github/workflows/deploy-dev.yml");
+      expect(job).toContain(`service: ${service}`);
+      expect(job).toContain(
+        "commit_sha: ${{ needs.authorize.outputs.commit_sha }}",
+      );
+      expect(job).toContain(
+        "build_run_id: ${{ needs.authorize.outputs.build_run_id }}",
+      );
+      expect(job).toContain("expected_build_event: push");
+      expect(job).toContain("evidence_mode: completed_run");
+      expect(job).toContain(
+        "expected_build_workflow_path: .github/workflows/build-docker-images.yml",
+      );
+    }
+    expect(deployApi).toContain("needs: [authorize, migration]");
+    expect(deployRest).toContain("needs: [authorize, api-ready]");
+    expect(deployRest).toContain("max-parallel: 1");
+    expect(deployWeb).toContain("needs: [authorize, web-gate]");
+    expect(deployWeb).toContain(
+      "gate_receipt_b64: ${{ needs.web-gate.outputs.receipt_b64 }}",
+    );
     expect(autoDeployDevWorkflow).toContain("types: [completed]");
     expect(autoDeployDevWorkflow).toContain("branches: [main]");
     expect(autoDeployDevWorkflow).toContain(

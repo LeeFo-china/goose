@@ -106,41 +106,95 @@ describe("web deployment hard gates", () => {
       "Validate immutable build evidence",
       "Validate gated dev web deployment",
     );
+    const splitStart = evidence.indexOf('case "${EVIDENCE_MODE}" in');
+    const sameRunStart = evidence.indexOf("same_run)", splitStart);
+    const completedRunStart = evidence.indexOf("completed_run)", sameRunStart);
+    const splitEnd = evidence.indexOf(
+      "\n          esac\n          receipt_dir=",
+      completedRunStart,
+    );
+    const sameRun = evidence.slice(sameRunStart, completedRunStart);
+    const completedRun = evidence.slice(completedRunStart, splitEnd);
+    const manifestEvidence = evidence.slice(splitEnd);
 
     expect(dev).toContain(
       "EXPECTED_BUILD_EVENT: ${{ github.event_name == 'workflow_dispatch' && 'workflow_dispatch' || inputs.expected_build_event }}",
     );
+    expect(dev).toContain("EVIDENCE_MODE: ${{ inputs.evidence_mode || 'completed_run' }}");
+    expect(dev).toContain(
+      "EXPECTED_BUILD_WORKFLOW_PATH: ${{ inputs.expected_build_workflow_path || '.github/workflows/build-docker-images.yml' }}",
+    );
     expect(dev).toContain("INLINE_GATE_RECEIPT_B64: ${{ inputs.gate_receipt_b64 }}");
     expect(evidence).toContain('[[ "${INPUT_BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
-    expect(evidence).toContain(
+    expect(splitStart).toBeGreaterThanOrEqual(0);
+    expect(sameRunStart).toBeGreaterThan(splitStart);
+    expect(completedRunStart).toBeGreaterThan(sameRunStart);
+    expect(splitEnd).toBeGreaterThan(completedRunStart);
+
+    expect(sameRun).toContain('test "${INPUT_BUILD_RUN_ID}" = "${GITHUB_RUN_ID}"');
+    expect(sameRun).toContain(
       'current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"',
     );
-    expect(evidence).toMatch(/case "\$\{EXPECTED_BUILD_EVENT\}" in[\s\S]*push\|workflow_dispatch/);
-    expect(evidence).toContain('test "${GITHUB_EVENT_NAME}" = workflow_run');
-    expect(evidence).toContain(
-      'test "$(jq -r \'.path\' <<< "${current_run_json}")" = ".github/workflows/auto-deploy-dev.yml"',
+    expect(sameRun).toContain(
+      'test "$(jq -r \'.path | split("@")[0]\' <<< "${current_run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
     );
-    expect(evidence).toContain(
-      'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_run',
+    expect(sameRun).toContain(
+      'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/release-dev.yml"',
     );
-    expect(evidence).toContain('test "${GITHUB_EVENT_NAME}" = workflow_dispatch');
-    expect(evidence).toContain(
-      'test "$(jq -r \'.path\' <<< "${current_run_json}")" = ".github/workflows/deploy-dev.yml"',
-    );
-    expect(evidence).toContain(
+    expect(sameRun).toContain(
       'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_dispatch',
     );
-    expect(evidence).toContain('test -z "${INLINE_GATE_RECEIPT_B64}"');
-    expect(evidence).toContain(
-      'test "$(jq -r \'.path\' <<< "${run_json}")" = ".github/workflows/build-docker-images.yml"',
+    expect(sameRun).toContain(
+      'test "$(jq -r \'.head_sha\' <<< "${current_run_json}")" = "${SOURCE_SHA}"',
     );
-    expect(evidence).toContain(
+    expect(sameRun).toContain('test "${EXPECTED_BUILD_EVENT}" = workflow_dispatch');
+    expect(sameRun).toContain('test "${GITHUB_EVENT_NAME}" = workflow_dispatch');
+    expect(sameRun).toContain('test -z "${INLINE_GATE_RECEIPT_B64}"');
+
+    expect(completedRun).toContain(
+      'run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_BUILD_RUN_ID}")"',
+    );
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.path | split("@")[0]\' <<< "${run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
+    );
+    expect(completedRun).toContain(
+      'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/build-docker-images.yml"',
+    );
+    expect(completedRun).toContain(
       'test "$(jq -r \'.event\' <<< "${run_json}")" = "${EXPECTED_BUILD_EVENT}"',
     );
-    expect(evidence).toContain('test "$(jq -r \'.conclusion\' <<< "${run_json}")" = "success"');
-    expect(evidence).toContain(
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.conclusion\' <<< "${run_json}")" = success',
+    );
+    expect(completedRun).toContain(
       'test "$(jq -r \'.head_sha\' <<< "${run_json}")" = "${SOURCE_SHA}"',
     );
+    expect(completedRun).toContain('test "${GITHUB_EVENT_NAME}" = workflow_run');
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.path | split("@")[0]\' <<< "${current_run_json}")" = ".github/workflows/auto-deploy-dev.yml"',
+    );
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_run',
+    );
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.path | split("@")[0]\' <<< "${current_run_json}")" = ".github/workflows/deploy-dev.yml"',
+    );
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_dispatch',
+    );
+    expect(completedRun).toContain('test -z "${INLINE_GATE_RECEIPT_B64}"');
+    expect(evidence).toContain("*) exit 1 ;;");
+
+    expect(manifestEvidence).toContain(
+      'receipt_dir="${RUNNER_TEMP}/image-manifest-${INPUT_BUILD_RUN_ID}"',
+    );
+    expect(manifestEvidence).toContain(
+      'test "$(jq -r \'.commit_sha\' "${manifest}")" = "${SOURCE_SHA}"',
+    );
+    expect(manifestEvidence).toContain(
+      'test "$(jq -r \'.target_environment\' "${manifest}")" = development',
+    );
+    expect(manifestEvidence).toContain('^sha256:[a-f0-9]{64}$');
     expect(evidence).not.toContain("github.workflow_ref");
   });
 
