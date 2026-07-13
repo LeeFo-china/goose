@@ -1,5 +1,5 @@
 name: Build Docker Images
-run-name: ${{ github.event_name == 'push' && 'Build development affected services' || format('Build {0} {1}', inputs.target_environment, inputs.service || 'all') }}
+run-name: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' && 'Build development affected services' || format('Build {0} {1}', inputs.target_environment, inputs.service || 'all') }}
 
 # Builds immutable application images on GitHub-hosted runners and publishes
 # them to Tencent CCR. Deployment is intentionally handled by environment-
@@ -23,14 +23,31 @@ on:
         required: true
         default: all
         type: string
+  workflow_call:
+    inputs:
+      target_environment:
+        required: true
+        type: string
+      service:
+        required: true
+        type: string
+    outputs:
+      build_services:
+        value: ${{ jobs.validate-request.outputs.build_services }}
+      deploy_services:
+        value: ${{ jobs.validate-request.outputs.deploy_services }}
+      no_op:
+        value: ${{ jobs.validate-request.outputs.no_op }}
+      target_environment:
+        value: ${{ jobs.validate-request.outputs.target_environment }}
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: ${{ github.event_name == 'push' && 'build-docker-images-development-push' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  group: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' && 'build-docker-images-development-push' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}
+  cancel-in-progress: ${{ github.event_name != 'push' || inputs.target_environment != '' || inputs.service != '' }}
 
 env:
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
@@ -52,6 +69,7 @@ jobs:
       - name: Resolve build plan
         id: resolve
         env:
+          DIRECT_PUSH: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' }}
           BEFORE_SHA: ${{ github.event.before }}
           COMMIT_SHA: ${{ github.sha }}
           WORKFLOW_RUN_ID: ${{ github.run_id }}
@@ -73,7 +91,7 @@ jobs:
             printf '%s' "${result}"
           }
 
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+          if [ "${DIRECT_PUSH}" = "true" ]; then
             TARGET_ENVIRONMENT=development
 
             if [[ "${BEFORE_SHA}" =~ ^0{40}$ ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
@@ -173,10 +191,10 @@ jobs:
             echo "target_environment=${TARGET_ENVIRONMENT}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Upload development build plan
+      - name: Upload immutable build plan
         uses: actions/upload-artifact@v6
         with:
-          name: dev-build-plan
+          name: ${{ steps.resolve.outputs.target_environment == 'production' && 'production-build-plan' || 'dev-build-plan' }}
           path: build-plan.json
           if-no-files-found: error
           retention-days: 30
