@@ -15,109 +15,109 @@ export type SmsVerificationCodeRow = {
   request_device: string | null;
 };
 
-class SmsVerificationCodeRepository {
+export type SmsRateLimitDimension =
+  | "phone"
+  | "request_ip"
+  | "request_device";
+
+export type SmsReservationResult =
+  | { reserved: true; id: string; limitedDimension: null }
+  | { reserved: false; id: null; limitedDimension: SmsRateLimitDimension };
+
+type UntypedRpcClient = {
+  rpc: (
+    functionName: string,
+    parameters: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export class SmsVerificationCodeRepository {
   private adminClient = SupabaseDB.getAdminClient();
+  private rpcClient: UntypedRpcClient;
 
-  async findRecentByPhoneScene(input: {
-    phone: string;
-    scene: SmsScene;
-    since: string;
-  }) {
-    const { data, error } = await this.adminClient
-      .from("sms_verification_codes")
-      .select("id, created_at")
-      .eq("phone", input.phone)
-      .eq("scene", input.scene)
-      .gte("created_at", input.since)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询验证码发送记录失败", error);
-    }
-
-    return (data || null) as { id: string; created_at: string } | null;
+  constructor(
+    rpcClient = SupabaseDB.getAdminClient() as unknown as UntypedRpcClient,
+  ) {
+    this.rpcClient = rpcClient;
   }
 
-  async findRecentByRequestIpScene(input: {
-    requestIp: string;
-    scene: SmsScene;
-    since: string;
-  }) {
-    const { data, error } = await this.adminClient
-      .from("sms_verification_codes")
-      .select("id, created_at")
-      .eq("request_ip", input.requestIp)
-      .eq("scene", input.scene)
-      .gte("created_at", input.since)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询验证码 IP 发送记录失败", error);
-    }
-
-    return (data || null) as { id: string; created_at: string } | null;
-  }
-
-  async findRecentByRequestDeviceScene(input: {
-    requestDevice: string;
-    scene: SmsScene;
-    since: string;
-  }) {
-    const { data, error } = await this.adminClient
-      .from("sms_verification_codes")
-      .select("id, created_at")
-      .eq("request_device", input.requestDevice)
-      .eq("scene", input.scene)
-      .gte("created_at", input.since)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询验证码设备发送记录失败", error);
-    }
-
-    return (data || null) as { id: string; created_at: string } | null;
-  }
-
-  async createPending(input: {
+  async reservePending(input: {
     phone: string;
     scene: SmsScene;
     code: string;
     expiredAt: string;
+    since: string;
     requestIp: string | null;
     requestDevice?: string | null;
-  }) {
-    const { error } = await this.adminClient.from("sms_verification_codes").insert({
-      phone: input.phone,
-      scene: input.scene,
-      code: input.code,
-      status: "pending",
-      expired_at: input.expiredAt,
-      request_ip: input.requestIp,
-      request_device: input.requestDevice ?? null,
-    }).select("id");
+    requestIpLimit: number;
+  }): Promise<SmsReservationResult> {
+    const { data, error } = await this.rpcClient.rpc(
+      "reserve_sms_verification_code",
+      {
+        p_phone: input.phone,
+        p_scene: input.scene,
+        p_code: input.code,
+        p_expired_at: input.expiredAt,
+        p_since: input.since,
+        p_request_ip: input.requestIp,
+        p_request_device: input.requestDevice ?? null,
+        p_request_ip_limit: input.requestIpLimit,
+      },
+    );
 
     if (error) {
-      throw Errors.dbError("保存验证码失败", error);
+      throw Errors.dbError("预留验证码失败", error);
     }
+
+    return this.parseReservationResult(data);
   }
 
-  async deletePendingByPhoneSceneCode(input: {
-    phone: string;
-    scene: SmsScene;
-    code: string;
-  }) {
+  private parseReservationResult(data: unknown): SmsReservationResult {
+    const row = Array.isArray(data) && data.length === 1 ? data[0] : null;
+    if (!row || typeof row !== "object") {
+      throw this.invalidReservationResult();
+    }
+
+    const record = row as Record<string, unknown>;
+    const reserved = record.reserved;
+    const id = record.reservation_id;
+    const limitedDimension = record.limited_dimension;
+    if (
+      reserved === true &&
+      typeof id === "string" &&
+      UUID_PATTERN.test(id) &&
+      limitedDimension === null
+    ) {
+      return { reserved: true, id, limitedDimension: null };
+    }
+    if (
+      reserved === false &&
+      id === null &&
+      isSmsRateLimitDimension(limitedDimension)
+    ) {
+      return {
+        reserved: false,
+        id: null,
+        limitedDimension,
+      };
+    }
+
+    throw this.invalidReservationResult();
+  }
+
+  private invalidReservationResult() {
+    return Errors.dbError("预留验证码失败", {
+      message: "reserve_sms_verification_code returned an invalid result",
+    });
+  }
+
+  async deletePendingById(reservationId: string) {
     const { error } = await this.adminClient
       .from("sms_verification_codes")
       .delete()
-      .eq("phone", input.phone)
-      .eq("scene", input.scene)
-      .eq("code", input.code)
+      .eq("id", reservationId)
       .eq("status", "pending")
       .select("id");
 
@@ -204,3 +204,13 @@ class SmsVerificationCodeRepository {
 }
 
 export const smsVerificationCodeRepository = new SmsVerificationCodeRepository();
+
+function isSmsRateLimitDimension(
+  value: unknown,
+): value is SmsRateLimitDimension {
+  return (
+    value === "phone" ||
+    value === "request_ip" ||
+    value === "request_device"
+  );
+}

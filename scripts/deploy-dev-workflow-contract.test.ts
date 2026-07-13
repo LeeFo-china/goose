@@ -9,6 +9,9 @@ const workflow = readFileSync(
 const deployStepStart = workflow.indexOf("- name: Deploy dev services");
 const checkStepStart = workflow.indexOf("- name: Check dev services");
 const deployStep = workflow.slice(deployStepStart, checkStepStart);
+const gatedDeployStepStart = workflow.indexOf("- name: Deploy gated dev web");
+const gatedCheckStepStart = workflow.indexOf("- name: Check gated dev web");
+const gatedDeployStep = workflow.slice(gatedDeployStepStart, gatedCheckStepStart);
 
 describe("deploy-dev workflow", () => {
   test("passes the just-built CCR images to remote docker compose", () => {
@@ -32,6 +35,18 @@ describe("deploy-dev workflow", () => {
       deployStep.match(
         /GOOES_SOCIAL_VIDEO_WORKER_IMAGE='\$\{REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE\}'/g,
       ),
+    ).toHaveLength(2);
+    expect(deployStep).not.toContain("REMOTE_GOOES_WEB_IMAGE");
+  });
+
+  test("passes the web image only after the dedicated manual gate", () => {
+    expect(gatedDeployStepStart).toBeGreaterThan(checkStepStart);
+    expect(gatedCheckStepStart).toBeGreaterThan(gatedDeployStepStart);
+    expect(gatedDeployStep).toContain(
+      'REMOTE_GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-web:${GITHUB_SHA}"',
+    );
+    expect(
+      gatedDeployStep.match(/GOOES_WEB_IMAGE='\$\{REMOTE_GOOES_WEB_IMAGE\}'/g),
     ).toHaveLength(2);
   });
 });

@@ -27,6 +27,7 @@ RUN corepack enable && \
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/admin/node_modules ./apps/admin/node_modules
+COPY --from=deps /app/packages/domain/node_modules ./packages/domain/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/admin ./apps/admin
 COPY packages/domain ./packages/domain

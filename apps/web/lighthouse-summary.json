@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-07-11T22:19:49.625Z",
+  "baseUrl": "http://127.0.0.1:3020",
+  "sourceDigest": "9b6186887885e4a69fc265f9c7ada8f8dd4e11194a9188a755d0235c2497badf",
+  "fixtureDigest": "0caad991a14f93d1f3a10930d04f2bba0b8a43b6a6eee8b49f531d89ba5b460e",
+  "buildId": "xvmvHsmNAuu2eerlOLEL2",
+  "revision": "9b6186887885e4a69fc265f9c7ada8f8dd4e11194a9188a755d0235c2497badf",
+  "lighthouseVersion": "12.8.2",
+  "profile": "mobile",
+  "thresholds": {
+    "performance": 85,
+    "accessibility": 95,
+    "seo": 95,
+    "lcpMs": 2500,
+    "tbtMs": 200,
+    "cls": 0.1
+  },
+  "routes": [
+    {
+      "path": "/",
+      "samples": 1,
+      "performance": 98,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2455,
+      "tbtMs": 23,
+      "cls": 0
+    },
+    {
+      "path": "/partners",
+      "samples": 1,
+      "performance": 98,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2364,
+      "tbtMs": 16,
+      "cls": 0
+    },
+    {
+      "path": "/articles/e2e-article",
+      "samples": 1,
+      "performance": 99,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2019,
+      "tbtMs": 14,
+      "cls": 0
+    },
+    {
+      "path": "/cases/e2e-case",
+      "samples": 1,
+      "performance": 99,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2020,
+      "tbtMs": 15,
+      "cls": 0
+    },
+    {
+      "path": "/cities/shanghai",
+      "samples": 3,
+      "performance": 99,
+      "accessibility": 100,
+      "seo": 100,
+      "lcpMs": 2019,
+      "tbtMs": 15,
+      "cls": 0
+    }
+  ]
+}

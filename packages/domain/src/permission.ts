@@ -103,6 +103,9 @@ export const PERMISSION_CODE_VALUES = [
   'platform.partner.commission.read',
   'platform.partner.commission.manage',
   'platform.partner.settlement.manage',
+  'platform.site_content.read',
+  'platform.site_content.manage',
+  'platform.site_content.publish',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -390,6 +393,18 @@ export const PermissionCodeConfig: Record<
   'platform.partner.settlement.manage': {
     label: '管理合伙人结算',
     module: 'platform_partner',
+  },
+  'platform.site_content.read': {
+    label: '查看官网内容',
+    module: 'platform_site_content',
+  },
+  'platform.site_content.manage': {
+    label: '管理官网内容',
+    module: 'platform_site_content',
+  },
+  'platform.site_content.publish': {
+    label: '发布官网内容',
+    module: 'platform_site_content',
   },
   'project_referral.read': {
     label: '查看介绍费',

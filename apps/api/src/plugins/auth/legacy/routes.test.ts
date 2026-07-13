@@ -36,6 +36,7 @@ describe("isVisitorSessionRoute", () => {
 describe("auth public route allowlist", () => {
   test("allows official partner application submissions without a token", () => {
     expect(isPublicRoute("POST", "/public/partner-applications")).toBe(true);
+    expect(isPublicRoute("POST", "/public/partner-applications/proxy-ip-check")).toBe(true);
     expect(isPublicRoute("POST", "/public/partner-applications/send-code")).toBe(true);
   });
 
@@ -56,6 +57,55 @@ describe("auth public route allowlist", () => {
       "POST",
       "/platform/partner-applications/00000000-0000-4000-8000-000000000001/approve",
     )).toBe(false);
+  });
+
+  test("allows only official website content reads without a token", () => {
+    const routes = [
+      "/public/site/articles",
+      "/public/site/articles/first-article",
+      "/public/site/cases",
+      "/public/site/cases/hangzhou-home",
+      "/public/site/cities",
+      "/public/site/cities/hangzhou",
+    ];
+
+    for (const route of routes) {
+      expect(isPublicRoute("GET", route)).toBe(true);
+      expect(isPublicRoute("HEAD", route)).toBe(true);
+      expect(isPublicRoute("POST", route)).toBe(false);
+      expect(isPublicRoute("PATCH", route)).toBe(false);
+      expect(shouldBypassAuth("GET", route)).toBe(false);
+    }
+
+    for (const route of [
+      "/public/site/articles/first-article/extra",
+      "/public/site/articles-extra",
+      "/public/site/article/first-article",
+      "/public/site/cities/hangzhou/extra",
+      "/public/site-content/articles",
+    ]) {
+      expect(isPublicRoute("GET", route)).toBe(false);
+    }
+  });
+
+  test("bypasses bearer auth only for HMAC-protected preview routes", () => {
+    expect(shouldBypassAuth("POST", "/internal/site-content/preview/consume")).toBe(true);
+    expect(shouldBypassAuth("GET", "/internal/site-content/versions/version-id/preview")).toBe(true);
+    expect(shouldBypassAuth("HEAD", "/internal/site-content/versions/version-id/preview")).toBe(true);
+
+    expect(isPublicRoute("POST", "/internal/site-content/preview/consume")).toBe(false);
+    expect(isPublicRoute("GET", "/internal/site-content/versions/version-id/preview")).toBe(false);
+    expect(isPublicRoute("HEAD", "/internal/site-content/versions/version-id/preview")).toBe(false);
+
+    for (const [method, route] of [
+      ["GET", "/internal/site-content/preview/consume"],
+      ["POST", "/internal/site-content/versions/version-id/preview"],
+      ["GET", "/internal/site-content/versions/version-id/preview/extra"],
+      ["GET", "/internal/site-content/versions//preview"],
+      ["GET", "/internal/site-content-extra/versions/version-id/preview"],
+    ] as const) {
+      expect(shouldBypassAuth(method, route)).toBe(false);
+    }
   });
 
   test("bypasses partner auth public routes even when a token is present", () => {

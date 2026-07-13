@@ -14,6 +14,7 @@ export * from './project-acceptance';
 export * from './project-log';
 export * from './project';
 export * from './referral';
+export * from './site-content';
 export * from './tenant';
 export * from './location';
 export * from './workflow';

@@ -79,6 +79,7 @@ import WorkflowController from "@/controllers/workflows";
 import WorkflowSubjectsController from "@/controllers/workflow-subjects";
 import WorkflowTasksController from "@/controllers/workflow-tasks";
 import WechatPayCallbacksController from "@/controllers/wechat-pay-callbacks";
+import SiteContentController from "@/controllers/site-content";
 
 const fullCrudRoutes = {
   list: true,
@@ -156,6 +157,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   WorkflowSubjectsController.registerExtraRoutes(app);
   WorkflowTasksController.registerExtraRoutes(app);
   WechatPayCallbacksController.registerExtraRoutes(app);
+  SiteContentController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);

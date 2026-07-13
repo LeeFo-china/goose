@@ -1,0 +1,38 @@
+services:
+  gooes-web:
+    image: ${GOOES_WEB_IMAGE:?set immutable GOOES_WEB_IMAGE}
+    container_name: gooes-web
+    restart: unless-stopped
+    env_file:
+      - ./.env.web
+    environment:
+      NODE_ENV: production
+      PORT: 3020
+      HOSTNAME: 0.0.0.0
+      GOOES_API_BASE_URL: ${GOOES_WEB_INTERNAL_API_BASE_URL:-http://gooes-api:3000}
+      GOOES_SITE_ENV: production
+      GOOES_WEB_PROXY_SHARED_SECRET: ${GOOES_WEB_PROXY_SHARED_SECRET:?set GOOES_WEB_PROXY_SHARED_SECRET}
+      GOOES_PREVIEW_SHARED_SECRET: ${GOOES_PREVIEW_SHARED_SECRET:?set GOOES_PREVIEW_SHARED_SECRET}
+      GOOES_PREVIEW_SESSION_SECRET: ${GOOES_PREVIEW_SESSION_SECRET:?set GOOES_PREVIEW_SESSION_SECRET}
+      GOOES_WEB_REVALIDATE_SHARED_SECRET: ${GOOES_WEB_REVALIDATE_SHARED_SECRET:?set GOOES_WEB_REVALIDATE_SHARED_SECRET}
+    ports:
+      - "127.0.0.1:3020:3020"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e 'fetch(\"http://127.0.0.1:3020/partners\").then((r) => process.exit(r.status === 200 && r.headers.get(\"x-gooes-service\") === \"web\" ? 0 : 1)).catch(() => process.exit(1))'",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+networks:
+  default:
+    external: true
+    name: supabase_default

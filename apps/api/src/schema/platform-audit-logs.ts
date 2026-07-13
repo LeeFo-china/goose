@@ -38,6 +38,10 @@ export const PlatformAuditLogActionSchema = z.enum([
   "wechat_rebind_reject",
   "platform_partner_member_rebind_approve",
   "platform_partner_member_rebind_reject",
+  "site_content_create",
+  "site_content_publish",
+  "site_content_rollback",
+  "site_content_archive",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);
@@ -47,6 +51,7 @@ export const PlatformAuditLogListQuerySchema = PaginationQuerySchema.extend({
   status: PlatformAuditLogStatusSchema.optional(),
   target_tenant_id: z.uuid("无效的租户 ID").optional(),
   resource_type: z.string().trim().max(80, "资源类型不能超过 80 个字符").optional(),
+  resource_id: z.uuid("无效的资源 ID").optional(),
   keyword: z.string().trim().max(80, "关键词不能超过 80 个字符").optional(),
 });
 

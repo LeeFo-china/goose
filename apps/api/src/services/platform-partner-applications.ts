@@ -48,6 +48,9 @@ const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const DEFAULT_SOURCE_CHANNEL = "official_website";
 const MINI_PROGRAM_SOURCE_CHANNEL = "mini_program";
 const PARTNER_APPLICATION_SMS_SCENE = "partner_application";
+// The website shares one BFF IP, so allow low normal traffic while retaining
+// a hard window cap against cookie deletion and phone rotation.
+const PARTNER_APPLICATION_REQUEST_IP_LIMIT = 5;
 
 export class PlatformPartnerApplicationsService {
   private readonly applicationRepository: PlatformPartnerApplicationsRepositoryPort;
@@ -73,13 +76,15 @@ export class PlatformPartnerApplicationsService {
     requestDevice?: string | null;
   }) {
     const phone = input.phone.trim();
+    const requestDevice = input.requestDevice?.trim() || null;
     await this.assertNoActiveApplicationByPhone(phone);
 
     return this.smsService.sendCode({
       phone,
       scene: PARTNER_APPLICATION_SMS_SCENE,
       requestIp: input.requestIp,
-      requestDevice: input.requestDevice ?? null,
+      requestDevice,
+      requestIpLimit: PARTNER_APPLICATION_REQUEST_IP_LIMIT,
     });
   }
 

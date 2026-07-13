@@ -249,7 +249,7 @@ describe("PlatformPartnerApplicationsService", () => {
     const result = await service.sendPublicApplicationCode({
       phone: application.phone,
       requestIp: "127.0.0.1",
-      requestDevice: "mini-device-1",
+      requestDevice: " mini-device-1 ",
     });
 
     expect(result).toEqual({ success: true, cooldown_seconds: 60 });
@@ -261,6 +261,7 @@ describe("PlatformPartnerApplicationsService", () => {
       scene: "partner_application",
       requestIp: "127.0.0.1",
       requestDevice: "mini-device-1",
+      requestIpLimit: 5,
     });
   });
 

@@ -11,6 +11,10 @@ import {
 import { platformPartnerApplicationsService } from "@/services/platform-partner-applications";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
+import {
+  resolveRequiredTrustedClientIp,
+  resolveTrustedClientIp,
+} from "@/utils/trusted-proxy-client-ip";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 
@@ -34,7 +38,7 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
     const data = await platformPartnerApplicationsService
       .sendPublicApplicationCode({
         ...bodyResult.data,
-        requestIp: request.ip ?? null,
+        requestIp: resolveTrustedClientIp(request),
         requestDevice: this.getRequestDevice(request),
       });
     return ResponseHandler.success(data);
@@ -55,6 +59,13 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
     const data = await platformPartnerApplicationsService
       .submitPublicApplication(bodyResult.data);
     return ResponseHandler.success(data);
+  }
+
+  @Post("/public/partner-applications/proxy-ip-check")
+  async checkPublicProxyIp(request: FastifyRequest, reply: FastifyReply) {
+    return ResponseHandler.success({
+      client_ip: resolveRequiredTrustedClientIp(request),
+    });
   }
 
   private createPublicApplicationValidationError(error: z.ZodError) {

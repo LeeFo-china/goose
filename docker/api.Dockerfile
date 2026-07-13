@@ -16,6 +16,7 @@ WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /app/packages/domain/node_modules ./packages/domain/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/api ./apps/api
 COPY packages/domain ./packages/domain
@@ -47,6 +48,7 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/tsconfig.base.json ./tsconfig.base.json
 COPY --from=builder /app/apps/api ./apps/api
 COPY --from=builder /app/packages/domain ./packages/domain
+COPY --from=deps /app/packages/domain/node_modules ./packages/domain/node_modules
 COPY scripts ./scripts
 
 WORKDIR /app/apps/api

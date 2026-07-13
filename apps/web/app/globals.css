@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0.985 0 0;
+  --foreground: 0.16 0 0;
+  --card: 1 0 0;
+  --card-foreground: 0.16 0 0;
+  --popover: 1 0 0;
+  --popover-foreground: 0.16 0 0;
+  --primary: 0.16 0 0;
+  --primary-foreground: 0.88 0.15 84;
+  --secondary: 0.935 0 0;
+  --secondary-foreground: 0.2 0 0;
+  --muted: 0.95 0 0;
+  --muted-foreground: 0.42 0 0;
+  --accent: 0.9 0.12 86;
+  --accent-foreground: 0.18 0.01 84;
+  --destructive: 0.52 0.21 27;
+  --destructive-foreground: 0.98 0 0;
+  --destructive-text: 0.52 0.18 27;
+  --success: 0.48 0.12 148;
+  --success-foreground: 0.98 0 0;
+  --warning: 0.78 0.16 83;
+  --warning-foreground: 0.18 0.01 84;
+  --border: 0.86 0 0;
+  --input: 0.62 0 0;
+  --ring: 0.25 0 0;
+  --overlay: 0.16 0 0;
+  --radius: 0.75rem;
+  --font-sans: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.dark {
+  --background: 0.145 0 0;
+  --foreground: 0.94 0 0;
+  --card: 0.185 0 0;
+  --card-foreground: 0.94 0 0;
+  --popover: 0.2 0 0;
+  --popover-foreground: 0.94 0 0;
+  --primary: 0.82 0.17 84;
+  --primary-foreground: 0.17 0.01 84;
+  --secondary: 0.25 0 0;
+  --secondary-foreground: 0.92 0 0;
+  --muted: 0.23 0 0;
+  --muted-foreground: 0.72 0 0;
+  --accent: 0.82 0.17 84;
+  --accent-foreground: 0.17 0.01 84;
+  --destructive: 0.57 0.2 27;
+  --destructive-foreground: 0.98 0 0;
+  --destructive-text: 0.68 0.16 27;
+  --success: 0.68 0.14 148;
+  --success-foreground: 0.16 0 0;
+  --warning: 0.82 0.16 83;
+  --warning-foreground: 0.17 0.01 84;
+  --border: 0.32 0 0;
+  --input: 0.55 0 0;
+  --ring: 0.82 0.17 84;
+  --overlay: 0.08 0 0;
+}
+
+@layer components {
+  [data-slot="field-group"] {
+    container-name: field-group;
+    container-type: inline-size;
+  }
+
+  @container field-group (min-width: 28rem) {
+    [data-slot="field"][data-orientation="responsive"] {
+      align-items: center;
+      flex-direction: row;
+    }
+
+    [data-slot="field"][data-orientation="responsive"] > * {
+      width: auto;
+    }
+
+    [data-slot="field"][data-orientation="responsive"]
+      > [data-slot="field-label"] {
+      flex: 1 1 auto;
+    }
+
+    [data-slot="field"][data-orientation="responsive"]:has(
+        > [data-slot="field-content"]
+      ) {
+      align-items: flex-start;
+    }
+
+    [data-slot="field"][data-orientation="responsive"]:has(
+        > [data-slot="field-content"]
+      )
+      > :is([role="checkbox"], [role="radio"]) {
+      margin-top: 1px;
+    }
+  }
+}
+
+* {
+  border-color: oklch(var(--border));
+}
+
+html {
+  background: oklch(var(--background));
+}
+
+body {
+  min-height: 100dvh;
+  background: oklch(var(--background));
+  color: oklch(var(--foreground));
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
