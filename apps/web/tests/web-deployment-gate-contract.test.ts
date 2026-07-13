@@ -130,13 +130,31 @@ describe("web deployment hard gates", () => {
     expect(sameRunStart).toBeGreaterThan(splitStart);
     expect(completedRunStart).toBeGreaterThan(sameRunStart);
     expect(splitEnd).toBeGreaterThan(completedRunStart);
+    expect(evidence).toContain("canonical_workflow_path() {");
+    expect(evidence).toContain(
+      'workflow_id="$(jq -er \'.workflow_id | select(type == "number" and . > 0 and (floor == .))\' <<< "${run_json}")"',
+    );
+    expect(evidence).toContain('[[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]]');
+    expect(evidence).toContain(
+      'workflow_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}")"',
+    );
+    expect(evidence).toContain(
+      'jq -er \'.path | select(type == "string" and length > 0)\' <<< "${workflow_json}"',
+    );
+    expect(evidence).not.toContain('.path | split("@")[0]');
+    expect(evidence).not.toMatch(
+      /jq[^\n]*\.path[^\n]*<<< "\$\{(?:current_)?run_json\}"/,
+    );
 
     expect(sameRun).toContain('test "${INPUT_BUILD_RUN_ID}" = "${GITHUB_RUN_ID}"');
     expect(sameRun).toContain(
       'current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"',
     );
     expect(sameRun).toContain(
-      'test "$(jq -r \'.path | split("@")[0]\' <<< "${current_run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
+      'current_workflow_path="$(canonical_workflow_path "${current_run_json}")"',
+    );
+    expect(sameRun).toContain(
+      'test "${current_workflow_path}" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
     );
     expect(sameRun).toContain(
       'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/release-dev.yml"',
@@ -155,7 +173,10 @@ describe("web deployment hard gates", () => {
       'run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_BUILD_RUN_ID}")"',
     );
     expect(completedRun).toContain(
-      'test "$(jq -r \'.path | split("@")[0]\' <<< "${run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
+      'build_workflow_path="$(canonical_workflow_path "${run_json}")"',
+    );
+    expect(completedRun).toContain(
+      'test "${build_workflow_path}" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
     );
     expect(completedRun).toContain(
       'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/build-docker-images.yml"',
@@ -171,13 +192,16 @@ describe("web deployment hard gates", () => {
     );
     expect(completedRun).toContain('test "${GITHUB_EVENT_NAME}" = workflow_run');
     expect(completedRun).toContain(
-      'test "$(jq -r \'.path | split("@")[0]\' <<< "${current_run_json}")" = ".github/workflows/auto-deploy-dev.yml"',
+      'current_workflow_path="$(canonical_workflow_path "${current_run_json}")"',
+    );
+    expect(completedRun).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/auto-deploy-dev.yml"',
     );
     expect(completedRun).toContain(
       'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_run',
     );
     expect(completedRun).toContain(
-      'test "$(jq -r \'.path | split("@")[0]\' <<< "${current_run_json}")" = ".github/workflows/deploy-dev.yml"',
+      'test "${current_workflow_path}" = ".github/workflows/deploy-dev.yml"',
     );
     expect(completedRun).toContain(
       'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_dispatch',

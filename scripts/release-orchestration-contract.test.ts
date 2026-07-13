@@ -262,6 +262,21 @@ describe("development orchestrator", () => {
     expect(completedRunStart).toBeGreaterThan(sameRunStart);
     expect(splitEnd).toBeGreaterThan(completedRunStart);
     expect(manifestStart).toBeGreaterThan(splitEnd);
+    expect(evidence).toContain("canonical_workflow_path() {");
+    expect(evidence).toContain(
+      'workflow_id="$(jq -er \'.workflow_id | select(type == "number" and . > 0 and (floor == .))\' <<< "${run_json}")"',
+    );
+    expect(evidence).toContain('[[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]]');
+    expect(evidence).toContain(
+      'workflow_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}")"',
+    );
+    expect(evidence).toContain(
+      'jq -er \'.path | select(type == "string" and length > 0)\' <<< "${workflow_json}"',
+    );
+    expect(evidence).not.toContain('.path | split("@")[0]');
+    expect(evidence).not.toMatch(
+      /jq[^\n]*\.path[^\n]*<<< "\$\{(?:current_)?run_json\}"/,
+    );
     expect(sameRun).toContain(
       'test "${INPUT_BUILD_RUN_ID}" = "${GITHUB_RUN_ID}"',
     );
@@ -269,7 +284,10 @@ describe("development orchestrator", () => {
       'current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"',
     );
     expect(sameRun).toContain(
-      'test "$(jq -r \'.path | split("@")[0]\' <<< "${current_run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
+      'current_workflow_path="$(canonical_workflow_path "${current_run_json}")"',
+    );
+    expect(sameRun).toContain(
+      'test "${current_workflow_path}" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
     );
     expect(sameRun).toContain(
       'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/release-dev.yml"',
@@ -286,7 +304,10 @@ describe("development orchestrator", () => {
       'run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_BUILD_RUN_ID}")"',
     );
     expect(completedRun).toContain(
-      'test "$(jq -r \'.path | split("@")[0]\' <<< "${run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
+      'build_workflow_path="$(canonical_workflow_path "${run_json}")"',
+    );
+    expect(completedRun).toContain(
+      'test "${build_workflow_path}" = "${EXPECTED_BUILD_WORKFLOW_PATH}"',
     );
     expect(completedRun).toContain(
       'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/build-docker-images.yml"',
@@ -300,6 +321,15 @@ describe("development orchestrator", () => {
     expect(completedRun).toContain(
       'test "$(jq -r \'.head_sha\' <<< "${run_json}")" = "${SOURCE_SHA}"',
     );
+    expect(completedRun).toContain(
+      'current_workflow_path="$(canonical_workflow_path "${current_run_json}")"',
+    );
+    expect(completedRun).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/auto-deploy-dev.yml"',
+    );
+    expect(completedRun).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/deploy-dev.yml"',
+    );
     expect(evidence).toContain("*) exit 1 ;;");
     expect(manifestEvidence).toContain(
       'receipt_dir="${RUNNER_TEMP}/image-manifest-${INPUT_BUILD_RUN_ID}"',
@@ -311,6 +341,18 @@ describe("development orchestrator", () => {
       'test "$(jq -r \'.target_environment\' "${manifest}")" = development',
     );
     expect(manifestEvidence).toContain('^sha256:[a-f0-9]{64}$');
+  });
+
+  test("never trusts a run path that can spoof an at-sign workflow filename", () => {
+    const trustedPath = ".github/workflows/release-dev.yml";
+    const spoofedRunPath = `${trustedPath}@shadow.yml@main`;
+
+    expect(spoofedRunPath.split("@")[0]).toBe(trustedPath);
+    expect(spoofedRunPath).not.toBe(trustedPath);
+    expect(deployDevWorkflow).not.toContain('.path | split("@")[0]');
+    expect(deployDevWorkflow).toContain(
+      'gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}"',
+    );
   });
 
   test("keeps every automatic deployment on completed build-run evidence", () => {
