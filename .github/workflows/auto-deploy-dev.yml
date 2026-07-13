@@ -106,6 +106,8 @@ jobs:
       commit_sha: ${{ needs.authorize.outputs.commit_sha }}
       build_run_id: ${{ needs.authorize.outputs.build_run_id }}
       expected_build_event: push
+      evidence_mode: completed_run
+      expected_build_workflow_path: .github/workflows/build-docker-images.yml
     secrets: inherit
 
   api-ready:
@@ -151,6 +153,8 @@ jobs:
       commit_sha: ${{ needs.authorize.outputs.commit_sha }}
       build_run_id: ${{ needs.authorize.outputs.build_run_id }}
       expected_build_event: push
+      evidence_mode: completed_run
+      expected_build_workflow_path: .github/workflows/build-docker-images.yml
     secrets: inherit
 
   rest-ready:
@@ -195,6 +199,8 @@ jobs:
       commit_sha: ${{ needs.authorize.outputs.commit_sha }}
       build_run_id: ${{ needs.authorize.outputs.build_run_id }}
       expected_build_event: push
+      evidence_mode: completed_run
+      expected_build_workflow_path: .github/workflows/build-docker-images.yml
       gate_receipt_b64: ${{ needs.web-gate.outputs.receipt_b64 }}
     secrets: inherit
 

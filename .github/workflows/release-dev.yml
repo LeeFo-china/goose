@@ -1,0 +1,247 @@
+name: Release Dev
+run-name: Dev release ${{ inputs.service }} from ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Admin release service(s); use all or a comma-separated list"
+        required: true
+        type: string
+      operation:
+        description: "Release intent; rollback builds and deploys the selected immutable ref"
+        required: true
+        default: release
+        type: choice
+        options: [release, rollback]
+      reason:
+        description: "Optional operator reason"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: admin-release-development
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare immutable development release
+    runs-on: ubuntu-24.04
+    outputs:
+      requested_services: ${{ steps.plan.outputs.requested_services }}
+      build_services: ${{ steps.plan.outputs.build_services }}
+      has_api: ${{ steps.plan.outputs.has_api }}
+      has_rest: ${{ steps.plan.outputs.has_rest }}
+      rest_matrix: ${{ steps.plan.outputs.rest_matrix }}
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Resolve trusted release plan
+        id: plan
+        env:
+          REQUESTED_SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+          requested_services="$(node scripts/resolve-admin-release-services.mjs requested "${REQUESTED_SERVICE}")"
+          build_services="$(node scripts/resolve-admin-release-services.mjs build "${REQUESTED_SERVICE}")"
+          test -n "${requested_services}"
+          test -n "${build_services}"
+
+          has_api=false
+          if [[ ",${requested_services}," == *,api,* ]]; then
+            has_api=true
+          fi
+          rest_matrix="$(jq -cn --arg services "${requested_services}" \
+            '{service: ($services | split(",") | map(select(. != "api")))}')"
+          has_rest="$(jq -r '.service | length > 0' <<< "${rest_matrix}")"
+
+          printf 'requested_services=%s\n' "${requested_services}" >> "${GITHUB_OUTPUT}"
+          printf 'build_services=%s\n' "${build_services}" >> "${GITHUB_OUTPUT}"
+          printf 'has_api=%s\n' "${has_api}" >> "${GITHUB_OUTPUT}"
+          printf 'has_rest=%s\n' "${has_rest}" >> "${GITHUB_OUTPUT}"
+          printf 'rest_matrix=%s\n' "${rest_matrix}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: Build immutable development images
+    needs: prepare
+    uses: ./.github/workflows/build-docker-images.yml
+    with:
+      target_environment: development
+      service: ${{ needs.prepare.outputs.build_services }}
+    secrets: inherit
+
+  migration:
+    name: Verify development migration history
+    needs: [prepare, build]
+    if: ${{ needs.prepare.result == 'success' && needs.build.result == 'success' }}
+    uses: ./.github/workflows/verify-dev-migration-history.yml
+    with:
+      commit_sha: ${{ github.sha }}
+      migration_version: "20260711120000"
+      artifact_name: auto-predeploy-migration-${{ github.sha }}
+    secrets: inherit
+
+  deploy-api:
+    name: Deploy API
+    needs: [prepare, build, migration]
+    if: >-
+      ${{ needs.prepare.outputs.has_api == 'true' &&
+          needs.build.result == 'success' &&
+          needs.migration.result == 'success' }}
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      service: api
+      commit_sha: ${{ github.sha }}
+      build_run_id: ${{ github.run_id }}
+      expected_build_event: workflow_dispatch
+      evidence_mode: same_run
+      expected_build_workflow_path: .github/workflows/release-dev.yml
+    secrets: inherit
+
+  api-ready:
+    name: Require build, migration, and API readiness
+    needs: [prepare, build, migration, deploy-api]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-24.04
+    env:
+      HAS_API: ${{ needs.prepare.outputs.has_api }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      MIGRATION_RESULT: ${{ needs.migration.result }}
+      API_RESULT: ${{ needs.deploy-api.result }}
+    steps:
+      - name: Propagate build, migration, and API results
+        run: |
+          set -euo pipefail
+          test "${BUILD_RESULT}" = success
+          test "${MIGRATION_RESULT}" = success
+          case "${API_RESULT}" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
+          if [ "${HAS_API}" = true ]; then
+            test "${API_RESULT}" = success
+          else
+            test "${API_RESULT}" = skipped
+          fi
+
+  deploy-rest:
+    name: Deploy ${{ matrix.service }}
+    needs: [prepare, api-ready]
+    if: ${{ needs.prepare.outputs.has_rest == 'true' && needs.api-ready.result == 'success' }}
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.prepare.outputs.rest_matrix) }}
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      service: ${{ matrix.service }}
+      commit_sha: ${{ github.sha }}
+      build_run_id: ${{ github.run_id }}
+      expected_build_event: workflow_dispatch
+      evidence_mode: same_run
+      expected_build_workflow_path: .github/workflows/release-dev.yml
+    secrets: inherit
+
+  rest-ready:
+    name: Require remaining services readiness
+    needs: [prepare, api-ready, deploy-rest]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-24.04
+    env:
+      HAS_REST: ${{ needs.prepare.outputs.has_rest }}
+      API_READY_RESULT: ${{ needs.api-ready.result }}
+      REST_RESULT: ${{ needs.deploy-rest.result }}
+    steps:
+      - name: Propagate remaining service results
+        run: |
+          set -euo pipefail
+          test "${API_READY_RESULT}" = success
+          case "${REST_RESULT}" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
+          if [ "${HAS_REST}" = true ]; then
+            test "${REST_RESULT}" = success
+          else
+            test "${REST_RESULT}" = skipped
+          fi
+
+  summary:
+    name: Summarize development release
+    needs:
+      - prepare
+      - build
+      - migration
+      - deploy-api
+      - api-ready
+      - deploy-rest
+      - rest-ready
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    env:
+      OPERATION: ${{ inputs.operation }}
+      REASON: ${{ inputs.reason }}
+      SELECTED_REF: ${{ github.ref_name }}
+      COMMIT_SHA: ${{ github.sha }}
+      REQUESTED_SERVICES: ${{ needs.prepare.outputs.requested_services }}
+      BUILD_SERVICES: ${{ needs.prepare.outputs.build_services }}
+      PREPARE_RESULT: ${{ needs.prepare.result }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      MIGRATION_RESULT: ${{ needs.migration.result }}
+      API_RESULT: ${{ needs.deploy-api.result }}
+      API_READY_RESULT: ${{ needs.api-ready.result }}
+      REST_RESULT: ${{ needs.deploy-rest.result }}
+      REST_READY_RESULT: ${{ needs.rest-ready.result }}
+    steps:
+      - name: Write trusted development release summary
+        run: |
+          set -uo pipefail
+          FINAL_OUTCOME=success
+          for result in \
+            "${PREPARE_RESULT}" \
+            "${BUILD_RESULT}" \
+            "${MIGRATION_RESULT}" \
+            "${API_READY_RESULT}" \
+            "${REST_READY_RESULT}"; do
+            if [ "${result}" != success ]; then
+              FINAL_OUTCOME=failure
+            fi
+          done
+
+          {
+            echo "## Admin development release"
+            echo ""
+            echo "- Operation: \`${OPERATION}\`"
+            echo "- Reason: ${REASON:-not provided}"
+            echo "- Selected ref: \`${SELECTED_REF}\`"
+            echo "- Commit SHA: \`${COMMIT_SHA}\`"
+            echo "- Requested services: \`${REQUESTED_SERVICES:-unavailable}\`"
+            echo "- Build services: \`${BUILD_SERVICES:-unavailable}\`"
+            echo "- Prepare: \`${PREPARE_RESULT}\`"
+            echo "- Build: \`${BUILD_RESULT}\`"
+            echo "- Migration: \`${MIGRATION_RESULT}\`"
+            echo "- API deployment: \`${API_RESULT}\`"
+            echo "- API barrier: \`${API_READY_RESULT}\`"
+            echo "- Remaining deployment: \`${REST_RESULT}\`"
+            echo "- Remaining barrier: \`${REST_READY_RESULT}\`"
+            echo "- Final outcome: \`${FINAL_OUTCOME}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          test "${FINAL_OUTCOME}" = success

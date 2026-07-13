@@ -23,6 +23,16 @@ on:
         description: "Expected Build Docker Images event"
         required: true
         type: string
+      evidence_mode:
+        description: "Trust evidence from this run or a completed build run"
+        required: false
+        default: completed_run
+        type: string
+      expected_build_workflow_path:
+        description: "Trusted workflow path that produced the image manifests"
+        required: false
+        default: .github/workflows/build-docker-images.yml
+        type: string
       gate_receipt_b64:
         description: "Inline development Web gate receipt"
         required: false
@@ -62,6 +72,8 @@ env:
   SOURCE_SHA: ${{ inputs.commit_sha }}
   RELEASE_SERVICE: ${{ inputs.service }}
   EXPECTED_BUILD_EVENT: ${{ github.event_name == 'workflow_dispatch' && 'workflow_dispatch' || inputs.expected_build_event }}
+  EVIDENCE_MODE: ${{ inputs.evidence_mode || 'completed_run' }}
+  EXPECTED_BUILD_WORKFLOW_PATH: ${{ inputs.expected_build_workflow_path || '.github/workflows/build-docker-images.yml' }}
   INLINE_GATE_RECEIPT_B64: ${{ inputs.gate_receipt_b64 }}
 
 jobs:
@@ -113,29 +125,47 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
           [[ "${INPUT_BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
-          current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
           case "${EXPECTED_BUILD_EVENT}" in
             push|workflow_dispatch) ;;
             *) exit 1 ;;
           esac
-          case "${EXPECTED_BUILD_EVENT}" in
-            push)
-              test "${GITHUB_EVENT_NAME}" = workflow_run
-              test "$(jq -r '.path' <<< "${current_run_json}")" = ".github/workflows/auto-deploy-dev.yml"
-              test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_run
-              ;;
-            workflow_dispatch)
-              test "${GITHUB_EVENT_NAME}" = workflow_dispatch
-              test "$(jq -r '.path' <<< "${current_run_json}")" = ".github/workflows/deploy-dev.yml"
+          case "${EVIDENCE_MODE}" in
+            same_run)
+              test "${INPUT_BUILD_RUN_ID}" = "${GITHUB_RUN_ID}"
+              current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+              test "$(jq -r '.path | split("@")[0]' <<< "${current_run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"
               test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_dispatch
+              test "$(jq -r '.head_sha' <<< "${current_run_json}")" = "${SOURCE_SHA}"
+              test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/release-dev.yml"
+              test "${EXPECTED_BUILD_EVENT}" = workflow_dispatch
+              test "${GITHUB_EVENT_NAME}" = workflow_dispatch
               test -z "${INLINE_GATE_RECEIPT_B64}"
               ;;
+            completed_run)
+              run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_BUILD_RUN_ID}")"
+              test "$(jq -r '.path | split("@")[0]' <<< "${run_json}")" = "${EXPECTED_BUILD_WORKFLOW_PATH}"
+              test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/build-docker-images.yml"
+              test "$(jq -r '.event' <<< "${run_json}")" = "${EXPECTED_BUILD_EVENT}"
+              test "$(jq -r '.conclusion' <<< "${run_json}")" = success
+              test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
+
+              current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+              case "${EXPECTED_BUILD_EVENT}" in
+                push)
+                  test "${GITHUB_EVENT_NAME}" = workflow_run
+                  test "$(jq -r '.path | split("@")[0]' <<< "${current_run_json}")" = ".github/workflows/auto-deploy-dev.yml"
+                  test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_run
+                  ;;
+                workflow_dispatch)
+                  test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+                  test "$(jq -r '.path | split("@")[0]' <<< "${current_run_json}")" = ".github/workflows/deploy-dev.yml"
+                  test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_dispatch
+                  test -z "${INLINE_GATE_RECEIPT_B64}"
+                  ;;
+              esac
+              ;;
+            *) exit 1 ;;
           esac
-          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_BUILD_RUN_ID}")"
-          test "$(jq -r '.path' <<< "${run_json}")" = ".github/workflows/build-docker-images.yml"
-          test "$(jq -r '.event' <<< "${run_json}")" = "${EXPECTED_BUILD_EVENT}"
-          test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
-          test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
           receipt_dir="${RUNNER_TEMP}/image-manifest-${INPUT_BUILD_RUN_ID}"
           rm -rf "${receipt_dir}"
           gh run download "${INPUT_BUILD_RUN_ID}" \

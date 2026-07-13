@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const buildWorkflow = readFileSync(
   new URL("../.github/workflows/build-docker-images.yml", import.meta.url),
@@ -9,6 +9,17 @@ const autoDeployDevWorkflow = readFileSync(
   new URL("../.github/workflows/auto-deploy-dev.yml", import.meta.url),
   "utf8",
 );
+const deployDevWorkflow = readFileSync(
+  new URL("../.github/workflows/deploy-dev.yml", import.meta.url),
+  "utf8",
+);
+const releaseDevWorkflowUrl = new URL(
+  "../.github/workflows/release-dev.yml",
+  import.meta.url,
+);
+const releaseDevWorkflow = existsSync(releaseDevWorkflowUrl)
+  ? readFileSync(releaseDevWorkflowUrl, "utf8")
+  : "";
 
 const script = new URL("./resolve-admin-release-services.mjs", import.meta.url).pathname;
 
@@ -106,5 +117,164 @@ describe("reusable build workflow", () => {
     expect(autoDeployDevWorkflow).toContain(
       "test \"$(jq -r '.path' <<< \"${run_json}\")\" = \".github/workflows/build-docker-images.yml\"",
     );
+  });
+});
+
+describe("development orchestrator", () => {
+  test("provides a development-only manual release entrypoint", () => {
+    expect(releaseDevWorkflow).toContain("name: Release Dev");
+    expect(releaseDevWorkflow).toContain("workflow_dispatch:");
+    expect(releaseDevWorkflow).not.toContain("workflow_call:");
+    expect(releaseDevWorkflow).not.toContain("\n  push:");
+    expect(releaseDevWorkflow).not.toContain("workflow_run:");
+    const serviceInput = releaseDevWorkflow.slice(
+      releaseDevWorkflow.indexOf("      service:"),
+      releaseDevWorkflow.indexOf("      operation:"),
+    );
+    expect(serviceInput).toContain("required: true");
+    expect(serviceInput).toContain("type: string");
+    expect(releaseDevWorkflow).toContain("options: [release, rollback]");
+    expect(releaseDevWorkflow).toContain("reason:");
+    expect(releaseDevWorkflow).toContain("contents: read");
+    expect(releaseDevWorkflow).toContain("actions: read");
+    expect(releaseDevWorkflow).toContain("group: admin-release-development");
+    expect(releaseDevWorkflow).toContain("cancel-in-progress: false");
+    expect(releaseDevWorkflow).not.toContain("gooes-prod-deploy");
+    expect(releaseDevWorkflow).not.toContain("1.13.20.39");
+    expect(releaseDevWorkflow).not.toContain("production");
+    expect(releaseDevWorkflow).not.toContain("web");
+  });
+
+  test("prepares ordered requested and build service evidence", () => {
+    expect(releaseDevWorkflow).toContain("[[ \"${GITHUB_SHA}\" =~ ^[a-f0-9]{40}$ ]]");
+    expect(releaseDevWorkflow).toContain('test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"');
+    expect(releaseDevWorkflow).toContain(
+      'node scripts/resolve-admin-release-services.mjs requested "${REQUESTED_SERVICE}"',
+    );
+    expect(releaseDevWorkflow).toContain(
+      'node scripts/resolve-admin-release-services.mjs build "${REQUESTED_SERVICE}"',
+    );
+    for (const output of [
+      "requested_services",
+      "build_services",
+      "has_api",
+      "has_rest",
+      "rest_matrix",
+    ]) {
+      expect(releaseDevWorkflow).toContain(`${output}:`);
+    }
+  });
+
+  test("builds, verifies migrations, and deploys API before remaining services", () => {
+    expect(releaseDevWorkflow).toContain("uses: ./.github/workflows/build-docker-images.yml");
+    expect(releaseDevWorkflow).toContain("target_environment: development");
+    expect(releaseDevWorkflow).toContain("uses: ./.github/workflows/verify-dev-migration-history.yml");
+    expect(releaseDevWorkflow).toContain('migration_version: "20260711120000"');
+    expect(releaseDevWorkflow).toContain(
+      "artifact_name: auto-predeploy-migration-${{ github.sha }}",
+    );
+    expect(releaseDevWorkflow).toContain("uses: ./.github/workflows/deploy-dev.yml");
+    expect(
+      releaseDevWorkflow.match(/uses: \.\/\.github\/workflows\/deploy-dev\.yml/g),
+    ).toHaveLength(2);
+    expect(releaseDevWorkflow).toContain("max-parallel: 1");
+    expect(releaseDevWorkflow.indexOf("deploy-api:")).toBeLessThan(
+      releaseDevWorkflow.indexOf("deploy-rest:"),
+    );
+    expect(releaseDevWorkflow.match(/evidence_mode: same_run/g)).toHaveLength(2);
+    expect(
+      releaseDevWorkflow.match(
+        /expected_build_workflow_path: \.github\/workflows\/release-dev\.yml/g,
+      ),
+    ).toHaveLength(2);
+    expect(releaseDevWorkflow.match(/build_run_id: \$\{\{ github\.run_id \}\}/g)).toHaveLength(2);
+    expect(releaseDevWorkflow.match(/expected_build_event: workflow_dispatch/g)).toHaveLength(2);
+  });
+
+  test("propagates required job results and reports release semantics", () => {
+    expect(releaseDevWorkflow).toContain("name: Require build, migration, and API readiness");
+    expect(releaseDevWorkflow).toContain("needs: [prepare, build, migration, deploy-api]");
+    expect(releaseDevWorkflow).toContain("name: Require remaining services readiness");
+    expect(releaseDevWorkflow).toContain("needs: [prepare, api-ready, deploy-rest]");
+    expect(releaseDevWorkflow).toContain("if: ${{ always() }}");
+    expect(releaseDevWorkflow).toContain("OPERATION: ${{ inputs.operation }}");
+    expect(releaseDevWorkflow).toContain("REASON: ${{ inputs.reason }}");
+    for (const field of [
+      "Selected ref",
+      "Commit SHA",
+      "Requested services",
+      "Build services",
+      "Build",
+      "Migration",
+      "API deployment",
+      "Remaining deployment",
+      "Final outcome",
+    ]) {
+      expect(releaseDevWorkflow).toContain(field);
+    }
+    expect(releaseDevWorkflow).toContain('test "${FINAL_OUTCOME}" = success');
+  });
+
+  test("splits same-run and completed-run evidence before manifest validation", () => {
+    expect(deployDevWorkflow).toContain("default: completed_run");
+    expect(deployDevWorkflow).toContain(
+      "default: .github/workflows/build-docker-images.yml",
+    );
+    const splitStart = deployDevWorkflow.indexOf('case "${EVIDENCE_MODE}" in');
+    const sameRunStart = deployDevWorkflow.indexOf("same_run)", splitStart);
+    const completedRunStart = deployDevWorkflow.indexOf("completed_run)", sameRunStart);
+    const splitEnd = deployDevWorkflow.indexOf(
+      "\n          esac\n          receipt_dir=",
+      completedRunStart,
+    );
+    const manifestStart = deployDevWorkflow.indexOf('receipt_dir="${RUNNER_TEMP}', splitEnd);
+
+    expect(splitStart).toBeGreaterThanOrEqual(0);
+    expect(sameRunStart).toBeGreaterThan(splitStart);
+    expect(completedRunStart).toBeGreaterThan(sameRunStart);
+    expect(splitEnd).toBeGreaterThan(completedRunStart);
+    expect(manifestStart).toBeGreaterThan(splitEnd);
+    expect(deployDevWorkflow).toContain(".path | split(\"@\")[0]");
+    expect(deployDevWorkflow).toContain(
+      'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/release-dev.yml"',
+    );
+    expect(deployDevWorkflow).toContain(
+      'test "${EXPECTED_BUILD_WORKFLOW_PATH}" = ".github/workflows/build-docker-images.yml"',
+    );
+    expect(deployDevWorkflow).toContain(
+      'test "${INPUT_BUILD_RUN_ID}" = "${GITHUB_RUN_ID}"',
+    );
+    expect(deployDevWorkflow).toContain(
+      'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_dispatch',
+    );
+    expect(deployDevWorkflow).toContain(
+      'test "$(jq -r \'.head_sha\' <<< "${current_run_json}")" = "${SOURCE_SHA}"',
+    );
+    expect(deployDevWorkflow).toContain("*) exit 1 ;;");
+    expect(deployDevWorkflow).toContain(
+      'test "$(jq -r \'.conclusion\' <<< "${run_json}")" = success',
+    );
+    expect(deployDevWorkflow).toContain(
+      'test "$(jq -r \'.commit_sha\' "${manifest}")" = "${SOURCE_SHA}"',
+    );
+    expect(deployDevWorkflow).toContain(
+      'test "$(jq -r \'.target_environment\' "${manifest}")" = development',
+    );
+  });
+
+  test("keeps every automatic deployment on completed build-run evidence", () => {
+    expect(autoDeployDevWorkflow.match(/uses: \.\/\.github\/workflows\/deploy-dev\.yml/g)).toHaveLength(3);
+    expect(autoDeployDevWorkflow.match(/evidence_mode: completed_run/g)).toHaveLength(3);
+    expect(
+      autoDeployDevWorkflow.match(
+        /expected_build_workflow_path: \.github\/workflows\/build-docker-images\.yml/g,
+      ),
+    ).toHaveLength(3);
+    expect(autoDeployDevWorkflow).toContain("types: [completed]");
+    expect(autoDeployDevWorkflow).toContain("branches: [main]");
+    expect(autoDeployDevWorkflow).toContain(
+      "github.event.workflow_run.conclusion == 'success'",
+    );
+    expect(autoDeployDevWorkflow).toContain("github.event.workflow_run.event == 'push'");
   });
 });
