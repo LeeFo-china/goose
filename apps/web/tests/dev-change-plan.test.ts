@@ -1,12 +1,33 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
 
 import { resolveDevChangePlan } from "../../../scripts/resolve-dev-change-plan.mjs";
 
+const scriptUrl = new URL("../../../scripts/resolve-dev-change-plan.mjs", import.meta.url);
+const script = scriptUrl.pathname;
 const metadata = {
   beforeSha: "1".repeat(40),
   commitSha: "2".repeat(40),
   workflowRunId: 12345,
 };
+
+type MetadataEnvironment = Partial<Record<"BEFORE_SHA" | "COMMIT_SHA" | "WORKFLOW_RUN_ID", string | undefined>>;
+
+function runCli(input: string, overrides: MetadataEnvironment = {}) {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    BEFORE_SHA: metadata.beforeSha,
+    COMMIT_SHA: metadata.commitSha,
+    WORKFLOW_RUN_ID: String(metadata.workflowRunId),
+  };
+
+  for (const [name, value] of Object.entries(overrides)) {
+    if (value === undefined) delete env[name];
+    else env[name] = value;
+  }
+
+  return spawnSync("node", [script], { encoding: "utf8", env, input });
+}
 
 describe("development change plan", () => {
   test.each([
@@ -115,5 +136,50 @@ describe("development change plan", () => {
       "cos-reconcile-worker",
     ]);
     expect(plan.classifications).toEqual(["shared-runtime"]);
+  });
+
+  test("reads NUL-delimited paths and immutable metadata through the CLI", () => {
+    const result = runCli("apps/api/src/app.ts\0apps/web/app/page.tsx\0");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      before_sha: metadata.beforeSha,
+      build_services: ["api", "web", "social-video-worker"],
+      changed_files: ["apps/api/src/app.ts", "apps/web/app/page.tsx"],
+      commit_sha: metadata.commitSha,
+      workflow_run_id: metadata.workflowRunId,
+    });
+  });
+
+  test.each([
+    ["missing before SHA", { BEFORE_SHA: undefined }],
+    ["missing commit SHA", { COMMIT_SHA: undefined }],
+    ["missing run ID", { WORKFLOW_RUN_ID: undefined }],
+    ["scientific notation run ID", { WORKFLOW_RUN_ID: "1e3" }],
+    ["hexadecimal run ID", { WORKFLOW_RUN_ID: "0x10" }],
+    ["leading whitespace in run ID", { WORKFLOW_RUN_ID: " 12345" }],
+    ["trailing whitespace in run ID", { WORKFLOW_RUN_ID: "12345 " }],
+    ["zero run ID", { WORKFLOW_RUN_ID: "0" }],
+    ["unsafe run ID", { WORKFLOW_RUN_ID: "9007199254740992" }],
+    ["invalid SHA", { COMMIT_SHA: "g".repeat(40) }],
+    ["uppercase SHA", { COMMIT_SHA: "A".repeat(40) }],
+    ["short SHA", { COMMIT_SHA: "abc123" }],
+  ] as const)("rejects %s", (_name, overrides) => {
+    const result = runCli("", overrides);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("invalid immutable build-plan metadata");
+  });
+
+  test("does not invoke the CLI when imported", () => {
+    const result = spawnSync(
+      "node",
+      ["--input-type=module", "-e", `await import(${JSON.stringify(scriptUrl.href)})`],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
   });
 });

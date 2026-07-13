@@ -121,14 +121,18 @@ export function resolveDevChangePlan(paths, metadata) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const commitSha = process.env.COMMIT_SHA ?? "";
   const beforeSha = process.env.BEFORE_SHA ?? "";
-  const workflowRunId = Number(process.env.WORKFLOW_RUN_ID);
+  const rawWorkflowRunId = process.env.WORKFLOW_RUN_ID ?? "";
 
   if (
     !/^[a-f0-9]{40}$/u.test(commitSha)
     || !/^[a-f0-9]{40}$/u.test(beforeSha)
-    || !Number.isSafeInteger(workflowRunId)
-    || workflowRunId <= 0
+    || !/^[1-9][0-9]*$/u.test(rawWorkflowRunId)
   ) {
+    throw new Error("invalid immutable build-plan metadata");
+  }
+
+  const workflowRunId = Number(rawWorkflowRunId);
+  if (!Number.isSafeInteger(workflowRunId)) {
     throw new Error("invalid immutable build-plan metadata");
   }
 
