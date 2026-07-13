@@ -30,6 +30,8 @@
 - 不自动部署生产环境。
 - 不把镜像构建迁回自托管 Runner。
 - 不实现跨 API、Admin、Web、Worker 的事务式原子发布。
+- 不新增 H5 的不可变镜像与自动部署链路；`apps/h5` 运行代码变化必须失败关闭并提示人工发布。
+- 不自动安装或 reload 开发 Nginx；`deploy/nginx` 变化必须失败关闭并提示走证书/Nginx 人工流程。
 - 不为本功能引入新的应用依赖、缓存、队列或服务器。
 - 不修改 orange 仓库。
 
@@ -98,10 +100,13 @@ no-op 计划。`workflow_dispatch` 输入和行为保持兼容。
 | `docker/social-video-worker.Dockerfile` | `social-video-worker` | `social-video-worker` | 独立 Worker 镜像 |
 | `packages/domain` 运行代码 | `api`, `admin`, `web`, `social-video-worker` | 全部开发服务 | Domain 被 API、Admin、Web 和 Worker 共享 |
 | 根依赖锁文件、workspace 配置、开发 compose 公共配置 | 全部可构建服务 | 全部开发服务 | 无法安全细分时保守扩大范围 |
+| `scripts/prepare-site-content-deployment-secrets.sh` | 全部可构建服务 | 全部开发服务 | 该脚本直接影响部署容器环境 |
 | `supabase/migrations` | 按同一次 push 的运行代码决定 | 迁移预检通过后才允许 | migration 只作为阻断信号，不自动 apply |
 | 仅 `*.test.*`、`apps/*/tests`、`apps/*/e2e` | 无 | 无 | 测试变化由质量检查处理，不发布镜像 |
 | 仅文档、Lighthouse 摘要、设计资产清单 | 无 | 无 | 输出 no-op 计划 |
-| 仅 GitHub Actions 或部署脚本 | 无 | 无 | 验证编排本身，不重启业务容器 |
+| 仅 GitHub Actions、自动化校验或计划脚本 | 无 | 无 | 验证编排本身，不重启业务容器 |
+| `apps/h5` 运行代码 | 阻断 | 阻断 | 当前构建矩阵没有 H5 镜像，明确提示继续使用现有人工发布 |
+| `deploy/nginx` | 阻断 | 阻断 | 证书、`nginx -t` 与 reload 继续走人工流程 |
 
 若同一 push 命中多个规则，取集合并集。任何不能分类但可能影响运行产物的路径必须安全降级为全服务，
 不能静默跳过。
@@ -153,6 +158,8 @@ workflow path 校验保持原样；自动入口必须显式传入并校验允许
 ## 失败与恢复
 
 - 变更解析或证据校验失败：不构建或不部署，失败关闭。
+- 命中 H5 运行代码：以 unsupported service 失败，不用其他服务的全量部署掩盖缺失能力。
+- 命中开发 Nginx 配置：在构建前失败并提示人工配置，不自动 reload Nginx。
 - 任一镜像构建失败：上游不成功，不触发自动部署。
 - migration 未对齐：在第一个 Docker 变更前失败。
 - API 部署失败：Worker、Gate 和 Web 不继续。
