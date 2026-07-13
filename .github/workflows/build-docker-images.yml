@@ -1,11 +1,13 @@
 name: Build Docker Images
-run-name: Build ${{ inputs.target_environment }} ${{ inputs.service || 'all' }}
+run-name: ${{ github.event_name == 'push' && 'Build development affected services' || format('Build {0} {1}', inputs.target_environment, inputs.service || 'all') }}
 
 # Builds immutable application images on GitHub-hosted runners and publishes
 # them to Tencent CCR. Deployment is intentionally handled by environment-
 # specific workflows after this workflow succeeds.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       target_environment:
@@ -27,13 +29,11 @@ permissions:
   actions: read
 
 concurrency:
-  group: build-docker-images-${{ inputs.target_environment }}-${{ inputs.service }}
+  group: ${{ github.event_name == 'push' && 'build-docker-images-development-push' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}
   cancel-in-progress: true
 
 env:
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
-  RELEASE_SERVICE: ${{ github.event.inputs.service || 'all' }}
-  TARGET_ENVIRONMENT: ${{ github.event.inputs.target_environment }}
 
 jobs:
   validate-request:
@@ -41,36 +41,154 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       build_services: ${{ steps.resolve.outputs.build_services }}
+      deploy_services: ${{ steps.resolve.outputs.deploy_services }}
+      no_op: ${{ steps.resolve.outputs.no_op }}
+      target_environment: ${{ steps.resolve.outputs.target_environment }}
     steps:
       - uses: actions/checkout@v6
-      - name: Validate service selection and web gate
+        with:
+          fetch-depth: 0
+
+      - name: Resolve build plan
         id: resolve
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          COMMIT_SHA: ${{ github.sha }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          REQUESTED_TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+          REQUESTED_SERVICE: ${{ inputs.service }}
         run: |
           set -euo pipefail
-          normalized=",${RELEASE_SERVICE//[[:space:]]/},"
-          BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${RELEASE_SERVICE}")"
-          test -n "${BUILD_SERVICES}"
-          echo "build_services=${BUILD_SERVICES}" >> "${GITHUB_OUTPUT}"
-          if [[ "${normalized}" == *",web,"* ]]; then
-            test "${normalized}" = ",web," || {
-              echo "Web must be built separately so its immutable evidence stays unambiguous."
-              exit 1
-            }
+
+          canonicalize_services() {
+            local selected=" $1 "
+            local service
+            local result=""
+            shift
+            for service in "$@"; do
+              if [[ "${selected}" == *" ${service} "* ]]; then
+                result="${result:+${result} }${service}"
+              fi
+            done
+            printf '%s' "${result}"
+          }
+
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            TARGET_ENVIRONMENT=development
+
+            if [[ "${BEFORE_SHA}" =~ ^0{40}$ ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              jq -n \
+                --arg commit_sha "${COMMIT_SHA}" \
+                --arg before_sha "${BEFORE_SHA}" \
+                --argjson workflow_run_id "${WORKFLOW_RUN_ID}" \
+                '{
+                  schema_version: 1,
+                  target_environment: "development",
+                  commit_sha: $commit_sha,
+                  before_sha: $before_sha,
+                  workflow_run_id: $workflow_run_id,
+                  migration_changed: true,
+                  changed_files: [],
+                  classifications: ["fallback-all"],
+                  build_services: ["api", "admin", "web", "social-video-worker"],
+                  deploy_services: ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker"],
+                  no_op: false
+                }' > build-plan.json
+            else
+              git diff --name-only -z "${BEFORE_SHA}" "${COMMIT_SHA}" > changed-files.bin
+              node scripts/resolve-dev-change-plan.mjs \
+                < changed-files.bin \
+                > build-plan.json
+            fi
+
+            node scripts/verify-dev-build-plan.mjs \
+              build-plan.json \
+              "${GITHUB_SHA}" \
+              "${GITHUB_RUN_ID}" \
+              > verified-build-plan.json
+            mv verified-build-plan.json build-plan.json
+          else
+            case "${REQUESTED_TARGET_ENVIRONMENT}" in
+              development|production)
+                TARGET_ENVIRONMENT="${REQUESTED_TARGET_ENVIRONMENT}"
+                ;;
+              *)
+                echo "Target environment must be development or production."
+                exit 1
+                ;;
+            esac
+
+            RAW_BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${REQUESTED_SERVICE}")"
+            RAW_DEPLOY_SERVICES="$(node scripts/resolve-web-deployment.mjs deploy "${REQUESTED_SERVICE}")"
+            BUILD_SERVICES="$(canonicalize_services "${RAW_BUILD_SERVICES}" api admin web social-video-worker)"
+            DEPLOY_SERVICES="$(canonicalize_services "${RAW_DEPLOY_SERVICES}" api admin web social-video-worker cos-reconcile-worker)"
+            test -n "${BUILD_SERVICES}"
+            test -n "${DEPLOY_SERVICES}"
+
+            if [ "${REQUESTED_SERVICE//[[:space:]]/}" = "all" ]; then
+              CLASSIFICATIONS=fallback-all
+            else
+              CLASSIFICATIONS="${BUILD_SERVICES}"
+            fi
+
+            jq -n \
+              --arg target_environment "${TARGET_ENVIRONMENT}" \
+              --arg commit_sha "${GITHUB_SHA}" \
+              --argjson workflow_run_id "${GITHUB_RUN_ID}" \
+              --arg build_services "${BUILD_SERVICES}" \
+              --arg deploy_services "${DEPLOY_SERVICES}" \
+              --arg classifications "${CLASSIFICATIONS}" \
+              '{
+                schema_version: 1,
+                target_environment: $target_environment,
+                commit_sha: $commit_sha,
+                before_sha: $commit_sha,
+                workflow_run_id: $workflow_run_id,
+                migration_changed: false,
+                changed_files: [],
+                classifications: ($classifications | split(" ") | sort),
+                build_services: ($build_services | split(" ")),
+                deploy_services: ($deploy_services | split(" ")),
+                no_op: false
+              }' > build-plan.json
+
+            if [ "${REQUESTED_SERVICE//[[:space:]]/}" = "all" ]; then
+              {
+                echo "### Production all-service behavior"
+                echo ""
+                echo "Web image will be built, but the reusable deploy excludes Web until a gated web-only request."
+              } >> "${GITHUB_STEP_SUMMARY}"
+            fi
           fi
-          if [ "${normalized}" = ",all," ]; then
-            {
-              echo "### Production all-service behavior"
-              echo ""
-              echo "Web image will be built, but the reusable deploy excludes Web until a gated web-only request."
-            } >> "${GITHUB_STEP_SUMMARY}"
-          fi
+
+          BUILD_SERVICES="$(jq -r '.build_services | join(" ")' build-plan.json)"
+          DEPLOY_SERVICES="$(jq -r '.deploy_services | join(" ")' build-plan.json)"
+          NO_OP="$(jq -r '.no_op' build-plan.json)"
+          TARGET_ENVIRONMENT="$(jq -r '.target_environment' build-plan.json)"
+
+          {
+            echo "build_services=${BUILD_SERVICES}"
+            echo "deploy_services=${DEPLOY_SERVICES}"
+            echo "no_op=${NO_OP}"
+            echo "target_environment=${TARGET_ENVIRONMENT}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload development build plan
+        uses: actions/upload-artifact@v6
+        with:
+          name: dev-build-plan
+          path: build-plan.json
+          if-no-files-found: error
+          retention-days: 30
 
   build:
     needs: validate-request
     name: Build ${{ matrix.service }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    environment: ${{ inputs.target_environment }}
+    environment: ${{ needs.validate-request.outputs.target_environment }}
+    env:
+      TARGET_ENVIRONMENT: ${{ needs.validate-request.outputs.target_environment }}
     strategy:
       fail-fast: true
       max-parallel: 4
