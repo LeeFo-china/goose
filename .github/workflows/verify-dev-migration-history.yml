@@ -1,0 +1,158 @@
+name: Verify Development Migration History
+
+on:
+  workflow_call:
+    inputs:
+      commit_sha:
+        required: true
+        type: string
+      migration_version:
+        required: true
+        type: string
+      artifact_name:
+        required: true
+        type: string
+    outputs:
+      evidence_b64:
+        description: "Base64-encoded verified development migration evidence"
+        value: ${{ jobs.verify.outputs.evidence_b64 }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
+    environment: development
+    outputs:
+      evidence_b64: ${{ steps.evidence.outputs.evidence_b64 }}
+    env:
+      DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db
+      DEV_PROJECT_REF: fclnkyatvfvmzgzdqlba
+      DEV_DB_HOST: api-dev.goodcms.cn
+      BLOCKED_PROJECT_REFS: unqhypivjkpwldhufpjc
+      BLOCKED_DB_HOSTS: api.goodcms.cn 1.13.20.39
+      COMMIT_SHA: ${{ inputs.commit_sha }}
+      MIGRATION_VERSION: ${{ inputs.migration_version }}
+      ARTIFACT_NAME: ${{ inputs.artifact_name }}
+    steps:
+      - name: Guard development runner and request
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+          test -r "${DEV_DB_ENV_FILE}"
+          [[ "${COMMIT_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          test "${MIGRATION_VERSION}" = "20260711120000"
+          [[ "${ARTIFACT_NAME}" =~ ^(auto-predeploy-migration|web-gate-migration)-[a-f0-9]{40}$ ]]
+
+      - name: Checkout verified commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit_sha }}
+          clean: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Verify immutable repository inputs
+        run: |
+          set -euo pipefail
+          node scripts/validate-web-gate-inputs.mjs \
+            development "${COMMIT_SHA}" "${MIGRATION_VERSION}"
+          [[ "${ARTIFACT_NAME}" =~ ^(auto-predeploy-migration|web-gate-migration)-[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${COMMIT_SHA}"
+          compgen -G "supabase/migrations/${MIGRATION_VERSION}_*.sql" > /dev/null
+
+      - name: Verify development database migration history
+        env:
+          NO_COLOR: "1"
+          TERM: dumb
+        run: |
+          set -euo pipefail
+          set -a
+          . "${DEV_DB_ENV_FILE}"
+          set +a
+          test -n "${SUPABASE_DB_URL:-}"
+
+          ACTUAL_PROJECT_REF="$(
+            SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-}" \
+            SUPABASE_DB_DIRECT_URL="${SUPABASE_DB_DIRECT_URL:-}" \
+            SUPABASE_DB_URL="${SUPABASE_DB_URL}" \
+            node --input-type=module <<'NODE'
+          const refPattern = /^[a-z0-9]{10,63}$/;
+
+          function fromDirectUrl(value) {
+            if (!value) return "";
+            try {
+              // Expected direct hostname shape: db.<ref>.supabase.co
+              const match = /^db\.([a-z0-9]{10,63})\.supabase\.co$/.exec(
+                new URL(value).hostname,
+              );
+              return match?.[1] ?? "";
+            } catch {
+              return "";
+            }
+          }
+
+          function fromDatabaseUrl(value) {
+            try {
+              // Expected pooler username shape: postgres.<ref>
+              const username = decodeURIComponent(new URL(value).username);
+              return /^postgres\.([a-z0-9]{10,63})$/.exec(username)?.[1] ?? "";
+            } catch {
+              return "";
+            }
+          }
+
+          const projectRef =
+            process.env.SUPABASE_PROJECT_REF ||
+            fromDirectUrl(process.env.SUPABASE_DB_DIRECT_URL) ||
+            fromDatabaseUrl(process.env.SUPABASE_DB_URL);
+
+          if (!refPattern.test(projectRef)) process.exit(1);
+          process.stdout.write(projectRef);
+          NODE
+          )"
+          test -n "${ACTUAL_PROJECT_REF}"
+
+          node scripts/validate-dev-database-target.mjs \
+            "${SUPABASE_DB_URL}" "${ACTUAL_PROJECT_REF}" \
+            "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
+            "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}"
+
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_URL}" > migration-history.txt
+          node scripts/verify-migration-history.mjs \
+            migration-history.txt supabase/migrations "${MIGRATION_VERSION}" \
+            > strict-evidence.json
+
+      - name: Create and verify development migration evidence
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg environment development \
+            --arg sha "${COMMIT_SHA}" \
+            --arg migration "${MIGRATION_VERSION}" \
+            --slurpfile strictEvidence strict-evidence.json \
+            '{environment:$environment,commit_sha:$sha,migration_version:$migration} + $strictEvidence[0]' \
+            > migration-evidence.json
+          node scripts/verify-dev-migration-evidence.mjs \
+            migration-evidence.json development "${COMMIT_SHA}" "${MIGRATION_VERSION}"
+
+      - name: Export verified evidence
+        id: evidence
+        run: |
+          set -euo pipefail
+          evidence_b64="$(base64 -w0 migration-evidence.json)"
+          printf 'evidence_b64=%s\n' "${evidence_b64}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload verified migration evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: migration-evidence.json
+          if-no-files-found: error
+          retention-days: 30
