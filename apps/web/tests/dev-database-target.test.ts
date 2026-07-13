@@ -9,6 +9,7 @@ const validUrl =
   "postgresql://dev_user:dev_password@api-dev.goodcms.cn:5432/postgres?sslmode=require";
 const devProjectRef = "fclnkyatvfvmzgzdqlba";
 const productionProjectRef = "unqhypivjkpwldhufpjc";
+const otherProjectRef = "aaaaaaaaaaaaaaaaaaaa";
 const validArgs = [
   validUrl,
   devProjectRef,
@@ -20,6 +21,55 @@ const validArgs = [
 
 function validate(args: readonly string[] = validArgs) {
   return spawnSync("node", [script, ...args], { encoding: "utf8" });
+}
+
+type ResolverEnvironment = Partial<
+  Record<
+    "SUPABASE_PROJECT_REF" | "SUPABASE_DB_DIRECT_URL" | "SUPABASE_DB_URL",
+    string
+  >
+>;
+
+const directUrl = (projectRef: string, protocol = "postgresql"): string =>
+  `${protocol}://postgres:direct_password@db.${projectRef}.supabase.co:5432/postgres`;
+const databaseUrl = (username: string): string =>
+  `postgresql://${username}:database_password@api-dev.goodcms.cn:5432/postgres`;
+
+function resolveProjectRef(values: ResolverEnvironment) {
+  const env = { ...process.env };
+  for (const name of [
+    "SUPABASE_PROJECT_REF",
+    "SUPABASE_DB_DIRECT_URL",
+    "SUPABASE_DB_URL",
+  ]) {
+    delete env[name];
+  }
+  Object.assign(env, values);
+
+  return spawnSync("node", [script, "--resolve-project-ref"], {
+    encoding: "utf8",
+    env,
+  });
+}
+
+function expectSafeResolverRejection(
+  result: ReturnType<typeof resolveProjectRef>,
+) {
+  expect(result.status).toBe(1);
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toBe("development database target rejected\n");
+  for (const secret of [
+    "postgresql://",
+    "https://",
+    "postgres.",
+    "direct_password",
+    "database_password",
+    devProjectRef,
+    productionProjectRef,
+    otherProjectRef,
+  ]) {
+    expect(result.stderr).not.toContain(secret);
+  }
 }
 
 describe("development database target validator", () => {
@@ -94,5 +144,132 @@ describe("development database target validator", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("development database target rejected\n");
+  });
+
+  test.each([
+    {
+      name: "matching configured, direct, and database username refs",
+      env: {
+        SUPABASE_PROJECT_REF: devProjectRef,
+        SUPABASE_DB_DIRECT_URL: directUrl(devProjectRef),
+        SUPABASE_DB_URL: databaseUrl(`postgres.${devProjectRef}`),
+      },
+    },
+    {
+      name: "matching direct and database username refs without a configured ref",
+      env: {
+        SUPABASE_DB_DIRECT_URL: directUrl(devProjectRef),
+        SUPABASE_DB_URL: databaseUrl(`postgres.${devProjectRef}`),
+      },
+    },
+    {
+      name: "matching configured and database username refs without a direct URL",
+      env: {
+        SUPABASE_PROJECT_REF: devProjectRef,
+        SUPABASE_DB_URL: databaseUrl(`postgres.${devProjectRef}`),
+      },
+    },
+    {
+      name: "a direct database ref with a generic database username",
+      env: {
+        SUPABASE_DB_DIRECT_URL: directUrl(devProjectRef),
+        SUPABASE_DB_URL: databaseUrl("dev_user"),
+      },
+    },
+  ])("resolves $name", ({ env }) => {
+    const result = resolveProjectRef(env);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(devProjectRef);
+    expect(result.stderr).toBe("");
+  });
+
+  test.each([
+    {
+      name: "a configured ref as the only ref source",
+      env: {
+        SUPABASE_PROJECT_REF: devProjectRef,
+        SUPABASE_DB_URL: databaseUrl("dev_user"),
+      },
+    },
+    {
+      name: "a configured and direct ref conflict",
+      env: {
+        SUPABASE_PROJECT_REF: devProjectRef,
+        SUPABASE_DB_DIRECT_URL: directUrl(otherProjectRef),
+        SUPABASE_DB_URL: databaseUrl("dev_user"),
+      },
+    },
+    {
+      name: "a direct and database username ref conflict",
+      env: {
+        SUPABASE_DB_DIRECT_URL: directUrl(devProjectRef),
+        SUPABASE_DB_URL: databaseUrl(`postgres.${otherProjectRef}`),
+      },
+    },
+    {
+      name: "a percent-decoded blocked database username ref conflict",
+      env: {
+        SUPABASE_PROJECT_REF: devProjectRef,
+        SUPABASE_DB_URL: databaseUrl(`postgres%2E${productionProjectRef}`),
+      },
+    },
+    {
+      name: "a malformed direct URL",
+      env: {
+        SUPABASE_DB_DIRECT_URL: "not-a-url",
+        SUPABASE_DB_URL: databaseUrl(`postgres.${devProjectRef}`),
+      },
+    },
+    {
+      name: "a direct URL with a non-Supabase hostname",
+      env: {
+        SUPABASE_DB_DIRECT_URL: validUrl,
+        SUPABASE_DB_URL: databaseUrl(`postgres.${devProjectRef}`),
+      },
+    },
+    {
+      name: "a direct URL with a non-Postgres protocol",
+      env: {
+        SUPABASE_DB_DIRECT_URL: directUrl(devProjectRef, "https"),
+        SUPABASE_DB_URL: databaseUrl(`postgres.${devProjectRef}`),
+      },
+    },
+    {
+      name: "an invalid database URL",
+      env: {
+        SUPABASE_DB_DIRECT_URL: directUrl(devProjectRef),
+        SUPABASE_DB_URL: "not-a-url",
+      },
+    },
+    {
+      name: "an invalid postgres-prefixed database username",
+      env: {
+        SUPABASE_DB_DIRECT_URL: directUrl(devProjectRef),
+        SUPABASE_DB_URL: databaseUrl("postgres.short"),
+      },
+    },
+  ])("rejects $name without disclosing resolver inputs", ({ env }) => {
+    expectSafeResolverRejection(resolveProjectRef(env));
+  });
+
+  test("does not execute the CLI when imported", () => {
+    const scriptUrl = new URL(
+      "../../../scripts/validate-dev-database-target.mjs",
+      import.meta.url,
+    );
+    const result = spawnSync(
+      "node",
+      [
+        "--input-type=module",
+        "-e",
+        `await import(${JSON.stringify(scriptUrl.href)})`,
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
   });
 });

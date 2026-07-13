@@ -24,6 +24,7 @@ jobs:
   verify:
     runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
     environment: development
+    timeout-minutes: 20
     outputs:
       evidence_b64: ${{ steps.evidence.outputs.evidence_b64 }}
     env:
@@ -44,6 +45,10 @@ jobs:
           [[ "${COMMIT_SHA}" =~ ^[a-f0-9]{40}$ ]]
           test "${MIGRATION_VERSION}" = "20260711120000"
           [[ "${ARTIFACT_NAME}" =~ ^(auto-predeploy-migration|web-gate-migration)-[a-f0-9]{40}$ ]]
+          case "${ARTIFACT_NAME}" in
+            "auto-predeploy-migration-${COMMIT_SHA}"|"web-gate-migration-${COMMIT_SHA}") ;;
+            *) exit 1 ;;
+          esac
 
       - name: Checkout verified commit
         uses: actions/checkout@v6
@@ -62,6 +67,10 @@ jobs:
           node scripts/validate-web-gate-inputs.mjs \
             development "${COMMIT_SHA}" "${MIGRATION_VERSION}"
           [[ "${ARTIFACT_NAME}" =~ ^(auto-predeploy-migration|web-gate-migration)-[a-f0-9]{40}$ ]]
+          case "${ARTIFACT_NAME}" in
+            "auto-predeploy-migration-${COMMIT_SHA}"|"web-gate-migration-${COMMIT_SHA}") ;;
+            *) exit 1 ;;
+          esac
           test "$(git rev-parse HEAD)" = "${COMMIT_SHA}"
           compgen -G "supabase/migrations/${MIGRATION_VERSION}_*.sql" > /dev/null
 
@@ -76,45 +85,7 @@ jobs:
           set +a
           test -n "${SUPABASE_DB_URL:-}"
 
-          ACTUAL_PROJECT_REF="$(
-            SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-}" \
-            SUPABASE_DB_DIRECT_URL="${SUPABASE_DB_DIRECT_URL:-}" \
-            SUPABASE_DB_URL="${SUPABASE_DB_URL}" \
-            node --input-type=module <<'NODE'
-          const refPattern = /^[a-z0-9]{10,63}$/;
-
-          function fromDirectUrl(value) {
-            if (!value) return "";
-            try {
-              // Expected direct hostname shape: db.<ref>.supabase.co
-              const match = /^db\.([a-z0-9]{10,63})\.supabase\.co$/.exec(
-                new URL(value).hostname,
-              );
-              return match?.[1] ?? "";
-            } catch {
-              return "";
-            }
-          }
-
-          function fromDatabaseUrl(value) {
-            try {
-              // Expected pooler username shape: postgres.<ref>
-              const username = decodeURIComponent(new URL(value).username);
-              return /^postgres\.([a-z0-9]{10,63})$/.exec(username)?.[1] ?? "";
-            } catch {
-              return "";
-            }
-          }
-
-          const projectRef =
-            process.env.SUPABASE_PROJECT_REF ||
-            fromDirectUrl(process.env.SUPABASE_DB_DIRECT_URL) ||
-            fromDatabaseUrl(process.env.SUPABASE_DB_URL);
-
-          if (!refPattern.test(projectRef)) process.exit(1);
-          process.stdout.write(projectRef);
-          NODE
-          )"
+          ACTUAL_PROJECT_REF="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref)"
           test -n "${ACTUAL_PROJECT_REF}"
 
           node scripts/validate-dev-database-target.mjs \

@@ -70,6 +70,7 @@ describe("CI environment isolation", () => {
       "value: ${{ jobs.verify.outputs.evidence_b64 }}",
     );
     expect(workflow).toContain("environment: development");
+    expect(workflow).toContain("timeout-minutes: 20");
     expect(workflow).toContain('test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"');
     expect(workflow).toContain(
       "DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db",
@@ -91,6 +92,11 @@ describe("CI environment isolation", () => {
     expect(workflow).toContain(
       '[[ "${ARTIFACT_NAME}" =~ ^(auto-predeploy-migration|web-gate-migration)-[a-f0-9]{40}$ ]]',
     );
+    expect(workflow).toContain('"auto-predeploy-migration-${COMMIT_SHA}"');
+    expect(workflow).toContain('"web-gate-migration-${COMMIT_SHA}"');
+    expect(workflow).toMatch(
+      /case "\$\{ARTIFACT_NAME\}" in[\s\S]*auto-predeploy-migration-\$\{COMMIT_SHA\}[\s\S]*web-gate-migration-\$\{COMMIT_SHA\}[\s\S]*\*\) exit 1 ;;/,
+    );
     expect(workflow).toContain("uses: actions/upload-artifact@v6");
     expect(workflow).toContain("name: ${{ inputs.artifact_name }}");
     expect(workflow).toContain("path: migration-evidence.json");
@@ -99,10 +105,11 @@ describe("CI environment isolation", () => {
     expect(workflow).toContain('base64 -w0 migration-evidence.json');
     expect(workflow).toContain('>> "${GITHUB_OUTPUT}"');
 
-    expect(workflow).toContain("SUPABASE_PROJECT_REF");
-    expect(workflow).toContain("SUPABASE_DB_DIRECT_URL");
-    expect(workflow).toContain("db.<ref>.supabase.co");
-    expect(workflow).toContain("postgres.<ref>");
+    expect(workflow).toContain(
+      'ACTUAL_PROJECT_REF="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref)"',
+    );
+    expect(workflow).not.toContain("node --input-type=module");
+    expect(workflow).not.toContain("<<'NODE'");
     expect(workflow).not.toContain(
       '"${SUPABASE_DB_URL}" "${DEV_PROJECT_REF}" "${DEV_DB_HOST}" "${DEV_PROJECT_REF}"',
     );
