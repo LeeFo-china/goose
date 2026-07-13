@@ -538,9 +538,9 @@ describe("production orchestrator", () => {
       'gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"',
     );
     for (const image of [
-      "GOOES_API_IMAGE=${image_base}/goose-api:${GITHUB_SHA}",
-      "GOOES_ADMIN_IMAGE=${image_base}/goose-admin:${GITHUB_SHA}",
-      "GOOES_SOCIAL_VIDEO_WORKER_IMAGE=${image_base}/goose-social-video-worker:${GITHUB_SHA}",
+      "GOOES_API_IMAGE=${image_base}/goose-api@${api_digest}",
+      "GOOES_ADMIN_IMAGE=${image_base}/goose-admin@${admin_digest}",
+      "GOOES_SOCIAL_VIDEO_WORKER_IMAGE=${image_base}/goose-social-video-worker@${social_video_worker_digest}",
     ]) {
       expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(image);
     }
@@ -579,5 +579,51 @@ describe("production orchestrator", () => {
     ]) {
       expect(deployProductionWorkflow).toContain(field);
     }
+  });
+
+  test("pins Admin candidate images to verified manifest digests instead of mutable SHA tags", () => {
+    const evidenceStart = deployProductionWorkflow.indexOf("- name: Validate production release evidence");
+    const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
+    const evidence = deployProductionWorkflow.slice(evidenceStart, dockerStart);
+    const shellVariable = (name: string) => `\${${name}}`;
+
+    expect(evidenceStart).toBeGreaterThanOrEqual(0);
+    expect(dockerStart).toBeGreaterThan(evidenceStart);
+    for (const [service, variable] of [
+      ["api", "GOOES_API_IMAGE"],
+      ["admin", "GOOES_ADMIN_IMAGE"],
+      ["social-video-worker", "GOOES_SOCIAL_VIDEO_WORKER_IMAGE"],
+    ]) {
+      const digestVariable = `${service.replaceAll("-", "_")}_digest`;
+      expect(evidence).toContain(
+        `${digestVariable}="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${shellVariable("evidence_dir")}/image-manifest-${service}.json")"`,
+      );
+      expect(evidence).toContain(
+        `${variable}=${shellVariable("image_base")}/goose-${service}@${shellVariable(digestVariable)}`,
+      );
+      expect(evidence).not.toContain(
+        `${variable}=${shellVariable("image_base")}/goose-${service}:${shellVariable("GITHUB_SHA")}`,
+      );
+    }
+    expect(evidence).toContain("GOOES_API_IMAGE=${image_base}/goose-api@${api_digest}");
+
+    const repository = "ccr.example/gooes/goose-api";
+    const sha = "a".repeat(40);
+    const candidateDigest = `sha256:${"b".repeat(64)}`;
+    const overwrittenDigest = `sha256:${"c".repeat(64)}`;
+    const mutableShaTag = `${repository}:${sha}`;
+    const candidateReference = `${repository}@${candidateDigest}`;
+    const shaTagRegistryBefore = new Map([[mutableShaTag, candidateDigest]]);
+    const shaTagRegistryAfter = new Map([[mutableShaTag, overwrittenDigest]]);
+    const deploymentReferenceBeforeOverwrite = candidateReference;
+    const deploymentReferenceAfterOverwrite = candidateReference;
+
+    expect(`${repository}:${sha}`).toBe(mutableShaTag);
+    expect(shaTagRegistryBefore.get(mutableShaTag)).not.toBe(
+      shaTagRegistryAfter.get(mutableShaTag),
+    );
+    expect(deploymentReferenceAfterOverwrite).toBe(deploymentReferenceBeforeOverwrite);
+    expect(candidateReference).toBe(`${repository}@${candidateDigest}`);
+    expect(candidateReference).not.toContain(mutableShaTag);
   });
 });

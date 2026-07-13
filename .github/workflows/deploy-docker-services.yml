@@ -212,13 +212,16 @@ jobs:
           test -n "${TENCENT_CCR_NAMESPACE}"
           image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
           if [[ ",${requested_services}," == *,api,* || ",${requested_services}," == *,cos-reconcile-worker,* ]]; then
-            echo "GOOES_API_IMAGE=${image_base}/goose-api:${GITHUB_SHA}" >> "${GITHUB_ENV}"
+            api_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-api.json")"
+            echo "GOOES_API_IMAGE=${image_base}/goose-api@${api_digest}" >> "${GITHUB_ENV}"
           fi
           if [[ ",${requested_services}," == *,admin,* ]]; then
-            echo "GOOES_ADMIN_IMAGE=${image_base}/goose-admin:${GITHUB_SHA}" >> "${GITHUB_ENV}"
+            admin_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-admin.json")"
+            echo "GOOES_ADMIN_IMAGE=${image_base}/goose-admin@${admin_digest}" >> "${GITHUB_ENV}"
           fi
           if [[ ",${requested_services}," == *,social-video-worker,* ]]; then
-            echo "GOOES_SOCIAL_VIDEO_WORKER_IMAGE=${image_base}/goose-social-video-worker:${GITHUB_SHA}" >> "${GITHUB_ENV}"
+            social_video_worker_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-social-video-worker.json")"
+            echo "GOOES_SOCIAL_VIDEO_WORKER_IMAGE=${image_base}/goose-social-video-worker@${social_video_worker_digest}" >> "${GITHUB_ENV}"
           fi
 
           receipt_name="production-deployment-receipt-${BUILD_RUN_ID}"
