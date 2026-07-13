@@ -26,7 +26,7 @@ export const ReleaseDispatchSchema = z.object({
   confirm_text: z.string().trim().max(40, "确认文本不能超过 40 个字符").optional(),
 }).superRefine((value, ctx) => {
   const selectedServices = value.services?.length ? value.services : [value.service];
-  const productionConfirmText = value.operation === "rollback" ? "确认回滚生产" : "确认发布生产";
+  const productionConfirmText = "确认构建生产候选";
 
   if (selectedServices.includes("all") && selectedServices.length > 1) {
     ctx.addIssue({
@@ -60,21 +60,25 @@ export const ReleaseDispatchSchema = z.object({
     });
   }
 
-  if (value.operation === "rollback" && value.environment !== "production") {
-    ctx.addIssue({
-      code: "custom",
-      path: ["operation"],
-      message: "回滚只支持生产环境",
-    });
-  }
-
   if (value.environment === "production" && value.confirm_text !== productionConfirmText) {
     ctx.addIssue({
       code: "custom",
       path: ["confirm_text"],
-      message: `生产${value.operation === "rollback" ? "回滚" : "发布"}需要输入：${productionConfirmText}`,
+      message: `构建生产候选需要输入：${productionConfirmText}`,
     });
   }
+});
+
+export const ReleaseProductionCandidateParamsSchema = z.object({
+  runId: z.string().trim().regex(/^\d+$/, "GitHub Run ID 必须是数字"),
+});
+
+export const ReleaseProductionCandidateDeploySchema = z.object({
+  services: z.array(ReleaseServiceSchema.exclude(["all"])).min(1, "请选择部署服务").max(4),
+  confirm_text: z.literal("确认部署生产环境", {
+    error: "部署生产候选需要输入：确认部署生产环境",
+  }),
+  reason: z.string().trim().max(200, "部署原因不能超过 200 个字符").optional(),
 });
 
 export const ReleaseCreateTagSchema = z.object({
@@ -139,6 +143,8 @@ export type ReleaseRefType = z.infer<typeof ReleaseRefTypeSchema>;
 export type ReleaseOperation = z.infer<typeof ReleaseOperationSchema>;
 export type ReleaseMigrationMode = z.infer<typeof ReleaseMigrationModeSchema>;
 export type ReleaseDispatchInput = z.infer<typeof ReleaseDispatchSchema>;
+export type ReleaseProductionCandidateParams = z.infer<typeof ReleaseProductionCandidateParamsSchema>;
+export type ReleaseProductionCandidateDeployInput = z.infer<typeof ReleaseProductionCandidateDeploySchema>;
 export type ReleaseCreateTagInput = z.infer<typeof ReleaseCreateTagSchema>;
 export type ReleaseCreateRollbackTagInput = z.infer<typeof ReleaseCreateRollbackTagSchema>;
 export type ReleaseRunListQuery = z.infer<typeof ReleaseRunListQuerySchema>;

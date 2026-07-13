@@ -1,6 +1,11 @@
 import { Errors } from "@/errors/error-factory";
 import { AppError } from "@/errors/app-error";
 import { ErrorCodes } from "@/errors/error-codes";
+import {
+  getGithubConfig,
+  githubRequest,
+  normalizeGithubError,
+} from "@/gateways/github-actions";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { dockerServiceHealthService } from "@/services/docker-service-health";
 import { platformAuditLogRepository } from "@/repositories/platform-audit-logs";
@@ -77,62 +82,6 @@ export const RELEASE_OPERATION_LABELS = {
   release: "发布",
   rollback: "回滚",
 } as const;
-
-export function getGithubConfig() {
-  const token = process.env.GITHUB_RELEASE_TOKEN || process.env.GITHUB_TOKEN || "";
-  const repository = process.env.GITHUB_RELEASE_REPOSITORY || process.env.GITHUB_REPOSITORY || "LeeFo-china/goose";
-
-  if (!token) {
-    throw Errors.business(
-      500,
-      "缺少 GitHub 发布令牌 GITHUB_RELEASE_TOKEN",
-      ErrorCodes.RELEASE_CONFIG_MISSING,
-    );
-  }
-
-  return {
-    token,
-    repository,
-    apiBase: `https://api.github.com/repos/${repository}`,
-    webBase: `https://github.com/${repository}`,
-  };
-}
-
-export function normalizeGithubError(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
-export async function githubRequest<T>(path: string, init: RequestInit = {}) {
-  const config = getGithubConfig();
-  const response = await fetch(`${config.apiBase}${path}`, {
-    ...init,
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${config.token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers || {}),
-    },
-  });
-
-  if (response.status === 204) return null as T;
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw Errors.business(
-      response.status,
-      normalizeGithubError(payload, "GitHub Actions 请求失败"),
-      ErrorCodes.RELEASE_DISPATCH_FAILED,
-      payload,
-    );
-  }
-
-  return payload as T;
-}
 
 export function includesKeyword(value: string, keyword?: string) {
   const normalizedKeyword = keyword?.trim().toLowerCase();
@@ -404,6 +353,9 @@ export {
   AppError,
   Errors,
   ErrorCodes,
+  getGithubConfig,
+  githubRequest,
+  normalizeGithubError,
   dockerServiceHealthService,
   platformAuditLogRepository,
   platformAuditLogService,
