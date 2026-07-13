@@ -21,6 +21,14 @@ export function SiteFooter(): React.JSX.Element {
           <p className="text-sm text-muted-foreground">
             为装修经营者和城市合作伙伴提供清晰、可靠的业务支持。
           </p>
+          <a
+            className="w-fit rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            href="https://beian.miit.gov.cn/"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            豫ICP备19043554号-1
+          </a>
         </div>
         <nav aria-label="页脚导航" className="flex flex-wrap gap-x-5 gap-y-2">
           {footerLinks.map((item) => (

@@ -278,6 +278,15 @@ describe("official website design system contract", () => {
     expect(shell).not.toMatch(/^\s*["']use client["'];?/m);
   });
 
+  test("publishes the official ICP registration in the shared footer", () => {
+    const footer = read("components/official-site/site-footer.tsx");
+
+    expect(footer).toContain("豫ICP备19043554号-1");
+    expect(footer).toContain('href="https://beian.miit.gov.cn/"');
+    expect(footer).toContain('target="_blank"');
+    expect(footer).toContain('rel="noopener noreferrer"');
+  });
+
   test("configures one system-aware ThemeProvider around SiteShell", () => {
     const layout = read("app/layout.tsx");
 
