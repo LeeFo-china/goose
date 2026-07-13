@@ -2,6 +2,18 @@ name: Verify Development Web Deployment Gate
 run-name: Verify development web gate ${{ inputs.commit_sha }}
 
 on:
+  workflow_call:
+    inputs:
+      commit_sha:
+        required: true
+        type: string
+      migration_version:
+        required: true
+        type: string
+    outputs:
+      receipt_b64:
+        description: "Base64-encoded verified development web gate receipt"
+        value: ${{ jobs.verify.outputs.receipt_b64 }}
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -22,9 +34,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  migration:
+    uses: ./.github/workflows/verify-dev-migration-history.yml
+    with:
+      commit_sha: ${{ inputs.commit_sha }}
+      migration_version: ${{ inputs.migration_version }}
+      artifact_name: web-gate-migration-${{ inputs.commit_sha }}
+    secrets: inherit
+
   verify:
+    needs: migration
     runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
     environment: development
+    timeout-minutes: 30
+    outputs:
+      receipt_b64: ${{ steps.receipt.outputs.receipt_b64 }}
     env:
       GATE_ENVIRONMENT: development
       GATE_COMMIT_SHA: ${{ inputs.commit_sha }}
@@ -58,23 +82,15 @@ jobs:
           test "$(git rev-parse HEAD)" = "${GATE_COMMIT_SHA}"
           test -f supabase/migrations/20260711120000_reserve_sms_verification_code.sql
 
-      - name: Verify Local and Remote migration history
+      - name: Verify reusable development migration evidence
         env:
-          NO_COLOR: "1"
-          TERM: dumb
+          MIGRATION_EVIDENCE_B64: ${{ needs.migration.outputs.evidence_b64 }}
         run: |
           set -euo pipefail
-          set -a
-          . /opt/gooes-dev/docker/.env.dev.db
-          set +a
-          test -n "${SUPABASE_DB_URL:-}"
-          corepack enable
-          corepack prepare pnpm@10.33.0 --activate
-          pnpm dlx supabase@2.99.0 migration list \
-            --db-url "${SUPABASE_DB_URL}" > migration-history.txt
-          node scripts/verify-migration-history.mjs \
-            migration-history.txt supabase/migrations "${GATE_MIGRATION_VERSION}" \
-            > migration-evidence.json
+          test -n "${MIGRATION_EVIDENCE_B64}"
+          printf '%s' "${MIGRATION_EVIDENCE_B64}" | base64 -d > migration-evidence.json
+          node scripts/verify-dev-migration-evidence.mjs \
+            migration-evidence.json development "${GATE_COMMIT_SHA}" "${GATE_MIGRATION_VERSION}"
 
       - name: Verify API revision and health
         env:
@@ -115,6 +131,7 @@ jobs:
           bun src/scripts/web-deployment-gate-smoke.ts > ../../web-gate-smoke.json
 
       - name: Create immutable gate receipt
+        id: receipt
         env:
           RECEIPT_COMMIT_SHA: ${{ inputs.commit_sha }}
           RECEIPT_MIGRATION_VERSION: ${{ inputs.migration_version }}
@@ -128,6 +145,10 @@ jobs:
             --slurpfile migrationEvidence migration-evidence.json \
             '{conclusion:"success", environment:$environment, commit_sha:$sha, migration_version:$migration} + $smoke[0] + $migrationEvidence[0]' \
             > web-deployment-gate-receipt.json
+          node scripts/verify-web-gate-receipt.mjs \
+            web-deployment-gate-receipt.json development "${RECEIPT_COMMIT_SHA}" "${RECEIPT_MIGRATION_VERSION}"
+          receipt_b64="$(base64 -w0 web-deployment-gate-receipt.json)"
+          printf 'receipt_b64=%s\n' "${receipt_b64}" >> "${GITHUB_OUTPUT}"
 
       - uses: actions/upload-artifact@v6
         with:

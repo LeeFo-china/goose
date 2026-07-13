@@ -5,6 +5,7 @@ const repositoryRoot = new URL("../../../", import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, repositoryRoot), "utf8");
 
 const dev = read(".github/workflows/deploy-dev.yml");
+const devGate = read(".github/workflows/verify-dev-web-deployment-gate.yml");
 const build = read(".github/workflows/build-docker-images.yml");
 const production = read(".github/workflows/deploy-docker-services.yml");
 
@@ -14,6 +15,21 @@ const sliceStep = (workflow: string, name: string, nextName: string): string => 
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
   return workflow.slice(start, end);
+};
+
+const sliceSection = (workflow: string, startMarker: string, endMarker: string): string => {
+  const start = workflow.indexOf(startMarker);
+  const end = workflow.indexOf(endMarker, start + startMarker.length);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  return workflow.slice(start, end);
+};
+
+const namedStep = (workflow: string, name: string): string => {
+  const start = workflow.indexOf(`- name: ${name}`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const end = workflow.indexOf("\n      - ", start + 1);
+  return workflow.slice(start, end < 0 ? undefined : end);
 };
 
 describe("web deployment hard gates", () => {
@@ -34,6 +50,75 @@ describe("web deployment hard gates", () => {
     expect(gate).toContain('test "${INPUT_SERVICE}" = "web"');
     expect(deploy).toContain("gooes-web-dev");
     expect(dev.indexOf("Validate gated dev web deployment")).toBeLessThan(dev.indexOf("Deploy gated dev web"));
+  });
+
+  test("keeps manual inputs while exposing a reusable development web gate receipt", () => {
+    const call = sliceSection(devGate, "  workflow_call:", "  workflow_dispatch:");
+    const dispatch = sliceSection(devGate, "  workflow_dispatch:", "permissions:");
+
+    for (const input of ["commit_sha", "migration_version"]) {
+      const nextMarker = input === "commit_sha" ? "      migration_version:" : "    outputs:";
+      const callInput = sliceSection(call, `      ${input}:`, nextMarker);
+      const dispatchInput = input === "commit_sha"
+        ? sliceSection(dispatch, `      ${input}:`, "      migration_version:")
+        : dispatch.slice(dispatch.indexOf(`      ${input}:`));
+      expect(callInput).toContain("required: true");
+      expect(callInput).toContain("type: string");
+      expect(dispatchInput).toContain("required: true");
+      expect(dispatchInput).toContain("type: string");
+    }
+    expect(dispatch).toContain('default: "20260711120000"');
+    expect(call).toContain("receipt_b64:");
+    expect(call).toContain("value: ${{ jobs.verify.outputs.receipt_b64 }}");
+    expect(devGate).toContain("permissions:\n  contents: read");
+    expect(devGate).toContain("cancel-in-progress: false");
+  });
+
+  test("delegates development migration history to the reusable migration gate", () => {
+    const migration = sliceSection(devGate, "  migration:", "  verify:");
+    const verifyHeader = sliceSection(devGate, "  verify:", "    steps:");
+    const evidence = namedStep(devGate, "Verify reusable development migration evidence");
+
+    expect(migration).toContain("uses: ./.github/workflows/verify-dev-migration-history.yml");
+    expect(migration).toContain("commit_sha: ${{ inputs.commit_sha }}");
+    expect(migration).toContain("migration_version: ${{ inputs.migration_version }}");
+    expect(migration).toContain("artifact_name: web-gate-migration-${{ inputs.commit_sha }}");
+    expect(migration).toContain("secrets: inherit");
+    expect(verifyHeader).toContain("needs: migration");
+    expect(evidence).toContain(
+      "MIGRATION_EVIDENCE_B64: ${{ needs.migration.outputs.evidence_b64 }}",
+    );
+    expect(evidence).toContain('test -n "${MIGRATION_EVIDENCE_B64}"');
+    expect(evidence).toContain(
+      "printf '%s' \"${MIGRATION_EVIDENCE_B64}\" | base64 -d > migration-evidence.json",
+    );
+    expect(evidence).toContain("scripts/verify-dev-migration-evidence.mjs");
+    expect(evidence).toContain(
+      'migration-evidence.json development "${GATE_COMMIT_SHA}" "${GATE_MIGRATION_VERSION}"',
+    );
+    expect(devGate).not.toContain("pnpm dlx supabase@2.99.0 migration list");
+    expect(devGate).not.toContain("SUPABASE_DB_URL");
+    expect(devGate).not.toContain("source .env.dev.db");
+    expect(devGate).not.toContain(". /opt/gooes-dev/docker/.env.dev.db");
+  });
+
+  test("self-verifies and exports the immutable development web gate receipt", () => {
+    const verifyHeader = sliceSection(devGate, "  verify:", "    steps:");
+    const receipt = namedStep(devGate, "Create immutable gate receipt");
+
+    expect(verifyHeader).toContain("receipt_b64: ${{ steps.receipt.outputs.receipt_b64 }}");
+    expect(receipt).toContain("id: receipt");
+    expect(receipt).toContain("--slurpfile migrationEvidence migration-evidence.json");
+    expect(receipt).toContain("scripts/verify-web-gate-receipt.mjs");
+    expect(receipt).toContain(
+      'web-deployment-gate-receipt.json development "${RECEIPT_COMMIT_SHA}" "${RECEIPT_MIGRATION_VERSION}"',
+    );
+    expect(receipt).toContain("base64 -w0 web-deployment-gate-receipt.json");
+    expect(receipt).toContain("printf 'receipt_b64=%s\\n'");
+    expect(receipt).toContain('>> "${GITHUB_OUTPUT}"');
+    expect(devGate).toContain("uses: actions/upload-artifact@v6");
+    expect(devGate).toContain("name: web-deployment-gate-receipt");
+    expect(devGate).toContain("retention-days: 14");
   });
 
   test("does not let normal dev deploy or health steps report web success", () => {
