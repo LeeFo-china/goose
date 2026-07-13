@@ -34,6 +34,12 @@ describe("automatic development image build contract", () => {
     expect(workflow).toContain("build-docker-images-development-push");
   });
 
+  test("never cancels an in-flight main push build with a narrower diff", () => {
+    expect(workflow).toContain(
+      "cancel-in-progress: ${{ github.event_name != 'push' }}",
+    );
+  });
+
   test("resolves and verifies immutable development plans from the push range", () => {
     const validateJob = sliceBetween("  validate-request:", "  build:");
     const resolveStep = sliceBetween(

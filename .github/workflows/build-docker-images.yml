@@ -30,7 +30,7 @@ permissions:
 
 concurrency:
   group: ${{ github.event_name == 'push' && 'build-docker-images-development-push' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 env:
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
