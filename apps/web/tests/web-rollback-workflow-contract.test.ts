@@ -23,6 +23,13 @@ function step(workflow: string, name: string): string {
 }
 
 describe("Web rollback workflows", () => {
+  test("does not cancel an in-progress development deployment or rollback", () => {
+    expect(dev).toContain("concurrency:");
+    expect(dev).toContain("group: deploy-dev-${{ inputs.service }}");
+    expect(dev).toContain("cancel-in-progress: false");
+    expect(dev).not.toContain("cancel-in-progress: true");
+  });
+
   test.each([dev, production])("verifies old revision and strict health after rollback", (workflow) => {
     expect(workflow).toContain("WEB_OLD_REVISION");
     expect(workflow).toContain("WEB_ROLLBACK_STATUS=rollback_failed");

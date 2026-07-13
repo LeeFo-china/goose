@@ -5,6 +5,29 @@ run-name: Dev deploy ${{ inputs.service }} ${{ inputs.commit_sha }}
 # GitHub-hosted runner and consumed here by immutable commit SHA.
 
 on:
+  workflow_call:
+    inputs:
+      service:
+        description: "Service to deploy"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact 40-character commit SHA already built for development"
+        required: true
+        type: string
+      build_run_id:
+        description: "Successful Build Docker Images run ID"
+        required: true
+        type: string
+      expected_build_event:
+        description: "Expected Build Docker Images event"
+        required: true
+        type: string
+      gate_receipt_b64:
+        description: "Inline development Web gate receipt"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       service:
@@ -31,13 +54,15 @@ permissions:
 
 concurrency:
   group: deploy-dev-${{ inputs.service }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
   DEV_DEPLOY_DIR: /opt/gooes-dev/docker
   SOURCE_SHA: ${{ inputs.commit_sha }}
   RELEASE_SERVICE: ${{ inputs.service }}
+  EXPECTED_BUILD_EVENT: ${{ github.event_name == 'workflow_dispatch' && 'workflow_dispatch' || inputs.expected_build_event }}
+  INLINE_GATE_RECEIPT_B64: ${{ inputs.gate_receipt_b64 }}
 
 jobs:
   deploy-dev:
@@ -87,10 +112,28 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
-          [[ "${INPUT_BUILD_RUN_ID}" =~ ^[0-9]+$ ]]
+          [[ "${INPUT_BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+          current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          case "${EXPECTED_BUILD_EVENT}" in
+            push|workflow_dispatch) ;;
+            *) exit 1 ;;
+          esac
+          case "${EXPECTED_BUILD_EVENT}" in
+            push)
+              test "${GITHUB_EVENT_NAME}" = workflow_run
+              test "$(jq -r '.path' <<< "${current_run_json}")" = ".github/workflows/auto-deploy-dev.yml"
+              test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_run
+              ;;
+            workflow_dispatch)
+              test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+              test "$(jq -r '.path' <<< "${current_run_json}")" = ".github/workflows/deploy-dev.yml"
+              test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_dispatch
+              test -z "${INLINE_GATE_RECEIPT_B64}"
+              ;;
+          esac
           run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_BUILD_RUN_ID}")"
           test "$(jq -r '.path' <<< "${run_json}")" = ".github/workflows/build-docker-images.yml"
-          test "$(jq -r '.event' <<< "${run_json}")" = "workflow_dispatch"
+          test "$(jq -r '.event' <<< "${run_json}")" = "${EXPECTED_BUILD_EVENT}"
           test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
           test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
           receipt_dir="${RUNNER_TEMP}/image-manifest-${INPUT_BUILD_RUN_ID}"
@@ -107,20 +150,35 @@ jobs:
         env:
           INPUT_SERVICE: ${{ inputs.service }}
           INPUT_GATE_RUN_ID: ${{ inputs.gate_run_id }}
+          EXPECTED_BUILD_EVENT: ${{ env.EXPECTED_BUILD_EVENT }}
+          INLINE_GATE_RECEIPT_B64: ${{ inputs.gate_receipt_b64 }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           echo "WEB_DEPLOY_STAGE=gate_rejected" >> "${GITHUB_ENV}"
           test "${INPUT_SERVICE}" = "web"
-          [[ "${INPUT_GATE_RUN_ID}" =~ ^[0-9]+$ ]]
-          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_GATE_RUN_ID}")"
-          test "$(jq -r '.path' <<< "${run_json}")" = ".github/workflows/verify-dev-web-deployment-gate.yml"
-          test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
-          receipt_dir="${RUNNER_TEMP}/web-gate-${INPUT_GATE_RUN_ID}"
+          receipt_dir="${RUNNER_TEMP}/web-gate-${GITHUB_RUN_ID}"
           rm -rf "${receipt_dir}"
-          gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
+          mkdir -p "${receipt_dir}"
+          receipt_file="${receipt_dir}/web-deployment-gate-receipt.json"
+          if [ -n "${INLINE_GATE_RECEIPT_B64}" ]; then
+            test "${EXPECTED_BUILD_EVENT}" = push
+            test "${GITHUB_EVENT_NAME}" = workflow_run
+            test -z "${INPUT_GATE_RUN_ID}"
+            printf '%s' "${INLINE_GATE_RECEIPT_B64}" | base64 -d > "${receipt_file}"
+          else
+            test "${EXPECTED_BUILD_EVENT}" = workflow_dispatch
+            test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+            test -z "${INLINE_GATE_RECEIPT_B64}"
+            [[ "${INPUT_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+            run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_GATE_RUN_ID}")"
+            test "$(jq -r '.path' <<< "${run_json}")" = ".github/workflows/verify-dev-web-deployment-gate.yml"
+            test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
+            test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
+            gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
+          fi
           node scripts/verify-web-gate-receipt.mjs \
-            "${receipt_dir}/web-deployment-gate-receipt.json" development "${SOURCE_SHA}" 20260711120000
+            "${receipt_file}" development "${SOURCE_SHA}" 20260711120000
           echo "WEB_DEPLOY_APPROVED=true" >> "${GITHUB_ENV}"
           echo "WEB_DEPLOY_STAGE=gate_validated" >> "${GITHUB_ENV}"
 

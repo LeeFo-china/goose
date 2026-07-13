@@ -32,6 +32,36 @@ const namedStep = (workflow: string, name: string): string => {
   return workflow.slice(start, end < 0 ? undefined : end);
 };
 
+const inputSection = (trigger: string, input: string): string => {
+  const start = trigger.indexOf(`      ${input}:`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const remaining = trigger.slice(start + 1);
+  const nextInput = /\n      [a-z_]+:\n/.exec(remaining);
+  const end = nextInput?.index === undefined ? -1 : start + 1 + nextInput.index;
+  return trigger.slice(start, end < 0 ? undefined : end);
+};
+
+const runBlocks = (workflow: string): string[] => {
+  const lines = workflow.split("\n");
+  const blocks: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(\s*)run:\s*\|/.exec(lines[index] ?? "");
+    if (!match) continue;
+    const indent = match[1]?.length ?? 0;
+    const block = [];
+    while (
+      index + 1 < lines.length &&
+      (/^\s*$/.test(lines[index + 1] ?? "") ||
+        (lines[index + 1]?.match(/^\s*/)?.[0].length ?? 0) > indent)
+    ) {
+      block.push(lines[index + 1] ?? "");
+      index += 1;
+    }
+    blocks.push(block.join("\n"));
+  }
+  return blocks;
+};
+
 describe("web deployment hard gates", () => {
   test("keeps development deployment separate from immutable image builds", () => {
     const resolve = sliceStep(dev, "Resolve services", "Checkout repository");
@@ -39,6 +69,79 @@ describe("web deployment hard gates", () => {
     expect(resolve).toContain("MANIFEST_SERVICE=web");
     expect(dev).toContain("build_run_id:");
     expect(dev).not.toContain("docker build");
+  });
+
+  test("keeps manual deployment inputs and exposes the reusable single-service interface", () => {
+    const call = sliceSection(dev, "  workflow_call:", "  workflow_dispatch:");
+    const dispatch = sliceSection(dev, "  workflow_dispatch:", "permissions:");
+
+    for (const input of ["service", "commit_sha", "build_run_id", "expected_build_event"]) {
+      const section = inputSection(call, input);
+      expect(section).toContain("required: true");
+      expect(section).toContain("type: string");
+    }
+    const inlineReceipt = inputSection(call, "gate_receipt_b64");
+    expect(inlineReceipt).toContain("required: false");
+    expect(inlineReceipt).toContain("type: string");
+    expect(inlineReceipt).toContain('default: ""');
+    expect(call).not.toContain("gate_run_id:");
+
+    const service = inputSection(dispatch, "service");
+    expect(service).toContain("required: true");
+    expect(service).toContain("type: choice");
+    expect(service).toContain("options: [api, admin, web, social-video-worker, cos-reconcile-worker]");
+    for (const input of ["commit_sha", "build_run_id"]) {
+      const section = inputSection(dispatch, input);
+      expect(section).toContain("required: true");
+      expect(section).toContain("type: string");
+    }
+    const gateRun = inputSection(dispatch, "gate_run_id");
+    expect(gateRun).toContain("required: false");
+    expect(gateRun).toContain("type: string");
+  });
+
+  test("binds build evidence to an allowed event and the exact caller workflow run", () => {
+    const evidence = sliceStep(
+      dev,
+      "Validate immutable build evidence",
+      "Validate gated dev web deployment",
+    );
+
+    expect(dev).toContain(
+      "EXPECTED_BUILD_EVENT: ${{ github.event_name == 'workflow_dispatch' && 'workflow_dispatch' || inputs.expected_build_event }}",
+    );
+    expect(dev).toContain("INLINE_GATE_RECEIPT_B64: ${{ inputs.gate_receipt_b64 }}");
+    expect(evidence).toContain('[[ "${INPUT_BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
+    expect(evidence).toContain(
+      'current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"',
+    );
+    expect(evidence).toMatch(/case "\$\{EXPECTED_BUILD_EVENT\}" in[\s\S]*push\|workflow_dispatch/);
+    expect(evidence).toContain('test "${GITHUB_EVENT_NAME}" = workflow_run');
+    expect(evidence).toContain(
+      'test "$(jq -r \'.path\' <<< "${current_run_json}")" = ".github/workflows/auto-deploy-dev.yml"',
+    );
+    expect(evidence).toContain(
+      'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_run',
+    );
+    expect(evidence).toContain('test "${GITHUB_EVENT_NAME}" = workflow_dispatch');
+    expect(evidence).toContain(
+      'test "$(jq -r \'.path\' <<< "${current_run_json}")" = ".github/workflows/deploy-dev.yml"',
+    );
+    expect(evidence).toContain(
+      'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_dispatch',
+    );
+    expect(evidence).toContain('test -z "${INLINE_GATE_RECEIPT_B64}"');
+    expect(evidence).toContain(
+      'test "$(jq -r \'.path\' <<< "${run_json}")" = ".github/workflows/build-docker-images.yml"',
+    );
+    expect(evidence).toContain(
+      'test "$(jq -r \'.event\' <<< "${run_json}")" = "${EXPECTED_BUILD_EVENT}"',
+    );
+    expect(evidence).toContain('test "$(jq -r \'.conclusion\' <<< "${run_json}")" = "success"');
+    expect(evidence).toContain(
+      'test "$(jq -r \'.head_sha\' <<< "${run_json}")" = "${SOURCE_SHA}"',
+    );
+    expect(evidence).not.toContain("github.workflow_ref");
   });
 
   test("requires exact dev evidence before the dedicated web deploy step", () => {
@@ -50,6 +153,48 @@ describe("web deployment hard gates", () => {
     expect(gate).toContain('test "${INPUT_SERVICE}" = "web"');
     expect(deploy).toContain("gooes-web-dev");
     expect(dev.indexOf("Validate gated dev web deployment")).toBeLessThan(dev.indexOf("Deploy gated dev web"));
+  });
+
+  test("accepts exactly one manual or automatic Web gate receipt source", () => {
+    const gate = sliceStep(dev, "Validate gated dev web deployment", "Sync compose files");
+
+    expect(gate).toContain("INLINE_GATE_RECEIPT_B64: ${{ inputs.gate_receipt_b64 }}");
+    expect(gate).toContain('if [ -n "${INLINE_GATE_RECEIPT_B64}" ]; then');
+    expect(gate).toContain('test "${EXPECTED_BUILD_EVENT}" = push');
+    expect(gate).toContain('test "${GITHUB_EVENT_NAME}" = workflow_run');
+    expect(gate).toContain('test -z "${INPUT_GATE_RUN_ID}"');
+    expect(gate).toContain(
+      "printf '%s' \"${INLINE_GATE_RECEIPT_B64}\" | base64 -d > \"${receipt_file}\"",
+    );
+    expect(gate).toContain('test "${EXPECTED_BUILD_EVENT}" = workflow_dispatch');
+    expect(gate).toContain('test "${GITHUB_EVENT_NAME}" = workflow_dispatch');
+    expect(gate).toContain('test -z "${INLINE_GATE_RECEIPT_B64}"');
+    expect(gate).toContain('[[ "${INPUT_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
+    expect(gate).toContain("verify-dev-web-deployment-gate.yml");
+    expect(gate).toContain('test "$(jq -r \'.conclusion\' <<< "${run_json}")" = "success"');
+    expect(gate).toContain('test "$(jq -r \'.head_sha\' <<< "${run_json}")" = "${SOURCE_SHA}"');
+    expect(gate).toContain("gh run download");
+    expect(gate).toContain("-n web-deployment-gate-receipt");
+    expect(gate).toContain(
+      'node scripts/verify-web-gate-receipt.mjs \\\n            "${receipt_file}" development "${SOURCE_SHA}" 20260711120000',
+    );
+    expect(gate).not.toMatch(/echo[^\n]*(?:INLINE_GATE_RECEIPT_B64|receipt_file)/);
+    expect(gate).not.toMatch(/cat\s+[^\n]*receipt/);
+    expect(dev.indexOf("verify-web-gate-receipt.mjs")).toBeLessThan(dev.indexOf("docker compose"));
+  });
+
+  test("does not require Web gate evidence for non-Web services", () => {
+    const gate = namedStep(dev, "Validate gated dev web deployment");
+    expect(gate).toContain("if: ${{ inputs.service == 'web' }}");
+    expect(namedStep(dev, "Deploy dev services")).toContain(
+      "if: ${{ inputs.service != 'web' }}",
+    );
+  });
+
+  test("never interpolates deployment inputs directly into shell", () => {
+    for (const block of runBlocks(dev)) {
+      expect(block).not.toMatch(/\$\{\{\s*(?:github\.event\.)?inputs\./);
+    }
   });
 
   test("keeps manual inputs while exposing a reusable development web gate receipt", () => {
