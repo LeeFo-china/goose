@@ -9,44 +9,73 @@ const workflow = readFileSync(
 const deployStepStart = workflow.indexOf("- name: Deploy dev services");
 const checkStepStart = workflow.indexOf("- name: Check dev services");
 const deployStep = workflow.slice(deployStepStart, checkStepStart);
+const gateStepStart = workflow.indexOf("- name: Validate gated dev web deployment");
 const gatedDeployStepStart = workflow.indexOf("- name: Deploy gated dev web");
 const gatedCheckStepStart = workflow.indexOf("- name: Check gated dev web");
 const gatedDeployStep = workflow.slice(gatedDeployStepStart, gatedCheckStepStart);
+const gateReceiptVerificationStart = workflow.indexOf(
+  "node scripts/verify-web-gate-receipt.mjs",
+  gateStepStart,
+);
+const gatedComposePullStart = workflow.indexOf(
+  "docker compose -f docker-compose.web-dev.yml pull gooes-web-dev",
+  gatedDeployStepStart,
+);
 
 describe("deploy-dev workflow", () => {
-  test("passes the just-built CCR images to remote docker compose", () => {
+  test("deploys immutable non-Web images with local docker compose", () => {
     expect(deployStepStart).toBeGreaterThanOrEqual(0);
     expect(checkStepStart).toBeGreaterThan(deployStepStart);
 
-    expect(deployStep).toContain('CCR_NAMESPACE="${{ vars.TENCENT_CCR_NAMESPACE }}"');
     expect(deployStep).toContain(
-      'REMOTE_GOOES_API_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-api:${IMAGE_TAG}"',
+      'image_base="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}"',
     );
+    expect(deployStep).toContain('export GOOES_API_IMAGE="${image_base}/goose-api:${SOURCE_SHA}"');
     expect(deployStep).toContain(
-      'REMOTE_GOOES_ADMIN_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-admin:${IMAGE_TAG}"',
+      'export GOOES_ADMIN_IMAGE="${image_base}/goose-admin:${SOURCE_SHA}"',
     );
+    expect(deployStep).toContain('export GOOES_WEB_IMAGE="${image_base}/goose-web:${SOURCE_SHA}"');
     expect(deployStep).toContain(
-      'REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-social-video-worker:${IMAGE_TAG}"',
+      'export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${image_base}/goose-social-video-worker:${SOURCE_SHA}"',
     );
-
-    expect(deployStep.match(/GOOES_API_IMAGE='\$\{REMOTE_GOOES_API_IMAGE\}'/g)).toHaveLength(2);
-    expect(deployStep.match(/GOOES_ADMIN_IMAGE='\$\{REMOTE_GOOES_ADMIN_IMAGE\}'/g)).toHaveLength(2);
+    expect(deployStep).toContain("api) compose_service=gooes-api-dev ;;");
+    expect(deployStep).toContain("admin) compose_service=gooes-admin-dev ;;");
+    expect(deployStep).toContain(
+      "social-video-worker) compose_service=gooes-social-video-worker-dev ;;",
+    );
     expect(
-      deployStep.match(
-        /GOOES_SOCIAL_VIDEO_WORKER_IMAGE='\$\{REMOTE_GOOES_SOCIAL_VIDEO_WORKER_IMAGE\}'/g,
-      ),
-    ).toHaveLength(2);
-    expect(deployStep).not.toContain("REMOTE_GOOES_WEB_IMAGE");
+      deployStep,
+    ).toContain("cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev ;;");
+    expect(deployStep).toContain('cd "${DEV_DEPLOY_DIR}"');
+    expect(deployStep).toContain(
+      'docker compose -f docker-compose.dev.yml --profile workers pull "${compose_service}"',
+    );
+    expect(deployStep).toContain(
+      'docker compose -f docker-compose.dev.yml --profile workers up -d --no-deps --force-recreate "${compose_service}"',
+    );
+    expect(deployStep).not.toContain("REMOTE_GOOES_");
   });
 
-  test("passes the web image only after the dedicated manual gate", () => {
+  test("deploys the immutable Web image locally only after its gate", () => {
+    expect(gateStepStart).toBeGreaterThanOrEqual(0);
     expect(gatedDeployStepStart).toBeGreaterThan(checkStepStart);
+    expect(gatedDeployStepStart).toBeGreaterThan(gateStepStart);
     expect(gatedCheckStepStart).toBeGreaterThan(gatedDeployStepStart);
+    expect(gatedDeployStep).toContain("if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}");
+    expect(gateReceiptVerificationStart).toBeGreaterThan(gateStepStart);
+    expect(gateReceiptVerificationStart).toBeLessThan(gatedComposePullStart);
+    expect(gatedComposePullStart).toBeGreaterThan(gatedDeployStepStart);
     expect(gatedDeployStep).toContain(
-      'REMOTE_GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${CCR_NAMESPACE}/goose-web:${GITHUB_SHA}"',
+      'export GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/goose-web:${SOURCE_SHA}"',
     );
-    expect(
-      gatedDeployStep.match(/GOOES_WEB_IMAGE='\$\{REMOTE_GOOES_WEB_IMAGE\}'/g),
-    ).toHaveLength(2);
+    expect(gatedDeployStep).toContain('cd "${DEV_DEPLOY_DIR}"');
+    expect(gatedDeployStep).toContain(
+      "docker compose -f docker-compose.web-dev.yml pull gooes-web-dev",
+    );
+    expect(gatedDeployStep).toContain(
+      "docker compose -f docker-compose.web-dev.yml up -d --no-deps --force-recreate gooes-web-dev",
+    );
+    expect(gatedDeployStep).not.toContain("REMOTE_GOOES_WEB_IMAGE");
+    expect(gatedDeployStep).not.toContain("${GITHUB_SHA}");
   });
 });
