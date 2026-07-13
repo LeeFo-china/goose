@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 const repositoryRoot = new URL("../../../", import.meta.url);
@@ -6,6 +6,13 @@ const workflow = readFileSync(
   new URL(".github/workflows/build-docker-images.yml", repositoryRoot),
   "utf8",
 );
+const autoDeployWorkflowUrl = new URL(
+  ".github/workflows/auto-deploy-dev.yml",
+  repositoryRoot,
+);
+const autoDeployWorkflow = existsSync(autoDeployWorkflowUrl)
+  ? readFileSync(autoDeployWorkflowUrl, "utf8")
+  : "";
 
 const sliceBetween = (startMarker: string, endMarker: string): string => {
   const start = workflow.indexOf(startMarker);
@@ -155,5 +162,130 @@ describe("automatic development image build contract", () => {
     expect(workflow).not.toContain("gooes-prod-deploy");
     expect(workflow).not.toContain("gooes-prod-vm-0-3");
     expect(workflow).not.toContain("uses: ./.github/workflows/deploy-docker-services.yml");
+  });
+});
+
+describe("automatic development deployment orchestration contract", () => {
+  test("runs only after a completed main push image build", () => {
+    expect(existsSync(autoDeployWorkflowUrl)).toBe(true);
+    expect(autoDeployWorkflow).toMatch(
+      /workflow_run:\s*\n\s+workflows:\s*\[Build Docker Images\]\s*\n\s+types:\s*\[completed\]\s*\n\s+branches:\s*\[main\]/,
+    );
+    expect(autoDeployWorkflow).toContain(
+      "github.event.workflow_run.conclusion == 'success'",
+    );
+    expect(autoDeployWorkflow).toContain(
+      "github.event.workflow_run.event == 'push'",
+    );
+    expect(autoDeployWorkflow).toContain(
+      "github.event.workflow_run.head_branch == 'main'",
+    );
+    expect(autoDeployWorkflow).toContain("group: auto-deploy-development");
+    expect(autoDeployWorkflow).toContain("cancel-in-progress: false");
+  });
+
+  test("downloads and strictly binds the upstream development build plan", () => {
+    expect(autoDeployWorkflow).toContain("permissions:");
+    expect(autoDeployWorkflow).toContain("contents: read");
+    expect(autoDeployWorkflow).toContain("actions: read");
+    expect(autoDeployWorkflow).toContain("github.event.workflow_run.id");
+    expect(autoDeployWorkflow).toContain("github.event.workflow_run.head_sha");
+    expect(autoDeployWorkflow).toContain('gh run download "${UPSTREAM_RUN_ID}"');
+    expect(autoDeployWorkflow).toContain("-n dev-build-plan");
+    expect(autoDeployWorkflow).toContain("scripts/verify-dev-build-plan.mjs");
+    expect(autoDeployWorkflow).toContain(
+      'build-plan.json "${UPSTREAM_SHA}" "${UPSTREAM_RUN_ID}"',
+    );
+
+    for (const output of [
+      "commit_sha",
+      "build_run_id",
+      "no_op",
+      "has_api",
+      "has_web",
+      "has_rest",
+      "rest_matrix",
+    ]) {
+      expect(autoDeployWorkflow).toContain(`${output}:`);
+      expect(autoDeployWorkflow).toContain(`${output}=`);
+    }
+  });
+
+  test("runs the read-only migration gate before any deployment", () => {
+    const migration = autoDeployWorkflow.indexOf("  migration:");
+    const firstDeploy = autoDeployWorkflow.indexOf(
+      "uses: ./.github/workflows/deploy-dev.yml",
+    );
+
+    expect(migration).toBeGreaterThanOrEqual(0);
+    expect(firstDeploy).toBeGreaterThan(migration);
+    expect(autoDeployWorkflow).toContain(
+      "uses: ./.github/workflows/verify-dev-migration-history.yml",
+    );
+    expect(autoDeployWorkflow).toContain(
+      "if: ${{ needs.authorize.outputs.no_op == 'false' }}",
+    );
+    expect(autoDeployWorkflow).toContain(
+      "artifact_name: auto-predeploy-migration-${{ needs.authorize.outputs.commit_sha }}",
+    );
+    expect(autoDeployWorkflow).toContain("  deploy-api:");
+    expect(autoDeployWorkflow).toContain("  api-ready:");
+    expect(autoDeployWorkflow).toContain("if: ${{ always()");
+    expect(autoDeployWorkflow).toContain('case "${MIGRATION_RESULT}" in');
+    expect(autoDeployWorkflow).toContain('case "${API_RESULT}" in');
+  });
+
+  test("serializes the remaining selected services behind the API barrier", () => {
+    expect(autoDeployWorkflow).toContain("  deploy-rest:");
+    expect(autoDeployWorkflow).toContain("needs: [authorize, api-ready]");
+    expect(autoDeployWorkflow).toContain(
+      "if: ${{ needs.authorize.outputs.has_rest == 'true'",
+    );
+    expect(autoDeployWorkflow).toContain("max-parallel: 1");
+    expect(autoDeployWorkflow).toContain(
+      "matrix: ${{ fromJSON(needs.authorize.outputs.rest_matrix) }}",
+    );
+    expect(autoDeployWorkflow).toContain("service: ${{ matrix.service }}");
+    expect(autoDeployWorkflow).toContain("  rest-ready:");
+    expect(autoDeployWorkflow).toContain('case "${REST_RESULT}" in');
+  });
+
+  test("gates Web after all barriers and passes its inline receipt to deployment", () => {
+    expect(autoDeployWorkflow).toContain("  web-gate:");
+    expect(autoDeployWorkflow).toContain(
+      "needs: [authorize, api-ready, rest-ready]",
+    );
+    expect(autoDeployWorkflow).toContain(
+      "uses: ./.github/workflows/verify-dev-web-deployment-gate.yml",
+    );
+    expect(autoDeployWorkflow).toContain("  deploy-web:");
+    expect(autoDeployWorkflow).toContain("needs: [authorize, web-gate]");
+    expect(autoDeployWorkflow).toContain("service: web");
+    expect(autoDeployWorkflow).toContain("expected_build_event: push");
+    expect(autoDeployWorkflow).toContain(
+      "gate_receipt_b64: ${{ needs.web-gate.outputs.receipt_b64 }}",
+    );
+  });
+
+  test("reports results without converting upstream failures into success", () => {
+    const summary = autoDeployWorkflow.slice(
+      autoDeployWorkflow.indexOf("  summary:"),
+    );
+
+    expect(summary).toContain("if: ${{ always()");
+    expect(summary).toContain("GITHUB_STEP_SUMMARY");
+    expect(summary).toContain("needs.migration.result");
+    expect(summary).toContain("needs.deploy-api.result");
+    expect(summary).toContain("needs.api-ready.result");
+    expect(summary).toContain("needs.deploy-rest.result");
+    expect(summary).toContain("needs.rest-ready.result");
+    expect(summary).toContain("needs.deploy-web.result");
+    expect(summary).not.toContain("exit 0");
+  });
+
+  test("does not interpolate caller inputs directly into shell blocks", () => {
+    for (const block of autoDeployWorkflow.matchAll(/run:\s*\|([\s\S]*?)(?=\n\s+- |\n\s{2}\w|$)/g)) {
+      expect(block[1] ?? "").not.toMatch(/\$\{\{\s*(?:github\.event\.)?inputs\./);
+    }
   });
 });

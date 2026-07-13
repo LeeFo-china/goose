@@ -53,6 +53,23 @@ describe("CI environment isolation", () => {
     }
   });
 
+  test("keeps automatic development orchestration isolated from production", () => {
+    expect(existsSync(workflowPath("auto-deploy-dev.yml"))).toBe(true);
+    const workflow = existsSync(workflowPath("auto-deploy-dev.yml"))
+      ? readWorkflow("auto-deploy-dev.yml")
+      : "";
+    const commands = runBlocks(workflow).join("\n");
+
+    expect(workflow).not.toContain("environment: production");
+    expect(workflow).not.toContain("gooes-prod-deploy");
+    expect(workflow).not.toContain("gooes-prod-vm-0-3");
+    expect(workflow).not.toContain("1.13.20.39");
+    expect(workflow).not.toContain("/opt/supabase/docker");
+    expect(commands).not.toMatch(/supabase\s+db\s+push/);
+    expect(commands).not.toMatch(/supabase(?:@\S+)?\s+migration\s+(?:up|repair)/);
+    expect(commands).not.toMatch(/docker (?:container|image|builder|system) prune/);
+  });
+
   test("keeps the reusable development migration gate read-only and immutable", () => {
     const workflow = readWorkflow("verify-dev-migration-history.yml");
     const commands = runBlocks(workflow).join("\n");

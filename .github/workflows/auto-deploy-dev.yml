@@ -1,0 +1,248 @@
+name: Auto Deploy Dev
+run-name: Auto dev deploy ${{ github.event.workflow_run.head_sha }}
+
+on:
+  workflow_run:
+    workflows: [Build Docker Images]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: auto-deploy-development
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    name: Authorize automatic development deployment
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      commit_sha: ${{ steps.plan.outputs.commit_sha }}
+      build_run_id: ${{ steps.plan.outputs.build_run_id }}
+      no_op: ${{ steps.plan.outputs.no_op }}
+      has_api: ${{ steps.plan.outputs.has_api }}
+      has_web: ${{ steps.plan.outputs.has_web }}
+      has_rest: ${{ steps.plan.outputs.has_rest }}
+      rest_matrix: ${{ steps.plan.outputs.rest_matrix }}
+    steps:
+      - name: Checkout verified source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          clean: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Download and verify development build plan
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+          UPSTREAM_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "${UPSTREAM_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+          [[ "${UPSTREAM_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${UPSTREAM_SHA}"
+
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${UPSTREAM_RUN_ID}")"
+          test "$(jq -r '.path' <<< "${run_json}")" = ".github/workflows/build-docker-images.yml"
+          test "$(jq -r '.event' <<< "${run_json}")" = push
+          test "$(jq -r '.conclusion' <<< "${run_json}")" = success
+          test "$(jq -r '.head_branch' <<< "${run_json}")" = main
+          test "$(jq -r '.head_sha' <<< "${run_json}")" = "${UPSTREAM_SHA}"
+
+          plan_dir="${RUNNER_TEMP}/dev-build-plan-${UPSTREAM_RUN_ID}"
+          rm -rf "${plan_dir}"
+          mkdir -p "${plan_dir}"
+          gh run download "${UPSTREAM_RUN_ID}" -n dev-build-plan -D "${plan_dir}"
+          cd "${plan_dir}"
+          test -f build-plan.json
+          node "${GITHUB_WORKSPACE}/scripts/verify-dev-build-plan.mjs" build-plan.json "${UPSTREAM_SHA}" "${UPSTREAM_RUN_ID}" > verified-build-plan.json
+
+          commit_sha="$(jq -r '.commit_sha' verified-build-plan.json)"
+          no_op="$(jq -r '.no_op' verified-build-plan.json)"
+          has_api="$(jq -r '.deploy_services | index("api") != null' verified-build-plan.json)"
+          has_web="$(jq -r '.deploy_services | index("web") != null' verified-build-plan.json)"
+          rest_matrix="$(jq -c '{service: [.deploy_services[] | select(. != "api" and . != "web")]}' verified-build-plan.json)"
+          has_rest="$(jq -r '[.deploy_services[] | select(. != "api" and . != "web")] | length > 0' verified-build-plan.json)"
+
+          printf 'commit_sha=%s\n' "${commit_sha}" >> "${GITHUB_OUTPUT}"
+          printf 'build_run_id=%s\n' "${UPSTREAM_RUN_ID}" >> "${GITHUB_OUTPUT}"
+          printf 'no_op=%s\n' "${no_op}" >> "${GITHUB_OUTPUT}"
+          printf 'has_api=%s\n' "${has_api}" >> "${GITHUB_OUTPUT}"
+          printf 'has_web=%s\n' "${has_web}" >> "${GITHUB_OUTPUT}"
+          printf 'has_rest=%s\n' "${has_rest}" >> "${GITHUB_OUTPUT}"
+          printf 'rest_matrix=%s\n' "${rest_matrix}" >> "${GITHUB_OUTPUT}"
+
+  migration:
+    name: Verify development migration history
+    needs: authorize
+    if: ${{ needs.authorize.outputs.no_op == 'false' }}
+    uses: ./.github/workflows/verify-dev-migration-history.yml
+    with:
+      commit_sha: ${{ needs.authorize.outputs.commit_sha }}
+      migration_version: "20260711120000"
+      artifact_name: auto-predeploy-migration-${{ needs.authorize.outputs.commit_sha }}
+    secrets: inherit
+
+  deploy-api:
+    name: Deploy API
+    needs: [authorize, migration]
+    if: ${{ needs.authorize.outputs.has_api == 'true' && needs.migration.result == 'success' }}
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      service: api
+      commit_sha: ${{ needs.authorize.outputs.commit_sha }}
+      build_run_id: ${{ needs.authorize.outputs.build_run_id }}
+      expected_build_event: push
+    secrets: inherit
+
+  api-ready:
+    name: Require migration and API readiness
+    needs: [authorize, migration, deploy-api]
+    if: ${{ always() && needs.authorize.result == 'success' }}
+    runs-on: ubuntu-24.04
+    env:
+      NO_OP: ${{ needs.authorize.outputs.no_op }}
+      HAS_API: ${{ needs.authorize.outputs.has_api }}
+      MIGRATION_RESULT: ${{ needs.migration.result }}
+      API_RESULT: ${{ needs.deploy-api.result }}
+    steps:
+      - name: Propagate migration and API results
+        run: |
+          set -euo pipefail
+          case "${MIGRATION_RESULT}" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
+          case "${API_RESULT}" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
+          if [ "${NO_OP}" = false ]; then
+            test "${MIGRATION_RESULT}" = success
+          fi
+          if [ "${HAS_API}" = true ]; then
+            test "${API_RESULT}" = success
+          fi
+
+  deploy-rest:
+    name: Deploy ${{ matrix.service }}
+    needs: [authorize, api-ready]
+    if: ${{ needs.authorize.outputs.has_rest == 'true' && needs.api-ready.result == 'success' }}
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.authorize.outputs.rest_matrix) }}
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      service: ${{ matrix.service }}
+      commit_sha: ${{ needs.authorize.outputs.commit_sha }}
+      build_run_id: ${{ needs.authorize.outputs.build_run_id }}
+      expected_build_event: push
+    secrets: inherit
+
+  rest-ready:
+    name: Require remaining services readiness
+    needs: [authorize, api-ready, deploy-rest]
+    if: ${{ always() && needs.authorize.result == 'success' }}
+    runs-on: ubuntu-24.04
+    env:
+      HAS_REST: ${{ needs.authorize.outputs.has_rest }}
+      API_READY_RESULT: ${{ needs.api-ready.result }}
+      REST_RESULT: ${{ needs.deploy-rest.result }}
+    steps:
+      - name: Propagate remaining service results
+        run: |
+          set -euo pipefail
+          test "${API_READY_RESULT}" = success
+          case "${REST_RESULT}" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
+          if [ "${HAS_REST}" = true ]; then
+            test "${REST_RESULT}" = success
+          fi
+
+  web-gate:
+    name: Verify development Web gate
+    needs: [authorize, api-ready, rest-ready]
+    if: ${{ needs.authorize.outputs.has_web == 'true' }}
+    uses: ./.github/workflows/verify-dev-web-deployment-gate.yml
+    with:
+      commit_sha: ${{ needs.authorize.outputs.commit_sha }}
+      migration_version: "20260711120000"
+    secrets: inherit
+
+  deploy-web:
+    name: Deploy Web
+    needs: [authorize, web-gate]
+    if: ${{ needs.authorize.outputs.has_web == 'true' }}
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      service: web
+      commit_sha: ${{ needs.authorize.outputs.commit_sha }}
+      build_run_id: ${{ needs.authorize.outputs.build_run_id }}
+      expected_build_event: push
+      gate_receipt_b64: ${{ needs.web-gate.outputs.receipt_b64 }}
+    secrets: inherit
+
+  summary:
+    name: Summarize automatic development deployment
+    needs:
+      - authorize
+      - migration
+      - deploy-api
+      - api-ready
+      - deploy-rest
+      - rest-ready
+      - web-gate
+      - deploy-web
+    if: ${{ always() && needs.authorize.result != 'skipped' }}
+    runs-on: ubuntu-24.04
+    env:
+      COMMIT_SHA: ${{ needs.authorize.outputs.commit_sha }}
+      BUILD_RUN_ID: ${{ needs.authorize.outputs.build_run_id }}
+      NO_OP: ${{ needs.authorize.outputs.no_op }}
+      HAS_API: ${{ needs.authorize.outputs.has_api }}
+      HAS_WEB: ${{ needs.authorize.outputs.has_web }}
+      HAS_REST: ${{ needs.authorize.outputs.has_rest }}
+      AUTHORIZE_RESULT: ${{ needs.authorize.result }}
+      MIGRATION_RESULT: ${{ needs.migration.result }}
+      API_RESULT: ${{ needs.deploy-api.result }}
+      API_READY_RESULT: ${{ needs.api-ready.result }}
+      REST_RESULT: ${{ needs.deploy-rest.result }}
+      REST_READY_RESULT: ${{ needs.rest-ready.result }}
+      WEB_GATE_RESULT: ${{ needs.web-gate.result }}
+      WEB_RESULT: ${{ needs.deploy-web.result }}
+    steps:
+      - name: Write deployment summary
+        run: |
+          set -euo pipefail
+          {
+            echo "## Automatic development deployment"
+            echo ""
+            echo "- Commit: \`${COMMIT_SHA}\`"
+            echo "- Build run: \`${BUILD_RUN_ID}\`"
+            echo "- No-op: \`${NO_OP}\`"
+            echo "- Services: API=\`${HAS_API}\`, rest=\`${HAS_REST}\`, Web=\`${HAS_WEB}\`"
+            echo "- Authorization: \`${AUTHORIZE_RESULT}\`"
+            echo "- Migration: \`${MIGRATION_RESULT}\`"
+            echo "- API: \`${API_RESULT}\`"
+            echo "- API barrier: \`${API_READY_RESULT}\`"
+            echo "- Remaining services: \`${REST_RESULT}\`"
+            echo "- Remaining services barrier: \`${REST_READY_RESULT}\`"
+            echo "- Web gate: \`${WEB_GATE_RESULT}\`"
+            echo "- Web: \`${WEB_RESULT}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
