@@ -183,6 +183,7 @@ jobs:
 
   build:
     needs: validate-request
+    if: ${{ needs.validate-request.outputs.no_op != 'true' }}
     name: Build ${{ matrix.service }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45

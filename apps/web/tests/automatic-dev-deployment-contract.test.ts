@@ -110,8 +110,12 @@ describe("automatic development image build contract", () => {
 
   test("builds only selected services using the validated target environment", () => {
     const buildJob = workflow.slice(workflow.indexOf("  build:"));
+    const buildJobHeader = buildJob.slice(0, buildJob.indexOf("strategy:"));
     const matrix = buildJob.slice(buildJob.indexOf("matrix:"), buildJob.indexOf("steps:"));
 
+    expect(buildJobHeader).toContain(
+      "if: ${{ needs.validate-request.outputs.no_op != 'true' }}",
+    );
     expect(buildJob).toContain(
       "environment: ${{ needs.validate-request.outputs.target_environment }}",
     );
