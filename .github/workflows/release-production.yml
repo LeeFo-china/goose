@@ -1,0 +1,295 @@
+name: Release Production
+run-name: Production ${{ inputs.operation }} ${{ inputs.service }} candidate ${{ inputs.build_run_id || github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Build an immutable candidate or deploy an existing candidate"
+        required: true
+        type: choice
+        options: [build, deploy]
+      service:
+        description: "Admin release service(s); use all or a comma-separated list"
+        required: true
+        type: string
+      build_run_id:
+        description: "Successful candidate build run ID; required for deploy"
+        required: false
+        default: ""
+        type: string
+      commit_sha:
+        description: "Candidate commit SHA; required for deploy"
+        required: false
+        default: ""
+        type: string
+      confirm_text:
+        description: "Build: 确认构建生产候选; deploy: 确认部署生产环境"
+        required: true
+        type: string
+      reason:
+        description: "Optional operator reason"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-release-${{ inputs.operation == 'build' && format('tag-{0}', github.ref_name) || format('candidate-{0}', inputs.build_run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-build:
+    name: Authorize production candidate build
+    if: ${{ inputs.operation == 'build' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      requested_services: ${{ steps.plan.outputs.requested_services }}
+      build_services: ${{ steps.plan.outputs.build_services }}
+    steps:
+      - name: Checkout selected release Tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Resolve trusted production build plan
+        id: plan
+        env:
+          CONFIRM_TEXT: ${{ inputs.confirm_text }}
+          REQUESTED_SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_TYPE}" = tag
+          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]]
+          test "${CONFIRM_TEXT}" = "确认构建生产候选"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+          requested_services="$(node scripts/resolve-admin-release-services.mjs requested "${REQUESTED_SERVICE}")"
+          build_services="$(node scripts/resolve-admin-release-services.mjs build "${REQUESTED_SERVICE}")"
+          test -n "${requested_services}"
+          test -n "${build_services}"
+          printf 'requested_services=%s\n' "${requested_services}" >> "${GITHUB_OUTPUT}"
+          printf 'build_services=%s\n' "${build_services}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: Build immutable production images
+    needs: prepare-build
+    if: ${{ needs.prepare-build.result == 'success' }}
+    uses: ./.github/workflows/build-docker-images.yml
+    with:
+      target_environment: production
+      service: ${{ needs.prepare-build.outputs.requested_services }}
+    secrets: inherit
+
+  candidate:
+    name: Publish verified production release candidate
+    needs: [prepare-build, build]
+    if: ${{ needs.prepare-build.result == 'success' && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout candidate verifier
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Download immutable production build evidence
+        env:
+          BUILD_SERVICES: ${{ needs.prepare-build.outputs.build_services }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          evidence_dir="${RUNNER_TEMP}/production-candidate-${GITHUB_RUN_ID}"
+          rm -rf "${evidence_dir}"
+          mkdir -p "${evidence_dir}"
+          gh run download "${GITHUB_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          for service in ${BUILD_SERVICES//,/ }; do
+            gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+            test -s "${evidence_dir}/image-manifest-${service}.json"
+          done
+          test -s "${evidence_dir}/build-plan.json"
+          echo "EVIDENCE_DIR=${evidence_dir}" >> "${GITHUB_ENV}"
+
+      - name: Create and verify immutable production candidate
+        env:
+          BUILD_SERVICES: ${{ needs.prepare-build.outputs.build_services }}
+          REQUESTED_SERVICES: ${{ needs.prepare-build.outputs.requested_services }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --argjson build_run_id "${GITHUB_RUN_ID}" \
+            --arg tag "${GITHUB_REF_NAME}" \
+            --arg commit_sha "${GITHUB_SHA}" \
+            --arg requested_services "${REQUESTED_SERVICES}" \
+            --arg build_services "${BUILD_SERVICES}" \
+            '{
+              schema_version: 1,
+              build_run_id: $build_run_id,
+              tag: $tag,
+              commit_sha: $commit_sha,
+              requested_services: ($requested_services | split(",")),
+              build_services: ($build_services | split(",")),
+              target_environment: "production",
+              build_plan_artifact: "production-build-plan"
+            }' > production-release-candidate.json
+          node scripts/verify-production-release-candidate.mjs \
+            production-release-candidate.json \
+            "${EVIDENCE_DIR}/build-plan.json" \
+            "${EVIDENCE_DIR}" \
+            "${GITHUB_RUN_ID}" \
+            "${GITHUB_SHA}" \
+            "${REQUESTED_SERVICES}" \
+            > verified-production-release-candidate.json
+          mv verified-production-release-candidate.json production-release-candidate.json
+          test "$(jq -r '.tag' production-release-candidate.json)" = "${GITHUB_REF_NAME}"
+
+      - name: Upload verified production release candidate
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-release-candidate
+          path: production-release-candidate.json
+          if-no-files-found: error
+          retention-days: 30
+
+  authorize-deploy:
+    name: Authorize evidence-bound production deployment
+    if: ${{ inputs.operation == 'deploy' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      requested_services: ${{ steps.authorize.outputs.requested_services }}
+    steps:
+      - name: Checkout candidate verifier
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Revalidate candidate and reject duplicate deployment
+        id: authorize
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+          CONFIRM_TEXT: ${{ inputs.confirm_text }}
+          REQUESTED_SERVICE: ${{ inputs.service }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_TYPE}" = tag
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]]
+          test "${CONFIRM_TEXT}" = "确认部署生产环境"
+          [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+          [[ "${COMMIT_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          test "${GITHUB_SHA}" = "${COMMIT_SHA}"
+
+          requested_services="$(node scripts/resolve-admin-release-services.mjs requested "${REQUESTED_SERVICE}")"
+          build_services="$(node scripts/resolve-admin-release-services.mjs build "${REQUESTED_SERVICE}")"
+          test -n "${requested_services}"
+          test -n "${build_services}"
+
+          canonical_workflow_path() {
+            local run_json="$1"
+            local workflow_id workflow_json
+            workflow_id="$(jq -er '.workflow_id | select(type == "number" and . > 0 and (floor == .))' <<< "${run_json}")"
+            [[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]]
+            workflow_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}")"
+            jq -er '.path | select(type == "string" and length > 0)' <<< "${workflow_json}"
+          }
+
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID}")"
+          build_workflow_path="$(canonical_workflow_path "${run_json}")"
+          test "${build_workflow_path}" = ".github/workflows/release-production.yml"
+          test "$(jq -r ".event" <<< "${run_json}")" = workflow_dispatch
+          test "$(jq -r ".conclusion" <<< "${run_json}")" = success
+          test "$(jq -r ".head_sha" <<< "${run_json}")" = "${COMMIT_SHA}"
+
+          evidence_dir="${RUNNER_TEMP}/production-deploy-${BUILD_RUN_ID}"
+          rm -rf "${evidence_dir}"
+          mkdir -p "${evidence_dir}"
+          gh run download "${BUILD_RUN_ID}" -n production-release-candidate -D "${evidence_dir}"
+          gh run download "${BUILD_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          for service in ${build_services//,/ }; do
+            gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+            test -s "${evidence_dir}/image-manifest-${service}.json"
+          done
+          node scripts/verify-production-release-candidate.mjs \
+            "${evidence_dir}/production-release-candidate.json" \
+            "${evidence_dir}/build-plan.json" \
+            "${evidence_dir}" \
+            "${BUILD_RUN_ID}" \
+            "${COMMIT_SHA}" \
+            "${requested_services}" \
+            > "${evidence_dir}/verified-candidate.json"
+          test "$(jq -r '.tag' "${evidence_dir}/verified-candidate.json")" = "${GITHUB_REF_NAME}"
+
+          receipt_name="production-deployment-receipt-${BUILD_RUN_ID}"
+          artifacts_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${receipt_name}&per_page=100")"
+          receipt_count="$(jq --arg name "${receipt_name}" '[.artifacts[] | select(.name == $name and .expired == false)] | length' <<< "${artifacts_json}")"
+          test "${receipt_count}" = 0
+          printf 'requested_services=%s\n' "${requested_services}" >> "${GITHUB_OUTPUT}"
+
+  deploy:
+    name: Deploy verified production candidate
+    needs: authorize-deploy
+    if: ${{ needs.authorize-deploy.result == 'success' }}
+    uses: ./.github/workflows/deploy-docker-services.yml
+    with:
+      service: ${{ needs.authorize-deploy.outputs.requested_services }}
+      built_image_sha: ${{ inputs.commit_sha }}
+      build_run_id: ${{ inputs.build_run_id }}
+      confirm_text: 确认部署生产环境
+    secrets: inherit
+
+  summary:
+    name: Production release summary
+    needs: [prepare-build, build, candidate, authorize-deploy, deploy]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    env:
+      OPERATION: ${{ inputs.operation }}
+      SERVICE: ${{ inputs.service }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      REASON: ${{ inputs.reason }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      CANDIDATE_RESULT: ${{ needs.candidate.result }}
+      DEPLOY_RESULT: ${{ needs.deploy.result }}
+    steps:
+      - name: Report candidate or deployment result
+        run: |
+          set -euo pipefail
+          {
+            echo "Operation: ${OPERATION}"
+            echo "Selected Tag: ${GITHUB_REF_NAME}"
+            echo "Commit SHA: ${GITHUB_SHA}"
+            echo "Requested service input: ${SERVICE}"
+            echo "Candidate build run: ${BUILD_RUN_ID:-${GITHUB_RUN_ID}}"
+            echo "Build: ${BUILD_RESULT}"
+            echo "Candidate: ${CANDIDATE_RESULT}"
+            echo "Deployment: ${DEPLOY_RESULT}"
+            echo "Reason: ${REASON:-not provided}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${OPERATION}" = build ]; then
+            test "${BUILD_RESULT}" = success
+            test "${CANDIDATE_RESULT}" = success
+          else
+            test "${DEPLOY_RESULT}" = success
+          fi

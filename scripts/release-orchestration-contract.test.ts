@@ -20,6 +20,17 @@ const releaseDevWorkflowUrl = new URL(
 const releaseDevWorkflow = existsSync(releaseDevWorkflowUrl)
   ? readFileSync(releaseDevWorkflowUrl, "utf8")
   : "";
+const releaseProductionWorkflowUrl = new URL(
+  "../.github/workflows/release-production.yml",
+  import.meta.url,
+);
+const releaseProductionWorkflow = existsSync(releaseProductionWorkflowUrl)
+  ? readFileSync(releaseProductionWorkflowUrl, "utf8")
+  : "";
+const deployProductionWorkflow = readFileSync(
+  new URL("../.github/workflows/deploy-docker-services.yml", import.meta.url),
+  "utf8",
+);
 
 const script = new URL("./resolve-admin-release-services.mjs", import.meta.url).pathname;
 
@@ -392,5 +403,181 @@ describe("development orchestrator", () => {
       "github.event.workflow_run.conclusion == 'success'",
     );
     expect(autoDeployDevWorkflow).toContain("github.event.workflow_run.event == 'push'");
+  });
+});
+
+describe("production orchestrator", () => {
+  test("separates candidate build and evidence-bound deployment", () => {
+    const triggerEnd = releaseProductionWorkflow.indexOf("permissions:");
+    const trigger = releaseProductionWorkflow.slice(0, triggerEnd);
+
+    expect(releaseProductionWorkflow).toContain("name: Release Production");
+    expect(releaseProductionWorkflow).toContain("options: [build, deploy]");
+    expect(trigger).toContain("workflow_dispatch:");
+    expect(trigger).not.toContain("workflow_call:");
+    expect(trigger).not.toContain("workflow_run:");
+    expect(trigger).not.toContain("\n  push:");
+    for (const [input, nextInput] of [
+      ["operation", "service"],
+      ["service", "build_run_id"],
+      ["confirm_text", "reason"],
+    ]) {
+      const start = trigger.indexOf(`      ${input}:`);
+      const end = trigger.indexOf(`      ${nextInput}:`, start + 1);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(start);
+      expect(trigger.slice(start, end)).toContain("required: true");
+    }
+    expect(releaseProductionWorkflow).toContain("contents: read");
+    expect(releaseProductionWorkflow).toContain("actions: read");
+    expect(releaseProductionWorkflow).toContain("target_environment: production");
+    expect(releaseProductionWorkflow).toContain("production-release-candidate");
+    expect(releaseProductionWorkflow).toContain("production-deployment-receipt-");
+    expect(releaseProductionWorkflow).toContain("verify-production-release-candidate.mjs");
+    expect(releaseProductionWorkflow).toContain("confirm_text:");
+    expect(releaseProductionWorkflow).toContain("cancel-in-progress: false");
+    expect(releaseProductionWorkflow).toContain("format('tag-{0}', github.ref_name)");
+    expect(releaseProductionWorkflow).toContain("format('candidate-{0}', inputs.build_run_id)");
+    expect(releaseProductionWorkflow).not.toContain("\n    environment: production");
+    expect(releaseProductionWorkflow).not.toContain("target_environment: development");
+    expect(releaseProductionWorkflow).not.toContain('"web"');
+  });
+
+  test("requires exact build and deploy authorization before reusable calls", () => {
+    const prepareBuild = sliceWorkflowJob(releaseProductionWorkflow, "prepare-build", "build");
+    const build = sliceWorkflowJob(releaseProductionWorkflow, "build", "candidate");
+    const authorize = sliceWorkflowJob(releaseProductionWorkflow, "authorize-deploy", "deploy");
+    const deploy = sliceWorkflowJob(releaseProductionWorkflow, "deploy", "summary");
+
+    expect(prepareBuild).toContain('test "${GITHUB_REF_TYPE}" = tag');
+    expect(prepareBuild).toContain('test "${CONFIRM_TEXT}" = "确认构建生产候选"');
+    expect(prepareBuild).toContain('[[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]');
+    expect(prepareBuild).toContain('^v[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}\\.[0-9]+$');
+    expect(prepareBuild).toContain("resolve-admin-release-services.mjs requested");
+    expect(prepareBuild).toContain("resolve-admin-release-services.mjs build");
+    expect(build).toContain("uses: ./.github/workflows/build-docker-images.yml");
+    expect(build).toContain("target_environment: production");
+    expect(build).toContain("service: ${{ needs.prepare-build.outputs.requested_services }}");
+
+    expect(authorize).toContain('test "${CONFIRM_TEXT}" = "确认部署生产环境"');
+    expect(authorize).toContain('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
+    expect(authorize).toContain('[[ "${COMMIT_SHA}" =~ ^[a-f0-9]{40}$ ]]');
+    expect(authorize).toContain('test "${GITHUB_SHA}" = "${COMMIT_SHA}"');
+    expect(deploy).toContain("uses: ./.github/workflows/deploy-docker-services.yml");
+    expect(deploy).toContain("service: ${{ needs.authorize-deploy.outputs.requested_services }}");
+    expect(deploy).toContain("build_run_id: ${{ inputs.build_run_id }}");
+    expect(deploy).toContain("built_image_sha: ${{ inputs.commit_sha }}");
+    expect(deploy).toContain("confirm_text: 确认部署生产环境");
+    expect(deploy).not.toContain("upload-artifact");
+  });
+
+  test("binds candidate and receipt evidence to the canonical workflow identity", () => {
+    const candidate = sliceWorkflowJob(releaseProductionWorkflow, "candidate", "authorize-deploy");
+    const authorize = sliceWorkflowJob(releaseProductionWorkflow, "authorize-deploy", "deploy");
+
+    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" -n production-build-plan');
+    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}"');
+    expect(candidate).toContain("verify-production-release-candidate.mjs");
+    expect(candidate).toContain("name: production-release-candidate");
+    expect(candidate.indexOf("verify-production-release-candidate.mjs")).toBeLessThan(
+      candidate.indexOf("name: production-release-candidate"),
+    );
+    expect(candidate.trimEnd()).toEndWith("retention-days: 30");
+
+    expect(authorize).toContain("canonical_workflow_path() {");
+    expect(authorize).toContain(
+      'gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}"',
+    );
+    expect(authorize).toContain(
+      'test "${build_workflow_path}" = ".github/workflows/release-production.yml"',
+    );
+    expect(authorize).not.toContain('.path | split("@")[0]');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n production-release-candidate');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n production-build-plan');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"');
+    expect(authorize).toContain("verify-production-release-candidate.mjs");
+    expect(authorize).toContain(
+      'test "$(jq -r ".event" <<< "${run_json}")" = workflow_dispatch',
+    );
+    expect(authorize).toContain(
+      'test "$(jq -r ".conclusion" <<< "${run_json}")" = success',
+    );
+    expect(authorize).toContain(
+      'test "$(jq -r ".head_sha" <<< "${run_json}")" = "${COMMIT_SHA}"',
+    );
+    expect(authorize).toContain('test "$(jq -r \'.tag\' "${evidence_dir}/verified-candidate.json")" = "${GITHUB_REF_NAME}"');
+    expect(authorize).toContain("production-deployment-receipt-${BUILD_RUN_ID}");
+    expect(authorize).toContain("expired == false");
+  });
+
+  test("revalidates candidate evidence inside the globally serialized production deploy", () => {
+    const evidenceStart = deployProductionWorkflow.indexOf("- name: Validate production release evidence");
+    const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
+    const receiptStart = deployProductionWorkflow.indexOf("- name: Upload production deployment receipt");
+    const containerHealthStart = deployProductionWorkflow.indexOf("- name: Check container health");
+    const healthStart = deployProductionWorkflow.indexOf("- name: Check public endpoints and pre-cutover Web loopback");
+
+    expect(deployProductionWorkflow).toContain("build_run_id:");
+    expect(deployProductionWorkflow).toContain("group: deploy-docker-services-main");
+    expect(deployProductionWorkflow).toContain("cancel-in-progress: false");
+    expect(evidenceStart).toBeGreaterThanOrEqual(0);
+    expect(dockerStart).toBeGreaterThan(evidenceStart);
+    expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
+      "verify-production-release-candidate.mjs",
+    );
+    expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
+      "production-deployment-receipt-",
+    );
+    expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
+      'gh run download "${BUILD_RUN_ID}" -n production-release-candidate',
+    );
+    expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
+      'gh run download "${BUILD_RUN_ID}" -n production-build-plan',
+    );
+    expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
+      'gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"',
+    );
+    for (const image of [
+      "GOOES_API_IMAGE=${image_base}/goose-api:${GITHUB_SHA}",
+      "GOOES_ADMIN_IMAGE=${image_base}/goose-admin:${GITHUB_SHA}",
+      "GOOES_SOCIAL_VIDEO_WORKER_IMAGE=${image_base}/goose-social-video-worker:${GITHUB_SHA}",
+    ]) {
+      expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(image);
+    }
+    expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/release-production.yml"',
+    );
+    expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).not.toContain(
+      '.path | split("@")[0]',
+    );
+    expect(deployProductionWorkflow).toContain('test "${GITHUB_REF_NAME}" = "main"');
+    expect(deployProductionWorkflow).toContain('test "${GITHUB_REF_TYPE}" = tag');
+    expect(deployProductionWorkflow).toContain('test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"');
+    expect(deployProductionWorkflow).toContain('test "${RELEASE_CONFIRM_TEXT}" = "确认部署生产环境"');
+    expect(deployProductionWorkflow).toContain("runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]");
+    expect(deployProductionWorkflow).toContain("environment: production");
+    expect(deployProductionWorkflow).toContain("DEPLOY_DIR: /opt/supabase/docker");
+    expect(deployProductionWorkflow).toContain('test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"');
+    expect(containerHealthStart).toBeGreaterThan(dockerStart);
+    expect(deployProductionWorkflow.slice(containerHealthStart, healthStart)).toContain(
+      'test "${revision}" = "${SOURCE_SHA}"',
+    );
+    expect(receiptStart).toBeGreaterThan(healthStart);
+    expect(deployProductionWorkflow.slice(receiptStart)).toContain("uses: actions/upload-artifact@v6");
+    expect(deployProductionWorkflow.slice(receiptStart)).toContain(
+      "production-deployment-receipt-${{ inputs.build_run_id }}",
+    );
+    expect(deployProductionWorkflow.slice(receiptStart + 1)).not.toContain("\n      - name:");
+    for (const field of [
+      "schema_version: 1",
+      "build_run_id: $build_run_id",
+      "deploy_run_id: $deploy_run_id",
+      "tag: $tag",
+      "commit_sha: $commit_sha",
+      "services: ($services | split(\",\"))",
+      "completed_at: $completed_at",
+    ]) {
+      expect(deployProductionWorkflow).toContain(field);
+    }
   });
 });
