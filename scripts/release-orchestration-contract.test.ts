@@ -511,17 +511,56 @@ describe("production orchestrator", () => {
   });
 
   test("revalidates candidate evidence inside the globally serialized production deploy", () => {
+    const guardStart = deployProductionWorkflow.indexOf("- name: Guard production runner");
+    const metadataStart = deployProductionWorkflow.indexOf("- name: Preflight Admin candidate metadata");
+    const checkoutStart = deployProductionWorkflow.indexOf("- name: Checkout compose files");
     const evidenceStart = deployProductionWorkflow.indexOf("- name: Validate production release evidence");
     const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
+    const syncStart = deployProductionWorkflow.indexOf("- name: Sync compose fragments");
     const receiptStart = deployProductionWorkflow.indexOf("- name: Upload production deployment receipt");
     const containerHealthStart = deployProductionWorkflow.indexOf("- name: Check container health");
     const healthStart = deployProductionWorkflow.indexOf("- name: Check public endpoints and pre-cutover Web loopback");
+    const guard = deployProductionWorkflow.slice(guardStart, metadataStart);
+    const metadata = deployProductionWorkflow.slice(metadataStart, checkoutStart);
+    const checkout = deployProductionWorkflow.slice(checkoutStart, evidenceStart);
 
     expect(deployProductionWorkflow).toContain("build_run_id:");
     expect(deployProductionWorkflow).toContain("group: deploy-docker-services-main");
     expect(deployProductionWorkflow).toContain("cancel-in-progress: false");
-    expect(evidenceStart).toBeGreaterThanOrEqual(0);
+    expect(guardStart).toBeGreaterThanOrEqual(0);
+    expect(metadataStart).toBeGreaterThan(guardStart);
+    expect(checkoutStart).toBeGreaterThan(metadataStart);
+    expect(evidenceStart).toBeGreaterThan(checkoutStart);
     expect(dockerStart).toBeGreaterThan(evidenceStart);
+    expect(syncStart).toBeGreaterThan(dockerStart);
+    expect(guard).toContain('SOURCE_DIR="${RUNNER_TEMP}/gooes-source-${GITHUB_RUN_ID}"');
+    expect(guard).toContain('echo "SOURCE_DIR=${SOURCE_DIR}" >> "${GITHUB_ENV}"');
+    expect(checkout).toContain('git clone --filter=blob:none --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"');
+    expect(checkout).toContain('git -C "${SOURCE_DIR}" fetch');
+    expect(checkout).toContain('git -C "${SOURCE_DIR}" clean -fdx');
+    expect(deployProductionWorkflow).not.toContain("${RUNNER_WORKSPACE}/source");
+    expect(metadata).toContain('if [ -z "${BUILD_RUN_ID}" ]; then');
+    expect(metadata.indexOf('if [ -z "${BUILD_RUN_ID}" ]; then')).toBeLessThan(
+      metadata.indexOf('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]'),
+    );
+    expect(metadata).toContain('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
+    expect(metadata).toContain('[[ "${INPUT_BUILT_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]]');
+    expect(metadata).toContain('test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"');
+    expect(metadata).toContain("canonical_workflow_path() {");
+    expect(metadata).toContain(
+      'gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}"',
+    );
+    expect(metadata).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/release-production.yml"',
+    );
+    expect(metadata).toContain(
+      'test "${build_workflow_path}" = ".github/workflows/release-production.yml"',
+    );
+    expect(metadata).toContain("production-deployment-receipt-${BUILD_RUN_ID}");
+    expect(metadata).toContain("expired == false");
+    expect(metadata).not.toContain("${SOURCE_DIR}");
+    expect(metadata).not.toContain("${DEPLOY_DIR}");
+    expect(metadata).not.toContain("docker");
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
       "verify-production-release-candidate.mjs",
     );
