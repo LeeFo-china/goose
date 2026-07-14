@@ -85,13 +85,14 @@ python3 /Users/leefo/.codex/skills/webapp-testing/scripts/with_server.py \
 - 关键词、严重度、风险类型筛选会同步 URL，并刷新为过滤后的列表；
 - 重置筛选会回到 `/project-health?page=1` 并恢复完整列表；
 - 快速切换筛选时，较早的慢响应不会覆盖较新的筛选结果；
+- 风险列表主接口失败时显示错误和“列表数据未加载”，不误导为风险 0；
 - AI 摘要失败只显示摘要错误，风险列表和 KPI 保持可用；
 - console error = 0；
 - failed response = 0。
 
 结果：
 
-- `apps/admin/e2e/project-health-smoke.spec.ts`：9 passed；
+- `apps/admin/e2e/project-health-smoke.spec.ts`：10 passed；
 - 首次固化时，390px 视口发现列表卡片被筛选区压缩导致 table viewport 不可见；
 - 已通过 `components/project-health/project-health-client-shell.tsx` 的移动端列表卡片保底高度修复，桌面 `lg` 以上仍保持原满高工作台布局。
 
@@ -118,7 +119,7 @@ python3 /Users/leefo/.codex/skills/webapp-testing/scripts/with_server.py \
 5. 使用真实 API 复验快速切换筛选时旧响应不覆盖新结果；
 6. 使用真实数据验证五类“去处理”分别进入 `overview/logs/acceptances/customer-service`；
 7. 使用真实 API 验证 AI 不自动调用，点击后才 POST，AI 失败只影响摘要面板；
-8. 验证 RPC 错误显示 StatusAlert，不显示为风险 0；
+8. 使用真实 API 复验 RPC 错误显示 StatusAlert，不显示为风险 0；
 9. 捕获 1440、1024、768、390 宽度截图；
 10. 完成键盘、焦点、触摸目标和 WCAG AA 对比度 smoke；
 11. 基于截图执行 `$impeccable audit`，记录评分、P0/P1、问题和修复 commit。

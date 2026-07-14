@@ -205,4 +205,16 @@ test.describe("project health smoke", () => {
     await expect(page.getByTestId("project-health-table-viewport").getByText("流程任务逾期")).toBeVisible();
     await expect(page.getByText("当前显示 5 条，共 5 条")).toBeVisible();
   });
+
+  test("风险列表失败态不展示为风险 0", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/project-health?page=1&keyword=__server_error__", {
+      waitUntil: "networkidle",
+    });
+
+    await expect(page.getByText("模拟项目风险加载失败")).toBeVisible();
+    await expect(page.getByText("列表数据未加载")).toBeVisible();
+    await expect(page.getByText("当前显示 0 条，共 0 条")).toHaveCount(0);
+    await expect(page.getByText("风险总数").locator("..").getByText("0")).toHaveCount(0);
+  });
 });

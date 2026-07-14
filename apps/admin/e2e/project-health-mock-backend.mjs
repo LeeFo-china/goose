@@ -218,6 +218,15 @@ createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && url.pathname === "/project-health/risks") {
+    if (url.searchParams.get("keyword") === "__server_error__") {
+      sendJson(response, 500, {
+        success: false,
+        message: "模拟项目风险加载失败",
+        code: "PROJECT_HEALTH_MOCK_FAILURE",
+      });
+      return;
+    }
+
     sendJson(response, 200, { success: true, data: buildRiskPage(url.searchParams) });
     return;
   }

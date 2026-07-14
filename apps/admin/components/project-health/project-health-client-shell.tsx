@@ -236,12 +236,18 @@ export function ProjectHealthClientShell({
         </CardContent>
         <CardFooter className="shrink-0 flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="outline" className="tabular-nums">
-              第 {data?.pagination.page ?? 1} / {Math.max(data?.pagination.total_pages ?? 1, 1)} 页
-            </Badge>
-            <span className="tabular-nums">
-              当前显示 {data?.items.length ?? 0} 条，共 {data?.pagination.total ?? 0} 条
-            </span>
+            {data ? (
+              <>
+                <Badge variant="outline" className="tabular-nums">
+                  第 {data.pagination.page} / {Math.max(data.pagination.total_pages, 1)} 页
+                </Badge>
+                <span className="tabular-nums">
+                  当前显示 {data.items.length} 条，共 {data.pagination.total} 条
+                </span>
+              </>
+            ) : (
+              <span>列表数据未加载</span>
+            )}
           </div>
           <ProjectHealthPagination
             pagination={data?.pagination ?? null}
