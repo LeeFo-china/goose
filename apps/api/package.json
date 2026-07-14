@@ -47,7 +47,7 @@
     "picture-library:import": "bun --env-file=.env src/scripts/picture-library-import.ts",
     "picture-library:health-check": "bun --env-file=.env src/scripts/picture-library-health-check.ts",
     "picture-library:variants-backfill": "bun --env-file=.env src/scripts/picture-library-variants-backfill.ts",
-    "project-health:release-readiness": "bun src/scripts/project-operational-risk-release-readiness.ts",
+    "project-health:release-readiness": "bun --env-file=.env src/scripts/project-operational-risk-release-readiness.ts",
     "storage:low-frequency-images:backfill": "bun src/scripts/storage-low-frequency-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
