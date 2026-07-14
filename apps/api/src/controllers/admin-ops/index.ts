@@ -12,6 +12,7 @@ import {
   ReleaseProductionCandidateDeploySchema,
   ReleaseProductionCandidateParamsSchema,
   ReleaseProductionMigrationDispatchSchema,
+  ReleaseProductionMigrationPrecheckDispatchSchema,
   ReleaseRefListQuerySchema,
   ReleaseRunFailureSummaryParamsSchema,
   ReleaseRunListQuerySchema,
@@ -201,6 +202,28 @@ class AdminOpsController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await releaseDeploymentService.dispatchProductionMigration(authContext, bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/admin/ops/releases/production-migrations/precheck")
+  async dispatchProductionMigrationPrecheck(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+
+    const bodyResult = ReleaseProductionMigrationPrecheckDispatchSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await releaseDeploymentService.dispatchProductionMigrationPrecheck(authContext, bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/admin/ops/releases/production-migrations/precheck/:runId")
+  async getProductionMigrationPrecheck(request: FastifyRequest, reply: FastifyReply) {
+    await this.getRequiredPlatformAdminContext(request);
+
+    const paramsResult = ReleaseProductionCandidateParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await releaseDeploymentService.getProductionMigrationPrecheck(paramsResult.data.runId);
     return ResponseHandler.success(data);
   }
 

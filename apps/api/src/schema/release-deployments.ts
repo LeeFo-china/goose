@@ -137,6 +137,20 @@ export const ReleaseProductionMigrationDispatchSchema = z.object({
   }
 });
 
+export const ReleaseProductionMigrationPrecheckDispatchSchema = z.object({
+  ref_type: ReleaseRefTypeSchema.default("branch"),
+  ref: z.string().trim().min(1, "版本不能为空").max(120, "版本不能超过 120 个字符"),
+  reason: z.string().trim().max(200, "迁移原因不能超过 200 个字符").optional(),
+}).superRefine((value, ctx) => {
+  if (value.ref_type === "commit") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["ref_type"],
+      message: "GitHub Actions 数据库迁移不能直接使用 Commit SHA，请选择分支或 Tag",
+    });
+  }
+});
+
 export type ReleaseEnvironment = z.infer<typeof ReleaseEnvironmentSchema>;
 export type ReleaseService = z.infer<typeof ReleaseServiceSchema>;
 export type ReleaseRefType = z.infer<typeof ReleaseRefTypeSchema>;
@@ -152,3 +166,5 @@ export type ReleaseRunFailureSummaryParams = z.infer<typeof ReleaseRunFailureSum
 export type ReleaseSuccessfulRefListQuery = z.infer<typeof ReleaseSuccessfulRefListQuerySchema>;
 export type ReleaseRefListQuery = z.infer<typeof ReleaseRefListQuerySchema>;
 export type ReleaseProductionMigrationDispatchInput = z.infer<typeof ReleaseProductionMigrationDispatchSchema>;
+export type ReleaseProductionMigrationPrecheckDispatchInput = z.infer<typeof ReleaseProductionMigrationPrecheckDispatchSchema>;
+export type ReleaseProductionMigrationPrecheckParams = z.infer<typeof ReleaseProductionCandidateParamsSchema>;

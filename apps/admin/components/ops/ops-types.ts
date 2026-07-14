@@ -350,3 +350,24 @@ export type ReleaseProductionMigrationDispatchResult = {
   run: ReleaseRun | null;
   message: string;
 };
+
+export type ReleaseProductionMigrationPrecheckResult = {
+  run_id: string;
+  run_url: string | null;
+  status: string | null;
+  conclusion: string | null;
+  ready: boolean;
+  needs_migration: boolean | null;
+  mode: ReleaseMigrationMode | null;
+  commit_sha: string | null;
+  before_count: number | null;
+  before_latest: string | null;
+  after_count: number | null;
+  after_latest: string | null;
+  pending_count: number | null;
+  pending_versions: string[];
+  applied_count: number | null;
+  applied_versions: string[];
+  checked_at: string | null;
+  message: string;
+};

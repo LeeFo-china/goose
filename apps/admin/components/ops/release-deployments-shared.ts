@@ -1,4 +1,4 @@
-import type { Pagination, ProductionReleaseCandidate, ReleaseCreateTagResult, ReleaseDispatchResult, ReleaseEnvironment, ReleaseMigrationMode, ReleaseOperation, ReleaseOptionsData, ReleaseProductionMigrationDispatchResult, ReleaseRefOption, ReleaseRefType, ReleaseRuntimeServiceVersion, ReleaseRuntimeVersionData, ReleaseRun, ReleaseRunFailureSummary, ReleaseRunListData, ReleaseService, ReleaseStage, ReleaseSuccessfulRef, ReleaseSuccessfulRefListData } from "@/components/ops/ops-types";
+import type { Pagination, ProductionReleaseCandidate, ReleaseCreateTagResult, ReleaseDispatchResult, ReleaseEnvironment, ReleaseMigrationMode, ReleaseOperation, ReleaseOptionsData, ReleaseProductionMigrationDispatchResult, ReleaseProductionMigrationPrecheckResult, ReleaseRefOption, ReleaseRefType, ReleaseRuntimeServiceVersion, ReleaseRuntimeVersionData, ReleaseRun, ReleaseRunFailureSummary, ReleaseRunListData, ReleaseService, ReleaseStage, ReleaseSuccessfulRef, ReleaseSuccessfulRefListData } from "@/components/ops/ops-types";
 import { requestBackendJson } from "@/lib/backend-client";
 
 export type ReleaseDeploymentsPanelProps = {
@@ -54,6 +54,25 @@ export async function dispatchProductionMigration(payload: {
     body: JSON.stringify(payload),
     fallbackMessage: "生产数据库迁移任务提交失败",
   });
+}
+
+export async function dispatchProductionMigrationPrecheck(payload: {
+  ref_type: Exclude<ReleaseRefType, "commit">;
+  ref: string;
+  reason: string;
+}) {
+  return requestBackendJson<ReleaseProductionMigrationDispatchResult>("/admin/ops/releases/production-migrations/precheck", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    fallbackMessage: "生产数据库迁移对比预检查提交失败",
+  });
+}
+
+export async function fetchProductionMigrationPrecheck(runId: string) {
+  return requestBackendJson<ReleaseProductionMigrationPrecheckResult>(
+    `/admin/ops/releases/production-migrations/precheck/${encodeURIComponent(runId)}`,
+    { cache: "no-store", fallbackMessage: "生产数据库迁移对比结果加载失败" },
+  );
 }
 
 export async function fetchProductionReleaseCandidate(runId: string) {

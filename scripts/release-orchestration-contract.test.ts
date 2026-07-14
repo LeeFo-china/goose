@@ -31,6 +31,10 @@ const deployProductionWorkflow = readFileSync(
   new URL("../.github/workflows/deploy-docker-services.yml", import.meta.url),
   "utf8",
 );
+const migrateProductionWorkflow = readFileSync(
+  new URL("../.github/workflows/migrate-production-database.yml", import.meta.url),
+  "utf8",
+);
 
 const script = new URL("./resolve-admin-release-services.mjs", import.meta.url).pathname;
 
@@ -75,6 +79,17 @@ describe("admin release service resolver", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stdout.toString("utf8")).toBe("");
     expect(result.stderr.toString("utf8").trim().length).toBeGreaterThan(0);
+  });
+});
+
+describe("production migration precheck workflow", () => {
+  test("publishes a structured JSON artifact for Admin migration comparison", () => {
+    expect(migrateProductionWorkflow).toContain("migration-precheck.json");
+    expect(migrateProductionWorkflow).toContain("production-migration-precheck");
+    expect(migrateProductionWorkflow).toContain("uses: actions/upload-artifact@v6");
+    expect(migrateProductionWorkflow).toContain("pending_count: ($pending_count | tonumber)");
+    expect(migrateProductionWorkflow).toContain("pending_versions: ($pending_versions | split(\" \")");
+    expect(migrateProductionWorkflow).toContain("workflow_run_id: ($workflow_run_id | tonumber)");
   });
 });
 

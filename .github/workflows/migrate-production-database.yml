@@ -213,6 +213,49 @@ jobs:
             echo "PROD_BACKUP_FILE=${backup_file}"
           } >> "${GITHUB_ENV}"
 
+          workflow_run_id="${GITHUB_RUN_ID}"
+          checked_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          pending_count="${#pending_files[@]}"
+          pending_versions_text="${pending_versions[*]:-}"
+          applied_count="${#applied_versions[@]}"
+          applied_versions_text="${applied_versions[*]:-}"
+          jq -n \
+            --arg mode "${MIGRATE_MODE}" \
+            --arg workflow_run_id "${workflow_run_id}" \
+            --arg commit_sha "${GITHUB_SHA}" \
+            --arg before_count "${before_count}" \
+            --arg before_latest "${before_latest}" \
+            --arg after_count "${after_count}" \
+            --arg after_latest "${after_latest}" \
+            --arg pending_count "${pending_count}" \
+            --arg pending_versions "${pending_versions_text}" \
+            --arg applied_count "${applied_count}" \
+            --arg applied_versions "${applied_versions_text}" \
+            --arg checked_at "${checked_at}" \
+            '{
+              schema_version: 1,
+              workflow_run_id: ($workflow_run_id | tonumber),
+              mode: $mode,
+              commit_sha: $commit_sha,
+              before_count: ($before_count | tonumber),
+              before_latest: $before_latest,
+              after_count: ($after_count | tonumber),
+              after_latest: $after_latest,
+              pending_count: ($pending_count | tonumber),
+              pending_versions: ($pending_versions | split(" ") | map(select(length > 0))),
+              applied_count: ($applied_count | tonumber),
+              applied_versions: ($applied_versions | split(" ") | map(select(length > 0))),
+              checked_at: $checked_at
+            }' > "${GITHUB_WORKSPACE}/migration-precheck.json"
+
+      - name: Upload migration precheck result
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-migration-precheck
+          path: migration-precheck.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Write migration summary
         if: ${{ always() }}
         run: |

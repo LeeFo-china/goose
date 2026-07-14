@@ -4,6 +4,7 @@ import {
   ReleaseDispatchSchema,
   ReleaseProductionCandidateDeploySchema,
   ReleaseProductionCandidateParamsSchema,
+  ReleaseProductionMigrationPrecheckDispatchSchema,
 } from "./release-deployments";
 
 describe("release deployment schemas", () => {
@@ -45,6 +46,21 @@ describe("release deployment schemas", () => {
   test("requires a numeric candidate run ID", () => {
     expect(ReleaseProductionCandidateParamsSchema.safeParse({ runId: "123" }).success).toBe(true);
     expect(ReleaseProductionCandidateParamsSchema.safeParse({ runId: "abc" }).success).toBe(false);
+  });
+
+  test("keeps production migration precheck read-only and branch or tag based", () => {
+    expect(ReleaseProductionMigrationPrecheckDispatchSchema.safeParse({
+      ref_type: "branch",
+      ref: "main",
+    }).success).toBe(true);
+    expect(ReleaseProductionMigrationPrecheckDispatchSchema.safeParse({
+      ref_type: "tag",
+      ref: "v2026.07.14.1",
+    }).success).toBe(true);
+    expect(ReleaseProductionMigrationPrecheckDispatchSchema.safeParse({
+      ref_type: "commit",
+      ref: "a".repeat(40),
+    }).success).toBe(false);
   });
 
   test("requires explicit services and the exact production deploy confirmation", () => {

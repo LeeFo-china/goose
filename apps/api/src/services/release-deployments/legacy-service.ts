@@ -34,6 +34,10 @@ import {
   getProductionCandidate,
   dispatchProductionCandidate,
 } from "./legacy/candidates";
+import {
+  dispatchProductionMigrationPrecheck,
+  getProductionMigrationPrecheck,
+} from "./legacy/migrations";
 
 class ReleaseDeploymentService {
   getOptions = getOptions;
@@ -58,6 +62,8 @@ class ReleaseDeploymentService {
   private findRecentRun = findRecentRun;
   dispatch = dispatch;
   dispatchProductionMigration = dispatchProductionMigration;
+  dispatchProductionMigrationPrecheck = dispatchProductionMigrationPrecheck;
+  getProductionMigrationPrecheck = getProductionMigrationPrecheck;
   getProductionCandidate = getProductionCandidate;
   dispatchProductionCandidate = dispatchProductionCandidate;
 }

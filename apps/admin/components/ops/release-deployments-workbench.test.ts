@@ -76,6 +76,24 @@ describe("release deployment workbench contracts", () => {
     expect(typesSource).toContain('export type ReleaseRuntimeService = Exclude<ReleaseService, "all"> | "web"');
   });
 
+  test("shows production migration precheck comparison before apply", () => {
+    const panelSource = readFileSync(join(import.meta.dir, "release-deployments-panel.tsx"), "utf8");
+    const cardSource = readFileSync(join(import.meta.dir, "production-migration-card.tsx"), "utf8");
+    const sharedSource = readFileSync(join(import.meta.dir, "release-deployments-shared.ts"), "utf8");
+    const typesSource = readFileSync(join(import.meta.dir, "ops-types.ts"), "utf8");
+
+    expect(panelSource).toContain("@/components/ops/production-migration-card");
+    expect(cardSource).toContain("刷新迁移对比");
+    expect(cardSource).toContain("无需迁移");
+    expect(cardSource).toContain("需要迁移");
+    expect(cardSource).toContain("pending_versions");
+    expect(cardSource).toContain("fetchProductionMigrationPrecheck");
+    expect(cardSource).toContain("dispatchProductionMigrationPrecheck");
+    expect(sharedSource).toContain("/admin/ops/releases/production-migrations/precheck");
+    expect(sharedSource).toContain("/admin/ops/releases/production-migrations/precheck/${encodeURIComponent(runId)}");
+    expect(typesSource).toContain("ReleaseProductionMigrationPrecheckResult");
+  });
+
   test("maps release stages before raw GitHub status", () => {
     expect(statusLabel(run({ stage: "ready_to_deploy", stage_label: "可部署", status: "completed", conclusion: "success" }))).toBe("可部署");
     expect(statusLabel(run({ stage: "deploy_failed", stage_label: "部署失败", status: "completed", conclusion: "failure" }))).toBe("部署失败");
