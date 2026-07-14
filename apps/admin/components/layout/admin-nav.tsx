@@ -5,27 +5,12 @@ import { usePathname } from "next/navigation";
 import {
   platformNavGroups,
   tenantNavGroups,
-  type AdminMenuGroup,
 } from "@/components/layout/menu-config";
+import { getVisibleGroups } from "@/components/layout/admin-nav-visibility";
 import { isActivePath } from "@/components/layout/admin-nav-utils";
 import type { AdminSession } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
 import { cn } from "@/lib/utils";
-
-function hasPermission(session: AdminSession, permission: string) {
-  return session.permissions.some((item) => item.code === permission);
-}
-
-function getVisibleGroups(session: AdminSession, groups: AdminMenuGroup[]) {
-  return groups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) =>
-        !item.permission || hasPermission(session, item.permission)
-      ),
-    }))
-    .filter((group) => group.items.length > 0);
-}
 
 export function AdminNav({
   session,

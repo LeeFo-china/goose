@@ -21,6 +21,7 @@ import {
   ScrollText,
   SearchCheck,
   Shield,
+  ShieldAlert,
   Sparkles,
   SlidersHorizontal,
   TerminalSquare,
@@ -29,12 +30,21 @@ import {
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
+import type { AdminPermission } from "@/lib/backend";
+
+export type AdminPermissionScope = AdminPermission["scope"];
+
+export type AdminMenuPermissionRequirement = {
+  code: string;
+  scope?: AdminPermissionScope;
+};
 
 export type AdminMenuItem = {
   href: string;
   label: string;
   icon: LucideIcon;
   permission?: string | null;
+  requiredPermissions?: AdminMenuPermissionRequirement[];
   activeMatch?: "exact" | "prefix";
 };
 
@@ -88,6 +98,15 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     label: "业务",
     items: [
       { href: "/dashboard", label: "概览", icon: LayoutDashboard },
+      {
+        href: "/project-health",
+        label: "项目风险",
+        icon: ShieldAlert,
+        requiredPermissions: [
+          { code: "dashboard.read" },
+          { code: "project.read", scope: "all" },
+        ],
+      },
       { href: "/customers", label: "客户", icon: Users },
       {
         href: "/wechat-rebind-requests",
