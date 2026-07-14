@@ -1,6 +1,7 @@
 # 项目运营风险中心 UI 审核记录
 
 日期：2026-07-14
+最近复核：2026-07-15
 
 ## 当前结论
 
@@ -8,8 +9,8 @@
 
 阻塞项：
 
-- 本机 Docker daemon 不可用，`supabase status` 无法连接 Docker；
-- 当前 shell 未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`；
+- 本机 Docker daemon 不可用，2026-07-15 复跑 `supabase status` 仍无法连接 Docker；
+- 当前 shell 未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`GOOES_API_BASE_URL`、`NEXT_PUBLIC_GOOES_API_BASE_URL`；
 - 缺少可登录 Admin 的租户管理员会话，无法验证真实 `/project-health` 列表、五类跳转、AI POST 和权限差异。
 
 因此本文件暂不记录 Impeccable 分数，不声明 P0/P1 已清零。mock smoke 只证明前端页面结构、RSC 边界、展示页 contract、AI 按需交互和响应式溢出在本地可重复验证。
@@ -43,7 +44,7 @@ pnpm --dir apps/admin build
 结果：
 
 - Domain contract test：5 pass；
-- API project-health/performance 定向测试：47 pass；
+- API project-health/performance 定向测试：49 pass；
 - Admin nav/project-health 定向测试：31 pass；
 - `packages/domain build`：通过；
 - `api:check`：通过；

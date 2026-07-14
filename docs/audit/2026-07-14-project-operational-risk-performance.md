@@ -1,6 +1,7 @@
 # 项目运营风险中心性能验证记录
 
 日期：2026-07-14
+最近复核：2026-07-15
 
 ## 当前状态
 
@@ -20,7 +21,7 @@
 
 ## 待 dev 数据库执行
 
-当前未记录 EXPLAIN 和 P95 数值。原因：本地 Supabase/Docker 运行态不可用，且尚未在本轮拿到可验证的 dev 数据库连接执行结果。禁止手工在远端数据库执行 DDL/DML 或伪造性能数据。
+当前未记录 EXPLAIN 和 P95 数值。原因：本地 Supabase/Docker 运行态不可用，2026-07-15 复跑 `supabase status` 仍因 Docker daemon 不可用失败；当前 shell 也未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`。尚未在本轮拿到可验证的 dev 数据库连接执行结果。禁止手工在远端数据库执行 DDL/DML 或伪造性能数据。
 
 获取代表 tenant：
 
