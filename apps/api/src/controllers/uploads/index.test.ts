@@ -1,11 +1,18 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { FastifyRequest } from "fastify";
 import type { AuthContext } from "@/services/authorization";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const projectId = "2d710a84-1045-4750-8dfd-51a0f463a4db";
 const tenantId = "tenant-1";
 const employeeId = "employee-1";
 const authUserId = "auth-1";
+const visitorId = "visitor-1";
+const otherVisitorId = "visitor-2";
 
 const createDirectUpload = mock(async () => ({
   provider: "tencent_cos",
@@ -22,7 +29,19 @@ const createDirectUpload = mock(async () => ({
   expires_at: "2026-06-16T10:10:00.000Z",
 }));
 
-const completeDirectUpload = mock(async () => ({
+type CompleteUploadResult = {
+  provider: string;
+  bucket: string;
+  region: string;
+  object_key: string;
+  storage_path: string;
+  url: string;
+} | {
+  file_id: string;
+  status: string;
+};
+
+const completeDirectUpload = mock(async (): Promise<CompleteUploadResult> => ({
   provider: "tencent_cos",
   bucket: "bucket",
   region: "ap-guangzhou",
@@ -55,11 +74,16 @@ const getRequiredAuthContext = mock(async (): Promise<AuthContext> => ({
 
 const canAccessProject = mock(async () => true);
 const logUploadTiming = mock(() => undefined);
+const resolveStoredFileUrl = mock(() => "https://example.com/resolved.jpg");
 
 mock.module("@/services/files/platform-file-storage", () => ({
   platformFileStorageService: {
     createDirectUpload,
     completeDirectUpload,
+  },
+  buildTenantOnboardingLicenseVisitorPrefix: (value: string) => {
+    const hash = createHash("sha256").update(value.trim()).digest("hex");
+    return `private/tenant-onboarding-license/visitors/${hash}/`;
   },
 }));
 
@@ -95,6 +119,14 @@ mock.module("@/utils/upload-timing-logger", () => ({
   logUploadTiming,
 }));
 
+mock.module("@/services/files/file-url-resolver", () => ({
+  resolveStoredFileUrl,
+  resolveStoredFileUrlList: mock((value: unknown) => value),
+  refreshPlatformCosPublicBaseUrlCache: mock(async () => undefined),
+  setPlatformCosAccessConfigCache: mock(() => undefined),
+  setPlatformCosPublicBaseUrlCache: mock(() => undefined),
+}));
+
 beforeEach(() => {
   createDirectUpload.mockClear();
   completeDirectUpload.mockClear();
@@ -102,6 +134,7 @@ beforeEach(() => {
   canAccessProject.mockClear();
   canAccessProject.mockImplementation(async () => true);
   logUploadTiming.mockClear();
+  resolveStoredFileUrl.mockClear();
 });
 
 const buildRequest = (body: Record<string, unknown>): FastifyRequest =>
@@ -113,6 +146,20 @@ const buildRequest = (body: Record<string, unknown>): FastifyRequest =>
       employee_id: employeeId,
     },
     id: "req-test",
+  }) as FastifyRequest;
+
+const buildVisitorRequest = (
+  body: Record<string, unknown>,
+  currentVisitorId = visitorId,
+): FastifyRequest =>
+  ({
+    body,
+    query: {},
+    user: {
+      token_type: "visitor_session",
+      visitor_id: currentVisitorId,
+    },
+    id: "req-visitor-test",
   }) as FastifyRequest;
 
 describe("UploadController project payment direct upload", () => {
@@ -247,5 +294,153 @@ describe("UploadController project payment direct upload", () => {
       statusCode: 403,
       code: "FORBIDDEN",
     });
+  });
+});
+
+describe("UploadController tenant onboarding license direct upload", () => {
+  test("allows visitor license init as a private upload", async () => {
+    const { default: controller } = await import("./index");
+
+    await controller.initDirectCosUpload(
+      buildVisitorRequest({
+        scene: "tenant_onboarding_license",
+        filename: "license.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 5 * 1024 * 1024,
+      }),
+      {} as never,
+    );
+
+    expect(createDirectUpload).toHaveBeenCalledWith(expect.objectContaining({
+      scene: "tenant_onboarding_license",
+      tenantId: null,
+      visitorId,
+      visibility: "private",
+    }));
+  });
+
+  test("normalizes visitor ownership before creating a private upload", async () => {
+    const { default: controller } = await import("./index");
+
+    await controller.initDirectCosUpload(
+      buildVisitorRequest({
+        scene: "tenant_onboarding_license",
+        filename: "license.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 100,
+      }, `  ${visitorId}  `),
+      {} as never,
+    );
+
+    expect(createDirectUpload).toHaveBeenCalledWith(expect.objectContaining({
+      visitorId,
+    }));
+  });
+
+  test("rejects another upload scene for a visitor", async () => {
+    const { default: controller } = await import("./index");
+
+    await expect(controller.initDirectCosUpload(
+      buildVisitorRequest({
+        scene: "project_payment",
+        project_id: projectId,
+        filename: "payment.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 100,
+      }),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("rejects the private license scene for tenant identities", async () => {
+    const { default: controller } = await import("./index");
+
+    await expect(controller.initDirectCosUpload(
+      buildRequest({
+        scene: "tenant_onboarding_license",
+        filename: "license.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 100,
+      }),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+  });
+
+  test("rejects a license larger than 5 MB", async () => {
+    const { default: controller } = await import("./index");
+
+    await expect(controller.initDirectCosUpload(
+      buildVisitorRequest({
+        scene: "tenant_onboarding_license",
+        filename: "license.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 5 * 1024 * 1024 + 1,
+      }),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  test("completes only the current visitor private object", async () => {
+    const ownerHash = createHash("sha256").update(visitorId).digest("hex");
+    const objectKey = `private/tenant-onboarding-license/visitors/${ownerHash}/2026/07/14/file.jpg`;
+    completeDirectUpload.mockImplementationOnce(async () => ({
+      file_id: "00000000-0000-4000-8000-000000000003",
+      status: "active",
+    }));
+    const { default: controller } = await import("./index");
+
+    const response = await controller.completeDirectCosUpload(
+      buildVisitorRequest({
+        scene: "tenant_onboarding_license",
+        filename: "license.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 100,
+        object_key: objectKey,
+      }),
+      {} as never,
+    );
+
+    expect(completeDirectUpload).toHaveBeenCalledWith(expect.objectContaining({
+      scene: "tenant_onboarding_license",
+      objectKey,
+      visitorId,
+      visibility: "private",
+    }));
+    expect(response.data).toEqual({
+      file_id: "00000000-0000-4000-8000-000000000003",
+      status: "active",
+    });
+    expect(response.data).not.toHaveProperty("public_url");
+    expect(response.data).not.toHaveProperty("url");
+  });
+
+  test("prevents another visitor from completing the owner's object key", async () => {
+    const ownerHash = createHash("sha256").update(visitorId).digest("hex");
+    const objectKey = `private/tenant-onboarding-license/visitors/${ownerHash}/2026/07/14/file.jpg`;
+    const { default: controller } = await import("./index");
+
+    await expect(controller.completeDirectCosUpload(
+      buildVisitorRequest({
+        scene: "tenant_onboarding_license",
+        filename: "license.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 100,
+        object_key: objectKey,
+      }, otherVisitorId),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(completeDirectUpload).not.toHaveBeenCalled();
+  });
+
+  test("rejects private license objects before resolving a public URL", async () => {
+    const ownerHash = createHash("sha256").update(visitorId).digest("hex");
+    const path = `private/tenant-onboarding-license/visitors/${ownerHash}/file.jpg`;
+    const { default: controller } = await import("./index");
+
+    await expect(controller.getPublicUrl({
+      ...buildVisitorRequest({}, visitorId),
+      query: { path },
+    } as FastifyRequest, {} as never)).rejects.toMatchObject({ statusCode: 403 });
+    expect(resolveStoredFileUrl).not.toHaveBeenCalled();
   });
 });

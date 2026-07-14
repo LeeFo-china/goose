@@ -5,6 +5,7 @@ import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { platformFileObjectRepository } from "@/repositories/platform-file-objects";
 import type { PlatformFileProvider } from "@/repositories/platform-file-objects";
+import type { PlatformFileVisibility } from "@/repositories/platform-file-objects";
 import { systemSettingsService } from "@/services/system-settings";
 import { SupabaseDB } from "@/utils/supabase";
 import {
@@ -36,7 +37,8 @@ export type PlatformUploadScene =
   | "project_payment"
   | "wechat_pay_applyment"
   | "picture_library"
-  | "picture_comment";
+  | "picture_comment"
+  | "tenant_onboarding_license";
 
 export type UploadImageInput = {
   buffer: Buffer;
@@ -52,6 +54,8 @@ export type UploadImageInput = {
 
 export type DirectUploadInput = Omit<UploadImageInput, "buffer"> & {
   sizeBytes: number;
+  visibility?: PlatformFileVisibility;
+  visitorId?: string | null;
 };
 
 export type CompleteDirectUploadInput = DirectUploadInput & {
@@ -92,6 +96,11 @@ export type PlatformUploadResponse = {
   object_key?: string;
   storage_path?: string;
   public_url?: string;
+};
+
+export type PrivatePlatformUploadResponse = {
+  file_id: string;
+  status: string;
 };
 
 export type CosStorageConfig = {
@@ -192,4 +201,4 @@ export {
   setPlatformCosPublicBaseUrlCache,
   systemSettingsService,
 };
-export type { PlatformFileProvider };
+export type { PlatformFileProvider, PlatformFileVisibility };

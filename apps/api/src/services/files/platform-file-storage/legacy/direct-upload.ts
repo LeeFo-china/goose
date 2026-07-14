@@ -86,13 +86,23 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     }
   }
 
-  const publicUrl = this.buildCosPublicUrl({
-    publicBaseUrl: config.publicBaseUrl,
-    bucket: config.bucket,
-    region: config.region,
-    objectKey: input.objectKey,
-  });
-  const accessUrl = resolveStoredFileUrl(input.objectKey) || publicUrl;
+  const visitorId = input.visitorId?.trim() || null;
+  const isPrivateLicense = input.scene === "tenant_onboarding_license"
+    && input.visibility === "private";
+  if (input.scene === "tenant_onboarding_license" && (!isPrivateLicense || !visitorId)) {
+    throw Errors.forbidden();
+  }
+  const publicUrl = isPrivateLicense
+    ? null
+    : this.buildCosPublicUrl({
+      publicBaseUrl: config.publicBaseUrl,
+      bucket: config.bucket,
+      region: config.region,
+      objectKey: input.objectKey,
+    });
+  const accessUrl = isPrivateLicense
+    ? null
+    : resolveStoredFileUrl(input.objectKey) || publicUrl;
 
   const headers = (headObject?.headers || {}) as Record<string, string | number | undefined>;
   const fallbackSize = input.sizeBytes ?? 0;
@@ -103,8 +113,9 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
   const etag = normalizeEtag(input.etag) || normalizeEtag(headObject?.ETag);
   const fileObject = await platformFileObjectRepository.createOrFindByObjectKey({
     tenant_id: input.tenantId ?? null,
-    owner_type: input.ownerType ?? input.scene,
+    owner_type: isPrivateLicense ? "visitor" : input.ownerType ?? input.scene,
     owner_id: input.ownerId ?? null,
+    owner_visitor_id: isPrivateLicense ? visitorId : null,
     scene: input.scene,
     provider: "tencent_cos",
     bucket: config.bucket,
@@ -114,18 +125,22 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     mime_type: contentType,
     size_bytes: Number.isFinite(contentLength) ? contentLength : fallbackSize,
     checksum: etag,
-    visibility: "public",
+    visibility: input.visibility ?? "public",
     public_url: publicUrl,
     metadata: {
       ...(input.metadata || {}),
       project_id: input.projectId ?? null,
       customer_id: input.customerId ?? null,
       verified_head_object: verifyHeadObject,
-      signed_url: accessUrl !== publicUrl,
+      signed_url: Boolean(accessUrl && accessUrl !== publicUrl),
     },
     created_by_auth_user_id: input.authUserId ?? null,
     created_by_employee_id: input.employeeId ?? null,
   });
+
+  if (isPrivateLicense) {
+    return { file_id: fileObject.id, status: fileObject.status };
+  }
 
   return this.toUploadResponse({
     fileId: fileObject.id,
@@ -133,7 +148,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     bucket: fileObject.bucket,
     region: fileObject.region,
     objectKey: fileObject.object_key,
-    publicUrl: fileObject.public_url || publicUrl,
-    accessUrl,
+    publicUrl: fileObject.public_url || publicUrl || "",
+    accessUrl: accessUrl || "",
   });
 }

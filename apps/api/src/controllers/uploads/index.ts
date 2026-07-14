@@ -7,12 +7,17 @@ import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { platformFileStorageService } from "@/services/files/platform-file-storage";
+import { buildTenantOnboardingLicenseVisitorPrefix } from "@/services/files/platform-file-storage";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { uploadService } from "@/services/uploads";
 import { customerSelfServiceService } from "@/services/customer-self-service";
 import type { JwtPayload } from "@/utils/jwt";
 import { logUploadTiming } from "@/utils/upload-timing-logger";
 import { z } from "zod";
+import {
+  isPublicStoredFileScene,
+  parseStoredObjectKey,
+} from "./stored-object-policy";
 
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const H5_MARKETING_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
@@ -40,17 +45,15 @@ const DIRECT_UPLOAD_SCENES = [
   "wechat_pay_applyment",
   "picture_library",
   "picture_comment",
+  "tenant_onboarding_license",
 ] as const;
 const FINANCE_PAYMENT_CONFIRM_PERMISSION = "finance.payment.confirm";
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
 const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>(["project_log", "project_acceptance", "project_payment"]);
-const PUBLIC_STORED_FILE_SCENES = new Set([
-  "h5_marketing_page",
-  "panorama_tiles",
-  "picture_library",
-  "picture_comment",
-]);
 const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>(["h5_marketing_page", "picture_library", "picture_comment"]);
+const PRIVATE_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
+  "tenant_onboarding_license",
+]);
 
 const DirectUploadInitSchema = z.object({
   scene: z.enum(DIRECT_UPLOAD_SCENES, {
@@ -96,13 +99,6 @@ type UploadActorContext = {
   isPlatformAdmin: boolean;
 };
 
-type ParsedStoredObjectKey = {
-  tenantId: string | null;
-  scene: string | null;
-  projectId: string | null;
-  isPlatformObjectKey: boolean;
-};
-
 function logUploadImagesTiming(
   stage: string,
   startedAt: number,
@@ -112,38 +108,6 @@ function logUploadImagesTiming(
 }
 
 const now = () => Date.now();
-
-function normalizeSceneCode(value: string | null | undefined) {
-  return value?.trim().replace(/-/g, "_") || null;
-}
-
-function parseStoredObjectKey(path: string): ParsedStoredObjectKey {
-  const parts = path.trim().replace(/^\/+/, "").split("/").filter(Boolean);
-  if (parts[0] === "tenants" && parts.length >= 3) {
-    return {
-      tenantId: parts[1] || null,
-      scene: normalizeSceneCode(parts[2]),
-      projectId: parts[3] === "projects" && parts[4] ? parts[4] : null,
-      isPlatformObjectKey: true,
-    };
-  }
-
-  if ((parts[0] === "public" || parts[0] === "system") && parts.length >= 2) {
-    return {
-      tenantId: null,
-      scene: normalizeSceneCode(parts[1]),
-      projectId: parts[2] === "projects" && parts[3] ? parts[3] : null,
-      isPlatformObjectKey: true,
-    };
-  }
-
-  return {
-    tenantId: null,
-    scene: null,
-    projectId: null,
-    isPlatformObjectKey: false,
-  };
-}
 
 class UploadController extends BaseController {
   constructor() {
@@ -205,6 +169,8 @@ class UploadController extends BaseController {
       authUserId: user.sub ?? null,
       employeeId: actorContext.employeeId,
       customerId: actorContext.customerId,
+      visitorId: actorContext.visitorId,
+      visibility: PRIVATE_DIRECT_UPLOAD_SCENES.has(scene) ? "private" : "public",
     });
     logUploadImagesTiming("direct-init-total", requestStartedAt, {
       request_id: request.id,
@@ -256,6 +222,8 @@ class UploadController extends BaseController {
       authUserId: user.sub ?? null,
       employeeId: actorContext.employeeId,
       customerId: actorContext.customerId,
+      visitorId: actorContext.visitorId,
+      visibility: PRIVATE_DIRECT_UPLOAD_SCENES.has(scene) ? "private" : "public",
       objectKey: result.data.object_key,
       etag: result.data.etag,
     });
@@ -265,7 +233,7 @@ class UploadController extends BaseController {
       tenant_id: actorContext.tenantId,
       size_bytes: result.data.size_bytes,
       object_key: result.data.object_key,
-      provider: uploaded.provider,
+      provider: "provider" in uploaded ? uploaded.provider : undefined,
       file_id: uploaded.file_id,
     });
 
@@ -292,7 +260,9 @@ class UploadController extends BaseController {
     projectId: string | undefined,
   ) {
     const scenePrefix = scene.replace(/_/g, "-");
-    const expectedPrefix = actorContext.tenantId
+    const expectedPrefix = scene === "tenant_onboarding_license"
+      ? buildTenantOnboardingLicenseVisitorPrefix(actorContext.visitorId)
+      : actorContext.tenantId
       ? `tenants/${actorContext.tenantId}/${scenePrefix}/`
       : `public/${scenePrefix}/`;
 
@@ -314,8 +284,12 @@ class UploadController extends BaseController {
     projectId: string | undefined,
     actorContext: UploadActorContext,
   ) {
+    if (scene === "tenant_onboarding_license" && !actorContext.visitorId) {
+      throw Errors.forbidden();
+    }
+
     if (actorContext.visitorId) {
-      if (scene !== "picture_comment") {
+      if (scene !== "picture_comment" && scene !== "tenant_onboarding_license") {
         throw Errors.forbidden();
       }
       return;
@@ -389,6 +363,10 @@ class UploadController extends BaseController {
       return;
     }
 
+    if (parsed.isPrivateObjectKey) {
+      throw Errors.business(403, "私有文件不能通过公开地址访问", ErrorCodes.FORBIDDEN);
+    }
+
     if (actorContext.isPlatformAdmin) {
       return;
     }
@@ -400,7 +378,7 @@ class UploadController extends BaseController {
       return;
     }
 
-    if (!parsed.scene || !PUBLIC_STORED_FILE_SCENES.has(parsed.scene)) {
+    if (!isPublicStoredFileScene(parsed.scene)) {
       throw Errors.business(403, "图片不属于当前登录身份", ErrorCodes.FORBIDDEN);
     }
   }
@@ -409,13 +387,14 @@ class UploadController extends BaseController {
     const tokenTenantId = user.tenant_id ?? null;
     const tokenEmployeeId = user.employee_id ?? null;
     const tokenCustomerId = user.customer_id ?? null;
+    const visitorId = user.visitor_id?.trim() || null;
 
-    if (user.token_type === "visitor_session" && user.visitor_id) {
+    if (user.token_type === "visitor_session" && visitorId) {
       return {
         tenantId: null,
         employeeId: null,
         customerId: null,
-        visitorId: user.visitor_id,
+        visitorId,
         isPlatformAdmin: false,
       };
     }
@@ -486,13 +465,17 @@ class UploadController extends BaseController {
       "picture_library",
       "picture_comment",
       "wechat_pay_applyment",
+      "tenant_onboarding_license",
     ].includes(scene)
       ? H5_MARKETING_MAX_UPLOAD_FILE_SIZE
       : DEFAULT_MAX_UPLOAD_FILE_SIZE;
   }
 
   private hasUploadIdentity(user: JwtPayload | undefined): user is JwtPayload {
-    return Boolean(user?.sub || (user?.token_type === "visitor_session" && user.visitor_id));
+    return Boolean(
+      user?.sub ||
+      (user?.token_type === "visitor_session" && user.visitor_id?.trim()),
+    );
   }
 }
 export default new UploadController();

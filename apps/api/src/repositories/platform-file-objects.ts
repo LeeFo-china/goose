@@ -9,6 +9,7 @@ export type PlatformFileObjectRecord = {
   tenant_id: string | null;
   owner_type: string;
   owner_id: string | null;
+  owner_visitor_id: string | null;
   scene: string;
   provider: PlatformFileProvider;
   bucket: string;
@@ -37,6 +38,7 @@ export type CreatePlatformFileObjectInput = {
   tenant_id?: string | null;
   owner_type: string;
   owner_id?: string | null;
+  owner_visitor_id?: string | null;
   scene: string;
   provider: PlatformFileProvider;
   bucket: string;
@@ -63,6 +65,7 @@ class PlatformFileObjectRepository {
       tenant_id: input.tenant_id ?? null,
       owner_type: input.owner_type,
       owner_id: input.owner_id ?? null,
+      owner_visitor_id: input.owner_visitor_id ?? null,
       scene: input.scene,
       provider: input.provider,
       bucket: input.bucket,
@@ -118,6 +121,7 @@ class PlatformFileObjectRepository {
           objectKey: input.object_key,
         });
         if (existing) {
+          this.assertExistingVisitorOwnership(existing, input);
           return existing;
         }
       }
@@ -163,6 +167,23 @@ class PlatformFileObjectRepository {
 
     return (data as PlatformFileObjectRecord | null) ?? null;
   }
+
+  private assertExistingVisitorOwnership(
+    existing: PlatformFileObjectRecord,
+    input: CreatePlatformFileObjectInput,
+  ) {
+    if (!input.owner_visitor_id) return;
+    if (
+      existing.owner_type !== "visitor" ||
+      existing.owner_visitor_id !== input.owner_visitor_id ||
+      existing.scene !== input.scene ||
+      existing.visibility !== input.visibility ||
+      existing.public_url !== (input.public_url ?? null)
+    ) {
+      throw Errors.forbidden();
+    }
+  }
+
 }
 
 export const platformFileObjectRepository = new PlatformFileObjectRepository();

@@ -8,6 +8,27 @@ import {
 } from "./routes";
 
 describe("isVisitorSessionRoute", () => {
+  test("allows applicant routes only with visitor sessions", () => {
+    const routes = [
+      ["POST", "/tenant-onboarding/applications/send-code"],
+      ["POST", "/tenant-onboarding/applications"],
+      ["GET", "/tenant-onboarding/applications/mine"],
+      ["GET", "/tenant-onboarding/applications/application-id"],
+      ["PATCH", "/tenant-onboarding/applications/application-id/supplement"],
+      ["POST", "/tenant-onboarding/applications/application-id/withdraw"],
+    ] as const;
+
+    for (const [method, route] of routes) {
+      expect(isVisitorSessionRoute(method, route)).toBe(true);
+      expect(isPublicRoute(method, route)).toBe(false);
+    }
+
+    expect(isVisitorSessionRoute("DELETE", "/tenant-onboarding/applications/application-id"))
+      .toBe(false);
+    expect(isVisitorSessionRoute("GET", "/tenant-onboarding/applications"))
+      .toBe(false);
+  });
+
   test("allows visitor sessions to submit wechat rebind requests only", () => {
     expect(isVisitorSessionRoute("POST", "/auth/wechat-rebind-requests")).toBe(true);
     expect(isVisitorSessionRoute("POST", "/partner/auth/rebind-code")).toBe(true);
