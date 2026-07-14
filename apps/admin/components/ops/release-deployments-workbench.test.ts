@@ -94,6 +94,19 @@ describe("release deployment workbench contracts", () => {
     expect(typesSource).toContain("ReleaseProductionMigrationPrecheckResult");
   });
 
+  test("keeps migration assist content generic and avoids stale Tencent LBS copy", () => {
+    const assistSource = readFileSync(join(import.meta.dir, "production-migration-assist-card.tsx"), "utf8");
+
+    expect(assistSource).toContain("迁移辅助信息");
+    expect(assistSource).toContain("动态迁移对比结果以左侧「迁移对比提示」为准");
+    expect(assistSource).toContain("确认待执行版本");
+    expect(assistSource).toContain("保留备份和回滚依据");
+    expect(assistSource).not.toContain("腾讯 LBS");
+    expect(assistSource).not.toContain("行政区划");
+    expect(assistSource).not.toContain("本轮定位相关迁移");
+    expect(assistSource).not.toContain("sync-tencent-districts");
+  });
+
   test("maps release stages before raw GitHub status", () => {
     expect(statusLabel(run({ stage: "ready_to_deploy", stage_label: "可部署", status: "completed", conclusion: "success" }))).toBe("可部署");
     expect(statusLabel(run({ stage: "deploy_failed", stage_label: "部署失败", status: "completed", conclusion: "failure" }))).toBe("部署失败");

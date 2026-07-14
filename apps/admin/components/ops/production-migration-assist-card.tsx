@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import Link from "next/link";
-import { GitBranch, MapPinned, ShieldCheck } from "lucide-react";
+import { Database, GitBranch, ShieldCheck } from "lucide-react";
 import { OpsSection } from "@/components/ops/ops-section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -12,20 +12,20 @@ import type { ReleaseOptionsData } from "@/components/ops/ops-types";
 
 const MIGRATION_ASSIST_CHECKLIST = [
   {
-    label: "先执行 plan",
-    description: "确认待执行 migration 版本和顺序，再切换 apply。",
+    label: "刷新迁移对比",
+    description: "动态迁移对比结果以左侧「迁移对比提示」为准，先确认是否存在 pending migration。",
   },
   {
-    label: "确认配置项",
-    description: "生产库需先配置腾讯 LBS WebService Key/SK 与小程序 Key。",
+    label: "确认待执行版本",
+    description: "核对 pending_versions 的顺序和 SQL 内容，确认本次版本就是要发布的数据库变更。",
   },
   {
-    label: "主数据单独同步",
-    description: "migration 只建表和配置项；行政区划数据需执行同步脚本写入生产库。",
+    label: "执行 apply 前二次确认",
+    description: "只有需要迁移且 SQL 已评审时才切换 apply，并输入生产数据库迁移确认文本。",
   },
   {
-    label: "迁移后验收",
-    description: "检查 system_settings、administrative_areas、tenant_service_areas 相关数据。",
+    label: "保留备份和回滚依据",
+    description: "apply 会先生成生产库备份；迁移后保留 GitHub Run、pending 列表和备份路径用于追溯。",
   },
 ] as const;
 
@@ -40,7 +40,7 @@ export function ProductionMigrationAssistCard({
   return (
     <OpsSection
       title="迁移辅助信息"
-      description="生产数据库迁移只负责 SQL 变更，外部主数据和系统配置需要单独确认。"
+      description="固定安全说明。是否需要迁移、待执行版本和检查结果以左侧迁移对比提示为准。"
       icon={<ShieldCheck data-icon="inline-start" />}
     >
         <div className="flex flex-col">
@@ -62,24 +62,23 @@ export function ProductionMigrationAssistCard({
           <div className="py-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                <MapPinned data-icon="inline-start" />
-                <span className="truncate">行政区划数据</span>
+                <Database data-icon="inline-start" />
+                <span className="truncate">执行边界</span>
               </div>
-              <Badge variant="warning">需同步</Badge>
+              <Badge variant="warning">生产高危</Badge>
             </div>
             <div className="mt-2 text-xs text-muted-foreground">
-              生产执行 migration 后，再运行{" "}
-              <span className="font-mono">scripts/sync-tencent-districts.ts</span>{" "}
-              写入完整省市区数据。
+              plan 只读取生产库迁移状态；apply 会修改生产数据库，必须先完成对比和 SQL 评审。
             </div>
           </div>
         </div>
 
         <Alert>
           <ShieldCheck data-icon="inline-start" />
-          <AlertTitle>本轮定位相关迁移</AlertTitle>
+          <AlertTitle>动态结果看左侧</AlertTitle>
           <AlertDescription>
-            包含腾讯 LBS 系统配置、服务区域表、行政区划表。SQL 不会自动调用腾讯接口，也不会复制开发库主数据。
+            右侧只保留通用安全步骤。是否需要迁移、pending_versions 和检查时间，
+            以左侧「迁移对比提示」区域最新结果为准。
           </AlertDescription>
         </Alert>
 
@@ -115,9 +114,9 @@ export function ProductionMigrationAssistCard({
             </Button>
           )}
           <Button asChild variant="outline" size="sm">
-            <Link href="/settings?group=tencent_lbs">
-              <MapPinned data-icon="inline-start" />
-              腾讯位置配置
+            <Link href="/platform/audit-logs">
+              <ShieldCheck data-icon="inline-start" />
+              查看审计日志
             </Link>
           </Button>
         </div>
