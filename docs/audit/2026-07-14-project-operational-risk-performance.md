@@ -57,22 +57,12 @@ psql "$SUPABASE_DB_DIRECT_URL" \
   -f supabase/tests/project_operational_risk_explain.sql
 ```
 
-执行 20 次 RPC smoke：
+执行 20 次 RPC smoke；如同时配置 `PROJECT_HEALTH_API_URL` 和 `PROJECT_HEALTH_ADMIN_TOKEN`，同一命令会额外执行 API smoke：
 
 ```bash
 cd apps/api
-PROJECT_HEALTH_TENANT_ID="$PROJECT_HEALTH_TENANT_ID" \
-  bun --env-file=.env src/scripts/project-operational-risk-performance-smoke.ts
-```
-
-如 API 已启动且有合法管理员 token，再执行完整 API smoke：
-
-```bash
-cd apps/api
-PROJECT_HEALTH_TENANT_ID="$PROJECT_HEALTH_TENANT_ID" \
-PROJECT_HEALTH_API_URL="https://api-dev.goodcms.cn" \
-PROJECT_HEALTH_ADMIN_TOKEN="$ADMIN_TOKEN" \
-  bun --env-file=.env src/scripts/project-operational-risk-performance-smoke.ts
+bun --env-file=.env --env-file=.env.local \
+  src/scripts/project-operational-risk-performance-smoke.ts
 ```
 
 目标：
