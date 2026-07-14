@@ -16,6 +16,7 @@
 - API 阶段仅在同时提供 `PROJECT_HEALTH_API_URL` 和 `PROJECT_HEALTH_ADMIN_TOKEN` 时运行；
 - 脚本只读调用 `get_project_operational_risk_page` 和 GET `/project-health/risks`，不执行 DDL/DML；
 - RPC 阶段校验原始 `ProjectOperationalRiskRpcPageSchema`，API 阶段校验带 `title/description/action` 的 Admin display payload，避免把正常 API 响应误判为格式异常。
+- Controller 日志只记录 `hasKeyword`，不记录 keyword 原文、手机号或其他客户输入文本。
 
 ## 待 dev 数据库执行
 
@@ -61,7 +62,7 @@ PROJECT_HEALTH_ADMIN_TOKEN="$ADMIN_TOKEN" \
 
 - RPC P95 < 500ms；
 - API P95 < 1000ms；
-- API 日志不包含客户电话、地址、工单内容或 keyword 原文。
+- dev API 日志需复验不包含客户电话、地址、工单内容或 keyword 原文。
 
 ## EXPLAIN 记录模板
 

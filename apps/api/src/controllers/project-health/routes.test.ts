@@ -137,6 +137,29 @@ describe("ProjectHealthController routes", () => {
     expect(JSON.stringify(response)).not.toContain("rpcMs");
   });
 
+  test("logs keyword presence without leaking raw keyword text", async () => {
+    const controller = await getController();
+    const request = createRequest({
+      page: "1",
+      pageSize: "20",
+      keyword: "湖畔客户手机号 13800138000",
+    });
+
+    await controller.listRisks(request as never, {} as never);
+
+    expect(request.log.info).toHaveBeenCalledTimes(1);
+    const infoCalls = request.log.info.mock.calls as unknown as Array<
+      [Record<string, unknown>, string]
+    >;
+    const logPayload = infoCalls[0]?.[0];
+    if (!logPayload) throw new Error("missing project health log payload");
+    expect(logPayload.hasKeyword).toBe(true);
+    expect(logPayload).not.toHaveProperty("keyword");
+    expect(logPayload).not.toHaveProperty("rawKeyword");
+    expect(JSON.stringify(logPayload)).not.toContain("湖畔客户手机号");
+    expect(JSON.stringify(logPayload)).not.toContain("13800138000");
+  });
+
   test("rejects pageSize over 100 before service call", async () => {
     const controller = await getController();
 
