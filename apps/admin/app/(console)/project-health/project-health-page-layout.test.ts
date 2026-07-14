@@ -50,4 +50,29 @@ describe("project health page layout contract", () => {
     expect(loading).toContain("@/components/ui/skeleton");
     expect(loading).not.toContain("Loader2");
   });
+
+  test("keeps ai summary as an explicit client action", () => {
+    const page = readRouteFile("page.tsx");
+    const shell = readComponentFile("project-health-client-shell.tsx");
+    const aiPanel = readComponentFile("project-health-ai-summary.tsx");
+
+    expect(page).not.toContain("ai-summary");
+    expect(shell).toContain("fetchProjectHealthAiSummary");
+    expect(shell).toContain("const [aiSummary");
+    expect(shell).toContain("const [aiError");
+    expect(shell).toContain("const [isAiLoading");
+    expect(shell).toContain("const aiRequestRef = useRef<AbortController | null>(null)");
+    expect(shell).toContain("const aiRequestIdRef = useRef(0)");
+    expect(shell).toContain("handleGenerateAiSummary");
+    expect(shell).toContain("setAiSummary(null)");
+    expect(shell).toContain("setAiError(null)");
+    expect(shell).toContain("<ProjectHealthAiSummary");
+    expect(aiPanel).toContain('aria-live="polite"');
+    expect(aiPanel).toContain("AI 经营摘要");
+    expect(aiPanel).toContain("仅供处理排序参考");
+    expect(aiPanel).toContain("@/components/admin/status-alert");
+    expect(aiPanel).not.toContain("bg-gradient");
+    expect(aiPanel).not.toContain("text-transparent");
+    expect(aiPanel).not.toContain("backdrop-blur");
+  });
 });

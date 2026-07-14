@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
-import type { ProjectOperationalRiskRpcPage } from "@gooes/domain";
+import type {
+  ProjectOperationalRiskAiSummary,
+  ProjectOperationalRiskRpcPage,
+} from "@gooes/domain";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { ProjectHealthAiSummary } from "@/components/project-health/project-health-ai-summary";
 import { ProjectHealthFilters } from "@/components/project-health/project-health-filters";
-import { fetchProjectHealthRisks } from "@/components/project-health/project-health-api";
+import {
+  fetchProjectHealthAiSummary,
+  fetchProjectHealthRisks,
+} from "@/components/project-health/project-health-api";
 import { ProjectHealthPagination } from "@/components/project-health/project-health-pagination";
 import { ProjectHealthSummaryCards } from "@/components/project-health/project-health-summary-cards";
 import { ProjectHealthTable } from "@/components/project-health/project-health-table";
@@ -47,8 +54,13 @@ export function ProjectHealthClientShell({
   const [filters, setFilters] = useState(initialFilters);
   const [error, setError] = useState(initialError);
   const [isListLoading, setIsListLoading] = useState(false);
+  const [aiSummary, setAiSummary] = useState<ProjectOperationalRiskAiSummary | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
   const listRequestRef = useRef<AbortController | null>(null);
   const listRequestIdRef = useRef(0);
+  const aiRequestRef = useRef<AbortController | null>(null);
+  const aiRequestIdRef = useRef(0);
 
   const loadRisks = useCallback(async (
     nextFilters: ProjectHealthQueryState,
@@ -72,6 +84,11 @@ export function ProjectHealthClientShell({
       setData(nextData);
       setFilters(requestFilters);
       setError(null);
+      aiRequestRef.current?.abort();
+      aiRequestIdRef.current += 1;
+      setAiSummary(null);
+      setAiError(null);
+      setIsAiLoading(false);
       if (options.replaceUrl !== false) {
         window.history.replaceState(null, "", buildProjectHealthHref(requestFilters));
       }
@@ -93,8 +110,38 @@ export function ProjectHealthClientShell({
     return () => {
       window.removeEventListener("popstate", handlePopState);
       listRequestRef.current?.abort();
+      aiRequestRef.current?.abort();
     };
   }, [loadRisks]);
+
+  const handleGenerateAiSummary = useCallback(async () => {
+    aiRequestRef.current?.abort();
+    const controller = new AbortController();
+    const requestId = aiRequestIdRef.current + 1;
+    aiRequestIdRef.current = requestId;
+    aiRequestRef.current = controller;
+    setIsAiLoading(true);
+    setAiError(null);
+
+    try {
+      const nextSummary = await fetchProjectHealthAiSummary(filters, {
+        signal: controller.signal,
+      });
+      if (aiRequestIdRef.current !== requestId) return;
+      setAiSummary(nextSummary);
+      setAiError(null);
+    } catch (generateError) {
+      if (isAbortError(generateError)) return;
+      if (aiRequestIdRef.current !== requestId) return;
+      setAiError(
+        generateError instanceof Error
+          ? generateError.message
+          : "AI 摘要生成失败",
+      );
+    } finally {
+      if (aiRequestIdRef.current === requestId) setIsAiLoading(false);
+    }
+  }, [filters]);
 
   const generatedAt = data?.generated_at
     ? new Intl.DateTimeFormat("zh-CN", {
@@ -131,14 +178,25 @@ export function ProjectHealthClientShell({
             <RefreshCw data-icon="inline-start" />
             刷新
           </Button>
-          <Button type="button" disabled title="Task 12 接入">
+          <Button
+            type="button"
+            disabled={isAiLoading || isListLoading}
+            onClick={() => void handleGenerateAiSummary()}
+          >
             <Sparkles data-icon="inline-start" />
-            生成 AI 经营摘要
+            {isAiLoading ? "正在生成" : "生成 AI 经营摘要"}
           </Button>
         </div>
       </div>
 
       <ProjectHealthSummaryCards data={data} />
+
+      <ProjectHealthAiSummary
+        summary={aiSummary}
+        error={aiError}
+        isLoading={isAiLoading}
+        onRetry={() => void handleGenerateAiSummary()}
+      />
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
