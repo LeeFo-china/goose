@@ -115,12 +115,125 @@ describe("tenant-onboarding atomic approval migration", () => {
     expect(body).toContain("'admin_phone_exists'");
   });
 
+  test("accepts only submitted or reviewing and treats null attribution as explicit unassigned", () => {
+    const body = functionBody(sql(), "approve_tenant_onboarding_application");
+    const reviewableGuard = body.match(
+      /IF v_application\.status NOT IN \(([\s\S]*?)\) OR v_application\.converted_tenant_id/,
+    )?.[1] ?? "";
+    expect(reviewableGuard).toContain("'submitted'");
+    expect(reviewableGuard).toContain("'reviewing'");
+    expect(reviewableGuard).not.toContain("'supplement_required'");
+    expect(body.match(/'partner_ambiguous'/g)).toHaveLength(1);
+    expect(body.indexOf("'partner_ambiguous'"))
+      .toBeGreaterThan(body.indexOf("p_attribution_source_type = 'region_auto_assignment'"));
+  });
+
+  test("resolves region paths with Task3 fail-closed transition semantics", () => {
+    const helper = functionBody(sql(), "resolve_tenant_onboarding_region_paths");
+    expect(helper).toMatch(
+      /exact\.level = 'province' AND exact\.parent_adcode IS NULL[\s\S]*?THEN 'prefix'/,
+    );
+    expect(helper).toMatch(
+      /parent\.adcode IS NULL[\s\S]*?THEN 'prefix'/,
+    );
+    expect(helper).toMatch(
+      /parent\.adcode = ANY \(walk\.path_adcodes\)[\s\S]*?THEN 'exact_only'/,
+    );
+    expect(helper).toMatch(
+      /NOT \([\s\S]*?walk\.current_level = 'district'[\s\S]*?parent\.level = 'city'[\s\S]*?walk\.current_level = 'city'[\s\S]*?parent\.level = 'province'[\s\S]*?\)[\s\S]*?THEN 'exact_only'/,
+    );
+    expect(helper).toMatch(
+      /parent\.level = 'province'[\s\S]*?parent\.parent_adcode IS NOT NULL[\s\S]*?THEN 'exact_only'/,
+    );
+    expect(helper).toMatch(
+      /walk\.depth \+ 1 >= 3[\s\S]*?THEN 'exact_only'/,
+    );
+    expect(helper).toContain("path_adcodes[1:1]");
+    expect(helper).toContain("JOIN public.administrative_areas AS exact");
+    expect(helper).toContain("exact.status = 'active'");
+  });
+
+  test("rejects missing exact service regions and uses only resolved path rows", () => {
+    const body = functionBody(sql(), "approve_tenant_onboarding_application");
+    expect(body).toContain("v_requested_region_count");
+    expect(body).toContain("v_resolved_region_count");
+    expect(body).toMatch(
+      /IF v_requested_region_count <> v_resolved_region_count THEN[\s\S]*?'application_state_conflict'/,
+    );
+    expect(body).toMatch(
+      /SELECT pg_catalog\.count\(\*\)::integer\s+INTO v_requested_region_count\s+FROM \(\s*SELECT DISTINCT requested\.code/,
+    );
+    expect(body.match(/public\.resolve_tenant_onboarding_region_paths/g)?.length)
+      .toBeGreaterThanOrEqual(3);
+    const serviceAreaWrite = body.match(
+      /INSERT INTO public\.tenant_service_areas[\s\S]*?ORDER BY service_code/,
+    )?.[0] ?? "";
+    expect(serviceAreaWrite).toContain("FROM region_names");
+    expect(serviceAreaWrite).not.toContain("v_application.address_city");
+  });
+
+  test("prevents partner phantoms for the low-frequency approval transaction", () => {
+    const body = functionBody(sql(), "approve_tenant_onboarding_application");
+    expect(body).toContain("Approval is a low-frequency background transaction");
+    expect(body).toContain("LOCK TABLE public.administrative_areas IN SHARE MODE");
+    expect(body).toContain("LOCK TABLE public.platform_partners IN SHARE MODE");
+    expect(body.indexOf("LOCK TABLE public.administrative_areas IN SHARE MODE"))
+      .toBeLessThan(body.indexOf("public.resolve_tenant_onboarding_region_paths"));
+    expect(body.indexOf("LOCK TABLE public.platform_partners IN SHARE MODE"))
+      .toBeLessThan(body.indexOf("bounded_partners AS"));
+  });
+
+  test("serializes every active employee phone mutation on the approval lock key", () => {
+    const source = sql();
+    const lockHelper = functionBody(source, "lock_tenant_onboarding_employee_phones");
+    const trigger = functionBody(source, "lock_active_employee_phone_mutation");
+    expect(source).toMatch(
+      /CREATE INDEX IF NOT EXISTS employees_active_normalized_phone_idx\s+ON public\.employees \(\(pg_catalog\.btrim\(phone\)\)\)\s+WHERE status = 'active'\s+AND phone IS NOT NULL\s+AND pg_catalog\.btrim\(phone\) <> ''/,
+    );
+    expect(lockHelper).toContain("tenant-onboarding-admin-phone:");
+    expect(lockHelper).toMatch(/SELECT DISTINCT[\s\S]*?ORDER BY normalized_phone ASC/);
+    expect(trigger).toContain("OLD.status = 'active'");
+    expect(trigger).toContain("NEW.status = 'active'");
+    expect(trigger).toContain("public.lock_tenant_onboarding_employee_phones");
+    expect(lockHelper).toContain("SECURITY DEFINER");
+    expect(trigger).toContain("SECURITY DEFINER");
+    expect(lockHelper).toContain("SET search_path = pg_catalog, public, auth");
+    expect(trigger).toContain("SET search_path = pg_catalog, public, auth");
+    for (const role of ["PUBLIC", "anon", "authenticated", "service_role"]) {
+      expect(source).toMatch(new RegExp(
+        `REVOKE ALL ON FUNCTION public\\.lock_tenant_onboarding_employee_phones[\\s\\S]*? FROM ${role};`,
+      ));
+      expect(source).toMatch(new RegExp(
+        `REVOKE ALL ON FUNCTION public\\.lock_active_employee_phone_mutation[\\s\\S]*? FROM ${role};`,
+      ));
+    }
+    expect(source).toMatch(
+      /BEFORE INSERT OR UPDATE OF phone, status OR DELETE\s+ON public\.employees/,
+    );
+    expect(functionBody(source, "approve_tenant_onboarding_application"))
+      .toContain("public.lock_tenant_onboarding_employee_phones");
+  });
+
+  test("fails approved idempotency closed when binding provenance is inconsistent", () => {
+    const body = functionBody(sql(), "approve_tenant_onboarding_application");
+    const idempotent = body.match(
+      /-- Approved idempotency integrity start\.([\s\S]*?)-- Approved idempotency integrity end\./,
+    )?.[1] ?? "";
+    expect(idempotent).toContain("v_idempotent_binding_count");
+    expect(idempotent).toContain("binding.partner_id = v_application.final_partner_id");
+    expect(idempotent).toContain("binding.source_type = v_application.attribution_source_type");
+    expect(idempotent).toContain("binding.source_id = v_application.id::text");
+    expect(idempotent).toContain("binding.status = 'active'");
+    expect(idempotent).toContain("binding.invite_code_id IS NOT DISTINCT FROM");
+    expect(idempotent).toContain("v_application.final_partner_id IS NULL");
+    expect(idempotent).toContain("'application_state_conflict'");
+  });
+
   test("revalidates bounded exact administrative ancestry and never picks a candidate", () => {
     const body = functionBody(sql(), "approve_tenant_onboarding_application");
-    expect(body).toContain("WITH RECURSIVE region_ancestors");
-    expect(body).toContain("ancestor.depth < 3");
-    expect(body).toContain("child.level = 'district' AND parent.level = 'city'");
-    expect(body).toContain("child.level = 'city' AND parent.level = 'province'");
+    expect(body).toContain("WITH region_paths AS");
+    expect(body).toContain("public.resolve_tenant_onboarding_region_paths");
+    expect(body).not.toContain("WITH RECURSIVE region_ancestors");
     expect(body).toContain("LIMIT 101");
     expect(body).toContain("'partner_ambiguous'");
     expect(body).toContain("'partner_unavailable'");
@@ -150,13 +263,25 @@ describe("tenant-onboarding atomic approval migration", () => {
 
   test("revokes public callers and grants only service-role execution", () => {
     const source = sql();
+    const regionHelper = functionBody(
+      source,
+      "resolve_tenant_onboarding_region_paths",
+    );
+    expect(regionHelper).toContain("SECURITY DEFINER");
+    expect(regionHelper).toContain("SET search_path = pg_catalog, public, auth");
     for (const role of ["PUBLIC", "anon", "authenticated"]) {
       expect(source).toMatch(new RegExp(
         `REVOKE ALL ON FUNCTION public\\.approve_tenant_onboarding_application[\\s\\S]*? FROM ${role};`,
       ));
+      expect(source).toMatch(new RegExp(
+        `REVOKE ALL ON FUNCTION public\\.resolve_tenant_onboarding_region_paths[\\s\\S]*? FROM ${role};`,
+      ));
     }
     expect(source).toContain(
       "GRANT EXECUTE ON FUNCTION public.approve_tenant_onboarding_application",
+    );
+    expect(source).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.resolve_tenant_onboarding_region_paths[\s\S]*? TO service_role;/,
     );
   });
 });

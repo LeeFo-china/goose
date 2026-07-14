@@ -1,9 +1,252 @@
 -- Convert an approved onboarding application into a fully initialized tenant in
--- one transaction. Rollback: revoke and drop approve_tenant_onboarding_application,
--- then revoke and drop initialize_default_decoration_tenant. Converted business
--- data must be preserved or reversed by a separately reviewed forward migration.
+-- one transaction. Rollback: revoke/drop the approval and region-path functions,
+-- drop the employee phone trigger, revoke/drop its trigger/lock functions, and
+-- drop employees_active_normalized_phone_idx before dropping the initializer.
+-- Converted business data must be preserved or reversed by a separately reviewed
+-- forward migration; never delete converted tenants as part of a schema rollback.
 
 BEGIN;
+
+CREATE INDEX IF NOT EXISTS employees_active_normalized_phone_idx
+  ON public.employees ((pg_catalog.btrim(phone)))
+  WHERE status = 'active'
+    AND phone IS NOT NULL
+    AND pg_catalog.btrim(phone) <> '';
+
+CREATE OR REPLACE FUNCTION public.lock_tenant_onboarding_employee_phones(
+  p_phones text[]
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, auth
+AS $$
+DECLARE
+  v_phone text;
+BEGIN
+  FOR v_phone IN
+    SELECT normalized.normalized_phone
+    FROM (
+      SELECT DISTINCT pg_catalog.btrim(input.phone) AS normalized_phone
+      FROM pg_catalog.unnest(COALESCE(p_phones, '{}'::text[]))
+        AS input(phone)
+      WHERE input.phone IS NOT NULL
+        AND pg_catalog.btrim(input.phone) <> ''
+    ) AS normalized
+    ORDER BY normalized_phone ASC
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'tenant-onboarding-admin-phone:' || v_phone,
+        0
+      )
+    );
+  END LOOP;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
+  FROM anon;
+REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
+  FROM authenticated;
+REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
+  FROM service_role;
+
+CREATE OR REPLACE FUNCTION public.lock_active_employee_phone_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, auth
+AS $$
+DECLARE
+  v_phones text[] := '{}'::text[];
+BEGIN
+  IF TG_OP IN ('UPDATE', 'DELETE') THEN
+    IF OLD.status = 'active'
+      AND OLD.phone IS NOT NULL
+      AND pg_catalog.btrim(OLD.phone) <> ''
+    THEN
+      v_phones := pg_catalog.array_append(v_phones, OLD.phone);
+    END IF;
+  END IF;
+
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    IF NEW.status = 'active'
+      AND NEW.phone IS NOT NULL
+      AND pg_catalog.btrim(NEW.phone) <> ''
+    THEN
+      v_phones := pg_catalog.array_append(v_phones, NEW.phone);
+    END IF;
+  END IF;
+
+  PERFORM public.lock_tenant_onboarding_employee_phones(v_phones);
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.lock_active_employee_phone_mutation()
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.lock_active_employee_phone_mutation()
+  FROM anon;
+REVOKE ALL ON FUNCTION public.lock_active_employee_phone_mutation()
+  FROM authenticated;
+REVOKE ALL ON FUNCTION public.lock_active_employee_phone_mutation()
+  FROM service_role;
+
+DROP TRIGGER IF EXISTS tr_lock_active_employee_phone_mutation
+  ON public.employees;
+CREATE TRIGGER tr_lock_active_employee_phone_mutation
+  BEFORE INSERT OR UPDATE OF phone, status OR DELETE
+  ON public.employees
+  FOR EACH ROW
+  EXECUTE FUNCTION public.lock_active_employee_phone_mutation();
+
+CREATE OR REPLACE FUNCTION public.resolve_tenant_onboarding_region_paths(
+  p_service_region_codes text[]
+)
+RETURNS TABLE(
+  service_code text,
+  adcode text,
+  name text,
+  level text,
+  depth integer
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, auth
+AS $$
+  WITH RECURSIVE requested_codes AS (
+    SELECT DISTINCT input.code AS service_code
+    FROM pg_catalog.unnest(COALESCE(p_service_region_codes, '{}'::text[]))
+      AS input(code)
+  ),
+  region_walk AS (
+    SELECT
+      requested.service_code,
+      exact.adcode AS current_adcode,
+      exact.level AS current_level,
+      exact.parent_adcode AS current_parent_adcode,
+      ARRAY[exact.adcode]::text[] AS path_adcodes,
+      ARRAY[exact.name]::text[] AS path_names,
+      ARRAY[exact.level]::text[] AS path_levels,
+      1 AS depth,
+      CASE
+        WHEN exact.level = 'province' AND exact.parent_adcode IS NULL
+          THEN 'prefix'
+        WHEN exact.level = 'province' THEN 'exact_only'
+        WHEN exact.parent_adcode IS NULL THEN 'prefix'
+        ELSE 'continue'
+      END AS outcome
+    FROM requested_codes AS requested
+    JOIN public.administrative_areas AS exact
+      ON exact.adcode = requested.service_code
+     AND exact.status = 'active'
+
+    UNION ALL
+
+    SELECT
+      walk.service_code,
+      parent.adcode,
+      parent.level,
+      parent.parent_adcode,
+      CASE
+        WHEN parent.adcode IS NOT NULL
+          AND NOT (parent.adcode = ANY (walk.path_adcodes))
+          AND (
+            (walk.current_level = 'district' AND parent.level = 'city')
+            OR (walk.current_level = 'city' AND parent.level = 'province')
+          )
+          THEN pg_catalog.array_append(walk.path_adcodes, parent.adcode)
+        ELSE walk.path_adcodes
+      END,
+      CASE
+        WHEN parent.adcode IS NOT NULL
+          AND NOT (parent.adcode = ANY (walk.path_adcodes))
+          AND (
+            (walk.current_level = 'district' AND parent.level = 'city')
+            OR (walk.current_level = 'city' AND parent.level = 'province')
+          )
+          THEN pg_catalog.array_append(walk.path_names, parent.name)
+        ELSE walk.path_names
+      END,
+      CASE
+        WHEN parent.adcode IS NOT NULL
+          AND NOT (parent.adcode = ANY (walk.path_adcodes))
+          AND (
+            (walk.current_level = 'district' AND parent.level = 'city')
+            OR (walk.current_level = 'city' AND parent.level = 'province')
+          )
+          THEN pg_catalog.array_append(walk.path_levels, parent.level)
+        ELSE walk.path_levels
+      END,
+      walk.depth + 1,
+      CASE
+        WHEN parent.adcode IS NULL THEN 'prefix'
+        WHEN parent.adcode = ANY (walk.path_adcodes) THEN 'exact_only'
+        WHEN NOT (
+          (walk.current_level = 'district' AND parent.level = 'city')
+          OR (walk.current_level = 'city' AND parent.level = 'province')
+        ) THEN 'exact_only'
+        WHEN parent.level = 'province'
+          AND parent.parent_adcode IS NOT NULL THEN 'exact_only'
+        WHEN parent.level = 'province' THEN 'prefix'
+        WHEN parent.parent_adcode IS NULL THEN 'prefix'
+        WHEN walk.depth + 1 >= 3 THEN 'exact_only'
+        ELSE 'continue'
+      END
+    FROM region_walk AS walk
+    LEFT JOIN public.administrative_areas AS parent
+      ON parent.adcode = walk.current_parent_adcode
+     AND parent.status = 'active'
+    WHERE walk.outcome = 'continue'
+  ),
+  output_paths AS (
+    SELECT
+      walk.service_code,
+      CASE
+        WHEN walk.outcome = 'exact_only' THEN walk.path_adcodes[1:1]
+        ELSE walk.path_adcodes
+      END AS path_adcodes,
+      CASE
+        WHEN walk.outcome = 'exact_only' THEN walk.path_names[1:1]
+        ELSE walk.path_names
+      END AS path_names,
+      CASE
+        WHEN walk.outcome = 'exact_only' THEN walk.path_levels[1:1]
+        ELSE walk.path_levels
+      END AS path_levels
+    FROM region_walk AS walk
+    WHERE walk.outcome <> 'continue'
+  )
+  SELECT
+    output.service_code,
+    output.path_adcodes[path_index],
+    output.path_names[path_index],
+    output.path_levels[path_index],
+    path_index::integer
+  FROM output_paths AS output
+  CROSS JOIN LATERAL pg_catalog.generate_subscripts(
+    output.path_adcodes,
+    1
+  ) AS indexes(path_index)
+  ORDER BY output.service_code ASC, indexes.path_index ASC;
+$$;
+
+REVOKE ALL ON FUNCTION public.resolve_tenant_onboarding_region_paths(text[])
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.resolve_tenant_onboarding_region_paths(text[])
+  FROM anon;
+REVOKE ALL ON FUNCTION public.resolve_tenant_onboarding_region_paths(text[])
+  FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.resolve_tenant_onboarding_region_paths(text[])
+  TO service_role;
 
 CREATE OR REPLACE FUNCTION public.initialize_default_decoration_tenant(
   p_tenant_id uuid,
@@ -425,6 +668,9 @@ DECLARE
   v_candidate_count integer := 0;
   v_best_tie_count integer := 0;
   v_best_partner_id uuid;
+  v_requested_region_count integer := 0;
+  v_resolved_region_count integer := 0;
+  v_idempotent_binding_count integer := 0;
   v_before_assist_status text;
   v_after_assist_status text;
   v_constraint_name text;
@@ -453,13 +699,84 @@ BEGIN
     WHERE profile.tenant_id = v_application.converted_tenant_id
     LIMIT 1;
 
-    SELECT binding.id
-    INTO v_binding_id
-    FROM public.tenant_partner_bindings AS binding
-    WHERE binding.tenant_id = v_application.converted_tenant_id
-      AND binding.source_id = v_application.id::text
-    ORDER BY binding.created_at ASC, binding.id ASC
-    LIMIT 1;
+    -- Approved idempotency integrity start.
+    -- Approved idempotency is fail-closed: the durable binding must still match
+    -- the application attribution snapshot instead of returning partial state.
+    IF v_application.final_partner_id IS NOT NULL THEN
+      IF v_application.attribution_source_type IS NULL THEN
+        RETURN pg_catalog.jsonb_build_object(
+          'status',
+          'application_state_conflict'
+        );
+      END IF;
+
+      SELECT pg_catalog.count(*)::integer
+      INTO v_idempotent_binding_count
+      FROM public.tenant_partner_bindings AS binding
+      WHERE binding.tenant_id = v_application.converted_tenant_id
+        AND (
+          binding.source_id = v_application.id::text
+          OR binding.status = 'active'
+        );
+
+      IF v_idempotent_binding_count <> 1 THEN
+        RETURN pg_catalog.jsonb_build_object(
+          'status',
+          'application_state_conflict'
+        );
+      END IF;
+
+      SELECT binding.id
+      INTO v_binding_id
+      FROM public.tenant_partner_bindings AS binding
+      WHERE binding.tenant_id = v_application.converted_tenant_id
+        AND binding.partner_id = v_application.final_partner_id
+        AND binding.source_type = v_application.attribution_source_type
+        AND binding.source_id = v_application.id::text
+        AND binding.status = 'active'
+        AND binding.invite_code_id IS NOT DISTINCT FROM CASE
+          WHEN v_application.attribution_source_type = 'invite_code'
+            THEN v_application.invite_code_id
+          ELSE NULL
+        END
+        AND (
+          v_application.attribution_source_type <> 'invite_code'
+          OR v_application.invite_code_id IS NOT NULL
+        )
+      LIMIT 1;
+
+      IF v_binding_id IS NULL THEN
+        RETURN pg_catalog.jsonb_build_object(
+          'status',
+          'application_state_conflict'
+        );
+      END IF;
+    ELSIF v_application.final_partner_id IS NULL THEN
+      IF v_application.attribution_source_type IS NOT NULL THEN
+        RETURN pg_catalog.jsonb_build_object(
+          'status',
+          'application_state_conflict'
+        );
+      END IF;
+
+      SELECT pg_catalog.count(*)::integer
+      INTO v_idempotent_binding_count
+      FROM public.tenant_partner_bindings AS binding
+      WHERE binding.tenant_id = v_application.converted_tenant_id
+        AND (
+          binding.source_id = v_application.id::text
+          OR binding.status = 'active'
+        );
+
+      IF v_idempotent_binding_count <> 0 THEN
+        RETURN pg_catalog.jsonb_build_object(
+          'status',
+          'application_state_conflict'
+        );
+      END IF;
+      v_binding_id := NULL;
+    END IF;
+    -- Approved idempotency integrity end.
 
     SELECT template_application.result
     INTO v_initialization
@@ -489,8 +806,7 @@ BEGIN
 
   IF v_application.status NOT IN (
     'submitted',
-    'reviewing',
-    'supplement_required'
+    'reviewing'
   ) OR v_application.converted_tenant_id IS NOT NULL THEN
     RETURN pg_catalog.jsonb_build_object(
       'status',
@@ -545,20 +861,16 @@ BEGIN
     ''
   );
 
-  -- The credit index is unique, but active employee phones are only unique
-  -- inside one tenant. These locks close both precheck/insert race windows.
+  -- The credit index is unique. Active employee phones use the same advisory
+  -- protocol as the employees trigger, closing approval/ordinary-write races.
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'tenant-onboarding-subject:' || v_credit_code,
       0
     )
   );
-  PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(
-      'tenant-onboarding-admin-phone:' ||
-        pg_catalog.btrim(v_application.admin_phone),
-      0
-    )
+  PERFORM public.lock_tenant_onboarding_employee_phones(
+    ARRAY[v_application.admin_phone]::text[]
   );
 
   PERFORM tenant.id
@@ -574,6 +886,8 @@ BEGIN
   PERFORM employee.id
   FROM public.employees AS employee
   WHERE employee.status = 'active'
+    AND employee.phone IS NOT NULL
+    AND pg_catalog.btrim(employee.phone) <> ''
     AND pg_catalog.btrim(employee.phone) =
       pg_catalog.btrim(v_application.admin_phone)
   LIMIT 1
@@ -594,88 +908,49 @@ BEGIN
     );
   END IF;
 
-  WITH RECURSIVE region_ancestors(
-    service_code,
-    adcode,
-    level,
-    parent_adcode,
-    depth
-  ) AS (
-    SELECT
-      service_code.adcode,
-      area.adcode,
-      area.level,
-      area.parent_adcode,
-      1
+  -- Approval is a low-frequency background transaction. SHARE keeps the region
+  -- hierarchy and partner candidate snapshot stable until conversion finishes.
+  LOCK TABLE public.administrative_areas IN SHARE MODE;
+  LOCK TABLE public.platform_partners IN SHARE MODE;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_requested_region_count
+  FROM (
+    SELECT DISTINCT requested.code
     FROM pg_catalog.unnest(v_application.service_region_codes)
-      AS service_code(adcode)
-    JOIN public.administrative_areas AS area
-      ON area.adcode = service_code.adcode
-     AND area.status = 'active'
-    UNION ALL
-    SELECT
-      ancestor.service_code,
-      parent.adcode,
-      parent.level,
-      parent.parent_adcode,
-      ancestor.depth + 1
-    FROM region_ancestors AS ancestor
-    JOIN public.administrative_areas AS child
-      ON child.adcode = ancestor.adcode
-     AND child.status = 'active'
-    JOIN public.administrative_areas AS parent
-      ON parent.adcode = child.parent_adcode
-     AND parent.status = 'active'
-    WHERE ancestor.depth < 3
-      AND (
-        (child.level = 'district' AND parent.level = 'city')
-        OR (child.level = 'city' AND parent.level = 'province')
-      )
-  )
+      AS requested(code)
+  ) AS requested_codes;
+
+  SELECT pg_catalog.count(DISTINCT paths.service_code)::integer
+  INTO v_resolved_region_count
+  FROM public.resolve_tenant_onboarding_region_paths(
+    v_application.service_region_codes
+  ) AS paths;
+
+  IF v_requested_region_count <> v_resolved_region_count THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'status',
+      'application_state_conflict'
+    );
+  END IF;
+
   SELECT COALESCE(
-    pg_catalog.array_agg(DISTINCT ancestor.adcode),
+    pg_catalog.array_agg(DISTINCT paths.adcode),
     '{}'::text[]
   )
   INTO v_ancestor_codes
-  FROM region_ancestors AS ancestor;
+  FROM public.resolve_tenant_onboarding_region_paths(
+    v_application.service_region_codes
+  ) AS paths;
 
-  WITH RECURSIVE region_ancestors(
-    service_code,
-    adcode,
-    level,
-    parent_adcode,
-    depth
-  ) AS (
+  WITH region_paths AS (
     SELECT
-      service_code.adcode,
-      area.adcode,
-      area.level,
-      area.parent_adcode,
-      1
-    FROM pg_catalog.unnest(v_application.service_region_codes)
-      AS service_code(adcode)
-    JOIN public.administrative_areas AS area
-      ON area.adcode = service_code.adcode
-     AND area.status = 'active'
-    UNION ALL
-    SELECT
-      ancestor.service_code,
-      parent.adcode,
-      parent.level,
-      parent.parent_adcode,
-      ancestor.depth + 1
-    FROM region_ancestors AS ancestor
-    JOIN public.administrative_areas AS child
-      ON child.adcode = ancestor.adcode
-     AND child.status = 'active'
-    JOIN public.administrative_areas AS parent
-      ON parent.adcode = child.parent_adcode
-     AND parent.status = 'active'
-    WHERE ancestor.depth < 3
-      AND (
-        (child.level = 'district' AND parent.level = 'city')
-        OR (child.level = 'city' AND parent.level = 'province')
-      )
+      paths.service_code,
+      paths.adcode,
+      paths.level
+    FROM public.resolve_tenant_onboarding_region_paths(
+      v_application.service_region_codes
+    ) AS paths
   ),
   bounded_partners AS (
     SELECT partner.id, partner.region_codes
@@ -688,18 +963,18 @@ BEGIN
   best_region_match AS (
     SELECT
       partner.id AS partner_id,
-      ancestor.service_code,
+      path.service_code,
       pg_catalog.max(
-        CASE ancestor.level
+        CASE path.level
           WHEN 'district' THEN 2
           WHEN 'city' THEN 1
           ELSE 0
         END
       ) AS specificity
     FROM bounded_partners AS partner
-    JOIN region_ancestors AS ancestor
-      ON ancestor.adcode = ANY (partner.region_codes)
-    GROUP BY partner.id, ancestor.service_code
+    JOIN region_paths AS path
+      ON path.adcode = ANY (partner.region_codes)
+    GROUP BY partner.id, path.service_code
   ),
   partner_scores AS (
     SELECT
@@ -749,12 +1024,6 @@ BEGIN
       LIMIT 1
     )
   INTO v_candidate_count, v_best_tie_count, v_best_partner_id;
-
-  IF p_final_partner_id IS NULL
-    AND (v_candidate_count > 100 OR v_best_tie_count > 1)
-  THEN
-    RETURN pg_catalog.jsonb_build_object('status', 'partner_ambiguous');
-  END IF;
 
   IF p_final_partner_id IS NOT NULL THEN
     PERFORM partner.id
@@ -841,61 +1110,29 @@ BEGIN
       p_reviewer_employee_id
     );
 
-    WITH RECURSIVE region_ancestors(
-      service_code,
-      adcode,
-      name,
-      level,
-      parent_adcode,
-      depth
-    ) AS (
+    WITH region_paths AS (
       SELECT
-        service_code.adcode,
-        area.adcode,
-        area.name,
-        area.level,
-        area.parent_adcode,
-        1
-      FROM pg_catalog.unnest(v_application.service_region_codes)
-        AS service_code(adcode)
-      LEFT JOIN public.administrative_areas AS area
-        ON area.adcode = service_code.adcode
-       AND area.status = 'active'
-      UNION ALL
-      SELECT
-        ancestor.service_code,
-        parent.adcode,
-        parent.name,
-        parent.level,
-        parent.parent_adcode,
-        ancestor.depth + 1
-      FROM region_ancestors AS ancestor
-      JOIN public.administrative_areas AS child
-        ON child.adcode = ancestor.adcode
-       AND child.status = 'active'
-      JOIN public.administrative_areas AS parent
-        ON parent.adcode = child.parent_adcode
-       AND parent.status = 'active'
-      WHERE ancestor.depth < 3
-        AND (
-          (child.level = 'district' AND parent.level = 'city')
-          OR (child.level = 'city' AND parent.level = 'province')
-        )
+        paths.service_code,
+        paths.name,
+        paths.level
+      FROM public.resolve_tenant_onboarding_region_paths(
+        v_application.service_region_codes
+      ) AS paths
     ),
     region_names AS (
       SELECT
-        ancestor.service_code,
-        pg_catalog.max(ancestor.name) FILTER (
-          WHERE ancestor.level = 'province'
+        path.service_code,
+        pg_catalog.max(path.name) FILTER (
+          WHERE path.level = 'province'
         ) AS province,
-        pg_catalog.max(ancestor.name) FILTER (
-          WHERE ancestor.level = 'city'
+        pg_catalog.max(path.name) FILTER (
+          WHERE path.level = 'city'
         ) AS city,
-        pg_catalog.max(ancestor.name) FILTER (
-          WHERE ancestor.level = 'district'
+        pg_catalog.max(path.name) FILTER (
+          WHERE path.level = 'district'
         ) AS district
-      FROM region_ancestors AS ancestor
-      GROUP BY ancestor.service_code
+      FROM region_paths AS path
+      GROUP BY path.service_code
     )
     INSERT INTO public.tenant_service_areas (
       tenant_id,
@@ -908,33 +1145,30 @@ BEGIN
       priority,
       status
     )
-    SELECT DISTINCT ON (service_code.adcode)
+    SELECT
       v_tenant_id,
       region_names.province,
       COALESCE(
         region_names.city,
         region_names.province,
-        v_application.address_city
+        region_names.district
       ),
       region_names.district,
-      service_code.adcode,
+      region_names.service_code,
       CASE
-        WHEN service_code.adcode = v_application.address_region_code
+        WHEN region_names.service_code = v_application.address_region_code
           THEN v_application.address_latitude
         ELSE NULL
       END,
       CASE
-        WHEN service_code.adcode = v_application.address_region_code
+        WHEN region_names.service_code = v_application.address_region_code
           THEN v_application.address_longitude
         ELSE NULL
       END,
       100,
       'inactive'
-    FROM pg_catalog.unnest(v_application.service_region_codes)
-      AS service_code(adcode)
-    LEFT JOIN region_names
-      ON region_names.service_code = service_code.adcode
-    ORDER BY service_code.adcode;
+    FROM region_names
+    ORDER BY service_code;
 
     IF p_final_partner_id IS NOT NULL THEN
       PERFORM binding.id
