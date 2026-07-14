@@ -127,6 +127,48 @@ test.describe("project health smoke", () => {
     expect(await isPageHorizontallyOverflowing(page)).toBe(false);
   });
 
+  test("风险中心支持键盘提交筛选和触发 AI 摘要", async ({ page }) => {
+    let aiRequestCount = 0;
+    page.on("request", (request) => {
+      if (request.url().includes("/api/backend/project-health/ai-summary")) {
+        aiRequestCount += 1;
+      }
+    });
+
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/project-health", { waitUntil: "networkidle" });
+
+    const keywordInput = page.getByPlaceholder("项目名称或完整项目 ID");
+    await keywordInput.focus();
+    await expect(keywordInput).toBeFocused();
+    await keywordInput.fill("云麓");
+
+    const filteredResponse = page.waitForResponse((response) =>
+      response.url().includes("/api/backend/project-health/risks") &&
+      response.url().includes("keyword=%E4%BA%91%E9%BA%93") &&
+      response.status() === 200
+    );
+    await page.keyboard.press("Enter");
+    await filteredResponse;
+
+    await expect(page).toHaveURL(/\/project-health\?page=1&keyword=%E4%BA%91%E9%BA%93$/);
+    await expect(page.getByTestId("project-health-table-viewport").getByText("云麓花园 3-1")).toBeVisible();
+
+    const aiButton = page.getByRole("button", { name: "生成 AI 经营摘要" });
+    await aiButton.focus();
+    await expect(aiButton).toBeFocused();
+
+    const aiResponse = page.waitForResponse((response) =>
+      response.url().includes("/api/backend/project-health/ai-summary") &&
+      response.status() === 200
+    );
+    await page.keyboard.press("Enter");
+    await aiResponse;
+
+    await expect(page.getByRole("heading", { name: "AI 经营摘要" })).toBeVisible();
+    expect(aiRequestCount).toBe(1);
+  });
+
   test("风险中心快速切换筛选时旧响应不会覆盖新结果", async ({ page }) => {
     await page.route("**/api/backend/project-health/risks**", async (route) => {
       const url = route.request().url();
