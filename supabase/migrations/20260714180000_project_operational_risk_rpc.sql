@@ -325,11 +325,90 @@ with input as (
     and workflow_tasks.status = 'pending'
     and workflow_tasks.due_at is null
 ), risk_facts as (
-  select * from workflow_task_risks
-  union all select * from procedure_risks
-  union all select * from missing_project_log_risks
-  union all select * from acceptance_risks
-  union all select * from service_ticket_risks
+  select
+    risk_key,
+    risk_type,
+    severity,
+    project_id,
+    project_name,
+    project_status,
+    source_type,
+    source_id,
+    assignee_employee_id,
+    assignee_employee_name,
+    occurred_at,
+    due_at,
+    overdue_days,
+    evidence
+  from workflow_task_risks
+  union all
+  select
+    risk_key,
+    risk_type,
+    severity,
+    project_id,
+    project_name,
+    project_status,
+    source_type,
+    source_id,
+    assignee_employee_id,
+    assignee_employee_name,
+    occurred_at,
+    due_at,
+    overdue_days,
+    evidence
+  from procedure_risks
+  union all
+  select
+    risk_key,
+    risk_type,
+    severity,
+    project_id,
+    project_name,
+    project_status,
+    source_type,
+    source_id,
+    assignee_employee_id,
+    assignee_employee_name,
+    occurred_at,
+    due_at,
+    overdue_days,
+    evidence
+  from missing_project_log_risks
+  union all
+  select
+    risk_key,
+    risk_type,
+    severity,
+    project_id,
+    project_name,
+    project_status,
+    source_type,
+    source_id,
+    assignee_employee_id,
+    assignee_employee_name,
+    occurred_at,
+    due_at,
+    overdue_days,
+    evidence
+  from acceptance_risks
+  union all
+  select
+    risk_key,
+    risk_type,
+    severity,
+    project_id,
+    project_name,
+    project_status,
+    source_type,
+    source_id,
+    assignee_employee_id,
+    assignee_employee_name,
+    occurred_at,
+    due_at,
+    overdue_days,
+    evidence
+  from service_ticket_risks
 ), deduplicated as (
   select
     risk_key,

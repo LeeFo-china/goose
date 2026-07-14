@@ -68,6 +68,8 @@ describe("project operational risk RPC migration contract", () => {
     expect(sql).toContain("'missing_project_log:'");
     expect(sql).toContain("'acceptance_rework:'");
     expect(sql).toContain("'service_ticket:'");
+    expect(lowerSql).not.toContain("select * from workflow_task_risks");
+    expect(lowerSql).not.toContain("union all select *");
 
     for (const column of [
       "risk_key",
