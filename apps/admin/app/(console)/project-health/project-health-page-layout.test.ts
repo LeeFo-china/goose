@@ -1,0 +1,53 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const routeDir = new URL(".", import.meta.url).pathname;
+const adminRoot = join(routeDir, "../../..");
+const componentDir = join(adminRoot, "components/project-health");
+
+function readRouteFile(fileName: string) {
+  return readFileSync(join(routeDir, fileName), "utf8");
+}
+
+function readComponentFile(fileName: string) {
+  return readFileSync(join(componentDir, fileName), "utf8");
+}
+
+describe("project health page layout contract", () => {
+  test("keeps the page inside a fixed admin workspace", () => {
+    const page = readRouteFile("page.tsx");
+
+    expect(page).toContain("h-[calc(100vh-6.5625rem)]");
+    expect(page).toContain("min-h-0 flex-col gap-5 overflow-hidden");
+    expect(page).toContain("ProjectHealthClientShell");
+  });
+
+  test("uses one card workspace with fixed table viewport and footer", () => {
+    const shell = readComponentFile("project-health-client-shell.tsx");
+
+    expect(shell).toContain("CardHeader");
+    expect(shell).toContain("CardContent");
+    expect(shell).toContain("CardFooter");
+    expect(shell).toContain('data-testid="project-health-table-viewport"');
+    expect(shell).toContain("min-h-0 flex-1 overflow-auto");
+    expect(shell).not.toContain("bg-gradient");
+    expect(shell).not.toContain("backdrop-blur");
+    expect(shell).not.toContain("text-transparent");
+  });
+
+  test("uses approved local admin UI primitives", () => {
+    const filters = readComponentFile("project-health-filters.tsx");
+    const table = readComponentFile("project-health-table.tsx");
+    const shell = readComponentFile("project-health-client-shell.tsx");
+    const loading = readRouteFile("loading.tsx");
+
+    expect(filters).toContain("@/components/ui/input");
+    expect(filters).toContain("@/components/ui/select");
+    expect(filters).toContain("@/components/ui/button");
+    expect(table).toContain("@/components/admin/data-table");
+    expect(shell).toContain("@/components/admin/status-alert");
+    expect(loading).toContain("@/components/ui/skeleton");
+    expect(loading).not.toContain("Loader2");
+  });
+});
