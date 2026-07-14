@@ -1877,6 +1877,20 @@ bucket versioning is enabled. If versioning is enabled or the state cannot be co
 release and design a separately reviewed immutable-object strategy; do not change the remote bucket
 configuration without explicit authorization.
 
+As a separate read-only release gate, capture the target bucket CORS rule and prove that the actual
+mini-program/client origin is allowed to send `PUT`. The allowed request headers must cover
+`content-type`, `content-length`, `x-cos-forbid-overwrite`, and every authorization header actually
+used by the client. Redact credentials and signed query parameters from the recorded evidence. If
+the origin, method, or any required header is absent, stop the release; do not modify remote CORS
+configuration without explicit authorization.
+
+After the target environment is confirmed and remote smoke mutation is explicitly authorized, use
+a dedicated disposable object key to run the real signed upload flow with the exact headers returned
+by the init API. Record that the first `PUT` succeeds, then repeat a second `PUT` to the same key and
+record that COS rejects it. A successful second request fails this gate. Preserve the redacted HTTP
+status/error evidence and clean up the disposable object only through the approved environment
+procedure. Do not run this smoke against any remote bucket while implementing this task.
+
 Load `/Users/leefo/Public/work/gooes/.env` in the shell without echoing values, verify
 `SUPABASE_DB_DIRECT_URL` is present, then run:
 

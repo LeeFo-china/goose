@@ -116,11 +116,20 @@ class PlatformFileObjectRepository {
     if (error) {
       const errorCode = (error as { code?: string }).code;
       if (errorCode === "23505") {
-        const existing = await this.findActiveByObjectKey({
-          provider: input.provider,
-          bucket: input.bucket,
-          objectKey: input.object_key,
-        });
+        const isPrivateVisitorObject = input.owner_type === "visitor" &&
+          Boolean(input.owner_visitor_id) &&
+          (input.visibility ?? "public") === "private";
+        const existing = isPrivateVisitorObject
+          ? await this.findPrivateVisitorConflict({
+            provider: input.provider,
+            bucket: input.bucket,
+            objectKey: input.object_key,
+          })
+          : await this.findActiveByObjectKey({
+            provider: input.provider,
+            bucket: input.bucket,
+            objectKey: input.object_key,
+          });
         if (existing) {
           this.assertExistingVisitorOwnership(existing, input);
           return existing;
@@ -160,6 +169,27 @@ class PlatformFileObjectRepository {
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询文件对象失败", error);
+    }
+
+    return (data as PlatformFileObjectRecord | null) ?? null;
+  }
+
+  private async findPrivateVisitorConflict(input: {
+    provider: PlatformFileProvider;
+    bucket: string;
+    objectKey: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("platform_file_objects")
+      .select("*")
+      .eq("provider", input.provider)
+      .eq("bucket", input.bucket)
+      .eq("object_key", input.objectKey)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (error) {

@@ -4,15 +4,39 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-async function loadRepositoryWithExisting(existing: Record<string, unknown>) {
+type QueryTrace = {
+  equals: Array<[string, unknown]>;
+  nullChecks: Array<[string, unknown]>;
+};
+
+async function loadRepositoryWithExisting(
+  existing: Record<string, unknown>,
+  trace?: QueryTrace,
+  honorStatusFilter = false,
+) {
   let maybeSingleCalls = 0;
+  let statusFilterMatches = true;
   const builder: Record<string, unknown> = {};
-  for (const method of ["from", "insert", "select", "eq", "is", "order", "limit"]) {
+  for (const method of ["from", "insert", "select", "order", "limit"]) {
     builder[method] = mock(() => builder);
   }
+  builder.eq = mock((field: string, value: unknown) => {
+    trace?.equals.push([field, value]);
+    if (field === "status" && existing.status !== value) {
+      statusFilterMatches = false;
+    }
+    return builder;
+  });
+  builder.is = mock((field: string, value: unknown) => {
+    trace?.nullChecks.push([field, value]);
+    return builder;
+  });
   builder.maybeSingle = mock(async () => {
     maybeSingleCalls += 1;
     if (maybeSingleCalls === 1) return { data: null, error: { code: "23505" } };
+    if (honorStatusFilter && !statusFilterMatches) {
+      return { data: null, error: null };
+    }
     return { data: existing, error: null };
   });
 
@@ -109,4 +133,40 @@ test("duplicate private objects accept exact authoritative metadata", async () =
 
   await expect(repository.createOrFindByObjectKey(privateInput))
     .resolves.toMatchObject({ id: "file-1", checksum: '"head-etag"' });
+});
+
+test.each(["failed", "migrating", "deleted"])(
+  "private conflict lookup exposes a %s row to invariant validation",
+  async (status) => {
+    const trace: QueryTrace = { equals: [], nullChecks: [] };
+    const repository = await loadRepositoryWithExisting(
+      { ...matchingExisting, status },
+      trace,
+      true,
+    );
+
+    await expect(repository.createOrFindByObjectKey(privateInput))
+      .rejects.toMatchObject({ statusCode: 400, code: "FILE_STORAGE_UPLOAD_FAILED" });
+    expect(trace.equals).toEqual(expect.arrayContaining([
+      ["provider", "tencent_cos"],
+      ["bucket", "bucket"],
+      ["object_key", "private/object.jpg"],
+    ]));
+    expect(trace.equals).not.toContainEqual(["status", "active"]);
+    expect(trace.nullChecks).toContainEqual(["deleted_at", null]);
+  },
+);
+
+test("public conflict recovery keeps the active-only legacy lookup", async () => {
+  const trace: QueryTrace = { equals: [], nullChecks: [] };
+  const repository = await loadRepositoryWithExisting(matchingExisting, trace, true);
+
+  await expect(repository.createOrFindByObjectKey({
+    ...privateInput,
+    owner_type: "project",
+    owner_visitor_id: null,
+    scene: "project_attachment",
+    visibility: "public",
+  })).resolves.toMatchObject({ id: "file-1" });
+  expect(trace.equals).toContainEqual(["status", "active"]);
 });
