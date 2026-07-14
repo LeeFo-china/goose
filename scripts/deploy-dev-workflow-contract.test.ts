@@ -5,6 +5,10 @@ const workflow = readFileSync(
   new URL("../.github/workflows/deploy-dev.yml", import.meta.url),
   "utf8",
 );
+const socialVideoWorkerDockerfile = readFileSync(
+  new URL("../docker/social-video-worker.Dockerfile", import.meta.url),
+  "utf8",
+);
 
 const deployStepStart = workflow.indexOf("- name: Deploy dev services");
 const checkStepStart = workflow.indexOf("- name: Check dev services");
@@ -77,5 +81,13 @@ describe("deploy-dev workflow", () => {
     );
     expect(gatedDeployStep).not.toContain("REMOTE_GOOES_WEB_IMAGE");
     expect(gatedDeployStep).not.toContain("${GITHUB_SHA}");
+  });
+
+  test("builds social video worker with domain package dependencies", () => {
+    const domainNodeModulesCopy = "COPY --from=deps /app/packages/domain/node_modules ./packages/domain/node_modules";
+    expect(socialVideoWorkerDockerfile).toContain(domainNodeModulesCopy);
+    expect(socialVideoWorkerDockerfile.indexOf(domainNodeModulesCopy)).toBeLessThan(
+      socialVideoWorkerDockerfile.indexOf("RUN cd packages/domain && bun run build"),
+    );
   });
 });
