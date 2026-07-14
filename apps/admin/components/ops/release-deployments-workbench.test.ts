@@ -60,6 +60,22 @@ describe("release deployment workbench contracts", () => {
     expect(sharedSource).toContain("/deploy");
   });
 
+  test("keeps official website publishing as an independent gated entry", () => {
+    const panelSource = readFileSync(join(import.meta.dir, "release-deployments-panel.tsx"), "utf8");
+    const dispatchSource = readFileSync(join(import.meta.dir, "release-deployments-dispatch-card.tsx"), "utf8");
+    const typesSource = readFileSync(join(import.meta.dir, "ops-types.ts"), "utf8");
+
+    expect(panelSource).toContain('value="web-release"');
+    expect(panelSource).toContain("官网发布");
+    expect(panelSource).toContain("官网 Web 使用独立 Gate");
+    expect(panelSource).toContain("verify-dev-web-deployment-gate.yml");
+    expect(panelSource).toContain("verify-web-deployment-gate.yml");
+    expect(panelSource).toContain("deploy-dev.yml");
+    expect(panelSource).toContain("deploy-docker-services.yml");
+    expect(dispatchSource).not.toContain('value="web"');
+    expect(typesSource).toContain('export type ReleaseRuntimeService = Exclude<ReleaseService, "all"> | "web"');
+  });
+
   test("maps release stages before raw GitHub status", () => {
     expect(statusLabel(run({ stage: "ready_to_deploy", stage_label: "可部署", status: "completed", conclusion: "success" }))).toBe("可部署");
     expect(statusLabel(run({ stage: "deploy_failed", stage_label: "部署失败", status: "completed", conclusion: "failure" }))).toBe("部署失败");

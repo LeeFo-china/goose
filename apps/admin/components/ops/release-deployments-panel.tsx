@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import type { ReleaseEnvironment, ReleaseRefType, ReleaseSuccessfulRef } from "@/components/ops/ops-types";
 import { OpsTabsList } from "@/components/ops/ops-tabs";
@@ -13,11 +15,40 @@ import { ReleaseRunsCard, SuccessfulRefsCard } from "@/components/ops/release-de
 import { ReleaseCandidateEvidence } from "@/components/ops/release-candidate-evidence";
 import { createReleaseTag, createRollbackTag, dispatchRelease, RELEASE_RUN_FORCE_POLL_MS, type ReleaseDeploymentsPanelProps } from "@/components/ops/release-deployments-shared";
 import { useReleaseDeploymentSnapshots } from "@/components/ops/release-deployments-snapshots";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 
-type ReleaseMode = "service-release" | "database-migration";
+type ReleaseMode = "service-release" | "web-release" | "database-migration";
+
+const WEB_RELEASE_WORKFLOWS = {
+  devGate: "verify-dev-web-deployment-gate.yml",
+  devDeploy: "deploy-dev.yml",
+  productionGate: "verify-web-deployment-gate.yml",
+  productionDeploy: "deploy-docker-services.yml",
+} as const;
+
+function getWorkflowUrl(repository: string | undefined, workflowId: string) {
+  const repositorySlug = repository?.trim() || "LeeFo-china/goose";
+  const repositoryUrl = repositorySlug.startsWith("http")
+    ? repositorySlug.replace(/\/$/, "")
+    : `https://github.com/${repositorySlug}`;
+  return `${repositoryUrl}/actions/workflows/${workflowId}`;
+}
+
+function releaseModeTitle(mode: ReleaseMode) {
+  if (mode === "database-migration") return "数据库迁移";
+  if (mode === "web-release") return "官网发布";
+  return "服务发布";
+}
+
+function releaseModeDescription(mode: ReleaseMode) {
+  if (mode === "database-migration") return "提交生产 migration GitHub Actions，默认先预检查 pending migrations。";
+  if (mode === "web-release") return "官网 Web 使用独立 Gate，不进入服务发布多选；按环境先验证再 Web-only 部署。";
+  return "选择发布来源、配置目标服务，并提交 GitHub Actions 发布任务。";
+}
 
 export function ReleaseDeploymentsPanel({
   options,
@@ -282,15 +313,12 @@ export function ReleaseDeploymentsPanel({
           <Card>
             <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle>{releaseMode === "database-migration" ? "数据库迁移" : "服务发布"}</CardTitle>
-                <CardDescription>
-                  {releaseMode === "database-migration"
-                    ? "提交生产 migration GitHub Actions，默认先预检查 pending migrations。"
-                    : "选择发布来源、配置目标服务，并提交 GitHub Actions 发布任务。"}
-                </CardDescription>
+                <CardTitle>{releaseModeTitle(releaseMode)}</CardTitle>
+                <CardDescription>{releaseModeDescription(releaseMode)}</CardDescription>
               </div>
               <OpsTabsList className="md:w-auto">
                 <TabsTrigger value="service-release">服务发布</TabsTrigger>
+                <TabsTrigger value="web-release">官网发布</TabsTrigger>
                 <TabsTrigger value="database-migration">数据库迁移</TabsTrigger>
               </OpsTabsList>
             </CardHeader>
@@ -328,6 +356,9 @@ export function ReleaseDeploymentsPanel({
                   }}
                 />
               </TabsContent>
+              <TabsContent value="web-release" className="mt-0">
+                <WebReleaseGuideCard repository={options?.repository} />
+              </TabsContent>
             </CardContent>
           </Card>
           {releaseMode === "database-migration" ? <ProductionMigrationAssistCard options={options} /> : null}
@@ -338,6 +369,102 @@ export function ReleaseDeploymentsPanel({
         state={{ lastRunsRefreshedAt, runsPollError, hasActiveRuns, currentRunsPagination, runsRefreshing, currentRuns, selectedCandidateRunId }}
         actions={{ refreshReleaseSnapshots, changeRunsPage, selectCandidateRun: setSelectedCandidateRunId }}
       />
+    </div>
+  );
+}
+
+function WebReleaseGuideCard({ repository }: { repository?: string }) {
+  const devGateUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.devGate);
+  const devDeployUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.devDeploy);
+  const productionGateUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.productionGate);
+  const productionDeployUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.productionDeploy);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-lg border bg-muted/20 p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold">官网发布独立入口</h3>
+              <Badge variant="outline">Web-only Gate</Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              官网 Web 使用独立 Gate。先确认 API revision、migration 与 smoke 结果，再执行 Web-only 部署；
+              不进入服务发布多选，避免和 API/Admin/Worker 发布链路混跑。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <WebReleaseEnvironmentPanel
+          title="开发环境"
+          description="用于 www-dev.goodcms.cn。先跑开发 Web Gate，再在 Dev 部署 workflow 中选择 service=web。"
+          steps={[
+            "确认 API 已发布到目标 commit，并完成必要 migration。",
+            `运行 ${WEB_RELEASE_WORKFLOWS.devGate}，记录成功的 gate_run_id。`,
+            `运行 ${WEB_RELEASE_WORKFLOWS.devDeploy}，选择 service=web 并填入 gate_run_id。`,
+          ]}
+          actions={[
+            { label: "开发 Web Gate", href: devGateUrl },
+            { label: "开发 Web 部署", href: devDeployUrl },
+          ]}
+        />
+        <WebReleaseEnvironmentPanel
+          title="生产环境"
+          description="用于生产官网。必须先通过生产 Web Gate，再走生产 Docker 服务部署 workflow 的 web 服务。"
+          steps={[
+            "先在服务发布中完成 API/Admin/Worker 候选构建与必要部署。",
+            `运行 ${WEB_RELEASE_WORKFLOWS.productionGate}，确认 release manifest、migration 与 smoke 证据。`,
+            `运行 ${WEB_RELEASE_WORKFLOWS.productionDeploy}，选择 service=web 并填入 gate_run_id 与确认文本。`,
+          ]}
+          actions={[
+            { label: "生产 Web Gate", href: productionGateUrl },
+            { label: "生产 Web 部署", href: productionDeployUrl },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+function WebReleaseEnvironmentPanel({
+  title,
+  description,
+  steps,
+  actions,
+}: {
+  title: string;
+  description: string;
+  steps: string[];
+  actions: Array<{ label: string; href: string }>;
+}) {
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border p-4">
+      <div>
+        <div className="text-sm font-semibold">{title}</div>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      </div>
+      <ol className="flex flex-col gap-2 text-sm text-muted-foreground">
+        {steps.map((step, index) => (
+          <li key={step} className="flex gap-2">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
+              {index + 1}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-auto flex flex-wrap gap-2">
+        {actions.map((action) => (
+          <Button key={action.href} asChild variant="outline" size="sm">
+            <Link href={action.href} target="_blank" rel="noreferrer">
+              <ExternalLink data-icon="inline-start" />
+              {action.label}
+            </Link>
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }

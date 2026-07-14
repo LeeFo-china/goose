@@ -247,9 +247,11 @@ export type ReleaseSuccessfulRefListData = {
   pagination: Pagination;
 };
 
+export type ReleaseRuntimeService = Exclude<ReleaseService, "all"> | "web";
+
 export type ReleaseRuntimeServiceVersion = {
   environment: ReleaseEnvironment;
-  service: Exclude<ReleaseService, "all">;
+  service: ReleaseRuntimeService;
   service_label: string;
   container_name: string;
   image: string;

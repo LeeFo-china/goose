@@ -103,6 +103,20 @@ describe("buildReleaseDispatchRequest", () => {
   });
 });
 
+describe("runtime service version contracts", () => {
+  test("recognizes official website containers as runtime-only services", () => {
+    expect(shared.getRuntimeService("gooes-web")).toBe("web");
+    expect(shared.getRuntimeService("gooes-web-dev")).toBe("web");
+    expect(shared.getReleaseServiceOrder("web" as never)).toBeGreaterThan(shared.getReleaseServiceOrder("admin"));
+  });
+
+  test("keeps official website out of existing admin release service options", () => {
+    expect(shared.RELEASE_WORKFLOWS.dev.services as string[]).not.toContain("web");
+    expect(shared.RELEASE_WORKFLOWS.production.services as string[]).not.toContain("web");
+    expect(shared.expandAdminReleaseServices(["all"])).not.toContain("web" as never);
+  });
+});
+
 describe("release run stages", () => {
   test("marks old workflows as visible legacy runs", () => {
     const normalized = shared.normalizeWorkflowRun(shared.LEGACY_RELEASE_WORKFLOWS[0]!, run({

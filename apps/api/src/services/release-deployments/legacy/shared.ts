@@ -32,6 +32,7 @@ import type {
   ReleaseRefType,
   ReleaseRunListQuery,
   ReleaseRuntimeServiceVersion,
+  ReleaseRuntimeService,
   ReleaseStage,
   ReleaseSuccessfulRefListQuery,
   ReleaseService,
@@ -83,6 +84,8 @@ const ADMIN_RELEASE_SERVICE_ORDER: Array<Exclude<ReleaseService, "all">> = [
   "cos-reconcile-worker",
 ];
 
+const RUNTIME_RELEASE_SERVICE_ORDER: ReleaseRuntimeService[] = ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker"];
+
 const LEGACY_RELEASE_WORKFLOW_IDS = new Set(LEGACY_RELEASE_WORKFLOWS.map((workflow) => workflow.workflowId));
 
 const RELEASE_STAGE_LABELS: Record<ReleaseStage, string> = {
@@ -116,6 +119,14 @@ export const SERVICE_LABELS: Record<ReleaseService, string> = {
   admin: "Admin",
   "social-video-worker": "视频转文本 Worker",
   "cos-reconcile-worker": "COS 对账 Worker",
+};
+
+export const RUNTIME_SERVICE_LABELS: Record<ReleaseRuntimeService, string> = {
+  api: SERVICE_LABELS.api,
+  admin: SERVICE_LABELS.admin,
+  web: "官网 Web",
+  "social-video-worker": SERVICE_LABELS["social-video-worker"],
+  "cos-reconcile-worker": SERVICE_LABELS["cos-reconcile-worker"],
 };
 
 export const REF_TYPE_LABELS: Record<ReleaseRefType, string> = {
@@ -317,9 +328,10 @@ export function formatServiceLabels(services: ReleaseService[]) {
   return services.map((service) => SERVICE_LABELS[service]).join("、");
 }
 
-export function getRuntimeService(name: string): Exclude<ReleaseService, "all"> | null {
+export function getRuntimeService(name: string): ReleaseRuntimeService | null {
   if (name === "gooes-api" || name === "gooes-api-dev") return "api";
   if (name === "gooes-admin" || name === "gooes-admin-dev") return "admin";
+  if (name === "gooes-web" || name === "gooes-web-dev") return "web";
   if (name === "gooes-social-video-worker" || name === "gooes-social-video-worker-dev") return "social-video-worker";
   if (name === "gooes-cos-reconcile-worker" || name === "gooes-cos-reconcile-worker-dev") return "cos-reconcile-worker";
   return null;
@@ -333,8 +345,8 @@ export function getReleaseEnvironmentOrder(environment: ReleaseEnvironment) {
   return environment === "production" ? 0 : 1;
 }
 
-export function getReleaseServiceOrder(service: Exclude<ReleaseService, "all">) {
-  return ["api", "admin", "social-video-worker", "cos-reconcile-worker"].indexOf(service);
+export function getReleaseServiceOrder(service: ReleaseRuntimeService) {
+  return RUNTIME_RELEASE_SERVICE_ORDER.indexOf(service);
 }
 
 export function shortSha(value: string | null | undefined) {
@@ -475,6 +487,7 @@ export type {
   ReleaseRunListQuery,
   ReleaseRuntimeServiceVersion,
   ReleaseRunAudit,
+  ReleaseRuntimeService,
   ReleaseService,
   ReleaseStage,
   ReleaseSuccessfulRefListQuery,

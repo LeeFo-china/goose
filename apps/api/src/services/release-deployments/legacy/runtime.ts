@@ -5,6 +5,7 @@ import {
   REF_TYPE_LABELS,
   RELEASE_OPERATION_LABELS,
   PRODUCTION_MIGRATION_WORKFLOW,
+  RUNTIME_SERVICE_LABELS,
   RELEASE_WORKFLOWS,
   SERVICE_LABELS,
   compareRuntimeWithDev,
@@ -137,7 +138,7 @@ export async function getRuntimeVersions(this: any) {
     services.push({
       environment: getRuntimeEnvironment(container.name),
       service,
-      service_label: SERVICE_LABELS[service],
+      service_label: RUNTIME_SERVICE_LABELS[service],
       container_name: container.name,
       image: container.image,
       image_tag: container.image_tag,
