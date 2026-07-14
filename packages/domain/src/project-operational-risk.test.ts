@@ -44,4 +44,16 @@ describe("project operational risk contract", () => {
       cautions: [],
     }).success).toBe(false);
   });
+
+  test("allows AI priority text up to 300 characters and does not bound caution text", () => {
+    expect(ProjectOperationalRiskAiSummarySchema.safeParse({
+      overview: "先处理严重延期。",
+      priorities: [{
+        risk_key: "r".repeat(300),
+        reason: "已逾期",
+        recommended_action: "核对计划",
+      }],
+      cautions: ["提示".repeat(151)],
+    }).success).toBe(true);
+  });
 });

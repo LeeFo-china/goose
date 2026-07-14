@@ -97,13 +97,13 @@ export const ProjectOperationalRiskAiSummarySchema = z.strictObject({
   priorities: z
     .array(
       z.strictObject({
-        risk_key: z.string().trim().min(1).max(200),
+        risk_key: z.string().trim().min(1).max(300),
         reason: z.string().trim().max(300),
         recommended_action: z.string().trim().max(300),
       }),
     )
     .max(5),
-  cautions: z.array(z.string().trim().max(300)).max(5),
+  cautions: z.array(z.string().trim()).max(5),
 });
 
 export type ProjectOperationalRiskType =
