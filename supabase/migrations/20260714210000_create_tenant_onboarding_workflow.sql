@@ -24,8 +24,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS tenants_unified_social_credit_code_unique_idx
   WHERE unified_social_credit_code IS NOT NULL
     AND btrim(unified_social_credit_code) <> '';
 
--- Operator remediation: inspect duplicate tenant/adcode rows and resolve them
--- via a follow-up migration before retrying; no business rows are auto-deleted.
+-- SHARE is the least restrictive table lock that conflicts with the ROW
+-- EXCLUSIVE lock used by INSERT/UPDATE/DELETE, so readers remain available while
+-- normalization, validation, and index creation are protected from write races.
+LOCK TABLE public.tenant_service_areas IN SHARE MODE;
+
+UPDATE public.tenant_service_areas
+SET adcode = NULL
+WHERE adcode IS NOT NULL
+  AND btrim(adcode) = '';
+
+-- Operator remediation: inspect duplicate tenant/adcode rows, then create and
+-- review an earlier-versioned remediation migration (before 20260714210000)
+-- with an explicitly approved merge rule before retrying. Never run manual
+-- remote DML; this migration never automatically deletes or merges business rows.
 DO $$
 DECLARE
   v_duplicate record;
@@ -55,7 +67,7 @@ BEGIN
         v_duplicate.normalized_adcode,
         v_duplicate.duplicate_count
       ),
-      HINT = 'Inspect duplicate tenant_service_areas rows, resolve them via a follow-up migration, then retry.';
+      HINT = 'Create and review an earlier-versioned remediation migration before 20260714210000 with an explicitly approved merge rule, then retry. Never run manual remote DML or automatically delete rows in this migration.';
   END IF;
 END;
 $$;
@@ -66,8 +78,8 @@ WHERE adcode IS NOT NULL
   AND btrim(adcode) <> ''
   AND adcode IS DISTINCT FROM btrim(adcode);
 
--- NOT VALID preserves legacy whitespace-only blank values while enforcing the
--- trim invariant on all new or updated rows.
+-- Blank values are now NULL and nonblank values are trimmed, so validate the
+-- invariant immediately and avoid failures on later unrelated row updates.
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -78,8 +90,7 @@ BEGIN
   ) THEN
     ALTER TABLE public.tenant_service_areas
     ADD CONSTRAINT tenant_service_areas_adcode_trimmed_check
-    CHECK (adcode IS NULL OR adcode = btrim(adcode))
-    NOT VALID;
+    CHECK (adcode IS NULL OR adcode = btrim(adcode));
   END IF;
 END;
 $$;

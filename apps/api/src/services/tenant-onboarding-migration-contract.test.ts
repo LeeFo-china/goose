@@ -46,13 +46,19 @@ describe("tenant onboarding migration contract", () => {
   test("preflights and normalizes service-area adcodes before uniqueness", () => {
     expect(migrationSql).toContain("TENANT_SERVICE_AREA_ADCODE_DUPLICATE");
     expect(migrationSql).toContain(
-      "Operator remediation: inspect duplicate tenant/adcode rows",
+      "SHARE is the least restrictive table lock",
     );
+    expect(migrationSql).toContain(
+      "earlier-versioned remediation migration",
+    );
+    expect(migrationSql).toContain("before 20260714210000");
+    expect(migrationSql).toContain("Never run manual remote DML");
+    expect(migrationSql).not.toContain("NOT VALID");
     expect(migrationSql).toMatch(
       /GROUP BY\s+service_areas\.tenant_id,\s*btrim\(service_areas\.adcode\)\s+HAVING count\(\*\) > 1/,
     );
     expect(migrationSql).toMatch(
-      /TENANT_SERVICE_AREA_ADCODE_DUPLICATE[\s\S]*?UPDATE public\.tenant_service_areas\s+SET adcode = btrim\(adcode\)\s+WHERE adcode IS NOT NULL\s+AND btrim\(adcode\) <> ''[\s\S]*?ADD CONSTRAINT tenant_service_areas_adcode_trimmed_check\s+CHECK \(adcode IS NULL OR adcode = btrim\(adcode\)\)[\s\S]*?CREATE UNIQUE INDEX IF NOT EXISTS tenant_service_areas_tenant_adcode_unique_idx\s+ON public\.tenant_service_areas\(tenant_id, adcode\)/,
+      /LOCK TABLE public\.tenant_service_areas IN SHARE MODE;[\s\S]*?UPDATE public\.tenant_service_areas\s+SET adcode = NULL\s+WHERE adcode IS NOT NULL\s+AND btrim\(adcode\) = '';[\s\S]*?TENANT_SERVICE_AREA_ADCODE_DUPLICATE[\s\S]*?UPDATE public\.tenant_service_areas\s+SET adcode = btrim\(adcode\)\s+WHERE adcode IS NOT NULL\s+AND btrim\(adcode\) <> ''[\s\S]*?ADD CONSTRAINT tenant_service_areas_adcode_trimmed_check\s+CHECK \(adcode IS NULL OR adcode = btrim\(adcode\)\);[\s\S]*?CREATE UNIQUE INDEX IF NOT EXISTS tenant_service_areas_tenant_adcode_unique_idx\s+ON public\.tenant_service_areas\(tenant_id, adcode\)/,
     );
     expect(migrationSql).toMatch(
       /BEGIN;[\s\S]*?TENANT_SERVICE_AREA_ADCODE_DUPLICATE[\s\S]*?COMMIT;/,
