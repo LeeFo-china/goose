@@ -34,6 +34,8 @@ const directUrl = (projectRef: string, protocol = "postgresql"): string =>
   `${protocol}://postgres:direct_password@db.${projectRef}.supabase.co:5432/postgres`;
 const databaseUrl = (username: string): string =>
   `postgresql://${username}:database_password@api-dev.goodcms.cn:5432/postgres`;
+const devProxyUrl = (port: number): string =>
+  `postgresql://postgres.your-tenant-id:database_password@api-dev.goodcms.cn:${port}/postgres`;
 
 function resolveProjectRef(values: ResolverEnvironment) {
   const env = { ...process.env };
@@ -174,6 +176,14 @@ describe("development database target validator", () => {
       env: {
         SUPABASE_DB_DIRECT_URL: directUrl(devProjectRef),
         SUPABASE_DB_URL: databaseUrl("dev_user"),
+      },
+    },
+    {
+      name: "a configured ref with custom dev proxy URLs that use placeholder usernames",
+      env: {
+        SUPABASE_PROJECT_REF: devProjectRef,
+        SUPABASE_DB_DIRECT_URL: devProxyUrl(5432),
+        SUPABASE_DB_URL: devProxyUrl(6543),
       },
     },
   ])("resolves $name", ({ env }) => {

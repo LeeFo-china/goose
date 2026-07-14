@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 
 const POSTGRES_PROTOCOLS = new Set(["postgres:", "postgresql:"]);
 const PROJECT_REF_PATTERN = /^[a-z0-9]{10,63}$/;
+const DEV_PROXY_PLACEHOLDER_USERNAMES = new Set(["postgres.your-tenant-id"]);
 
 function splitList(value = "") {
   return value.split(/\s+/).filter(Boolean);
@@ -40,36 +41,99 @@ function isCanonicalHostname(value) {
   }
 }
 
-function resolveDirectProjectRef(value) {
-  if (!value) return { isValid: true, projectRef: null };
+function isDevProxyPlaceholderUsername(username) {
+  return DEV_PROXY_PLACEHOLDER_USERNAMES.has(username);
+}
+
+function decodeUsername(parsed) {
+  try {
+    return decodeURIComponent(parsed.username);
+  } catch {
+    return null;
+  }
+}
+
+function resolveDirectProjectRef(value, databaseHostname = null) {
+  if (!value) {
+    return { isValid: true, projectRef: null, usesPlaceholder: false };
+  }
 
   const parsed = parsePostgresUrl(value);
-  if (!parsed) return { isValid: false, projectRef: null };
+  if (!parsed) {
+    return { isValid: false, projectRef: null, usesPlaceholder: false };
+  }
   const match = /^db\.([a-z0-9]{10,63})\.supabase\.co$/.exec(parsed.hostname);
-  if (!match) return { isValid: false, projectRef: null };
-  return { isValid: true, projectRef: match[1] };
+  if (match) {
+    return { isValid: true, projectRef: match[1], usesPlaceholder: false };
+  }
+
+  const username = decodeUsername(parsed);
+  if (
+    username &&
+    databaseHostname &&
+    parsed.hostname === databaseHostname &&
+    isDevProxyPlaceholderUsername(username)
+  ) {
+    return { isValid: true, projectRef: null, usesPlaceholder: true };
+  }
+
+  return { isValid: false, projectRef: null, usesPlaceholder: false };
 }
 
 function resolveDatabaseProjectRef(value) {
   const parsed = parsePostgresUrl(value);
-  if (!parsed) return { isValid: false, projectRef: null };
+  if (!parsed) {
+    return {
+      hostname: null,
+      isValid: false,
+      projectRef: null,
+      usesPlaceholder: false,
+    };
+  }
 
-  let username;
-  try {
-    username = decodeURIComponent(parsed.username);
-  } catch {
-    return { isValid: false, projectRef: null };
+  const username = decodeUsername(parsed);
+  if (!username) {
+    return {
+      hostname: parsed.hostname,
+      isValid: false,
+      projectRef: null,
+      usesPlaceholder: false,
+    };
+  }
+
+  if (isDevProxyPlaceholderUsername(username)) {
+    return {
+      hostname: parsed.hostname,
+      isValid: true,
+      projectRef: null,
+      usesPlaceholder: true,
+    };
   }
 
   if (!username.startsWith("postgres.")) {
-    return { isValid: true, projectRef: null };
+    return {
+      hostname: parsed.hostname,
+      isValid: true,
+      projectRef: null,
+      usesPlaceholder: false,
+    };
   }
 
   const projectRef = username.slice("postgres.".length);
   if (!isValidProjectRef(projectRef)) {
-    return { isValid: false, projectRef: null };
+    return {
+      hostname: parsed.hostname,
+      isValid: false,
+      projectRef: null,
+      usesPlaceholder: false,
+    };
   }
-  return { isValid: true, projectRef };
+  return {
+    hostname: parsed.hostname,
+    isValid: true,
+    projectRef,
+    usesPlaceholder: false,
+  };
 }
 
 export function resolveProjectRef(environment = process.env) {
@@ -78,16 +142,25 @@ export function resolveProjectRef(environment = process.env) {
     return null;
   }
 
+  const database = resolveDatabaseProjectRef(environment.SUPABASE_DB_URL ?? "");
   const direct = resolveDirectProjectRef(
     environment.SUPABASE_DB_DIRECT_URL ?? "",
+    database.hostname,
   );
-  const database = resolveDatabaseProjectRef(environment.SUPABASE_DB_URL ?? "");
   if (!direct.isValid || !database.isValid) return null;
 
   const databaseProjectRefs = [direct.projectRef, database.projectRef].filter(
     Boolean,
   );
-  if (databaseProjectRefs.length === 0) return null;
+  if (databaseProjectRefs.length === 0) {
+    if (
+      configuredProjectRef &&
+      (direct.usesPlaceholder || database.usesPlaceholder)
+    ) {
+      return configuredProjectRef;
+    }
+    return null;
+  }
 
   const projectRefs = configuredProjectRef
     ? [configuredProjectRef, ...databaseProjectRefs]
