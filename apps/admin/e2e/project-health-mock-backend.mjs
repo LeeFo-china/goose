@@ -25,6 +25,7 @@ const session = {
   },
   roles: ["tenant_admin"],
   permissions: [
+    { code: "dashboard.read", scope: "all" },
     { code: "project.read", scope: "all" },
     { code: "project.workflow.read", scope: "all" },
   ],

@@ -56,7 +56,7 @@ pnpm --dir apps/admin build
 
 - mock backend：`127.0.0.1:3999`
 - Admin dev server：`127.0.0.1:3011`
-- mock session：非平台租户管理员
+- mock session：非平台租户管理员，具备 `dashboard.read + project.read:all`
 - mock 数据：五类风险各 1 条，summary.total = 5
 
 可复跑命令：
@@ -75,6 +75,7 @@ python3 /Users/leefo/.codex/skills/webapp-testing/scripts/with_server.py \
 验证项：
 
 - `/project-health` 服务端渲染成功，不再把 icon component 从 server component 传给 client component；
+- 1440 宽度下侧边栏展示“项目风险”导航入口；
 - Admin helper 能接受后端返回的 display page items，包括 `title/description/action`；
 - 390、768、1440 三个宽度均无页面级横向溢出；
 - 表格视口内能看到风险列表；

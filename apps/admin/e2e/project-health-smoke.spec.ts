@@ -43,6 +43,9 @@ test.describe("project health smoke", () => {
       await page.goto("/project-health", { waitUntil: "networkidle" });
 
       await expect(page.getByRole("heading", { name: "项目风险" })).toBeVisible();
+      if (width === 1440) {
+        await expect(page.getByRole("link", { name: "项目风险" })).toBeVisible();
+      }
       await expect(page.getByText("风险总数")).toBeVisible();
       const tableViewport = page.getByTestId("project-health-table-viewport");
       await expect(tableViewport).toBeVisible();
