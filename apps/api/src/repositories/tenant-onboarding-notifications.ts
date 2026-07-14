@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import { isPostgresUniqueViolation } from "@/repositories/repository-errors";
 import {
   parseNullableTenantOnboardingNotificationDelivery,
+  parseTenantOnboardingNotificationDeliverySummaries,
   parseTenantOnboardingNotificationDelivery,
   parseTenantOnboardingNotificationRpcResult,
   parseTenantOnboardingRecipientRow,
@@ -17,6 +18,11 @@ const DELIVERY_SELECT = [
   "id", "application_id", "application_version", "event_type", "channel",
   "status", "attempt_count", "last_error", "sent_at", "claim_token",
   "claim_expires_at", "created_at", "updated_at",
+].join(",");
+const HISTORY_DELIVERY_SELECT = [
+  "id", "application_id", "application_version", "event_type", "channel",
+  "status", "attempt_count", "last_error", "sent_at", "created_at",
+  "updated_at",
 ].join(",");
 
 export type TenantOnboardingApplicationRecipient = {
@@ -44,8 +50,15 @@ type UntypedTable = {
   eq: (...args: unknown[]) => UntypedTable;
   in: (...args: unknown[]) => UntypedTable;
   lt: (...args: unknown[]) => UntypedTable;
+  order: (...args: unknown[]) => UntypedTable;
+  range: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
   single: () => Promise<{ data: unknown; error: unknown }>;
+  then: Promise<{
+    data: unknown;
+    error: unknown;
+    count: number | null;
+  }>["then"];
 };
 
 type UntypedClient = { from: (table: TableName) => UntypedTable };
@@ -70,7 +83,7 @@ function hasDeliveryConstraint(error: unknown): boolean {
   );
 }
 
-class TenantOnboardingNotificationsRepository {
+export class TenantOnboardingNotificationsRepository {
   async findOrCreateDelivery(input: DeliveryKey) {
     const existing = await this.findExact(input);
     if (existing) return { delivery: existing, created: false as const };
@@ -200,6 +213,39 @@ class TenantOnboardingNotificationsRepository {
         admin_phone: row.admin_phone,
       }
       : null;
+  }
+
+  async listByApplication(input: {
+    applicationId: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const page = Number.isInteger(input.page) && input.page > 0 ? input.page : 1;
+    const pageSize = Number.isInteger(input.pageSize) && input.pageSize > 0
+      ? Math.min(input.pageSize, 100)
+      : 20;
+    const start = (page - 1) * pageSize;
+    const { data, error, count } = await from(
+      "tenant_onboarding_notification_deliveries",
+    )
+      .select(HISTORY_DELIVERY_SELECT, { count: "exact" })
+      .eq("application_id", input.applicationId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(start, start + pageSize - 1);
+    if (error) throw Errors.dbError("查询装企入驻通知记录失败", error);
+    return {
+      list: parseTenantOnboardingNotificationDeliverySummaries(
+        data ?? [],
+        "查询装企入驻通知记录失败",
+      ),
+      pagination: {
+        page,
+        pageSize,
+        total: count ?? 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    };
   }
 
   private async findExact(input: DeliveryKey) {

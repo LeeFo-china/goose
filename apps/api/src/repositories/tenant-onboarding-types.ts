@@ -152,6 +152,11 @@ export type TenantOnboardingNotificationDeliveryRecord = {
   updated_at: string;
 };
 
+export type TenantOnboardingNotificationDeliverySummaryRecord = Omit<
+  TenantOnboardingNotificationDeliveryRecord,
+  "claim_token" | "claim_expires_at"
+>;
+
 export type TenantOnboardingPagination = {
   page: number;
   pageSize: number;
@@ -206,3 +211,93 @@ export type TenantOnboardingApprovalRpcResult =
   | {
       status: TenantOnboardingApprovalRpcErrorStatus;
     };
+
+export type TenantOnboardingPlatformApplicationListRecord = Pick<
+  TenantOnboardingApplicationRecord,
+  | "id"
+  | "application_no"
+  | "company_name"
+  | "admin_name"
+  | "address_city"
+  | "address_district"
+  | "address_region_code"
+  | "service_region_codes"
+  | "source_channel"
+  | "candidate_partner_id"
+  | "candidate_match_reason"
+  | "status"
+  | "partner_assist_status"
+  | "partner_assist_due_at"
+  | "version"
+  | "created_at"
+  | "updated_at"
+> & {
+  candidate_partner?: TenantOnboardingPartnerBrief | null;
+  final_partner?: TenantOnboardingPartnerBrief | null;
+};
+
+export type TenantOnboardingPlatformApplicationRecord =
+  TenantOnboardingPlatformApplicationListRecord & Pick<
+    TenantOnboardingApplicationRecord,
+    | "unified_social_credit_code"
+    | "business_license_file_id"
+    | "admin_phone"
+    | "address_province"
+    | "address"
+    | "address_latitude"
+    | "address_longitude"
+    | "invite_code_id"
+    | "candidate_snapshot"
+    | "final_partner_id"
+    | "attribution_source_type"
+    | "partner_assist_requested_at"
+    | "converted_tenant_id"
+    | "reviewed_by_employee_id"
+    | "reviewed_at"
+    | "review_remark"
+    | "privacy_policy_version"
+    | "onboarding_terms_version"
+    | "consented_at"
+    | "withdrawn_at"
+  >;
+
+export type TenantOnboardingPlatformReviewMutationErrorStatus =
+  | "application_not_found"
+  | "state_conflict"
+  | "version_conflict"
+  | "partner_unavailable";
+
+export type TenantOnboardingPlatformReviewMutationRpcResult =
+  | {
+      status: "updated";
+      application_id: string;
+      application_version: number;
+      idempotent: boolean;
+    }
+  | { status: TenantOnboardingPlatformReviewMutationErrorStatus };
+
+export type TenantOnboardingPlatformReviewMutationResult =
+  | {
+      status: "updated";
+      application: TenantOnboardingPlatformApplicationRecord;
+      idempotent: boolean;
+    }
+  | { status: TenantOnboardingPlatformReviewMutationErrorStatus };
+
+export type TenantOnboardingLicenseAccessRecord = {
+  application_id: string;
+  visitor_id: string;
+  business_license_file_id: string;
+  file: {
+    id: string;
+    owner_type: string;
+    owner_visitor_id: string | null;
+    scene: string;
+    provider: string;
+    object_key: string;
+    visibility: string;
+    public_url: string | null;
+    status: string;
+    deleted_at: string | null;
+  } | null;
+};

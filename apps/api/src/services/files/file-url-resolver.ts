@@ -1,4 +1,6 @@
 import COS from "cos-nodejs-sdk-v5";
+import { ErrorCodes } from "@/errors/error-codes";
+import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 import { systemSettingsService } from "@/services/system-settings";
 
@@ -340,14 +342,14 @@ function getCosClient(config: CachedCosAccessConfig) {
   return cosClient;
 }
 
-function getSignedCosUrl(objectKey: string) {
+function getSignedCosUrl(objectKey: string, ttlSeconds?: number) {
   const config = cachedCosAccessConfig;
   if (!config) {
     return null;
   }
 
   const rule = getAccessRuleForObjectKey(objectKey);
-  const expires = rule.signed_url_ttl_seconds ||
+  const expires = ttlSeconds || rule.signed_url_ttl_seconds ||
     config.signedUrlTtlSeconds ||
     DEFAULT_SIGNED_URL_TTL_SECONDS;
 
@@ -359,6 +361,50 @@ function getSignedCosUrl(objectKey: string) {
     Expires: expires,
     Protocol: "https:",
   });
+}
+
+export async function resolveSignedStoredFileUrl(
+  value: string,
+  options: { ttlSeconds?: number } = {},
+) {
+  const objectKey = value.trim();
+  const isPrivateObjectKey = trimSlashes(objectKey).startsWith("private/");
+  if (
+    isHttpUrl(objectKey) ||
+    (!isPrivateObjectKey && !isLikelyPlatformCosObjectKey(objectKey))
+  ) {
+    throw Errors.business(
+      403,
+      "私有文件地址不可访问",
+      ErrorCodes.TENANT_ONBOARDING_DOCUMENT_FORBIDDEN,
+    );
+  }
+
+  if (!cachedCosAccessConfig || Date.now() >= cacheExpiresAt) {
+    await refreshPlatformCosPublicBaseUrlCache();
+  }
+  if (!cachedCosAccessConfig) {
+    throw Errors.business(
+      503,
+      "私有文件签名配置不可用",
+      ErrorCodes.FILE_STORAGE_CONFIG_MISSING,
+    );
+  }
+
+  const requestedTtl = Number(options.ttlSeconds ?? 600);
+  const ttlSeconds = Math.min(
+    600,
+    Math.max(1, Number.isFinite(requestedTtl) ? Math.floor(requestedTtl) : 600),
+  );
+  const signedUrl = getSignedCosUrl(objectKey, ttlSeconds);
+  if (!signedUrl) {
+    throw Errors.business(
+      503,
+      "私有文件签名配置不可用",
+      ErrorCodes.FILE_STORAGE_CONFIG_MISSING,
+    );
+  }
+  return signedUrl;
 }
 
 function getPublicCosUrl(objectKey: string) {

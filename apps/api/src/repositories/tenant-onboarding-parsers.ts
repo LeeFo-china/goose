@@ -5,6 +5,7 @@ import type {
   TenantOnboardingApplicationRecord,
   TenantOnboardingApplicationSummaryRecord,
   TenantOnboardingNotificationDeliveryRecord,
+  TenantOnboardingNotificationDeliverySummaryRecord,
   TenantOnboardingPartnerBrief,
 } from "@/repositories/tenant-onboarding-types";
 import {
@@ -91,6 +92,10 @@ const NotificationDeliverySchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
 }).strict();
+const NotificationDeliverySummarySchema = NotificationDeliverySchema.omit({
+  claim_token: true,
+  claim_expires_at: true,
+});
 
 const RecipientRowSchema = z.object({
   id: z.uuid(),
@@ -200,6 +205,12 @@ export const parseTenantOnboardingNotificationDelivery = (
   message: string,
 ): TenantOnboardingNotificationDeliveryRecord =>
   parse(NotificationDeliverySchema, data, message);
+
+export const parseTenantOnboardingNotificationDeliverySummaries = (
+  data: unknown,
+  message: string,
+): TenantOnboardingNotificationDeliverySummaryRecord[] =>
+  parse(z.array(NotificationDeliverySummarySchema), data, message);
 
 export const parseNullableTenantOnboardingNotificationDelivery = (
   data: unknown,

@@ -12,6 +12,7 @@ import {
   parseTenantOnboardingMutation,
   parseTenantOnboardingNestedInvite,
   parseTenantOnboardingNotificationDelivery,
+  parseTenantOnboardingNotificationDeliverySummaries,
   parseTenantOnboardingNotificationRpcResult,
   parseTenantOnboardingPartners,
   parseTenantOnboardingRecipientRow,
@@ -21,6 +22,7 @@ import type {
   TenantOnboardingApplicationRecord,
   TenantOnboardingApplicationSummaryRecord,
   TenantOnboardingNotificationDeliveryRecord,
+  TenantOnboardingNotificationDeliverySummaryRecord,
   TenantOnboardingPartnerBrief,
 } from "./tenant-onboarding-types";
 
@@ -64,6 +66,12 @@ const delivery: TenantOnboardingNotificationDeliveryRecord = {
   sent_at: null, claim_token: null, claim_expires_at: null,
   created_at: NOW, updated_at: NOW,
 };
+const deliverySummary: TenantOnboardingNotificationDeliverySummaryRecord = {
+  id: ID, application_id: ID_2, application_version: 1,
+  event_type: "submitted", channel: "sms", status: "pending",
+  attempt_count: 0, last_error: null, sent_at: null,
+  created_at: NOW, updated_at: NOW,
+};
 
 describe("tenant onboarding repository runtime parsers", () => {
   test("parses application, summary, notification, and recipient rows", () => {
@@ -73,6 +81,14 @@ describe("tenant onboarding repository runtime parsers", () => {
       .toEqual([summary]);
     expect(parseTenantOnboardingNotificationDelivery(delivery, "bad"))
       .toEqual(delivery);
+    expect(parseTenantOnboardingNotificationDeliverySummaries(
+      [deliverySummary],
+      "bad",
+    )).toEqual([deliverySummary]);
+    expect(() => parseTenantOnboardingNotificationDeliverySummaries(
+      [delivery],
+      "bad",
+    )).toThrow(expect.objectContaining({ code: "DB_ERROR" }));
     expect(parseNullableTenantOnboardingNotificationDelivery(null, "bad")).toBeNull();
     expect(parseTenantOnboardingNotificationRpcResult([delivery], "bad"))
       .toEqual(delivery);
