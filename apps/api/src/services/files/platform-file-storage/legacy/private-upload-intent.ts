@@ -1,6 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 const INTENT_VERSION = "v1";
+const INTENT_KEY_DERIVATION_LABEL =
+  "gooes:tenant-onboarding-license-upload-intent:v1";
 export const TENANT_ONBOARDING_LICENSE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 export const TENANT_ONBOARDING_LICENSE_MIME_TYPES = new Set([
   "image/jpeg",
@@ -63,7 +65,7 @@ export function createPrivateUploadIntent(
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signedValue = `${INTENT_VERSION}.${encodedPayload}`;
-  const signature = createHmac("sha256", input.secretKey)
+  const signature = createHmac("sha256", deriveIntentKey(input.secretKey))
     .update(signedValue)
     .digest("base64url");
   return `${signedValue}.${signature}`;
@@ -79,7 +81,7 @@ export function verifyPrivateUploadIntent(
   if (!/^[A-Za-z0-9_-]+$/.test(encodedPayload)) return null;
   if (!/^[A-Za-z0-9_-]+$/.test(encodedSignature)) return null;
 
-  const expectedSignature = createHmac("sha256", input.secretKey)
+  const expectedSignature = createHmac("sha256", deriveIntentKey(input.secretKey))
     .update(`${INTENT_VERSION}.${encodedPayload}`)
     .digest();
   const receivedSignature = Buffer.from(encodedSignature, "base64url");
@@ -112,6 +114,12 @@ export function verifyPrivateUploadIntent(
     sizeBytes: payload.size_bytes,
     expiresAtSeconds: payload.expires_at,
   };
+}
+
+function deriveIntentKey(secretKey: string) {
+  return createHmac("sha256", secretKey)
+    .update(INTENT_KEY_DERIVATION_LABEL)
+    .digest();
 }
 
 function parsePayload(encodedPayload: string): EncodedPrivateUploadIntent | null {

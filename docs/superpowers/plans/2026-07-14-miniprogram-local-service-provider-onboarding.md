@@ -1870,6 +1870,13 @@ git commit -m "feat(onboarding): 增加旧入驻入口关闭门禁"
 
 - [ ] **Step 1: Verify local migration order without printing secrets**
 
+Before release, use a read-only check against the explicitly confirmed target Tencent COS bucket and
+record evidence in the verification document that bucket versioning is disabled. The signed
+`x-cos-forbid-overwrite: true` header does not prevent COS from creating a new object version when
+bucket versioning is enabled. If versioning is enabled or the state cannot be confirmed, stop the
+release and design a separately reviewed immutable-object strategy; do not change the remote bucket
+configuration without explicit authorization.
+
 Load `/Users/leefo/Public/work/gooes/.env` in the shell without echoing values, verify
 `SUPABASE_DB_DIRECT_URL` is present, then run:
 

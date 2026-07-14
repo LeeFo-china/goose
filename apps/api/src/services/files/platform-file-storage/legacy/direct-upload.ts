@@ -33,8 +33,13 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     throw Errors.forbidden();
   }
   const expiresAtSeconds = Math.floor(Date.now() / 1000) + config.signedUrlTtl;
+  // COS only enforces this overwrite guard when bucket versioning is disabled.
+  // Task 13 must verify the target bucket setting before release.
   const signedHeaders = isPrivateLicense
-    ? { "Content-Length": input.sizeBytes }
+    ? {
+      "Content-Length": input.sizeBytes,
+      "x-cos-forbid-overwrite": true,
+    }
     : undefined;
 
   const uploadUrl = cos.getObjectUrl({
@@ -69,7 +74,12 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     method: "PUT" as const,
     headers: {
       "content-type": input.mimetype,
-      ...(isPrivateLicense ? { "content-length": String(input.sizeBytes) } : {}),
+      ...(isPrivateLicense
+        ? {
+          "content-length": String(input.sizeBytes),
+          "x-cos-forbid-overwrite": true,
+        }
+        : {}),
     },
     expires_in: config.signedUrlTtl,
     expires_at: new Date(expiresAtSeconds * 1000).toISOString(),

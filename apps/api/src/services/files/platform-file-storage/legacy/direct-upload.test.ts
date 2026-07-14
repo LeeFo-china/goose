@@ -144,11 +144,15 @@ describe("private direct upload init", () => {
 
     expect(getObjectUrl).toHaveBeenCalledWith(expect.objectContaining({
       Method: "PUT",
-      Headers: { "Content-Length": 100 },
+      Headers: {
+        "Content-Length": 100,
+        "x-cos-forbid-overwrite": true,
+      },
     }));
     expect(response.headers).toEqual({
       "content-type": "image/jpeg",
       "content-length": "100",
+      "x-cos-forbid-overwrite": true,
     });
     const uploadIntent = response.upload_intent;
     expect(uploadIntent).toBeString();

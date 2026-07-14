@@ -31,22 +31,32 @@ const privateInput = {
   object_key: "private/object.jpg",
   mime_type: "image/jpeg",
   size_bytes: 100,
+  checksum: "head-etag",
   visibility: "private" as const,
   public_url: null,
 };
 
+const matchingExisting = {
+  id: "file-1",
+  owner_type: "visitor",
+  owner_visitor_id: "visitor-b",
+  scene: "tenant_onboarding_license",
+  provider: "tencent_cos",
+  bucket: "bucket",
+  object_key: "private/object.jpg",
+  mime_type: "image/jpeg",
+  size_bytes: 100,
+  checksum: '"head-etag"',
+  visibility: "private",
+  public_url: null,
+  status: "active",
+  deleted_at: null,
+};
+
 test("duplicate private object keys cannot cross visitor ownership", async () => {
   const repository = await loadRepositoryWithExisting({
-    id: "file-1",
-    owner_type: "visitor",
+    ...matchingExisting,
     owner_visitor_id: "visitor-a",
-    scene: "tenant_onboarding_license",
-    provider: "tencent_cos",
-    bucket: "bucket",
-    object_key: "private/object.jpg",
-    visibility: "private",
-    public_url: null,
-    status: "active",
   });
 
   await expect(repository.createOrFindByObjectKey(privateInput))
@@ -55,20 +65,13 @@ test("duplicate private object keys cannot cross visitor ownership", async () =>
 
 test("duplicate visitor objects must preserve private visibility", async () => {
   const repository = await loadRepositoryWithExisting({
-    id: "file-1",
-    owner_type: "visitor",
-    owner_visitor_id: "visitor-b",
-    scene: "tenant_onboarding_license",
-    provider: "tencent_cos",
-    bucket: "bucket",
-    object_key: "private/object.jpg",
+    ...matchingExisting,
     visibility: "public",
     public_url: "https://cdn.example.com/private/object.jpg",
-    status: "active",
   });
 
   await expect(repository.createOrFindByObjectKey(privateInput))
-    .rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    .rejects.toMatchObject({ statusCode: 400, code: "FILE_STORAGE_UPLOAD_FAILED" });
 });
 
 test.each([
@@ -76,18 +79,34 @@ test.each([
   ["deleted timestamp", { status: "active", deleted_at: "2026-07-14T00:00:00Z" }],
 ])("duplicate visitor objects reject %s", async (_name, state) => {
   const repository = await loadRepositoryWithExisting({
-    id: "file-1",
-    owner_type: "visitor",
-    owner_visitor_id: "visitor-b",
-    scene: "tenant_onboarding_license",
-    provider: "tencent_cos",
-    bucket: "bucket",
-    object_key: "private/object.jpg",
-    visibility: "private",
-    public_url: null,
+    ...matchingExisting,
     ...state,
   });
 
   await expect(repository.createOrFindByObjectKey(privateInput))
-    .rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    .rejects.toMatchObject({ statusCode: 400, code: "FILE_STORAGE_UPLOAD_FAILED" });
+});
+
+test.each([
+  ["provider", { provider: "supabase_storage" }],
+  ["bucket", { bucket: "other-bucket" }],
+  ["object key", { object_key: "private/other.jpg" }],
+  ["MIME type", { mime_type: "image/png" }],
+  ["size", { size_bytes: 101 }],
+  ["checksum", { checksum: "other-etag" }],
+])("duplicate private objects reject mismatched %s", async (_name, mismatch) => {
+  const repository = await loadRepositoryWithExisting({
+    ...matchingExisting,
+    ...mismatch,
+  });
+
+  await expect(repository.createOrFindByObjectKey(privateInput))
+    .rejects.toMatchObject({ statusCode: 400, code: "FILE_STORAGE_UPLOAD_FAILED" });
+});
+
+test("duplicate private objects accept exact authoritative metadata", async () => {
+  const repository = await loadRepositoryWithExisting(matchingExisting);
+
+  await expect(repository.createOrFindByObjectKey(privateInput))
+    .resolves.toMatchObject({ id: "file-1", checksum: '"head-etag"' });
 });

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 
 type IntentModule = {
@@ -42,7 +42,18 @@ describe("private upload intent", () => {
     if (!intent) return;
 
     const token = intent.createPrivateUploadIntent(intentInput);
-    const payload = Buffer.from(token.split(".")[1] ?? "", "base64url").toString();
+    const [version, encodedPayload, signature] = token.split(".");
+    const payload = Buffer.from(encodedPayload ?? "", "base64url").toString();
+    const signedValue = `${version}.${encodedPayload}`;
+    const derivedKey = createHmac("sha256", intentInput.secretKey)
+      .update("gooes:tenant-onboarding-license-upload-intent:v1")
+      .digest();
+    const domainSeparatedSignature = createHmac("sha256", derivedKey)
+      .update(signedValue)
+      .digest("base64url");
+    const rawSecretSignature = createHmac("sha256", intentInput.secretKey)
+      .update(signedValue)
+      .digest("base64url");
     const verified = intent.verifyPrivateUploadIntent({
       token,
       ...intentInput,
@@ -50,6 +61,8 @@ describe("private upload intent", () => {
     });
 
     expect(token).toStartWith("v1.");
+    expect(signature).toBe(domainSeparatedSignature);
+    expect(signature).not.toBe(rawSecretSignature);
     expect(payload).not.toContain(intentInput.visitorId);
     expect(payload).toContain(
       createHash("sha256").update(intentInput.visitorId).digest("hex"),
