@@ -3,6 +3,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import {
   parseNullableTenantOnboardingApplication,
   parseTenantOnboardingActiveInvite,
+  parseTenantOnboardingApprovalRpcResult,
   parseTenantOnboardingAdministrativeAreas,
   parseTenantOnboardingApplication,
   parseTenantOnboardingApplicationSummaries,
@@ -14,6 +15,7 @@ import {
   parseTenantOnboardingSubmitMutation,
 } from "@/repositories/tenant-onboarding-parsers";
 import type {
+  ApproveTenantOnboardingRpcInput,
   TenantOnboardingAdministrativeAreaRecord,
   TenantOnboardingApplicationRecord,
   TenantOnboardingApplicationSummaryRecord,
@@ -316,6 +318,23 @@ class TenantOnboardingRepository {
     const result = parseTenantOnboardingMutation(data, "撤回装企入驻申请失败");
     if (!result) return null;
     return await this.findOwnedById(result.application_id, input.visitorId);
+  }
+
+  async approveApplication(input: ApproveTenantOnboardingRpcInput) {
+    const { data, error } = await this.rpc(
+      "approve_tenant_onboarding_application",
+      {
+        p_application_id: input.applicationId,
+        p_expected_version: input.expectedVersion,
+        p_reviewer_employee_id: input.reviewerEmployeeId,
+        p_tenant_slug: input.tenantSlug,
+        p_final_partner_id: input.finalPartnerId,
+        p_attribution_source_type: input.attributionSourceType,
+        p_review_remark: input.reviewRemark,
+      },
+    );
+    if (error) throw Errors.dbError("审核通过装企入驻失败", error);
+    return parseTenantOnboardingApprovalRpcResult(data, "审核通过装企入驻失败");
   }
 
   private rpc(name: string, params: Record<string, unknown>) {

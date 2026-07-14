@@ -40,6 +40,13 @@ describe("tenant-onboarding applicant repository contract", () => {
     expect(service).not.toContain("appendReviewEvent");
   });
 
+  test("approves through the narrow RPC and runtime parser", () => {
+    expect(repository).toContain('async approveApplication(');
+    expect(repository).toContain('"approve_tenant_onboarding_application"');
+    expect(repository).toContain("parseTenantOnboardingApprovalRpcResult");
+    expect(repository).not.toMatch(/return data as TenantOnboardingApprovalRpcResult/);
+  });
+
   test("parses untyped Supabase rows at both repository boundaries", () => {
     for (const source of [repository, notificationRepository]) {
       expect(source).toContain("tenant-onboarding-parsers");

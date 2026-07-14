@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import type {
   TenantOnboardingAdministrativeAreaRecord,
+  TenantOnboardingApprovalRpcResult,
   TenantOnboardingApplicationRecord,
   TenantOnboardingApplicationSummaryRecord,
   TenantOnboardingNotificationDeliveryRecord,
@@ -137,6 +138,37 @@ const ActiveInviteSchema = z.object({
 
 const MutationSchema = z.object({ application_id: z.uuid() }).strict();
 const SubmitMutationSchema = MutationSchema.extend({ created: z.boolean() }).strict();
+const ApprovalInitializationSchema = z.object({
+  template_code: z.literal("default_decoration_company"),
+  template_version: z.literal("2026.05.10"),
+  departments_count: z.number().int().nonnegative(),
+  posts_count: z.number().int().nonnegative(),
+  roles_count: z.number().int().nonnegative(),
+  admin_employee_id: z.uuid(),
+  admin_role_id: z.uuid(),
+}).strict();
+const ApprovalResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("approved"),
+    application_id: z.uuid(),
+    tenant_id: z.uuid(),
+    binding_id: z.uuid().nullable(),
+    profile_id: z.uuid(),
+    initialization: ApprovalInitializationSchema,
+    idempotent: z.boolean(),
+  }).strict(),
+  z.object({
+    status: z.enum([
+      "application_not_found",
+      "application_state_conflict",
+      "application_version_conflict",
+      "subject_exists",
+      "admin_phone_exists",
+      "partner_ambiguous",
+      "partner_unavailable",
+    ]),
+  }).strict(),
+]);
 
 function parse<T>(schema: z.ZodType<T>, data: unknown, message: string): T {
   const result = schema.safeParse(data);
@@ -221,3 +253,8 @@ export const parseTenantOnboardingMutation = (data: unknown, message: string) =>
   const rows = parse(z.array(MutationSchema).max(1), data, message);
   return rows[0] ?? null;
 };
+
+export const parseTenantOnboardingApprovalRpcResult = (
+  data: unknown,
+  message: string,
+): TenantOnboardingApprovalRpcResult => parse(ApprovalResultSchema, data, message);

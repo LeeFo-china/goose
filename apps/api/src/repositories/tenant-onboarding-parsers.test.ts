@@ -3,6 +3,7 @@ import {
   parseNullableTenantOnboardingApplication,
   parseNullableTenantOnboardingNotificationDelivery,
   parseTenantOnboardingActiveInvite,
+  parseTenantOnboardingApprovalRpcResult,
   parseTenantOnboardingAdministrativeAreas,
   parseTenantOnboardingApplication,
   parseTenantOnboardingApplicationSummaries,
@@ -107,6 +108,48 @@ describe("tenant onboarding repository runtime parsers", () => {
     expect(parseTenantOnboardingMutation([], "bad")).toBeNull();
     expect(parseTenantOnboardingMutation([{ application_id: ID }], "bad"))
       .toEqual({ application_id: ID });
+  });
+
+  test("parses every stable approval RPC result", () => {
+    const initialization = {
+      template_code: "default_decoration_company",
+      template_version: "2026.05.10",
+      departments_count: 43,
+      posts_count: 48,
+      roles_count: 4,
+      admin_employee_id: ID,
+      admin_role_id: ID_2,
+    };
+    expect(parseTenantOnboardingApprovalRpcResult({
+      status: "approved",
+      application_id: ID,
+      tenant_id: ID_2,
+      binding_id: null,
+      profile_id: ID,
+      initialization,
+      idempotent: false,
+    }, "bad")).toMatchObject({ status: "approved", idempotent: false });
+
+    for (const status of [
+      "application_not_found", "application_state_conflict",
+      "application_version_conflict", "subject_exists", "admin_phone_exists",
+      "partner_ambiguous", "partner_unavailable",
+    ] as const) {
+      expect(parseTenantOnboardingApprovalRpcResult({ status }, "bad"))
+        .toEqual({ status });
+    }
+  });
+
+  test("fails malformed approval RPC results closed", () => {
+    for (const result of [
+      { status: "approved", application_id: ID },
+      { status: "unknown" },
+      { status: "subject_exists", tenant_id: ID },
+      [{ status: "subject_exists" }],
+    ]) {
+      expect(() => parseTenantOnboardingApprovalRpcResult(result, "invalid"))
+        .toThrow(expect.objectContaining({ code: "DB_ERROR" }));
+    }
   });
 
   test("fails every ordinary row family closed with DB_ERROR", () => {

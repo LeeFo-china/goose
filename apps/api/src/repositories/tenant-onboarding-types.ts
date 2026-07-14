@@ -174,6 +174,16 @@ export type TenantOnboardingInitializationRecord = {
   admin_role_id: string;
 };
 
+export type ApproveTenantOnboardingRpcInput = {
+  applicationId: string;
+  expectedVersion: number;
+  reviewerEmployeeId: string;
+  tenantSlug: string;
+  finalPartnerId: string | null;
+  attributionSourceType: "invite_code" | "region_auto_assignment" | "platform_manual" | null;
+  reviewRemark: string | null;
+};
+
 export type TenantOnboardingApprovalRpcErrorStatus =
   | "application_not_found"
   | "application_state_conflict"
