@@ -1,11 +1,15 @@
+import { existsSync } from "node:fs";
+
 type Env = Record<string, string | undefined>;
 
 export type ProjectOperationalRiskReleaseReadinessStatus =
   | "ready"
+  | "missing_artifact"
   | "missing_env"
   | "api_smoke_skipped";
 
 export type ProjectOperationalRiskReleaseReadinessCheck =
+  | "local_artifacts_present"
   | "migration_list_configured"
   | "rpc_performance_smoke_configured"
   | "api_smoke_configured";
@@ -35,6 +39,11 @@ const API_SMOKE_ENV = [
   "PROJECT_HEALTH_API_URL",
   "PROJECT_HEALTH_ADMIN_TOKEN",
 ] as const;
+const REQUIRED_LOCAL_ARTIFACTS = [
+  "supabase/migrations/20260714180000_project_operational_risk_rpc.sql",
+  "supabase/tests/project_operational_risk_rpc.sql",
+  "supabase/tests/project_operational_risk_explain.sql",
+] as const;
 
 const READ_ONLY_COMMANDS = [
   'supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"',
@@ -53,12 +62,31 @@ function formatMissingEnv(names: readonly string[]): string {
   return `missing ${names.join(", ")}`;
 }
 
+function defaultArtifactExists(relativePath: string): boolean {
+  return existsSync(new URL(`../../../../${relativePath}`, import.meta.url));
+}
+
 export function buildProjectOperationalRiskReleaseReadinessReport(
   env: Env,
   generatedAt = new Date().toISOString(),
+  artifactExists: (relativePath: string) => boolean = defaultArtifactExists,
 ): ProjectOperationalRiskReleaseReadinessReport {
   const blockers: ProjectOperationalRiskReleaseReadinessBlocker[] = [];
   const completedChecks: ProjectOperationalRiskReleaseReadinessCheck[] = [];
+
+  const missingArtifacts = REQUIRED_LOCAL_ARTIFACTS.filter(
+    (artifact) => !artifactExists(artifact),
+  );
+  if (missingArtifacts.length > 0) {
+    blockers.push({
+      check: "local_artifacts_present",
+      detail: `missing ${missingArtifacts.join(", ")}`,
+      next_action:
+        "Restore the project health RPC migration, SQL fixture and EXPLAIN template before release verification.",
+    });
+  } else {
+    completedChecks.push("local_artifacts_present");
+  }
 
   const missingMigrationEnv = missingEnvNames(env, MIGRATION_LIST_ENV);
   if (missingMigrationEnv.length > 0) {
@@ -110,6 +138,9 @@ function resolveStatus(
   blockers: ProjectOperationalRiskReleaseReadinessBlocker[],
 ): ProjectOperationalRiskReleaseReadinessStatus {
   if (blockers.length === 0) return "ready";
+  if (blockers.some((blocker) => blocker.check === "local_artifacts_present")) {
+    return "missing_artifact";
+  }
 
   const onlyApiSmokeMissing = blockers.every(
     (blocker) => blocker.check === "api_smoke_configured",
