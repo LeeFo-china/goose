@@ -54,6 +54,17 @@ BEGIN
       MESSAGE = 'TENANT_ONBOARDING_NOTIFICATION_CLAIM_INVALID';
   END IF;
 
+  UPDATE public.tenant_onboarding_notification_deliveries AS delivery
+  SET status = 'failed',
+      last_error = 'TENANT_ONBOARDING_NOTIFICATION_ATTEMPTS_EXHAUSTED',
+      claim_token = NULL,
+      claim_expires_at = NULL
+  WHERE delivery.id = p_delivery_id
+    AND delivery.application_id = p_application_id
+    AND delivery.status = 'processing'
+    AND delivery.claim_expires_at <= p_now
+    AND delivery.attempt_count >= p_max_attempts;
+
   RETURN QUERY
   UPDATE public.tenant_onboarding_notification_deliveries AS delivery
   SET status = 'processing',

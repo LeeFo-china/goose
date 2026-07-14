@@ -5,6 +5,10 @@ const repository = readFileSync(
   new URL("../repositories/tenant-onboarding.ts", import.meta.url),
   "utf8",
 );
+const notificationRepository = readFileSync(
+  new URL("../repositories/tenant-onboarding-notifications.ts", import.meta.url),
+  "utf8",
+);
 const service = readFileSync(
   new URL("./tenant-onboarding-applications.ts", import.meta.url),
   "utf8",
@@ -34,5 +38,14 @@ describe("tenant-onboarding applicant repository contract", () => {
     expect(repository).toContain('"withdraw_tenant_onboarding_application"');
     expect(service).not.toContain("markVerified");
     expect(service).not.toContain("appendReviewEvent");
+  });
+
+  test("parses untyped Supabase rows at both repository boundaries", () => {
+    for (const source of [repository, notificationRepository]) {
+      expect(source).toContain("tenant-onboarding-parsers");
+      expect(source).not.toMatch(/data\s+as\s+TenantOnboarding/);
+    }
+    expect(repository).toContain("parseTenantOnboardingApplication");
+    expect(notificationRepository).toContain("parseTenantOnboardingNotificationDelivery");
   });
 });

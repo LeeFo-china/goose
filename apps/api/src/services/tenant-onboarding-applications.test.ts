@@ -66,10 +66,7 @@ const uniqueResolution: TenantOnboardingPartnerResolution = {
   },
   reason: "region",
 };
-const unmatchedResolutions: Array<[
-  string,
-  TenantOnboardingPartnerResolution,
-]> = [
+const unmatchedResolutions: Array<[string, TenantOnboardingPartnerResolution]> = [
   ["none", {
     kind: "none", partnerIds: [], selectedPartner: null,
     reason: "no_eligible_partner",
@@ -80,8 +77,9 @@ const unmatchedResolutions: Array<[
   }],
 ];
 const license: TenantOnboardingBusinessLicenseRecord = {
-  id: FILE_ID, owner_visitor_id: VISITOR_ID, scene: "tenant_onboarding_license",
-  status: "active", visibility: "private", deleted_at: null,
+  id: FILE_ID, owner_type: "visitor", owner_visitor_id: VISITOR_ID,
+  scene: "tenant_onboarding_license", status: "active", visibility: "private",
+  public_url: null, deleted_at: null,
 };
 type AtomicCreateInput = {
   application: TenantOnboardingCreateApplicationInput;
@@ -273,25 +271,47 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
 
   test("persists invite provenance only when active lookup matches the resolved partner", async () => {
     const inviteResolution = { ...uniqueResolution, reason: "invite_code" as const };
-    regionResolver.resolve.mockImplementationOnce(async () => inviteResolution);
-    inviteCodeRepository.findActiveInviteCodeByCode.mockImplementationOnce(async () => ({
-      id: INVITE_ID, code: "JOINME", partner_id: PARTNER_ID,
-    }));
-    await (await createService()).submit({ ...submission, invite_code: " joinme " }, context());
+    const order: string[] = [];
+    inviteCodeRepository.findActiveInviteCodeByCode.mockImplementationOnce(async () => {
+      order.push("provenance");
+      return { id: INVITE_ID, code: "JOINME", partner_id: PARTNER_ID };
+    });
+    regionResolver.resolve.mockImplementationOnce(async () => {
+      order.push("resolve");
+      return inviteResolution;
+    });
+    await (await createService()).submit({
+      ...submission, source_channel: "partner_invite", invite_code: " joinme ",
+    }, context());
+    expect(order).toEqual(["provenance", "resolve"]);
     expect(repository.createApplicationAtomic.mock.calls[0]?.[0].application.invite_code_id)
       .toBe(INVITE_ID);
   });
 
-  test("fails invite provenance closed when lookup partner differs", async () => {
-    regionResolver.resolve.mockImplementationOnce(async () => ({
-      ...uniqueResolution, reason: "invite_code",
-    }));
+  test("fails a rebound partner invite closed after resolving again without it", async () => {
     inviteCodeRepository.findActiveInviteCodeByCode.mockImplementationOnce(async () => ({
       id: INVITE_ID, code: "JOINME", partner_id: "00000000-0000-4000-8000-000000000999",
     }));
-    await (await createService()).submit({ ...submission, invite_code: "JOINME" }, context());
-    expect(repository.createApplicationAtomic.mock.calls[0]?.[0].application.invite_code_id)
-      .toBeNull();
+    regionResolver.resolve
+      .mockImplementationOnce(async () => ({ ...uniqueResolution, reason: "invite_code" }))
+      .mockImplementationOnce(async () => uniqueResolution);
+    await expect((await createService()).submit({
+      ...submission, source_channel: "partner_invite", invite_code: "JOINME",
+    }, context())).rejects.toMatchObject({ code: "TENANT_ONBOARDING_INVITE_INVALID" });
+    expect(regionResolver.resolve).toHaveBeenNthCalledWith(2, {
+      serviceRegionCodes: submission.service_region_codes, inviteCode: null,
+    });
+    expect(repository.createApplicationAtomic).not.toHaveBeenCalled();
+  });
+
+  test("fails an inactive partner invite with the stable business code", async () => {
+    await expect((await createService()).submit({
+      ...submission, source_channel: "partner_invite", invite_code: "EXPIRED",
+    }, context())).rejects.toMatchObject({ code: "TENANT_ONBOARDING_INVITE_INVALID" });
+    expect(regionResolver.resolve).toHaveBeenCalledWith({
+      serviceRegionCodes: submission.service_region_codes, inviteCode: null,
+    });
+    expect(repository.createApplicationAtomic).not.toHaveBeenCalled();
   });
 
   test.each(unmatchedResolutions)(
@@ -329,8 +349,10 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
     ["a missing", null],
     ["a public", { visibility: "public" }],
     ["an inactive", { status: "deleted" }],
+    ["a non-visitor-owned", { owner_type: "employee" }],
     ["another visitor's", { owner_visitor_id: "visitor-other" }],
     ["a wrong-scene", { scene: "avatar" }],
+    ["a public-URL-bearing", { public_url: "https://cdn.example/license.png" }],
     ["a deleted", { deleted_at: NOW }],
   ] as const)("rejects %s license under the Task4 file contract", async (_label, changes) => {
     // Task4's applicant file port does not project owner_type; Task5 extends that contract.
@@ -378,6 +400,24 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
     expect(repository.supplementAtomic).toHaveBeenCalledWith(expect.objectContaining({
       candidate: expect.objectContaining({ replace: true, partnerId: PARTNER_ID }),
     }));
+  });
+
+  test.each([
+    ["same order", ["411525", "411500"]],
+    ["different order with duplicates", ["411500", "411525", "411500"]],
+  ] as const)("does not reset candidate for the %s region set", async (_label, regions) => {
+    repository.findOwnedById.mockImplementationOnce(async () => ({
+      ...application, status: "supplement_required",
+      service_region_codes: ["411525", "411500"],
+    }));
+    await (await createService()).supplement({
+      applicationId: APPLICATION_ID, visitorId: VISITOR_ID, expectedVersion: 1,
+      patch: { service_region_codes: [...regions] },
+    });
+    expect(regionResolver.resolve).not.toHaveBeenCalled();
+    expect(repository.supplementAtomic).toHaveBeenCalledWith(
+      expect.objectContaining({ candidate: expect.objectContaining({ replace: false }) }),
+    );
   });
 
   test("falls back to normal region resolution when stored invite is inactive", async () => {

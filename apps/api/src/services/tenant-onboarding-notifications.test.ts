@@ -308,7 +308,7 @@ describe("TenantOnboardingNotificationsService", () => {
   });
 
   test("does not send beyond the bounded delivery attempt limit", async () => {
-    repository.findByIdAndApplication.mockImplementationOnce(async () =>
+    repository.findByIdAndApplication.mockImplementation(async () =>
       delivery({ status: "failed", attempt_count: 3 })
     );
     repository.claimDelivery.mockImplementationOnce(async () => null);
@@ -318,7 +318,36 @@ describe("TenantOnboardingNotificationsService", () => {
       applicationId: APPLICATION_ID,
       deliveryId: DELIVERY_ID,
     })).resolves.toMatchObject({ attempt_count: 3 });
+    expect(repository.findByIdAndApplication).toHaveBeenCalledTimes(2);
     expect(sendSmsTemplate).not.toHaveBeenCalled();
+  });
+
+  test("reloads an exhausted expired lease as failed instead of returning stale processing", async () => {
+    const processing = delivery({
+      status: "processing", attempt_count: 3, claim_token: CLAIM_TOKEN,
+      claim_expires_at: "2026-07-14T07:59:59.000Z",
+    });
+    const exhausted = delivery({
+      status: "failed", attempt_count: 3, claim_token: null,
+      claim_expires_at: null,
+      last_error: "TENANT_ONBOARDING_NOTIFICATION_ATTEMPTS_EXHAUSTED",
+    });
+    repository.findByIdAndApplication
+      .mockImplementationOnce(async () => processing)
+      .mockImplementationOnce(async () => exhausted);
+    repository.claimDelivery.mockImplementationOnce(async () => null);
+    const service = await createService(3);
+
+    const result = await service.retry({
+      applicationId: APPLICATION_ID,
+      deliveryId: DELIVERY_ID,
+    });
+
+    expect(result).toEqual(exhausted);
+    expect(repository.findByIdAndApplication).toHaveBeenCalledTimes(2);
+    expect(sendSmsTemplate).not.toHaveBeenCalled();
+    expect(repository.finalizeSent).not.toHaveBeenCalled();
+    expect(repository.finalizeFailed).not.toHaveBeenCalled();
   });
 });
 

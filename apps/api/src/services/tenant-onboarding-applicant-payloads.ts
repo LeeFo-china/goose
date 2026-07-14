@@ -120,3 +120,15 @@ export function buildTenantOnboardingCandidateMutation(
       : null,
   };
 }
+
+export function haveSameTenantOnboardingRegionSet(
+  left: readonly string[],
+  right: readonly string[],
+) {
+  const normalize = (values: readonly string[]) =>
+    [...new Set(values.map((value) => value.trim()))].sort();
+  const normalizedLeft = normalize(left);
+  const normalizedRight = normalize(right);
+  return normalizedLeft.length === normalizedRight.length &&
+    normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}

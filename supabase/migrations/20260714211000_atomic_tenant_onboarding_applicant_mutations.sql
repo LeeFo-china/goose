@@ -71,6 +71,34 @@ BEGIN
     RETURN;
   END IF;
 
+  PERFORM context.id
+  FROM public.user_location_contexts AS context
+  WHERE context.id = (p_application->>'visitor_context_id')::uuid
+    AND context.visitor_id = p_application->>'visitor_id'
+  FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'TENANT_ONBOARDING_CONTEXT_FORBIDDEN';
+  END IF;
+
+  PERFORM file.id
+  FROM public.platform_file_objects AS file
+  WHERE file.id = (p_application->>'business_license_file_id')::uuid
+    AND file.owner_type = 'visitor'
+    AND file.owner_visitor_id = p_application->>'visitor_id'
+    AND file.scene = 'tenant_onboarding_license'
+    AND file.status = 'active'
+    AND file.visibility = 'private'
+    AND file.deleted_at IS NULL
+    AND file.public_url IS NULL
+  FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'TENANT_ONBOARDING_DOCUMENT_FORBIDDEN';
+  END IF;
+
   BEGIN
     UPDATE public.sms_verification_codes AS sms
     SET status = 'verified', verified_at = p_now
@@ -210,6 +238,25 @@ BEGIN
   FOR UPDATE;
 
   IF NOT FOUND THEN RETURN; END IF;
+
+  IF p_patch ? 'business_license_file_id' THEN
+    PERFORM file.id
+    FROM public.platform_file_objects AS file
+    WHERE file.id = (p_patch->>'business_license_file_id')::uuid
+      AND file.owner_type = 'visitor'
+      AND file.owner_visitor_id = p_visitor_id
+      AND file.scene = 'tenant_onboarding_license'
+      AND file.status = 'active'
+      AND file.visibility = 'private'
+      AND file.deleted_at IS NULL
+      AND file.public_url IS NULL
+    FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'TENANT_ONBOARDING_DOCUMENT_FORBIDDEN';
+    END IF;
+  END IF;
 
   UPDATE public.tenant_onboarding_applications AS application
   SET company_name = CASE WHEN p_patch ? 'company_name' THEN p_patch->>'company_name' ELSE application.company_name END,

@@ -29,6 +29,18 @@ describe("tenant-onboarding notification claim migration", () => {
     expect(source).toContain("gen_random_uuid()");
   });
 
+  test("finalizes an expired exhausted lease before attempting another claim", () => {
+    const source = sql();
+    const exhaustedUpdate = source.indexOf("TENANT_ONBOARDING_NOTIFICATION_ATTEMPTS_EXHAUSTED");
+    const normalClaim = source.indexOf("attempt_count = delivery.attempt_count + 1");
+    expect(exhaustedUpdate).toBeGreaterThan(0);
+    expect(normalClaim).toBeGreaterThan(exhaustedUpdate);
+    expect(source).toContain("delivery.attempt_count >= p_max_attempts");
+    expect(source).toContain("delivery.claim_expires_at <= p_now");
+    expect(source).toContain("claim_token = NULL");
+    expect(source).toContain("claim_expires_at = NULL");
+  });
+
   test("finalizes only the currently processing claim token", () => {
     const source = sql();
     expect(source).toContain("finalize_tenant_onboarding_notification_sent");

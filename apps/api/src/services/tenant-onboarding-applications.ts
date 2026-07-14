@@ -17,6 +17,7 @@ import {
   buildTenantOnboardingCandidateMutation,
   buildTenantOnboardingCreateRecord,
   buildTenantOnboardingSupplementPatch,
+  haveSameTenantOnboardingRegionSet,
   type TenantOnboardingApplicantPatch,
 } from "@/services/tenant-onboarding-applicant-payloads";
 import {
@@ -24,6 +25,7 @@ import {
   type TenantOnboardingPartnerResolution,
 } from "@/services/tenant-onboarding-region-match";
 import { tenantOnboardingNotificationsService } from "@/services/tenant-onboarding-notifications";
+import { resolveTenantOnboardingSubmissionPartner } from "@/services/tenant-onboarding-submission-resolution";
 
 const SMS_SCENE = "tenant_onboarding_application" as const;
 const REVIEW_HOURS = 48;
@@ -159,14 +161,13 @@ export class TenantOnboardingApplicationsService {
       visitorId,
     );
     await this.assertNoOpenSubject(normalizedCreditCode);
-    const resolution = await this.regionResolver.resolve({
+    const { resolution, inviteCodeId } = await resolveTenantOnboardingSubmissionPartner({
       serviceRegionCodes: input.service_region_codes,
-      inviteCode: input.invite_code?.trim().toUpperCase() || null,
+      submittedInviteCode: input.invite_code,
+      sourceChannel: input.source_channel,
+      inviteCodeRepository: this.inviteCodeRepository,
+      regionResolver: this.regionResolver,
     });
-    const inviteCodeId = await this.resolveInviteCodeId(
-      input.invite_code,
-      resolution,
-    );
     const result = await this.createApplicationWithRetry({
       input,
       visitorId,
@@ -297,9 +298,10 @@ export class TenantOnboardingApplicationsService {
   private async assertPrivateBusinessLicense(fileId: string, visitorId: string) {
     const file = await this.fileRepository.findById(fileId);
     if (
-      !file || file.owner_visitor_id !== visitorId || file.status !== "active" ||
+      !file || file.owner_type !== "visitor" ||
+      file.owner_visitor_id !== visitorId || file.status !== "active" ||
       file.visibility !== "private" || file.scene !== "tenant_onboarding_license" ||
-      file.deleted_at !== null
+      file.deleted_at !== null || file.public_url !== null
     ) {
       throw Errors.business(
         403,
@@ -368,22 +370,17 @@ export class TenantOnboardingApplicationsService {
     throw Errors.dbError("生成装企入驻申请编号失败");
   }
 
-  private async resolveInviteCodeId(
-    submittedCode: string | null | undefined,
-    resolution: TenantOnboardingPartnerResolution,
-  ) {
-    if (resolution.reason !== "invite_code" || !resolution.selectedPartner) return null;
-    const code = submittedCode?.trim().toUpperCase();
-    if (!code) return null;
-    const invite = await this.inviteCodeRepository.findActiveInviteCodeByCode(code);
-    return invite?.partner_id === resolution.selectedPartner.id ? invite.id : null;
-  }
-
   private async resolveSupplementCandidate(
     current: TenantOnboardingApplicationRecord,
     patch: TenantOnboardingSupplementPatch,
   ) {
-    if (!patch.service_region_codes) {
+    if (
+      !patch.service_region_codes ||
+      haveSameTenantOnboardingRegionSet(
+        current.service_region_codes,
+        patch.service_region_codes,
+      )
+    ) {
       return buildTenantOnboardingCandidateMutation(false, null, this.clock());
     }
     const invite = current.invite_code_id

@@ -102,7 +102,12 @@ export class TenantOnboardingNotificationsService {
       leaseSeconds: this.leaseSeconds,
       now: this.clock().toISOString(),
     });
-    if (!claimed) return delivery;
+    if (!claimed) {
+      return await this.repository.findByIdAndApplication(
+        delivery.id,
+        delivery.application_id,
+      );
+    }
     const claimToken = this.requireClaimToken(claimed);
     try {
       const recipient = await this.requireRecipient(delivery.application_id);

@@ -46,6 +46,28 @@ describe("atomic tenant-onboarding applicant mutations migration", () => {
     expect(source).toContain("FOR UPDATE");
   });
 
+  test("locks and revalidates context and private visitor license at the write boundary", () => {
+    const source = sql();
+    expect(source.match(/FROM public\.user_location_contexts AS context/g))
+      .toHaveLength(1);
+    expect(source.match(/FROM public\.platform_file_objects AS file/g))
+      .toHaveLength(2);
+    expect(source.match(/FOR SHARE/g)).toHaveLength(3);
+    expect(source).toContain("context.visitor_id = p_application->>'visitor_id'");
+    for (const predicate of [
+      "file.owner_type = 'visitor'",
+      "file.owner_visitor_id = p_application->>'visitor_id'",
+      "file.scene = 'tenant_onboarding_license'",
+      "file.status = 'active'",
+      "file.visibility = 'private'",
+      "file.deleted_at IS NULL",
+      "file.public_url IS NULL",
+    ]) expect(source).toContain(predicate);
+    expect(source).toContain("TENANT_ONBOARDING_CONTEXT_FORBIDDEN");
+    expect(source).toContain("TENANT_ONBOARDING_DOCUMENT_FORBIDDEN");
+    expect(source).toContain("p_patch ? 'business_license_file_id'");
+  });
+
   test("keeps applicant RPCs service-role-only", () => {
     const source = sql();
     for (const name of [

@@ -1,7 +1,12 @@
 import { Errors } from "@/errors/error-factory";
 import { isPostgresUniqueViolation } from "@/repositories/repository-errors";
+import {
+  parseNullableTenantOnboardingNotificationDelivery,
+  parseTenantOnboardingNotificationDelivery,
+  parseTenantOnboardingNotificationRpcResult,
+  parseTenantOnboardingRecipientRow,
+} from "@/repositories/tenant-onboarding-parsers";
 import type {
-  TenantOnboardingNotificationDeliveryRecord,
   TenantOnboardingNotificationEventType,
 } from "@/repositories/tenant-onboarding-types";
 import { SupabaseDB } from "@/utils/supabase";
@@ -13,8 +18,6 @@ const DELIVERY_SELECT = [
   "status", "attempt_count", "last_error", "sent_at", "claim_token",
   "claim_expires_at", "created_at", "updated_at",
 ].join(",");
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type TenantOnboardingApplicationRecipient = {
   application_id: string;
@@ -78,7 +81,10 @@ class TenantOnboardingNotificationsRepository {
       .single();
     if (!error) {
       return {
-        delivery: data as TenantOnboardingNotificationDeliveryRecord,
+        delivery: parseTenantOnboardingNotificationDelivery(
+          data,
+          "创建装企入驻通知记录失败",
+        ),
         created: true as const,
       };
     }
@@ -96,7 +102,10 @@ class TenantOnboardingNotificationsRepository {
       .eq("application_id", applicationId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻通知记录失败", error);
-    return (data as TenantOnboardingNotificationDeliveryRecord | null) ?? null;
+    return parseNullableTenantOnboardingNotificationDelivery(
+      data,
+      "查询装企入驻通知记录失败",
+    );
   }
 
   async claimDelivery(input: {
@@ -114,7 +123,19 @@ class TenantOnboardingNotificationsRepository {
       p_now: input.now,
     });
     if (error) throw Errors.dbError("领取装企入驻通知任务失败", error);
-    return this.parseRpcDelivery(data, true, "领取装企入驻通知任务失败");
+    const delivery = parseTenantOnboardingNotificationRpcResult(
+      data,
+      "领取装企入驻通知任务失败",
+    );
+    if (
+      delivery &&
+      (delivery.status !== "processing" || delivery.claim_token === null)
+    ) {
+      throw Errors.dbError("领取装企入驻通知任务失败", {
+        message: "notification claim returned without an active lease",
+      });
+    }
+    return delivery;
   }
 
   async finalizeSent(input: {
@@ -133,7 +154,10 @@ class TenantOnboardingNotificationsRepository {
       },
     );
     if (error) throw Errors.dbError("标记装企入驻通知成功失败", error);
-    return this.parseRpcDelivery(data, false, "标记装企入驻通知成功失败");
+    return parseTenantOnboardingNotificationRpcResult(
+      data,
+      "标记装企入驻通知成功失败",
+    );
   }
 
   async finalizeFailed(input: {
@@ -152,7 +176,10 @@ class TenantOnboardingNotificationsRepository {
       },
     );
     if (error) throw Errors.dbError("标记装企入驻通知失败状态失败", error);
-    return this.parseRpcDelivery(data, false, "标记装企入驻通知失败状态失败");
+    return parseTenantOnboardingNotificationRpcResult(
+      data,
+      "标记装企入驻通知失败状态失败",
+    );
   }
 
   async loadCurrentApplicationRecipient(applicationId: string) {
@@ -161,12 +188,10 @@ class TenantOnboardingNotificationsRepository {
       .eq("id", applicationId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻通知接收人失败", error);
-    const row = data as {
-      id: string;
-      application_no: string;
-      company_name: string;
-      admin_phone: string;
-    } | null;
+    const row = parseTenantOnboardingRecipientRow(
+      data,
+      "查询装企入驻通知接收人失败",
+    );
     return row
       ? {
         application_id: row.id,
@@ -186,7 +211,10 @@ class TenantOnboardingNotificationsRepository {
       .eq("channel", input.channel)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻通知去重记录失败", error);
-    return (data as TenantOnboardingNotificationDeliveryRecord | null) ?? null;
+    return parseNullableTenantOnboardingNotificationDelivery(
+      data,
+      "查询装企入驻通知去重记录失败",
+    );
   }
 
   private rpc(name: string, params: Record<string, unknown>) {
@@ -194,47 +222,6 @@ class TenantOnboardingNotificationsRepository {
       .rpc(name, params);
   }
 
-  private parseRpcDelivery(
-    data: unknown,
-    requireClaim: boolean,
-    message: string,
-  ) {
-    if (Array.isArray(data) && data.length === 0) return null;
-    const row = Array.isArray(data) && data.length === 1 ? data[0] : null;
-    if (!row || typeof row !== "object") throw this.invalidRpcResult(message);
-    const record = row as Record<string, unknown>;
-    const validStatus = ["pending", "processing", "sent", "failed"].includes(
-      String(record.status),
-    );
-    const validEvent = ["submitted", "supplement_required", "approved", "rejected"]
-      .includes(String(record.event_type));
-    const nullableString = (value: unknown) =>
-      value === null || typeof value === "string";
-    if (
-      typeof record.id !== "string" || !UUID_PATTERN.test(record.id) ||
-      typeof record.application_id !== "string" ||
-      !UUID_PATTERN.test(record.application_id) ||
-      !Number.isInteger(record.application_version) || !validEvent ||
-      record.channel !== "sms" || !Number.isInteger(record.attempt_count) ||
-      !validStatus || !nullableString(record.last_error) ||
-      !nullableString(record.sent_at) || !nullableString(record.claim_token) ||
-      !nullableString(record.claim_expires_at) ||
-      typeof record.created_at !== "string" ||
-      typeof record.updated_at !== "string" ||
-      (requireClaim && (
-        record.status !== "processing" ||
-        typeof record.claim_token !== "string" ||
-        !UUID_PATTERN.test(record.claim_token)
-      ))
-    ) throw this.invalidRpcResult(message);
-    return record as TenantOnboardingNotificationDeliveryRecord;
-  }
-
-  private invalidRpcResult(message: string) {
-    return Errors.dbError(message, {
-      message: "tenant onboarding notification RPC returned invalid data",
-    });
-  }
 }
 
 export const tenantOnboardingNotificationsRepository =

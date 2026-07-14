@@ -1,4 +1,18 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
+import {
+  parseNullableTenantOnboardingApplication,
+  parseTenantOnboardingActiveInvite,
+  parseTenantOnboardingAdministrativeAreas,
+  parseTenantOnboardingApplication,
+  parseTenantOnboardingApplicationSummaries,
+  parseTenantOnboardingBusinessFile,
+  parseTenantOnboardingLocationContext,
+  parseTenantOnboardingMutation,
+  parseTenantOnboardingNestedInvite,
+  parseTenantOnboardingPartners,
+  parseTenantOnboardingSubmitMutation,
+} from "@/repositories/tenant-onboarding-parsers";
 import type {
   TenantOnboardingAdministrativeAreaRecord,
   TenantOnboardingApplicationRecord,
@@ -31,8 +45,6 @@ const OWNED_LIST_SELECT = [
   "id", "application_no", "company_name", "status", "partner_assist_status",
   "version", "created_at", "updated_at",
 ].join(",");
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type TenantOnboardingCreateApplicationInput = Omit<
   TenantOnboardingApplicationRecord,
@@ -75,10 +87,12 @@ export type TenantOnboardingLocationContextRecord = {
 
 export type TenantOnboardingBusinessLicenseRecord = {
   id: string;
+  owner_type: string;
   owner_visitor_id: string | null;
   scene: string;
   status: string;
   visibility: string;
+  public_url: string | null;
   deleted_at: string | null;
 };
 
@@ -141,13 +155,19 @@ class TenantOnboardingRepository {
         p_now: input.now,
       },
     );
-    if (this.isSmsInvalid(error)) {
-      throw Errors.business(400, "验证码错误或已过期", "SMS_CODE_INVALID");
-    }
+    const mappedError = mapTenantOnboardingApplicantMutationError(error);
+    if (mappedError) throw mappedError;
     if (error) throw Errors.dbError("提交装企入驻申请失败", error);
-    const result = this.parseMutationResult(data, true);
-    const application = await this.findById(result.applicationId);
-    if (!application) throw this.invalidRpcResult("提交装企入驻申请失败");
+    const result = parseTenantOnboardingSubmitMutation(
+      data,
+      "提交装企入驻申请失败",
+    );
+    const application = await this.findById(result.application_id);
+    if (!application) {
+      throw Errors.dbError("提交装企入驻申请失败", {
+        message: "tenant onboarding RPC application was not found",
+      });
+    }
     return { application, created: result.created };
   }
 
@@ -161,7 +181,10 @@ class TenantOnboardingRepository {
       .eq("idempotency_key", idempotencyKey)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻幂等申请失败", error);
-    return (data as TenantOnboardingApplicationRecord | null) ?? null;
+    return parseNullableTenantOnboardingApplication(
+      data,
+      "查询装企入驻幂等申请失败",
+    );
   }
 
   async findOpenByCreditCode(normalizedCreditCode: string, excludeId?: string) {
@@ -174,7 +197,10 @@ class TenantOnboardingRepository {
     if (excludeId) query = query.neq("id", excludeId);
     const { data, error } = await query.maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻重复主体失败", error);
-    return (data as TenantOnboardingApplicationRecord | null) ?? null;
+    return parseNullableTenantOnboardingApplication(
+      data,
+      "查询装企入驻重复主体失败",
+    );
   }
 
   async findOwnedById(applicationId: string, visitorId: string) {
@@ -184,7 +210,10 @@ class TenantOnboardingRepository {
       .eq("visitor_id", visitorId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻申请详情失败", error);
-    return (data as TenantOnboardingApplicationRecord | null) ?? null;
+    return parseNullableTenantOnboardingApplication(
+      data,
+      "查询装企入驻申请详情失败",
+    );
   }
 
   async findById(applicationId: string) {
@@ -193,7 +222,7 @@ class TenantOnboardingRepository {
       .eq("id", applicationId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻申请失败", error);
-    return (data as TenantOnboardingApplicationRecord | null) ?? null;
+    return parseNullableTenantOnboardingApplication(data, "查询装企入驻申请失败");
   }
 
   async listOwned(input: { visitorId: string; page: number; pageSize: number }) {
@@ -212,7 +241,10 @@ class TenantOnboardingRepository {
       .range(start, start + pageSize - 1);
     if (error) throw Errors.dbError("查询我的装企入驻申请失败", error);
     return {
-      list: (data ?? []) as TenantOnboardingApplicationSummaryRecord[],
+      list: parseTenantOnboardingApplicationSummaries(
+        data === null ? [] : data,
+        "查询我的装企入驻申请失败",
+      ),
       pagination: {
         page,
         pageSize,
@@ -255,10 +287,12 @@ class TenantOnboardingRepository {
         p_now: input.now,
       },
     );
+    const mappedError = mapTenantOnboardingApplicantMutationError(error);
+    if (mappedError) throw mappedError;
     if (error) throw Errors.dbError("补充装企入驻申请失败", error);
-    const result = this.parseMutationResult(data, false);
+    const result = parseTenantOnboardingMutation(data, "补充装企入驻申请失败");
     if (!result) return null;
-    return await this.findOwnedById(result.applicationId, input.visitorId);
+    return await this.findOwnedById(result.application_id, input.visitorId);
   }
 
   async withdrawAtomic(input: {
@@ -279,9 +313,9 @@ class TenantOnboardingRepository {
       },
     );
     if (error) throw Errors.dbError("撤回装企入驻申请失败", error);
-    const result = this.parseMutationResult(data, false);
+    const result = parseTenantOnboardingMutation(data, "撤回装企入驻申请失败");
     if (!result) return null;
-    return await this.findOwnedById(result.applicationId, input.visitorId);
+    return await this.findOwnedById(result.application_id, input.visitorId);
   }
 
   private rpc(name: string, params: Record<string, unknown>) {
@@ -289,38 +323,6 @@ class TenantOnboardingRepository {
       .rpc(name, params);
   }
 
-  private parseMutationResult(data: unknown, requireCreated: true): {
-    applicationId: string;
-    created: boolean;
-  };
-  private parseMutationResult(data: unknown, requireCreated: false): {
-    applicationId: string;
-  } | null;
-  private parseMutationResult(data: unknown, requireCreated: boolean) {
-    if (Array.isArray(data) && data.length === 0 && !requireCreated) return null;
-    const row = Array.isArray(data) && data.length === 1 ? data[0] : null;
-    if (!row || typeof row !== "object") throw this.invalidRpcResult();
-    const record = row as Record<string, unknown>;
-    if (typeof record.application_id !== "string" ||
-      !UUID_PATTERN.test(record.application_id)) throw this.invalidRpcResult();
-    if (requireCreated && typeof record.created !== "boolean") {
-      throw this.invalidRpcResult();
-    }
-    return requireCreated
-      ? { applicationId: record.application_id, created: record.created as boolean }
-      : { applicationId: record.application_id };
-  }
-
-  private isSmsInvalid(error: unknown) {
-    if (!error || typeof error !== "object") return false;
-    const record = error as Record<string, unknown>;
-    return record.code === "P0001" &&
-      record.message === "TENANT_ONBOARDING_SMS_INVALID";
-  }
-
-  private invalidRpcResult(message = "执行装企入驻申请事务失败") {
-    return Errors.dbError(message, { message: "tenant onboarding RPC returned invalid data" });
-  }
 }
 
 class TenantOnboardingApplicantContextRepository {
@@ -330,33 +332,29 @@ class TenantOnboardingApplicantContextRepository {
       .eq("id", contextId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻定位上下文失败", error);
-    return (data as TenantOnboardingLocationContextRecord | null) ?? null;
+    return parseTenantOnboardingLocationContext(
+      data,
+      "查询装企入驻定位上下文失败",
+    );
   }
 }
 
 class TenantOnboardingApplicantFileRepository {
   async findById(fileId: string) {
     const { data, error } = await from("platform_file_objects")
-      .select("id,owner_visitor_id,scene,status,visibility,deleted_at")
+      .select("id,owner_type,owner_visitor_id,scene,status,visibility,public_url,deleted_at")
       .eq("id", fileId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻营业执照失败", error);
-    return (data as TenantOnboardingBusinessLicenseRecord | null) ?? null;
+    return parseTenantOnboardingBusinessFile(data, "查询装企入驻营业执照失败");
   }
 }
 
-type InviteCodePartnerRow = {
+export type TenantOnboardingActiveInviteCode = {
   id: string;
   code: string;
   partner_id: string;
-  expires_at: string | null;
-  partner: TenantOnboardingPartnerBrief | null;
 };
-
-export type TenantOnboardingActiveInviteCode = Pick<
-  InviteCodePartnerRow,
-  "id" | "code" | "partner_id"
->;
 
 class TenantOnboardingRegionMatchRepository {
   async loadActiveByAdcodes(adcodes: readonly string[]) {
@@ -368,7 +366,10 @@ class TenantOnboardingRegionMatchRepository {
       .eq("status", "active")
       .limit(boundedCodes.length);
     if (error) throw Errors.dbError("查询装企入驻行政区划失败", error);
-    return (data ?? []) as TenantOnboardingAdministrativeAreaRecord[];
+    return parseTenantOnboardingAdministrativeAreas(
+      data === null ? [] : data,
+      "查询装企入驻行政区划失败",
+    );
   }
 
   async listActiveOverlappingPartners(
@@ -381,7 +382,10 @@ class TenantOnboardingRegionMatchRepository {
       .order("id", { ascending: true })
       .limit(input.limit + 1);
     if (error) throw Errors.dbError("查询装企入驻候选合伙人失败", error);
-    const rows = (data ?? []) as TenantOnboardingPartnerBrief[];
+    const rows = parseTenantOnboardingPartners(
+      data === null ? [] : data,
+      "查询装企入驻候选合伙人失败",
+    );
     return {
       partners: rows.slice(0, input.limit),
       truncated: rows.length > input.limit,
@@ -395,7 +399,10 @@ class TenantOnboardingRegionMatchRepository {
       .eq("status", "active")
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻合伙人邀请码失败", error);
-    const row = (data as InviteCodePartnerRow | null) ?? null;
+    const row = parseTenantOnboardingNestedInvite(
+      data,
+      "查询装企入驻合伙人邀请码失败",
+    );
     if (!row?.partner || row.partner.status !== "active") return null;
     if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
       return null;
@@ -419,12 +426,39 @@ class TenantOnboardingRegionMatchRepository {
       .limit(1)
       .maybeSingle();
     if (error) throw Errors.dbError("查询装企入驻邀请码来源失败", error);
-    const row = data as Omit<InviteCodePartnerRow, "partner"> | null;
+    const row = parseTenantOnboardingActiveInvite(
+      data,
+      "查询装企入驻邀请码来源失败",
+    );
     if (!row || (row.expires_at && new Date(row.expires_at).getTime() <= Date.now())) {
       return null;
     }
     return { id: row.id, code: row.code, partner_id: row.partner_id };
   }
+}
+
+export function mapTenantOnboardingApplicantMutationError(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const record = error as Record<string, unknown>;
+  if (record.code !== "P0001") return null;
+  if (record.message === "TENANT_ONBOARDING_SMS_INVALID") {
+    return Errors.business(400, "验证码错误或已过期", "SMS_CODE_INVALID");
+  }
+  if (record.message === "TENANT_ONBOARDING_CONTEXT_FORBIDDEN") {
+    return Errors.business(
+      404,
+      "装企入驻申请不存在",
+      ErrorCodes.TENANT_ONBOARDING_APPLICATION_NOT_FOUND,
+    );
+  }
+  if (record.message === "TENANT_ONBOARDING_DOCUMENT_FORBIDDEN") {
+    return Errors.business(
+      403,
+      "营业执照文件不可用于当前申请",
+      ErrorCodes.TENANT_ONBOARDING_DOCUMENT_FORBIDDEN,
+    );
+  }
+  return null;
 }
 
 export const tenantOnboardingRepository = new TenantOnboardingRepository();
