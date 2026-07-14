@@ -41,12 +41,21 @@ describe("project operational risk RPC migration contract", () => {
   test("protects tenant scope, project status scope, diagnostics, and db pagination", () => {
     const sql = migrationSql();
     const tenantConstraintMatches = sql.match(/tenant_id\s*=\s*p_tenant_id/g) ?? [];
+    const employeeTenantMatches = sql.match(/employees\.tenant_id\s*=\s*p_tenant_id/g) ?? [];
 
     expect(tenantConstraintMatches.length).toBeGreaterThanOrEqual(7);
+    expect(employeeTenantMatches.length).toBeGreaterThanOrEqual(5);
     expect(sql).toContain("status <> 'invalid'");
     expect(sql).toContain("workflow_tasks_missing_due_at");
     expect(sql).toContain("offset ((select page - 1 from input) * (select page_size from input))");
     expect(sql).toContain("limit (select page_size from input)");
+  });
+
+  test("compares workflow task due times in an absolute time domain", () => {
+    const sql = migrationSql();
+
+    expect(sql).toContain("workflow_tasks.due_at < statement_timestamp()");
+    expect(sql).not.toContain("workflow_tasks.due_at < normalized.local_now");
   });
 
   test("emits all risk families through union-all compatible risk facts", () => {

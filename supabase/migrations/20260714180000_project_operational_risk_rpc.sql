@@ -62,7 +62,7 @@ with input as (
   where workflow_tasks.tenant_id = p_tenant_id
     and workflow_tasks.status = 'pending'
     and workflow_tasks.due_at is not null
-    and workflow_tasks.due_at < normalized.local_now
+    and workflow_tasks.due_at < statement_timestamp()
 ), workflow_task_risks as (
   select
     'workflow_task_overdue:' || workflow_task_candidates.id::text as risk_key,
@@ -105,6 +105,7 @@ with input as (
   cross join normalized
   left join public.employees as employees
     on employees.id = workflow_task_candidates.assignee_employee_id
+   and employees.tenant_id = p_tenant_id
 ), procedure_candidates as (
   select
     project_procedure_assignments.id,
@@ -152,6 +153,7 @@ with input as (
   cross join normalized
   left join public.employees as employees
     on employees.id = procedure_candidates.assignee_employee_id
+   and employees.tenant_id = p_tenant_id
 ), active_project_procedures as (
   select distinct on (project_procedure_assignments.project_id)
     project_procedure_assignments.id,
@@ -231,6 +233,7 @@ with input as (
   cross join normalized
   left join public.employees as employees
     on employees.id = project_log_context.assignee_employee_id
+   and employees.tenant_id = p_tenant_id
   where tenant_projects.status in ('started', 'constructing')
     and extract(hour from normalized.local_now) >= 18
     and not project_log_context.has_today_log
@@ -261,6 +264,7 @@ with input as (
     on tenant_projects.id = project_acceptances.project_id
   left join public.employees as employees
     on employees.id = project_acceptances.initiator_id
+   and employees.tenant_id = p_tenant_id
   where project_acceptances.tenant_id = p_tenant_id
     and project_acceptances.status = 'rejected'
 ), service_ticket_risks as (
@@ -303,6 +307,7 @@ with input as (
   cross join normalized
   left join public.employees as employees
     on employees.id = customer_service_tickets.assigned_employee_id
+   and employees.tenant_id = p_tenant_id
   where customer_service_tickets.tenant_id = p_tenant_id
     and customer_service_tickets.status in ('open', 'in_progress')
     and customer_service_tickets.priority in ('high', 'urgent')
