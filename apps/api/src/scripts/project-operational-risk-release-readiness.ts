@@ -1,0 +1,133 @@
+type Env = Record<string, string | undefined>;
+
+export type ProjectOperationalRiskReleaseReadinessStatus =
+  | "ready"
+  | "missing_env"
+  | "api_smoke_skipped";
+
+export type ProjectOperationalRiskReleaseReadinessCheck =
+  | "migration_list_configured"
+  | "rpc_performance_smoke_configured"
+  | "api_smoke_configured";
+
+export type ProjectOperationalRiskReleaseReadinessBlocker = {
+  check: ProjectOperationalRiskReleaseReadinessCheck;
+  detail: string;
+  next_action: string;
+};
+
+export type ProjectOperationalRiskReleaseReadinessReport = {
+  ok: boolean;
+  status: ProjectOperationalRiskReleaseReadinessStatus;
+  generated_at: string;
+  completed_checks: ProjectOperationalRiskReleaseReadinessCheck[];
+  blockers: ProjectOperationalRiskReleaseReadinessBlocker[];
+  read_only_commands: string[];
+};
+
+const MIGRATION_LIST_ENV = ["SUPABASE_DB_DIRECT_URL"] as const;
+const RPC_PERFORMANCE_ENV = [
+  "PROJECT_HEALTH_TENANT_ID",
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+] as const;
+const API_SMOKE_ENV = [
+  "PROJECT_HEALTH_API_URL",
+  "PROJECT_HEALTH_ADMIN_TOKEN",
+] as const;
+
+const READ_ONLY_COMMANDS = [
+  'supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"',
+  "cd apps/api && PROJECT_HEALTH_TENANT_ID=\"$PROJECT_HEALTH_TENANT_ID\" bun --env-file=.env src/scripts/project-operational-risk-performance-smoke.ts",
+  "cd apps/api && PROJECT_HEALTH_TENANT_ID=\"$PROJECT_HEALTH_TENANT_ID\" PROJECT_HEALTH_API_URL=\"$PROJECT_HEALTH_API_URL\" PROJECT_HEALTH_ADMIN_TOKEN=\"$PROJECT_HEALTH_ADMIN_TOKEN\" bun --env-file=.env src/scripts/project-operational-risk-performance-smoke.ts",
+];
+
+function missingEnvNames(
+  env: Env,
+  names: readonly string[],
+): string[] {
+  return names.filter((name) => !env[name]?.trim());
+}
+
+function formatMissingEnv(names: readonly string[]): string {
+  return `missing ${names.join(", ")}`;
+}
+
+export function buildProjectOperationalRiskReleaseReadinessReport(
+  env: Env,
+  generatedAt = new Date().toISOString(),
+): ProjectOperationalRiskReleaseReadinessReport {
+  const blockers: ProjectOperationalRiskReleaseReadinessBlocker[] = [];
+  const completedChecks: ProjectOperationalRiskReleaseReadinessCheck[] = [];
+
+  const missingMigrationEnv = missingEnvNames(env, MIGRATION_LIST_ENV);
+  if (missingMigrationEnv.length > 0) {
+    blockers.push({
+      check: "migration_list_configured",
+      detail: formatMissingEnv(missingMigrationEnv),
+      next_action:
+        "Configure SUPABASE_DB_DIRECT_URL, then run migration list before applying or deploying the risk RPC.",
+    });
+  } else {
+    completedChecks.push("migration_list_configured");
+  }
+
+  const missingRpcEnv = missingEnvNames(env, RPC_PERFORMANCE_ENV);
+  if (missingRpcEnv.length > 0) {
+    blockers.push({
+      check: "rpc_performance_smoke_configured",
+      detail: formatMissingEnv(missingRpcEnv),
+      next_action:
+        "Configure PROJECT_HEALTH_TENANT_ID, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then run the read-only RPC performance smoke.",
+    });
+  } else {
+    completedChecks.push("rpc_performance_smoke_configured");
+  }
+
+  const missingApiEnv = missingEnvNames(env, API_SMOKE_ENV);
+  if (missingApiEnv.length > 0) {
+    blockers.push({
+      check: "api_smoke_configured",
+      detail: formatMissingEnv(missingApiEnv),
+      next_action:
+        "Configure PROJECT_HEALTH_API_URL and PROJECT_HEALTH_ADMIN_TOKEN, then run the dev API smoke before release.",
+    });
+  } else {
+    completedChecks.push("api_smoke_configured");
+  }
+
+  return {
+    ok: blockers.length === 0,
+    status: resolveStatus(blockers),
+    generated_at: generatedAt,
+    completed_checks: completedChecks,
+    blockers,
+    read_only_commands: READ_ONLY_COMMANDS,
+  };
+}
+
+function resolveStatus(
+  blockers: ProjectOperationalRiskReleaseReadinessBlocker[],
+): ProjectOperationalRiskReleaseReadinessStatus {
+  if (blockers.length === 0) return "ready";
+
+  const onlyApiSmokeMissing = blockers.every(
+    (blocker) => blocker.check === "api_smoke_configured",
+  );
+  return onlyApiSmokeMissing ? "api_smoke_skipped" : "missing_env";
+}
+
+async function main(): Promise<void> {
+  const report = buildProjectOperationalRiskReleaseReadinessReport(process.env);
+  console.log(JSON.stringify(report, null, 2));
+  if (!report.ok) process.exit(1);
+}
+
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(
+      error instanceof Error ? error.message : "项目风险发布 readiness 检查失败",
+    );
+    process.exit(1);
+  });
+}

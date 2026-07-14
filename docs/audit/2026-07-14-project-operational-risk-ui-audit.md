@@ -29,7 +29,8 @@ cd apps/api && bun test \
   src/services/project-operational-risks.test.ts \
   src/services/project-operational-risk-ai.test.ts \
   src/controllers/project-health/routes.test.ts \
-  src/scripts/project-operational-risk-performance-smoke.test.ts
+  src/scripts/project-operational-risk-performance-smoke.test.ts \
+  src/scripts/project-operational-risk-release-readiness.test.ts
 cd apps/admin && bun test \
   components/layout/admin-nav-utils.test.ts \
   components/layout/admin-nav-visibility.test.ts \
@@ -44,7 +45,7 @@ pnpm --dir apps/admin build
 结果：
 
 - Domain contract test：5 pass；
-- API project-health/performance 定向测试：49 pass；
+- API project-health/performance/readiness 定向测试：52 pass；
 - Admin nav/project-health 定向测试：31 pass；
 - `packages/domain build`：通过；
 - `api:check`：通过；

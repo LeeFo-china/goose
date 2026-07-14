@@ -8,10 +8,12 @@
 已补充只读性能验证工具和 EXPLAIN SQL：
 
 - `apps/api/src/scripts/project-operational-risk-performance-smoke.ts`
+- `apps/api/src/scripts/project-operational-risk-release-readiness.ts`
 - `supabase/tests/project_operational_risk_explain.sql`
 
 本地已验证的内容：
 
+- release readiness gate 只检查发布验证前置条件并输出 JSON，不执行 DDL/DML，不输出密钥值；
 - P50/P95 计算使用排序后的向上取整索引；
 - smoke 配置只读取 `PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`；
 - API 阶段仅在同时提供 `PROJECT_HEALTH_API_URL` 和 `PROJECT_HEALTH_ADMIN_TOKEN` 时运行；
@@ -22,6 +24,18 @@
 ## 待 dev 数据库执行
 
 当前未记录 EXPLAIN 和 P95 数值。原因：本地 Supabase/Docker 运行态不可用，2026-07-15 复跑 `supabase status` 仍因 Docker daemon 不可用失败；当前 shell 也未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`。尚未在本轮拿到可验证的 dev 数据库连接执行结果。禁止手工在远端数据库执行 DDL/DML 或伪造性能数据。
+
+先执行只读 release readiness gate：
+
+```bash
+pnpm --dir apps/api run project-health:release-readiness
+```
+
+Expected:
+
+- 缺少配置时退出 1，`status` 为 `missing_env` 或 `api_smoke_skipped`；
+- 所有发布验证前置条件齐全时退出 0，`status` 为 `ready`；
+- 输出只包含变量名和只读命令模板，不包含数据库密码、service role key 或管理员 token 原文。
 
 获取代表 tenant：
 
