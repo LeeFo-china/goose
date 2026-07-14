@@ -11,6 +11,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const APPLICATION_ID = "00000000-0000-4000-8000-000000000101";
 const DELIVERY_ID = "00000000-0000-4000-8000-000000000501";
+const CLAIM_TOKEN = "00000000-0000-4000-8000-000000000601";
 const NOW = "2026-07-14T08:00:00.000Z";
 
 function delivery(
@@ -26,6 +27,10 @@ function delivery(
     attempt_count: 0,
     last_error: null,
     sent_at: null,
+    claim_token: overrides.claim_token === undefined ? null : overrides.claim_token,
+    claim_expires_at: overrides.claim_expires_at === undefined
+      ? null
+      : overrides.claim_expires_at,
     created_at: NOW,
     updated_at: NOW,
     ...overrides,
@@ -47,10 +52,17 @@ const repository = {
     channel: "sms";
   }) => ({ delivery: delivery(input), created: true })),
   findByIdAndApplication: mock(async () => delivery({ status: "failed" }) as TenantOnboardingNotificationDeliveryRecord | null),
-  markAttempting: mock(async () => delivery({ attempt_count: 1 }) as TenantOnboardingNotificationDeliveryRecord | null),
-  markSent: mock(async () => delivery({ status: "sent", attempt_count: 1, sent_at: NOW })),
-  markFailed: mock(async (_input: { deliveryId: string; lastError: string }) =>
-    delivery({ status: "failed", attempt_count: 1 })
+  claimDelivery: mock(async () => delivery({
+    status: "processing", attempt_count: 1, claim_token: CLAIM_TOKEN,
+    claim_expires_at: "2026-07-14T08:02:00.000Z",
+  }) as TenantOnboardingNotificationDeliveryRecord | null),
+  finalizeSent: mock(async (): Promise<TenantOnboardingNotificationDeliveryRecord | null> =>
+    delivery({ status: "sent", attempt_count: 1, sent_at: NOW })
+  ),
+  finalizeFailed: mock(async (_input: {
+    deliveryId: string; applicationId: string; claimToken: string; lastError: string;
+  }) =>
+    delivery({ status: "failed", attempt_count: 1 }) as TenantOnboardingNotificationDeliveryRecord | null
   ),
   loadCurrentApplicationRecipient: mock(async () => recipient as typeof recipient | null),
 };
@@ -79,20 +91,23 @@ describe("TenantOnboardingNotificationsService", () => {
     repository.findByIdAndApplication.mockImplementation(async () =>
       delivery({ status: "failed" })
     );
-    repository.markAttempting.mockImplementation(async () =>
-      delivery({ attempt_count: 1 })
+    repository.claimDelivery.mockImplementation(async () =>
+      delivery({
+        status: "processing", attempt_count: 1, claim_token: CLAIM_TOKEN,
+        claim_expires_at: "2026-07-14T08:02:00.000Z",
+      })
     );
-    repository.markSent.mockImplementation(async () =>
+    repository.finalizeSent.mockImplementation(async () =>
       delivery({ status: "sent", attempt_count: 1, sent_at: NOW })
     );
-    repository.markFailed.mockImplementation(async () =>
+    repository.finalizeFailed.mockImplementation(async () =>
       delivery({ status: "failed", attempt_count: 1 })
     );
     repository.loadCurrentApplicationRecipient.mockImplementation(async () => recipient);
     sendSmsTemplate.mockImplementation(async () => undefined);
   });
 
-  test("finds or creates one delivery and deduplicates an already existing event", async () => {
+  test("finds or creates one delivery and no-ops an already sent event", async () => {
     const service = await createService();
 
     await service.deliver({
@@ -117,11 +132,29 @@ describe("TenantOnboardingNotificationsService", () => {
       channel: "sms",
     });
     expect(sendSmsTemplate).toHaveBeenCalledTimes(1);
-    expect(repository.markAttempting).toHaveBeenCalledWith({
+    expect(repository.claimDelivery).toHaveBeenCalledWith({
       deliveryId: DELIVERY_ID,
-      expectedAttemptCount: 0,
+      applicationId: APPLICATION_ID,
       maxAttempts: 3,
+      leaseSeconds: 120,
+      now: NOW,
     });
+  });
+
+  test("resumes an existing pending delivery through the lease claim", async () => {
+    repository.findOrCreateDelivery.mockImplementationOnce(async () => ({
+      delivery: delivery(), created: false,
+    }));
+    const service = await createService();
+
+    await service.deliver({
+      applicationId: APPLICATION_ID,
+      applicationVersion: 1,
+      eventType: "submitted",
+    });
+
+    expect(repository.claimDelivery).toHaveBeenCalledTimes(1);
+    expect(sendSmsTemplate).toHaveBeenCalledTimes(1);
   });
 
   test("resolves the current application recipient without persisting message data", async () => {
@@ -148,8 +181,10 @@ describe("TenantOnboardingNotificationsService", () => {
         company_name: recipient.company_name,
       },
     });
-    expect(repository.markSent).toHaveBeenCalledWith({
+    expect(repository.finalizeSent).toHaveBeenCalledWith({
       deliveryId: DELIVERY_ID,
+      applicationId: APPLICATION_ID,
+      claimToken: CLAIM_TOKEN,
       sentAt: NOW,
     });
   });
@@ -189,9 +224,11 @@ describe("TenantOnboardingNotificationsService", () => {
       eventType: "submitted",
     })).resolves.toBeDefined();
 
-    const failure = repository.markFailed.mock.calls[0]?.[0];
+    const failure = repository.finalizeFailed.mock.calls[0]?.[0];
     expect(failure).toEqual({
       deliveryId: DELIVERY_ID,
+      applicationId: APPLICATION_ID,
+      claimToken: CLAIM_TOKEN,
       lastError: "SMS_CONFIG_MISSING: 短信发送失败",
     });
     expect(JSON.stringify(failure)).not.toContain("13900139000");
@@ -201,7 +238,7 @@ describe("TenantOnboardingNotificationsService", () => {
 
   test("absorbs recipient and persistence failures without exposing provider state", async () => {
     repository.loadCurrentApplicationRecipient.mockImplementationOnce(async () => null);
-    repository.markFailed.mockImplementationOnce(async () => {
+    repository.finalizeFailed.mockImplementationOnce(async () => {
       throw new Error("database unavailable");
     });
     const service = await createService();
@@ -212,6 +249,23 @@ describe("TenantOnboardingNotificationsService", () => {
       eventType: "submitted",
     })).resolves.toBeDefined();
     expect(sendSmsTemplate).not.toHaveBeenCalled();
+  });
+
+  test("never marks a successful provider send failed when sent finalization is uncertain", async () => {
+    repository.finalizeSent.mockImplementationOnce(async () => null);
+    repository.findByIdAndApplication.mockImplementationOnce(async () =>
+      delivery({ status: "sent", attempt_count: 1, sent_at: NOW })
+    );
+    const service = await createService();
+
+    const result = await service.deliver({
+      applicationId: APPLICATION_ID,
+      applicationVersion: 1,
+      eventType: "submitted",
+    });
+
+    expect(result).toMatchObject({ status: "sent" });
+    expect(repository.finalizeFailed).not.toHaveBeenCalled();
   });
 
   test("retries only a delivery belonging to the reviewed application", async () => {
@@ -240,10 +294,12 @@ describe("TenantOnboardingNotificationsService", () => {
       deliveryId: DELIVERY_ID,
     });
 
-    expect(repository.markAttempting).toHaveBeenCalledWith({
+    expect(repository.claimDelivery).toHaveBeenCalledWith({
       deliveryId: DELIVERY_ID,
-      expectedAttemptCount: 0,
+      applicationId: APPLICATION_ID,
       maxAttempts: 3,
+      leaseSeconds: 120,
+      now: NOW,
     });
     expect(sendSmsTemplate).toHaveBeenCalledWith(expect.objectContaining({
       phone: recipient.admin_phone,
@@ -255,7 +311,7 @@ describe("TenantOnboardingNotificationsService", () => {
     repository.findByIdAndApplication.mockImplementationOnce(async () =>
       delivery({ status: "failed", attempt_count: 3 })
     );
-    repository.markAttempting.mockImplementationOnce(async () => null);
+    repository.claimDelivery.mockImplementationOnce(async () => null);
     const service = await createService(3);
 
     await expect(service.retry({

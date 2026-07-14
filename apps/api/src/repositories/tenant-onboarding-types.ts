@@ -74,6 +74,18 @@ export type TenantOnboardingApplicationRecord = {
   final_partner?: TenantOnboardingPartnerBrief | null;
 };
 
+export type TenantOnboardingApplicationSummaryRecord = Pick<
+  TenantOnboardingApplicationRecord,
+  | "id"
+  | "application_no"
+  | "company_name"
+  | "status"
+  | "partner_assist_status"
+  | "version"
+  | "created_at"
+  | "updated_at"
+>;
+
 export type TenantOnboardingApplicationReviewRecord = {
   id: string;
   application_id: string;
@@ -130,10 +142,12 @@ export type TenantOnboardingNotificationDeliveryRecord = {
   application_version: number;
   event_type: TenantOnboardingNotificationEventType;
   channel: "sms";
-  status: "pending" | "sent" | "failed";
+  status: "pending" | "processing" | "sent" | "failed";
   attempt_count: number;
   last_error: string | null;
   sent_at: string | null;
+  claim_token: string | null;
+  claim_expires_at: string | null;
   created_at: string;
   updated_at: string;
 };

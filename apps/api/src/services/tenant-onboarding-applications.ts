@@ -5,29 +5,45 @@ import {
   tenantOnboardingApplicantFileRepository,
   tenantOnboardingRegionMatchRepository,
   tenantOnboardingRepository,
+  type TenantOnboardingActiveInviteCode,
   type TenantOnboardingBusinessLicenseRecord,
-  type TenantOnboardingCreateApplicationInput,
   type TenantOnboardingLocationContextRecord,
-  type TenantOnboardingReviewEventInput,
   type TenantOnboardingSupplementPatch,
 } from "@/repositories/tenant-onboarding";
 import type { TenantOnboardingApplicationRecord } from "@/repositories/tenant-onboarding-types";
 import type { SubmitTenantOnboardingApplicationInput } from "@/schema/tenant-onboarding";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import {
+  buildTenantOnboardingCandidateMutation,
+  buildTenantOnboardingCreateRecord,
+  buildTenantOnboardingSupplementPatch,
+  type TenantOnboardingApplicantPatch,
+} from "@/services/tenant-onboarding-applicant-payloads";
+import {
   TenantOnboardingRegionMatchService,
   type TenantOnboardingPartnerResolution,
 } from "@/services/tenant-onboarding-region-match";
 import { tenantOnboardingNotificationsService } from "@/services/tenant-onboarding-notifications";
 
-const SMS_SCENE = "partner_tenant_onboarding" as const;
+const SMS_SCENE = "tenant_onboarding_application" as const;
 const REVIEW_HOURS = 48;
+const MAX_APPLICATION_NUMBER_ATTEMPTS = 3;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 120;
 const OPEN_SUBJECT_CONSTRAINT = "tenant_onboarding_applications_open_subject_unique_idx";
 const IDEMPOTENCY_CONSTRAINT = "tenant_onboarding_applications_visitor_idempotency_unique";
+const APPLICATION_NUMBER_CONSTRAINT = "tenant_onboarding_applications_application_no_key";
 const WITHDRAWABLE_STATUSES = new Set(["submitted", "reviewing", "supplement_required"]);
 
-type RepositoryPort = typeof tenantOnboardingRepository;
+type RepositoryPort = Pick<
+  typeof tenantOnboardingRepository,
+  | "createApplicationAtomic"
+  | "findByVisitorAndIdempotencyKey"
+  | "findOpenByCreditCode"
+  | "findOwnedById"
+  | "listOwned"
+  | "supplementAtomic"
+  | "withdrawAtomic"
+>;
 
 type SmsPort = {
   sendCode(input: {
@@ -41,7 +57,6 @@ type SmsPort = {
     scene: typeof SMS_SCENE;
     code: string;
   }): Promise<{ id: string } | null>;
-  markVerified(id: string): Promise<unknown>;
 };
 
 type LocationContextPort = { findById(id: string): Promise<TenantOnboardingLocationContextRecord | null> };
@@ -52,6 +67,10 @@ type RegionResolverPort = {
     serviceRegionCodes: readonly string[];
     inviteCode: string | null;
   }): Promise<TenantOnboardingPartnerResolution>;
+};
+type InviteCodePort = {
+  findActiveInviteCodeByCode(code: string): Promise<TenantOnboardingActiveInviteCode | null>;
+  findActiveInviteCodeById(id: string): Promise<TenantOnboardingActiveInviteCode | null>;
 };
 
 type NotificationPort = {
@@ -68,14 +87,13 @@ type Dependencies = {
   locationContextRepository?: LocationContextPort;
   fileRepository?: FilePort;
   regionResolver?: RegionResolverPort;
+  inviteCodeRepository?: InviteCodePort;
   notificationService?: NotificationPort;
   clock?: () => Date;
   applicationNumberGenerator?: () => string;
 };
 
-export type TenantOnboardingApplicantPatch = TenantOnboardingSupplementPatch & {
-  company_location?: SubmitTenantOnboardingApplicationInput["company_location"];
-};
+export type { TenantOnboardingApplicantPatch } from "@/services/tenant-onboarding-applicant-payloads";
 
 type SubmitContext = { visitorId: string; idempotencyKey: string };
 export class TenantOnboardingApplicationsService {
@@ -84,6 +102,7 @@ export class TenantOnboardingApplicationsService {
   private readonly locationContextRepository: LocationContextPort;
   private readonly fileRepository: FilePort;
   private readonly regionResolver: RegionResolverPort;
+  private readonly inviteCodeRepository: InviteCodePort;
   private readonly notificationService: NotificationPort;
   private readonly clock: () => Date;
   private readonly applicationNumberGenerator: () => string;
@@ -99,6 +118,8 @@ export class TenantOnboardingApplicationsService {
         administrativeAreaRepository: tenantOnboardingRegionMatchRepository,
         partnerRepository: tenantOnboardingRegionMatchRepository,
       });
+    this.inviteCodeRepository = dependencies.inviteCodeRepository ??
+      tenantOnboardingRegionMatchRepository;
     this.notificationService = dependencies.notificationService ??
       tenantOnboardingNotificationsService;
     this.clock = dependencies.clock ?? (() => new Date());
@@ -142,29 +163,22 @@ export class TenantOnboardingApplicationsService {
       serviceRegionCodes: input.service_region_codes,
       inviteCode: input.invite_code?.trim().toUpperCase() || null,
     });
-    let application: TenantOnboardingApplicationRecord;
-    try {
-      application = await this.repository.createApplication(
-        this.buildCreateRecord({
-          input,
-          visitorId,
-          idempotencyKey,
-          normalizedCreditCode,
-          phone,
-          resolution,
-        }),
-      );
-    } catch (error) {
-      const recovered = await this.recoverConcurrentCreate(
-        error,
-        visitorId,
-        idempotencyKey,
-      );
-      if (recovered) return this.response(recovered, false, true);
-      throw error;
-    }
-
-    await this.smsService.markVerified(verificationCode.id);
+    const inviteCodeId = await this.resolveInviteCodeId(
+      input.invite_code,
+      resolution,
+    );
+    const result = await this.createApplicationWithRetry({
+      input,
+      visitorId,
+      idempotencyKey,
+      normalizedCreditCode,
+      phone,
+      resolution,
+      inviteCodeId,
+      smsCodeId: verificationCode.id,
+    });
+    const application = result.application;
+    if (!result.created) return this.response(application, false, true);
     try {
       await this.notificationService.deliver({
         applicationId: application.id,
@@ -213,21 +227,30 @@ export class TenantOnboardingApplicationsService {
       );
     }
 
-    const updated = await this.repository.updateSupplement({
-      applicationId: input.applicationId,
-      visitorId,
-      expectedVersion: input.expectedVersion,
-      patch: this.buildSupplementPatch(input.patch),
-    });
+    const patch = buildTenantOnboardingSupplementPatch(input.patch);
+    if (patch.unified_social_credit_code && await this.repository.findOpenByCreditCode(
+      patch.unified_social_credit_code,
+      input.applicationId,
+    )) throw this.duplicatedApplication();
+
+    const candidate = await this.resolveSupplementCandidate(current, patch);
+    let updated: TenantOnboardingApplicationRecord | null;
+    try {
+      updated = await this.repository.supplementAtomic({
+        applicationId: input.applicationId,
+        visitorId,
+        expectedVersion: input.expectedVersion,
+        patch,
+        candidate,
+        now: this.clock().toISOString(),
+      });
+    } catch (error) {
+      if (this.matchesConstraint(error, OPEN_SUBJECT_CONSTRAINT)) {
+        throw this.duplicatedApplication();
+      }
+      throw error;
+    }
     if (!updated) throw this.stateConflict();
-    await this.repository.appendReviewEvent(this.applicantReview({
-      applicationId: input.applicationId,
-      visitorId,
-      decision: "supplemented",
-      before: current,
-      after: updated,
-      remark: null,
-    }));
     return updated;
   }
   async withdraw(input: {
@@ -244,20 +267,14 @@ export class TenantOnboardingApplicationsService {
     ) {
       throw this.stateConflict();
     }
-    const updated = await this.repository.withdraw({
+    const updated = await this.repository.withdrawAtomic({
       applicationId: input.applicationId,
       visitorId,
       expectedVersion: input.expectedVersion,
+      reason: input.reason?.trim() || null,
+      now: this.clock().toISOString(),
     });
     if (!updated) throw this.stateConflict();
-    await this.repository.appendReviewEvent(this.applicantReview({
-      applicationId: input.applicationId,
-      visitorId,
-      decision: "withdrawn",
-      before: current,
-      after: updated,
-      remark: input.reason?.trim() || null,
-    }));
     return updated;
   }
   private async verifySmsCode(phone: string, code: string) {
@@ -296,91 +313,6 @@ export class TenantOnboardingApplicationsService {
       throw this.duplicatedApplication();
     }
   }
-  private buildCreateRecord(input: {
-    input: SubmitTenantOnboardingApplicationInput;
-    visitorId: string;
-    idempotencyKey: string;
-    normalizedCreditCode: string;
-    phone: string;
-    resolution: TenantOnboardingPartnerResolution;
-  }): TenantOnboardingCreateApplicationInput {
-    const now = this.clock();
-    const isUnique = input.resolution.kind === "unique";
-    const selectedPartner = input.resolution.selectedPartner;
-    return {
-      application_no: this.applicationNumberGenerator(),
-      visitor_id: input.visitorId,
-      visitor_context_id: input.input.visitor_context_id,
-      company_name: input.input.company_name.trim(),
-      unified_social_credit_code: input.normalizedCreditCode,
-      business_license_file_id: input.input.business_license_file_id,
-      admin_name: input.input.admin_name.trim(),
-      admin_phone: input.phone,
-      address_province: input.input.company_location.province ?? null,
-      address_city: input.input.company_location.city,
-      address_district: input.input.company_location.district ?? null,
-      address_region_code: input.input.company_location.region_code,
-      address: input.input.company_location.address,
-      address_latitude: input.input.company_location.latitude ?? null,
-      address_longitude: input.input.company_location.longitude ?? null,
-      service_region_codes: [...input.input.service_region_codes],
-      source_channel: input.input.source_channel,
-      invite_code_id: null,
-      candidate_partner_id: selectedPartner?.id ?? null,
-      candidate_match_reason: input.resolution.reason,
-      candidate_snapshot: selectedPartner
-        ? {
-          partner_id: selectedPartner.id,
-          partner_name: selectedPartner.name,
-          region_codes: [...selectedPartner.region_codes],
-          match_reason: input.resolution.reason,
-        }
-        : {
-          partner_ids: [...input.resolution.partnerIds],
-          match_reason: input.resolution.reason,
-        },
-      final_partner_id: null,
-      attribution_source_type: null,
-      status: "submitted",
-      partner_assist_status: isUnique ? "pending" : "not_applicable",
-      partner_assist_requested_at: isUnique ? now.toISOString() : null,
-      partner_assist_due_at: isUnique
-        ? new Date(now.getTime() + REVIEW_HOURS * 60 * 60 * 1000).toISOString()
-        : null,
-      privacy_policy_version: input.input.privacy_policy_version,
-      onboarding_terms_version: input.input.onboarding_terms_version,
-      consented_at: now.toISOString(),
-      idempotency_key: input.idempotencyKey,
-    };
-  }
-  private buildSupplementPatch(
-    patch: TenantOnboardingApplicantPatch,
-  ): TenantOnboardingSupplementPatch {
-    const result: TenantOnboardingSupplementPatch = {};
-    if (patch.company_name !== undefined) result.company_name = patch.company_name.trim();
-    if (patch.unified_social_credit_code !== undefined) {
-      result.unified_social_credit_code =
-        patch.unified_social_credit_code.trim().toUpperCase();
-    }
-    if (patch.business_license_file_id !== undefined) {
-      result.business_license_file_id = patch.business_license_file_id;
-    }
-    if (patch.admin_name !== undefined) result.admin_name = patch.admin_name.trim();
-    if (patch.service_region_codes !== undefined) {
-      result.service_region_codes = [...patch.service_region_codes];
-    }
-    const location = patch.company_location;
-    if (location) {
-      result.address_province = location.province ?? null;
-      result.address_city = location.city;
-      result.address_district = location.district ?? null;
-      result.address_region_code = location.region_code;
-      result.address = location.address;
-      result.address_latitude = location.latitude ?? null;
-      result.address_longitude = location.longitude ?? null;
-    }
-    return result;
-  }
   private async recoverConcurrentCreate(
     error: unknown,
     visitorId: string,
@@ -396,6 +328,72 @@ export class TenantOnboardingApplicationsService {
     if (existing) return existing;
     if (isOpenSubject) throw this.duplicatedApplication();
     return null;
+  }
+  private async createApplicationWithRetry(input: {
+    input: SubmitTenantOnboardingApplicationInput;
+    visitorId: string;
+    idempotencyKey: string;
+    normalizedCreditCode: string;
+    phone: string;
+    resolution: TenantOnboardingPartnerResolution;
+    inviteCodeId: string | null;
+    smsCodeId: string;
+  }) {
+    for (let attempt = 1; attempt <= MAX_APPLICATION_NUMBER_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.repository.createApplicationAtomic({
+          application: buildTenantOnboardingCreateRecord({
+            ...input,
+            applicationNumber: this.applicationNumberGenerator(),
+            now: this.clock(),
+          }),
+          smsCodeId: input.smsCodeId,
+          smsPhone: input.phone,
+          now: this.clock().toISOString(),
+        });
+      } catch (error) {
+        if (
+          this.matchesConstraint(error, APPLICATION_NUMBER_CONSTRAINT) &&
+          attempt < MAX_APPLICATION_NUMBER_ATTEMPTS
+        ) continue;
+        const recovered = await this.recoverConcurrentCreate(
+          error,
+          input.visitorId,
+          input.idempotencyKey,
+        );
+        if (recovered) return { application: recovered, created: false };
+        throw error;
+      }
+    }
+    throw Errors.dbError("生成装企入驻申请编号失败");
+  }
+
+  private async resolveInviteCodeId(
+    submittedCode: string | null | undefined,
+    resolution: TenantOnboardingPartnerResolution,
+  ) {
+    if (resolution.reason !== "invite_code" || !resolution.selectedPartner) return null;
+    const code = submittedCode?.trim().toUpperCase();
+    if (!code) return null;
+    const invite = await this.inviteCodeRepository.findActiveInviteCodeByCode(code);
+    return invite?.partner_id === resolution.selectedPartner.id ? invite.id : null;
+  }
+
+  private async resolveSupplementCandidate(
+    current: TenantOnboardingApplicationRecord,
+    patch: TenantOnboardingSupplementPatch,
+  ) {
+    if (!patch.service_region_codes) {
+      return buildTenantOnboardingCandidateMutation(false, null, this.clock());
+    }
+    const invite = current.invite_code_id
+      ? await this.inviteCodeRepository.findActiveInviteCodeById(current.invite_code_id)
+      : null;
+    const resolution = await this.regionResolver.resolve({
+      serviceRegionCodes: patch.service_region_codes,
+      inviteCode: invite?.code ?? null,
+    });
+    return buildTenantOnboardingCandidateMutation(true, resolution, this.clock());
   }
   private matchesConstraint(error: unknown, constraint: string) {
     const details = this.databaseErrorDetails(error);
@@ -417,31 +415,6 @@ export class TenantOnboardingApplicationsService {
     const application = await this.repository.findOwnedById(applicationId, visitorId);
     if (!application) throw this.applicationNotFound();
     return application;
-  }
-  private applicantReview(input: {
-    applicationId: string;
-    visitorId: string;
-    decision: string;
-    before: TenantOnboardingApplicationRecord;
-    after: TenantOnboardingApplicationRecord;
-    remark: string | null;
-  }): TenantOnboardingReviewEventInput {
-    return {
-      application_id: input.applicationId,
-      review_stage: "applicant",
-      decision: input.decision,
-      actor_type: "visitor",
-      actor_visitor_id: input.visitorId,
-      actor_employee_id: null,
-      actor_partner_member_id: null,
-      before_status: input.before.status,
-      after_status: input.after.status,
-      before_partner_assist_status: input.before.partner_assist_status,
-      after_partner_assist_status: input.after.partner_assist_status,
-      required_fields: [],
-      remark: input.remark,
-      metadata: { version: input.after.version },
-    };
   }
   private response(
     application: TenantOnboardingApplicationRecord,

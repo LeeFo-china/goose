@@ -12,6 +12,7 @@ import { sendSmsTemplate } from "@/services/sms";
 import type { SmsTemplatePurpose } from "@/services/sms/legacy/shared";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_LEASE_SECONDS = 120;
 const SMS_PURPOSES = {
   submitted: "tenant_onboarding_submitted",
   supplement_required: "tenant_onboarding_supplement_required",
@@ -26,9 +27,9 @@ type RepositoryPort = Pick<
   typeof tenantOnboardingNotificationsRepository,
   | "findOrCreateDelivery"
   | "findByIdAndApplication"
-  | "markAttempting"
-  | "markSent"
-  | "markFailed"
+  | "claimDelivery"
+  | "finalizeSent"
+  | "finalizeFailed"
   | "loadCurrentApplicationRecipient"
 >;
 
@@ -36,6 +37,7 @@ type Dependencies = {
   repository?: RepositoryPort;
   sendSmsTemplate?: typeof sendSmsTemplate;
   maxAttempts?: number;
+  leaseSeconds?: number;
   clock?: () => Date;
 };
 
@@ -49,6 +51,7 @@ export class TenantOnboardingNotificationsService {
   private readonly repository: RepositoryPort;
   private readonly sendTemplate: typeof sendSmsTemplate;
   private readonly maxAttempts: number;
+  private readonly leaseSeconds: number;
   private readonly clock: () => Date;
 
   constructor(dependencies: Dependencies = {}) {
@@ -56,6 +59,7 @@ export class TenantOnboardingNotificationsService {
       tenantOnboardingNotificationsRepository;
     this.sendTemplate = dependencies.sendSmsTemplate ?? sendSmsTemplate;
     this.maxAttempts = dependencies.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+    this.leaseSeconds = dependencies.leaseSeconds ?? DEFAULT_LEASE_SECONDS;
     this.clock = dependencies.clock ?? (() => new Date());
   }
 
@@ -67,7 +71,7 @@ export class TenantOnboardingNotificationsService {
         event_type: input.eventType,
         channel: "sms",
       });
-      if (!result.created) return result.delivery;
+      if (result.delivery.status === "sent") return result.delivery;
       return await this.attempt(result.delivery);
     } catch {
       return null;
@@ -91,35 +95,65 @@ export class TenantOnboardingNotificationsService {
   }
 
   private async attempt(delivery: TenantOnboardingNotificationDeliveryRecord) {
-    let current = delivery;
+    const claimed = await this.repository.claimDelivery({
+      deliveryId: delivery.id,
+      applicationId: delivery.application_id,
+      maxAttempts: this.maxAttempts,
+      leaseSeconds: this.leaseSeconds,
+      now: this.clock().toISOString(),
+    });
+    if (!claimed) return delivery;
+    const claimToken = this.requireClaimToken(claimed);
     try {
-      const attempting = await this.repository.markAttempting({
-        deliveryId: delivery.id,
-        expectedAttemptCount: delivery.attempt_count,
-        maxAttempts: this.maxAttempts,
-      });
-      if (!attempting) return delivery;
-      current = attempting;
       const recipient = await this.requireRecipient(delivery.application_id);
       await this.sendTemplate({
         phone: recipient.admin_phone,
         templatePurpose: SMS_PURPOSES[delivery.event_type],
         templateParam: this.templateParams(recipient),
       });
-      return await this.repository.markSent({
-        deliveryId: delivery.id,
-        sentAt: this.clock().toISOString(),
-      });
     } catch (error) {
       try {
-        return await this.repository.markFailed({
+        return await this.repository.finalizeFailed({
           deliveryId: delivery.id,
+          applicationId: delivery.application_id,
+          claimToken,
           lastError: this.sanitizeError(error),
-        });
+        }) ?? await this.currentDelivery(delivery, claimed);
       } catch {
-        return current;
+        return claimed;
       }
     }
+    try {
+      return await this.repository.finalizeSent({
+        deliveryId: delivery.id,
+        applicationId: delivery.application_id,
+        claimToken,
+        sentAt: this.clock().toISOString(),
+      }) ?? await this.currentDelivery(delivery, claimed);
+    } catch {
+      return await this.currentDelivery(delivery, claimed);
+    }
+  }
+
+  private async currentDelivery(
+    delivery: TenantOnboardingNotificationDeliveryRecord,
+    fallback: TenantOnboardingNotificationDeliveryRecord,
+  ) {
+    try {
+      return await this.repository.findByIdAndApplication(
+        delivery.id,
+        delivery.application_id,
+      ) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private requireClaimToken(delivery: TenantOnboardingNotificationDeliveryRecord) {
+    if (delivery.status !== "processing" || !delivery.claim_token) {
+      throw Errors.dbError("装企入驻通知租约无效");
+    }
+    return delivery.claim_token;
   }
 
   private async requireRecipient(applicationId: string) {
