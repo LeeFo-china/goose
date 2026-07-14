@@ -65,6 +65,18 @@ describe("project operational risk performance smoke helpers", () => {
     expect(config.adminToken).toBe("admin-token");
   });
 
+  test("uses GOOES_API_BASE_URL as a compatibility alias for API smoke", () => {
+    const config = normalizeSmokeConfig({
+      PROJECT_HEALTH_TENANT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      SUPABASE_URL: "http://127.0.0.1:54321",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role",
+      GOOES_API_BASE_URL: "https://api-dev.goodcms.cn",
+      PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
+    });
+
+    expect(config.apiUrl).toBe("https://api-dev.goodcms.cn");
+  });
+
   test("reports missing required config without running writes", () => {
     expect(() => normalizeSmokeConfig({})).toThrow(
       "PROJECT_HEALTH_TENANT_ID is required",

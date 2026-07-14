@@ -35,9 +35,9 @@ const RPC_PERFORMANCE_ENV = [
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
 ] as const;
-const API_SMOKE_ENV = [
+const API_SMOKE_URL_ENV = [
   "PROJECT_HEALTH_API_URL",
-  "PROJECT_HEALTH_ADMIN_TOKEN",
+  "GOOES_API_BASE_URL",
 ] as const;
 const API_SMOKE_TOKEN_ENV = [
   "PROJECT_HEALTH_ADMIN_TOKEN",
@@ -119,17 +119,13 @@ export function buildProjectOperationalRiskReleaseReadinessReport(
     completedChecks.push("rpc_performance_smoke_configured");
   }
 
-  const missingApiEnv = missingEnvNames(env, API_SMOKE_ENV).filter(
-    (name) =>
-      name !== "PROJECT_HEALTH_ADMIN_TOKEN" ||
-      !hasAnyEnv(env, API_SMOKE_TOKEN_ENV),
-  );
+  const missingApiEnv = missingApiSmokeEnv(env);
   if (missingApiEnv.length > 0) {
     blockers.push({
       check: "api_smoke_configured",
       detail: formatMissingApiEnv(missingApiEnv),
       next_action:
-        "Configure PROJECT_HEALTH_API_URL and PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN, then run the dev API smoke before release.",
+        "Configure PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL and PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN, then run the dev API smoke before release.",
     });
   } else {
     completedChecks.push("api_smoke_configured");
@@ -145,14 +141,28 @@ export function buildProjectOperationalRiskReleaseReadinessReport(
   };
 }
 
+function missingApiSmokeEnv(env: Env): string[] {
+  const missing: string[] = [];
+  if (!hasAnyEnv(env, API_SMOKE_URL_ENV)) {
+    missing.push("PROJECT_HEALTH_API_URL");
+  }
+  if (!hasAnyEnv(env, API_SMOKE_TOKEN_ENV)) {
+    missing.push("PROJECT_HEALTH_ADMIN_TOKEN");
+  }
+  return missing;
+}
+
 function formatMissingApiEnv(names: readonly string[]): string {
-  return formatMissingEnv(
-    names.map((name) =>
-      name === "PROJECT_HEALTH_ADMIN_TOKEN"
-        ? "PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN"
-        : name
-    ),
-  );
+  const labels = names.map((name) => {
+    if (name === "PROJECT_HEALTH_API_URL") {
+      return "PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL";
+    }
+    if (name === "PROJECT_HEALTH_ADMIN_TOKEN") {
+      return "PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN";
+    }
+    return name;
+  });
+  return formatMissingEnv(labels);
 }
 
 function resolveStatus(

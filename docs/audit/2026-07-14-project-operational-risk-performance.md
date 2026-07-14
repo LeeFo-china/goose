@@ -15,8 +15,9 @@
 
 - release readiness gate 检查本地 RPC migration、SQL fixture、EXPLAIN SQL 和发布验证前置配置并输出 JSON，不执行 DDL/DML，不输出密钥值；
 - P50/P95 计算使用排序后的向上取整索引；
-- smoke 配置只读取 `PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`；
-- API 阶段仅在同时提供 `PROJECT_HEALTH_API_URL`，以及 `PROJECT_HEALTH_ADMIN_TOKEN` 或兼容别名 `ADMIN_TOKEN` 时运行；
+- RPC smoke 必需配置为 `PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`；
+- API 阶段仅在同时提供 `PROJECT_HEALTH_API_URL` 或兼容既有开发约定的 `GOOES_API_BASE_URL`，
+  以及 `PROJECT_HEALTH_ADMIN_TOKEN` 或兼容别名 `ADMIN_TOKEN` 时运行；
 - 脚本只读调用 `get_project_operational_risk_page` 和 GET `/project-health/risks`，不执行 DDL/DML；
 - RPC 阶段校验原始 `ProjectOperationalRiskRpcPageSchema`，API 阶段校验带 `title/description/action` 的 Admin display payload，避免把正常 API 响应误判为格式异常。
 - Controller 日志只记录 `hasKeyword`，不记录 keyword 原文、手机号或其他客户输入文本。
@@ -57,7 +58,8 @@ psql "$SUPABASE_DB_DIRECT_URL" \
   -f supabase/tests/project_operational_risk_explain.sql
 ```
 
-执行 20 次 RPC smoke；如同时配置 `PROJECT_HEALTH_API_URL`，以及 `PROJECT_HEALTH_ADMIN_TOKEN` 或 `ADMIN_TOKEN`，同一命令会额外执行 API smoke：
+执行 20 次 RPC smoke；如同时配置 `PROJECT_HEALTH_API_URL` 或 `GOOES_API_BASE_URL`，
+以及 `PROJECT_HEALTH_ADMIN_TOKEN` 或 `ADMIN_TOKEN`，同一命令会额外执行 API smoke：
 
 ```bash
 cd apps/api

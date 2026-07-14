@@ -51,6 +51,15 @@ type ParsedApiRiskPayload = {
   message?: string;
 };
 
+const API_SMOKE_URL_ENV = [
+  "PROJECT_HEALTH_API_URL",
+  "GOOES_API_BASE_URL",
+] as const;
+const API_SMOKE_TOKEN_ENV = [
+  "PROJECT_HEALTH_ADMIN_TOKEN",
+  "ADMIN_TOKEN",
+] as const;
+
 function requireEnv(env: Env, name: string): string {
   const value = env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
@@ -120,11 +129,8 @@ export function normalizeSmokeConfig(env: Env): ProjectOperationalRiskSmokeConfi
     iterations: parseIterations(env.PROJECT_HEALTH_SMOKE_ITERATIONS),
     supabaseUrl: requireEnv(env, "SUPABASE_URL"),
     supabaseServiceRoleKey: requireEnv(env, "SUPABASE_SERVICE_ROLE_KEY"),
-    apiUrl: readOptionalEnv(env, "PROJECT_HEALTH_API_URL"),
-    adminToken: readFirstOptionalEnv(env, [
-      "PROJECT_HEALTH_ADMIN_TOKEN",
-      "ADMIN_TOKEN",
-    ]),
+    apiUrl: readFirstOptionalEnv(env, API_SMOKE_URL_ENV),
+    adminToken: readFirstOptionalEnv(env, API_SMOKE_TOKEN_ENV),
   };
 }
 
@@ -205,7 +211,8 @@ async function runApiSample(
       round,
       ms: 0,
       ok: true,
-      message: "API smoke skipped: PROJECT_HEALTH_API_URL or PROJECT_HEALTH_ADMIN_TOKEN not configured",
+      message:
+        "API smoke skipped: configure PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL, and PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN",
     };
   }
 

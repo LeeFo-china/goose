@@ -75,11 +75,29 @@ describe("project operational risk release readiness", () => {
     expect(report.blockers).toEqual([
       {
         check: "api_smoke_configured",
-        detail: "missing PROJECT_HEALTH_API_URL, PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN",
+        detail:
+          "missing PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL, PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN",
         next_action:
-          "Configure PROJECT_HEALTH_API_URL and PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN, then run the dev API smoke before release.",
+          "Configure PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL and PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN, then run the dev API smoke before release.",
       },
     ]);
+  });
+
+  test("accepts GOOES_API_BASE_URL as the dev API smoke URL alias", () => {
+    const report = buildProjectOperationalRiskReleaseReadinessReport(
+      {
+        SUPABASE_DB_DIRECT_URL: "postgres://db",
+        PROJECT_HEALTH_TENANT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        SUPABASE_URL: "https://supabase.example",
+        SUPABASE_SERVICE_ROLE_KEY: "service-role",
+        GOOES_API_BASE_URL: "https://api-dev.goodcms.cn",
+        PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
+      },
+      "2026-07-15T08:00:00.000Z",
+    );
+
+    expect(report.ok).toBe(true);
+    expect(report.completed_checks).toContain("api_smoke_configured");
   });
 
   test("accepts ADMIN_TOKEN as the dev API smoke token alias", () => {
