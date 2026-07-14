@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Response } from "@playwright/test";
 
-const viewportWidths = [390, 768, 1440] as const;
+const viewportWidths = [390, 768, 1024, 1440] as const;
 const tenantAdminPhone = process.env.GOOES_E2E_TENANT_ADMIN_PHONE || "18800000001";
 
 async function loginAsTenantAdmin(page: Page) {
@@ -43,7 +43,7 @@ test.describe("project health smoke", () => {
       await page.goto("/project-health", { waitUntil: "networkidle" });
 
       await expect(page.getByRole("heading", { name: "项目风险" })).toBeVisible();
-      if (width === 1440) {
+      if (width >= 1024) {
         await expect(page.getByRole("link", { name: "项目风险" })).toBeVisible();
       }
       await expect(page.getByText("风险总数")).toBeVisible();
@@ -124,6 +124,27 @@ test.describe("project health smoke", () => {
 
     await expect(page).toHaveURL(/\/project-health\?page=1$/);
     await expect(page.getByText("当前显示 5 条，共 5 条")).toBeVisible();
+    expect(await isPageHorizontallyOverflowing(page)).toBe(false);
+  });
+
+  test("风险中心为五类风险生成处理入口", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto("/project-health", { waitUntil: "networkidle" });
+
+    const tableViewport = page.getByTestId("project-health-table-viewport");
+    const actionHrefs = await tableViewport
+      .getByRole("link", { name: "去处理" })
+      .evaluateAll((links) =>
+        links.map((link) => (link as HTMLAnchorElement).getAttribute("href")),
+      );
+
+    expect(actionHrefs).toEqual([
+      "/projects/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa?tab=overview",
+      "/projects/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?tab=overview",
+      "/projects/cccccccc-cccc-4ccc-8ccc-cccccccccccc?tab=logs",
+      "/projects/dddddddd-dddd-4ddd-8ddd-dddddddddddd?tab=acceptances&acceptanceId=dddddddd-dddd-4ddd-8ddd-ddddddddddd1",
+      "/customer-service?ticketId=eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1",
+    ]);
     expect(await isPageHorizontallyOverflowing(page)).toBe(false);
   });
 

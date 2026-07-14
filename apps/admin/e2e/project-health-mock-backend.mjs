@@ -51,7 +51,7 @@ const riskItems = [
     evidence: { node_name: "水电验收", overdue_days: 3 },
     title: "流程任务逾期",
     description: "湖畔雅居 12-1 的水电验收节点已逾期 3 天。",
-    action: { label: "去处理", href: "/projects/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+    action: { label: "去处理", href: "/projects/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa?tab=overview" },
   },
   {
     risk_key: "procedure_overdue:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
@@ -70,7 +70,7 @@ const riskItems = [
     evidence: { procedure_name: "瓦工铺贴", overdue_days: 2 },
     title: "施工阶段逾期",
     description: "江湾府 8-2 的瓦工铺贴阶段未按计划完成。",
-    action: { label: "去处理", href: "/projects/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+    action: { label: "去处理", href: "/projects/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?tab=overview" },
   },
   {
     risk_key: "missing_project_log:cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
@@ -108,7 +108,7 @@ const riskItems = [
     evidence: { rework_count: 2, acceptance_name: "泥木验收" },
     title: "验收返工",
     description: "星河湾 5-2 的泥木验收已有 2 次返工记录。",
-    action: { label: "去处理", href: "/projects/dddddddd-dddd-4ddd-8ddd-dddddddddddd?tab=acceptances" },
+    action: { label: "去处理", href: "/projects/dddddddd-dddd-4ddd-8ddd-dddddddddddd?tab=acceptances&acceptanceId=dddddddd-dddd-4ddd-8ddd-ddddddddddd1" },
   },
   {
     risk_key: "service_ticket:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1",
@@ -127,7 +127,7 @@ const riskItems = [
     evidence: { ticket_priority: "high", customer_message: "客户询问延期原因" },
     title: "高优先级客服工单",
     description: "春江悦 6-1 有客户高优先级咨询待跟进。",
-    action: { label: "去处理", href: "/customers?keyword=春江悦" },
+    action: { label: "去处理", href: "/customer-service?ticketId=eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1" },
   },
 ];
 
