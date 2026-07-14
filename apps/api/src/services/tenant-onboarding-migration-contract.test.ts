@@ -30,4 +30,16 @@ describe("tenant onboarding migration contract", () => {
       expect(migrationSql).toContain(contract);
     }
   });
+
+  test("records expired partner assists in the partner-assist review stage", () => {
+    const expiryFunction =
+      migrationSql.match(
+        /CREATE OR REPLACE FUNCTION public\.expire_tenant_onboarding_partner_assists\([\s\S]*?\$\$;/,
+      )?.[0] ?? "";
+
+    expect(expiryFunction).not.toBe("");
+    expect(expiryFunction).toMatch(
+      /INSERT INTO public\.tenant_onboarding_application_reviews \([\s\S]*?\)\s*SELECT\s+expired_applications\.id,\s*'partner_assist',\s*'expired',\s*'system',/,
+    );
+  });
 });

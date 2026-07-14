@@ -351,7 +351,7 @@ BEGIN
     )
     SELECT
       expired_applications.id,
-      'system',
+      'partner_assist',
       'expired',
       'system',
       expired_applications.status,
