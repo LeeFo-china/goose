@@ -14,7 +14,8 @@
 - P50/P95 计算使用排序后的向上取整索引；
 - smoke 配置只读取 `PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`；
 - API 阶段仅在同时提供 `PROJECT_HEALTH_API_URL` 和 `PROJECT_HEALTH_ADMIN_TOKEN` 时运行；
-- 脚本只读调用 `get_project_operational_risk_page` 和 GET `/project-health/risks`，不执行 DDL/DML。
+- 脚本只读调用 `get_project_operational_risk_page` 和 GET `/project-health/risks`，不执行 DDL/DML；
+- RPC 阶段校验原始 `ProjectOperationalRiskRpcPageSchema`，API 阶段校验带 `title/description/action` 的 Admin display payload，避免把正常 API 响应误判为格式异常。
 
 ## 待 dev 数据库执行
 

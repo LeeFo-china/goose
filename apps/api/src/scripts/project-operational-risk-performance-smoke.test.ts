@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   normalizeSmokeConfig,
   percentile,
+  parseApiRiskPayload,
   summarizeSamples,
 } from "./project-operational-risk-performance-smoke";
 
@@ -62,5 +63,61 @@ describe("project operational risk performance smoke helpers", () => {
         SUPABASE_URL: "http://127.0.0.1:54321",
       }),
     ).toThrow("SUPABASE_SERVICE_ROLE_KEY is required");
+  });
+
+  test("accepts API display payloads with action metadata", () => {
+    const result = parseApiRiskPayload({
+      responseOk: true,
+      status: 200,
+      payload: {
+        success: true,
+        data: {
+          generated_at: "2026-07-14T08:00:00.000Z",
+          business_date: "2026-07-14",
+          summary: {
+            total: 1,
+            danger: 1,
+            warning: 0,
+            info: 0,
+            affected_projects: 1,
+            by_type: {
+              workflow_task_overdue: 1,
+              procedure_overdue: 0,
+              missing_project_log: 0,
+              acceptance_rework: 0,
+              service_ticket: 0,
+            },
+          },
+          diagnostics: { workflow_tasks_missing_due_at: 0 },
+          items: [
+            {
+              risk_key: "workflow_task:22222222-2222-4222-8222-222222222222",
+              risk_type: "workflow_task_overdue",
+              severity: "danger",
+              project_id: "11111111-1111-4111-8111-111111111111",
+              project_name: "湖畔花园",
+              project_status: "constructing",
+              source_type: "workflow_task",
+              source_id: "22222222-2222-4222-8222-222222222222",
+              assignee_employee_id: null,
+              assignee_employee_name: null,
+              occurred_at: "2026-07-12T08:00:00.000Z",
+              due_at: "2026-07-12T08:00:00.000Z",
+              overdue_days: 2,
+              evidence: { task_title: "水电验收" },
+              title: "工作流任务逾期",
+              description: "水电验收，逾期 2 天。",
+              action: {
+                label: "去处理",
+                href: "/projects/11111111-1111-4111-8111-111111111111",
+              },
+            },
+          ],
+          pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+        },
+      },
+    });
+
+    expect(result).toEqual({ ok: true, status: 200, total: 1, itemCount: 1 });
   });
 });

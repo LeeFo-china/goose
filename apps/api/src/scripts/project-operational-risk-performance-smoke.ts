@@ -1,5 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import { ProjectOperationalRiskRpcPageSchema } from "@gooes/domain";
+import {
+  ProjectOperationalRiskDisplayPageSchema,
+  ProjectOperationalRiskRpcPageSchema,
+} from "@gooes/domain";
 
 type Env = Record<string, string | undefined>;
 
@@ -38,6 +41,14 @@ type SupabaseRpcClient = {
     fn: string,
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
+};
+
+type ParsedApiRiskPayload = {
+  ok: boolean;
+  status: number;
+  total?: number;
+  itemCount?: number;
+  message?: string;
 };
 
 function requireEnv(env: Env, name: string): string {
@@ -103,6 +114,31 @@ export function normalizeSmokeConfig(env: Env): ProjectOperationalRiskSmokeConfi
     supabaseServiceRoleKey: requireEnv(env, "SUPABASE_SERVICE_ROLE_KEY"),
     apiUrl: readOptionalEnv(env, "PROJECT_HEALTH_API_URL"),
     adminToken: readOptionalEnv(env, "PROJECT_HEALTH_ADMIN_TOKEN"),
+  };
+}
+
+export function parseApiRiskPayload(input: {
+  payload: unknown;
+  responseOk: boolean;
+  status: number;
+}): ParsedApiRiskPayload {
+  const data = (input.payload as { data?: unknown } | null)?.data;
+  const parsed = ProjectOperationalRiskDisplayPageSchema.safeParse(data);
+  if (!input.responseOk || !parsed.success) {
+    return {
+      ok: false,
+      status: input.status,
+      message: input.responseOk
+        ? "API payload format invalid"
+        : `API status ${input.status}`,
+    };
+  }
+
+  return {
+    ok: true,
+    status: input.status,
+    total: parsed.data.pagination.total,
+    itemCount: parsed.data.items.length,
   };
 }
 
@@ -186,16 +222,19 @@ async function runApiSample(
     };
   }
 
-  const data = (payload as { data?: unknown } | null)?.data;
-  const parsed = ProjectOperationalRiskRpcPageSchema.safeParse(data);
-  if (!response.ok || !parsed.success) {
+  const parsed = parseApiRiskPayload({
+    payload,
+    responseOk: response.ok,
+    status: response.status,
+  });
+  if (!parsed.ok) {
     return {
       phase: "api",
       round,
       ms,
       ok: false,
-      status: response.status,
-      message: response.ok ? "API payload format invalid" : `API status ${response.status}`,
+      status: parsed.status,
+      message: parsed.message,
     };
   }
 
@@ -204,9 +243,9 @@ async function runApiSample(
     round,
     ms,
     ok: true,
-    status: response.status,
-    total: parsed.data.pagination.total,
-    itemCount: parsed.data.items.length,
+    status: parsed.status,
+    total: parsed.total,
+    itemCount: parsed.itemCount,
   };
 }
 
