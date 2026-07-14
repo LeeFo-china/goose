@@ -5,12 +5,13 @@
 
 ## 当前结论
 
-当前完成静态预审、production build 验证，以及已固化到 Playwright 的本地 mock 数据浏览器 smoke。尚未完成连接 dev 数据库和真实管理员登录态的发布级浏览器 smoke，也尚未执行基于真实截图的 `$impeccable audit` 评分。
+当前完成静态预审、production build 验证，以及已固化到 Playwright 的本地 mock 数据浏览器 smoke。
+2026-07-15 已在当前 worktree 复跑这些本地门禁。尚未完成连接 dev 数据库和真实管理员登录态的发布级浏览器 smoke，也尚未执行基于真实截图的 `$impeccable audit` 评分。
 
 阻塞项：
 
 - 本机 Docker daemon 不可用，2026-07-15 复跑 `supabase status` 仍无法连接 Docker；
-- 当前 shell 未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`GOOES_API_BASE_URL`、`NEXT_PUBLIC_GOOES_API_BASE_URL`；
+- 当前 shell 未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`PROJECT_HEALTH_API_URL`、`GOOES_API_BASE_URL`、`NEXT_PUBLIC_GOOES_API_BASE_URL`；
 - 缺少可登录 Admin 的租户管理员会话，无法验证真实 `/project-health` 列表、五类跳转、AI POST 和权限差异。
 
 因此本文件暂不记录 Impeccable 分数，不声明 P0/P1 已清零。mock smoke 只证明前端页面结构、RSC 边界、展示页 contract、AI 按需交互和响应式溢出在本地可重复验证。
@@ -45,7 +46,7 @@ pnpm --dir apps/admin build
 结果：
 
 - Domain contract test：5 pass；
-- API project-health/performance/readiness 定向测试：52 pass；
+- API project-health/performance/readiness 定向测试：57 pass；
 - Admin nav/project-health 定向测试：31 pass；
 - `packages/domain build`：通过；
 - `api:check`：通过；
@@ -95,7 +96,7 @@ python3 /Users/leefo/.codex/skills/webapp-testing/scripts/with_server.py \
 
 结果：
 
-- `apps/admin/e2e/project-health-smoke.spec.ts`：11 passed；
+- `apps/admin/e2e/project-health-smoke.spec.ts`：2026-07-15 复跑 11 passed；
 - 首次固化时，390px 视口发现列表卡片被筛选区压缩导致 table viewport 不可见；
 - 已通过 `components/project-health/project-health-client-shell.tsx` 的移动端列表卡片保底高度修复，桌面 `lg` 以上仍保持原满高工作台布局。
 

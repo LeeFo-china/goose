@@ -24,7 +24,13 @@
 
 ## 待 dev 数据库执行
 
-当前未记录 EXPLAIN 和 P95 数值。原因：本地 Supabase/Docker 运行态不可用，2026-07-15 复跑 `supabase status` 仍因 Docker daemon 不可用失败；当前 shell 也未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`。尚未在本轮拿到可验证的 dev 数据库连接执行结果。禁止手工在远端数据库执行 DDL/DML 或伪造性能数据。
+当前未记录 EXPLAIN 和 P95 数值。原因：本地 Supabase/Docker 运行态不可用，2026-07-15 复跑 `supabase status` 仍因 Docker daemon 不可用失败；当前 shell 也未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`PROJECT_HEALTH_API_URL`、`GOOES_API_BASE_URL`。尚未在本轮拿到可验证的 dev 数据库连接执行结果。禁止手工在远端数据库执行 DDL/DML 或伪造性能数据。
+
+2026-07-15 复跑 `pnpm --dir apps/api run project-health:release-readiness`：
+
+- `status`: `missing_env`；
+- `completed_checks`: `local_artifacts_present`；
+- 缺失项：`SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL`、`PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN`。
 
 先执行只读 release readiness gate：
 
