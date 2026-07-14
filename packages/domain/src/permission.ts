@@ -94,6 +94,8 @@ export const PERMISSION_CODE_VALUES = [
   'platform.payment.config.read',
   'platform.payment.config.manage',
   'platform.billing.recharge_product.manage',
+  'platform.tenant_onboarding.review',
+  'platform.service_provider.publish',
   'platform.partner.read',
   'platform.partner.manage',
   'platform.partner.level.manage',
@@ -106,6 +108,8 @@ export const PERMISSION_CODE_VALUES = [
   'platform.site_content.read',
   'platform.site_content.manage',
   'platform.site_content.publish',
+  'service_provider.profile.read',
+  'service_provider.profile.manage',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -358,6 +362,14 @@ export const PermissionCodeConfig: Record<
     label: '管理积分充值套餐',
     module: 'platform_billing',
   },
+  'platform.tenant_onboarding.review': {
+    label: '审核装企入驻',
+    module: 'platform_tenant_onboarding',
+  },
+  'platform.service_provider.publish': {
+    label: '审核服务商发布',
+    module: 'platform_tenant_onboarding',
+  },
   'platform.partner.read': {
     label: '查看城市合伙人',
     module: 'platform_partner',
@@ -405,6 +417,14 @@ export const PermissionCodeConfig: Record<
   'platform.site_content.publish': {
     label: '发布官网内容',
     module: 'platform_site_content',
+  },
+  'service_provider.profile.read': {
+    label: '查看服务商资料',
+    module: 'service_provider',
+  },
+  'service_provider.profile.manage': {
+    label: '管理服务商资料',
+    module: 'service_provider',
   },
   'project_referral.read': {
     label: '查看介绍费',
