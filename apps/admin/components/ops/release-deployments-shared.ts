@@ -1,4 +1,4 @@
-import type { ReleaseCreateTagResult, ReleaseDispatchResult, ReleaseEnvironment, ReleaseMigrationMode, ReleaseOperation, ReleaseOptionsData, ReleaseProductionMigrationDispatchResult, ReleaseRefOption, ReleaseRefType, ReleaseRuntimeServiceVersion, ReleaseRuntimeVersionData, ReleaseRun, ReleaseRunFailureSummary, ReleaseRunListData, ReleaseService, ReleaseSuccessfulRef, ReleaseSuccessfulRefListData, Pagination } from "@/components/ops/ops-types";
+import type { Pagination, ProductionReleaseCandidate, ReleaseCreateTagResult, ReleaseDispatchResult, ReleaseEnvironment, ReleaseMigrationMode, ReleaseOperation, ReleaseOptionsData, ReleaseProductionMigrationDispatchResult, ReleaseRefOption, ReleaseRefType, ReleaseRuntimeServiceVersion, ReleaseRuntimeVersionData, ReleaseRun, ReleaseRunFailureSummary, ReleaseRunListData, ReleaseService, ReleaseStage, ReleaseSuccessfulRef, ReleaseSuccessfulRefListData } from "@/components/ops/ops-types";
 import { requestBackendJson } from "@/lib/backend-client";
 
 export type ReleaseDeploymentsPanelProps = {
@@ -54,6 +54,24 @@ export async function dispatchProductionMigration(payload: {
     body: JSON.stringify(payload),
     fallbackMessage: "生产数据库迁移任务提交失败",
   });
+}
+
+export async function fetchProductionReleaseCandidate(runId: string) {
+  return requestBackendJson<ProductionReleaseCandidate>(
+    `/admin/ops/releases/production-candidates/${encodeURIComponent(runId)}`,
+    { cache: "no-store", fallbackMessage: "生产候选证据校验失败" },
+  );
+}
+
+export async function deployProductionReleaseCandidate(runId: string, payload: {
+  services: Exclude<ReleaseService, "all">[];
+  confirm_text: "确认部署生产环境";
+  reason?: string;
+}) {
+  return requestBackendJson<ReleaseDispatchResult>(
+    `/admin/ops/releases/production-candidates/${encodeURIComponent(runId)}/deploy`,
+    { method: "POST", body: JSON.stringify(payload), fallbackMessage: "生产候选部署提交失败" },
+  );
 }
 
 export async function createReleaseTag(payload: {
@@ -157,6 +175,7 @@ export function formatDateTime(value: string | null | undefined) {
 }
 
 export function statusLabel(run: ReleaseRun) {
+  if (!run.legacy && run.stage !== "legacy") return run.stage_label || stageLabel(run.stage);
   if (run.status === "completed") {
     if (run.conclusion === "success") return "成功";
     if (run.conclusion === "failure") return "失败";
@@ -169,6 +188,16 @@ export function statusLabel(run: ReleaseRun) {
 }
 
 export function statusVariant(run: ReleaseRun) {
+  if (!run.legacy && run.stage !== "legacy") {
+    if (run.stage === "deployed" || run.stage === "ready_to_deploy") return "success" as const;
+    if (run.stage === "build_failed" || run.stage === "deploy_failed") return "danger" as const;
+    if (
+      run.stage === "build_queued"
+      || run.stage === "building"
+      || run.stage === "deploy_queued"
+      || run.stage === "deploying"
+    ) return "warning" as const;
+  }
   if (run.status === "completed" && run.conclusion === "success") return "success" as const;
   if (run.status === "completed" && run.conclusion) return "danger" as const;
   if (run.status === "in_progress" || run.status === "queued") return "warning" as const;
@@ -176,8 +205,29 @@ export function statusVariant(run: ReleaseRun) {
 }
 
 export function isReleaseRunActive(run: ReleaseRun) {
+  if (!run.legacy && run.stage !== "legacy") {
+    return run.stage === "build_queued"
+      || run.stage === "building"
+      || run.stage === "deploy_queued"
+      || run.stage === "deploying";
+  }
   if (run.status === "queued" || run.status === "in_progress") return true;
   return run.status !== "completed" && !run.conclusion;
+}
+
+function stageLabel(stage: ReleaseStage) {
+  const labels: Record<ReleaseStage, string> = {
+    build_queued: "构建排队中",
+    building: "构建中",
+    build_failed: "构建失败",
+    ready_to_deploy: "可部署",
+    deploy_queued: "部署排队中",
+    deploying: "部署中",
+    deploy_failed: "部署失败",
+    deployed: "已部署",
+    legacy: "历史记录",
+  };
+  return labels[stage];
 }
 
 export function shouldShowFailureSummary(run: ReleaseRun) {

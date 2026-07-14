@@ -131,6 +131,16 @@ export type ReleaseService = "api" | "admin" | "social-video-worker" | "cos-reco
 export type ReleaseRefType = "branch" | "tag" | "commit";
 export type ReleaseOperation = "release" | "rollback";
 export type ReleaseMigrationMode = "plan" | "apply";
+export type ReleaseStage =
+  | "build_queued"
+  | "building"
+  | "build_failed"
+  | "ready_to_deploy"
+  | "deploy_queued"
+  | "deploying"
+  | "deploy_failed"
+  | "deployed"
+  | "legacy";
 
 export type ReleaseRefOption = {
   value: string;
@@ -171,6 +181,9 @@ export type ReleaseRun = {
   workflow_label: string;
   services: ReleaseService[] | null;
   service_label: string;
+  stage: ReleaseStage;
+  stage_label: string;
+  legacy: boolean;
   audit: {
     id: string;
     summary: string | null;
@@ -188,6 +201,9 @@ export type ReleaseRun = {
     operation_label: string | null;
     ref: string | null;
     ref_type_label: string | null;
+    stage: string | null;
+    commit_sha: string | null;
+    build_run_id: string | null;
     workflow_url: string | null;
     run_id: string | null;
     run_url: string | null;
@@ -260,6 +276,21 @@ export type ReleaseRuntimeVersionData = {
   services: ReleaseRuntimeServiceVersion[];
 };
 
+export type ProductionReleaseCandidate = {
+  build_run_id: string;
+  tag: string;
+  commit_sha: string;
+  services: Exclude<ReleaseService, "all">[];
+  build_services: Array<"api" | "admin" | "social-video-worker">;
+  target_environment: "production";
+  manifest_verified: true;
+  ready_to_deploy: boolean;
+  already_deployed: boolean;
+  blocked_reason: string | null;
+  run_url: string | null;
+  created_at: string | null;
+};
+
 export type ReleaseRunFailureSummary = {
   run_id: string;
   total_jobs: number;
@@ -301,6 +332,7 @@ export type ReleaseDispatchResult = {
   services?: ReleaseService[];
   service_label: string;
   ref: string;
+  stage: "release" | "build" | "deploy";
   workflow_id: string;
   workflow_url: string;
   run: ReleaseRun | null;
