@@ -130,35 +130,6 @@ const riskItems = [
   },
 ];
 
-const riskPage = {
-  generated_at: now,
-  business_date: "2026-07-14",
-  summary: {
-    total: riskItems.length,
-    danger: 2,
-    warning: 3,
-    info: 0,
-    affected_projects: 5,
-    by_type: {
-      workflow_task_overdue: 1,
-      procedure_overdue: 1,
-      missing_project_log: 1,
-      acceptance_rework: 1,
-      service_ticket: 1,
-    },
-  },
-  diagnostics: {
-    workflow_tasks_missing_due_at: 0,
-  },
-  items: riskItems,
-  pagination: {
-    page: 1,
-    page_size: 20,
-    total: riskItems.length,
-    total_pages: 1,
-  },
-};
-
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
@@ -172,6 +143,63 @@ function readBody(request) {
     request.on("data", (chunk) => chunks.push(chunk));
     request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
   });
+}
+
+function countByType(items) {
+  return {
+    workflow_task_overdue: items.filter((item) => item.risk_type === "workflow_task_overdue").length,
+    procedure_overdue: items.filter((item) => item.risk_type === "procedure_overdue").length,
+    missing_project_log: items.filter((item) => item.risk_type === "missing_project_log").length,
+    acceptance_rework: items.filter((item) => item.risk_type === "acceptance_rework").length,
+    service_ticket: items.filter((item) => item.risk_type === "service_ticket").length,
+  };
+}
+
+function buildRiskPage(searchParams) {
+  const severity = searchParams.get("severity") || "";
+  const riskType = searchParams.get("risk_type") || "";
+  const keyword = (searchParams.get("keyword") || "").trim().toLowerCase();
+  const page = Number.parseInt(searchParams.get("page") || "1", 10);
+  const pageSize = Number.parseInt(searchParams.get("pageSize") || "20", 10);
+
+  const filteredItems = riskItems.filter((item) => {
+    if (severity && item.severity !== severity) return false;
+    if (riskType && item.risk_type !== riskType) return false;
+    if (!keyword) return true;
+
+    return [
+      item.project_id,
+      item.project_name,
+      item.risk_key,
+      item.title,
+      item.description,
+    ].some((value) => value.toLowerCase().includes(keyword));
+  });
+  const start = (Math.max(page, 1) - 1) * Math.max(pageSize, 1);
+  const items = filteredItems.slice(start, start + pageSize);
+
+  return {
+    generated_at: now,
+    business_date: "2026-07-14",
+    summary: {
+      total: filteredItems.length,
+      danger: filteredItems.filter((item) => item.severity === "danger").length,
+      warning: filteredItems.filter((item) => item.severity === "warning").length,
+      info: 0,
+      affected_projects: new Set(filteredItems.map((item) => item.project_id)).size,
+      by_type: countByType(filteredItems),
+    },
+    diagnostics: {
+      workflow_tasks_missing_due_at: 0,
+    },
+    items,
+    pagination: {
+      page: Math.max(page, 1),
+      page_size: Math.max(pageSize, 1),
+      total: filteredItems.length,
+      total_pages: Math.ceil(filteredItems.length / Math.max(pageSize, 1)),
+    },
+  };
 }
 
 createServer(async (request, response) => {
@@ -189,7 +217,7 @@ createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && url.pathname === "/project-health/risks") {
-    sendJson(response, 200, { success: true, data: riskPage });
+    sendJson(response, 200, { success: true, data: buildRiskPage(url.searchParams) });
     return;
   }
 
