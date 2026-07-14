@@ -270,6 +270,13 @@ export function isVisitorSessionRoute(method: string, url: string) {
   }
 
   if (
+    (method === "GET" || method === "HEAD") &&
+    url === "/visitor/local-service-providers"
+  ) {
+    return true;
+  }
+
+  if (
     (method === "GET" || method === "HEAD")
     && url === "/public/administrative-areas"
   ) {

@@ -10,7 +10,7 @@ process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 describe("PlatformTenantOnboardingController routes", () => {
-  test("registers the eleven platform review routes", async () => {
+  test("registers platform review and service-provider publication routes", async () => {
     const module = await import(".").catch(() => null);
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
@@ -32,6 +32,12 @@ describe("PlatformTenantOnboardingController routes", () => {
       { method: "POST", path: "/platform/tenant-onboarding/applications/:id/request-supplement" },
       { method: "POST", path: "/platform/tenant-onboarding/applications/:id/approve" },
       { method: "POST", path: "/platform/tenant-onboarding/applications/:id/reject" },
+      { method: "GET", path: "/platform/service-provider-publications" },
+      { method: "GET", path: "/platform/service-provider-publications/:tenantId" },
+      { method: "GET", path: "/platform/service-provider-publications/:tenantId/areas" },
+      { method: "POST", path: "/platform/service-provider-publications/:tenantId/publish" },
+      { method: "POST", path: "/platform/service-provider-publications/:tenantId/return-draft" },
+      { method: "POST", path: "/platform/service-provider-publications/:tenantId/suspend" },
     ]);
   });
 
@@ -41,6 +47,8 @@ describe("PlatformTenantOnboardingController routes", () => {
       ["GET", `/platform/tenant-onboarding/applications/${crypto.randomUUID()}`],
       ["POST", `/platform/tenant-onboarding/applications/${crypto.randomUUID()}/approve`],
       ["POST", `/platform/tenant-onboarding/applications/${crypto.randomUUID()}/license-access`],
+      ["GET", "/platform/service-provider-publications"],
+      ["POST", `/platform/service-provider-publications/${crypto.randomUUID()}/publish`],
     ] as const;
     for (const [method, path] of routes) {
       expect(isPublicRoute(method, path)).toBe(false);

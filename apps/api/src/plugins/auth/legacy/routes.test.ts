@@ -16,6 +16,7 @@ describe("isVisitorSessionRoute", () => {
       ["GET", "/tenant-onboarding/applications/application-id"],
       ["PATCH", "/tenant-onboarding/applications/application-id/supplement"],
       ["POST", "/tenant-onboarding/applications/application-id/withdraw"],
+      ["GET", "/visitor/local-service-providers"],
     ] as const;
 
     for (const [method, route] of routes) {
