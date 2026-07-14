@@ -98,16 +98,8 @@ const versionedMutations = [
     schema: SupplementTenantOnboardingApplicationSchema,
     validInput: { version: 1, company_name: "晴天装饰" },
   },
-  {
-    name: "withdraw",
-    schema: WithdrawTenantOnboardingApplicationSchema,
-    validInput: { version: 1 },
-  },
-  {
-    name: "start review",
-    schema: StartReviewTenantOnboardingApplicationSchema,
-    validInput: { version: 1 },
-  },
+  { name: "withdraw", schema: WithdrawTenantOnboardingApplicationSchema, validInput: { version: 1 } },
+  { name: "start review", schema: StartReviewTenantOnboardingApplicationSchema, validInput: { version: 1 } },
   {
     name: "request supplement",
     schema: RequestSupplementTenantOnboardingApplicationSchema,
@@ -125,11 +117,7 @@ const versionedMutations = [
       partner_id: "00000000-0000-4000-8000-000000000701",
     },
   },
-  {
-    name: "partner assist decision",
-    schema: TenantOnboardingPartnerAssistDecisionSchema,
-    validInput: { version: 1, decision: "verified" },
-  },
+  { name: "partner assist decision", schema: TenantOnboardingPartnerAssistDecisionSchema, validInput: { version: 1, decision: "verified" } },
   {
     name: "approve",
     schema: ApproveTenantOnboardingApplicationSchema,
@@ -139,26 +127,10 @@ const versionedMutations = [
       review_remark: "主体信息核验通过",
     },
   },
-  {
-    name: "reject",
-    schema: RejectTenantOnboardingApplicationSchema,
-    validInput: { version: 1, review_remark: "主体信息不符合要求" },
-  },
-  {
-    name: "profile update",
-    schema: UpdateTenantServiceProviderProfileSchema,
-    validInput: { version: 1, public_name: "晴天装饰" },
-  },
-  {
-    name: "area update",
-    schema: UpdateTenantServiceProviderAreaSchema,
-    validInput: { version: 1, city: "信阳市" },
-  },
-  {
-    name: "submit profile review",
-    schema: SubmitTenantServiceProviderProfileSchema,
-    validInput: { version: 1 },
-  },
+  { name: "reject", schema: RejectTenantOnboardingApplicationSchema, validInput: { version: 1, review_remark: "主体信息不符合要求" } },
+  { name: "profile update", schema: UpdateTenantServiceProviderProfileSchema, validInput: { version: 1, public_name: "晴天装饰" } },
+  { name: "area update", schema: UpdateTenantServiceProviderAreaSchema, validInput: { version: 1, city: "信阳市" } },
+  { name: "submit profile review", schema: SubmitTenantServiceProviderProfileSchema, validInput: { version: 1 } },
   {
     name: "publish profile",
     schema: PublishTenantServiceProviderProfileSchema,
@@ -248,6 +220,7 @@ describe("tenant onboarding schemas", () => {
 
   test("accepts an optional normalized partner invite code", () => {
     const withoutInvite = SubmitTenantOnboardingApplicationSchema.safeParse(validInput);
+    const withNullInvite = SubmitTenantOnboardingApplicationSchema.safeParse({ ...validInput, invite_code: null });
     const withInvite = SubmitTenantOnboardingApplicationSchema.safeParse({
       ...validInput,
       source_channel: "partner_invite",
@@ -255,10 +228,25 @@ describe("tenant onboarding schemas", () => {
     });
 
     expect(withoutInvite.success).toBe(true);
+    expect(withNullInvite.success).toBe(true);
     expect(withInvite.success).toBe(true);
     if (withInvite.success) {
       expect(withInvite.data.invite_code).toBe("CP-411525-ABC");
     }
+  });
+
+  test("requires an invite code for partner-invite submissions", () => {
+    expect(SubmitTenantOnboardingApplicationSchema.safeParse({
+      ...validInput,
+      source_channel: "partner_invite",
+    }).success).toBe(false);
+  });
+
+  test("rejects invite codes on local-services submissions", () => {
+    expect(SubmitTenantOnboardingApplicationSchema.safeParse({
+      ...validInput,
+      invite_code: "CP-411525-ABC",
+    }).success).toBe(false);
   });
 
   test("accepts at most 20 unique service regions", () => {
@@ -361,7 +349,24 @@ describe("tenant onboarding schemas", () => {
       final_partner_id: "not-a-uuid",
       review_remark: "主体信息核验通过",
     }).success).toBe(false);
+    expect(ApproveTenantOnboardingApplicationSchema.safeParse({
+      version: 3,
+      attribution_mode: "partner",
+      final_partner_id: "00000000-0000-4000-8000-000000000701",
+      review_remark: "主体信息核验通过",
+    }).success).toBe(true);
   });
+
+  for (const attribution_mode of ["auto", "unassigned"] as const) {
+    test(`rejects a final partner for ${attribution_mode} attribution`, () => {
+      expect(ApproveTenantOnboardingApplicationSchema.safeParse({
+        version: 3,
+        attribution_mode,
+        final_partner_id: "00000000-0000-4000-8000-000000000701",
+        review_remark: "主体信息核验通过",
+      }).success).toBe(false);
+    });
+  }
 
   for (const mutation of versionedMutations) {
     test(`${mutation.name} requires a positive integer version`, () => {
@@ -433,6 +438,13 @@ describe("tenant onboarding schemas", () => {
       required_fields: ["company_name"],
       remark: " ",
     }).success).toBe(false);
+    for (const requiredField of ["status", "admin_phone", "company_nmae"]) {
+      expect(RequestSupplementTenantOnboardingApplicationSchema.safeParse({
+        version: 2,
+        required_fields: [requiredField],
+        remark: "请补充资料",
+      }).success).toBe(false);
+    }
   });
 
   test("rejects blank or oversized approval remarks", () => {

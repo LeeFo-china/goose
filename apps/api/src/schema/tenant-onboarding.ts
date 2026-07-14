@@ -161,7 +161,24 @@ export const SubmitTenantOnboardingApplicationSchema =
     agree_privacy: z.literal(true, {
       message: "请先同意隐私政策和入驻条款",
     }),
-  }).strict();
+  })
+    .strict()
+    .superRefine((value, context) => {
+      if (value.source_channel === "partner_invite" && !value.invite_code) {
+        context.addIssue({
+          code: "custom",
+          path: ["invite_code"],
+          message: "合伙人邀请来源必须提供邀请码",
+        });
+      }
+      if (value.source_channel === "local_services" && value.invite_code) {
+        context.addIssue({
+          code: "custom",
+          path: ["invite_code"],
+          message: "本地服务来源不能使用邀请码",
+        });
+      }
+    });
 
 export const SupplementTenantOnboardingApplicationSchema =
   ApplicantEditableFieldsSchema.partial()
@@ -185,8 +202,17 @@ export const StartReviewTenantOnboardingApplicationSchema = z
   })
   .strict();
 
+export const TenantOnboardingSupplementFieldSchema = z.enum([
+  "company_name",
+  "unified_social_credit_code",
+  "business_license_file_id",
+  "admin_name",
+  "company_location",
+  "service_region_codes",
+]);
+
 const RequiredSupplementFieldsSchema = z
-  .array(z.string().trim().min(1, "补充字段不能为空").max(80))
+  .array(TenantOnboardingSupplementFieldSchema)
   .min(1, "请选择至少一个补充字段")
   .max(20, "补充字段不能超过 20 个")
   .refine(hasUniqueValues, "补充字段不能重复");
@@ -233,6 +259,13 @@ export const ApproveTenantOnboardingApplicationSchema = z
         code: "custom",
         path: ["final_partner_id"],
         message: "请选择最终归因合伙人",
+      });
+    }
+    if (value.attribution_mode !== "partner" && value.final_partner_id) {
+      context.addIssue({
+        code: "custom",
+        path: ["final_partner_id"],
+        message: "当前归因方式不能指定最终合伙人",
       });
     }
   });

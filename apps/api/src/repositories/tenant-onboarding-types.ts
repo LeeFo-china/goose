@@ -4,6 +4,7 @@ import type {
   TenantOnboardingSourceChannel,
   TenantServiceProviderProfileStatus,
 } from "@/schema/tenant-onboarding";
+import type { Json } from "@/types/database";
 
 export type TenantOnboardingPartnerBrief = {
   id: string;
@@ -34,7 +35,7 @@ export type TenantOnboardingApplicationRecord = {
   invite_code_id: string | null;
   candidate_partner_id: string | null;
   candidate_match_reason: string | null;
-  candidate_snapshot: Record<string, unknown>;
+  candidate_snapshot: Json;
   final_partner_id: string | null;
   attribution_source_type: string | null;
   status: TenantOnboardingApplicationStatus;
@@ -72,7 +73,7 @@ export type TenantOnboardingApplicationReviewRecord = {
   after_partner_assist_status: TenantOnboardingPartnerAssistStatus | null;
   required_fields: string[];
   remark: string | null;
-  metadata: Record<string, unknown>;
+  metadata: Json;
   created_at: string;
 };
 
