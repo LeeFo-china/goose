@@ -10,9 +10,11 @@ import { RuntimeVersionsPanel } from "@/components/ops/release-deployments-dialo
 import { ProductionMigrationAssistCard } from "@/components/ops/production-migration-assist-card";
 import { ProductionMigrationCard, ReleaseDispatchCard } from "@/components/ops/release-deployments-dispatch-card";
 import { ReleaseRunsCard, SuccessfulRefsCard } from "@/components/ops/release-deployments-sections";
+import { ReleaseCandidateEvidence } from "@/components/ops/release-candidate-evidence";
 import { createReleaseTag, createRollbackTag, dispatchRelease, RELEASE_RUN_FORCE_POLL_MS, type ReleaseDeploymentsPanelProps } from "@/components/ops/release-deployments-shared";
 import { useReleaseDeploymentSnapshots } from "@/components/ops/release-deployments-snapshots";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 
 type ReleaseMode = "service-release" | "database-migration";
@@ -31,6 +33,7 @@ export function ReleaseDeploymentsPanel({
   const [pending, startTransition] = useTransition();
   const [releaseMode, setReleaseMode] = useState<ReleaseMode>("service-release");
   const [rollbackConfirmText, setRollbackConfirmText] = useState("");
+  const [selectedCandidateRunId, setSelectedCandidateRunId] = useState("");
   const snapshots = useReleaseDeploymentSnapshots({
     runs,
     runsPagination,
@@ -132,7 +135,7 @@ export function ReleaseDeploymentsPanel({
         tagMessage: "",
         productionVersionMode: "existing_tag",
       });
-      toast.success(data.message || "回滚 Tag 已创建，请确认后发布生产");
+      toast.success(data.message || "回滚 Tag 已创建，请构建并验证生产候选后再部署。");
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "回滚 Tag 创建失败");
@@ -157,7 +160,7 @@ export function ReleaseDeploymentsPanel({
         ref: tagData.tag,
         operation: "rollback",
         reason: reason.trim() || fallbackReason,
-        confirm_text: "确认回滚生产",
+        confirm_text: "确认构建生产候选",
       });
       setDraft({
         environment: "production",
@@ -175,7 +178,7 @@ export function ReleaseDeploymentsPanel({
         productionVersionMode: "existing_tag",
       });
       setRollbackConfirmText("");
-      toast.success(data.message || `已提交生产回滚：${tagData.tag}`);
+      toast.success(data.message || `已提交回滚候选构建：${tagData.tag}`);
       router.refresh();
       setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
       void refreshReleaseSnapshots({ silent: true });
@@ -250,7 +253,20 @@ export function ReleaseDeploymentsPanel({
     ? Boolean(tagName.trim() && tagSourceRef.trim() && tagMessage.trim())
     : Boolean(ref.trim());
   const confirmRefLabel = creatingProductionTag ? tagName || "新 Tag" : ref || "-";
-  const disabled = pending || !options?.configured || !currentEnvironment || selectedServices.length === 0 || !releaseRefReady || (production && confirmText !== "确认发布生产");
+  const disabled = pending || !options?.configured || !currentEnvironment || selectedServices.length === 0 || !releaseRefReady || (production && confirmText !== "确认构建生产候选");
+  const readyProductionRuns = useMemo(
+    () => currentRuns.filter((run) => run.environment === "production" && run.stage === "ready_to_deploy" && !run.legacy),
+    [currentRuns],
+  );
+  const selectedReadyProductionRun = readyProductionRuns.find((run) => run.id === selectedCandidateRunId)
+    || readyProductionRuns[0]
+    || null;
+
+  function refreshAfterCandidateSubmitted() {
+    router.refresh();
+    setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
+    void refreshReleaseSnapshots({ silent: true });
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -291,6 +307,16 @@ export function ReleaseDeploymentsPanel({
                     />
                   )}
                 />
+                {production ? (
+                  <>
+                    <Separator className="my-5" />
+                    <ReleaseCandidateEvidence
+                      run={selectedReadyProductionRun}
+                      configured={Boolean(options?.configured)}
+                      onSubmitted={refreshAfterCandidateSubmitted}
+                    />
+                  </>
+                ) : null}
               </TabsContent>
               <TabsContent value="database-migration" className="mt-0">
                 <ProductionMigrationCard
@@ -308,7 +334,10 @@ export function ReleaseDeploymentsPanel({
         </div>
       </Tabs>
 
-      <ReleaseRunsCard state={{ lastRunsRefreshedAt, runsPollError, hasActiveRuns, currentRunsPagination, runsRefreshing, currentRuns }} actions={{ refreshReleaseSnapshots, changeRunsPage }} />
+      <ReleaseRunsCard
+        state={{ lastRunsRefreshedAt, runsPollError, hasActiveRuns, currentRunsPagination, runsRefreshing, currentRuns, selectedCandidateRunId }}
+        actions={{ refreshReleaseSnapshots, changeRunsPage, selectCandidateRun: setSelectedCandidateRunId }}
+      />
     </div>
   );
 }

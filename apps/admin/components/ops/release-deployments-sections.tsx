@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, Loader2, RefreshCw, RotateCcw, Tag } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw, RotateCcw, ShieldCheck, Tag } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -114,14 +114,14 @@ export function SuccessfulRefsCard({ state, actions, embedded = false }: { state
                   <AlertDialogTrigger asChild>
                     <Button type="button" variant="destructive" size="sm" disabled={Boolean(rollbackPendingId)}>
                       <RotateCcw data-icon="inline-start" />
-                      回滚发布
+                      构建回滚候选
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>确认回滚生产环境</AlertDialogTitle>
+                      <AlertDialogTitle>确认构建回滚候选</AlertDialogTitle>
                       <AlertDialogDescription>
-                        将基于 {item.head_sha.slice(0, 7)} 创建回滚 Tag，并发布生产环境全部服务。该操作会重建生产容器。
+                        将基于 {item.head_sha.slice(0, 7)} 创建回滚 Tag，并构建生产候选。本阶段不会修改生产容器。
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <FieldGroup>
@@ -131,15 +131,15 @@ export function SuccessfulRefsCard({ state, actions, embedded = false }: { state
                           id={`rollback-confirm-${item.id}`}
                           value={rollbackConfirmText}
                           onChange={(event) => setRollbackConfirmText(event.target.value)}
-                          placeholder="输入：确认回滚生产"
+                          placeholder="输入：确认构建生产候选"
                         />
-                        <FieldDescription>输入确认文本后才能提交生产回滚。</FieldDescription>
+                        <FieldDescription>输入确认文本后才能构建回滚候选；生产部署仍需在候选证据区二次确认。</FieldDescription>
                       </Field>
                     </FieldGroup>
                     <AlertDialogFooter>
                       <AlertDialogCancel>取消</AlertDialogCancel>
                       <AlertDialogAction
-                        disabled={rollbackConfirmText !== "确认回滚生产" || Boolean(rollbackPendingId)}
+                        disabled={rollbackConfirmText !== "确认构建生产候选" || Boolean(rollbackPendingId)}
                         onClick={() => runRollbackDispatch(item)}
                       >
                         {rollbackPendingId === item.id ? (
@@ -147,7 +147,7 @@ export function SuccessfulRefsCard({ state, actions, embedded = false }: { state
                         ) : (
                           <RotateCcw data-icon="inline-start" />
                         )}
-                        确认回滚
+                        确认构建候选
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -160,8 +160,8 @@ export function SuccessfulRefsCard({ state, actions, embedded = false }: { state
           )}
           <p className="text-xs text-muted-foreground">
             {embedded
-              ? "“作为来源”会把 Commit 填入创建新 Tag 流程；回滚操作会创建 Tag，并在提交生产前二次确认。"
-              : "“作为来源”会把 Commit 填入创建新 Tag 流程；“回滚 Tag”只创建并填入发布版本；“回滚发布”会创建 Tag 并提交生产全部服务回滚。"}
+              ? "“作为来源”会把 Commit 填入创建新 Tag 流程；回滚候选只构建并校验证据，不会修改生产容器。"
+              : "“作为来源”会把 Commit 填入创建新 Tag 流程；“回滚 Tag”只创建并填入发布版本；“构建回滚候选”会创建 Tag 并提交生产候选构建。"}
           </p>
           <CompactPagination
             pagination={currentSuccessfulRefsPagination}
@@ -186,8 +186,8 @@ export function SuccessfulRefsCard({ state, actions, embedded = false }: { state
 }
 
 export function ReleaseRunsCard({ state, actions }: { state: any; actions: any }) {
-  const { lastRunsRefreshedAt, runsPollError, hasActiveRuns, currentRunsPagination, runsRefreshing, currentRuns } = state;
-  const { refreshReleaseSnapshots, changeRunsPage } = actions;
+  const { lastRunsRefreshedAt, runsPollError, hasActiveRuns, currentRunsPagination, runsRefreshing, currentRuns, selectedCandidateRunId } = state;
+  const { refreshReleaseSnapshots, changeRunsPage, selectCandidateRun } = actions;
   return (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -219,7 +219,7 @@ export function ReleaseRunsCard({ state, actions }: { state: any; actions: any }
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
+          <Table className="min-w-[760px]" containerClassName="overflow-x-auto">
             <TableHeader>
               <TableRow>
                 <TableHead>环境</TableHead>
@@ -238,13 +238,16 @@ export function ReleaseRunsCard({ state, actions }: { state: any; actions: any }
                   </TableCell>
                 </TableRow>
               ) : currentRuns.map((run: any) => (
-                <TableRow key={`${run.environment}-${run.id}`}>
+                <TableRow key={`${run.environment}-${run.id}`} data-state={selectedCandidateRunId === run.id ? "selected" : undefined}>
                   <TableCell>
-                    <div className="font-medium">{run.workflow_label}</div>
+                    <div className="flex flex-wrap items-center gap-2 font-medium">
+                      <span>{run.workflow_label}</span>
+                      {run.legacy ? <Badge variant="outline">历史任务</Badge> : null}
+                    </div>
                     <div className="text-xs text-muted-foreground">{run.workflow_id}</div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(run)}>{statusLabel(run)}</Badge>
+                    <Badge variant={statusVariant(run)}>{run.legacy ? statusLabel(run) : run.stage_label}</Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant={run.service_label === "未记录" ? "secondary" : "outline"}>
@@ -262,6 +265,17 @@ export function ReleaseRunsCard({ state, actions }: { state: any; actions: any }
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
+                      {canSelectCandidateRun(run) ? (
+                        <Button
+                          type="button"
+                          variant={selectedCandidateRunId === run.id ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => selectCandidateRun(run.id)}
+                        >
+                          <ShieldCheck data-icon="inline-start" />
+                          候选证据
+                        </Button>
+                      ) : null}
                       <ReleaseRunDetailsDialog run={run} />
                       {run.html_url ? (
                         <Button asChild variant="ghost" size="sm">
@@ -285,4 +299,8 @@ export function ReleaseRunsCard({ state, actions }: { state: any; actions: any }
         </CardContent>
       </Card>
   );
+}
+
+function canSelectCandidateRun(run: any) {
+  return run.environment === "production" && run.stage === "ready_to_deploy" && !run.legacy;
 }

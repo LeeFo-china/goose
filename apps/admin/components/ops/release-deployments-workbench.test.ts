@@ -36,6 +36,23 @@ function run(overrides: Partial<ReleaseRun> = {}): ReleaseRun {
 }
 
 describe("release deployment workbench contracts", () => {
+  test("uses two-stage production copy and candidate evidence UI", () => {
+    const dispatchSource = readFileSync(join(import.meta.dir, "release-deployments-dispatch-card.tsx"), "utf8");
+    const candidateSource = readFileSync(join(import.meta.dir, "release-candidate-evidence.tsx"), "utf8");
+
+    expect(dispatchSource).toContain("构建并发布到开发环境");
+    expect(dispatchSource).toContain("构建生产候选");
+    expect(dispatchSource).toContain("确认构建生产候选");
+    expect(dispatchSource).not.toContain("生产发布会触发构建并重建对应生产容器");
+    expect(candidateSource).toContain("部署此构建到生产");
+    expect(candidateSource).toContain("确认部署生产环境");
+    expect(candidateSource).toContain("Commit SHA");
+    expect(candidateSource).toContain("构建 Run");
+    expect(candidateSource).toContain("镜像清单已验证");
+    expect(candidateSource).toContain("AlertDialog");
+    expect(candidateSource).not.toContain("<Card");
+  });
+
   test("uses production candidate API paths", () => {
     const sharedSource = readFileSync(join(import.meta.dir, "release-deployments-shared.ts"), "utf8");
 

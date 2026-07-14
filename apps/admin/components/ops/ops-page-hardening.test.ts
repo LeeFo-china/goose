@@ -17,6 +17,10 @@ function readOpsSources() {
       new URL("./release-deployments-dispatch-card.tsx", import.meta.url),
       "utf8",
     ),
+    releaseCandidateEvidence: readFileSync(
+      new URL("./release-candidate-evidence.tsx", import.meta.url),
+      "utf8",
+    ),
     serviceHealth: readFileSync(
       new URL("./service-health-panel.tsx", import.meta.url),
       "utf8",
@@ -120,7 +124,7 @@ describe("Ops page hardening", () => {
   });
 
   test("merges release operation tabs into the primary shadcn card header", () => {
-    const { releaseDeployments, releaseDispatch } = readOpsSources();
+    const { releaseDeployments, releaseDispatch, releaseCandidateEvidence } = readOpsSources();
 
     expect(releaseDeployments).toContain('from "@/components/ui/card"');
     expect(releaseDeployments).toContain("CardHeader");
@@ -128,9 +132,12 @@ describe("Ops page hardening", () => {
     expect(releaseDeployments).toContain("<OpsTabsList");
     expect(releaseDeployments).toContain('value={releaseMode}');
     expect(releaseDeployments).toContain('releaseMode === "database-migration"');
+    expect(releaseDeployments).toContain("<ReleaseCandidateEvidence");
     expect(releaseDispatch).not.toContain('from "@/components/ui/card"');
     expect(releaseDispatch).not.toContain("<Card>");
     expect(releaseDispatch).not.toContain("<CardHeader");
     expect(releaseDispatch).not.toContain("<CardContent");
+    expect(releaseCandidateEvidence).not.toContain('from "@/components/ui/card"');
+    expect(releaseCandidateEvidence).not.toContain("<Card");
   });
 });

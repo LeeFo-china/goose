@@ -32,7 +32,7 @@ export function ReleaseDispatchCard({ state, actions, sourcePicker }: { state: a
             {latestDispatch?.run?.html_url ? (
               <Alert>
                 <Rocket data-icon="inline-start" />
-                <AlertTitle>发布任务已创建</AlertTitle>
+                <AlertTitle>{latestDispatch.stage === "build" ? "生产候选构建已提交" : "发布任务已创建"}</AlertTitle>
                 <AlertDescription>
                   {latestDispatch.service_label} · {latestDispatch.ref}
                   <Button asChild variant="link" className="ml-2 h-auto p-0">
@@ -46,9 +46,9 @@ export function ReleaseDispatchCard({ state, actions, sourcePicker }: { state: a
             {production ? (
               <Alert>
                 <ShieldCheck data-icon="inline-start" />
-                <AlertTitle>生产发布规则</AlertTitle>
+                <AlertTitle>生产候选规则</AlertTitle>
                 <AlertDescription>
-                  生产只允许发布 Tag；可以选择已有 Tag，也可以在本表单中创建新 Tag 后自动发起发布。
+                  此操作只构建并校验生产镜像，不会修改生产容器。候选验证通过后，需在候选证据区二次确认部署。
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -114,14 +114,14 @@ export function ReleaseDispatchCard({ state, actions, sourcePicker }: { state: a
                     <SelectContent>
                       <SelectGroup>
                         <SelectItem value="existing_tag">选择已有 Tag</SelectItem>
-                        <SelectItem value="new_tag">创建新 Tag 并发布</SelectItem>
+                        <SelectItem value="new_tag">创建新 Tag 并构建候选</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
                   <FieldDescription>
                     {productionVersionMode === "new_tag"
-                      ? "提交时会先创建 Tag，再用这个 Tag 发起生产发布。"
-                      : "适合发布已经创建并确认过的生产 Tag。"}
+                      ? "提交时会先创建 Tag，再用这个 Tag 构建生产候选。"
+                      : "适合使用已经创建并确认过的生产 Tag 构建候选。"}
                   </FieldDescription>
                 </Field>
 
@@ -261,9 +261,9 @@ export function ReleaseDispatchCard({ state, actions, sourcePicker }: { state: a
                   id="release-confirm"
                   value={confirmText}
                   onChange={(event) => setDraft({ confirmText: event.target.value })}
-                  placeholder="输入：确认发布生产"
+                  placeholder="输入：确认构建生产候选"
                 />
-                <FieldDescription>生产发布会触发构建并重建对应生产容器。</FieldDescription>
+                <FieldDescription>此操作只构建并校验生产镜像，不会修改生产容器。</FieldDescription>
               </Field>
             ) : null}
           </FieldGroup>
@@ -272,15 +272,18 @@ export function ReleaseDispatchCard({ state, actions, sourcePicker }: { state: a
             <AlertDialogTrigger asChild>
               <Button type="button" disabled={disabled}>
                 {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Rocket data-icon="inline-start" />}
-                {creatingProductionTag ? "创建 Tag 并提交发布" : "提交发布"}
+                {production
+                  ? creatingProductionTag ? "创建 Tag 并构建生产候选" : "构建生产候选"
+                  : "构建并发布到开发环境"}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>{production ? "确认发布生产版本" : "确认发布开发环境"}</AlertDialogTitle>
+                <AlertDialogTitle>{production ? "确认构建生产候选" : "确认发布开发环境"}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  将提交 {currentEnvironment?.label || "-"} 的 {selectedServiceLabel || "-"} 发布任务，版本为 {confirmRefLabel}。
-                  {creatingProductionTag ? " 系统会先创建这个 Tag，再发起生产发布。" : ""}
+                  将提交 {currentEnvironment?.label || "-"} 的 {selectedServiceLabel || "-"} {production ? "候选构建" : "发布"}任务，版本为 {confirmRefLabel}。
+                  {creatingProductionTag ? " 系统会先创建这个 Tag，再构建生产候选。" : ""}
+                  {production ? " 本阶段不会修改生产容器。" : ""}
                   任务提交后请在 GitHub Actions 或发布记录中查看执行状态。
                 </AlertDialogDescription>
               </AlertDialogHeader>
