@@ -1,10 +1,10 @@
 import type {
   ProjectOperationalRiskAiSummary,
-  ProjectOperationalRiskRpcPage,
+  ProjectOperationalRiskDisplayPage,
 } from "@gooes/domain";
 import {
   ProjectOperationalRiskAiSummarySchema,
-  ProjectOperationalRiskRpcPageSchema,
+  ProjectOperationalRiskDisplayPageSchema,
 } from "@gooes/domain";
 import {
   buildProjectHealthBackendQuery,
@@ -93,14 +93,14 @@ function buildAiSummaryBody(query: ProjectHealthQueryState): string {
 export async function fetchProjectHealthRisks(
   query: ProjectHealthQueryState,
   options: ProjectHealthRequestOptions = {},
-): Promise<ProjectOperationalRiskRpcPage> {
+): Promise<ProjectOperationalRiskDisplayPage> {
   const fetcher = options.fetcher ?? defaultFetcher;
   const response = await fetcher(
     `/api/backend/project-health/risks?${buildProjectHealthBackendQuery(query)}`,
     { signal: options.signal },
   );
 
-  const data = await parseProjectHealthPayload<ProjectOperationalRiskRpcPage>(
+  const data = await parseProjectHealthPayload<ProjectOperationalRiskDisplayPage>(
     response,
     "风险列表加载失败",
     "风险列表响应缺少 data",
@@ -108,7 +108,7 @@ export async function fetchProjectHealthRisks(
 
   return parseDomainData(
     data,
-    ProjectOperationalRiskRpcPageSchema,
+    ProjectOperationalRiskDisplayPageSchema,
     "风险列表响应格式异常",
   );
 }

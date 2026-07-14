@@ -17,10 +17,13 @@ function readComponentFile(fileName: string) {
 describe("project health page layout contract", () => {
   test("keeps the page inside a fixed admin workspace", () => {
     const page = readRouteFile("page.tsx");
+    const shell = readComponentFile("project-health-client-shell.tsx");
 
     expect(page).toContain("h-[calc(100vh-6.5625rem)]");
     expect(page).toContain("min-h-0 flex-col gap-5 overflow-hidden");
     expect(page).toContain("ProjectHealthClientShell");
+    expect(page).not.toContain("headerIcon=");
+    expect(shell).toContain("ShieldAlert");
   });
 
   test("uses one card workspace with fixed table viewport and footer", () => {

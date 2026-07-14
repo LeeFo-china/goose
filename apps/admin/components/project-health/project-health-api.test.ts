@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
   ProjectOperationalRiskAiSummary,
-  ProjectOperationalRiskRpcPage,
+  ProjectOperationalRiskDisplayPage,
 } from "@gooes/domain";
 import {
   fetchProjectHealthAiSummary,
@@ -17,7 +17,7 @@ function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   });
 }
 
-function createRiskPage(): ProjectOperationalRiskRpcPage {
+function createRiskPage(): ProjectOperationalRiskDisplayPage {
   return {
     generated_at: "2026-07-14T08:00:00.000Z",
     business_date: "2026-07-14",
@@ -36,7 +36,30 @@ function createRiskPage(): ProjectOperationalRiskRpcPage {
       },
     },
     diagnostics: { workflow_tasks_missing_due_at: 0 },
-    items: [],
+    items: [
+      {
+        risk_key: "workflow_task:00000000-0000-4000-8000-000000000001",
+        risk_type: "workflow_task_overdue",
+        severity: "danger",
+        project_id: "11111111-1111-4111-8111-111111111111",
+        project_name: "湖畔花园",
+        project_status: "constructing",
+        source_type: "workflow_task",
+        source_id: "00000000-0000-4000-8000-000000000001",
+        assignee_employee_id: null,
+        assignee_employee_name: "李工",
+        occurred_at: "2026-07-14T08:00:00.000Z",
+        due_at: "2026-07-13T08:00:00.000Z",
+        overdue_days: 1,
+        evidence: { task_title: "水电验收" },
+        title: "工作流任务逾期",
+        description: "水电验收逾期。",
+        action: {
+          label: "去处理",
+          href: "/projects/11111111-1111-4111-8111-111111111111?tab=overview",
+        },
+      },
+    ],
     pagination: { page: 1, page_size: 20, total: 0, total_pages: 0 },
   };
 }
@@ -56,6 +79,9 @@ describe("project health api helpers", () => {
     );
 
     expect(data.pagination.page).toBe(1);
+    expect(data.items[0]?.action.href).toBe(
+      "/projects/11111111-1111-4111-8111-111111111111?tab=overview",
+    );
     expect(String(calls[0]?.input)).toBe(
       "/api/backend/project-health/risks?page=2&pageSize=20&severity=danger&keyword=%E6%B9%96%E7%95%94",
     );

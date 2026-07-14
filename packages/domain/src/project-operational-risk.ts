@@ -92,6 +92,11 @@ export const ProjectOperationalRiskDisplayItemSchema =
     }),
   });
 
+export const ProjectOperationalRiskDisplayPageSchema =
+  ProjectOperationalRiskRpcPageSchema.extend({
+    items: z.array(ProjectOperationalRiskDisplayItemSchema),
+  });
+
 export const ProjectOperationalRiskAiSummarySchema = z.strictObject({
   overview: z.string().trim().max(800),
   priorities: z
@@ -120,6 +125,9 @@ export type ProjectOperationalRiskRpcPage = z.infer<
 >;
 export type ProjectOperationalRiskDisplayItem = z.infer<
   typeof ProjectOperationalRiskDisplayItemSchema
+>;
+export type ProjectOperationalRiskDisplayPage = z.infer<
+  typeof ProjectOperationalRiskDisplayPageSchema
 >;
 export type ProjectOperationalRiskAiSummary = z.infer<
   typeof ProjectOperationalRiskAiSummarySchema

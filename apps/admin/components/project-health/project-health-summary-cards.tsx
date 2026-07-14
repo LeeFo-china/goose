@@ -1,12 +1,12 @@
 import { AlertTriangle, CircleAlert, ClipboardList, FolderKanban } from "lucide-react";
-import type { ProjectOperationalRiskRpcPage } from "@gooes/domain";
+import type { ProjectOperationalRiskDisplayPage } from "@gooes/domain";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function ProjectHealthSummaryCards({
   data,
 }: {
-  data: ProjectOperationalRiskRpcPage | null;
+  data: ProjectOperationalRiskDisplayPage | null;
 }) {
   const items = data
     ? [

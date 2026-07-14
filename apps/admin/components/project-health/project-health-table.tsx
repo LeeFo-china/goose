@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { AlertTriangle, CircleAlert } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { ProjectOperationalRiskFact } from "@gooes/domain";
+import type { ProjectOperationalRiskDisplayItem } from "@gooes/domain";
 import { DataTable } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,15 +15,15 @@ import {
   getProjectOperationalRiskTypeLabel,
 } from "@/components/project-health/project-health-display";
 
-function riskActionHref(item: ProjectOperationalRiskFact) {
-  return `/projects/${item.project_id}`;
+function riskActionHref(item: ProjectOperationalRiskDisplayItem) {
+  return item.action.href;
 }
 
 function toBadgeVariant(variant: "default" | "secondary" | "destructive" | "outline") {
   return variant === "destructive" ? "danger" : variant;
 }
 
-const columns: ColumnDef<ProjectOperationalRiskFact>[] = [
+const columns: ColumnDef<ProjectOperationalRiskDisplayItem>[] = [
   {
     accessorKey: "severity",
     header: "严重度",
@@ -107,7 +107,7 @@ const columns: ColumnDef<ProjectOperationalRiskFact>[] = [
 export function ProjectHealthTable({
   items,
 }: {
-  items: ProjectOperationalRiskFact[];
+  items: ProjectOperationalRiskDisplayItem[];
 }) {
   return (
     <DataTable

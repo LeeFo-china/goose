@@ -1,10 +1,9 @@
-import { ShieldAlert } from "lucide-react";
 import type {
-  ProjectOperationalRiskRpcPage,
+  ProjectOperationalRiskDisplayPage,
   ProjectOperationalRiskSeverity,
   ProjectOperationalRiskType,
 } from "@gooes/domain";
-import { ProjectOperationalRiskRpcPageSchema } from "@gooes/domain";
+import { ProjectOperationalRiskDisplayPageSchema } from "@gooes/domain";
 import { ProjectHealthClientShell } from "@/components/project-health/project-health-client-shell";
 import {
   buildProjectHealthBackendQuery,
@@ -53,7 +52,7 @@ function parseFilters(params: ProjectHealthSearchParams): ProjectHealthQueryStat
 }
 
 async function getProjectHealthData(filters: ProjectHealthQueryState): Promise<{
-  data: ProjectOperationalRiskRpcPage | null;
+  data: ProjectOperationalRiskDisplayPage | null;
   error: string | null;
 }> {
   const token = await getAdminToken();
@@ -67,10 +66,10 @@ async function getProjectHealthData(filters: ProjectHealthQueryState): Promise<{
         cache: "no-store",
       },
     );
-    const payload = await parseBackendJson<ProjectOperationalRiskRpcPage>(response);
+    const payload = await parseBackendJson<ProjectOperationalRiskDisplayPage>(response);
     if (!payload.data) return { data: null, error: "项目风险响应缺少 data" };
 
-    const parsed = ProjectOperationalRiskRpcPageSchema.safeParse(payload.data);
+    const parsed = ProjectOperationalRiskDisplayPageSchema.safeParse(payload.data);
     if (!parsed.success) return { data: null, error: "项目风险响应格式异常" };
 
     return { data: parsed.data, error: null };
@@ -100,7 +99,6 @@ export default async function ProjectHealthPage({
         initialData={data}
         initialFilters={initialFilters}
         initialError={error}
-        headerIcon={ShieldAlert}
       />
     </div>
   );

@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
-import { Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
 import type {
   ProjectOperationalRiskAiSummary,
-  ProjectOperationalRiskRpcPage,
+  ProjectOperationalRiskDisplayPage,
 } from "@gooes/domain";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { ProjectHealthAiSummary } from "@/components/project-health/project-health-ai-summary";
@@ -43,12 +43,10 @@ export function ProjectHealthClientShell({
   initialData,
   initialFilters,
   initialError,
-  headerIcon: HeaderIcon,
 }: {
-  initialData: ProjectOperationalRiskRpcPage | null;
+  initialData: ProjectOperationalRiskDisplayPage | null;
   initialFilters: ProjectHealthQueryState;
   initialError: string | null;
-  headerIcon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 }) {
   const [data, setData] = useState(initialData);
   const [filters, setFilters] = useState(initialFilters);
@@ -159,7 +157,7 @@ export function ProjectHealthClientShell({
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-            <HeaderIcon aria-hidden={true} className="size-4" />
+            <ShieldAlert aria-hidden={true} className="size-4" />
           </span>
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-normal">项目风险</h1>
