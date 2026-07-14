@@ -189,6 +189,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     label: "系统",
     items: [
       { href: "/settings", label: "系统配置", icon: SlidersHorizontal },
+      {
+        href: "/settings/service-provider",
+        label: "服务商资料",
+        icon: Building2,
+        permission: "service_provider.profile.read",
+      },
     ],
   },
 ];
