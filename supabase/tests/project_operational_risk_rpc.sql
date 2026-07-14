@@ -8,12 +8,12 @@ values
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', 'project-health-b', '风险中心测试租户 B', 'active'),
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', 'project-health-empty', '风险中心空租户', 'active');
 
-insert into public.employees (id, tenant_id, name, role, status)
+insert into public.employees (id, tenant_id, name, status)
 values
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '项目经理甲', 'admin', 'active'),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '施工负责人乙', 'employee', 'active'),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '客服负责人丙', 'employee', 'active'),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', '其他租户员工', 'employee', 'active');
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '项目经理甲', 'active'),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '施工负责人乙', 'active'),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '客服负责人丙', 'active'),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', '其他租户员工', 'active');
 
 insert into public.customers (id, tenant_id, name, phone, source, status, owner_id)
 values
@@ -183,6 +183,10 @@ begin
     )
   ) then
     raise exception 'project health: invalid or cross-tenant project leaked';
+  end if;
+
+  if result::text like '%完整投诉内容不得出现在 evidence%' then
+    raise exception 'project health: service ticket content leaked';
   end if;
 end $$;
 
