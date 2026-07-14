@@ -2,9 +2,13 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
-import { ProjectOperationalRiskListQuerySchema } from "@/schema/project-health";
+import {
+  ProjectOperationalRiskAiSummaryBodySchema,
+  ProjectOperationalRiskListQuerySchema,
+} from "@/schema/project-health";
+import { projectOperationalRiskAiService } from "@/services/project-operational-risk-ai";
 import { projectOperationalRiskService } from "@/services/project-operational-risks";
-import { Get } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 
 class ProjectHealthController extends TenantBaseController {
@@ -53,6 +57,22 @@ class ProjectHealthController extends TenantBaseController {
     }
 
     return response;
+  }
+
+  @Post("/project-health/ai-summary")
+  async generateAiSummary(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const body = ProjectOperationalRiskAiSummaryBodySchema.safeParse(
+      request.body ?? {},
+    );
+    if (!body.success) throw Errors.fromZod(body.error);
+
+    const result = await projectOperationalRiskAiService.generate(
+      authContext,
+      body.data,
+    );
+
+    return ResponseHandler.success(result);
   }
 }
 

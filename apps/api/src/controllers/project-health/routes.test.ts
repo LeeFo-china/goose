@@ -29,9 +29,17 @@ const listRisks = mock(async () => ({
   },
   timing: { rpcMs: 12, serviceMs: 3 },
 }));
+const generate = mock(async () => ({
+  overview: "当前最需要处理的是湖畔花园的工作流逾期。",
+  priorities: [],
+  cautions: [],
+}));
 
 mock.module("@/services/project-operational-risks", () => ({
   projectOperationalRiskService: { listRisks },
+}));
+mock.module("@/services/project-operational-risk-ai", () => ({
+  projectOperationalRiskAiService: { generate },
 }));
 
 const authContext = {
@@ -81,6 +89,7 @@ function createRequest(query: unknown) {
 describe("ProjectHealthController routes", () => {
   beforeEach(() => {
     listRisks.mockClear();
+    generate.mockClear();
   });
 
   test("registers the project health route contract", async () => {
@@ -88,12 +97,14 @@ describe("ProjectHealthController routes", () => {
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
       get: (path: string) => routes.push({ method: "GET", path }),
+      post: (path: string) => routes.push({ method: "POST", path }),
     };
 
     controller.registerExtraRoutes(fastify as never);
 
     expect(routes).toEqual([
       { method: "GET", path: "/project-health/risks" },
+      { method: "POST", path: "/project-health/ai-summary" },
     ]);
   });
 
@@ -139,5 +150,36 @@ describe("ProjectHealthController routes", () => {
       code: "VALIDATION_ERROR",
     });
     expect(listRisks).not.toHaveBeenCalled();
+  });
+
+  test("passes tenant auth context and parsed body to ai summary service", async () => {
+    const controller = await getController();
+    const request = {
+      ...createRequest({}),
+      body: {
+        risk_type: "workflow_task_overdue",
+        severity: "danger",
+        keyword: "湖畔",
+      },
+    };
+
+    const response = await controller.generateAiSummary(
+      request as never,
+      {} as never,
+    );
+
+    expect(generate).toHaveBeenCalledWith(authContext, {
+      risk_type: "workflow_task_overdue",
+      severity: "danger",
+      keyword: "湖畔",
+    });
+    expect(response).toEqual({
+      data: {
+        overview: "当前最需要处理的是湖畔花园的工作流逾期。",
+        priorities: [],
+        cautions: [],
+      },
+      message: "success",
+    });
   });
 });
