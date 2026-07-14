@@ -189,6 +189,10 @@ const repository = {
   findInvoiceByTenantId: mock(
     async (): Promise<TenantSubscriptionInvoiceWithLedgerRecord | null> => null,
   ),
+  ensureSubscriptionInvoices: mock(async () => ({
+    created: 0,
+    scanned: 0,
+  })),
   listInvoicesDueForReminder: mock(async () => []),
   markInvoiceReminded: mock(async () => null),
   listInvoicesDueForCharge: mock(async () => []),

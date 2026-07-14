@@ -1,19 +1,9 @@
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase/index";
 
-export type TenantBillingSubscriptionStatus =
-  | "active"
-  | "past_due"
-  | "locked"
-  | "canceled";
+export type TenantBillingSubscriptionStatus = "active" | "past_due" | "locked" | "canceled";
 
-export type TenantSubscriptionInvoiceStatus =
-  | "upcoming"
-  | "reminded"
-  | "paid"
-  | "past_due"
-  | "failed"
-  | "void";
+export type TenantSubscriptionInvoiceStatus = "upcoming" | "reminded" | "paid" | "past_due" | "failed" | "void";
 
 export type TenantBillingSubscriptionRecord = {
   id: string;
@@ -103,6 +93,11 @@ export type BillingSubscriptionRpcResult = {
   [key: string]: unknown;
 };
 
+export type BillingEnsureSubscriptionInvoicesResult = {
+  created: number;
+  scanned: number;
+};
+
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_PAGE_SIZE = 100;
 export const MAX_PAGE_SIZE = 100;
@@ -177,6 +172,7 @@ type UntypedClient = {
   ) => UntypedTable;
   rpc: (
     functionName:
+      | "billing_ensure_subscription_invoices"
       | "billing_charge_subscription_invoice"
       | "billing_recover_subscription_after_recharge",
     args: Record<string, unknown>,
@@ -387,6 +383,34 @@ export class BillingSubscriptionRepository {
     return (data ?? []) as TenantSubscriptionInvoiceRecord[];
   }
 
+  async ensureSubscriptionInvoices(input: {
+    nowIso: string;
+    batchSize?: number;
+  }): Promise<BillingEnsureSubscriptionInvoicesResult> {
+    const batchSize = normalizeSubscriptionPageRange({
+      page: 1,
+      pageSize: input.batchSize,
+    }).pageSize;
+    const { data, error } = await this.rpc(
+      "billing_ensure_subscription_invoices",
+      {
+        p_now: input.nowIso,
+        p_limit: batchSize,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("补建订阅账单失败", error);
+    }
+
+    const payload = (data ?? {}) as Record<string, unknown>;
+
+    return {
+      created: toNonNegativeInteger(payload.created),
+      scanned: toNonNegativeInteger(payload.scanned),
+    };
+  }
+
   async listInvoicesDueForCharge(input: {
     nowIso: string;
     page?: number;
@@ -460,6 +484,14 @@ export class BillingSubscriptionRepository {
 
     return data as BillingSubscriptionRpcResult;
   }
+}
+
+function toNonNegativeInteger(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+
+  return Math.floor(value);
 }
 
 export const billingSubscriptionRepository = new BillingSubscriptionRepository();

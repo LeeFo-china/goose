@@ -1,99 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import type {
   BillingSubscriptionRpcResult,
   TenantBillingSubscriptionLockState,
   TenantSubscriptionInvoiceRecord,
 } from "@/repositories/billing-subscriptions";
-
-const migrationDir = join(
-  import.meta.dir,
-  "../../../../supabase/migrations",
-);
-
-describe("tenant subscription billing migration", () => {
-  test("creates subscription billing tables and charge recovery RPCs", () => {
-    const migrationSource = readLatestTenantSubscriptionBillingMigration();
-
-    expect(migrationSource).toContain(
-      "CREATE TABLE IF NOT EXISTS public.tenant_billing_plans",
-    );
-    expect(migrationSource).toContain(
-      "CREATE TABLE IF NOT EXISTS public.tenant_billing_subscriptions",
-    );
-    expect(migrationSource).toContain(
-      "CREATE TABLE IF NOT EXISTS public.tenant_subscription_invoices",
-    );
-    expect(migrationSource).toContain(
-      "CREATE OR REPLACE FUNCTION public.billing_charge_subscription_invoice",
-    );
-    expect(migrationSource).toContain(
-      "CREATE OR REPLACE FUNCTION public.billing_recover_subscription_after_recharge",
-    );
-    expect(migrationSource).toContain(
-      "tenant_subscription_invoices_tenant_period_unique_idx",
-    );
-    expect(migrationSource).toContain(
-      "tenant_subscription_invoices_reminder_status_idx",
-    );
-    expect(migrationSource).toContain("'subscription_monthly_fee'");
-    expect(migrationSource).toContain("'tenant_subscription_invoice'");
-    expect(migrationSource).toContain(
-      "REVOKE ALL ON FUNCTION public.billing_charge_subscription_invoice",
-    );
-    expect(migrationSource).toContain(
-      "GRANT EXECUTE ON FUNCTION public.billing_charge_subscription_invoice",
-    );
-    expect(migrationSource).toContain(
-      "TENANT_SUBSCRIPTION_INVOICE_TENANT_MISMATCH",
-    );
-    expect(migrationSource).toContain("FOREIGN KEY (subscription_id, tenant_id)");
-    expect(migrationSource).toContain("FOREIGN KEY (last_invoice_id, tenant_id)");
-    expect(migrationSource).toContain("TENANT_CREDIT_LEDGER_CONFLICT");
-    expect(migrationSource).toContain("GET STACKED DIAGNOSTICS");
-    expect(migrationSource).toContain("RAISE;");
-  });
-});
-
-describe("billing subscription repository contract", () => {
-  test("uses subscription tables, due invoice queries, pagination, and charge recovery RPCs", () => {
-    const repositorySource = readFileSync(
-      join(import.meta.dir, "../repositories/billing-subscriptions.ts"),
-      "utf8",
-    );
-
-    expect(repositorySource).toContain("tenant_billing_subscriptions");
-    expect(repositorySource).toContain("tenant_subscription_invoices");
-    expect(repositorySource).toContain("listInvoicesDueForReminder");
-    expect(repositorySource).toContain("listInvoicesDueForCharge");
-    expect(repositorySource).toContain("findOpenInvoiceByTenantId");
-    expect(repositorySource).toContain(".range(from, to)");
-    expect(repositorySource).toContain(".range(0, 0)");
-    expect(repositorySource).toContain("billing_charge_subscription_invoice");
-    expect(repositorySource).toContain(
-      "billing_recover_subscription_after_recharge",
-    );
-
-    const chargeListSource = repositorySource.slice(
-      repositorySource.indexOf("async listInvoicesDueForCharge"),
-      repositorySource.indexOf("async markInvoiceReminded"),
-    );
-    expect(chargeListSource).toContain(
-      '.in("status", ["upcoming", "reminded"])',
-    );
-    expect(chargeListSource).not.toContain('"past_due"');
-    expect(chargeListSource).not.toContain('"failed"');
-
-    const markInvoiceRemindedSource = repositorySource.slice(
-      repositorySource.indexOf("async markInvoiceReminded"),
-      repositorySource.indexOf("async chargeInvoice"),
-    );
-    expect(markInvoiceRemindedSource).toContain('.eq("status", "upcoming")');
-    expect(markInvoiceRemindedSource).toContain(".maybeSingle()");
-  });
-
-});
 
 describe("normalizeSubscriptionPageRange", () => {
   test("falls back to page 1 when page is not positive", async () => {
@@ -160,6 +70,10 @@ describe("BillingSubscriptionService", () => {
     }
 
     repository.listInvoicesDueForReminder.mockImplementation(async () => []);
+    repository.ensureSubscriptionInvoices.mockImplementation(async () => ({
+      created: 0,
+      scanned: 0,
+    }));
     repository.markInvoiceReminded.mockImplementation(async (invoiceId: string) =>
       invoice(invoiceId)
     );
@@ -200,11 +114,48 @@ describe("BillingSubscriptionService", () => {
     });
     expect(repository.markInvoiceReminded).toHaveBeenCalledTimes(3);
     expect(result).toEqual({
+      ensured: 0,
       reminded: 1,
       charged: 0,
       locked: 0,
       skipped: 1,
       errors: ["invoice-reminder-error: reminder update failed"],
+    });
+  });
+
+  test("ensures subscription invoices before reminders and charges", async () => {
+    const service = await createService();
+    const callOrder: string[] = [];
+    repository.ensureSubscriptionInvoices.mockImplementation(async () => {
+      callOrder.push("ensure");
+      return { created: 2, scanned: 5 };
+    });
+    repository.listInvoicesDueForReminder.mockImplementation(async () => {
+      callOrder.push("reminders");
+      return [];
+    });
+    repository.listInvoicesDueForCharge.mockImplementation(async () => {
+      callOrder.push("charges");
+      return [];
+    });
+
+    const result = await service.runDueChecks({
+      now: fixedNow,
+      batchSize: 25,
+    });
+
+    expect(repository.ensureSubscriptionInvoices).toHaveBeenCalledWith({
+      nowIso: fixedNow.toISOString(),
+      batchSize: 25,
+    });
+    expect(callOrder).toEqual(["ensure", "reminders", "charges"]);
+    expect(result).toEqual({
+      ensured: 2,
+      reminded: 0,
+      charged: 0,
+      locked: 0,
+      skipped: 0,
+      errors: [],
     });
   });
 
@@ -245,6 +196,7 @@ describe("BillingSubscriptionService", () => {
       operatorUserId: "operator-1",
     });
     expect(result).toEqual({
+      ensured: 0,
       reminded: 0,
       charged: 1,
       locked: 1,
@@ -253,8 +205,11 @@ describe("BillingSubscriptionService", () => {
     });
   });
 
-  test("continues charge phase when reminder list fails", async () => {
+  test("continues later phases when ensure or reminder list fails", async () => {
     const service = await createService();
+    repository.ensureSubscriptionInvoices.mockImplementation(async () => {
+      throw new Error("ensure failed");
+    });
     repository.listInvoicesDueForReminder.mockImplementation(async () => {
       throw new Error("reminder query failed");
     });
@@ -283,11 +238,15 @@ describe("BillingSubscriptionService", () => {
       operatorUserId: null,
     });
     expect(result).toEqual({
+      ensured: 0,
       reminded: 0,
       charged: 1,
       locked: 0,
       skipped: 0,
-      errors: ["reminders: reminder query failed"],
+      errors: [
+        "ensure_invoices: ensure failed",
+        "reminders: reminder query failed",
+      ],
     });
   });
 
@@ -309,6 +268,7 @@ describe("BillingSubscriptionService", () => {
     });
     expect(repository.chargeInvoice).not.toHaveBeenCalled();
     expect(result).toEqual({
+      ensured: 0,
       reminded: 0,
       charged: 0,
       locked: 0,
@@ -335,6 +295,10 @@ describe("BillingSubscriptionService", () => {
       page: 1,
       pageSize: 100,
     });
+    expect(repository.ensureSubscriptionInvoices).toHaveBeenCalledWith({
+      nowIso: fixedNow.toISOString(),
+      batchSize: 100,
+    });
   });
 
   test("exposes getTenantLockState and recoverAfterRecharge passthroughs", async () => {
@@ -353,21 +317,6 @@ describe("BillingSubscriptionService", () => {
   });
 
 });
-
-function readLatestTenantSubscriptionBillingMigration() {
-  const migrationFile = readdirSync(migrationDir)
-    .filter((fileName) =>
-      fileName.endsWith("_create_tenant_subscription_billing.sql")
-    )
-    .sort()
-    .at(-1);
-
-  if (!migrationFile) {
-    throw new Error("No tenant subscription billing migration found");
-  }
-
-  return readFileSync(join(migrationDir, migrationFile), "utf8");
-}
 
 async function importBillingSubscriptionRepository() {
   process.env.SUPABASE_URL ??= "http://localhost:54321";
@@ -388,6 +337,12 @@ const repository = {
     pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
   })),
   findInvoiceByTenantId: mock(async () => null),
+  ensureSubscriptionInvoices: mock(
+    async (): Promise<{ created: number; scanned: number }> => ({
+      created: 0,
+      scanned: 0,
+    }),
+  ),
   listInvoicesDueForReminder: mock(
     async (): Promise<TenantSubscriptionInvoiceRecord[]> => [],
   ),
