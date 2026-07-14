@@ -4,7 +4,13 @@ import type {
   TenantOnboardingSourceChannel,
   TenantServiceProviderProfileStatus,
 } from "@/schema/tenant-onboarding";
+import type { AdministrativeAreaRecord } from "@/repositories/administrative-areas";
 import type { Json } from "@/types/database";
+
+export type TenantOnboardingAdministrativeAreaRecord = Pick<
+  AdministrativeAreaRecord,
+  "adcode" | "level" | "parent_adcode"
+>;
 
 export type TenantOnboardingPartnerBrief = {
   id: string;
