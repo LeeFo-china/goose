@@ -289,6 +289,12 @@ export const UpdateTenantServiceProviderProfileSchema = z
     "至少需要提交一个更新字段",
   );
 
+const TenantServiceProviderAreaPrioritySchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(10000);
+
 const TenantServiceProviderAreaFieldsSchema = z
   .object({
     province: z.string().trim().min(1).max(40).nullable().optional(),
@@ -298,12 +304,13 @@ const TenantServiceProviderAreaFieldsSchema = z
     center_latitude: z.number().min(-90).max(90).nullable().optional(),
     center_longitude: z.number().min(-180).max(180).nullable().optional(),
     service_radius_km: z.number().positive().max(9999).nullable().optional(),
-    priority: z.number().int().min(0).max(10000).default(100),
+    priority: TenantServiceProviderAreaPrioritySchema,
   })
   .strict();
 
 export const CreateTenantServiceProviderAreaSchema =
   TenantServiceProviderAreaFieldsSchema.extend({
+    priority: TenantServiceProviderAreaPrioritySchema.default(100),
     version: PositiveVersionSchema,
   }).strict();
 

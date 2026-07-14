@@ -4,14 +4,29 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { PlatformAuditLogActionSchema } from "@/schema/platform-audit-logs";
 
 import {
+  AdministrativeRegionCodeSchema,
   ApproveTenantOnboardingApplicationSchema,
+  CreateTenantServiceProviderAreaSchema,
+  MobilePhoneSchema,
+  PublishTenantServiceProviderProfileSchema,
+  RejectTenantOnboardingApplicationSchema,
   RequestSupplementTenantOnboardingApplicationSchema,
+  RequestTenantOnboardingPartnerAssistSchema,
+  RetryTenantOnboardingNotificationSchema,
+  ReturnTenantServiceProviderProfileToDraftSchema,
   StartReviewTenantOnboardingApplicationSchema,
   SubmitTenantOnboardingApplicationSchema,
+  SubmitTenantServiceProviderProfileSchema,
   SupplementTenantOnboardingApplicationSchema,
+  SuspendTenantServiceProviderProfileSchema,
   TenantOnboardingApplicationListQuerySchema,
   TenantOnboardingApplicationStatusSchema,
+  TenantOnboardingPartnerAssistDecisionSchema,
   TenantOnboardingPartnerAssistStatusSchema,
+  UnifiedSocialCreditCodeSchema,
+  UpdateTenantServiceProviderAreaSchema,
+  UpdateTenantServiceProviderProfileSchema,
+  WithdrawTenantOnboardingApplicationSchema,
 } from "./tenant-onboarding";
 
 const validInput = {
@@ -69,11 +84,166 @@ const stableAuditActions = [
   "service_provider_suspend",
 ] as const;
 
+type VersionedMutationCase = {
+  name: string;
+  schema: {
+    safeParse: (input: unknown) => { success: boolean };
+  };
+  validInput: Record<string, unknown>;
+};
+
+const versionedMutations = [
+  {
+    name: "applicant supplement",
+    schema: SupplementTenantOnboardingApplicationSchema,
+    validInput: { version: 1, company_name: "晴天装饰" },
+  },
+  {
+    name: "withdraw",
+    schema: WithdrawTenantOnboardingApplicationSchema,
+    validInput: { version: 1 },
+  },
+  {
+    name: "start review",
+    schema: StartReviewTenantOnboardingApplicationSchema,
+    validInput: { version: 1 },
+  },
+  {
+    name: "request supplement",
+    schema: RequestSupplementTenantOnboardingApplicationSchema,
+    validInput: {
+      version: 1,
+      required_fields: ["business_license_file_id"],
+      remark: "请补充营业执照",
+    },
+  },
+  {
+    name: "request partner assist",
+    schema: RequestTenantOnboardingPartnerAssistSchema,
+    validInput: {
+      version: 1,
+      partner_id: "00000000-0000-4000-8000-000000000701",
+    },
+  },
+  {
+    name: "partner assist decision",
+    schema: TenantOnboardingPartnerAssistDecisionSchema,
+    validInput: { version: 1, decision: "verified" },
+  },
+  {
+    name: "approve",
+    schema: ApproveTenantOnboardingApplicationSchema,
+    validInput: {
+      version: 1,
+      attribution_mode: "unassigned",
+      review_remark: "主体信息核验通过",
+    },
+  },
+  {
+    name: "reject",
+    schema: RejectTenantOnboardingApplicationSchema,
+    validInput: { version: 1, review_remark: "主体信息不符合要求" },
+  },
+  {
+    name: "profile update",
+    schema: UpdateTenantServiceProviderProfileSchema,
+    validInput: { version: 1, public_name: "晴天装饰" },
+  },
+  {
+    name: "area update",
+    schema: UpdateTenantServiceProviderAreaSchema,
+    validInput: { version: 1, city: "信阳市" },
+  },
+  {
+    name: "submit profile review",
+    schema: SubmitTenantServiceProviderProfileSchema,
+    validInput: { version: 1 },
+  },
+  {
+    name: "publish profile",
+    schema: PublishTenantServiceProviderProfileSchema,
+    validInput: { version: 1, review_remark: "公开信息核验通过" },
+  },
+  {
+    name: "return profile to draft",
+    schema: ReturnTenantServiceProviderProfileToDraftSchema,
+    validInput: { version: 1, review_remark: "请修改公开信息" },
+  },
+  {
+    name: "suspend profile",
+    schema: SuspendTenantServiceProviderProfileSchema,
+    validInput: { version: 1, review_remark: "暂停公开展示" },
+  },
+] satisfies readonly VersionedMutationCase[];
+
 describe("tenant onboarding schemas", () => {
   test("accepts a complete local-services applicant payload", () => {
     const result = SubmitTenantOnboardingApplicationSchema.safeParse(validInput);
 
     expect(result.success).toBe(true);
+  });
+
+  test("normalizes valid credit codes and rejects invalid forms", () => {
+    const normalized = UnifiedSocialCreditCodeSchema.safeParse(
+      " 91411525ma9g000000 ",
+    );
+
+    expect(normalized.success).toBe(true);
+    if (normalized.success) {
+      expect(normalized.data).toBe("91411525MA9G000000");
+    }
+    for (const value of ["91411525MA9I000000", "91411525MA9G00000"]) {
+      expect(UnifiedSocialCreditCodeSchema.safeParse(value).success).toBe(false);
+    }
+  });
+
+  test("rejects invalid mobile phones and administrative region codes", () => {
+    for (const value of ["12900139000", "1390013900", "1390013900A"]) {
+      expect(MobilePhoneSchema.safeParse(value).success).toBe(false);
+    }
+    for (const value of ["41152", "4115250", "41152A"]) {
+      expect(AdministrativeRegionCodeSchema.safeParse(value).success).toBe(false);
+    }
+
+    expect(SubmitTenantOnboardingApplicationSchema.safeParse({
+      ...validInput,
+      company_location: { ...validInput.company_location, region_code: "41152A" },
+    }).success).toBe(false);
+    expect(SubmitTenantOnboardingApplicationSchema.safeParse({
+      ...validInput,
+      service_region_codes: ["41152A"],
+    }).success).toBe(false);
+  });
+
+  test("rejects out-of-range company coordinates", () => {
+    const invalidCoordinates = [
+      ["latitude", 90.001],
+      ["latitude", -90.001],
+      ["longitude", 180.001],
+      ["longitude", -180.001],
+    ] as const;
+
+    for (const [field, value] of invalidCoordinates) {
+      expect(SubmitTenantOnboardingApplicationSchema.safeParse({
+        ...validInput,
+        company_location: {
+          ...validInput.company_location,
+          [field]: value,
+        },
+      }).success).toBe(false);
+    }
+  });
+
+  test("rejects unknown and camelCase submission fields", () => {
+    for (const extra of [
+      { unexpected_field: true },
+      { companyName: "晴天装饰" },
+    ]) {
+      expect(SubmitTenantOnboardingApplicationSchema.safeParse({
+        ...validInput,
+        ...extra,
+      }).success).toBe(false);
+    }
   });
 
   test("accepts an optional normalized partner invite code", () => {
@@ -142,6 +312,7 @@ describe("tenant onboarding schemas", () => {
     for (const status of statuses) {
       expect(TenantOnboardingApplicationStatusSchema.safeParse(status).success).toBe(true);
     }
+    expect(TenantOnboardingApplicationStatusSchema.safeParse("pending").success).toBe(false);
   });
 
   test("accepts all partner assist statuses", () => {
@@ -157,6 +328,7 @@ describe("tenant onboarding schemas", () => {
     for (const status of statuses) {
       expect(TenantOnboardingPartnerAssistStatusSchema.safeParse(status).success).toBe(true);
     }
+    expect(TenantOnboardingPartnerAssistStatusSchema.safeParse("approved").success).toBe(false);
   });
 
   test("requires a positive optimistic version on approval", () => {
@@ -183,19 +355,61 @@ describe("tenant onboarding schemas", () => {
     });
 
     expect(result.success).toBe(false);
+    expect(ApproveTenantOnboardingApplicationSchema.safeParse({
+      version: 3,
+      attribution_mode: "partner",
+      final_partner_id: "not-a-uuid",
+      review_remark: "主体信息核验通过",
+    }).success).toBe(false);
   });
 
-  test("requires positive versions on supplement and review mutations", () => {
-    expect(StartReviewTenantOnboardingApplicationSchema.safeParse({ version: 1 }).success).toBe(true);
-    expect(StartReviewTenantOnboardingApplicationSchema.safeParse({ version: 0 }).success).toBe(false);
-    expect(SupplementTenantOnboardingApplicationSchema.safeParse({
-      version: 2,
-      company_name: "固始晴天装饰工程有限公司",
-    }).success).toBe(true);
-    expect(SupplementTenantOnboardingApplicationSchema.safeParse({
-      version: -1,
-      company_name: "固始晴天装饰工程有限公司",
-    }).success).toBe(false);
+  for (const mutation of versionedMutations) {
+    test(`${mutation.name} requires a positive integer version`, () => {
+      const withoutVersion: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(mutation.validInput)) {
+        if (key !== "version") withoutVersion[key] = value;
+      }
+
+      expect(mutation.schema.safeParse(mutation.validInput).success).toBe(true);
+      expect(mutation.schema.safeParse(withoutVersion).success).toBe(false);
+      for (const version of [0, -1, 1.5]) {
+        expect(mutation.schema.safeParse({
+          ...mutation.validInput,
+          version,
+        }).success).toBe(false);
+      }
+    });
+  }
+
+  test("keeps notification retry unversioned because it changes delivery only", () => {
+    expect(RetryTenantOnboardingNotificationSchema.safeParse({}).success).toBe(true);
+    expect(RetryTenantOnboardingNotificationSchema.safeParse({ version: 1 }).success).toBe(false);
+  });
+
+  test("rejects area updates without caller-supplied business fields", () => {
+    expect(UpdateTenantServiceProviderAreaSchema.safeParse({ version: 1 }).success).toBe(false);
+
+    const result = UpdateTenantServiceProviderAreaSchema.safeParse({
+      version: 1,
+      city: "信阳市",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty("priority");
+    }
+  });
+
+  test("keeps the priority default scoped to area creation", () => {
+    const result = CreateTenantServiceProviderAreaSchema.safeParse({
+      version: 1,
+      city: "信阳市",
+      adcode: "411500",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.priority).toBe(100);
+    }
   });
 
   test("requires unique supplement fields and a nonblank remark", () => {
@@ -219,6 +433,16 @@ describe("tenant onboarding schemas", () => {
       required_fields: ["company_name"],
       remark: " ",
     }).success).toBe(false);
+  });
+
+  test("rejects blank or oversized approval remarks", () => {
+    for (const review_remark of [" ", "验".repeat(501)]) {
+      expect(ApproveTenantOnboardingApplicationSchema.safeParse({
+        version: 3,
+        attribution_mode: "unassigned",
+        review_remark,
+      }).success).toBe(false);
+    }
   });
 
   test("coerces and defaults paginated list query values", () => {
