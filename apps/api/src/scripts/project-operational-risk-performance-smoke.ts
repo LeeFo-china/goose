@@ -62,6 +62,14 @@ function readOptionalEnv(env: Env, name: string): string | null {
   return value || null;
 }
 
+function readFirstOptionalEnv(env: Env, names: readonly string[]): string | null {
+  for (const name of names) {
+    const value = readOptionalEnv(env, name);
+    if (value) return value;
+  }
+  return null;
+}
+
 function parseIterations(value: string | undefined): number {
   const parsed = Number.parseInt(value || "20", 10);
   if (!Number.isFinite(parsed) || parsed < 1) return 20;
@@ -113,7 +121,10 @@ export function normalizeSmokeConfig(env: Env): ProjectOperationalRiskSmokeConfi
     supabaseUrl: requireEnv(env, "SUPABASE_URL"),
     supabaseServiceRoleKey: requireEnv(env, "SUPABASE_SERVICE_ROLE_KEY"),
     apiUrl: readOptionalEnv(env, "PROJECT_HEALTH_API_URL"),
-    adminToken: readOptionalEnv(env, "PROJECT_HEALTH_ADMIN_TOKEN"),
+    adminToken: readFirstOptionalEnv(env, [
+      "PROJECT_HEALTH_ADMIN_TOKEN",
+      "ADMIN_TOKEN",
+    ]),
   };
 }
 

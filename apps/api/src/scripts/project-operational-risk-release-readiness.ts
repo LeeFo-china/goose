@@ -39,6 +39,10 @@ const API_SMOKE_ENV = [
   "PROJECT_HEALTH_API_URL",
   "PROJECT_HEALTH_ADMIN_TOKEN",
 ] as const;
+const API_SMOKE_TOKEN_ENV = [
+  "PROJECT_HEALTH_ADMIN_TOKEN",
+  "ADMIN_TOKEN",
+] as const;
 const REQUIRED_LOCAL_ARTIFACTS = [
   "supabase/migrations/20260714180000_project_operational_risk_rpc.sql",
   "supabase/tests/project_operational_risk_rpc.sql",
@@ -55,6 +59,10 @@ function missingEnvNames(
   names: readonly string[],
 ): string[] {
   return names.filter((name) => !env[name]?.trim());
+}
+
+function hasAnyEnv(env: Env, names: readonly string[]): boolean {
+  return names.some((name) => Boolean(env[name]?.trim()));
 }
 
 function formatMissingEnv(names: readonly string[]): string {
@@ -111,13 +119,17 @@ export function buildProjectOperationalRiskReleaseReadinessReport(
     completedChecks.push("rpc_performance_smoke_configured");
   }
 
-  const missingApiEnv = missingEnvNames(env, API_SMOKE_ENV);
+  const missingApiEnv = missingEnvNames(env, API_SMOKE_ENV).filter(
+    (name) =>
+      name !== "PROJECT_HEALTH_ADMIN_TOKEN" ||
+      !hasAnyEnv(env, API_SMOKE_TOKEN_ENV),
+  );
   if (missingApiEnv.length > 0) {
     blockers.push({
       check: "api_smoke_configured",
-      detail: formatMissingEnv(missingApiEnv),
+      detail: formatMissingApiEnv(missingApiEnv),
       next_action:
-        "Configure PROJECT_HEALTH_API_URL and PROJECT_HEALTH_ADMIN_TOKEN, then run the dev API smoke before release.",
+        "Configure PROJECT_HEALTH_API_URL and PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN, then run the dev API smoke before release.",
     });
   } else {
     completedChecks.push("api_smoke_configured");
@@ -131,6 +143,16 @@ export function buildProjectOperationalRiskReleaseReadinessReport(
     blockers,
     read_only_commands: READ_ONLY_COMMANDS,
   };
+}
+
+function formatMissingApiEnv(names: readonly string[]): string {
+  return formatMissingEnv(
+    names.map((name) =>
+      name === "PROJECT_HEALTH_ADMIN_TOKEN"
+        ? "PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN"
+        : name
+    ),
+  );
 }
 
 function resolveStatus(
