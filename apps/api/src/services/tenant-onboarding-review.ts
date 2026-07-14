@@ -26,6 +26,7 @@ import type { AuthContext } from "@/services/authorization";
 import { resolveSignedStoredFileUrl } from "@/services/files/file-url-resolver";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
+  isTenantOnboardingPartnerEligibleForDecision,
   TenantOnboardingRegionMatchService,
 } from "@/services/tenant-onboarding-region-match";
 import { tenantOnboardingNotificationsService } from "@/services/tenant-onboarding-notifications";
@@ -201,7 +202,7 @@ export class TenantOnboardingReviewService {
       throw stateConflictError();
     }
     const resolution = await this.resolveFreshPartner(application);
-    if (!resolution.partnerIds.some((partnerId) => partnerId === input.partner_id)) {
+    if (!isTenantOnboardingPartnerEligibleForDecision(resolution, input.partner_id)) {
       throw partnerUnavailableError();
     }
     const mutation = this.requireMutation(
@@ -397,7 +398,10 @@ export class TenantOnboardingReviewService {
     }
     if (
       !input.final_partner_id ||
-      !resolution.partnerIds.some((partnerId) => partnerId === input.final_partner_id)
+      !isTenantOnboardingPartnerEligibleForDecision(
+        resolution,
+        input.final_partner_id,
+      )
     ) {
       throw partnerUnavailableError();
     }

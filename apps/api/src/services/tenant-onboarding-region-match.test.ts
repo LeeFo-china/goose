@@ -2,13 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import type { TenantOnboardingPartnerBrief } from "@/repositories/tenant-onboarding-types";
 import {
+  isTenantOnboardingPartnerEligibleForDecision,
   TenantOnboardingRegionMatchService,
   type TenantOnboardingPartnerResolution,
 } from "@/services/tenant-onboarding-region-match";
 
-type AreaRecord = {
-  adcode: string; level: "province" | "city" | "district"; parent_adcode: string | null;
-};
+type AreaRecord = { adcode: string; level: "province" | "city" | "district"; parent_adcode: string | null };
 
 type ResolverFixtureOptions = {
   areas: AreaRecord[];
@@ -162,15 +161,16 @@ describe("TenantOnboardingRegionMatchService", () => {
 
   test("fails closed when the bounded regional candidate result is truncated", async () => {
     const { overlapLimits, overlapQueries, resolver } = createResolver({
-      areas: xinyangAreas,
+      areas: xinyangAreas, partnersTruncated: true,
       partners: [partner("partner-apparently-best", ["411525"])],
-      partnersTruncated: true,
     });
-
-    await expect(resolve(resolver, ["411525", "411525"]))
-      .resolves.toEqual(ambiguousResolution(["partner-apparently-best"]));
+    const result = await resolve(resolver, ["411525", "411525"]);
+    expect(result).toMatchObject({
+      kind: "ambiguous", partnerIds: ["partner-apparently-best"],
+      reason: "candidate_limit",
+    });
+    expect(isTenantOnboardingPartnerEligibleForDecision(result, "partner-apparently-best")).toBe(false);
     expect(overlapQueries).toEqual([["410000", "411500", "411525"]]);
-    expect(overlapQueries).toHaveLength(1);
     const queriedCodes = overlapQueries[0] ?? [];
     expect(new Set(queriedCodes).size).toBe(queriedCodes.length);
     expect(overlapLimits).toEqual([100]);

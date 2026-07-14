@@ -40,8 +40,16 @@ export type TenantOnboardingPartnerResolution =
       kind: "ambiguous";
       partnerIds: string[];
       selectedPartner: null;
-      reason: "same_specificity";
+      reason: "same_specificity" | "candidate_limit";
     };
+
+export function isTenantOnboardingPartnerEligibleForDecision(
+  resolution: TenantOnboardingPartnerResolution,
+  partnerId: string,
+) {
+  return resolution.reason !== "candidate_limit" &&
+    resolution.partnerIds.some((candidateId) => candidateId === partnerId);
+}
 
 export type TenantOnboardingAdministrativeAreaRepositoryPort = {
   /** Loads active records for these exact codes. The resolver batches at most three levels. */
@@ -394,7 +402,7 @@ export class TenantOnboardingRegionMatchService {
       kind: "ambiguous",
       partnerIds,
       selectedPartner: null,
-      reason: "same_specificity",
+      reason: "candidate_limit",
     };
   }
 

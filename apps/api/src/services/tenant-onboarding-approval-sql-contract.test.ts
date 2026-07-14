@@ -177,10 +177,17 @@ describe("tenant-onboarding atomic approval migration", () => {
     expect(body).toContain("Approval is a low-frequency background transaction");
     expect(body).toContain("LOCK TABLE public.administrative_areas IN SHARE MODE");
     expect(body).toContain("LOCK TABLE public.platform_partners IN SHARE MODE");
+    expect(body).toContain(
+      "LOCK TABLE public.platform_partner_invite_codes IN SHARE MODE",
+    );
     expect(body.indexOf("LOCK TABLE public.administrative_areas IN SHARE MODE"))
       .toBeLessThan(body.indexOf("public.resolve_tenant_onboarding_region_paths"));
     expect(body.indexOf("LOCK TABLE public.platform_partners IN SHARE MODE"))
       .toBeLessThan(body.indexOf("bounded_partners AS"));
+    expect(body.indexOf("LOCK TABLE public.platform_partners IN SHARE MODE"))
+      .toBeLessThan(body.indexOf(
+        "LOCK TABLE public.platform_partner_invite_codes IN SHARE MODE",
+      ));
   });
 
   test("serializes every active employee phone mutation on the approval lock key", () => {
@@ -249,6 +256,24 @@ describe("tenant-onboarding atomic approval migration", () => {
     expect(body).toContain("'partner_unavailable'");
     expect(body).toContain("partner.id = p_final_partner_id");
     expect(body).not.toMatch(/SELECT\s+partner\.id\s+INTO\s+v_final_partner_id/i);
+  });
+
+  test("recomputes the authoritative eligible set for explicit partner approval", () => {
+    const body = functionBody(sql(), "approve_tenant_onboarding_application");
+    expect(body).toContain("v_fresh_invite_partner_id");
+    expect(body).toContain("v_fresh_eligible_partner_ids");
+    expect(body).toContain("v_region_best_partner_ids");
+    expect(body.indexOf("INTO v_ancestor_codes"))
+      .toBeLessThan(body.indexOf("INTO v_fresh_invite_partner_id"));
+    expect(body).toMatch(
+      /v_fresh_invite_partner_id IS NOT NULL[\s\S]*?ARRAY\[v_fresh_invite_partner_id\]/,
+    );
+    expect(body).toMatch(
+      /v_candidate_count > 100[\s\S]*?'partner_ambiguous'/,
+    );
+    expect(body).toMatch(
+      /p_attribution_source_type = 'platform_manual'[\s\S]*?p_final_partner_id = ANY \(v_fresh_eligible_partner_ids\)/,
+    );
   });
 
   test("validates slug and attribution then performs every conversion write atomically", () => {

@@ -48,46 +48,26 @@ const auth = (input: {
 });
 
 const application: TenantOnboardingApplicationRecord = {
-  id: APPLICATION_ID,
-  application_no: "ZQ-20260714-A1B2C3",
-  visitor_id: "visitor-1",
-  visitor_context_id: null,
-  company_name: "晴天装饰",
+  id: APPLICATION_ID, application_no: "ZQ-20260714-A1B2C3",
+  visitor_id: "visitor-1", visitor_context_id: null, company_name: "晴天装饰",
   unified_social_credit_code: "91411525MA9G000000",
-  business_license_file_id: FILE_ID,
-  admin_name: "负责人",
-  admin_phone: "13900139000",
-  address_province: "河南省",
-  address_city: "信阳市",
-  address_district: "固始县",
-  address_region_code: "411525",
-  address: "详细地址",
-  address_latitude: null,
-  address_longitude: null,
-  service_region_codes: ["411525"],
-  source_channel: "local_services",
-  invite_code_id: null,
-  candidate_partner_id: PARTNER_ID,
-  candidate_match_reason: "region",
-  candidate_snapshot: {},
-  final_partner_id: null,
-  attribution_source_type: null,
-  status: "submitted",
-  partner_assist_status: "pending",
+  business_license_file_id: FILE_ID, admin_name: "负责人",
+  admin_phone: "13900139000", address_province: "河南省",
+  address_city: "信阳市", address_district: "固始县",
+  address_region_code: "411525", address: "详细地址",
+  address_latitude: null, address_longitude: null,
+  service_region_codes: ["411525"], source_channel: "local_services",
+  invite_code_id: null, candidate_partner_id: PARTNER_ID,
+  candidate_match_reason: "region", candidate_snapshot: {},
+  final_partner_id: null, attribution_source_type: null,
+  status: "submitted", partner_assist_status: "pending",
   partner_assist_requested_at: NOW,
   partner_assist_due_at: "2026-07-16T04:00:00.000Z",
-  version: 1,
-  converted_tenant_id: null,
-  reviewed_by_employee_id: null,
-  reviewed_at: null,
-  review_remark: null,
-  privacy_policy_version: "2026-07",
-  onboarding_terms_version: "2026-07",
-  consented_at: NOW,
-  idempotency_key: "intent-1",
-  withdrawn_at: null,
-  created_at: NOW,
-  updated_at: NOW,
+  version: 1, converted_tenant_id: null, reviewed_by_employee_id: null,
+  reviewed_at: null, review_remark: null, privacy_policy_version: "2026-07",
+  onboarding_terms_version: "2026-07", consented_at: NOW,
+  idempotency_key: "intent-1", withdrawn_at: null,
+  created_at: NOW, updated_at: NOW,
 };
 
 const failedDelivery: TenantOnboardingNotificationDeliveryRecord = {
@@ -207,6 +187,10 @@ const resolution = {
     region_codes: ["411525"],
   },
   reason: "region" as const,
+};
+const candidateLimitResolution: TenantOnboardingPartnerResolution = {
+  kind: "ambiguous", partnerIds: [PARTNER_ID], selectedPartner: null,
+  reason: "candidate_limit",
 };
 const regionResolver = {
   resolve: mock(async (): Promise<TenantOnboardingPartnerResolution> => resolution),
@@ -358,6 +342,20 @@ describe("TenantOnboardingReviewService", () => {
         candidateSnapshot: expect.objectContaining({ partner_id: PARTNER_ID }),
       }),
     );
+  });
+
+  test("never treats candidate-limit diagnostics as explicit eligibility", async () => {
+    regionResolver.resolve.mockImplementation(async () => candidateLimitResolution);
+    const service = await createService();
+    await expect(service.requestPartnerAssist(auth(), APPLICATION_ID, {
+      version: 1, partner_id: PARTNER_ID,
+    })).rejects.toMatchObject({ code: "TENANT_ONBOARDING_STATE_CONFLICT" });
+    await expect(service.approve(auth(), APPLICATION_ID, {
+      version: 1, attribution_mode: "partner", final_partner_id: PARTNER_ID,
+      review_remark: "审核通过",
+    })).rejects.toMatchObject({ code: "TENANT_ONBOARDING_STATE_CONFLICT" });
+    expect(repository.requestPartnerAssistAtomic).not.toHaveBeenCalled();
+    expect(approvalRepository.approveApplication).not.toHaveBeenCalled();
   });
 
   test("rejects terminally, expires assist, and does not roll back for notification failure", async () => {

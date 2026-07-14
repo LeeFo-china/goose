@@ -668,6 +668,9 @@ DECLARE
   v_candidate_count integer := 0;
   v_best_tie_count integer := 0;
   v_best_partner_id uuid;
+  v_fresh_invite_partner_id uuid;
+  v_fresh_eligible_partner_ids uuid[] := '{}'::uuid[];
+  v_region_best_partner_ids uuid[] := '{}'::uuid[];
   v_requested_region_count integer := 0;
   v_resolved_region_count integer := 0;
   v_idempotent_binding_count integer := 0;
@@ -911,6 +914,7 @@ BEGIN
   -- hierarchy and partner candidate snapshot stable until conversion finishes.
   LOCK TABLE public.administrative_areas IN SHARE MODE;
   LOCK TABLE public.platform_partners IN SHARE MODE;
+  LOCK TABLE public.platform_partner_invite_codes IN SHARE MODE;
 
   SELECT pg_catalog.count(*)::integer
   INTO v_requested_region_count
@@ -941,6 +945,18 @@ BEGIN
   FROM public.resolve_tenant_onboarding_region_paths(
     v_application.service_region_codes
   ) AS paths;
+
+  SELECT partner.id
+  INTO v_fresh_invite_partner_id
+  FROM public.platform_partner_invite_codes AS invite
+  JOIN public.platform_partners AS partner
+    ON partner.id = invite.partner_id
+   AND partner.status = 'active'
+  WHERE invite.id = v_application.invite_code_id
+    AND invite.status = 'active'
+    AND (invite.expires_at IS NULL OR invite.expires_at > pg_catalog.now())
+    AND partner.region_codes && v_ancestor_codes
+  LIMIT 1;
 
   WITH region_paths AS (
     SELECT
@@ -1021,8 +1037,28 @@ BEGIN
         AND score.province_matches = best.province_matches
       ORDER BY score.partner_id ASC
       LIMIT 1
+    ),
+    COALESCE(
+      (
+        SELECT pg_catalog.array_agg(
+          score.partner_id ORDER BY score.partner_id
+        )
+        FROM partner_scores AS score
+        CROSS JOIN best_score AS best
+        WHERE score.district_matches = best.district_matches
+          AND score.city_matches = best.city_matches
+          AND score.province_matches = best.province_matches
+      ),
+      '{}'::uuid[]
     )
-  INTO v_candidate_count, v_best_tie_count, v_best_partner_id;
+  INTO v_candidate_count, v_best_tie_count, v_best_partner_id,
+    v_region_best_partner_ids;
+
+  IF v_fresh_invite_partner_id IS NOT NULL THEN
+    v_fresh_eligible_partner_ids := ARRAY[v_fresh_invite_partner_id];
+  ELSIF v_candidate_count <= 100 THEN
+    v_fresh_eligible_partner_ids := v_region_best_partner_ids;
+  END IF;
 
   IF p_final_partner_id IS NOT NULL THEN
     PERFORM partner.id
@@ -1035,25 +1071,31 @@ BEGIN
       RETURN pg_catalog.jsonb_build_object('status', 'partner_unavailable');
     END IF;
 
+    IF (
+      v_fresh_invite_partner_id IS NULL
+      AND v_candidate_count > 100
+    ) OR (
+      p_attribution_source_type = 'region_auto_assignment'
+      AND pg_catalog.cardinality(v_fresh_eligible_partner_ids) > 1
+    ) THEN
+      RETURN pg_catalog.jsonb_build_object('status', 'partner_ambiguous');
+    END IF;
+
     IF p_attribution_source_type = 'invite_code' THEN
-      PERFORM invite.id
-      FROM public.platform_partner_invite_codes AS invite
-      WHERE invite.id = v_application.invite_code_id
-        AND invite.partner_id = p_final_partner_id
-        AND invite.status = 'active'
-        AND (
-          invite.expires_at IS NULL
-          OR invite.expires_at > pg_catalog.now()
-        )
-      FOR SHARE;
-      IF NOT FOUND THEN
+      IF v_fresh_invite_partner_id IS DISTINCT FROM p_final_partner_id THEN
         RETURN pg_catalog.jsonb_build_object('status', 'partner_unavailable');
       END IF;
     ELSIF p_attribution_source_type = 'region_auto_assignment' THEN
-      IF v_candidate_count > 100 OR v_best_tie_count > 1 THEN
-        RETURN pg_catalog.jsonb_build_object('status', 'partner_ambiguous');
+      IF v_fresh_invite_partner_id IS NOT NULL
+        OR v_best_tie_count <> 1
+        OR v_best_partner_id <> p_final_partner_id
+      THEN
+        RETURN pg_catalog.jsonb_build_object('status', 'partner_unavailable');
       END IF;
-      IF v_best_tie_count <> 1 OR v_best_partner_id <> p_final_partner_id THEN
+    ELSIF p_attribution_source_type = 'platform_manual' THEN
+      IF NOT (
+        p_final_partner_id = ANY (v_fresh_eligible_partner_ids)
+      ) THEN
         RETURN pg_catalog.jsonb_build_object('status', 'partner_unavailable');
       END IF;
     END IF;
