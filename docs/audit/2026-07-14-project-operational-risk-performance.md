@@ -33,7 +33,7 @@ pnpm --dir apps/api run project-health:release-readiness
 
 Expected:
 
-- 命令会按 `apps/api` 工作目录尝试加载 `.env`，`.env` 不存在时仍可运行并报告缺失变量；
+- 命令会按 `apps/api` 工作目录尝试加载 `.env` 和 `.env.local`，文件不存在时仍可运行并报告缺失变量；
 - 缺少本地 artifact 时退出 1，`status` 为 `missing_artifact`；
 - 缺少配置时退出 1，`status` 为 `missing_env` 或 `api_smoke_skipped`；
 - 所有发布验证前置条件齐全时退出 0，`status` 为 `ready`；

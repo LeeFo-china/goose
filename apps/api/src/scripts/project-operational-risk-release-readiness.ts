@@ -47,8 +47,8 @@ const REQUIRED_LOCAL_ARTIFACTS = [
 
 const READ_ONLY_COMMANDS = [
   'supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"',
-  "cd apps/api && PROJECT_HEALTH_TENANT_ID=\"$PROJECT_HEALTH_TENANT_ID\" bun --env-file=.env src/scripts/project-operational-risk-performance-smoke.ts",
-  "cd apps/api && PROJECT_HEALTH_TENANT_ID=\"$PROJECT_HEALTH_TENANT_ID\" PROJECT_HEALTH_API_URL=\"$PROJECT_HEALTH_API_URL\" PROJECT_HEALTH_ADMIN_TOKEN=\"$PROJECT_HEALTH_ADMIN_TOKEN\" bun --env-file=.env src/scripts/project-operational-risk-performance-smoke.ts",
+  "cd apps/api && PROJECT_HEALTH_TENANT_ID=\"$PROJECT_HEALTH_TENANT_ID\" bun --env-file=.env --env-file=.env.local src/scripts/project-operational-risk-performance-smoke.ts",
+  "cd apps/api && PROJECT_HEALTH_TENANT_ID=\"$PROJECT_HEALTH_TENANT_ID\" PROJECT_HEALTH_API_URL=\"$PROJECT_HEALTH_API_URL\" PROJECT_HEALTH_ADMIN_TOKEN=\"$PROJECT_HEALTH_ADMIN_TOKEN\" bun --env-file=.env --env-file=.env.local src/scripts/project-operational-risk-performance-smoke.ts",
 ];
 
 function missingEnvNames(
