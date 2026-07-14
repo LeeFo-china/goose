@@ -32,4 +32,18 @@ describe("tenant onboarding license object paths", () => {
     expect(first).not.toContain(firstVisitorId);
     expect(second).not.toContain(secondVisitorId);
   });
+
+  test("derives a private license extension from MIME instead of filename", async () => {
+    const { buildCosObjectKey } = await import("./paths");
+    const objectKey = buildCosObjectKey.call({}, {
+      filename: "deceptive.exe",
+      mimetype: "image/png",
+      scene: "tenant_onboarding_license",
+      tenantId: null,
+      visitorId: "visitor-1",
+    });
+
+    expect(objectKey).toEndWith(".png");
+    expect(objectKey).not.toContain(".exe");
+  });
 });

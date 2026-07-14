@@ -396,6 +396,7 @@ describe("UploadController tenant onboarding license direct upload", () => {
         mimetype: "image/jpeg",
         size_bytes: 100,
         object_key: objectKey,
+        upload_intent: "v1.private-upload-intent.signature",
       }),
       {} as never,
     );
@@ -405,6 +406,7 @@ describe("UploadController tenant onboarding license direct upload", () => {
       objectKey,
       visitorId,
       visibility: "private",
+      uploadIntent: "v1.private-upload-intent.signature",
     }));
     expect(response.data).toEqual({
       file_id: "00000000-0000-4000-8000-000000000003",
@@ -412,6 +414,24 @@ describe("UploadController tenant onboarding license direct upload", () => {
     });
     expect(response.data).not.toHaveProperty("public_url");
     expect(response.data).not.toHaveProperty("url");
+  });
+
+  test("requires an upload intent to complete a private license", async () => {
+    const ownerHash = createHash("sha256").update(visitorId).digest("hex");
+    const objectKey = `private/tenant-onboarding-license/visitors/${ownerHash}/file.jpg`;
+    const { default: controller } = await import("./index");
+
+    await expect(controller.completeDirectCosUpload(
+      buildVisitorRequest({
+        scene: "tenant_onboarding_license",
+        filename: "license.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 100,
+        object_key: objectKey,
+      }),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR" });
+    expect(completeDirectUpload).not.toHaveBeenCalled();
   });
 
   test("prevents another visitor from completing the owner's object key", async () => {
@@ -426,6 +446,7 @@ describe("UploadController tenant onboarding license direct upload", () => {
         mimetype: "image/jpeg",
         size_bytes: 100,
         object_key: objectKey,
+        upload_intent: "v1.private-upload-intent.signature",
       }, otherVisitorId),
       {} as never,
     )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });

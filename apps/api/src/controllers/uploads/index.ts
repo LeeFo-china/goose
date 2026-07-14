@@ -76,6 +76,15 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
     .refine((value) => !value.startsWith("/"), "对象路径不合法")
     .refine((value) => !value.includes("\\"), "对象路径不合法"),
   etag: z.string().trim().max(200, "ETag 过长").optional(),
+  upload_intent: z.string().trim().min(1).max(4096, "上传凭证过长").optional(),
+}).superRefine((value, context) => {
+  if (value.scene === "tenant_onboarding_license" && !value.upload_intent) {
+    context.addIssue({
+      code: "custom",
+      path: ["upload_intent"],
+      message: "缺少私有上传凭证",
+    });
+  }
 });
 
 const UploadPublicUrlQuerySchema = z.object({
@@ -226,6 +235,7 @@ class UploadController extends BaseController {
       visibility: PRIVATE_DIRECT_UPLOAD_SCENES.has(scene) ? "private" : "public",
       objectKey: result.data.object_key,
       etag: result.data.etag,
+      uploadIntent: result.data.upload_intent,
     });
     logUploadImagesTiming("direct-complete-total", requestStartedAt, {
       request_id: request.id,

@@ -50,7 +50,12 @@ export function buildCosObjectKey(this: any, input: Pick<
   const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
-  const extension = getFileExtension(input);
+  const extension = getFileExtension({
+    filename: input.scene === "tenant_onboarding_license"
+      ? undefined
+      : input.filename,
+    mimetype: input.mimetype,
+  });
   if (input.scene === "tenant_onboarding_license") {
     return `${buildTenantOnboardingLicenseVisitorPrefix(input.visitorId)}`
       + `${year}/${month}/${day}/${randomUUID()}${extension}`;

@@ -70,3 +70,24 @@ test("duplicate visitor objects must preserve private visibility", async () => {
   await expect(repository.createOrFindByObjectKey(privateInput))
     .rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
 });
+
+test.each([
+  ["inactive status", { status: "deleted", deleted_at: null }],
+  ["deleted timestamp", { status: "active", deleted_at: "2026-07-14T00:00:00Z" }],
+])("duplicate visitor objects reject %s", async (_name, state) => {
+  const repository = await loadRepositoryWithExisting({
+    id: "file-1",
+    owner_type: "visitor",
+    owner_visitor_id: "visitor-b",
+    scene: "tenant_onboarding_license",
+    provider: "tencent_cos",
+    bucket: "bucket",
+    object_key: "private/object.jpg",
+    visibility: "private",
+    public_url: null,
+    ...state,
+  });
+
+  await expect(repository.createOrFindByObjectKey(privateInput))
+    .rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+});

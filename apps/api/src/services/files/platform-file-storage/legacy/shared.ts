@@ -61,6 +61,7 @@ export type DirectUploadInput = Omit<UploadImageInput, "buffer"> & {
 export type CompleteDirectUploadInput = DirectUploadInput & {
   objectKey: string;
   etag?: string | null;
+  uploadIntent?: string | null;
 };
 
 export type RegisterExistingCosObjectInput = Omit<DirectUploadInput, "mimetype" | "sizeBytes"> & {
@@ -70,6 +71,7 @@ export type RegisterExistingCosObjectInput = Omit<DirectUploadInput, "mimetype" 
   ownerType?: string;
   ownerId?: string | null;
   etag?: string | null;
+  uploadIntent?: string | null;
   verifyHead?: boolean;
   failIfMissing?: boolean;
   metadata?: Record<string, unknown>;

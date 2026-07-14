@@ -178,7 +178,9 @@ class PlatformFileObjectRepository {
       existing.owner_visitor_id !== input.owner_visitor_id ||
       existing.scene !== input.scene ||
       existing.visibility !== input.visibility ||
-      existing.public_url !== (input.public_url ?? null)
+      existing.public_url !== (input.public_url ?? null) ||
+      existing.status !== "active" ||
+      existing.deleted_at !== null
     ) {
       throw Errors.forbidden();
     }
