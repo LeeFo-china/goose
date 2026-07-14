@@ -105,6 +105,7 @@ class ProjectStatusBootstrapController extends ProjectBaseController {
       log_entry: data.log_entry,
       next_action: data.next_action,
       logs,
+      tencent_lbs: data.tencent_lbs,
       ...(data.calendar
         ? {
           calendar: {

@@ -34,6 +34,7 @@ export function createEmptyTimings(this: any, ): EmployeeProjectDetailBootstrapT
     workflow_state_ms: 0,
     construction_stages_ms: 0,
     logs_ms: 0,
+    tencent_lbs_ms: 0,
     calendar_ms: 0,
   };
 }

@@ -30,6 +30,7 @@ export type BootstrapTimingStep =
   | "workflow_state_ms"
   | "construction_stages_ms"
   | "logs_ms"
+  | "tencent_lbs_ms"
   | "calendar_ms";
 
 export type EmployeeProjectDetailBootstrapTimings =
@@ -127,6 +128,11 @@ export type ProjectDetailNextAction =
     enabled: boolean;
     reason: string | null;
   };
+
+export type TencentLbsMiniprogramConfig = {
+  configured: boolean;
+  miniprogram_key: string | null;
+};
 
 export type { EmployeeProjectDetailBootstrapQuery };
 export type { AuthContext, EffectivePermission };

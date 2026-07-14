@@ -1,4 +1,5 @@
 import { workflowSubjectsService } from "@/services/workflow-subjects";
+import { systemSettingsService } from "@/services/system-settings";
 import {
   buildUnavailableProjectWorkflowProgress,
   enrichProjectWorkflowProgressWithConstructionStages,
@@ -23,6 +24,7 @@ import type {
   ProjectLogListResult,
   ProjectMembersResult,
   ProjectWorkflowState,
+  TencentLbsMiniprogramConfig,
   WorkflowProgressResult,
   ProjectWorkflowBlockingState,
 } from "./shared";
@@ -47,6 +49,7 @@ export type EmployeeProjectDetailBootstrapResult = {
   calendar: ProjectLogCalendarResult | null;
   referral_summary?: null;
   cameras_summary?: null;
+  tencent_lbs: TencentLbsMiniprogramConfig;
   server_time: string;
   partial_errors: PartialError[];
   timings: EmployeeProjectDetailBootstrapTimings;
@@ -154,6 +157,22 @@ export async function getBootstrap(this: any, input: {
 }): Promise<EmployeeProjectDetailBootstrapResult> {
   const partialErrors: PartialError[] = [];
   const timings = this.createEmptyTimings();
+  const tencentLbsPromise = this.measure(
+    "tencent_lbs_ms",
+    timings,
+    async () => {
+      try {
+        const miniProgramKey = await systemSettingsService.getString(
+          "TENCENT_LBS_MINIPROGRAM_KEY",
+          "",
+        );
+        return buildTencentLbsMiniprogramConfig(miniProgramKey);
+      } catch (error) {
+        partialErrors.push(this.toPartialError("tencent_lbs", error));
+        return buildTencentLbsMiniprogramConfig("");
+      }
+    },
+  );
   const workflowProgressPromise = this.measure(
     "workflow_progress_ms",
     timings,
@@ -211,7 +230,7 @@ export async function getBootstrap(this: any, input: {
     : input.authContext.tenantId;
   const workflowProgress = await workflowProgressPromise;
 
-  const [constructionStages, logs, calendar] =
+  const [constructionStages, logs, calendar, tencentLbs] =
     await Promise.all([
       this.measure("construction_stages_ms", timings, () =>
         projectSer.buildProjectConstructionStagesForBootstrapData({
@@ -244,6 +263,7 @@ export async function getBootstrap(this: any, input: {
           "calendar_ms",
         )
         : Promise.resolve(null),
+      tencentLbsPromise,
     ]);
 
   const permissions = this.completePermissionsByStages(
@@ -314,9 +334,23 @@ export async function getBootstrap(this: any, input: {
       ? null
       : undefined,
     cameras_summary: input.query.include_cameras_summary ? null : undefined,
+    tencent_lbs: tencentLbs,
     server_time: new Date().toISOString(),
     partial_errors: partialErrors,
     timings,
+  };
+}
+
+function buildTencentLbsMiniprogramConfig(
+  miniProgramKey: string | null | undefined,
+): TencentLbsMiniprogramConfig {
+  const normalizedKey = typeof miniProgramKey === "string"
+    ? miniProgramKey.trim()
+    : "";
+
+  return {
+    configured: normalizedKey.length > 0,
+    miniprogram_key: normalizedKey || null,
   };
 }
 

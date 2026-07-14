@@ -70,6 +70,7 @@ const getProjectProgress = mock(async () => {
     warnings: [],
   };
 });
+const getSystemSettingString = mock(async () => "");
 
 mock.module("./shared", () => ({
   projectSer: {
@@ -121,6 +122,12 @@ mock.module("@/services/workflow-subjects", () => ({
   },
 }));
 
+mock.module("@/services/system-settings", () => ({
+  systemSettingsService: {
+    getString: getSystemSettingString,
+  },
+}));
+
 function createBootstrapContext() {
   const timings = {
     bootstrap_data_ms: 0,
@@ -132,6 +139,7 @@ function createBootstrapContext() {
     workflow_state_ms: 0,
     construction_stages_ms: 0,
     logs_ms: 0,
+    tencent_lbs_ms: 0,
     calendar_ms: 0,
   };
   return {
@@ -240,6 +248,40 @@ describe("employee project detail bootstrap orchestration", () => {
       module: "workflow_state",
       code: null,
       message: "查询流程待办失败",
+    });
+  });
+
+  test("returns tencent lbs miniprogram config for employee camera reverse geocoding", async () => {
+    getSystemSettingString.mockClear();
+    getSystemSettingString.mockImplementationOnce(async () => "lbs-mini-key");
+
+    const { getBootstrap } = await import("./orchestration");
+    const context = createBootstrapContext();
+
+    const result = await getBootstrap.call(context, bootstrapInput);
+
+    expect(getSystemSettingString).toHaveBeenCalledWith(
+      "TENCENT_LBS_MINIPROGRAM_KEY",
+      "",
+    );
+    expect(result.tencent_lbs).toEqual({
+      configured: true,
+      miniprogram_key: "lbs-mini-key",
+    });
+  });
+
+  test("returns disabled tencent lbs config when miniprogram key is missing", async () => {
+    getSystemSettingString.mockClear();
+    getSystemSettingString.mockImplementationOnce(async () => "");
+
+    const { getBootstrap } = await import("./orchestration");
+    const context = createBootstrapContext();
+
+    const result = await getBootstrap.call(context, bootstrapInput);
+
+    expect(result.tencent_lbs).toEqual({
+      configured: false,
+      miniprogram_key: null,
     });
   });
 });
