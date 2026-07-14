@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-当前完成静态预审、production build 验证，以及本地 mock 数据浏览器 smoke。尚未完成连接 dev 数据库和真实管理员登录态的发布级浏览器 smoke，也尚未执行基于真实截图的 `$impeccable audit` 评分。
+当前完成静态预审、production build 验证，以及已固化到 Playwright 的本地 mock 数据浏览器 smoke。尚未完成连接 dev 数据库和真实管理员登录态的发布级浏览器 smoke，也尚未执行基于真实截图的 `$impeccable audit` 评分。
 
 阻塞项：
 
@@ -12,7 +12,7 @@
 - 当前 shell 未设置 `SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`PROJECT_HEALTH_ADMIN_TOKEN`、`ADMIN_TOKEN`；
 - 缺少可登录 Admin 的租户管理员会话，无法验证真实 `/project-health` 列表、五类跳转、AI POST 和权限差异。
 
-因此本文件暂不记录 Impeccable 分数，不声明 P0/P1 已清零。mock smoke 只证明前端页面结构、RSC 边界、展示页 contract、AI 按需交互和响应式溢出在本地可运行。
+因此本文件暂不记录 Impeccable 分数，不声明 P0/P1 已清零。mock smoke 只证明前端页面结构、RSC 边界、展示页 contract、AI 按需交互和响应式溢出在本地可重复验证。
 
 ## 已完成静态证据
 
@@ -42,7 +42,7 @@ pnpm --dir apps/admin build
 
 结果：
 
-- Domain contract test：4 pass；
+- Domain contract test：5 pass；
 - API project-health/performance 定向测试：47 pass；
 - Admin nav/project-health 定向测试：31 pass；
 - `packages/domain build`：通过；
@@ -55,9 +55,22 @@ pnpm --dir apps/admin build
 环境：
 
 - mock backend：`127.0.0.1:3999`
-- Admin dev server：`127.0.0.1:3021`
-- mock session：具备 `dashboard.read` 与 `project.read:all`
+- Admin dev server：`127.0.0.1:3011`
+- mock session：非平台租户管理员
 - mock 数据：五类风险各 1 条，summary.total = 5
+
+可复跑命令：
+
+```bash
+python3 /Users/leefo/.codex/skills/webapp-testing/scripts/with_server.py \
+  --server "node apps/admin/e2e/project-health-mock-backend.mjs" \
+  --port 3999 \
+  --timeout 45 \
+  -- zsh -lc 'cd apps/admin && \
+    GOOES_API_BASE_URL=http://127.0.0.1:3999 \
+    PLAYWRIGHT_BASE_URL=http://127.0.0.1:3011 \
+    pnpm exec playwright test e2e/project-health-smoke.spec.ts --project=chromium'
+```
 
 验证项：
 
@@ -70,11 +83,11 @@ pnpm --dir apps/admin build
 - console error = 0；
 - failed response = 0。
 
-截图：
+结果：
 
-- `/tmp/project-health-mock-390.png`
-- `/tmp/project-health-mock-768.png`
-- `/tmp/project-health-mock-1440.png`
+- `apps/admin/e2e/project-health-smoke.spec.ts`：4 passed；
+- 首次固化时，390px 视口发现列表卡片被筛选区压缩导致 table viewport 不可见；
+- 已通过 `components/project-health/project-health-client-shell.tsx` 的移动端列表卡片保底高度修复，桌面 `lg` 以上仍保持原满高工作台布局。
 
 ## 静态 UI 预审
 
