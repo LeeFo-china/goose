@@ -232,6 +232,11 @@ begin
     'Asia/Shanghai'
   ) into result;
 
+  if (result->'summary'->>'total')::integer = 0
+    or jsonb_array_length(result->'items') = 0 then
+    raise exception 'project health: project id keyword filter should match';
+  end if;
+
   if exists (
     select 1 from jsonb_array_elements(result->'items') as item
     where item->>'project_id' <> '11111111-1111-4111-8111-111111111112'
