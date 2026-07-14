@@ -34,6 +34,7 @@ DECLARE
   v_candidate_snapshot jsonb;
   v_fresh_invite_partner_id uuid;
   v_fresh_eligible_partner_ids uuid[];
+  v_idempotent boolean := false;
 BEGIN
   IF p_application_id IS NULL
     OR p_expected_version IS NULL
@@ -67,13 +68,9 @@ BEGIN
     AND v_application.status = 'reviewing'
     AND v_application.version = p_expected_version
   THEN
-    RETURN pg_catalog.jsonb_build_object(
-      'status', 'updated',
-      'application_id', v_application.id,
-      'application_version', v_application.version,
-      'idempotent', true
-    );
-  END IF;
+    v_after := v_application;
+    v_idempotent := true;
+  ELSE
 
   IF v_application.version IS DISTINCT FROM p_expected_version THEN
     RETURN pg_catalog.jsonb_build_object('status', 'version_conflict');
@@ -371,11 +368,52 @@ BEGIN
     END
   );
 
+  END IF;
+
   RETURN pg_catalog.jsonb_build_object(
     'status', 'updated',
     'application_id', v_after.id,
     'application_version', v_after.version,
-    'idempotent', false
+    'application', pg_catalog.jsonb_build_object(
+      'id', v_after.id,
+      'application_no', v_after.application_no,
+      'company_name', v_after.company_name,
+      'unified_social_credit_code', v_after.unified_social_credit_code,
+      'business_license_file_id', v_after.business_license_file_id,
+      'admin_name', v_after.admin_name,
+      'admin_phone', v_after.admin_phone,
+      'address_province', v_after.address_province,
+      'address_city', v_after.address_city,
+      'address_district', v_after.address_district,
+      'address_region_code', v_after.address_region_code,
+      'address', v_after.address,
+      'address_latitude', v_after.address_latitude,
+      'address_longitude', v_after.address_longitude,
+      'service_region_codes', v_after.service_region_codes,
+      'source_channel', v_after.source_channel,
+      'invite_code_id', v_after.invite_code_id,
+      'candidate_partner_id', v_after.candidate_partner_id,
+      'candidate_match_reason', v_after.candidate_match_reason,
+      'candidate_snapshot', v_after.candidate_snapshot,
+      'final_partner_id', v_after.final_partner_id,
+      'attribution_source_type', v_after.attribution_source_type,
+      'status', v_after.status,
+      'partner_assist_status', v_after.partner_assist_status,
+      'partner_assist_requested_at', v_after.partner_assist_requested_at,
+      'partner_assist_due_at', v_after.partner_assist_due_at,
+      'converted_tenant_id', v_after.converted_tenant_id,
+      'reviewed_by_employee_id', v_after.reviewed_by_employee_id,
+      'reviewed_at', v_after.reviewed_at,
+      'review_remark', v_after.review_remark,
+      'privacy_policy_version', v_after.privacy_policy_version,
+      'onboarding_terms_version', v_after.onboarding_terms_version,
+      'consented_at', v_after.consented_at,
+      'withdrawn_at', v_after.withdrawn_at,
+      'version', v_after.version,
+      'created_at', v_after.created_at,
+      'updated_at', v_after.updated_at
+    ),
+    'idempotent', v_idempotent
   );
 END;
 $$;

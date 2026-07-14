@@ -254,13 +254,11 @@ export class TenantOnboardingReviewRepository {
     if (error) throw Errors.dbError("更新平台装企入驻审核失败", error);
     const result = parsePlatformReviewMutation(data);
     if (result.status !== "updated") return result;
-    const application = await this.findApplicationById(result.application_id);
-    if (!application || application.version !== result.application_version) {
-      throw Errors.dbError("更新平台装企入驻审核失败", {
-        message: "review mutation result could not be reloaded",
-      });
-    }
-    return { status: "updated", application, idempotent: result.idempotent };
+    return {
+      status: "updated",
+      application: result.application,
+      idempotent: result.idempotent,
+    };
   }
 }
 

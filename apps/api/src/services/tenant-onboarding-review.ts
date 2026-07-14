@@ -50,6 +50,7 @@ import {
   documentForbiddenError,
   LICENSE_TTL_SECONDS,
   MAX_SLUG_ATTEMPTS,
+  notificationDeliverySummary,
   normalizePage,
   normalizePageSize,
   partnerAmbiguousError,
@@ -315,10 +316,9 @@ export class TenantOnboardingReviewService {
       applicationId,
     );
     if (!existing) throw applicationNotFoundError();
-    const delivery = await this.notificationService.retry({
-      applicationId,
-      deliveryId,
-    });
+    const delivery = notificationDeliverySummary(
+      await this.notificationService.retry({ applicationId, deliveryId }),
+    );
     if (
       delivery && (
         delivery.attempt_count > existing.attempt_count ||
@@ -457,7 +457,9 @@ export class TenantOnboardingReviewService {
     eventType: "supplement_required" | "approved" | "rejected";
   }) {
     try {
-      return await this.notificationService.deliver(input);
+      return notificationDeliverySummary(
+        await this.notificationService.deliver(input),
+      );
     } catch {
       return null;
     }

@@ -59,6 +59,8 @@ describe("tenant onboarding platform review repository contract", () => {
   test("routes every durable platform review transition through the atomic RPC", () => {
     const source = readFileSync(reviewRepository, "utf8");
     expect(source).toContain('"mutate_tenant_onboarding_platform_review"');
+    expect(source).not.toContain("this.findApplicationById(result.application_id)");
+    expect(source).not.toContain("review mutation result could not be reloaded");
     for (const action of [
       "start_review",
       "request_supplement",

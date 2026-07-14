@@ -80,8 +80,8 @@ const failedDelivery: TenantOnboardingNotificationDeliveryRecord = {
   attempt_count: 1,
   last_error: "SMS_DELIVERY_FAILED: 短信发送失败",
   sent_at: null,
-  claim_token: null,
-  claim_expires_at: null,
+  claim_token: DELIVERY_ID,
+  claim_expires_at: NOW,
   created_at: NOW,
   updated_at: NOW,
 };
@@ -236,7 +236,6 @@ beforeEach(() => {
   inviteRepository.findActiveInviteCodeById.mockImplementation(async () => null);
   notifications.deliver.mockImplementation(async () => failedDelivery);
 });
-
 describe("TenantOnboardingReviewService", () => {
   test("requires a platform admin and the dedicated review permission", async () => {
     const service = await createService();
@@ -246,7 +245,6 @@ describe("TenantOnboardingReviewService", () => {
       .rejects.toMatchObject({ statusCode: 403 });
     expect(repository.listApplications).not.toHaveBeenCalled();
   });
-
   test("passes bounded pagination and all platform queue filters", async () => {
     const service = await createService();
     await service.list(auth(), {
@@ -323,6 +321,8 @@ describe("TenantOnboardingReviewService", () => {
       eventType: "supplement_required",
     });
     expect(result.notification_delivery).toMatchObject({ status: "failed" });
+    expect(result.notification_delivery).not.toHaveProperty("claim_token");
+    expect(result.notification_delivery).not.toHaveProperty("claim_expires_at");
   });
 
   test("requests assist only for a freshly eligible explicit partner", async () => {
@@ -468,6 +468,8 @@ describe("TenantOnboardingReviewService", () => {
       deliveryId: DELIVERY_ID,
     });
     expect(result).toMatchObject({ id: DELIVERY_ID });
+    expect(result).not.toHaveProperty("claim_token");
+    expect(result).not.toHaveProperty("claim_expires_at");
     expect(audit.recordBestEffort).toHaveBeenCalledTimes(1);
   });
 

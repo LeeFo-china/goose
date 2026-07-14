@@ -1,6 +1,10 @@
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
-import type { TenantOnboardingPlatformApplicationRecord } from "@/repositories/tenant-onboarding-types";
+import type {
+  TenantOnboardingNotificationDeliveryRecord,
+  TenantOnboardingNotificationDeliverySummaryRecord,
+  TenantOnboardingPlatformApplicationRecord,
+} from "@/repositories/tenant-onboarding-types";
 
 export const REVIEW_PERMISSION = "platform.tenant_onboarding.review";
 export const MAX_PAGE_SIZE = 100;
@@ -106,6 +110,25 @@ export function auditSummary(action: string) {
     tenant_onboarding_notification_retry: "重试装企入驻状态通知",
   };
   return summaries[action] ?? "处理装企入驻申请";
+}
+
+export function notificationDeliverySummary(
+  delivery: TenantOnboardingNotificationDeliveryRecord | null,
+): TenantOnboardingNotificationDeliverySummaryRecord | null {
+  if (!delivery) return null;
+  return {
+    id: delivery.id,
+    application_id: delivery.application_id,
+    application_version: delivery.application_version,
+    event_type: delivery.event_type,
+    channel: delivery.channel,
+    status: delivery.status,
+    attempt_count: delivery.attempt_count,
+    last_error: delivery.last_error,
+    sent_at: delivery.sent_at,
+    created_at: delivery.created_at,
+    updated_at: delivery.updated_at,
+  };
 }
 
 export const applicationNotFoundError = () => Errors.business(

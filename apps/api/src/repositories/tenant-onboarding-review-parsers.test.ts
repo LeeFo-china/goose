@@ -98,12 +98,21 @@ describe("tenant onboarding review repository parsers", () => {
   });
 
   test("parses every bounded mutation result and rejects malformed versions", () => {
+    const mutationApplication = Object.fromEntries(
+      Object.entries(detailRecord).filter(([key]) =>
+        key !== "candidate_partner" && key !== "final_partner"
+      ),
+    );
     expect(parsePlatformReviewMutation({
       status: "updated",
       application_id: ID,
-      application_version: 3,
+      application_version: 2,
+      application: mutationApplication,
       idempotent: false,
-    })).toMatchObject({ status: "updated", application_version: 3 });
+    })).toMatchObject({
+      status: "updated", application_version: 2,
+      application: { id: ID, version: 2 },
+    });
     const statuses: TenantOnboardingPlatformReviewMutationErrorStatus[] = [
       "application_not_found",
       "state_conflict",
@@ -117,7 +126,16 @@ describe("tenant onboarding review repository parsers", () => {
       status: "updated",
       application_id: ID,
       application_version: 0,
+      application: mutationApplication,
       idempotent: false,
+    })).toThrow();
+    expect(() => parsePlatformReviewMutation({
+      status: "updated", application_id: ID,
+      application_version: 3, idempotent: false,
+    })).toThrow();
+    expect(() => parsePlatformReviewMutation({
+      status: "updated", application_id: ID, application_version: 3,
+      application: mutationApplication, idempotent: false,
     })).toThrow();
   });
 

@@ -64,6 +64,10 @@ const DetailRecordSchema = ListRecordSchema.extend({
   consented_at: z.string(),
   withdrawn_at: NullableStringSchema,
 }).strict();
+const MutationApplicationSchema = DetailRecordSchema.omit({
+  candidate_partner: true,
+  final_partner: true,
+});
 
 const ReviewSchema = z.object({
   id: z.uuid(),
@@ -89,6 +93,7 @@ const MutationResultSchema = z.discriminatedUnion("status", [
     status: z.literal("updated"),
     application_id: z.uuid(),
     application_version: z.number().int().positive(),
+    application: MutationApplicationSchema,
     idempotent: z.boolean(),
   }).strict(),
   z.object({
@@ -99,7 +104,14 @@ const MutationResultSchema = z.discriminatedUnion("status", [
       "partner_unavailable",
     ]),
   }).strict(),
-]);
+]).refine(
+  (result) =>
+    result.status !== "updated" || (
+      result.application.id === result.application_id &&
+      result.application.version === result.application_version
+    ),
+  { message: "mutation application snapshot does not match result metadata" },
+);
 
 const LicenseAccessSchema = z.object({
   application_id: z.uuid(),

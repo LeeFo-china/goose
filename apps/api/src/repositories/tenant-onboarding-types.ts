@@ -272,6 +272,7 @@ export type TenantOnboardingPlatformReviewMutationRpcResult =
       status: "updated";
       application_id: string;
       application_version: number;
+      application: TenantOnboardingPlatformApplicationRecord;
       idempotent: boolean;
     }
   | { status: TenantOnboardingPlatformReviewMutationErrorStatus };

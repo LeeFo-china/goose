@@ -42,6 +42,24 @@ describe("tenant onboarding platform review mutations", () => {
     expect(body).toContain("UPDATE public.tenant_onboarding_applications");
     expect(body).toContain("INSERT INTO public.tenant_onboarding_application_reviews");
     expect(body).toContain("version = application.version + 1");
+    const projections = [...body.matchAll(
+      /'application', pg_catalog\.jsonb_build_object\(([\s\S]*?)\)\s*,\s*'idempotent'/g,
+    )].map((match) => match[1] ?? "");
+    expect(projections).toHaveLength(1);
+    for (const projection of projections) {
+      for (const field of [
+        "application_no", "company_name", "business_license_file_id",
+        "admin_phone", "service_region_codes", "candidate_snapshot",
+        "status", "partner_assist_status", "version",
+      ]) expect(projection).toContain(`'${field}'`);
+      for (const forbidden of [
+        "visitor_id", "visitor_context_id", "idempotency_key", "object_key",
+        "public_url",
+      ]) expect(projection).not.toContain(`'${forbidden}'`);
+    }
+    expect(body).toContain("v_after := v_application");
+    expect(body).toContain("'idempotent', v_idempotent");
+    expect(body).not.toContain("pg_catalog.to_jsonb(v_after)");
   });
 
   test("revalidates assist eligibility and preserves non-blocking attribution", () => {
