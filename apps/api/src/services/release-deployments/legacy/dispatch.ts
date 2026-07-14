@@ -9,6 +9,7 @@ import {
   SERVICE_LABELS,
   compareRuntimeWithDev,
   dockerServiceHealthService,
+  expandAdminReleaseServices,
   formatCommitTitle,
   formatDateTime,
   formatServiceLabels,
@@ -56,6 +57,44 @@ import {
   type SuccessfulReleaseRef,
 } from "./shared";
 
+type ReleaseDispatchStage = "release" | "build";
+type ReleaseRecentRunStage = ReleaseDispatchStage | "deploy";
+
+export function buildReleaseDispatchRequest(input: ReleaseDispatchInput): {
+  workflowId: string;
+  ref: string;
+  stage: ReleaseDispatchStage;
+  inputs: Record<string, string>;
+} {
+  const services = normalizeDispatchServices(input);
+  const serviceInput = expandAdminReleaseServices(services).join(",");
+
+  if (input.environment === "production") {
+    return {
+      workflowId: RELEASE_WORKFLOWS.production.workflowId,
+      ref: input.ref,
+      stage: "build",
+      inputs: {
+        operation: "build",
+        service: serviceInput,
+        confirm_text: input.confirm_text || "",
+        reason: input.reason || "",
+      },
+    };
+  }
+
+  return {
+    workflowId: RELEASE_WORKFLOWS.dev.workflowId,
+    ref: input.ref,
+    stage: "release",
+    inputs: {
+      service: serviceInput,
+      operation: input.operation || "release",
+      reason: input.reason || "",
+    },
+  };
+}
+
 export async function listActiveRuns(this: any, workflow: ReleaseWorkflow) {
   const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
     `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&status=in_progress&per_page=10`,
@@ -85,7 +124,32 @@ export async function assertWorkflowIdle(this: any, workflow: ReleaseWorkflow) {
   );
 }
 
-export async function findRecentRun(this: any, workflow: ReleaseWorkflow, input: ReleaseDispatchInput) {
+export function matchesRecentRunStage(run: NormalizedReleaseRun, stage?: ReleaseRecentRunStage) {
+  if (!stage) return true;
+  if (stage === "release") {
+    return run.stage === "deploy_queued"
+      || run.stage === "deploying"
+      || run.stage === "deploy_failed"
+      || run.stage === "deployed";
+  }
+  if (stage === "build") {
+    return run.stage === "build_queued"
+      || run.stage === "building"
+      || run.stage === "build_failed"
+      || run.stage === "ready_to_deploy";
+  }
+  return run.stage === "deploy_queued"
+    || run.stage === "deploying"
+    || run.stage === "deploy_failed"
+    || run.stage === "deployed";
+}
+
+export async function findRecentRun(
+  this: any,
+  workflow: ReleaseWorkflow,
+  input: ReleaseDispatchInput,
+  stage?: ReleaseRecentRunStage,
+) {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     if (attempt > 0) {
       await sleep(1500);
@@ -94,15 +158,16 @@ export async function findRecentRun(this: any, workflow: ReleaseWorkflow, input:
     const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
       `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&per_page=10`,
     );
-    const run = (payload.workflow_runs || []).find((item) => {
-      if (input.ref_type === "commit") {
-        return item.head_sha?.toLowerCase() === input.ref.toLowerCase();
-      }
-      return item.head_branch === input.ref;
-    });
+    for (const item of payload.workflow_runs || []) {
+      const isMatchingRef = input.ref_type === "commit"
+        ? item.head_sha?.toLowerCase() === input.ref.toLowerCase()
+        : item.head_branch === input.ref;
+      if (!isMatchingRef) continue;
 
-    if (run) {
-      return normalizeWorkflowRun(workflow, run);
+      const run = normalizeWorkflowRun(workflow, item);
+      if (matchesRecentRunStage(run, stage)) {
+        return run;
+      }
     }
   }
 
@@ -120,25 +185,26 @@ export async function dispatch(this: any, authContext: AuthContext, input: Relea
   await this.assertRefExists(input);
 
   const config = getGithubConfig();
-  const releaseServiceInput = services.includes("all") ? "all" : services.join(",");
+  const dispatchRequest = buildReleaseDispatchRequest(input);
+  const expandedServices = expandAdminReleaseServices(services);
   const serviceLabel = formatServiceLabels(services);
   const operation = input.operation || "release";
   const operationLabel = RELEASE_OPERATION_LABELS[operation];
-  const inputs = { service: releaseServiceInput };
 
   await githubRequest<null>(
-    `/actions/workflows/${workflow.workflowId}/dispatches`,
+    `/actions/workflows/${dispatchRequest.workflowId}/dispatches`,
     {
       method: "POST",
       body: JSON.stringify({
-        ref: input.ref,
-        inputs,
+        ref: dispatchRequest.ref,
+        inputs: dispatchRequest.inputs,
       }),
     },
   );
 
-  const workflowUrl = `${config.webBase}/actions/workflows/${workflow.workflowId}`;
-  const run = await this.findRecentRun(workflow, input);
+  const workflowUrl = `${config.webBase}/actions/workflows/${dispatchRequest.workflowId}`;
+  const run = await this.findRecentRun(workflow, input, dispatchRequest.stage);
+  const commitSha = run?.head_sha || null;
 
   await platformAuditLogService.recordBestEffort({
     action: "platform_release_dispatch",
@@ -150,15 +216,17 @@ export async function dispatch(this: any, authContext: AuthContext, input: Relea
     summary: `发起${workflow.label}${operationLabel}：${serviceLabel}`,
     metadata: {
       environment: input.environment,
+      stage: dispatchRequest.stage,
       operation,
       operation_label: operationLabel,
       service: services.includes("all") ? "all" : services[0],
-      services,
+      services: expandedServices,
       ref_type: input.ref_type,
       ref_type_label: REF_TYPE_LABELS[input.ref_type],
       ref: input.ref,
       reason: input.reason || null,
-      workflow_id: workflow.workflowId,
+      commit_sha: commitSha,
+      workflow_id: dispatchRequest.workflowId,
       workflow_url: workflowUrl,
       run_id: run?.id || null,
       run_url: run?.html_url || null,
@@ -168,13 +236,16 @@ export async function dispatch(this: any, authContext: AuthContext, input: Relea
   return {
     environment: input.environment,
     service: services.includes("all") ? "all" : services[0],
-    services,
+    services: expandedServices,
     service_label: serviceLabel,
     ref: input.ref,
-    workflow_id: workflow.workflowId,
+    stage: dispatchRequest.stage,
+    workflow_id: dispatchRequest.workflowId,
     workflow_url: workflowUrl,
     run,
-    message: "已提交 GitHub Actions 发布任务，请在发布记录中查看状态。",
+    message: input.environment === "dev"
+      ? "已提交开发环境构建与发布任务，请在发布记录中查看各阶段状态。"
+      : "已提交生产候选构建，构建成功并校验证据后才能部署。",
   };
 }
 

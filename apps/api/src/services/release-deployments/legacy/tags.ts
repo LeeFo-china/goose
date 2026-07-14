@@ -149,7 +149,7 @@ export async function createTag(this: any, authContext: AuthContext, input: Rele
     target_sha: commit.sha,
     tag_sha: tagObject.sha,
     html_url: htmlUrl,
-    message: "发布 Tag 已创建，可以直接选择该 Tag 发起生产发布。",
+    message: "发布 Tag 已创建，可以使用该 Tag 构建生产候选。",
   };
 }
 
@@ -166,6 +166,6 @@ export async function createRollbackTag(this: any, authContext: AuthContext, inp
   return {
     ...result,
     rollback: true,
-    message: "回滚 Tag 已创建，请确认生产发布信息后再提交发布。",
+    message: "回滚 Tag 已创建，请构建并验证生产候选后再部署。",
   };
 }

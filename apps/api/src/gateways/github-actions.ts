@@ -25,6 +25,11 @@ type DownloadArtifactJsonInput = {
   fileName: string;
 };
 
+type DownloadArtifactJsonByIdInput = {
+  artifactId: number;
+  fileName: string;
+};
+
 export function getGithubConfig() {
   const token = process.env.GITHUB_RELEASE_TOKEN || process.env.GITHUB_TOKEN || "";
   const repository = process.env.GITHUB_RELEASE_REPOSITORY || process.env.GITHUB_REPOSITORY || "LeeFo-china/goose";
@@ -311,7 +316,10 @@ async function downloadArtifactJson<T>({
 
   const archive = await githubBinaryRequest(`/actions/artifacts/${artifact.id}/zip`);
   const content = extractBoundedArchiveEntry(archive, fileName);
+  return parseArtifactJsonContent<T>(content);
+}
 
+function parseArtifactJsonContent<T>(content: Uint8Array): T {
   try {
     return JSON.parse(new TextDecoder().decode(content)) as T;
   } catch {
@@ -323,8 +331,26 @@ async function downloadArtifactJson<T>({
   }
 }
 
+async function downloadArtifactJsonById<T>({
+  artifactId,
+  fileName,
+}: DownloadArtifactJsonByIdInput): Promise<T> {
+  if (!Number.isSafeInteger(artifactId) || artifactId <= 0) {
+    throw Errors.business(
+      409,
+      "发布证据元数据无效",
+      ErrorCodes.RELEASE_CANDIDATE_INVALID,
+    );
+  }
+
+  const archive = await githubBinaryRequest(`/actions/artifacts/${artifactId}/zip`);
+  const content = extractBoundedArchiveEntry(archive, fileName);
+  return parseArtifactJsonContent<T>(content);
+}
+
 export const githubActionsGateway = {
   request: githubRequest,
   downloadArtifactJson,
+  downloadArtifactJsonById,
   getConfig: getGithubConfig,
 };

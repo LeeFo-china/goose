@@ -9,6 +9,8 @@ import {
   ReleaseCreateRollbackTagSchema,
   ReleaseCreateTagSchema,
   ReleaseDispatchSchema,
+  ReleaseProductionCandidateDeploySchema,
+  ReleaseProductionCandidateParamsSchema,
   ReleaseProductionMigrationDispatchSchema,
   ReleaseRefListQuerySchema,
   ReleaseRunFailureSummaryParamsSchema,
@@ -159,6 +161,35 @@ class AdminOpsController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await releaseDeploymentService.dispatch(authContext, bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/admin/ops/releases/production-candidates/:runId")
+  async getProductionReleaseCandidate(request: FastifyRequest, reply: FastifyReply) {
+    await this.getRequiredPlatformAdminContext(request);
+
+    const paramsResult = ReleaseProductionCandidateParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await releaseDeploymentService.getProductionCandidate(paramsResult.data.runId);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/admin/ops/releases/production-candidates/:runId/deploy")
+  async deployProductionReleaseCandidate(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+
+    const paramsResult = ReleaseProductionCandidateParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = ReleaseProductionCandidateDeploySchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await releaseDeploymentService.dispatchProductionCandidate(
+      authContext,
+      paramsResult.data.runId,
+      bodyResult.data,
+    );
     return ResponseHandler.success(data);
   }
 

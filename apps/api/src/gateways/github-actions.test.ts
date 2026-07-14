@@ -120,6 +120,26 @@ describe("githubActionsGateway.downloadArtifactJson", () => {
     expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("X-GitHub-Api-Version")).toBe("2022-11-28");
   });
 
+  test("decodes JSON from an explicit artifact id through the same archive boundary", async () => {
+    const archive = zipSync({
+      "production-deployment-receipt.json": encodeJson({ schema_version: 1, build_run_id: 123 }),
+    });
+    const fetchMock = installFetch([new Response(archive)]);
+
+    expect(await githubActionsGateway.downloadArtifactJsonById<{
+      schema_version: number;
+      build_run_id: number;
+    }>({
+      artifactId: 77,
+      fileName: "production-deployment-receipt.json",
+    })).toEqual({ schema_version: 1, build_run_id: 123 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api.github.com/repos/acme/repo/actions/artifacts/77/zip",
+    );
+  });
+
   test("rejects missing artifacts", async () => {
     installFetch([jsonResponse({ artifacts: [] })]);
     await expectCandidateInvalid(githubActionsGateway.downloadArtifactJson({

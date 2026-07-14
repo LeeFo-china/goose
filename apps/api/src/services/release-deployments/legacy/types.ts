@@ -3,6 +3,7 @@ import type {
   ReleaseCreateTagInput,
   ReleaseDispatchInput,
   ReleaseEnvironment,
+  ReleaseProductionCandidateDeployInput,
   ReleaseProductionMigrationDispatchInput,
   ReleaseRefListQuery,
   ReleaseRefType,
@@ -16,6 +17,17 @@ import type {
   EmployeeLite,
   PlatformReleaseDispatchAuditRecord,
 } from "@/repositories/platform-audit-logs";
+
+export type ReleaseStage =
+  | "build_queued"
+  | "building"
+  | "build_failed"
+  | "ready_to_deploy"
+  | "deploy_queued"
+  | "deploying"
+  | "deploy_failed"
+  | "deployed"
+  | "legacy";
 
 export type GithubWorkflowRun = {
   id: number;
@@ -60,6 +72,9 @@ export type NormalizedReleaseRun = {
   workflow_label: string;
   services: ReleaseService[] | null;
   service_label: string;
+  stage: ReleaseStage;
+  stage_label: string;
+  legacy: boolean;
   audit: ReleaseRunAudit | null;
   title: string;
   status: string | null;
@@ -129,6 +144,21 @@ export type ReleaseRuntimeServiceVersion = {
   latest_successful_prod_sha: string | null;
   diff_status: "same_as_dev" | "behind_dev" | "ahead_of_dev" | "unknown";
   diff_label: string;
+};
+
+export type ProductionReleaseCandidate = {
+  build_run_id: string;
+  tag: string;
+  commit_sha: string;
+  services: Exclude<ReleaseService, "all">[];
+  build_services: Array<"api" | "admin" | "social-video-worker">;
+  target_environment: "production";
+  manifest_verified: true;
+  ready_to_deploy: boolean;
+  already_deployed: boolean;
+  blocked_reason: string | null;
+  run_url: string | null;
+  created_at: string | null;
 };
 
 export type ReleaseRunFailureJobSummary = {
@@ -208,6 +238,7 @@ export type {
   ReleaseCreateTagInput,
   ReleaseDispatchInput,
   ReleaseEnvironment,
+  ReleaseProductionCandidateDeployInput,
   ReleaseProductionMigrationDispatchInput,
   ReleaseRefListQuery,
   ReleaseRefType,

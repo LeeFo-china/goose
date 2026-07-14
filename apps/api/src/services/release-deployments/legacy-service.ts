@@ -30,6 +30,10 @@ import {
   dispatch,
   dispatchProductionMigration,
 } from "./legacy/dispatch";
+import {
+  getProductionCandidate,
+  dispatchProductionCandidate,
+} from "./legacy/candidates";
 
 class ReleaseDeploymentService {
   getOptions = getOptions;
@@ -54,6 +58,8 @@ class ReleaseDeploymentService {
   private findRecentRun = findRecentRun;
   dispatch = dispatch;
   dispatchProductionMigration = dispatchProductionMigration;
+  getProductionCandidate = getProductionCandidate;
+  dispatchProductionCandidate = dispatchProductionCandidate;
 }
 
 export const releaseDeploymentService = new ReleaseDeploymentService();

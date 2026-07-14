@@ -21,15 +21,18 @@ import type {
   GithubWorkflowRun,
   NormalizedReleaseRun,
   PlatformReleaseDispatchAuditRecord,
+  ProductionReleaseCandidate,
   ReleaseCreateRollbackTagInput,
   ReleaseCreateTagInput,
   ReleaseDispatchInput,
   ReleaseEnvironment,
+  ReleaseProductionCandidateDeployInput,
   ReleaseProductionMigrationDispatchInput,
   ReleaseRefListQuery,
   ReleaseRefType,
   ReleaseRunListQuery,
   ReleaseRuntimeServiceVersion,
+  ReleaseStage,
   ReleaseSuccessfulRefListQuery,
   ReleaseService,
   ReleaseWorkflow,
@@ -42,18 +45,56 @@ import type {
 export const RELEASE_WORKFLOWS: Record<ReleaseEnvironment, ReleaseWorkflow> = {
   dev: {
     environment: "dev",
-    workflowId: "deploy-dev.yml",
+    workflowId: "release-dev.yml",
     label: "开发环境",
     defaultRef: "main",
     services: ["api", "admin", "social-video-worker", "cos-reconcile-worker"],
   },
   production: {
     environment: "production",
-    workflowId: "build-docker-images.yml",
+    workflowId: "release-production.yml",
     label: "生产环境",
     defaultRef: "main",
     services: ["all", "api", "admin", "social-video-worker", "cos-reconcile-worker"],
   },
+};
+
+export const LEGACY_RELEASE_WORKFLOWS: ReleaseWorkflow[] = [
+  {
+    environment: "dev",
+    workflowId: "deploy-dev.yml",
+    label: "开发环境历史发布",
+    defaultRef: "main",
+    services: ["api", "admin", "social-video-worker", "cos-reconcile-worker"],
+  },
+  {
+    environment: "production",
+    workflowId: "build-docker-images.yml",
+    label: "生产环境历史构建",
+    defaultRef: "main",
+    services: ["all", "api", "admin", "social-video-worker", "cos-reconcile-worker"],
+  },
+];
+
+const ADMIN_RELEASE_SERVICE_ORDER: Array<Exclude<ReleaseService, "all">> = [
+  "api",
+  "admin",
+  "social-video-worker",
+  "cos-reconcile-worker",
+];
+
+const LEGACY_RELEASE_WORKFLOW_IDS = new Set(LEGACY_RELEASE_WORKFLOWS.map((workflow) => workflow.workflowId));
+
+const RELEASE_STAGE_LABELS: Record<ReleaseStage, string> = {
+  build_queued: "构建排队中",
+  building: "构建中",
+  build_failed: "构建失败",
+  ready_to_deploy: "可部署",
+  deploy_queued: "部署排队中",
+  deploying: "部署中",
+  deploy_failed: "部署失败",
+  deployed: "已部署",
+  legacy: "历史记录",
 };
 
 export const PRODUCTION_MIGRATION_WORKFLOW: ReleaseWorkflow = {
@@ -63,6 +104,11 @@ export const PRODUCTION_MIGRATION_WORKFLOW: ReleaseWorkflow = {
   defaultRef: "main",
   services: [],
 };
+
+function isLegacyReleaseWorkflow(workflow: ReleaseWorkflow) {
+  return LEGACY_RELEASE_WORKFLOW_IDS.has(workflow.workflowId)
+    || workflow.workflowId === PRODUCTION_MIGRATION_WORKFLOW.workflowId;
+}
 
 export const SERVICE_LABELS: Record<ReleaseService, string> = {
   all: "全部服务",
@@ -82,6 +128,12 @@ export const RELEASE_OPERATION_LABELS = {
   release: "发布",
   rollback: "回滚",
 } as const;
+
+export function expandAdminReleaseServices(services: ReleaseService[]): Array<Exclude<ReleaseService, "all">> {
+  if (services.includes("all")) return [...ADMIN_RELEASE_SERVICE_ORDER];
+  const selected = new Set(services.filter((service): service is Exclude<ReleaseService, "all"> => service !== "all"));
+  return ADMIN_RELEASE_SERVICE_ORDER.filter((service) => selected.has(service));
+}
 
 export function includesKeyword(value: string, keyword?: string) {
   const normalizedKeyword = keyword?.trim().toLowerCase();
@@ -124,6 +176,8 @@ export function getShanghaiReleaseTagPrefix(date = new Date()) {
 
 export function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkflowRun): NormalizedReleaseRun {
   const services = inferRunServices(workflow, run);
+  const legacy = isLegacyReleaseWorkflow(workflow);
+  const stage = inferReleaseStage(workflow, run, legacy);
   return {
     id: String(run.id),
     environment: workflow.environment,
@@ -131,6 +185,9 @@ export function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkf
     workflow_label: workflow.label,
     services,
     service_label: services ? formatServiceLabels(services) : inferFallbackServiceLabel(workflow, run),
+    stage,
+    stage_label: RELEASE_STAGE_LABELS[stage],
+    legacy,
     audit: null,
     title: run.display_title || run.name || workflow.label,
     status: run.status,
@@ -143,6 +200,35 @@ export function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkf
     updated_at: run.updated_at,
     run_started_at: run.run_started_at,
   };
+}
+
+export function inferReleaseStage(
+  workflow: ReleaseWorkflow,
+  run: GithubWorkflowRun,
+  legacy = isLegacyReleaseWorkflow(workflow),
+): ReleaseStage {
+  if (legacy) return "legacy";
+
+  const status = run.status || "";
+  const conclusion = run.conclusion || "";
+  const title = `${run.display_title || ""} ${run.name || ""}`.toLowerCase();
+  const isDeploy = workflow.environment === "dev" || /\bproduction\s+deploy\b/.test(title);
+
+  if (isDeploy) {
+    if (status === "queued" || status === "waiting" || status === "requested" || status === "pending") {
+      return "deploy_queued";
+    }
+    if (status === "in_progress") return "deploying";
+    if (status === "completed" && conclusion === "success") return "deployed";
+    return "deploy_failed";
+  }
+
+  if (status === "queued" || status === "waiting" || status === "requested" || status === "pending") {
+    return "build_queued";
+  }
+  if (status === "in_progress") return "building";
+  if (status === "completed" && conclusion === "success") return "ready_to_deploy";
+  return "build_failed";
 }
 
 export function getMetadataValue(metadata: unknown, key: string) {
@@ -196,7 +282,7 @@ export function normalizeRunAudit(record: PlatformReleaseDispatchAuditRecord): R
 export function parseServicesFromText(value: string | null | undefined) {
   const text = value?.trim();
   if (!text) return null;
-  const match = text.match(/\b(?:Dev|Production)\s+deploy\s+(.+)$/i);
+  const match = text.match(/\b(?:Dev\s+release|Dev\s+deploy|Production\s+build|Production\s+deploy)\s+(.+?)(?:\s+(?:from|candidate)\b.*)?$/i);
   if (!match?.[1]) return null;
   const raw = match[1].split(",").map((item) => item.trim()).filter(Boolean);
   if (raw.includes("all")) return ["all"] as ReleaseService[];
@@ -260,7 +346,10 @@ export function isFullSha(value: string | null | undefined) {
 }
 
 export function getLatestSuccessfulRunFromPayload(workflow: ReleaseWorkflow, runs: GithubWorkflowRun[]) {
-  const run = runs.find((item) => item.conclusion === "success" && Boolean(item.head_sha));
+  const run = runs.find((item) => {
+    if (item.conclusion !== "success" || !item.head_sha) return false;
+    return inferReleaseStage(workflow, item) === "deployed";
+  });
   if (!run?.head_sha) return null;
   const title = run.display_title || run.name || workflow.label;
   return {
@@ -373,10 +462,12 @@ export type {
   GithubWorkflowRun,
   NormalizedReleaseRun,
   PlatformReleaseDispatchAuditRecord,
+  ProductionReleaseCandidate,
   ReleaseCreateRollbackTagInput,
   ReleaseCreateTagInput,
   ReleaseDispatchInput,
   ReleaseEnvironment,
+  ReleaseProductionCandidateDeployInput,
   ReleaseProductionMigrationDispatchInput,
   ReleaseRefListQuery,
   ReleaseRefType,
@@ -385,6 +476,7 @@ export type {
   ReleaseRuntimeServiceVersion,
   ReleaseRunAudit,
   ReleaseService,
+  ReleaseStage,
   ReleaseSuccessfulRefListQuery,
   ServiceHealthContainer,
   ReleaseWorkflow,

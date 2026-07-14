@@ -2,6 +2,7 @@ import {
   AppError,
   Errors,
   ErrorCodes,
+  LEGACY_RELEASE_WORKFLOWS,
   REF_TYPE_LABELS,
   RELEASE_OPERATION_LABELS,
   PRODUCTION_MIGRATION_WORKFLOW,
@@ -61,16 +62,19 @@ import {
 export async function listRuns(this: any, query: ReleaseRunListQuery) {
   const page = query.page || 1;
   const pageSize = Math.min(query.pageSize || 10, 30);
+  const legacyWorkflows = LEGACY_RELEASE_WORKFLOWS.filter((workflow) => !query.environment || workflow.environment === query.environment);
   const environments = query.environment
     ? [
         RELEASE_WORKFLOWS[query.environment],
         ...(query.environment === "production" ? [PRODUCTION_MIGRATION_WORKFLOW] : []),
+        ...legacyWorkflows,
       ]
-    : [...Object.values(RELEASE_WORKFLOWS), PRODUCTION_MIGRATION_WORKFLOW];
+    : [...Object.values(RELEASE_WORKFLOWS), PRODUCTION_MIGRATION_WORKFLOW, ...LEGACY_RELEASE_WORKFLOWS];
 
   const results = await Promise.all(
     environments.map(async (workflow) => {
-      const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
+      const request = (this.githubRequest || githubRequest) as typeof githubRequest;
+      const payload = await request<{ workflow_runs?: GithubWorkflowRun[] }>(
         `/actions/workflows/${workflow.workflowId}/runs?per_page=100&page=1`,
       );
 
@@ -154,18 +158,20 @@ export async function listSuccessfulRefs(this: any, query: ReleaseSuccessfulRefL
 
   const results = await Promise.all(
     environments.map(async (workflow) => {
-      const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
+      const request = (this.githubRequest || githubRequest) as typeof githubRequest;
+      const payload = await request<{ workflow_runs?: GithubWorkflowRun[] }>(
         `/actions/workflows/${workflow.workflowId}/runs?status=completed&per_page=100`,
       );
 
       return (payload.workflow_runs || [])
-        .filter((run) => run.conclusion === "success" && Boolean(run.head_sha))
+        .map((run) => normalizeWorkflowRun(workflow, run))
+        .filter((run) => run.conclusion === "success" && run.stage === "deployed" && Boolean(run.head_sha))
         .map((run): SuccessfulReleaseRef => {
-          const title = run.display_title || run.name || workflow.label;
+          const title = run.title || workflow.label;
           const headSha = run.head_sha as string;
 
           return {
-            id: String(run.id),
+            id: run.id,
             environment: workflow.environment,
             workflow_id: workflow.workflowId,
             workflow_label: workflow.label,
