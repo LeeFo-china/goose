@@ -890,8 +890,7 @@ BEGIN
     AND pg_catalog.btrim(employee.phone) <> ''
     AND pg_catalog.btrim(employee.phone) =
       pg_catalog.btrim(v_application.admin_phone)
-  LIMIT 1
-  FOR SHARE;
+  LIMIT 1;
   IF FOUND THEN
     RETURN pg_catalog.jsonb_build_object('status', 'admin_phone_exists');
   END IF;

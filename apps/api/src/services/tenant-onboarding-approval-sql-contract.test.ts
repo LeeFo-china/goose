@@ -187,6 +187,13 @@ describe("tenant-onboarding atomic approval migration", () => {
     const source = sql();
     const lockHelper = functionBody(source, "lock_tenant_onboarding_employee_phones");
     const trigger = functionBody(source, "lock_active_employee_phone_mutation");
+    const approval = functionBody(
+      source,
+      "approve_tenant_onboarding_application",
+    );
+    const phonePrecheck = approval.match(
+      /PERFORM employee\.id[\s\S]*?IF FOUND THEN[\s\S]*?'admin_phone_exists'[\s\S]*?END IF;/,
+    )?.[0] ?? "";
     expect(source).toMatch(
       /CREATE INDEX IF NOT EXISTS employees_active_normalized_phone_idx\s+ON public\.employees \(\(pg_catalog\.btrim\(phone\)\)\)\s+WHERE status = 'active'\s+AND phone IS NOT NULL\s+AND pg_catalog\.btrim\(phone\) <> ''/,
     );
@@ -210,8 +217,11 @@ describe("tenant-onboarding atomic approval migration", () => {
     expect(source).toMatch(
       /BEFORE INSERT OR UPDATE OF phone, status OR DELETE\s+ON public\.employees/,
     );
-    expect(functionBody(source, "approve_tenant_onboarding_application"))
-      .toContain("public.lock_tenant_onboarding_employee_phones");
+    expect(approval).toContain("public.lock_tenant_onboarding_employee_phones");
+    expect(phonePrecheck).toContain("PERFORM employee.id");
+    expect(phonePrecheck).not.toContain("FOR SHARE");
+    expect(approval.indexOf("public.lock_tenant_onboarding_employee_phones"))
+      .toBeLessThan(approval.indexOf(phonePrecheck));
   });
 
   test("fails approved idempotency closed when binding provenance is inconsistent", () => {
