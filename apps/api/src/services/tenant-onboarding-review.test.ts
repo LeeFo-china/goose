@@ -10,7 +10,6 @@ import type { TenantOnboardingPartnerResolution } from "@/services/tenant-onboar
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const APPLICATION_ID = "00000000-0000-4000-8000-000000000001";
 const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000002";
 const PARTNER_ID = "00000000-0000-4000-8000-000000000003";
@@ -202,7 +201,7 @@ const notifications = {
 };
 const audit = { recordBestEffort: mock(async () => null) };
 const resolveSigned = mock(async () => "https://private.example/signed-license");
-
+const expiryRepository = { expireDuePartnerAssistTasks: mock(async () => [] as string[]) };
 async function createService() {
   const { TenantOnboardingReviewService } = await import("./tenant-onboarding-review");
   return new TenantOnboardingReviewService({
@@ -214,6 +213,7 @@ async function createService() {
     notificationService: notifications,
     auditLogService: audit,
     resolveSignedStoredFileUrl: resolveSigned,
+    expiryRepository,
     clock: () => new Date(NOW),
     tenantSlugGenerator: (_record, attempt) => `zq-91411525-${attempt}`,
   });
@@ -229,6 +229,7 @@ beforeEach(() => {
     ...Object.values(notifications),
     ...Object.values(audit),
     resolveSigned,
+    ...Object.values(expiryRepository),
   ]) dependency.mockClear();
   repository.findApplicationById.mockImplementation(async () => application);
   repository.findTenantBySlug.mockImplementation(async () => null);
@@ -266,7 +267,6 @@ describe("TenantOnboardingReviewService", () => {
       keyword: "晴天",
     });
   });
-
   test("loads reviews and deliveries through separate bounded pages", async () => {
     const service = await createService();
     await service.get(auth(), APPLICATION_ID);

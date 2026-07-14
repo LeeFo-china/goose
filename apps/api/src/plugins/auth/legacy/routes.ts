@@ -226,6 +226,10 @@ function isAuthIdentitySwitchRoute(method: string, url: string) {
 }
 
 export function isPartnerPortalRoute(method: string, url: string) {
+  if (isPartnerOnboardingAssistRoute(method, url)) {
+    return true;
+  }
+
   if (
     method === "POST" &&
     (
@@ -244,6 +248,20 @@ export function isPartnerPortalRoute(method: string, url: string) {
     (method === "GET" || method === "HEAD") &&
     partnerPortalRoutes.has(url)
   );
+}
+
+function isPartnerOnboardingAssistRoute(method: string, url: string) {
+  if (
+    (method === "GET" || method === "HEAD") &&
+    (
+      url === "/partner/onboarding-applications" ||
+      /^\/partner\/onboarding-applications\/[^/]+$/.test(url)
+    )
+  ) {
+    return true;
+  }
+  return method === "POST" &&
+    /^\/partner\/onboarding-applications\/[^/]+\/assist-review$/.test(url);
 }
 
 export function isVisitorSessionRoute(method: string, url: string) {

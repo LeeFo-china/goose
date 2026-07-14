@@ -6,6 +6,9 @@ import type {
 } from "@/repositories/tenant-onboarding-review";
 import type { TenantOnboardingPlatformApplicationRecord } from "@/repositories/tenant-onboarding-types";
 import type {
+  tenantOnboardingPartnerAssistRepository,
+} from "@/repositories/tenant-onboarding-partner-assist";
+import type {
   tenantOnboardingRegionMatchRepository,
   tenantOnboardingRepository,
 } from "@/repositories/tenant-onboarding";
@@ -53,6 +56,10 @@ export type AuditLogServicePort = Pick<
   "recordBestEffort"
 >;
 export type SignedUrlResolver = typeof resolveSignedStoredFileUrl;
+export type PartnerAssistExpiryRepositoryPort = Pick<
+  typeof tenantOnboardingPartnerAssistRepository,
+  "expireDuePartnerAssistTasks"
+>;
 export type TenantSlugGenerator = (
   application: TenantOnboardingPlatformApplicationRecord,
   attempt: number,
@@ -69,4 +76,5 @@ export type TenantOnboardingReviewServiceDependencies = {
   resolveSignedStoredFileUrl?: SignedUrlResolver;
   clock?: () => Date;
   tenantSlugGenerator?: TenantSlugGenerator;
+  expiryRepository?: PartnerAssistExpiryRepositoryPort;
 };

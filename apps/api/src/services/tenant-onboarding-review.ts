@@ -1,17 +1,8 @@
-import {
-  tenantOnboardingNotificationsRepository,
-} from "@/repositories/tenant-onboarding-notifications";
-import {
-  tenantOnboardingReviewRepository,
-} from "@/repositories/tenant-onboarding-review";
-import type {
-  TenantOnboardingPlatformApplicationRecord,
-  TenantOnboardingPlatformReviewMutationResult,
-} from "@/repositories/tenant-onboarding-types";
-import {
-  tenantOnboardingRegionMatchRepository,
-  tenantOnboardingRepository,
-} from "@/repositories/tenant-onboarding";
+import { tenantOnboardingNotificationsRepository } from "@/repositories/tenant-onboarding-notifications";
+import { tenantOnboardingReviewRepository } from "@/repositories/tenant-onboarding-review";
+import type { TenantOnboardingPlatformApplicationRecord, TenantOnboardingPlatformReviewMutationResult } from "@/repositories/tenant-onboarding-types";
+import { tenantOnboardingPartnerAssistRepository } from "@/repositories/tenant-onboarding-partner-assist";
+import { tenantOnboardingRegionMatchRepository, tenantOnboardingRepository } from "@/repositories/tenant-onboarding";
 import type {
   ApproveTenantOnboardingApplicationInput,
   RejectTenantOnboardingApplicationInput,
@@ -36,6 +27,7 @@ import type {
   InviteCodeRepositoryPort,
   NotificationRepositoryPort,
   NotificationServicePort,
+  PartnerAssistExpiryRepositoryPort,
   RegionResolverPort,
   ReviewRepositoryPort,
   SignedUrlResolver,
@@ -74,6 +66,7 @@ export class TenantOnboardingReviewService {
   private readonly signedUrlResolver: SignedUrlResolver;
   private readonly clock: () => Date;
   private readonly tenantSlugGenerator: TenantSlugGenerator;
+  private readonly expiryRepository: PartnerAssistExpiryRepositoryPort;
 
   constructor(dependencies: TenantOnboardingReviewServiceDependencies = {}) {
     this.repository = dependencies.repository ?? tenantOnboardingReviewRepository;
@@ -96,10 +89,13 @@ export class TenantOnboardingReviewService {
     this.clock = dependencies.clock ?? (() => new Date());
     this.tenantSlugGenerator = dependencies.tenantSlugGenerator ??
       defaultTenantSlug;
+    this.expiryRepository = dependencies.expiryRepository ??
+      tenantOnboardingPartnerAssistRepository;
   }
 
   async list(authContext: AuthContext, query: TenantOnboardingApplicationListQuery) {
     this.assertReviewPermission(authContext);
+    await this.expireDuePartnerAssists();
     return this.repository.listApplications({
       ...query,
       page: normalizePage(query.page),
@@ -110,6 +106,7 @@ export class TenantOnboardingReviewService {
 
   async get(authContext: AuthContext, applicationId: string) {
     this.assertReviewPermission(authContext);
+    await this.expireDuePartnerAssists();
     return this.requireApplication(applicationId);
   }
 
@@ -463,6 +460,12 @@ export class TenantOnboardingReviewService {
     } catch {
       return null;
     }
+  }
+
+  private expireDuePartnerAssists() {
+    return this.expiryRepository.expireDuePartnerAssistTasks({
+      cutoff: this.clock().toISOString(),
+    });
   }
 
   private audit(

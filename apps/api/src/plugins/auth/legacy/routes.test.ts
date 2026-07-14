@@ -184,6 +184,25 @@ describe("auth public route allowlist", () => {
     expect(isPartnerPortalRoute("HEAD", "/partner/auth/unbind-wechat")).toBe(false);
   });
 
+  test("scopes partner onboarding assist routes to platform partner tokens", () => {
+    const applicationId = "00000000-0000-4000-8000-000000000501";
+    const routes = [
+      ["GET", "/partner/onboarding-applications"],
+      ["HEAD", "/partner/onboarding-applications"],
+      ["GET", `/partner/onboarding-applications/${applicationId}`],
+      ["HEAD", `/partner/onboarding-applications/${applicationId}`],
+      ["POST", `/partner/onboarding-applications/${applicationId}/assist-review`],
+    ] as const;
+
+    for (const [method, route] of routes) {
+      expect(isPartnerPortalRoute(method, route)).toBe(true);
+      expect(isPublicRoute(method, route)).toBe(false);
+      expect(isVisitorSessionRoute(method, route)).toBe(false);
+    }
+    expect(isPartnerPortalRoute("POST", "/partner/onboarding-applications"))
+      .toBe(false);
+  });
+
   test("allows platform partner tokens to list and switch auth identities", () => {
     expect(isPartnerPortalRoute("GET", "/auth/identities")).toBe(true);
     expect(isPartnerPortalRoute("HEAD", "/auth/identities")).toBe(true);
