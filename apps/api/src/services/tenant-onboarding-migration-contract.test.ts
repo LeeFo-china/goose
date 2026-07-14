@@ -42,4 +42,26 @@ describe("tenant onboarding migration contract", () => {
       /INSERT INTO public\.tenant_onboarding_application_reviews \([\s\S]*?\)\s*SELECT\s+expired_applications\.id,\s*'partner_assist',\s*'expired',\s*'system',/,
     );
   });
+
+  test("preflights and normalizes service-area adcodes before uniqueness", () => {
+    expect(migrationSql).toContain("TENANT_SERVICE_AREA_ADCODE_DUPLICATE");
+    expect(migrationSql).toContain(
+      "Operator remediation: inspect duplicate tenant/adcode rows",
+    );
+    expect(migrationSql).toMatch(
+      /GROUP BY\s+service_areas\.tenant_id,\s*btrim\(service_areas\.adcode\)\s+HAVING count\(\*\) > 1/,
+    );
+    expect(migrationSql).toMatch(
+      /TENANT_SERVICE_AREA_ADCODE_DUPLICATE[\s\S]*?UPDATE public\.tenant_service_areas\s+SET adcode = btrim\(adcode\)\s+WHERE adcode IS NOT NULL\s+AND btrim\(adcode\) <> ''[\s\S]*?ADD CONSTRAINT tenant_service_areas_adcode_trimmed_check\s+CHECK \(adcode IS NULL OR adcode = btrim\(adcode\)\)[\s\S]*?CREATE UNIQUE INDEX IF NOT EXISTS tenant_service_areas_tenant_adcode_unique_idx\s+ON public\.tenant_service_areas\(tenant_id, adcode\)/,
+    );
+    expect(migrationSql).toMatch(
+      /BEGIN;[\s\S]*?TENANT_SERVICE_AREA_ADCODE_DUPLICATE[\s\S]*?COMMIT;/,
+    );
+  });
+
+  test("indexes globally due pending partner assists", () => {
+    expect(migrationSql).toMatch(
+      /CREATE INDEX IF NOT EXISTS tenant_onboarding_applications_pending_assist_due_idx\s+ON public\.tenant_onboarding_applications\(\s*partner_assist_due_at,\s*id\s*\)\s+WHERE partner_assist_status = 'pending'\s+AND partner_assist_due_at IS NOT NULL\s+AND status IN \('submitted', 'reviewing', 'supplement_required'\)/,
+    );
+  });
 });

@@ -6,6 +6,8 @@
 -- reverse dependency order. After data exists, disable workflow entry points and
 -- use a forward migration so applications and append-only review history remain.
 
+BEGIN;
+
 ALTER TABLE public.tenants
 ADD COLUMN IF NOT EXISTS unified_social_credit_code text NULL;
 
@@ -21,6 +23,66 @@ CREATE UNIQUE INDEX IF NOT EXISTS tenants_unified_social_credit_code_unique_idx
   ON public.tenants(upper(btrim(unified_social_credit_code)))
   WHERE unified_social_credit_code IS NOT NULL
     AND btrim(unified_social_credit_code) <> '';
+
+-- Operator remediation: inspect duplicate tenant/adcode rows and resolve them
+-- via a follow-up migration before retrying; no business rows are auto-deleted.
+DO $$
+DECLARE
+  v_duplicate record;
+BEGIN
+  SELECT
+    service_areas.tenant_id,
+    btrim(service_areas.adcode) AS normalized_adcode,
+    count(*) AS duplicate_count
+  INTO v_duplicate
+  FROM public.tenant_service_areas AS service_areas
+  WHERE service_areas.adcode IS NOT NULL
+    AND btrim(service_areas.adcode) <> ''
+  GROUP BY
+    service_areas.tenant_id,
+    btrim(service_areas.adcode)
+  HAVING count(*) > 1
+  ORDER BY service_areas.tenant_id, btrim(service_areas.adcode)
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'TENANT_SERVICE_AREA_ADCODE_DUPLICATE',
+      DETAIL = format(
+        'tenant_id=%s, adcode=%s, row_count=%s',
+        v_duplicate.tenant_id,
+        v_duplicate.normalized_adcode,
+        v_duplicate.duplicate_count
+      ),
+      HINT = 'Inspect duplicate tenant_service_areas rows, resolve them via a follow-up migration, then retry.';
+  END IF;
+END;
+$$;
+
+UPDATE public.tenant_service_areas
+SET adcode = btrim(adcode)
+WHERE adcode IS NOT NULL
+  AND btrim(adcode) <> ''
+  AND adcode IS DISTINCT FROM btrim(adcode);
+
+-- NOT VALID preserves legacy whitespace-only blank values while enforcing the
+-- trim invariant on all new or updated rows.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'tenant_service_areas_adcode_trimmed_check'
+      AND conrelid = 'public.tenant_service_areas'::regclass
+  ) THEN
+    ALTER TABLE public.tenant_service_areas
+    ADD CONSTRAINT tenant_service_areas_adcode_trimmed_check
+    CHECK (adcode IS NULL OR adcode = btrim(adcode))
+    NOT VALID;
+  END IF;
+END;
+$$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS tenant_service_areas_tenant_adcode_unique_idx
   ON public.tenant_service_areas(tenant_id, adcode)
@@ -126,6 +188,15 @@ CREATE INDEX IF NOT EXISTS tenant_onboarding_applications_partner_queue_idx
     created_at DESC
   )
   WHERE candidate_partner_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS tenant_onboarding_applications_pending_assist_due_idx
+  ON public.tenant_onboarding_applications(
+    partner_assist_due_at,
+    id
+  )
+  WHERE partner_assist_status = 'pending'
+    AND partner_assist_due_at IS NOT NULL
+    AND status IN ('submitted', 'reviewing', 'supplement_required');
 
 CREATE TABLE IF NOT EXISTS public.tenant_onboarding_application_reviews (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -481,3 +552,5 @@ WHERE roles.code = 'system_admin'
   AND roles.tenant_id IS NOT NULL
 ON CONFLICT (role_id, permission_id) DO UPDATE SET
   access_scope = EXCLUDED.access_scope;
+
+COMMIT;
