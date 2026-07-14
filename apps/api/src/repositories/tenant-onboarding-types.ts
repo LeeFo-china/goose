@@ -19,6 +19,16 @@ export type TenantOnboardingPartnerBrief = {
   region_codes: string[];
 };
 
+export type TenantOnboardingPartnerOverlapQuery = {
+  region_codes: readonly string[];
+  limit: 100;
+};
+
+export type TenantOnboardingPartnerOverlapResult = {
+  partners: readonly TenantOnboardingPartnerBrief[];
+  truncated: boolean;
+};
+
 export type TenantOnboardingApplicationRecord = {
   id: string;
   application_no: string;

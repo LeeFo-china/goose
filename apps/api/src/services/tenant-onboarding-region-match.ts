@@ -1,9 +1,12 @@
 import type {
   TenantOnboardingAdministrativeAreaRecord,
   TenantOnboardingPartnerBrief,
+  TenantOnboardingPartnerOverlapQuery,
+  TenantOnboardingPartnerOverlapResult,
 } from "@/repositories/tenant-onboarding-types";
 
 const MAX_ADMINISTRATIVE_AREA_LEVELS = 3;
+const MAX_REGION_PARTNER_CANDIDATES = 100;
 
 const AREA_SPECIFICITY = {
   province: 0,
@@ -48,10 +51,13 @@ export type TenantOnboardingAdministrativeAreaRepositoryPort = {
 };
 
 export type TenantOnboardingPartnerRepositoryPort = {
-  /** Queries status=active partners whose region_codes overlap at least one exact code. */
+  /**
+   * Queries only TenantOnboardingPartnerBrief fields for status=active partners.
+   * The adapter must cap returned rows at input.limit and report any truncation.
+   */
   listActiveOverlappingPartners: (
-    regionCodes: readonly string[],
-  ) => Promise<readonly TenantOnboardingPartnerBrief[]>;
+    input: TenantOnboardingPartnerOverlapQuery,
+  ) => Promise<TenantOnboardingPartnerOverlapResult>;
   /** Returns the partner for a currently valid invite code, or null. */
   findPartnerByInviteCode: (
     inviteCode: string,
@@ -69,6 +75,11 @@ type ResolveTenantOnboardingPartnerInput = {
 };
 
 type AreaPaths = Map<string, TenantOnboardingAdministrativeAreaRecord[]>;
+
+type LoadedAreas = {
+  areasByCode: Map<string, TenantOnboardingAdministrativeAreaRecord>;
+  conflictingCodes: Set<string>;
+};
 
 type ScoredPartner = {
   partner: TenantOnboardingPartnerBrief;
@@ -100,10 +111,20 @@ export class TenantOnboardingRegionMatchService {
       return this.unique(invitedPartner, "invite_code");
     }
 
-    const repositoryPartners =
-      await this.partnerRepository.listActiveOverlappingPartners(ancestorCodes);
+    const candidateResult =
+      await this.partnerRepository.listActiveOverlappingPartners({
+        region_codes: ancestorCodes,
+        limit: MAX_REGION_PARTNER_CANDIDATES,
+      });
+    if (
+      candidateResult.truncated ||
+      candidateResult.partners.length > MAX_REGION_PARTNER_CANDIDATES
+    ) {
+      return this.truncated(candidateResult.partners, new Set(ancestorCodes));
+    }
+
     const scoredPartners = this.scoreEligiblePartners(
-      repositoryPartners,
+      candidateResult.partners,
       areaPaths,
       new Set(ancestorCodes),
     );
@@ -131,7 +152,10 @@ export class TenantOnboardingRegionMatchService {
   }
 
   private async loadAreaPaths(submittedCodes: readonly string[]): Promise<AreaPaths> {
-    const areasByCode = new Map<string, TenantOnboardingAdministrativeAreaRecord>();
+    const loadedAreas: LoadedAreas = {
+      areasByCode: new Map(),
+      conflictingCodes: new Set(),
+    };
     const loadedCodes = new Set<string>();
     let frontier = [...submittedCodes];
 
@@ -149,15 +173,13 @@ export class TenantOnboardingRegionMatchService {
       const requestedCodeSet = new Set(requestedCodes);
       const rows = await this.administrativeAreaRepository
         .loadActiveByAdcodes(requestedCodes);
-
-      for (const row of rows) {
-        if (requestedCodeSet.has(row.adcode) && !areasByCode.has(row.adcode)) {
-          areasByCode.set(row.adcode, { ...row });
-        }
-      }
+      this.mergeAreaRows(rows, requestedCodeSet, loadedAreas);
 
       frontier = requestedCodes.flatMap((adcode) => {
-        const parentAdcode = areasByCode.get(adcode)?.parent_adcode;
+        const area = loadedAreas.areasByCode.get(adcode);
+        const parentAdcode = area?.level === "province"
+          ? null
+          : area?.parent_adcode;
         return parentAdcode && !loadedCodes.has(parentAdcode)
           ? [parentAdcode]
           : [];
@@ -166,31 +188,88 @@ export class TenantOnboardingRegionMatchService {
 
     return new Map(submittedCodes.map((submittedCode) => [
       submittedCode,
-      this.buildAreaPath(submittedCode, areasByCode),
+      this.buildAreaPath(submittedCode, loadedAreas),
     ]));
+  }
+
+  private mergeAreaRows(
+    rows: readonly TenantOnboardingAdministrativeAreaRecord[],
+    requestedCodes: ReadonlySet<string>,
+    loadedAreas: LoadedAreas,
+  ): void {
+    const rowsByCode = new Map<string, TenantOnboardingAdministrativeAreaRecord[]>();
+    for (const row of rows) {
+      if (!requestedCodes.has(row.adcode)) continue;
+      const matchingRows = rowsByCode.get(row.adcode) ?? [];
+      matchingRows.push(row);
+      rowsByCode.set(row.adcode, matchingRows);
+    }
+
+    for (const adcode of requestedCodes) {
+      const matchingRows = rowsByCode.get(adcode);
+      const firstRow = matchingRows?.[0];
+      if (!matchingRows || !firstRow) continue;
+
+      const isConsistent = matchingRows.every((row) => (
+        row.adcode === firstRow.adcode &&
+        row.level === firstRow.level &&
+        row.parent_adcode === firstRow.parent_adcode
+      ));
+      if (isConsistent) {
+        loadedAreas.areasByCode.set(adcode, { ...firstRow });
+      } else {
+        loadedAreas.areasByCode.delete(adcode);
+        loadedAreas.conflictingCodes.add(adcode);
+      }
+    }
   }
 
   private buildAreaPath(
     submittedCode: string,
-    areasByCode: ReadonlyMap<string, TenantOnboardingAdministrativeAreaRecord>,
+    loadedAreas: LoadedAreas,
   ): TenantOnboardingAdministrativeAreaRecord[] {
-    const path: TenantOnboardingAdministrativeAreaRecord[] = [];
-    const visitedCodes = new Set<string>();
-    let currentCode: string | null = submittedCode;
+    if (loadedAreas.conflictingCodes.has(submittedCode)) return [];
+    const exactArea = loadedAreas.areasByCode.get(submittedCode);
+    if (!exactArea) return [];
 
-    while (
-      currentCode &&
-      path.length < MAX_ADMINISTRATIVE_AREA_LEVELS &&
-      !visitedCodes.has(currentCode)
-    ) {
-      visitedCodes.add(currentCode);
-      const area = areasByCode.get(currentCode);
-      if (!area) break;
-      path.push({ ...area });
-      currentCode = area.parent_adcode;
+    const exactPath = [{ ...exactArea }];
+    const path = [...exactPath];
+    const visitedCodes = new Set([submittedCode]);
+    let currentArea = exactArea;
+
+    while (true) {
+      if (currentArea.level === "province") {
+        return currentArea.parent_adcode === null ? path : exactPath;
+      }
+      if (!currentArea.parent_adcode) return path;
+      if (path.length >= MAX_ADMINISTRATIVE_AREA_LEVELS) return exactPath;
+
+      const parentCode = currentArea.parent_adcode;
+      if (
+        visitedCodes.has(parentCode) ||
+        loadedAreas.conflictingCodes.has(parentCode)
+      ) {
+        return exactPath;
+      }
+
+      const parentArea = loadedAreas.areasByCode.get(parentCode);
+      if (!parentArea) return path;
+      if (!this.isValidParentLevel(currentArea.level, parentArea.level)) {
+        return exactPath;
+      }
+
+      path.push({ ...parentArea });
+      visitedCodes.add(parentCode);
+      currentArea = parentArea;
     }
+  }
 
-    return path;
+  private isValidParentLevel(
+    childLevel: TenantOnboardingAdministrativeAreaRecord["level"],
+    parentLevel: TenantOnboardingAdministrativeAreaRecord["level"],
+  ): boolean {
+    return (childLevel === "district" && parentLevel === "city") ||
+      (childLevel === "city" && parentLevel === "province");
   }
 
   private collectAncestorCodes(areaPaths: AreaPaths): string[] {
@@ -235,7 +314,7 @@ export class TenantOnboardingRegionMatchService {
       .filter((candidate) => candidate.score.some((matches) => matches > 0))
       .sort((left, right) => {
         const scoreOrder = this.compareScores(right.score, left.score);
-        return scoreOrder || left.partner.id.localeCompare(right.partner.id);
+        return scoreOrder || this.compareIds(left.partner.id, right.partner.id);
       });
   }
 
@@ -299,6 +378,30 @@ export class TenantOnboardingRegionMatchService {
       selectedPartner: null,
       reason: "no_eligible_partner",
     };
+  }
+
+  /** partnerIds is a bounded diagnostic subset, never an attribution decision. */
+  private truncated(
+    repositoryPartners: readonly TenantOnboardingPartnerBrief[],
+    ancestorCodes: ReadonlySet<string>,
+  ): TenantOnboardingPartnerResolution {
+    const partnerIds = [...new Set(repositoryPartners
+      .filter((partner) => this.isEligiblePartner(partner, ancestorCodes))
+      .map((partner) => partner.id))]
+      .sort(this.compareIds)
+      .slice(0, MAX_REGION_PARTNER_CANDIDATES);
+    return {
+      kind: "ambiguous",
+      partnerIds,
+      selectedPartner: null,
+      reason: "same_specificity",
+    };
+  }
+
+  private compareIds(left: string, right: string): number {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
   }
 
   private unique(
