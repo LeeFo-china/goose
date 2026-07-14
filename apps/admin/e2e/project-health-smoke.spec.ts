@@ -127,6 +127,40 @@ test.describe("project health smoke", () => {
     expect(await isPageHorizontallyOverflowing(page)).toBe(false);
   });
 
+  test("风险中心快速切换筛选时旧响应不会覆盖新结果", async ({ page }) => {
+    await page.route("**/api/backend/project-health/risks**", async (route) => {
+      const url = route.request().url();
+      if (url.includes("keyword=%E6%B9%96%E7%95%94")) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+
+      await route.continue().catch(() => undefined);
+    });
+
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/project-health", { waitUntil: "networkidle" });
+
+    const jiangwanResponse = page.waitForResponse((response) =>
+      response.url().includes("/api/backend/project-health/risks") &&
+      response.url().includes("keyword=%E6%B1%9F%E6%B9%BE") &&
+      response.status() === 200
+    );
+
+    await page.evaluate(() => {
+      window.history.pushState(null, "", "/project-health?page=1&keyword=湖畔");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      window.history.pushState(null, "", "/project-health?page=1&keyword=江湾");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    await jiangwanResponse;
+
+    const tableViewport = page.getByTestId("project-health-table-viewport");
+    await expect(page).toHaveURL(/\/project-health\?page=1&keyword=%E6%B1%9F%E6%B9%BE$/);
+    await expect(page.getByText("当前显示 1 条，共 1 条")).toBeVisible();
+    await expect(tableViewport.getByText("江湾府 8-2")).toBeVisible();
+    await expect(tableViewport.getByText("湖畔雅居 12-1")).toHaveCount(0);
+  });
+
   test("风险中心为五类风险生成处理入口", async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 900 });
     await page.goto("/project-health", { waitUntil: "networkidle" });

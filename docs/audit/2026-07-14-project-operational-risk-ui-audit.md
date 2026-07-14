@@ -84,13 +84,14 @@ python3 /Users/leefo/.codex/skills/webapp-testing/scripts/with_server.py \
 - AI 摘要面板显示 overview、priority 和 caution；
 - 关键词、严重度、风险类型筛选会同步 URL，并刷新为过滤后的列表；
 - 重置筛选会回到 `/project-health?page=1` 并恢复完整列表；
+- 快速切换筛选时，较早的慢响应不会覆盖较新的筛选结果；
 - AI 摘要失败只显示摘要错误，风险列表和 KPI 保持可用；
 - console error = 0；
 - failed response = 0。
 
 结果：
 
-- `apps/admin/e2e/project-health-smoke.spec.ts`：8 passed；
+- `apps/admin/e2e/project-health-smoke.spec.ts`：9 passed；
 - 首次固化时，390px 视口发现列表卡片被筛选区压缩导致 table viewport 不可见；
 - 已通过 `components/project-health/project-health-client-shell.tsx` 的移动端列表卡片保底高度修复，桌面 `lg` 以上仍保持原满高工作台布局。
 
@@ -114,7 +115,7 @@ python3 /Users/leefo/.codex/skills/webapp-testing/scripts/with_server.py \
 2. 验证导航显示“项目风险”，self/assigned/department scope 用户不显示且 API 403；
 3. 使用真实数据验证 GET 首屏 200、pageSize 20、KPI 与 summary 一致；
 4. 使用真实数据验证搜索、严重度、风险类型、重置、上一页/下一页同步 URL；
-5. 快速切换筛选，确认旧响应不覆盖新结果；
+5. 使用真实 API 复验快速切换筛选时旧响应不覆盖新结果；
 6. 使用真实数据验证五类“去处理”分别进入 `overview/logs/acceptances/customer-service`；
 7. 使用真实 API 验证 AI 不自动调用，点击后才 POST，AI 失败只影响摘要面板；
 8. 验证 RPC 错误显示 StatusAlert，不显示为风险 0；
