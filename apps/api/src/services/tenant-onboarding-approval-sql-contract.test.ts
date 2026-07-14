@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEPARTMENT_CODE_VALUES,
+  DepartmentConfig,
   EMPLOYEE_POST_CODE_VALUES,
   EmployeePostConfig,
 } from "@gooes/domain";
@@ -53,7 +54,7 @@ describe("tenant-onboarding atomic approval migration", () => {
       "(employee_id, role_id)",
       "(tenant_id, template_code, template_version)",
     ]) expect(body).toContain(`ON CONFLICT ${conflictTarget}`);
-    expect(body).toContain("WHERE template.code = ANY (v_department_codes)");
+    expect(body).toContain("ON template.code = department_defaults.code");
     expect(body).toContain("COALESCE(existing.enabled, false)");
     expect(body).toContain("'SYSTEM_ADMIN'");
     expect(body).toContain("'system_admin'");
@@ -64,12 +65,26 @@ describe("tenant-onboarding atomic approval migration", () => {
     expect(body).toContain("'admin_role_id', v_admin_role_id");
   });
 
+  test("pins every current department alias instead of reading mutable template names", () => {
+    const body = functionBody(sql(), "initialize_default_decoration_tenant");
+    const departmentBlock = body.match(
+      /WITH department_defaults\(code, alias_name\) AS \(\s*VALUES([\s\S]*?)\n  \),\n  upserted_departments/,
+    )?.[1] ?? "";
+    const mappings = [...departmentBlock.matchAll(/\('([A-Z0-9_]+)', '([^']+)'\)/g)]
+      .map((match) => [match[1], match[2]]);
+    expect(mappings).toEqual(DEPARTMENT_CODE_VALUES.map((code) => [
+      code,
+      DepartmentConfig[code].label,
+    ]));
+    expect(departmentBlock).not.toContain("template.default_name");
+  });
+
   test("pins every current department and employee-post template code", () => {
     const body = functionBody(sql(), "initialize_default_decoration_tenant");
     const departmentBlock = body.match(
-      /v_department_codes constant text\[\] := ARRAY\[([\s\S]*?)\];/,
+      /WITH department_defaults\(code, alias_name\) AS \(\s*VALUES([\s\S]*?)\n  \),\n  upserted_departments/,
     )?.[1] ?? "";
-    const departmentCodes = [...departmentBlock.matchAll(/'([A-Z0-9_]+)'/g)]
+    const departmentCodes = [...departmentBlock.matchAll(/\('([A-Z0-9_]+)',/g)]
       .map((match) => match[1]);
     expect(departmentCodes).toEqual([...DEPARTMENT_CODE_VALUES]);
 
