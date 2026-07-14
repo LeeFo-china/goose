@@ -42,6 +42,19 @@ export const PlatformAuditLogActionSchema = z.enum([
   "site_content_publish",
   "site_content_rollback",
   "site_content_archive",
+  "tenant_onboarding_submit",
+  "tenant_onboarding_start_review",
+  "tenant_onboarding_request_supplement",
+  "tenant_onboarding_request_partner_assist",
+  "tenant_onboarding_approve",
+  "tenant_onboarding_reject",
+  "tenant_onboarding_withdraw",
+  "tenant_onboarding_partner_assist",
+  "tenant_onboarding_notification_retry",
+  "service_provider_submit_review",
+  "service_provider_publish",
+  "service_provider_return_draft",
+  "service_provider_suspend",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);
