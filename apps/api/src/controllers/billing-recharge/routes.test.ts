@@ -17,6 +17,7 @@ describe("BillingRechargeController routes", () => {
 
     expect(routes).toEqual([
       { method: "GET", path: "/billing/recharge-products" },
+      { method: "GET", path: "/billing/recharge-orders" },
       { method: "POST", path: "/billing/recharge-orders" },
       { method: "GET", path: "/billing/recharge-orders/:id" },
     ]);

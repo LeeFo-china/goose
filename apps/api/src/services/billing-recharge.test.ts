@@ -107,6 +107,20 @@ const rechargeRepository = {
     list: [product],
     pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
   })),
+  listOrders: mock(async () => ({
+    list: [
+      {
+        ...paidOrder,
+        metadata: {
+          product_snapshot: {
+            code: "credit_1000",
+            title: "1000 积分",
+          },
+        },
+      },
+    ],
+    pagination: { page: 2, pageSize: 10, total: 1, totalPages: 1 },
+  })),
   findEnabledProductByCode: mock(async () => product),
   findOrderByIdempotencyKey: mock(async () => null),
   createOrder: mock(async () => order),
@@ -227,6 +241,59 @@ describe("BillingRechargeService", () => {
         amount_fen: 10000,
         credits: 1000,
         bonus_credits: 100,
+      }),
+    ]);
+  });
+
+  test("lists tenant wechat recharge orders with backend refund action", async () => {
+    const service = await createService();
+
+    const result = await service.listOrders(authContext, {
+      page: 2,
+      pageSize: 10,
+      status: "paid",
+      keyword: "TC202607",
+    });
+
+    expect(rechargeRepository.listOrders).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      page: 2,
+      pageSize: 10,
+      status: "paid",
+      keyword: "TC202607",
+    });
+    expect(result.pagination).toEqual({
+      page: 2,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
+    });
+    expect(result.list).toEqual([
+      expect.objectContaining({
+        id: "order-1",
+        tenant_id: "tenant-1",
+        order_no: "TC202607020001",
+        package_code: "credit_1000",
+        product_title: "1000 积分",
+        amount_fen: 10000,
+        credits: 1000,
+        bonus_credits: 100,
+        channel: "wechat_pay",
+        status: "paid",
+        paid_at: "2026-07-02T08:03:00.000Z",
+        paid_amount_fen: 0,
+        out_trade_no: "TC202607020001",
+        transaction_id: null,
+        refund_status: null,
+        refund_requested_at: null,
+        refunded_at: null,
+        refund_amount_fen: null,
+        refund_action: {
+          enabled: false,
+          label: "申请退款",
+          disabled_reason: "REFUND_REQUEST_NOT_SUPPORTED",
+          requires_reason: true,
+        },
       }),
     ]);
   });

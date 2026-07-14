@@ -25,6 +25,13 @@ export type BillingRechargeProductQuery = {
   pageSize?: number;
 };
 
+export type BillingRechargeOrderQuery = {
+  page?: number;
+  pageSize?: number;
+  status?: "pending" | "paid" | "closed" | "refunded";
+  keyword?: string;
+};
+
 export type BillingRechargeCreateOrderInput = {
   package_code: string;
   payer_openid: string;
@@ -34,6 +41,7 @@ export type BillingRechargeCreateOrderInput = {
 type BillingRechargeRepositoryPort = Pick<
   typeof billingRechargeRepository,
   | "listEnabledProducts"
+  | "listOrders"
   | "findEnabledProductByCode"
   | "findOrderByIdempotencyKey"
   | "createOrder"
@@ -123,6 +131,30 @@ export class BillingRechargeService {
     return {
       ...products,
       list: products.list.map(toProductView),
+    };
+  }
+
+  async listOrders(
+    authContext: AuthContext,
+    query: BillingRechargeOrderQuery = {},
+  ) {
+    const tenantId = this.assertCanRead(authContext);
+    const page = normalizePositiveInteger(query.page, DEFAULT_PAGE);
+    const pageSize = Math.min(
+      normalizePositiveInteger(query.pageSize, DEFAULT_PAGE_SIZE),
+      MAX_PAGE_SIZE,
+    );
+    const orders = await this.rechargeRepository.listOrders({
+      tenantId,
+      page,
+      pageSize,
+      status: query.status,
+      keyword: query.keyword,
+    });
+
+    return {
+      ...orders,
+      list: orders.list.map((order) => this.toOrderView(order)),
     };
   }
 
@@ -295,6 +327,7 @@ export class BillingRechargeService {
       tenant_id: order.tenant_id,
       order_no: order.order_no,
       package_code: order.package_code,
+      product_title: readProductTitle(order.metadata),
       amount_fen: order.amount_fen,
       credits: order.credits,
       bonus_credits: order.bonus_credits,
@@ -305,6 +338,11 @@ export class BillingRechargeService {
       out_trade_no: order.out_trade_no,
       prepay_id: order.prepay_id,
       transaction_id: order.transaction_id,
+      refund_status: order.refund_status ?? null,
+      refund_requested_at: order.refund_requested_at ?? null,
+      refunded_at: order.refunded_at ?? null,
+      refund_amount_fen: order.refund_amount_fen ?? null,
+      refund_action: buildRefundAction(order),
       created_at: order.created_at,
       updated_at: order.updated_at,
     };
@@ -322,6 +360,31 @@ function toProductSnapshot(product: CreditRechargeProductRecord) {
     amount_fen: product.amount_fen,
     credits: product.credits,
     bonus_credits: product.bonus_credits,
+  };
+}
+
+function readProductTitle(metadata: Record<string, unknown>) {
+  const snapshot = metadata.product_snapshot;
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const title = (snapshot as { title?: unknown }).title;
+  return typeof title === "string" && title.trim() ? title : null;
+}
+
+function buildRefundAction(order: TenantCreditOrderRecord) {
+  if (order.status === "refunded" || order.refund_status === "refunded") {
+    return {
+      enabled: false,
+      label: "已退款",
+      disabled_reason: "ORDER_ALREADY_REFUNDED",
+      requires_reason: true,
+    };
+  }
+
+  return {
+    enabled: false,
+    label: "申请退款",
+    disabled_reason: "REFUND_REQUEST_NOT_SUPPORTED",
+    requires_reason: true,
   };
 }
 
