@@ -19,6 +19,7 @@ export type BillingDueCheckInput = {
 };
 
 export type BillingDueCheckResult = {
+  ensured: number;
   reminded: number;
   charged: number;
   locked: number;
@@ -57,6 +58,13 @@ export type BillingSubscriptionRepositoryPort = {
     page?: number;
     pageSize?: number;
   }) => Promise<TenantSubscriptionInvoiceRecord[]>;
+  ensureSubscriptionInvoices: (input: {
+    nowIso: string;
+    batchSize?: number;
+  }) => Promise<{
+    created: number;
+    scanned: number;
+  }>;
   markInvoiceReminded: (
     invoiceId: string,
   ) => Promise<TenantSubscriptionInvoiceRecord | null>;
@@ -97,12 +105,23 @@ export class BillingSubscriptionService {
       100,
     );
     const result: BillingDueCheckResult = {
+      ensured: 0,
       reminded: 0,
       charged: 0,
       locked: 0,
       skipped: 0,
       errors: [],
     };
+
+    try {
+      const ensureResult = await this.repository.ensureSubscriptionInvoices({
+        nowIso,
+        batchSize,
+      });
+      result.ensured = ensureResult.created;
+    } catch (error) {
+      result.errors.push(formatPhaseError("ensure_invoices", error));
+    }
 
     try {
       const reminderInvoices = await this.repository.listInvoicesDueForReminder({
@@ -242,7 +261,10 @@ function formatInvoiceError(invoiceId: string, error: unknown): string {
   return `${invoiceId}: ${formatErrorMessage(error)}`;
 }
 
-function formatPhaseError(phase: "reminders" | "charges", error: unknown): string {
+function formatPhaseError(
+  phase: "ensure_invoices" | "reminders" | "charges",
+  error: unknown,
+): string {
   return `${phase}: ${formatErrorMessage(error)}`;
 }
 
