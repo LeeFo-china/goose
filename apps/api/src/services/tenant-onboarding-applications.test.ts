@@ -4,7 +4,10 @@ import type {
   TenantOnboardingBusinessLicenseRecord,
   TenantOnboardingCreateApplicationInput,
 } from "@/repositories/tenant-onboarding";
-import type { TenantOnboardingApplicationRecord } from "@/repositories/tenant-onboarding-types";
+import type {
+  TenantOnboardingApplicationRecord,
+  TenantOnboardingApplicationSummaryRecord,
+} from "@/repositories/tenant-onboarding-types";
 import type { SubmitTenantOnboardingApplicationInput } from "@/schema/tenant-onboarding";
 import type { TenantOnboardingPartnerResolution } from "./tenant-onboarding-region-match";
 
@@ -22,6 +25,8 @@ const INVITE_ID = "00000000-0000-4000-8000-000000000501";
 const IDEMPOTENCY_KEY = "tenant-onboarding-request-1";
 const APP_NO_CONSTRAINT = "tenant_onboarding_applications_application_no_key";
 const OPEN_CONSTRAINT = "tenant_onboarding_applications_open_subject_unique_idx";
+const IDEMPOTENCY_CONSTRAINT =
+  "tenant_onboarding_applications_visitor_idempotency_unique";
 
 const application: TenantOnboardingApplicationRecord = {
   id: APPLICATION_ID, application_no: "ZQ-20260714-A1B2", visitor_id: VISITOR_ID,
@@ -61,6 +66,19 @@ const uniqueResolution: TenantOnboardingPartnerResolution = {
   },
   reason: "region",
 };
+const unmatchedResolutions: Array<[
+  string,
+  TenantOnboardingPartnerResolution,
+]> = [
+  ["none", {
+    kind: "none", partnerIds: [], selectedPartner: null,
+    reason: "no_eligible_partner",
+  }],
+  ["ambiguous", {
+    kind: "ambiguous", partnerIds: [PARTNER_ID, "partner-2"],
+    selectedPartner: null, reason: "same_specificity",
+  }],
+];
 const license: TenantOnboardingBusinessLicenseRecord = {
   id: FILE_ID, owner_visitor_id: VISITOR_ID, scene: "tenant_onboarding_license",
   status: "active", visibility: "private", deleted_at: null,
@@ -80,7 +98,13 @@ const repository = {
   findByVisitorAndIdempotencyKey: mock(async () => null as TenantOnboardingApplicationRecord | null),
   findOpenByCreditCode: mock(async () => null as TenantOnboardingApplicationRecord | null),
   findOwnedById: mock(async () => application as TenantOnboardingApplicationRecord | null),
-  listOwned: mock(async () => ({ list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })),
+  listOwned: mock(async (): Promise<{
+    list: TenantOnboardingApplicationSummaryRecord[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  }> => ({
+    list: [],
+    pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+  })),
   supplementAtomic: mock(async () => ({ ...application, status: "submitted" as const, version: 2 }) as TenantOnboardingApplicationRecord | null),
   withdrawAtomic: mock(async () => ({ ...application, status: "withdrawn" as const, version: 2 }) as TenantOnboardingApplicationRecord | null),
 };
@@ -89,9 +113,15 @@ const smsService = {
   findValidPending: mock(async () => ({ id: "sms-code-id" }) as { id: string } | null),
 };
 const locationContextRepository = {
-  findById: mock(async () => ({ id: CONTEXT_ID, visitor_id: VISITOR_ID })),
+  findById: mock(async (): Promise<{ id: string; visitor_id: string | null } | null> =>
+    ({ id: CONTEXT_ID, visitor_id: VISITOR_ID })
+  ),
 };
-const fileRepository = { findById: mock(async () => license) };
+const fileRepository = {
+  findById: mock(async (): Promise<TenantOnboardingBusinessLicenseRecord | null> =>
+    license
+  ),
+};
 const regionResolver = {
   resolve: mock(async (): Promise<TenantOnboardingPartnerResolution> => uniqueResolution),
 };
@@ -154,7 +184,18 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
     expect(repository.createApplicationAtomic).toHaveBeenCalledWith(expect.objectContaining({
       smsCodeId: "sms-code-id", smsPhone: "13900139000", now: NOW,
     }));
-    expect(result).toMatchObject({ created: true, idempotent: false, application });
+    expect(notificationService.deliver).toHaveBeenCalledWith({
+      applicationId: APPLICATION_ID,
+      applicationVersion: 1,
+      eventType: "submitted",
+    });
+    expect(result).toEqual({
+      application,
+      next_action: "wait_for_review",
+      estimated_review_hours: 48,
+      created: true,
+      idempotent: false,
+    });
   });
 
   test("returns a pre-existing idempotent result without touching SMS", async () => {
@@ -163,6 +204,36 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
     expect(result).toMatchObject({ created: false, idempotent: true });
     expect(smsService.findValidPending).not.toHaveBeenCalled();
     expect(repository.createApplicationAtomic).not.toHaveBeenCalled();
+  });
+
+  test("honors RPC created=false as the authoritative concurrent idempotent result", async () => {
+    repository.createApplicationAtomic.mockImplementationOnce(async () => ({
+      application, created: false,
+    }));
+    const result = await (await createService()).submit(submission, context());
+    expect(result).toEqual({
+      application,
+      next_action: "wait_for_review",
+      estimated_review_hours: 48,
+      created: false,
+      idempotent: true,
+    });
+    expect(notificationService.deliver).not.toHaveBeenCalled();
+  });
+
+  test("re-reads only the exact concurrent idempotency constraint", async () => {
+    repository.findByVisitorAndIdempotencyKey
+      .mockImplementationOnce(async () => null)
+      .mockImplementationOnce(async () => application);
+    repository.createApplicationAtomic.mockImplementationOnce(async () => {
+      throw Errors.dbError("concurrent", {
+        code: "23505", constraint: IDEMPOTENCY_CONSTRAINT,
+      });
+    });
+    const result = await (await createService()).submit(submission, context());
+    expect(result).toMatchObject({ application, created: false, idempotent: true });
+    expect(repository.findByVisitorAndIdempotencyKey).toHaveBeenCalledTimes(2);
+    expect(notificationService.deliver).not.toHaveBeenCalled();
   });
 
   test("retries only the exact application-number constraint at most three times", async () => {
@@ -223,6 +294,54 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
       .toBeNull();
   });
 
+  test.each(unmatchedResolutions)(
+    "persists a %s resolution without candidate assistance",
+    async (_label, resolution) => {
+      regionResolver.resolve.mockImplementationOnce(async () => resolution);
+      await (await createService()).submit(submission, context());
+      const payload = repository.createApplicationAtomic.mock.calls[0]?.[0].application;
+      expect(payload).toMatchObject({
+        candidate_partner_id: null,
+        candidate_match_reason: resolution.reason,
+        candidate_snapshot: {
+          partner_ids: [...resolution.partnerIds],
+          match_reason: resolution.reason,
+        },
+        partner_assist_status: "not_applicable",
+        partner_assist_requested_at: null,
+        partner_assist_due_at: null,
+      });
+    },
+  );
+
+  test.each([
+    ["a missing", null],
+    ["another visitor's", { id: CONTEXT_ID, visitor_id: "visitor-other" }],
+  ] as const)("rejects %s location context", async (_label, record) => {
+    locationContextRepository.findById.mockImplementationOnce(async () => record);
+    await expect((await createService()).submit(submission, context()))
+      .rejects.toMatchObject({ code: "TENANT_ONBOARDING_APPLICATION_NOT_FOUND" });
+    expect(fileRepository.findById).not.toHaveBeenCalled();
+    expect(repository.createApplicationAtomic).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["a missing", null],
+    ["a public", { visibility: "public" }],
+    ["an inactive", { status: "deleted" }],
+    ["another visitor's", { owner_visitor_id: "visitor-other" }],
+    ["a wrong-scene", { scene: "avatar" }],
+    ["a deleted", { deleted_at: NOW }],
+  ] as const)("rejects %s license under the Task4 file contract", async (_label, changes) => {
+    // Task4's applicant file port does not project owner_type; Task5 extends that contract.
+    fileRepository.findById.mockImplementationOnce(async () =>
+      changes ? { ...license, ...changes } : null
+    );
+    await expect((await createService()).submit(submission, context()))
+      .rejects.toMatchObject({ code: "TENANT_ONBOARDING_DOCUMENT_FORBIDDEN" });
+    expect(repository.createApplicationAtomic).not.toHaveBeenCalled();
+  });
+
   test("supplements credit through precheck excluding self and one atomic RPC", async () => {
     const current = { ...application, status: "supplement_required" as const, version: 4 };
     repository.findOwnedById.mockImplementationOnce(async () => current);
@@ -275,7 +394,7 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
   });
 
   test("withdraws and appends audit only inside the atomic repository method", async () => {
-    await (await createService()).withdraw({
+    const withdrawn = await (await createService()).withdraw({
       applicationId: APPLICATION_ID, visitorId: VISITOR_ID, expectedVersion: 1,
       reason: " 暂缓入驻 ",
     });
@@ -283,16 +402,51 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
       applicationId: APPLICATION_ID, visitorId: VISITOR_ID, expectedVersion: 1,
       reason: "暂缓入驻", now: NOW,
     });
+    expect(withdrawn).toEqual({ ...application, status: "withdrawn", version: 2 });
   });
 
-  test("rejects invalid SMS, ownership, file, and optimistic state stably", async () => {
+  test("returns exact list, detail, and supplement service responses", async () => {
+    const summary = {
+      id: APPLICATION_ID, application_no: application.application_no,
+      company_name: application.company_name, status: application.status,
+      partner_assist_status: application.partner_assist_status,
+      version: 1, created_at: NOW, updated_at: NOW,
+    };
+    const page = {
+      list: [summary],
+      pagination: { page: 2, pageSize: 10, total: 11, totalPages: 2 },
+    };
+    repository.listOwned.mockImplementationOnce(async () => page);
+    const service = await createService();
+    expect(await service.listOwned({ visitorId: VISITOR_ID, page: 2, pageSize: 10 }))
+      .toEqual(page);
+    expect(await service.getOwned({ applicationId: APPLICATION_ID, visitorId: VISITOR_ID }))
+      .toEqual(application);
+    expect(repository.listOwned).toHaveBeenCalledWith({
+      visitorId: VISITOR_ID, page: 2, pageSize: 10,
+    });
+    expect(repository.findOwnedById).toHaveBeenCalledWith(
+      APPLICATION_ID,
+      VISITOR_ID,
+    );
+
+    const current = { ...application, status: "supplement_required" as const, version: 3 };
+    const updated = { ...current, company_name: "晴天装饰集团", status: "submitted" as const, version: 4 };
+    repository.findOwnedById.mockImplementationOnce(async () => current);
+    repository.supplementAtomic.mockImplementationOnce(async () => updated);
+    expect(await service.supplement({
+      applicationId: APPLICATION_ID, visitorId: VISITOR_ID, expectedVersion: 3,
+      patch: { company_name: " 晴天装饰集团 " },
+    })).toEqual(updated);
+    expect(repository.supplementAtomic).toHaveBeenCalledWith(expect.objectContaining({
+      patch: { company_name: "晴天装饰集团" },
+    }));
+  });
+
+  test("rejects invalid SMS and optimistic state with stable codes", async () => {
     smsService.findValidPending.mockImplementationOnce(async () => null);
     await expect((await createService()).submit(submission, context()))
       .rejects.toMatchObject({ code: "SMS_CODE_INVALID" });
-    repository.findOwnedById.mockImplementationOnce(async () => null);
-    await expect((await createService()).withdraw({
-      applicationId: APPLICATION_ID, visitorId: VISITOR_ID, expectedVersion: 1,
-    })).rejects.toMatchObject({ code: "TENANT_ONBOARDING_APPLICATION_NOT_FOUND" });
     repository.findOwnedById.mockImplementationOnce(async () => ({
       ...application, status: "supplement_required", version: 3,
     }));
