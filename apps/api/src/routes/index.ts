@@ -70,6 +70,7 @@ import UsageController from "@/controllers/usage";
 import BillingController from "@/controllers/billing";
 import BillingRechargeController from "@/controllers/billing-recharge";
 import PlatformBillingRechargeController from "@/controllers/platform-billing-recharge";
+import PlatformBillingRechargeRefundController from "@/controllers/platform-billing-recharge-refunds";
 import FinanceController from "@/controllers/finance";
 import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
@@ -155,6 +156,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   BillingController.registerExtraRoutes(app);
   BillingRechargeController.registerExtraRoutes(app);
   PlatformBillingRechargeController.registerExtraRoutes(app);
+  PlatformBillingRechargeRefundController.registerExtraRoutes(app);
   UserAuthEventsController.registerExtraRoutes(app);
   IdentityDiagnosticsController.registerExtraRoutes(app);
   PictureLibraryController.registerExtraRoutes(app);
