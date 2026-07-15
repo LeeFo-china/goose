@@ -87,8 +87,7 @@ type OpenAiCompatibleResponse = {
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
-  if (Array.isArray(value)) return value[0] || null;
-  return value || null;
+  return Array.isArray(value) ? value[0] || null : value || null;
 }
 
 function firstNonEmptyEnv(names: string[]) {
@@ -120,6 +119,10 @@ function extractContent(result: OpenAiCompatibleResponse) {
     return rawContent.map((item) => item.text || "").join("").trim();
   }
   return "";
+}
+
+function normalizeOpenAiCompatibleResponse(value: unknown): OpenAiCompatibleResponse {
+  return value && typeof value === "object" ? (value as OpenAiCompatibleResponse) : {};
 }
 
 function normalizeTimeout(value: number | null | undefined, fallback: number) {
@@ -291,7 +294,7 @@ class AiGateway {
         }),
         signal: controller.signal,
       });
-      const result = await response.json().catch(() => ({})) as OpenAiCompatibleResponse;
+      const result = normalizeOpenAiCompatibleResponse(await response.json().catch(() => ({})));
       if (!response.ok) {
         throw Errors.business(
           502,
