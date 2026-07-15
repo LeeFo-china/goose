@@ -554,8 +554,8 @@ jobs:
             for _ in $(seq 1 60); do
               state="$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null || true)"
               health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$name" 2>/dev/null || true)"
-              if [ "$health" = "healthy" ] || { [ -z "$health" ] && [ "$state" = "running" ]; }; then
-                echo "$name is ${health:-$state}"
+              if [ "$state" = "running" ] && [ "$health" = "healthy" ]; then
+                echo "$name is healthy"
                 return 0
               fi
               if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then

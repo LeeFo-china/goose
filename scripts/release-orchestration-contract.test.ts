@@ -309,6 +309,7 @@ gh() {
 function runProductionRuntimeEvidenceCheck(
   configuredImage: string,
   serviceLabel: string,
+  healthStatus = "healthy",
 ): ReturnType<typeof Bun.spawnSync> {
   const checkScript = extractWorkflowRunScript(
     sliceWorkflowStep(deployProductionWorkflow, "Check container health"),
@@ -319,7 +320,7 @@ docker() {
   test "$2" = -f
   case "$3" in
     '{{.State.Status}}') printf '%s\\n' running ;;
-    '{{if .State.Health}}{{.State.Health.Status}}{{end}}') printf '%s\\n' healthy ;;
+    '{{if .State.Health}}{{.State.Health.Status}}{{end}}') printf '%s\\n' '${healthStatus}' ;;
     '{{.Config.Image}}') printf '%s\\n' '${configuredImage}' ;;
     '{{index .Config.Labels "com.goodcms.service"}}') printf '%s\\n' '${serviceLabel}' ;;
     '{{index .Config.Labels "org.opencontainers.image.revision"}}') printf '%s\\n' "$SOURCE_SHA" ;;
@@ -2095,6 +2096,10 @@ describe("production orchestrator", () => {
       ).exitCode,
     ).not.toBe(0);
     expect(runProductionRuntimeEvidenceCheck(expectedImage, "admin").exitCode).not.toBe(0);
+    expect(runProductionRuntimeEvidenceCheck(expectedImage, "api", "").exitCode).not.toBe(0);
+    expect(
+      runProductionRuntimeEvidenceCheck(expectedImage, "api", "unhealthy").exitCode,
+    ).not.toBe(0);
 
     const runtimeCheck = sliceWorkflowStep(
       deployProductionWorkflow,
