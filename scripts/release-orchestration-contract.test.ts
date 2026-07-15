@@ -144,6 +144,11 @@ interface WorkflowTextContract {
   requiredFragments: readonly string[];
   orderedFragments?: readonly string[];
   forbiddenPatterns?: readonly RegExp[];
+  exactLineContracts?: readonly {
+    line: string;
+    count: number;
+    exclusivePattern?: RegExp;
+  }[];
 }
 
 function validatesWorkflowTextContract(
@@ -161,6 +166,26 @@ function validatesWorkflowTextContract(
       return false;
     }
     previousFragmentEnd = fragmentStart + fragment.length;
+  }
+
+  const contentLines = content.split(/\r?\n/);
+  for (const exactLineContract of contract.exactLineContracts ?? []) {
+    const exactLineCount = contentLines.filter(
+      (line) => line === exactLineContract.line,
+    ).length;
+    if (exactLineCount !== exactLineContract.count) {
+      return false;
+    }
+    if (
+      exactLineContract.exclusivePattern &&
+      contentLines.some(
+        (line) =>
+          exactLineContract.exclusivePattern?.test(line) &&
+          line !== exactLineContract.line,
+      )
+    ) {
+      return false;
+    }
   }
 
   return !(contract.forbiddenPatterns ?? []).some((pattern) => {
@@ -713,10 +738,12 @@ describe("reusable build workflow", () => {
     '              cleanup_images+=("${expected_digest_ref}")',
     "            fi",
   ].join("\n");
+  const canonicalCleanupImageRemovalLine =
+    '              docker image rm "${image}" >/dev/null 2>&1 || true';
   const cleanupFunctionBlock = [
     "          cleanup() {",
     '            for image in "${cleanup_images[@]}"; do',
-    '              docker image rm "${image}" >/dev/null 2>&1 || true',
+    canonicalCleanupImageRemovalLine,
     "            done",
     "          }",
   ].join("\n");
@@ -1023,6 +1050,13 @@ describe("reusable build workflow", () => {
       requiredFragments: productionPullImageRequiredFragments,
       orderedFragments: productionPullImageOrderedFragments,
       forbiddenPatterns: productionPullImageForbiddenPatterns,
+      exactLineContracts: [
+        {
+          line: canonicalCleanupImageRemovalLine,
+          count: 1,
+          exclusivePattern: /^\s*docker image rm(?:\s|$)/,
+        },
+      ],
     };
     const contracts: readonly {
       content: string;
@@ -1105,6 +1139,8 @@ describe("reusable build workflow", () => {
       'cleanup_images+=("${expected_image}")',
       'docker image inspect "${expected_image}"',
       ...mutableShaTagOperationFixtures,
+      'docker image rm "${expected_digest_ref}"',
+      'docker image rm -f "${expected_digest_ref}"',
     ]) {
       expect(
         validatesWorkflowTextContract(
