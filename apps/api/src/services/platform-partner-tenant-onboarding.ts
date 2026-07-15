@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import {
   platformPartnersRepository,
   type PlatformPartnerInviteCodeWithPartnerRecord,
@@ -41,6 +42,8 @@ type PlatformPartnerTenantOnboardingDependencies = {
   tenantRepository?: TenantRepositoryPort;
   smsService?: SmsServicePort;
   slugSuffixFactory?: () => string;
+  legacyCutoffAt?: Date | string | null;
+  clock?: () => Date;
 };
 
 const PARTNER_TENANT_ONBOARDING_SMS_SCENE =
@@ -49,12 +52,61 @@ const INVITE_BINDING_CHANGE_REASON = "装企小程序扫码入驻自动绑定";
 const ADMIN_DEPARTMENT_CODE = "ADMIN";
 const ADMIN_POST_CODE = "SYSTEM_ADMIN";
 const MAX_SLUG_ATTEMPTS = 5;
+const LEGACY_PARTNER_TENANT_ONBOARDING_CUTOFF_ENV =
+  "LEGACY_PARTNER_TENANT_ONBOARDING_CUTOFF_AT";
+const MAX_LEGACY_CUTOFF_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+export function parseLegacyPartnerTenantOnboardingCutoffAt(
+  value: Date | string | null | undefined,
+): Date | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) {
+    assertValidLegacyCutoffDate(value);
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  assertValidLegacyCutoffDate(parsed);
+  return parsed;
+}
+
+export function assertLegacyPartnerTenantOnboardingCutoffWindow(input: {
+  fullReleaseAt: Date;
+  cutoffAt: Date;
+}) {
+  assertValidLegacyCutoffDate(input.fullReleaseAt);
+  assertValidLegacyCutoffDate(input.cutoffAt);
+  const maxCutoffAt =
+    input.fullReleaseAt.getTime() + MAX_LEGACY_CUTOFF_WINDOW_MS;
+  if (input.cutoffAt.getTime() > maxCutoffAt) {
+    throw Errors.business(
+      500,
+      "旧装企入驻入口截止时间不能晚于小程序全量发布后 14 日",
+      ErrorCodes.VALIDATION_ERROR,
+      { max_days: 14 },
+    );
+  }
+}
+
+function assertValidLegacyCutoffDate(value: Date) {
+  if (Number.isNaN(value.getTime())) {
+    throw Errors.business(
+      500,
+      `${LEGACY_PARTNER_TENANT_ONBOARDING_CUTOFF_ENV} 必须是有效 ISO-8601 时间`,
+      ErrorCodes.VALIDATION_ERROR,
+    );
+  }
+}
 
 export class PlatformPartnerTenantOnboardingService {
   private readonly partnerRepository: PartnerRepositoryPort;
   private readonly tenantRepository: TenantRepositoryPort;
   private readonly smsService: SmsServicePort;
   private readonly slugSuffixFactory: () => string;
+  private readonly legacyCutoffAt: Date | null;
+  private readonly clock: () => Date;
 
   constructor(
     dependencies: PlatformPartnerTenantOnboardingDependencies = {},
@@ -66,6 +118,12 @@ export class PlatformPartnerTenantOnboardingService {
     this.smsService = dependencies.smsService ?? smsVerificationCodeService;
     this.slugSuffixFactory =
       dependencies.slugSuffixFactory ?? (() => Math.random().toString(36).slice(2, 8));
+    this.legacyCutoffAt = parseLegacyPartnerTenantOnboardingCutoffAt(
+      dependencies.legacyCutoffAt === undefined
+        ? process.env[LEGACY_PARTNER_TENANT_ONBOARDING_CUTOFF_ENV]
+        : dependencies.legacyCutoffAt,
+    );
+    this.clock = dependencies.clock ?? (() => new Date());
   }
 
   async sendPublicTenantOnboardingCode(input: {
@@ -73,6 +131,7 @@ export class PlatformPartnerTenantOnboardingService {
     requestIp: string | null;
     requestDevice?: string | null;
   }) {
+    this.assertLegacyTenantOnboardingOpen();
     const phone = this.normalizePhone(input.phone);
     return this.smsService.sendCode({
       phone,
@@ -85,6 +144,7 @@ export class PlatformPartnerTenantOnboardingService {
   async submitPublicTenantOnboarding(
     input: PartnerTenantOnboardingSubmitInput,
   ) {
+    this.assertLegacyTenantOnboardingOpen();
     const phone = this.normalizePhone(input.admin_phone);
     const verificationCode = await this.verifySmsCode({ phone, code: input.sms_code });
 
@@ -142,6 +202,17 @@ export class PlatformPartnerTenantOnboardingService {
       created: true,
       auth: null,
     };
+  }
+
+  private assertLegacyTenantOnboardingOpen() {
+    if (!this.legacyCutoffAt) return;
+    if (this.clock().getTime() < this.legacyCutoffAt.getTime()) return;
+
+    throw Errors.business(
+      410,
+      "请升级小程序后重新申请",
+      ErrorCodes.TENANT_ONBOARDING_CLIENT_UPGRADE_REQUIRED,
+    );
   }
 
   private async verifySmsCode(input: { phone: string; code: string }) {

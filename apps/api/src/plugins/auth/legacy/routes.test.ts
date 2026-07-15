@@ -8,6 +8,28 @@ import {
 } from "./routes";
 
 describe("isVisitorSessionRoute", () => {
+  test("allows applicant routes only with visitor sessions", () => {
+    const routes = [
+      ["POST", "/tenant-onboarding/applications/send-code"],
+      ["POST", "/tenant-onboarding/applications"],
+      ["GET", "/tenant-onboarding/applications/mine"],
+      ["GET", "/tenant-onboarding/applications/application-id"],
+      ["PATCH", "/tenant-onboarding/applications/application-id/supplement"],
+      ["POST", "/tenant-onboarding/applications/application-id/withdraw"],
+      ["GET", "/visitor/local-service-providers"],
+    ] as const;
+
+    for (const [method, route] of routes) {
+      expect(isVisitorSessionRoute(method, route)).toBe(true);
+      expect(isPublicRoute(method, route)).toBe(false);
+    }
+
+    expect(isVisitorSessionRoute("DELETE", "/tenant-onboarding/applications/application-id"))
+      .toBe(false);
+    expect(isVisitorSessionRoute("GET", "/tenant-onboarding/applications"))
+      .toBe(false);
+  });
+
   test("allows visitor sessions to submit wechat rebind requests only", () => {
     expect(isVisitorSessionRoute("POST", "/auth/wechat-rebind-requests")).toBe(true);
     expect(isVisitorSessionRoute("POST", "/partner/auth/rebind-code")).toBe(true);
@@ -161,6 +183,25 @@ describe("auth public route allowlist", () => {
     expect(isPartnerPortalRoute("POST", "/partner/auth/unbind-wechat")).toBe(true);
     expect(isPartnerPortalRoute("GET", "/partner/auth/unbind-code")).toBe(false);
     expect(isPartnerPortalRoute("HEAD", "/partner/auth/unbind-wechat")).toBe(false);
+  });
+
+  test("scopes partner onboarding assist routes to platform partner tokens", () => {
+    const applicationId = "00000000-0000-4000-8000-000000000501";
+    const routes = [
+      ["GET", "/partner/onboarding-applications"],
+      ["HEAD", "/partner/onboarding-applications"],
+      ["GET", `/partner/onboarding-applications/${applicationId}`],
+      ["HEAD", `/partner/onboarding-applications/${applicationId}`],
+      ["POST", `/partner/onboarding-applications/${applicationId}/assist-review`],
+    ] as const;
+
+    for (const [method, route] of routes) {
+      expect(isPartnerPortalRoute(method, route)).toBe(true);
+      expect(isPublicRoute(method, route)).toBe(false);
+      expect(isVisitorSessionRoute(method, route)).toBe(false);
+    }
+    expect(isPartnerPortalRoute("POST", "/partner/onboarding-applications"))
+      .toBe(false);
   });
 
   test("allows platform partner tokens to list and switch auth identities", () => {

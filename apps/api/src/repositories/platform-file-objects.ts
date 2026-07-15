@@ -1,3 +1,4 @@
+import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 
@@ -9,6 +10,7 @@ export type PlatformFileObjectRecord = {
   tenant_id: string | null;
   owner_type: string;
   owner_id: string | null;
+  owner_visitor_id: string | null;
   scene: string;
   provider: PlatformFileProvider;
   bucket: string;
@@ -37,6 +39,7 @@ export type CreatePlatformFileObjectInput = {
   tenant_id?: string | null;
   owner_type: string;
   owner_id?: string | null;
+  owner_visitor_id?: string | null;
   scene: string;
   provider: PlatformFileProvider;
   bucket: string;
@@ -63,6 +66,7 @@ class PlatformFileObjectRepository {
       tenant_id: input.tenant_id ?? null,
       owner_type: input.owner_type,
       owner_id: input.owner_id ?? null,
+      owner_visitor_id: input.owner_visitor_id ?? null,
       scene: input.scene,
       provider: input.provider,
       bucket: input.bucket,
@@ -112,12 +116,22 @@ class PlatformFileObjectRepository {
     if (error) {
       const errorCode = (error as { code?: string }).code;
       if (errorCode === "23505") {
-        const existing = await this.findActiveByObjectKey({
-          provider: input.provider,
-          bucket: input.bucket,
-          objectKey: input.object_key,
-        });
+        const isPrivateVisitorObject = input.owner_type === "visitor" &&
+          Boolean(input.owner_visitor_id) &&
+          (input.visibility ?? "public") === "private";
+        const existing = isPrivateVisitorObject
+          ? await this.findPrivateVisitorConflict({
+            provider: input.provider,
+            bucket: input.bucket,
+            objectKey: input.object_key,
+          })
+          : await this.findActiveByObjectKey({
+            provider: input.provider,
+            bucket: input.bucket,
+            objectKey: input.object_key,
+          });
         if (existing) {
+          this.assertExistingVisitorOwnership(existing, input);
           return existing;
         }
       }
@@ -163,6 +177,68 @@ class PlatformFileObjectRepository {
 
     return (data as PlatformFileObjectRecord | null) ?? null;
   }
+
+  private async findPrivateVisitorConflict(input: {
+    provider: PlatformFileProvider;
+    bucket: string;
+    objectKey: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("platform_file_objects")
+      .select("*")
+      .eq("provider", input.provider)
+      .eq("bucket", input.bucket)
+      .eq("object_key", input.objectKey)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询文件对象失败", error);
+    }
+
+    return (data as PlatformFileObjectRecord | null) ?? null;
+  }
+
+  private assertExistingVisitorOwnership(
+    existing: PlatformFileObjectRecord,
+    input: CreatePlatformFileObjectInput,
+  ) {
+    if (
+      input.owner_type !== "visitor" ||
+      !input.owner_visitor_id ||
+      (input.visibility ?? "public") !== "private"
+    ) return;
+    if (
+      existing.owner_type !== "visitor" ||
+      existing.owner_visitor_id !== input.owner_visitor_id
+    ) {
+      throw Errors.forbidden();
+    }
+    if (
+      existing.scene !== input.scene ||
+      existing.provider !== input.provider ||
+      existing.bucket !== input.bucket ||
+      existing.object_key !== input.object_key ||
+      existing.mime_type !== input.mime_type ||
+      existing.size_bytes !== input.size_bytes ||
+      normalizeChecksum(existing.checksum) !== normalizeChecksum(input.checksum) ||
+      existing.visibility !== (input.visibility ?? "public") ||
+      existing.public_url !== (input.public_url ?? null) ||
+      existing.status !== "active" ||
+      existing.deleted_at !== null
+    ) {
+      throw Errors.business(
+        400,
+        "重复文件对象完整性校验失败",
+        ErrorCodes.FILE_STORAGE_UPLOAD_FAILED,
+      );
+    }
+  }
+
 }
 
 export const platformFileObjectRepository = new PlatformFileObjectRepository();
+
+function normalizeChecksum(value: string | null | undefined) {
+  return value?.trim().replace(/^"+|"+$/g, "") || null;
+}

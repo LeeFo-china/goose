@@ -40,6 +40,10 @@ export type TenantCreditOrderRecord = {
   paid_amount_fen: number;
   closed_at: string | null;
   latest_notification_id: string | null;
+  refund_status?: string | null;
+  refund_requested_at?: string | null;
+  refunded_at?: string | null;
+  refund_amount_fen?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -108,6 +112,7 @@ type UntypedTable = {
   insert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
+  or: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
   range: (...args: unknown[]) => UntypedTable;
   limit: (...args: unknown[]) => UntypedTable;
@@ -155,6 +160,73 @@ class BillingRechargeRepository {
 
     return {
       list: (data ?? []) as CreditRechargeProductRecord[],
+      pagination: {
+        page: input.page,
+        pageSize: input.pageSize,
+        total: count ?? 0,
+        totalPages: count ? Math.ceil(count / input.pageSize) : 0,
+      },
+    };
+  }
+
+  async listOrders(input: {
+    tenantId: string;
+    page: number;
+    pageSize: number;
+    status?: string;
+    keyword?: string;
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+    let request = this.from("tenant_credit_orders")
+      .select(
+        [
+          "id",
+          "tenant_id",
+          "order_no",
+          "idempotency_key",
+          "package_code",
+          "credits",
+          "amount_fen",
+          "bonus_credits",
+          "channel",
+          "status",
+          "paid_at",
+          "created_by",
+          "remark",
+          "metadata",
+          "payment_config_id",
+          "out_trade_no",
+          "prepay_id",
+          "transaction_id",
+          "paid_amount_fen",
+          "closed_at",
+          "latest_notification_id",
+          "created_at",
+          "updated_at",
+        ].join(", "),
+        { count: "exact" },
+      )
+      .eq("tenant_id", input.tenantId)
+      .eq("channel", "wechat_pay")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (input.status) request = request.eq("status", input.status);
+    if (input.keyword) {
+      const escaped = input.keyword.replaceAll(",", "\\,");
+      request = request.or(
+        `order_no.ilike.%${escaped}%,out_trade_no.ilike.%${escaped}%,transaction_id.ilike.%${escaped}%`,
+      );
+    }
+
+    const { data, error, count } = await request;
+    if (error) {
+      throw Errors.dbError("查询积分充值订单列表失败", error);
+    }
+
+    return {
+      list: (data ?? []) as TenantCreditOrderRecord[],
       pagination: {
         page: input.page,
         pageSize: input.pageSize,

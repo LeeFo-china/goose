@@ -7,6 +7,15 @@ export const BillingRechargeProductQuerySchema = z.object({
     .default(20),
 }).strict();
 
+export const BillingRechargeOrderQuerySchema = z.object({
+  page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
+  pageSize: z.coerce.number().int().min(1, "每页数量必须大于 0")
+    .max(100, "每页数量不能超过 100")
+    .default(20),
+  status: z.enum(["pending", "paid", "closed", "refunded"]).optional(),
+  keyword: z.string().trim().max(120, "关键词不能超过 120 个字符").optional(),
+}).strict();
+
 export const BillingRechargeCreateOrderSchema = z.object({
   package_code: z.string().trim().min(1, "充值套餐不能为空")
     .max(80, "充值套餐编码不能超过 80 个字符"),
@@ -21,6 +30,8 @@ export const BillingRechargeOrderParamSchema = z.object({
 
 export type BillingRechargeProductQuery =
   z.infer<typeof BillingRechargeProductQuerySchema>;
+export type BillingRechargeOrderQuery =
+  z.infer<typeof BillingRechargeOrderQuerySchema>;
 export type BillingRechargeCreateOrderInput =
   z.infer<typeof BillingRechargeCreateOrderSchema>;
 export type BillingRechargeOrderParam =

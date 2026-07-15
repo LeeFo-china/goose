@@ -34,6 +34,18 @@ export function getTemplateConfigKey(input: {
     ? "ALIYUN_SMS_TEMPLATE_CODE"
     : "TENCENT_SMS_TEMPLATE_ID";
 
+  const tenantOnboardingSuffixes = {
+    tenant_onboarding_submitted: "TENANT_ONBOARDING_SUBMITTED",
+    tenant_onboarding_supplement_required:
+      "TENANT_ONBOARDING_SUPPLEMENT_REQUIRED",
+    tenant_onboarding_approved: "TENANT_ONBOARDING_APPROVED",
+    tenant_onboarding_rejected: "TENANT_ONBOARDING_REJECTED",
+  } as const;
+  if (input.purpose in tenantOnboardingSuffixes) {
+    const purpose = input.purpose as keyof typeof tenantOnboardingSuffixes;
+    return `${prefix}_${tenantOnboardingSuffixes[purpose]}`;
+  }
+
   if (input.purpose === "bind_customer") {
     return `${prefix}_BIND_CUSTOMER`;
   }

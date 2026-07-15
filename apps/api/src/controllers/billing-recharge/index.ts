@@ -2,6 +2,7 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   BillingRechargeCreateOrderSchema,
+  BillingRechargeOrderQuerySchema,
   BillingRechargeOrderParamSchema,
   BillingRechargeProductQuerySchema,
 } from "@/schema/billing-recharge";
@@ -31,6 +32,21 @@ class BillingRechargeController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await billingRechargeService.listProducts(
+      authContext,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/billing/recharge-orders")
+  async listOrders(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const queryResult = BillingRechargeOrderQuerySchema.safeParse(
+      request.query || {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await billingRechargeService.listOrders(
       authContext,
       queryResult.data,
     );

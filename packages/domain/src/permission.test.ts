@@ -2,6 +2,25 @@ import { describe, expect, test } from "bun:test";
 import { PermissionCodeConfig, PERMISSION_CODE_VALUES } from "./permission";
 
 describe("domain permissions", () => {
+  test("exposes tenant onboarding workflow permissions", () => {
+    expect(PermissionCodeConfig["platform.tenant_onboarding.review"]).toEqual({
+      label: "审核装企入驻",
+      module: "platform_tenant_onboarding",
+    });
+    expect(PermissionCodeConfig["platform.service_provider.publish"]).toEqual({
+      label: "审核服务商发布",
+      module: "platform_tenant_onboarding",
+    });
+    expect(PermissionCodeConfig["service_provider.profile.read"]).toEqual({
+      label: "查看服务商资料",
+      module: "service_provider",
+    });
+    expect(PermissionCodeConfig["service_provider.profile.manage"]).toEqual({
+      label: "管理服务商资料",
+      module: "service_provider",
+    });
+  });
+
   test("exposes platform site content permissions", () => {
     const expectedPermissions = {
       "platform.site_content.read": {

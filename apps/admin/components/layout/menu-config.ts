@@ -60,6 +60,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
       { href: "/dashboard", label: "平台概览", icon: LayoutDashboard },
       { href: "/platform/tenants", label: "平台租户", icon: Building2 },
       { href: "/platform/partners", label: "城市合伙人", icon: Users },
+      {
+        href: "/platform/tenant-onboarding",
+        label: "服务商入驻",
+        icon: ClipboardCheck,
+        permission: "platform.tenant_onboarding.review",
+      },
       { href: "/platform/devices", label: "设备资产", icon: Camera },
       { href: "/platform/leads", label: "平台线索", icon: Inbox },
       { href: "/platform/picture-library", label: "图片资料库", icon: Images },
@@ -202,6 +208,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     label: "系统",
     items: [
       { href: "/settings", label: "系统配置", icon: SlidersHorizontal },
+      {
+        href: "/settings/service-provider",
+        label: "服务商资料",
+        icon: Building2,
+        permission: "service_provider.profile.read",
+      },
     ],
   },
 ];

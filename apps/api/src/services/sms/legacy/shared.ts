@@ -7,7 +7,12 @@ export { systemSettingsService } from "@/services/system-settings";
 export type SmsScene = DomainSmsScene;
 
 export type SmsProvider = "mock" | "disabled" | "aliyun" | "tencent";
-export type SmsTemplatePurpose = DomainSmsScene | "project_acceptance";
+export type SmsTemplatePurpose = DomainSmsScene |
+  "project_acceptance" |
+  "tenant_onboarding_submitted" |
+  "tenant_onboarding_supplement_required" |
+  "tenant_onboarding_approved" |
+  "tenant_onboarding_rejected";
 export type SmsChannel = {
   provider: SmsProvider;
   tenantId?: string | null;

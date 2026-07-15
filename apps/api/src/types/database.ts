@@ -3705,6 +3705,7 @@ export type Database = {
           object_key: string
           original_name: string | null
           owner_id: string | null
+          owner_visitor_id: string | null
           owner_type: string
           provider: string
           public_url: string | null
@@ -3733,6 +3734,7 @@ export type Database = {
           object_key: string
           original_name?: string | null
           owner_id?: string | null
+          owner_visitor_id?: string | null
           owner_type: string
           provider?: string
           public_url?: string | null
@@ -3761,6 +3763,7 @@ export type Database = {
           object_key?: string
           original_name?: string | null
           owner_id?: string | null
+          owner_visitor_id?: string | null
           owner_type?: string
           provider?: string
           public_url?: string | null
@@ -7468,6 +7471,407 @@ export type Database = {
           },
         ]
       }
+      tenant_onboarding_applications: {
+        Row: {
+          address: string
+          address_city: string
+          address_district: string | null
+          address_latitude: number | null
+          address_longitude: number | null
+          address_province: string | null
+          address_region_code: string
+          admin_name: string
+          admin_phone: string
+          application_no: string
+          attribution_source_type: string | null
+          business_license_file_id: string
+          candidate_match_reason: string | null
+          candidate_partner_id: string | null
+          candidate_snapshot: Json
+          consented_at: string
+          converted_tenant_id: string | null
+          created_at: string
+          final_partner_id: string | null
+          id: string
+          idempotency_key: string
+          invite_code_id: string | null
+          onboarding_terms_version: string
+          partner_assist_due_at: string | null
+          partner_assist_requested_at: string | null
+          partner_assist_status: string
+          privacy_policy_version: string
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          service_region_codes: string[]
+          source_channel: string
+          status: string
+          unified_social_credit_code: string
+          updated_at: string
+          version: number
+          visitor_context_id: string | null
+          visitor_id: string
+          withdrawn_at: string | null
+        }
+        Insert: {
+          address: string
+          address_city: string
+          address_district?: string | null
+          address_latitude?: number | null
+          address_longitude?: number | null
+          address_province?: string | null
+          address_region_code: string
+          admin_name: string
+          admin_phone: string
+          application_no: string
+          attribution_source_type?: string | null
+          business_license_file_id: string
+          candidate_match_reason?: string | null
+          candidate_partner_id?: string | null
+          candidate_snapshot?: Json
+          consented_at: string
+          converted_tenant_id?: string | null
+          created_at?: string
+          final_partner_id?: string | null
+          id?: string
+          idempotency_key: string
+          invite_code_id?: string | null
+          onboarding_terms_version: string
+          partner_assist_due_at?: string | null
+          partner_assist_requested_at?: string | null
+          partner_assist_status?: string
+          privacy_policy_version: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          service_region_codes: string[]
+          source_channel: string
+          status?: string
+          unified_social_credit_code: string
+          updated_at?: string
+          version?: number
+          visitor_context_id?: string | null
+          visitor_id: string
+          withdrawn_at?: string | null
+        }
+        Update: {
+          address?: string
+          address_city?: string
+          address_district?: string | null
+          address_latitude?: number | null
+          address_longitude?: number | null
+          address_province?: string | null
+          address_region_code?: string
+          admin_name?: string
+          admin_phone?: string
+          application_no?: string
+          attribution_source_type?: string | null
+          business_license_file_id?: string
+          candidate_match_reason?: string | null
+          candidate_partner_id?: string | null
+          candidate_snapshot?: Json
+          consented_at?: string
+          converted_tenant_id?: string | null
+          created_at?: string
+          final_partner_id?: string | null
+          id?: string
+          idempotency_key?: string
+          invite_code_id?: string | null
+          onboarding_terms_version?: string
+          partner_assist_due_at?: string | null
+          partner_assist_requested_at?: string | null
+          partner_assist_status?: string
+          privacy_policy_version?: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          service_region_codes?: string[]
+          source_channel?: string
+          status?: string
+          unified_social_credit_code?: string
+          updated_at?: string
+          version?: number
+          visitor_context_id?: string | null
+          visitor_id?: string
+          withdrawn_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_onboarding_applications_business_license_file_id_fkey"
+            columns: ["business_license_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_candidate_partner_id_fkey"
+            columns: ["candidate_partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_converted_tenant_id_fkey"
+            columns: ["converted_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_final_partner_id_fkey"
+            columns: ["final_partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_invite_code_id_fkey"
+            columns: ["invite_code_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_invite_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_visitor_context_id_fkey"
+            columns: ["visitor_context_id"]
+            isOneToOne: false
+            referencedRelation: "user_location_contexts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_onboarding_application_reviews: {
+        Row: {
+          actor_employee_id: string | null
+          actor_partner_member_id: string | null
+          actor_type: string
+          actor_visitor_id: string | null
+          after_partner_assist_status: string | null
+          after_status: string | null
+          application_id: string
+          before_partner_assist_status: string | null
+          before_status: string | null
+          created_at: string
+          decision: string
+          id: string
+          metadata: Json
+          remark: string | null
+          required_fields: string[]
+          review_stage: string
+        }
+        Insert: {
+          actor_employee_id?: string | null
+          actor_partner_member_id?: string | null
+          actor_type: string
+          actor_visitor_id?: string | null
+          after_partner_assist_status?: string | null
+          after_status?: string | null
+          application_id: string
+          before_partner_assist_status?: string | null
+          before_status?: string | null
+          created_at?: string
+          decision: string
+          id?: string
+          metadata?: Json
+          remark?: string | null
+          required_fields?: string[]
+          review_stage: string
+        }
+        Update: {
+          actor_employee_id?: string | null
+          actor_partner_member_id?: string | null
+          actor_type?: string
+          actor_visitor_id?: string | null
+          after_partner_assist_status?: string | null
+          after_status?: string | null
+          application_id?: string
+          before_partner_assist_status?: string | null
+          before_status?: string | null
+          created_at?: string
+          decision?: string
+          id?: string
+          metadata?: Json
+          remark?: string | null
+          required_fields?: string[]
+          review_stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_onboarding_application_reviews_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_application_reviews_actor_partner_member_id_fkey"
+            columns: ["actor_partner_member_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_application_reviews_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_onboarding_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_onboarding_notification_deliveries: {
+        Row: {
+          application_id: string
+          application_version: number
+          attempt_count: number
+          channel: string
+          claim_expires_at: string | null
+          claim_token: string | null
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          application_id: string
+          application_version: number
+          attempt_count?: number
+          channel?: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          last_error?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          application_id?: string
+          application_version?: number
+          attempt_count?: number
+          channel?: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          last_error?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_onboarding_notification_deliveries_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_onboarding_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_service_provider_profiles: {
+        Row: {
+          address: string | null
+          address_city: string | null
+          address_district: string | null
+          address_latitude: number | null
+          address_longitude: number | null
+          address_province: string | null
+          address_region_code: string | null
+          created_at: string
+          id: string
+          introduction: string | null
+          public_name: string | null
+          public_phone: string | null
+          published_at: string | null
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          status: string
+          submitted_at: string | null
+          suspended_at: string | null
+          tenant_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          address?: string | null
+          address_city?: string | null
+          address_district?: string | null
+          address_latitude?: number | null
+          address_longitude?: number | null
+          address_province?: string | null
+          address_region_code?: string | null
+          created_at?: string
+          id?: string
+          introduction?: string | null
+          public_name?: string | null
+          public_phone?: string | null
+          published_at?: string | null
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          status?: string
+          submitted_at?: string | null
+          suspended_at?: string | null
+          tenant_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          address?: string | null
+          address_city?: string | null
+          address_district?: string | null
+          address_latitude?: number | null
+          address_longitude?: number | null
+          address_province?: string | null
+          address_region_code?: string | null
+          created_at?: string
+          id?: string
+          introduction?: string | null
+          public_name?: string | null
+          public_phone?: string | null
+          published_at?: string | null
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          status?: string
+          submitted_at?: string | null
+          suspended_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_provider_profiles_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_provider_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_share_links: {
         Row: {
           created_at: string
@@ -7729,6 +8133,7 @@ export type Database = {
           name: string
           slug: string
           status: string
+          unified_social_credit_code: string | null
           updated_at: string
         }
         Insert: {
@@ -7751,6 +8156,7 @@ export type Database = {
           name: string
           slug: string
           status?: string
+          unified_social_credit_code?: string | null
           updated_at?: string
         }
         Update: {
@@ -7773,6 +8179,7 @@ export type Database = {
           name?: string
           slug?: string
           status?: string
+          unified_social_credit_code?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -9170,6 +9577,18 @@ export type Database = {
       }
     }
     Functions: {
+      approve_tenant_onboarding_application: {
+        Args: {
+          p_application_id: string
+          p_attribution_source_type?: string
+          p_expected_version: number
+          p_final_partner_id?: string
+          p_review_remark?: string
+          p_reviewer_employee_id: string
+          p_tenant_slug: string
+        }
+        Returns: Json
+      }
       assign_platform_lead: {
         Args: {
           p_assigned_note?: string
@@ -9252,6 +9671,36 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      claim_tenant_onboarding_notification: {
+        Args: {
+          p_application_id: string
+          p_delivery_id: string
+          p_lease_seconds: number
+          p_max_attempts: number
+          p_now: string
+        }
+        Returns: {
+          application_id: string
+          application_version: number
+          attempt_count: number
+          channel: string
+          claim_expires_at: string | null
+          claim_token: string | null
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_onboarding_notification_deliveries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       claim_next_social_video_transcription:
         | {
@@ -9352,6 +9801,70 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      expire_tenant_onboarding_partner_assists: {
+        Args: { p_cutoff: string; p_partner_id?: string }
+        Returns: {
+          application_id: string
+        }[]
+      }
+      finalize_tenant_onboarding_notification_failed: {
+        Args: {
+          p_application_id: string
+          p_claim_token: string
+          p_delivery_id: string
+          p_last_error: string
+        }
+        Returns: {
+          application_id: string
+          application_version: number
+          attempt_count: number
+          channel: string
+          claim_expires_at: string | null
+          claim_token: string | null
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_onboarding_notification_deliveries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      finalize_tenant_onboarding_notification_sent: {
+        Args: {
+          p_application_id: string
+          p_claim_token: string
+          p_delivery_id: string
+          p_sent_at: string
+        }
+        Returns: {
+          application_id: string
+          application_version: number
+          attempt_count: number
+          channel: string
+          claim_expires_at: string | null
+          claim_token: string | null
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_onboarding_notification_deliveries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       complete_workflow_instance_node: {
         Args: {
           p_action: string
@@ -9374,6 +9887,15 @@ export type Database = {
           p_project_log_scope?: string
           p_stage_code: string
           p_tenant_department_id?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      initialize_default_decoration_tenant: {
+        Args: {
+          p_admin_name: string
+          p_admin_phone: string
+          p_operator_employee_id?: string
           p_tenant_id: string
         }
         Returns: Json
@@ -9479,6 +10001,39 @@ export type Database = {
         Returns: {
           running_instance_count: number
           version_id: string
+        }[]
+      }
+      list_tenant_service_provider_publications: {
+        Args: { p_keyword: string; p_status: string }
+        Returns: {
+          address_city: string | null
+          address_district: string | null
+          area_count: number
+          public_name: string | null
+          public_phone: string | null
+          status: string
+          submitted_at: string | null
+          tenant_id: string
+          tenant_name: string
+          updated_at: string
+          version: number
+        }[]
+      }
+      list_visitor_local_service_providers: {
+        Args: { p_region_codes: string[] }
+        Returns: {
+          address: string | null
+          address_city: string | null
+          address_district: string | null
+          address_latitude: number | null
+          address_longitude: number | null
+          address_province: string | null
+          address_region_code: string | null
+          introduction: string | null
+          matched_region_code: string
+          public_name: string
+          public_phone: string
+          tenant_id: string
         }[]
       }
       list_customer_home_projects: {
@@ -9612,6 +10167,20 @@ export type Database = {
           user_id: string
         }[]
       }
+      mutate_tenant_onboarding_platform_review: {
+        Args: {
+          p_action: string
+          p_application_id: string
+          p_candidate_snapshot: Json
+          p_expected_version: number
+          p_now: string
+          p_partner_id: string
+          p_remark: string
+          p_required_fields: string[]
+          p_reviewer_employee_id: string
+        }
+        Returns: Json
+      }
       picture_asset_set_favorite: {
         Args: { p_asset_id: string; p_favorited: boolean; p_visitor_id: string }
         Returns: {
@@ -9627,6 +10196,15 @@ export type Database = {
           like_count: number
           liked: boolean
         }[]
+      }
+      publish_tenant_service_provider: {
+        Args: {
+          p_expected_version: number
+          p_review_remark: string
+          p_reviewer_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       publish_workflow_definition:
         | {
@@ -9665,6 +10243,110 @@ export type Database = {
             }
             Returns: Json
           }
+      resolve_tenant_onboarding_region_paths: {
+        Args: { p_service_region_codes: string[] }
+        Returns: {
+          adcode: string
+          depth: number
+          level: string
+          name: string
+          service_code: string
+        }[]
+      }
+      return_tenant_service_provider_to_draft: {
+        Args: {
+          p_expected_version: number
+          p_review_remark: string
+          p_reviewer_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      submit_tenant_onboarding_application: {
+        Args: {
+          p_application: Json
+          p_now: string
+          p_sms_code_id: string
+          p_sms_phone: string
+        }
+        Returns: {
+          application_id: string
+          created: boolean
+        }[]
+      }
+      submit_tenant_onboarding_partner_assist: {
+        Args: {
+          p_application_id: string
+          p_decision: string
+          p_expected_version: number
+          p_now: string
+          p_partner_id: string
+          p_partner_member_id: string
+          p_remark: string
+        }
+        Returns: Json
+      }
+      submit_tenant_service_provider_profile: {
+        Args: { p_expected_version: number; p_tenant_id: string }
+        Returns: Json
+      }
+      supplement_tenant_onboarding_application: {
+        Args: {
+          p_application_id: string
+          p_candidate_match_reason: string
+          p_candidate_partner_id: string
+          p_candidate_snapshot: Json
+          p_expected_version: number
+          p_now: string
+          p_partner_assist_due_at: string
+          p_partner_assist_requested_at: string
+          p_partner_assist_status: string
+          p_patch: Json
+          p_replace_candidate: boolean
+          p_visitor_id: string
+        }
+        Returns: {
+          application_id: string
+        }[]
+      }
+      suspend_tenant_service_provider: {
+        Args: {
+          p_expected_version: number
+          p_review_remark: string
+          p_reviewer_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      update_tenant_service_provider_profile: {
+        Args: {
+          p_expected_version: number
+          p_patch: Json
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      upsert_tenant_service_provider_area: {
+        Args: {
+          p_area: Json
+          p_area_id: string
+          p_expected_profile_version: number
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      withdraw_tenant_onboarding_application: {
+        Args: {
+          p_application_id: string
+          p_expected_version: number
+          p_now: string
+          p_reason: string
+          p_visitor_id: string
+        }
+        Returns: {
+          application_id: string
+        }[]
+      }
       rebuild_workflow_subject_runtime: {
         Args: {
           p_actor_employee_id: string
