@@ -1045,11 +1045,6 @@ describe("reusable build workflow", () => {
       requiredFragments: productionPullJobRequiredFragments,
       orderedFragments: productionPullJobStepOrderedFragments,
       forbiddenPatterns: productionPullForbiddenPatterns,
-    };
-    const pullImageContract: WorkflowTextContract = {
-      requiredFragments: productionPullImageRequiredFragments,
-      orderedFragments: productionPullImageOrderedFragments,
-      forbiddenPatterns: productionPullImageForbiddenPatterns,
       exactLineContracts: [
         {
           line: canonicalCleanupImageRemovalLine,
@@ -1057,6 +1052,11 @@ describe("reusable build workflow", () => {
           exclusivePattern: /^\s*docker image rm(?:\s|$)/,
         },
       ],
+    };
+    const pullImageContract: WorkflowTextContract = {
+      requiredFragments: productionPullImageRequiredFragments,
+      orderedFragments: productionPullImageOrderedFragments,
+      forbiddenPatterns: productionPullImageForbiddenPatterns,
     };
     const contracts: readonly {
       content: string;
@@ -1122,6 +1122,18 @@ describe("reusable build workflow", () => {
       validatesWorkflowTextContract(misplacedPullStepOrder, pullJobContract),
     ).toBe(false);
 
+    const pullJobWithGuardCleanup = pullJob.replace(
+      "          docker buildx version",
+      [
+        "          docker buildx version",
+        "          docker image rm -f production-image:main",
+      ].join("\n"),
+    );
+    expect(pullJobWithGuardCleanup).not.toBe(pullJob);
+    expect(
+      validatesWorkflowTextContract(pullJobWithGuardCleanup, pullJobContract),
+    ).toBe(false);
+
     const pullStep = sliceWorkflowStep(
       pullJob,
       "Pull and verify immutable images",
@@ -1139,13 +1151,23 @@ describe("reusable build workflow", () => {
       'cleanup_images+=("${expected_image}")',
       'docker image inspect "${expected_image}"',
       ...mutableShaTagOperationFixtures,
-      'docker image rm "${expected_digest_ref}"',
-      'docker image rm -f "${expected_digest_ref}"',
     ]) {
       expect(
         validatesWorkflowTextContract(
           `${pullStep}\n            ${mutableTagOperation}`,
           pullImageContract,
+        ),
+      ).toBe(false);
+    }
+
+    for (const extraImageRemoval of [
+      'docker image rm "${expected_digest_ref}"',
+      'docker image rm -f "${expected_digest_ref}"',
+    ]) {
+      expect(
+        validatesWorkflowTextContract(
+          `${pullJob}\n            ${extraImageRemoval}`,
+          pullJobContract,
         ),
       ).toBe(false);
     }
