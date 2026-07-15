@@ -94,6 +94,15 @@ describe("production migration precheck workflow", () => {
 });
 
 describe("reusable build workflow", () => {
+  test("uses the US Tencent CCR registry across Docker release workflows", () => {
+    const releaseWorkflows = [buildWorkflow, deployDevWorkflow, deployProductionWorkflow];
+
+    for (const workflow of releaseWorkflows) {
+      expect(workflow).toContain("TENCENT_CCR_REGISTRY: useccr.ccs.tencentyun.com");
+      expect(workflow).not.toContain("TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com");
+    }
+  });
+
   test("exposes stable inputs, outputs, and environment-specific build plans", () => {
     expect(buildWorkflow).toContain("push:\n    branches: [main]");
     expect(buildWorkflow).toContain("workflow_dispatch:");

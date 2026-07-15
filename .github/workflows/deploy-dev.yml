@@ -67,7 +67,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  TENCENT_CCR_REGISTRY: useccr.ccs.tencentyun.com
   DEV_DEPLOY_DIR: /opt/gooes-dev/docker
   SOURCE_SHA: ${{ inputs.commit_sha }}
   RELEASE_SERVICE: ${{ inputs.service }}

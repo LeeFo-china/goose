@@ -50,7 +50,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'push' || inputs.target_environment != '' || inputs.service != '' }}
 
 env:
-  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  TENCENT_CCR_REGISTRY: useccr.ccs.tencentyun.com
 
 jobs:
   validate-request:

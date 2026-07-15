@@ -67,7 +67,7 @@ concurrency:
 
 env:
   DEPLOY_DIR: /opt/supabase/docker
-  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  TENCENT_CCR_REGISTRY: useccr.ccs.tencentyun.com
   SOURCE_SHA: ${{ github.sha }}
   RELEASE_SERVICE: ${{ inputs.service || github.event.inputs.service || 'all' }}
   RELEASE_CONFIRM_TEXT: ${{ inputs.confirm_text || github.event.inputs.confirm_text || '' }}
