@@ -27,6 +27,7 @@ type ReleaseMode = "service-release" | "web-release" | "database-migration";
 const WEB_RELEASE_WORKFLOWS = {
   devGate: "verify-dev-web-deployment-gate.yml",
   devDeploy: "deploy-dev.yml",
+  productionBuild: "build-docker-images.yml",
   productionGate: "verify-web-deployment-gate.yml",
   productionDeploy: "deploy-docker-services.yml",
 } as const;
@@ -377,6 +378,7 @@ export function ReleaseDeploymentsPanel({
 function WebReleaseGuideCard({ repository }: { repository?: string }) {
   const devGateUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.devGate);
   const devDeployUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.devDeploy);
+  const productionBuildUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.productionBuild);
   const productionGateUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.productionGate);
   const productionDeployUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.productionDeploy);
 
@@ -413,13 +415,15 @@ function WebReleaseGuideCard({ repository }: { repository?: string }) {
         />
         <WebReleaseEnvironmentPanel
           title="生产环境"
-          description="用于生产官网。必须先通过生产 Web Gate，再走生产 Docker 服务部署 workflow 的 web 服务。"
+          description="用于生产官网。先构建生产 Web SHA 镜像，再执行生产 Web Gate 与 Web-only 部署。"
           steps={[
             "先在服务发布中完成 API/Admin/Worker 候选构建与必要部署。",
+            `运行 ${WEB_RELEASE_WORKFLOWS.productionBuild}，从同一发布 Tag 构建 production / web SHA 镜像。`,
             `运行 ${WEB_RELEASE_WORKFLOWS.productionGate}，确认 release manifest、migration 与 smoke 证据。`,
             `运行 ${WEB_RELEASE_WORKFLOWS.productionDeploy}，选择 service=web 并填入 gate_run_id 与确认文本。`,
           ]}
           actions={[
+            { label: "生产 Web 构建", href: productionBuildUrl },
             { label: "生产 Web Gate", href: productionGateUrl },
             { label: "生产 Web 部署", href: productionDeployUrl },
           ]}

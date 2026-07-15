@@ -72,6 +72,9 @@ describe("release deployment workbench contracts", () => {
     expect(panelSource).toContain("verify-web-deployment-gate.yml");
     expect(panelSource).toContain("deploy-dev.yml");
     expect(panelSource).toContain("deploy-docker-services.yml");
+    expect(panelSource).toContain('productionBuild: "build-docker-images.yml"');
+    expect(panelSource).toContain("先构建生产 Web SHA 镜像");
+    expect(panelSource).toContain("生产 Web 构建");
     expect(dispatchSource).not.toContain('value="web"');
     expect(typesSource).toContain('export type ReleaseRuntimeService = Exclude<ReleaseService, "all"> | "web"');
   });
