@@ -64,17 +64,46 @@ describe("release deployment workbench contracts", () => {
     const panelSource = readFileSync(join(import.meta.dir, "release-deployments-panel.tsx"), "utf8");
     const dispatchSource = readFileSync(join(import.meta.dir, "release-deployments-dispatch-card.tsx"), "utf8");
     const typesSource = readFileSync(join(import.meta.dir, "ops-types.ts"), "utf8");
+    const repositoryRoot = join(import.meta.dir, "../../../..");
+    const productionDeployWorkflow = readFileSync(
+      join(repositoryRoot, ".github/workflows/deploy-docker-services.yml"),
+      "utf8",
+    );
+    const productionGateWorkflow = readFileSync(
+      join(repositoryRoot, ".github/workflows/verify-production-web-deployment-gate.yml"),
+      "utf8",
+    );
+    const cutoverRunbookSource = readFileSync(
+      join(repositoryRoot, "docs/operations/official-website-production-cutover-runbook.md"),
+      "utf8",
+    );
 
     expect(panelSource).toContain('value="web-release"');
     expect(panelSource).toContain("官网发布");
     expect(panelSource).toContain("官网 Web 使用独立 Gate");
     expect(panelSource).toContain("verify-dev-web-deployment-gate.yml");
-    expect(panelSource).toContain("verify-web-deployment-gate.yml");
+    expect(panelSource).toContain("verify-production-web-deployment-gate.yml");
     expect(panelSource).toContain("deploy-dev.yml");
     expect(panelSource).toContain("deploy-docker-services.yml");
     expect(panelSource).toContain('productionBuild: "build-docker-images.yml"');
+    expect(panelSource).toContain('productionGate: "verify-production-web-deployment-gate.yml"');
+    expect(panelSource).not.toContain('productionGate: "verify-web-deployment-gate.yml"');
     expect(panelSource).toContain("先构建生产 Web SHA 镜像");
     expect(panelSource).toContain("生产 Web 构建");
+    expect(panelSource).toContain("build_run_id 与 commit SHA");
+    expect(panelSource).toContain("built_image_sha、build_run_id、gate_run_id、web_smoke_content_path");
+    expect(panelSource).toContain("container loopback smoke");
+    expect(panelSource).toContain("生产切流 Runbook");
+    expect(panelSource).toContain("official-website-production-cutover-runbook.md");
+    expect(productionDeployWorkflow).toContain("built_image_sha:");
+    expect(productionDeployWorkflow).toContain("build_run_id:");
+    expect(productionDeployWorkflow).toContain(
+      '.github/workflows/verify-production-web-deployment-gate.yml',
+    );
+    expect(productionGateWorkflow).toContain(
+      "uses: ./.github/workflows/verify-web-deployment-gate.yml",
+    );
+    expect(cutoverRunbookSource).toContain("不安装、不重载");
     expect(dispatchSource).not.toContain('value="web"');
     expect(typesSource).toContain('export type ReleaseRuntimeService = Exclude<ReleaseService, "all"> | "web"');
   });

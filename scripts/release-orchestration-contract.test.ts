@@ -1613,7 +1613,7 @@ describe("production orchestrator", () => {
     expect(receiptStart).toBeGreaterThan(healthStart);
     expect(deployProductionWorkflow.slice(receiptStart)).toContain("uses: actions/upload-artifact@v6");
     expect(deployProductionWorkflow.slice(receiptStart)).toContain(
-      "production-deployment-receipt-${{ inputs.build_run_id }}",
+      "production-deployment-receipt-${{ env.BUILD_RUN_ID }}",
     );
     expect(deployProductionWorkflow.slice(receiptStart + 1)).not.toContain("\n      - name:");
     for (const field of [
@@ -1629,7 +1629,127 @@ describe("production orchestrator", () => {
     }
   });
 
-  test("constructs the production Web image base inside the gate validation step", () => {
+  test("isolates direct production Web deployment behind standalone build and wrapper gate evidence", () => {
+    const triggerEnd = deployProductionWorkflow.indexOf("permissions:");
+    const trigger = deployProductionWorkflow.slice(0, triggerEnd);
+    const dispatchStart = trigger.indexOf("  workflow_dispatch:");
+    const dispatch = trigger.slice(dispatchStart);
+    const builtImageInputStart = dispatch.indexOf("      built_image_sha:");
+    const buildRunInputStart = dispatch.indexOf("      build_run_id:");
+    const confirmInputStart = dispatch.indexOf("      confirm_text:");
+    const guardStart = deployProductionWorkflow.indexOf("- name: Guard production runner");
+    const metadataStart = deployProductionWorkflow.indexOf("- name: Preflight Admin candidate metadata");
+    const checkoutStart = deployProductionWorkflow.indexOf("- name: Checkout compose files");
+    const evidenceStart = deployProductionWorkflow.indexOf("- name: Validate production release evidence");
+    const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
+    const webGateStart = deployProductionWorkflow.indexOf("- name: Validate web deployment gate");
+    const syncStart = deployProductionWorkflow.indexOf("- name: Sync compose fragments", webGateStart);
+    const receiptStart = deployProductionWorkflow.indexOf("- name: Create production deployment receipt");
+    const uploadStart = deployProductionWorkflow.indexOf("- name: Upload production deployment receipt");
+    const loopbackStart = deployProductionWorkflow.indexOf("- name: Check public endpoints and pre-cutover Web loopback");
+    const rollbackStart = deployProductionWorkflow.indexOf("- name: Roll back production web");
+    const guard = deployProductionWorkflow.slice(guardStart, metadataStart);
+    const metadata = deployProductionWorkflow.slice(metadataStart, checkoutStart);
+    const evidence = deployProductionWorkflow.slice(evidenceStart, dockerStart);
+    const webGate = deployProductionWorkflow.slice(webGateStart, syncStart);
+    const receipt = deployProductionWorkflow.slice(receiptStart, uploadStart);
+    const upload = deployProductionWorkflow.slice(uploadStart);
+    const loopback = deployProductionWorkflow.slice(loopbackStart, rollbackStart);
+
+    expect(dispatchStart).toBeGreaterThanOrEqual(0);
+    expect(builtImageInputStart).toBeGreaterThanOrEqual(0);
+    expect(buildRunInputStart).toBeGreaterThan(builtImageInputStart);
+    expect(confirmInputStart).toBeGreaterThan(buildRunInputStart);
+    expect(dispatch).toContain("built_image_sha:");
+    expect(dispatch).toContain("Standalone production Web build commit SHA evidence");
+    expect(dispatch).toContain("build_run_id:");
+    expect(dispatch).toContain("Successful standalone production Web build workflow run ID");
+    expect(dispatch.slice(builtImageInputStart, buildRunInputStart)).toContain("required: false");
+    expect(dispatch.slice(buildRunInputStart, confirmInputStart)).toContain("required: false");
+    expect(deployProductionWorkflow).toContain(
+      "BUILD_RUN_ID: ${{ inputs.build_run_id || github.event.inputs.build_run_id || '' }}",
+    );
+
+    expect(guard).toContain(
+      "INPUT_BUILT_IMAGE_SHA: ${{ inputs.built_image_sha || github.event.inputs.built_image_sha || '' }}",
+    );
+    expect(guard).toContain('normalized_release_service="${RELEASE_SERVICE//[[:space:]]/}"');
+    expect(guard).toContain('if [ "${normalized_release_service}" = web ]; then');
+    expect(guard).toContain('test "${GITHUB_EVENT_NAME}" = workflow_dispatch');
+    expect(guard).toContain('test "${GITHUB_REF_TYPE}" = tag');
+    expect(guard).toContain('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
+    expect(guard).toContain('[[ "${INPUT_BUILT_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]]');
+    expect(guard).toContain('test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"');
+    expect(guard).toContain('test "${RELEASE_CONFIRM_TEXT}" = "确认部署生产环境"');
+    expect(guard).toContain('echo "WEB_DIRECT_DEPLOY=true" >> "${GITHUB_ENV}"');
+    expect(guard).toContain('echo "ADMIN_CANDIDATE=false" >> "${GITHUB_ENV}"');
+
+    expect(metadata.slice(0, metadata.indexOf("run: |"))).toContain(
+      "if: ${{ env.WEB_DIRECT_DEPLOY != 'true' }}",
+    );
+    expect(evidence.slice(0, evidence.indexOf("run: |"))).toContain(
+      "if: ${{ env.WEB_DIRECT_DEPLOY != 'true' }}",
+    );
+    expect(metadata).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/release-production.yml"',
+    );
+    expect(evidence).toContain('gh run download "${BUILD_RUN_ID}" -n production-release-candidate');
+    expect(evidence).toContain('echo "ADMIN_CANDIDATE=true" >> "${GITHUB_ENV}"');
+
+    expect(webGate).toContain('test "${WEB_DIRECT_DEPLOY:-false}" = true');
+    expect(webGate).toContain('test "${INPUT_BUILT_IMAGE_SHA}" = "${SOURCE_SHA}"');
+    expect(webGate).toContain('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
+    expect(webGate).toContain("canonical_workflow_path() {");
+    expect(webGate).toContain(
+      'test "${build_workflow_path}" = ".github/workflows/build-docker-images.yml"',
+    );
+    expect(webGate).toContain('test "$(jq -r \'.event\' <<< "${build_run_json}")" = workflow_dispatch');
+    expect(webGate).toContain('test "$(jq -r \'.conclusion\' <<< "${build_run_json}")" = success');
+    expect(webGate).toContain('test "$(jq -r \'.head_sha\' <<< "${build_run_json}")" = "${SOURCE_SHA}"');
+    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n production-build-plan');
+    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n image-manifest-web');
+    expect(webGate).toContain('test "$(jq -r \'.target_environment\' "${evidence_dir}/build-plan.json")" = production');
+    expect(webGate).toContain('test "$(jq -r \'.commit_sha\' "${evidence_dir}/build-plan.json")" = "${SOURCE_SHA}"');
+    expect(webGate).toContain('test "$(jq -c \'.build_services\' "${evidence_dir}/build-plan.json")" = \'["web"]\'');
+    expect(webGate).toContain('test "$(jq -c \'.deploy_services\' "${evidence_dir}/build-plan.json")" = \'["web"]\'');
+    expect(webGate).toContain('test "$(jq -r \'.no_op\' "${evidence_dir}/build-plan.json")" = false');
+    expect(webGate).toContain('test "$(jq -r \'.service\' "${web_manifest}")" = web');
+    expect(webGate).toContain('test "$(jq -r \'.target_environment\' "${web_manifest}")" = production');
+    expect(webGate).toContain('test "$(jq -r \'.commit_sha\' "${web_manifest}")" = "${SOURCE_SHA}"');
+    expect(webGate).toContain('test "$(jq -r \'.image\' "${web_manifest}")" = "${expected_web_image}"');
+    expect(webGate).toContain('web_digest="$(jq -er \'.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))\' "${web_manifest}")"');
+    expect(webGate).toContain('receipt_name="production-deployment-receipt-${BUILD_RUN_ID}"');
+    expect(webGate).toContain('test "${receipt_count}" = 0');
+    expect(webGate).toContain(
+      'test "${gate_workflow_path}" = ".github/workflows/verify-production-web-deployment-gate.yml"',
+    );
+    expect(webGate).toContain('test "$(jq -r \'.event\' <<< "${gate_run_json}")" = workflow_dispatch');
+    expect(webGate).toContain('test "$(jq -r \'.conclusion\' <<< "${gate_run_json}")" = success');
+    expect(webGate).toContain(
+      '"${receipt_dir}/web-deployment-gate-receipt.json" production "${SOURCE_SHA}" 20260711120000',
+    );
+    expect(webGate).toContain('test -n "${INPUT_WEB_SMOKE_CONTENT_PATH}"');
+    expect(webGate).toContain("validate-web-smoke-content-path.mjs");
+    expect(webGate).toContain(allowedRegistryPairArm);
+    expect(webGate).toContain('GOOES_WEB_IMAGE=${image_base}/goose-web@${web_digest}');
+    expect(webGate).not.toContain('GOOES_WEB_IMAGE=${image_base}/goose-web:${SOURCE_SHA}');
+
+    expect(receipt).toContain("if: ${{ success() && env.BUILD_RUN_ID != '' }}");
+    expect(receipt).toContain('if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then');
+    expect(receipt).toContain('test "${DEPLOY_SERVICES}" = web');
+    expect(receipt).toContain('test "${ADMIN_CANDIDATE}" = true');
+    expect(upload).toContain("if: ${{ success() && env.BUILD_RUN_ID != '' }}");
+    expect(upload).toContain("production-deployment-receipt-${{ env.BUILD_RUN_ID }}");
+    expect(loopbackStart).toBeGreaterThan(syncStart);
+    expect(rollbackStart).toBeGreaterThan(loopbackStart);
+    expect(loopback).toContain('echo "WEB_DEPLOY_STAGE=container_ready_for_manual_cutover"');
+    expect(loopback).toContain("This workflow does not install or reload production Nginx");
+    expect(deployProductionWorkflow).not.toMatch(/(?:sudo\s+)?nginx\s+-t/);
+    expect(deployProductionWorkflow).not.toMatch(/systemctl\s+reload\s+nginx/);
+    expect(deployProductionWorkflow).not.toContain("/etc/nginx");
+  });
+
+  test("constructs the production Web digest reference inside the gate validation step", () => {
     const webGateStart = deployProductionWorkflow.indexOf(
       "- name: Validate web deployment gate",
     );
@@ -1639,7 +1759,7 @@ describe("production orchestrator", () => {
     );
     const webGateStep = deployProductionWorkflow.slice(webGateStart, syncStart);
     const webImageStart = webGateStep.indexOf(
-      'echo "GOOES_WEB_IMAGE=${image_base}/goose-web:${SOURCE_SHA}"',
+      'echo "GOOES_WEB_IMAGE=${image_base}/goose-web@${web_digest}"',
     );
     const webGateBeforeImage = webGateStep.slice(0, webImageStart);
 
@@ -1650,6 +1770,12 @@ describe("production orchestrator", () => {
     expect(webGateBeforeImage).toContain('test -n "${TENCENT_CCR_NAMESPACE}"');
     expect(webGateBeforeImage).toContain(
       'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
+    );
+    expect(webGateBeforeImage).toContain(
+      'web_digest="$(jq -er \'.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))\' "${web_manifest}")"',
+    );
+    expect(webGateStep).not.toContain(
+      'GOOES_WEB_IMAGE=${image_base}/goose-web:${SOURCE_SHA}',
     );
   });
 
