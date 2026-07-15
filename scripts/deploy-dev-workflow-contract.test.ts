@@ -36,10 +36,12 @@ const gatedComposePullStart = workflow.indexOf(
 );
 
 const requiredImmutableDeploymentFragments = [
+  'manifest_build_run_id="$(jq -er \'.build_run_id | select(type == "number" and . > 0 and (floor == .))\' "${IMAGE_MANIFEST_PATH}")"',
   'manifest_service="$(jq -er \'.service | select(type == "string" and length > 0)\' "${IMAGE_MANIFEST_PATH}")"',
   'manifest_image="$(jq -er \'.image | select(type == "string" and length > 0)\' "${IMAGE_MANIFEST_PATH}")"',
   'manifest_digest="$(jq -er \'.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))\' "${IMAGE_MANIFEST_PATH}")"',
   'test "${manifest_image}" = "${expected_manifest_image}"',
+  'test "${manifest_build_run_id}" = "${INPUT_BUILD_RUN_ID}"',
   'manifest_image_repository="${manifest_image%:*}"',
   'DEPLOY_IMAGE_REF="${manifest_image_repository}@${manifest_digest}"',
   'echo "DEPLOY_IMAGE_REF=${DEPLOY_IMAGE_REF}" >> "${GITHUB_ENV}"',
@@ -50,6 +52,7 @@ const requiredImmutableDeploymentFragments = [
   'export GOOES_WEB_IMAGE="${DEPLOY_IMAGE_REF}"',
   'configured_image="$(docker inspect -f \'{{.Config.Image}}\' "${container}" 2>/dev/null || true)"',
   'test "${configured_image}" = "${DEPLOY_IMAGE_REF}"',
+  'test "${run_id}" = "${INPUT_BUILD_RUN_ID}"',
   'configured_image="$(docker inspect -f \'{{.Config.Image}}\' gooes-web-dev 2>/dev/null || true)"',
 ];
 const requiredNonWebHealthAssertions = [
@@ -85,6 +88,7 @@ docker() {
     '{{.State.Status}}') printf '%s\\n' running ;;
     '{{if .State.Health}}{{.State.Health.Status}}{{end}}') printf '%s\\n' ${health} ;;
     '{{index .Config.Labels "org.opencontainers.image.revision"}}') printf '%s\\n' "$SOURCE_SHA" ;;
+    '{{index .Config.Labels "com.goodcms.github.run_id"}}') printf '%s\\n' "$INPUT_BUILD_RUN_ID" ;;
     '{{.Config.Image}}') printf '%s\\n' "$DEPLOY_IMAGE_REF" ;;
     *) return 1 ;;
   esac
@@ -96,6 +100,7 @@ sleep() { :; }
     env: {
       ...process.env,
       DEPLOY_IMAGE_REF: "useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      INPUT_BUILD_RUN_ID: "123",
       RELEASE_SERVICE: "social-video-worker",
       SOURCE_SHA: "0123456789abcdef0123456789abcdef01234567",
     },
@@ -123,7 +128,10 @@ describe("deploy-dev workflow", () => {
       'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
     );
     expect(loginStep).toContain(
-      'expected_manifest_image="${image_base}/${manifest_repository}:${SOURCE_SHA}"',
+      'expected_manifest_image="${image_base}/${manifest_repository}:run-${INPUT_BUILD_RUN_ID}-${SOURCE_SHA}"',
+    );
+    expect(loginStep).toContain(
+      'manifest_build_run_id="$(jq -er \'.build_run_id | select(type == "number" and . > 0 and (floor == .))\' "${IMAGE_MANIFEST_PATH}")"',
     );
     expect(loginStep).toContain(
       'manifest_service="$(jq -er \'.service | select(type == "string" and length > 0)\' "${IMAGE_MANIFEST_PATH}")"',
@@ -136,6 +144,7 @@ describe("deploy-dev workflow", () => {
     );
     expect(loginStep).toContain('test "${manifest_service}" = "${MANIFEST_SERVICE}"');
     expect(loginStep).toContain('test "${manifest_image}" = "${expected_manifest_image}"');
+    expect(loginStep).toContain('test "${manifest_build_run_id}" = "${INPUT_BUILD_RUN_ID}"');
     expect(loginStep).toContain('manifest_image_repository="${manifest_image%:*}"');
     expect(loginStep).toContain(
       'test "${manifest_image_repository}" = "${image_base}/${manifest_repository}"',
@@ -190,6 +199,7 @@ describe("deploy-dev workflow", () => {
     );
     expect(checkStep).toContain('test "${configured_image}" = "${DEPLOY_IMAGE_REF}"');
     expect(checkStep).toContain('test "${revision}" = "${SOURCE_SHA}"');
+    expect(checkStep).toContain('test "${run_id}" = "${INPUT_BUILD_RUN_ID}"');
     expect(checkStep).toContain('test "${state}" = running');
     expect(checkStep).toContain('test "${health}" = healthy');
   });
@@ -235,6 +245,7 @@ describe("deploy-dev workflow", () => {
       'configured_image="$(docker inspect -f \'{{.Config.Image}}\' gooes-web-dev 2>/dev/null || true)"',
     );
     expect(gatedCheckStep).toContain('test "${configured_image}" = "${DEPLOY_IMAGE_REF}"');
+    expect(gatedCheckStep).toContain('test "${run_id}" = "${INPUT_BUILD_RUN_ID}"');
   });
 
   test("rejects regressions that ignore manifest.image or deploy a selected SHA tag", () => {

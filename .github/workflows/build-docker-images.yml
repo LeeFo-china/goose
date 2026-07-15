@@ -307,6 +307,7 @@ jobs:
             ADMIN_H5_URL=https://h5.goodcms.cn
           fi
           SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
+          RUN_IMAGE="${IMAGE_BASE}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"
           BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           case "$SERVICE" in
@@ -319,6 +320,7 @@ jobs:
                 --build-arg BUILD_CREATED="${BUILD_CREATED}" \
                 -t "$BRANCH_IMAGE" \
                 -t "$SHA_IMAGE" \
+                -t "$RUN_IMAGE" \
                 .
               ;;
             social-video-worker)
@@ -331,6 +333,7 @@ jobs:
                 --build-arg BUILD_CREATED="${BUILD_CREATED}" \
                 -t "$BRANCH_IMAGE" \
                 -t "$SHA_IMAGE" \
+                -t "$RUN_IMAGE" \
                 .
               ;;
             admin)
@@ -344,6 +347,7 @@ jobs:
                 --build-arg BUILD_CREATED="${BUILD_CREATED}" \
                 -t "$BRANCH_IMAGE" \
                 -t "$SHA_IMAGE" \
+                -t "$RUN_IMAGE" \
                 .
               ;;
             web)
@@ -355,6 +359,7 @@ jobs:
                 --build-arg BUILD_CREATED="${BUILD_CREATED}" \
                 -t "$BRANCH_IMAGE" \
                 -t "$SHA_IMAGE" \
+                -t "$RUN_IMAGE" \
                 .
               ;;
             *)
@@ -365,16 +370,18 @@ jobs:
 
           docker push "$BRANCH_IMAGE"
           docker push "$SHA_IMAGE"
+          docker push "$RUN_IMAGE"
 
-          digest="$(docker buildx imagetools inspect "$SHA_IMAGE" | awk '/^Digest:/ {print $2; exit}')"
+          digest="$(docker buildx imagetools inspect "$RUN_IMAGE" | awk '/^Digest:/ {print $2; exit}')"
           [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
           jq -n \
             --arg service "${SERVICE}" \
-            --arg image "${SHA_IMAGE}" \
+            --arg image "${RUN_IMAGE}" \
             --arg digest "${digest}" \
+            --argjson build_run_id "${GITHUB_RUN_ID}" \
             --arg commit_sha "${GITHUB_SHA}" \
             --arg environment "${TARGET_ENVIRONMENT}" \
-            '{service:$service,image:$image,digest:$digest,commit_sha:$commit_sha,target_environment:$environment}' \
+            '{service:$service,image:$image,digest:$digest,build_run_id:$build_run_id,commit_sha:$commit_sha,target_environment:$environment}' \
             > "image-manifest-${SERVICE}.json"
 
       - name: Upload image manifest
@@ -485,7 +492,8 @@ jobs:
             test "$(jq -r '.service' "${manifest}")" = "${service}"
             test "$(jq -r '.commit_sha' "${manifest}")" = "${GITHUB_SHA}"
             test "$(jq -r '.target_environment' "${manifest}")" = production
-            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"
+            test "$(jq -er '.build_run_id | select(type == "number" and . > 0 and (floor == .))' "${manifest}")" = "${GITHUB_RUN_ID}"
+            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"
             test "$(jq -r '.image' "${manifest}")" = "${expected_image}"
             digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${manifest}")"
             remote_digest="$(docker buildx imagetools inspect "${expected_image}" | awk '/^Digest:/ {print $2; exit}')"
@@ -499,6 +507,8 @@ jobs:
             docker pull "${expected_digest_ref}"
             revision="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${expected_digest_ref}")"
             test "${revision}" = "${GITHUB_SHA}"
+            run_id="$(docker image inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' "${expected_digest_ref}")"
+            test "${run_id}" = "${GITHUB_RUN_ID}"
             repo_digests="$(docker image inspect -f '{{json .RepoDigests}}' "${expected_digest_ref}")"
             jq -e --arg expected "${expected_digest_ref}" 'index($expected) != null' <<< "${repo_digests}" >/dev/null
           done

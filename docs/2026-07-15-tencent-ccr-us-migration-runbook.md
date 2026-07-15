@@ -53,10 +53,16 @@ Web 有意排除并保持独立。
 每个 production 构建都必须等待 `build-docker-images.yml` 中的生产 Runner 校验任务成功：
 
 1. 验证 release Tag、commit SHA、production build plan 和镜像 manifest。
-2. 校验远端 SHA tag 的 digest 与 manifest 一致。
-3. 以不可变 digest 引用拉取镜像。
-4. 校验本地 `org.opencontainers.image.revision` 等于目标 commit SHA，且 RepoDigest 与 manifest 一致。
+2. 校验远端 run-scoped evidence Tag `run-<Run ID>-<commit SHA>` 的 digest 与 manifest 一致，
+   且 manifest 中数值类型的 `build_run_id` 等于本次 Run ID。
+3. 以 manifest 中 run-scoped image 的仓库和不可变 digest 引用拉取镜像。
+4. 校验本地 `org.opencontainers.image.revision` 等于目标 commit SHA、
+   `com.goodcms.github.run_id` 等于本次 Run ID，且 RepoDigest 与 manifest 一致。
 5. 只清理本次新增且未使用的 digest 引用。
+
+构建仍推送 `dev`/`main` branch Tag 和 `<commit SHA>` Tag，供人工定位与兼容使用；两者都可能被
+后续构建覆盖，禁止作为自动部署证据。所有自动 dev/production 部署只能接受 manifest 中的
+`run-<Run ID>-<commit SHA>` image，并最终使用该 image 的 `repository@digest`。
 
 该任务不执行 `docker compose`、不创建或重启容器、不修改 Nginx。正常生产服务部署仍必须
 再次运行 `release-production.yml operation=deploy`，提供候选 `build_run_id`、`commit_sha`，
@@ -335,8 +341,9 @@ TENCENT_CCR_REGISTRY=ccr.ccs.tencentyun.com
 TENCENT_CCR_NAMESPACE=gooes-goodcms
 ```
 
-回滚后只能使用旧仓库中已经存在、且能关联不可变 build manifest、commit SHA、digest 和
-revision 证据的镜像。不得仅凭可变 branch tag 回滚。紧急状态解除后必须恢复美国仓库成对
+回滚后只能使用旧仓库中已经存在、且能关联不可变 build manifest、数值 `build_run_id`、
+run-scoped evidence Tag、commit SHA、digest、revision 和 run label 证据的镜像。不得仅凭可变
+branch Tag 或 SHA Tag 回滚。紧急状态解除后必须恢复美国仓库成对
 变量；所有正常后续发布一律使用 `useccr.ccs.tencentyun.com/america_goose`。
 
 ## Acceptance/evidence
@@ -346,11 +353,11 @@ revision 证据的镜像。不得仅凭可变 branch tag 回滚。紧急状态�
 | 范围 | 必须记录的证据 |
 | --- | --- |
 | Repository | 合并 PR、不可变 main SHA、生产 release Tag、两个 Repository Variable 精确值、两个 Secret 名称 |
-| Development build | `build-docker-images.yml` Run ID、`dev-build-plan`，以及 API/Admin/Web/social-video-worker 四个 manifest 的 image、SHA、digest |
-| Development deploy | `auto-deploy-dev.yml` Run ID；五个容器的 ID、image、revision、health；cos-reconcile-worker 复用 API 的证据 |
+| Development build | `build-docker-images.yml` Run ID、`dev-build-plan`，以及 API/Admin/Web/social-video-worker 四个 manifest 的 run-scoped image、数值 `build_run_id`、SHA、digest |
+| Development deploy | `auto-deploy-dev.yml` Run ID；五个容器的 ID、`repository@digest` image、revision、run label、health；cos-reconcile-worker 复用 API 的证据 |
 | Development config | 实际 `.env.bak.ccr-us-<stamp>` 文件名；`docker compose ... config --images` 输出；API/Admin/Web 健康端点结果 |
-| Production service candidate | `release-production.yml` Run ID、不可变 `production-release-candidate` artifact、API/Admin/social-video-worker manifest 和生产 Runner pull 校验结果 |
-| Production Web candidate | 独立 `build-docker-images.yml` Run ID、Web manifest、远端 SHA digest、不可变 digest pull、revision 校验结果；没有 Gate 或 deploy run |
+| Production service candidate | `release-production.yml` Run ID、不可变 `production-release-candidate` artifact、API/Admin/social-video-worker manifest 的 run-scoped image/build_run_id 和生产 Runner pull 校验结果 |
+| Production Web candidate | 独立 `build-docker-images.yml` Run ID、Web manifest、远端 run-scoped evidence Tag digest、不可变 digest pull、revision/run label 校验结果；没有 Gate 或 deploy run |
 | Production safety | 首次 production workflow dispatch 前和候选构建后的稳定 `docker inspect` 快照及其无差异 diff，字段包含 container ID、name、`Config.Image`、image ID、revision、`.State.StartedAt`、`.RestartCount`；health/status 单独记录；API/Admin/官网状态无回归；没有 Compose、容器生命周期变更或 Nginx reload 记录 |
 | Production config | 实际 `.env.bak.ccr-us-<stamp>` 与 `.env.admin.bak.ccr-us-<stamp>` 文件名；API/Admin/social/cos 未来引用解析到美国仓库；Web 配置保持不变 |
 

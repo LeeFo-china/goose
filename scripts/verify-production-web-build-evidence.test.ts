@@ -9,7 +9,8 @@ const verifierPath = new URL(
 ).pathname;
 const sha = "a".repeat(40);
 const tag = "v2026.07.16.1";
-const image = `useccr.ccs.tencentyun.com/america_goose/goose-web:${sha}`;
+const imageBase = "useccr.ccs.tencentyun.com/america_goose";
+const image = `${imageBase}/goose-web:run-123-${sha}`;
 const digest = `sha256:${"b".repeat(64)}`;
 const roots: string[] = [];
 
@@ -41,6 +42,7 @@ const fixture: EvidenceFixture = {
   },
   manifest: {
     service: "web",
+    build_run_id: 123,
     target_environment: "production",
     commit_sha: sha,
     image,
@@ -118,6 +120,36 @@ describe("production Web build evidence verifier", () => {
     });
   });
 
+  test("rejects mutable SHA evidence even when manifest and expected image agree", () => {
+    expectRejected(
+      (evidence) => {
+        evidence.expected.image = `${imageBase}/goose-web:${sha}`;
+        evidence.manifest.image = evidence.expected.image;
+      },
+      "invalid expected run image",
+    );
+  });
+
+  test("rejects a registry pair change after the Web build", () => {
+    expectRejected(
+      (evidence) => {
+        evidence.expected.image = `ccr.ccs.tencentyun.com/gooes-goodcms/goose-web:run-123-${sha}`;
+      },
+      "manifest image mismatch",
+    );
+  });
+
+  test("rejects an unapproved Web registry even when expected and manifest agree", () => {
+    expectRejected(
+      (evidence) => {
+        const unsupportedImage = `registry.example.com/other/goose-web:run-123-${sha}`;
+        evidence.expected.image = unsupportedImage;
+        evidence.manifest.image = unsupportedImage;
+      },
+      "invalid expected run image",
+    );
+  });
+
   test.each([
     ["build run ID", (evidence: EvidenceFixture) => { evidence.buildRun.id = 124; }, "build run ID mismatch"],
     ["build run event", (evidence: EvidenceFixture) => { evidence.buildRun.event = "push"; }, "build run event mismatch"],
@@ -131,6 +163,7 @@ describe("production Web build evidence verifier", () => {
     ["build services", (evidence: EvidenceFixture) => { evidence.plan.build_services = ["api", "web"]; }, "plan build services mismatch"],
     ["deploy services", (evidence: EvidenceFixture) => { evidence.plan.deploy_services = ["web", "admin"]; }, "plan deploy services mismatch"],
     ["manifest service", (evidence: EvidenceFixture) => { evidence.manifest.service = "admin"; }, "manifest service mismatch"],
+    ["manifest build run", (evidence: EvidenceFixture) => { evidence.manifest.build_run_id = 124; }, "manifest build run mismatch"],
     ["manifest environment", (evidence: EvidenceFixture) => { evidence.manifest.target_environment = "development"; }, "manifest environment mismatch"],
     ["manifest SHA", (evidence: EvidenceFixture) => { evidence.manifest.commit_sha = "c".repeat(40); }, "manifest commit SHA mismatch"],
     ["manifest image", (evidence: EvidenceFixture) => { evidence.manifest.image = `${image}-other`; }, "manifest image mismatch"],

@@ -75,7 +75,7 @@ const registryUsageBlocks = [
     "production pull image verification",
     buildWorkflow,
     "Pull and verify immutable images",
-    'expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"',
+    'expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"',
   ],
   [
     "development login",
@@ -760,6 +760,8 @@ describe("reusable build workflow", () => {
   const immutablePullLine = '            docker pull "${expected_digest_ref}"';
   const revisionInspectLine =
     "            revision=\"$(docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' \"${expected_digest_ref}\")\"";
+  const runIdInspectLine =
+    "            run_id=\"$(docker image inspect -f '{{index .Config.Labels \"com.goodcms.github.run_id\"}}' \"${expected_digest_ref}\")\"";
   const repoDigestsInspectLine =
     "            repo_digests=\"$(docker image inspect -f '{{json .RepoDigests}}' \"${expected_digest_ref}\")\"";
   const repoDigestsAssertionLine =
@@ -782,7 +784,8 @@ describe("reusable build workflow", () => {
     '            test "$(jq -r \'.service\' "${manifest}")" = "${service}"',
     '            test "$(jq -r \'.commit_sha\' "${manifest}")" = "${GITHUB_SHA}"',
     '            test "$(jq -r \'.target_environment\' "${manifest}")" = production',
-    '            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"',
+    '            test "$(jq -er \'.build_run_id | select(type == "number" and . > 0 and (floor == .))\' "${manifest}")" = "${GITHUB_RUN_ID}"',
+    '            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"',
     '            test "$(jq -r \'.image\' "${manifest}")" = "${expected_image}"',
     manifestDigestLine,
     remoteDigestResolutionLine,
@@ -793,6 +796,8 @@ describe("reusable build workflow", () => {
     immutablePullLine,
     revisionInspectLine,
     '            test "${revision}" = "${GITHUB_SHA}"',
+    runIdInspectLine,
+    '            test "${run_id}" = "${GITHUB_RUN_ID}"',
     repoDigestsInspectLine,
     repoDigestsAssertionLine,
   ] as const;
@@ -801,7 +806,8 @@ describe("reusable build workflow", () => {
     '            test "$(jq -r \'.service\' "${manifest}")" = "${service}"',
     '            test "$(jq -r \'.commit_sha\' "${manifest}")" = "${GITHUB_SHA}"',
     '            test "$(jq -r \'.target_environment\' "${manifest}")" = production',
-    '            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"',
+    '            test "$(jq -er \'.build_run_id | select(type == "number" and . > 0 and (floor == .))\' "${manifest}")" = "${GITHUB_RUN_ID}"',
+    '            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"',
     '            test "$(jq -r \'.image\' "${manifest}")" = "${expected_image}"',
     manifestDigestLine,
     remoteDigestResolutionLine,
@@ -812,6 +818,8 @@ describe("reusable build workflow", () => {
     immutablePullLine,
     revisionInspectLine,
     '            test "${revision}" = "${GITHUB_SHA}"',
+    runIdInspectLine,
+    '            test "${run_id}" = "${GITHUB_RUN_ID}"',
     repoDigestsInspectLine,
     repoDigestsAssertionLine,
   ] as const;
@@ -909,6 +917,47 @@ describe("reusable build workflow", () => {
       expect(fragmentStart).toBeGreaterThanOrEqual(previousBoundaryEnd);
       previousBoundaryEnd = fragmentStart + fragment.length;
     }
+  });
+
+  test("publishes run-scoped build evidence instead of resolving a mutable SHA tag", () => {
+    const buildStep = sliceWorkflowStep(buildWorkflow, "Build and push image");
+
+    expect(buildStep).toContain('RUN_IMAGE="${IMAGE_BASE}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"');
+    expect(buildStep.match(/-t "\$RUN_IMAGE"/g)).toHaveLength(4);
+    expect(buildStep).toContain('docker push "$RUN_IMAGE"');
+    expect(buildStep).toContain('docker buildx imagetools inspect "$RUN_IMAGE"');
+    expect(buildStep).not.toContain('docker buildx imagetools inspect "$SHA_IMAGE"');
+    expect(buildStep).toContain('--arg image "${RUN_IMAGE}"');
+    expect(buildStep).toContain('--argjson build_run_id "${GITHUB_RUN_ID}"');
+    expect(buildStep).toContain('build_run_id:$build_run_id');
+
+    const sha = "a".repeat(40);
+    const developmentRunImage = `registry/namespace/goose-admin:run-101-${sha}`;
+    const productionRunImage = `registry/namespace/goose-admin:run-202-${sha}`;
+    expect(developmentRunImage).not.toBe(productionRunImage);
+    expect(developmentRunImage).toEndWith(`run-101-${sha}`);
+    expect(productionRunImage).toEndWith(`run-202-${sha}`);
+  });
+
+  test("binds production pull verification to run-scoped image and OCI run label", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const pullStep = sliceWorkflowStep(pullJob, "Pull and verify immutable images");
+
+    expect(pullStep).toContain(
+      'expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"',
+    );
+    expect(pullStep).toContain(
+      'test "$(jq -er \'.build_run_id | select(type == "number" and . > 0 and (floor == .))\' "${manifest}")" = "${GITHUB_RUN_ID}"',
+    );
+    expect(pullStep).toContain(
+      'run_id="$(docker image inspect -f \'{{index .Config.Labels "com.goodcms.github.run_id"}}\' "${expected_digest_ref}")"',
+    );
+    expect(pullStep).toContain('test "${run_id}" = "${GITHUB_RUN_ID}"');
+    expect(pullStep).not.toContain('expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"');
   });
 
   test("locks the production pull job boundary", () => {
@@ -1010,7 +1059,7 @@ describe("reusable build workflow", () => {
     }
     expectGuardedRegistryUsageStep(
       pullStep,
-      'expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"',
+      'expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"',
     );
   });
 
@@ -1545,6 +1594,13 @@ describe("production orchestrator", () => {
     expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" -n production-build-plan');
     expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}"');
     expect(candidate).toContain("verify-production-release-candidate.mjs");
+    expect(candidate).toContain(allowedRegistryPairArm);
+    expect(candidate).toContain('image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"');
+    expect(candidate).toContain('"${REQUESTED_SERVICES}" \\');
+    expect(candidate).toContain('"${image_base}" \\');
+    expect(candidate.indexOf(allowedRegistryPairArm)).toBeLessThan(
+      candidate.indexOf("verify-production-release-candidate.mjs"),
+    );
     expect(candidate).toContain("name: production-release-candidate");
     expect(candidate.indexOf("verify-production-release-candidate.mjs")).toBeLessThan(
       candidate.indexOf("name: production-release-candidate"),
@@ -1563,6 +1619,13 @@ describe("production orchestrator", () => {
     expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n production-build-plan');
     expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"');
     expect(authorize).toContain("verify-production-release-candidate.mjs");
+    expect(authorize).toContain(allowedRegistryPairArm);
+    expect(authorize).toContain('image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"');
+    expect(authorize).toContain('"${requested_services}" \\');
+    expect(authorize).toContain('"${image_base}" \\');
+    expect(authorize.indexOf(allowedRegistryPairArm)).toBeLessThan(
+      authorize.indexOf("verify-production-release-candidate.mjs"),
+    );
     expect(authorize).toContain(
       'test "$(jq -r ".event" <<< "${run_json}")" = workflow_dispatch',
     );
@@ -1643,12 +1706,28 @@ describe("production orchestrator", () => {
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
       'gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"',
     );
-    for (const image of [
-      "GOOES_API_IMAGE=${image_base}/goose-api@${api_digest}",
-      "GOOES_ADMIN_IMAGE=${image_base}/goose-admin@${admin_digest}",
-      "GOOES_SOCIAL_VIDEO_WORKER_IMAGE=${image_base}/goose-social-video-worker@${social_video_worker_digest}",
+    const productionEvidence = deployProductionWorkflow.slice(evidenceStart, dockerStart);
+    expect(productionEvidence.indexOf(allowedRegistryPairArm)).toBeLessThan(
+      productionEvidence.indexOf("verify-production-release-candidate.mjs"),
+    );
+    for (const [service, variable] of [
+      ["api", "GOOES_API_IMAGE"],
+      ["admin", "GOOES_ADMIN_IMAGE"],
+      ["social-video-worker", "GOOES_SOCIAL_VIDEO_WORKER_IMAGE"],
     ]) {
-      expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(image);
+      const shellName = service.replaceAll("-", "_");
+      expect(productionEvidence).toContain(
+        `${shellName}_image="$(jq -er '.image | select(type == "string" and length > 0)' "\${evidence_dir}/image-manifest-${service}.json")"`,
+      );
+      expect(productionEvidence).toContain(
+        `${shellName}_repository="\${${shellName}_image%:*}"`,
+      );
+      expect(productionEvidence).toContain(
+        `${variable}=\${${shellName}_repository}@\${${shellName}_digest}`,
+      );
+      expect(productionEvidence.indexOf("verify-production-release-candidate.mjs")).toBeLessThan(
+        productionEvidence.indexOf(`${shellName}_image=`),
+      );
     }
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
       'test "${current_workflow_path}" = ".github/workflows/release-production.yml"',
@@ -1667,6 +1746,9 @@ describe("production orchestrator", () => {
     expect(containerHealthStart).toBeGreaterThan(dockerStart);
     expect(deployProductionWorkflow.slice(containerHealthStart, healthStart)).toContain(
       'test "${revision}" = "${SOURCE_SHA}"',
+    );
+    expect(deployProductionWorkflow.slice(containerHealthStart, healthStart)).toContain(
+      'test "${run_id}" = "${BUILD_RUN_ID}"',
     );
     expect(receiptStart).toBeGreaterThan(healthStart);
     expect(deployProductionWorkflow.slice(receiptStart)).toContain("uses: actions/upload-artifact@v6");
@@ -1780,13 +1862,23 @@ describe("production orchestrator", () => {
     expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n image-manifest-web');
     expect(webGate).toContain('printf \'%s\\n\' "${build_run_json}" > "${evidence_dir}/build-run.json"');
     expect(webGate).toContain("verify-production-web-build-evidence.mjs");
+    expect(webGate.indexOf(allowedRegistryPairArm)).toBeLessThan(
+      webGate.indexOf("verify-production-web-build-evidence.mjs"),
+    );
     expect(webGate).toContain(
       '"${BUILD_RUN_ID}" "${SOURCE_SHA}" "${GITHUB_REF_NAME}" "${expected_web_image}"',
+    );
+    expect(webGate).toContain(
+      'expected_web_image="${image_base}/goose-web:run-${BUILD_RUN_ID}-${SOURCE_SHA}"',
     );
     expect(webGate).toContain('> "${evidence_dir}/verified-web-build.json"');
     expect(webGate).toContain(
       'web_digest="$(jq -er \'.digest\' "${evidence_dir}/verified-web-build.json")"',
     );
+    expect(webGate).toContain(
+      'verified_web_image="$(jq -er \'.image\' "${evidence_dir}/verified-web-build.json")"',
+    );
+    expect(webGate).toContain('web_repository="${verified_web_image%:*}"');
     expect(webGate).toContain('receipt_name="production-deployment-receipt-${BUILD_RUN_ID}"');
     expect(webGate).toContain('test "${receipt_count}" = 0');
     expect(webGate).toContain(
@@ -1802,7 +1894,7 @@ describe("production orchestrator", () => {
     expect(webGate).toContain('test -n "${INPUT_WEB_SMOKE_CONTENT_PATH}"');
     expect(webGate).toContain("validate-web-smoke-content-path.mjs");
     expect(webGate).toContain(allowedRegistryPairArm);
-    expect(webGate).toContain('GOOES_WEB_IMAGE=${image_base}/goose-web@${web_digest}');
+    expect(webGate).toContain('GOOES_WEB_IMAGE=${web_repository}@${web_digest}');
     expect(webGate).not.toContain('GOOES_WEB_IMAGE=${image_base}/goose-web:${SOURCE_SHA}');
 
     expect(webSyncStart).toBeGreaterThanOrEqual(0);
@@ -1851,14 +1943,22 @@ describe("production orchestrator", () => {
       expect(evidence).toContain(
         `${digestVariable}="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${shellVariable("evidence_dir")}/image-manifest-${service}.json")"`,
       );
+      const imageVariable = `${service.replaceAll("-", "_")}_image`;
+      const repositoryVariable = `${service.replaceAll("-", "_")}_repository`;
       expect(evidence).toContain(
-        `${variable}=${shellVariable("image_base")}/goose-${service}@${shellVariable(digestVariable)}`,
+        `${imageVariable}="$(jq -er '.image | select(type == "string" and length > 0)' "${shellVariable("evidence_dir")}/image-manifest-${service}.json")"`,
+      );
+      expect(evidence).toContain(
+        `${repositoryVariable}="${shellVariable(`${imageVariable}%:*`)}"`,
+      );
+      expect(evidence).toContain(
+        `${variable}=${shellVariable(repositoryVariable)}@${shellVariable(digestVariable)}`,
       );
       expect(evidence).not.toContain(
         `${variable}=${shellVariable("image_base")}/goose-${service}:${shellVariable("GITHUB_SHA")}`,
       );
     }
-    expect(evidence).toContain("GOOES_API_IMAGE=${image_base}/goose-api@${api_digest}");
+    expect(evidence).toContain("GOOES_API_IMAGE=${api_repository}@${api_digest}");
 
     const repository = "ccr.example/gooes/goose-api";
     const sha = "a".repeat(40);

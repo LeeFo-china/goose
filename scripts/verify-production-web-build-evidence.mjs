@@ -5,6 +5,10 @@ const SHA_PATTERN = /^[a-f0-9]{40}$/u;
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const TAG_PATTERN = /^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$/u;
 const RUN_ID_PATTERN = /^[1-9][0-9]*$/u;
+const ALLOWED_WEB_REPOSITORIES = [
+  "useccr.ccs.tencentyun.com/america_goose/goose-web",
+  "ccr.ccs.tencentyun.com/gooes-goodcms/goose-web",
+];
 
 function reject(message) {
   throw new Error(message);
@@ -30,9 +34,13 @@ export function verifyProductionWebBuildEvidence(buildRun, plan, manifest, expec
   assert(Number.isSafeInteger(expected.runId) && expected.runId > 0, "invalid expected run ID");
   assert(typeof expected.sha === "string" && SHA_PATTERN.test(expected.sha), "invalid expected commit SHA");
   assert(typeof expected.tag === "string" && TAG_PATTERN.test(expected.tag), "invalid expected release Tag");
+  const expectedRunImageSuffix = `:run-${expected.runId}-${expected.sha}`;
   assert(
-    typeof expected.image === "string" && expected.image.endsWith(`:${expected.sha}`),
-    "invalid expected SHA image",
+    typeof expected.image === "string"
+      && ALLOWED_WEB_REPOSITORIES.some(
+        (repository) => expected.image === `${repository}${expectedRunImageSuffix}`,
+      ),
+    "invalid expected run image",
   );
 
   assert(buildRun.id === expected.runId, "build run ID mismatch");
@@ -50,6 +58,7 @@ export function verifyProductionWebBuildEvidence(buildRun, plan, manifest, expec
   assert(plan.no_op === false, "production plan must not be a no-op");
 
   assert(manifest.service === "web", "manifest service mismatch");
+  assert(manifest.build_run_id === expected.runId, "manifest build run mismatch");
   assert(manifest.target_environment === "production", "manifest environment mismatch");
   assert(manifest.commit_sha === expected.sha, "manifest commit SHA mismatch");
   assert(manifest.image === expected.image, "manifest image mismatch");
@@ -81,7 +90,7 @@ function runCli() {
   const args = process.argv.slice(2);
   assert(
     args.length === 7,
-    "expected BUILD_RUN_PATH PLAN_PATH MANIFEST_PATH RUN_ID SHA TAG SHA_IMAGE",
+    "expected BUILD_RUN_PATH PLAN_PATH MANIFEST_PATH RUN_ID SHA TAG RUN_IMAGE",
   );
   const [buildRunPath, planPath, manifestPath, rawRunId, sha, tag, image] = args;
   const buildRun = JSON.parse(readFileSync(buildRunPath, "utf8"));

@@ -274,16 +274,6 @@ jobs:
             gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
             test -s "${evidence_dir}/image-manifest-${service}.json"
           done
-          node "${SOURCE_DIR}/scripts/verify-production-release-candidate.mjs" \
-            "${evidence_dir}/production-release-candidate.json" \
-            "${evidence_dir}/build-plan.json" \
-            "${evidence_dir}" \
-            "${BUILD_RUN_ID}" \
-            "${GITHUB_SHA}" \
-            "${requested_services}" \
-            > "${evidence_dir}/verified-candidate.json"
-          test "$(jq -r '.tag' "${evidence_dir}/verified-candidate.json")" = "${GITHUB_REF_NAME}"
-
           test -n "${TENCENT_CCR_REGISTRY}"
           test -n "${TENCENT_CCR_NAMESPACE}"
           case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
@@ -295,17 +285,34 @@ jobs:
               ;;
           esac
           image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
+          node "${SOURCE_DIR}/scripts/verify-production-release-candidate.mjs" \
+            "${evidence_dir}/production-release-candidate.json" \
+            "${evidence_dir}/build-plan.json" \
+            "${evidence_dir}" \
+            "${BUILD_RUN_ID}" \
+            "${GITHUB_SHA}" \
+            "${requested_services}" \
+            "${image_base}" \
+            > "${evidence_dir}/verified-candidate.json"
+          test "$(jq -r '.tag' "${evidence_dir}/verified-candidate.json")" = "${GITHUB_REF_NAME}"
+
           if [[ ",${requested_services}," == *,api,* || ",${requested_services}," == *,cos-reconcile-worker,* ]]; then
+            api_image="$(jq -er '.image | select(type == "string" and length > 0)' "${evidence_dir}/image-manifest-api.json")"
+            api_repository="${api_image%:*}"
             api_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-api.json")"
-            echo "GOOES_API_IMAGE=${image_base}/goose-api@${api_digest}" >> "${GITHUB_ENV}"
+            echo "GOOES_API_IMAGE=${api_repository}@${api_digest}" >> "${GITHUB_ENV}"
           fi
           if [[ ",${requested_services}," == *,admin,* ]]; then
+            admin_image="$(jq -er '.image | select(type == "string" and length > 0)' "${evidence_dir}/image-manifest-admin.json")"
+            admin_repository="${admin_image%:*}"
             admin_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-admin.json")"
-            echo "GOOES_ADMIN_IMAGE=${image_base}/goose-admin@${admin_digest}" >> "${GITHUB_ENV}"
+            echo "GOOES_ADMIN_IMAGE=${admin_repository}@${admin_digest}" >> "${GITHUB_ENV}"
           fi
           if [[ ",${requested_services}," == *,social-video-worker,* ]]; then
+            social_video_worker_image="$(jq -er '.image | select(type == "string" and length > 0)' "${evidence_dir}/image-manifest-social-video-worker.json")"
+            social_video_worker_repository="${social_video_worker_image%:*}"
             social_video_worker_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-social-video-worker.json")"
-            echo "GOOES_SOCIAL_VIDEO_WORKER_IMAGE=${image_base}/goose-social-video-worker@${social_video_worker_digest}" >> "${GITHUB_ENV}"
+            echo "GOOES_SOCIAL_VIDEO_WORKER_IMAGE=${social_video_worker_repository}@${social_video_worker_digest}" >> "${GITHUB_ENV}"
           fi
 
           receipt_name="production-deployment-receipt-${BUILD_RUN_ID}"
@@ -383,13 +390,15 @@ jobs:
                 ;;
             esac
             image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
-            expected_web_image="${image_base}/goose-web:${SOURCE_SHA}"
+            expected_web_image="${image_base}/goose-web:run-${BUILD_RUN_ID}-${SOURCE_SHA}"
             node "${SOURCE_DIR}/scripts/verify-production-web-build-evidence.mjs" \
               "${evidence_dir}/build-run.json" \
               "${evidence_dir}/build-plan.json" \
               "${web_manifest}" \
               "${BUILD_RUN_ID}" "${SOURCE_SHA}" "${GITHUB_REF_NAME}" "${expected_web_image}" \
               > "${evidence_dir}/verified-web-build.json"
+            verified_web_image="$(jq -er '.image' "${evidence_dir}/verified-web-build.json")"
+            web_repository="${verified_web_image%:*}"
             web_digest="$(jq -er '.digest' "${evidence_dir}/verified-web-build.json")"
 
             receipt_name="production-deployment-receipt-${BUILD_RUN_ID}"
@@ -413,7 +422,7 @@ jobs:
             test -n "${INPUT_WEB_SMOKE_CONTENT_PATH}"
             node "${SOURCE_DIR}/scripts/validate-web-smoke-content-path.mjs" \
               "${INPUT_WEB_SMOKE_CONTENT_PATH}"
-            echo "GOOES_WEB_IMAGE=${image_base}/goose-web@${web_digest}" >> "${GITHUB_ENV}"
+            echo "GOOES_WEB_IMAGE=${web_repository}@${web_digest}" >> "${GITHUB_ENV}"
             echo "COMPOSE_FILES=-f docker-compose.web.yml" >> "${GITHUB_ENV}"
             echo "COMPOSE_ENV_FILE=.env.web" >> "${GITHUB_ENV}"
             echo "WEB_SMOKE_CONTENT_PATH=${INPUT_WEB_SMOKE_CONTENT_PATH}" >> "${GITHUB_ENV}"
@@ -578,12 +587,16 @@ jobs:
                 *) exit 1 ;;
               esac
               revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${container}")"
+              run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' "${container}")"
               test "${revision}" = "${SOURCE_SHA}"
+              test "${run_id}" = "${BUILD_RUN_ID}"
             done
           fi
           if service_selected web; then
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web)"
+            run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' gooes-web)"
             test "${revision}" = "${SOURCE_SHA}"
+            test "${run_id}" = "${BUILD_RUN_ID}"
           fi
 
       - name: Check public endpoints and pre-cutover Web loopback

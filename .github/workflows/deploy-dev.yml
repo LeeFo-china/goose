@@ -2,7 +2,7 @@ name: Deploy Dev
 run-name: Dev deploy ${{ inputs.service }} ${{ inputs.commit_sha }}
 
 # Deployment-only workflow. Images are built by Build Docker Images on a
-# GitHub-hosted runner and consumed here by immutable commit SHA.
+# GitHub-hosted runner and consumed here by run-scoped manifest digest.
 
 on:
   workflow_call:
@@ -71,6 +71,7 @@ env:
   TENCENT_CCR_NAMESPACE: ${{ vars.TENCENT_CCR_NAMESPACE }}
   DEV_DEPLOY_DIR: /opt/gooes-dev/docker
   SOURCE_SHA: ${{ inputs.commit_sha }}
+  INPUT_BUILD_RUN_ID: ${{ inputs.build_run_id }}
   RELEASE_SERVICE: ${{ inputs.service }}
   EXPECTED_BUILD_EVENT: ${{ github.event_name == 'workflow_dispatch' && 'workflow_dispatch' || inputs.expected_build_event }}
   EVIDENCE_MODE: ${{ inputs.evidence_mode || 'completed_run' }}
@@ -120,7 +121,6 @@ jobs:
 
       - name: Validate immutable build evidence
         env:
-          INPUT_BUILD_RUN_ID: ${{ inputs.build_run_id }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -259,7 +259,8 @@ jobs:
           esac
           test -f "${IMAGE_MANIFEST_PATH}"
           image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
-          expected_manifest_image="${image_base}/${manifest_repository}:${SOURCE_SHA}"
+          expected_manifest_image="${image_base}/${manifest_repository}:run-${INPUT_BUILD_RUN_ID}-${SOURCE_SHA}"
+          manifest_build_run_id="$(jq -er '.build_run_id | select(type == "number" and . > 0 and (floor == .))' "${IMAGE_MANIFEST_PATH}")"
           manifest_service="$(jq -er '.service | select(type == "string" and length > 0)' "${IMAGE_MANIFEST_PATH}")"
           manifest_image="$(jq -er '.image | select(type == "string" and length > 0)' "${IMAGE_MANIFEST_PATH}")"
           manifest_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${IMAGE_MANIFEST_PATH}")"
@@ -267,6 +268,7 @@ jobs:
           manifest_environment="$(jq -er '.target_environment | select(type == "string" and . == "development")' "${IMAGE_MANIFEST_PATH}")"
           test "${manifest_service}" = "${MANIFEST_SERVICE}"
           test "${manifest_image}" = "${expected_manifest_image}"
+          test "${manifest_build_run_id}" = "${INPUT_BUILD_RUN_ID}"
           test "${manifest_commit_sha}" = "${SOURCE_SHA}"
           test "${manifest_environment}" = development
           manifest_image_repository="${manifest_image%:*}"
@@ -325,12 +327,14 @@ jobs:
             state="$(docker inspect -f '{{.State.Status}}' "${container}" 2>/dev/null || true)"
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${container}" 2>/dev/null || true)"
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${container}" 2>/dev/null || true)"
+            run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' "${container}" 2>/dev/null || true)"
             configured_image="$(docker inspect -f '{{.Config.Image}}' "${container}" 2>/dev/null || true)"
-            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${revision}" = "${SOURCE_SHA}" ] && [ "${state}" = running ] && [ "${health}" = healthy ]; then break; fi
+            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${revision}" = "${SOURCE_SHA}" ] && [ "${run_id}" = "${INPUT_BUILD_RUN_ID}" ] && [ "${state}" = running ] && [ "${health}" = healthy ]; then break; fi
             sleep 5
           done
           test "${configured_image}" = "${DEPLOY_IMAGE_REF}"
           test "${revision}" = "${SOURCE_SHA}"
+          test "${run_id}" = "${INPUT_BUILD_RUN_ID}"
           test "${state}" = running
           test "${health}" = healthy
           if [ -n "${url}" ]; then curl -fsS --retry 8 --retry-delay 3 -o /dev/null "${url}"; fi
@@ -383,13 +387,15 @@ jobs:
           for _ in $(seq 1 60); do
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true)"
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web-dev 2>/dev/null || true)"
+            run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' gooes-web-dev 2>/dev/null || true)"
             configured_image="$(docker inspect -f '{{.Config.Image}}' gooes-web-dev 2>/dev/null || true)"
-            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${health}" = healthy ] && [ "${revision}" = "${SOURCE_SHA}" ]; then break; fi
+            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${health}" = healthy ] && [ "${revision}" = "${SOURCE_SHA}" ] && [ "${run_id}" = "${INPUT_BUILD_RUN_ID}" ]; then break; fi
             sleep 5
           done
           test "${configured_image}" = "${DEPLOY_IMAGE_REF}"
           test "${health}" = healthy
           test "${revision}" = "${SOURCE_SHA}"
+          test "${run_id}" = "${INPUT_BUILD_RUN_ID}"
           headers="$(curl -fsS -D - -o /dev/null --retry 8 --retry-delay 3 https://www-dev.goodcms.cn/partners)"
           grep -iq '^x-gooes-service: web' <<< "${headers}"
           grep -iq "^x-gooes-revision: ${SOURCE_SHA}" <<< "${headers}"
