@@ -15,6 +15,13 @@ const selectionPhoneSql = readFileSync(
   ),
   "utf8",
 );
+const selectionStatusFixSql = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260715121000_fix_phone_identity_selection_status_references.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("phone identity login migration", () => {
   test("adds the SMS scene without removing legacy scenes", () => {
@@ -118,6 +125,21 @@ describe("phone identity login migration", () => {
     );
     expect(selectionPhoneSql).toContain(
       "GRANT EXECUTE ON FUNCTION public.reserve_phone_identity_selection",
+    );
+  });
+
+  test("qualifies status columns in selection RPC updates", () => {
+    expect(selectionStatusFixSql).toContain(
+      "CREATE OR REPLACE FUNCTION public.reserve_phone_identity_selection",
+    );
+    expect(selectionStatusFixSql).toContain(
+      "CREATE OR REPLACE FUNCTION public.release_phone_identity_selection",
+    );
+    expect(selectionStatusFixSql).toContain(
+      "AND session_row.status = 'selection_required'",
+    );
+    expect(selectionStatusFixSql).toContain(
+      "AND session_row.status = 'binding'",
     );
   });
 });
