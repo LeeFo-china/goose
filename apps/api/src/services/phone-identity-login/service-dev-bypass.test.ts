@@ -37,7 +37,10 @@ describe("PhoneIdentityLoginService development SMS bypass", () => {
   test("verify creates a development bypass SMS record before claiming the session", async () => {
     const deps = dependencies();
 
-    await withPhoneLoginWithoutCode("true", async () => {
+    await withPhoneLoginWithoutCode("true", {
+      nodeEnv: "production",
+      deployEnv: "development",
+    }, async () => {
       const result = await new PhoneIdentityLoginService(deps).verify({
         input: { phone: PHONE },
         request: request(),
@@ -64,6 +67,26 @@ describe("PhoneIdentityLoginService development SMS bypass", () => {
       now: "2026-07-15T00:00:00.000Z",
       expiresAt: "2026-07-15T00:05:00.000Z",
     });
+  });
+
+  test("verify rejects the bypass flag in production", async () => {
+    const deps = dependencies();
+
+    await withPhoneLoginWithoutCode("true", {
+      nodeEnv: "production",
+      deployEnv: "production",
+    }, async () => {
+      await expect(new PhoneIdentityLoginService(deps).verify({
+        input: { phone: PHONE },
+        request: request(),
+      })).rejects.toMatchObject({
+        statusCode: 400,
+        code: ErrorCodes.SMS_CODE_REQUIRED,
+      });
+    });
+
+    expect(deps.smsService.reserveBypassCode).not.toHaveBeenCalled();
+    expect(deps.sessionRepository.claimVerification).not.toHaveBeenCalled();
   });
 });
 
@@ -117,19 +140,31 @@ function dependencies(overrides: Partial<{
 
 async function withPhoneLoginWithoutCode<T>(
   value: string,
-  run: () => Promise<T>,
+  environment: { nodeEnv?: string; deployEnv?: string } | (() => Promise<T>),
+  callback?: () => Promise<T>,
 ): Promise<T> {
+  const run = typeof environment === "function" ? environment : callback;
+  if (!run) throw new TypeError("Missing test callback");
   const previous = process.env.AUTH_PHONE_LOGIN_WITHOUT_CODE;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousDeployEnv = process.env.GOOES_DEPLOY_ENV;
   process.env.AUTH_PHONE_LOGIN_WITHOUT_CODE = value;
+  if (typeof environment !== "function") {
+    setEnv("NODE_ENV", environment.nodeEnv);
+    setEnv("GOOES_DEPLOY_ENV", environment.deployEnv);
+  }
   try {
     return await run();
   } finally {
-    if (previous === undefined) {
-      delete process.env.AUTH_PHONE_LOGIN_WITHOUT_CODE;
-    } else {
-      process.env.AUTH_PHONE_LOGIN_WITHOUT_CODE = previous;
-    }
+    setEnv("AUTH_PHONE_LOGIN_WITHOUT_CODE", previous);
+    setEnv("NODE_ENV", previousNodeEnv);
+    setEnv("GOOES_DEPLOY_ENV", previousDeployEnv);
   }
+}
+
+function setEnv(key: string, value: string | undefined) {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
 }
 
 function request(): RequestLike {

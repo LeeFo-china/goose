@@ -9,6 +9,14 @@ const socialVideoWorkerDockerfile = readFileSync(
   new URL("../docker/social-video-worker.Dockerfile", import.meta.url),
   "utf8",
 );
+const devCompose = readFileSync(
+  new URL("../deploy/docker-compose.dev.yml", import.meta.url),
+  "utf8",
+);
+const productionApiCompose = readFileSync(
+  new URL("../deploy/docker-compose.api.yml", import.meta.url),
+  "utf8",
+);
 
 const evidenceStepStart = workflow.indexOf("- name: Validate immutable build evidence");
 const deployStepStart = workflow.indexOf("- name: Deploy dev services");
@@ -110,6 +118,13 @@ sleep() { :; }
 }
 
 describe("deploy-dev workflow", () => {
+  test("keeps the test-login bypass limited to development containers", () => {
+    expect(devCompose.match(/GOOES_DEPLOY_ENV: development/g)).toHaveLength(3);
+    expect(devCompose).not.toContain("GOOES_DEPLOY_ENV: production");
+    expect(productionApiCompose.match(/GOOES_DEPLOY_ENV: production/g)).toHaveLength(3);
+    expect(productionApiCompose).not.toContain("GOOES_DEPLOY_ENV: development");
+  });
+
   test("binds the manifest service, image, digest, and current CCR pair", () => {
     expect(evidenceStepStart).toBeGreaterThanOrEqual(0);
     expect(gateStepStart).toBeGreaterThan(evidenceStepStart);
