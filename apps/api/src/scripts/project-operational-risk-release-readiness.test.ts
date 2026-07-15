@@ -285,6 +285,8 @@ describe("project operational risk release readiness", () => {
       read_only_commands: [
         'supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"',
         "cd apps/api && bun --env-file=.env --env-file=.env.local src/scripts/project-operational-risk-performance-smoke.ts",
+        "cd apps/admin && PLAYWRIGHT_BASE_URL=\"$PLAYWRIGHT_BASE_URL\" GOOES_API_BASE_URL=\"$GOOES_API_BASE_URL\" GOOES_E2E_TENANT_ADMIN_PHONE=\"$GOOES_E2E_TENANT_ADMIN_PHONE\" pnpm exec playwright test e2e/project-health-smoke.spec.ts --project=chromium",
+        "update docs/audit/2026-07-14-project-operational-risk-ui-audit.md project-health-ui-release-evidence after real dev screenshots, WCAG AA smoke and Impeccable audit pass",
       ],
     });
   });

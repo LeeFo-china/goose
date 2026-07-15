@@ -50,6 +50,8 @@ Expected:
 - 缺少配置时退出 1，`status` 为 `missing_env` 或 `api_smoke_skipped`；
 - 所有发布验证前置条件齐全时退出 0，`status` 为 `ready`；
 - 输出只包含变量名和只读命令模板，不包含数据库密码、service role key 或管理员 token 原文。
+- `read_only_commands` 会同时给出 migration list、RPC/API performance smoke、dev Admin Playwright smoke
+  以及 UI audit evidence 更新提示。
 
 获取代表 tenant：
 
@@ -76,6 +78,16 @@ psql "$SUPABASE_DB_DIRECT_URL" \
 cd apps/api
 bun --env-file=.env --env-file=.env.local \
   src/scripts/project-operational-risk-performance-smoke.ts
+```
+
+执行 dev Admin 浏览器 smoke：
+
+```bash
+cd apps/admin
+PLAYWRIGHT_BASE_URL="$PLAYWRIGHT_BASE_URL" \
+GOOES_API_BASE_URL="$GOOES_API_BASE_URL" \
+GOOES_E2E_TENANT_ADMIN_PHONE="$GOOES_E2E_TENANT_ADMIN_PHONE" \
+pnpm exec playwright test e2e/project-health-smoke.spec.ts --project=chromium
 ```
 
 目标：
