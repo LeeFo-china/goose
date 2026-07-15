@@ -74,9 +74,12 @@ build matrix service 也在 checkout、权限检查、CCR 登录及 Docker build
 因此 `run-<Run ID>-<commit SHA>` Tag 在允许执行的构建中保持不可变。只读且不写远端镜像的
 production pull verification 不需要该 guard。
 
-该任务不执行 `docker compose`、不创建或重启容器、不修改 Nginx。正常生产服务部署仍必须
+该任务不执行 `docker compose`、不创建或重启容器、不修改 Nginx。正常生产非 Web 服务部署只能
 再次运行 `release-production.yml operation=deploy`，提供候选 `build_run_id`、`commit_sha`，
-并输入第二次确认文本 `确认部署生产环境`；本次 Strategy B 禁止执行该步骤。
+并输入第二次确认文本 `确认部署生产环境`。`deploy-docker-services.yml` 的非 Web 直接 dispatch、
+空 `build_run_id` 和 `main` 回退路径全部 fail-closed；只有 reusable caller 的当前 workflow 身份为
+`release-production.yml` 且候选复验成功后才允许执行，并必须生成 deployment receipt。本次
+Strategy B 禁止执行该步骤。
 
 ### Production Web
 

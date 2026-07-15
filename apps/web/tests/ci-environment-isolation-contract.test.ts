@@ -193,7 +193,11 @@ describe("CI environment isolation", () => {
     }
     const deploy = readWorkflow("deploy-docker-services.yml");
     expect(deploy).toContain("确认部署生产环境");
-    expect(deploy).toContain('test "${GITHUB_REF_NAME}" = "main"');
+    expect(deploy).not.toContain('test "${GITHUB_REF_NAME}" = "main"');
+    expect(deploy).toContain('test "${GITHUB_REF_TYPE}" = tag');
+    expect(deploy).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/release-production.yml"',
+    );
   });
 
   test("does not build application images in deployment workflows", () => {

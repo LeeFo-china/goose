@@ -242,6 +242,107 @@ function extractWorkflowSteps(workflow: string): string[] {
   return stepStarts.map((start) => sliceWorkflowStepAt(workflow, start));
 }
 
+function runProductionGuard(buildRunId: string): ReturnType<typeof Bun.spawnSync> {
+  const guardScript = extractWorkflowRunScript(
+    sliceWorkflowStep(deployProductionWorkflow, "Guard production runner"),
+  );
+  return Bun.spawnSync(["bash", "-c", guardScript], {
+    env: {
+      BUILD_RUN_ID: buildRunId,
+      GITHUB_ENV: "/dev/null",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_REF_NAME: "v2026.07.16.1",
+      GITHUB_REF_TYPE: "tag",
+      GITHUB_RUN_ID: "999",
+      GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+      INPUT_BUILT_IMAGE_SHA: "0123456789abcdef0123456789abcdef01234567",
+      RELEASE_CONFIRM_TEXT: "确认部署生产环境",
+      RELEASE_SERVICE: "api",
+      RUNNER_NAME: "gooes-prod-vm-0-3",
+      RUNNER_TEMP: "/tmp",
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+}
+
+function runNonWebCandidatePreflight(
+  currentWorkflowPath: string,
+): ReturnType<typeof Bun.spawnSync> {
+  const preflightScript = extractWorkflowRunScript(
+    sliceWorkflowStep(
+      deployProductionWorkflow,
+      "Preflight Admin candidate metadata",
+    ),
+  );
+  const ghMock = `
+gh() {
+  case "$2" in
+    repos/LeeFo-china/goose/actions/runs/999)
+      printf '%s\\n' '{"workflow_id":11,"event":"workflow_dispatch","head_sha":"0123456789abcdef0123456789abcdef01234567"}'
+      ;;
+    repos/LeeFo-china/goose/actions/workflows/11)
+      printf '%s\\n' '{"path":"${currentWorkflowPath}"}'
+      ;;
+    *) return 1 ;;
+  esac
+}
+`;
+  return Bun.spawnSync(["bash", "-c", `${ghMock}\n${preflightScript}`], {
+    env: {
+      ...process.env,
+      BUILD_RUN_ID: "123",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_REF_NAME: "v2026.07.16.1",
+      GITHUB_REF_TYPE: "tag",
+      GITHUB_REPOSITORY: "LeeFo-china/goose",
+      GITHUB_RUN_ID: "999",
+      GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+      INPUT_BUILT_IMAGE_SHA: "0123456789abcdef0123456789abcdef01234567",
+      RELEASE_CONFIRM_TEXT: "确认部署生产环境",
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+}
+
+function runProductionRuntimeEvidenceCheck(
+  configuredImage: string,
+  serviceLabel: string,
+): ReturnType<typeof Bun.spawnSync> {
+  const checkScript = extractWorkflowRunScript(
+    sliceWorkflowStep(deployProductionWorkflow, "Check container health"),
+  );
+  const dockerMock = `
+docker() {
+  test "$1" = inspect
+  test "$2" = -f
+  case "$3" in
+    '{{.State.Status}}') printf '%s\\n' running ;;
+    '{{if .State.Health}}{{.State.Health.Status}}{{end}}') printf '%s\\n' healthy ;;
+    '{{.Config.Image}}') printf '%s\\n' '${configuredImage}' ;;
+    '{{index .Config.Labels "com.goodcms.service"}}') printf '%s\\n' '${serviceLabel}' ;;
+    '{{index .Config.Labels "org.opencontainers.image.revision"}}') printf '%s\\n' "$SOURCE_SHA" ;;
+    '{{index .Config.Labels "com.goodcms.github.run_id"}}') printf '%s\\n' "$BUILD_RUN_ID" ;;
+    *) return 1 ;;
+  esac
+}
+sleep() { :; }
+`;
+  return Bun.spawnSync(["bash", "-c", `${dockerMock}\n${checkScript}`], {
+    env: {
+      ADMIN_CANDIDATE: "true",
+      BUILD_RUN_ID: "123",
+      DEPLOY_SERVICES: "api",
+      GOOES_API_IMAGE:
+        "useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      SOURCE_SHA: "0123456789abcdef0123456789abcdef01234567",
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+}
+
 function extractSensitiveRegistrySteps(workflow: string): string[] {
   const registryInterpolation =
     /\$(?:\{TENCENT_CCR_(?:REGISTRY|NAMESPACE)\}|TENCENT_CCR_(?:REGISTRY|NAMESPACE)(?![A-Za-z0-9_]))/;
@@ -1848,14 +1949,25 @@ describe("production orchestrator", () => {
     expect(syncStart).toBeGreaterThan(dockerStart);
     expect(guard).toContain('SOURCE_DIR="${RUNNER_TEMP}/gooes-source-${GITHUB_RUN_ID}"');
     expect(guard).toContain('echo "SOURCE_DIR=${SOURCE_DIR}" >> "${GITHUB_ENV}"');
+    for (const requiredGuard of [
+      'test "${GITHUB_EVENT_NAME}" = workflow_dispatch',
+      'test "${GITHUB_REF_TYPE}" = tag',
+      '[[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}\\.[0-9]+$ ]] || exit 1',
+      '[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1',
+      '[[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]] || exit 1',
+      '[[ "${INPUT_BUILT_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]] || exit 1',
+      'test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"',
+    ]) {
+      expect(guard).toContain(requiredGuard);
+      expect(guard.indexOf(requiredGuard)).toBeLessThan(
+        guard.indexOf('if [ "${normalized_release_service}" = web ]; then'),
+      );
+    }
     expect(checkout).toContain('git clone --filter=blob:none --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"');
     expect(checkout).toContain('git -C "${SOURCE_DIR}" fetch');
     expect(checkout).toContain('git -C "${SOURCE_DIR}" clean -fdx');
     expect(deployProductionWorkflow).not.toContain("${RUNNER_WORKSPACE}/source");
-    expect(metadata).toContain('if [ -z "${BUILD_RUN_ID}" ]; then');
-    expect(metadata.indexOf('if [ -z "${BUILD_RUN_ID}" ]; then')).toBeLessThan(
-      metadata.indexOf('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]'),
-    );
+    expect(metadata).not.toContain('if [ -z "${BUILD_RUN_ID}" ]; then');
     expect(metadata).toContain('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
     expect(metadata).toContain('[[ "${INPUT_BUILT_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]]');
     expect(metadata).toContain('test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"');
@@ -1890,6 +2002,7 @@ describe("production orchestrator", () => {
       'gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"',
     );
     const productionEvidence = deployProductionWorkflow.slice(evidenceStart, dockerStart);
+    expect(productionEvidence).not.toContain('if [ -z "${BUILD_RUN_ID}" ]; then');
     expect(productionEvidence.indexOf(allowedRegistryPairArm)).toBeLessThan(
       productionEvidence.indexOf("verify-production-release-candidate.mjs"),
     );
@@ -1918,7 +2031,7 @@ describe("production orchestrator", () => {
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).not.toContain(
       '.path | split("@")[0]',
     );
-    expect(deployProductionWorkflow).toContain('test "${GITHUB_REF_NAME}" = "main"');
+    expect(deployProductionWorkflow).not.toContain('test "${GITHUB_REF_NAME}" = "main"');
     expect(deployProductionWorkflow).toContain('test "${GITHUB_REF_TYPE}" = tag');
     expect(deployProductionWorkflow).toContain('test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"');
     expect(deployProductionWorkflow).toContain('test "${RELEASE_CONFIRM_TEXT}" = "确认部署生产环境"');
@@ -1932,6 +2045,12 @@ describe("production orchestrator", () => {
     );
     expect(deployProductionWorkflow.slice(containerHealthStart, healthStart)).toContain(
       'test "${run_id}" = "${BUILD_RUN_ID}"',
+    );
+    expect(deployProductionWorkflow.slice(containerHealthStart, healthStart)).toContain(
+      'test "${configured_image}" = "${expected_image}"',
+    );
+    expect(deployProductionWorkflow.slice(containerHealthStart, healthStart)).toContain(
+      'test "${service_label}" = "${expected_service_label}"',
     );
     expect(receiptStart).toBeGreaterThan(healthStart);
     expect(deployProductionWorkflow.slice(receiptStart)).toContain("uses: actions/upload-artifact@v6");
@@ -1949,6 +2068,46 @@ describe("production orchestrator", () => {
       "completed_at: $completed_at",
     ]) {
       expect(deployProductionWorkflow).toContain(field);
+    }
+  });
+
+  test("rejects an empty build run ID instead of falling back to main", () => {
+    expect(runProductionGuard("").exitCode).not.toBe(0);
+  });
+
+  test("rejects direct non-Web dispatch outside the release-production caller", () => {
+    expect(
+      runNonWebCandidatePreflight(
+        ".github/workflows/deploy-docker-services.yml",
+      ).exitCode,
+    ).not.toBe(0);
+  });
+
+  test("binds production runtime evidence to the selected digest and service label", () => {
+    const expectedImage =
+      "useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    expect(runProductionRuntimeEvidenceCheck(expectedImage, "api").exitCode).toBe(0);
+    expect(
+      runProductionRuntimeEvidenceCheck(
+        "useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "api",
+      ).exitCode,
+    ).not.toBe(0);
+    expect(runProductionRuntimeEvidenceCheck(expectedImage, "admin").exitCode).not.toBe(0);
+
+    const runtimeCheck = sliceWorkflowStep(
+      deployProductionWorkflow,
+      "Check container health",
+    );
+    for (const mapping of [
+      'check_runtime_evidence api gooes-api "${GOOES_API_IMAGE}" api',
+      'check_runtime_evidence admin gooes-admin "${GOOES_ADMIN_IMAGE}" admin',
+      'check_runtime_evidence social-video-worker gooes-social-video-worker "${GOOES_SOCIAL_VIDEO_WORKER_IMAGE}" social-video-worker',
+      'check_runtime_evidence cos-reconcile-worker gooes-cos-reconcile-worker "${GOOES_API_IMAGE}" api',
+      'check_runtime_evidence web gooes-web "${GOOES_WEB_IMAGE}" web',
+    ]) {
+      expect(runtimeCheck).toContain(mapping);
     }
   });
 
@@ -2088,11 +2247,23 @@ describe("production orchestrator", () => {
     expect(webSync).not.toContain("docker-compose.api.yml");
     expect(webSync).not.toContain("docker-compose.admin.yml");
     expect(nonWebSync).toContain('test "${DEPLOY_SERVICES}" != web');
+    expect(nonWebSync).toContain('test "${ADMIN_CANDIDATE:-false}" = true');
     expect(nonWebSync).toContain('docker-compose.api.yml.bak.github-actions-${GITHUB_RUN_ID}');
     expect(nonWebSync).toContain('docker-compose.admin.yml.bak.github-actions-${GITHUB_RUN_ID}');
     expect(nonWebSync).toContain('sudo install -m 0644 deploy/docker-compose.api.yml');
     expect(nonWebSync).toContain('sudo install -m 0644 deploy/docker-compose.admin.yml');
     expect(nonWebSync).not.toContain("docker-compose.web.yml");
+
+    for (const stepName of ["Pull latest images", "Recreate services"]) {
+      const deploymentStep = sliceWorkflowStep(
+        deployProductionWorkflow,
+        stepName,
+      );
+      expect(deploymentStep).toContain(
+        'test "${ADMIN_CANDIDATE:-false}" = true',
+      );
+      expect(deploymentStep).toContain('test "${DEPLOY_SERVICES}" != web');
+    }
 
     expect(receipt).toContain("if: ${{ success() && env.BUILD_RUN_ID != '' }}");
     expect(receipt).toContain('if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then');

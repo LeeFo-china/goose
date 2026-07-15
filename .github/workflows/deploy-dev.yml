@@ -373,6 +373,7 @@ jobs:
             docker tag "${old_image_id}" "${WEB_ROLLBACK_TAG}"
             echo "WEB_ROLLBACK_READY=true" >> "${GITHUB_ENV}"
             echo "WEB_ROLLBACK_TAG=${WEB_ROLLBACK_TAG}" >> "${GITHUB_ENV}"
+            echo "WEB_OLD_IMAGE_ID=${old_image_id}" >> "${GITHUB_ENV}"
             echo "WEB_OLD_REVISION=${old_revision}" >> "${GITHUB_ENV}"
           fi
           cd "${DEV_DEPLOY_DIR}"
@@ -420,11 +421,15 @@ jobs:
           for _ in $(seq 1 60); do
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true)"
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web-dev 2>/dev/null || true)"
-            if [ "${health}" = healthy ] && [ "${revision}" = "${WEB_OLD_REVISION}" ]; then break; fi
+            image_id="$(docker inspect -f '{{.Image}}' gooes-web-dev 2>/dev/null || true)"
+            configured_image="$(docker inspect -f '{{.Config.Image}}' gooes-web-dev 2>/dev/null || true)"
+            if [ "${health}" = healthy ] && [ "${revision}" = "${WEB_OLD_REVISION}" ] && [ "${image_id}" = "${WEB_OLD_IMAGE_ID}" ] && [ "${configured_image}" = "${WEB_ROLLBACK_TAG}" ]; then break; fi
             sleep 5
           done
           test "${health}" = healthy
           test "${revision}" = "${WEB_OLD_REVISION}"
+          test "${image_id}" = "${WEB_OLD_IMAGE_ID}"
+          test "${configured_image}" = "${WEB_ROLLBACK_TAG}"
           headers="$(curl -fsS -D - -o /dev/null https://www-dev.goodcms.cn/partners)"
           grep -iq '^x-gooes-service: web' <<< "${headers}"
           grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}" <<< "${headers}"

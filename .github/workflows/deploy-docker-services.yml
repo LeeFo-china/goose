@@ -96,30 +96,24 @@ jobs:
           echo "WEB_DEPLOY_STAGE=initial" >> "${GITHUB_ENV}"
           test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
           test "${RELEASE_CONFIRM_TEXT}" = "确认部署生产环境"
-          [[ "${GITHUB_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+          [[ "${GITHUB_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1
           test -n "${RUNNER_TEMP}"
           SOURCE_DIR="${RUNNER_TEMP}/gooes-source-${GITHUB_RUN_ID}"
           echo "SOURCE_DIR=${SOURCE_DIR}" >> "${GITHUB_ENV}"
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+          test "${GITHUB_REF_TYPE}" = tag
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]] || exit 1
+          [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "${INPUT_BUILT_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"
           normalized_release_service="${RELEASE_SERVICE//[[:space:]]/}"
           if [ "${normalized_release_service}" = web ]; then
-            test "${GITHUB_EVENT_NAME}" = workflow_dispatch
-            test "${GITHUB_REF_TYPE}" = tag
-            [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]]
-            [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
-            [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]
-            [[ "${INPUT_BUILT_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]]
-            test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"
-            test "${RELEASE_CONFIRM_TEXT}" = "确认部署生产环境"
             echo "WEB_DIRECT_DEPLOY=true" >> "${GITHUB_ENV}"
             echo "ADMIN_CANDIDATE=false" >> "${GITHUB_ENV}"
           else
             echo "WEB_DIRECT_DEPLOY=false" >> "${GITHUB_ENV}"
-            if [ -n "${BUILD_RUN_ID}" ]; then
-              test "${GITHUB_EVENT_NAME}" = workflow_dispatch
-              test "${GITHUB_REF_TYPE}" = tag
-            else
-              test "${GITHUB_REF_NAME}" = "main"
-            fi
+            echo "ADMIN_CANDIDATE=false" >> "${GITHUB_ENV}"
           fi
 
       - name: Preflight Admin candidate metadata
@@ -129,16 +123,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ -z "${BUILD_RUN_ID}" ]; then
-            exit 0
-          fi
-
           test "${GITHUB_EVENT_NAME}" = workflow_dispatch
           test "${GITHUB_REF_TYPE}" = tag
-          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]]
-          [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
-          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]
-          [[ "${INPUT_BUILT_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]] || exit 1
+          [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "${INPUT_BUILT_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]] || exit 1
           test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"
           test "${RELEASE_CONFIRM_TEXT}" = "确认部署生产环境"
 
@@ -146,7 +136,7 @@ jobs:
             local run_json="$1"
             local workflow_id workflow_json
             workflow_id="$(jq -er '.workflow_id | select(type == "number" and . > 0 and (floor == .))' <<< "${run_json}")"
-            [[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]]
+            [[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]] || exit 1
             workflow_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}")"
             jq -er '.path | select(type == "string" and length > 0)' <<< "${workflow_json}"
           }
@@ -223,16 +213,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ -z "${BUILD_RUN_ID}" ]; then
-            echo "ADMIN_CANDIDATE=false" >> "${GITHUB_ENV}"
-            exit 0
-          fi
-
           test "${GITHUB_EVENT_NAME}" = workflow_dispatch
           test "${GITHUB_REF_TYPE}" = tag
-          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]]
-          [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
-          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]] || exit 1
+          [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]] || exit 1
           test "${INPUT_BUILT_IMAGE_SHA}" = "${GITHUB_SHA}"
           test "${RELEASE_CONFIRM_TEXT}" = "确认部署生产环境"
           test -z "${INPUT_GATE_RUN_ID}"
@@ -247,7 +232,7 @@ jobs:
             local run_json="$1"
             local workflow_id workflow_json
             workflow_id="$(jq -er '.workflow_id | select(type == "number" and . > 0 and (floor == .))' <<< "${run_json}")"
-            [[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]]
+            [[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]] || exit 1
             workflow_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}")"
             jq -er '.path | select(type == "string" and length > 0)' <<< "${workflow_json}"
           }
@@ -347,13 +332,13 @@ jobs:
             echo "WEB_DEPLOY_STAGE=gate_rejected" >> "${GITHUB_ENV}"
             test "${WEB_DIRECT_DEPLOY:-false}" = true
             test "${INPUT_BUILT_IMAGE_SHA}" = "${SOURCE_SHA}"
-            [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+            [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1
 
             canonical_workflow_path() {
               local run_json="$1"
               local workflow_id workflow_json
               workflow_id="$(jq -er '.workflow_id | select(type == "number" and . > 0 and (floor == .))' <<< "${run_json}")"
-              [[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]]
+              [[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]] || exit 1
               workflow_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}")"
               jq -er '.path | select(type == "string" and length > 0)' <<< "${workflow_json}"
             }
@@ -406,7 +391,7 @@ jobs:
             receipt_count="$(jq --arg name "${receipt_name}" '[.artifacts[] | select(.name == $name and .expired == false)] | length' <<< "${artifacts_json}")"
             test "${receipt_count}" = 0
 
-            [[ "${INPUT_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+            [[ "${INPUT_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1
             gate_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_GATE_RUN_ID}")"
             gate_workflow_path="$(canonical_workflow_path "${gate_run_json}")"
             test "${gate_workflow_path}" = ".github/workflows/verify-production-web-deployment-gate.yml"
@@ -428,6 +413,7 @@ jobs:
             echo "WEB_SMOKE_CONTENT_PATH=${INPUT_WEB_SMOKE_CONTENT_PATH}" >> "${GITHUB_ENV}"
             echo "WEB_DEPLOY_STAGE=gate_validated" >> "${GITHUB_ENV}"
           else
+            test "${ADMIN_CANDIDATE:-false}" = true
             echo "COMPOSE_FILES=-f docker-compose.api.yml -f docker-compose.admin.yml" >> "${GITHUB_ENV}"
             echo "COMPOSE_ENV_FILE=" >> "${GITHUB_ENV}"
           fi
@@ -445,6 +431,7 @@ jobs:
             sudo cp "${DEPLOY_DIR}/docker-compose.web.yml" "${DEPLOY_DIR}/docker-compose.web.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
             sudo install -m 0644 deploy/docker-compose.web.yml "${DEPLOY_DIR}/docker-compose.web.yml"
           else
+            test "${ADMIN_CANDIDATE:-false}" = true
             test "${DEPLOY_SERVICES}" != web
             sudo cp "${DEPLOY_DIR}/docker-compose.api.yml" "${DEPLOY_DIR}/docker-compose.api.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
             sudo cp "${DEPLOY_DIR}/docker-compose.admin.yml" "${DEPLOY_DIR}/docker-compose.admin.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
@@ -484,6 +471,12 @@ jobs:
           GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
         run: |
           set -euo pipefail
+          if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then
+            test "${DEPLOY_SERVICES}" = web
+          else
+            test "${ADMIN_CANDIDATE:-false}" = true
+            test "${DEPLOY_SERVICES}" != web
+          fi
           source "${SOURCE_DIR}/scripts/prepare-site-content-deployment-secrets.sh" "${DEPLOY_SERVICES}"
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           cd "${DEPLOY_DIR}"
@@ -508,6 +501,12 @@ jobs:
           GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
         run: |
           set -euo pipefail
+          if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then
+            test "${DEPLOY_SERVICES}" = web
+          else
+            test "${ADMIN_CANDIDATE:-false}" = true
+            test "${DEPLOY_SERVICES}" != web
+          fi
           source "${SOURCE_DIR}/scripts/prepare-site-content-deployment-secrets.sh" "${DEPLOY_SERVICES}"
           test "${#GOOES_WEB_PROXY_SHARED_SECRET}" -ge 32
           cd "${DEPLOY_DIR}"
@@ -519,10 +518,11 @@ jobs:
               ROLLBACK_CREATED_AT="$(date +%s)"
               WEB_ROLLBACK_TAG="gooes-web:rollback-${GITHUB_RUN_ID}-${ROLLBACK_CREATED_AT}"
               old_revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web)"
-              [[ "${old_revision}" =~ ^[a-f0-9]{40}$ ]]
+              [[ "${old_revision}" =~ ^[a-f0-9]{40}$ ]] || exit 1
               docker tag "${old_image_id}" "${WEB_ROLLBACK_TAG}"
               echo "WEB_ROLLBACK_READY=true" >> "${GITHUB_ENV}"
               echo "WEB_ROLLBACK_TAG=${WEB_ROLLBACK_TAG}" >> "${GITHUB_ENV}"
+              echo "WEB_OLD_IMAGE_ID=${old_image_id}" >> "${GITHUB_ENV}"
               echo "WEB_OLD_REVISION=${old_revision}" >> "${GITHUB_ENV}"
               echo "WEB_ROLLBACK_STATUS=available" >> "${GITHUB_ENV}"
             fi
@@ -572,31 +572,47 @@ jobs:
           service_selected() {
             [[ " ${DEPLOY_SERVICES} " == *" $1 "* ]]
           }
+          check_runtime_evidence() {
+            local service="$1"
+            local container="$2"
+            local expected_image="$3"
+            local expected_service_label="$4"
+            local configured_image service_label revision run_id
+            test -n "${expected_image}"
+            configured_image="$(docker inspect -f '{{.Config.Image}}' "${container}")"
+            service_label="$(docker inspect -f '{{index .Config.Labels "com.goodcms.service"}}' "${container}")"
+            revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${container}")"
+            run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' "${container}")"
+            test "${configured_image}" = "${expected_image}"
+            test "${service_label}" = "${expected_service_label}"
+            test "${revision}" = "${SOURCE_SHA}"
+            test "${run_id}" = "${BUILD_RUN_ID}"
+            echo "${service} runtime evidence verified"
+          }
           if service_selected api; then check_container gooes-api; fi
           if service_selected social-video-worker; then check_container gooes-social-video-worker; fi
           if service_selected cos-reconcile-worker; then check_container gooes-cos-reconcile-worker; fi
           if service_selected admin; then check_container gooes-admin; fi
           if service_selected web; then check_container gooes-web; fi
-          if [ "${ADMIN_CANDIDATE:-false}" = true ]; then
-            for service in ${DEPLOY_SERVICES}; do
-              case "${service}" in
-                api) container=gooes-api ;;
-                admin) container=gooes-admin ;;
-                social-video-worker) container=gooes-social-video-worker ;;
-                cos-reconcile-worker) container=gooes-cos-reconcile-worker ;;
-                *) exit 1 ;;
-              esac
-              revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${container}")"
-              run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' "${container}")"
-              test "${revision}" = "${SOURCE_SHA}"
-              test "${run_id}" = "${BUILD_RUN_ID}"
-            done
+          if service_selected api; then
+            test "${ADMIN_CANDIDATE:-false}" = true
+            check_runtime_evidence api gooes-api "${GOOES_API_IMAGE}" api
+          fi
+          if service_selected admin; then
+            test "${ADMIN_CANDIDATE:-false}" = true
+            check_runtime_evidence admin gooes-admin "${GOOES_ADMIN_IMAGE}" admin
+          fi
+          if service_selected social-video-worker; then
+            test "${ADMIN_CANDIDATE:-false}" = true
+            check_runtime_evidence social-video-worker gooes-social-video-worker "${GOOES_SOCIAL_VIDEO_WORKER_IMAGE}" social-video-worker
+          fi
+          if service_selected cos-reconcile-worker; then
+            test "${ADMIN_CANDIDATE:-false}" = true
+            check_runtime_evidence cos-reconcile-worker gooes-cos-reconcile-worker "${GOOES_API_IMAGE}" api
           fi
           if service_selected web; then
-            revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web)"
-            run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' gooes-web)"
-            test "${revision}" = "${SOURCE_SHA}"
-            test "${run_id}" = "${BUILD_RUN_ID}"
+            test "${WEB_DIRECT_DEPLOY:-false}" = true
+            check_runtime_evidence web gooes-web "${GOOES_WEB_IMAGE}" web
           fi
 
       - name: Check public endpoints and pre-cutover Web loopback
@@ -662,11 +678,15 @@ jobs:
           for _ in $(seq 1 60); do
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web 2>/dev/null || true)"
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web 2>/dev/null || true)"
-            if [ "${health}" = healthy ] && [ "${revision}" = "${WEB_OLD_REVISION}" ]; then break; fi
+            image_id="$(docker inspect -f '{{.Image}}' gooes-web 2>/dev/null || true)"
+            configured_image="$(docker inspect -f '{{.Config.Image}}' gooes-web 2>/dev/null || true)"
+            if [ "${health}" = healthy ] && [ "${revision}" = "${WEB_OLD_REVISION}" ] && [ "${image_id}" = "${WEB_OLD_IMAGE_ID}" ] && [ "${configured_image}" = "${WEB_ROLLBACK_TAG}" ]; then break; fi
             sleep 5
           done
           test "${health}" = healthy
           test "${revision}" = "${WEB_OLD_REVISION}"
+          test "${image_id}" = "${WEB_OLD_IMAGE_ID}"
+          test "${configured_image}" = "${WEB_ROLLBACK_TAG}"
           smoke_rollback_url() {
             path="$1"
             headers="$(curl -fsS --connect-timeout 5 --max-time 30 \
@@ -752,9 +772,9 @@ jobs:
         if: ${{ success() && env.BUILD_RUN_ID != '' }}
         run: |
           set -euo pipefail
-          [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
-          [[ "${GITHUB_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
-          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "${GITHUB_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]] || exit 1
           test "${GITHUB_REF_TYPE}" = tag
           if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then
             test "${DEPLOY_SERVICES}" = web
