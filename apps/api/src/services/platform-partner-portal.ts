@@ -1,5 +1,6 @@
 import type { FastifyRequest } from "fastify";
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import {
   platformPartnerPortalRepository,
   type PlatformPartnerMemberRecord,
@@ -116,6 +117,37 @@ export class PlatformPartnerPortalService {
     this.assertUsableMember(member);
     return this.buildAuthResponse(
       member,
+      input.userId,
+      input.openid,
+      input.unionid ?? null,
+    );
+  }
+
+  async authenticateSelectedMember(input: {
+    memberId: string;
+    phone: string;
+    userId: string;
+    openid: string;
+    unionid?: string | null;
+  }) {
+    const member = await this.repository.findMemberById(input.memberId);
+    if (!member || member.phone !== input.phone) {
+      throw Errors.business(
+        409,
+        "身份选项已不可用",
+        ErrorCodes.IDENTITY_OPTION_UNAVAILABLE,
+      );
+    }
+
+    const bound = await bindPlatformPartnerMemberWithoutSmsCode({
+      repository: this.repository,
+      phone: input.phone,
+      authUserId: input.userId,
+      memberId: input.memberId,
+    });
+    this.assertUsableMember(bound);
+    return this.buildAuthResponse(
+      bound,
       input.userId,
       input.openid,
       input.unionid ?? null,

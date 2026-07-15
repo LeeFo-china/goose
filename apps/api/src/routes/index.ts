@@ -18,6 +18,7 @@ import CustomerController from "@/controllers/customer";
 import CustomerServiceController from "@/controllers/customer-service";
 import PostsController from "@/controllers/posts";
 import WeChatController from "@/controllers/wechat";
+import PhoneIdentityLoginController from "@/controllers/phone-identity-login";
 import RpcController from "@/controllers/common/rpc/get_home_dashboard_stats";
 import GetProjectCreatePageDataController from "@/controllers/common/rpc/get_project_create_page_data";
 import PropertyControlle from "@/controllers/properties";
@@ -129,6 +130,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   });
 
   WeChatController.registerExtraRoutes(app);
+  PhoneIdentityLoginController.registerExtraRoutes(app);
   AdminAuthController.registerExtraRoutes(app);
   AdminOpsController.registerExtraRoutes(app);
   SystemSettingsController.registerExtraRoutes(app);
