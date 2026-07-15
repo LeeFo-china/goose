@@ -57,6 +57,7 @@ export type ReserveSelectionResult =
       | "same_candidate_in_progress"
       | "same_candidate_consumed";
     sessionId: string;
+    verifiedPhone: string;
     candidate: {
       id: string;
       targetMode: PhoneIdentityTargetMode;
@@ -191,6 +192,7 @@ export class PhoneIdentityLoginRepository {
       return {
         status,
         sessionId: parseUuid(row.session_id),
+        verifiedPhone: parsePhone(row.verified_phone),
         candidate: {
           id: input.candidateId,
           targetMode: parseStatus(row.target_mode, TARGET_MODES),
@@ -282,6 +284,13 @@ function parseUuid(value: unknown): string {
 function parseNullableUuid(value: unknown): string | null {
   if (value === null) return null;
   return parseUuid(value);
+}
+
+function parsePhone(value: unknown): string {
+  if (typeof value === "string" && /^1[3-9]\d{9}$/.test(value)) {
+    return value;
+  }
+  throw invalidRpcResult(value);
 }
 
 function isOneOf<const TValues extends readonly string[]>(

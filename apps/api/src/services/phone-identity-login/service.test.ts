@@ -328,6 +328,12 @@ function dependencies(overrides: Partial<{
       claimVerification: overrides.claimVerification ??
         mock(async () => ({ status: "claimed" as const, sessionId: SESSION_ID })),
       beginSelection: mock(async () => "ready" as const),
+      reserveSelection: mock(async () => ({
+        status: "session_not_found" as const,
+        sessionId: null,
+      })),
+      finalizeSelection: mock(async () => "consumed" as const),
+      releaseSelection: mock(async () => "released" as const),
     },
     candidateRepository: {
       listCustomersByPhone: mock(async () => overrides.customers ?? []),

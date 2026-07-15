@@ -146,6 +146,7 @@ describe("PhoneIdentityLoginRepository", () => {
       data: [{
         status: "reserved",
         session_id: SESSION_ID,
+        verified_phone: "13800138000",
         target_mode: "tenant_employee",
         tenant_id: TENANT_ID,
         customer_id: null,
@@ -166,6 +167,7 @@ describe("PhoneIdentityLoginRepository", () => {
     })).resolves.toEqual({
       status: "reserved",
       sessionId: SESSION_ID,
+      verifiedPhone: "13800138000",
       candidate: {
         id: CANDIDATE_ID,
         targetMode: "tenant_employee",
@@ -197,6 +199,7 @@ describe("PhoneIdentityLoginRepository", () => {
           data: [{
             status,
             session_id: SESSION_ID,
+            verified_phone: "13800138000",
             target_mode: "platform_partner",
             tenant_id: null,
             customer_id: null,
@@ -217,6 +220,7 @@ describe("PhoneIdentityLoginRepository", () => {
       })).resolves.toEqual({
         status,
         sessionId: SESSION_ID,
+        verifiedPhone: "13800138000",
         candidate: {
           id: CANDIDATE_ID,
           targetMode: "platform_partner",

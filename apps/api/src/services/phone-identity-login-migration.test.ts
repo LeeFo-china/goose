@@ -8,6 +8,13 @@ const sql = readFileSync(
   ),
   "utf8",
 );
+const selectionPhoneSql = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260715101000_return_phone_identity_selection_phone.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("phone identity login migration", () => {
   test("adds the SMS scene without removing legacy scenes", () => {
@@ -95,6 +102,22 @@ describe("phone identity login migration", () => {
     expect(sql).toMatch(/p_limit NOT BETWEEN 1 AND 1000/);
     expect(sql).toMatch(
       /expires_at < p_before[\s\S]*LIMIT p_limit[\s\S]*FOR UPDATE SKIP LOCKED/,
+    );
+  });
+
+  test("returns verified phone when reserving a selected candidate", () => {
+    expect(selectionPhoneSql).toContain(
+      "DROP FUNCTION public.reserve_phone_identity_selection",
+    );
+    expect(selectionPhoneSql).toMatch(
+      /RETURNS TABLE\([\s\S]*verified_phone text[\s\S]*target_mode text/,
+    );
+    expect(selectionPhoneSql).toContain("v_session.verified_phone");
+    expect(selectionPhoneSql).toContain(
+      "REVOKE ALL ON FUNCTION public.reserve_phone_identity_selection",
+    );
+    expect(selectionPhoneSql).toContain(
+      "GRANT EXECUTE ON FUNCTION public.reserve_phone_identity_selection",
     );
   });
 });

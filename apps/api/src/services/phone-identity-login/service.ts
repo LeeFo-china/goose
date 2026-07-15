@@ -11,6 +11,7 @@ import type {
 } from "@/repositories/phone-identity-login";
 import type {
   PhoneIdentityLoginSendCodeInput,
+  PhoneIdentityLoginSelectInput,
   PhoneIdentityLoginVerifyInput,
 } from "@/schema/phone-identity-login";
 import {
@@ -20,10 +21,18 @@ import {
 import type { SmsVerificationCodeService } from "@/services/sms-verification-codes";
 import type { JwtPayload } from "@/utils/jwt";
 import { buildPhoneIdentityCandidates } from "./candidates";
-import type {
-  PhoneIdentityBindings,
-  PhoneIdentityBindingSelection,
-} from "./bindings";
+import type { PhoneIdentityBindings } from "./bindings";
+import {
+  hashToken,
+  maskPhone,
+  serializePublicCandidate,
+  serializeShareContext,
+  serializeStoredCandidate,
+  toBindingSelection,
+  type ShareLoginContext,
+  type VisitorSignerInput,
+  type VisitorSignerOutput,
+} from "./helpers";
 import type { PhoneIdentityCandidate } from "./types";
 
 type RequestLogger = Pick<FastifyRequest["log"], "info" | "warn">;
@@ -34,31 +43,15 @@ type RequestLike = {
   log?: RequestLogger;
 };
 
-type ShareLoginContext = {
-  shareLinkId: string;
-  tenantId: string;
-  shareEmployeeId?: string | null;
-  source?: string | null;
-};
-
-type VisitorSignerInput = {
-  authUserId: string;
-  openid: string;
-  unionid?: string | null;
-  verifiedPhone: string;
-  shareLinkId?: string | null;
-};
-
-type VisitorSignerOutput = {
-  token: string;
-  visitorId: string;
-};
-
 export type PhoneIdentityLoginServiceDependencies = {
   smsService: Pick<SmsVerificationCodeService, "sendCode">;
   sessionRepository: Pick<
     PhoneIdentityLoginRepository,
-    "claimVerification" | "beginSelection"
+    | "claimVerification"
+    | "beginSelection"
+    | "reserveSelection"
+    | "finalizeSelection"
+    | "releaseSelection"
   >;
   candidateRepository: Pick<
     PhoneIdentityCandidateRepository,
@@ -87,6 +80,11 @@ type SendCodeParams = {
 
 type VerifyParams = {
   input: PhoneIdentityLoginVerifyInput;
+  request: RequestLike;
+};
+
+type SelectParams = {
+  input: PhoneIdentityLoginSelectInput;
   request: RequestLike;
 };
 
@@ -222,6 +220,68 @@ export class PhoneIdentityLoginService {
       phone_masked: maskPhone(params.input.phone),
       candidates: discovery.candidates.map(serializePublicCandidate),
     };
+  }
+
+  async select(params: SelectParams) {
+    const actor = await this.requireWechatActor(params.request, true);
+    const now = this.now();
+    const reservation = await this.dependencies.sessionRepository.reserveSelection({
+      selectionTokenHash: hashToken(params.input.selection_token),
+      candidateId: params.input.candidate_id,
+      authUserId: actor.authUserId,
+      openidHash: actor.openidHash,
+      now: now.toISOString(),
+    });
+
+    if (!("candidate" in reservation)) {
+      throw selectionError(reservation.status);
+    }
+
+    this.logInfo(params.request, "phone_identity_login_selection_reserved", {
+      requestId: params.request.id,
+      sessionId: reservation.sessionId,
+      candidateId: reservation.candidate.id,
+      reserveStatus: reservation.status,
+    });
+
+    try {
+      const auth = await this.dependencies.bindings.authenticate(
+        toBindingSelection(reservation.candidate, {
+          authUserId: actor.authUserId,
+          openid: actor.openid,
+          phone: reservation.verifiedPhone,
+        }),
+      );
+      if (reservation.status !== "same_candidate_consumed") {
+        const finalizeStatus = await this.dependencies.sessionRepository
+          .finalizeSelection({
+            sessionId: reservation.sessionId,
+            candidateId: reservation.candidate.id,
+            now: now.toISOString(),
+          });
+        if (finalizeStatus !== "consumed") {
+          throw Errors.business(
+            409,
+            "身份选择状态已变化，请重新提交",
+            ErrorCodes.IDENTITY_SELECTION_IN_PROGRESS,
+          );
+        }
+      }
+
+      return {
+        status: "authenticated" as const,
+        auth,
+      };
+    } catch (error) {
+      if (reservation.status !== "same_candidate_consumed") {
+        await this.releaseReservedSelection(
+          reservation.sessionId,
+          reservation.candidate.id,
+          now.toISOString(),
+        );
+      }
+      throw error;
+    }
   }
 
   private async discoverCandidates(input: {
@@ -370,56 +430,22 @@ export class PhoneIdentityLoginService {
   ) {
     request.log?.info({ event, ...payload }, "[auth] phone identity login");
   }
-}
 
-function toBindingSelection(
-  candidate: PhoneIdentityCandidate,
-  input: { authUserId: string; openid: string; phone: string },
-): PhoneIdentityBindingSelection {
-  return {
-    targetMode: candidate.targetMode,
-    tenantId: candidate.tenantId,
-    customerId: candidate.customerId,
-    employeeId: candidate.employeeId,
-    partnerMemberId: candidate.partnerMemberId,
-    authUserId: input.authUserId,
-    openid: input.openid,
-    phone: input.phone,
-  };
-}
-
-function serializePublicCandidate(candidate: PhoneIdentityCandidate) {
-  return {
-    candidate_id: candidate.candidateId,
-    target_mode: candidate.targetMode,
-    role_label: candidate.roleLabel,
-    title: candidate.title,
-    subtitle: candidate.subtitle,
-    binding_state: candidate.bindingState,
-    ...(candidate.rebindKind ? { rebind_kind: candidate.rebindKind } : {}),
-  };
-}
-
-function serializeStoredCandidate(candidate: PhoneIdentityCandidate) {
-  return {
-    id: candidate.candidateId,
-    target_mode: candidate.targetMode,
-    tenant_id: candidate.tenantId,
-    customer_id: candidate.customerId,
-    employee_id: candidate.employeeId,
-    partner_id: candidate.partnerId,
-    partner_member_id: candidate.partnerMemberId,
-  };
-}
-
-function serializeShareContext(context: ShareLoginContext | null) {
-  if (!context) return {};
-  return {
-    share_link_id: context.shareLinkId,
-    tenant_id: context.tenantId,
-    share_employee_id: context.shareEmployeeId ?? null,
-    source: context.source ?? null,
-  };
+  private async releaseReservedSelection(
+    sessionId: string,
+    candidateId: string,
+    now: string,
+  ) {
+    try {
+      await this.dependencies.sessionRepository.releaseSelection({
+        sessionId,
+        candidateId,
+        now,
+      });
+    } catch {
+      // Binding errors must remain the user-facing result; release is best effort.
+    }
+  }
 }
 
 function defaultVisitorSigner(input: VisitorSignerInput) {
@@ -437,10 +463,37 @@ function defaultVisitorSigner(input: VisitorSignerInput) {
   };
 }
 
-function hashToken(token: string) {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-function maskPhone(phone: string) {
-  return `${phone.slice(0, 3)}****${phone.slice(-4)}`;
+function selectionError(status: string) {
+  if (status === "expired") {
+    return Errors.business(
+      410,
+      "身份选择凭证已过期，请重新验证手机号",
+      ErrorCodes.IDENTITY_SELECTION_EXPIRED,
+    );
+  }
+  if (status === "selection_consumed") {
+    return Errors.business(
+      409,
+      "身份选择凭证已使用",
+      ErrorCodes.IDENTITY_SELECTION_CONSUMED,
+    );
+  }
+  if (status === "in_progress") {
+    return Errors.business(
+      409,
+      "身份选择处理中，请稍后重试",
+      ErrorCodes.IDENTITY_SELECTION_IN_PROGRESS,
+    );
+  }
+  if (status === "option_unavailable") {
+    return Errors.business(
+      409,
+      "所选身份不可用，请重新验证手机号",
+      ErrorCodes.IDENTITY_OPTION_UNAVAILABLE,
+    );
+  }
+  return Errors.unauthorized(
+    "请先完成手机号验证",
+    ErrorCodes.AUTH_SESSION_REQUIRED,
+  );
 }
