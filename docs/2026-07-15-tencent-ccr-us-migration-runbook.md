@@ -64,6 +64,13 @@ Web 有意排除并保持独立。
 后续构建覆盖，禁止作为自动部署证据。所有自动 dev/production 部署只能接受 manifest 中的
 `run-<Run ID>-<commit SHA>` image，并最终使用该 image 的 `repository@digest`。
 
+任何失败的 `build-docker-images.yml` 构建都禁止使用 GitHub Actions 的 **Re-run jobs** 或
+**Re-run all jobs**。重新运行会保留同一个 Run ID，存在覆盖同名 run-scoped evidence Tag 的风险；
+必须重新发起 workflow dispatch，或由新的 push/caller 创建全新的 workflow run。工作流在
+`validate-request` 的首个可信步骤强制要求 `GITHUB_RUN_ATTEMPT=1`，对 push、
+`workflow_dispatch` 和 `workflow_call` 一视同仁；attempt 大于 1 会 fail-closed，因此
+`run-<Run ID>-<commit SHA>` Tag 在允许执行的构建中保持不可变。
+
 该任务不执行 `docker compose`、不创建或重启容器、不修改 Nginx。正常生产服务部署仍必须
 再次运行 `release-production.yml operation=deploy`，提供候选 `build_run_id`、`commit_sha`，
 并输入第二次确认文本 `确认部署生产环境`；本次 Strategy B 禁止执行该步骤。

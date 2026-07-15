@@ -211,6 +211,17 @@ function sliceWorkflowStep(workflow: string, stepName: string): string {
   return sliceWorkflowStepAt(workflow, start);
 }
 
+function extractWorkflowRunScript(step: string): string {
+  const lines = step.split(/\r?\n/);
+  const runLineIndex = lines.findIndex((line) => line.trim() === "run: |");
+  expect(runLineIndex).toBeGreaterThanOrEqual(0);
+  const scriptLines = lines.slice(runLineIndex + 1).filter((line) => line.length > 0);
+  const indentation = Math.min(
+    ...scriptLines.map((line) => line.match(/^\s*/)?.[0].length ?? 0),
+  );
+  return scriptLines.map((line) => line.slice(indentation)).join("\n");
+}
+
 function sliceWorkflowStepAt(workflow: string, start: number): string {
   const remainingWorkflow = workflow.slice(start + 1);
   const nextSiblingOffset = remainingWorkflow.search(/^      - /m);
@@ -649,6 +660,47 @@ describe("production migration precheck workflow", () => {
 });
 
 describe("reusable build workflow", () => {
+  const rerunGuardStepName = "Reject workflow re-runs";
+  const rerunGuardMarker = `      - name: ${rerunGuardStepName}`;
+  const checkoutMarker = "      - uses: actions/checkout@v6";
+  const resolveMarker = "      - name: Resolve build plan";
+  const rerunGuardTestLine = '          if ! test "${GITHUB_RUN_ATTEMPT}" = 1; then';
+  const rerunGuardError =
+    "Workflow re-runs are forbidden because they can overwrite immutable image evidence. Start a new workflow dispatch/run; do not use Re-run jobs or Re-run all jobs.";
+
+  function satisfiesRerunAttemptContract(workflow: string): boolean {
+    const validationJobStart = workflow.indexOf("  validate-request:");
+    const buildJobStart = workflow.indexOf("  build:", validationJobStart + 1);
+    if (validationJobStart < 0 || buildJobStart <= validationJobStart) {
+      return false;
+    }
+
+    const validationJob = workflow.slice(validationJobStart, buildJobStart);
+    const guardStart = validationJob.indexOf(rerunGuardMarker);
+    const checkoutStart = validationJob.indexOf(checkoutMarker);
+    const resolveStart = validationJob.indexOf(resolveMarker);
+    if (
+      guardStart < 0 ||
+      checkoutStart <= guardStart ||
+      resolveStart <= checkoutStart
+    ) {
+      return false;
+    }
+
+    const guardEndCandidates = [checkoutStart, resolveStart].filter(
+      (index) => index > guardStart,
+    );
+    const guardEnd = Math.min(...guardEndCandidates);
+    const guardStep = validationJob.slice(guardStart, guardEnd);
+    return (
+      guardStep.includes("          set -euo pipefail") &&
+      guardStep.includes(rerunGuardTestLine) &&
+      guardStep.includes(rerunGuardError) &&
+      !guardStep.includes("          if:") &&
+      (validationJob.match(/GITHUB_RUN_ATTEMPT/g) ?? []).length === 1
+    );
+  }
+
   const productionTagRegexLine =
     '[[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}\\.[0-9]+$ ]]';
   const productionBuildPlanStart = [
@@ -871,6 +923,45 @@ describe("reusable build workflow", () => {
     expect(buildWorkflow).toContain(
       "name: ${{ steps.resolve.outputs.target_environment == 'production' && 'production-build-plan' || 'dev-build-plan' }}",
     );
+  });
+
+  test("rejects workflow re-runs before checkout, plan resolution, build, push, or artifact upload", () => {
+    expect(satisfiesRerunAttemptContract(buildWorkflow)).toBe(true);
+
+    const guardStep = sliceWorkflowStep(buildWorkflow, rerunGuardStepName);
+    const deletedGuard = buildWorkflow.replace(guardStep, "");
+    expect(deletedGuard).not.toBe(buildWorkflow);
+    expect(satisfiesRerunAttemptContract(deletedGuard)).toBe(false);
+
+    const attemptTwoAllowed = buildWorkflow.replace(
+      rerunGuardTestLine,
+      '          if ! test "${GITHUB_RUN_ATTEMPT}" -ge 1; then',
+    );
+    expect(attemptTwoAllowed).not.toBe(buildWorkflow);
+    expect(satisfiesRerunAttemptContract(attemptTwoAllowed)).toBe(false);
+
+    const guardAfterResolve = buildWorkflow
+      .replace(guardStep, "")
+      .replace(resolveMarker, `${resolveMarker}\n${guardStep}`);
+    expect(guardAfterResolve).not.toBe(buildWorkflow);
+    expect(satisfiesRerunAttemptContract(guardAfterResolve)).toBe(false);
+  });
+
+  test("allows attempt one and fails attempt two with actionable guidance", () => {
+    const guardScript = extractWorkflowRunScript(
+      sliceWorkflowStep(buildWorkflow, rerunGuardStepName),
+    );
+    const runGuard = (attempt: string): ReturnType<typeof Bun.spawnSync> =>
+      Bun.spawnSync(["bash", "-c", guardScript], {
+        env: { GITHUB_RUN_ATTEMPT: attempt },
+        stderr: "pipe",
+        stdout: "pipe",
+      });
+
+    expect(runGuard("1").exitCode).toBe(0);
+    const rejectedRerun = runGuard("2");
+    expect(rejectedRerun.exitCode).not.toBe(0);
+    expect(rejectedRerun.stderr.toString()).toContain(rerunGuardError);
   });
 
   test("distinguishes a direct push from a reusable call whose caller event is push", () => {

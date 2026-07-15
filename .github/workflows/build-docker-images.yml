@@ -63,6 +63,14 @@ jobs:
       no_op: ${{ steps.resolve.outputs.no_op }}
       target_environment: ${{ steps.resolve.outputs.target_environment }}
     steps:
+      - name: Reject workflow re-runs
+        run: |
+          set -euo pipefail
+          if ! test "${GITHUB_RUN_ATTEMPT}" = 1; then
+            echo "Workflow re-runs are forbidden because they can overwrite immutable image evidence. Start a new workflow dispatch/run; do not use Re-run jobs or Re-run all jobs." >&2
+            exit 1
+          fi
+
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0

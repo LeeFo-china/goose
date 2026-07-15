@@ -137,6 +137,11 @@ describe("automatic development image build contract", () => {
 
   test("exports the plan contract and isolates push from manual inputs", () => {
     const validateJob = sliceBetween("  validate-request:", "  build:");
+    const resolveStep = sliceBetween(
+      "- name: Resolve build plan",
+      "- name: Upload immutable build plan",
+    );
+    const resolveShell = resolveStep.slice(resolveStep.indexOf("run: |"));
 
     for (const output of [
       "build_services",
@@ -158,7 +163,7 @@ describe("automatic development image build contract", () => {
       'classifications: ($classifications | split(" ") | sort)',
     );
     expect(validateJob).toContain("### Production all-service behavior");
-    expect(validateJob).not.toMatch(/run:\s*\|[\s\S]*\$\{\{\s*inputs\./);
+    expect(resolveShell).not.toMatch(/\$\{\{\s*inputs\./);
   });
 
   test("builds only selected services using the validated target environment", () => {
