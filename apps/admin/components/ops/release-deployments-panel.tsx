@@ -460,13 +460,13 @@ function WebReleaseEnvironmentPanel({
   return (
     <div className="flex flex-col gap-4 rounded-lg border p-4">
       <div>
-        <div className="text-sm font-semibold">{title}</div>
+        <h4 className="text-sm font-semibold">{title}</h4>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
       <ol className="flex flex-col gap-2 text-sm text-muted-foreground">
         {steps.map((step, index) => (
           <li key={step} className="flex gap-2">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
+            <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
               {index + 1}
             </span>
             <span>{step}</span>

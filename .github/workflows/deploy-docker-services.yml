@@ -328,6 +328,7 @@ jobs:
           INPUT_GATE_RUN_ID: ${{ inputs.gate_run_id || github.event.inputs.gate_run_id || '' }}
           INPUT_WEB_SMOKE_CONTENT_PATH: ${{ inputs.web_smoke_content_path || github.event.inputs.web_smoke_content_path || '' }}
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           DEPLOY_SERVICES="$(node "${SOURCE_DIR}/scripts/resolve-web-deployment.mjs" deploy \
@@ -350,26 +351,26 @@ jobs:
               jq -er '.path | select(type == "string" and length > 0)' <<< "${workflow_json}"
             }
 
+            current_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+            current_workflow_path="$(canonical_workflow_path "${current_run_json}")"
+            test "${current_workflow_path}" = ".github/workflows/deploy-docker-services.yml"
+            test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_dispatch
+            test "$(jq -r '.head_sha' <<< "${current_run_json}")" = "${SOURCE_SHA}"
+            test "$(jq -r '.head_branch' <<< "${current_run_json}")" = "${GITHUB_REF_NAME}"
+
             build_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID}")"
             build_workflow_path="$(canonical_workflow_path "${build_run_json}")"
             test "${build_workflow_path}" = ".github/workflows/build-docker-images.yml"
-            test "$(jq -r '.event' <<< "${build_run_json}")" = workflow_dispatch
-            test "$(jq -r '.conclusion' <<< "${build_run_json}")" = success
-            test "$(jq -r '.head_sha' <<< "${build_run_json}")" = "${SOURCE_SHA}"
 
             evidence_dir="${RUNNER_TEMP}/production-web-deploy-${BUILD_RUN_ID}"
             rm -rf "${evidence_dir}"
             mkdir -p "${evidence_dir}"
+            printf '%s\n' "${build_run_json}" > "${evidence_dir}/build-run.json"
             gh run download "${BUILD_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
             gh run download "${BUILD_RUN_ID}" -n image-manifest-web -D "${evidence_dir}"
             test -s "${evidence_dir}/build-plan.json"
             web_manifest="${evidence_dir}/image-manifest-web.json"
             test -s "${web_manifest}"
-            test "$(jq -r '.target_environment' "${evidence_dir}/build-plan.json")" = production
-            test "$(jq -r '.commit_sha' "${evidence_dir}/build-plan.json")" = "${SOURCE_SHA}"
-            test "$(jq -c '.build_services' "${evidence_dir}/build-plan.json")" = '["web"]'
-            test "$(jq -c '.deploy_services' "${evidence_dir}/build-plan.json")" = '["web"]'
-            test "$(jq -r '.no_op' "${evidence_dir}/build-plan.json")" = false
 
             test -n "${TENCENT_CCR_REGISTRY}"
             test -n "${TENCENT_CCR_NAMESPACE}"
@@ -383,11 +384,13 @@ jobs:
             esac
             image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
             expected_web_image="${image_base}/goose-web:${SOURCE_SHA}"
-            test "$(jq -r '.service' "${web_manifest}")" = web
-            test "$(jq -r '.target_environment' "${web_manifest}")" = production
-            test "$(jq -r '.commit_sha' "${web_manifest}")" = "${SOURCE_SHA}"
-            test "$(jq -r '.image' "${web_manifest}")" = "${expected_web_image}"
-            web_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${web_manifest}")"
+            node "${SOURCE_DIR}/scripts/verify-production-web-build-evidence.mjs" \
+              "${evidence_dir}/build-run.json" \
+              "${evidence_dir}/build-plan.json" \
+              "${web_manifest}" \
+              "${BUILD_RUN_ID}" "${SOURCE_SHA}" "${GITHUB_REF_NAME}" "${expected_web_image}" \
+              > "${evidence_dir}/verified-web-build.json"
+            web_digest="$(jq -er '.digest' "${evidence_dir}/verified-web-build.json")"
 
             receipt_name="production-deployment-receipt-${BUILD_RUN_ID}"
             artifacts_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${receipt_name}&per_page=100")"
@@ -400,6 +403,8 @@ jobs:
             test "${gate_workflow_path}" = ".github/workflows/verify-production-web-deployment-gate.yml"
             test "$(jq -r '.event' <<< "${gate_run_json}")" = workflow_dispatch
             test "$(jq -r '.conclusion' <<< "${gate_run_json}")" = success
+            test "$(jq -r '.head_sha' <<< "${gate_run_json}")" = "${SOURCE_SHA}"
+            test "$(jq -r '.head_branch' <<< "${gate_run_json}")" = "${GITHUB_REF_NAME}"
             receipt_dir="${RUNNER_TEMP}/web-gate-${INPUT_GATE_RUN_ID}"
             rm -rf "${receipt_dir}"
             gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
@@ -426,12 +431,17 @@ jobs:
           set -euo pipefail
           cd "${SOURCE_DIR}"
           test -d "${DEPLOY_DIR}"
-          sudo cp "${DEPLOY_DIR}/docker-compose.api.yml" "${DEPLOY_DIR}/docker-compose.api.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
-          sudo cp "${DEPLOY_DIR}/docker-compose.admin.yml" "${DEPLOY_DIR}/docker-compose.admin.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
-          sudo cp "${DEPLOY_DIR}/docker-compose.web.yml" "${DEPLOY_DIR}/docker-compose.web.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
-          sudo install -m 0644 deploy/docker-compose.api.yml "${DEPLOY_DIR}/docker-compose.api.yml"
-          sudo install -m 0644 deploy/docker-compose.admin.yml "${DEPLOY_DIR}/docker-compose.admin.yml"
-          sudo install -m 0644 deploy/docker-compose.web.yml "${DEPLOY_DIR}/docker-compose.web.yml"
+          if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then
+            test "${DEPLOY_SERVICES}" = web
+            sudo cp "${DEPLOY_DIR}/docker-compose.web.yml" "${DEPLOY_DIR}/docker-compose.web.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
+            sudo install -m 0644 deploy/docker-compose.web.yml "${DEPLOY_DIR}/docker-compose.web.yml"
+          else
+            test "${DEPLOY_SERVICES}" != web
+            sudo cp "${DEPLOY_DIR}/docker-compose.api.yml" "${DEPLOY_DIR}/docker-compose.api.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
+            sudo cp "${DEPLOY_DIR}/docker-compose.admin.yml" "${DEPLOY_DIR}/docker-compose.admin.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
+            sudo install -m 0644 deploy/docker-compose.api.yml "${DEPLOY_DIR}/docker-compose.api.yml"
+            sudo install -m 0644 deploy/docker-compose.admin.yml "${DEPLOY_DIR}/docker-compose.admin.yml"
+          fi
 
       - name: Login to Tencent CCR
         env:

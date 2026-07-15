@@ -1644,6 +1644,7 @@ describe("production orchestrator", () => {
     const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
     const webGateStart = deployProductionWorkflow.indexOf("- name: Validate web deployment gate");
     const syncStart = deployProductionWorkflow.indexOf("- name: Sync compose fragments", webGateStart);
+    const loginStart = deployProductionWorkflow.indexOf("- name: Login to Tencent CCR", syncStart);
     const receiptStart = deployProductionWorkflow.indexOf("- name: Create production deployment receipt");
     const uploadStart = deployProductionWorkflow.indexOf("- name: Upload production deployment receipt");
     const loopbackStart = deployProductionWorkflow.indexOf("- name: Check public endpoints and pre-cutover Web loopback");
@@ -1652,9 +1653,14 @@ describe("production orchestrator", () => {
     const metadata = deployProductionWorkflow.slice(metadataStart, checkoutStart);
     const evidence = deployProductionWorkflow.slice(evidenceStart, dockerStart);
     const webGate = deployProductionWorkflow.slice(webGateStart, syncStart);
+    const syncCompose = deployProductionWorkflow.slice(syncStart, loginStart);
     const receipt = deployProductionWorkflow.slice(receiptStart, uploadStart);
     const upload = deployProductionWorkflow.slice(uploadStart);
     const loopback = deployProductionWorkflow.slice(loopbackStart, rollbackStart);
+    const webSyncStart = syncCompose.indexOf('if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then');
+    const nonWebSyncStart = syncCompose.indexOf("\n          else\n", webSyncStart);
+    const webSync = syncCompose.slice(webSyncStart, nonWebSyncStart);
+    const nonWebSync = syncCompose.slice(nonWebSyncStart);
 
     expect(dispatchStart).toBeGreaterThanOrEqual(0);
     expect(builtImageInputStart).toBeGreaterThanOrEqual(0);
@@ -1699,25 +1705,30 @@ describe("production orchestrator", () => {
     expect(webGate).toContain('test "${WEB_DIRECT_DEPLOY:-false}" = true');
     expect(webGate).toContain('test "${INPUT_BUILT_IMAGE_SHA}" = "${SOURCE_SHA}"');
     expect(webGate).toContain('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
+    expect(webGate.slice(0, webGate.indexOf("run: |"))).toContain(
+      "GH_REPO: ${{ github.repository }}",
+    );
     expect(webGate).toContain("canonical_workflow_path() {");
+    expect(webGate).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/deploy-docker-services.yml"',
+    );
+    expect(webGate).toContain('test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_dispatch');
+    expect(webGate).toContain('test "$(jq -r \'.head_sha\' <<< "${current_run_json}")" = "${SOURCE_SHA}"');
+    expect(webGate).toContain('test "$(jq -r \'.head_branch\' <<< "${current_run_json}")" = "${GITHUB_REF_NAME}"');
     expect(webGate).toContain(
       'test "${build_workflow_path}" = ".github/workflows/build-docker-images.yml"',
     );
-    expect(webGate).toContain('test "$(jq -r \'.event\' <<< "${build_run_json}")" = workflow_dispatch');
-    expect(webGate).toContain('test "$(jq -r \'.conclusion\' <<< "${build_run_json}")" = success');
-    expect(webGate).toContain('test "$(jq -r \'.head_sha\' <<< "${build_run_json}")" = "${SOURCE_SHA}"');
     expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n production-build-plan');
     expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n image-manifest-web');
-    expect(webGate).toContain('test "$(jq -r \'.target_environment\' "${evidence_dir}/build-plan.json")" = production');
-    expect(webGate).toContain('test "$(jq -r \'.commit_sha\' "${evidence_dir}/build-plan.json")" = "${SOURCE_SHA}"');
-    expect(webGate).toContain('test "$(jq -c \'.build_services\' "${evidence_dir}/build-plan.json")" = \'["web"]\'');
-    expect(webGate).toContain('test "$(jq -c \'.deploy_services\' "${evidence_dir}/build-plan.json")" = \'["web"]\'');
-    expect(webGate).toContain('test "$(jq -r \'.no_op\' "${evidence_dir}/build-plan.json")" = false');
-    expect(webGate).toContain('test "$(jq -r \'.service\' "${web_manifest}")" = web');
-    expect(webGate).toContain('test "$(jq -r \'.target_environment\' "${web_manifest}")" = production');
-    expect(webGate).toContain('test "$(jq -r \'.commit_sha\' "${web_manifest}")" = "${SOURCE_SHA}"');
-    expect(webGate).toContain('test "$(jq -r \'.image\' "${web_manifest}")" = "${expected_web_image}"');
-    expect(webGate).toContain('web_digest="$(jq -er \'.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))\' "${web_manifest}")"');
+    expect(webGate).toContain('printf \'%s\\n\' "${build_run_json}" > "${evidence_dir}/build-run.json"');
+    expect(webGate).toContain("verify-production-web-build-evidence.mjs");
+    expect(webGate).toContain(
+      '"${BUILD_RUN_ID}" "${SOURCE_SHA}" "${GITHUB_REF_NAME}" "${expected_web_image}"',
+    );
+    expect(webGate).toContain('> "${evidence_dir}/verified-web-build.json"');
+    expect(webGate).toContain(
+      'web_digest="$(jq -er \'.digest\' "${evidence_dir}/verified-web-build.json")"',
+    );
     expect(webGate).toContain('receipt_name="production-deployment-receipt-${BUILD_RUN_ID}"');
     expect(webGate).toContain('test "${receipt_count}" = 0');
     expect(webGate).toContain(
@@ -1725,6 +1736,8 @@ describe("production orchestrator", () => {
     );
     expect(webGate).toContain('test "$(jq -r \'.event\' <<< "${gate_run_json}")" = workflow_dispatch');
     expect(webGate).toContain('test "$(jq -r \'.conclusion\' <<< "${gate_run_json}")" = success');
+    expect(webGate).toContain('test "$(jq -r \'.head_sha\' <<< "${gate_run_json}")" = "${SOURCE_SHA}"');
+    expect(webGate).toContain('test "$(jq -r \'.head_branch\' <<< "${gate_run_json}")" = "${GITHUB_REF_NAME}"');
     expect(webGate).toContain(
       '"${receipt_dir}/web-deployment-gate-receipt.json" production "${SOURCE_SHA}" 20260711120000',
     );
@@ -1733,6 +1746,20 @@ describe("production orchestrator", () => {
     expect(webGate).toContain(allowedRegistryPairArm);
     expect(webGate).toContain('GOOES_WEB_IMAGE=${image_base}/goose-web@${web_digest}');
     expect(webGate).not.toContain('GOOES_WEB_IMAGE=${image_base}/goose-web:${SOURCE_SHA}');
+
+    expect(webSyncStart).toBeGreaterThanOrEqual(0);
+    expect(nonWebSyncStart).toBeGreaterThan(webSyncStart);
+    expect(webSync).toContain('test "${DEPLOY_SERVICES}" = web');
+    expect(webSync).toContain('docker-compose.web.yml.bak.github-actions-${GITHUB_RUN_ID}');
+    expect(webSync).toContain('sudo install -m 0644 deploy/docker-compose.web.yml');
+    expect(webSync).not.toContain("docker-compose.api.yml");
+    expect(webSync).not.toContain("docker-compose.admin.yml");
+    expect(nonWebSync).toContain('test "${DEPLOY_SERVICES}" != web');
+    expect(nonWebSync).toContain('docker-compose.api.yml.bak.github-actions-${GITHUB_RUN_ID}');
+    expect(nonWebSync).toContain('docker-compose.admin.yml.bak.github-actions-${GITHUB_RUN_ID}');
+    expect(nonWebSync).toContain('sudo install -m 0644 deploy/docker-compose.api.yml');
+    expect(nonWebSync).toContain('sudo install -m 0644 deploy/docker-compose.admin.yml');
+    expect(nonWebSync).not.toContain("docker-compose.web.yml");
 
     expect(receipt).toContain("if: ${{ success() && env.BUILD_RUN_ID != '' }}");
     expect(receipt).toContain('if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then');
@@ -1747,36 +1774,6 @@ describe("production orchestrator", () => {
     expect(deployProductionWorkflow).not.toMatch(/(?:sudo\s+)?nginx\s+-t/);
     expect(deployProductionWorkflow).not.toMatch(/systemctl\s+reload\s+nginx/);
     expect(deployProductionWorkflow).not.toContain("/etc/nginx");
-  });
-
-  test("constructs the production Web digest reference inside the gate validation step", () => {
-    const webGateStart = deployProductionWorkflow.indexOf(
-      "- name: Validate web deployment gate",
-    );
-    const syncStart = deployProductionWorkflow.indexOf(
-      "- name: Sync compose fragments",
-      webGateStart,
-    );
-    const webGateStep = deployProductionWorkflow.slice(webGateStart, syncStart);
-    const webImageStart = webGateStep.indexOf(
-      'echo "GOOES_WEB_IMAGE=${image_base}/goose-web@${web_digest}"',
-    );
-    const webGateBeforeImage = webGateStep.slice(0, webImageStart);
-
-    expect(webGateStart).toBeGreaterThanOrEqual(0);
-    expect(syncStart).toBeGreaterThan(webGateStart);
-    expect(webImageStart).toBeGreaterThanOrEqual(0);
-    expect(webGateBeforeImage).toContain('test -n "${TENCENT_CCR_REGISTRY}"');
-    expect(webGateBeforeImage).toContain('test -n "${TENCENT_CCR_NAMESPACE}"');
-    expect(webGateBeforeImage).toContain(
-      'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
-    );
-    expect(webGateBeforeImage).toContain(
-      'web_digest="$(jq -er \'.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))\' "${web_manifest}")"',
-    );
-    expect(webGateStep).not.toContain(
-      'GOOES_WEB_IMAGE=${image_base}/goose-web:${SOURCE_SHA}',
-    );
   });
 
   test("pins Admin candidate images to verified manifest digests instead of mutable SHA tags", () => {
