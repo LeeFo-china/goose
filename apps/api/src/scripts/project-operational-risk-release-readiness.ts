@@ -6,13 +6,15 @@ export type ProjectOperationalRiskReleaseReadinessStatus =
   | "ready"
   | "missing_artifact"
   | "missing_env"
-  | "api_smoke_skipped";
+  | "api_smoke_skipped"
+  | "admin_smoke_skipped";
 
 export type ProjectOperationalRiskReleaseReadinessCheck =
   | "local_artifacts_present"
   | "migration_list_configured"
   | "rpc_performance_smoke_configured"
-  | "api_smoke_configured";
+  | "api_smoke_configured"
+  | "admin_smoke_configured";
 
 export type ProjectOperationalRiskReleaseReadinessBlocker = {
   check: ProjectOperationalRiskReleaseReadinessCheck;
@@ -42,6 +44,10 @@ const API_SMOKE_URL_ENV = [
 const API_SMOKE_TOKEN_ENV = [
   "PROJECT_HEALTH_ADMIN_TOKEN",
   "ADMIN_TOKEN",
+] as const;
+const ADMIN_SMOKE_ENV = [
+  "PLAYWRIGHT_BASE_URL",
+  "GOOES_E2E_TENANT_ADMIN_PHONE",
 ] as const;
 const REQUIRED_LOCAL_ARTIFACTS = [
   "supabase/migrations/20260714180000_project_operational_risk_rpc.sql",
@@ -131,6 +137,18 @@ export function buildProjectOperationalRiskReleaseReadinessReport(
     completedChecks.push("api_smoke_configured");
   }
 
+  const missingAdminEnv = missingEnvNames(env, ADMIN_SMOKE_ENV);
+  if (missingAdminEnv.length > 0) {
+    blockers.push({
+      check: "admin_smoke_configured",
+      detail: formatMissingEnv(missingAdminEnv),
+      next_action:
+        "Configure PLAYWRIGHT_BASE_URL and GOOES_E2E_TENANT_ADMIN_PHONE, then run the dev Admin project health browser smoke before release.",
+    });
+  } else {
+    completedChecks.push("admin_smoke_configured");
+  }
+
   return {
     ok: blockers.length === 0,
     status: resolveStatus(blockers),
@@ -176,7 +194,12 @@ function resolveStatus(
   const onlyApiSmokeMissing = blockers.every(
     (blocker) => blocker.check === "api_smoke_configured",
   );
-  return onlyApiSmokeMissing ? "api_smoke_skipped" : "missing_env";
+  if (onlyApiSmokeMissing) return "api_smoke_skipped";
+
+  const onlyAdminSmokeMissing = blockers.every(
+    (blocker) => blocker.check === "admin_smoke_configured",
+  );
+  return onlyAdminSmokeMissing ? "admin_smoke_skipped" : "missing_env";
 }
 
 async function main(): Promise<void> {

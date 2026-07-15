@@ -14,6 +14,8 @@ describe("project operational risk release readiness", () => {
         SUPABASE_SERVICE_ROLE_KEY: "service-role",
         PROJECT_HEALTH_API_URL: "https://api-dev.goodcms.cn",
         PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
+        PLAYWRIGHT_BASE_URL: "https://admin-dev.goodcms.cn",
+        GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
       () => false,
@@ -49,6 +51,7 @@ describe("project operational risk release readiness", () => {
     expect(report.blockers.map((item) => item.check)).toEqual([
       "rpc_performance_smoke_configured",
       "api_smoke_configured",
+      "admin_smoke_configured",
     ]);
     expect(JSON.stringify(report)).not.toContain("secret-pass");
     expect(JSON.stringify(report)).not.toContain("service-role-secret");
@@ -61,6 +64,8 @@ describe("project operational risk release readiness", () => {
         PROJECT_HEALTH_TENANT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         SUPABASE_URL: "https://supabase.example",
         SUPABASE_SERVICE_ROLE_KEY: "service-role",
+        PLAYWRIGHT_BASE_URL: "https://admin-dev.goodcms.cn",
+        GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
     );
@@ -71,6 +76,7 @@ describe("project operational risk release readiness", () => {
       "local_artifacts_present",
       "migration_list_configured",
       "rpc_performance_smoke_configured",
+      "admin_smoke_configured",
     ]);
     expect(report.blockers).toEqual([
       {
@@ -92,6 +98,8 @@ describe("project operational risk release readiness", () => {
         SUPABASE_SERVICE_ROLE_KEY: "service-role",
         GOOES_API_BASE_URL: "https://api-dev.goodcms.cn",
         PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
+        PLAYWRIGHT_BASE_URL: "https://admin-dev.goodcms.cn",
+        GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
     );
@@ -109,12 +117,45 @@ describe("project operational risk release readiness", () => {
         SUPABASE_SERVICE_ROLE_KEY: "service-role",
         PROJECT_HEALTH_API_URL: "https://api-dev.goodcms.cn",
         ADMIN_TOKEN: "admin-token",
+        PLAYWRIGHT_BASE_URL: "https://admin-dev.goodcms.cn",
+        GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
     );
 
     expect(report.ok).toBe(true);
     expect(report.completed_checks).toContain("api_smoke_configured");
+  });
+
+  test("requires admin base URL and tenant admin phone for release browser smoke", () => {
+    const report = buildProjectOperationalRiskReleaseReadinessReport(
+      {
+        SUPABASE_DB_DIRECT_URL: "postgres://db",
+        PROJECT_HEALTH_TENANT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        SUPABASE_URL: "https://supabase.example",
+        SUPABASE_SERVICE_ROLE_KEY: "service-role",
+        PROJECT_HEALTH_API_URL: "https://api-dev.goodcms.cn",
+        PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
+      },
+      "2026-07-15T08:00:00.000Z",
+    );
+
+    expect(report.ok).toBe(false);
+    expect(report.status).toBe("admin_smoke_skipped");
+    expect(report.completed_checks).toEqual([
+      "local_artifacts_present",
+      "migration_list_configured",
+      "rpc_performance_smoke_configured",
+      "api_smoke_configured",
+    ]);
+    expect(report.blockers).toEqual([
+      {
+        check: "admin_smoke_configured",
+        detail: "missing PLAYWRIGHT_BASE_URL, GOOES_E2E_TENANT_ADMIN_PHONE",
+        next_action:
+          "Configure PLAYWRIGHT_BASE_URL and GOOES_E2E_TENANT_ADMIN_PHONE, then run the dev Admin project health browser smoke before release.",
+      },
+    ]);
   });
 
   test("returns ready status and read-only verification commands when all prerequisites exist", () => {
@@ -126,6 +167,8 @@ describe("project operational risk release readiness", () => {
         SUPABASE_SERVICE_ROLE_KEY: "service-role",
         PROJECT_HEALTH_API_URL: "https://api-dev.goodcms.cn",
         PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
+        PLAYWRIGHT_BASE_URL: "https://admin-dev.goodcms.cn",
+        GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
     );
@@ -139,6 +182,7 @@ describe("project operational risk release readiness", () => {
         "migration_list_configured",
         "rpc_performance_smoke_configured",
         "api_smoke_configured",
+        "admin_smoke_configured",
       ],
       blockers: [],
       read_only_commands: [

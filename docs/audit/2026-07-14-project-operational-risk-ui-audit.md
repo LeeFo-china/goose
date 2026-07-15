@@ -16,6 +16,8 @@
 
 因此本文件暂不记录 Impeccable 分数，不声明 P0/P1 已清零。mock smoke 只证明前端页面结构、RSC 边界、展示页 contract、AI 按需交互和响应式溢出在本地可重复验证。
 
+补充：`project-health:release-readiness` 已把 dev Admin 浏览器 smoke 前置条件纳入 gate。发布验收前必须显式配置 `PLAYWRIGHT_BASE_URL` 和 `GOOES_E2E_TENANT_ADMIN_PHONE`，避免使用 Playwright 默认 `127.0.0.1:3011` 或默认手机号误判 dev Admin 已验收。
+
 ## 已完成静态证据
 
 命令：

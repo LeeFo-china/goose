@@ -13,11 +13,13 @@
 
 本地已验证的内容：
 
-- release readiness gate 检查本地 RPC migration、SQL fixture、EXPLAIN SQL 和发布验证前置配置并输出 JSON，不执行 DDL/DML，不输出密钥值；
+- release readiness gate 检查本地 RPC migration、SQL fixture、EXPLAIN SQL、dev DB/API 性能 smoke 配置和 dev Admin 浏览器 smoke 配置并输出 JSON，不执行 DDL/DML，不输出密钥值；
 - P50/P95 计算使用排序后的向上取整索引；
 - RPC smoke 必需配置为 `PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`；
 - API 阶段仅在同时提供 `PROJECT_HEALTH_API_URL` 或兼容既有开发约定的 `GOOES_API_BASE_URL`，
   以及 `PROJECT_HEALTH_ADMIN_TOKEN` 或兼容别名 `ADMIN_TOKEN` 时运行；
+- Admin 浏览器 smoke 阶段要求显式提供 `PLAYWRIGHT_BASE_URL` 和 `GOOES_E2E_TENANT_ADMIN_PHONE`，
+  避免发布验收误打本机默认地址或默认测试手机号；
 - 脚本只读调用 `get_project_operational_risk_page` 和 GET `/project-health/risks`，不执行 DDL/DML；
 - RPC 阶段校验原始 `ProjectOperationalRiskRpcPageSchema`，API 阶段校验带 `title/description/action` 的 Admin display payload，避免把正常 API 响应误判为格式异常。
 - Controller 日志只记录 `hasKeyword`，不记录 keyword 原文、手机号或其他客户输入文本。
@@ -30,7 +32,7 @@
 
 - `status`: `missing_env`；
 - `completed_checks`: `local_artifacts_present`；
-- 缺失项：`SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL`、`PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN`。
+- 缺失项：`SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL`、`PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN`、`PLAYWRIGHT_BASE_URL`、`GOOES_E2E_TENANT_ADMIN_PHONE`。
 
 先执行只读 release readiness gate：
 
