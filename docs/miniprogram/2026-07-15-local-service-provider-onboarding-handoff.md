@@ -267,6 +267,35 @@ Idempotency-Key: <uuid-v4>
   - `partner_assist_due_at` 有值
   - `idempotency_count=1`
 
+### 场景 C：平台审核通过并自动归因城市合伙人
+
+- 平台审核员：`Dev 超级管理员`
+- 审核申请 ID：`04659e6f-694f-4b9e-bfdc-5d1244491e70`
+- `GET /platform/tenant-onboarding/applications`：返回该 `submitted` 申请
+- `POST /platform/tenant-onboarding/applications/:id/start-review`：HTTP `200`
+  - 审核后状态：`reviewing`
+  - 版本：`2`
+- `POST /platform/tenant-onboarding/applications/:id/approve`：HTTP `200`
+  - 审核模式：`attribution_mode=auto`
+  - 审核结果：`approved`
+  - 版本：`3`
+- 审核通过后创建的数据：
+  - 租户 ID：`f3ada63b-0e99-449f-bd7a-321e434bbae4`
+  - 租户状态：`active`
+  - 负责人/管理员员工 ID：`063c2bc8-9083-4785-98b2-a7a88c369e77`
+  - 城市合伙人绑定 ID：`ce2ef28e-364d-4bf1-8a93-7d884e9a4217`
+  - 服务商 profile ID：`36638cf0-ecbc-4af3-8b96-e77ab3f9e058`
+  - 服务区域：`411525`
+- DB 核验：
+  - `status=approved`
+  - `converted_tenant_id=f3ada63b-0e99-449f-bd7a-321e434bbae4`
+  - `final_partner_id=b4b7517c-9db2-4d5e-bac8-80ffd6725bd0`
+  - `attribution_source_type=region_auto_assignment`
+  - `tenant_partner_bindings.status=active`
+  - `tenant_partner_bindings.source_type=region_auto_assignment`
+  - `tenant_service_provider_profiles.status=draft`
+  - `tenant_service_areas.status=inactive`
+
 ### 营业执照私有上传 smoke
 
 - 文件 ID：`1025146c-703d-42cb-a9bd-e936ea08cb33`
@@ -300,9 +329,11 @@ Idempotency-Key: <uuid-v4>
 
 ## 后端后续建议
 
-平台审核 smoke 还未在本轮执行。后续需要使用平台管理员 token 验证：
+平台审核通过后，服务商公开资料仍是 `draft`，服务区域仍是 `inactive`。这是后端当前设计：入驻通过只完成租户初始化和服务商资料草稿创建，不会自动发布到 visitor 本地服务商列表。
 
-1. 平台审核队列能看到上述 `submitted` 申请。
-2. `start review` 能进入 `reviewing`。
-3. `approve` 后能创建租户、管理员、服务商 profile 和服务区域。
-4. 有城市合伙人候选时，最终归因符合平台审核选择。
+后续建议继续验证服务商公开资料发布链路：
+
+1. 租户侧补充服务商公开资料并提交发布审核。
+2. 平台发布服务商公开资料。
+3. 服务区域激活后，`GET /visitor/local-service-providers` 在 `411525` 定位下返回该服务商。
+4. 未发布或 inactive 服务区域不得出现在 visitor 本地服务商列表。
