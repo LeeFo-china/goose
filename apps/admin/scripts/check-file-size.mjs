@@ -3,7 +3,13 @@ import path from "node:path";
 
 const MAX_LINES = 500;
 const ROOT = process.cwd();
-const EXCLUDED_DIRS = new Set([".next", "dist", "node_modules"]);
+const EXCLUDED_DIRS = new Set([
+  ".next",
+  ".next-dev",
+  ".next-e2e",
+  "dist",
+  "node_modules",
+]);
 const TARGET_EXTENSIONS = new Set([".ts", ".tsx"]);
 
 async function collectFiles(dir) {

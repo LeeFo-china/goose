@@ -16,6 +16,7 @@ out
 dist
 .next
 apps/*/.next
+apps/*/.next-dev
 apps/*/.next-e2e
 supabase/.temp
 *.tgz

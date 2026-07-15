@@ -6,7 +6,8 @@ const stagedOnly = args.has("--staged");
 
 const API_SOURCE_RE = /^apps\/api\/src\/.*\.(ts|tsx|js|jsx|mjs|cjs)$/;
 const ADMIN_SOURCE_RE = /^apps\/admin\/.*\.(ts|tsx)$/;
-const ADMIN_EXCLUDED_RE = /^apps\/admin\/(\.next|dist|node_modules)\//;
+const ADMIN_EXCLUDED_RE =
+  /^apps\/admin\/(\.next|\.next-dev|\.next-e2e|dist|node_modules)\//;
 const STAGED_SOURCE_PATHS = ["apps/api/src", "apps/admin"];
 const GIT_DIFF_MAX_BUFFER = 32 * 1024 * 1024;
 
