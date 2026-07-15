@@ -4,6 +4,17 @@ import {
   buildProjectOperationalRiskReleaseReadinessReport,
 } from "./project-operational-risk-release-readiness";
 
+const READY_UI_AUDIT_EVIDENCE = `<!-- project-health-ui-release-evidence
+{
+  "status": "ready",
+  "impeccable_score": 16,
+  "p0_count": 0,
+  "p1_count": 0,
+  "real_dev_screenshots": true,
+  "wcag_aa_smoke": true
+}
+-->`;
+
 describe("project operational risk release readiness", () => {
   test("reports missing local release artifacts before external verification", () => {
     const report = buildProjectOperationalRiskReleaseReadinessReport(
@@ -19,6 +30,7 @@ describe("project operational risk release readiness", () => {
       },
       "2026-07-15T08:00:00.000Z",
       () => false,
+      () => READY_UI_AUDIT_EVIDENCE,
     );
 
     expect(report.ok).toBe(false);
@@ -43,6 +55,8 @@ describe("project operational risk release readiness", () => {
         SUPABASE_SERVICE_ROLE_KEY: "service-role-secret",
       },
       "2026-07-15T08:00:00.000Z",
+      undefined,
+      () => READY_UI_AUDIT_EVIDENCE,
     );
 
     expect(report.ok).toBe(false);
@@ -68,6 +82,8 @@ describe("project operational risk release readiness", () => {
         GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
+      undefined,
+      () => READY_UI_AUDIT_EVIDENCE,
     );
 
     expect(report.ok).toBe(false);
@@ -77,6 +93,7 @@ describe("project operational risk release readiness", () => {
       "migration_list_configured",
       "rpc_performance_smoke_configured",
       "admin_smoke_configured",
+      "ui_audit_recorded",
     ]);
     expect(report.blockers).toEqual([
       {
@@ -102,6 +119,8 @@ describe("project operational risk release readiness", () => {
         GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
+      undefined,
+      () => READY_UI_AUDIT_EVIDENCE,
     );
 
     expect(report.ok).toBe(true);
@@ -121,6 +140,8 @@ describe("project operational risk release readiness", () => {
         GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
+      undefined,
+      () => READY_UI_AUDIT_EVIDENCE,
     );
 
     expect(report.ok).toBe(true);
@@ -138,6 +159,8 @@ describe("project operational risk release readiness", () => {
         PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
       },
       "2026-07-15T08:00:00.000Z",
+      undefined,
+      () => READY_UI_AUDIT_EVIDENCE,
     );
 
     expect(report.ok).toBe(false);
@@ -147,6 +170,7 @@ describe("project operational risk release readiness", () => {
       "migration_list_configured",
       "rpc_performance_smoke_configured",
       "api_smoke_configured",
+      "ui_audit_recorded",
     ]);
     expect(report.blockers).toEqual([
       {
@@ -154,6 +178,76 @@ describe("project operational risk release readiness", () => {
         detail: "missing PLAYWRIGHT_BASE_URL, GOOES_E2E_TENANT_ADMIN_PHONE",
         next_action:
           "Configure PLAYWRIGHT_BASE_URL and GOOES_E2E_TENANT_ADMIN_PHONE, then run the dev Admin project health browser smoke before release.",
+      },
+    ]);
+  });
+
+  test("requires structured UI audit evidence before release readiness", () => {
+    const report = buildProjectOperationalRiskReleaseReadinessReport(
+      {
+        SUPABASE_DB_DIRECT_URL: "postgres://db",
+        PROJECT_HEALTH_TENANT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        SUPABASE_URL: "https://supabase.example",
+        SUPABASE_SERVICE_ROLE_KEY: "service-role",
+        PROJECT_HEALTH_API_URL: "https://api-dev.goodcms.cn",
+        PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
+        PLAYWRIGHT_BASE_URL: "https://admin-dev.goodcms.cn",
+        GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
+      },
+      "2026-07-15T08:00:00.000Z",
+      undefined,
+      () => `# 项目运营风险中心 UI 审核记录
+
+尚未执行基于真实截图的 $impeccable audit 评分。`,
+    );
+
+    expect(report.ok).toBe(false);
+    expect(report.status).toBe("ui_audit_pending");
+    expect(report.completed_checks).toEqual([
+      "local_artifacts_present",
+      "migration_list_configured",
+      "rpc_performance_smoke_configured",
+      "api_smoke_configured",
+      "admin_smoke_configured",
+    ]);
+    expect(report.blockers).toEqual([
+      {
+        check: "ui_audit_recorded",
+        detail:
+          "missing project-health-ui-release-evidence block in docs/audit/2026-07-14-project-operational-risk-ui-audit.md",
+        next_action:
+          "Record real dev screenshots, WCAG AA smoke and Impeccable score evidence before release.",
+      },
+    ]);
+  });
+
+  test("blocks UI audit evidence below the Impeccable release threshold", () => {
+    const report = buildProjectOperationalRiskReleaseReadinessReport(
+      {
+        SUPABASE_DB_DIRECT_URL: "postgres://db",
+        PROJECT_HEALTH_TENANT_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        SUPABASE_URL: "https://supabase.example",
+        SUPABASE_SERVICE_ROLE_KEY: "service-role",
+        PROJECT_HEALTH_API_URL: "https://api-dev.goodcms.cn",
+        PROJECT_HEALTH_ADMIN_TOKEN: "admin-token",
+        PLAYWRIGHT_BASE_URL: "https://admin-dev.goodcms.cn",
+        GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
+      },
+      "2026-07-15T08:00:00.000Z",
+      undefined,
+      () => `<!-- project-health-ui-release-evidence
+{"status":"ready","impeccable_score":15,"p0_count":0,"p1_count":0,"real_dev_screenshots":true,"wcag_aa_smoke":true}
+-->`,
+    );
+
+    expect(report.ok).toBe(false);
+    expect(report.status).toBe("ui_audit_pending");
+    expect(report.blockers).toEqual([
+      {
+        check: "ui_audit_recorded",
+        detail: "impeccable_score must be >= 16",
+        next_action:
+          "Record real dev screenshots, WCAG AA smoke and Impeccable score evidence before release.",
       },
     ]);
   });
@@ -171,6 +265,8 @@ describe("project operational risk release readiness", () => {
         GOOES_E2E_TENANT_ADMIN_PHONE: "18800000001",
       },
       "2026-07-15T08:00:00.000Z",
+      undefined,
+      () => READY_UI_AUDIT_EVIDENCE,
     );
 
     expect(report).toEqual({
@@ -183,6 +279,7 @@ describe("project operational risk release readiness", () => {
         "rpc_performance_smoke_configured",
         "api_smoke_configured",
         "admin_smoke_configured",
+        "ui_audit_recorded",
       ],
       blockers: [],
       read_only_commands: [

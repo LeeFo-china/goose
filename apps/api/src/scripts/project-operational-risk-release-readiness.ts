@@ -1,20 +1,23 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 type Env = Record<string, string | undefined>;
+type TextReader = (relativePath: string) => string | null;
 
 export type ProjectOperationalRiskReleaseReadinessStatus =
   | "ready"
   | "missing_artifact"
   | "missing_env"
   | "api_smoke_skipped"
-  | "admin_smoke_skipped";
+  | "admin_smoke_skipped"
+  | "ui_audit_pending";
 
 export type ProjectOperationalRiskReleaseReadinessCheck =
   | "local_artifacts_present"
   | "migration_list_configured"
   | "rpc_performance_smoke_configured"
   | "api_smoke_configured"
-  | "admin_smoke_configured";
+  | "admin_smoke_configured"
+  | "ui_audit_recorded";
 
 export type ProjectOperationalRiskReleaseReadinessBlocker = {
   check: ProjectOperationalRiskReleaseReadinessCheck;
@@ -54,6 +57,11 @@ const REQUIRED_LOCAL_ARTIFACTS = [
   "supabase/tests/project_operational_risk_rpc.sql",
   "supabase/tests/project_operational_risk_explain.sql",
 ] as const;
+const UI_AUDIT_EVIDENCE_FILE =
+  "docs/audit/2026-07-14-project-operational-risk-ui-audit.md";
+const UI_AUDIT_EVIDENCE_MARKER = "project-health-ui-release-evidence";
+const UI_AUDIT_NEXT_ACTION =
+  "Record real dev screenshots, WCAG AA smoke and Impeccable score evidence before release.";
 
 const READ_ONLY_COMMANDS = [
   'supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"',
@@ -79,10 +87,22 @@ function defaultArtifactExists(relativePath: string): boolean {
   return existsSync(new URL(`../../../../${relativePath}`, import.meta.url));
 }
 
+function defaultReadText(relativePath: string): string | null {
+  try {
+    return readFileSync(
+      new URL(`../../../../${relativePath}`, import.meta.url),
+      "utf8",
+    );
+  } catch {
+    return null;
+  }
+}
+
 export function buildProjectOperationalRiskReleaseReadinessReport(
   env: Env,
   generatedAt = new Date().toISOString(),
   artifactExists: (relativePath: string) => boolean = defaultArtifactExists,
+  readText: TextReader = defaultReadText,
 ): ProjectOperationalRiskReleaseReadinessReport {
   const blockers: ProjectOperationalRiskReleaseReadinessBlocker[] = [];
   const completedChecks: ProjectOperationalRiskReleaseReadinessCheck[] = [];
@@ -149,6 +169,19 @@ export function buildProjectOperationalRiskReleaseReadinessReport(
     completedChecks.push("admin_smoke_configured");
   }
 
+  const uiAuditEvidence = validateUiAuditEvidence(
+    readText(UI_AUDIT_EVIDENCE_FILE),
+  );
+  if (!uiAuditEvidence.ok) {
+    blockers.push({
+      check: "ui_audit_recorded",
+      detail: uiAuditEvidence.detail,
+      next_action: UI_AUDIT_NEXT_ACTION,
+    });
+  } else {
+    completedChecks.push("ui_audit_recorded");
+  }
+
   return {
     ok: blockers.length === 0,
     status: resolveStatus(blockers),
@@ -183,6 +216,62 @@ function formatMissingApiEnv(names: readonly string[]): string {
   return formatMissingEnv(labels);
 }
 
+function validateUiAuditEvidence(
+  content: string | null,
+): { ok: true } | { ok: false; detail: string } {
+  if (!content) {
+    return { ok: false, detail: `missing ${UI_AUDIT_EVIDENCE_FILE}` };
+  }
+
+  const match = content.match(
+    new RegExp(
+      `<!--\\s*${UI_AUDIT_EVIDENCE_MARKER}\\s*([\\s\\S]*?)\\s*-->`,
+    ),
+  );
+  if (!match?.[1]) {
+    return {
+      ok: false,
+      detail:
+        `missing ${UI_AUDIT_EVIDENCE_MARKER} block in ${UI_AUDIT_EVIDENCE_FILE}`,
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    return { ok: false, detail: `${UI_AUDIT_EVIDENCE_MARKER} is not valid JSON` };
+  }
+
+  if (!isRecord(parsed)) {
+    return { ok: false, detail: `${UI_AUDIT_EVIDENCE_MARKER} must be an object` };
+  }
+  if (parsed.status !== "ready") {
+    return {
+      ok: false,
+      detail: `${UI_AUDIT_EVIDENCE_MARKER} status must be ready`,
+    };
+  }
+  if (typeof parsed.impeccable_score !== "number" || parsed.impeccable_score < 16) {
+    return { ok: false, detail: "impeccable_score must be >= 16" };
+  }
+  if (parsed.p0_count !== 0 || parsed.p1_count !== 0) {
+    return { ok: false, detail: "p0_count and p1_count must be 0" };
+  }
+  if (parsed.real_dev_screenshots !== true) {
+    return { ok: false, detail: "real_dev_screenshots must be true" };
+  }
+  if (parsed.wcag_aa_smoke !== true) {
+    return { ok: false, detail: "wcag_aa_smoke must be true" };
+  }
+
+  return { ok: true };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function resolveStatus(
   blockers: ProjectOperationalRiskReleaseReadinessBlocker[],
 ): ProjectOperationalRiskReleaseReadinessStatus {
@@ -199,7 +288,12 @@ function resolveStatus(
   const onlyAdminSmokeMissing = blockers.every(
     (blocker) => blocker.check === "admin_smoke_configured",
   );
-  return onlyAdminSmokeMissing ? "admin_smoke_skipped" : "missing_env";
+  if (onlyAdminSmokeMissing) return "admin_smoke_skipped";
+
+  const onlyUiAuditPending = blockers.every(
+    (blocker) => blocker.check === "ui_audit_recorded",
+  );
+  return onlyUiAuditPending ? "ui_audit_pending" : "missing_env";
 }
 
 async function main(): Promise<void> {

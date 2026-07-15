@@ -20,6 +20,9 @@
   以及 `PROJECT_HEALTH_ADMIN_TOKEN` 或兼容别名 `ADMIN_TOKEN` 时运行；
 - Admin 浏览器 smoke 阶段要求显式提供 `PLAYWRIGHT_BASE_URL` 和 `GOOES_E2E_TENANT_ADMIN_PHONE`，
   避免发布验收误打本机默认地址或默认测试手机号；
+- UI 审核阶段要求 `docs/audit/2026-07-14-project-operational-risk-ui-audit.md` 中的
+  `project-health-ui-release-evidence` JSON 块达到 `status=ready`、`impeccable_score>=16`、
+  `p0_count=0`、`p1_count=0`、真实 dev 截图和 WCAG AA smoke 均已完成；
 - 脚本只读调用 `get_project_operational_risk_page` 和 GET `/project-health/risks`，不执行 DDL/DML；
 - RPC 阶段校验原始 `ProjectOperationalRiskRpcPageSchema`，API 阶段校验带 `title/description/action` 的 Admin display payload，避免把正常 API 响应误判为格式异常。
 - Controller 日志只记录 `hasKeyword`，不记录 keyword 原文、手机号或其他客户输入文本。
@@ -32,7 +35,7 @@
 
 - `status`: `missing_env`；
 - `completed_checks`: `local_artifacts_present`；
-- 缺失项：`SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL`、`PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN`、`PLAYWRIGHT_BASE_URL`、`GOOES_E2E_TENANT_ADMIN_PHONE`。
+- 缺失项：`SUPABASE_DB_DIRECT_URL`、`PROJECT_HEALTH_TENANT_ID`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`PROJECT_HEALTH_API_URL or GOOES_API_BASE_URL`、`PROJECT_HEALTH_ADMIN_TOKEN or ADMIN_TOKEN`、`PLAYWRIGHT_BASE_URL`、`GOOES_E2E_TENANT_ADMIN_PHONE`；UI audit evidence 当前仍为 `pending`。
 
 先执行只读 release readiness gate：
 

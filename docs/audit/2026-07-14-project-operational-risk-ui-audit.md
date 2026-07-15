@@ -18,6 +18,17 @@
 
 补充：`project-health:release-readiness` 已把 dev Admin 浏览器 smoke 前置条件纳入 gate。发布验收前必须显式配置 `PLAYWRIGHT_BASE_URL` 和 `GOOES_E2E_TENANT_ADMIN_PHONE`，避免使用 Playwright 默认 `127.0.0.1:3011` 或默认手机号误判 dev Admin 已验收。
 
+<!-- project-health-ui-release-evidence
+{
+  "status": "pending",
+  "impeccable_score": null,
+  "p0_count": null,
+  "p1_count": null,
+  "real_dev_screenshots": false,
+  "wcag_aa_smoke": false
+}
+-->
+
 ## 已完成静态证据
 
 命令：
@@ -48,7 +59,7 @@ pnpm --dir apps/admin build
 结果：
 
 - Domain contract test：5 pass；
-- API project-health/performance/readiness 定向测试：57 pass；
+- API project-health/performance/readiness 定向测试：60 pass；
 - Admin nav/project-health 定向测试：31 pass；
 - `packages/domain build`：通过；
 - `api:check`：通过；
