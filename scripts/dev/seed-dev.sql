@@ -182,7 +182,7 @@ BEGIN
     customer_origin = EXCLUDED.customer_origin;
 
   -- Unified phone identity login mini-program integration fixtures.
-  -- Reserved phones: 19900004001-19900004009. Re-run this seed before a new
+  -- Reserved phones: 19900004001-19900004010. Re-run this seed before a new
   -- shared-dev test round to reset bindable identities back to an unbound state.
   INSERT INTO public.tenants (
     slug,
@@ -340,6 +340,15 @@ BEGIN
       v_post_id,
       'active',
       NULL
+    ),
+    (
+      v_tenant_id,
+      'Dev 统一登录已绑员工',
+      '19900004010',
+      v_tenant_department_id,
+      v_post_id,
+      'active',
+      NULL
     )
   ON CONFLICT (tenant_id, phone)
   WHERE tenant_id IS NOT NULL AND phone IS NOT NULL
@@ -400,6 +409,12 @@ BEGIN
   WHERE tenant_id = v_tenant_id
     AND phone = '19900004008';
 
+  UPDATE public.employees
+  SET
+    user_id = v_bound_tenant_auth_user_id
+  WHERE tenant_id = v_tenant_id
+    AND phone = '19900004010';
+
   INSERT INTO public.user_oauth_identities (
     user_id,
     platform,
@@ -439,7 +454,7 @@ BEGIN
 
   DELETE FROM public.user_business_memberships
   WHERE user_id = v_bound_tenant_auth_user_id
-    AND identity_type = 'customer'
+    AND identity_type IN ('customer', 'employee')
     AND tenant_id = v_tenant_id;
 
   INSERT INTO public.user_business_memberships (
@@ -460,6 +475,26 @@ BEGIN
   FROM public.customers AS customer
   WHERE customer.tenant_id = v_tenant_id
     AND customer.phone = '19900004008'
+  LIMIT 1;
+
+  INSERT INTO public.user_business_memberships (
+    user_id,
+    tenant_id,
+    identity_type,
+    identity_id,
+    status,
+    is_default
+  )
+  SELECT
+    v_bound_tenant_auth_user_id,
+    v_tenant_id,
+    'employee',
+    employee.id,
+    'active',
+    true
+  FROM public.employees AS employee
+  WHERE employee.tenant_id = v_tenant_id
+    AND employee.phone = '19900004010'
   LIMIT 1;
 
   INSERT INTO public.platform_partner_levels (
@@ -668,5 +703,6 @@ FROM (
     ('P6', '跨租户多客户', '19900004006', NULL, 'selection_required'),
     ('P7', '跨租户排序 share_token', '19900004006', 'ts_dev_phone_identity_b', 'tenant B customer first'),
     ('P8', '客户已绑定其他微信', '19900004008', NULL, 'WECHAT_ALREADY_BOUND'),
-    ('P9', '合伙人成员已绑定其他微信', '19900004009', NULL, 'PARTNER_MEMBER_ALREADY_BOUND')
+    ('P9', '合伙人成员已绑定其他微信', '19900004009', NULL, 'PARTNER_MEMBER_ALREADY_BOUND'),
+    ('P10', '员工已绑定其他微信', '19900004010', NULL, 'WECHAT_ALREADY_BOUND')
 ) AS matrix(case_id, scenario, phone, share_token, expected);

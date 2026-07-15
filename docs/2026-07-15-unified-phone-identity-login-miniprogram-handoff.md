@@ -385,6 +385,7 @@ dev 环境固定使用 `19900004xxx` 段假号。每轮共享 dev 联调前，�
 | P7 | `19900004006` | `ts_dev_phone_identity_b` | 跨租户多客户 + 分享租户 | `selection_required`，测试公司 B 客户候选排第一 |
 | P8 | `19900004008` | - | 客户已绑定其他有效微信 | `WECHAT_ALREADY_BOUND`，返回可换绑上下文 |
 | P9 | `19900004009` | - | 合伙人成员已绑定其他有效微信 | `PARTNER_MEMBER_ALREADY_BOUND` |
+| P10 | `19900004010` | - | 员工已绑定其他有效微信 | `WECHAT_ALREADY_BOUND`，返回可换绑上下文 |
 
 `selection_token` 过期和幂等测试复用 P5 或 P6：
 
