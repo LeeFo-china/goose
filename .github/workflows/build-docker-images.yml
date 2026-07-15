@@ -326,6 +326,39 @@ jobs:
           RUN_IMAGE="${IMAGE_BASE}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"
           BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+          push_image() {
+            local image="$1"
+            for attempt in 1 2 3 4 5; do
+              if docker push "${image}"; then
+                return 0
+              fi
+              echo "docker push failed for ${image} (attempt ${attempt}/5)." >&2
+              if [ "${attempt}" -lt 5 ]; then
+                sleep $((attempt * 5))
+              fi
+            done
+            return 1
+          }
+
+          resolve_remote_digest() {
+            local image="$1"
+            local output digest
+            for attempt in 1 2 3 4 5; do
+              if output="$(docker buildx imagetools inspect "${image}" 2>/dev/null)"; then
+                digest="$(awk '/^Digest:/ {print $2; exit}' <<< "${output}")"
+                if [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+                  printf '%s\n' "${digest}"
+                  return 0
+                fi
+              fi
+              echo "Remote digest resolution failed for ${image} (attempt ${attempt}/5)." >&2
+              if [ "${attempt}" -lt 5 ]; then
+                sleep $((attempt * 5))
+              fi
+            done
+            return 1
+          }
+
           case "$SERVICE" in
             api)
               docker build \
@@ -384,11 +417,11 @@ jobs:
               ;;
           esac
 
-          docker push "$BRANCH_IMAGE"
-          docker push "$SHA_IMAGE"
-          docker push "$RUN_IMAGE"
+          push_image "$BRANCH_IMAGE"
+          push_image "$SHA_IMAGE"
+          push_image "$RUN_IMAGE"
 
-          digest="$(docker buildx imagetools inspect "$RUN_IMAGE" | awk '/^Digest:/ {print $2; exit}')"
+          digest="$(resolve_remote_digest "$RUN_IMAGE")"
           [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
           jq -n \
             --arg service "${SERVICE}" \
@@ -487,6 +520,25 @@ jobs:
               ;;
           esac
 
+          resolve_remote_digest() {
+            local image="$1"
+            local output digest
+            for attempt in 1 2 3 4 5; do
+              if output="$(docker buildx imagetools inspect "${image}" 2>/dev/null)"; then
+                digest="$(awk '/^Digest:/ {print $2; exit}' <<< "${output}")"
+                if [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+                  printf '%s\n' "${digest}"
+                  return 0
+                fi
+              fi
+              echo "Remote digest resolution failed for ${image} (attempt ${attempt}/5)." >&2
+              if [ "${attempt}" -lt 5 ]; then
+                sleep $((attempt * 5))
+              fi
+            done
+            return 1
+          }
+
           cleanup_images=()
           cleanup() {
             for image in "${cleanup_images[@]}"; do
@@ -512,7 +564,7 @@ jobs:
             expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"
             test "$(jq -r '.image' "${manifest}")" = "${expected_image}"
             digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${manifest}")"
-            remote_digest="$(docker buildx imagetools inspect "${expected_image}" | awk '/^Digest:/ {print $2; exit}')"
+            remote_digest="$(resolve_remote_digest "${expected_image}")"
             [[ "${remote_digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
             test "${remote_digest}" = "${digest}"
             expected_digest_ref="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}@${digest}"
