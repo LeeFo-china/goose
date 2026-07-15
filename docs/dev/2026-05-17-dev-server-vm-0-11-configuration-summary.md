@@ -2,6 +2,10 @@
 
 日期：2026-05-17
 
+> 2026-07-15 运维口径更新：本文保留 2026-05-17 的配置背景，镜像路径和可复制命令已
+> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
+> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+
 ## 1. 服务器用途
 
 `VM-0-11-ubuntu` 已从旧生产/原型用途清理出来，保留 3x-ui，同时作为第一版 `gooes-dev` 运行服务器。
@@ -66,9 +70,9 @@ gooes-cos-reconcile-worker-dev
 镜像 tag：
 
 ```text
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:dev
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:dev
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:dev
+useccr.ccs.tencentyun.com/america_goose/goose-api:dev
+useccr.ccs.tencentyun.com/america_goose/goose-admin:dev
+useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:dev
 ```
 
 端口：

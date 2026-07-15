@@ -2,6 +2,10 @@
 
 日期：2026-05-16
 
+> 2026-07-15 运维口径更新：本文保留 2026-05-16 的流程背景，镜像路径和可复制命令已
+> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
+> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+
 ## 目标
 
 新服务器已经切到 Docker Compose 部署，后续发布需要满足：
@@ -15,9 +19,9 @@
 
 | 服务 | 镜像 | Dockerfile | 工作流 |
 | --- | --- | --- | --- |
-| API | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant` | `docker/api.Dockerfile` | `.github/workflows/build-docker-images.yml` |
-| Admin | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant` | `docker/admin.Dockerfile` | `.github/workflows/build-docker-images.yml` |
-| 视频转文本 Worker | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant` | `docker/social-video-worker.Dockerfile` | `.github/workflows/build-docker-images.yml` |
+| API | `useccr.ccs.tencentyun.com/america_goose/goose-api:feature-multi-tenant` | `docker/api.Dockerfile` | `.github/workflows/build-docker-images.yml` |
+| Admin | `useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant` | `docker/admin.Dockerfile` | `.github/workflows/build-docker-images.yml` |
+| 视频转文本 Worker | `useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:feature-multi-tenant` | `docker/social-video-worker.Dockerfile` | `.github/workflows/build-docker-images.yml` |
 
 ### 调整点
 

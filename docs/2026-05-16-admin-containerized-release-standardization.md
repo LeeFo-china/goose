@@ -1,5 +1,9 @@
 # 2026-05-16 Admin 容器化发布流程规范
 
+> 2026-07-15 运维口径更新：本文保留 2026-05-16 的流程背景，镜像路径和可复制命令已
+> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
+> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+
 ## 1. 目标
 
 将 Admin 从“服务器本地临时构建”规范为仓库内可复现的容器化发布流程。
@@ -24,7 +28,7 @@
 Admin 镜像：
 
 ```text
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
+useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant
 ```
 
 构建阶段：
@@ -65,7 +69,7 @@ deploy/.env.admin.example
 
 | 变量 | 说明 | 推荐值 |
 | --- | --- | --- |
-| `GOOES_ADMIN_IMAGE` | Admin 镜像 | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant` |
+| `GOOES_ADMIN_IMAGE` | Admin 镜像 | `useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant` |
 | `GOOES_API_BASE_URL` | Admin 服务端访问 API 地址 | `http://gooes-api:3000` |
 | `NEXT_PUBLIC_GOOES_API_BASE_URL` | 浏览器侧 API 公网地址 | `https://api.goodcms.cn` |
 | `NEXT_PUBLIC_GOOES_H5_BASE_URL` | 浏览器侧 H5 公网地址 | `https://h5.goodcms.cn` |

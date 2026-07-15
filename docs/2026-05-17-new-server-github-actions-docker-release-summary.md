@@ -2,6 +2,10 @@
 
 日期：2026-05-17
 
+> 2026-07-15 运维口径更新：本文保留 2026-05-17 的流程背景，镜像路径和可复制命令已
+> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
+> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+
 ## 结论
 
 代码从 GitHub 发布到新服务器的链路已跑通。
@@ -70,17 +74,17 @@ RUNNER_NAME 必须等于 gooes-prod-vm-0-3
 当前业务镜像统一推送到腾讯 CCR：
 
 ```text
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant
+useccr.ccs.tencentyun.com/america_goose/goose-api:feature-multi-tenant
+useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant
+useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:feature-multi-tenant
 ```
 
 构建 workflow 会同时推送 commit SHA tag，用于回滚：
 
 ```text
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:<commit-sha>
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:<commit-sha>
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:<commit-sha>
+useccr.ccs.tencentyun.com/america_goose/goose-api:<commit-sha>
+useccr.ccs.tencentyun.com/america_goose/goose-admin:<commit-sha>
+useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:<commit-sha>
 ```
 
 回滚文档：
@@ -92,9 +96,9 @@ docs/2026-05-17-docker-release-sha-tag-rollback-plan.md
 新服务器 `/opt/supabase/docker/.env` 中已经配置：
 
 ```text
-GOOES_API_IMAGE=ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant
-GOOES_ADMIN_IMAGE=ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
-GOOES_SOCIAL_VIDEO_WORKER_IMAGE=ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant
+GOOES_API_IMAGE=useccr.ccs.tencentyun.com/america_goose/goose-api:feature-multi-tenant
+GOOES_ADMIN_IMAGE=useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant
+GOOES_SOCIAL_VIDEO_WORKER_IMAGE=useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:feature-multi-tenant
 ```
 
 ## 部署服务

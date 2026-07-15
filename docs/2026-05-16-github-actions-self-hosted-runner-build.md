@@ -2,6 +2,10 @@
 
 日期：2026-05-16
 
+> 2026-07-15 运维口径更新：本文保留 2026-05-16 的流程背景，镜像路径和可复制命令已
+> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
+> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+
 ## 背景
 
 GitHub hosted runner 构建业务镜像后推送腾讯 CCR 时，跨境上传耗时过长：
@@ -100,9 +104,9 @@ docker builder prune -a -f --filter "until=24h"
 ## 当前镜像目标
 
 ```text
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant
+useccr.ccs.tencentyun.com/america_goose/goose-api:feature-multi-tenant
+useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant
+useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:feature-multi-tenant
 ```
 
 ## 后续事项
