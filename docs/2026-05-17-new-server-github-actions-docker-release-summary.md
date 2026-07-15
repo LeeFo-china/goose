@@ -2,15 +2,16 @@
 
 日期：2026-05-17
 
-> 2026-07-15 运维口径更新：本文保留 2026-05-17 的流程背景，镜像路径和可复制命令已
-> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
-> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+> **历史归档，全文不可执行。** 本文只保留 2026-05-17 的流程和命令作为历史证据，任何
+> 命令、路径、Runner、分支或部署步骤都不得用于现行环境。2026-07-15 起的迁移边界、
+> production Strategy B 和生产 Web 独立发布链只以
+> `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；镜像路径更新不表示生产已部署。
 
 ## 结论
 
-代码从 GitHub 发布到新服务器的链路已跑通。
+截至 2026-05-17，代码从 GitHub 发布到新服务器的链路已跑通。
 
-当前发布路径：
+2026-05-17 的历史发布路径：
 
 ```text
 push feature/multi-tenant
@@ -71,7 +72,7 @@ RUNNER_NAME 必须等于 gooes-prod-vm-0-3
 
 ## 镜像仓库
 
-当前业务镜像统一推送到腾讯 CCR：
+截至 2026-05-17，业务镜像统一推送到腾讯 CCR：
 
 ```text
 useccr.ccs.tencentyun.com/america_goose/goose-api:feature-multi-tenant
@@ -93,7 +94,7 @@ useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:<commit-sha>
 docs/2026-05-17-docker-release-sha-tag-rollback-plan.md
 ```
 
-新服务器 `/opt/supabase/docker/.env` 中已经配置：
+2026-05-17 记录的新服务器 `/opt/supabase/docker/.env` 配置为：
 
 ```text
 GOOES_API_IMAGE=useccr.ccs.tencentyun.com/america_goose/goose-api:feature-multi-tenant
@@ -189,7 +190,7 @@ deploy / deploy: success
 
 说明：
 
-- 当前正常链路只触发一次 deploy。
+- 2026-05-17 的正常链路只触发一次 deploy。
 - deploy workflow 仍保留 concurrency：
 
 ```text
@@ -214,15 +215,15 @@ https://api.goodcms.cn/        HTTP 200
 https://admin.goodcms.cn/login HTTP 200
 ```
 
-## 当前发布方式
+## 2026-05-17 历史发布方式（仅作证据）
 
-日常发布只需要：
+2026-05-17 记录的日常发布操作（仅作历史证据）：
 
 ```bash
 git push origin feature/multi-tenant
 ```
 
-发布后观察：
+2026-05-17 发布后的观察命令（仅作历史证据）：
 
 ```bash
 gh run list --repo LeeFo-china/goose --branch feature/multi-tenant --limit 10
@@ -242,7 +243,7 @@ curl -sS -o /dev/null -w 'api %{http_code} %{time_total}\n' https://api.goodcms.
 curl -sS -o /dev/null -w 'admin %{http_code} %{time_total}\n' https://admin.goodcms.cn/login
 ```
 
-## 后续建议
+## 2026-05-17 记录的后续建议
 
 1. 观察 2-3 次正常业务发布，确认自动 deploy 稳定。
 2. 稳定后可以归档旧 PM2 deploy workflow。

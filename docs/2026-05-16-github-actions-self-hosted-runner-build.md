@@ -2,9 +2,10 @@
 
 日期：2026-05-16
 
-> 2026-07-15 运维口径更新：本文保留 2026-05-16 的流程背景，镜像路径和可复制命令已
-> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
-> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+> **历史归档，全文不可执行。** 本文只保留 2026-05-16 的流程和命令作为历史证据，任何
+> 命令、路径、Runner、分支或部署步骤都不得用于现行环境。2026-07-15 起的迁移边界、
+> production Strategy B 和生产 Web 独立发布链只以
+> `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；镜像路径更新不表示生产已部署。
 
 ## 背景
 
@@ -20,9 +21,9 @@ GitHub hosted runner 构建业务镜像后推送腾讯 CCR 时，跨境上传耗
 
 因此构建链路切到腾讯云 self-hosted runner。
 
-## 当前 runner
+## 2026-05-16 历史 Runner
 
-仓库当前可用 runner：
+仓库在 2026-05-16 记录的可用 Runner：
 
 ```text
 name: gooes-prod-vm-0-3
@@ -76,7 +77,9 @@ feature-multi-tenant
 
 其中 `feature-multi-tenant` 用于日常发布，`<GITHUB_SHA>` 用于手动回滚。
 
-Docker 部署 workflow 支持 `workflow_call` 和手动触发。当前 `feature/multi-tenant` 分支中，统一镜像构建 workflow 会在 API、Admin、Worker 三个镜像全部构建成功后通过 `workflow_call` 调用一次部署，执行：
+Docker 部署 workflow 当时支持 `workflow_call` 和手动触发。2026-05-16 的
+`feature/multi-tenant` 分支中，统一镜像构建 workflow 会在 API、Admin、Worker 三个镜像
+全部构建成功后通过 `workflow_call` 调用一次部署，执行：
 
 ```bash
 cd /opt/supabase/docker
@@ -101,7 +104,7 @@ docker builder prune -a -f --filter "until=24h"
 
 旧 PM2 部署 workflow `.github/workflows/deploy.yml` 已取消 push 自动触发，仅保留手动触发。
 
-## 当前镜像目标
+## 2026-05-16 历史镜像目标
 
 ```text
 useccr.ccs.tencentyun.com/america_goose/goose-api:feature-multi-tenant
@@ -109,7 +112,7 @@ useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant
 useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:feature-multi-tenant
 ```
 
-## 后续事项
+## 2026-05-16 记录的后续事项
 
 新业务服务器 `VM-0-3-ubuntu` 已安装专用 runner，服务名：
 

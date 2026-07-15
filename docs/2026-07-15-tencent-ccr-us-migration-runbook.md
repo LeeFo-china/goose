@@ -161,6 +161,38 @@ printf 'WORKTREE_ROOT=%s\nRELEASE_TAG=%s\nMERGED_MAIN_SHA=%s\n' \
 peel 到同一 SHA。最后再次核对远端 `refs/tags/${RELEASE_TAG}` 存在、对象与本地一致且解析到
 `MERGED_MAIN_SHA`，然后才允许 dispatch。
 
+### Production baseline before dispatch
+
+完成 Release Tag preflight 后、运行下面任何 production workflow dispatch 之前，必须先在生产
+服务器记录 baseline。稳定快照包含 container ID、name、`Config.Image`、image ID、
+`org.opencontainers.image.revision`、`.State.StartedAt` 和 `.RestartCount`；后两个字段用于证明
+期间没有 restart。health/status 单独记录，不能混入稳定 diff。下面两个 Bash 块都必须在同一
+生产服务器会话执行；完成后回到仍保留 `RELEASE_TAG` 的预检 shell 再 dispatch。
+
+```bash
+set -euo pipefail
+mapfile -t containers < <(
+  docker ps -a --format '{{.Names}}' | grep '^gooes-' | LC_ALL=C sort
+)
+test "${#containers[@]}" -gt 0
+docker inspect --format \
+  '{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.Image}}|{{index .Config.Labels "org.opencontainers.image.revision"}}|{{.State.StartedAt}}|{{.RestartCount}}' \
+  "${containers[@]}" \
+  | LC_ALL=C sort -t '|' -k2,2 \
+  > /tmp/gooes-prod-before-ccr-migration.immutable.txt
+docker ps -a --format '{{.Names}}|{{.Status}}' \
+  | grep '^gooes-' \
+  | LC_ALL=C sort \
+  > /tmp/gooes-prod-before-ccr-migration.health-status.txt
+```
+
+baseline 文件存在且非空后，才允许继续；否则禁止 dispatch：
+
+```bash
+test -s /tmp/gooes-prod-before-ccr-migration.immutable.txt
+test -s /tmp/gooes-prod-before-ccr-migration.health-status.txt
+```
+
 生产服务候选构建和校验：
 
 ```bash
@@ -232,28 +264,8 @@ curl --noproxy '*' -fsS https://www-dev.goodcms.cn/ >/dev/null
 四个 production 镜像均完成 manifest 和生产 Runner pull 校验后，在
 `/opt/supabase/docker` 同时备份 active `.env` 和 `.env.admin`。只更新 API、Admin 和
 social-video-worker 的 `:main` 引用；cos-reconcile-worker 继续复用 API。生产 Web 配置保持
-不变，因为本次迁移没有部署 Web。
-
-在任何 production 构建前记录不可变运行时快照。稳定 diff 只包含 container ID、name、
-`Config.Image`、image ID 和 `org.opencontainers.image.revision`；health/status 单独记录，不能
-混入不可变 diff：
-
-```bash
-set -euo pipefail
-mapfile -t containers < <(
-  docker ps -a --format '{{.Names}}' | grep '^gooes-' | LC_ALL=C sort
-)
-test "${#containers[@]}" -gt 0
-docker inspect --format \
-  '{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.Image}}|{{index .Config.Labels "org.opencontainers.image.revision"}}' \
-  "${containers[@]}" \
-  | LC_ALL=C sort -t '|' -k2,2 \
-  > /tmp/gooes-prod-before-ccr-migration.immutable.txt
-docker ps -a --format '{{.Names}}|{{.Status}}' \
-  | grep '^gooes-' \
-  | LC_ALL=C sort \
-  > /tmp/gooes-prod-before-ccr-migration.health-status.txt
-```
+不变，因为本次迁移没有部署 Web。这里使用 workflow dispatch 之前已经生成的 production
+baseline，不得在构建后重新生成或覆盖 baseline。
 
 ```bash
 set -euo pipefail
@@ -284,9 +296,10 @@ printf 'Production backups: %s %s\n' \
   "${env_backup}" "${admin_backup}"
 ```
 
-本次迁移禁止执行 `docker compose pull`、`docker compose up`、`docker restart`、容器重建或
-任何 Nginx 命令。只允许用 `docker compose ... config --images` 解析未来默认引用，并再次
-比较生产容器快照；运行中的生产容器镜像和 ID 必须保持不变。
+本次迁移禁止执行 `docker compose pull`、`docker compose up`、`docker restart`，也禁止
+`docker stop/start/run/rm/kill`、容器重建或任何其他容器生命周期与 Nginx 操作。只允许用
+`docker compose ... config --images` 解析未来默认引用，并再次比较生产容器快照；运行中的
+生产容器 ID、镜像、启动时间和重启计数必须保持不变。
 
 ```bash
 set -euo pipefail
@@ -297,7 +310,7 @@ mapfile -t containers < <(
 )
 test "${#containers[@]}" -gt 0
 docker inspect --format \
-  '{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.Image}}|{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+  '{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.Image}}|{{index .Config.Labels "org.opencontainers.image.revision"}}|{{.State.StartedAt}}|{{.RestartCount}}' \
   "${containers[@]}" \
   | LC_ALL=C sort -t '|' -k2,2 \
   > /tmp/gooes-prod-after-ccr-build.immutable.txt
@@ -338,10 +351,11 @@ revision 证据的镜像。不得仅凭可变 branch tag 回滚。紧急状态�
 | Development config | 实际 `.env.bak.ccr-us-<stamp>` 文件名；`docker compose ... config --images` 输出；API/Admin/Web 健康端点结果 |
 | Production service candidate | `release-production.yml` Run ID、不可变 `production-release-candidate` artifact、API/Admin/social-video-worker manifest 和生产 Runner pull 校验结果 |
 | Production Web candidate | 独立 `build-docker-images.yml` Run ID、Web manifest、远端 SHA digest、不可变 digest pull、revision 校验结果；没有 Gate 或 deploy run |
-| Production safety | 构建前后按 name 排序的稳定 `docker inspect` 快照及其无差异 diff，字段包含 container ID、name、`Config.Image`、image ID、revision；health/status 单独记录；API/Admin/官网状态无回归；没有 Compose、restart 或 Nginx reload 记录 |
+| Production safety | 首次 production workflow dispatch 前和候选构建后的稳定 `docker inspect` 快照及其无差异 diff，字段包含 container ID、name、`Config.Image`、image ID、revision、`.State.StartedAt`、`.RestartCount`；health/status 单独记录；API/Admin/官网状态无回归；没有 Compose、容器生命周期变更或 Nginx reload 记录 |
 | Production config | 实际 `.env.bak.ccr-us-<stamp>` 与 `.env.admin.bak.ccr-us-<stamp>` 文件名；API/Admin/social/cos 未来引用解析到美国仓库；Web 配置保持不变 |
 
 生产验收的硬条件是构建前后稳定 immutable snapshot 的 `diff -u` 无输出，尤其是所有生产
-容器 ID、`Config.Image`、image ID 和 revision 不变。health/status 只作为单独运行状态证据，
-不能用于该 immutable diff。只要出现容器重建、Web Gate/Deploy、Nginx 配置变化或 reload，
-本次操作就不再符合 Strategy B，必须停止并按事故流程记录和处置。
+容器 ID、`Config.Image`、image ID、revision、`.State.StartedAt` 和 `.RestartCount` 不变。
+health/status 只作为单独运行状态证据，不能用于该 immutable diff。只要出现容器 restart、
+重建或其他生命周期变更、Web Gate/Deploy、Nginx 配置变化或 reload，本次操作就不再符合
+Strategy B，必须停止并按事故流程记录和处置。

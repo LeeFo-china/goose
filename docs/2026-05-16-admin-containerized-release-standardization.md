@@ -1,8 +1,9 @@
 # 2026-05-16 Admin 容器化发布流程规范
 
-> 2026-07-15 运维口径更新：本文保留 2026-05-16 的流程背景，镜像路径和可复制命令已
-> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
-> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+> **历史归档，全文不可执行。** 本文只保留 2026-05-16 的流程和命令作为历史证据，任何
+> 命令、路径、Runner、分支或部署步骤都不得用于现行环境。2026-07-15 起的迁移边界、
+> production Strategy B 和生产 Web 独立发布链只以
+> `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；镜像路径更新不表示生产已部署。
 
 ## 1. 目标
 
@@ -112,9 +113,9 @@ tsconfig.base.json
 - `Settings -> Actions -> General -> Workflow permissions`
 - 选择 `Read and write permissions`
 
-## 6. 服务器发布命令
+## 6. 2026-05-16 历史服务器发布命令（仅作证据）
 
-在新服务器 `/opt/supabase/docker` 执行：
+以下命令记录了 2026-05-16 在新服务器 `/opt/supabase/docker` 的操作，仅作历史证据：
 
 ```bash
 docker compose \
@@ -149,9 +150,9 @@ curl -I https://admin.goodcms.cn/login
 5. `https://admin.goodcms.cn/login` 返回非 5xx。
 6. 登录后能正常访问平台概览、租户后台常用页面。
 
-## 8. 后续优化
+## 8. 2026-05-16 记录的后续优化
 
-当前已经采用“自动构建镜像，服务器自动拉取重启”。
+截至 2026-05-16 已采用“自动构建镜像，服务器自动拉取重启”。
 
 后续可继续推进：
 
