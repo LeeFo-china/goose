@@ -660,9 +660,13 @@ describe("production migration precheck workflow", () => {
 });
 
 describe("reusable build workflow", () => {
-  const rerunGuardStepName = "Reject workflow re-runs";
-  const rerunGuardMarker = `      - name: ${rerunGuardStepName}`;
+  const validationRerunGuardStepName = "Reject workflow re-runs";
+  const buildRerunGuardStepName = "Reject build job re-runs";
+  const validationRerunGuardMarker =
+    `      - name: ${validationRerunGuardStepName}`;
+  const buildRerunGuardMarker = `      - name: ${buildRerunGuardStepName}`;
   const checkoutMarker = "      - uses: actions/checkout@v6";
+  const buildCheckoutMarker = "      - name: Checkout repository";
   const resolveMarker = "      - name: Resolve build plan";
   const rerunGuardTestLine = '          if ! test "${GITHUB_RUN_ATTEMPT}" = 1; then';
   const rerunGuardError =
@@ -671,33 +675,67 @@ describe("reusable build workflow", () => {
   function satisfiesRerunAttemptContract(workflow: string): boolean {
     const validationJobStart = workflow.indexOf("  validate-request:");
     const buildJobStart = workflow.indexOf("  build:", validationJobStart + 1);
-    if (validationJobStart < 0 || buildJobStart <= validationJobStart) {
-      return false;
-    }
-
-    const validationJob = workflow.slice(validationJobStart, buildJobStart);
-    const guardStart = validationJob.indexOf(rerunGuardMarker);
-    const checkoutStart = validationJob.indexOf(checkoutMarker);
-    const resolveStart = validationJob.indexOf(resolveMarker);
+    const productionPullJobStart = workflow.indexOf(
+      "  verify-production-pull:",
+      buildJobStart + 1,
+    );
     if (
-      guardStart < 0 ||
-      checkoutStart <= guardStart ||
-      resolveStart <= checkoutStart
+      validationJobStart < 0 ||
+      buildJobStart <= validationJobStart ||
+      productionPullJobStart <= buildJobStart
     ) {
       return false;
     }
 
-    const guardEndCandidates = [checkoutStart, resolveStart].filter(
-      (index) => index > guardStart,
+    const validationJob = workflow.slice(validationJobStart, buildJobStart);
+    const validationGuardStart = validationJob.indexOf(
+      validationRerunGuardMarker,
     );
-    const guardEnd = Math.min(...guardEndCandidates);
-    const guardStep = validationJob.slice(guardStart, guardEnd);
-    return (
+    const validationCheckoutStart = validationJob.indexOf(checkoutMarker);
+    const resolveStart = validationJob.indexOf(resolveMarker);
+    if (
+      validationGuardStart < 0 ||
+      validationCheckoutStart <= validationGuardStart ||
+      resolveStart <= validationCheckoutStart
+    ) {
+      return false;
+    }
+
+    const validationGuardEndCandidates = [
+      validationCheckoutStart,
+      resolveStart,
+    ].filter((index) => index > validationGuardStart);
+    const validationGuardEnd = Math.min(...validationGuardEndCandidates);
+    const validationGuardStep = validationJob.slice(
+      validationGuardStart,
+      validationGuardEnd,
+    );
+
+    const buildJob = workflow.slice(buildJobStart, productionPullJobStart);
+    const buildStepsStart = buildJob.indexOf("    steps:");
+    const buildGuardStart = buildJob.indexOf(buildRerunGuardMarker);
+    const firstBuildStepStart = buildJob.indexOf("      - ", buildStepsStart);
+    const buildCheckoutStart = buildJob.indexOf(buildCheckoutMarker);
+    if (
+      buildStepsStart < 0 ||
+      buildGuardStart !== firstBuildStepStart ||
+      buildCheckoutStart <= buildGuardStart
+    ) {
+      return false;
+    }
+    const buildGuardStep = buildJob.slice(buildGuardStart, buildCheckoutStart);
+
+    const isValidGuardStep = (guardStep: string): boolean =>
       guardStep.includes("          set -euo pipefail") &&
       guardStep.includes(rerunGuardTestLine) &&
       guardStep.includes(rerunGuardError) &&
-      !guardStep.includes("          if:") &&
-      (validationJob.match(/GITHUB_RUN_ATTEMPT/g) ?? []).length === 1
+      !guardStep.includes("        if:");
+
+    return (
+      isValidGuardStep(validationGuardStep) &&
+      isValidGuardStep(buildGuardStep) &&
+      (validationJob.match(/GITHUB_RUN_ATTEMPT/g) ?? []).length === 1 &&
+      (buildJob.match(/GITHUB_RUN_ATTEMPT/g) ?? []).length === 1
     );
   }
 
@@ -925,13 +963,25 @@ describe("reusable build workflow", () => {
     );
   });
 
-  test("rejects workflow re-runs before checkout, plan resolution, build, push, or artifact upload", () => {
+  test("guards both complete workflow re-runs and isolated build job re-runs before writes", () => {
     expect(satisfiesRerunAttemptContract(buildWorkflow)).toBe(true);
 
-    const guardStep = sliceWorkflowStep(buildWorkflow, rerunGuardStepName);
-    const deletedGuard = buildWorkflow.replace(guardStep, "");
-    expect(deletedGuard).not.toBe(buildWorkflow);
-    expect(satisfiesRerunAttemptContract(deletedGuard)).toBe(false);
+    const validationGuardStep = sliceWorkflowStep(
+      buildWorkflow,
+      validationRerunGuardStepName,
+    );
+    const buildGuardStart = buildWorkflow.indexOf(buildRerunGuardMarker);
+    expect(buildGuardStart).toBeGreaterThanOrEqual(0);
+    if (buildGuardStart < 0) {
+      return;
+    }
+    const buildGuardStep = sliceWorkflowStepAt(buildWorkflow, buildGuardStart);
+
+    for (const deletedGuard of [validationGuardStep, buildGuardStep]) {
+      const mutatedWorkflow = buildWorkflow.replace(deletedGuard, "");
+      expect(mutatedWorkflow).not.toBe(buildWorkflow);
+      expect(satisfiesRerunAttemptContract(mutatedWorkflow)).toBe(false);
+    }
 
     const attemptTwoAllowed = buildWorkflow.replace(
       rerunGuardTestLine,
@@ -941,27 +991,69 @@ describe("reusable build workflow", () => {
     expect(satisfiesRerunAttemptContract(attemptTwoAllowed)).toBe(false);
 
     const guardAfterResolve = buildWorkflow
-      .replace(guardStep, "")
-      .replace(resolveMarker, `${resolveMarker}\n${guardStep}`);
+      .replace(validationGuardStep, "")
+      .replace(resolveMarker, `${resolveMarker}\n${validationGuardStep}`);
     expect(guardAfterResolve).not.toBe(buildWorkflow);
     expect(satisfiesRerunAttemptContract(guardAfterResolve)).toBe(false);
+
+    for (const laterStepName of ["Checkout repository", "Login to Tencent CCR"]) {
+      const laterStep = sliceWorkflowStep(buildWorkflow, laterStepName);
+      const movedBuildGuard = buildWorkflow
+        .replace(buildGuardStep, "")
+        .replace(laterStep, `${laterStep}${buildGuardStep}`);
+      expect(movedBuildGuard).not.toBe(buildWorkflow);
+      expect(satisfiesRerunAttemptContract(movedBuildGuard)).toBe(false);
+    }
   });
 
-  test("allows attempt one and fails attempt two with actionable guidance", () => {
-    const guardScript = extractWorkflowRunScript(
-      sliceWorkflowStep(buildWorkflow, rerunGuardStepName),
+  test("limits the job-level re-run guard to the image-writing build job", () => {
+    const validationJob = sliceWorkflowJob(
+      buildWorkflow,
+      "validate-request",
+      "build",
     );
-    const runGuard = (attempt: string): ReturnType<typeof Bun.spawnSync> =>
-      Bun.spawnSync(["bash", "-c", guardScript], {
-        env: { GITHUB_RUN_ATTEMPT: attempt },
-        stderr: "pipe",
-        stdout: "pipe",
-      });
+    const buildJob = sliceWorkflowJob(
+      buildWorkflow,
+      "build",
+      "verify-production-pull",
+    );
+    const productionPullJob = buildWorkflow.slice(
+      buildWorkflow.indexOf("  verify-production-pull:"),
+    );
 
-    expect(runGuard("1").exitCode).toBe(0);
-    const rejectedRerun = runGuard("2");
-    expect(rejectedRerun.exitCode).not.toBe(0);
-    expect(rejectedRerun.stderr.toString()).toContain(rerunGuardError);
+    expect(validationJob).toContain(validationRerunGuardMarker);
+    expect(buildJob).not.toContain(validationRerunGuardMarker);
+    expect(buildJob).toContain(buildRerunGuardMarker);
+    expect(buildJob).toContain('docker push "$RUN_IMAGE"');
+    expect(productionPullJob).not.toContain("GITHUB_RUN_ATTEMPT");
+    expect(productionPullJob).not.toContain(buildRerunGuardMarker);
+  });
+
+  test("allows attempt one and rejects attempt two in each independently executed job", () => {
+    for (const guardStepName of [
+      validationRerunGuardStepName,
+      buildRerunGuardStepName,
+    ]) {
+      const guardStart = buildWorkflow.indexOf(`      - name: ${guardStepName}`);
+      expect(guardStart).toBeGreaterThanOrEqual(0);
+      if (guardStart < 0) {
+        continue;
+      }
+      const guardScript = extractWorkflowRunScript(
+        sliceWorkflowStepAt(buildWorkflow, guardStart),
+      );
+      const runGuard = (attempt: string): ReturnType<typeof Bun.spawnSync> =>
+        Bun.spawnSync(["bash", "-c", guardScript], {
+          env: { GITHUB_RUN_ATTEMPT: attempt },
+          stderr: "pipe",
+          stdout: "pipe",
+        });
+
+      expect(runGuard("1").exitCode).toBe(0);
+      const rejectedRerun = runGuard("2");
+      expect(rejectedRerun.exitCode).not.toBe(0);
+      expect(rejectedRerun.stderr.toString()).toContain(rerunGuardError);
+    }
   });
 
   test("distinguishes a direct push from a reusable call whose caller event is push", () => {

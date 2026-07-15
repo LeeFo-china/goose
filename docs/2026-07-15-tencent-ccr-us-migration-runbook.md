@@ -67,9 +67,12 @@ Web 有意排除并保持独立。
 任何失败的 `build-docker-images.yml` 构建都禁止使用 GitHub Actions 的 **Re-run jobs** 或
 **Re-run all jobs**。重新运行会保留同一个 Run ID，存在覆盖同名 run-scoped evidence Tag 的风险；
 必须重新发起 workflow dispatch，或由新的 push/caller 创建全新的 workflow run。工作流在
-`validate-request` 的首个可信步骤强制要求 `GITHUB_RUN_ATTEMPT=1`，对 push、
-`workflow_dispatch` 和 `workflow_call` 一视同仁；attempt 大于 1 会 fail-closed，因此
-`run-<Run ID>-<commit SHA>` Tag 在允许执行的构建中保持不可变。
+`validate-request` 的首个步骤强制要求 `GITHUB_RUN_ATTEMPT=1`，使完整 run 尽早失败；每个
+build matrix service 也在 checkout、权限检查、CCR 登录及 Docker build/push 前，以无条件首步
+执行同一 guard。对 push、`workflow_dispatch` 和 `workflow_call` 一视同仁；即使单独选择
+**Re-run failed jobs** 或指定 Build Job，attempt 大于 1 也会在任何远端镜像写入前 fail-closed，
+因此 `run-<Run ID>-<commit SHA>` Tag 在允许执行的构建中保持不可变。只读且不写远端镜像的
+production pull verification 不需要该 guard。
 
 该任务不执行 `docker compose`、不创建或重启容器、不修改 Nginx。正常生产服务部署仍必须
 再次运行 `release-production.yml operation=deploy`，提供候选 `build_run_id`、`commit_sha`，

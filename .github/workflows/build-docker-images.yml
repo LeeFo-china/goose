@@ -237,6 +237,14 @@ jobs:
             image_repo: goose-web
 
     steps:
+      - name: Reject build job re-runs
+        run: |
+          set -euo pipefail
+          if ! test "${GITHUB_RUN_ATTEMPT}" = 1; then
+            echo "Workflow re-runs are forbidden because they can overwrite immutable image evidence. Start a new workflow dispatch/run; do not use Re-run jobs or Re-run all jobs." >&2
+            exit 1
+          fi
+
       - name: Checkout repository
         if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         uses: actions/checkout@v6
