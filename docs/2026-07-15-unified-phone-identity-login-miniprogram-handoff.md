@@ -371,22 +371,51 @@ dispatchByAuthMode(result.auth);
 
 ## 8. 测试手机号矩阵
 
-测试数据不要写入文档中的真实手机号。建议用下面矩阵在 dev 环境登记并由小程序团队线下共享明细：
+dev 环境固定使用 `19900004xxx` 段假号。每轮共享 dev 联调前，后端先重新执行
+`scripts/dev/seed-dev.sql`，把可绑定身份恢复到未绑定状态。
 
-| 编号 | 场景 | 预期 |
-| --- | --- | --- |
-| P1 | 手机号没有客户、员工、合伙人成员 | `visitor_verified`，进入访客首页，可提交装修需求 |
-| P2 | 手机号只有一个客户身份 | `authenticated`，进入客户端 |
-| P3 | 手机号只有一个员工身份 | `authenticated`，进入员工端 |
-| P4 | 手机号只有一个城市合伙人成员身份 | `authenticated`，进入合伙人端 |
-| P5 | 手机号同时命中客户和员工 | `selection_required`，展示两个候选 |
-| P6 | 手机号命中多个租户客户 | `selection_required`，每个租户客户一条候选 |
-| P7 | P6 带匹配租户的 `share_token` | 匹配分享租户的客户候选排第一 |
-| P8 | 客户或员工身份已绑定其他有效微信 | 候选 `binding_state=rebind_required` 或选择时报 `WECHAT_ALREADY_BOUND` |
-| P9 | 合伙人成员已绑定其他有效微信 | 候选 `binding_state=rebind_required` 或选择时报 `PARTNER_MEMBER_ALREADY_BOUND` |
-| P10 | 多身份选择页停留超过 300 秒再提交 | `IDENTITY_SELECTION_EXPIRED` |
-| P11 | 多身份选择页重复点击同一候选 | 只登录一次，重复请求幂等成功 |
-| P12 | 验证码错误 / 过期 / 频繁发送 | 分别返回对应短信错误码 |
+| 编号 | 手机号 | share_token | 场景 | 预期 |
+| --- | --- | --- | --- | --- |
+| P1 | `19900004001` | - | 零身份 | `visitor_verified`，进入访客态，可提交装修需求 |
+| P2 | `19900004002` | - | 单客户 | `authenticated`，`authMode=customer` |
+| P3 | `19900004003` | - | 单员工 | `authenticated`，`authMode=tenant_employee` |
+| P4 | `19900004004` | - | 单城市合伙人成员 | `authenticated`，`authMode=platform_partner` |
+| P5 | `19900004005` | - | 客户 + 员工多身份 | `selection_required`，展示两个候选 |
+| P6 | `19900004006` | - | 跨租户多客户 | `selection_required`，展示两个客户候选 |
+| P7 | `19900004006` | `ts_dev_phone_identity_b` | 跨租户多客户 + 分享租户 | `selection_required`，测试公司 B 客户候选排第一 |
+| P8 | `19900004008` | - | 客户已绑定其他有效微信 | `WECHAT_ALREADY_BOUND`，返回可换绑上下文 |
+| P9 | `19900004009` | - | 合伙人成员已绑定其他有效微信 | `PARTNER_MEMBER_ALREADY_BOUND` |
+
+`selection_token` 过期和幂等测试复用 P5 或 P6：
+
+- 选择页停留超过 300 秒再提交：`IDENTITY_SELECTION_EXPIRED`。
+- 同一 `selection_token` 重复选择同一候选：幂等返回同一身份登录成功。
+- 同一 `selection_token` 已消费后选择其他候选：`IDENTITY_SELECTION_CONSUMED`。
+
+### 8.1 dev 验证码获取
+
+统一手机号登录不使用固定万能码。`send-code` 会生成随机 6 位码并写入
+`sms_verification_codes`，场景固定为 `login_identity`。
+
+后端联调值班可在 Orange 调用 `send-code` 后查最近一条未过期验证码：
+
+```bash
+GOOES_ALLOW_DEV_CODE_LOOKUP=true \
+PHONE_IDENTITY_LOGIN_PHONE=19900004002 \
+bun run api:phone-identity-latest-code
+```
+
+如果在 git worktree 中执行，且 `.env` 不在当前 worktree 根目录，额外指定：
+`GOOES_ENV_FILE=/Users/leefo/Public/work/gooes/.env`。
+
+也可以传 CLI 参数：
+
+```bash
+GOOES_ALLOW_DEV_CODE_LOOKUP=true \
+bun run api:phone-identity-latest-code -- --phone=19900004002
+```
+
+该脚本只用于 dev 联调，不对小程序开放，不部署为公开接口。
 
 ## 9. dev 发布门禁
 
