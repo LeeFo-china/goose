@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const buildWorkflow = readFileSync(
   new URL("../.github/workflows/build-docker-images.yml", import.meta.url),
@@ -220,6 +228,79 @@ function extractWorkflowRunScript(step: string): string {
     ...scriptLines.map((line) => line.match(/^\s*/)?.[0].length ?? 0),
   );
   return scriptLines.map((line) => line.slice(indentation)).join("\n");
+}
+
+function extractShellFunction(script: string, functionName: string): string {
+  const lines = script.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `${functionName}() {`);
+  const end = lines.findIndex((line, index) => index > start && line.trim() === "}");
+
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  return lines.slice(start, end + 1).join("\n");
+}
+
+type DigestRetryMockMode = "always-fail" | "nonzero-valid" | "succeed-fifth";
+
+function runDigestRetryHelper(
+  step: string,
+  mode: DigestRetryMockMode,
+): { attempts: number; exitCode: number; stdout: string } {
+  const root = mkdtempSync(join(tmpdir(), "ccr-digest-retry-"));
+  const attemptsPath = join(root, "attempts");
+  writeFileSync(attemptsPath, "0\n");
+  const digest = `sha256:${"a".repeat(64)}`;
+  const helper = extractShellFunction(
+    extractWorkflowRunScript(step),
+    "resolve_remote_digest",
+  );
+  const dockerMock = `
+sleep() { :; }
+docker() {
+  local attempt
+  attempt="$(cat "\${ATTEMPT_FILE}")"
+  attempt=$((attempt + 1))
+  printf '%s\\n' "\${attempt}" > "\${ATTEMPT_FILE}"
+  case "\${MOCK_MODE}" in
+    always-fail)
+      return 42
+      ;;
+    nonzero-valid)
+      printf 'Digest: ${digest}\\n'
+      return 42
+      ;;
+    succeed-fifth)
+      if [ "\${attempt}" -lt 5 ]; then
+        return 42
+      fi
+      printf 'Digest: ${digest}\\n'
+      return 0
+      ;;
+  esac
+}
+`;
+
+  try {
+    const result = Bun.spawnSync(
+      ["bash", "-c", `${dockerMock}\n${helper}\nresolve_remote_digest test-image`],
+      {
+        env: {
+          ...process.env,
+          ATTEMPT_FILE: attemptsPath,
+          MOCK_MODE: mode,
+        },
+        stderr: "pipe",
+        stdout: "pipe",
+      },
+    );
+    return {
+      attempts: Number.parseInt(readFileSync(attemptsPath, "utf8"), 10),
+      exitCode: result.exitCode,
+      stdout: result.stdout.toString().trim(),
+    };
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
 }
 
 function sliceWorkflowStepAt(workflow: string, start: number): string {
@@ -869,7 +950,7 @@ describe("reusable build workflow", () => {
     productionTagRegexLine,
     "\n  build:",
     "      - name: Login to Tencent CCR",
-    '          docker push "$SHA_IMAGE"',
+    '          push_image "$SHA_IMAGE"',
     "\n  verify-production-pull:",
   ] as const;
   const productionPullJobStepOrderedFragments = [
@@ -942,7 +1023,7 @@ describe("reusable build workflow", () => {
   const manifestDigestLine =
     "            digest=\"$(jq -er '.digest | select(type == \"string\" and test(\"^sha256:[a-f0-9]{64}$\"))' \"${manifest}\")\"";
   const remoteDigestResolutionLine =
-    "            remote_digest=\"$(docker buildx imagetools inspect \"${expected_image}\" | awk '/^Digest:/ {print $2; exit}')\"";
+    '            remote_digest="$(resolve_remote_digest "${expected_image}")"';
   const remoteDigestRegexLine =
     '            [[ "${remote_digest}" =~ ^sha256:[a-f0-9]{64}$ ]]';
   const remoteDigestComparisonLine =
@@ -1126,7 +1207,7 @@ describe("reusable build workflow", () => {
     expect(validationJob).toContain(validationRerunGuardMarker);
     expect(buildJob).not.toContain(validationRerunGuardMarker);
     expect(buildJob).toContain(buildRerunGuardMarker);
-    expect(buildJob).toContain('docker push "$RUN_IMAGE"');
+    expect(buildJob).toContain('push_image "$RUN_IMAGE"');
     expect(productionPullJob).not.toContain("GITHUB_RUN_ATTEMPT");
     expect(productionPullJob).not.toContain(buildRerunGuardMarker);
   });
@@ -1194,7 +1275,7 @@ describe("reusable build workflow", () => {
     }
     expect(buildJob).toContain("needs: validate-request");
     expect(buildJob).toContain("      - name: Login to Tencent CCR");
-    expect(buildJob).toContain('          docker push "$SHA_IMAGE"');
+    expect(buildJob).toContain('          push_image "$SHA_IMAGE"');
     expect(validationJob).not.toContain("docker push");
     let previousBoundaryEnd = 0;
     for (const fragment of productionMatrixBoundaryOrderedFragments) {
@@ -1209,8 +1290,8 @@ describe("reusable build workflow", () => {
 
     expect(buildStep).toContain('RUN_IMAGE="${IMAGE_BASE}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"');
     expect(buildStep.match(/-t "\$RUN_IMAGE"/g)).toHaveLength(4);
-    expect(buildStep).toContain('docker push "$RUN_IMAGE"');
-    expect(buildStep).toContain('docker buildx imagetools inspect "$RUN_IMAGE"');
+    expect(buildStep).toContain('push_image "$RUN_IMAGE"');
+    expect(buildStep).toContain('docker buildx imagetools inspect "${image}"');
     expect(buildStep).not.toContain('docker buildx imagetools inspect "$SHA_IMAGE"');
     expect(buildStep).toContain('--arg image "${RUN_IMAGE}"');
     expect(buildStep).toContain('--argjson build_run_id "${GITHUB_RUN_ID}"');
@@ -1222,6 +1303,126 @@ describe("reusable build workflow", () => {
     expect(developmentRunImage).not.toBe(productionRunImage);
     expect(developmentRunImage).toEndWith(`run-101-${sha}`);
     expect(productionRunImage).toEndWith(`run-202-${sha}`);
+  });
+
+  test("retries CCR pushes and remote digest resolution without rebuilding", () => {
+    const buildStep = sliceWorkflowStep(buildWorkflow, "Build and push image");
+    const pushFunctionStart = buildStep.indexOf("          push_image() {");
+    const digestFunctionStart = buildStep.indexOf(
+      "          resolve_remote_digest() {",
+    );
+    const pushFunction = buildStep.slice(
+      pushFunctionStart,
+      digestFunctionStart,
+    );
+    const digestFunction = buildStep.slice(
+      digestFunctionStart,
+      buildStep.indexOf("\n\n          case", digestFunctionStart),
+    );
+
+    expect(pushFunctionStart).toBeGreaterThanOrEqual(0);
+    expect(digestFunctionStart).toBeGreaterThan(pushFunctionStart);
+    expect(pushFunction.match(/for attempt in 1 2 3 4 5; do/g)).toHaveLength(1);
+    expect(pushFunction.match(/docker push "\$\{image\}"/g)).toHaveLength(1);
+    expect(buildStep.match(/^\s*(?:if )?docker push\b/gm)).toHaveLength(1);
+    expect(pushFunction.trimEnd()).toEndWith("return 1\n          }");
+    expect(pushFunction).not.toMatch(/\bdocker (?:build(?:\s|$)|buildx build(?:\s|$))/);
+    expect(digestFunction.match(/for attempt in 1 2 3 4 5; do/g)).toHaveLength(1);
+    expect(
+      digestFunction.match(/docker buildx imagetools inspect "\$\{image\}"/g),
+    ).toHaveLength(1);
+    expect(buildStep.match(/docker buildx imagetools inspect/g)).toHaveLength(1);
+    expect(digestFunction).toContain(
+      '[[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]',
+    );
+    expect(digestFunction.trimEnd()).toEndWith("return 1\n          }");
+    expect(digestFunction).not.toMatch(/\bdocker (?:build(?:\s|$)|buildx build(?:\s|$))/);
+    expect(buildStep).toContain('push_image "$BRANCH_IMAGE"');
+    expect(buildStep).toContain('push_image "$SHA_IMAGE"');
+    expect(buildStep).toContain('push_image "$RUN_IMAGE"');
+    expect(buildStep).toContain('digest="$(resolve_remote_digest "$RUN_IMAGE")"');
+    expect(buildStep).not.toContain('\n          docker push "$BRANCH_IMAGE"');
+    expect(buildStep).not.toContain('\n          docker push "$SHA_IMAGE"');
+    expect(buildStep).not.toContain('\n          docker push "$RUN_IMAGE"');
+    expect(buildStep.match(/\bdocker build\b/g)).toHaveLength(4);
+  });
+
+  test("retries production remote digest resolution before immutable pull", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const pullStep = sliceWorkflowStep(pullJob, "Pull and verify immutable images");
+    const digestFunctionStart = pullStep.indexOf(
+      "          resolve_remote_digest() {",
+    );
+    const digestFunction = pullStep.slice(
+      digestFunctionStart,
+      pullStep.indexOf("\n\n          cleanup_images", digestFunctionStart),
+    );
+
+    expect(digestFunctionStart).toBeGreaterThanOrEqual(0);
+    expect(digestFunction.match(/for attempt in 1 2 3 4 5; do/g)).toHaveLength(1);
+    expect(
+      digestFunction.match(/docker buildx imagetools inspect "\$\{image\}"/g),
+    ).toHaveLength(1);
+    expect(pullStep.match(/docker buildx imagetools inspect/g)).toHaveLength(1);
+    expect(digestFunction).toContain(
+      '[[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]',
+    );
+    expect(digestFunction.trimEnd()).toEndWith("return 1\n          }");
+    expect(digestFunction).not.toMatch(/\bdocker (?:build(?:\s|$)|buildx build(?:\s|$))/);
+    expect(pullStep).toContain(remoteDigestResolutionLine);
+    expect(pullStep).not.toContain(
+      'remote_digest="$(docker buildx imagetools inspect "${expected_image}"',
+    );
+  });
+
+  test("rejects a valid-looking digest when inspect exits nonzero", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const retrySteps = [
+      sliceWorkflowStep(buildWorkflow, "Build and push image"),
+      sliceWorkflowStep(pullJob, "Pull and verify immutable images"),
+    ];
+
+    for (const step of retrySteps) {
+      const result = runDigestRetryHelper(step, "nonzero-valid");
+      expect(result.exitCode).not.toBe(0);
+      expect(result.attempts).toBe(5);
+      expect(result.stdout).toBe("");
+    }
+  });
+
+  test("stops digest retries on fifth success and fails after five errors", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const retrySteps = [
+      sliceWorkflowStep(buildWorkflow, "Build and push image"),
+      sliceWorkflowStep(pullJob, "Pull and verify immutable images"),
+    ];
+    const expectedDigest = `sha256:${"a".repeat(64)}`;
+
+    for (const step of retrySteps) {
+      const success = runDigestRetryHelper(step, "succeed-fifth");
+      expect(success).toEqual({
+        attempts: 5,
+        exitCode: 0,
+        stdout: expectedDigest,
+      });
+
+      const failure = runDigestRetryHelper(step, "always-fail");
+      expect(failure.exitCode).not.toBe(0);
+      expect(failure.attempts).toBe(5);
+      expect(failure.stdout).toBe("");
+    }
   });
 
   test("binds production pull verification to run-scoped image and OCI run label", () => {
