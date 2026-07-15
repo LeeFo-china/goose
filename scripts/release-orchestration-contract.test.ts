@@ -66,6 +66,18 @@ const registryUsageBlocks = [
     'IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${IMAGE_REPO}"',
   ],
   [
+    "production pull login",
+    buildWorkflow,
+    "Login to Tencent CCR",
+    'docker login "${TENCENT_CCR_REGISTRY}"',
+  ],
+  [
+    "production pull image verification",
+    buildWorkflow,
+    "Pull and verify immutable images",
+    'expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"',
+  ],
+  [
     "development login",
     deployDevWorkflow,
     "Login to Tencent CCR",
@@ -118,12 +130,54 @@ function resolve(mode: string, services: string): ReturnType<typeof Bun.spawnSyn
   });
 }
 
-function sliceWorkflowJob(workflow: string, job: string, nextJob: string): string {
+function sliceWorkflowJob(workflow: string, job: string, nextBoundary: string): string {
   const start = workflow.indexOf(`  ${job}:`);
-  const end = workflow.indexOf(`  ${nextJob}:`, start + 1);
+  const yamlBoundary = workflow.indexOf(`  ${nextBoundary}:`, start + 1);
+  const markerBoundary = workflow.indexOf(nextBoundary, start + 1);
+  const end = yamlBoundary >= 0 ? yamlBoundary : markerBoundary;
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
   return workflow.slice(start, end);
+}
+
+interface WorkflowTextContract {
+  requiredFragments: readonly string[];
+  orderedFragments?: readonly string[];
+  forbiddenPatterns?: readonly RegExp[];
+}
+
+function validatesWorkflowTextContract(
+  content: string,
+  contract: WorkflowTextContract,
+): boolean {
+  if (!contract.requiredFragments.every((fragment) => content.includes(fragment))) {
+    return false;
+  }
+
+  let previousFragmentEnd = 0;
+  for (const fragment of contract.orderedFragments ?? []) {
+    const fragmentStart = content.indexOf(fragment, previousFragmentEnd);
+    if (fragmentStart < previousFragmentEnd) {
+      return false;
+    }
+    previousFragmentEnd = fragmentStart + fragment.length;
+  }
+
+  return !(contract.forbiddenPatterns ?? []).some((pattern) => {
+    return pattern.test(content);
+  });
+}
+
+function swapWorkflowFragments(
+  content: string,
+  first: string,
+  second: string,
+): string {
+  const placeholder = "__WORKFLOW_CONTRACT_FIRST_FRAGMENT__";
+  return content
+    .replace(first, placeholder)
+    .replace(second, first)
+    .replace(placeholder, second);
 }
 
 function sliceWorkflowStep(workflow: string, stepName: string): string {
@@ -169,8 +223,12 @@ function getKnownRegistryUsage(
   step: string,
 ): string | undefined {
   const stepName = getWorkflowStepName(step);
-  return registryUsageBlocks.find(([, expectedWorkflow, expectedStepName]) => {
-    return expectedWorkflow === workflow && expectedStepName === stepName;
+  return registryUsageBlocks.find(([, expectedWorkflow, expectedStepName, usage]) => {
+    return (
+      expectedWorkflow === workflow &&
+      expectedStepName === stepName &&
+      step.includes(usage)
+    );
   })?.[3];
 }
 
@@ -478,10 +536,10 @@ describe("Tencent CCR registry configuration", () => {
   );
 
   test("tracks every registry credential and image-path usage", () => {
-    expect(registryUsageBlocks).toHaveLength(8);
+    expect(registryUsageBlocks).toHaveLength(10);
     expect(registryWorkflows.reduce((count, [, workflow]) => {
       return count + extractSensitiveRegistrySteps(workflow).length;
-    }, 0)).toBe(8);
+    }, 0)).toBe(10);
   });
 
   test("validates every extracted sensitive registry step", () => {
@@ -492,8 +550,8 @@ describe("Tencent CCR registry configuration", () => {
       }));
     });
 
-    expect(sensitiveSteps).toHaveLength(8);
-    expect(registryUsageBlocks).toHaveLength(8);
+    expect(sensitiveSteps).toHaveLength(10);
+    expect(registryUsageBlocks).toHaveLength(10);
     for (const { step, workflow } of sensitiveSteps) {
       const knownUsage = getKnownRegistryUsage(workflow, step);
       expect(knownUsage).toBeDefined();
@@ -566,6 +624,193 @@ describe("production migration precheck workflow", () => {
 });
 
 describe("reusable build workflow", () => {
+  const productionTagRegexLine =
+    '[[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}\\.[0-9]+$ ]]';
+  const productionBuildPlanStart = [
+    "            jq -n \\",
+    '              --arg target_environment "${TARGET_ENVIRONMENT}" \\',
+  ].join("\n");
+  const productionValidationRequiredFragments = [
+    'TARGET_ENVIRONMENT="${REQUESTED_TARGET_ENVIRONMENT}"',
+    'if [ "${TARGET_ENVIRONMENT}" = production ]; then',
+    'test "${GITHUB_REF_TYPE}" = tag',
+    productionTagRegexLine,
+    'RAW_BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${REQUESTED_SERVICE}")"',
+    productionBuildPlanStart,
+  ] as const;
+  const productionValidationOrderedFragments = [
+    'TARGET_ENVIRONMENT="${REQUESTED_TARGET_ENVIRONMENT}"',
+    'if [ "${TARGET_ENVIRONMENT}" = production ]; then',
+    'test "${GITHUB_REF_TYPE}" = tag',
+    productionTagRegexLine,
+    "            fi",
+    'RAW_BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${REQUESTED_SERVICE}")"',
+    productionBuildPlanStart,
+  ] as const;
+  const productionMatrixBoundaryOrderedFragments = [
+    'if [ "${TARGET_ENVIRONMENT}" = production ]; then',
+    productionTagRegexLine,
+    "\n  build:",
+    "      - name: Login to Tencent CCR",
+    '          docker push "$SHA_IMAGE"',
+    "\n  verify-production-pull:",
+  ] as const;
+  const productionPullJobStepOrderedFragments = [
+    "      - name: Guard production pull verification",
+    "      - name: Download immutable production evidence",
+    "      - name: Login to Tencent CCR",
+    "      - name: Pull and verify immutable images",
+  ] as const;
+  const productionPullJobRequiredFragments = [
+    "    needs: [validate-request, build]",
+    "    if: ${{ needs.validate-request.outputs.target_environment == 'production' && needs.validate-request.outputs.no_op != 'true' && needs.build.result == 'success' }}",
+    "    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]",
+    "    environment: production",
+    "    timeout-minutes: 30",
+    "      BUILD_SERVICES: ${{ needs.validate-request.outputs.build_services }}",
+    ...productionPullJobStepOrderedFragments,
+  ] as const;
+  const productionPullGuardRequiredFragments = [
+    "          set -euo pipefail",
+    "          docker buildx version",
+    '          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"',
+    '          test "${GITHUB_REF_TYPE}" = tag',
+    `          ${productionTagRegexLine}`,
+    '          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]',
+    '          test -n "${BUILD_SERVICES}"',
+  ] as const;
+  const productionPullEvidenceRequiredFragments = [
+    "          GH_TOKEN: ${{ github.token }}",
+    "          set -euo pipefail",
+    '          evidence_dir="${RUNNER_TEMP}/production-pull-${GITHUB_RUN_ID}"',
+    '          rm -rf "${evidence_dir}"',
+    '          mkdir -p "${evidence_dir}"',
+    '          gh run download "${GITHUB_RUN_ID}" -n production-build-plan -D "${evidence_dir}"',
+    '            gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"',
+    '          test "$(jq -r \'.target_environment\' "${evidence_dir}/build-plan.json")" = production',
+    '          test "$(jq -r \'.commit_sha\' "${evidence_dir}/build-plan.json")" = "${GITHUB_SHA}"',
+    '          test "$(jq -r \'.build_services | join(" ")\' "${evidence_dir}/build-plan.json")" = "${BUILD_SERVICES}"',
+    '          echo "PULL_EVIDENCE_DIR=${evidence_dir}" >> "${GITHUB_ENV}"',
+  ] as const;
+  const productionPullLoginRequiredFragments = [
+    "          TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}",
+    "          TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}",
+    "          set -euo pipefail",
+    '          test -n "${TENCENT_CCR_USERNAME}"',
+    '          test -n "${TENCENT_CCR_PASSWORD}"',
+    '          test -n "${TENCENT_CCR_REGISTRY}"',
+    '          test -n "${TENCENT_CCR_NAMESPACE}"',
+    '          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in',
+    `            ${allowedRegistryPairArm}`,
+    "          for attempt in 1 2 3 4 5; do",
+    '            if printf \'%s\' "${TENCENT_CCR_PASSWORD}" | docker login "${TENCENT_CCR_REGISTRY}" \\',
+    '              -u "${TENCENT_CCR_USERNAME}" --password-stdin; then',
+    "            sleep $((attempt * 5))",
+    "          done\n          exit 1",
+  ] as const;
+  const absentImageCleanupBlock = [
+    '            if ! docker image inspect "${expected_digest_ref}" >/dev/null 2>&1; then',
+    '              cleanup_images+=("${expected_digest_ref}")',
+    "            fi",
+  ].join("\n");
+  const cleanupFunctionBlock = [
+    "          cleanup() {",
+    '            for image in "${cleanup_images[@]}"; do',
+    '              docker image rm "${image}" >/dev/null 2>&1 || true',
+    "            done",
+    "          }",
+  ].join("\n");
+  const manifestDigestLine =
+    "            digest=\"$(jq -er '.digest | select(type == \"string\" and test(\"^sha256:[a-f0-9]{64}$\"))' \"${manifest}\")\"";
+  const remoteDigestResolutionLine =
+    "            remote_digest=\"$(docker buildx imagetools inspect \"${expected_image}\" | awk '/^Digest:/ {print $2; exit}')\"";
+  const remoteDigestRegexLine =
+    '            [[ "${remote_digest}" =~ ^sha256:[a-f0-9]{64}$ ]]';
+  const remoteDigestComparisonLine =
+    '            test "${remote_digest}" = "${digest}"';
+  const expectedDigestRefLine =
+    '            expected_digest_ref="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}@${digest}"';
+  const immutablePullLine = '            docker pull "${expected_digest_ref}"';
+  const revisionInspectLine =
+    "            revision=\"$(docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' \"${expected_digest_ref}\")\"";
+  const repoDigestsInspectLine =
+    "            repo_digests=\"$(docker image inspect -f '{{json .RepoDigests}}' \"${expected_digest_ref}\")\"";
+  const repoDigestsAssertionLine =
+    "            jq -e --arg expected \"${expected_digest_ref}\" 'index($expected) != null' <<< \"${repo_digests}\" >/dev/null";
+  const productionPullImageRequiredFragments = [
+    "          set -euo pipefail",
+    '          test -n "${TENCENT_CCR_REGISTRY}"',
+    '          test -n "${TENCENT_CCR_NAMESPACE}"',
+    '          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in',
+    `            ${allowedRegistryPairArm}`,
+    "          cleanup_images=()",
+    cleanupFunctionBlock,
+    "          trap cleanup EXIT",
+    "              api) image_repo=goose-api ;;",
+    "              admin) image_repo=goose-admin ;;",
+    "              web) image_repo=goose-web ;;",
+    "              social-video-worker) image_repo=goose-social-video-worker ;;",
+    '              *) echo "Unsupported build service: ${service}"; exit 1 ;;',
+    '            manifest="${PULL_EVIDENCE_DIR}/image-manifest-${service}.json"',
+    '            test "$(jq -r \'.service\' "${manifest}")" = "${service}"',
+    '            test "$(jq -r \'.commit_sha\' "${manifest}")" = "${GITHUB_SHA}"',
+    '            test "$(jq -r \'.target_environment\' "${manifest}")" = production',
+    '            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"',
+    '            test "$(jq -r \'.image\' "${manifest}")" = "${expected_image}"',
+    manifestDigestLine,
+    remoteDigestResolutionLine,
+    remoteDigestRegexLine,
+    remoteDigestComparisonLine,
+    expectedDigestRefLine,
+    absentImageCleanupBlock,
+    immutablePullLine,
+    revisionInspectLine,
+    '            test "${revision}" = "${GITHUB_SHA}"',
+    repoDigestsInspectLine,
+    repoDigestsAssertionLine,
+  ] as const;
+  const productionPullImageOrderedFragments = [
+    '            manifest="${PULL_EVIDENCE_DIR}/image-manifest-${service}.json"',
+    '            test "$(jq -r \'.service\' "${manifest}")" = "${service}"',
+    '            test "$(jq -r \'.commit_sha\' "${manifest}")" = "${GITHUB_SHA}"',
+    '            test "$(jq -r \'.target_environment\' "${manifest}")" = production',
+    '            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"',
+    '            test "$(jq -r \'.image\' "${manifest}")" = "${expected_image}"',
+    manifestDigestLine,
+    remoteDigestResolutionLine,
+    remoteDigestRegexLine,
+    remoteDigestComparisonLine,
+    expectedDigestRefLine,
+    absentImageCleanupBlock,
+    immutablePullLine,
+    revisionInspectLine,
+    '            test "${revision}" = "${GITHUB_SHA}"',
+    repoDigestsInspectLine,
+    repoDigestsAssertionLine,
+  ] as const;
+  const productionPullImageForbiddenPatterns = [
+    /cleanup_images\+=\("\$\{expected_image\}"\)/,
+    /docker pull[^\n]*"\$\{expected_image\}"/,
+    /docker tag[^\n]*"\$\{expected_image\}"/,
+    /docker image tag[^\n]*"\$\{expected_image\}"/,
+    /docker image rm[^\n]*"\$\{expected_image\}"/,
+    /docker rmi[^\n]*"\$\{expected_image\}"/,
+    /docker image inspect[^\n]*"\$\{expected_image\}"/,
+  ] as const;
+  const mutableShaTagOperationFixtures = [
+    'docker tag "${expected_digest_ref}" "${expected_image}"',
+    'docker image tag "${expected_digest_ref}" "${expected_image}"',
+    'docker image rm "${expected_image}"',
+    'docker rmi "${expected_image}"',
+    'docker pull "${expected_image}"',
+  ] as const;
+  const productionPullForbiddenPatterns = [
+    /\bdocker\s+compose\b/i,
+    /\bdocker\s+(?:run|start|stop|restart)\b/i,
+    /\bsystemctl(?:\s|$)/i,
+    /\bnginx(?:\s|$)/i,
+  ] as const;
+
   test("exposes stable inputs, outputs, and environment-specific build plans", () => {
     expect(buildWorkflow).toContain("push:\n    branches: [main]");
     expect(buildWorkflow).toContain("workflow_dispatch:");
@@ -608,6 +853,283 @@ describe("reusable build workflow", () => {
     );
     expect(buildWorkflow).toContain('if [ "${DIRECT_PUSH}" = "true" ]; then');
     expect(buildWorkflow).not.toContain('if [ "${GITHUB_EVENT_NAME}" = "push" ]; then');
+  });
+
+  test("rejects production builds before service resolution and matrix push", () => {
+    const validationJob = sliceWorkflowJob(buildWorkflow, "validate-request", "build");
+    const buildJob = sliceWorkflowJob(
+      buildWorkflow,
+      "build",
+      "verify-production-pull",
+    );
+
+    for (const fragment of productionValidationRequiredFragments) {
+      expect(validationJob).toContain(fragment);
+    }
+    let previousFragmentEnd = 0;
+    for (const fragment of productionValidationOrderedFragments) {
+      const fragmentStart = validationJob.indexOf(fragment, previousFragmentEnd);
+      expect(fragmentStart).toBeGreaterThanOrEqual(previousFragmentEnd);
+      previousFragmentEnd = fragmentStart + fragment.length;
+    }
+    expect(buildJob).toContain("needs: validate-request");
+    expect(buildJob).toContain("      - name: Login to Tencent CCR");
+    expect(buildJob).toContain('          docker push "$SHA_IMAGE"');
+    expect(validationJob).not.toContain("docker push");
+    let previousBoundaryEnd = 0;
+    for (const fragment of productionMatrixBoundaryOrderedFragments) {
+      const fragmentStart = buildWorkflow.indexOf(fragment, previousBoundaryEnd);
+      expect(fragmentStart).toBeGreaterThanOrEqual(previousBoundaryEnd);
+      previousBoundaryEnd = fragmentStart + fragment.length;
+    }
+  });
+
+  test("locks the production pull job boundary", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+
+    for (const fragment of productionPullJobRequiredFragments) {
+      expect(pullJob).toContain(fragment);
+    }
+    let previousStepEnd = 0;
+    for (const fragment of productionPullJobStepOrderedFragments) {
+      const fragmentStart = pullJob.indexOf(fragment, previousStepEnd);
+      expect(fragmentStart).toBeGreaterThanOrEqual(previousStepEnd);
+      previousStepEnd = fragmentStart + fragment.length;
+    }
+  });
+
+  test("guards production pull metadata", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const guardStep = sliceWorkflowStep(
+      pullJob,
+      "Guard production pull verification",
+    );
+
+    for (const fragment of productionPullGuardRequiredFragments) {
+      expect(guardStep).toContain(fragment);
+    }
+    expect(guardStep).not.toContain("TENCENT_CCR_REGISTRY");
+    expect(guardStep).not.toContain("TENCENT_CCR_NAMESPACE");
+  });
+
+  test("downloads and validates immutable production evidence", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const evidenceStep = sliceWorkflowStep(
+      pullJob,
+      "Download immutable production evidence",
+    );
+
+    for (const fragment of productionPullEvidenceRequiredFragments) {
+      expect(evidenceStep).toContain(fragment);
+    }
+  });
+
+  test("logs in to Tencent CCR with guarded retries", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const loginStep = sliceWorkflowStep(pullJob, "Login to Tencent CCR");
+
+    for (const fragment of productionPullLoginRequiredFragments) {
+      expect(loginStep).toContain(fragment);
+    }
+    expect(loginStep.trimEnd()).toEndWith("done\n          exit 1");
+    expectGuardedRegistryUsageStep(
+      loginStep,
+      'docker login "${TENCENT_CCR_REGISTRY}"',
+    );
+  });
+
+  test("pulls, verifies, and cleans up immutable production images", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const pullStep = sliceWorkflowStep(
+      pullJob,
+      "Pull and verify immutable images",
+    );
+
+    for (const fragment of productionPullImageRequiredFragments) {
+      expect(pullStep).toContain(fragment);
+    }
+    let previousFragmentEnd = 0;
+    for (const fragment of productionPullImageOrderedFragments) {
+      const fragmentStart = pullStep.indexOf(fragment, previousFragmentEnd);
+      expect(fragmentStart).toBeGreaterThanOrEqual(previousFragmentEnd);
+      previousFragmentEnd = fragmentStart + fragment.length;
+    }
+    expect(pullStep.split('cleanup_images+=("${expected_digest_ref}")')).toHaveLength(2);
+    for (const pattern of productionPullImageForbiddenPatterns) {
+      expect(pattern.test(pullStep)).toBe(false);
+    }
+    for (const operation of mutableShaTagOperationFixtures) {
+      expect(pullStep).not.toContain(operation);
+    }
+    expectGuardedRegistryUsageStep(
+      pullStep,
+      'expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"',
+    );
+  });
+
+  test("keeps production pull verification free of deployment commands", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+
+    for (const pattern of productionPullForbiddenPatterns) {
+      expect(pattern.test(pullJob)).toBe(false);
+    }
+  });
+
+  test("rejects malformed production pull verification contracts", () => {
+    const validationJob = sliceWorkflowJob(buildWorkflow, "validate-request", "build");
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const validationContract: WorkflowTextContract = {
+      requiredFragments: productionValidationRequiredFragments,
+      orderedFragments: productionValidationOrderedFragments,
+    };
+    const matrixBoundaryContract: WorkflowTextContract = {
+      requiredFragments: productionMatrixBoundaryOrderedFragments,
+      orderedFragments: productionMatrixBoundaryOrderedFragments,
+    };
+    const pullJobContract: WorkflowTextContract = {
+      requiredFragments: productionPullJobRequiredFragments,
+      orderedFragments: productionPullJobStepOrderedFragments,
+      forbiddenPatterns: productionPullForbiddenPatterns,
+    };
+    const pullImageContract: WorkflowTextContract = {
+      requiredFragments: productionPullImageRequiredFragments,
+      orderedFragments: productionPullImageOrderedFragments,
+      forbiddenPatterns: productionPullImageForbiddenPatterns,
+    };
+    const contracts: readonly {
+      content: string;
+      contract: WorkflowTextContract;
+    }[] = [
+      {
+        content: validationJob,
+        contract: validationContract,
+      },
+      {
+        content: buildWorkflow,
+        contract: matrixBoundaryContract,
+      },
+      {
+        content: pullJob,
+        contract: pullJobContract,
+      },
+      {
+        content: sliceWorkflowStep(pullJob, "Guard production pull verification"),
+        contract: { requiredFragments: productionPullGuardRequiredFragments },
+      },
+      {
+        content: sliceWorkflowStep(
+          pullJob,
+          "Download immutable production evidence",
+        ),
+        contract: { requiredFragments: productionPullEvidenceRequiredFragments },
+      },
+      {
+        content: sliceWorkflowStep(pullJob, "Login to Tencent CCR"),
+        contract: { requiredFragments: productionPullLoginRequiredFragments },
+      },
+      {
+        content: sliceWorkflowStep(pullJob, "Pull and verify immutable images"),
+        contract: pullImageContract,
+      },
+    ];
+
+    for (const { content, contract } of contracts) {
+      expect(validatesWorkflowTextContract(content, contract)).toBe(true);
+      for (const fragment of contract.requiredFragments) {
+        const malformedContent = content.replace(fragment, "");
+        expect(malformedContent).not.toBe(content);
+        expect(validatesWorkflowTextContract(malformedContent, contract)).toBe(false);
+      }
+    }
+
+    const misplacedValidation = swapWorkflowFragments(
+      validationJob,
+      productionValidationOrderedFragments[0],
+      productionValidationOrderedFragments[1],
+    );
+    expect(
+      validatesWorkflowTextContract(misplacedValidation, validationContract),
+    ).toBe(false);
+
+    const misplacedPullStepOrder = swapWorkflowFragments(
+      pullJob,
+      productionPullJobStepOrderedFragments[2],
+      productionPullJobStepOrderedFragments[3],
+    );
+    expect(
+      validatesWorkflowTextContract(misplacedPullStepOrder, pullJobContract),
+    ).toBe(false);
+
+    const pullStep = sliceWorkflowStep(
+      pullJob,
+      "Pull and verify immutable images",
+    );
+    const misplacedRemoteResolution = swapWorkflowFragments(
+      pullStep,
+      manifestDigestLine,
+      remoteDigestResolutionLine,
+    );
+    expect(
+      validatesWorkflowTextContract(misplacedRemoteResolution, pullImageContract),
+    ).toBe(false);
+
+    for (const mutableTagOperation of [
+      'cleanup_images+=("${expected_image}")',
+      'docker image inspect "${expected_image}"',
+      ...mutableShaTagOperationFixtures,
+    ]) {
+      expect(
+        validatesWorkflowTextContract(
+          `${pullStep}\n            ${mutableTagOperation}`,
+          pullImageContract,
+        ),
+      ).toBe(false);
+    }
+
+    for (const command of [
+      "docker compose up -d",
+      "docker run --rm busybox true",
+      "docker start gooes-api",
+      "docker stop gooes-api",
+      "docker restart gooes-api",
+      "systemctl restart gooes-api",
+      "nginx -s reload",
+    ]) {
+      expect(
+        validatesWorkflowTextContract(
+          `${pullJob}\n          ${command}`,
+          pullJobContract,
+        ),
+      ).toBe(false);
+    }
   });
 
   test("keeps automatic development deployment bound to successful push evidence", () => {

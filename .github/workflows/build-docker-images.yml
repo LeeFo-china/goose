@@ -137,6 +137,11 @@ jobs:
                 ;;
             esac
 
+            if [ "${TARGET_ENVIRONMENT}" = production ]; then
+              test "${GITHUB_REF_TYPE}" = tag
+              [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]]
+            fi
+
             RAW_BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${REQUESTED_SERVICE}")"
             RAW_DEPLOY_SERVICES="$(node scripts/resolve-web-deployment.mjs deploy "${REQUESTED_SERVICE}")"
             BUILD_SERVICES="$(canonicalize_services "${RAW_BUILD_SERVICES}" api admin web social-video-worker)"
@@ -380,3 +385,122 @@ jobs:
           path: image-manifest-${{ matrix.service }}.json
           if-no-files-found: error
           retention-days: 30
+
+  verify-production-pull:
+    name: Verify production images from production runner
+    needs: [validate-request, build]
+    if: ${{ needs.validate-request.outputs.target_environment == 'production' && needs.validate-request.outputs.no_op != 'true' && needs.build.result == 'success' }}
+    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
+    environment: production
+    timeout-minutes: 30
+    env:
+      BUILD_SERVICES: ${{ needs.validate-request.outputs.build_services }}
+    steps:
+      - name: Guard production pull verification
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          test "${GITHUB_REF_TYPE}" = tag
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]]
+          [[ "${GITHUB_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          test -n "${BUILD_SERVICES}"
+          docker buildx version
+
+      - name: Download immutable production evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          evidence_dir="${RUNNER_TEMP}/production-pull-${GITHUB_RUN_ID}"
+          rm -rf "${evidence_dir}"
+          mkdir -p "${evidence_dir}"
+          gh run download "${GITHUB_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          for service in ${BUILD_SERVICES}; do
+            gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+          done
+          test "$(jq -r '.target_environment' "${evidence_dir}/build-plan.json")" = production
+          test "$(jq -r '.commit_sha' "${evidence_dir}/build-plan.json")" = "${GITHUB_SHA}"
+          test "$(jq -r '.build_services | join(" ")' "${evidence_dir}/build-plan.json")" = "${BUILD_SERVICES}"
+          echo "PULL_EVIDENCE_DIR=${evidence_dir}" >> "${GITHUB_ENV}"
+
+      - name: Login to Tencent CCR
+        env:
+          TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
+          TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "${TENCENT_CCR_USERNAME}"
+          test -n "${TENCENT_CCR_PASSWORD}"
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          for attempt in 1 2 3 4 5; do
+            if printf '%s' "${TENCENT_CCR_PASSWORD}" | docker login "${TENCENT_CCR_REGISTRY}" \
+              -u "${TENCENT_CCR_USERNAME}" --password-stdin; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          exit 1
+
+      - name: Pull and verify immutable images
+        run: |
+          set -euo pipefail
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+
+          cleanup_images=()
+          cleanup() {
+            for image in "${cleanup_images[@]}"; do
+              docker image rm "${image}" >/dev/null 2>&1 || true
+            done
+          }
+          trap cleanup EXIT
+
+          for service in ${BUILD_SERVICES}; do
+            case "${service}" in
+              api) image_repo=goose-api ;;
+              admin) image_repo=goose-admin ;;
+              web) image_repo=goose-web ;;
+              social-video-worker) image_repo=goose-social-video-worker ;;
+              *) echo "Unsupported build service: ${service}"; exit 1 ;;
+            esac
+
+            manifest="${PULL_EVIDENCE_DIR}/image-manifest-${service}.json"
+            test "$(jq -r '.service' "${manifest}")" = "${service}"
+            test "$(jq -r '.commit_sha' "${manifest}")" = "${GITHUB_SHA}"
+            test "$(jq -r '.target_environment' "${manifest}")" = production
+            expected_image="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}:${GITHUB_SHA}"
+            test "$(jq -r '.image' "${manifest}")" = "${expected_image}"
+            digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${manifest}")"
+            remote_digest="$(docker buildx imagetools inspect "${expected_image}" | awk '/^Digest:/ {print $2; exit}')"
+            [[ "${remote_digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
+            test "${remote_digest}" = "${digest}"
+            expected_digest_ref="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}@${digest}"
+
+            if ! docker image inspect "${expected_digest_ref}" >/dev/null 2>&1; then
+              cleanup_images+=("${expected_digest_ref}")
+            fi
+            docker pull "${expected_digest_ref}"
+            revision="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${expected_digest_ref}")"
+            test "${revision}" = "${GITHUB_SHA}"
+            repo_digests="$(docker image inspect -f '{{json .RepoDigests}}' "${expected_digest_ref}")"
+            jq -e --arg expected "${expected_digest_ref}" 'index($expected) != null' <<< "${repo_digests}" >/dev/null
+          done
+
+  # End production pull verification
