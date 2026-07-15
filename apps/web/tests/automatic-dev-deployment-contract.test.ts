@@ -25,9 +25,10 @@ const sliceBetween = (startMarker: string, endMarker: string): string => {
 const dockerCommandShapes = (shellSource: string): string[] => {
   const normalizedShellSource = shellSource.replace(/\\\r?\n\s*/g, " ");
   return Array.from(
-    normalizedShellSource.matchAll(/\bdocker\s+([^;\n|)]*)/g),
+    normalizedShellSource.matchAll(/\bdocker\s+/g),
     (match) => {
-      const tokens = String(match[1]).trim().split(/\s+/);
+      const commandStart = (match.index ?? 0) + match[0].length;
+      const tokens = normalizedShellSource.slice(commandStart).trimStart().split(/\s+/);
       if (tokens[0]?.startsWith("-")) {
         return "<global-option>";
       }
@@ -243,6 +244,10 @@ describe("automatic development image build contract", () => {
     "docker image prune -a -f",
     "docker buildx prune -a -f",
     "docker --config /tmp/docker pull example.invalid/image@sha256:deadbeef",
+    'docker image rm "$(docker stop gooes-api)"',
+    'docker image rm "$(docker image prune -a -f)"',
+    'docker image rm "$(docker buildx prune -a -f)"',
+    'docker image rm "$(docker --config /tmp/docker stop gooes-api)"',
   ])("rejects production pull Docker mutation: %s", (mutation) => {
     const verifyProductionPull = sliceBetween(
       "  verify-production-pull:",
