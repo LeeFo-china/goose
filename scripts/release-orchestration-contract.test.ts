@@ -35,6 +35,79 @@ const migrateProductionWorkflow = readFileSync(
   new URL("../.github/workflows/migrate-production-database.yml", import.meta.url),
   "utf8",
 );
+const registryWorkflows = [
+  ["build", buildWorkflow],
+  ["development deploy", deployDevWorkflow],
+  ["production deploy", deployProductionWorkflow],
+] as const;
+const apiCompose = readFileSync(
+  new URL("../deploy/docker-compose.api.yml", import.meta.url),
+  "utf8",
+);
+const adminCompose = readFileSync(
+  new URL("../deploy/docker-compose.admin.yml", import.meta.url),
+  "utf8",
+);
+const adminEnvironmentExample = readFileSync(
+  new URL("../deploy/.env.admin.example", import.meta.url),
+  "utf8",
+);
+const registryUsageBlocks = [
+  [
+    "build login",
+    buildWorkflow,
+    "Login to Tencent CCR",
+    'docker login "$TENCENT_CCR_REGISTRY"',
+  ],
+  [
+    "build image path",
+    buildWorkflow,
+    "Build and push image",
+    'IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${IMAGE_REPO}"',
+  ],
+  [
+    "development login",
+    deployDevWorkflow,
+    "Login to Tencent CCR",
+    'docker login "${TENCENT_CCR_REGISTRY}"',
+  ],
+  [
+    "development service image path",
+    deployDevWorkflow,
+    "Deploy dev services",
+    'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
+  ],
+  [
+    "development Web image path",
+    deployDevWorkflow,
+    "Deploy gated dev web",
+    'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
+  ],
+  [
+    "production service image path",
+    deployProductionWorkflow,
+    "Validate production release evidence",
+    'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
+  ],
+  [
+    "production Web image path",
+    deployProductionWorkflow,
+    "Validate web deployment gate",
+    'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
+  ],
+  [
+    "production login",
+    deployProductionWorkflow,
+    "Login to Tencent CCR",
+    'docker login "$TENCENT_CCR_REGISTRY"',
+  ],
+] as const;
+const registryKey = "TENCENT_CCR_REGISTRY";
+const namespaceKey = "TENCENT_CCR_NAMESPACE";
+const registryDeclaration = `${registryKey}: \${{ vars.TENCENT_CCR_REGISTRY }}`;
+const namespaceDeclaration = `${namespaceKey}: \${{ vars.TENCENT_CCR_NAMESPACE }}`;
+const allowedRegistryPairArm =
+  "useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)";
 
 const script = new URL("./resolve-admin-release-services.mjs", import.meta.url).pathname;
 
@@ -52,6 +125,405 @@ function sliceWorkflowJob(workflow: string, job: string, nextJob: string): strin
   expect(end).toBeGreaterThan(start);
   return workflow.slice(start, end);
 }
+
+function sliceWorkflowStep(workflow: string, stepName: string): string {
+  const start = workflow.indexOf(`      - name: ${stepName}`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  return sliceWorkflowStepAt(workflow, start);
+}
+
+function sliceWorkflowStepAt(workflow: string, start: number): string {
+  const remainingWorkflow = workflow.slice(start + 1);
+  const nextSiblingOffset = remainingWorkflow.search(/^      - /m);
+  const end = nextSiblingOffset < 0
+    ? workflow.length
+    : start + 1 + nextSiblingOffset;
+
+  expect(end).toBeGreaterThan(start);
+  return workflow.slice(start, end);
+}
+
+function extractWorkflowSteps(workflow: string): string[] {
+  const stepStarts: number[] = [];
+  for (const match of workflow.matchAll(/^      - /gm)) {
+    stepStarts.push(match.index);
+  }
+
+  return stepStarts.map((start) => sliceWorkflowStepAt(workflow, start));
+}
+
+function extractSensitiveRegistrySteps(workflow: string): string[] {
+  const registryInterpolation =
+    /\$(?:\{TENCENT_CCR_(?:REGISTRY|NAMESPACE)\}|TENCENT_CCR_(?:REGISTRY|NAMESPACE)(?![A-Za-z0-9_]))/;
+  return extractWorkflowSteps(workflow).filter((step) => {
+    return registryInterpolation.test(step);
+  });
+}
+
+function getWorkflowStepName(step: string): string | undefined {
+  return step.match(/^      - name: (.+)$/m)?.[1];
+}
+
+function getKnownRegistryUsage(
+  workflow: string,
+  step: string,
+): string | undefined {
+  const stepName = getWorkflowStepName(step);
+  return registryUsageBlocks.find(([, expectedWorkflow, expectedStepName]) => {
+    return expectedWorkflow === workflow && expectedStepName === stepName;
+  })?.[3];
+}
+
+function countYamlKey(content: string, key: string): number {
+  const keyForm = `(?:"${key}"|'${key}'|${key})`;
+  const keyDeclaration = new RegExp(
+    `(?:^|[,{])[ \\t]*${keyForm}[ \\t]*:`,
+    "gm",
+  );
+  return content.match(keyDeclaration)?.length ?? 0;
+}
+
+function hasUniqueWorkflowRootRegistryDeclarations(workflow: string): boolean {
+  const jobsStart = workflow.indexOf("\njobs:");
+  if (jobsStart < 0) return false;
+
+  const workflowRoot = workflow.slice(0, jobsStart);
+  const rootEnvStart = workflowRoot.indexOf("\nenv:\n");
+  if (rootEnvStart < 0) return false;
+
+  const rootEnv = workflowRoot.slice(rootEnvStart + 1);
+  return (
+    rootEnv.split("\n").includes(`  ${registryDeclaration}`) &&
+    rootEnv.split("\n").includes(`  ${namespaceDeclaration}`) &&
+    countYamlKey(workflow, registryKey) === 1 &&
+    countYamlKey(workflow, namespaceKey) === 1
+  );
+}
+
+function hasExclusiveCoupledAllowlist(allowlist: string): boolean {
+  const normalizedAllowlist = allowlist
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
+  const expectedAllowlist = [
+    'case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in',
+    allowedRegistryPairArm,
+    ";;",
+    "*)",
+    'echo "::error::Unsupported Tencent CCR registry/namespace pair."',
+    "exit 1",
+    ";;",
+    "esac",
+  ].join("\n");
+
+  return normalizedAllowlist === expectedAllowlist;
+}
+
+function expectGuardedRegistryUsageStep(step: string, usage: string): void {
+  const strictShellStart = step.indexOf("set -euo pipefail");
+  const registryGuardStart = step.indexOf(
+    'test -n "${TENCENT_CCR_REGISTRY}"',
+  );
+  const namespaceGuardStart = step.indexOf(
+    'test -n "${TENCENT_CCR_NAMESPACE}"',
+  );
+  const allowlistStart = step.indexOf(
+    'case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in',
+  );
+  const allowlistEnd = step.indexOf("esac", allowlistStart);
+  const usageStart = step.indexOf(usage);
+  const allowlist = step.slice(allowlistStart, allowlistEnd + "esac".length);
+
+  expect(step.split(usage).length - 1).toBe(1);
+  expect(strictShellStart).toBeGreaterThanOrEqual(0);
+  expect(registryGuardStart).toBeGreaterThan(strictShellStart);
+  expect(namespaceGuardStart).toBeGreaterThan(registryGuardStart);
+  expect(allowlistStart).toBeGreaterThan(namespaceGuardStart);
+  expect(allowlistEnd).toBeGreaterThan(allowlistStart);
+  expect(usageStart).toBeGreaterThan(allowlistEnd);
+  expect(hasExclusiveCoupledAllowlist(allowlist)).toBe(true);
+}
+
+describe("Tencent CCR registry configuration", () => {
+  test("rejects registry declarations scoped only to a workflow job", () => {
+    const jobScopedRegistryFixture = [
+      "name: Malformed registry workflow",
+      "jobs:",
+      "  build:",
+      "    env:",
+      `      ${registryDeclaration}`,
+      `      ${namespaceDeclaration}`,
+      "    runs-on: ubuntu-latest",
+    ].join("\n");
+
+    expect(hasUniqueWorkflowRootRegistryDeclarations(jobScopedRegistryFixture)).toBe(
+      false,
+    );
+  });
+
+  test.each([
+    ["registry", registryDeclaration],
+    ["namespace", namespaceDeclaration],
+  ])(
+    "rejects a duplicate %s declaration in job env",
+    (_name, duplicateDeclaration) => {
+      const jobOverrideFixture = [
+        "name: Malformed registry override workflow",
+        "env:",
+        `  ${registryDeclaration}`,
+        `  ${namespaceDeclaration}`,
+        "jobs:",
+        "  build:",
+        "    env:",
+        `      ${duplicateDeclaration}`,
+        "    runs-on: ubuntu-latest",
+      ].join("\n");
+
+      expect(hasUniqueWorkflowRootRegistryDeclarations(jobOverrideFixture)).toBe(
+        false,
+      );
+    },
+  );
+
+  test.each([
+    ["registry", "TENCENT_CCR_REGISTRY: evil.example"],
+    ["namespace", "TENCENT_CCR_NAMESPACE: evil_namespace"],
+  ])(
+    "rejects a different-value %s override in job env",
+    (_name, overrideDeclaration) => {
+      const differentValueOverrideFixture = [
+        "name: Malformed different-value override workflow",
+        "env:",
+        `  ${registryDeclaration}`,
+        `  ${namespaceDeclaration}`,
+        "jobs:",
+        "  build:",
+        "    env:",
+        `      ${overrideDeclaration}`,
+        "    runs-on: ubuntu-latest",
+      ].join("\n");
+
+      expect(
+        hasUniqueWorkflowRootRegistryDeclarations(differentValueOverrideFixture),
+      ).toBe(false);
+    },
+  );
+
+  test.each([
+    ["double-quoted registry", '"TENCENT_CCR_REGISTRY": evil.example'],
+    ["single-quoted namespace", "'TENCENT_CCR_NAMESPACE': evil_namespace"],
+  ])(
+    "rejects a %s override in job env",
+    (_name, overrideDeclaration) => {
+      const quotedOverrideFixture = [
+        "name: Malformed quoted override workflow",
+        "env:",
+        `  ${registryDeclaration}`,
+        `  ${namespaceDeclaration}`,
+        "jobs:",
+        "  build:",
+        "    env:",
+        `      ${overrideDeclaration}`,
+        "    runs-on: ubuntu-latest",
+      ].join("\n");
+
+      expect(
+        hasUniqueWorkflowRootRegistryDeclarations(quotedOverrideFixture),
+      ).toBe(false);
+    },
+  );
+
+  test("rejects a flow-map registry override after root env", () => {
+    const flowMapOverrideFixture = [
+      "name: Malformed flow-map override workflow",
+      "env:",
+      `  ${registryDeclaration}`,
+      `  ${namespaceDeclaration}`,
+      "jobs:",
+      "  build:",
+      "    env: { TENCENT_CCR_REGISTRY: evil.example }",
+      "    runs-on: ubuntu-latest",
+    ].join("\n");
+
+    expect(hasUniqueWorkflowRootRegistryDeclarations(flowMapOverrideFixture)).toBe(
+      false,
+    );
+  });
+
+  test("ends a named step before an unnamed sibling run step", () => {
+    const unnamedSiblingStepFixture = [
+      "jobs:",
+      "  validate:",
+      "    steps:",
+      "      - name: Guard registry",
+      "        run: |",
+      "          set -euo pipefail",
+      '          test -n "${TENCENT_CCR_REGISTRY}"',
+      '          test -n "${TENCENT_CCR_NAMESPACE}"',
+      '          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in',
+      `            ${allowedRegistryPairArm}`,
+      "              ;;",
+      "            *)",
+      '              echo "::error::Unsupported Tencent CCR registry/namespace pair."',
+      "              exit 1",
+      "              ;;",
+      "          esac",
+      "      - run: |",
+      '          image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
+      "      - name: Finish",
+      "        run: echo done",
+    ].join("\n");
+
+    const guardStep = sliceWorkflowStep(
+      unnamedSiblingStepFixture,
+      "Guard registry",
+    );
+    expect(guardStep).not.toContain('image_base="${TENCENT_CCR_REGISTRY}');
+    expect(extractSensitiveRegistrySteps(unnamedSiblingStepFixture)).toHaveLength(2);
+  });
+
+  test("discovers a direct registry image interpolation as sensitive", () => {
+    const directImageInterpolationFixture = [
+      "jobs:",
+      "  pull:",
+      "    steps:",
+      "      - name: Pull direct image",
+      "        run: |",
+      "          set -euo pipefail",
+      '          docker pull "${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/goose-api:main"',
+      "      - name: Finish",
+      "        run: echo done",
+    ].join("\n");
+
+    const sensitiveSteps = extractSensitiveRegistrySteps(
+      directImageInterpolationFixture,
+    );
+    expect(sensitiveSteps).toHaveLength(1);
+    expect(
+      getKnownRegistryUsage(directImageInterpolationFixture, sensitiveSteps[0]),
+    ).toBeUndefined();
+    expect(countYamlKey(directImageInterpolationFixture, registryKey)).toBe(0);
+    expect(countYamlKey(directImageInterpolationFixture, namespaceKey)).toBe(0);
+  });
+
+  test("discovers direct bare registry login and image usage as sensitive", () => {
+    const bareRegistryUsageFixture = [
+      "jobs:",
+      "  pull:",
+      "    steps:",
+      "      - name: Pull bare-variable image",
+      "        run: |",
+      "          set -euo pipefail",
+      "          docker login \"$TENCENT_CCR_REGISTRY\"",
+      "          docker pull \"$TENCENT_CCR_REGISTRY/$TENCENT_CCR_NAMESPACE/goose-api:main\"",
+      "      - name: Finish",
+      "        run: echo done",
+    ].join("\n");
+
+    const sensitiveSteps = extractSensitiveRegistrySteps(bareRegistryUsageFixture);
+    expect(sensitiveSteps).toHaveLength(1);
+    expect(
+      getKnownRegistryUsage(bareRegistryUsageFixture, sensitiveSteps[0]),
+    ).toBeUndefined();
+  });
+
+  test("ignores partial variable names and GitHub expressions", () => {
+    const nonShellRegistryReferenceFixture = [
+      "jobs:",
+      "  inspect:",
+      "    steps:",
+      "      - name: Inspect unrelated values",
+      "        run: |",
+      "          set -euo pipefail",
+      "          echo \"$TENCENT_CCR_REGISTRY_BACKUP\"",
+      "          echo \"$TENCENT_CCR_NAMESPACE_SUFFIX\"",
+      "          echo '${{ vars.TENCENT_CCR_REGISTRY }}'",
+      "          echo '${{ vars.TENCENT_CCR_NAMESPACE }}'",
+      "      - name: Finish",
+      "        run: echo done",
+    ].join("\n");
+
+    expect(extractSensitiveRegistrySteps(nonShellRegistryReferenceFixture)).toHaveLength(
+      0,
+    );
+  });
+
+  test("rejects an additional registry success arm", () => {
+    const additionalSuccessArmFixture = [
+      'case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in',
+      `  ${allowedRegistryPairArm}`,
+      "    ;;",
+      "  evil.example:america_goose)",
+      "    ;;",
+      "  *)",
+      '    echo "::error::Unsupported Tencent CCR registry/namespace pair."',
+      "    exit 1",
+      "    ;;",
+      "esac",
+    ].join("\n");
+
+    expect(hasExclusiveCoupledAllowlist(additionalSuccessArmFixture)).toBe(false);
+  });
+
+  test.each(registryWorkflows)(
+    "%s workflow reads the registry and namespace from repository variables",
+    (_name, workflow) => {
+      expect(hasUniqueWorkflowRootRegistryDeclarations(workflow)).toBe(true);
+      expect(workflow).not.toContain(
+        "TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com",
+      );
+      expect(workflow).not.toContain("/${{ vars.TENCENT_CCR_NAMESPACE }}");
+    },
+  );
+
+  test("tracks every registry credential and image-path usage", () => {
+    expect(registryUsageBlocks).toHaveLength(8);
+    expect(registryWorkflows.reduce((count, [, workflow]) => {
+      return count + extractSensitiveRegistrySteps(workflow).length;
+    }, 0)).toBe(8);
+  });
+
+  test("validates every extracted sensitive registry step", () => {
+    const sensitiveSteps = registryWorkflows.flatMap(([, workflow]) => {
+      return extractSensitiveRegistrySteps(workflow).map((step) => ({
+        step,
+        workflow,
+      }));
+    });
+
+    expect(sensitiveSteps).toHaveLength(8);
+    expect(registryUsageBlocks).toHaveLength(8);
+    for (const { step, workflow } of sensitiveSteps) {
+      const knownUsage = getKnownRegistryUsage(workflow, step);
+      expect(knownUsage).toBeDefined();
+      if (knownUsage === undefined) continue;
+      expectGuardedRegistryUsageStep(step, knownUsage);
+    }
+  });
+
+  test("keeps API images fail-closed and migrates the social worker default", () => {
+    expect(apiCompose).toContain(
+      "  gooes-api:\n    image: ${GOOES_API_IMAGE:?set GOOES_API_IMAGE}",
+    );
+    expect(apiCompose).toContain(
+      "  gooes-cos-reconcile-worker:\n    image: ${GOOES_API_IMAGE:?set GOOES_API_IMAGE}",
+    );
+    expect(apiCompose).not.toContain("GOOES_API_IMAGE:-");
+    expect(apiCompose).toContain(
+      "  gooes-social-video-worker:\n    image: ${GOOES_SOCIAL_VIDEO_WORKER_IMAGE:-useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:main}",
+    );
+  });
+
+  test("uses exact Tencent CCR US defaults for tracked Admin configuration", () => {
+    expect(adminCompose).toContain(
+      "  gooes-admin:\n    image: ${GOOES_ADMIN_IMAGE:-useccr.ccs.tencentyun.com/america_goose/goose-admin:main}",
+    );
+    expect(adminEnvironmentExample).toContain(
+      "GOOES_ADMIN_IMAGE=useccr.ccs.tencentyun.com/america_goose/goose-admin:main",
+    );
+  });
+});
 
 describe("admin release service resolver", () => {
   test.each([
@@ -633,6 +1105,30 @@ describe("production orchestrator", () => {
     ]) {
       expect(deployProductionWorkflow).toContain(field);
     }
+  });
+
+  test("constructs the production Web image base inside the gate validation step", () => {
+    const webGateStart = deployProductionWorkflow.indexOf(
+      "- name: Validate web deployment gate",
+    );
+    const syncStart = deployProductionWorkflow.indexOf(
+      "- name: Sync compose fragments",
+      webGateStart,
+    );
+    const webGateStep = deployProductionWorkflow.slice(webGateStart, syncStart);
+    const webImageStart = webGateStep.indexOf(
+      'echo "GOOES_WEB_IMAGE=${image_base}/goose-web:${SOURCE_SHA}"',
+    );
+    const webGateBeforeImage = webGateStep.slice(0, webImageStart);
+
+    expect(webGateStart).toBeGreaterThanOrEqual(0);
+    expect(syncStart).toBeGreaterThan(webGateStart);
+    expect(webImageStart).toBeGreaterThanOrEqual(0);
+    expect(webGateBeforeImage).toContain('test -n "${TENCENT_CCR_REGISTRY}"');
+    expect(webGateBeforeImage).toContain('test -n "${TENCENT_CCR_NAMESPACE}"');
+    expect(webGateBeforeImage).toContain(
+      'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
+    );
   });
 
   test("pins Admin candidate images to verified manifest digests instead of mutable SHA tags", () => {

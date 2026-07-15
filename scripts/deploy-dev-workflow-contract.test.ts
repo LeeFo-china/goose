@@ -32,7 +32,7 @@ describe("deploy-dev workflow", () => {
     expect(checkStepStart).toBeGreaterThan(deployStepStart);
 
     expect(deployStep).toContain(
-      'image_base="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}"',
+      'image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"',
     );
     expect(deployStep).toContain('export GOOES_API_IMAGE="${image_base}/goose-api:${SOURCE_SHA}"');
     expect(deployStep).toContain(
@@ -70,7 +70,7 @@ describe("deploy-dev workflow", () => {
     expect(gateReceiptVerificationStart).toBeLessThan(gatedComposePullStart);
     expect(gatedComposePullStart).toBeGreaterThan(gatedDeployStepStart);
     expect(gatedDeployStep).toContain(
-      'export GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/goose-web:${SOURCE_SHA}"',
+      'export GOOES_WEB_IMAGE="${image_base}/goose-web:${SOURCE_SHA}"',
     );
     expect(gatedDeployStep).toContain('cd "${DEV_DEPLOY_DIR}"');
     expect(gatedDeployStep).toContain(

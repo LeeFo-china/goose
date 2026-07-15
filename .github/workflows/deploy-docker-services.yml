@@ -67,7 +67,8 @@ concurrency:
 
 env:
   DEPLOY_DIR: /opt/supabase/docker
-  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  TENCENT_CCR_REGISTRY: ${{ vars.TENCENT_CCR_REGISTRY }}
+  TENCENT_CCR_NAMESPACE: ${{ vars.TENCENT_CCR_NAMESPACE }}
   SOURCE_SHA: ${{ github.sha }}
   RELEASE_SERVICE: ${{ inputs.service || github.event.inputs.service || 'all' }}
   RELEASE_CONFIRM_TEXT: ${{ inputs.confirm_text || github.event.inputs.confirm_text || '' }}
@@ -192,7 +193,6 @@ jobs:
           INPUT_BUILT_IMAGE_SHA: ${{ inputs.built_image_sha || '' }}
           INPUT_GATE_RUN_ID: ${{ inputs.gate_run_id || '' }}
           INPUT_WEB_SMOKE_CONTENT_PATH: ${{ inputs.web_smoke_content_path || '' }}
-          TENCENT_CCR_NAMESPACE: ${{ vars.TENCENT_CCR_NAMESPACE }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -257,7 +257,16 @@ jobs:
             > "${evidence_dir}/verified-candidate.json"
           test "$(jq -r '.tag' "${evidence_dir}/verified-candidate.json")" = "${GITHUB_REF_NAME}"
 
+          test -n "${TENCENT_CCR_REGISTRY}"
           test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
           image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
           if [[ ",${requested_services}," == *,api,* || ",${requested_services}," == *,cos-reconcile-worker,* ]]; then
             api_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-api.json")"
@@ -317,7 +326,18 @@ jobs:
               "${receipt_dir}/web-deployment-gate-receipt.json" production "${SOURCE_SHA}" 20260711120000
             node "${SOURCE_DIR}/scripts/validate-web-smoke-content-path.mjs" \
               "${INPUT_WEB_SMOKE_CONTENT_PATH}"
-            echo "GOOES_WEB_IMAGE=${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/goose-web:${SOURCE_SHA}" >> "${GITHUB_ENV}"
+            test -n "${TENCENT_CCR_REGISTRY}"
+            test -n "${TENCENT_CCR_NAMESPACE}"
+            case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+              useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+                ;;
+              *)
+                echo "::error::Unsupported Tencent CCR registry/namespace pair."
+                exit 1
+                ;;
+            esac
+            image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
+            echo "GOOES_WEB_IMAGE=${image_base}/goose-web:${SOURCE_SHA}" >> "${GITHUB_ENV}"
             echo "COMPOSE_FILES=-f docker-compose.web.yml" >> "${GITHUB_ENV}"
             echo "COMPOSE_ENV_FILE=.env.web" >> "${GITHUB_ENV}"
             echo "WEB_SMOKE_CONTENT_PATH=${INPUT_WEB_SMOKE_CONTENT_PATH}" >> "${GITHUB_ENV}"
@@ -348,6 +368,16 @@ jobs:
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
           set -euo pipefail
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
           for i in 1 2 3 4 5; do
             if printf '%s' "$TENCENT_CCR_PASSWORD" | docker login "$TENCENT_CCR_REGISTRY" -u "$TENCENT_CCR_USERNAME" --password-stdin; then
               exit 0

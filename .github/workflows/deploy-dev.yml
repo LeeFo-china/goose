@@ -67,7 +67,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  TENCENT_CCR_REGISTRY: ${{ vars.TENCENT_CCR_REGISTRY }}
+  TENCENT_CCR_NAMESPACE: ${{ vars.TENCENT_CCR_NAMESPACE }}
   DEV_DEPLOY_DIR: /opt/gooes-dev/docker
   SOURCE_SHA: ${{ inputs.commit_sha }}
   RELEASE_SERVICE: ${{ inputs.service }}
@@ -238,6 +239,16 @@ jobs:
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
           set -euo pipefail
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
           printf '%s' "${TENCENT_CCR_PASSWORD}" | docker login "${TENCENT_CCR_REGISTRY}" \
             -u "${TENCENT_CCR_USERNAME}" --password-stdin
 
@@ -251,7 +262,17 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/prepare-site-content-deployment-secrets.sh "${DEPLOY_SERVICES}"
-          image_base="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}"
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
           export GOOES_API_IMAGE="${image_base}/goose-api:${SOURCE_SHA}"
           export GOOES_ADMIN_IMAGE="${image_base}/goose-admin:${SOURCE_SHA}"
           export GOOES_WEB_IMAGE="${image_base}/goose-web:${SOURCE_SHA}"
@@ -296,7 +317,18 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/prepare-site-content-deployment-secrets.sh web
-          export GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/goose-web:${SOURCE_SHA}"
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
+          export GOOES_WEB_IMAGE="${image_base}/goose-web:${SOURCE_SHA}"
           old_image_id="$(docker inspect -f '{{.Image}}' gooes-web-dev 2>/dev/null || true)"
           echo "WEB_ROLLBACK_STATUS=not_available" >> "${GITHUB_ENV}"
           echo "WEB_DEPLOY_STAGE=deploying" >> "${GITHUB_ENV}"

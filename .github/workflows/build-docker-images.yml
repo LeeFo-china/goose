@@ -50,7 +50,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'push' || inputs.target_environment != '' || inputs.service != '' }}
 
 env:
-  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  TENCENT_CCR_REGISTRY: ${{ vars.TENCENT_CCR_REGISTRY }}
+  TENCENT_CCR_NAMESPACE: ${{ vars.TENCENT_CCR_NAMESPACE }}
 
 jobs:
   validate-request:
@@ -254,6 +255,16 @@ jobs:
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
           set -euo pipefail
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
           for i in 1 2 3 4 5; do
             if printf '%s' "$TENCENT_CCR_PASSWORD" | docker login "$TENCENT_CCR_REGISTRY" -u "$TENCENT_CCR_USERNAME" --password-stdin; then
               exit 0
@@ -270,7 +281,17 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"
-          IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${IMAGE_REPO}"
           if [ "${TARGET_ENVIRONMENT}" = "development" ]; then
             BRANCH_IMAGE="${IMAGE_BASE}:dev"
             ADMIN_API_URL=https://api-dev.goodcms.cn
