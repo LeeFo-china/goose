@@ -16,7 +16,7 @@
 
 因此本文件暂不记录 Impeccable 分数，不声明 P0/P1 已清零。mock smoke 只证明前端页面结构、RSC 边界、展示页 contract、AI 按需交互和响应式溢出在本地可重复验证。
 
-补充：`project-health:release-readiness` 已把 dev Admin 浏览器 smoke 前置条件纳入 gate。发布验收前必须显式配置 `PLAYWRIGHT_BASE_URL` 和 `GOOES_E2E_TENANT_ADMIN_PHONE`，避免使用 Playwright 默认 `127.0.0.1:3011` 或默认手机号误判 dev Admin 已验收。
+补充：`project-health:release-readiness` 已把 dev Admin 浏览器 smoke 前置条件纳入 gate。发布验收前必须显式配置 `PLAYWRIGHT_BASE_URL` 和 `GOOES_E2E_TENANT_ADMIN_PHONE`，避免使用 Playwright 默认 `127.0.0.1:3011` 或默认手机号误判 dev Admin 已验收。直接运行 `apps/admin/e2e/project-health-smoke.spec.ts` 时，如果 Admin 或 API 任一目标不是 `localhost/127.0.0.1/.localhost`，也必须显式配置 `GOOES_E2E_TENANT_ADMIN_PHONE`。
 
 <!-- project-health-ui-release-evidence
 {
@@ -49,7 +49,8 @@ cd apps/admin && bun test \
   components/layout/admin-nav-utils.test.ts \
   components/layout/admin-nav-visibility.test.ts \
   components/project-health/*.test.ts \
-  app/'(console)'/project-health/project-health-page-layout.test.ts
+  app/'(console)'/project-health/project-health-page-layout.test.ts \
+  lib/project-health-smoke-env.test.ts
 pnpm --dir packages/domain build
 bun run api:check
 pnpm --dir apps/admin check
@@ -60,7 +61,7 @@ pnpm --dir apps/admin build
 
 - Domain contract test：5 pass；
 - API project-health/performance/readiness 定向测试：60 pass；
-- Admin nav/project-health 定向测试：31 pass；
+- Admin nav/project-health/smoke env 定向测试：35 pass；
 - `packages/domain build`：通过；
 - `api:check`：通过；
 - `apps/admin check`：通过；
@@ -74,6 +75,7 @@ pnpm --dir apps/admin build
 - Admin dev server：`127.0.0.1:3011`
 - mock session：非平台租户管理员，具备 `dashboard.read + project.read:all`
 - mock 数据：五类风险各 1 条，summary.total = 5
+- 本地 mock smoke 允许缺省使用 `18800000001`；远端 Admin 或 API smoke 必须显式传入 `GOOES_E2E_TENANT_ADMIN_PHONE`
 
 可复跑命令：
 

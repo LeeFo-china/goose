@@ -20,6 +20,9 @@
   以及 `PROJECT_HEALTH_ADMIN_TOKEN` 或兼容别名 `ADMIN_TOKEN` 时运行；
 - Admin 浏览器 smoke 阶段要求显式提供 `PLAYWRIGHT_BASE_URL` 和 `GOOES_E2E_TENANT_ADMIN_PHONE`，
   避免发布验收误打本机默认地址或默认测试手机号；
+- 直接运行 `apps/admin/e2e/project-health-smoke.spec.ts` 时，本地 mock 目标可使用默认手机号；
+  一旦 Admin 或 API 任一目标不是 `localhost/127.0.0.1/.localhost`，测试会要求显式提供
+  `GOOES_E2E_TENANT_ADMIN_PHONE` 后再继续；
 - UI 审核阶段要求 `docs/audit/2026-07-14-project-operational-risk-ui-audit.md` 中的
   `project-health-ui-release-evidence` JSON 块达到 `status=ready`、`impeccable_score>=16`、
   `p0_count=0`、`p1_count=0`、真实 dev 截图和 WCAG AA smoke 均已完成；

@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Response } from "@playwright/test";
 
+import { resolveProjectHealthSmokeTenantAdminPhone } from "../lib/project-health-smoke-env";
+
 const viewportWidths = [390, 768, 1024, 1440] as const;
-const tenantAdminPhone = process.env.GOOES_E2E_TENANT_ADMIN_PHONE || "18800000001";
+const tenantAdminPhone = resolveProjectHealthSmokeTenantAdminPhone();
 
 async function loginAsTenantAdmin(page: Page) {
   const loginResponse = await page.request.post("/api/auth/login", {
@@ -181,6 +183,13 @@ test.describe("project health smoke", () => {
 
     await page.setViewportSize({ width: 768, height: 900 });
     await page.goto("/project-health", { waitUntil: "networkidle" });
+    const refreshResponse = page.waitForResponse((response) =>
+      response.url().includes("/api/backend/project-health/risks?page=1&pageSize=20") &&
+      !response.url().includes("keyword=") &&
+      response.status() === 200
+    );
+    await page.getByRole("button", { name: "刷新" }).click();
+    await refreshResponse;
 
     const jiangwanResponse = page.waitForResponse((response) =>
       response.url().includes("/api/backend/project-health/risks") &&
