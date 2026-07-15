@@ -1,20 +1,27 @@
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
+import type { FastifyRequest } from "fastify";
 import type { PhoneIdentityTargetMode } from "./types";
 
 type RelationOne<T> = T | T[] | null;
 
-type TenantRef = {
+type BasicTenantRef = {
   id: string | null;
   status: string | null;
+};
+
+type CustomerTenantRef = BasicTenantRef & {
+  name: string | null;
+  slug: string | null;
 };
 
 type CustomerBindingRecord = {
   id: string;
   tenant_id: string | null;
   user_id: string | null;
+  name: string | null;
   phone: string | null;
-  tenant: RelationOne<TenantRef>;
+  tenant: RelationOne<CustomerTenantRef>;
 };
 
 type EmployeeBindingRecord = {
@@ -23,7 +30,7 @@ type EmployeeBindingRecord = {
   user_id: string | null;
   phone: string | null;
   status: string | null;
-  tenant: RelationOne<TenantRef>;
+  tenant: RelationOne<BasicTenantRef>;
 };
 
 type PartnerBindingRecord = {
@@ -32,7 +39,7 @@ type PartnerBindingRecord = {
   auth_user_id: string | null;
   phone: string | null;
   status: string;
-  partner: RelationOne<{
+  partner?: RelationOne<{
     id: string;
     status: string;
   }>;
@@ -48,7 +55,9 @@ export type PhoneIdentityBindingSelection = {
   partnerMemberId: string | null;
   authUserId: string;
   openid: string | null;
+  unionid?: string | null;
   phone: string;
+  request?: FastifyRequest | null;
 };
 
 export type PhoneIdentityBindingsDependencies = {
@@ -60,11 +69,13 @@ export type PhoneIdentityBindingsDependencies = {
     authUserId: string;
     customer: CustomerBindingRecord;
     openid: string | null;
+    request?: FastifyRequest | null;
   }) => Promise<string>;
   signCustomerAuth: (input: {
     authUserId: string;
     customer: CustomerBindingRecord;
     openid: string | null;
+    request?: FastifyRequest | null;
   }) => Promise<AuthOutput> | AuthOutput;
 
   findEmployee: (input: {
@@ -75,11 +86,13 @@ export type PhoneIdentityBindingsDependencies = {
     authUserId: string;
     employee: EmployeeBindingRecord;
     openid: string | null;
+    request?: FastifyRequest | null;
   }) => Promise<string>;
   signEmployeeAuth: (input: {
     authUserId: string;
     employee: EmployeeBindingRecord;
     openid: string | null;
+    request?: FastifyRequest | null;
   }) => Promise<AuthOutput> | AuthOutput;
 
   findPartnerMember: (input: {
@@ -89,11 +102,13 @@ export type PhoneIdentityBindingsDependencies = {
     authUserId: string;
     member: PartnerBindingRecord;
     openid: string | null;
+    unionid?: string | null;
   }) => Promise<PartnerBindingRecord>;
   signPartnerAuth: (input: {
     authUserId: string;
     member: PartnerBindingRecord;
     openid: string | null;
+    unionid?: string | null;
   }) => Promise<AuthOutput> | AuthOutput;
 };
 
@@ -109,11 +124,13 @@ export class PhoneIdentityBindings {
         authUserId: input.authUserId,
         customer,
         openid: input.openid,
+        request: input.request ?? null,
       });
       return this.dependencies.signCustomerAuth({
         authUserId,
         customer: { ...customer, user_id: authUserId },
         openid: input.openid,
+        request: input.request ?? null,
       });
     }
 
@@ -123,11 +140,13 @@ export class PhoneIdentityBindings {
         authUserId: input.authUserId,
         employee,
         openid: input.openid,
+        request: input.request ?? null,
       });
       return this.dependencies.signEmployeeAuth({
         authUserId,
         employee: { ...employee, user_id: authUserId },
         openid: input.openid,
+        request: input.request ?? null,
       });
     }
 
@@ -136,11 +155,13 @@ export class PhoneIdentityBindings {
       authUserId: input.authUserId,
       member,
       openid: input.openid,
+      unionid: input.unionid ?? null,
     });
     return this.dependencies.signPartnerAuth({
       authUserId: input.authUserId,
       member: boundMember,
       openid: input.openid,
+      unionid: input.unionid ?? null,
     });
   }
 
@@ -156,6 +177,7 @@ export class PhoneIdentityBindings {
         authUserId: input.authUserId,
         customer,
         openid: input.openid,
+        request: input.request ?? null,
       });
     }
 
@@ -165,6 +187,7 @@ export class PhoneIdentityBindings {
         authUserId: input.authUserId,
         employee,
         openid: input.openid,
+        request: input.request ?? null,
       });
     }
 
@@ -173,6 +196,7 @@ export class PhoneIdentityBindings {
       authUserId: input.authUserId,
       member,
       openid: input.openid,
+      unionid: input.unionid ?? null,
     });
   }
 

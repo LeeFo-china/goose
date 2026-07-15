@@ -3,7 +3,9 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type WechatEmployeeIdentityRow = {
   id: string;
+  tenant_id: string | null;
   user_id: string | null;
+  phone: string | null;
   status: string | null;
   tenant:
     | { id: string | null; status: string | null }
@@ -13,7 +15,9 @@ export type WechatEmployeeIdentityRow = {
 
 const EMPLOYEE_LOGIN_CANDIDATE_SELECT = `
   id,
+  tenant_id,
   user_id,
+  phone,
   status,
   tenant:tenants!employees_tenant_id_fkey(id, status)
 `;

@@ -156,7 +156,7 @@ describe("PhoneIdentityLoginService", () => {
       status: "authenticated",
       auth: { mode: "customer", authMode: "customer" },
     });
-    expect(deps.bindings.buildCurrentAuth).toHaveBeenCalledWith({
+    expect(deps.bindings.buildCurrentAuth).toHaveBeenCalledWith(expect.objectContaining({
       targetMode: "customer",
       tenantId: TENANT_ID,
       customerId: CUSTOMER_ID,
@@ -165,7 +165,7 @@ describe("PhoneIdentityLoginService", () => {
       authUserId: AUTH_USER_ID,
       openid: OPENID,
       phone: PHONE,
-    });
+    }));
     expect(deps.bindings.authenticate).not.toHaveBeenCalled();
   });
 

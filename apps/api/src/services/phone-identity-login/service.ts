@@ -14,10 +14,6 @@ import type {
   PhoneIdentityLoginSelectInput,
   PhoneIdentityLoginVerifyInput,
 } from "@/schema/phone-identity-login";
-import {
-  buildVisitorSessionId,
-  signVisitorSession,
-} from "@/services/wechat-auth-legacy/common";
 import type { SmsVerificationCodeService } from "@/services/sms-verification-codes";
 import type { JwtPayload } from "@/utils/jwt";
 import { buildPhoneIdentityCandidates } from "./candidates";
@@ -25,9 +21,11 @@ import type { PhoneIdentityBindings } from "./bindings";
 import {
   hashToken,
   maskPhone,
+  defaultVisitorSigner,
   serializePublicCandidate,
   serializeShareContext,
   serializeStoredCandidate,
+  selectionError,
   toBindingSelection,
   type ShareLoginContext,
   type VisitorSignerInput,
@@ -37,7 +35,7 @@ import type { PhoneIdentityCandidate } from "./types";
 
 type RequestLogger = Pick<FastifyRequest["log"], "info" | "warn">;
 
-type RequestLike = {
+export type RequestLike = {
   id?: string;
   user?: JwtPayload;
   log?: RequestLogger;
@@ -187,7 +185,9 @@ export class PhoneIdentityLoginService {
       const auth = await this.authenticateCandidate(candidate, {
         authUserId: actor.authUserId,
         openid: actor.openid,
+        unionid: actor.unionid,
         phone: params.input.phone,
+        request: params.request as FastifyRequest,
       });
       return {
         status: "authenticated" as const,
@@ -249,7 +249,9 @@ export class PhoneIdentityLoginService {
         toBindingSelection(reservation.candidate, {
           authUserId: actor.authUserId,
           openid: actor.openid,
+          unionid: actor.unionid,
           phone: reservation.verifiedPhone,
+          request: params.request as FastifyRequest,
         }),
       );
       if (reservation.status !== "same_candidate_consumed") {
@@ -324,7 +326,9 @@ export class PhoneIdentityLoginService {
   private async authenticateCandidate(candidate: PhoneIdentityCandidate, input: {
     authUserId: string;
     openid: string;
+    unionid?: string | null;
     phone: string;
+    request?: FastifyRequest;
   }) {
     const selection = toBindingSelection(candidate, input);
     if (candidate.bindingState === "current") {
@@ -446,54 +450,4 @@ export class PhoneIdentityLoginService {
       // Binding errors must remain the user-facing result; release is best effort.
     }
   }
-}
-
-function defaultVisitorSigner(input: VisitorSignerInput) {
-  const visitorId = buildVisitorSessionId(input.openid);
-  return {
-    visitorId,
-    token: signVisitorSession({
-      authUserId: input.authUserId,
-      openid: input.openid,
-      unionid: input.unionid ?? null,
-      visitorId,
-      verifiedPhone: input.verifiedPhone,
-      shareLinkId: input.shareLinkId ?? null,
-    }),
-  };
-}
-
-function selectionError(status: string) {
-  if (status === "expired") {
-    return Errors.business(
-      410,
-      "身份选择凭证已过期，请重新验证手机号",
-      ErrorCodes.IDENTITY_SELECTION_EXPIRED,
-    );
-  }
-  if (status === "selection_consumed") {
-    return Errors.business(
-      409,
-      "身份选择凭证已使用",
-      ErrorCodes.IDENTITY_SELECTION_CONSUMED,
-    );
-  }
-  if (status === "in_progress") {
-    return Errors.business(
-      409,
-      "身份选择处理中，请稍后重试",
-      ErrorCodes.IDENTITY_SELECTION_IN_PROGRESS,
-    );
-  }
-  if (status === "option_unavailable") {
-    return Errors.business(
-      409,
-      "所选身份不可用，请重新验证手机号",
-      ErrorCodes.IDENTITY_OPTION_UNAVAILABLE,
-    );
-  }
-  return Errors.unauthorized(
-    "请先完成手机号验证",
-    ErrorCodes.AUTH_SESSION_REQUIRED,
-  );
 }

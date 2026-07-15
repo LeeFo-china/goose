@@ -1,4 +1,10 @@
 import { createHash } from "node:crypto";
+import { ErrorCodes } from "@/errors/error-codes";
+import { Errors } from "@/errors/error-factory";
+import {
+  buildVisitorSessionId,
+  signVisitorSession,
+} from "@/services/wechat-auth-legacy/common";
 import type { PhoneIdentityBindingSelection } from "./bindings";
 import type {
   PhoneIdentityCandidate,
@@ -35,7 +41,13 @@ type BindingCandidate = {
 
 export function toBindingSelection(
   candidate: BindingCandidate,
-  input: { authUserId: string; openid: string; phone: string },
+  input: {
+    authUserId: string;
+    openid: string;
+    unionid?: string | null;
+    phone: string;
+    request?: PhoneIdentityBindingSelection["request"];
+  },
 ): PhoneIdentityBindingSelection {
   return {
     targetMode: candidate.targetMode,
@@ -45,7 +57,9 @@ export function toBindingSelection(
     partnerMemberId: candidate.partnerMemberId,
     authUserId: input.authUserId,
     openid: input.openid,
+    unionid: input.unionid ?? null,
     phone: input.phone,
+    request: input.request ?? null,
   };
 }
 
@@ -89,4 +103,54 @@ export function hashToken(token: string) {
 
 export function maskPhone(phone: string) {
   return `${phone.slice(0, 3)}****${phone.slice(-4)}`;
+}
+
+export function defaultVisitorSigner(input: VisitorSignerInput) {
+  const visitorId = buildVisitorSessionId(input.openid);
+  return {
+    visitorId,
+    token: signVisitorSession({
+      authUserId: input.authUserId,
+      openid: input.openid,
+      unionid: input.unionid ?? null,
+      visitorId,
+      verifiedPhone: input.verifiedPhone,
+      shareLinkId: input.shareLinkId ?? null,
+    }),
+  };
+}
+
+export function selectionError(status: string) {
+  if (status === "expired") {
+    return Errors.business(
+      410,
+      "身份选择凭证已过期，请重新验证手机号",
+      ErrorCodes.IDENTITY_SELECTION_EXPIRED,
+    );
+  }
+  if (status === "selection_consumed") {
+    return Errors.business(
+      409,
+      "身份选择凭证已使用",
+      ErrorCodes.IDENTITY_SELECTION_CONSUMED,
+    );
+  }
+  if (status === "in_progress") {
+    return Errors.business(
+      409,
+      "身份选择处理中，请稍后重试",
+      ErrorCodes.IDENTITY_SELECTION_IN_PROGRESS,
+    );
+  }
+  if (status === "option_unavailable") {
+    return Errors.business(
+      409,
+      "所选身份不可用，请重新验证手机号",
+      ErrorCodes.IDENTITY_OPTION_UNAVAILABLE,
+    );
+  }
+  return Errors.unauthorized(
+    "请先完成手机号验证",
+    ErrorCodes.AUTH_SESSION_REQUIRED,
+  );
 }

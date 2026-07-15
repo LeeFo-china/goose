@@ -35,7 +35,7 @@ describe("PhoneIdentityLoginService.select", () => {
       openidHash: sha256(OPENID),
       now: "2026-07-15T00:00:00.000Z",
     });
-    expect(deps.bindings.authenticate).toHaveBeenCalledWith({
+    expect(deps.bindings.authenticate).toHaveBeenCalledWith(expect.objectContaining({
       targetMode: "customer",
       tenantId: TENANT_ID,
       customerId: CUSTOMER_ID,
@@ -44,7 +44,7 @@ describe("PhoneIdentityLoginService.select", () => {
       authUserId: AUTH_USER_ID,
       openid: OPENID,
       phone: PHONE,
-    });
+    }));
     expect(deps.sessionRepository.finalizeSelection).toHaveBeenCalledWith({
       sessionId: SESSION_ID,
       candidateId: CANDIDATE_ID,

@@ -35,11 +35,11 @@ describe("PhoneIdentityBindings", () => {
       tenantId: "tenant-1",
       customerId: "customer-1",
     });
-    expect(bindCustomer).toHaveBeenCalledWith({
+    expect(bindCustomer).toHaveBeenCalledWith(expect.objectContaining({
       authUserId: AUTH_USER_ID,
       customer: customer(),
       openid: OPENID,
-    });
+    }));
   });
 
   test("reloads and binds a selected employee before signing tenant employee auth", async () => {
@@ -69,11 +69,11 @@ describe("PhoneIdentityBindings", () => {
       mode: "tenant_employee",
       authMode: "tenant_employee",
     });
-    expect(bindEmployee).toHaveBeenCalledWith({
+    expect(bindEmployee).toHaveBeenCalledWith(expect.objectContaining({
       authUserId: AUTH_USER_ID,
       employee: employee(),
       openid: OPENID,
-    });
+    }));
   });
 
   test("reloads and binds a selected partner member before signing partner auth", async () => {
@@ -103,11 +103,11 @@ describe("PhoneIdentityBindings", () => {
       mode: "platform_partner",
       authMode: "platform_partner",
     });
-    expect(bindPartnerMember).toHaveBeenCalledWith({
+    expect(bindPartnerMember).toHaveBeenCalledWith(expect.objectContaining({
       authUserId: AUTH_USER_ID,
       member: partnerMember({ status: "pending_bind" }),
       openid: OPENID,
-    });
+    }));
   });
 
   test("rejects changed phone and unavailable accounts", async () => {
