@@ -326,11 +326,13 @@ jobs:
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${container}" 2>/dev/null || true)"
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${container}" 2>/dev/null || true)"
             configured_image="$(docker inspect -f '{{.Config.Image}}' "${container}" 2>/dev/null || true)"
-            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${revision}" = "${SOURCE_SHA}" ] && { [ "${health}" = healthy ] || { [ -z "${health}" ] && [ "${state}" = running ]; }; }; then break; fi
+            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${revision}" = "${SOURCE_SHA}" ] && [ "${state}" = running ] && [ "${health}" = healthy ]; then break; fi
             sleep 5
           done
           test "${configured_image}" = "${DEPLOY_IMAGE_REF}"
           test "${revision}" = "${SOURCE_SHA}"
+          test "${state}" = running
+          test "${health}" = healthy
           if [ -n "${url}" ]; then curl -fsS --retry 8 --retry-delay 3 -o /dev/null "${url}"; fi
 
       - name: Deploy gated dev web

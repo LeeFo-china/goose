@@ -52,9 +52,56 @@ const requiredImmutableDeploymentFragments = [
   'test "${configured_image}" = "${DEPLOY_IMAGE_REF}"',
   'configured_image="$(docker inspect -f \'{{.Config.Image}}\' gooes-web-dev 2>/dev/null || true)"',
 ];
+const requiredNonWebHealthAssertions = [
+  'test "${state}" = running',
+  'test "${health}" = healthy',
+];
 
 function satisfiesImmutableDeploymentContract(candidate: string): boolean {
   return requiredImmutableDeploymentFragments.every((fragment) => candidate.includes(fragment));
+}
+
+function satisfiesNonWebHealthContract(candidate: string): boolean {
+  return requiredNonWebHealthAssertions.every((fragment) => candidate.includes(fragment));
+}
+
+function extractRunScript(step: string): string {
+  const marker = "        run: |\n";
+  const start = step.indexOf(marker);
+  expect(start).toBeGreaterThanOrEqual(0);
+
+  return step
+    .slice(start + marker.length)
+    .split("\n")
+    .map((line) => line.replace(/^          /, ""))
+    .join("\n");
+}
+
+function runNonWebHealthCheck(health: "healthy" | "unhealthy"): ReturnType<typeof Bun.spawnSync> {
+  const checkScript = extractRunScript(checkStep);
+  const dockerMock = `
+docker() {
+  case "$3" in
+    '{{.State.Status}}') printf '%s\\n' running ;;
+    '{{if .State.Health}}{{.State.Health.Status}}{{end}}') printf '%s\\n' ${health} ;;
+    '{{index .Config.Labels "org.opencontainers.image.revision"}}') printf '%s\\n' "$SOURCE_SHA" ;;
+    '{{.Config.Image}}') printf '%s\\n' "$DEPLOY_IMAGE_REF" ;;
+    *) return 1 ;;
+  esac
+}
+sleep() { :; }
+`;
+
+  return Bun.spawnSync(["bash", "-c", `${dockerMock}\n${checkScript}`], {
+    env: {
+      ...process.env,
+      DEPLOY_IMAGE_REF: "useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      RELEASE_SERVICE: "social-video-worker",
+      SOURCE_SHA: "0123456789abcdef0123456789abcdef01234567",
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
 }
 
 describe("deploy-dev workflow", () => {
@@ -142,6 +189,25 @@ describe("deploy-dev workflow", () => {
       'configured_image="$(docker inspect -f \'{{.Config.Image}}\' "${container}" 2>/dev/null || true)"',
     );
     expect(checkStep).toContain('test "${configured_image}" = "${DEPLOY_IMAGE_REF}"');
+    expect(checkStep).toContain('test "${revision}" = "${SOURCE_SHA}"');
+    expect(checkStep).toContain('test "${state}" = running');
+    expect(checkStep).toContain('test "${health}" = healthy');
+  });
+
+  test("rejects an unhealthy non-Web container after the polling deadline", () => {
+    expect(runNonWebHealthCheck("unhealthy").exitCode).not.toBe(0);
+  });
+
+  test("accepts a healthy non-Web container with matching immutable evidence", () => {
+    expect(runNonWebHealthCheck("healthy").exitCode).toBe(0);
+  });
+
+  test("rejects removal of either final non-Web health assertion", () => {
+    expect(satisfiesNonWebHealthContract(checkStep)).toBe(true);
+
+    for (const assertion of requiredNonWebHealthAssertions) {
+      expect(satisfiesNonWebHealthContract(checkStep.replace(assertion, ""))).toBe(false);
+    }
   });
 
   test("deploys the immutable Web image locally only after its gate", () => {
