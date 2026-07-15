@@ -115,18 +115,22 @@ class TenantShareLinkRepository {
     }
 
     const record = (data || null) as TenantShareLinkRecord | null;
-    if (!record) return null;
+    return this.hydratePublicRecord(record);
+  }
 
-    const [tenant, employee] = await Promise.all([
-      this.findTenant(record.tenant_id),
-      this.findEmployee(record.share_employee_id),
-    ]);
+  async findPublicById(id: string) {
+    const { data, error } = await this.client
+      .from("tenant_share_links")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
 
-    return {
-      ...record,
-      tenant,
-      share_employee: employee,
-    };
+    if (error) {
+      throw Errors.dbError("查询员工分享链接失败", error);
+    }
+
+    const record = (data || null) as TenantShareLinkRecord | null;
+    return this.hydratePublicRecord(record);
   }
 
   async bindCustomer(input: {
@@ -176,6 +180,21 @@ class TenantShareLinkRepository {
     }
 
     return data as TenantShareLinkPublicRecord["share_employee"] | null;
+  }
+
+  private async hydratePublicRecord(record: TenantShareLinkRecord | null) {
+    if (!record) return null;
+
+    const [tenant, employee] = await Promise.all([
+      this.findTenant(record.tenant_id),
+      this.findEmployee(record.share_employee_id),
+    ]);
+
+    return {
+      ...record,
+      tenant,
+      share_employee: employee,
+    };
   }
 }
 
