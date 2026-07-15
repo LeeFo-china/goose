@@ -33,7 +33,7 @@ export const PhoneIdentityLoginSendCodeSchema = z
 export const PhoneIdentityLoginVerifySchema = z
   .object({
     phone: ChinaMobilePhoneSchema,
-    code: SmsCodeSchema,
+    code: SmsCodeSchema.optional(),
     share_token: ShareTokenSchema.optional(),
   })
   .strict();

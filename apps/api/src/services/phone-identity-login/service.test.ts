@@ -323,6 +323,7 @@ function dependencies(overrides: Partial<{
   return {
     smsService: {
       sendCode: mock(async () => ({ success: true as const, cooldown_seconds: 60 })),
+      reserveBypassCode: mock(async () => ({ code: "000000" })),
     },
     sessionRepository: {
       claimVerification: overrides.claimVerification ??

@@ -15,6 +15,7 @@ import type {
   PhoneIdentityLoginVerifyInput,
 } from "@/schema/phone-identity-login";
 import type { SmsVerificationCodeService } from "@/services/sms-verification-codes";
+import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import type { JwtPayload } from "@/utils/jwt";
 import { buildPhoneIdentityCandidates } from "./candidates";
 import type { PhoneIdentityBindings } from "./bindings";
@@ -42,7 +43,7 @@ export type RequestLike = {
 };
 
 export type PhoneIdentityLoginServiceDependencies = {
-  smsService: Pick<SmsVerificationCodeService, "sendCode">;
+  smsService: Pick<SmsVerificationCodeService, "sendCode" | "reserveBypassCode">;
   sessionRepository: Pick<
     PhoneIdentityLoginRepository,
     | "claimVerification"
@@ -121,9 +122,15 @@ export class PhoneIdentityLoginService {
   async verify(params: VerifyParams) {
     const actor = await this.requireWechatActor(params.request, true);
     const now = this.now();
-    const verification = await this.dependencies.sessionRepository.claimVerification({
+    const code = await this.resolveVerificationCode({
       phone: params.input.phone,
       code: params.input.code,
+      now,
+      request: params.request,
+    });
+    const verification = await this.dependencies.sessionRepository.claimVerification({
+      phone: params.input.phone,
+      code,
       authUserId: actor.authUserId,
       openidHash: actor.openidHash,
       now: now.toISOString(),
@@ -321,6 +328,35 @@ export class PhoneIdentityLoginService {
       activeWechatOauthUserIds,
       shareTenantId: input.shareTenantId,
     });
+  }
+
+  private async resolveVerificationCode(input: {
+    phone: string;
+    code?: string;
+    now: Date;
+    request: RequestLike;
+  }) {
+    if (isPhoneLoginWithoutCodeEnabled()) {
+      const reservation = await this.dependencies.smsService.reserveBypassCode({
+        phone: input.phone,
+        scene: "login_identity",
+        now: input.now.toISOString(),
+      });
+      this.logInfo(input.request, "phone_identity_login_sms_bypassed", {
+        requestId: input.request.id,
+      });
+      return reservation.code;
+    }
+
+    const code = input.code?.trim() || "";
+    if (!code) {
+      throw Errors.business(
+        400,
+        "请输入验证码",
+        ErrorCodes.SMS_CODE_REQUIRED,
+      );
+    }
+    return code;
   }
 
   private async authenticateCandidate(candidate: PhoneIdentityCandidate, input: {

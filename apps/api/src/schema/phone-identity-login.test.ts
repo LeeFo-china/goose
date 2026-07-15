@@ -21,6 +21,12 @@ describe("phone identity login schemas", () => {
       }).success,
     ).toBe(true);
     expect(
+      PhoneIdentityLoginVerifySchema.safeParse({
+        phone: "13800138000",
+        share_token: "share_token_123",
+      }).success,
+    ).toBe(true);
+    expect(
       PhoneIdentityLoginSelectSchema.safeParse({
         selection_token: "A".repeat(43),
         candidate_id: "00000000-0000-4000-8000-000000000001",
