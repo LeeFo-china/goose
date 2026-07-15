@@ -18,7 +18,8 @@ describe("web app scaffold", () => {
     const pkg = JSON.parse(read("package.json"));
 
     expect(nextConfig).toContain('output: "standalone"');
-    expect(nextConfig).not.toContain("NEXT_DIST_DIR");
+    expect(nextConfig).toContain("PHASE_DEVELOPMENT_SERVER");
+    expect(nextConfig).toContain('process.env.NEXT_DIST_DIR ?? ".next-dev"');
     expect(layout).not.toMatch(/^\s*["']use client["'];?/m);
     expect(pkg.scripts.build).toBe(
       "next build && node scripts/sync-standalone-assets.mjs",
