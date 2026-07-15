@@ -5,6 +5,7 @@ export type AuthTargetRole = (typeof AUTH_TARGET_ROLE_VALUES)[number];
 export const SMS_SCENE_VALUES = [
   'bind_customer',
   'bind_employee',
+  'login_identity',
   'admin_login',
   'rebind_wechat',
   'bind_platform_partner',
