@@ -144,8 +144,10 @@ Nginx, or alter production traffic.
 2. Set repository variable `TENCENT_CCR_REGISTRY` to `useccr.ccs.tencentyun.com`; retain
    `TENCENT_CCR_NAMESPACE=america_goose`.
 3. Merge the focused migration branch into remote `main`.
-4. Observe the resulting automatic development build. If its trusted change plan does not select
-   every application service, dispatch `release-dev.yml` with `service=all` from merged `main`.
+4. Require the resulting automatic development build plan to select every application service. The
+   tracked Compose changes are runtime-wide and must produce four image builds plus five deployment
+   services. If that contract fails, stop and fix the resolver; `release-dev.yml service=all` is not
+   a substitute because Web remains outside the service orchestrator.
 5. Require successful SHA image manifests and healthy development containers for API, Admin, Web,
    social-video-worker, and cos-reconcile-worker. The cos-reconcile-worker continues to share the API
    image.
