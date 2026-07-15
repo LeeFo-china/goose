@@ -22,11 +22,38 @@ const sliceBetween = (startMarker: string, endMarker: string): string => {
   return workflow.slice(start, end);
 };
 
-const dockerTopLevelCommands = (shellSource: string): string[] => {
+const dockerCommandShapes = (shellSource: string): string[] => {
   const normalizedShellSource = shellSource.replace(/\\\r?\n\s*/g, " ");
   return Array.from(
-    normalizedShellSource.matchAll(/\bdocker\s+([a-z][a-z0-9-]*)\b/g),
-    (match) => String(match[1]),
+    normalizedShellSource.matchAll(/\bdocker\s+([^;\n|)]*)/g),
+    (match) => {
+      const tokens = String(match[1]).trim().split(/\s+/);
+      if (tokens[0]?.startsWith("-")) {
+        return "<global-option>";
+      }
+      if (tokens[0] === "buildx" && tokens[1] === "imagetools") {
+        return tokens.slice(0, 3).join(" ");
+      }
+      if (tokens[0] === "buildx" || tokens[0] === "image") {
+        return tokens.slice(0, 2).join(" ");
+      }
+      return tokens[0] ?? "<missing-command>";
+    },
+  );
+};
+
+const allowedProductionPullDockerCommands = [
+  "buildx imagetools inspect",
+  "buildx version",
+  "image inspect",
+  "image rm",
+  "login",
+  "pull",
+];
+
+const expectOnlyProductionPullDockerCommands = (shellSource: string): void => {
+  expect([...new Set(dockerCommandShapes(shellSource))].sort()).toEqual(
+    allowedProductionPullDockerCommands,
   );
 };
 
@@ -201,10 +228,7 @@ describe("automatic development image build contract", () => {
     expect(verifyProductionPull).toContain(
       'test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"',
     );
-    expect(verifyProductionPull).not.toMatch(/\bdocker\s+-/);
-    expect(
-      [...new Set(dockerTopLevelCommands(verifyProductionPull))].sort(),
-    ).toEqual(["buildx", "image", "login", "pull"]);
+    expectOnlyProductionPullDockerCommands(verifyProductionPull);
     expect(verifyProductionPull).not.toMatch(/\bdocker(?:-|\s+)compose\b/);
     expect(verifyProductionPull).not.toMatch(/\brestart\b/i);
     expect(verifyProductionPull).not.toMatch(/\bsystemctl\b/);
@@ -213,6 +237,21 @@ describe("automatic development image build contract", () => {
     expect(verifyProductionPull).not.toMatch(
       /uses:\s+\.\/\.github\/workflows\/deploy-/,
     );
+  });
+
+  test.each([
+    "docker image prune -a -f",
+    "docker buildx prune -a -f",
+    "docker --config /tmp/docker pull example.invalid/image@sha256:deadbeef",
+  ])("rejects production pull Docker mutation: %s", (mutation) => {
+    const verifyProductionPull = sliceBetween(
+      "  verify-production-pull:",
+      "  # End production pull verification",
+    );
+
+    expect(() =>
+      expectOnlyProductionPullDockerCommands(`${verifyProductionPull}\n${mutation}`),
+    ).toThrow();
   });
 });
 

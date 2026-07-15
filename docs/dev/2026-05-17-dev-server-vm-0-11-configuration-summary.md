@@ -1,10 +1,11 @@
-# VM-0-11-ubuntu Dev 服务器配置摘要
+# VM-0-11-ubuntu Dev 服务器配置摘要（2026-05-17 历史归档）
 
 日期：2026-05-17
 
-> 2026-07-15 运维口径更新：本文保留 2026-05-17 的配置背景，镜像路径和可复制命令已
-> 统一更新为美国仓库目标。当前迁移边界、production Strategy B 和生产 Web 独立发布链
-> 以 `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；路径更新不表示生产已部署。
+> **历史归档，全文不可执行。** 本文命令、Runner、分支和部署步骤仅作为 2026-05-17
+> 的历史证据；镜像路径仅为避免复制旧仓库地址而更新。现行迁移边界、production
+> Strategy B 和生产 Web 独立发布链以
+> `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准。
 
 ## 1. 服务器用途
 
@@ -19,12 +20,12 @@
 - 不在本机运行 dev 数据库。
 - 不在本机承担长期镜像构建。
 
-## 2. 当前资源
+## 2. 2026-05-17 资源快照
 
 ```text
 CPU: 2 核
 内存: 约 3.6Gi
-磁盘: 约 59G，当前可用约 50G
+磁盘: 约 59G，2026-05-17 可用约 50G
 Docker: 已安装
 Docker Compose v2: 已安装
 Nginx: 已启用
@@ -101,7 +102,7 @@ docker compose -f docker-compose.dev.yml up -d --no-deps --force-recreate <servi
 /etc/nginx/conf.d/gooes-dev.conf
 ```
 
-当前已配置 HTTP/HTTPS 反代：
+截至 2026-05-17 已配置 HTTP/HTTPS 反代：
 
 ```text
 api-dev.goodcms.cn   -> 127.0.0.1:13000
@@ -109,7 +110,7 @@ admin-dev.goodcms.cn -> 127.0.0.1:13010
 h5-dev.goodcms.cn    -> 127.0.0.1:13020
 ```
 
-`h5-dev.goodcms.cn` 当前没有独立 H5 运行容器，默认页面 upstream `127.0.0.1:13020` 仍是预留位。但为了小程序开发版能按同源 H5 域名读取公开活动接口，Nginx 已按生产 H5 口径增加公开接口代理：
+`h5-dev.goodcms.cn` 在 2026-05-17 没有独立 H5 运行容器，默认页面 upstream `127.0.0.1:13020` 仍是预留位。但为了小程序开发版能按同源 H5 域名读取公开活动接口，Nginx 已按生产 H5 口径增加公开接口代理：
 
 ```text
 h5-dev.goodcms.cn/public/marketing-pages    -> 127.0.0.1:13000
@@ -131,11 +132,11 @@ Domains: api-dev.goodcms.cn admin-dev.goodcms.cn h5-dev.goodcms.cn
 Expiry Date: 2026-08-15
 ```
 
-当前 `api-dev.goodcms.cn` 与 `admin-dev.goodcms.cn` 已由 dev 容器提供服务。
+截至 2026-05-17，`api-dev.goodcms.cn` 与 `admin-dev.goodcms.cn` 已由 dev 容器提供服务。
 
-## 6. DNS 当前状态
+## 6. 2026-05-17 DNS 状态
 
-当前公共 DNS 已解析到 dev 服务器：
+截至 2026-05-17，公共 DNS 已解析到 dev 服务器：
 
 ```text
 api-dev.goodcms.cn   -> 43.165.126.30
@@ -149,7 +150,7 @@ h5-dev.goodcms.cn    -> 43.165.126.30
 curl --noproxy '*' http://api-dev.goodcms.cn/
 ```
 
-当前 HTTPS 已正常命中 dev 服务器上的 Nginx，并转发到对应 dev 容器。
+截至 2026-05-17，HTTPS 已正常命中 dev 服务器上的 Nginx，并转发到对应 dev 容器。
 
 ## 7. Dev Supabase
 
@@ -179,7 +180,7 @@ SOCIAL_VIDEO_CHARGE_ENABLED=false
 
 ## 8. 数据库连接状态
 
-Supabase HTTPS API 连通正常。Direct DB host 当前只解析到 IPv6：
+2026-05-17 的 Supabase HTTPS API 连通正常。Direct DB host 当时只解析到 IPv6：
 
 ```text
 db.<project-ref>.supabase.co
@@ -198,7 +199,7 @@ user=postgres.<project-ref>
 
 从 dev 服务器执行 `psql` 登录测试已通过。后续 migration 可以使用 `SUPABASE_DB_URL`。
 
-## 9. 当前未完成事项
+## 9. 2026-05-17 未完成事项
 
 1. Worker dev 容器按需启动。
 2. 生产发布继续保持手动触发，dev 发布由 `Deploy Dev` workflow 按代码路径自动触发，必要时可手动选择服务补发。
@@ -228,7 +229,7 @@ ssh gooes-dev \
   < scripts/dev/seed-dev.sql
 ```
 
-当前 seed 数据：
+2026-05-17 seed 数据：
 
 | 类型 | 值 |
 | --- | --- |
@@ -288,7 +289,7 @@ Migrate Dev Database
 .github/workflows/deploy-dev.yml
 ```
 
-当前已可通过 GitHub Actions 自动或手动触发 `Deploy Dev`。
+截至 2026-05-17，已可通过 GitHub Actions 自动或手动触发 `Deploy Dev`。
 
 自动触发规则：
 
@@ -327,7 +328,9 @@ cos-reconcile-worker
 
 Dev 发布链路有两层 Docker 清理。
 
-第一层在 GitHub Actions 构建 runner `gooes-prod-vm-0-3` 上执行。原因是 dev 镜像仍在生产 runner 构建并推送到腾讯 CCR，构建过程会在 `/var/lib/containerd` 累积 dangling 镜像和 build cache。
+以下第一层清理方式仅记录 2026-05-17 的历史实现，现已过时：当时在 GitHub Actions
+构建 runner `gooes-prod-vm-0-3` 上执行，因为 dev 镜像当时仍在生产 runner 构建并推送
+到腾讯 CCR，构建过程会在 `/var/lib/containerd` 累积 dangling 镜像和 build cache。
 
 清理动作：
 
@@ -337,7 +340,7 @@ docker image prune -f
 docker builder prune -f --filter "until=24h"
 ```
 
-这一步只删除退出容器、dangling 镜像和 24 小时以前的构建缓存，不删除已经打 tag 的 `:dev` 或 SHA 镜像。
+在 2026-05-17 的实现中，这一步只删除退出容器、dangling 镜像和 24 小时以前的构建缓存，不删除已经打 tag 的 `:dev` 或 SHA 镜像。
 
 第二层在 `VM-0-11-ubuntu` dev 运行服务器上执行。每次 dev 部署和健康检查后，workflow 会通过 SSH 清理旧运行镜像：
 
@@ -347,7 +350,7 @@ docker image prune -a -f
 docker builder prune -a -f --filter "until=24h"
 ```
 
-这一步会删除未被当前容器引用的旧 dev 镜像。已运行容器引用的当前镜像不会被删除；如需回滚旧 SHA 镜像，服务器会从腾讯 CCR 重新拉取。
+在 2026-05-17 的实现中，这一步会删除未被运行中容器引用的旧 dev 镜像。运行中容器引用的镜像不会被删除；如需回滚旧 SHA 镜像，服务器会从腾讯 CCR 重新拉取。
 
 明确不执行：
 
@@ -357,11 +360,11 @@ docker volume prune
 
 原因是 volume 可能承载持久化数据、Nginx 配置、日志或后续扩展服务数据，不能放进自动清理。
 
-当前 dev 发布链路：
+2026-05-17 dev 发布链路（历史）：
 
 ```text
 GitHub push / manual dispatch
-  -> gooes-prod-vm-0-3 构建 dev 镜像
+  -> gooes-prod-vm-0-3 构建 dev 镜像（2026-05-17 历史实现，现已过时）
   -> 推送腾讯 CCR
   -> VM-0-11-ubuntu pull 镜像
   -> docker compose up -d --force-recreate
@@ -369,4 +372,4 @@ GitHub push / manual dispatch
   -> VM-0-11-ubuntu 清理旧镜像和旧 build cache
 ```
 
-后续如果要把 dev 构建迁移到 `VM-0-11-ubuntu`，需要先在 dev 服务器安装并注册独立 GitHub runner、配置 Docker 构建权限、腾讯 CCR 登录和同等清理策略。
+2026-05-17 当时提出：如果要把 dev 构建迁移到 `VM-0-11-ubuntu`，需要先在 dev 服务器安装并注册独立 GitHub runner、配置 Docker 构建权限、腾讯 CCR 登录和同等清理策略。该建议不代表现行发布链路。
