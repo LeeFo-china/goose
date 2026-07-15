@@ -98,8 +98,8 @@ currently running production images and historical rollback.
 
 ### Admin Super-Admin Release Center
 
-The Admin UI and API release service require no registry-specific business-code change. They already
-dispatch these stable workflows:
+The Admin API release service requires no registry-specific business-code change. It already
+dispatches these stable workflows:
 
 ```text
 development -> release-dev.yml
@@ -109,11 +109,18 @@ production  -> release-production.yml
 Registry selection belongs to the called workflows. Existing release-center tests will verify that
 development still means build-and-deploy, while production candidate build does not deploy.
 
+The production service candidate intentionally excludes Web from its deploy scope. Web remains a
+separate Gate and Web-only deployment. The Admin Web release guide must add the missing production
+image-build step and link to `build-docker-images.yml`, so an operator builds the Web SHA image from
+the same release Tag before running the Web Gate. This is an Admin guidance correction only; Web must
+not be added to the service deployment multi-select.
+
 ## Production Pull Verification
 
-`release-production.yml` will add an evidence-bound pull verification job between image build and
-candidate publication. It will run on the production deploy runner with the `production` GitHub
-environment and will:
+`build-docker-images.yml` will add an evidence-bound pull verification job after every production
+image build. Placing the check in the reusable build workflow covers both service candidates invoked
+by `release-production.yml` and the separate production Web build. It will run on the production
+deploy runner with the `production` GitHub environment and will:
 
 1. Guard the expected production runner and selected release Tag.
 2. Download the current run's immutable build plan and image manifests.
@@ -124,8 +131,9 @@ environment and will:
 6. Verify the local image revision label and registry digest against the manifest.
 7. Remove only the newly pulled, unused SHA-tag references after verification.
 
-Candidate publication depends on this job succeeding. The job must not call `docker compose up`,
-restart a service, reload Nginx, or alter production traffic.
+The reusable build workflow does not complete until this job succeeds, so service candidate
+publication also depends on it. The job must not call `docker compose up`, restart a service, reload
+Nginx, or alter production traffic.
 
 ## Rollout Sequence
 
@@ -150,16 +158,19 @@ restart a service, reload Nginx, or alter production traffic.
 
 1. Create release candidate Tag `v2026.07.15.1` from the merged remote `main` commit.
 2. Dispatch `release-production.yml` with `operation=build`, `service=all`, and the existing exact
-   confirmation text.
-3. Require all production image manifests, the production pull-verification job, and the immutable
-   candidate artifact to succeed.
-4. Record production container IDs, image names, and revisions before and after the candidate run;
+   confirmation text. This builds API, Admin, and social-video-worker; cos-reconcile-worker continues
+   to share the API image.
+3. Dispatch `build-docker-images.yml` from the same Tag with `target_environment=production` and
+   `service=web`. This creates the production Web SHA image without deploying it.
+4. Require all four production image manifests, both production pull-verification results, and the
+   immutable service candidate artifact to succeed.
+5. Record production container IDs, image names, and revisions before and after the build runs;
    they must be unchanged.
-5. Back up `/opt/supabase/docker/.env` and `.env.admin`, then change only active API, Admin, and
+6. Back up `/opt/supabase/docker/.env` and `.env.admin`, then change only active API, Admin, and
    social-video-worker image variables to US-registry `:main` references. Do not run Compose.
-6. Keep production Web fail-closed: its actual future deployment must continue to use a gated SHA
+7. Keep production Web fail-closed: its actual future deployment must continue to use a gated SHA
    image supplied by the production deployment workflow.
-7. Verify production Compose resolves the new registry while all running production containers still
+8. Verify production Compose resolves the new registry while all running production containers still
    use their pre-migration images.
 
 ## Rollback
@@ -184,8 +195,8 @@ timestamped backups. Running containers remain unchanged throughout this phase.
 | GitHub config | Registry and namespace variables have the exact US values; secrets remain present |
 | Build | API, Admin, Web, and social-video-worker SHA manifests point to the US registry |
 | Development | Five application containers are healthy and resolve to new-registry images |
-| Admin release center | Dev dispatch uses `release-dev.yml`; production build uses `release-production.yml` |
-| Production candidate | Build, manifest verification, and production-runner pull verification pass |
+| Admin release center | Dev uses `release-dev.yml`; service production uses `release-production.yml`; Web guide includes its separate build |
+| Production candidate | Service candidate and Web build manifests pass production-runner pull verification |
 | Production safety | Container IDs, revisions, Nginx, and public endpoints are unchanged |
 | Server config | Active `.env` files resolve future pulls to the US registry; backups remain intact |
 | Rollback | Old registry and timestamped server environment backups remain available |
