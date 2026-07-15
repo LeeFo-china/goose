@@ -10,6 +10,12 @@ class WechatEmployeeIdentityService {
     );
   }
 
+  getEmployeeLoginCandidateById(employeeId: string) {
+    return wechatEmployeeIdentityRepository.getEmployeeLoginCandidateById(
+      employeeId,
+    );
+  }
+
   bindEmployeeAuthUser(input: {
     employeeId: string;
     authUserId: string;

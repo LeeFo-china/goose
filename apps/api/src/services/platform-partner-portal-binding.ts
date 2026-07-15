@@ -6,7 +6,7 @@ import type {
 
 type BindWithoutSmsRepository = Pick<
   PlatformPartnerPortalRepositoryPort,
-  "findBindableMemberByPhone" | "bindMemberAuthUser"
+  "findBindableMemberByPhone" | "findMemberById" | "bindMemberAuthUser"
 >;
 
 export function assertUsablePlatformPartnerMember(
@@ -28,13 +28,24 @@ export async function bindPlatformPartnerMemberWithoutSmsCode(input: {
   repository: BindWithoutSmsRepository;
   phone: string;
   authUserId: string;
+  memberId?: string;
 }) {
-  const member = await input.repository.findBindableMemberByPhone(input.phone);
+  const member = input.memberId
+    ? await input.repository.findMemberById(input.memberId)
+    : await input.repository.findBindableMemberByPhone(input.phone);
   if (!member) {
     throw Errors.business(
       404,
       "未找到可绑定的合伙人成员",
       "PARTNER_MEMBER_NOT_FOUND",
+    );
+  }
+
+  if (input.memberId && member.phone !== input.phone) {
+    throw Errors.business(
+      409,
+      "身份选项已不可用",
+      "IDENTITY_OPTION_UNAVAILABLE",
     );
   }
 

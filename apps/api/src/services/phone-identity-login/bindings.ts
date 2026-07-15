@@ -145,6 +145,11 @@ export class PhoneIdentityBindings {
   }
 
   async buildCurrentAuth(input: PhoneIdentityBindingSelection) {
+    const bindingState = await this.inspectCurrentBinding(input);
+    if (bindingState !== "current") {
+      throw optionUnavailable();
+    }
+
     if (input.targetMode === "customer") {
       const customer = await this.loadCustomer(input);
       return this.dependencies.signCustomerAuth({
@@ -171,6 +176,23 @@ export class PhoneIdentityBindings {
     });
   }
 
+  async inspectCurrentBinding(
+    input: PhoneIdentityBindingSelection,
+  ): Promise<"current" | "unbound" | "indeterminate"> {
+    const record = await this.loadRecordForInspection(input);
+    if (!record) return "indeterminate";
+
+    if (input.targetMode === "platform_partner") {
+      const member = record as PartnerBindingRecord;
+      if (member.auth_user_id === input.authUserId) return "current";
+      return member.auth_user_id ? "indeterminate" : "unbound";
+    }
+
+    const item = record as CustomerBindingRecord | EmployeeBindingRecord;
+    if (item.user_id === input.authUserId) return "current";
+    return item.user_id ? "indeterminate" : "unbound";
+  }
+
   private async loadCustomer(input: PhoneIdentityBindingSelection) {
     if (!input.tenantId || !input.customerId) {
       throw optionUnavailable();
@@ -193,6 +215,30 @@ export class PhoneIdentityBindings {
     }
 
     return customer;
+  }
+
+  private async loadRecordForInspection(input: PhoneIdentityBindingSelection) {
+    try {
+      if (input.targetMode === "customer") {
+        return await this.loadCustomer(input);
+      }
+
+      if (input.targetMode === "tenant_employee") {
+        return await this.loadEmployee(input);
+      }
+
+      return await this.loadPartnerMember(input);
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === ErrorCodes.IDENTITY_OPTION_UNAVAILABLE
+      ) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   private async loadEmployee(input: PhoneIdentityBindingSelection) {

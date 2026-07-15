@@ -171,6 +171,42 @@ describe("PhoneIdentityBindings", () => {
       .resolves.toEqual({ mode: "customer", authMode: "customer" });
     expect(bindCustomer).not.toHaveBeenCalled();
   });
+
+  test("inspects current, unbound, and indeterminate binding state", async () => {
+    const current = new PhoneIdentityBindings({
+      ...baseDependencies(),
+      findCustomer: mock(async () => customer({ user_id: AUTH_USER_ID })),
+    });
+    await expect(current.inspectCurrentBinding(customerInput()))
+      .resolves.toBe("current");
+
+    const unbound = new PhoneIdentityBindings({
+      ...baseDependencies(),
+      findCustomer: mock(async () => customer({ user_id: null })),
+    });
+    await expect(unbound.inspectCurrentBinding(customerInput()))
+      .resolves.toBe("unbound");
+
+    const unavailable = new PhoneIdentityBindings({
+      ...baseDependencies(),
+      findCustomer: mock(async () => customer({ phone: "13900139000" })),
+    });
+    await expect(unavailable.inspectCurrentBinding(customerInput()))
+      .resolves.toBe("indeterminate");
+  });
+
+  test("buildCurrentAuth requires an existing current binding", async () => {
+    const signCustomerAuth = mock(async () => ({ mode: "customer", authMode: "customer" }));
+    const bindings = new PhoneIdentityBindings({
+      ...baseDependencies(),
+      findCustomer: mock(async () => customer({ user_id: null })),
+      signCustomerAuth,
+    });
+
+    await expect(bindings.buildCurrentAuth(customerInput()))
+      .rejects.toMatchObject({ code: ErrorCodes.IDENTITY_OPTION_UNAVAILABLE });
+    expect(signCustomerAuth).not.toHaveBeenCalled();
+  });
 });
 
 function baseDependencies() {
