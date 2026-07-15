@@ -4,8 +4,8 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-describe("BillingRechargeController routes", () => {
-  test("registers tenant recharge product and order routes", async () => {
+describe("PlatformBillingRechargeRefundController routes", () => {
+  test("registers platform recharge refund review routes", async () => {
     const { default: controller } = await import(".");
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
@@ -16,11 +16,11 @@ describe("BillingRechargeController routes", () => {
     controller.registerExtraRoutes(fastify as never);
 
     expect(routes).toEqual([
-      { method: "GET", path: "/billing/recharge-products" },
-      { method: "GET", path: "/billing/recharge-orders" },
-      { method: "POST", path: "/billing/recharge-orders" },
-      { method: "GET", path: "/billing/recharge-orders/:id" },
-      { method: "POST", path: "/billing/recharge-orders/:id/refund-requests" },
+      { method: "GET", path: "/platform/billing/recharge-refund-requests" },
+      { method: "GET", path: "/platform/billing/recharge-refund-requests/:id" },
+      { method: "POST", path: "/platform/billing/recharge-refund-requests/:id/approve" },
+      { method: "POST", path: "/platform/billing/recharge-refund-requests/:id/reject" },
+      { method: "POST", path: "/platform/billing/recharge-refund-requests/:id/execute" },
     ]);
   });
 });

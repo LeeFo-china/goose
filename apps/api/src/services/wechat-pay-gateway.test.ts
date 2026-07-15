@@ -202,4 +202,67 @@ describe("WechatPayGateway", () => {
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  test("requests direct merchant refund by transaction id", async () => {
+    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.mch.weixin.qq.com/v3/refund/domestic/refunds");
+      expect(init?.method).toBe("POST");
+      expect(init?.headers).toEqual(
+        expect.objectContaining({
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        }),
+      );
+      expect(String((init?.headers as Record<string, string>).Authorization))
+        .toContain('mchid="1112582521"');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        transaction_id: "4200000000202607010000000001",
+        out_refund_no: "TRR202607100800000001",
+        reason: "客户误充值，需要申请退款",
+        notify_url: "https://api.example.com/pay/wechat/callback",
+        amount: {
+          refund: 10000,
+          total: 10000,
+          currency: "CNY",
+        },
+      });
+      return new Response(JSON.stringify({
+        out_refund_no: "TRR202607100800000001",
+        refund_id: "5030000000202607150000000001",
+        status: "PROCESSING",
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    const result = await gateway.requestRefund({
+      config: directConfig,
+      transactionId: "4200000000202607010000000001",
+      outRefundNo: "TRR202607100800000001",
+      reason: "客户误充值，需要申请退款",
+      refundAmountFen: 10000,
+      totalAmountFen: 10000,
+      secretBundle: {
+        privateKeyPem: privateKey,
+        apiV3Key: "api-v3-key",
+        wechatPayPublicKeyId: null,
+        wechatPayPublicKeyPem: null,
+        baseUrl: "https://api.mch.weixin.qq.com",
+      },
+    });
+
+    expect(result).toEqual({
+      out_refund_no: "TRR202607100800000001",
+      refund_id: "5030000000202607150000000001",
+      status: "PROCESSING",
+      raw: {
+        out_refund_no: "TRR202607100800000001",
+        refund_id: "5030000000202607150000000001",
+        status: "PROCESSING",
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

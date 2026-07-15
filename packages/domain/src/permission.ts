@@ -81,6 +81,7 @@ export const PERMISSION_CODE_VALUES = [
   'finance.closing.manage',
   'billing.recharge.create',
   'billing.recharge.read',
+  'billing.recharge.refund.request',
   'wechat_pay.config.read',
   'wechat_pay.config.manage',
   'wechat_pay.order.read',
@@ -94,6 +95,8 @@ export const PERMISSION_CODE_VALUES = [
   'platform.payment.config.read',
   'platform.payment.config.manage',
   'platform.billing.recharge_product.manage',
+  'platform.billing.recharge_refund.read',
+  'platform.billing.recharge_refund.review',
   'platform.tenant_onboarding.review',
   'platform.service_provider.publish',
   'platform.partner.read',
@@ -310,6 +313,10 @@ export const PermissionCodeConfig: Record<
   'finance.closing.manage': { label: '管理月度结账', module: 'finance' },
   'billing.recharge.create': { label: '发起积分充值', module: 'billing' },
   'billing.recharge.read': { label: '查看积分充值订单', module: 'billing' },
+  'billing.recharge.refund.request': {
+    label: '申请积分充值退款',
+    module: 'billing',
+  },
   'wechat_pay.config.read': {
     label: '查看微信支付配置',
     module: 'wechat_pay',
@@ -360,6 +367,14 @@ export const PermissionCodeConfig: Record<
   },
   'platform.billing.recharge_product.manage': {
     label: '管理积分充值套餐',
+    module: 'platform_billing',
+  },
+  'platform.billing.recharge_refund.read': {
+    label: '查看积分充值退款申请',
+    module: 'platform_billing',
+  },
+  'platform.billing.recharge_refund.review': {
+    label: '审核积分充值退款申请',
     module: 'platform_billing',
   },
   'platform.tenant_onboarding.review': {

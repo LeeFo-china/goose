@@ -5,6 +5,7 @@ import {
   BillingRechargeOrderQuerySchema,
   BillingRechargeOrderParamSchema,
   BillingRechargeProductQuerySchema,
+  BillingRechargeRefundRequestSchema,
 } from "@/schema/billing-recharge";
 import { authorizationService } from "@/services/authorization";
 import { billingRechargeService } from "@/services/billing-recharge";
@@ -79,6 +80,27 @@ class BillingRechargeController extends BaseController {
     const data = await billingRechargeService.getOrder(
       authContext,
       paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/billing/recharge-orders/:id/refund-requests")
+  async requestRefund(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const paramsResult = BillingRechargeOrderParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = BillingRechargeRefundRequestSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await billingRechargeService.requestRefund(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }

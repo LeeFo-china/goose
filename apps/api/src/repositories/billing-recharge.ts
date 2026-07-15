@@ -1,5 +1,13 @@
 import { Errors } from "@/errors/error-factory";
 import type { BillingAccountBalance } from "@/repositories/billing";
+import {
+  billingRechargeRefundCallbackRepository,
+  type BillingConfirmWechatRechargeRefundInput,
+  type BillingConfirmWechatRechargeRefundResult,
+  type BillingMarkWechatRechargeRefundFailedInput,
+  type BillingMarkWechatRechargeRefundFailedResult,
+  type BillingWechatRefundRequestMatch,
+} from "@/repositories/billing-recharge-refund-callbacks";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 export type CreditRechargeProductRecord = {
@@ -200,6 +208,10 @@ class BillingRechargeRepository {
           "prepay_id",
           "transaction_id",
           "paid_amount_fen",
+          "refund_status",
+          "refund_requested_at",
+          "refunded_at",
+          "refund_amount_fen",
           "closed_at",
           "latest_notification_id",
           "created_at",
@@ -349,6 +361,11 @@ class BillingRechargeRepository {
     return rows[0] ?? null;
   }
 
+  async findWechatRefundRequestByOutRefundNo(outRefundNo: string) {
+    return billingRechargeRefundCallbackRepository
+      .findWechatRefundRequestByOutRefundNo(outRefundNo);
+  }
+
   async findWechatNotificationByNotifyId(input: { notifyId: string }) {
     const { data, error } = await this.from("tenant_credit_wechat_notifications")
       .select("*")
@@ -433,6 +450,28 @@ class BillingRechargeRepository {
 
     return data as BillingConfirmWechatRechargeResult;
   }
+
+  async confirmWechatRechargeRefund(
+    input: BillingConfirmWechatRechargeRefundInput,
+  ) {
+    return billingRechargeRefundCallbackRepository
+      .confirmWechatRechargeRefund(input);
+  }
+
+  async markWechatRechargeRefundFailed(
+    input: BillingMarkWechatRechargeRefundFailedInput,
+  ) {
+    return billingRechargeRefundCallbackRepository
+      .markWechatRechargeRefundFailed(input);
+  }
 }
+
+export type {
+  BillingConfirmWechatRechargeRefundInput,
+  BillingConfirmWechatRechargeRefundResult,
+  BillingMarkWechatRechargeRefundFailedInput,
+  BillingMarkWechatRechargeRefundFailedResult,
+  BillingWechatRefundRequestMatch,
+};
 
 export const billingRechargeRepository = new BillingRechargeRepository();

@@ -28,6 +28,12 @@ export const BillingRechargeOrderParamSchema = z.object({
   id: z.uuid("无效的充值订单 ID"),
 });
 
+export const BillingRechargeRefundRequestSchema = z.object({
+  reason: z.string().trim().min(1, "退款原因不能为空")
+    .max(500, "退款原因不能超过 500 个字符"),
+  idempotency_key: z.uuid("幂等键格式不正确"),
+}).strict();
+
 export type BillingRechargeProductQuery =
   z.infer<typeof BillingRechargeProductQuerySchema>;
 export type BillingRechargeOrderQuery =
@@ -36,3 +42,5 @@ export type BillingRechargeCreateOrderInput =
   z.infer<typeof BillingRechargeCreateOrderSchema>;
 export type BillingRechargeOrderParam =
   z.infer<typeof BillingRechargeOrderParamSchema>;
+export type BillingRechargeRefundRequestInput =
+  z.infer<typeof BillingRechargeRefundRequestSchema>;

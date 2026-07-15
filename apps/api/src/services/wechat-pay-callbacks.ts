@@ -21,6 +21,7 @@ import {
   type WechatPayCallbackContextMatcherDependencies,
 } from "@/services/wechat-pay-callback-context-matcher";
 import { billingSubscriptionService } from "@/services/billing-subscriptions";
+import { handleCreditRechargeRefundCallback } from "@/services/wechat-pay-callback-refunds";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
 
 type OrderRepositoryPort = Pick<
@@ -38,11 +39,14 @@ type PaymentBridgePort = Pick<typeof workflowTaskPaymentBridge, "complete">;
 type CreditRechargeRepositoryPort = Pick<
   typeof billingRechargeRepository,
   | "findWechatOrderByOutTradeNo"
+  | "findWechatRefundRequestByOutRefundNo"
   | "findWechatNotificationByNotifyId"
   | "createWechatNotification"
   | "markWechatNotificationProcessed"
   | "markWechatNotificationFailed"
   | "confirmWechatRecharge"
+  | "confirmWechatRechargeRefund"
+  | "markWechatRechargeRefundFailed"
 >;
 
 type WechatPayCallbackServiceDependencies =
@@ -98,6 +102,14 @@ export class WechatPayCallbackService {
       payload,
     });
     const notifyId = this.requireString(payload, "id", "回调通知 ID 缺失");
+    if (matched.kind === "credit_recharge_refund") {
+      return handleCreditRechargeRefundCallback({
+        matched,
+        notifyId,
+        payload,
+        repository: this.creditRechargeRepository,
+      });
+    }
     if (matched.kind === "credit_recharge") {
       return this.handleCreditRechargeCallback({ matched, notifyId, payload });
     }
