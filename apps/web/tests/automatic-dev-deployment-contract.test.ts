@@ -165,13 +165,42 @@ describe("automatic development image build contract", () => {
     expect(buildJob).toContain("image-manifest-${SERVICE}.json");
   });
 
-  test("does not introduce deployment runners or production deployment coupling", () => {
-    expect(workflow).toContain("runs-on: ubuntu-24.04");
-    expect(workflow).not.toContain("gooes-dev-deploy");
-    expect(workflow).not.toContain("gooes-build-tencent");
-    expect(workflow).not.toContain("gooes-prod-deploy");
-    expect(workflow).not.toContain("gooes-prod-vm-0-3");
-    expect(workflow).not.toContain("uses: ./.github/workflows/deploy-docker-services.yml");
+  test("keeps validation and build jobs off deployment runners", () => {
+    const buildJobs = sliceBetween(
+      "  validate-request:",
+      "  verify-production-pull:",
+    );
+
+    expect(buildJobs).toContain("runs-on: ubuntu-24.04");
+    expect(buildJobs).not.toContain("gooes-dev-deploy");
+    expect(buildJobs).not.toContain("gooes-build-tencent");
+    expect(buildJobs).not.toContain("gooes-prod-deploy");
+    expect(buildJobs).not.toContain("gooes-prod-vm-0-3");
+  });
+
+  test("keeps production pull verification on its runner without deploying", () => {
+    const verifyProductionPull = sliceBetween(
+      "  verify-production-pull:",
+      "  # End production pull verification",
+    );
+
+    expect(verifyProductionPull).toContain(
+      "name: Verify production images from production runner",
+    );
+    expect(verifyProductionPull).toContain(
+      "runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]",
+    );
+    expect(verifyProductionPull).toContain(
+      'test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"',
+    );
+    expect(verifyProductionPull).not.toMatch(/\bdocker(?:-|\s+)compose\b/);
+    expect(verifyProductionPull).not.toMatch(/\brestart\b/i);
+    expect(verifyProductionPull).not.toMatch(/\bsystemctl\b/);
+    expect(verifyProductionPull).not.toMatch(/\bnginx\b/i);
+    expect(verifyProductionPull).not.toMatch(/\bgh\s+workflow\s+run\b/);
+    expect(verifyProductionPull).not.toMatch(
+      /uses:\s+\.\/\.github\/workflows\/deploy-/,
+    );
   });
 });
 
