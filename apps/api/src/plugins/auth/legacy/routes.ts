@@ -226,6 +226,10 @@ function isAuthIdentitySwitchRoute(method: string, url: string) {
 }
 
 export function isPartnerPortalRoute(method: string, url: string) {
+  if (isPartnerOnboardingAssistRoute(method, url)) {
+    return true;
+  }
+
   if (
     method === "POST" &&
     (
@@ -246,7 +250,32 @@ export function isPartnerPortalRoute(method: string, url: string) {
   );
 }
 
+function isPartnerOnboardingAssistRoute(method: string, url: string) {
+  if (
+    (method === "GET" || method === "HEAD") &&
+    (
+      url === "/partner/onboarding-applications" ||
+      /^\/partner\/onboarding-applications\/[^/]+$/.test(url)
+    )
+  ) {
+    return true;
+  }
+  return method === "POST" &&
+    /^\/partner\/onboarding-applications\/[^/]+\/assist-review$/.test(url);
+}
+
 export function isVisitorSessionRoute(method: string, url: string) {
+  if (isTenantOnboardingApplicantRoute(method, url)) {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD") &&
+    url === "/visitor/local-service-providers"
+  ) {
+    return true;
+  }
+
   if (
     (method === "GET" || method === "HEAD")
     && url === "/public/administrative-areas"
@@ -391,6 +420,34 @@ export function isVisitorSessionRoute(method: string, url: string) {
   }
 
   return false;
+}
+
+function isTenantOnboardingApplicantRoute(method: string, url: string) {
+  if (
+    method === "POST" &&
+    (
+      url === "/tenant-onboarding/applications/send-code" ||
+      url === "/tenant-onboarding/applications"
+    )
+  ) {
+    return true;
+  }
+  if (
+    (method === "GET" || method === "HEAD") &&
+    (
+      url === "/tenant-onboarding/applications/mine" ||
+      /^\/tenant-onboarding\/applications\/[^/]+$/.test(url)
+    )
+  ) {
+    return true;
+  }
+  return (
+    method === "PATCH" &&
+    /^\/tenant-onboarding\/applications\/[^/]+\/supplement$/.test(url)
+  ) || (
+    method === "POST" &&
+    /^\/tenant-onboarding\/applications\/[^/]+\/withdraw$/.test(url)
+  );
 }
 
 export function isPureVisitorPayload(payload: VerifiedJwtPayload) {

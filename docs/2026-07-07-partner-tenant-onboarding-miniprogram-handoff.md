@@ -1,5 +1,25 @@
 # 小程序城市合伙人扫码装企入驻对接
 
+> 废弃提示，2026-07-14 起新本地服务商主动入驻请对接
+> [小程序本地服务商页装企主动入驻对接](./2026-07-14-local-service-provider-onboarding-miniprogram-handoff.md)。
+> 本文描述的 `POST /partner-onboarding/tenant-applications` 是 legacy-only 路径，
+> 语义仍是“邀请入驻成功即创建租户”，只保留到计划配置的
+> `LEGACY_PARTNER_TENANT_ONBOARDING_CUTOFF_AT`。截止时间必须不晚于新小程序全量发布后
+> 14 日。截止到达后，旧发送验证码和旧提交接口返回
+> `410 TENANT_ONBOARDING_CLIENT_UPGRADE_REQUIRED`，不会发送短信，不会创建租户。
+
+## 2026-07-14 源断言
+
+- 新本地服务商主动入驻接口在 `apps/api/src/controllers/tenant-onboarding/index.ts`，
+  提交成功返回 HTTP `202` 和 `application.status=submitted`。
+- 本文旧路径必须保持旧成功响应，旧小程序不能收到新 `202 submitted` envelope 后误判为
+  “入驻成功”。
+- 新本地服务商列表必须调用 `GET /visitor/local-service-providers`，无匹配时返回空列表，
+  禁止跨区域用其他城市或其他区县公司兜底展示。
+- 营业执照必须使用 `tenant_onboarding_license` 私有直传，不能请求 `/uploads/public-url`。
+- 本次 gooes 实现遵守 `/Users/leefo/Public/work/orange` 的 orange 只读边界，
+  小程序代码变更由 orange 团队处理。
+
 日期：2026-07-07
 
 ## 背景

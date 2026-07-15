@@ -1870,6 +1870,27 @@ git commit -m "feat(onboarding): 增加旧入驻入口关闭门禁"
 
 - [ ] **Step 1: Verify local migration order without printing secrets**
 
+Before release, use a read-only check against the explicitly confirmed target Tencent COS bucket and
+record evidence in the verification document that bucket versioning is disabled. The signed
+`x-cos-forbid-overwrite: true` header does not prevent COS from creating a new object version when
+bucket versioning is enabled. If versioning is enabled or the state cannot be confirmed, stop the
+release and design a separately reviewed immutable-object strategy; do not change the remote bucket
+configuration without explicit authorization.
+
+As a separate read-only release gate, capture the target bucket CORS rule and prove that the actual
+mini-program/client origin is allowed to send `PUT`. The allowed request headers must cover
+`content-type`, `content-length`, `x-cos-forbid-overwrite`, and every authorization header actually
+used by the client. Redact credentials and signed query parameters from the recorded evidence. If
+the origin, method, or any required header is absent, stop the release; do not modify remote CORS
+configuration without explicit authorization.
+
+After the target environment is confirmed and remote smoke mutation is explicitly authorized, use
+a dedicated disposable object key to run the real signed upload flow with the exact headers returned
+by the init API. Record that the first `PUT` succeeds, then repeat a second `PUT` to the same key and
+record that COS rejects it. A successful second request fails this gate. Preserve the redacted HTTP
+status/error evidence and clean up the disposable object only through the approved environment
+procedure. Do not run this smoke against any remote bucket while implementing this task.
+
 Load `/Users/leefo/Public/work/gooes/.env` in the shell without echoing values, verify
 `SUPABASE_DB_DIRECT_URL` is present, then run:
 
@@ -1943,6 +1964,87 @@ Run a disposable smoke case and clean up only through existing API/test fixtures
    reached cutoff returns `410` without creating a tenant.
 
 Record IDs with redacted phone/license data in the verification document.
+
+Before release, also run the following two-session deadlock smoke against disposable fixtures after
+the migrations are applied and remote smoke mutation is explicitly authorized. Prepare a reviewable
+application whose `admin_phone` equals one disposable active employee's phone. The application,
+employee and reviewer IDs must belong to the test tenant/environment. Do not use a real employee or
+production application.
+
+In session A, acquire the same advisory key used by approval, then keep the transaction open:
+
+```sql
+\set ON_ERROR_STOP off
+BEGIN;
+SET LOCAL deadlock_timeout = '200ms';
+SET LOCAL lock_timeout = '15s';
+SELECT pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended(
+    'tenant-onboarding-admin-phone:' || pg_catalog.btrim(:'admin_phone'),
+    0
+  )
+);
+```
+
+While session A remains open, start session B with this preamble:
+
+```sql
+\set ON_ERROR_STOP off
+BEGIN;
+SET LOCAL deadlock_timeout = '200ms';
+SET LOCAL lock_timeout = '15s';
+```
+
+Then run exactly one mutation variant. It must block in the employee BEFORE trigger while waiting for
+session A's advisory lock. Use this command for the UPDATE repetition:
+
+```sql
+-- Mentioning phone invokes the trigger even though the value is unchanged.
+UPDATE public.employees
+SET phone = phone
+WHERE id = :'employee_id'::uuid
+  AND status = 'active';
+```
+
+In a fresh repetition with both sessions restarted, use this command instead for the DELETE variant:
+
+```sql
+DELETE FROM public.employees
+WHERE id = :'employee_id'::uuid
+  AND status = 'active';
+```
+
+Once the chosen session B statement is waiting, continue session A:
+
+```sql
+SELECT public.approve_tenant_onboarding_application(
+  :'application_id'::uuid,
+  :'expected_version'::integer,
+  :'reviewer_employee_id'::uuid,
+  :'tenant_slug',
+  NULL,
+  NULL,
+  'employee phone lock concurrency smoke'
+);
+\echo approval_sqlstate=:SQLSTATE
+ROLLBACK;
+```
+
+After session A releases its advisory lock, session B must complete; record its state and preserve the
+fixture by rolling back:
+
+```sql
+\echo employee_mutation_sqlstate=:SQLSTATE
+ROLLBACK;
+```
+
+Run the choreography once with `UPDATE` and once with `DELETE`. Expected: neither session reports
+SQLSTATE `40P01`; both recorded SQLSTATE values are `00000`, and session B is serialized behind the
+advisory lock. Session A may conservatively return `admin_phone_exists` because an unlocked MVCC read
+can still see the pre-update/pre-delete active employee. This fail-closed result is expected. If a real
+DELETE is intended, let that separate transaction finish, reload the application's current
+status/version, and retry approval once; do not blindly loop or retry inside the still-open mutation
+transaction. An UPDATE that leaves the phone active should continue to conflict.
 
 - [ ] **Step 4: Run `EXPLAIN (ANALYZE, BUFFERS)` on bounded representative queries**
 

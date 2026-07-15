@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { getFileExtension, joinPublicUrl, trimSlashes } from "./shared";
+import { createHash, randomUUID } from "node:crypto";
+import { Errors, getFileExtension, joinPublicUrl, trimSlashes } from "./shared";
 import type {
   PlatformFileProvider,
   PlatformUploadResponse,
@@ -36,6 +36,7 @@ export function buildLegacyObjectPath(this: any, input: {
     wechat_pay_applyment: "wechat-pay-applyment",
     picture_library: "picture-library",
     picture_comment: "picture-comment",
+    tenant_onboarding_license: "tenant-onboarding-license",
   };
 
   return `${prefixByScene[input.scene]}/${year}/${month}/${day}/${randomUUID()}${input.extension}`;
@@ -44,12 +45,21 @@ export function buildLegacyObjectPath(this: any, input: {
 export function buildCosObjectKey(this: any, input: Pick<
   UploadImageInput,
   "filename" | "mimetype" | "scene" | "projectId" | "tenantId"
->) {
+> & { visitorId?: string | null }) {
   const now = new Date();
   const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
-  const extension = getFileExtension(input);
+  const extension = getFileExtension({
+    filename: input.scene === "tenant_onboarding_license"
+      ? undefined
+      : input.filename,
+    mimetype: input.mimetype,
+  });
+  if (input.scene === "tenant_onboarding_license") {
+    return `${buildTenantOnboardingLicenseVisitorPrefix(input.visitorId)}`
+      + `${year}/${month}/${day}/${randomUUID()}${extension}`;
+  }
   const tenantPrefix = input.tenantId
     ? `tenants/${input.tenantId}`
     : "public";
@@ -59,6 +69,19 @@ export function buildCosObjectKey(this: any, input: Pick<
     : "unassigned";
 
   return `${tenantPrefix}/${scene}/${projectSegment}/${year}/${month}/${day}/${randomUUID()}${extension}`;
+}
+
+export function buildTenantOnboardingLicenseVisitorPrefix(
+  visitorId: string | null | undefined,
+) {
+  const normalizedVisitorId = visitorId?.trim();
+  if (!normalizedVisitorId) {
+    throw Errors.forbidden();
+  }
+  const visitorHash = createHash("sha256")
+    .update(normalizedVisitorId)
+    .digest("hex");
+  return `private/tenant-onboarding-license/visitors/${visitorHash}/`;
 }
 
 export function buildCosPublicUrl(this: any, input: {

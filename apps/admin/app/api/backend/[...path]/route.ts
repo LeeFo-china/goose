@@ -26,6 +26,11 @@ function buildBackendHeaders(request: Request, token: string) {
     headers.set("content-type", contentType);
   }
 
+  const idempotencyKey = request.headers.get("idempotency-key");
+  if (idempotencyKey) {
+    headers.set("idempotency-key", idempotencyKey);
+  }
+
   return headers;
 }
 

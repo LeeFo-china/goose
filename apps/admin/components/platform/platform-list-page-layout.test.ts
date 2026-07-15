@@ -18,10 +18,16 @@ const platformPages: ReadonlyArray<{
   { name: "usage", layoutPath: "../../app/(console)/platform/usage/page.tsx" },
   { name: "billing", layoutPath: "../../app/(console)/platform/billing/page.tsx" },
   { name: "audit logs", layoutPath: "../../app/(console)/platform/audit-logs/page.tsx" },
+  {
+    name: "tenant onboarding",
+    layoutPath: "../../app/(console)/platform/tenant-onboarding/page.tsx",
+  },
 ];
 
 function readSource(path: string) {
-  return readFileSync(new URL(path, import.meta.url), "utf8");
+  const url = new URL(path, import.meta.url);
+  expect(existsSync(url), path).toBe(true);
+  return existsSync(url) ? readFileSync(url, "utf8") : "";
 }
 
 function readSummarySource(path: string) {

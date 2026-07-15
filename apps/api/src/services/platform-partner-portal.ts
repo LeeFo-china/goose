@@ -23,6 +23,7 @@ import {
   assertUsablePlatformPartnerMember,
   bindPlatformPartnerMemberWithoutSmsCode,
 } from "@/services/platform-partner-portal-binding";
+import { requireCurrentPlatformPartnerMember } from "@/services/platform-partner-identity";
 import {
   buildPartnerAuthResponse,
   buildPartnerVisitorAuthResponse,
@@ -330,34 +331,7 @@ export class PlatformPartnerPortalService {
   }
 
   private async requireCurrentPartnerMember(user?: JwtPayload) {
-    const partnerUser = this.requirePartnerUser(user);
-    if (!user?.sub) {
-      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
-    }
-
-    const member = await this.repository.findMemberByAuthUserId(user.sub);
-    if (!member || member.partner_id !== partnerUser.partnerId) {
-      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
-    }
-
-    this.assertUsableMember(member);
-    return { ...partnerUser, userId: user.sub, member };
-  }
-
-  private requirePartnerUser(user?: JwtPayload) {
-    const partnerId = typeof user?.partner_id === "string"
-      ? user.partner_id.trim()
-      : "";
-    if (
-      !partnerId ||
-      user?.token_type !== "platform_partner" ||
-      !Array.isArray(user?.roles) ||
-      !user.roles.includes(PLATFORM_PARTNER_ROLE)
-    ) {
-      throw Errors.business(403, "无城市合伙人访问权限", "PARTNER_AUTH_REQUIRED");
-    }
-
-    return { partnerId };
+    return requireCurrentPlatformPartnerMember(user, this.repository);
   }
 
   private resolveMonthRange(month?: string) {
