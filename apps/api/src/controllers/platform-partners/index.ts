@@ -59,6 +59,8 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Post("/partner-onboarding/tenant-applications/send-code")
   async sendTenantOnboardingCode(request: FastifyRequest, reply: FastifyReply) {
+    // Legacy-only direct activation route. New local-service onboarding uses
+    // /tenant-onboarding/applications and returns a submitted application.
     const bodyResult = PartnerTenantOnboardingSendCodeSchema.safeParse(
       request.body || {},
     );
@@ -75,6 +77,8 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Post("/partner-onboarding/tenant-applications")
   async submitTenantOnboarding(request: FastifyRequest, reply: FastifyReply) {
+    // Legacy-only direct activation route. Keep the legacy success envelope until
+    // LEGACY_PARTNER_TENANT_ONBOARDING_CUTOFF_AT is intentionally configured.
     const bodyResult = PartnerTenantOnboardingSubmitSchema.safeParse(
       request.body || {},
     );

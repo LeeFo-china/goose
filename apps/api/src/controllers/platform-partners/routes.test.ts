@@ -5,7 +5,7 @@ process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 describe("PlatformPartnersController routes", () => {
-  test("registers partner, invite code, and tenant binding routes", async () => {
+  async function registeredRoutes() {
     const { default: controller } = await import(".");
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
@@ -15,6 +15,11 @@ describe("PlatformPartnersController routes", () => {
     };
 
     controller.registerExtraRoutes(fastify as never);
+    return routes;
+  }
+
+  test("registers partner, invite code, and tenant binding routes", async () => {
+    const routes = await registeredRoutes();
 
     expect(routes).toEqual([
       { method: "GET", path: "/partner-onboarding/invite-codes/:code" },
@@ -36,5 +41,22 @@ describe("PlatformPartnersController routes", () => {
       { method: "GET", path: "/platform/partner-bindings" },
       { method: "POST", path: "/platform/partner-bindings" },
     ]);
+  });
+
+  test("keeps legacy tenant application routes separate from the new submitted-application API", async () => {
+    const routes = await registeredRoutes();
+
+    expect(routes).toContainEqual({
+      method: "POST",
+      path: "/partner-onboarding/tenant-applications/send-code",
+    });
+    expect(routes).toContainEqual({
+      method: "POST",
+      path: "/partner-onboarding/tenant-applications",
+    });
+    expect(routes).not.toContainEqual({
+      method: "POST",
+      path: "/tenant-onboarding/applications",
+    });
   });
 });
