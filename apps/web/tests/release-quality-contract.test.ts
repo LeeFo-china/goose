@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  PHASE_DEVELOPMENT_SERVER,
+  PHASE_PRODUCTION_BUILD,
+} from "next/constants";
 
 import sitemap from "@/app/sitemap";
 import { scanVisibleCopySource } from "@/scripts/check-visible-copy.mjs";
+import createNextConfig from "../next.config";
 
 const webRoot = join(import.meta.dir, "..");
 
@@ -13,6 +18,25 @@ function read(path: string): string {
 }
 
 describe("official website release quality contract", () => {
+  test("separates development and production Next outputs", () => {
+    const previousDistDir = process.env.NEXT_DIST_DIR;
+
+    try {
+      delete process.env.NEXT_DIST_DIR;
+      expect(createNextConfig(PHASE_DEVELOPMENT_SERVER).distDir).toBe(".next-dev");
+
+      process.env.NEXT_DIST_DIR = ".next-custom";
+      expect(createNextConfig(PHASE_DEVELOPMENT_SERVER).distDir).toBe(".next-custom");
+      expect(createNextConfig(PHASE_PRODUCTION_BUILD).distDir).toBe(".next");
+    } finally {
+      if (previousDistDir === undefined) {
+        delete process.env.NEXT_DIST_DIR;
+      } else {
+        process.env.NEXT_DIST_DIR = previousDistDir;
+      }
+    }
+  });
+
   test("scans visible copy without treating code or aria labels as visible text", () => {
     const findings = scanVisibleCopySource(`
       const Scroll = "implementation detail";
@@ -279,8 +303,6 @@ describe("official website release quality contract", () => {
     const playwrightConfig = read("playwright.config.ts");
     const runner = read("scripts/run-playwright-e2e.mjs");
 
-    expect(nextConfig).not.toContain("distDir");
-    expect(nextConfig).not.toContain("GOOES_WEB_DIST_DIR");
     expect(playwrightConfig).toContain("reuseExistingServer: false");
     expect(playwrightConfig).not.toContain("next-e2e");
     expect(runner).toContain('rmSync(join(webRoot, ".next")');
