@@ -1,11 +1,16 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const appDir = dirname(fileURLToPath(import.meta.url));
 const buildRevision = process.env.GOOES_BUILD_SHA ?? "unknown";
 
-const nextConfig: NextConfig = {
+const createNextConfig = (phase: string): NextConfig => ({
+  distDir:
+    phase === PHASE_DEVELOPMENT_SERVER
+      ? process.env.NEXT_DIST_DIR ?? ".next-dev"
+      : ".next",
   // SEO 稳定性优先：等待动态 metadata 后再输出 HTML，避免普通 Chrome/Lighthouse 把标签放进 body。
   htmlLimitedBots: /.*/,
   poweredByHeader: false,
@@ -30,6 +35,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-};
+});
 
-export default nextConfig;
+export default createNextConfig;
