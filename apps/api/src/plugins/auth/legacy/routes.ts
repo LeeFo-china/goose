@@ -225,8 +225,23 @@ function isAuthIdentitySwitchRoute(method: string, url: string) {
   );
 }
 
+function isUnifiedPhoneIdentityLoginRoute(method: string, url: string) {
+  return (
+    method === "POST" &&
+    (
+      url === "/auth/phone-login/send-code" ||
+      url === "/auth/phone-login/verify" ||
+      url === "/auth/phone-login/select"
+    )
+  );
+}
+
 export function isPartnerPortalRoute(method: string, url: string) {
   if (isPartnerOnboardingAssistRoute(method, url)) {
+    return true;
+  }
+
+  if (isUnifiedPhoneIdentityLoginRoute(method, url)) {
     return true;
   }
 
@@ -344,6 +359,14 @@ export function isVisitorSessionRoute(method: string, url: string) {
   }
 
   if (method === "POST" && url === "/auth/verify-role") {
+    return true;
+  }
+
+  if (isUnifiedPhoneIdentityLoginRoute(method, url)) {
+    return true;
+  }
+
+  if (method === "POST" && url === "/platform/leads") {
     return true;
   }
 

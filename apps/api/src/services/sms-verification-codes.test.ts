@@ -10,10 +10,13 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const serviceModule = import("@/services/sms-verification-codes");
 
 interface SmsRecord {
+  code: string;
+  expiredAt: string;
   phone: string;
   requestDevice: string | null;
   requestIp: string | null;
   scene: SmsScene;
+  since: string;
 }
 
 async function createHarness() {
@@ -21,11 +24,14 @@ async function createHarness() {
   const records: SmsRecord[] = [];
   const repository = {
     reservePending(input: {
+      code: string;
+      expiredAt: string;
       phone: string;
       requestDevice?: string | null;
       requestIp: string | null;
       requestIpLimit: number;
       scene: SmsScene;
+      since: string;
     }) {
       const limitedDimension: "phone" | "request_device" | "request_ip" | null =
         records.some(
@@ -56,10 +62,13 @@ async function createHarness() {
       }
 
       records.push({
+        code: input.code,
+        expiredAt: input.expiredAt,
         phone: input.phone,
         requestDevice: input.requestDevice ?? null,
         requestIp: input.requestIp,
         scene: input.scene,
+        since: input.since,
       });
       return Promise.resolve({
         reserved: true as const,
@@ -74,7 +83,7 @@ async function createHarness() {
   const send = mock(async () => undefined);
   const service = new SmsVerificationCodeService({ repository, send });
 
-  return { send, service };
+  return { records, send, service };
 }
 
 function sendInput(
@@ -195,5 +204,29 @@ describe("SmsVerificationCodeService atomic rate limits", () => {
     });
 
     await expect(service.sendCode(sendInput(0))).rejects.toBe(cleanupFailure);
+  });
+
+  test("reserves an internal bypass code without sending SMS", async () => {
+    const { records, send, service } = await createHarness();
+
+    const result = await service.reserveBypassCode({
+      phone: "13800138000",
+      scene: "login_identity",
+      now: "2026-07-15T00:00:00.000Z",
+    });
+
+    expect(result.code).toMatch(/^\d{6}$/);
+    expect(send).not.toHaveBeenCalled();
+    expect(records).toEqual([
+      {
+        code: result.code,
+        expiredAt: "2026-07-15T00:05:00.000Z",
+        phone: "13800138000",
+        requestDevice: null,
+        requestIp: null,
+        scene: "login_identity",
+        since: "2026-07-15T00:00:01.000Z",
+      },
+    ]);
   });
 });

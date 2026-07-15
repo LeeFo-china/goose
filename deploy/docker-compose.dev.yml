@@ -9,6 +9,7 @@ services:
     environment:
       SERVICE_NAME: gooes-api-dev
       NODE_ENV: ${GOOES_API_NODE_ENV:-production}
+      GOOES_DEPLOY_ENV: development
       PORT: ${GOOES_API_PORT:-3000}
       GOOES_WEB_PROXY_SHARED_SECRET: ${GOOES_WEB_PROXY_SHARED_SECRET:?set GOOES_WEB_PROXY_SHARED_SECRET}
       GOOES_PREVIEW_SHARED_SECRET: ${GOOES_PREVIEW_SHARED_SECRET:?set GOOES_PREVIEW_SHARED_SECRET}
@@ -124,6 +125,7 @@ services:
     environment:
       SERVICE_NAME: gooes-social-video-worker-dev
       NODE_ENV: production
+      GOOES_DEPLOY_ENV: development
       FFMPEG_BIN: ${SOCIAL_VIDEO_FFMPEG_BIN:-/usr/bin/ffmpeg}
     depends_on:
       gooes-api-dev:
@@ -154,6 +156,7 @@ services:
     environment:
       SERVICE_NAME: gooes-cos-reconcile-worker-dev
       NODE_ENV: production
+      GOOES_DEPLOY_ENV: development
     command: ["bun", "src/workers/project-log-comment-cos-reconcile-worker.ts"]
     volumes:
       - gooes-dev-api-reports:/app/apps/api/reports
