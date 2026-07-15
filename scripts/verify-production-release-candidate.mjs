@@ -9,10 +9,20 @@ const REQUESTED_ORDER = [
   "cos-reconcile-worker",
 ];
 const BUILD_ORDER = ["api", "admin", "social-video-worker"];
+const IMAGE_REPOSITORIES = {
+  admin: "goose-admin",
+  api: "goose-api",
+  "social-video-worker": "goose-social-video-worker",
+};
 const SHA_PATTERN = /^[a-f0-9]{40}$/u;
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const TAG_PATTERN = /^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$/u;
 const RUN_ID_PATTERN = /^[1-9][0-9]*$/u;
+const IMAGE_BASE_PATTERN = /^[a-z0-9.-]+(?::[0-9]+)?\/[a-z0-9._-]+$/u;
+const ALLOWED_IMAGE_BASES = new Set([
+  "useccr.ccs.tencentyun.com/america_goose",
+  "ccr.ccs.tencentyun.com/gooes-goodcms",
+]);
 
 function reject(message) {
   throw new Error(message);
@@ -63,6 +73,15 @@ export function verifyProductionReleaseCandidate(candidate, plan, manifests, exp
   assert(isObject(plan), "plan must be an object");
   assert(isObject(manifests), "manifests must be an object");
   assert(isObject(expected), "expected metadata must be an object");
+  assert(
+    typeof expected.imageBase === "string"
+      && IMAGE_BASE_PATTERN.test(expected.imageBase),
+    "invalid expected image base",
+  );
+  assert(
+    ALLOWED_IMAGE_BASES.has(expected.imageBase),
+    "unsupported expected image base",
+  );
 
   assert(candidate.schema_version === 1, "unsupported candidate schema");
   assert(
@@ -116,11 +135,21 @@ export function verifyProductionReleaseCandidate(candidate, plan, manifests, exp
     const manifest = manifests[service];
     assert(isObject(manifest), `invalid manifest for ${service}`);
     assert(manifest.service === service, `manifest service mismatch for ${service}`);
-    assert(manifest.commit_sha === expected.sha, `manifest commit SHA mismatch for ${service}`);
+    assert(
+      manifest.build_run_id === expected.runId,
+      `manifest build run mismatch for ${service}`,
+    );
+    assert(
+      manifest.commit_sha === expected.sha,
+      `manifest commit SHA mismatch for ${service}`,
+    );
     assert(
       manifest.target_environment === "production",
       `manifest environment mismatch for ${service}`,
     );
+    const expectedImage = `${expected.imageBase}/${IMAGE_REPOSITORIES[service]}`
+      + `:run-${expected.runId}-${expected.sha}`;
+    assert(manifest.image === expectedImage, `manifest image mismatch for ${service}`);
     assert(
       typeof manifest.digest === "string" && DIGEST_PATTERN.test(manifest.digest),
       `invalid manifest digest for ${service}`,
@@ -130,12 +159,12 @@ export function verifyProductionReleaseCandidate(candidate, plan, manifests, exp
   return candidate;
 }
 
-function parseExpected(rawRunId, expectedSha, rawServices) {
+function parseExpected(rawRunId, expectedSha, rawServices, imageBase) {
   assert(RUN_ID_PATTERN.test(rawRunId), "invalid expected run ID");
   const runId = Number(rawRunId);
   assert(Number.isSafeInteger(runId), "invalid expected run ID");
   const services = rawServices.replaceAll(/\s/gu, "").split(",");
-  return { runId, services, sha: expectedSha };
+  return { imageBase, runId, services, sha: expectedSha };
 }
 
 function readManifests(manifestDirectory, candidate) {
@@ -154,13 +183,21 @@ function readManifests(manifestDirectory, candidate) {
 function runCli() {
   const args = process.argv.slice(2);
   assert(
-    args.length === 6,
-    "expected CANDIDATE_PATH PLAN_PATH MANIFEST_DIRECTORY RUN_ID SHA SERVICES",
+    args.length === 7,
+    "expected CANDIDATE_PATH PLAN_PATH MANIFEST_DIRECTORY RUN_ID SHA SERVICES IMAGE_BASE",
   );
-  const [candidatePath, planPath, manifestDirectory, rawRunId, expectedSha, rawServices] = args;
+  const [
+    candidatePath,
+    planPath,
+    manifestDirectory,
+    rawRunId,
+    expectedSha,
+    rawServices,
+    imageBase,
+  ] = args;
   const candidate = JSON.parse(readFileSync(candidatePath, "utf8"));
   const plan = JSON.parse(readFileSync(planPath, "utf8"));
-  const expected = parseExpected(rawRunId, expectedSha, rawServices);
+  const expected = parseExpected(rawRunId, expectedSha, rawServices, imageBase);
   const manifests = readManifests(manifestDirectory, candidate);
   const verifiedCandidate = verifyProductionReleaseCandidate(candidate, plan, manifests, expected);
   process.stdout.write(`${JSON.stringify(verifiedCandidate)}\n`);

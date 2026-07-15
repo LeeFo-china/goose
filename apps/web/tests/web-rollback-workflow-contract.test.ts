@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -22,6 +29,79 @@ function step(workflow: string, name: string): string {
   return workflow.slice(start, next < 0 ? undefined : next);
 }
 
+function runRollbackEvidenceCheck(
+  workflow: string,
+  actualImageId: string,
+  configuredImage: string,
+): ReturnType<typeof spawnSync> {
+  const work = mkdtempSync(join(tmpdir(), "web-rollback-evidence-"));
+  roots.push(work);
+  const scripts = join(work, "scripts");
+  mkdirSync(scripts);
+  writeFileSync(join(scripts, "prepare-site-content-deployment-secrets.sh"), ":\n");
+  const docker = join(work, "docker");
+  writeFileSync(
+    docker,
+    `#!/usr/bin/env bash
+if [ "$1" = compose ]; then exit 0; fi
+if [ "$1" = inspect ] && [ "$2" = -f ]; then
+  case "$3" in
+    '{{if .State.Health}}{{.State.Health.Status}}{{end}}') printf '%s\\n' healthy ;;
+    '{{index .Config.Labels "org.opencontainers.image.revision"}}') printf '%s\\n' "$WEB_OLD_REVISION" ;;
+    '{{.Image}}') printf '%s\\n' "$ACTUAL_IMAGE_ID" ;;
+    '{{.Config.Image}}') printf '%s\\n' "$ACTUAL_CONFIG_IMAGE" ;;
+    *) exit 1 ;;
+  esac
+  exit 0
+fi
+exit 1
+`,
+  );
+  chmodSync(docker, 0o755);
+  const curl = join(work, "curl");
+  writeFileSync(
+    curl,
+    `#!/usr/bin/env bash
+for argument in "$@"; do url="$argument"; done
+if [[ "$url" == */api/preview ]]; then
+  printf 'HTTP/1.1 303\\r\\nlocation: /preview-error\\r\\ncache-control: no-store\\r\\n'
+else
+  printf 'HTTP/1.1 200\\r\\nx-gooes-service: web\\r\\nx-gooes-revision: %s\\r\\n' "$WEB_OLD_REVISION"
+fi
+`,
+  );
+  chmodSync(curl, 0o755);
+  const sleep = join(work, "sleep");
+  writeFileSync(sleep, "#!/usr/bin/env bash\n:\n");
+  chmodSync(sleep, 0o755);
+
+  const rollbackName = workflow === dev
+    ? "Roll back gated dev web"
+    : "Roll back production web";
+  const rollbackScript = step(workflow, rollbackName)
+    .split("run: |\n")[1]
+    ?.replace(/^ {10}/gm, "") ?? "exit 2";
+  return spawnSync("bash", ["-c", rollbackScript], {
+    cwd: work,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ACTUAL_CONFIG_IMAGE: configuredImage,
+      ACTUAL_IMAGE_ID: actualImageId,
+      DEV_DEPLOY_DIR: work,
+      DEPLOY_DIR: work,
+      GITHUB_ENV: join(work, "github-env"),
+      GOOES_WEB_PROXY_SHARED_SECRET: "x".repeat(32),
+      PATH: `${work}:${process.env.PATH}`,
+      SOURCE_DIR: work,
+      WEB_OLD_IMAGE_ID: "sha256:old-image-id",
+      WEB_OLD_REVISION: "0123456789abcdef0123456789abcdef01234567",
+      WEB_ROLLBACK_TAG: "gooes-web:rollback-123-456",
+      WEB_SMOKE_CONTENT_PATH: "/articles/test-content",
+    },
+  });
+}
+
 describe("Web rollback workflows", () => {
   test("does not cancel an in-progress development deployment or rollback", () => {
     expect(dev).toContain("concurrency:");
@@ -30,14 +110,44 @@ describe("Web rollback workflows", () => {
     expect(dev).not.toContain("cancel-in-progress: true");
   });
 
-  test.each([dev, production])("verifies old revision and strict health after rollback", (workflow) => {
+  test.each([dev, production])("verifies exact old image identity after rollback", (workflow) => {
     expect(workflow).toContain("WEB_OLD_REVISION");
+    expect(workflow).toContain("WEB_OLD_IMAGE_ID");
+    expect(workflow).toContain('echo "WEB_OLD_IMAGE_ID=${old_image_id}" >> "${GITHUB_ENV}"');
     expect(workflow).toContain("WEB_ROLLBACK_STATUS=rollback_failed");
     expect(workflow).toContain("WEB_ROLLBACK_STATUS=success");
     expect(workflow).toMatch(/health[\s\S]*revision[\s\S]*WEB_OLD_REVISION/);
+    expect(workflow).toContain("image_id");
+    expect(workflow).toContain('test "${image_id}" = "${WEB_OLD_IMAGE_ID}"');
+    expect(workflow).toContain('test "${configured_image}" = "${WEB_ROLLBACK_TAG}"');
     expect(workflow).toContain("x-gooes-service: web");
     expect(workflow).toContain("x-gooes-revision: ${WEB_OLD_REVISION}");
   });
+
+  test.each([dev, production])(
+    "rejects the same revision when rollback resolves to a different image",
+    (workflow) => {
+      expect(
+        runRollbackEvidenceCheck(
+          workflow,
+          "sha256:different-image-id",
+          "gooes-web:rollback-123-456",
+        ).status,
+      ).not.toBe(0);
+    },
+  );
+
+  test.each([dev, production])(
+    "accepts the exact old image ID and rollback tag",
+    (workflow) => {
+      const result = runRollbackEvidenceCheck(
+        workflow,
+        "sha256:old-image-id",
+        "gooes-web:rollback-123-456",
+      );
+      expect(result.status, result.stderr).toBe(0);
+    },
+  );
 
   test.each([dev, production])("keeps rollback tags for at least seven days", (workflow) => {
     expect(workflow).toContain("ROLLBACK_CREATED_AT");

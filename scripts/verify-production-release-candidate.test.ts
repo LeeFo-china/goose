@@ -6,6 +6,15 @@ import { join } from "node:path";
 import { verifyProductionReleaseCandidate } from "./verify-production-release-candidate.mjs";
 
 const sha = "a".repeat(40);
+const imageBase = "useccr.ccs.tencentyun.com/america_goose";
+interface ImageManifestFixture {
+  build_run_id: number;
+  commit_sha: string;
+  digest: string;
+  image: string;
+  service: string;
+  target_environment: string;
+}
 const candidate = {
   schema_version: 1,
   build_run_id: 123,
@@ -25,15 +34,18 @@ const plan = {
   deploy_services: ["api", "cos-reconcile-worker"],
   no_op: false,
 };
-const manifests = {
+const manifests: Record<string, ImageManifestFixture> = {
   api: {
     service: "api",
+    build_run_id: 123,
     commit_sha: sha,
     target_environment: "production",
+    image: `${imageBase}/goose-api:run-123-${sha}`,
     digest: `sha256:${"b".repeat(64)}`,
   },
 };
 const expected = {
+  imageBase,
   runId: 123,
   sha,
   services: ["api", "cos-reconcile-worker"],
@@ -47,6 +59,37 @@ function cloneEvidence() {
     manifests: structuredClone(manifests),
     plan: structuredClone(plan),
   };
+}
+
+function allServiceEvidence() {
+  const evidence = cloneEvidence();
+  evidence.candidate.requested_services = [
+    "api",
+    "admin",
+    "social-video-worker",
+    "cos-reconcile-worker",
+  ];
+  evidence.candidate.build_services = ["api", "admin", "social-video-worker"];
+  evidence.expected.services = structuredClone(evidence.candidate.requested_services);
+  evidence.plan.build_services = structuredClone(evidence.candidate.build_services);
+  evidence.plan.deploy_services = structuredClone(evidence.candidate.requested_services);
+  evidence.manifests.admin = {
+    service: "admin",
+    build_run_id: 123,
+    commit_sha: sha,
+    target_environment: "production",
+    image: `${imageBase}/goose-admin:run-123-${sha}`,
+    digest: `sha256:${"c".repeat(64)}`,
+  };
+  evidence.manifests["social-video-worker"] = {
+    service: "social-video-worker",
+    build_run_id: 123,
+    commit_sha: sha,
+    target_environment: "production",
+    image: `${imageBase}/goose-social-video-worker:run-123-${sha}`,
+    digest: `sha256:${"d".repeat(64)}`,
+  };
+  return evidence;
 }
 
 function expectRejected(
@@ -160,6 +203,75 @@ describe("production release candidate verifier", () => {
     );
   });
 
+  test("rejects manifest build run provenance from another run", () => {
+    expectRejected(
+      (evidence) => { evidence.manifests.api.build_run_id = 124; },
+      "manifest build run mismatch for api",
+    );
+  });
+
+  test("rejects a mutable SHA image instead of run-scoped evidence", () => {
+    expectRejected(
+      (evidence) => {
+        evidence.manifests.api.image = `${imageBase}/goose-api:${sha}`;
+      },
+      "manifest image mismatch for api",
+    );
+  });
+
+  test("rejects registry pair changes after candidate build", () => {
+    expectRejected(
+      (evidence) => {
+        evidence.expected.imageBase = "ccr.ccs.tencentyun.com/gooes-goodcms";
+      },
+      "manifest image mismatch for api",
+    );
+  });
+
+  test("maps every production service to its exact run-scoped repository", () => {
+    const evidence = allServiceEvidence();
+
+    expect(
+      verifyProductionReleaseCandidate(
+        evidence.candidate,
+        evidence.plan,
+        evidence.manifests,
+        evidence.expected,
+      ),
+    ).toEqual(evidence.candidate);
+
+    for (const service of evidence.candidate.build_services) {
+      const mutated = allServiceEvidence();
+      mutated.manifests[service].image = `${imageBase}/wrong-repository:run-123-${sha}`;
+      expect(() =>
+        verifyProductionReleaseCandidate(
+          mutated.candidate,
+          mutated.plan,
+          mutated.manifests,
+          mutated.expected,
+        )
+      ).toThrow(`manifest image mismatch for ${service}`);
+    }
+  });
+
+  test("rejects an invalid expected image base", () => {
+    expectRejected(
+      (evidence) => { evidence.expected.imageBase = `${imageBase}/goose-api`; },
+      "invalid expected image base",
+    );
+  });
+
+  test("rejects an unapproved but syntactically valid image base", () => {
+    const unsupportedImageBase = "registry.example.com/other";
+    expectRejected(
+      (evidence) => {
+        evidence.expected.imageBase = unsupportedImageBase;
+        evidence.manifests.api.image = `${unsupportedImageBase}/goose-api:run-123-${sha}`;
+      },
+      "unsupported expected image base",
+    );
+  });
+
   test.each([
     ["candidate schema", (evidence: ReturnType<typeof cloneEvidence>) => {
       evidence.candidate.schema_version = 2;
@@ -231,6 +343,7 @@ describe("production release candidate verifier", () => {
       "123",
       sha,
       "api,cos-reconcile-worker",
+      imageBase,
     ]);
 
     expect(result.exitCode).toBe(0);

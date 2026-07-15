@@ -64,14 +64,89 @@ describe("release deployment workbench contracts", () => {
     const panelSource = readFileSync(join(import.meta.dir, "release-deployments-panel.tsx"), "utf8");
     const dispatchSource = readFileSync(join(import.meta.dir, "release-deployments-dispatch-card.tsx"), "utf8");
     const typesSource = readFileSync(join(import.meta.dir, "ops-types.ts"), "utf8");
+    const repositoryRoot = join(import.meta.dir, "../../../..");
+    const productionDeployWorkflow = readFileSync(
+      join(repositoryRoot, ".github/workflows/deploy-docker-services.yml"),
+      "utf8",
+    );
+    const productionGateWorkflow = readFileSync(
+      join(repositoryRoot, ".github/workflows/verify-production-web-deployment-gate.yml"),
+      "utf8",
+    );
+    const cutoverRunbookSource = readFileSync(
+      join(repositoryRoot, "docs/operations/official-website-production-cutover-runbook.md"),
+      "utf8",
+    );
+    const runbookSection4Start = cutoverRunbookSource.indexOf("## 4. 部署 Web，但不切域名");
+    const runbookSection5Start = cutoverRunbookSource.indexOf("## 5.", runbookSection4Start);
+    const runbookSection4 = cutoverRunbookSource.slice(runbookSection4Start, runbookSection5Start);
+    const buildStageStart = runbookSection4.indexOf("1. `Build Docker Images`");
+    const gateStageStart = runbookSection4.indexOf("2. `Verify Production Web Deployment Gate`");
+    const deployStageStart = runbookSection4.indexOf("3. `Deploy Docker Services`");
+    const manualCutoverStart = runbookSection4.indexOf("4. `container_ready_for_manual_cutover`");
+    const buildStage = runbookSection4.slice(buildStageStart, gateStageStart);
+    const gateStage = runbookSection4.slice(gateStageStart, deployStageStart);
+    const deployStage = runbookSection4.slice(deployStageStart, manualCutoverStart);
 
     expect(panelSource).toContain('value="web-release"');
     expect(panelSource).toContain("官网发布");
     expect(panelSource).toContain("官网 Web 使用独立 Gate");
     expect(panelSource).toContain("verify-dev-web-deployment-gate.yml");
-    expect(panelSource).toContain("verify-web-deployment-gate.yml");
+    expect(panelSource).toContain("verify-production-web-deployment-gate.yml");
     expect(panelSource).toContain("deploy-dev.yml");
     expect(panelSource).toContain("deploy-docker-services.yml");
+    expect(panelSource).toContain('productionBuild: "build-docker-images.yml"');
+    expect(panelSource).toContain('productionGate: "verify-production-web-deployment-gate.yml"');
+    expect(panelSource).not.toContain('productionGate: "verify-web-deployment-gate.yml"');
+    expect(panelSource).toContain("先构建生产 Web SHA 镜像");
+    expect(panelSource).toContain("生产 Web 构建");
+    expect(panelSource).toContain("build_run_id 与 commit SHA");
+    expect(panelSource).toContain("built_image_sha、build_run_id、gate_run_id、web_smoke_content_path");
+    expect(panelSource).toContain("container loopback smoke");
+    expect(panelSource).toContain("生产切流 Runbook");
+    expect(panelSource).toContain("official-website-production-cutover-runbook.md");
+    expect(productionDeployWorkflow).toContain("built_image_sha:");
+    expect(productionDeployWorkflow).toContain("build_run_id:");
+    expect(productionDeployWorkflow).toContain(
+      '.github/workflows/verify-production-web-deployment-gate.yml',
+    );
+    expect(productionGateWorkflow).toContain(
+      "uses: ./.github/workflows/verify-web-deployment-gate.yml",
+    );
+    expect(runbookSection4Start).toBeGreaterThanOrEqual(0);
+    expect(runbookSection5Start).toBeGreaterThan(runbookSection4Start);
+    expect(buildStageStart).toBeGreaterThanOrEqual(0);
+    expect(gateStageStart).toBeGreaterThan(buildStageStart);
+    expect(deployStageStart).toBeGreaterThan(gateStageStart);
+    expect(manualCutoverStart).toBeGreaterThan(deployStageStart);
+    expect(buildStage).toContain("同一 release Tag");
+    expect(buildStage).toContain("target_environment=production");
+    expect(buildStage).toContain("service=web");
+    expect(buildStage).toContain("build_run_id");
+    expect(buildStage).toContain("production pull verification");
+    expect(buildStage).not.toContain("gate_run_id");
+    expect(buildStage).not.toContain("web_smoke_content_path");
+    expect(gateStage).toContain("同一 release Tag");
+    expect(gateStage).toContain("commit_sha");
+    expect(gateStage).toContain("migration_version");
+    expect(gateStage).toContain("gate_run_id");
+    expect(gateStage).not.toContain("build_run_id");
+    expect(gateStage).not.toContain("web_smoke_content_path");
+    for (const input of [
+      "service=web",
+      "built_image_sha",
+      "build_run_id",
+      "gate_run_id",
+      "web_smoke_content_path",
+      "confirm_text",
+    ]) {
+      expect(deployStage).toContain(input);
+    }
+    expect(runbookSection4.slice(manualCutoverStart)).toContain("人工 Nginx");
+    expect(runbookSection4).toContain("工作流不得访问或修改 `/etc/nginx`");
+    expect(runbookSection4).toContain("不得执行 reload");
+    expect(panelSource).toContain('<h4 className="text-sm font-semibold">{title}</h4>');
+    expect(panelSource).toContain('aria-hidden="true"');
     expect(dispatchSource).not.toContain('value="web"');
     expect(typesSource).toContain('export type ReleaseRuntimeService = Exclude<ReleaseService, "all"> | "web"');
   });

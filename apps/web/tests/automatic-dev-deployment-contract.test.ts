@@ -22,6 +22,42 @@ const sliceBetween = (startMarker: string, endMarker: string): string => {
   return workflow.slice(start, end);
 };
 
+const dockerCommandShapes = (shellSource: string): string[] => {
+  const normalizedShellSource = shellSource.replace(/\\\r?\n\s*/g, " ");
+  return Array.from(
+    normalizedShellSource.matchAll(/\bdocker\s+/g),
+    (match) => {
+      const commandStart = (match.index ?? 0) + match[0].length;
+      const tokens = normalizedShellSource.slice(commandStart).trimStart().split(/\s+/);
+      if (tokens[0]?.startsWith("-")) {
+        return "<global-option>";
+      }
+      if (tokens[0] === "buildx" && tokens[1] === "imagetools") {
+        return tokens.slice(0, 3).join(" ");
+      }
+      if (tokens[0] === "buildx" || tokens[0] === "image") {
+        return tokens.slice(0, 2).join(" ");
+      }
+      return tokens[0] ?? "<missing-command>";
+    },
+  );
+};
+
+const allowedProductionPullDockerCommands = [
+  "buildx imagetools inspect",
+  "buildx version",
+  "image inspect",
+  "image rm",
+  "login",
+  "pull",
+];
+
+const expectOnlyProductionPullDockerCommands = (shellSource: string): void => {
+  expect([...new Set(dockerCommandShapes(shellSource))].sort()).toEqual(
+    allowedProductionPullDockerCommands,
+  );
+};
+
 describe("automatic development image build contract", () => {
   test("triggers affected-service builds for main pushes without removing manual builds", () => {
     expect(workflow).toContain("push:");
@@ -101,6 +137,11 @@ describe("automatic development image build contract", () => {
 
   test("exports the plan contract and isolates push from manual inputs", () => {
     const validateJob = sliceBetween("  validate-request:", "  build:");
+    const resolveStep = sliceBetween(
+      "- name: Resolve build plan",
+      "- name: Upload immutable build plan",
+    );
+    const resolveShell = resolveStep.slice(resolveStep.indexOf("run: |"));
 
     for (const output of [
       "build_services",
@@ -122,7 +163,7 @@ describe("automatic development image build contract", () => {
       'classifications: ($classifications | split(" ") | sort)',
     );
     expect(validateJob).toContain("### Production all-service behavior");
-    expect(validateJob).not.toMatch(/run:\s*\|[\s\S]*\$\{\{\s*inputs\./);
+    expect(resolveShell).not.toMatch(/\$\{\{\s*inputs\./);
   });
 
   test("builds only selected services using the validated target environment", () => {
@@ -165,13 +206,62 @@ describe("automatic development image build contract", () => {
     expect(buildJob).toContain("image-manifest-${SERVICE}.json");
   });
 
-  test("does not introduce deployment runners or production deployment coupling", () => {
-    expect(workflow).toContain("runs-on: ubuntu-24.04");
-    expect(workflow).not.toContain("gooes-dev-deploy");
-    expect(workflow).not.toContain("gooes-build-tencent");
-    expect(workflow).not.toContain("gooes-prod-deploy");
-    expect(workflow).not.toContain("gooes-prod-vm-0-3");
-    expect(workflow).not.toContain("uses: ./.github/workflows/deploy-docker-services.yml");
+  test("keeps validation and build jobs off deployment runners", () => {
+    const buildJobs = sliceBetween(
+      "  validate-request:",
+      "  verify-production-pull:",
+    );
+
+    expect(buildJobs).toContain("runs-on: ubuntu-24.04");
+    expect(buildJobs).not.toContain("gooes-dev-deploy");
+    expect(buildJobs).not.toContain("gooes-build-tencent");
+    expect(buildJobs).not.toContain("gooes-prod-deploy");
+    expect(buildJobs).not.toContain("gooes-prod-vm-0-3");
+  });
+
+  test("keeps production pull verification on its runner without deploying", () => {
+    const verifyProductionPull = sliceBetween(
+      "  verify-production-pull:",
+      "  # End production pull verification",
+    );
+
+    expect(verifyProductionPull).toContain(
+      "name: Verify production images from production runner",
+    );
+    expect(verifyProductionPull).toContain(
+      "runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]",
+    );
+    expect(verifyProductionPull).toContain(
+      'test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"',
+    );
+    expectOnlyProductionPullDockerCommands(verifyProductionPull);
+    expect(verifyProductionPull).not.toMatch(/\bdocker(?:-|\s+)compose\b/);
+    expect(verifyProductionPull).not.toMatch(/\brestart\b/i);
+    expect(verifyProductionPull).not.toMatch(/\bsystemctl\b/);
+    expect(verifyProductionPull).not.toMatch(/\bnginx\b/i);
+    expect(verifyProductionPull).not.toMatch(/\bgh\s+workflow\s+run\b/);
+    expect(verifyProductionPull).not.toMatch(
+      /uses:\s+\.\/\.github\/workflows\/deploy-/,
+    );
+  });
+
+  test.each([
+    "docker image prune -a -f",
+    "docker buildx prune -a -f",
+    "docker --config /tmp/docker pull example.invalid/image@sha256:deadbeef",
+    'docker image rm "$(docker stop gooes-api)"',
+    'docker image rm "$(docker image prune -a -f)"',
+    'docker image rm "$(docker buildx prune -a -f)"',
+    'docker image rm "$(docker --config /tmp/docker stop gooes-api)"',
+  ])("rejects production pull Docker mutation: %s", (mutation) => {
+    const verifyProductionPull = sliceBetween(
+      "  verify-production-pull:",
+      "  # End production pull verification",
+    );
+
+    expect(() =>
+      expectOnlyProductionPullDockerCommands(`${verifyProductionPull}\n${mutation}`),
+    ).toThrow();
   });
 });
 
