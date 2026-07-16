@@ -12,6 +12,7 @@ export * from './permission';
 export * from './post';
 export * from './project-acceptance';
 export * from './project-log';
+export * from './project-operational-risk';
 export * from './project';
 export * from './referral';
 export * from './site-content';
