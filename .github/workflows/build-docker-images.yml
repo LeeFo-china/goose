@@ -283,6 +283,39 @@ jobs:
           SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
           BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+          retry_docker_push() {
+            local image="$1"
+            local attempt
+            for attempt in 1 2 3; do
+              if docker push "${image}"; then
+                return 0
+              fi
+              if [ "${attempt}" -eq 3 ]; then
+                return 1
+              fi
+              echo "docker push failed for ${image}; retrying attempt $((attempt + 1))/3" >&2
+              sleep $((attempt * 20))
+            done
+          }
+
+          inspect_image_digest() {
+            local output
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if output="$(docker buildx imagetools inspect "$SHA_IMAGE")"; then
+                digest="$(awk '/^Digest:/ {print $2; exit}' <<< "${output}")"
+                if [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+                  return 0
+                fi
+              fi
+              if [ "${attempt}" -eq 5 ]; then
+                return 1
+              fi
+              echo "image digest is not ready for ${SHA_IMAGE}; retrying attempt $((attempt + 1))/5" >&2
+              sleep $((attempt * 10))
+            done
+          }
+
           case "$SERVICE" in
             api)
               docker build \
@@ -337,11 +370,11 @@ jobs:
               ;;
           esac
 
-          docker push "$BRANCH_IMAGE"
-          docker push "$SHA_IMAGE"
+          retry_docker_push "$BRANCH_IMAGE"
+          retry_docker_push "$SHA_IMAGE"
 
-          digest="$(docker buildx imagetools inspect "$SHA_IMAGE" | awk '/^Digest:/ {print $2; exit}')"
-          [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          digest=""
+          inspect_image_digest
           jq -n \
             --arg service "${SERVICE}" \
             --arg image "${SHA_IMAGE}" \
