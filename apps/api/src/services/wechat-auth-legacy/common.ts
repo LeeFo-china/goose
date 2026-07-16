@@ -170,16 +170,20 @@ export function buildVisitorSessionId(this: any, openid: string) {
 }
 
 export function signVisitorSession(this: any, input: {
+  authUserId?: string | null;
   openid: string;
   unionid?: string | null;
   visitorId: string;
   verifiedPhone?: string | null;
+  shareLinkId?: string | null;
 }) {
   return signVisitorSessionToken({
+    sub: input.authUserId ?? undefined,
     openid: input.openid,
     visitor_id: input.visitorId,
     unionid: input.unionid ?? undefined,
     verified_phone: input.verifiedPhone ?? undefined,
+    share_link_id: input.shareLinkId ?? undefined,
   });
 }
 

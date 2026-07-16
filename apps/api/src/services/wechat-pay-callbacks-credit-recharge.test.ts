@@ -3,6 +3,7 @@ import type {
   TenantCreditOrderRecord,
   TenantCreditWechatNotificationRecord,
 } from "@/repositories/billing-recharge";
+import type { TenantCreditRefundRequestRecord } from "@/repositories/billing-recharge-refunds";
 import type { PaymentRecord } from "@/repositories/payments";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
@@ -115,10 +116,11 @@ const loadSecretBundle = mock(async (): Promise<WechatPaySecretBundle> => ({
   baseUrl: "https://api.mch.weixin.qq.com",
 }));
 const verifySignature = mock(() => true);
-const decryptResource = mock(() => decryptedResource);
+const decryptResource = mock((): Record<string, unknown> => decryptedResource);
 const findCreditOrderByOutTradeNo = mock(
   async (): Promise<TenantCreditOrderRecord | null> => creditOrder,
 );
+const findRefundRequestByOutRefundNo = mock(async () => null);
 const findCreditNotificationByNotifyId = mock(
   async (): Promise<TenantCreditWechatNotificationRecord | null> => null,
 );
@@ -138,6 +140,17 @@ const confirmWechatRecharge = mock(async () => ({
   account: { id: "account-1", available_credits: 3100 },
   ledger: { id: "ledger-1" },
   idempotent: false,
+}));
+const confirmWechatRechargeRefund = mock(async () => ({
+  request: {},
+  order: {},
+  account: { id: "account-1", available_credits: 2000 },
+  ledger: { id: "refund-ledger-1" },
+  idempotent: false,
+}));
+const markWechatRechargeRefundFailed = mock(async () => ({
+  request: {} as TenantCreditRefundRequestRecord,
+  order: creditOrder,
 }));
 const recoverAfterRecharge = mock(async () => ({
   recovered: true,
@@ -162,11 +175,14 @@ async function createService() {
     crypto: { verifySignature, decryptResource },
     creditRechargeRepository: {
       findWechatOrderByOutTradeNo: findCreditOrderByOutTradeNo,
+      findWechatRefundRequestByOutRefundNo: findRefundRequestByOutRefundNo,
       findWechatNotificationByNotifyId: findCreditNotificationByNotifyId,
       createWechatNotification: createCreditNotification,
       markWechatNotificationProcessed: markCreditNotificationProcessed,
       markWechatNotificationFailed: markCreditNotificationFailed,
       confirmWechatRecharge,
+      confirmWechatRechargeRefund,
+      markWechatRechargeRefundFailed,
     },
     paymentRepository: { create: createPayment },
     paymentBridge: { complete: completePaymentTask },
@@ -183,11 +199,14 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
       verifySignature,
       decryptResource,
       findCreditOrderByOutTradeNo,
+      findRefundRequestByOutRefundNo,
       findCreditNotificationByNotifyId,
       createCreditNotification,
       markCreditNotificationProcessed,
       markCreditNotificationFailed,
       confirmWechatRecharge,
+      confirmWechatRechargeRefund,
+      markWechatRechargeRefundFailed,
       recoverAfterRecharge,
       createPayment,
       completePaymentTask,
@@ -197,6 +216,7 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
     verifySignature.mockImplementation(() => true);
     decryptResource.mockImplementation(() => decryptedResource);
     findCreditOrderByOutTradeNo.mockImplementation(async () => creditOrder);
+    findRefundRequestByOutRefundNo.mockImplementation(async () => null);
     findCreditNotificationByNotifyId.mockImplementation(async () => null);
   });
 

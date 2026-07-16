@@ -178,6 +178,38 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).not.toContain("api_v3_key");
     expect(migrationSource).not.toContain("private_key");
   });
+
+  test("creates tenant credit refund request records without direct refund execution", () => {
+    const migrationSource = readTenantCreditRefundRequestsMigration();
+
+    expect(migrationSource).toContain("ALTER TABLE public.tenant_credit_orders");
+    expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS refund_status");
+    expect(migrationSource).toContain("CREATE TABLE IF NOT EXISTS public.tenant_credit_refund_requests");
+    expect(migrationSource).toContain("tenant_credit_refund_requests_idempotency_idx");
+    expect(migrationSource).toContain("tenant_credit_refund_requests_active_order_idx");
+    expect(migrationSource).toContain("billing.recharge.refund.request");
+    expect(migrationSource).toContain("platform.billing.recharge_refund.read");
+    expect(migrationSource).toContain("platform.billing.recharge_refund.review");
+    expect(migrationSource).toContain("'pending_review'::text");
+    expect(migrationSource).not.toContain("billing_confirm_wechat_refund");
+    expect(migrationSource).not.toContain("wechat_payment_refunds");
+  });
+
+  test("confirms tenant credit recharge refunds with reverse ledger RPC", () => {
+    const migrationSource = readTenantCreditRefundConfirmationMigration();
+
+    expect(migrationSource).toContain("CREATE OR REPLACE FUNCTION public.billing_confirm_wechat_recharge_refund");
+    expect(migrationSource).toContain("tenant_credit_refund_requests_out_refund_no_unique_idx");
+    expect(migrationSource).toContain("FOR UPDATE");
+    expect(migrationSource).toContain("available_credits");
+    expect(migrationSource).toContain("'wechat_recharge_refund'");
+    expect(migrationSource).toContain("'tenant_credit_refund_request'");
+    expect(migrationSource).toContain("direction");
+    expect(migrationSource).toContain("'out'");
+    expect(migrationSource).toContain("status = 'refunded'");
+    expect(migrationSource).toContain("refund_status = 'refunded'");
+    expect(migrationSource).toContain("BILLING_RECHARGE_REFUND_CREDITS_CONSUMED");
+  });
 });
 
 function readWechatPayMigration() {
@@ -274,6 +306,26 @@ function readPlatformCreditRechargeProductsMigration() {
   return readFileSync(
     new URL(
       "../../../../supabase/migrations/20260702170000_platform_credit_recharge_products.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readTenantCreditRefundRequestsMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260715103000_create_tenant_credit_refund_requests.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+}
+
+function readTenantCreditRefundConfirmationMigration() {
+  return readFileSync(
+    new URL(
+      "../../../../supabase/migrations/20260715120000_confirm_tenant_credit_recharge_refunds.sql",
       import.meta.url,
     ),
     "utf8",

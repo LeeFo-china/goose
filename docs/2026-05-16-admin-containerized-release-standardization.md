@@ -1,5 +1,10 @@
 # 2026-05-16 Admin 容器化发布流程规范
 
+> **历史归档，全文不可执行。** 本文只保留 2026-05-16 的流程和命令作为历史证据，任何
+> 命令、路径、Runner、分支或部署步骤都不得用于现行环境。2026-07-15 起的迁移边界、
+> production Strategy B 和生产 Web 独立发布链只以
+> `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；镜像路径更新不表示生产已部署。
+
 ## 1. 目标
 
 将 Admin 从“服务器本地临时构建”规范为仓库内可复现的容器化发布流程。
@@ -24,7 +29,7 @@
 Admin 镜像：
 
 ```text
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
+useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant
 ```
 
 构建阶段：
@@ -65,7 +70,7 @@ deploy/.env.admin.example
 
 | 变量 | 说明 | 推荐值 |
 | --- | --- | --- |
-| `GOOES_ADMIN_IMAGE` | Admin 镜像 | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant` |
+| `GOOES_ADMIN_IMAGE` | Admin 镜像 | `useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant` |
 | `GOOES_API_BASE_URL` | Admin 服务端访问 API 地址 | `http://gooes-api:3000` |
 | `NEXT_PUBLIC_GOOES_API_BASE_URL` | 浏览器侧 API 公网地址 | `https://api.goodcms.cn` |
 | `NEXT_PUBLIC_GOOES_H5_BASE_URL` | 浏览器侧 H5 公网地址 | `https://h5.goodcms.cn` |
@@ -108,9 +113,9 @@ tsconfig.base.json
 - `Settings -> Actions -> General -> Workflow permissions`
 - 选择 `Read and write permissions`
 
-## 6. 服务器发布命令
+## 6. 2026-05-16 历史服务器发布命令（仅作证据）
 
-在新服务器 `/opt/supabase/docker` 执行：
+以下命令记录了 2026-05-16 在新服务器 `/opt/supabase/docker` 的操作，仅作历史证据：
 
 ```bash
 docker compose \
@@ -145,9 +150,9 @@ curl -I https://admin.goodcms.cn/login
 5. `https://admin.goodcms.cn/login` 返回非 5xx。
 6. 登录后能正常访问平台概览、租户后台常用页面。
 
-## 8. 后续优化
+## 8. 2026-05-16 记录的后续优化
 
-当前已经采用“自动构建镜像，服务器自动拉取重启”。
+截至 2026-05-16 已采用“自动构建镜像，服务器自动拉取重启”。
 
 后续可继续推进：
 

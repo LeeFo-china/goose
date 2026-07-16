@@ -125,7 +125,9 @@ const rechargeRepository = {
   findOrderByIdempotencyKey: mock(async () => null),
   createOrder: mock(async () => order),
   markPrepayCreated: mock(async () => ({ ...order, prepay_id: "prepay-1" })),
-  findOrderById: mock(async () => paidOrder),
+  findOrderById: mock(
+    async (): Promise<TenantCreditOrderRecord | null> => paidOrder,
+  ),
   getAccountByTenantId: mock(async () => account),
 };
 
@@ -224,6 +226,8 @@ describe("BillingRechargeService", () => {
     }
     rechargeRepository.findEnabledProductByCode.mockImplementation(async () => product);
     rechargeRepository.findOrderByIdempotencyKey.mockImplementation(async () => null);
+    rechargeRepository.findOrderById.mockImplementation(async () => paidOrder);
+    rechargeRepository.getAccountByTenantId.mockImplementation(async () => account);
     paymentConfigRepository.findWechatPayConfig.mockImplementation(
       async (): Promise<PlatformPaymentConfigRecord> => platformConfig,
     );
@@ -289,9 +293,9 @@ describe("BillingRechargeService", () => {
         refunded_at: null,
         refund_amount_fen: null,
         refund_action: {
-          enabled: false,
+          enabled: true,
           label: "申请退款",
-          disabled_reason: "REFUND_REQUEST_NOT_SUPPORTED",
+          disabled_reason: null,
           requires_reason: true,
         },
       }),

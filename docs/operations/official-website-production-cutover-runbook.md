@@ -58,11 +58,22 @@ basic-auth 密码文件或导出的 secret。
 
 ## 4. 部署 Web，但不切域名
 
-触发 `Build Docker Images`，固定选择 `service=web`，提供：
+以下三个 workflow 必须在同一 release Tag 上依次执行，并绑定同一个 Git SHA：
 
-- 与当前提交完全一致的成功 production gate run ID；
-- 一个已发布的内容详情路径，例如 `/articles/example-slug`；
-- 不可变 Git SHA 镜像由同一次 build 传入 deploy workflow。
+1. `Build Docker Images`（同一 release Tag）
+   - 输入 `target_environment=production`、`service=web`。
+   - 记录成功 run 的 `build_run_id` 和 Git SHA。
+   - Build run 必须完成 production pull verification，证明生产 runner 可按 digest 拉取镜像。
+2. `Verify Production Web Deployment Gate`（同一 release Tag）
+   - 输入与 Build 完全一致的 `commit_sha`，以及已应用的 `migration_version`。
+   - 记录成功 run 的 `gate_run_id`。
+3. `Deploy Docker Services`（同一 release Tag）
+   - 输入 `service=web`、`built_image_sha`、`build_run_id`、`gate_run_id`、
+     `web_smoke_content_path` 和 `confirm_text=确认部署生产环境`。
+   - `web_smoke_content_path` 必须是已发布的文章、案例或城市详情路径，例如
+     `/articles/example-slug`。
+4. `container_ready_for_manual_cutover`
+   - 只有 Deploy summary 显示该状态，才可进入后续人工 Nginx 候选配置和切流步骤。
 
 工作流必须通过以下 loopback 检查，并在 summary 中显示
 `container_ready_for_manual_cutover`：

@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import {
   billingRechargeRepository,
+  type BillingWechatRefundRequestMatch,
   type TenantCreditOrderRecord,
 } from "@/repositories/billing-recharge";
 import {
@@ -35,7 +36,7 @@ type SecretBundleServicePort = Pick<typeof wechatPaySecretBundleService, "load">
 type ProjectOrderRepositoryPort = Pick<typeof wechatPayOrderRepository, "findByOutTradeNo">;
 type CreditRechargeRepositoryPort = Pick<
   typeof billingRechargeRepository,
-  "findWechatOrderByOutTradeNo"
+  "findWechatOrderByOutTradeNo" | "findWechatRefundRequestByOutRefundNo"
 >;
 
 export type WechatPayCallbackCrypto = {
@@ -68,9 +69,19 @@ export type CreditRechargeCallbackContext = {
   order: TenantCreditOrderRecord;
 };
 
+export type CreditRechargeRefundCallbackContext = {
+  kind: "credit_recharge_refund";
+  config: PlatformPaymentConfigRecord;
+  payload: Record<string, unknown>;
+  resource: Record<string, unknown>;
+  refundRequest: BillingWechatRefundRequestMatch["request"];
+  order: TenantCreditOrderRecord;
+};
+
 export type MatchedCallbackContext =
   | ProjectPaymentCallbackContext
-  | CreditRechargeCallbackContext;
+  | CreditRechargeCallbackContext
+  | CreditRechargeRefundCallbackContext;
 
 export class WechatPayCallbackContextMatcher {
   private readonly configRepository: ConfigRepositoryPort;
@@ -107,6 +118,23 @@ export class WechatPayCallbackContextMatcher {
     const signature = this.requireHeader(input.headers, "wechatpay-signature");
     const callbackSerial = this.optionalHeader(input.headers, "wechatpay-serial");
     const resource = this.requireResource(input.payload);
+    if (this.isRefundEvent(input.payload)) {
+      const refundMatch = await this.matchCreditRechargeRefund({
+        ...input,
+        timestamp,
+        nonce,
+        signature,
+        callbackSerial,
+        resource,
+      });
+      if (refundMatch) return refundMatch;
+      throw Errors.business(
+        401,
+        "微信支付退款回调签名或退款单匹配失败",
+        "WECHAT_PAY_REFUND_CALLBACK_VERIFY_FAILED",
+      );
+    }
+
     const projectMatch = await this.matchProjectPayment({
       ...input,
       timestamp,
@@ -153,6 +181,35 @@ export class WechatPayCallbackContextMatcher {
           resource: decrypted,
           order,
         } satisfies ProjectPaymentCallbackContext;
+      }
+    }
+    return null;
+  }
+
+  private async matchCreditRechargeRefund(input: MatchInput) {
+    const configs =
+      await this.platformConfigRepository.listCallbackCandidateConfigs();
+    for (const config of configs) {
+      const decrypted = await this.verifyAndDecrypt({ ...input, config });
+      if (!decrypted) continue;
+      const outRefundNo = this.requireString(
+        decrypted,
+        "out_refund_no",
+        "微信支付退款回调缺少商户退款单号",
+      );
+      const matched =
+        await this.creditRechargeRepository.findWechatRefundRequestByOutRefundNo(
+          outRefundNo,
+        );
+      if (matched?.order.payment_config_id === config.id) {
+        return {
+          kind: "credit_recharge_refund",
+          config,
+          payload: input.payload,
+          resource: decrypted,
+          refundRequest: matched.request,
+          order: matched.order,
+        } satisfies CreditRechargeRefundCallbackContext;
       }
     }
     return null;
@@ -263,6 +320,11 @@ export class WechatPayCallbackContextMatcher {
 
   private optionalString(value: unknown) {
     return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+
+  private isRefundEvent(payload: Record<string, unknown>) {
+    const eventType = this.optionalString(payload.event_type);
+    return Boolean(eventType?.startsWith("REFUND."));
   }
 }
 

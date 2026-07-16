@@ -27,16 +27,24 @@ type ReleaseMode = "service-release" | "web-release" | "database-migration";
 const WEB_RELEASE_WORKFLOWS = {
   devGate: "verify-dev-web-deployment-gate.yml",
   devDeploy: "deploy-dev.yml",
-  productionGate: "verify-web-deployment-gate.yml",
+  productionBuild: "build-docker-images.yml",
+  productionGate: "verify-production-web-deployment-gate.yml",
   productionDeploy: "deploy-docker-services.yml",
 } as const;
 
-function getWorkflowUrl(repository: string | undefined, workflowId: string) {
+function getRepositoryUrl(repository: string | undefined) {
   const repositorySlug = repository?.trim() || "LeeFo-china/goose";
-  const repositoryUrl = repositorySlug.startsWith("http")
+  return repositorySlug.startsWith("http")
     ? repositorySlug.replace(/\/$/, "")
     : `https://github.com/${repositorySlug}`;
-  return `${repositoryUrl}/actions/workflows/${workflowId}`;
+}
+
+function getWorkflowUrl(repository: string | undefined, workflowId: string) {
+  return `${getRepositoryUrl(repository)}/actions/workflows/${workflowId}`;
+}
+
+function getRepositoryFileUrl(repository: string | undefined, filePath: string) {
+  return `${getRepositoryUrl(repository)}/blob/main/${filePath}`;
 }
 
 function releaseModeTitle(mode: ReleaseMode) {
@@ -377,8 +385,13 @@ export function ReleaseDeploymentsPanel({
 function WebReleaseGuideCard({ repository }: { repository?: string }) {
   const devGateUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.devGate);
   const devDeployUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.devDeploy);
+  const productionBuildUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.productionBuild);
   const productionGateUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.productionGate);
   const productionDeployUrl = getWorkflowUrl(repository, WEB_RELEASE_WORKFLOWS.productionDeploy);
+  const productionRunbookUrl = getRepositoryFileUrl(
+    repository,
+    "docs/operations/official-website-production-cutover-runbook.md",
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -413,15 +426,19 @@ function WebReleaseGuideCard({ repository }: { repository?: string }) {
         />
         <WebReleaseEnvironmentPanel
           title="生产环境"
-          description="用于生产官网。必须先通过生产 Web Gate，再走生产 Docker 服务部署 workflow 的 web 服务。"
+          description="用于生产官网。先构建生产 Web SHA 镜像，完成证据绑定部署后再人工切流。"
           steps={[
-            "先在服务发布中完成 API/Admin/Worker 候选构建与必要部署。",
-            `运行 ${WEB_RELEASE_WORKFLOWS.productionGate}，确认 release manifest、migration 与 smoke 证据。`,
-            `运行 ${WEB_RELEASE_WORKFLOWS.productionDeploy}，选择 service=web 并填入 gate_run_id 与确认文本。`,
+            "确认同一 commit 的 API 已部署且健康，并已应用必要 migration。",
+            `运行 ${WEB_RELEASE_WORKFLOWS.productionBuild}，使用同一发布 Tag 构建 production / web，记录 build_run_id 与 commit SHA。`,
+            `运行 ${WEB_RELEASE_WORKFLOWS.productionGate}，核对 API revision、migration 与 smoke，记录 gate_run_id。`,
+            `运行 ${WEB_RELEASE_WORKFLOWS.productionDeploy}，使用同一发布 Tag，选择 service=web，填入 built_image_sha、build_run_id、gate_run_id、web_smoke_content_path 与确认文本。`,
+            "container loopback smoke 通过后，按生产切流 Runbook 人工切流；workflow 不会 reload Nginx。",
           ]}
           actions={[
+            { label: "生产 Web 构建", href: productionBuildUrl },
             { label: "生产 Web Gate", href: productionGateUrl },
             { label: "生产 Web 部署", href: productionDeployUrl },
+            { label: "生产切流 Runbook", href: productionRunbookUrl },
           ]}
         />
       </div>
@@ -443,13 +460,13 @@ function WebReleaseEnvironmentPanel({
   return (
     <div className="flex flex-col gap-4 rounded-lg border p-4">
       <div>
-        <div className="text-sm font-semibold">{title}</div>
+        <h4 className="text-sm font-semibold">{title}</h4>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
       <ol className="flex flex-col gap-2 text-sm text-muted-foreground">
         {steps.map((step, index) => (
           <li key={step} className="flex gap-2">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
+            <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
               {index + 1}
             </span>
             <span>{step}</span>

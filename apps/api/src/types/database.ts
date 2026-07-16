@@ -6492,6 +6492,10 @@ export type Database = {
           order_no: string
           package_code: string | null
           paid_at: string | null
+          refund_amount_fen: number | null
+          refund_requested_at: string | null
+          refund_status: string | null
+          refunded_at: string | null
           remark: string | null
           status: string
           tenant_id: string
@@ -6510,6 +6514,10 @@ export type Database = {
           order_no: string
           package_code?: string | null
           paid_at?: string | null
+          refund_amount_fen?: number | null
+          refund_requested_at?: string | null
+          refund_status?: string | null
+          refunded_at?: string | null
           remark?: string | null
           status: string
           tenant_id: string
@@ -6528,6 +6536,10 @@ export type Database = {
           order_no?: string
           package_code?: string | null
           paid_at?: string | null
+          refund_amount_fen?: number | null
+          refund_requested_at?: string | null
+          refund_status?: string | null
+          refunded_at?: string | null
           remark?: string | null
           status?: string
           tenant_id?: string
@@ -6536,6 +6548,107 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tenant_credit_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_credit_refund_requests: {
+        Row: {
+          created_at: string
+          failure_message: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          order_id: string
+          out_refund_no: string | null
+          reason: string
+          refund_amount_fen: number | null
+          refunded_at: string | null
+          request_no: string
+          requested_amount_fen: number
+          requested_by_employee_id: string | null
+          requested_credits: number
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          wechat_refund_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          failure_message?: string | null
+          id?: string
+          idempotency_key: string
+          metadata?: Json
+          order_id: string
+          out_refund_no?: string | null
+          reason: string
+          refund_amount_fen?: number | null
+          refunded_at?: string | null
+          request_no: string
+          requested_amount_fen: number
+          requested_by_employee_id?: string | null
+          requested_credits: number
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          wechat_refund_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          failure_message?: string | null
+          id?: string
+          idempotency_key?: string
+          metadata?: Json
+          order_id?: string
+          out_refund_no?: string | null
+          reason?: string
+          refund_amount_fen?: number | null
+          refunded_at?: string | null
+          request_no?: string
+          requested_amount_fen?: number
+          requested_by_employee_id?: string | null
+          requested_credits?: number
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          wechat_refund_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_credit_refund_requests_order_tenant_fkey"
+            columns: ["order_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_credit_orders"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_refund_requests_requested_by_employee_id_fkey"
+            columns: ["requested_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_refund_requests_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_refund_requests_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

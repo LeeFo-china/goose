@@ -125,12 +125,27 @@ describe("domain permissions", () => {
   test("exposes billing recharge permissions in domain constants", () => {
     expect(PERMISSION_CODE_VALUES).toContain("billing.recharge.create");
     expect(PERMISSION_CODE_VALUES).toContain("billing.recharge.read");
+    expect(PERMISSION_CODE_VALUES).toContain("billing.recharge.refund.request");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.billing.recharge_refund.read");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.billing.recharge_refund.review");
     expect(PERMISSION_CODE_VALUES).toContain("platform.payment.config.read");
     expect(PERMISSION_CODE_VALUES).toContain("platform.payment.config.manage");
     expect(PERMISSION_CODE_VALUES).toContain("platform.billing.recharge_product.manage");
     expect(PermissionCodeConfig["billing.recharge.create"]).toEqual({
       label: "发起积分充值",
       module: "billing",
+    });
+    expect(PermissionCodeConfig["billing.recharge.refund.request"]).toEqual({
+      label: "申请积分充值退款",
+      module: "billing",
+    });
+    expect(PermissionCodeConfig["platform.billing.recharge_refund.read"]).toEqual({
+      label: "查看积分充值退款申请",
+      module: "platform_billing",
+    });
+    expect(PermissionCodeConfig["platform.billing.recharge_refund.review"]).toEqual({
+      label: "审核积分充值退款申请",
+      module: "platform_billing",
     });
     expect(PermissionCodeConfig["platform.payment.config.manage"]).toEqual({
       label: "管理平台支付配置",

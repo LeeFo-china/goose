@@ -2,9 +2,14 @@
 
 日期：2026-05-16
 
-## 目标
+> **历史归档，全文不可执行。** 本文只保留 2026-05-16 的流程和命令作为历史证据，任何
+> 命令、路径、Runner、分支或部署步骤都不得用于现行环境。2026-07-15 起的迁移边界、
+> production Strategy B 和生产 Web 独立发布链只以
+> `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准；镜像路径更新不表示生产已部署。
 
-新服务器已经切到 Docker Compose 部署，后续发布需要满足：
+## 2026-05-16 历史目标
+
+截至 2026-05-16，新服务器已切到 Docker Compose 部署，当时的后续发布目标为：
 
 - 代码 push 后由 GitHub Actions 构建业务镜像。
 - 服务器通过 `docker compose pull && docker compose up -d` 更新。
@@ -15,9 +20,9 @@
 
 | 服务 | 镜像 | Dockerfile | 工作流 |
 | --- | --- | --- | --- |
-| API | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant` | `docker/api.Dockerfile` | `.github/workflows/build-docker-images.yml` |
-| Admin | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant` | `docker/admin.Dockerfile` | `.github/workflows/build-docker-images.yml` |
-| 视频转文本 Worker | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant` | `docker/social-video-worker.Dockerfile` | `.github/workflows/build-docker-images.yml` |
+| API | `useccr.ccs.tencentyun.com/america_goose/goose-api:feature-multi-tenant` | `docker/api.Dockerfile` | `.github/workflows/build-docker-images.yml` |
+| Admin | `useccr.ccs.tencentyun.com/america_goose/goose-admin:feature-multi-tenant` | `docker/admin.Dockerfile` | `.github/workflows/build-docker-images.yml` |
+| 视频转文本 Worker | `useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:feature-multi-tenant` | `docker/social-video-worker.Dockerfile` | `.github/workflows/build-docker-images.yml` |
 
 ### 调整点
 
@@ -27,7 +32,7 @@
 - 每个镜像会同时推送固定 tag `feature-multi-tenant` 和 commit SHA tag，SHA tag 用于手动回滚。
 - Worker 镜像构建时传入 `ALPINE_MIRROR=https://mirrors.tencent.com/alpine`。
 
-## 服务器部署命令
+## 2026-05-16 历史服务器部署命令（仅作证据）
 
 服务器目录：
 
@@ -56,7 +61,7 @@ docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile w
 
 ## GitHub Actions 自动部署
 
-已新增 Docker 自动部署 workflow：
+截至 2026-05-16 已新增 Docker 自动部署 workflow：
 
 ```text
 .github/workflows/deploy-docker-services.yml
@@ -66,7 +71,7 @@ docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile w
 
 - `Build Docker Images`
 
-当前 `feature/multi-tenant` 分支的自动部署由统一镜像构建 workflow 在 matrix 全部成功后通过 `workflow_call` 直接调用：
+截至 2026-05-16，`feature/multi-tenant` 分支的自动部署由统一镜像构建 workflow 在 matrix 全部成功后通过 `workflow_call` 直接调用：
 
 ```text
 .github/workflows/build-docker-images.yml
@@ -80,7 +85,7 @@ docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile w
 deploy-docker-services-feature-multi-tenant
 ```
 
-当前正常链路只会触发一次 deploy；concurrency 主要用于手动重跑或异常重复触发时保护生产部署。
+2026-05-16 的正常链路只会触发一次 deploy；concurrency 主要用于手动重跑或异常重复触发时保护生产部署。
 
 runner 约束：
 
@@ -92,7 +97,7 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 
 部署步骤：
 
-1. 在新服务器 runner 上拉取当前提交的 `deploy/docker-compose.api.yml` 与 `deploy/docker-compose.admin.yml`。
+1. 在新服务器 runner 上拉取当时提交的 `deploy/docker-compose.api.yml` 与 `deploy/docker-compose.admin.yml`。
 2. 同步 compose 片段到 `/opt/supabase/docker`，同步前保留 `*.bak.github-actions-<run_id>` 备份。
 3. 登录腾讯 CCR。
 4. 拉取最新镜像：
@@ -127,7 +132,7 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 - Docker 容器重建后 IP 会变化。
 - Nginx 旧 worker 可能继续持有旧 upstream IP，导致 `502 Bad Gateway`。
 
-当前服务器已将业务域名代理改为 Docker DNS 动态解析：
+截至 2026-05-16，服务器已将业务域名代理改为 Docker DNS 动态解析：
 
 ```nginx
 resolver 127.0.0.11 valid=10s ipv6=off;
@@ -159,7 +164,7 @@ proxy_pass $gooes_panorama_upload_upstream;
 /opt/supabase/docker/volumes/proxy/nginx/supabase-nginx.conf.tpl
 ```
 
-修改后生成并 reload：
+2026-05-16 记录的生成与 reload 命令（仅作历史证据）：
 
 ```bash
 docker exec supabase-nginx sh -lc \
@@ -168,7 +173,7 @@ docker exec supabase-nginx sh -lc \
 
 ## 验收记录
 
-已完成验证：
+2026-05-16 已完成的历史验证：
 
 - `gooes-admin` 重建后状态为 `healthy`。
 - 不手动 reload Nginx，`https://admin.goodcms.cn/login` 连续返回 `HTTP/2 200`。

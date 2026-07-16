@@ -41,6 +41,10 @@ concurrency:
   group: production-release-${{ inputs.operation == 'build' && format('tag-{0}', github.ref_name) || format('candidate-{0}', inputs.build_run_id) }}
   cancel-in-progress: false
 
+env:
+  TENCENT_CCR_REGISTRY: ${{ vars.TENCENT_CCR_REGISTRY }}
+  TENCENT_CCR_NAMESPACE: ${{ vars.TENCENT_CCR_NAMESPACE }}
+
 jobs:
   prepare-build:
     name: Authorize production candidate build
@@ -131,6 +135,17 @@ jobs:
           REQUESTED_SERVICES: ${{ needs.prepare-build.outputs.requested_services }}
         run: |
           set -euo pipefail
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
           jq -n \
             --argjson build_run_id "${GITHUB_RUN_ID}" \
             --arg tag "${GITHUB_REF_NAME}" \
@@ -154,6 +169,7 @@ jobs:
             "${GITHUB_RUN_ID}" \
             "${GITHUB_SHA}" \
             "${REQUESTED_SERVICES}" \
+            "${image_base}" \
             > verified-production-release-candidate.json
           mv verified-production-release-candidate.json production-release-candidate.json
           test "$(jq -r '.tag' production-release-candidate.json)" = "${GITHUB_REF_NAME}"
@@ -231,6 +247,17 @@ jobs:
             gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
             test -s "${evidence_dir}/image-manifest-${service}.json"
           done
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
           node scripts/verify-production-release-candidate.mjs \
             "${evidence_dir}/production-release-candidate.json" \
             "${evidence_dir}/build-plan.json" \
@@ -238,6 +265,7 @@ jobs:
             "${BUILD_RUN_ID}" \
             "${COMMIT_SHA}" \
             "${requested_services}" \
+            "${image_base}" \
             > "${evidence_dir}/verified-candidate.json"
           test "$(jq -r '.tag' "${evidence_dir}/verified-candidate.json")" = "${GITHUB_REF_NAME}"
 

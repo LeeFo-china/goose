@@ -20,6 +20,7 @@ describe("BillingRechargeController routes", () => {
       { method: "GET", path: "/billing/recharge-orders" },
       { method: "POST", path: "/billing/recharge-orders" },
       { method: "GET", path: "/billing/recharge-orders/:id" },
+      { method: "POST", path: "/billing/recharge-orders/:id/refund-requests" },
     ]);
   });
 });

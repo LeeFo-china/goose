@@ -18,6 +18,7 @@ import CustomerController from "@/controllers/customer";
 import CustomerServiceController from "@/controllers/customer-service";
 import PostsController from "@/controllers/posts";
 import WeChatController from "@/controllers/wechat";
+import PhoneIdentityLoginController from "@/controllers/phone-identity-login";
 import RpcController from "@/controllers/common/rpc/get_home_dashboard_stats";
 import GetProjectCreatePageDataController from "@/controllers/common/rpc/get_project_create_page_data";
 import PropertyControlle from "@/controllers/properties";
@@ -70,6 +71,7 @@ import UsageController from "@/controllers/usage";
 import BillingController from "@/controllers/billing";
 import BillingRechargeController from "@/controllers/billing-recharge";
 import PlatformBillingRechargeController from "@/controllers/platform-billing-recharge";
+import PlatformBillingRechargeRefundController from "@/controllers/platform-billing-recharge-refunds";
 import FinanceController from "@/controllers/finance";
 import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
@@ -129,6 +131,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   });
 
   WeChatController.registerExtraRoutes(app);
+  PhoneIdentityLoginController.registerExtraRoutes(app);
   AdminAuthController.registerExtraRoutes(app);
   AdminOpsController.registerExtraRoutes(app);
   SystemSettingsController.registerExtraRoutes(app);
@@ -156,6 +159,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   BillingController.registerExtraRoutes(app);
   BillingRechargeController.registerExtraRoutes(app);
   PlatformBillingRechargeController.registerExtraRoutes(app);
+  PlatformBillingRechargeRefundController.registerExtraRoutes(app);
   UserAuthEventsController.registerExtraRoutes(app);
   IdentityDiagnosticsController.registerExtraRoutes(app);
   PictureLibraryController.registerExtraRoutes(app);

@@ -2,7 +2,7 @@ name: Deploy Dev
 run-name: Dev deploy ${{ inputs.service }} ${{ inputs.commit_sha }}
 
 # Deployment-only workflow. Images are built by Build Docker Images on a
-# GitHub-hosted runner and consumed here by immutable commit SHA.
+# GitHub-hosted runner and consumed here by run-scoped manifest digest.
 
 on:
   workflow_call:
@@ -67,9 +67,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  TENCENT_CCR_REGISTRY: ${{ vars.TENCENT_CCR_REGISTRY }}
+  TENCENT_CCR_NAMESPACE: ${{ vars.TENCENT_CCR_NAMESPACE }}
   DEV_DEPLOY_DIR: /opt/gooes-dev/docker
   SOURCE_SHA: ${{ inputs.commit_sha }}
+  INPUT_BUILD_RUN_ID: ${{ inputs.build_run_id }}
   RELEASE_SERVICE: ${{ inputs.service }}
   EXPECTED_BUILD_EVENT: ${{ github.event_name == 'workflow_dispatch' && 'workflow_dispatch' || inputs.expected_build_event }}
   EVIDENCE_MODE: ${{ inputs.evidence_mode || 'completed_run' }}
@@ -119,7 +121,6 @@ jobs:
 
       - name: Validate immutable build evidence
         env:
-          INPUT_BUILD_RUN_ID: ${{ inputs.build_run_id }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -188,6 +189,7 @@ jobs:
           test "$(jq -r '.commit_sha' "${manifest}")" = "${SOURCE_SHA}"
           test "$(jq -r '.target_environment' "${manifest}")" = development
           [[ "$(jq -r '.digest' "${manifest}")" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "IMAGE_MANIFEST_PATH=${manifest}" >> "${GITHUB_ENV}"
 
       - name: Validate gated dev web deployment
         if: ${{ inputs.service == 'web' }}
@@ -238,6 +240,41 @@ jobs:
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
           set -euo pipefail
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          case "${MANIFEST_SERVICE}" in
+            api) manifest_repository=goose-api ;;
+            admin) manifest_repository=goose-admin ;;
+            web) manifest_repository=goose-web ;;
+            social-video-worker) manifest_repository=goose-social-video-worker ;;
+            *) exit 1 ;;
+          esac
+          test -f "${IMAGE_MANIFEST_PATH}"
+          image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
+          expected_manifest_image="${image_base}/${manifest_repository}:run-${INPUT_BUILD_RUN_ID}-${SOURCE_SHA}"
+          manifest_build_run_id="$(jq -er '.build_run_id | select(type == "number" and . > 0 and (floor == .))' "${IMAGE_MANIFEST_PATH}")"
+          manifest_service="$(jq -er '.service | select(type == "string" and length > 0)' "${IMAGE_MANIFEST_PATH}")"
+          manifest_image="$(jq -er '.image | select(type == "string" and length > 0)' "${IMAGE_MANIFEST_PATH}")"
+          manifest_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${IMAGE_MANIFEST_PATH}")"
+          manifest_commit_sha="$(jq -er '.commit_sha | select(type == "string" and test("^[a-f0-9]{40}$"))' "${IMAGE_MANIFEST_PATH}")"
+          manifest_environment="$(jq -er '.target_environment | select(type == "string" and . == "development")' "${IMAGE_MANIFEST_PATH}")"
+          test "${manifest_service}" = "${MANIFEST_SERVICE}"
+          test "${manifest_image}" = "${expected_manifest_image}"
+          test "${manifest_build_run_id}" = "${INPUT_BUILD_RUN_ID}"
+          test "${manifest_commit_sha}" = "${SOURCE_SHA}"
+          test "${manifest_environment}" = development
+          manifest_image_repository="${manifest_image%:*}"
+          test "${manifest_image_repository}" = "${image_base}/${manifest_repository}"
+          DEPLOY_IMAGE_REF="${manifest_image_repository}@${manifest_digest}"
+          echo "DEPLOY_IMAGE_REF=${DEPLOY_IMAGE_REF}" >> "${GITHUB_ENV}"
           printf '%s' "${TENCENT_CCR_PASSWORD}" | docker login "${TENCENT_CCR_REGISTRY}" \
             -u "${TENCENT_CCR_USERNAME}" --password-stdin
 
@@ -251,16 +288,26 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/prepare-site-content-deployment-secrets.sh "${DEPLOY_SERVICES}"
-          image_base="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}"
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
           export GOOES_API_IMAGE="${image_base}/goose-api:${SOURCE_SHA}"
           export GOOES_ADMIN_IMAGE="${image_base}/goose-admin:${SOURCE_SHA}"
           export GOOES_WEB_IMAGE="${image_base}/goose-web:${SOURCE_SHA}"
           export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${image_base}/goose-social-video-worker:${SOURCE_SHA}"
           case "${RELEASE_SERVICE}" in
-            api) compose_service=gooes-api-dev ;;
-            admin) compose_service=gooes-admin-dev ;;
-            social-video-worker) compose_service=gooes-social-video-worker-dev ;;
-            cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev ;;
+            api) compose_service=gooes-api-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
+            admin) compose_service=gooes-admin-dev; export GOOES_ADMIN_IMAGE="${DEPLOY_IMAGE_REF}" ;;
+            social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;
+            cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
           esac
           cd "${DEV_DEPLOY_DIR}"
           docker compose -f docker-compose.dev.yml --profile workers pull "${compose_service}"
@@ -280,10 +327,16 @@ jobs:
             state="$(docker inspect -f '{{.State.Status}}' "${container}" 2>/dev/null || true)"
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${container}" 2>/dev/null || true)"
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${container}" 2>/dev/null || true)"
-            if [ "${revision}" = "${SOURCE_SHA}" ] && { [ "${health}" = healthy ] || { [ -z "${health}" ] && [ "${state}" = running ]; }; }; then break; fi
+            run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' "${container}" 2>/dev/null || true)"
+            configured_image="$(docker inspect -f '{{.Config.Image}}' "${container}" 2>/dev/null || true)"
+            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${revision}" = "${SOURCE_SHA}" ] && [ "${run_id}" = "${INPUT_BUILD_RUN_ID}" ] && [ "${state}" = running ] && [ "${health}" = healthy ]; then break; fi
             sleep 5
           done
+          test "${configured_image}" = "${DEPLOY_IMAGE_REF}"
           test "${revision}" = "${SOURCE_SHA}"
+          test "${run_id}" = "${INPUT_BUILD_RUN_ID}"
+          test "${state}" = running
+          test "${health}" = healthy
           if [ -n "${url}" ]; then curl -fsS --retry 8 --retry-delay 3 -o /dev/null "${url}"; fi
 
       - name: Deploy gated dev web
@@ -296,7 +349,19 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/prepare-site-content-deployment-secrets.sh web
-          export GOOES_WEB_IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/goose-web:${SOURCE_SHA}"
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
+          image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
+          test "${DEPLOY_IMAGE_REF%@*}" = "${image_base}/goose-web"
+          export GOOES_WEB_IMAGE="${DEPLOY_IMAGE_REF}"
           old_image_id="$(docker inspect -f '{{.Image}}' gooes-web-dev 2>/dev/null || true)"
           echo "WEB_ROLLBACK_STATUS=not_available" >> "${GITHUB_ENV}"
           echo "WEB_DEPLOY_STAGE=deploying" >> "${GITHUB_ENV}"
@@ -308,6 +373,7 @@ jobs:
             docker tag "${old_image_id}" "${WEB_ROLLBACK_TAG}"
             echo "WEB_ROLLBACK_READY=true" >> "${GITHUB_ENV}"
             echo "WEB_ROLLBACK_TAG=${WEB_ROLLBACK_TAG}" >> "${GITHUB_ENV}"
+            echo "WEB_OLD_IMAGE_ID=${old_image_id}" >> "${GITHUB_ENV}"
             echo "WEB_OLD_REVISION=${old_revision}" >> "${GITHUB_ENV}"
           fi
           cd "${DEV_DEPLOY_DIR}"
@@ -322,11 +388,15 @@ jobs:
           for _ in $(seq 1 60); do
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true)"
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web-dev 2>/dev/null || true)"
-            if [ "${health}" = healthy ] && [ "${revision}" = "${SOURCE_SHA}" ]; then break; fi
+            run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' gooes-web-dev 2>/dev/null || true)"
+            configured_image="$(docker inspect -f '{{.Config.Image}}' gooes-web-dev 2>/dev/null || true)"
+            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${health}" = healthy ] && [ "${revision}" = "${SOURCE_SHA}" ] && [ "${run_id}" = "${INPUT_BUILD_RUN_ID}" ]; then break; fi
             sleep 5
           done
+          test "${configured_image}" = "${DEPLOY_IMAGE_REF}"
           test "${health}" = healthy
           test "${revision}" = "${SOURCE_SHA}"
+          test "${run_id}" = "${INPUT_BUILD_RUN_ID}"
           headers="$(curl -fsS -D - -o /dev/null --retry 8 --retry-delay 3 https://www-dev.goodcms.cn/partners)"
           grep -iq '^x-gooes-service: web' <<< "${headers}"
           grep -iq "^x-gooes-revision: ${SOURCE_SHA}" <<< "${headers}"
@@ -351,11 +421,15 @@ jobs:
           for _ in $(seq 1 60); do
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-web-dev 2>/dev/null || true)"
             revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-web-dev 2>/dev/null || true)"
-            if [ "${health}" = healthy ] && [ "${revision}" = "${WEB_OLD_REVISION}" ]; then break; fi
+            image_id="$(docker inspect -f '{{.Image}}' gooes-web-dev 2>/dev/null || true)"
+            configured_image="$(docker inspect -f '{{.Config.Image}}' gooes-web-dev 2>/dev/null || true)"
+            if [ "${health}" = healthy ] && [ "${revision}" = "${WEB_OLD_REVISION}" ] && [ "${image_id}" = "${WEB_OLD_IMAGE_ID}" ] && [ "${configured_image}" = "${WEB_ROLLBACK_TAG}" ]; then break; fi
             sleep 5
           done
           test "${health}" = healthy
           test "${revision}" = "${WEB_OLD_REVISION}"
+          test "${image_id}" = "${WEB_OLD_IMAGE_ID}"
+          test "${configured_image}" = "${WEB_ROLLBACK_TAG}"
           headers="$(curl -fsS -D - -o /dev/null https://www-dev.goodcms.cn/partners)"
           grep -iq '^x-gooes-service: web' <<< "${headers}"
           grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}" <<< "${headers}"

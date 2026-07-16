@@ -1,16 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
-import {
-  billingRechargeRepository,
-  type CreditRechargeProductRecord,
-  type TenantCreditOrderRecord,
-} from "@/repositories/billing-recharge";
+import { billingRechargeRepository } from "@/repositories/billing-recharge";
 import {
   platformPaymentConfigRepository,
   type PlatformPaymentConfigRecord,
 } from "@/repositories/platform-payment-configs";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import {
+  toBillingRechargeOrderView,
+  toProductSnapshot,
+  toProductView,
+} from "@/services/billing-recharge-views";
+import {
+  BillingRechargeRefundService,
+  type BillingRechargeRefundRequestInput,
+  type BillingRechargeRefundServiceDependencies,
+} from "@/services/billing-recharge-refunds";
 import {
   wechatPayGateway,
   type WechatPayCreateJsapiPrepayResult,
@@ -62,6 +68,7 @@ type AccessPolicyPort = {
 
 type BillingRechargeServiceDependencies = {
   rechargeRepository?: BillingRechargeRepositoryPort;
+  refundRepository?: BillingRechargeRefundServiceDependencies["refundRepository"];
   paymentConfigRepository?: PaymentConfigRepositoryPort;
   accessPolicyService?: AccessPolicyPort;
   secretBundleService?: {
@@ -80,6 +87,8 @@ type BillingRechargeServiceDependencies = {
     }) => Promise<WechatPayCreateJsapiPrepayResult>;
   };
   tradeNoFactory?: () => string;
+  requestNoFactory?: () => string;
+  nowFactory?: () => Date;
 };
 
 const RECHARGE_CREATE_PERMISSION = "billing.recharge.create";
@@ -100,6 +109,7 @@ export class BillingRechargeService {
     BillingRechargeServiceDependencies["wechatPayGateway"]
   >;
   private readonly tradeNoFactory: () => string;
+  private readonly refundService: BillingRechargeRefundService;
 
   constructor(dependencies: BillingRechargeServiceDependencies = {}) {
     this.rechargeRepository =
@@ -112,6 +122,13 @@ export class BillingRechargeService {
       dependencies.secretBundleService ?? wechatPaySecretBundleService;
     this.wechatPayGateway = dependencies.wechatPayGateway ?? wechatPayGateway;
     this.tradeNoFactory = dependencies.tradeNoFactory ?? createRechargeTradeNo;
+    this.refundService = new BillingRechargeRefundService({
+      orderRepository: this.rechargeRepository,
+      refundRepository: dependencies.refundRepository,
+      accessPolicyService: this.accessPolicyService,
+      requestNoFactory: dependencies.requestNoFactory,
+      nowFactory: dependencies.nowFactory,
+    });
   }
 
   async listProducts(
@@ -154,7 +171,7 @@ export class BillingRechargeService {
 
     return {
       ...orders,
-      list: orders.list.map((order) => this.toOrderView(order)),
+      list: orders.list.map(toBillingRechargeOrderView),
     };
   }
 
@@ -163,9 +180,7 @@ export class BillingRechargeService {
     input: BillingRechargeCreateOrderInput,
   ) {
     const tenantId = this.assertCanCreate(authContext);
-    if (!authContext.employeeId) {
-      throw Errors.forbidden();
-    }
+    if (!authContext.employeeId) throw Errors.forbidden();
 
     if (input.idempotency_key) {
       const existing = await this.rechargeRepository.findOrderByIdempotencyKey({
@@ -175,7 +190,7 @@ export class BillingRechargeService {
       if (existing) {
         return {
           idempotent: true,
-          order: this.toOrderView(existing),
+          order: toBillingRechargeOrderView(existing),
           product: null,
           payment_request: null,
         };
@@ -235,7 +250,7 @@ export class BillingRechargeService {
 
     return {
       idempotent: false,
-      order: this.toOrderView(orderWithPrepay),
+      order: toBillingRechargeOrderView(orderWithPrepay),
       product: toProductView(product),
       payment_request: prepay.paymentRequest,
     };
@@ -256,9 +271,17 @@ export class BillingRechargeService {
     }
 
     return {
-      order: this.toOrderView(order),
+      order: toBillingRechargeOrderView(order),
       account: await this.rechargeRepository.getAccountByTenantId(tenantId),
     };
+  }
+
+  async requestRefund(
+    authContext: AuthContext,
+    orderId: string,
+    input: BillingRechargeRefundRequestInput,
+  ) {
+    return this.refundService.requestRefund(authContext, orderId, input);
   }
 
   private assertCanCreate(authContext: AuthContext) {
@@ -320,72 +343,6 @@ export class BillingRechargeService {
       );
     }
   }
-
-  private toOrderView(order: TenantCreditOrderRecord) {
-    return {
-      id: order.id,
-      tenant_id: order.tenant_id,
-      order_no: order.order_no,
-      package_code: order.package_code,
-      product_title: readProductTitle(order.metadata),
-      amount_fen: order.amount_fen,
-      credits: order.credits,
-      bonus_credits: order.bonus_credits,
-      channel: order.channel,
-      status: order.status,
-      paid_at: order.paid_at,
-      paid_amount_fen: order.paid_amount_fen,
-      out_trade_no: order.out_trade_no,
-      prepay_id: order.prepay_id,
-      transaction_id: order.transaction_id,
-      refund_status: order.refund_status ?? null,
-      refund_requested_at: order.refund_requested_at ?? null,
-      refunded_at: order.refunded_at ?? null,
-      refund_amount_fen: order.refund_amount_fen ?? null,
-      refund_action: buildRefundAction(order),
-      created_at: order.created_at,
-      updated_at: order.updated_at,
-    };
-  }
-}
-
-function toProductView(product: CreditRechargeProductRecord) {
-  return toProductSnapshot(product);
-}
-
-function toProductSnapshot(product: CreditRechargeProductRecord) {
-  return {
-    code: product.code,
-    title: product.title,
-    amount_fen: product.amount_fen,
-    credits: product.credits,
-    bonus_credits: product.bonus_credits,
-  };
-}
-
-function readProductTitle(metadata: Record<string, unknown>) {
-  const snapshot = metadata.product_snapshot;
-  if (!snapshot || typeof snapshot !== "object") return null;
-  const title = (snapshot as { title?: unknown }).title;
-  return typeof title === "string" && title.trim() ? title : null;
-}
-
-function buildRefundAction(order: TenantCreditOrderRecord) {
-  if (order.status === "refunded" || order.refund_status === "refunded") {
-    return {
-      enabled: false,
-      label: "已退款",
-      disabled_reason: "ORDER_ALREADY_REFUNDED",
-      requires_reason: true,
-    };
-  }
-
-  return {
-    enabled: false,
-    label: "申请退款",
-    disabled_reason: "REFUND_REQUEST_NOT_SUPPORTED",
-    requires_reason: true,
-  };
 }
 
 function normalizePositiveInteger(value: number | undefined, fallback: number) {

@@ -51,6 +51,30 @@ class TenantShareLinkService {
     return this.serializePublicDetail(record);
   }
 
+  async resolveLoginContext(token: string) {
+    const record = await tenantShareLinkRepository.findPublicByToken(token);
+    return this.requireAvailableContext(record);
+  }
+
+  async resolveAttribution(input: {
+    shareLinkId?: string | null;
+    shareToken?: string | null;
+  }) {
+    const byId = input.shareLinkId
+      ? await tenantShareLinkRepository.findPublicById(input.shareLinkId)
+      : null;
+    const byToken = input.shareToken
+      ? await tenantShareLinkRepository.findPublicByToken(input.shareToken)
+      : null;
+
+    if (byId && byToken && byId.id !== byToken.id) {
+      throw Errors.business(409, "分享归因上下文不一致", "SHARE_CONTEXT_MISMATCH");
+    }
+
+    const record = byId ?? byToken;
+    return record ? this.requireAvailableContext(record) : null;
+  }
+
   async bindCustomer(input: {
     authUserId: string;
     phone: string;
@@ -99,6 +123,29 @@ class TenantShareLinkService {
           name: record.share_employee.name,
         }
         : null,
+    };
+  }
+
+  private requireAvailableContext(record: TenantShareLinkPublicRecord | null) {
+    if (!record) {
+      throw Errors.business(404, "分享链接不可用", "TENANT_SHARE_LINK_NOT_AVAILABLE");
+    }
+
+    const expiresAt = record.expires_at ? new Date(record.expires_at).getTime() : null;
+    const expired = expiresAt !== null && expiresAt <= Date.now();
+    if (
+      record.status !== "active" ||
+      expired ||
+      record.tenant?.status !== "active"
+    ) {
+      throw Errors.business(409, "分享链接不可用", "TENANT_SHARE_LINK_NOT_AVAILABLE");
+    }
+
+    return {
+      shareLinkId: record.id,
+      tenantId: record.tenant_id,
+      shareEmployeeId: record.share_employee_id,
+      source: record.source,
     };
   }
 
