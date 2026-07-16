@@ -73,6 +73,7 @@ export type UntypedTable = {
   insert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable; neq: (...args: unknown[]) => UntypedTable;
+  or: (...args: unknown[]) => UntypedTable;
   gte: (...args: unknown[]) => UntypedTable; lt: (...args: unknown[]) => UntypedTable;
   in: (...args: unknown[]) => UntypedTable; order: (...args: unknown[]) => UntypedTable;
   limit: (...args: unknown[]) => UntypedTable; range: (...args: unknown[]) => UntypedTable;

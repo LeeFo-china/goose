@@ -151,6 +151,18 @@ export class PhoneIdentityBindings {
     }
 
     const member = await this.loadPartnerMember(input);
+    if (member.auth_user_id && member.auth_user_id !== input.authUserId) {
+      throw partnerMemberAlreadyBound();
+    }
+    if (member.auth_user_id === input.authUserId && member.status === "active") {
+      return this.dependencies.signPartnerAuth({
+        authUserId: input.authUserId,
+        member,
+        openid: input.openid,
+        unionid: input.unionid ?? null,
+      });
+    }
+
     const boundMember = await this.dependencies.bindPartnerMember({
       authUserId: input.authUserId,
       member,
@@ -324,5 +336,13 @@ function optionUnavailable() {
     409,
     "所选身份不可用，请重新验证手机号",
     ErrorCodes.IDENTITY_OPTION_UNAVAILABLE,
+  );
+}
+
+function partnerMemberAlreadyBound() {
+  return Errors.business(
+    409,
+    "该合伙人成员已绑定其他微信",
+    "PARTNER_MEMBER_ALREADY_BOUND",
   );
 }

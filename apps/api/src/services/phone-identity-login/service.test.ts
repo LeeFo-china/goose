@@ -257,6 +257,13 @@ describe("PhoneIdentityLoginService", () => {
           target_mode: "customer",
           tenant_id: TENANT_ID,
           customer_id: CUSTOMER_ID,
+          binding_state: "bindable",
+          display_snapshot: {
+            role_label: "客户",
+            title: "某某装饰",
+            subtitle: "李四",
+            rebind_kind: null,
+          },
         }),
       ]),
       now: "2026-07-15T00:00:00.000Z",

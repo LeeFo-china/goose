@@ -84,6 +84,13 @@ export function serializeStoredCandidate(candidate: PhoneIdentityCandidate) {
     employee_id: candidate.employeeId,
     partner_id: candidate.partnerId,
     partner_member_id: candidate.partnerMemberId,
+    binding_state: candidate.bindingState,
+    display_snapshot: {
+      role_label: candidate.roleLabel,
+      title: candidate.title,
+      subtitle: candidate.subtitle,
+      rebind_kind: candidate.rebindKind ?? null,
+    },
   };
 }
 

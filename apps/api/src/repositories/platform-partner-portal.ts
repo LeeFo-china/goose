@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { bindPlatformPartnerMemberAuthUser } from "@/repositories/platform-partner-portal-bind";
 import {
   COMMISSION_LEDGER_SELECT,
   INVITE_CODE_SELECT,
@@ -209,18 +210,13 @@ class PlatformPartnerPortalRepository implements PlatformPartnerPortalRepository
     });
   }
 
-  async bindMemberAuthUser(memberId: string, authUserId: string) {
-    const { data, error } = await this.from("platform_partner_members")
-      .update({
-        auth_user_id: authUserId,
-        status: "active",
-      })
-      .eq("id", memberId)
-      .select(MEMBER_SELECT)
-      .single();
-
-    if (error) throw Errors.dbError("绑定合伙人成员失败", error);
-    return data as PlatformPartnerMemberRecord;
+  bindMemberAuthUser(memberId: string, authUserId: string) {
+    return bindPlatformPartnerMemberAuthUser({
+      from: (table) => this.from(table),
+      findMemberById: (id) => this.findMemberById(id),
+      memberId,
+      authUserId,
+    });
   }
 
   async unbindMemberAuthUser(input: {

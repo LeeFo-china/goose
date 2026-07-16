@@ -157,6 +157,25 @@ describe("PhoneIdentityBindings", () => {
       .rejects.toMatchObject({ code: "PARTNER_MEMBER_ALREADY_BOUND" });
   });
 
+  test("rejects partner members bound to another auth user before binding mutation", async () => {
+    const bindPartnerMember = mock(async () => partnerMember({ auth_user_id: AUTH_USER_ID }));
+    const bindings = new PhoneIdentityBindings({
+      ...baseDependencies(),
+      findPartnerMember: mock(async () => partnerMember({
+        auth_user_id: "other-auth-user",
+        status: "active",
+      })),
+      bindPartnerMember,
+    });
+
+    await expect(bindings.authenticate(partnerInput()))
+      .rejects.toMatchObject({
+        statusCode: 409,
+        code: "PARTNER_MEMBER_ALREADY_BOUND",
+      });
+    expect(bindPartnerMember).not.toHaveBeenCalled();
+  });
+
   test("buildCurrentAuth signs without executing binding mutations", async () => {
     const bindCustomer = mock(async () => "unexpected");
     const signCustomerAuth = mock(async () => ({ mode: "customer", authMode: "customer" }));
