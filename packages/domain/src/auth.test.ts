@@ -10,4 +10,14 @@ describe("tenant onboarding SMS scene", () => {
     expect(SMS_SCENE_VALUES).toContain("partner_tenant_onboarding");
     expect(new Set(SMS_SCENE_VALUES).size).toBe(SMS_SCENE_VALUES.length);
   });
+
+  test("exports the unified identity login scene without removing legacy scenes", () => {
+    const scene: SmsScene = "login_identity";
+
+    expect(SMS_SCENE_VALUES).toContain(scene);
+    expect(SMS_SCENE_VALUES).toContain("bind_customer");
+    expect(SMS_SCENE_VALUES).toContain("bind_employee");
+    expect(SMS_SCENE_VALUES).toContain("bind_platform_partner");
+    expect(new Set(SMS_SCENE_VALUES).size).toBe(SMS_SCENE_VALUES.length);
+  });
 });

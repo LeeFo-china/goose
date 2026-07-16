@@ -158,14 +158,22 @@ describe("CI environment isolation", () => {
 
   test("builds images on a GitHub-hosted runner and publishes immutable evidence", () => {
     const workflow = readWorkflow("build-docker-images.yml");
-    expect(workflow).toContain("runs-on: ubuntu-24.04");
-    expect(workflow).toContain("max-parallel: 4");
-    expect(workflow).toContain("timeout-minutes: 45");
-    expect(workflow).toContain("docker build");
-    expect(workflow).toContain("${GITHUB_SHA}");
-    expect(workflow).toContain("image-manifest");
-    for (const label of forbiddenProductionRunnerLabels) {
-      expect(workflow).not.toContain(label);
+    const productionPullStart = workflow.indexOf("  verify-production-pull:");
+    expect(productionPullStart).toBeGreaterThanOrEqual(0);
+    const buildJobs = workflow.slice(0, productionPullStart);
+
+    expect(buildJobs).toContain("runs-on: ubuntu-24.04");
+    expect(buildJobs).toContain("max-parallel: 4");
+    expect(buildJobs).toContain("timeout-minutes: 45");
+    expect(buildJobs).toContain("docker build");
+    expect(buildJobs).toContain("${GITHUB_SHA}");
+    expect(buildJobs).toContain("image-manifest");
+    for (const label of [
+      "gooes-dev-deploy",
+      "gooes-prod-deploy",
+      ...forbiddenProductionRunnerLabels,
+    ]) {
+      expect(buildJobs).not.toContain(label);
     }
   });
 
@@ -185,7 +193,11 @@ describe("CI environment isolation", () => {
     }
     const deploy = readWorkflow("deploy-docker-services.yml");
     expect(deploy).toContain("确认部署生产环境");
-    expect(deploy).toContain('test "${GITHUB_REF_NAME}" = "main"');
+    expect(deploy).not.toContain('test "${GITHUB_REF_NAME}" = "main"');
+    expect(deploy).toContain('test "${GITHUB_REF_TYPE}" = tag');
+    expect(deploy).toContain(
+      'test "${current_workflow_path}" = ".github/workflows/release-production.yml"',
+    );
   });
 
   test("does not build application images in deployment workflows", () => {

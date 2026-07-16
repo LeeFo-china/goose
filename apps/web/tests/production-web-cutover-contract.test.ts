@@ -109,6 +109,12 @@ describe("production official website cutover contracts", () => {
     expect(rollbackStep).toContain('Host: www.goodcms.cn');
     expect(rollbackStep).toContain("http://127.0.0.1:3020/api/preview");
     expect(rollbackStep).toContain("^x-gooes-revision: ${WEB_OLD_REVISION}");
+    expect(rollbackStep).toContain(
+      'test "${image_id}" = "${WEB_OLD_IMAGE_ID}"',
+    );
+    expect(rollbackStep).toContain(
+      'test "${configured_image}" = "${WEB_ROLLBACK_TAG}"',
+    );
     expect(rollbackStep).toContain("^HTTP/[^ ]+ 303$");
     expect(rollbackStep).toContain("^location: /preview-error$");
     expect(rollbackStep).toContain("^cache-control: no-store$");

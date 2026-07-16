@@ -1,10 +1,15 @@
-# 开发快速发布验证与数据库处理方案
+# 2026-05-17 开发快速发布验证与数据库处理方案（历史归档）
 
 日期：2026-05-17
 
+> **历史归档，全文不可执行。** 本文命令、Runner、分支和部署步骤仅作为 2026-05-17
+> 的历史证据；镜像路径仅为避免复制旧仓库地址而更新。现行迁移边界、production
+> Strategy B 和生产 Web 独立发布链以
+> `docs/2026-07-15-tencent-ccr-us-migration-runbook.md` 为准。
+
 ## 1. 结论
 
-当前生产发布链路已经跑通：代码 push 后 GitHub Actions 在腾讯云 self-hosted runner 构建 `api`、`admin`、`social-video-worker` 镜像，推送腾讯 CCR，再部署到新服务器。
+截至 2026-05-17，生产发布链路已经跑通：代码 push 后 GitHub Actions 在腾讯云 self-hosted runner 构建 `api`、`admin`、`social-video-worker` 镜像，推送腾讯 CCR，再部署到新服务器。
 
 但这条链路不适合高频开发验证。开发阶段要解决两个问题：
 
@@ -21,7 +26,7 @@
 
 第一阶段先做“共享开发环境”，这是收益最高的改造。
 
-## 2. 当前问题
+## 2. 2026-05-17 时点问题
 
 ### 2.1 高频提交直接触发生产发布
 
@@ -54,7 +59,7 @@
 
 短期不建议继续让所有开发 push 自动上生产。更合理的是：
 
-- 保留当前生产 workflow，但改成手动触发或受保护触发。
+- 保留当时的生产 workflow，但改成手动触发或受保护触发。
 - 新增一个 `Deploy Dev` workflow，支持选择发布服务。
 - 开发者修改 API 时，只发布 API；修改 admin 时，只发布 admin；修改 worker 时，只发布对应 worker。
 
@@ -101,15 +106,15 @@ h5-dev.goodcms.cn
 dev 镜像 tag 建议：
 
 ```text
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:dev
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:dev
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:dev
+useccr.ccs.tencentyun.com/america_goose/goose-api:dev
+useccr.ccs.tencentyun.com/america_goose/goose-admin:dev
+useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:dev
 ```
 
 同时保留 SHA tag：
 
 ```text
-ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:<GITHUB_SHA>
+useccr.ccs.tencentyun.com/america_goose/goose-api:<GITHUB_SHA>
 ```
 
 `dev` 用于快速覆盖，`<GITHUB_SHA>` 用于排查和临时回退。
@@ -315,7 +320,7 @@ GET /health
 }
 ```
 
-`/health` 不应该泄露数据库连接串、密钥、token、供应商 secret。DB 信息只返回可观测状态，例如是否连通、当前 migration 版本、测试租户数量。
+`/health` 不应该泄露数据库连接串、密钥、token、供应商 secret。DB 信息只返回可观测状态，例如是否连通、已应用 migration 版本、测试租户数量。
 
 ### 5.2 Admin 快速验证
 
@@ -442,4 +447,4 @@ services:
 
 这样开发速度会明显提升，同时不会牺牲生产稳定性。
 
-不建议第一版就做复杂的多套 Kubernetes、自动 preview environment 或数据库分支。当前项目最需要的是稳定、简单、可控的 dev 环境和数据库纪律。
+不建议第一版就做复杂的多套 Kubernetes、自动 preview environment 或数据库分支。2026-05-17 时点的项目最需要的是稳定、简单、可控的 dev 环境和数据库纪律。

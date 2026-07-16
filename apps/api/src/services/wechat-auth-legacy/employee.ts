@@ -50,6 +50,10 @@ import {
   type WechatAuthResolution,
 } from "./shared";
 
+type EmployeeLoginCandidate = Awaited<
+  ReturnType<typeof wechatEmployeeIdentityService.listEmployeeLoginCandidatesByPhone>
+>[number];
+
 export async function bindEmployeeRole(this: any, 
   request: FastifyRequest,
   authUserId: string,
@@ -92,6 +96,40 @@ export async function bindEmployeeRole(this: any,
   if (!employee) {
     throw Errors.badRequest("该手机号未绑定员工身份");
   }
+
+  return bindSelectedEmployeeRole.call(
+    this,
+    request,
+    authUserId,
+    phone,
+    openid,
+    employee,
+  );
+}
+
+export async function bindSelectedEmployeeRole(this: any,
+  request: FastifyRequest,
+  authUserId: string,
+  phone: string,
+  openid: string | null,
+  employee: EmployeeLoginCandidate,
+) {
+  const logEmployeeBindStage = (
+    stage: string,
+    startedAt: number,
+    extra?: Record<string, unknown>,
+  ) => {
+    request.log.info(
+      {
+        requestId: request.id,
+        stage,
+        durationMs: Date.now() - startedAt,
+        authUserId,
+        ...extra,
+      },
+      "[auth] bind employee stage completed",
+    );
+  };
 
   if (!isEmployeeOperableStatus(employee.status)) {
     throw Errors.badRequest("该员工账号已停用，无法登录");

@@ -40,9 +40,9 @@ case "$1" in
     case "$*" in
       *id-old*) printf '%s\\n' \
         "gooes-web:rollback-103-${now - 8 * 86_400}" \
-        "ccr.ccs.tencentyun.com/gooes-goodcms/goose-web:${sha}" \
-        "ccr.ccs.tencentyun.com/gooes-goodcms/goose-web:main" \
-        "ccr.ccs.tencentyun.com/gooes-goodcms/goose-web:dev" \
+        "useccr.ccs.tencentyun.com/america_goose/goose-web:${sha}" \
+        "useccr.ccs.tencentyun.com/america_goose/goose-web:main" \
+        "useccr.ccs.tencentyun.com/america_goose/goose-web:dev" \
         "other.example.com/team/other:${sha}" ;;
       *) exit 2 ;;
     esac
@@ -63,7 +63,7 @@ esac
     if (!existsSync(removed)) throw new Error(`cleanup did not remove a tag: ${result.stderr}`);
     expect(readFileSync(removed, "utf8").trim().split("\n")).toEqual([
       `gooes-web:rollback-103-${now - 8 * 86_400}`,
-      `ccr.ccs.tencentyun.com/gooes-goodcms/goose-web:${sha}`,
+      `useccr.ccs.tencentyun.com/america_goose/goose-web:${sha}`,
     ]);
     expect(result.stderr).toContain("skip unparseable rollback tag: gooes-web:rollback-legacy");
     expect(result.stderr).toContain("skip rollback image referenced by a container: id-referenced");

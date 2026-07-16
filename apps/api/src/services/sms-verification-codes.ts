@@ -9,6 +9,7 @@ import type { SmsScene } from "@gooes/domain";
 const SMS_CODE_COOLDOWN_SECONDS = 60;
 const SMS_CODE_TTL_SECONDS = 5 * 60;
 const DEFAULT_REQUEST_IP_LIMIT = 1;
+const BYPASS_THROTTLE_OFFSET_MS = 1_000;
 
 interface SmsVerificationCodeRepositoryPort {
   reservePending(input: {
@@ -87,6 +88,39 @@ export class SmsVerificationCodeService {
       success: true as const,
       cooldown_seconds: SMS_CODE_COOLDOWN_SECONDS,
     };
+  }
+
+  async reserveBypassCode(input: {
+    phone: string;
+    scene: SmsScene;
+    now: string;
+  }) {
+    const nowMs = new Date(input.now).getTime();
+    const code = this.generateVerificationCode();
+    const expiredAt = new Date(nowMs + SMS_CODE_TTL_SECONDS * 1000)
+      .toISOString();
+    const reservation = await this.repository.reservePending({
+      phone: input.phone,
+      scene: input.scene,
+      code,
+      expiredAt,
+      // Dev bypass should not consume the send-code cooldown, but it still
+      // creates a normal pending SMS row for the verification session to claim.
+      since: new Date(nowMs + BYPASS_THROTTLE_OFFSET_MS).toISOString(),
+      requestIp: null,
+      requestDevice: null,
+      requestIpLimit: DEFAULT_REQUEST_IP_LIMIT,
+    });
+    if (!reservation.reserved) {
+      throw Errors.business(
+        429,
+        "验证码发送过于频繁，请稍后再试",
+        "SMS_CODE_RATE_LIMITED",
+        { cooldown_seconds: SMS_CODE_COOLDOWN_SECONDS },
+      );
+    }
+
+    return { code };
   }
 
   findValidPending(input: {

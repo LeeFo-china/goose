@@ -16,6 +16,7 @@ export type JwtPayload = {
   customer_id?: string | null;
   partner_id?: string | null;
   verified_phone?: string | null;
+  share_link_id?: string | null;
   iat?: number;
   exp?: number;
 };

@@ -53,6 +53,30 @@ describe("isVisitorSessionRoute", () => {
     expect(isVisitorSessionRoute("GET", "/auth/switch")).toBe(false);
     expect(isVisitorSessionRoute("GET", "/auth/switch/visitor")).toBe(false);
   });
+
+  test("allows visitor sessions to use unified phone login and submit platform leads", () => {
+    const phoneLoginRoutes = [
+      "/auth/phone-login/send-code",
+      "/auth/phone-login/verify",
+      "/auth/phone-login/select",
+    ];
+
+    for (const route of phoneLoginRoutes) {
+      expect(isVisitorSessionRoute("POST", route)).toBe(true);
+      expect(isPublicRoute("POST", route)).toBe(false);
+      expect(shouldBypassAuth("POST", route)).toBe(false);
+    }
+
+    expect(isVisitorSessionRoute("POST", "/platform/leads")).toBe(true);
+    expect(isPublicRoute("POST", "/platform/leads")).toBe(false);
+    expect(shouldBypassAuth("POST", "/platform/leads")).toBe(false);
+
+    expect(isVisitorSessionRoute("GET", "/platform/leads")).toBe(false);
+    expect(isVisitorSessionRoute("GET", "/platform/leads/00000000-0000-4000-8000-000000000001"))
+      .toBe(false);
+    expect(isVisitorSessionRoute("POST", "/platform/leads/00000000-0000-4000-8000-000000000001/assign"))
+      .toBe(false);
+  });
 });
 
 describe("auth public route allowlist", () => {
@@ -213,5 +237,19 @@ describe("auth public route allowlist", () => {
     expect(isPartnerPortalRoute("DELETE", "/auth/identities")).toBe(false);
     expect(isPartnerPortalRoute("GET", "/auth/switch")).toBe(false);
     expect(isPartnerPortalRoute("GET", "/auth/switch/visitor")).toBe(false);
+  });
+
+  test("allows platform partner tokens to use unified phone login", () => {
+    const phoneLoginRoutes = [
+      "/auth/phone-login/send-code",
+      "/auth/phone-login/verify",
+      "/auth/phone-login/select",
+    ];
+
+    for (const route of phoneLoginRoutes) {
+      expect(isPartnerPortalRoute("POST", route)).toBe(true);
+      expect(isPublicRoute("POST", route)).toBe(false);
+      expect(shouldBypassAuth("POST", route)).toBe(false);
+    }
   });
 });
