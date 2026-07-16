@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -11,6 +12,7 @@ import { join } from "node:path";
 import {
   buildTestSuites,
   discoverRootContractTests,
+  REPOSITORY_ROOT,
   runCli,
   runTestSuites,
   type RunnerDependencies,
@@ -220,5 +222,20 @@ describe("runCli", () => {
     expect(await runCli(["--stable"], dependencies, repoRoot)).toBe(2);
     expect(discoveryCalls).toBe(1);
     expect(executeCalled).toBe(false);
+  });
+});
+
+describe("root package scripts", () => {
+  it("exposes stable and all workspace test commands", () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(REPOSITORY_ROOT, "package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+
+    expect(packageJson.scripts?.test).toBe(
+      "bun scripts/run-workspace-tests.ts --stable",
+    );
+    expect(packageJson.scripts?.["test:all"]).toBe(
+      "bun scripts/run-workspace-tests.ts --all",
+    );
   });
 });

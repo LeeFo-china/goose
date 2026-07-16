@@ -25,6 +25,8 @@
     }
   },
   "scripts": {
+    "test": "bun scripts/run-workspace-tests.ts --stable",
+    "test:all": "bun scripts/run-workspace-tests.ts --all",
     "dev": "bun run api:dev",
     "start": "bun run api:start",
     "build": "bun run api:build",
