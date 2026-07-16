@@ -296,6 +296,41 @@ Idempotency-Key: <uuid-v4>
   - `tenant_service_provider_profiles.status=draft`
   - `tenant_service_areas.status=inactive`
 
+### 场景 D：服务商公开资料发布后 visitor 本地服务商列表可见
+
+- 测试租户 ID：`f3ada63b-0e99-449f-bd7a-321e434bbae4`
+- 服务商 profile ID：`36638cf0-ecbc-4af3-8b96-e77ab3f9e058`
+- 服务区域 ID：`189f276d-a244-45a1-b18c-9c39d6a84426`
+- 服务区域：`411525`
+- 发布前可见性：
+  - profile 状态：`draft`
+  - 服务区域状态：`inactive`
+  - visitor 定位 `411525` 调用 `GET /visitor/local-service-providers`：不返回该服务商
+- 租户侧资料发布准备：
+  - 调用 `update_tenant_service_provider_profile` 补齐 `public_phone/introduction/address`
+  - 调用 `upsert_tenant_service_provider_area` 确认区域 `411525`
+  - 调用 `submit_tenant_service_provider_profile`
+  - profile 状态变为 `pending_review`
+  - visitor 定位 `411525`：仍不返回该服务商
+- 平台发布：
+  - `GET /platform/service-provider-publications?status=pending_review`：能看到该租户
+  - `GET /platform/service-provider-publications/:tenantId`：返回 `pending_review/version=4`
+  - `GET /platform/service-provider-publications/:tenantId/areas`：返回 1 个服务区域
+  - `POST /platform/service-provider-publications/:tenantId/publish`：HTTP `200`
+  - profile 状态变为 `published/version=5`
+  - 服务区域状态变为 `active`
+- visitor 可见性：
+  - visitor 定位 `411525`：返回该服务商，`matched_region_code=411525`
+  - visitor 定位 `330106`：不返回该服务商
+- 返回给小程序的服务商字段包含：
+  - `tenant_id=f3ada63b-0e99-449f-bd7a-321e434bbae4`
+  - `public_name=合伙人匹配Smoke装饰445654`
+  - `public_phone=13900000002`
+  - `address_region_code=411525`
+  - `address_latitude=32.168`
+  - `address_longitude=115.654`
+  - `matched_region_code=411525`
+
 ### 营业执照私有上传 smoke
 
 - 文件 ID：`1025146c-703d-42cb-a9bd-e936ea08cb33`
@@ -331,9 +366,9 @@ Idempotency-Key: <uuid-v4>
 
 平台审核通过后，服务商公开资料仍是 `draft`，服务区域仍是 `inactive`。这是后端当前设计：入驻通过只完成租户初始化和服务商资料草稿创建，不会自动发布到 visitor 本地服务商列表。
 
-后续建议继续验证服务商公开资料发布链路：
+本轮已验证发布链路。后续建议补充以下负向和回归场景：
 
-1. 租户侧补充服务商公开资料并提交发布审核。
-2. 平台发布服务商公开资料。
-3. 服务区域激活后，`GET /visitor/local-service-providers` 在 `411525` 定位下返回该服务商。
-4. 未发布或 inactive 服务区域不得出现在 visitor 本地服务商列表。
+1. `pending_review` 未发布时，visitor 列表始终不可见。
+2. 平台退回 `return-draft` 后，服务区域应回到 `inactive`，visitor 不可见。
+3. 平台暂停 `suspend` 后，服务区域应回到 `inactive`，visitor 不可见。
+4. 小程序端完成后，用真机验证导航坐标和服务商列表 UI。
