@@ -136,6 +136,31 @@ describe("runTestSuites", () => {
     expect(logs.join("\n")).toContain("second: FAIL");
     expect(logs.join("\n")).toContain("third: PASS");
   });
+
+  it("continues after a suite fails to start", async () => {
+    const suites: TestSuite[] = [
+      { name: "first", cwd: repoRoot, targets: ["first"] },
+      { name: "second", cwd: repoRoot, targets: ["second"] },
+    ];
+    const executionOrder: string[] = [];
+    const messages: string[] = [];
+
+    expect(await runTestSuites(suites, {
+      execute: async (suite) => {
+        executionOrder.push(suite.name);
+        if (suite.name === "first") {
+          throw new Error("spawn failed");
+        }
+        return 0;
+      },
+      log: (message) => messages.push(message),
+      error: (message) => messages.push(message),
+    })).toBe(1);
+    expect(executionOrder).toEqual(["first", "second"]);
+    expect(messages.join("\n")).toContain("first 启动失败: spawn failed");
+    expect(messages.join("\n")).toContain("first: FAIL (1)");
+    expect(messages.join("\n")).toContain("second: PASS");
+  });
 });
 
 describe("runCli", () => {
