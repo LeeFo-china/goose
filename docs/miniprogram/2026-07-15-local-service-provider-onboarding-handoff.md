@@ -331,6 +331,77 @@ Idempotency-Key: <uuid-v4>
   - `address_longitude=115.654`
   - `matched_region_code=411525`
 
+### 场景 E：服务商发布状态负向可见性
+
+执行日期：2026-07-17
+
+说明：当前 smoke 测试租户管理员员工 `063c2bc8-9083-4785-98b2-a7a88c369e77` 尚未绑定 `user_id`，无法生成正常租户登录态；因此租户侧资料编辑/提交步骤使用 service-role RPC 验证状态机，平台审核和 visitor 可见性均走 HTTP API。
+
+- 起始状态：
+  - profile 状态：`published/version=5`
+  - 服务区域：`411525`
+  - 服务区域状态：`active`
+  - visitor 定位 `411525`：返回该服务商
+  - visitor 定位 `330106`：不返回该服务商
+- 平台暂停展示：
+  - `POST /platform/service-provider-publications/:tenantId/suspend`：HTTP `200`
+  - profile 状态：`suspended/version=6`
+  - 服务区域状态：`inactive`
+  - visitor 定位 `411525`：不返回该服务商
+- 暂停后恢复发布：
+  - 租户侧核心资料重新进入 `pending_review`
+  - `POST /platform/service-provider-publications/:tenantId/publish`：HTTP `200`
+  - profile 状态：`published/version=8`
+  - 服务区域状态：`active`
+  - visitor 定位 `411525`：重新返回该服务商
+- 核心资料变更待审：
+  - profile 状态：`pending_review/version=9`
+  - 服务区域状态：`inactive`
+  - visitor 定位 `411525`：不返回该服务商
+- 平台退回草稿：
+  - `POST /platform/service-provider-publications/:tenantId/return-draft`：HTTP `200`
+  - profile 状态：`draft/version=10`
+  - 服务区域状态：`inactive`
+  - visitor 定位 `411525`：不返回该服务商
+- 最终恢复：
+  - profile 状态：`published/version=12`
+  - 服务区域状态：`active`
+  - visitor 定位 `411525`：返回该服务商
+  - visitor 定位 `330106`：不返回该服务商
+
+结论：`GET /visitor/local-service-providers` 只展示 `published + active area` 的服务商；`draft`、`pending_review`、`suspended` 均不会展示，也不会跨区域兜底。
+
+### 场景 F：装企入驻申请负向校验
+
+执行日期：2026-07-17
+
+测试访客：`smoke-visitor-license-write`
+
+- 缺少 `Idempotency-Key`
+  - `POST /tenant-onboarding/applications`
+  - HTTP `400`
+  - `code=VALIDATION_ERROR`
+  - message 包含：`缺少有效的 Idempotency-Key`
+- 本地服务来源携带邀请码
+  - `source_channel=local_services`
+  - `invite_code=INVITE123`
+  - HTTP `400`
+  - `code=VALIDATION_ERROR`
+  - message/details 包含：`本地服务来源不能使用邀请码`
+- 验证码错误
+  - HTTP `400`
+  - `code=SMS_CODE_INVALID`
+- 统一社会信用代码存在待处理申请
+  - 使用已有 `submitted` 申请主体：`91330106MA9G854833`
+  - HTTP `409`
+  - `code=TENANT_ONBOARDING_APPLICATION_DUPLICATED`
+- 营业执照文件不可用或不归属当前访客
+  - 使用不存在/非当前访客归属的 `business_license_file_id`
+  - HTTP `403`
+  - `code=TENANT_ONBOARDING_DOCUMENT_FORBIDDEN`
+
+结论：小程序端应按以上错误码做可恢复提示；这些错误不会创建新的入驻申请。测试中临时插入的短信验证码记录已清理。
+
 ### 营业执照私有上传 smoke
 
 - 文件 ID：`1025146c-703d-42cb-a9bd-e936ea08cb33`
