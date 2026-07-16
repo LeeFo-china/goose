@@ -1,3 +1,4 @@
+import { ErrorCodes } from "@/errors/error-codes";
 import { invalidateCustomerTenantOptions } from "./cache";
 import {
   Errors,
@@ -7,6 +8,8 @@ import {
   type WechatCustomerIdentityCacheContext,
   type WechatCustomerIdentityRow,
 } from "./shared";
+
+const CUSTOMER_TENANT_USER_ID_CONSTRAINT = "customers_tenant_user_id_unique";
 
 export async function bindCustomerAuthUser(
   this: WechatCustomerIdentityCacheContext,
@@ -18,14 +21,76 @@ export async function bindCustomerAuthUser(
     >;
   },
 ) {
-  const result = await wechatCustomerIdentityRepository.bindCustomerAuthUser({
-    customerId: input.customer.id,
-    authUserId: input.authUserId,
-    tenantId: input.customer.tenant_id,
-    claimedAt: input.customer.claimed_at ? null : new Date().toISOString(),
-  });
+  await assertCustomerTenantBindingAvailable(input);
+
+  const result = await wechatCustomerIdentityRepository
+    .bindCustomerAuthUser({
+      customerId: input.customer.id,
+      authUserId: input.authUserId,
+      tenantId: input.customer.tenant_id,
+      claimedAt: input.customer.claimed_at ? null : new Date().toISOString(),
+    })
+    .catch((error: unknown) => {
+      if (isCustomerTenantUserConflict(error)) {
+        throw buildCustomerTenantBindingConflict(input);
+      }
+      throw error;
+    });
   invalidateCustomerTenantOptions.call(this, input.authUserId);
   return result;
+}
+
+async function assertCustomerTenantBindingAvailable(input: {
+  authUserId: string;
+  customer: Pick<WechatCustomerIdentityRow, "id" | "tenant_id">;
+}) {
+  const tenantId = input.customer.tenant_id;
+  if (!tenantId) return;
+
+  const currentBinding = await wechatCustomerIdentityRepository
+    .findCustomerIdentityByAuthUserAndTenant({
+      authUserId: input.authUserId,
+      tenantId,
+    });
+  if (!currentBinding || currentBinding.id === input.customer.id) return;
+
+  throw buildCustomerTenantBindingConflict(input, currentBinding.id);
+}
+
+function buildCustomerTenantBindingConflict(
+  input: {
+    customer: Pick<WechatCustomerIdentityRow, "id" | "tenant_id">;
+  },
+  currentCustomerId?: string | null,
+) {
+  return Errors.business(
+    409,
+    "当前微信已绑定该装修公司的其他客户档案，请联系管理员处理",
+    ErrorCodes.WECHAT_ALREADY_BOUND,
+    {
+      target_role: "customer",
+      tenant_id: input.customer.tenant_id ?? null,
+      customer_id: input.customer.id,
+      current_customer_id: currentCustomerId ?? null,
+    },
+  );
+}
+
+function isCustomerTenantUserConflict(error: unknown) {
+  const details = databaseErrorDetails(error);
+  if (!details || details.code !== "23505") return false;
+
+  return JSON.stringify(details).includes(CUSTOMER_TENANT_USER_ID_CONSTRAINT);
+}
+
+function databaseErrorDetails(error: unknown): Record<string, unknown> | null {
+  if (typeof error !== "object" || error === null) return null;
+
+  const record = error as Record<string, unknown>;
+  const details = record.details;
+  return typeof details === "object" && details !== null
+    ? details as Record<string, unknown>
+    : record;
 }
 
 export async function bindCustomerRole(

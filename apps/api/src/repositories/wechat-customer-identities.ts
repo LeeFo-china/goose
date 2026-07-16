@@ -239,6 +239,26 @@ class WechatCustomerIdentityRepository {
     return (data || []) as WechatCustomerIdentityRow[];
   }
 
+  async findCustomerIdentityByAuthUserAndTenant(input: {
+    authUserId: string;
+    tenantId: string;
+  }) {
+    const { data, error } = await runAuthReadQuery(() =>
+      this.adminClient
+        .from("customers")
+        .select("id, phone, user_id, tenant_id")
+        .eq("user_id", input.authUserId)
+        .eq("tenant_id", input.tenantId)
+        .maybeSingle()
+    );
+
+    if (error) {
+      throw Errors.dbError("查询当前账号客户绑定失败", error);
+    }
+
+    return (data || null) as WechatCustomerIdentityRow | null;
+  }
+
   async listCustomerTenantOptionsByIds(customerIds: string[]) {
     if (customerIds.length === 0) {
       return [] as WechatCustomerTenantOption[];
