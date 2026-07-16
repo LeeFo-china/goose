@@ -35,7 +35,7 @@ const USAGE = "用法: bun scripts/run-workspace-tests.ts --stable|--all";
 export function discoverRootContractTests(repoRoot: string): readonly string[] {
   return readdirSync(join(repoRoot, "scripts"), { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".test.ts"))
-    .map((entry) => `scripts/${entry.name}`)
+    .map((entry) => `./scripts/${entry.name}`)
     .sort();
 }
 
@@ -54,10 +54,11 @@ export function buildTestSuites(
     cwd: configuration.repoRoot,
     targets: rootContractTests,
   };
+  // Bun filters by path substring; "./" prevents directory targets from matching ancestors or E2E.
   const domain: TestSuite = {
     name: "domain",
     cwd: join(configuration.repoRoot, "packages/domain"),
-    targets: ["src"],
+    targets: ["./src"],
   };
 
   if (mode === "stable") {
@@ -67,7 +68,7 @@ export function buildTestSuites(
       {
         name: "web",
         cwd: join(configuration.repoRoot, "apps/web"),
-        targets: ["tests"],
+        targets: ["./tests"],
       },
     ];
   }
@@ -78,17 +79,17 @@ export function buildTestSuites(
     {
       name: "api",
       cwd: join(configuration.repoRoot, "apps/api"),
-      targets: ["src"],
+      targets: ["./src"],
     },
     {
       name: "admin",
       cwd: join(configuration.repoRoot, "apps/admin"),
-      targets: ["app", "components", "lib", "tests"],
+      targets: ["./app", "./components", "./lib", "./tests"],
     },
     {
       name: "web",
       cwd: join(configuration.repoRoot, "apps/web"),
-      targets: ["tests", "components"],
+      targets: ["./tests", "./components"],
     },
   ];
 }

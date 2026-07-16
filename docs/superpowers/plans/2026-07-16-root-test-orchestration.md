@@ -4,9 +4,9 @@
 
 **Goal:** Add reliable root-level Bun commands for the stable test gate and package-isolated all-workspace diagnostics.
 
-**Architecture:** A focused TypeScript runner discovers only top-level release-contract tests and builds explicit workspace suites with package-local working directories. Pure suite construction and injected execution dependencies keep orchestration behavior unit-testable, while the CLI uses the installed Bun 1.3.14 `spawn` API to stream child output, continue after failures, and emit one aggregate status.
+**Architecture:** A focused TypeScript runner discovers only top-level release-contract tests and builds explicit workspace suites with package-local working directories. Pure suite construction and injected execution dependencies keep orchestration behavior unit-testable, while the CLI uses the installed Bun 1.3.2 `spawn` API to stream child output, continue after failures, and emit one aggregate status.
 
-**Tech Stack:** Bun 1.3.14, TypeScript, `bun:test`, Node.js filesystem/path APIs
+**Tech Stack:** Bun 1.3.2, TypeScript, `bun:test`, Node.js filesystem/path APIs
 
 ---
 
@@ -49,8 +49,8 @@ import {
 
 const repoRoot = "/repo";
 const rootContractTests = [
-  "scripts/z-last.test.ts",
-  "scripts/a-first.test.ts",
+  "./scripts/z-last.test.ts",
+  "./scripts/a-first.test.ts",
 ];
 
 function build(mode: TestMode): TestSuite[] {
@@ -64,19 +64,19 @@ describe("workspace test suite selection", () => {
         name: "release-contracts",
         cwd: repoRoot,
         targets: [
-          "scripts/a-first.test.ts",
-          "scripts/z-last.test.ts",
+          "./scripts/a-first.test.ts",
+          "./scripts/z-last.test.ts",
         ],
       },
       {
         name: "domain",
         cwd: join(repoRoot, "packages/domain"),
-        targets: ["src"],
+        targets: ["./src"],
       },
       {
         name: "web",
         cwd: join(repoRoot, "apps/web"),
-        targets: ["tests"],
+        targets: ["./tests"],
       },
     ]);
   });
@@ -87,29 +87,29 @@ describe("workspace test suite selection", () => {
         name: "release-contracts",
         cwd: repoRoot,
         targets: [
-          "scripts/a-first.test.ts",
-          "scripts/z-last.test.ts",
+          "./scripts/a-first.test.ts",
+          "./scripts/z-last.test.ts",
         ],
       },
       {
         name: "domain",
         cwd: join(repoRoot, "packages/domain"),
-        targets: ["src"],
+        targets: ["./src"],
       },
       {
         name: "api",
         cwd: join(repoRoot, "apps/api"),
-        targets: ["src"],
+        targets: ["./src"],
       },
       {
         name: "admin",
         cwd: join(repoRoot, "apps/admin"),
-        targets: ["app", "components", "lib", "tests"],
+        targets: ["./app", "./components", "./lib", "./tests"],
       },
       {
         name: "web",
         cwd: join(repoRoot, "apps/web"),
-        targets: ["tests", "components"],
+        targets: ["./tests", "./components"],
       },
     ]);
   });
@@ -127,12 +127,13 @@ describe("workspace test suite selection", () => {
       mkdirSync(join(tempRoot, "scripts/nested"), { recursive: true });
       writeFileSync(join(tempRoot, "scripts/z-last.test.ts"), "");
       writeFileSync(join(tempRoot, "scripts/a-first.test.ts"), "");
+      writeFileSync(join(tempRoot, "scripts/nested/a-first.test.ts"), "");
       writeFileSync(join(tempRoot, "scripts/not-a-test.ts"), "");
       writeFileSync(join(tempRoot, "scripts/nested/ignored.test.ts"), "");
 
       expect(discoverRootContractTests(tempRoot)).toEqual([
-        "scripts/a-first.test.ts",
-        "scripts/z-last.test.ts",
+        "./scripts/a-first.test.ts",
+        "./scripts/z-last.test.ts",
       ]);
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
@@ -267,7 +268,7 @@ export const REPOSITORY_ROOT = join(
 export function discoverRootContractTests(repoRoot: string): string[] {
   return readdirSync(join(repoRoot, "scripts"), { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".test.ts"))
-    .map((entry) => join("scripts", entry.name))
+    .map((entry) => `./scripts/${entry.name}`)
     .sort();
 }
 
@@ -289,7 +290,7 @@ export function buildTestSuites(
   const domain: TestSuite = {
     name: "domain",
     cwd: join(repoRoot, "packages/domain"),
-    targets: ["src"],
+    targets: ["./src"],
   };
 
   if (mode === "stable") {
@@ -299,7 +300,7 @@ export function buildTestSuites(
       {
         name: "web",
         cwd: join(repoRoot, "apps/web"),
-        targets: ["tests"],
+        targets: ["./tests"],
       },
     ];
   }
@@ -310,17 +311,17 @@ export function buildTestSuites(
     {
       name: "api",
       cwd: join(repoRoot, "apps/api"),
-      targets: ["src"],
+      targets: ["./src"],
     },
     {
       name: "admin",
       cwd: join(repoRoot, "apps/admin"),
-      targets: ["app", "components", "lib", "tests"],
+      targets: ["./app", "./components", "./lib", "./tests"],
     },
     {
       name: "web",
       cwd: join(repoRoot, "apps/web"),
-      targets: ["tests", "components"],
+      targets: ["./tests", "./components"],
     },
   ];
 }
@@ -532,7 +533,7 @@ Run:
 bun test scripts/run-workspace-tests.test.ts
 ```
 
-Expected: 8 tests pass and 0 fail.
+Expected: 10 tests pass and 0 fail.
 
 - [ ] **Step 5: Commit the root commands**
 
@@ -556,7 +557,7 @@ Run:
 bun test scripts/run-workspace-tests.test.ts
 ```
 
-Expected: 8 tests pass, 0 fail, and no child workspace test process starts.
+Expected: 10 tests pass, 0 fail, and no child workspace test process starts.
 
 - [ ] **Step 2: Run the stable root gate**
 
@@ -594,7 +595,7 @@ git status --short
 git diff --name-only 9e3da81d...HEAD
 ```
 
-Expected: `git diff --check` has no output; the worktree is clean after the three implementation commits; changed paths are limited to the design/plan docs, `package.json`, and the two runner files. `bun.lock` and `pnpm-lock.yaml` are unchanged.
+Expected: `git diff --check` has no output; the worktree is clean after the four implementation commits; changed paths are limited to the design/plan docs, `package.json`, and the two runner files. `bun.lock` and `pnpm-lock.yaml` are unchanged.
 
 - [ ] **Step 5: Request a code review focused on orchestration correctness**
 

@@ -46,18 +46,19 @@ Stable mode runs these suites sequentially:
 
 | Suite | Working directory | Bun test targets |
 | --- | --- | --- |
-| release-contracts | repository root | the sorted top-level `scripts/*.test.ts` files |
-| domain | `packages/domain` | `src` |
-| web | `apps/web` | `tests` |
+| release-contracts | repository root | the sorted top-level `./scripts/*.test.ts` files |
+| domain | `packages/domain` | `./src` |
+| web | `apps/web` | `./tests` |
 
 All-workspace mode runs the stable suites plus:
 
 | Suite | Working directory | Bun test targets |
 | --- | --- | --- |
-| api | `apps/api` | `src` |
-| admin | `apps/admin` | `app components lib tests` |
-| web | `apps/web` | `tests components` |
+| api | `apps/api` | `./src` |
+| admin | `apps/admin` | `./app ./components ./lib ./tests` |
+| web | `apps/web` | `./tests ./components` |
 
+Bun uses path substring filters, so every directory target uses a `./` prefix to avoid matching ancestor paths and collecting E2E files.
 The explicit Admin and Web targets exclude their `e2e` directories. Web all-mode replaces the
 stable Web suite instead of running it twice.
 
@@ -66,9 +67,10 @@ stable Web suite instead of running it twice.
 Add `scripts/run-workspace-tests.ts` with two modes: `--stable` and `--all`.
 
 The runner owns a typed suite definition containing a display name, working directory, and Bun test
-arguments. It discovers only root-level `scripts/*.test.ts` contract files, sorts them for stable
-execution, and launches every suite with `Bun.spawn` without a shell. Child output is inherited so
-failure details remain visible.
+arguments. It discovers only root-level `scripts/*.test.ts` contract files and emits sorted
+`./scripts/*.test.ts` targets, anchoring each concrete file target to the repository root. It launches
+every suite with `Bun.spawn` without a shell. Child output is inherited so failure details remain
+visible.
 
 Suites run sequentially to keep logs readable and avoid cross-process resource contention. The
 runner records each exit code, continues after failures, prints one final summary, and exits:

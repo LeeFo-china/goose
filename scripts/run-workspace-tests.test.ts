@@ -22,57 +22,57 @@ import {
 
 const repoRoot = "/repo";
 const rootContractTests = [
-  "scripts/z-last.test.ts",
-  "scripts/a-first.test.ts",
+  "./scripts/z-last.test.ts",
+  "./scripts/a-first.test.ts",
 ];
 
 describe("buildTestSuites", () => {
-  it("builds the stable suite in deterministic order", () => {
+  it("builds the stable suite with directory-scoped workspace filters", () => {
     expect(buildTestSuites("stable", { repoRoot, rootContractTests })).toEqual([
       {
         name: "release-contracts",
         cwd: repoRoot,
-        targets: ["scripts/a-first.test.ts", "scripts/z-last.test.ts"],
+        targets: ["./scripts/a-first.test.ts", "./scripts/z-last.test.ts"],
       },
       {
         name: "domain",
         cwd: join(repoRoot, "packages/domain"),
-        targets: ["src"],
+        targets: ["./src"],
       },
       {
         name: "web",
         cwd: join(repoRoot, "apps/web"),
-        targets: ["tests"],
+        targets: ["./tests"],
       },
     ]);
   });
 
-  it("builds the all suite in deterministic order", () => {
+  it("builds the all suite with directory-scoped workspace filters", () => {
     expect(buildTestSuites("all", { repoRoot, rootContractTests })).toEqual([
       {
         name: "release-contracts",
         cwd: repoRoot,
-        targets: ["scripts/a-first.test.ts", "scripts/z-last.test.ts"],
+        targets: ["./scripts/a-first.test.ts", "./scripts/z-last.test.ts"],
       },
       {
         name: "domain",
         cwd: join(repoRoot, "packages/domain"),
-        targets: ["src"],
+        targets: ["./src"],
       },
       {
         name: "api",
         cwd: join(repoRoot, "apps/api"),
-        targets: ["src"],
+        targets: ["./src"],
       },
       {
         name: "admin",
         cwd: join(repoRoot, "apps/admin"),
-        targets: ["app", "components", "lib", "tests"],
+        targets: ["./app", "./components", "./lib", "./tests"],
       },
       {
         name: "web",
         cwd: join(repoRoot, "apps/web"),
-        targets: ["tests", "components"],
+        targets: ["./tests", "./components"],
       },
     ]);
   });
@@ -104,11 +104,12 @@ describe("discoverRootContractTests", () => {
       writeFileSync(join(scriptsDirectory, "z-last.test.ts"), "");
       writeFileSync(join(scriptsDirectory, "a-first.test.ts"), "");
       writeFileSync(join(scriptsDirectory, "notes.ts"), "");
+      writeFileSync(join(scriptsDirectory, "nested", "a-first.test.ts"), "");
       writeFileSync(join(scriptsDirectory, "nested", "ignored.test.ts"), "");
 
       expect(discoverRootContractTests(temporaryRoot)).toEqual([
-        "scripts/a-first.test.ts",
-        "scripts/z-last.test.ts",
+        "./scripts/a-first.test.ts",
+        "./scripts/z-last.test.ts",
       ]);
     } finally {
       rmSync(temporaryRoot, { force: true, recursive: true });
