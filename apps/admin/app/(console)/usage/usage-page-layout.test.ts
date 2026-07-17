@@ -12,13 +12,15 @@ describe("Tenant usage page layout", () => {
     expect(page).toContain("h-[calc(100vh-6.5625rem)]");
     expect(page).toContain("min-h-0 flex-col gap-5 overflow-hidden");
     expect(page).toContain("Card className=\"flex min-h-0 flex-1 flex-col overflow-hidden shadow-none\"");
-    expect(page).toContain("CardHeader className=\"shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3\"");
+    expect(page).toContain("CardHeader className=\"shrink-0 flex flex-col gap-3 border-b bg-card px-4 py-0\"");
     expect(page).toContain("CardContent className=\"relative flex min-h-0 flex-1 flex-col bg-card p-0\"");
     expect(page).toContain("data-testid=\"tenant-usage-list-table-viewport\"");
     expect(page).toContain("UsageOverviewPanel");
     expect(page).toContain("UsageTabsNav");
-    expect(page).toContain("tabsListClassName=\"w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden md:w-auto\"");
-    expect(page).toContain("tabsTriggerClassName=\"px-2 sm:px-3\"");
+    expect(page).toContain("tabsListClassName=\"h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0\"");
+    expect(page).toContain("tabsTriggerClassName=\"rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-2 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground\"");
+    expect(page).not.toContain("<CardTitle>本租户用量</CardTitle>");
+    expect(page).not.toContain("租户只能查看本公司的 AI、短信和短视频转写用量");
     expect(page).not.toContain("<UsageSummaryCards data={summaryResult.data} />");
     expect(page).not.toContain("grid gap-3 p-4 md:grid-cols-3");
     expect(page).not.toContain("TabsTrigger value=\"ai\" asChild");

@@ -21,7 +21,7 @@ import type {
   UsageSocialVideoLogRecord,
 } from "@/components/usage/usage-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
 import { isPlatformOnlySession } from "@/lib/session-mode";
 import {
@@ -155,14 +155,8 @@ export default async function TenantUsagePage({
       ) : null}
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-        <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div className="min-w-0">
-              <CardTitle>本租户用量</CardTitle>
-              <CardDescription>
-                租户只能查看本公司的 AI、短信和短视频转写用量，手机号仅展示脱敏值。
-              </CardDescription>
-            </div>
+        <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-card px-4 py-0">
+          <div className="flex overflow-x-auto">
             <UsageTabsNav
               basePath="/usage"
               tab={tab}
@@ -173,20 +167,22 @@ export default async function TenantUsagePage({
               socialVideoStatus={socialVideoStatus}
               socialVideoBillable={socialVideoBillable}
               summaryLabel="用量概览"
-              tabsListClassName="w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden md:w-auto"
-              tabsTriggerClassName="px-2 sm:px-3"
+              tabsListClassName="h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0"
+              tabsTriggerClassName="rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-2 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
             />
           </div>
-          <UsageFilters
-            basePath="/usage"
-            tab={tab}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            aiStatus={aiStatus}
-            smsStatus={smsStatus}
-            socialVideoStatus={socialVideoStatus}
-            socialVideoBillable={socialVideoBillable}
-          />
+          <div className="pb-3">
+            <UsageFilters
+              basePath="/usage"
+              tab={tab}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              aiStatus={aiStatus}
+              smsStatus={smsStatus}
+              socialVideoStatus={socialVideoStatus}
+              socialVideoBillable={socialVideoBillable}
+            />
+          </div>
         </CardHeader>
         <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
           {tab === "summary" ? (
