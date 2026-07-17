@@ -7,4 +7,9 @@ describe("platform billing page tabs", () => {
     expect(normalizeBillingTab("recharge")).toBe("recharge");
     expect(normalizeBillingTab("unknown")).toBe("tenants");
   });
+
+  test("keeps recharge refund review as a first-class billing tab", () => {
+    expect(billingTabs).toContain("refunds");
+    expect(normalizeBillingTab("refunds")).toBe("refunds");
+  });
 });
