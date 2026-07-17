@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import {
   type CSSProperties,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -56,6 +57,7 @@ export function ProjectsClientShell({
   workflowNodeKey,
   workflowInstanceStatus,
   workflowFilters,
+  sectionTabs,
   error,
 }: {
   projects: ProjectRecord[];
@@ -66,6 +68,7 @@ export function ProjectsClientShell({
   workflowNodeKey: string;
   workflowInstanceStatus: string;
   workflowFilters: ProjectWorkflowFiltersData;
+  sectionTabs?: ReactNode;
   error: string | null;
 }) {
   const router = useRouter();
@@ -204,6 +207,9 @@ export function ProjectsClientShell({
             <p className="mt-1 text-sm text-muted-foreground">
               项目预算、施工状态、负责人和客户房产信息。当前筛选共 {pagination.total} 条记录。
             </p>
+            {sectionTabs ? (
+              <div className="mt-3">{sectionTabs}</div>
+            ) : null}
           </div>
         </div>
         <CreateProjectButton onSaved={refreshProjects} />

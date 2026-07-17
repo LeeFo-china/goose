@@ -12,6 +12,7 @@ describe("admin nav active matching", () => {
 
   test("keeps prefix matching for section nav items by default", () => {
     expect(isActivePath("/projects/project-1", "/projects")).toBe(true);
+    expect(isActivePath("/projects/health", "/projects")).toBe(true);
   });
 
   test("keeps tenant settings inactive on service provider profile route", () => {

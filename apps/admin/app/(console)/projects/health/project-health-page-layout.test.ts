@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const routeDir = new URL(".", import.meta.url).pathname;
-const adminRoot = join(routeDir, "../../..");
+const adminRoot = join(routeDir, "../../../..");
 const componentDir = join(adminRoot, "components/project-health");
 
 function readRouteFile(fileName: string) {
@@ -52,6 +52,19 @@ describe("project health page layout contract", () => {
     expect(shell).toContain("@/components/admin/status-alert");
     expect(loading).toContain("@/components/ui/skeleton");
     expect(loading).not.toContain("Loader2");
+  });
+
+  test("keeps loading aligned with project health tabs and labeled filters", () => {
+    const loading = readRouteFile("loading.tsx");
+
+    expect(loading).toContain('data-testid="project-section-tabs-loading"');
+    expect(loading).toContain("h-auto min-w-max justify-start gap-5");
+    expect(loading).toContain(
+      "md:grid-cols-[minmax(220px,1fr)_160px_180px_auto_auto]",
+    );
+    expect(loading).toContain('data-testid="project-health-filter-loading"');
+    expect(loading).toContain("flex min-w-0 flex-col gap-1");
+    expect(loading).not.toContain("md:grid-cols-[1fr_160px_180px_auto_auto]");
   });
 
   test("keeps ai summary as an explicit client action", () => {

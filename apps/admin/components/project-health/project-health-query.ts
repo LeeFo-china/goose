@@ -35,7 +35,7 @@ export function buildProjectHealthHref(
   const params = new URLSearchParams();
   params.set("page", String(normalizePage(query.page)));
   appendProjectHealthFilters(params, query);
-  return `/project-health?${params.toString()}`;
+  return `/projects/health?${params.toString()}`;
 }
 
 export function buildProjectHealthFilterHref(

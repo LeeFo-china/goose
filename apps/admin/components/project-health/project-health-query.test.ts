@@ -16,7 +16,7 @@ describe("project health query helpers", () => {
         keyword: "湖畔",
       }),
     ).toBe(
-      "/project-health?page=2&severity=danger&risk_type=procedure_overdue&keyword=%E6%B9%96%E7%95%94",
+      "/projects/health?page=2&severity=danger&risk_type=procedure_overdue&keyword=%E6%B9%96%E7%95%94",
     );
   });
 
@@ -28,7 +28,7 @@ describe("project health query helpers", () => {
         riskType: null,
         keyword: " ",
       }),
-    ).toBe("/project-health?page=1");
+    ).toBe("/projects/health?page=1");
   });
 
   test("resets page when filters change", () => {
@@ -38,12 +38,12 @@ describe("project health query helpers", () => {
         { severity: "danger", keyword: "新关键词" },
       ),
     ).toBe(
-      "/project-health?page=1&severity=danger&keyword=%E6%96%B0%E5%85%B3%E9%94%AE%E8%AF%8D",
+      "/projects/health?page=1&severity=danger&keyword=%E6%96%B0%E5%85%B3%E9%94%AE%E8%AF%8D",
     );
   });
 
   test("builds reset href", () => {
-    expect(buildProjectHealthResetHref()).toBe("/project-health?page=1");
+    expect(buildProjectHealthResetHref()).toBe("/projects/health?page=1");
   });
 
   test("builds backend query with fixed page size", () => {

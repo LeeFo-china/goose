@@ -56,6 +56,20 @@ describe("Project management page layout", () => {
     expect(shell).toContain("PROJECT_TABLE_HEADER_HEIGHT");
   });
 
+  test("keeps project loading aligned with the project domain header and filters", () => {
+    const { loading } = readProjectManagementSources();
+
+    expect(loading).toContain("FolderKanban");
+    expect(loading).toContain('data-testid="project-section-tabs-loading"');
+    expect(loading).toContain("h-auto min-w-max justify-start gap-5");
+    expect(loading).toContain(
+      "xl:grid-cols-[150px_170px_150px_150px_minmax(220px,1fr)_72px]",
+    );
+    expect(loading).toContain("Array.from({ length: 6 })");
+    expect(loading).not.toContain("flex justify-end");
+    expect(loading).not.toContain("lg:grid-cols-[150px_150px_1fr_72px]");
+  });
+
   test("keeps project table within the list viewport without horizontal scrolling", () => {
     const table = readFileSync(
       new URL("./projects-table.tsx", import.meta.url),

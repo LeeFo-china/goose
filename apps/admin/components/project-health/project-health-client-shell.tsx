@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
 import type {
   ProjectOperationalRiskAiSummary,
@@ -43,10 +43,12 @@ export function ProjectHealthClientShell({
   initialData,
   initialFilters,
   initialError,
+  sectionTabs,
 }: {
   initialData: ProjectOperationalRiskDisplayPage | null;
   initialFilters: ProjectHealthQueryState;
   initialError: string | null;
+  sectionTabs?: ReactNode;
 }) {
   const [data, setData] = useState(initialData);
   const [filters, setFilters] = useState(initialFilters);
@@ -164,6 +166,9 @@ export function ProjectHealthClientShell({
             <p className="mt-1 text-sm text-muted-foreground">
               聚合流程、施工、日志、验收和客服风险。生成时间：{generatedAt}
             </p>
+            {sectionTabs ? (
+              <div className="mt-3">{sectionTabs}</div>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

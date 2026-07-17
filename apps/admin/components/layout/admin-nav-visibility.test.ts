@@ -33,52 +33,17 @@ function createSession(permissions: AdminPermission[]): AdminSession {
   };
 }
 
-function findProjectRiskItem(): AdminMenuItem {
-  const item = tenantNavGroups
-    .flatMap((group) => group.items)
-    .find((menuItem) => menuItem.href === "/project-health");
-
-  if (!item) throw new Error("project risk menu item not found");
-
-  return item;
-}
-
 describe("admin nav visibility", () => {
-  test("shows project risk item when dashboard read and all-project read permissions exist", () => {
-    const session = createSession([
-      { code: "dashboard.read", scope: "all" },
-      { code: "project.read", scope: "all" },
-    ]);
+  test("keeps project list and risk under one tenant project nav item", () => {
+    const businessItems = tenantNavGroups.find((group) => group.label === "业务")
+      ?.items ?? [];
+    const projectItem = businessItems.find((item) => item.href === "/projects");
 
-    expect(hasMenuItemAccess(session, findProjectRiskItem())).toBe(true);
-  });
-
-  test.each(["self", "assigned", "department"] as const)(
-    "hides project risk item when project read scope is %s",
-    (scope) => {
-      const session = createSession([
-        { code: "dashboard.read", scope: "all" },
-        { code: "project.read", scope },
-      ]);
-
-      expect(hasMenuItemAccess(session, findProjectRiskItem())).toBe(false);
-    },
-  );
-
-  test("hides project risk item when dashboard read permission is missing", () => {
-    const session = createSession([
-      { code: "project.read", scope: "all" },
-    ]);
-
-    expect(hasMenuItemAccess(session, findProjectRiskItem())).toBe(false);
-  });
-
-  test("hides project risk item when project read permission is missing", () => {
-    const session = createSession([
-      { code: "dashboard.read", scope: "all" },
-    ]);
-
-    expect(hasMenuItemAccess(session, findProjectRiskItem())).toBe(false);
+    expect(projectItem?.label).toBe("项目");
+    expect(projectItem?.requiredPermissions).toBeUndefined();
+    expect(projectItem?.permission).toBeUndefined();
+    expect(businessItems.some((item) => item.href === "/project-health")).toBe(false);
+    expect(businessItems.some((item) => item.label === "项目风险")).toBe(false);
   });
 
   test("keeps legacy permission visible for any matching scope and hidden otherwise", () => {
@@ -121,7 +86,7 @@ describe("admin nav visibility", () => {
         label: "空分组",
         items: [
           {
-            href: "/project-health",
+            href: "/projects/health",
             label: "项目风险",
             icon: Users,
             requiredPermissions: [

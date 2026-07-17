@@ -3,6 +3,10 @@ import { type ProjectRecord } from "@/components/projects/project-mutations";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { ProjectsClientShell } from "@/components/projects/projects-client-shell";
 import {
+  canViewProjectHealth,
+  ProjectSectionTabs,
+} from "@/components/projects/project-section-tabs";
+import {
   emptyWorkflowFilters,
   type ProjectWorkflowFiltersData,
 } from "@/components/projects/project-list-filter-utils";
@@ -15,7 +19,7 @@ import {
   PROJECT_LIST_PAGE_SIZE_COOKIE,
   normalizeProjectListPreferredPageSize,
 } from "@/components/projects/project-list-page-size-preference";
-import { getAdminToken } from "@/lib/auth";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 type Pagination = {
@@ -177,12 +181,15 @@ export default async function ProjectsPage({
   const workflowNodeKey = params.workflow_node_key?.trim() || "";
   const workflowInstanceStatus = params.workflow_instance_status?.trim() || "";
   const [
+    session,
     { list, pagination, error: listError },
     { filters: workflowFilters, error: filtersError },
   ] = await Promise.all([
+    getAdminSession(),
     getProjects(params),
     getProjectWorkflowFilters(params),
   ]);
+  const canViewHealth = canViewProjectHealth(session);
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -195,6 +202,9 @@ export default async function ProjectsPage({
         workflowNodeKey={workflowNodeKey}
         workflowInstanceStatus={workflowInstanceStatus}
         workflowFilters={workflowFilters}
+        sectionTabs={
+          <ProjectSectionTabs activeTab="list" canViewHealth={canViewHealth} />
+        }
         error={listError ?? filtersError}
       />
     </div>

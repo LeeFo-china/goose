@@ -21,7 +21,6 @@ import {
   ScrollText,
   SearchCheck,
   Shield,
-  ShieldAlert,
   Sparkles,
   SlidersHorizontal,
   TerminalSquare,
@@ -104,15 +103,6 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     label: "业务",
     items: [
       { href: "/dashboard", label: "概览", icon: LayoutDashboard },
-      {
-        href: "/project-health",
-        label: "项目风险",
-        icon: ShieldAlert,
-        requiredPermissions: [
-          { code: "dashboard.read" },
-          { code: "project.read", scope: "all" },
-        ],
-      },
       { href: "/customers", label: "客户", icon: Users },
       {
         href: "/wechat-rebind-requests",

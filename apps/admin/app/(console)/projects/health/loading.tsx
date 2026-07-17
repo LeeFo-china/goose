@@ -13,6 +13,16 @@ export default function ProjectHealthLoading() {
           <div className="flex min-w-0 flex-col gap-2">
             <Skeleton className="h-6 w-36" />
             <Skeleton className="h-4 w-64 max-w-full" />
+            <div
+              aria-hidden="true"
+              data-testid="project-section-tabs-loading"
+              className="mt-1 flex overflow-x-auto"
+            >
+              <div className="flex h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0">
+                <Skeleton className="h-8 w-16 rounded-none" />
+                <Skeleton className="h-8 w-16 rounded-none" />
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex gap-2">
@@ -34,12 +44,28 @@ export default function ProjectHealthLoading() {
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 border-b bg-muted/20 p-3">
-          <div className="grid gap-3 md:grid-cols-[1fr_160px_180px_auto_auto]">
-            <Skeleton className="h-9" />
-            <Skeleton className="h-9" />
-            <Skeleton className="h-9" />
-            <Skeleton className="h-9 w-20" />
-            <Skeleton className="h-9 w-20" />
+          <div
+            data-testid="project-health-filter-loading"
+            className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_160px_180px_auto_auto]"
+          >
+            <div className="flex min-w-0 flex-col gap-1">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-10" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-10" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-10" />
+            </div>
+            <div className="flex items-end">
+              <Skeleton className="h-11 w-full md:h-10 md:w-20" />
+            </div>
+            <div className="flex items-end">
+              <Skeleton className="h-11 w-full md:h-10 md:w-20" />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
