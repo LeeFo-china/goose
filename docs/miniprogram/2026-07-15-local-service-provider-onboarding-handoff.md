@@ -402,6 +402,101 @@ Idempotency-Key: <uuid-v4>
 
 结论：小程序端应按以上错误码做可恢复提示；这些错误不会创建新的入驻申请。测试中临时插入的短信验证码记录已清理。
 
+### 场景 G：小程序端完整 API smoke 与 UI 映射
+
+执行日期：2026-07-17
+
+小程序端已使用后端提供的 smoke visitor 完成本地 API 联调，并确认本地服务商主动入驻链路符合后端契约。
+
+- 初始无定位上下文：
+  - `GET /visitor/location-context` 返回 `context=null`
+  - `GET /visitor/local-service-providers?page=1&pageSize=20` 返回空数组
+- 定位 `411525`：
+  - 返回测试服务商：`合伙人匹配Smoke装饰445654`
+  - `matched_region_code=411525`
+- 定位 `330106`：
+  - 返回空列表
+  - 不跨区域返回固始服务商
+- 错误验证码：
+  - `sms_code=000000`
+  - HTTP `400`
+  - `code=SMS_CODE_INVALID`
+- 重复企业：
+  - HTTP `409`
+  - `code=TENANT_ONBOARDING_APPLICATION_DUPLICATED`
+- 不可用营业执照：
+  - HTTP `403`
+  - `code=TENANT_ONBOARDING_DOCUMENT_FORBIDDEN`
+- 正常提交：
+  - HTTP `202`
+  - `created=true`
+  - `idempotent=false`
+  - 申请号：`ZQ-20260717-J6IYIT`
+  - 申请 ID：`be1fecae-e925-4ba9-948f-5b5524558ff5`
+  - `status=submitted`
+  - `partner_assist_status=pending`
+- 相同 `Idempotency-Key` 重放：
+  - HTTP `202`
+  - 返回同一条申请
+  - `created=false`
+  - `idempotent=true`
+  - `GET /tenant-onboarding/applications/mine` 确认只存在一条申请
+
+小程序端已修复请求序列化问题：没有有效经纬度时省略 `latitude/longitude`，不再发送 `null`；空的可选 `province/district` 也省略。后端 schema 仍保持“可选 number”，不需要调整契约。
+
+小程序 UI 映射已复核：
+
+- `status=submitted` 展示“申请已提交，等待平台审核”。
+- 成功页展示后端返回的申请编号。
+- `partner_assist_status=pending` 展示“城市合伙人协查中，最终以平台审核为准”。
+- 协查状态不展示为平台审核通过。
+- 本地服务来源成功页不展示“入驻成功”，不引导员工登录。
+- 成功页可以返回本地服务商列表。
+
+当前测试申请 `ZQ-20260717-J6IYIT` 继续保留，用于后续真机 UI 验收、平台审核或城市合伙人协查流程联调；小程序端确认不会清理、处理或使用相同主体重新提交。
+
+### 场景 H：合伙人邀请码二维码环境对齐
+
+执行日期：2026-07-17
+
+已定位一类合伙人邀请码二维码联调问题：邀请码和合伙人数据本身正常，同一个邀请码在 dev API 解析为 `200`，在 production API 解析为 `404 PARTNER_INVITE_CODE_UNAVAILABLE`。根因不是邀请码解析逻辑，而是二维码打开的小程序版本、该小程序构建使用的 API base URL、以及邀请码所在数据库环境不一致。
+
+后端生成城市合伙人邀请码二维码时：
+
+- 管理端图片地址为 `GET /platform/partner-invite-codes/:code/qrcode`。
+- 二维码生成请求的 `scene` 使用标准化邀请码，例如 `CP-...`。
+- 二维码打开的小程序版本来自系统配置 `WECHAT_MINIPROGRAM_ENV_VERSION`：
+  - `release`：正式版
+  - `trial`：体验版
+  - `develop`：开发版
+- 二维码不会携带 API base URL。扫码后访问哪个 API，由被打开的小程序版本自身的构建配置决定。
+
+当前 orange 只读检查结论：
+
+- `NODE_ENV=development` 构建会使用 `config/dev.ts` 中的 `BASE_URL=https://api-dev.goodcms.cn`。
+- production 构建配置没有注入 dev base URL，实际会走生产 API。
+- 如果 dev 后端把二维码配置成 `WECHAT_MINIPROGRAM_ENV_VERSION=trial`，但微信体验版包是生产 API 构建，扫码后会打开体验版并访问 production API。dev 数据库里的邀请码在 production 不存在，因此返回 `404 PARTNER_INVITE_CODE_UNAVAILABLE`。
+
+dev 联调建议二选一：
+
+1. 推荐：dev 后端系统配置将 `WECHAT_MINIPROGRAM_ENV_VERSION` 调整为 `develop`，重新生成二维码，用开发版小程序联调，并确认开发版构建连接 `https://api-dev.goodcms.cn`。
+2. 如必须使用 `trial`：需要小程序团队确认上传到体验版的包是 dev API 构建，即连接 `https://api-dev.goodcms.cn`；否则不要用 dev 数据库邀请码做体验版扫码验证。
+
+production 正式使用：
+
+1. production 数据库必须创建正式城市合伙人和对应邀请码。
+2. production 后端保持或调整 `WECHAT_MINIPROGRAM_ENV_VERSION=release`。
+3. 从 production 管理端重新生成二维码。
+4. 扫码打开正式版小程序，并访问 production API。
+
+验收清单：
+
+1. 在目标 API 上直接请求 `GET /partner-onboarding/invite-codes/:code`，必须返回 `200`。
+2. 确认返回的 `partner.id`、`invite_code.id` 属于目标数据库环境。
+3. 扫二维码后确认小程序打开的版本环境与预期一致：dev 联调为 `develop` 或已确认连接 dev API 的 `trial`，正式使用为 `release`。
+4. 扫码后再次查看该邀请码，`scan_count` 应递增。后端当前在解析成功后调用 `increment_platform_partner_invite_code_counts` 增加 `scan_count=1`。
+5. 如果目标 API 返回 `404 PARTNER_INVITE_CODE_UNAVAILABLE`，先核查二维码打开的小程序版本和 API base URL，不要直接清理或重建 dev 邀请码。
+
 ### 营业执照私有上传 smoke
 
 - 文件 ID：`1025146c-703d-42cb-a9bd-e936ea08cb33`
@@ -419,6 +514,7 @@ Idempotency-Key: <uuid-v4>
 4. 如果返回 `partner_assist_status=pending`，可以辅助展示“城市合伙人协查中”，但仍以平台审核为准。
 5. 统一社会信用代码重复、验证码错误、营业执照不可用、缺少幂等键时，按后端错误码展示可恢复提示。
 6. `GET /tenant-onboarding/applications/mine?page=1&pageSize=20` 可用于“我的入驻申请”列表，必须分页。
+7. 合伙人邀请码二维码联调时，必须先确认二维码 `env_version`、小程序构建 API base URL 和邀请码所在数据库是同一目标环境。
 
 ## 推荐联调验收清单
 
@@ -431,7 +527,8 @@ Idempotency-Key: <uuid-v4>
 7. 提交成功返回 `202` 后，展示“申请已提交，等待平台审核”。
 8. 网络重试同一 `Idempotency-Key`，页面保持同一申请成功态，不重复创建。
 9. 城市合伙人覆盖区域提交后，展示平台审核中；如果展示协查进度，文案使用“城市合伙人协查中”。
-10. 小程序仓库修改完成后，跑 `npm run build:weapp` 做构建验证。
+10. 合伙人邀请码二维码联调时，先在目标 API 解析邀请码返回 `200`，再扫码确认 `scan_count` 递增。
+11. 小程序仓库修改完成后，跑 `npm run build:weapp` 做构建验证。
 
 ## 后端后续建议
 
