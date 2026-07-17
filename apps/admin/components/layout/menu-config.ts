@@ -87,7 +87,7 @@ export const platformNavGroups: AdminMenuGroup[] = [
   {
     label: "平台配置",
     items: [
-      { href: "/settings", label: "系统配置", icon: SlidersHorizontal },
+      { href: "/settings", label: "系统配置", icon: SlidersHorizontal, activeMatch: "exact" },
       { href: "/social-video", label: "自媒体脚本", icon: Clapperboard },
     ],
   },
@@ -207,7 +207,7 @@ export const tenantNavGroups: AdminMenuGroup[] = [
   {
     label: "系统",
     items: [
-      { href: "/settings", label: "系统配置", icon: SlidersHorizontal },
+      { href: "/settings", label: "系统配置", icon: SlidersHorizontal, activeMatch: "exact" },
       {
         href: "/settings/service-provider",
         label: "服务商资料",
