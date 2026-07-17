@@ -289,7 +289,7 @@ export function TenantDialog({
                     />
                   </Field>
                 </div>
-                <PlatformTenantAddressPicker mode={mode} tenant={tenant} disabled={pending} />
+                <PlatformTenantAddressPicker mode={mode} tenant={tenant} disabled={pending} active={open} />
               </FieldGroup>
             </div>
 

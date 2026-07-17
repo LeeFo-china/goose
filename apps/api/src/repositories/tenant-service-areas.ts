@@ -27,10 +27,29 @@ export type TenantServiceAreaRecord = {
     slug: string | null;
     status: string | null;
     address: string | null;
+    address_title: string | null;
+    address_poi_id: string | null;
+    address_province: string | null;
+    address_city: string | null;
+    address_district: string | null;
+    address_adcode: string | null;
     address_latitude: number | null;
     address_longitude: number | null;
+    address_source: string | null;
+    address_confidence: number | null;
+    address_confirmed_at: string | null;
   } | null;
 };
+
+const TENANT_SERVICE_AREA_SELECT = `
+  *,
+  tenant:tenants!tenant_service_areas_tenant_id_fkey(
+    id,name,slug,status,address,address_title,address_poi_id,
+    address_province,address_city,address_district,address_adcode,
+    address_latitude,address_longitude,address_source,address_confidence,
+    address_confirmed_at
+  )
+`;
 
 class TenantServiceAreaRepository {
   private client = SupabaseDB.getAdminClient();
@@ -45,10 +64,7 @@ class TenantServiceAreaRepository {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     let request = this.from("tenant_service_areas")
-      .select(`
-        *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
-      `, { count: "exact" });
+      .select(TENANT_SERVICE_AREA_SELECT, { count: "exact" });
 
     if (query.tenant_id) request = request.eq("tenant_id", query.tenant_id);
     if (query.status) request = request.eq("status", query.status);
@@ -80,10 +96,7 @@ class TenantServiceAreaRepository {
 
   async listActiveForMatching() {
     const { data, error } = await this.from("tenant_service_areas")
-      .select(`
-        *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
-      `)
+      .select(TENANT_SERVICE_AREA_SELECT)
       .eq("status", "active")
       .order("priority", { ascending: false });
 
@@ -97,10 +110,7 @@ class TenantServiceAreaRepository {
 
   async findById(id: string) {
     const { data, error } = await this.from("tenant_service_areas")
-      .select(`
-        *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
-      `)
+      .select(TENANT_SERVICE_AREA_SELECT)
       .eq("id", id)
       .maybeSingle();
 
@@ -114,10 +124,7 @@ class TenantServiceAreaRepository {
   async create(input: CreateTenantServiceAreaInput) {
     const { data, error } = await this.from("tenant_service_areas")
       .insert(input)
-      .select(`
-        *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
-      `)
+      .select(TENANT_SERVICE_AREA_SELECT)
       .single();
 
     if (error) {
@@ -131,10 +138,7 @@ class TenantServiceAreaRepository {
     const { data, error } = await this.from("tenant_service_areas")
       .update(input)
       .eq("id", id)
-      .select(`
-        *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
-      `)
+      .select(TENANT_SERVICE_AREA_SELECT)
       .maybeSingle();
 
     if (error) {
