@@ -339,7 +339,7 @@ describe("automatic development deployment orchestration contract", () => {
     expect(autoDeployWorkflow).toContain("  deploy-rest:");
     expect(autoDeployWorkflow).toContain("needs: [authorize, api-ready]");
     expect(autoDeployWorkflow).toContain(
-      "if: ${{ needs.authorize.outputs.has_rest == 'true'",
+      "if: ${{ always() && needs.authorize.outputs.has_rest == 'true' && needs.api-ready.result == 'success' }}",
     );
     expect(autoDeployWorkflow).toContain("max-parallel: 1");
     expect(autoDeployWorkflow).toContain(

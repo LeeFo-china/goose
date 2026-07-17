@@ -144,7 +144,7 @@ jobs:
   deploy-rest:
     name: Deploy ${{ matrix.service }}
     needs: [prepare, api-ready]
-    if: ${{ needs.prepare.outputs.has_rest == 'true' && needs.api-ready.result == 'success' }}
+    if: ${{ always() && needs.prepare.outputs.has_rest == 'true' && needs.api-ready.result == 'success' }}
     strategy:
       fail-fast: true
       max-parallel: 1

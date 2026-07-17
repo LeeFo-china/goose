@@ -1816,6 +1816,9 @@ describe("development orchestrator", () => {
       );
     }
     expect(deployRest).toContain("needs: [prepare, api-ready]");
+    expect(deployRest).toContain(
+      "if: ${{ always() && needs.prepare.outputs.has_rest == 'true' && needs.api-ready.result == 'success' }}",
+    );
     expect(deployRest).toContain("max-parallel: 1");
   });
 
