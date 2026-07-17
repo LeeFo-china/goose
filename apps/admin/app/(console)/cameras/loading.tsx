@@ -4,34 +4,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function CamerasLoading() {
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <div className="shrink-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <Skeleton className="size-10 shrink-0" />
-          <div className="flex min-w-0 flex-col gap-2">
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-4 w-80 max-w-full" />
-            <div className="mt-1 flex flex-wrap gap-2">
-              <Skeleton className="h-6 w-16" />
-              <Skeleton className="h-6 w-16" />
-              <Skeleton className="h-6 w-16" />
-              <Skeleton className="h-6 w-24" />
-            </div>
-          </div>
-        </div>
-        <Skeleton className="h-9 w-28" />
-      </div>
-
-      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <CardHeader className="shrink-0 border-b bg-muted/20 p-3">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex gap-2 overflow-x-auto">
-              <Skeleton className="h-9 w-28" />
-              <Skeleton className="h-9 w-28" />
+            <div
+              aria-hidden="true"
+              data-testid="camera-workspace-tabs-loading"
+              className="flex overflow-x-auto"
+            >
+              <div className="flex h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0">
+                <Skeleton className="h-10 w-20 rounded-none" />
+                <Skeleton className="h-10 w-16 rounded-none" />
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-4 w-16" />
+            <div className="flex flex-wrap items-center gap-2 pb-3 md:ml-auto md:pb-0">
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-9 w-28" />
             </div>
           </div>
         </CardHeader>

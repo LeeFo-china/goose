@@ -1,10 +1,4 @@
-import {
-  Camera,
-  CameraOff,
-  CircuitBoard,
-  Search,
-  X,
-} from "lucide-react";
+import { Search, X } from "lucide-react";
 import Link from "next/link";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CreateCameraButton } from "@/components/cameras/camera-mutations";
@@ -179,7 +173,6 @@ export default async function CamerasPage({
   const hasCameraProjectGroups = cameraProjectGroups.length > 0;
   const showCameraSearch = hasCameraProjectGroups || Boolean(cameraKeyword);
   const showCameraPagination = cameraProjectPagination.total > 0;
-  const showWorkspaceSummary = cameraProjectSummary.total_camera_count > 0 || hasTenantDevices;
   const showSetupFlow = !hasCameraProjectGroups && !cameraProjectError && !cameraKeyword;
   const currentPageOfflineCount = cameraProjectGroups.reduce(
     (count, group) => count + group.cameras.filter((camera) => camera.status === "offline").length,
@@ -209,34 +202,7 @@ export default async function CamerasPage({
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <div className="shrink-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
-            <Camera className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold tracking-normal">工地监控</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              维护项目摄像头、客户可见权限和设备资产接入。
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Badge variant="outline">已绑定项目 {cameraProjectSummary.project_count}</Badge>
-              {cameraProjectSummary.online_count > 0 ? (
-                <Badge variant="success">在线 {cameraProjectSummary.online_count}</Badge>
-              ) : null}
-              {cameraProjectSummary.hidden_count > 0 ? (
-                <Badge variant="secondary">客户隐藏 {cameraProjectSummary.hidden_count}</Badge>
-              ) : null}
-              {hasTenantDevices ? (
-                <Badge variant="outline">未绑定设备 {unboundTenantDeviceCount}</Badge>
-              ) : (
-                <Badge variant="secondary">尚未接入设备</Badge>
-              )}
-            </div>
-          </div>
-        </div>
-        {headerAction}
-      </div>
+      <h1 className="sr-only">工地监控</h1>
 
       {projectError ? (
         <div className="shrink-0">
@@ -261,28 +227,23 @@ export default async function CamerasPage({
 
       {selectedProjectId || cameraProjectGroups.length || cameraProjectError ? (
         <CamerasWorkspaceTabs
-          summary={showWorkspaceSummary ? (
+          actions={headerAction}
+          summary={(
             <>
-              {cameraProjectSummary.total_camera_count > 0 ? (
-                <span className="inline-flex items-center gap-1">
-                  <Camera className="size-3.5" />
-                  摄像头 {cameraProjectSummary.total_camera_count}
-                </span>
-              ) : null}
-              {hasTenantDevices ? (
-                <span className="inline-flex items-center gap-1">
-                  <CircuitBoard className="size-3.5" />
-                  设备 {tenantDevices.length}
-                </span>
+              <Badge variant="outline">已绑定项目 {cameraProjectSummary.project_count}</Badge>
+              {cameraProjectSummary.online_count > 0 ? (
+                <Badge variant="success">在线 {cameraProjectSummary.online_count}</Badge>
               ) : null}
               {cameraProjectSummary.hidden_count > 0 ? (
-                <span className="inline-flex items-center gap-1">
-                  <CameraOff className="size-3.5" />
-                  客户隐藏 {cameraProjectSummary.hidden_count}
-                </span>
+                <Badge variant="secondary">客户隐藏 {cameraProjectSummary.hidden_count}</Badge>
               ) : null}
+              {hasTenantDevices ? (
+                <Badge variant="outline">未绑定设备 {unboundTenantDeviceCount}</Badge>
+              ) : (
+                <Badge variant="secondary">尚未接入设备</Badge>
+              )}
             </>
-          ) : null}
+          )}
           cameras={(
             <>
               <div className="shrink-0 border-b bg-card px-4 py-3">
