@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function PlatformTenantDetailLoading() {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]">
       <div className="flex flex-col gap-3">
         <Skeleton className="h-9 w-32" />
         <Skeleton className="h-8 w-56" />
@@ -34,6 +34,17 @@ export default function PlatformTenantDetailLoading() {
           </Card>
         ))}
       </div>
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-72 max-w-full" />
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-14 w-full" />
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

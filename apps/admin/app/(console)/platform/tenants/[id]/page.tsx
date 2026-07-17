@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Building2, ClipboardList, ShieldCheck, UserRoundCog } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { ServiceProviderPublicProfileCard } from "@/components/platform-tenants/service-provider-public-profile-card";
 import { TenantServiceAreaPanel } from "@/components/platform-tenants/tenant-service-area-panel";
 import {
   getPlatformTenantStatusMeta,
@@ -10,6 +11,7 @@ import {
   type PlatformTenantRoleLite,
   type TenantServiceAreaListData,
 } from "@/components/platform-tenants/platform-tenant-types";
+import type { ServiceProviderProfile } from "@/components/tenant-onboarding/tenant-onboarding-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,6 +110,48 @@ async function getTenantServiceAreas(tenantId: string) {
   }
 }
 
+async function getPlatformServiceProviderProfile(id: string) {
+  const token = await getAdminToken();
+  if (!token) {
+    return {
+      data: null,
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const response = await fetch(buildBackendUrl(`/platform/service-provider-publications/${id}`), {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<ServiceProviderProfile>(response);
+    return {
+      data: payload.data ?? null,
+      error: null,
+    };
+  } catch (error) {
+    if (getErrorStatus(error) === 404) {
+      return {
+        data: null,
+        error: null,
+      };
+    }
+
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : "服务商公开资料加载失败",
+    };
+  }
+}
+
+function getErrorStatus(error: unknown) {
+  if (typeof error !== "object" || error === null || !("status" in error)) return null;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
+}
+
 function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-md border bg-muted/30 px-3 py-2">
@@ -178,12 +222,21 @@ export default async function PlatformTenantDetailPage({
 
   const { id } = await params;
   const hasPlatformAccess = session.roles.includes("platform_admin");
-  const [{ data: tenant, error }, { data: serviceAreas, error: serviceAreaError }] =
+  const [
+    { data: tenant, error },
+    { data: serviceAreas, error: serviceAreaError },
+    { data: serviceProviderProfile, error: serviceProviderProfileError },
+  ] =
     hasPlatformAccess
-      ? await Promise.all([getPlatformTenant(id), getTenantServiceAreas(id)])
+      ? await Promise.all([
+        getPlatformTenant(id),
+        getTenantServiceAreas(id),
+        getPlatformServiceProviderProfile(id),
+      ])
       : [
           { data: null, error: "当前账号不是平台超管，无法访问租户详情" },
           { data: [], error: null },
+          { data: null, error: null },
         ];
   const statusMeta = tenant ? getPlatformTenantStatusMeta(tenant.status) : null;
   const initialization = tenant?.initialization ?? null;
@@ -191,7 +244,7 @@ export default async function PlatformTenantDetailPage({
   const adminRole = initialization?.admin_role ?? null;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
         <div className="flex flex-col gap-3">
           <Button asChild variant="ghost" className="w-fit px-0">
@@ -273,6 +326,11 @@ export default async function PlatformTenantDetailPage({
               </CardContent>
             </Card>
           </div>
+
+          <ServiceProviderPublicProfileCard
+            profile={serviceProviderProfile}
+            error={serviceProviderProfileError}
+          />
 
           <Card>
             <CardHeader>
