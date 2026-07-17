@@ -23,7 +23,10 @@ describe("project health page layout contract", () => {
     expect(page).toContain("min-h-0 flex-col gap-5 overflow-hidden");
     expect(page).toContain("ProjectHealthClientShell");
     expect(page).not.toContain("headerIcon=");
-    expect(shell).toContain("ShieldAlert");
+    expect(shell).toContain('<h1 className="sr-only">项目风险</h1>');
+    expect(shell).not.toContain("ShieldAlert");
+    expect(shell).not.toContain("text-xl font-semibold tracking-normal");
+    expect(shell).not.toContain("聚合流程、施工、日志、验收和客服风险");
   });
 
   test("uses one card workspace with fixed table viewport and footer", () => {
@@ -64,6 +67,7 @@ describe("project health page layout contract", () => {
     );
     expect(loading).toContain('data-testid="project-health-filter-loading"');
     expect(loading).toContain("flex min-w-0 flex-col gap-1");
+    expect(loading).not.toContain("ShieldAlert");
     expect(loading).not.toContain("md:grid-cols-[1fr_160px_180px_auto_auto]");
   });
 

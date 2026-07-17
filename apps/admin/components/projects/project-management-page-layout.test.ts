@@ -56,16 +56,22 @@ describe("Project management page layout", () => {
     expect(shell).toContain("PROJECT_TABLE_HEADER_HEIGHT");
   });
 
-  test("keeps project loading aligned with the project domain header and filters", () => {
-    const { loading } = readProjectManagementSources();
+  test("starts the project workspace with tabs and actions instead of a visual section title", () => {
+    const { loading, shell } = readProjectManagementSources();
 
-    expect(loading).toContain("FolderKanban");
+    expect(shell).toContain('<h1 className="sr-only">项目管理</h1>');
+    expect(shell).toContain("sectionTabs");
+    expect(shell).not.toContain("FolderKanban");
+    expect(shell).not.toContain("text-xl font-semibold tracking-normal");
+    expect(shell).not.toContain("项目预算、施工状态、负责人和客户房产信息");
+
     expect(loading).toContain('data-testid="project-section-tabs-loading"');
     expect(loading).toContain("h-auto min-w-max justify-start gap-5");
     expect(loading).toContain(
       "xl:grid-cols-[150px_170px_150px_150px_minmax(220px,1fr)_72px]",
     );
     expect(loading).toContain("Array.from({ length: 6 })");
+    expect(loading).not.toContain("FolderKanban");
     expect(loading).not.toContain("flex justify-end");
     expect(loading).not.toContain("lg:grid-cols-[150px_150px_1fr_72px]");
   });

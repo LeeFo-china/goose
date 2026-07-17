@@ -1,31 +1,22 @@
-import { ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProjectHealthLoading() {
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-            <ShieldAlert aria-hidden="true" className="size-4" />
-          </span>
-          <div className="flex min-w-0 flex-col gap-2">
-            <Skeleton className="h-6 w-36" />
-            <Skeleton className="h-4 w-64 max-w-full" />
-            <div
-              aria-hidden="true"
-              data-testid="project-section-tabs-loading"
-              className="mt-1 flex overflow-x-auto"
-            >
-              <div className="flex h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0">
-                <Skeleton className="h-8 w-16 rounded-none" />
-                <Skeleton className="h-8 w-16 rounded-none" />
-              </div>
-            </div>
+      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div
+          aria-hidden="true"
+          data-testid="project-section-tabs-loading"
+          className="flex overflow-x-auto"
+        >
+          <div className="flex h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0">
+            <Skeleton className="h-8 w-16 rounded-none" />
+            <Skeleton className="h-8 w-16 rounded-none" />
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+          <Skeleton className="h-4 w-32" />
           <Skeleton className="h-9 w-20" />
           <Skeleton className="h-9 w-36" />
         </div>

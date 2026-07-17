@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import type {
   ProjectOperationalRiskAiSummary,
   ProjectOperationalRiskDisplayPage,
@@ -156,22 +156,15 @@ export function ProjectHealthClientShell({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-            <ShieldAlert aria-hidden={true} className="size-4" />
+      <h1 className="sr-only">项目风险</h1>
+      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        {sectionTabs ? (
+          <div className="min-w-0">{sectionTabs}</div>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+          <span className="text-sm text-muted-foreground">
+            生成时间：{generatedAt}
           </span>
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-normal">项目风险</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              聚合流程、施工、日志、验收和客服风险。生成时间：{generatedAt}
-            </p>
-            {sectionTabs ? (
-              <div className="mt-3">{sectionTabs}</div>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"

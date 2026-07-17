@@ -11,7 +11,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { FolderKanban, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   ProjectFilters,
@@ -197,22 +197,14 @@ export function ProjectsClientShell({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-            <FolderKanban aria-hidden="true" className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-normal">项目管理</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              项目预算、施工状态、负责人和客户房产信息。当前筛选共 {pagination.total} 条记录。
-            </p>
-            {sectionTabs ? (
-              <div className="mt-3">{sectionTabs}</div>
-            ) : null}
-          </div>
+      <h1 className="sr-only">项目管理</h1>
+      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        {sectionTabs ? (
+          <div className="min-w-0">{sectionTabs}</div>
+        ) : null}
+        <div className="self-end md:ml-auto md:self-auto">
+          <CreateProjectButton onSaved={refreshProjects} />
         </div>
-        <CreateProjectButton onSaved={refreshProjects} />
       </div>
 
       {error ? (
