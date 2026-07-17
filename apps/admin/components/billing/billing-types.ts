@@ -192,7 +192,12 @@ export type PlatformRechargeOrder = {
   out_trade_no: string | null;
   transaction_id: string | null;
   paid_at: string | null;
+  refund_status?: string | null;
+  refund_requested_at?: string | null;
+  refunded_at?: string | null;
+  refund_amount_fen?: number | null;
   created_at: string;
+  updated_at?: string;
   tenant?: {
     id: string;
     name: string | null;
@@ -240,6 +245,53 @@ export type PlatformRechargeOrderDetailData = {
   order: PlatformRechargeOrder;
   notifications: PlatformRechargeNotification[];
   audit_logs: PlatformRechargeAuditLog[];
+};
+
+export type PlatformRechargeRefundStatus =
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "refunding"
+  | "refunded"
+  | "failed";
+
+export type PlatformRechargeRefundRequest = {
+  id: string;
+  tenant_id: string;
+  order_id: string;
+  request_no: string;
+  idempotency_key: string;
+  status: PlatformRechargeRefundStatus;
+  reason: string;
+  requested_amount_fen: number;
+  requested_credits: number;
+  requested_by_employee_id: string | null;
+  reviewed_by_employee_id: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  out_refund_no: string | null;
+  wechat_refund_id: string | null;
+  refund_amount_fen: number | null;
+  refunded_at: string | null;
+  failure_message: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  tenant?: {
+    id: string;
+    name: string | null;
+    slug: string | null;
+  } | null;
+  order?: PlatformRechargeOrder | null;
+};
+
+export type PlatformRechargeRefundRequestListData = {
+  list: PlatformRechargeRefundRequest[];
+  pagination: Pagination;
+};
+
+export type PlatformRechargeRefundRequestDetailData = {
+  request: PlatformRechargeRefundRequest;
 };
 
 export type BillingEvent = {

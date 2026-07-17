@@ -7,6 +7,7 @@ import type {
   BillingPricingRuleListData,
   PlatformRechargeOrderListData,
   PlatformRechargeProductListData,
+  PlatformRechargeRefundRequestListData,
   PlatformWechatPayConfigResult,
   BillingTenantListData,
 } from "@/components/billing/billing-types";
@@ -25,6 +26,8 @@ export type SearchParams = Promise<{
   eventPageSize?: string;
   rechargeOrderPage?: string;
   rechargeOrderPageSize?: string;
+  rechargeRefundPage?: string;
+  rechargeRefundPageSize?: string;
   tab?: string;
   tenantKeyword?: string;
   tenantStatus?: string;
@@ -56,12 +59,14 @@ export type SearchParams = Promise<{
   ledgerEndDate?: string;
   rechargeOrderStatus?: string;
   rechargeOrderKeyword?: string;
+  rechargeRefundStatus?: string;
+  rechargeRefundKeyword?: string;
 }>;
 
-export type BillingTab = "tenants" | "events" | "ai" | "pricing" | "ledger" | "recharge";
+export type BillingTab = "tenants" | "events" | "ai" | "pricing" | "ledger" | "recharge" | "refunds";
 export type QueryValue = string | number | boolean | undefined;
 
-export const billingTabs: BillingTab[] = ["tenants", "events", "ai", "pricing", "ledger", "recharge"];
+export const billingTabs: BillingTab[] = ["tenants", "events", "ai", "pricing", "ledger", "recharge", "refunds"];
 
 export const emptySummary: BillingPlatformSummary = {
   tenant_count: 0,
@@ -144,6 +149,13 @@ export function emptyRechargeProductList(): PlatformRechargeProductListData {
 }
 
 export function emptyRechargeOrderList(page: number, pageSize: number): PlatformRechargeOrderListData {
+  return {
+    list: [],
+    pagination: { page, pageSize, total: 0, totalPages: 0 },
+  };
+}
+
+export function emptyRechargeRefundRequestList(page: number, pageSize: number): PlatformRechargeRefundRequestListData {
   return {
     list: [],
     pagination: { page, pageSize, total: 0, totalPages: 0 },

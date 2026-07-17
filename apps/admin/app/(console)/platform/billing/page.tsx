@@ -7,8 +7,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession } from "@/lib/auth";
 import { BillingEventsTab, BillingTenantsTab } from "@/app/(console)/platform/billing/billing-account-tabs";
 import { BillingRechargeTab } from "@/app/(console)/platform/billing/billing-recharge-tab";
+import { BillingRechargeRefundsTab } from "@/app/(console)/platform/billing/billing-recharge-refunds-tab";
 import { BillingAiTab, BillingLedgerTab, BillingPricingTab } from "@/app/(console)/platform/billing/billing-usage-tabs";
-import { buildQuery, cleanParam, emptyAiFilterOptions, emptyAiUsageStats, emptyEventList, emptyLedgerList, emptyPlatformWechatPayConfig, emptyPricingList, emptyRechargeOrderList, emptyRechargeProductList, emptySummary, emptyTenantList, fetchBackend, formatCredits, normalizeBillingTab, normalizePlatformListPageSize, pickParam, readPositiveInteger, SummaryItem, type SearchParams } from "@/app/(console)/platform/billing/billing-page-shared";
+import { buildQuery, cleanParam, emptyAiFilterOptions, emptyAiUsageStats, emptyEventList, emptyLedgerList, emptyPlatformWechatPayConfig, emptyPricingList, emptyRechargeOrderList, emptyRechargeProductList, emptyRechargeRefundRequestList, emptySummary, emptyTenantList, fetchBackend, formatCredits, normalizeBillingTab, normalizePlatformListPageSize, pickParam, readPositiveInteger, SummaryItem, type SearchParams } from "@/app/(console)/platform/billing/billing-page-shared";
 import type {
   BillingAiUsageFilterOptions,
   BillingAiUsageStats,
@@ -19,6 +20,7 @@ import type {
   BillingTenantListData,
   PlatformRechargeOrderListData,
   PlatformRechargeProductListData,
+  PlatformRechargeRefundRequestListData,
   PlatformWechatPayConfigResult,
 } from "@/components/billing/billing-types";
 
@@ -44,6 +46,8 @@ export default async function PlatformBillingPage({
   const eventPageSize = normalizePlatformListPageSize(params.eventPageSize);
   const rechargeOrderPage = readPositiveInteger(params.rechargeOrderPage, 1);
   const rechargeOrderPageSize = normalizePlatformListPageSize(params.rechargeOrderPageSize);
+  const rechargeRefundPage = readPositiveInteger(params.rechargeRefundPage, 1);
+  const rechargeRefundPageSize = normalizePlatformListPageSize(params.rechargeRefundPageSize);
   const activeTab = normalizeBillingTab(params.tab);
   const tenantStatus = pickParam(params.tenantStatus, ["active", "suspended", "closed"] as const);
   const tenantFilters = {
@@ -93,6 +97,18 @@ export default async function PlatformBillingPage({
   const rechargeOrderFilters = {
     rechargeOrderStatus,
     rechargeOrderKeyword: cleanParam(params.rechargeOrderKeyword),
+  };
+  const rechargeRefundStatus = pickParam(params.rechargeRefundStatus, [
+    "pending_review",
+    "approved",
+    "rejected",
+    "refunding",
+    "refunded",
+    "failed",
+  ] as const);
+  const rechargeRefundFilters = {
+    rechargeRefundStatus,
+    rechargeRefundKeyword: cleanParam(params.rechargeRefundKeyword),
   };
 
   const summaryResult = hasPlatformAccess
@@ -198,6 +214,17 @@ export default async function PlatformBillingPage({
       emptyRechargeOrderList(rechargeOrderPage, rechargeOrderPageSize),
     )
     : { data: emptyRechargeOrderList(rechargeOrderPage, rechargeOrderPageSize), error: null };
+  const rechargeRefundsResult = hasPlatformAccess
+    ? await fetchBackend<PlatformRechargeRefundRequestListData>(
+      `/platform/billing/recharge-refund-requests?${buildQuery({
+        page: rechargeRefundPage,
+        pageSize: rechargeRefundPageSize,
+        status: rechargeRefundFilters.rechargeRefundStatus,
+        keyword: rechargeRefundFilters.rechargeRefundKeyword,
+      })}`,
+      emptyRechargeRefundRequestList(rechargeRefundPage, rechargeRefundPageSize),
+    )
+    : { data: emptyRechargeRefundRequestList(rechargeRefundPage, rechargeRefundPageSize), error: null };
   const activeError = summaryResult.error
     || tenantsResult.error
     || ledgerResult.error
@@ -207,7 +234,8 @@ export default async function PlatformBillingPage({
     || aiFilterOptionsResult.error
     || platformWechatPayConfigResult.error
     || rechargeProductsResult.error
-    || rechargeOrdersResult.error;
+    || rechargeOrdersResult.error
+    || rechargeRefundsResult.error;
   const activePagination = activeTab === "tenants"
     ? tenantsResult.data.pagination
     : activeTab === "events"
@@ -218,7 +246,9 @@ export default async function PlatformBillingPage({
           ? ledgerResult.data.pagination
           : activeTab === "recharge"
             ? rechargeOrdersResult.data.pagination
-            : { page: 1, pageSize, total: aiStatsResult.data.list.length, totalPages: 1 };
+            : activeTab === "refunds"
+              ? rechargeRefundsResult.data.pagination
+              : { page: 1, pageSize, total: aiStatsResult.data.list.length, totalPages: 1 };
   const activeCount = activeTab === "tenants"
     ? tenantsResult.data.list.length
     : activeTab === "events"
@@ -229,7 +259,9 @@ export default async function PlatformBillingPage({
           ? ledgerResult.data.list.length
           : activeTab === "recharge"
             ? rechargeOrdersResult.data.list.length
-            : aiStatsResult.data.list.length;
+            : activeTab === "refunds"
+              ? rechargeRefundsResult.data.list.length
+              : aiStatsResult.data.list.length;
   const pageKey = activeTab === "ledger"
     ? "ledgerPage"
     : activeTab === "pricing"
@@ -238,7 +270,9 @@ export default async function PlatformBillingPage({
         ? "eventPage"
         : activeTab === "recharge"
           ? "rechargeOrderPage"
-          : "page";
+          : activeTab === "refunds"
+            ? "rechargeRefundPage"
+            : "page";
   const pageSizeKey = activeTab === "ledger"
     ? "ledgerPageSize"
     : activeTab === "pricing"
@@ -247,7 +281,9 @@ export default async function PlatformBillingPage({
         ? "eventPageSize"
         : activeTab === "recharge"
           ? "rechargeOrderPageSize"
-          : "pageSize";
+          : activeTab === "refunds"
+            ? "rechargeRefundPageSize"
+            : "pageSize";
   const unit = activeTab === "tenants"
     ? "个账户"
     : activeTab === "events"
@@ -258,7 +294,9 @@ export default async function PlatformBillingPage({
           ? "条流水"
           : activeTab === "recharge"
             ? "笔充值订单"
-            : "个 AI 观察项";
+            : activeTab === "refunds"
+              ? "条退款申请"
+              : "个 AI 观察项";
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -296,6 +334,9 @@ export default async function PlatformBillingPage({
               <TabsTrigger value="recharge" asChild>
                 <Link href={`/platform/billing?${buildQuery({ tab: "recharge", rechargeOrderPageSize })}`}>微信充值</Link>
               </TabsTrigger>
+              <TabsTrigger value="refunds" asChild>
+                <Link href={`/platform/billing?${buildQuery({ tab: "refunds", rechargeRefundPageSize })}`}>退款审核</Link>
+              </TabsTrigger>
             </TabsList>
           }
           pagination={activePagination}
@@ -319,6 +360,11 @@ export default async function PlatformBillingPage({
               products={rechargeProductsResult.data}
               orders={rechargeOrdersResult.data}
               orderFilters={rechargeOrderFilters}
+            />
+          ) : activeTab === "refunds" ? (
+            <BillingRechargeRefundsTab
+              refunds={rechargeRefundsResult.data}
+              refundFilters={rechargeRefundFilters}
             />
           ) : (
             <BillingLedgerTab ledger={ledgerResult.data} ledgerFilters={ledgerFilters} />
