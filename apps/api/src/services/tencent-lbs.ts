@@ -48,6 +48,10 @@ type TencentPlaceSuggestionResponse = {
     id?: string;
     title?: string;
     address?: string;
+    province?: string;
+    city?: string;
+    district?: string;
+    adcode?: string | number;
     location?: {
       lat?: number;
       lng?: number;
@@ -91,6 +95,13 @@ export type TencentAddressSuggestion = {
   confidence: number;
 };
 
+type AddressSuggestionScope = {
+  province?: string | null;
+  city?: string | null;
+  district?: string | null;
+  adcode?: string | null;
+};
+
 function md5(value: string) {
   return createHash("md5").update(value).digest("hex");
 }
@@ -123,6 +134,49 @@ function normalizeConfidence(value: number | undefined) {
 function normalizeText(value: string | undefined) {
   const normalized = value?.trim();
   return normalized || null;
+}
+
+function normalizeScope(input: AddressSuggestionScope): Required<AddressSuggestionScope> {
+  return {
+    province: normalizeText(input.province || undefined),
+    city: normalizeText(input.city || undefined),
+    district: normalizeText(input.district || undefined),
+    adcode: normalizeText(input.adcode || undefined),
+  };
+}
+
+function hasScope(scope: AddressSuggestionScope) {
+  return Boolean(scope.province || scope.city || scope.district || scope.adcode);
+}
+
+function hasTextScope(scope: AddressSuggestionScope) {
+  return Boolean(scope.province || scope.city || scope.district);
+}
+
+function resolveSuggestionRegion(
+  region: string | null | undefined,
+  scope: Required<AddressSuggestionScope>,
+) {
+  if (scope.city) return scope.city;
+  if (scope.province) return scope.province;
+  return region?.trim() || null;
+}
+
+function matchesScopedText(expected: string | null | undefined, actual: string | null) {
+  return !expected || actual === expected;
+}
+
+function suggestionMatchesScope(suggestion: TencentAddressSuggestion, scope: AddressSuggestionScope) {
+  if (scope.adcode && suggestion.adcode && suggestion.adcode !== scope.adcode) {
+    return false;
+  }
+  if (scope.adcode && !suggestion.adcode && !hasTextScope(scope)) {
+    return false;
+  }
+
+  return matchesScopedText(scope.province, suggestion.province) &&
+    matchesScopedText(scope.city, suggestion.city) &&
+    matchesScopedText(scope.district, suggestion.district);
 }
 
 class TencentLbsService {
@@ -186,6 +240,10 @@ class TencentLbsService {
   async suggestAddress(input: {
     keyword: string;
     region?: string | null;
+    province?: string | null;
+    city?: string | null;
+    district?: string | null;
+    adcode?: string | null;
     pageSize?: number;
   }) {
     const config = await this.getConfig();
@@ -194,12 +252,14 @@ class TencentLbsService {
     }
 
     const normalizedKeyword = input.keyword.trim();
-    const normalizedRegion = input.region?.trim() || null;
+    const scope = normalizeScope(input);
+    const normalizedRegion = resolveSuggestionRegion(input.region, scope);
     const result = await this.requestAddressSuggestions({
       key: config.webserviceKey,
       sk: config.webserviceSk,
       keyword: normalizedKeyword,
       region: normalizedRegion,
+      scope,
       pageSize: input.pageSize,
     });
     if (result.list.length || normalizedRegion) {
@@ -211,6 +271,7 @@ class TencentLbsService {
       sk: config.webserviceSk,
       keyword: normalizedKeyword,
       region: normalizedKeyword,
+      scope,
       pageSize: input.pageSize,
     });
   }
@@ -220,6 +281,7 @@ class TencentLbsService {
     sk?: string;
     keyword: string;
     region: string | null;
+    scope?: AddressSuggestionScope;
     pageSize?: number;
   }) {
     const params: Record<string, string> = {
@@ -229,7 +291,7 @@ class TencentLbsService {
       page_size: String(Math.min(input.pageSize || 10, 10)),
       region: input.region || "全国",
     };
-    params.region_fix = input.region ? "0" : "1";
+    params.region_fix = "1";
 
     const response = await fetch(buildSignedGetUrl({
       url: PLACE_SUGGESTION_URL,
@@ -243,21 +305,29 @@ class TencentLbsService {
       throw Errors.badRequest(payload.message || response.statusText || "腾讯位置服务地址搜索失败");
     }
 
+    const list = (payload.data || []).map((item): TencentAddressSuggestion => ({
+      id: normalizeText(item.id),
+      title: normalizeText(item.title),
+      address: normalizeText(item.address),
+      province: normalizeText(item.province || item.ad_info?.province),
+      city: normalizeText(item.city || item.ad_info?.city),
+      district: normalizeText(item.district || item.ad_info?.district),
+      adcode: item.adcode != null
+        ? String(item.adcode)
+        : item.ad_info?.adcode != null
+          ? String(item.ad_info.adcode)
+          : null,
+      latitude: typeof item.location?.lat === "number" ? item.location.lat : null,
+      longitude: typeof item.location?.lng === "number" ? item.location.lng : null,
+      source: "tencent_suggestion",
+      confidence: 1,
+    }));
+    const scope = input.scope && hasScope(input.scope) ? input.scope : null;
+    const scopedList = scope ? list.filter((item) => suggestionMatchesScope(item, scope)) : list;
+
     return {
-      list: (payload.data || []).map((item): TencentAddressSuggestion => ({
-        id: normalizeText(item.id),
-        title: normalizeText(item.title),
-        address: normalizeText(item.address),
-        province: normalizeText(item.ad_info?.province),
-        city: normalizeText(item.ad_info?.city),
-        district: normalizeText(item.ad_info?.district),
-        adcode: item.ad_info?.adcode != null ? String(item.ad_info.adcode) : null,
-        latitude: typeof item.location?.lat === "number" ? item.location.lat : null,
-        longitude: typeof item.location?.lng === "number" ? item.location.lng : null,
-        source: "tencent_suggestion",
-        confidence: 1,
-      })),
-      count: payload.count ?? payload.data?.length ?? 0,
+      list: scopedList,
+      count: scope ? scopedList.length : payload.count ?? payload.data?.length ?? 0,
       request_id: payload.request_id ?? null,
     };
   }

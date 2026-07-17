@@ -2,25 +2,26 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Edit3, Loader2, Plus, RefreshCw, Save, Send } from "lucide-react";
+import { Loader2, RefreshCw, Save, Send } from "lucide-react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { ServiceProviderAreaDialog } from "./service-provider-area-dialog";
+import {
+  ServiceProviderAddressMap,
+  ServiceProviderAddressPicker,
+  type ServiceProviderAddressValue,
+} from "./service-provider-address-picker";
+import { ServiceProviderAreaSection } from "./service-provider-area-section";
+import {
+  ServiceProviderRegionPicker,
+  type ServiceProviderRegionValue,
+} from "./service-provider-region-picker";
 import {
   fetchServiceProviderAreas,
   fetchServiceProviderProfile,
@@ -28,15 +29,11 @@ import {
   updateServiceProviderProfile,
 } from "./service-provider-actions";
 import {
-  areaStatusMeta,
-  formatAreaRegion,
-  formatDateTime,
   profileStatusMeta,
   type ListData,
   type ServiceProviderArea,
   type ServiceProviderMutationResult,
   type ServiceProviderProfile,
-  type ServiceProviderPublicationStatus,
 } from "./service-provider-types";
 
 type ProfileForm = {
@@ -65,12 +62,6 @@ const emptyProfileForm: ProfileForm = {
   address: "",
   address_latitude: "",
   address_longitude: "",
-};
-const statusNotice: Record<ServiceProviderPublicationStatus, string> = {
-  draft: "资料仍是草稿，可继续编辑并提交平台发布审核。",
-  pending_review: "平台发布审核中；再次编辑会取消当前审核并回到草稿，修改后需要重新提交。",
-  published: "当前资料正在小程序公开展示；保存关键资料或服务区域后会进入待平台审核，并暂时从访客结果移除。",
-  suspended: "当前资料未公开展示；编辑关键内容后需重新提交平台审核，其他恢复事宜请联系平台运营。",
 };
 
 function toProfileForm(profile: ServiceProviderProfile | null): ProfileForm {
@@ -137,6 +128,10 @@ export function ServiceProviderWorkspace({
 
   function updateForm(field: keyof ProfileForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function patchForm(patch: Partial<ProfileForm>) {
+    setForm((current) => ({ ...current, ...patch }));
   }
 
   function applyMutation(result: ServiceProviderMutationResult) {
@@ -238,16 +233,16 @@ export function ServiceProviderWorkspace({
   return (
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
       <CardHeader className="shrink-0 border-b">
-        <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle>当前资料状态</CardTitle>
-              <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
-              <Badge variant="outline" className="tabular-nums">版本 {version || "-"}</Badge>
-            </div>
-            <CardDescription className="mt-2">{statusNotice[status]}</CardDescription>
+        <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+            <Badge variant="outline" className="tabular-nums">版本 {version || "-"}</Badge>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={!canManage || pending || !currentProfile} onClick={saveProfile}>
+              <Save data-icon="inline-start" />
+              保存资料
+            </Button>
             <Button type="button" variant="outline" disabled={pending} onClick={() => void refreshCurrent()}>
               <RefreshCw data-icon="inline-start" />
               刷新资料
@@ -281,13 +276,11 @@ export function ServiceProviderWorkspace({
               <ProfileFormSection
                 form={form}
                 disabled={!canManage || pending}
-                status={status}
-                updatedAt={currentProfile.updated_at}
                 onChange={updateForm}
-                onSave={saveProfile}
+                onPatch={patchForm}
               />
               <Separator />
-              <AreaSection
+              <ServiceProviderAreaSection
                 areas={currentAreas}
                 profileVersion={version}
                 canManage={canManage}
@@ -308,57 +301,66 @@ export function ServiceProviderWorkspace({
 function ProfileFormSection({
   form,
   disabled,
-  status,
-  updatedAt,
   onChange,
-  onSave,
+  onPatch,
 }: {
   form: ProfileForm;
   disabled: boolean;
-  status: ServiceProviderPublicationStatus;
-  updatedAt: string;
   onChange: (field: keyof ProfileForm, value: string) => void;
-  onSave: () => void;
+  onPatch: (patch: Partial<ProfileForm>) => void;
 }) {
+  const regionValue: ServiceProviderRegionValue = {
+    address_province: form.address_province,
+    address_city: form.address_city,
+    address_district: form.address_district,
+    address_region_code: form.address_region_code,
+  };
+  const addressValue: ServiceProviderAddressValue = {
+    address: form.address,
+    address_province: form.address_province,
+    address_city: form.address_city,
+    address_district: form.address_district,
+    address_region_code: form.address_region_code,
+    address_latitude: form.address_latitude,
+    address_longitude: form.address_longitude,
+  };
+
   return (
-    <section className="flex flex-col gap-4" aria-labelledby="service-provider-profile-heading">
-      <div className="flex flex-col justify-between gap-2 md:flex-row md:items-start">
-        <div>
-          <h2 id="service-provider-profile-heading" className="text-base font-semibold">公开资料</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            小程序仅展示平台发布后的资料，最近更新 {formatDateTime(updatedAt)}。
-          </p>
-        </div>
-        <Button type="button" variant="outline" disabled={disabled} onClick={onSave}>
-          <Save data-icon="inline-start" />
-          保存资料
-        </Button>
-      </div>
-      <FieldGroup className="grid gap-4 md:grid-cols-2">
-        <TextField id="service-provider-public-name" label="公开名称" value={form.public_name} disabled={disabled} onChange={(value) => onChange("public_name", value)} />
-        <TextField id="service-provider-public-phone" label="公开电话" value={form.public_phone} disabled={disabled} onChange={(value) => onChange("public_phone", value)} />
-        <TextField id="service-provider-address-province" label="省份" value={form.address_province} disabled={disabled} onChange={(value) => onChange("address_province", value)} />
-        <TextField id="service-provider-address-city" label="城市" value={form.address_city} disabled={disabled} onChange={(value) => onChange("address_city", value)} />
-        <TextField id="service-provider-address-district" label="区县" value={form.address_district} disabled={disabled} onChange={(value) => onChange("address_district", value)} />
-        <TextField id="service-provider-address-region-code" label="地址区域代码" value={form.address_region_code} disabled={disabled} onChange={(value) => onChange("address_region_code", value)} />
-        <TextField id="service-provider-address" label="详细地址" value={form.address} disabled={disabled} className="md:col-span-2" onChange={(value) => onChange("address", value)} />
-        <TextField id="service-provider-address-latitude" label="地址纬度" value={form.address_latitude} disabled={disabled} type="number" onChange={(value) => onChange("address_latitude", value)} />
-        <TextField id="service-provider-address-longitude" label="地址经度" value={form.address_longitude} disabled={disabled} type="number" onChange={(value) => onChange("address_longitude", value)} />
-        <Field className="md:col-span-2">
-          <FieldLabel htmlFor="service-provider-introduction">公司简介</FieldLabel>
-          <Textarea
-            id="service-provider-introduction"
-            rows={5}
-            maxLength={2000}
-            value={form.introduction}
+    <section className="flex flex-col gap-4" aria-label="服务商公开资料">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] lg:items-start">
+        <FieldGroup className="grid gap-4 md:grid-cols-2">
+          <TextField id="service-provider-public-name" label="公开名称" value={form.public_name} disabled={disabled} onChange={(value) => onChange("public_name", value)} />
+          <TextField id="service-provider-public-phone" label="公开电话" value={form.public_phone} disabled={disabled} onChange={(value) => onChange("public_phone", value)} />
+          <ServiceProviderRegionPicker
+            value={regionValue}
             disabled={disabled}
-            onChange={(event) => onChange("introduction", event.target.value)}
+            onChange={onPatch}
           />
-          <FieldDescription>
-            {status === "published" ? "修改公开简介后，需要平台重新发布后才恢复展示。" : "建议说明服务范围、工期能力和售后方式。"}
-          </FieldDescription>
-        </Field>
-      </FieldGroup>
+          <ServiceProviderAddressPicker
+            value={addressValue}
+            disabled={disabled}
+            onChange={onPatch}
+          />
+          <Field className="md:col-span-2">
+            <FieldLabel htmlFor="service-provider-introduction">公司简介</FieldLabel>
+            <Textarea
+              id="service-provider-introduction"
+              rows={5}
+              maxLength={2000}
+              value={form.introduction}
+              disabled={disabled}
+              onChange={(event) => onChange("introduction", event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
+        <div className="lg:sticky lg:top-0">
+          <ServiceProviderAddressMap
+            value={addressValue}
+            disabled={disabled}
+            onChange={onPatch}
+          />
+        </div>
+      </div>
     </section>
   );
 }
@@ -391,109 +393,5 @@ function TextField({
         onChange={(event) => onChange(event.target.value)}
       />
     </Field>
-  );
-}
-
-function AreaSection({
-  areas,
-  profileVersion,
-  canManage,
-  pending,
-  onMutated,
-  onError,
-  onMessage,
-  onLoadPage,
-}: {
-  areas: ListData<ServiceProviderArea>;
-  profileVersion: number;
-  canManage: boolean;
-  pending: boolean;
-  onMutated: (result: ServiceProviderMutationResult) => void;
-  onError: (error: RequestError | null) => void;
-  onMessage: (message: string) => void;
-  onLoadPage: (page: number) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState<ServiceProviderArea | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const currentPage = areas.pagination.page || 1;
-  const totalPages = areas.pagination.totalPages || 0;
-
-  function openDialog(area: ServiceProviderArea | null) {
-    setEditing(area);
-    setDialogOpen(true);
-    onError(null);
-    onMessage("");
-  }
-
-  return (
-    <section className="flex flex-col gap-4" aria-labelledby="service-provider-areas-heading">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-        <div>
-          <h2 id="service-provider-areas-heading" className="text-base font-semibold">服务区域</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            区域需平台发布后才会展示，租户侧新增或修改默认保持未展示。
-          </p>
-        </div>
-        <Button type="button" disabled={!canManage || pending || !profileVersion} onClick={() => openDialog(null)}>
-          <Plus data-icon="inline-start" />
-          新增区域
-        </Button>
-      </div>
-      <div className="overflow-hidden rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>区域</TableHead>
-              <TableHead>行政区划代码</TableHead>
-              <TableHead>优先级</TableHead>
-              <TableHead>展示状态</TableHead>
-              <TableHead className="w-24 text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {areas.list.length ? areas.list.map((area) => {
-              const meta = areaStatusMeta[area.status];
-              return (
-                <TableRow key={area.id}>
-                  <TableCell className="font-medium">{formatAreaRegion(area) || "-"}</TableCell>
-                  <TableCell className="tabular-nums">{area.adcode}</TableCell>
-                  <TableCell className="tabular-nums">{area.priority}</TableCell>
-                  <TableCell><Badge variant={meta.variant}>{meta.label}</Badge></TableCell>
-                  <TableCell className="text-right">
-                    <Button type="button" size="sm" variant="ghost" disabled={!canManage || pending} onClick={() => openDialog(area)}>
-                      <Edit3 data-icon="inline-start" />
-                      编辑
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            }) : (
-              <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                  暂无服务区域，未发布区域前不会出现在访客本地服务商列表。
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      <div className="flex flex-col justify-between gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center">
-        <span className="tabular-nums">当前显示 {areas.list.length} 个，共 {areas.pagination.total} 个</span>
-        <div className="flex gap-2">
-          <Button type="button" size="sm" variant="outline" disabled={pending || currentPage <= 1} onClick={() => void onLoadPage(currentPage - 1)}>上一页</Button>
-          <Badge variant="outline" className="tabular-nums">第 {currentPage} / {Math.max(totalPages, 1)} 页</Badge>
-          <Button type="button" size="sm" variant="outline" disabled={pending || !totalPages || currentPage >= totalPages} onClick={() => void onLoadPage(currentPage + 1)}>下一页</Button>
-        </div>
-      </div>
-      <ServiceProviderAreaDialog
-        open={dialogOpen}
-        editing={editing}
-        profileVersion={profileVersion}
-        onOpenChange={setDialogOpen}
-        onMutated={onMutated}
-        onError={onError}
-        onMessage={onMessage}
-      />
-    </section>
   );
 }

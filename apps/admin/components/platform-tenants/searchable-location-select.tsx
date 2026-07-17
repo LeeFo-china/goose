@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type TouchEvent, type WheelEvent, useMemo, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,10 @@ export type SearchableLocationOption = {
   label?: string;
   keywords?: string[];
 };
+
+function stopOverlayScrollPropagation(event: TouchEvent | WheelEvent) {
+  event.stopPropagation();
+}
 
 export function SearchableLocationSelect({
   id,
@@ -89,14 +93,23 @@ export function SearchableLocationSelect({
           <ChevronsUpDown data-icon="inline-end" className="opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+        onWheelCapture={stopOverlayScrollPropagation}
+        onTouchMoveCapture={stopOverlayScrollPropagation}
+      >
         <Command>
           <CommandInput
             value={keyword}
             onValueChange={setKeyword}
             placeholder={searchPlaceholder}
           />
-          <CommandList>
+          <CommandList
+            className="overscroll-contain"
+            onWheelCapture={stopOverlayScrollPropagation}
+            onTouchMoveCapture={stopOverlayScrollPropagation}
+          >
             <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup>
               {!required ? (

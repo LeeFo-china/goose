@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { requestPlatformTenantJson } from "@/components/platform-tenants/platform-tenant-requests";
+import { requestBackendJson } from "@/lib/backend-client";
 
 type MapConfig = {
   web_js_key: string | null;
@@ -28,6 +28,14 @@ type MapConfig = {
 };
 
 const COORDINATE_NUDGE_STEP = 0.00001;
+const DEFAULT_MAP_LOCATION = { latitude: 35.8617, longitude: 104.1954 };
+const DEFAULT_MAP_ZOOM = 4;
+const ADDRESS_MAP_ZOOM = 16;
+
+type MapLocation = {
+  latitude: number;
+  longitude: number;
+};
 
 declare global {
   interface Window {
@@ -63,6 +71,7 @@ function TencentMapCanvas({
   title,
   address,
   className,
+  zoom,
   onPick,
   markerDraggable,
 }: {
@@ -72,7 +81,8 @@ function TencentMapCanvas({
   title?: string | null;
   address?: string | null;
   className: string;
-  onPick?: (location: { latitude: number; longitude: number }) => void;
+  zoom: number;
+  onPick?: (location: MapLocation) => void;
   markerDraggable?: boolean;
 }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -82,6 +92,7 @@ function TencentMapCanvas({
   const titleRef = useRef(title);
   const addressRef = useRef(address);
   const onPickRef = useRef(onPick);
+  const zoomRef = useRef(zoom);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -89,15 +100,19 @@ function TencentMapCanvas({
     titleRef.current = title;
     addressRef.current = address;
     onPickRef.current = onPick;
-  }, [address, onPick, title]);
+    zoomRef.current = zoom;
+  }, [address, onPick, title, zoom]);
 
   const updateMarkerLocation = useCallback((
-    location: { latitude: number; longitude: number },
+    location: MapLocation,
     notify = false,
+    nextZoom = zoomRef.current,
   ) => {
     if (!window.TMap) return;
     const TMap = window.TMap;
     const position = new TMap.LatLng(location.latitude, location.longitude);
+    mapInstanceRef.current?.setCenter?.(position);
+    mapInstanceRef.current?.setZoom?.(nextZoom);
     markerRef.current?.setGeometries?.([{
       id: "tenant-address",
       position,
@@ -133,7 +148,7 @@ function TencentMapCanvas({
         const center = new TMap.LatLng(latitude, longitude);
         const map = new TMap.Map(mapRef.current, {
           center,
-          zoom: 16,
+          zoom: zoomRef.current,
         });
         const marker = new TMap.MultiMarker({
           id: "tenant-address-marker",
@@ -209,8 +224,8 @@ function TencentMapCanvas({
   ]);
 
   useEffect(() => {
-    updateMarkerLocation({ latitude, longitude });
-  }, [latitude, longitude, updateMarkerLocation]);
+    updateMarkerLocation({ latitude, longitude }, false, zoom);
+  }, [latitude, longitude, updateMarkerLocation, zoom]);
 
   return (
     <div className={`relative overflow-hidden rounded-md border bg-muted ${className}`}>
@@ -235,6 +250,9 @@ export function PlatformTenantAddressMapPreview({
   title,
   address,
   disabled,
+  mapConfigPath = "/api/backend/platform/location/map-config",
+  previewClassName = "h-40",
+  zoom = ADDRESS_MAP_ZOOM,
   onConfirm,
 }: {
   latitude: number | null;
@@ -242,18 +260,26 @@ export function PlatformTenantAddressMapPreview({
   title?: string | null;
   address?: string | null;
   disabled?: boolean;
-  onConfirm: (location: { latitude: number; longitude: number }) => void;
+  mapConfigPath?: string;
+  previewClassName?: string;
+  zoom?: number;
+  onConfirm: (location: MapLocation) => void;
 }) {
   const [config, setConfig] = useState<MapConfig | null>(null);
   const [open, setOpen] = useState(false);
   const [draftLocation, setDraftLocation] = useState({ latitude, longitude });
   const canOpenMap = Boolean(!disabled && config?.configured);
+  const hasCoordinate = latitude != null && longitude != null;
+  const resolvedLocation = hasCoordinate
+    ? { latitude, longitude }
+    : DEFAULT_MAP_LOCATION;
+  const resolvedZoom = hasCoordinate ? zoom : DEFAULT_MAP_ZOOM;
 
   useEffect(() => {
-    requestPlatformTenantJson<MapConfig>("/api/backend/platform/location/map-config")
+    requestBackendJson<MapConfig>(mapConfigPath)
       .then(setConfig)
       .catch(() => setConfig({ web_js_key: null, configured: false }));
-  }, []);
+  }, [mapConfigPath]);
 
   useEffect(() => {
     setDraftLocation({ latitude, longitude });
@@ -261,18 +287,15 @@ export function PlatformTenantAddressMapPreview({
 
   const handleNudge = useCallback((delta: { latitude: number; longitude: number }) => {
     setDraftLocation((current) => {
-      const currentLatitude = current.latitude ?? latitude;
-      const currentLongitude = current.longitude ?? longitude;
-      if (currentLatitude == null || currentLongitude == null) return current;
+      const currentLatitude = current.latitude ?? resolvedLocation.latitude;
+      const currentLongitude = current.longitude ?? resolvedLocation.longitude;
 
       return {
         latitude: Number((currentLatitude + delta.latitude).toFixed(7)),
         longitude: Number((currentLongitude + delta.longitude).toFixed(7)),
       };
     });
-  }, [latitude, longitude]);
-
-  if (latitude == null || longitude == null) return null;
+  }, [resolvedLocation.latitude, resolvedLocation.longitude]);
 
   return (
     <div className="rounded-md border bg-muted/20 p-3 text-sm">
@@ -280,10 +303,12 @@ export function PlatformTenantAddressMapPreview({
         <div className="min-w-0">
           <div className="flex items-center gap-2 font-medium">
             <MapPin className="size-4 text-muted-foreground" />
-            已保存坐标
+            {hasCoordinate ? "已保存坐标" : "待确认坐标"}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            {latitude.toFixed(6)}, {longitude.toFixed(6)}
+            {hasCoordinate
+              ? `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+              : "选择区域或地址后自动定位"}
           </div>
         </div>
         <Button
@@ -304,11 +329,12 @@ export function PlatformTenantAddressMapPreview({
         <div className="relative mt-3">
           <TencentMapCanvas
             config={config}
-            latitude={latitude}
-            longitude={longitude}
+            latitude={resolvedLocation.latitude}
+            longitude={resolvedLocation.longitude}
             title={title}
             address={address}
-            className="h-40"
+            className={previewClassName}
+            zoom={resolvedZoom}
           />
           <Button
             type="button"
@@ -343,7 +369,7 @@ export function PlatformTenantAddressMapPreview({
           ) : null}
           <div className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs text-muted-foreground">
-              当前坐标：{(draftLocation.latitude ?? latitude).toFixed(7)}, {(draftLocation.longitude ?? longitude).toFixed(7)}
+              当前坐标：{(draftLocation.latitude ?? resolvedLocation.latitude).toFixed(7)}, {(draftLocation.longitude ?? resolvedLocation.longitude).toFixed(7)}
             </div>
             <div className="grid w-fit grid-cols-3 gap-1">
               <span />
@@ -373,7 +399,7 @@ export function PlatformTenantAddressMapPreview({
                 variant="outline"
                 size="icon"
                 className="size-8"
-                onClick={() => setDraftLocation({ latitude, longitude })}
+                onClick={() => setDraftLocation(resolvedLocation)}
                 aria-label="还原坐标"
               >
                 <MapPin className="size-4" />
@@ -405,11 +431,12 @@ export function PlatformTenantAddressMapPreview({
           {open && config?.web_js_key ? (
             <TencentMapCanvas
               config={config}
-              latitude={draftLocation.latitude ?? latitude}
-              longitude={draftLocation.longitude ?? longitude}
+              latitude={draftLocation.latitude ?? resolvedLocation.latitude}
+              longitude={draftLocation.longitude ?? resolvedLocation.longitude}
               title={title}
               address={address}
               className="h-[420px]"
+              zoom={resolvedZoom}
               onPick={setDraftLocation}
               markerDraggable
             />
