@@ -338,6 +338,44 @@ jobs:
           test "${state}" = running
           test "${health}" = healthy
           if [ -n "${url}" ]; then curl -fsS --retry 8 --retry-delay 3 -o /dev/null "${url}"; fi
+          if [ "${RELEASE_SERVICE}" = api ] || [ "${RELEASE_SERVICE}" = admin ]; then
+            project_health_cookie_jar="$(mktemp)"
+            project_health_response_path="$(mktemp)"
+            cleanup_project_health_smoke() {
+              rm -f "${project_health_cookie_jar}" "${project_health_response_path}"
+            }
+            trap cleanup_project_health_smoke EXIT
+
+            curl -fsS --retry 3 --retry-delay 2 \
+              -o /dev/null \
+              -c "${project_health_cookie_jar}" \
+              -H 'content-type: application/json' \
+              -X POST \
+              'https://admin-dev.goodcms.cn/api/auth/login' \
+              --data '{"phone":"18800000001","code":""}'
+
+            curl -fsS --retry 3 --retry-delay 2 \
+              -o "${project_health_response_path}" \
+              -b "${project_health_cookie_jar}" \
+              'https://admin-dev.goodcms.cn/api/backend/project-health/risks?page=1&pageSize=20'
+
+            PROJECT_HEALTH_SMOKE_RESPONSE_PATH="${project_health_response_path}" node <<'NODE'
+          const { readFileSync } = require("node:fs");
+
+          const responsePath = process.env.PROJECT_HEALTH_SMOKE_RESPONSE_PATH;
+          const payload = JSON.parse(readFileSync(responsePath, "utf8"));
+
+          if (payload?.message !== "success" || !Array.isArray(payload?.data?.items)) {
+            console.error("Project health smoke returned an invalid response shape.");
+            console.error(JSON.stringify({
+              success: payload?.success ?? null,
+              code: payload?.code ?? null,
+              message: payload?.message ?? null,
+            }));
+            process.exit(1);
+          }
+          NODE
+          fi
 
       - name: Deploy gated dev web
         if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}

@@ -67,6 +67,15 @@ const requiredNonWebHealthAssertions = [
   'test "${state}" = running',
   'test "${health}" = healthy',
 ];
+const requiredProjectHealthSmokeFragments = [
+  'if [ "${RELEASE_SERVICE}" = api ] || [ "${RELEASE_SERVICE}" = admin ]; then',
+  'project_health_cookie_jar="$(mktemp)"',
+  'https://admin-dev.goodcms.cn/api/auth/login',
+  '--data \'{"phone":"18800000001","code":""}\'',
+  'https://admin-dev.goodcms.cn/api/backend/project-health/risks?page=1&pageSize=20',
+  'PROJECT_HEALTH_SMOKE_RESPONSE_PATH="${project_health_response_path}" node <<\'NODE\'',
+  'if (payload?.message !== "success" || !Array.isArray(payload?.data?.items)) {',
+];
 
 function satisfiesImmutableDeploymentContract(candidate: string): boolean {
   return requiredImmutableDeploymentFragments.every((fragment) => candidate.includes(fragment));
@@ -74,6 +83,10 @@ function satisfiesImmutableDeploymentContract(candidate: string): boolean {
 
 function satisfiesNonWebHealthContract(candidate: string): boolean {
   return requiredNonWebHealthAssertions.every((fragment) => candidate.includes(fragment));
+}
+
+function satisfiesProjectHealthSmokeContract(candidate: string): boolean {
+  return requiredProjectHealthSmokeFragments.every((fragment) => candidate.includes(fragment));
 }
 
 function extractRunScript(step: string): string {
@@ -232,6 +245,14 @@ describe("deploy-dev workflow", () => {
 
     for (const assertion of requiredNonWebHealthAssertions) {
       expect(satisfiesNonWebHealthContract(checkStep.replace(assertion, ""))).toBe(false);
+    }
+  });
+
+  test("checks the project health route after API or Admin dev deployment", () => {
+    expect(satisfiesProjectHealthSmokeContract(checkStep)).toBe(true);
+
+    for (const fragment of requiredProjectHealthSmokeFragments) {
+      expect(satisfiesProjectHealthSmokeContract(checkStep.replace(fragment, ""))).toBe(false);
     }
   });
 
