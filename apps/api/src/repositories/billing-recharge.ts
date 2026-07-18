@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import type { BillingAccountBalance } from "@/repositories/billing";
 import { createGuardedPendingRechargeOrder } from "@/repositories/billing-recharge-order-creation";
 import { hasPendingWechatOrdersForPaymentConfig } from "@/repositories/billing-recharge-payment-config";
+import { markPendingRechargePrepayCreated } from "@/repositories/billing-recharge-prepay";
 import {
   claimExpiredRechargeOrders,
   markClaimedRechargeOrderClosed,
@@ -169,6 +170,7 @@ class BillingRechargeRepository {
   readonly markOrderClosed = markClaimedRechargeOrderClosed;
   readonly releaseCloseClaim = releaseRechargeOrderCloseClaim;
   readonly createOrder = createGuardedPendingRechargeOrder;
+  readonly markPrepayCreated = markPendingRechargePrepayCreated;
   readonly hasPendingWechatOrdersForPaymentConfig =
     hasPendingWechatOrdersForPaymentConfig;
 
@@ -302,25 +304,6 @@ class BillingRechargeRepository {
     }
 
     return (data as TenantCreditOrderRecord | null) ?? null;
-  }
-
-  async markPrepayCreated(input: {
-    tenantId: string;
-    orderId: string;
-    prepayId: string;
-  }) {
-    const { data, error } = await this.from("tenant_credit_orders")
-      .update({ prepay_id: input.prepayId })
-      .eq("tenant_id", input.tenantId)
-      .eq("id", input.orderId)
-      .select("*")
-      .single();
-
-    if (error) {
-      throw Errors.dbError("保存积分充值预支付单失败", error);
-    }
-
-    return data as TenantCreditOrderRecord;
   }
 
   async findOrderById(input: { tenantId: string; orderId: string }) {

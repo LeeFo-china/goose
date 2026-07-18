@@ -116,6 +116,19 @@ describe("WechatPayGateway closeTransactionByOutTradeNo", () => {
     });
   });
 
+  test("rejects an unexpected successful status instead of assuming closure", async () => {
+    const fetchImpl = mock(async () => new Response(null, {
+      status: 202,
+    })) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
+      statusCode: 502,
+      code: "WECHAT_PAY_CLOSE_FAILED",
+      details: { status: 202, code: null, message: null },
+    });
+  });
+
   test("maps non-JSON close-order failures without inventing fields", async () => {
     const fetchImpl = mock(async () => new Response("upstream unavailable", {
       status: 503,

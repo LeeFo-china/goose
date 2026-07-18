@@ -377,7 +377,7 @@ describe("BillingRechargeService", () => {
       paySign: "pay-sign",
     });
     expect(result.server_time).toBe("2026-07-18T02:00:00.000Z");
-    expect(nowFactory).toHaveBeenCalledTimes(1);
+    expect(nowFactory).toHaveBeenCalledTimes(3);
     expect(result.order).toMatchObject({
       status: "pending",
       credits: 1000,

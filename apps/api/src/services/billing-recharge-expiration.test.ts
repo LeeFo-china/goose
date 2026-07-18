@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  CLOCK_START,
   createExpirationHarness,
   makeOrder,
   successTransaction,
@@ -27,7 +26,6 @@ describe("BillingRechargeExpirationService state matrix", () => {
 
     expect(harness.repository.claimExpiredOrders).toHaveBeenCalledTimes(1);
     expect(harness.repository.claimExpiredOrders).toHaveBeenCalledWith({
-      now: CLOCK_START,
       batchSize: 1,
       leaseSeconds: 60,
       excludedOrderIds: [],
@@ -54,7 +52,6 @@ describe("BillingRechargeExpirationService state matrix", () => {
     expect(harness.repository.renewCloseClaim).toHaveBeenCalledWith({
       orderId: order.id,
       claimToken: order.close_claim_token,
-      now: new Date("2026-07-18T03:00:01.000Z"),
       leaseSeconds: 60,
     });
     expect(harness.repository.releaseCloseClaim).not.toHaveBeenCalled();
@@ -80,9 +77,9 @@ describe("BillingRechargeExpirationService state matrix", () => {
     expect(harness.repository.markOrderClosed).toHaveBeenCalledWith({
       orderId: "order-1",
       claimToken: "claim-1",
-      closedAt: new Date("2026-07-18T03:00:02.000Z"),
+      closedAt: new Date("2026-07-18T03:00:00.000Z"),
     });
-    expect(harness.nowFactory).toHaveBeenCalledTimes(3);
+    expect(harness.nowFactory).toHaveBeenCalledTimes(1);
     expect(result.closed).toBe(1);
   });
 
@@ -98,15 +95,16 @@ describe("BillingRechargeExpirationService state matrix", () => {
       "claim:order-1",
       "renew:order-1:claim-1",
       "query:order-1",
+      "renew:order-1:claim-1",
       "close:order-1",
       "mark:order-1",
     ]);
     expect(harness.repository.markOrderClosed).toHaveBeenCalledWith({
       orderId: "order-1",
       claimToken: "claim-1",
-      closedAt: new Date("2026-07-18T03:00:02.000Z"),
+      closedAt: new Date("2026-07-18T03:00:00.000Z"),
     });
-    expect(harness.nowFactory).toHaveBeenCalledTimes(3);
+    expect(harness.nowFactory).toHaveBeenCalledTimes(1);
     expect(result.closed).toBe(1);
   });
 
@@ -121,7 +119,6 @@ describe("BillingRechargeExpirationService state matrix", () => {
     const result = await harness.service.runExpiredOrderChecks({ batchSize: 3 });
 
     expect(harness.repository.claimExpiredOrders).toHaveBeenNthCalledWith(2, {
-      now: new Date("2026-07-18T03:00:02.000Z"),
       batchSize: 1,
       leaseSeconds: 60,
       excludedOrderIds: [first.id],

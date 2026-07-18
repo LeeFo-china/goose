@@ -4,6 +4,10 @@ import {
   type WechatPayCloseTransactionByOutTradeNoInput,
 } from "@/services/wechat-pay-gateway-close-transaction";
 import {
+  createWechatPayJsapiPrepay,
+  normalizeWechatPayPrepayRequestTimeout,
+} from "@/services/wechat-pay-gateway-create-prepay";
+import {
   queryWechatPayTransactionByOutTradeNo,
   type WechatPayQueryTransactionByOutTradeNoInput,
   type WechatPayTransactionQueryResult,
@@ -12,10 +16,9 @@ import {
   parseWechatPayJson,
   stringField,
 } from "@/services/wechat-pay-gateway-response";
-import {
-  buildWechatPayJsapiPrepayRequest,
-  type WechatPayJsapiConfig,
-  type WechatPayJsapiOrder,
+import type {
+  WechatPayJsapiConfig,
+  WechatPayJsapiOrder,
 } from "@/services/wechat-pay-jsapi-request-builder";
 import type { WechatPaySecretBundle } from "@/services/wechat-pay-secret-bundles";
 import {
@@ -31,6 +34,7 @@ type WechatPayGatewayDependencies = {
   nonceFactory?: () => string;
   timestampFactory?: () => string;
   closeRequestTimeoutMs?: number;
+  prepayRequestTimeoutMs?: number;
   queryRequestTimeoutMs?: number;
 };
 
@@ -86,6 +90,7 @@ export class WechatPayGateway {
   private readonly nonceFactory?: () => string;
   private readonly timestampFactory?: () => string;
   private readonly closeRequestTimeoutMs?: number;
+  private readonly prepayRequestTimeoutMs?: number;
   private readonly queryRequestTimeoutMs?: number;
 
   constructor(dependencies: WechatPayGatewayDependencies = {}) {
@@ -93,73 +98,20 @@ export class WechatPayGateway {
     this.nonceFactory = dependencies.nonceFactory;
     this.timestampFactory = dependencies.timestampFactory;
     this.closeRequestTimeoutMs = dependencies.closeRequestTimeoutMs;
+    this.prepayRequestTimeoutMs = dependencies.prepayRequestTimeoutMs;
     this.queryRequestTimeoutMs = dependencies.queryRequestTimeoutMs;
   }
 
   async createJsapiPrepay(
     input: WechatPayCreateJsapiPrepayInput,
   ): Promise<WechatPayCreateJsapiPrepayResult> {
-    const serialNo = input.config.serial_no?.trim();
-    if (!serialNo) {
-      throw Errors.business(
-        409,
-        "微信支付证书序列号未配置",
-        "WECHAT_PAY_SERIAL_NO_REQUIRED",
-      );
-    }
-
-    const prepayRequest = buildWechatPayJsapiPrepayRequest({
-      config: input.config,
-      order: input.order,
-      description: input.description,
+    const prepayId = await createWechatPayJsapiPrepay({
+      ...input,
+      fetchImpl: this.fetchImpl,
+      nonce: this.createNonce(),
+      timestamp: this.createTimestamp(),
+      timeoutMs: this.prepayRequestTimeoutMs,
     });
-    const body = JSON.stringify(prepayRequest.body);
-    const nonce = this.createNonce();
-    const timestamp = this.createTimestamp();
-    const authorization = buildWechatPayAuthorization({
-      method: "POST",
-      urlPath: prepayRequest.urlPath,
-      body,
-      merchantId: input.config.merchant_id || "",
-      serialNo,
-      privateKeyPem: input.secretBundle.privateKeyPem,
-      nonce,
-      timestamp,
-    });
-    const response = await this.fetchImpl(
-      `${input.secretBundle.baseUrl}${prepayRequest.urlPath}`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: authorization,
-          "Content-Type": "application/json",
-        },
-        body,
-      },
-    );
-    const payload = await parseWechatPayJson(response);
-    if (!response.ok) {
-      throw Errors.business(
-        502,
-        "微信支付预下单失败",
-        "WECHAT_PAY_PREPAY_FAILED",
-        {
-          status: response.status,
-          code: stringField(payload, "code"),
-          message: stringField(payload, "message"),
-        },
-      );
-    }
-
-    const prepayId = stringField(payload, "prepay_id");
-    if (!prepayId) {
-      throw Errors.business(
-        502,
-        "微信支付预下单响应缺少 prepay_id",
-        "WECHAT_PAY_PREPAY_RESPONSE_INVALID",
-      );
-    }
 
     return {
       prepayId,
@@ -335,6 +287,8 @@ export class WechatPayGateway {
     return this.timestampFactory?.() ?? undefined;
   }
 }
+
+export { normalizeWechatPayPrepayRequestTimeout };
 
 function buildRefundRequestBody(input: WechatPayRequestRefundInput) {
   if (!input.config.merchant_id) {

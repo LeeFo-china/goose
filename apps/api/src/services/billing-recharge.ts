@@ -15,7 +15,10 @@ import {
   toProductSnapshot,
   toProductView,
 } from "@/services/billing-recharge-views";
-import { parseBillingRechargePaymentExpiration } from "@/services/billing-recharge-payment-expiration";
+import {
+  isBillingRechargePaymentWindowOpen,
+  parseBillingRechargePaymentExpiration,
+} from "@/services/billing-recharge-payment-expiration";
 import {
   requireActiveRechargePaymentConfig,
   requirePostInsertRechargePaymentConfig,
@@ -169,7 +172,6 @@ export class BillingRechargeService {
     query: BillingRechargeOrderQuery = {},
   ) {
     const tenantId = this.assertCanRead(authContext);
-    const now = this.nowFactory();
     const page = normalizePositiveInteger(query.page, DEFAULT_PAGE);
     const pageSize = Math.min(
       normalizePositiveInteger(query.pageSize, DEFAULT_PAGE_SIZE),
@@ -182,11 +184,14 @@ export class BillingRechargeService {
       status: query.status,
       keyword: query.keyword,
     });
+    const responseNow = this.nowFactory();
 
     return {
       ...orders,
-      list: orders.list.map((order) => toBillingRechargeOrderView(order, now)),
-      server_time: now.toISOString(),
+      list: orders.list.map((order) =>
+        toBillingRechargeOrderView(order, responseNow)
+      ),
+      server_time: responseNow.toISOString(),
     };
   }
 
@@ -196,7 +201,6 @@ export class BillingRechargeService {
   ) {
     const tenantId = this.assertCanCreate(authContext);
     if (!authContext.employeeId) throw Errors.forbidden();
-    const now = this.nowFactory();
 
     if (input.idempotency_key) {
       const existing = await this.rechargeRepository.findOrderByIdempotencyKey({
@@ -205,14 +209,18 @@ export class BillingRechargeService {
       });
       if (existing) {
         const paymentRequest = existing.status === "pending"
-          ? await this.createPaymentRequestForOrder(existing, now)
+          ? await this.createPaymentRequestForOrder(existing)
           : null;
+        const responseNow = this.nowFactory();
+        const orderView = toBillingRechargeOrderView(existing, responseNow);
         return {
           idempotent: true,
-          order: toBillingRechargeOrderView(existing, now),
+          order: orderView,
           product: null,
-          payment_request: paymentRequest,
-          server_time: now.toISOString(),
+          payment_request: orderView.payment_action.enabled
+            ? paymentRequest
+            : null,
+          server_time: responseNow.toISOString(),
         };
       }
     }
@@ -237,8 +245,9 @@ export class BillingRechargeService {
     const config = initial.config;
     const guardVersion = initial.guardVersion;
     const outTradeNo = this.tradeNoFactory();
+    const creationNow = this.nowFactory();
     const paymentExpiresAt = new Date(
-      now.getTime() + RECHARGE_PAYMENT_WINDOW_MS,
+      creationNow.getTime() + RECHARGE_PAYMENT_WINDOW_MS,
     ).toISOString();
     const order = await this.rechargeRepository.createOrder({
       tenant_id: tenantId,
@@ -284,24 +293,41 @@ export class BillingRechargeService {
       description: "积分充值",
       secretBundle,
     });
-    const orderWithPrepay = await this.rechargeRepository.markPrepayCreated({
+    const markNow = this.nowFactory();
+    const markedOrder = await this.rechargeRepository.markPrepayCreated({
       tenantId,
       orderId: order.id,
       prepayId: prepay.prepayId,
+      now: markNow,
     });
+    const orderWithPrepay = markedOrder ??
+      await this.rechargeRepository.findOrderById({
+        tenantId,
+        orderId: order.id,
+      });
+    if (!orderWithPrepay) {
+      throw Errors.business(
+        404,
+        "积分充值订单不存在",
+        "BILLING_RECHARGE_ORDER_NOT_FOUND",
+      );
+    }
+    const responseNow = this.nowFactory();
+    const orderView = toBillingRechargeOrderView(orderWithPrepay, responseNow);
 
     return {
       idempotent: false,
-      order: toBillingRechargeOrderView(orderWithPrepay, now),
+      order: orderView,
       product: toProductView(product),
-      payment_request: prepay.paymentRequest,
-      server_time: now.toISOString(),
+      payment_request: markedOrder && orderView.payment_action.enabled
+        ? prepay.paymentRequest
+        : null,
+      server_time: responseNow.toISOString(),
     };
   }
 
   async getOrder(authContext: AuthContext, orderId: string) {
     const tenantId = this.assertCanRead(authContext);
-    const now = this.nowFactory();
     const order = await this.rechargeRepository.findOrderById({
       tenantId,
       orderId,
@@ -314,16 +340,17 @@ export class BillingRechargeService {
       );
     }
 
+    const account = await this.rechargeRepository.getAccountByTenantId(tenantId);
+    const responseNow = this.nowFactory();
     return {
-      order: toBillingRechargeOrderView(order, now),
-      account: await this.rechargeRepository.getAccountByTenantId(tenantId),
-      server_time: now.toISOString(),
+      order: toBillingRechargeOrderView(order, responseNow),
+      account,
+      server_time: responseNow.toISOString(),
     };
   }
 
   async createPaymentRequest(authContext: AuthContext, orderId: string) {
     const tenantId = this.assertCanCreate(authContext);
-    const now = this.nowFactory();
     const order = await this.rechargeRepository.findOrderById({
       tenantId,
       orderId,
@@ -336,10 +363,13 @@ export class BillingRechargeService {
       );
     }
 
+    const paymentRequest = await this.createPaymentRequestForOrder(order);
+    const responseNow = this.nowFactory();
+    const orderView = toBillingRechargeOrderView(order, responseNow);
     return {
-      order: toBillingRechargeOrderView(order, now),
-      payment_request: await this.createPaymentRequestForOrder(order, now),
-      server_time: now.toISOString(),
+      order: orderView,
+      payment_request: orderView.payment_action.enabled ? paymentRequest : null,
+      server_time: responseNow.toISOString(),
     };
   }
 
@@ -381,12 +411,12 @@ export class BillingRechargeService {
 
   private async createPaymentRequestForOrder(
     order: TenantCreditOrderRecord,
-    now: Date,
   ) {
-    const prepayId = this.requireReusablePrepayId(order, now);
+    const prepayId = this.requireReusablePrepayId(order, this.nowFactory());
     const { config } = requireActiveRechargePaymentConfig(
       await this.paymentConfigRepository.findWechatPayConfig(),
     );
+    if (!isBillingRechargePaymentWindowOpen(order, this.nowFactory())) return null;
     if (order.payment_config_id !== config.id) {
       throw Errors.business(
         409,
@@ -401,6 +431,7 @@ export class BillingRechargeService {
     const secretBundle = await this.secretBundleService.load(
       config.encrypted_config_ref,
     );
+    if (!isBillingRechargePaymentWindowOpen(order, this.nowFactory())) return null;
     return this.wechatPayGateway.createMiniProgramPaymentRequest({
       config,
       prepayId,

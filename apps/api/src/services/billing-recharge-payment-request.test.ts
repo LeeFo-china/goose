@@ -227,7 +227,7 @@ describe("BillingRechargeService payment request", () => {
       payment_request: { paySign: "pay-sign-resigned" },
       server_time: "2026-07-18T02:00:00.000Z",
     });
-    expect(nowFactory).toHaveBeenCalledTimes(1);
+    expect(nowFactory).toHaveBeenCalledTimes(4);
   });
 
   test("requires recharge create permission before reading the order", async () => {
@@ -381,7 +381,7 @@ describe("BillingRechargeService payment request", () => {
     expect(createMiniProgramPaymentRequest).toHaveBeenCalledTimes(1);
     expect(rechargeRepository.createOrder).not.toHaveBeenCalled();
     expect(createJsapiPrepay).not.toHaveBeenCalled();
-    expect(nowFactory).toHaveBeenCalledTimes(1);
+    expect(nowFactory).toHaveBeenCalledTimes(4);
   });
 
   test("does not re-sign an idempotent non-WeChat pending order", async () => {

@@ -28,3 +28,19 @@ export function parseBillingRechargePaymentExpiration(
     ? { value: trimmed, expiresAtMs }
     : null;
 }
+
+export function isBillingRechargePaymentWindowOpen(
+  order: {
+    status: string;
+    channel: string;
+    payment_expires_at?: string | null;
+  },
+  now: Date,
+): boolean {
+  const expiration = parseBillingRechargePaymentExpiration(
+    order.payment_expires_at,
+  );
+  return order.status === "pending" &&
+    order.channel === "wechat_pay" &&
+    Boolean(expiration && expiration.expiresAtMs > now.getTime());
+}

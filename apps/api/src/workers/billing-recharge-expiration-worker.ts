@@ -1,5 +1,8 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { BillingRechargeExpirationTelemetry } from "@/services/billing-recharge-expiration";
+import type {
+  BillingRechargeExpirationReleaseFailure,
+  BillingRechargeExpirationTelemetry,
+} from "@/services/billing-recharge-expiration";
 
 const SERVICE_NAME = "billing-recharge-expiration-worker";
 const DEFAULT_INTERVAL_MS = 10_000;
@@ -10,7 +13,9 @@ const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 100;
 const DEFAULT_FAILURE_CODE = "BILLING_RECHARGE_EXPIRATION_TICK_FAILED";
 const SAFE_FAILURE_MESSAGE = "充值过期收敛执行失败";
+const SAFE_RELEASE_FAILURE_MESSAGE = "释放充值过期订单租约失败";
 const SAFE_ERROR_CODE = /^[A-Z][A-Z0-9_]{0,99}$/;
+const SAFE_ORDER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 type WorkerEnvironment = Readonly<Record<string, string | undefined>>;
 type ShutdownSignal = "SIGINT" | "SIGTERM";
@@ -211,6 +216,9 @@ async function executeTick(input: {
     const telemetry = await service.runExpiredOrderChecks({
       batchSize: input.batchSize,
     });
+    for (const failure of safeReleaseFailures(telemetry.release_failures)) {
+      input.log("warn", "release close claim failed", failure);
+    }
     input.log("info", "tick completed", {
       duration_ms: Math.max(0, input.now() - input.startedAt),
       telemetry: safeTelemetry(telemetry),
@@ -221,6 +229,24 @@ async function executeTick(input: {
       ...safeErrorFields(error),
     });
   }
+}
+
+function safeReleaseFailures(
+  failures: BillingRechargeExpirationReleaseFailure[] | undefined,
+): Array<Record<string, string | null>> {
+  if (!Array.isArray(failures)) return [];
+  return failures.slice(0, 100).map((failure) => ({
+    order_id: typeof failure?.order_id === "string" &&
+        SAFE_ORDER_ID.test(failure.order_id)
+      ? failure.order_id
+      : "unknown",
+    diagnostic: typeof failure?.diagnostic === "string" &&
+        SAFE_ERROR_CODE.test(failure.diagnostic)
+      ? failure.diagnostic
+      : null,
+    error_code: "BILLING_RECHARGE_EXPIRE_RELEASE_FAILED",
+    error_message: SAFE_RELEASE_FAILURE_MESSAGE,
+  }));
 }
 
 async function loadDefaultExpirationService(): Promise<ExpirationServicePort> {

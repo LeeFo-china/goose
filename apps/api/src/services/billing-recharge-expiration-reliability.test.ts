@@ -35,7 +35,6 @@ describe("BillingRechargeExpirationService lease reliability", () => {
 
     expect(harness.repository.claimExpiredOrders).toHaveBeenCalledTimes(3);
     expect(harness.repository.claimExpiredOrders).toHaveBeenLastCalledWith({
-      now: expect.any(Date),
       batchSize: 1,
       leaseSeconds: 60,
       excludedOrderIds: orders.map((order) => order.id),
@@ -175,7 +174,7 @@ describe("BillingRechargeExpirationService lease reliability", () => {
     expect(markWorkers).toEqual([winnerId]);
     expect(markTokens).toEqual([winnerToken]);
     expect(markTokens).toEqual([currentToken]);
-    expect(renewCloseClaim).toHaveBeenCalledTimes(2);
+    expect(renewCloseClaim).toHaveBeenCalledTimes(3);
     expect(markOrderClosed).toHaveBeenCalledTimes(1);
   });
 
