@@ -267,6 +267,24 @@ describe("BillingRechargeService payment request", () => {
     },
   );
 
+  test("rejects a non-WeChat pending order before loading payment dependencies", async () => {
+    rechargeRepository.findOrderById.mockImplementation(async () => ({
+      ...pendingOrder,
+      channel: "manual",
+    }));
+    const service = await createService();
+
+    await expect(service.createPaymentRequest(authContext, "order-1"))
+      .rejects.toMatchObject({
+        statusCode: 409,
+        code: "BILLING_RECHARGE_PAYMENT_CHANNEL_UNSUPPORTED",
+      });
+
+    expect(paymentConfigRepository.findWechatPayConfig).not.toHaveBeenCalled();
+    expect(secretBundleService.load).not.toHaveBeenCalled();
+    expect(createMiniProgramPaymentRequest).not.toHaveBeenCalled();
+  });
+
   test.each([
     ["expiration boundary", "2026-07-18T02:00:00.000Z"],
     ["invalid expiration", "invalid-date"],
@@ -356,6 +374,27 @@ describe("BillingRechargeService payment request", () => {
     expect(rechargeRepository.createOrder).not.toHaveBeenCalled();
     expect(createJsapiPrepay).not.toHaveBeenCalled();
     expect(nowFactory).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not re-sign an idempotent non-WeChat pending order", async () => {
+    rechargeRepository.findOrderByIdempotencyKey.mockImplementation(
+      async () => ({ ...pendingOrder, channel: "manual" }),
+    );
+    const service = await createService();
+
+    await expect(service.createOrder(authContext, {
+      package_code: "credit_1000",
+      payer_openid: "openid-1",
+      idempotency_key: pendingOrder.idempotency_key,
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BILLING_RECHARGE_PAYMENT_CHANNEL_UNSUPPORTED",
+    });
+
+    expect(paymentConfigRepository.findWechatPayConfig).not.toHaveBeenCalled();
+    expect(secretBundleService.load).not.toHaveBeenCalled();
+    expect(createMiniProgramPaymentRequest).not.toHaveBeenCalled();
+    expect(createJsapiPrepay).not.toHaveBeenCalled();
   });
 
   test.each(["paid", "closed", "refunded"] as const)(
