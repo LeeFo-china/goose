@@ -45,6 +45,7 @@ const order = {
   payment_config_id: "platform-config-1",
   out_trade_no: "TC202607020001",
   prepay_id: null,
+  payment_expires_at: "2026-07-18T02:05:00.000Z",
   transaction_id: null,
   paid_amount_fen: 0,
   closed_at: null,
@@ -173,7 +174,16 @@ const wechatPayGateway = {
       paySign: "pay-sign",
     },
   })),
+  createMiniProgramPaymentRequest: mock(() => ({
+    timeStamp: "1782873600",
+    nonceStr: "nonce-resigned",
+    package: "prepay_id=prepay-1",
+    signType: "RSA" as const,
+    paySign: "pay-sign-resigned",
+  })),
 };
+
+const nowFactory = mock(() => new Date("2026-07-18T02:00:00.000Z"));
 
 const authContext = {
   authUserId: "auth-1",
@@ -209,6 +219,7 @@ async function createService() {
     secretBundleService,
     wechatPayGateway,
     tradeNoFactory: () => "TC202607020001",
+    nowFactory,
   });
 }
 
@@ -221,6 +232,8 @@ describe("BillingRechargeService", () => {
       accessPolicy.hasPermission,
       secretBundleService.load,
       wechatPayGateway.createJsapiPrepay,
+      wechatPayGateway.createMiniProgramPaymentRequest,
+      nowFactory,
     ]) {
       item.mockClear();
     }
@@ -272,6 +285,8 @@ describe("BillingRechargeService", () => {
       total: 1,
       totalPages: 1,
     });
+    expect(result.server_time).toBe("2026-07-18T02:00:00.000Z");
+    expect(nowFactory).toHaveBeenCalledTimes(1);
     expect(result.list).toEqual([
       expect.objectContaining({
         id: "order-1",
@@ -324,6 +339,7 @@ describe("BillingRechargeService", () => {
       status: "pending",
       created_by: "employee-1",
       payment_config_id: "platform-config-1",
+      payment_expires_at: "2026-07-18T02:05:00.000Z",
       metadata: {
         payer_openid: "openid-1",
         product_snapshot: {
@@ -342,6 +358,7 @@ describe("BillingRechargeService", () => {
           out_trade_no: "TC202607020001",
           amount: 100,
           payer_openid: "openid-1",
+          payment_expires_at: "2026-07-18T02:05:00.000Z",
         }),
         description: "积分充值",
       }),
@@ -350,6 +367,8 @@ describe("BillingRechargeService", () => {
       package: "prepay_id=prepay-1",
       paySign: "pay-sign",
     });
+    expect(result.server_time).toBe("2026-07-18T02:00:00.000Z");
+    expect(nowFactory).toHaveBeenCalledTimes(1);
     expect(result.order).toMatchObject({
       status: "pending",
       credits: 1000,
@@ -385,5 +404,7 @@ describe("BillingRechargeService", () => {
     });
     expect(result.order).toMatchObject({ id: "order-1", status: "paid" });
     expect(result.account).toMatchObject({ available_credits: 2000 });
+    expect(result.server_time).toBe("2026-07-18T02:00:00.000Z");
+    expect(nowFactory).toHaveBeenCalledTimes(1);
   });
 });

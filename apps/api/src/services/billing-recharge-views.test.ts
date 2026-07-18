@@ -25,6 +25,7 @@ const paidOrder = {
   payment_config_id: "platform-config-1",
   out_trade_no: "TC202607020001",
   prepay_id: null,
+  payment_expires_at: "2026-07-18T02:05:00.000Z",
   transaction_id: "4200000001",
   paid_amount_fen: 10000,
   closed_at: null,
@@ -112,5 +113,112 @@ describe("billing recharge views", () => {
       ...expected,
       requires_reason: true,
     });
+  });
+
+  test.each([
+    [
+      "unexpired pending order with prepay id",
+      {
+        status: "pending",
+        prepay_id: "prepay-1",
+        payment_expires_at: "2026-07-18T02:05:00.000Z",
+      },
+      { enabled: true, label: "继续支付", disabled_reason: null },
+    ],
+    [
+      "pending order at the expiration boundary",
+      {
+        status: "pending",
+        prepay_id: null,
+        payment_expires_at: "2026-07-18T02:00:00.000Z",
+      },
+      {
+        enabled: false,
+        label: "支付已超时",
+        disabled_reason: "ORDER_PAYMENT_EXPIRED",
+      },
+    ],
+    [
+      "unexpired pending order without prepay id",
+      {
+        status: "pending",
+        prepay_id: null,
+        payment_expires_at: "2026-07-18T02:05:00.000Z",
+      },
+      {
+        enabled: false,
+        label: "暂不可支付",
+        disabled_reason: "PAYMENT_REQUEST_UNAVAILABLE",
+      },
+    ],
+    [
+      "paid order",
+      { status: "paid" },
+      {
+        enabled: false,
+        label: "已支付",
+        disabled_reason: "ORDER_ALREADY_PAID",
+      },
+    ],
+    [
+      "closed order",
+      { status: "closed" },
+      {
+        enabled: false,
+        label: "订单已关闭",
+        disabled_reason: "ORDER_CLOSED",
+      },
+    ],
+    [
+      "refunded order",
+      { status: "refunded" },
+      {
+        enabled: false,
+        label: "已退款",
+        disabled_reason: "ORDER_ALREADY_REFUNDED",
+      },
+    ],
+    [
+      "order with refunded status",
+      { status: "paid", refund_status: "refunded" },
+      {
+        enabled: false,
+        label: "已退款",
+        disabled_reason: "ORDER_ALREADY_REFUNDED",
+      },
+    ],
+  ])("builds payment action for %s", (_, override, expected) => {
+    const view = toBillingRechargeOrderView(
+      { ...paidOrder, ...override } as TenantCreditOrderRecord,
+      new Date("2026-07-18T02:00:00.000Z"),
+    );
+
+    expect(view.payment_expires_at).toBe(
+      (override as { payment_expires_at?: string }).payment_expires_at
+        ?? paidOrder.payment_expires_at,
+    );
+    expect(view.payment_action).toEqual(expected);
+    expect(view.payment_action).not.toHaveProperty("code");
+  });
+
+  test("normalizes a missing payment expiration to null", () => {
+    const view = toBillingRechargeOrderView({
+      ...paidOrder,
+      payment_expires_at: undefined,
+    });
+
+    expect(view.payment_expires_at).toBeNull();
+  });
+
+  test("normalizes an invalid calendar expiration to null", () => {
+    const view = toBillingRechargeOrderView({
+      ...paidOrder,
+      status: "pending",
+      prepay_id: "prepay-1",
+      payment_expires_at: "2027-02-30T02:05:00.000Z",
+    });
+
+    expect(view.payment_expires_at).toBeNull();
+    expect(view.payment_action.disabled_reason).toBe("ORDER_PAYMENT_EXPIRED");
   });
 });

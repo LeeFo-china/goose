@@ -43,6 +43,7 @@ export type TenantCreditOrderRecord = {
   payment_config_id: string | null;
   out_trade_no: string | null;
   prepay_id: string | null;
+  payment_expires_at?: string | null;
   transaction_id: string | null;
   paid_amount_fen: number;
   closed_at: string | null;
@@ -68,6 +69,7 @@ export type TenantCreditOrderCreateInput = {
   status: "pending";
   created_by: string;
   payment_config_id: string;
+  payment_expires_at: string;
   metadata: Record<string, unknown>;
 };
 
@@ -205,6 +207,7 @@ class BillingRechargeRepository {
           "payment_config_id",
           "out_trade_no",
           "prepay_id",
+          "payment_expires_at",
           "transaction_id",
           "paid_amount_fen",
           "refund_status",
