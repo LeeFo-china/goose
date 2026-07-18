@@ -20,6 +20,31 @@ typecheck、build、文件大小、完整 diff 检查及 worker 禁用态启动/
 继续支付路由均返回预期的无凭证 `401 / TOKEN_MISSING`；独立过期 worker 已按默认 10 秒周期
 启动并完成空队列 tick，3010 Admin 保持原服务不变。
 
+同日已使用微信开发者工具中的真实 `wx.login` 会话完成本机 3000 登录态回归。当前微信账号
+解析为员工身份，充值列表、创建订单、重新生成支付请求和订单详情均返回 200。测试订单
+`TC20260718095852791093FA4EE` 在服务端截止时间前保持 `pending`，到期后由 worker 记录
+`claimed=1 / closed=1 / failed=0` 并收敛为 `closed / ORDER_CLOSED`；关单后再次请求支付参数
+返回 `409 / BILLING_RECHARGE_ORDER_NOT_PENDING`，待支付列表不再包含该订单。测试未调用
+`wx.requestPayment`，未产生扣款。
+
+## 真实开发构建回归记录
+
+- 创建响应与 `POST /billing/recharge-orders/:id/payment-request` 均返回
+  `timeStamp / nonceStr / package / signType / paySign` 五个支付字段。
+- 创建响应的 `payment_expires_at` 与 `server_time` 相差约 5 分钟；到期前
+  `payment_action.enabled = true` 且 `disabled_reason = null`。
+- 到期后详情返回 `status = closed`、`payment_action.enabled = false`、
+  `payment_action.disabled_reason = ORDER_CLOSED`。
+- orange 开发构建的充值记录页真实展示该订单为“已关闭”，首卡没有支付或退款操作按钮；
+  已退款订单继续仅按 `refund_action.disabled_reason` 展示“已退款”。
+- orange 当前开发产物写入的 API 地址仍是 `http://192.168.1.19:3000`，但本机当前局域网
+  地址为 `192.168.1.5`，因此未改写时登录页可稳定复现“请求失败(503)”。仅为本轮 UI
+  验证在开发者工具运行时临时将旧地址改写为 `127.0.0.1:3000`，测试结束后已恢复，未写入
+  orange 文件；真实登录产生的凭证仅由小程序按原流程保存在开发者工具内，未输出到终端
+  或验证文档。
+- orange 当前仍未接入 `payment_action`、`payment_expires_at` 和继续支付 service；本轮只能
+  验证后端 pending/closed 状态及现有关闭态 UI，不能视为小程序待支付交互已完成。
+
 ## 接口共同约定
 
 - 使用现有员工 Bearer 登录态和租户上下文，小程序不传 `tenant_id`。
@@ -269,15 +294,20 @@ worker 默认每 10 秒扫描一次。倒计时归零后建议沿用现有 1200m
    - 页面进入时恢复最新 pending 订单。
    - 处理绝对倒计时、前后台恢复、cancel 后继续支付、归零后结果确认。
    - 当前 `8 × 1200ms` 的支付轮询不足以稳定覆盖 10 秒 worker 周期，需要按上文调整。
+   - 当前代码在 `idempotent = true` 时即使后端返回有效 `payment_request` 也直接提示“订单
+     已存在”，应改为只按 `payment_action` 与 `payment_request` 决定是否拉起支付。
 4. `src/packageEmployees/pages/creditRecharge/model.ts`
    - 增加支付动作映射、剩余时间计算、倒计时文案和可单测的状态转换。
 5. `src/packageEmployees/pages/creditRecharge/components/RechargeStatusPanels.tsx`
    - 展示剩余时间、“继续支付”、“正在确认支付结果”和关闭状态。
 6. `src/packageEmployees/pages/rechargeRecords/components/RechargeRecordCard.tsx`
    - 可选：对 pending 记录展示后端 `payment_action`，并跳转充值页继续支付。
+   - pending/closed 订单应展示 `amount_fen`；当前优先读取 `paid_amount_fen = 0`，会把本轮
+     1 分测试订单显示为 `¥0`。
 
-当前 orange 的 `.env.development` 已指向 `http://192.168.1.19:3000`。本机联调前确认该
-地址仍是运行 API 的电脑局域网 IP；微信开发者工具需关闭合法域名校验。真机不能使用
+当前 orange 的 `.env.development` 指向已失效的 `http://192.168.1.19:3000`。小程序团队
+重新执行 dev 构建前，应将微信开发者工具环境改为 `http://127.0.0.1:3000`，或将真机联调
+环境改为运行 API 的电脑当前局域网 IP；微信开发者工具需关闭合法域名校验。真机不能使用
 `localhost` 指向电脑，生产环境仍必须使用已备案且配置到微信后台的 HTTPS 域名。
 
 ## 关键错误码
