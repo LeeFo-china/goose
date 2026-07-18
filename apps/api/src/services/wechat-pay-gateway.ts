@@ -421,12 +421,19 @@ function buildRefundQueryUrlPath(
   config: WechatPayJsapiConfig,
   outRefundNo: string,
 ) {
+  const encodedOutRefundNo = encodeURIComponent(outRefundNo);
   if (config.merchant_mode === "service_provider_sub_merchant") {
-    throw Errors.business(
-      409,
-      "当前暂不支持查询服务商子商户退款",
-      "WECHAT_PAY_REFUND_QUERY_MODE_UNSUPPORTED",
-    );
+    if (!config.merchant_id || !config.sub_merchant_id) {
+      throw Errors.business(
+        409,
+        "微信支付服务商子商户配置不完整",
+        "WECHAT_PAY_CONFIG_INCOMPLETE",
+      );
+    }
+    const query = new URLSearchParams({
+      sub_mchid: config.sub_merchant_id,
+    });
+    return `/v3/refund/domestic/refunds/${encodedOutRefundNo}?${query.toString()}`;
   }
   if (!config.merchant_id) {
     throw Errors.business(
@@ -435,7 +442,7 @@ function buildRefundQueryUrlPath(
       "WECHAT_PAY_CONFIG_INCOMPLETE",
     );
   }
-  return `/v3/refund/domestic/refunds/${encodeURIComponent(outRefundNo)}`;
+  return `/v3/refund/domestic/refunds/${encodedOutRefundNo}`;
 }
 
 function normalizeRefundReason(reason: string) {

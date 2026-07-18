@@ -84,7 +84,7 @@ export const failedRequest = {
   failure_message: "微信退款请求失败",
 } satisfies PlatformRechargeRefundRequestRecord;
 
-export const paymentConfig = {
+export const paymentConfig: PlatformPaymentConfigRecord = {
   id: "platform-config-1",
   provider: "wechat_pay",
   profile_code: "platform_direct_recharge",
@@ -107,6 +107,14 @@ export const paymentConfig = {
   updated_by_employee_id: null,
   created_at: "2026-07-01T00:00:00.000Z",
   updated_at: "2026-07-01T00:00:00.000Z",
+};
+
+export const partnerPaymentConfig = {
+  ...paymentConfig,
+  profile_code: "tenant_service_provider",
+  merchant_mode: "service_provider_sub_merchant",
+  merchant_id: "1561816121",
+  sub_merchant_id: "1900000109",
 } satisfies PlatformPaymentConfigRecord;
 
 export const authContext = {

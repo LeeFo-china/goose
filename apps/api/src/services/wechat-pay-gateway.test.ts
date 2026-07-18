@@ -1,13 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
-import { generateKeyPairSync } from "node:crypto";
+import { createVerify, generateKeyPairSync } from "node:crypto";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { WechatPayOrderRecord } from "@/repositories/wechat-pay-orders";
+import { buildWechatPayRequestSignMessage } from "./wechat-pay-signatures";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const { privateKey } = generateKeyPairSync("rsa", {
+const { privateKey, publicKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
   publicKeyEncoding: { format: "pem", type: "spki" },
@@ -47,6 +48,13 @@ const directConfig = {
   updated_by_employee_id: null,
   created_at: "2026-07-01T00:00:00.000Z",
   updated_at: "2026-07-01T00:00:00.000Z",
+} satisfies WechatPayConfigRecord;
+
+const partnerConfig = {
+  ...directConfig,
+  merchant_mode: "service_provider_sub_merchant",
+  merchant_id: "1561816121",
+  sub_merchant_id: "1900000109",
 } satisfies WechatPayConfigRecord;
 
 const order = {
@@ -241,6 +249,76 @@ describe("WechatPayGateway", () => {
       status: "PROCESSING",
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test("queries partner refund with sub merchant id in the signed path", async () => {
+    const urlPath =
+      "/v3/refund/domestic/refunds/TRR202607100800000001?sub_mchid=1900000109";
+    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe(`https://api.mch.weixin.qq.com${urlPath}`);
+      expect(init?.method).toBe("GET");
+      const authorization = String(
+        (init?.headers as Record<string, string>).Authorization,
+      );
+      expect(authorization).toContain('mchid="1561816121"');
+      const signature = authorization.match(/signature="([^"]+)"/)?.[1] ?? "";
+      const verifier = createVerify("RSA-SHA256");
+      verifier.update(buildWechatPayRequestSignMessage({
+        method: "GET",
+        urlPath,
+        body: "",
+        nonce: "nonce-1",
+        timestamp: "1782873600",
+      }));
+      verifier.end();
+      expect(verifier.verify(publicKey, signature, "base64")).toBe(true);
+      return new Response(JSON.stringify({
+        out_refund_no: "TRR202607100800000001",
+        refund_id: "5030000000202607150000000001",
+        status: "PROCESSING",
+        amount: { refund: 10000, total: 10000, currency: "CNY" },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    const result = await gateway.queryRefundByOutRefundNo({
+      config: partnerConfig,
+      outRefundNo: "TRR202607100800000001",
+      secretBundle: {
+        privateKeyPem: privateKey,
+        apiV3Key: "api-v3-key",
+        wechatPayPublicKeyId: null,
+        wechatPayPublicKeyPem: null,
+        baseUrl: "https://api.mch.weixin.qq.com",
+      },
+    });
+
+    expect(result).toMatchObject({ status: "PROCESSING" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejects partner refund query without sub merchant id", async () => {
+    const fetchImpl = mock(async () => new Response()) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    await expect(gateway.queryRefundByOutRefundNo({
+      config: { ...partnerConfig, sub_merchant_id: null },
+      outRefundNo: "TRR202607100800000001",
+      secretBundle: {
+        privateKeyPem: privateKey,
+        apiV3Key: "api-v3-key",
+        wechatPayPublicKeyId: null,
+        wechatPayPublicKeyPem: null,
+        baseUrl: "https://api.mch.weixin.qq.com",
+      },
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_CONFIG_INCOMPLETE",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   test("requests direct merchant refund by transaction id", async () => {

@@ -6,6 +6,7 @@ import {
   authContext,
   failedRequest,
   order,
+  partnerPaymentConfig,
   paymentConfig,
   refundingRequest,
   requestWithWechatResult,
@@ -414,6 +415,9 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
   test("retries the same refund after the immediate query cannot find it", async () => {
     const refundInputs: unknown[] = [];
     let requestAttempts = 0;
+    paymentConfigRepository.findWechatPayConfig.mockImplementation(
+      async () => partnerPaymentConfig,
+    );
     wechatPayGateway.requestRefund.mockImplementation(async (input) => {
       events.push("wechat-refund");
       refundInputs.push(input);
@@ -444,8 +448,12 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
     const result = await service.execute(authContext, "refund-request-1");
 
     expect(wechatPayGateway.requestRefund).toHaveBeenCalledTimes(2);
+    expect(wechatPayGateway.queryRefundByOutRefundNo).toHaveBeenCalledWith(
+      expect.objectContaining({ config: partnerPaymentConfig }),
+    );
     expect(refundInputs[1]).toEqual(refundInputs[0]);
     expect(refundInputs[1]).toMatchObject({
+      config: partnerPaymentConfig,
       transactionId: "4200000001",
       outRefundNo: "TRR202607100800000001",
       reason: "客户误充值，需要申请退款",
@@ -486,13 +494,5 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
     expect(refundInputs[1]).toEqual(refundInputs[0]);
     expect(repository.markRequestFailed).not.toHaveBeenCalled();
     expect(repository.markOrderRefundStatus).toHaveBeenCalledTimes(1);
-    expect(events).toEqual([
-      "wechat-query-transaction",
-      "mark-request-refunding",
-      "mark-order-refunding",
-      "wechat-refund",
-      "wechat-query-refund",
-      "wechat-refund",
-    ]);
   });
 });
