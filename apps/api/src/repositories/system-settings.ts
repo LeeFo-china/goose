@@ -22,8 +22,10 @@ export type SystemSettingRecord = {
   updated_at: string;
 };
 
-class SystemSettingRepository {
-  private client = SupabaseDB.getAdminClient();
+export class SystemSettingRepository {
+  constructor(
+    private readonly client: unknown = SupabaseDB.getAdminClient(),
+  ) {}
 
   private table() {
     return (this.client as unknown as {

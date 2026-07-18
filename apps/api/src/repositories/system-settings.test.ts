@@ -3,10 +3,10 @@ import { Errors } from "@/errors/error-factory";
 import type { SystemSettingRecord } from "@/repositories/system-settings";
 import type { AuthContext } from "@/services/authorization";
 
-process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
-process.env.SUPABASE_PUBLISH ??= "test-publish-key";
-process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-process.env.APP_CONFIG_ENCRYPTION_KEY ??= "test-config-encryption-key";
+process.env.SUPABASE_URL = "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH = "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+process.env.APP_CONFIG_ENCRYPTION_KEY = "test-config-encryption-key";
 
 type QueryResult = { data: unknown; error: unknown };
 
@@ -44,12 +44,6 @@ const query = {
   insert,
 };
 const from = mock((_table: string) => query);
-
-mock.module("@/utils/supabase", () => ({
-  SupabaseDB: {
-    getAdminClient: () => ({ from }),
-  },
-}));
 
 const pendingConfigError = {
   code: "23514",
@@ -92,6 +86,11 @@ const platformAuth = {
   permissions: [],
 } satisfies AuthContext;
 
+async function createRepository() {
+  const { SystemSettingRepository } = await import("./system-settings");
+  return new SystemSettingRepository({ from });
+}
+
 describe("SystemSettingRepository payment config trigger errors", () => {
   beforeEach(() => {
     maybeSingle.mockClear();
@@ -104,7 +103,7 @@ describe("SystemSettingRepository payment config trigger errors", () => {
 
   test("maps the exact pending recharge config trigger error to the stable 409", async () => {
     updateResult = { data: null, error: pendingConfigError };
-    const { systemSettingRepository } = await import("./system-settings");
+    const systemSettingRepository = await createRepository();
 
     await expect(systemSettingRepository.updateValue(updateInput)).rejects
       .toMatchObject({
@@ -121,7 +120,7 @@ describe("SystemSettingRepository payment config trigger errors", () => {
     [{ code: "42P01", message: "relation does not exist" }],
   ])("keeps unrelated database errors as 500", async (error) => {
     updateResult = { data: null, error };
-    const { systemSettingRepository } = await import("./system-settings");
+    const systemSettingRepository = await createRepository();
 
     await expect(systemSettingRepository.updateValue(updateInput)).rejects
       .toMatchObject({
@@ -134,7 +133,7 @@ describe("SystemSettingRepository payment config trigger errors", () => {
   test("does not wrap an existing application error again", async () => {
     const existingError = Errors.business(409, "已有业务错误", "EXISTING_ERROR");
     updateResult = { data: null, error: existingError };
-    const { systemSettingRepository } = await import("./system-settings");
+    const systemSettingRepository = await createRepository();
 
     await expect(systemSettingRepository.updateValue(updateInput)).rejects
       .toBe(existingError);
@@ -145,7 +144,12 @@ describe("platform system settings payment secret update", () => {
   test("propagates the pending recharge conflict from the repository", async () => {
     queueExistingSettings(3);
     updateResult = { data: null, error: pendingConfigError };
-    const { systemSettingsService } = await import("@/services/system-settings");
+    const { SystemSettingsService } = await import(
+      "@/services/system-settings/legacy-service"
+    );
+    const systemSettingsService = new SystemSettingsService(
+      await createRepository(),
+    );
 
     await expect(systemSettingsService.updateSetting(
       platformAuth,
