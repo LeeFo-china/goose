@@ -17,7 +17,11 @@ type CloseTransactionInput = WechatPayCloseTransactionByOutTradeNoInput & {
   fetchImpl: typeof fetch;
   nonce?: string;
   timestamp?: string;
+  timeoutMs?: number;
 };
+
+const DEFAULT_CLOSE_REQUEST_TIMEOUT_MS = 10_000;
+const MAX_CLOSE_REQUEST_TIMEOUT_MS = 60_000;
 
 export async function closeWechatPayTransactionByOutTradeNo(
   input: CloseTransactionInput,
@@ -43,18 +47,12 @@ export async function closeWechatPayTransactionByOutTradeNo(
     nonce: input.nonce,
     timestamp: input.timestamp,
   });
-  const response = await input.fetchImpl(
-    `${input.secretBundle.baseUrl}${request.urlPath}`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        Authorization: authorization,
-        "Content-Type": "application/json",
-      },
-      body,
-    },
-  );
+  const response = await fetchCloseTransaction({
+    input,
+    urlPath: request.urlPath,
+    authorization,
+    body,
+  });
   if (response.ok) return;
 
   const payload = await parseWechatPayJson(response);
@@ -67,6 +65,54 @@ export async function closeWechatPayTransactionByOutTradeNo(
       code: stringField(payload, "code"),
       message: stringField(payload, "message"),
     },
+  );
+}
+
+async function fetchCloseTransaction(input: {
+  input: CloseTransactionInput;
+  urlPath: string;
+  authorization: string;
+  body: string;
+}) {
+  const timeoutMs = normalizeCloseRequestTimeout(input.input.timeoutMs);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await input.input.fetchImpl(
+      `${input.input.secretBundle.baseUrl}${input.urlPath}`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: input.authorization,
+          "Content-Type": "application/json",
+        },
+        body: input.body,
+        signal: controller.signal,
+      },
+    );
+  } catch {
+    const details = controller.signal.aborted
+      ? { reason: "timeout", timeout_ms: timeoutMs }
+      : { reason: "network_error" };
+    throw Errors.business(
+      502,
+      "微信支付关单失败",
+      "WECHAT_PAY_CLOSE_FAILED",
+      details,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function normalizeCloseRequestTimeout(timeoutMs: number | undefined) {
+  if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs)) {
+    return DEFAULT_CLOSE_REQUEST_TIMEOUT_MS;
+  }
+  return Math.max(
+    1,
+    Math.min(Math.floor(timeoutMs), MAX_CLOSE_REQUEST_TIMEOUT_MS),
   );
 }
 

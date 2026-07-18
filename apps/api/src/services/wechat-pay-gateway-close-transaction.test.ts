@@ -44,10 +44,14 @@ const secretBundle = {
   baseUrl: "https://api.mch.weixin.qq.com",
 } satisfies WechatPaySecretBundle;
 
-async function createGateway(fetchImpl: typeof fetch) {
+async function createGateway(
+  fetchImpl: typeof fetch,
+  closeRequestTimeoutMs?: number,
+) {
   const { WechatPayGateway } = await import("./wechat-pay-gateway");
   return new WechatPayGateway({
     fetchImpl,
+    closeRequestTimeoutMs,
     nonceFactory: () => "nonce-1",
     timestampFactory: () => "1782873600",
     nowSecondsFactory: () => 1_782_873_600,
@@ -105,11 +109,7 @@ describe("WechatPayGateway close transaction and local payment request", () => {
     }), { status: 400 })) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
-    await expect(gateway.closeTransactionByOutTradeNo({
-      config: directConfig,
-      outTradeNo: "WX202607010001",
-      secretBundle,
-    })).rejects.toMatchObject({
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
       statusCode: 502,
       code: "WECHAT_PAY_CLOSE_FAILED",
       details: {
@@ -120,19 +120,29 @@ describe("WechatPayGateway close transaction and local payment request", () => {
     });
   });
 
+  test("maps non-JSON close-order failures without inventing fields", async () => {
+    const fetchImpl = mock(async () => new Response("upstream unavailable", {
+      status: 503,
+      headers: { "content-type": "text/plain" },
+    })) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
+      statusCode: 502,
+      code: "WECHAT_PAY_CLOSE_FAILED",
+      details: { status: 503, code: null, message: null },
+    });
+  });
+
   test("rejects close-order requests with stable configuration errors", async () => {
     const fetchImpl = mock(async () => new Response(null, { status: 204 })) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
-    await expect(gateway.closeTransactionByOutTradeNo({
+    await expect(closeTransaction(gateway, {
       config: { ...directConfig, serial_no: null },
-      outTradeNo: "WX202607010001",
-      secretBundle,
     })).rejects.toMatchObject({ code: "WECHAT_PAY_SERIAL_NO_REQUIRED" });
-    await expect(gateway.closeTransactionByOutTradeNo({
+    await expect(closeTransaction(gateway, {
       config: { ...partnerConfig, sub_merchant_id: null },
-      outTradeNo: "WX202607010001",
-      secretBundle,
     })).rejects.toMatchObject({ code: "WECHAT_PAY_CONFIG_INCOMPLETE" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
@@ -179,7 +189,96 @@ describe("WechatPayGateway close transaction and local payment request", () => {
       code: "WECHAT_PAY_CONFIG_INCOMPLETE",
     }));
   });
+
+  test("re-signs locally with the direct merchant app id fallback", async () => {
+    const gateway = await createGateway(fetch);
+
+    const paymentRequest = gateway.createMiniProgramPaymentRequest({
+      config: directConfig,
+      prepayId: "prepay-direct",
+      secretBundle,
+    });
+
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(buildWechatPayMiniProgramSignMessage({
+      appId: directConfig.app_id,
+      timestamp: paymentRequest.timeStamp,
+      nonce: paymentRequest.nonceStr,
+      packageValue: paymentRequest.package,
+    }));
+    verifier.end();
+    expect(verifier.verify(publicKey, paymentRequest.paySign, "base64")).toBe(true);
+  });
+
+  test("does not wrap signing failures as close transport failures", async () => {
+    const fetchImpl = mock(async () => new Response(null, { status: 204 })) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+    let caughtError: unknown;
+
+    try {
+      await closeTransaction(gateway, {
+        secretBundle: { ...secretBundle, privateKeyPem: "invalid-key" },
+      });
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toBeInstanceOf(Error);
+    expect(caughtError).not.toMatchObject({ code: "WECHAT_PAY_CLOSE_FAILED" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test("aborts a timed-out close request and returns a stable error", async () => {
+    let didAbort = false;
+    const fetchImpl = mock((_url: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const requestSignal = init?.signal;
+        if (!requestSignal) {
+          reject(new Error("missing AbortSignal"));
+          return;
+        }
+        requestSignal.addEventListener("abort", () => {
+          didAbort = true;
+          reject(requestSignal.reason);
+        }, { once: true });
+      })) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl, 5);
+
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
+      statusCode: 502,
+      message: "微信支付关单失败",
+      code: "WECHAT_PAY_CLOSE_FAILED",
+      details: { reason: "timeout", timeout_ms: 5 },
+    });
+    expect(didAbort).toBe(true);
+  });
+
+  test("maps close request network failures without leaking the cause", async () => {
+    const fetchImpl = mock(async () => {
+      throw new TypeError("connect ECONNRESET internal-upstream.example");
+    }) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
+      statusCode: 502,
+      message: "微信支付关单失败",
+      code: "WECHAT_PAY_CLOSE_FAILED",
+      details: { reason: "network_error" },
+    });
+  });
 });
+
+async function closeTransaction(
+  gateway: Awaited<ReturnType<typeof createGateway>>,
+  overrides: Partial<Parameters<typeof gateway.closeTransactionByOutTradeNo>[0]> = {},
+) {
+  return gateway.closeTransactionByOutTradeNo({
+    config: directConfig,
+    outTradeNo: "WX202607010001",
+    secretBundle,
+    ...overrides,
+  });
+}
 
 function expectAuthorizationSignature(
   init: RequestInit | undefined,

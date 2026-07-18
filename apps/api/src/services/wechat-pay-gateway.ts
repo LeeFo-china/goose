@@ -30,6 +30,7 @@ type WechatPayGatewayDependencies = {
   timestampFactory?: () => string;
   requestTimeoutMs?: number;
   nowSecondsFactory?: () => number;
+  closeRequestTimeoutMs?: number;
 };
 type WechatPayOperation = "jsapi_prepay" | "transaction_query" | "refund_request" | "refund_query";
 export const DEFAULT_WECHAT_PAY_REQUEST_TIMEOUT_MS = 10_000;
@@ -53,7 +54,6 @@ export type WechatPayQueryTransactionByOutTradeNoInput = {
   outTradeNo: string;
   secretBundle: WechatPaySecretBundle;
 };
-
 export type WechatPayTransactionQueryResult = Record<string, unknown> & {
   out_trade_no?: string;
   transaction_id?: string;
@@ -61,13 +61,11 @@ export type WechatPayTransactionQueryResult = Record<string, unknown> & {
   success_time?: string;
   amount?: Record<string, unknown>;
 };
-
 export type WechatPayQueryRefundByOutRefundNoInput = {
   config: WechatPayJsapiConfig;
   outRefundNo: string;
   secretBundle: WechatPaySecretBundle;
 };
-
 export type WechatPayRefundQueryResult = Record<string, unknown> & {
   out_refund_no?: string;
   refund_id?: string;
@@ -78,7 +76,6 @@ export type WechatPayRefundQueryResult = Record<string, unknown> & {
   amount?: Record<string, unknown>;
   requestId: string | null;
 };
-
 export type WechatPayRequestRefundInput = {
   config: WechatPayJsapiConfig;
   transactionId: string;
@@ -103,6 +100,7 @@ export class WechatPayGateway {
   private readonly timestampFactory?: () => string;
   private readonly requestTimeoutMs: number;
   private readonly nowSecondsFactory: () => number;
+  private readonly closeRequestTimeoutMs?: number;
 
   constructor(dependencies: WechatPayGatewayDependencies = {}) {
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
@@ -112,6 +110,7 @@ export class WechatPayGateway {
       DEFAULT_WECHAT_PAY_REQUEST_TIMEOUT_MS;
     this.nowSecondsFactory = dependencies.nowSecondsFactory ??
       (() => Math.floor(Date.now() / 1_000));
+    this.closeRequestTimeoutMs = dependencies.closeRequestTimeoutMs;
   }
 
   async createJsapiPrepay(
@@ -181,6 +180,7 @@ export class WechatPayGateway {
       fetchImpl: this.fetchImpl,
       nonce: this.createNonce(),
       timestamp: this.createTimestamp(),
+      timeoutMs: this.closeRequestTimeoutMs,
     });
   }
 
