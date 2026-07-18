@@ -165,7 +165,9 @@ describe("BillingRechargeExpirationService state matrix", () => {
   });
 
   test("closes locally when WeChat confirms the order never existed", async () => {
-    const harness = await createExpirationHarness({ orders: [makeOrder()] });
+    const harness = await createExpirationHarness({
+      orders: [makeOrder(1, { prepay_id: null })],
+    });
     harness.queryTransaction.mockImplementationOnce(async () => {
       throw Errors.business(
         502,
@@ -187,6 +189,51 @@ describe("BillingRechargeExpirationService state matrix", () => {
       .toHaveBeenCalled();
     expect(harness.repository.releaseCloseClaim).not.toHaveBeenCalled();
     expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, closed: 1 });
+  });
+
+  test("keeps ORDER_NOT_EXIST retryable when a prepay id was persisted", async () => {
+    const harness = await createExpirationHarness({ orders: [makeOrder()] });
+    harness.queryTransaction.mockImplementationOnce(async () => {
+      throw Errors.business(
+        502,
+        "微信支付查单失败",
+        "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
+        { status: 404, code: "ORDER_NOT_EXIST", message: "订单不存在" },
+      );
+    });
+
+    const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+    expect(harness.repository.markOrderClosed).not.toHaveBeenCalled();
+    expect(harness.calls.at(-1)).toBe(
+      "release:order-1:BILLING_RECHARGE_EXPIRE_QUERY_FAILED",
+    );
+    expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, failed: 1 });
+  });
+
+  test("does not close when prepay appears during an ORDER_NOT_EXIST query", async () => {
+    const harness = await createExpirationHarness({
+      orders: [makeOrder(1, { prepay_id: null })],
+    });
+    harness.queryTransaction.mockImplementationOnce(async () => {
+      throw Errors.business(
+        502,
+        "微信支付查单失败",
+        "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
+        { status: 404, code: "ORDER_NOT_EXIST", message: "订单不存在" },
+      );
+    });
+    harness.repository.markOrderClosed.mockImplementationOnce(async () => null);
+
+    const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+    expect(harness.repository.markOrderClosed).toHaveBeenCalledWith({
+      orderId: "order-1",
+      claimToken: "claim-1",
+      closedAt: new Date("2026-07-18T03:00:00.000Z"),
+      requireMissingPrepay: true,
+    });
+    expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, retried: 1 });
   });
 
   test.each([
@@ -240,7 +287,9 @@ describe("BillingRechargeExpirationService state matrix", () => {
   });
 
   test("closes locally when the post-close query reports no WeChat order", async () => {
-    const harness = await createExpirationHarness({ orders: [makeOrder()] });
+    const harness = await createExpirationHarness({
+      orders: [makeOrder(1, { prepay_id: null })],
+    });
     harness.queryTransaction
       .mockImplementationOnce(async () => ({ trade_state: "NOTPAY" }))
       .mockImplementationOnce(async () => {
@@ -260,6 +309,31 @@ describe("BillingRechargeExpirationService state matrix", () => {
     expect(harness.calls.at(-1)).toBe("mark:order-1");
     expect(harness.repository.releaseCloseClaim).not.toHaveBeenCalled();
     expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, closed: 1 });
+  });
+
+  test("keeps post-close ORDER_NOT_EXIST retryable with a stored prepay id", async () => {
+    const harness = await createExpirationHarness({ orders: [makeOrder()] });
+    harness.queryTransaction
+      .mockImplementationOnce(async () => ({ trade_state: "NOTPAY" }))
+      .mockImplementationOnce(async () => {
+        throw Errors.business(
+          502,
+          "微信支付查单失败",
+          "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
+          { status: 404, code: "ORDER_NOT_EXIST", message: "订单不存在" },
+        );
+      });
+    harness.closeTransaction.mockImplementationOnce(async () => {
+      throw new Error("close timeout");
+    });
+
+    const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+    expect(harness.repository.markOrderClosed).not.toHaveBeenCalled();
+    expect(harness.calls.at(-1)).toBe(
+      "release:order-1:BILLING_RECHARGE_EXPIRE_SECOND_QUERY_FAILED",
+    );
+    expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, failed: 1 });
   });
 
   test("does not count a conditional close race as closed", async () => {

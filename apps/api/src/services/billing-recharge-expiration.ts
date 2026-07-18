@@ -222,7 +222,9 @@ export class BillingRechargeExpirationService {
     try {
       transaction = await this.query(input.context, input.outTradeNo);
     } catch (error) {
-      if (isWechatOrderNotExist(error)) return this.markClosed(input);
+      if (canCloseNonexistentWechatOrder(input.order, error)) {
+        return this.markClosed(input, { requireMissingPrepay: true });
+      }
       this.defer(input, DIAGNOSTIC.queryFailed);
       return "failed";
     }
@@ -284,7 +286,9 @@ export class BillingRechargeExpirationService {
     try {
       transaction = await this.query(input.context, input.outTradeNo);
     } catch (error) {
-      if (isWechatOrderNotExist(error)) return this.markClosed(input);
+      if (canCloseNonexistentWechatOrder(input.order, error)) {
+        return this.markClosed(input, { requireMissingPrepay: true });
+      }
       this.defer(input, DIAGNOSTIC.secondQueryFailed);
       return "failed";
     }
@@ -322,12 +326,15 @@ export class BillingRechargeExpirationService {
     order: TenantCreditOrderRecord;
     claimToken: string;
     deferred: DeferredRelease[];
-  }): Promise<OrderOutcome> {
+  }, options: { requireMissingPrepay?: boolean } = {}): Promise<OrderOutcome> {
     try {
       const closed = await this.repository.markOrderClosed({
         orderId: input.order.id,
         claimToken: input.claimToken,
         closedAt: this.nowFactory(),
+        ...(options.requireMissingPrepay
+          ? { requireMissingPrepay: true }
+          : {}),
       });
       return closed ? "closed" : "retried";
     } catch {
@@ -451,7 +458,11 @@ function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function isWechatOrderNotExist(error: unknown) {
+function canCloseNonexistentWechatOrder(
+  order: TenantCreditOrderRecord,
+  error: unknown,
+) {
+  if (optionalString(order.prepay_id)) return false;
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; details?: unknown };
   if (candidate.code !== "WECHAT_PAY_TRANSACTION_QUERY_FAILED") return false;
