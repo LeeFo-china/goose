@@ -1,7 +1,7 @@
 # Recharge Expiration Reliability Design
 
-**Date:** 2026-07-18  
-**Status:** Implemented and verified in code; migrations not applied by this work
+**Date:** 2026-07-18
+**Status:** Implemented and aggregate-verified; remote dev database verification pending
 **Scope:** Harden the pending-recharge expiration work already implemented on `feat/recharge-payment-expiration`.
 
 ## Context
@@ -45,12 +45,18 @@ Add a migration-owned RPC:
 billing_confirm_wechat_recharge_and_recover(...)
 ```
 
-The wrapper calls, in one PostgreSQL transaction:
+The wrapper first obtains the order tenant and deterministically selects an invoice by
+`due_at, id`, then follows the same lock order as
+`billing_charge_subscription_invoice`: recoverable invoice, subscription, and finally the credit
+account inside confirmation. It then calls, in the same PostgreSQL transaction:
 
 1. `billing_confirm_wechat_recharge(...)`;
 2. `billing_recover_subscription_after_recharge(tenant_id)`.
 
-The tenant ID is read from the confirmed order returned by the first function, not accepted independently from the application. The result keeps the existing confirmation keys and adds a `recovery` object.
+The tenant ID is read from the persisted order, not accepted independently from the application.
+The base confirmation RPC is no longer executable by `service_role`; application callers must use
+the wrapper so they cannot bypass the canonical lock order. The result keeps the existing
+confirmation keys and adds a `recovery` object.
 
 If recovery raises, PostgreSQL rolls back the credit confirmation, order status change, ledger entry, balance update, and claim-clearing trigger together. The order therefore remains retryable. The idempotent paid branch also invokes recovery, so older paid orders can safely retry the wrapper.
 
@@ -64,22 +70,26 @@ The new function is `SECURITY DEFINER`, fixes `search_path`, revokes `PUBLIC`, `
 
 The run performs this loop sequentially:
 
-1. claim one expired order with a fresh database time while excluding order IDs already seen in this run;
+1. claim one expired order using `clock_timestamp()` inside PostgreSQL while excluding order IDs already seen in this run;
 2. load or reuse the order's reconciliation configuration and secret;
 3. renew that order's claim by `id + status=pending + claim_token` immediately before the first WeChat request;
 4. query WeChat, then follow the existing state matrix;
-5. retain failed or uncertain claims in memory until the run has finished claiming its bounded set;
-6. release retained claims at the end of the run.
+5. when the query returns `NOTPAY`, renew the same token again immediately before the irreversible close request;
+6. retain failed or uncertain claims in memory until the run has finished claiming its bounded set;
+7. release retained claims at the end of the run.
 
 The claim RPC accepts at most 100 excluded order IDs and filters them in SQL. This remains correct even if an earlier uncertain order's short lease expires before a long run finishes. Deferring uncertain releases avoids making those orders available to other workers immediately; a crash still relies on the short database lease for recovery.
 
 Add a repository method:
 
 ```ts
-renewCloseClaim({ orderId, claimToken, now, leaseSeconds })
+renewCloseClaim({ orderId, claimToken, leaseSeconds })
 ```
 
-It conditionally extends the lease only when the order is still pending and the token still matches, returning the renewed order or `null`. A `null` result means ownership was lost; the service must not call WeChat close or perform a local transition.
+It calls a database RPC that conditionally extends the lease with `clock_timestamp()` only when the
+order is still pending and the token still matches, returning the renewed order or `null`. A `null`
+result means ownership was lost; the service must not call WeChat close or perform a local
+transition.
 
 The default lease remains 60 seconds. The bounded WeChat path is at most one query, one close, and one second query, each with a ten-second default timeout. Renewal therefore gives the current order a sufficient safety margin without making crash recovery wait for an entire batch lease.
 
@@ -117,6 +127,14 @@ Protection has two layers:
 
 The trigger checks only pending `wechat_pay` orders referencing the affected configuration. Once those orders are paid or closed, rotation is allowed.
 
+Creation is serialized with rotation by `recharge_guard_version`. The
+`20260718122500_serialize_recharge_config_creation.sql` migration increments that version whenever
+critical config or referenced secret material changes, guards config/secret deletion, and exposes
+`billing_create_pending_wechat_recharge_order`. That RPC locks the config row, verifies the version
+read by the service, and creates the pending order in the same transaction. A concurrent rotation is
+therefore ordered either before creation (the version check rejects and the service retries) or after
+creation (the pending-order guard rejects the rotation).
+
 Environment-backed secret references cannot be versioned or guarded by PostgreSQL. Operations documentation must require waiting until no pending order references that config before rotating the environment secret. The application-managed platform recharge profile uses the guarded system-setting reference.
 
 ## 4. Reconciliation state machine
@@ -139,6 +157,11 @@ other/query error -> retain claim, then release; never local-close
 ```
 
 Before any close request, the service must still own the renewed token. Local closure remains conditional on the same token. Confirmation remains financially idempotent.
+
+JSAPI prepay and every query/close request have a ten-second default timeout. Public responses take a
+fresh clock reading after awaited work. If work crosses `payment_expires_at`, the response suppresses
+`payment_request` and exposes `payment_action.disabled_reason=ORDER_PAYMENT_EXPIRED`; a late prepay ID
+may only be persisted while the order is still pending and unexpired.
 
 ## 5. Verification
 
@@ -168,35 +191,136 @@ focused RPC smoke
 
 ## 6. Local implementation status
 
-The reliability work is implemented on `feat/recharge-payment-expiration` and has completed
-implementation, specification review, and quality review locally.
-
-Verification completed on 2026-07-18:
-
-- 261 focused API, repository, migration-contract, WeChat gateway/callback, expiration, and worker
-  tests passed with zero failures;
-- API TypeScript typecheck, production build, and file-size checks passed;
-- `git diff --check` passed;
-- a credential-free disabled-worker smoke started with the documented defaults, handled one
-  `SIGINT`, logged `worker stopped`, and exited with code 0;
-- the mini-program contract and smoke checklist are recorded in
-  `docs/miniprogram/2026-07-18-recharge-payment-expiration-handoff.md`.
+The reliability work is implemented on `feat/recharge-payment-expiration`. After final-review
+remediation, the 33 changed API test files passed 267 tests with zero failures and 925 expectations
+with every remote Supabase/database environment variable removed. API typecheck, build, file-size,
+and `git diff --check` also passed. A credential-free worker shutdown smoke had already passed.
 
 Database and real-payment verification remain intentionally unexecuted:
 
-- `supabase status` cannot inspect local services because the Docker daemon is not running;
-- `supabase migration list --local` cannot connect to local PostgreSQL at `127.0.0.1:54322`;
+- the machine has no Docker CLI or local PostgreSQL, so local Supabase cannot be used;
+- the user authorized the remote dev database, and read-only preflight confirmed exactly five pending
+  migrations plus 11 historical pending WeChat recharge orders, but no migration had been applied at
+  the time of this status update;
 - no remote migration, deployment, or database mutation was performed;
 - no real WeChat payment/query/close smoke was run against an unconfirmed database target.
 
-The next database step is to start local Docker/Supabase, apply the five recharge migrations
-locally, verify the local migration list, and then run bounded RPC and real-payment smoke tests.
+The next database step is to apply the five confirmed migrations to the authorized remote dev target,
+verify migration alignment, regenerate database types from that schema, and run bounded RPC and
+real-payment smoke tests.
 
 ## Rollback
 
-- Revert application calls to the original confirmation RPC before dropping the wrapper.
-- Drop the configuration-guard triggers and their functions.
-- Remove the wrapper RPC grants and function.
-- Per-order claiming and renewal are application changes; reverting them restores the previous page-claim behavior but also restores the reviewed lease risk.
+Rollback must deploy an application version compatible with the previous RPC signatures and stop the
+expiration worker before changing database functions. The following dependency order rolls back the
+reliability layer while retaining the original payment-expiration columns, index, and claim-clearing
+trigger from `20260718110000`:
 
-No destructive table or status change is required.
+```sql
+BEGIN;
+
+-- 1. Remove final database-clock claim APIs and restore the previous
+--    four-argument exclusion API expected by the prior worker.
+DROP FUNCTION IF EXISTS public.billing_renew_recharge_close_claim(uuid, uuid, integer);
+DROP FUNCTION IF EXISTS public.billing_claim_expired_recharge_orders(integer, integer, uuid[]);
+
+CREATE OR REPLACE FUNCTION public.billing_claim_expired_recharge_orders(
+  p_now timestamptz,
+  p_limit integer,
+  p_lease_seconds integer,
+  p_excluded_ids uuid[] DEFAULT ARRAY[]::uuid[]
+)
+RETURNS SETOF public.tenant_credit_orders
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_now IS NULL THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'BILLING_RECHARGE_CLAIM_NOW_REQUIRED';
+  END IF;
+  IF coalesce(cardinality(p_excluded_ids), 0) > 100 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'BILLING_RECHARGE_CLAIM_EXCLUSIONS_TOO_LARGE';
+  END IF;
+
+  RETURN QUERY
+  WITH candidates AS (
+    SELECT orders.id
+    FROM public.tenant_credit_orders AS orders
+    WHERE orders.channel = 'wechat_pay'
+      AND orders.status = 'pending'
+      AND orders.payment_expires_at IS NOT NULL
+      AND orders.payment_expires_at <= p_now
+      AND NOT (orders.id = ANY(coalesce(p_excluded_ids, ARRAY[]::uuid[])))
+      AND (
+        orders.close_claim_expires_at IS NULL
+        OR orders.close_claim_expires_at <= p_now
+      )
+    ORDER BY orders.payment_expires_at ASC, orders.id ASC
+    LIMIT least(greatest(coalesce(p_limit, 100), 1), 100)
+    FOR UPDATE SKIP LOCKED
+  )
+  UPDATE public.tenant_credit_orders AS orders
+  SET
+    close_claim_token = gen_random_uuid(),
+    close_claim_expires_at = p_now + make_interval(
+      secs => least(greatest(coalesce(p_lease_seconds, 60), 10), 600)
+    ),
+    close_attempt_count = orders.close_attempt_count + 1,
+    close_last_error = NULL
+  FROM candidates
+  WHERE orders.id = candidates.id
+  RETURNING orders.*;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.billing_claim_expired_recharge_orders(
+  timestamptz, integer, integer, uuid[]
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.billing_claim_expired_recharge_orders(
+  timestamptz, integer, integer, uuid[]
+) TO service_role;
+
+-- 2. Remove creation/config serialization and every update/delete guard.
+DROP FUNCTION IF EXISTS public.billing_create_pending_wechat_recharge_order(
+  uuid, text, text, text, text, bigint, bigint, integer, uuid, uuid,
+  bigint, timestamptz, jsonb
+);
+DROP TRIGGER IF EXISTS tr_guard_pending_recharge_payment_secret_delete
+  ON public.system_settings;
+DROP TRIGGER IF EXISTS tr_guard_pending_recharge_payment_secret
+  ON public.system_settings;
+DROP TRIGGER IF EXISTS tr_guard_pending_recharge_payment_config_delete
+  ON public.platform_payment_configs;
+DROP TRIGGER IF EXISTS tr_guard_pending_recharge_payment_config
+  ON public.platform_payment_configs;
+DROP FUNCTION IF EXISTS public.guard_pending_recharge_payment_secret();
+DROP FUNCTION IF EXISTS public.guard_pending_recharge_payment_config_delete();
+DROP FUNCTION IF EXISTS public.guard_pending_recharge_payment_config();
+DROP INDEX IF EXISTS public.tenant_credit_orders_pending_wechat_payment_config_idx;
+ALTER TABLE public.platform_payment_configs
+  DROP CONSTRAINT IF EXISTS platform_payment_configs_recharge_guard_version_check,
+  DROP COLUMN IF EXISTS recharge_guard_version;
+
+-- 3. Restore direct confirmation access only after the application no longer
+--    calls the atomic wrapper, then remove that wrapper.
+GRANT EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) TO service_role;
+DROP FUNCTION IF EXISTS public.billing_confirm_wechat_recharge_and_recover(
+  uuid, text, integer, timestamptz, uuid, jsonb
+);
+
+COMMIT;
+```
+
+This rollback deliberately restores the reviewed risks: caller-clock leases, direct noncanonical
+confirmation locking, non-atomic subscription recovery, and mutable credentials during pending
+orders. It must be exercised against an isolated schema first. A full feature rollback would also
+need a separate forward migration to remove the `20260718110000` expiry columns/trigger/index after
+all pending orders and workers are drained; that destructive data change is not part of the routine
+reliability rollback.

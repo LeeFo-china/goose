@@ -13,10 +13,10 @@
 migration。小程序侧可先完成兼容，但应在后端 migration、API 和 worker 同时就绪后再开放
 真实入口。
 
-本地代码验证已完成：261 条聚焦测试、API typecheck、build、文件大小检查及 worker
-禁用态启动/退出 smoke 均通过。由于本机 Docker/Supabase 未启动，migration、RPC 和真实
-微信支付查单/关单 smoke 仍未执行；这不影响小程序先按本文修改类型和交互，但暂不能把本地
-代码状态表述为已部署可联调。
+最终审查修复后，本次变更涉及的 33 个 API 测试文件已聚合通过 267 条测试、0 失败；API
+typecheck、build、文件大小、完整 diff 检查及 worker 禁用态启动/退出 smoke 也已通过。
+远程 dev 已获授权并完成只读预检，但 migration、RPC 和真实微信支付查单/关单 smoke 尚未
+执行；完成前仍以本文的“尚未部署、不可真实联调”状态为准。
 
 ## 接口共同约定
 
@@ -111,6 +111,11 @@ Content-Type: application/json
 }
 ```
 
+`payment_request` 的类型必须是上面对象或 `null`。如果微信预下单、配置读取或网络耗时跨过
+`payment_expires_at`，后端即使已取得 prepay 结果也会返回 `null`，同时订单的
+`payment_action.disabled_reason` 为 `ORDER_PAYMENT_EXPIRED`。小程序不得再调起支付，应转入
+结果确认。
+
 网络超时重试同一次创建时必须复用原 `idempotency_key`。只有用户明确开始一笔新充值，
 或旧订单已 `closed` 后重新充值，才生成新的 UUID v4；后端会生成新的
 `out_trade_no` 和新的 5 分钟截止时间。
@@ -198,7 +203,9 @@ Content-Type: application/json
 ```
 
 只有 `payment_action.enabled = true` 时才展示并调用此接口。不要保存并长期复用创建订单
-响应里的签名参数。
+响应里的签名参数。继续支付响应的 `payment_request` 同样可能因请求期间刚好到期而为
+`null`；此时按同一响应中的 `order.payment_action` 展示并刷新详情，不调用
+`Taro.requestPayment`。
 
 ## 推荐的小程序状态机
 
@@ -284,6 +291,7 @@ worker 默认每 10 秒扫描一次。倒计时归零后建议沿用现有 1200m
 | 409 | `BILLING_RECHARGE_PAYMENT_CHANNEL_UNSUPPORTED` | 隐藏继续支付入口 |
 | 409 | `BILLING_RECHARGE_PAYMENT_REQUEST_UNAVAILABLE` | 刷新详情；仍不可用则提示重新下单 |
 | 409 | `BILLING_RECHARGE_PAYMENT_CONFIG_MISMATCH` | 停止支付并上报 `requestId` |
+| 502 | `WECHAT_PAY_PREPAY_FAILED` | 不重建订单；刷新详情，未过期时允许用户重试继续支付 |
 
 错误响应格式为 `{ success: false, message, code, details?, requestId }`。不要把完整 token、
 openid、支付签名或密钥写入日志；联调反馈只提供订单号、接口、错误码、`requestId` 和脱敏
