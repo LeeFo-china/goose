@@ -4,6 +4,11 @@ import {
   type TenantCreditWechatNotificationRecord,
 } from "@/repositories/billing-recharge";
 import type { CreditRechargeRefundCallbackContext } from "@/services/wechat-pay-callback-context-matcher";
+import {
+  assertWechatRefundEventMatches,
+  parseAndAssertWechatRefundCallback,
+  type WechatRefundCallbackExpectedBinding,
+} from "@/services/wechat-pay-refund-contract";
 
 type CreditRechargeRefundRepositoryPort = Pick<
   typeof billingRechargeRepository,
@@ -12,7 +17,7 @@ type CreditRechargeRefundRepositoryPort = Pick<
   | "markWechatNotificationProcessed"
   | "markWechatNotificationFailed"
   | "confirmWechatRechargeRefund"
-  | "markWechatRechargeRefundFailed"
+  | "applyWechatRechargeRefundCallbackState"
 >;
 
 const SUCCESS_RESPONSE = { code: "SUCCESS", message: "成功" } as const;
@@ -62,51 +67,91 @@ async function processCreditRechargeRefund(input: {
 }) {
   const { matched, notification, repository } = input;
   const eventType = notification.event_type;
-  const refundStatus = optionalString(matched.resource.refund_status);
-  const outRefundNo = requireString(
+  const refund = parseAndAssertWechatRefundCallback(
     matched.resource,
-    "out_refund_no",
-    "微信支付退款回调缺少商户退款单号",
+    buildExpectedRefundBinding(matched),
   );
-  const refundId = optionalString(matched.resource.refund_id);
+  assertWechatRefundEventMatches(eventType, refund.status);
 
-  if (eventType === "REFUND.SUCCESS" || refundStatus === "SUCCESS") {
+  if (refund.status === "SUCCESS") {
     await repository.confirmWechatRechargeRefund({
       refundRequestId: matched.refundRequest.id,
-      outRefundNo,
-      wechatRefundId: refundId,
-      refundAmountFen: getResourceRefundAmount(matched.resource),
+      outRefundNo: refund.outRefundNo,
+      wechatRefundId: refund.wechatRefundId,
+      refundAmountFen: refund.refundAmountFen,
       refundedAt: optionalString(matched.resource.success_time) ??
         new Date().toISOString(),
       notificationId: notification.id,
       metadata: {
         callback_notify_id: notification.notify_id,
-        out_refund_no: outRefundNo,
-        refund_id: refundId,
+        out_refund_no: refund.outRefundNo,
+        refund_id: refund.wechatRefundId,
       },
     });
     return;
   }
 
-  if (
-    eventType === "REFUND.ABNORMAL" ||
-    eventType === "REFUND.CLOSED" ||
-    refundStatus === "ABNORMAL" ||
-    refundStatus === "CLOSED"
-  ) {
-    await repository.markWechatRechargeRefundFailed({
+  if (refund.status === "ABNORMAL" || refund.status === "CLOSED") {
+    await repository.applyWechatRechargeRefundCallbackState({
       refundRequestId: matched.refundRequest.id,
-      tenantId: matched.order.tenant_id,
-      orderId: matched.order.id,
-      failureMessage: eventType || refundStatus || "REFUND_FAILED",
+      outRefundNo: refund.outRefundNo,
+      status: refund.status,
+      checkedAt: notification.created_at,
       metadata: {
         callback_notify_id: notification.notify_id,
-        out_refund_no: outRefundNo,
-        refund_id: refundId,
-        refund_status: refundStatus,
+        out_refund_no: refund.outRefundNo,
+        refund_id: refund.wechatRefundId,
+        refund_status: refund.status,
       },
     });
   }
+}
+
+function buildExpectedRefundBinding(
+  matched: CreditRechargeRefundCallbackContext,
+): WechatRefundCallbackExpectedBinding {
+  const base = {
+    outRefundNo: requireLocalString(
+      matched.refundRequest.out_refund_no,
+      "BILLING_RECHARGE_REFUND_OUT_REFUND_NO_REQUIRED",
+    ),
+    wechatRefundId: optionalString(matched.refundRequest.wechat_refund_id),
+    transactionId: requireLocalString(
+      matched.order.transaction_id,
+      "BILLING_RECHARGE_REFUND_TRANSACTION_ID_REQUIRED",
+    ),
+    outTradeNo: requireLocalString(
+      matched.order.out_trade_no,
+      "BILLING_RECHARGE_REFUND_OUT_TRADE_NO_REQUIRED",
+    ),
+    refundAmountFen: matched.refundRequest.requested_amount_fen,
+    totalAmountFen: matched.order.paid_amount_fen || matched.order.amount_fen,
+    currency: "CNY" as const,
+  };
+  const merchantId = requireLocalString(
+    matched.config.merchant_id,
+    "WECHAT_PAY_CONFIG_INCOMPLETE",
+  );
+  if (matched.config.merchant_mode === "service_provider_sub_merchant") {
+    return {
+      ...base,
+      merchantMode: "service_provider_sub_merchant",
+      merchantId,
+      subMerchantId: requireLocalString(
+        matched.config.sub_merchant_id,
+        "WECHAT_PAY_CONFIG_INCOMPLETE",
+      ),
+    };
+  }
+  return { ...base, merchantMode: "direct_merchant", merchantId };
+}
+
+function requireLocalString(value: unknown, code: string) {
+  const result = optionalString(value);
+  if (!result) {
+    throw Errors.business(409, "积分充值退款本地绑定信息不完整", code);
+  }
+  return result;
 }
 
 function requireString(
@@ -121,18 +166,6 @@ function requireString(
 
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function getResourceRefundAmount(resource: Record<string, unknown>) {
-  const amount = resource.amount;
-  if (!amount || typeof amount !== "object" || Array.isArray(amount)) {
-    throw Errors.badRequest("微信支付退款回调金额缺失");
-  }
-  const refund = Number((amount as Record<string, unknown>).refund ?? 0);
-  if (!Number.isFinite(refund) || refund <= 0) {
-    throw Errors.badRequest("微信支付退款回调金额不正确");
-  }
-  return refund;
 }
 
 function getErrorMessage(error: unknown) {

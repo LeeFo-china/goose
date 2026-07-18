@@ -53,6 +53,10 @@ type UntypedClient = {
       | "tenant_credit_orders"
       | "tenants",
   ) => UntypedTable;
+  rpc: (
+    functionName: "billing_begin_wechat_recharge_refund",
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
 };
 
 class PlatformBillingRechargeRefundRepository {
@@ -108,6 +112,29 @@ class PlatformBillingRechargeRefundRepository {
 
     if (error) {
       throw Errors.dbError("查询积分充值退款申请失败", error);
+    }
+
+    const list = await this.hydrate(
+      data ? [data as TenantCreditRefundRequestRecord] : [],
+    );
+    return list[0] ?? null;
+  }
+
+  async beginWechatRefund(input: {
+    requestId: string;
+    outRefundNo: string;
+    now: string;
+  }) {
+    const { data, error } = await (
+      SupabaseDB.getAdminClient() as unknown as UntypedClient
+    ).rpc("billing_begin_wechat_recharge_refund", {
+      p_refund_request_id: input.requestId,
+      p_out_refund_no: input.outRefundNo,
+      p_now: input.now,
+    });
+
+    if (error) {
+      throw Errors.dbError("开始执行积分充值微信退款失败", error);
     }
 
     const list = await this.hydrate(

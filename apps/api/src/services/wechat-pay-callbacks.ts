@@ -46,7 +46,7 @@ type CreditRechargeRepositoryPort = Pick<
   | "markWechatNotificationFailed"
   | "confirmWechatRecharge"
   | "confirmWechatRechargeRefund"
-  | "markWechatRechargeRefundFailed"
+  | "applyWechatRechargeRefundCallbackState"
 >;
 
 type WechatPayCallbackServiceDependencies =

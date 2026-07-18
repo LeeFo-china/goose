@@ -176,18 +176,12 @@ export const repository = {
     async (): Promise<PlatformRechargeRefundRequestRecord | null> =>
       approvedRequest,
   ),
-  markRequestRefunding: mock(
+  beginWechatRefund: mock(
     async (): Promise<PlatformRechargeRefundRequestRecord | null> => {
-      events.push("mark-request-refunding");
+      events.push("begin-wechat-refund");
       return refundingRequest;
     },
   ),
-  markOrderRefundStatus: mock(async (input: {
-    refundStatus: string;
-  }): Promise<TenantCreditOrderRecord> => {
-    events.push(`mark-order-${input.refundStatus}`);
-    return { ...order, refund_status: "refunding" };
-  }),
   saveWechatRefundResult: mock(
     async (
       input: Parameters<
@@ -208,6 +202,9 @@ export const repository = {
 
 export const paymentConfigRepository = {
   findWechatPayConfig: mock(async () => paymentConfig),
+  findWechatPayConfigById: mock(
+    async (): Promise<PlatformPaymentConfigRecord | null> => paymentConfig,
+  ),
 };
 
 export const secretBundleService = {
@@ -259,15 +256,9 @@ export function resetExecutionMocks() {
     fn.mockClear();
   }
   repository.findRequestById.mockImplementation(async () => approvedRequest);
-  repository.markRequestRefunding.mockImplementation(async () => {
-    events.push("mark-request-refunding");
+  repository.beginWechatRefund.mockImplementation(async () => {
+    events.push("begin-wechat-refund");
     return refundingRequest;
-  });
-  repository.markOrderRefundStatus.mockImplementation(async (input: {
-    refundStatus: string;
-  }) => {
-    events.push(`mark-order-${input.refundStatus}`);
-    return { ...order, refund_status: "refunding" };
   });
   repository.saveWechatRefundResult.mockImplementation(async (input) => {
     events.push("save-wechat-result");
@@ -280,6 +271,9 @@ export function resetExecutionMocks() {
     };
   });
   paymentConfigRepository.findWechatPayConfig.mockImplementation(
+    async () => paymentConfig,
+  );
+  paymentConfigRepository.findWechatPayConfigById.mockImplementation(
     async () => paymentConfig,
   );
   secretBundleService.load.mockImplementation(async () => ({

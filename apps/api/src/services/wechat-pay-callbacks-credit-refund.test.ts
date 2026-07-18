@@ -37,6 +37,14 @@ const platformConfig = {
   updated_at: "2026-07-02T08:00:00.000Z",
 } satisfies PlatformPaymentConfigRecord;
 
+const partnerConfig = {
+  ...platformConfig,
+  profile_code: "tenant_service_provider",
+  merchant_mode: "service_provider_sub_merchant",
+  merchant_id: "1900000100",
+  sub_merchant_id: "1900000109",
+} satisfies PlatformPaymentConfigRecord;
+
 const creditOrder = {
   id: "credit-order-1",
   tenant_id: "tenant-1",
@@ -120,6 +128,8 @@ const refundRawBody = JSON.stringify({
 });
 
 const decryptedRefundResource = {
+  mchid: "1900000001",
+  transaction_id: "4200000000202607020000000001",
   out_trade_no: "TC202607020001",
   out_refund_no: "TR202607020001",
   refund_id: "5030000000202607020000000001",
@@ -134,7 +144,9 @@ const decryptedRefundResource = {
 };
 
 const listProjectCallbackCandidateConfigs = mock(async () => []);
-const listPlatformCallbackCandidateConfigs = mock(async () => [platformConfig]);
+const listPlatformCallbackCandidateConfigs = mock(
+  async (): Promise<PlatformPaymentConfigRecord[]> => [platformConfig],
+);
 const loadSecretBundle = mock(async (): Promise<WechatPaySecretBundle> => ({
   privateKeyPem: "private-key",
   apiV3Key: "12345678901234567890123456789012",
@@ -178,10 +190,7 @@ const confirmWechatRechargeRefund = mock(async () => ({
   ledger: { id: "refund-ledger-1" },
   idempotent: false,
 }));
-const markWechatRechargeRefundFailed = mock(async () => ({
-  request: refundRequest,
-  order: creditOrder,
-}));
+const applyWechatRechargeRefundCallbackState = mock(async () => true);
 const recoverAfterRecharge = mock(async () => ({ recovered: true }));
 const createPayment = mock(async (): Promise<PaymentRecord> => {
   throw new Error("project payment should not be created for credit refund");
@@ -210,7 +219,7 @@ async function createService() {
       markWechatNotificationFailed: markCreditNotificationFailed,
       confirmWechatRecharge,
       confirmWechatRechargeRefund,
-      markWechatRechargeRefundFailed,
+      applyWechatRechargeRefundCallbackState,
     },
     paymentRepository: { create: createPayment },
     paymentBridge: { complete: completePaymentTask },
@@ -234,7 +243,7 @@ describe("WechatPayCallbackService credit recharge refund callbacks", () => {
       markCreditNotificationFailed,
       confirmWechatRecharge,
       confirmWechatRechargeRefund,
-      markWechatRechargeRefundFailed,
+      applyWechatRechargeRefundCallbackState,
       recoverAfterRecharge,
       createPayment,
       completePaymentTask,
@@ -296,6 +305,31 @@ describe("WechatPayCallbackService credit recharge refund callbacks", () => {
     expect(completePaymentTask).not.toHaveBeenCalled();
   });
 
+  test("binds a service-provider callback to both merchant identifiers", async () => {
+    listPlatformCallbackCandidateConfigs.mockImplementationOnce(
+      async () => [partnerConfig],
+    );
+    decryptResource.mockImplementationOnce(() => ({
+      ...decryptedRefundResource,
+      mchid: undefined,
+      sp_mchid: "1900000100",
+      sub_mchid: "1900000109",
+    }));
+    const service = await createService();
+
+    const result = await service.handleCallback({
+      rawBody: refundRawBody,
+      headers: {
+        "wechatpay-timestamp": "1782873600",
+        "wechatpay-nonce": "callback-nonce",
+        "wechatpay-signature": "signature",
+      },
+    });
+
+    expect(result).toEqual({ code: "SUCCESS", message: "成功" });
+    expect(confirmWechatRechargeRefund).toHaveBeenCalledTimes(1);
+  });
+
   test("returns success without refund side effects for duplicate notification", async () => {
     findCreditNotificationByNotifyId.mockImplementationOnce(async () => ({
       ...refundNotification,
@@ -315,11 +349,30 @@ describe("WechatPayCallbackService credit recharge refund callbacks", () => {
     expect(result).toEqual({ code: "SUCCESS", message: "成功" });
     expect(createCreditNotification).not.toHaveBeenCalled();
     expect(confirmWechatRechargeRefund).not.toHaveBeenCalled();
-    expect(markWechatRechargeRefundFailed).not.toHaveBeenCalled();
     expect(markCreditNotificationProcessed).not.toHaveBeenCalled();
   });
 
-  test("marks refund request failed for failed refund callback", async () => {
+  test("rejects a refund event whose status is contradictory", async () => {
+    decryptResource.mockImplementationOnce(() => ({
+      ...decryptedRefundResource,
+      refund_status: "CLOSED",
+    }));
+    const service = await createService();
+
+    await expect(service.handleCallback({
+      rawBody: refundRawBody,
+      headers: {
+        "wechatpay-timestamp": "1782873600",
+        "wechatpay-nonce": "callback-nonce",
+        "wechatpay-signature": "signature",
+      },
+    })).rejects.toMatchObject({
+      code: "BILLING_RECHARGE_WECHAT_REFUND_EVENT_MISMATCH",
+    });
+    expect(confirmWechatRechargeRefund).not.toHaveBeenCalled();
+  });
+
+  test("atomically closes a refund for a CLOSED callback", async () => {
     decryptResource.mockImplementationOnce(() => ({
       ...decryptedRefundResource,
       refund_status: "CLOSED",
@@ -344,11 +397,11 @@ describe("WechatPayCallbackService credit recharge refund callbacks", () => {
 
     expect(result).toEqual({ code: "SUCCESS", message: "成功" });
     expect(confirmWechatRechargeRefund).not.toHaveBeenCalled();
-    expect(markWechatRechargeRefundFailed).toHaveBeenCalledWith({
+    expect(applyWechatRechargeRefundCallbackState).toHaveBeenCalledWith({
       refundRequestId: "refund-request-1",
-      tenantId: "tenant-1",
-      orderId: "credit-order-1",
-      failureMessage: "REFUND.CLOSED",
+      outRefundNo: "TR202607020001",
+      status: "CLOSED",
+      checkedAt: "2026-07-02T09:20:01.000Z",
       metadata: {
         callback_notify_id: "notify-refund-1",
         out_refund_no: "TR202607020001",
@@ -359,5 +412,44 @@ describe("WechatPayCallbackService credit recharge refund callbacks", () => {
     expect(markCreditNotificationProcessed).toHaveBeenCalledWith({
       notificationId: "refund-notification-1",
     });
+  });
+
+  test("keeps the refund active through the atomic ABNORMAL callback state", async () => {
+    decryptResource.mockImplementationOnce(() => ({
+      ...decryptedRefundResource,
+      refund_status: "ABNORMAL",
+    }));
+    createCreditNotification.mockImplementationOnce(async () => ({
+      ...refundNotification,
+      event_type: "REFUND.ABNORMAL",
+    }));
+    const service = await createService();
+
+    const result = await service.handleCallback({
+      rawBody: JSON.stringify({
+        ...JSON.parse(refundRawBody),
+        event_type: "REFUND.ABNORMAL",
+      }),
+      headers: {
+        "wechatpay-timestamp": "1782873600",
+        "wechatpay-nonce": "callback-nonce",
+        "wechatpay-signature": "signature",
+      },
+    });
+
+    expect(result).toEqual({ code: "SUCCESS", message: "成功" });
+    expect(applyWechatRechargeRefundCallbackState).toHaveBeenCalledWith({
+      refundRequestId: "refund-request-1",
+      outRefundNo: "TR202607020001",
+      status: "ABNORMAL",
+      checkedAt: "2026-07-02T09:20:01.000Z",
+      metadata: {
+        callback_notify_id: "notify-refund-1",
+        out_refund_no: "TR202607020001",
+        refund_id: "5030000000202607020000000001",
+        refund_status: "ABNORMAL",
+      },
+    });
+    expect(confirmWechatRechargeRefund).not.toHaveBeenCalled();
   });
 });

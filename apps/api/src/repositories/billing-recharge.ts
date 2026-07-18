@@ -2,10 +2,9 @@ import { Errors } from "@/errors/error-factory";
 import type { BillingAccountBalance } from "@/repositories/billing";
 import {
   billingRechargeRefundCallbackRepository,
+  type BillingApplyWechatRechargeRefundCallbackStateInput,
   type BillingConfirmWechatRechargeRefundInput,
   type BillingConfirmWechatRechargeRefundResult,
-  type BillingMarkWechatRechargeRefundFailedInput,
-  type BillingMarkWechatRechargeRefundFailedResult,
   type BillingWechatRefundRequestMatch,
 } from "@/repositories/billing-recharge-refund-callbacks";
 import { SupabaseDB } from "@/utils/supabase/index";
@@ -458,19 +457,17 @@ class BillingRechargeRepository {
       .confirmWechatRechargeRefund(input);
   }
 
-  async markWechatRechargeRefundFailed(
-    input: BillingMarkWechatRechargeRefundFailedInput,
+  async applyWechatRechargeRefundCallbackState(
+    input: BillingApplyWechatRechargeRefundCallbackStateInput,
   ) {
     return billingRechargeRefundCallbackRepository
-      .markWechatRechargeRefundFailed(input);
+      .applyWechatRechargeRefundCallbackState(input);
   }
 }
 
 export type {
   BillingConfirmWechatRechargeRefundInput,
   BillingConfirmWechatRechargeRefundResult,
-  BillingMarkWechatRechargeRefundFailedInput,
-  BillingMarkWechatRechargeRefundFailedResult,
   BillingWechatRefundRequestMatch,
 };
 

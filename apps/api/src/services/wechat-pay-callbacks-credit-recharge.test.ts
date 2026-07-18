@@ -3,7 +3,6 @@ import type {
   TenantCreditOrderRecord,
   TenantCreditWechatNotificationRecord,
 } from "@/repositories/billing-recharge";
-import type { TenantCreditRefundRequestRecord } from "@/repositories/billing-recharge-refunds";
 import type { PaymentRecord } from "@/repositories/payments";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
@@ -148,10 +147,7 @@ const confirmWechatRechargeRefund = mock(async () => ({
   ledger: { id: "refund-ledger-1" },
   idempotent: false,
 }));
-const markWechatRechargeRefundFailed = mock(async () => ({
-  request: {} as TenantCreditRefundRequestRecord,
-  order: creditOrder,
-}));
+const applyWechatRechargeRefundCallbackState = mock(async () => true);
 const recoverAfterRecharge = mock(async () => ({
   recovered: true,
 }));
@@ -182,7 +178,7 @@ async function createService() {
       markWechatNotificationFailed: markCreditNotificationFailed,
       confirmWechatRecharge,
       confirmWechatRechargeRefund,
-      markWechatRechargeRefundFailed,
+      applyWechatRechargeRefundCallbackState,
     },
     paymentRepository: { create: createPayment },
     paymentBridge: { complete: completePaymentTask },
@@ -206,7 +202,7 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
       markCreditNotificationFailed,
       confirmWechatRecharge,
       confirmWechatRechargeRefund,
-      markWechatRechargeRefundFailed,
+      applyWechatRechargeRefundCallbackState,
       recoverAfterRecharge,
       createPayment,
       completePaymentTask,

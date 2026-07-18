@@ -1,6 +1,5 @@
 import { Errors } from "@/errors/error-factory";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
-import type { TenantCreditRefundRequestStatus } from "@/repositories/billing-recharge-refunds";
 import {
   platformBillingRechargeRefundRepository,
   type PlatformRechargeRefundRequestRecord,
@@ -29,14 +28,13 @@ import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundl
 type RepositoryPort = Pick<
   typeof platformBillingRechargeRefundRepository,
   | "findRequestById"
-  | "markRequestRefunding"
-  | "markOrderRefundStatus"
+  | "beginWechatRefund"
   | "saveWechatRefundResult"
 >;
 
 type PaymentConfigRepositoryPort = Pick<
   typeof platformPaymentConfigRepository,
-  "findWechatPayConfig"
+  "findWechatPayConfigById"
 >;
 
 type SecretBundleServicePort = Pick<typeof wechatPaySecretBundleService, "load">;
@@ -58,11 +56,7 @@ export type PlatformBillingRechargeRefundExecutionServiceDependencies = {
 };
 
 const REVIEW_PERMISSION = "platform.billing.recharge_refund.review";
-const RECHARGE_CHANNEL = "tenant_recharge";
-const EXECUTABLE_STATUSES: TenantCreditRefundRequestStatus[] = [
-  "approved",
-  "failed",
-];
+const EXECUTABLE_STATUSES = ["approved", "failed"] as const;
 
 export class PlatformBillingRechargeRefundExecutionService {
   private readonly repository: RepositoryPort;
@@ -109,7 +103,10 @@ export class PlatformBillingRechargeRefundExecutionService {
     );
     const outRefundNo = this.buildOutRefundNo(current);
 
-    const config = await this.paymentConfigRepository.findWechatPayConfig();
+    const paymentConfigId = this.requirePaymentConfigId(order);
+    const config = await this.paymentConfigRepository.findWechatPayConfigById(
+      paymentConfigId,
+    );
     this.assertPaymentConfigReady(config, order);
     const secretBundle = await this.secretBundleService.load(
       config.encrypted_config_ref,
@@ -126,18 +123,12 @@ export class PlatformBillingRechargeRefundExecutionService {
       totalAmountFen,
     });
 
-    const refundingRequest = await this.repository.markRequestRefunding({
-      id: requestId,
-      fromStatuses: EXECUTABLE_STATUSES,
+    const refundingRequest = await this.repository.beginWechatRefund({
+      requestId,
       outRefundNo,
+      now: this.nowFactory().toISOString(),
     });
     if (!refundingRequest) throw invalidExecutionStateError();
-
-    await this.repository.markOrderRefundStatus({
-      tenantId: refundingRequest.tenant_id,
-      orderId: refundingRequest.order_id,
-      refundStatus: "refunding",
-    });
 
     const refundInput = {
       config,
@@ -229,7 +220,7 @@ export class PlatformBillingRechargeRefundExecutionService {
   }
 
   private assertExecutableRequest(request: PlatformRechargeRefundRequestRecord) {
-    if (!EXECUTABLE_STATUSES.includes(request.status)) {
+    if (!EXECUTABLE_STATUSES.some((status) => status === request.status)) {
       throw invalidExecutionStateError();
     }
   }
@@ -288,15 +279,27 @@ export class PlatformBillingRechargeRefundExecutionService {
     return outTradeNo;
   }
 
+  private requirePaymentConfigId(order: TenantCreditOrderRecord) {
+    const paymentConfigId = optionalString(order.payment_config_id);
+    if (!paymentConfigId) {
+      throw Errors.business(
+        409,
+        "积分充值订单缺少原支付配置",
+        "BILLING_RECHARGE_PAYMENT_CONFIG_REQUIRED",
+      );
+    }
+    return paymentConfigId;
+  }
+
   private assertPaymentConfigReady(
     config: PlatformPaymentConfigRecord | null,
     order: TenantCreditOrderRecord,
   ): asserts config is PlatformPaymentConfigRecord {
-    if (!config || config.status !== "active") {
+    if (!config) {
       throw Errors.business(
         409,
-        "平台微信支付配置未启用",
-        "PLATFORM_WECHAT_PAY_CONFIG_NOT_ACTIVE",
+        "积分充值订单关联的原支付配置不存在",
+        "BILLING_RECHARGE_PAYMENT_CONFIG_NOT_FOUND",
       );
     }
     if (order.payment_config_id && order.payment_config_id !== config.id) {
@@ -322,13 +325,6 @@ export class PlatformBillingRechargeRefundExecutionService {
         409,
         "平台微信支付密钥引用未配置",
         "PLATFORM_WECHAT_PAY_SECRET_REF_REQUIRED",
-      );
-    }
-    if (!config.enabled_channels.includes(RECHARGE_CHANNEL)) {
-      throw Errors.business(
-        409,
-        "平台微信支付未启用积分充值通道",
-        "PLATFORM_WECHAT_PAY_RECHARGE_CHANNEL_DISABLED",
       );
     }
   }
