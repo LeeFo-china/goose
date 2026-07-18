@@ -1,7 +1,7 @@
 # Recharge Expiration Reliability Design
 
 **Date:** 2026-07-18  
-**Status:** Pending written-spec review  
+**Status:** Approved for implementation
 **Scope:** Harden the pending-recharge expiration work already implemented on `feat/recharge-payment-expiration`.
 
 ## Context
@@ -64,14 +64,14 @@ The new function is `SECURITY DEFINER`, fixes `search_path`, revokes `PUBLIC`, `
 
 The run performs this loop sequentially:
 
-1. claim one expired order with a fresh database time;
+1. claim one expired order with a fresh database time while excluding order IDs already seen in this run;
 2. load or reuse the order's reconciliation configuration and secret;
 3. renew that order's claim by `id + status=pending + claim_token` immediately before the first WeChat request;
 4. query WeChat, then follow the existing state matrix;
 5. retain failed or uncertain claims in memory until the run has finished claiming its bounded set;
 6. release retained claims at the end of the run.
 
-Deferring uncertain releases prevents the next one-row claim from selecting the same expired order repeatedly in the same run. A crash still relies on the short database lease for recovery.
+The claim RPC accepts at most 100 excluded order IDs and filters them in SQL. This remains correct even if an earlier uncertain order's short lease expires before a long run finishes. Deferring uncertain releases avoids making those orders available to other workers immediately; a crash still relies on the short database lease for recovery.
 
 Add a repository method:
 
