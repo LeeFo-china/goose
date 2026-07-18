@@ -1,5 +1,4 @@
 import {
-  systemSettingRepository,
   accessPolicyService,
   Errors,
   type AuthContext,
@@ -94,9 +93,12 @@ export async function clearLegacyTenantSmsOverrides(this: any, input: {
   }) {
     await Promise.all(
       Array.from(LEGACY_PARTIAL_TENANT_SMS_SETTING_KEYS).map(async (key) => {
-        const existing = await systemSettingRepository.findByKey(key, input.tenantId);
+        const existing = await this.systemSettingRepository.findByKey(
+          key,
+          input.tenantId,
+        );
         if (!existing) return;
-        await systemSettingRepository.updateValue({
+        await this.systemSettingRepository.updateValue({
           key,
           tenantId: input.tenantId,
           valueText: null,
@@ -119,10 +121,14 @@ export async function updateSetting(this: any, authContext: AuthContext, key: st
     }
 
     const definition = definitionByKey.get(key);
-    const platformRecord = await systemSettingRepository.findByKey(key, null)
+    const platformRecord = await this.systemSettingRepository.findByKey(
+      key,
+      null,
+    )
       || (definition ? this.buildDefinitionRecord(definition) : null);
     const record = tenantId
-      ? await systemSettingRepository.findByKey(key, tenantId) || platformRecord
+      ? await this.systemSettingRepository.findByKey(key, tenantId) ||
+        platformRecord
       : platformRecord;
     if (!record) {
       throw Errors.notFound("系统配置不存在");
@@ -132,15 +138,18 @@ export async function updateSetting(this: any, authContext: AuthContext, key: st
     const valueText = record.is_secret && validatedValue
       ? encryptSecretValue(validatedValue)
       : validatedValue;
-    const existingExact = await systemSettingRepository.findByKey(key, tenantId);
+    const existingExact = await this.systemSettingRepository.findByKey(
+      key,
+      tenantId,
+    );
     const updated = existingExact
-      ? await systemSettingRepository.updateValue({
+      ? await this.systemSettingRepository.updateValue({
         key,
         tenantId,
         valueText,
         employeeId: authContext.employeeId,
       })
-      : await systemSettingRepository.createValue({
+      : await this.systemSettingRepository.createValue({
         key,
         tenantId,
         groupCode: record.group_code,
