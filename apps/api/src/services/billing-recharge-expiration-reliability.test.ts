@@ -152,6 +152,96 @@ describe("BillingRechargeExpirationService cleanup configuration", () => {
     },
   );
 
+  test.each(["disabled", "suspended"] as const)(
+    "queries and closes a %s service-provider order without app ids",
+    async (status) => {
+      const config = makePaymentConfig("provider-config", {
+        profile_code: "tenant_service_provider",
+        merchant_mode: "service_provider_sub_merchant",
+        sub_merchant_id: "sub-merchant-1",
+        app_id: null,
+        sub_app_id: null,
+        status,
+        enabled_channels: [],
+      });
+      const order = makeOrder(1, { payment_config_id: config.id });
+      const harness = await createExpirationHarness({
+        orders: [order],
+        configs: [config],
+      });
+      harness.queryTransaction.mockImplementationOnce(async () => ({
+        trade_state: "NOTPAY",
+      }));
+
+      const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+      expect(harness.wechatPayGateway.queryTransactionByOutTradeNo)
+        .toHaveBeenCalledWith(expect.objectContaining({ config }));
+      expect(harness.wechatPayGateway.closeTransactionByOutTradeNo)
+        .toHaveBeenCalledWith(expect.objectContaining({ config }));
+      expect(result.closed).toBe(1);
+    },
+  );
+
+  test.each([
+    {
+      profile_code: "platform_direct_recharge",
+      merchant_mode: "service_provider_sub_merchant",
+      sub_merchant_id: "sub-merchant-1",
+      sub_app_id: "wx-sub-app",
+    },
+    {
+      profile_code: "tenant_service_provider",
+      merchant_mode: "direct_merchant",
+      sub_merchant_id: null,
+    },
+  ] as const)(
+    "rejects the crossed $profile_code and $merchant_mode cleanup combination",
+    async (overrides) => {
+      const config = makePaymentConfig("crossed-config", overrides);
+      const order = makeOrder(1, { payment_config_id: config.id });
+      const harness = await createExpirationHarness({
+        orders: [order],
+        configs: [config],
+      });
+
+      const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+      expect(harness.wechatPayGateway.queryTransactionByOutTradeNo).not
+        .toHaveBeenCalled();
+      expect(harness.repository.releaseCloseClaim).toHaveBeenCalledWith({
+        orderId: order.id,
+        claimToken: order.close_claim_token,
+        errorMessage: "BILLING_RECHARGE_EXPIRE_PAYMENT_CONFIG_FAILED",
+      });
+      expect(result.failed).toBe(1);
+    },
+  );
+
+  test("defers a missing payment config id and continues the next claim", async () => {
+    const missingConfig = makeOrder(1, { payment_config_id: null });
+    const healthy = makeOrder(2);
+    const harness = await createExpirationHarness({
+      orders: [missingConfig, healthy],
+    });
+
+    const result = await harness.service.runExpiredOrderChecks({ batchSize: 3 });
+
+    expect(harness.repository.releaseCloseClaim).toHaveBeenCalledWith({
+      orderId: missingConfig.id,
+      claimToken: missingConfig.close_claim_token,
+      errorMessage: "BILLING_RECHARGE_EXPIRE_PAYMENT_CONFIG_REQUIRED",
+    });
+    expect(harness.repository.renewCloseClaim).toHaveBeenCalledTimes(1);
+    expect(harness.repository.renewCloseClaim).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: healthy.id }),
+    );
+    expect(harness.wechatPayGateway.queryTransactionByOutTradeNo)
+      .toHaveBeenCalledTimes(1);
+    expect(harness.calls).toContain("mark:order-2");
+    expect(result).toMatchObject({ claimed: 2, closed: 1, failed: 1 });
+  });
+
   test("loads each config and secret only once per run", async () => {
     const firstConfig = makePaymentConfig("config-a");
     const secondConfig = makePaymentConfig("config-b");
@@ -219,10 +309,12 @@ describe("BillingRechargeExpirationService cleanup configuration", () => {
     },
   );
 
-  test("rejects incomplete cleanup credentials without a remote call", async () => {
+  test("rejects a service-provider cleanup config without sub merchant id", async () => {
     const invalidConfig = makePaymentConfig("provider-config", {
+      profile_code: "tenant_service_provider",
       merchant_mode: "service_provider_sub_merchant",
       sub_merchant_id: null,
+      app_id: null,
       sub_app_id: null,
     });
     const order = makeOrder(1, { payment_config_id: invalidConfig.id });

@@ -355,18 +355,18 @@ export class BillingRechargeExpirationService {
   ): asserts config is PlatformPaymentConfigRecord {
     const commonReady = config?.id === configId &&
       config.provider === "wechat_pay" &&
-      config.profile_code === "platform_direct_recharge" &&
       config.principal_type === "platform" &&
       ["active", "disabled", "suspended"].includes(config.status) &&
       Boolean(optionalString(config.merchant_id)) &&
-      Boolean(optionalString(config.app_id)) &&
       Boolean(optionalString(config.serial_no)) &&
       Boolean(optionalString(config.encrypted_config_ref));
-    const modeReady = config?.merchant_mode === "direct_merchant" ||
-      (config?.merchant_mode === "service_provider_sub_merchant" &&
-        Boolean(optionalString(config.sub_merchant_id)) &&
-        Boolean(optionalString(config.sub_app_id)));
-    if (!commonReady || !modeReady) {
+    const profileModeReady =
+      (config?.profile_code === "platform_direct_recharge" &&
+        config.merchant_mode === "direct_merchant") ||
+      (config?.profile_code === "tenant_service_provider" &&
+        config.merchant_mode === "service_provider_sub_merchant" &&
+        Boolean(optionalString(config.sub_merchant_id)));
+    if (!commonReady || !profileModeReady) {
       throw Errors.business(
         409,
         "平台微信支付充值清理配置未就绪",
