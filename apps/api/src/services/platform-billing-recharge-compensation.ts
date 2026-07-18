@@ -98,16 +98,12 @@ export class PlatformBillingRechargeCompensationService {
     const outTradeNo = this.requireOrderOutTradeNo(order);
 
     if (order.status === "paid") {
-      return {
-        compensated: false,
-        already_paid: true,
-        trade_state: "SUCCESS",
-        order_id: order.id,
-        out_trade_no: outTradeNo,
-        transaction_id: order.transaction_id,
-        notification_id: order.latest_notification_id,
-        result: null,
-      };
+      return this.recoverPaidOrder({
+        authContext,
+        order,
+        outTradeNo,
+        reason: input.reason ?? null,
+      });
     }
     if (order.status !== "pending") {
       throw Errors.business(
@@ -321,6 +317,71 @@ export class PlatformBillingRechargeCompensationService {
           notification_id: notification.id,
           error_message: getErrorMessage(error),
         },
+      });
+      throw error;
+    }
+  }
+
+  private async recoverPaidOrder(input: {
+    authContext: AuthContext;
+    order: TenantCreditOrderRecord;
+    outTradeNo: string;
+    reason: string | null;
+  }) {
+    const { authContext, order, outTradeNo, reason } = input;
+    const transactionId = this.optionalString(order.transaction_id);
+    const auditMetadata = {
+      reason,
+      out_trade_no: outTradeNo,
+      transaction_id: transactionId,
+      notification_id: order.latest_notification_id,
+      paid_amount_fen: order.paid_amount_fen,
+    };
+
+    try {
+      if (!transactionId) {
+        throw Errors.business(
+          409,
+          "已支付积分充值订单缺少微信支付交易号",
+          "BILLING_RECHARGE_TRANSACTION_ID_REQUIRED",
+        );
+      }
+      const confirmResult = await this.rechargeRepository.confirmWechatRecharge({
+        orderId: order.id,
+        transactionId,
+        paidAmountFen: order.paid_amount_fen,
+        paidAt: order.paid_at,
+        notificationId: order.latest_notification_id,
+        metadata: {
+          compensation_source: "platform_paid_recovery",
+          compensation_actor_employee_id: authContext.employeeId ?? null,
+          out_trade_no: outTradeNo,
+        },
+      });
+      await this.recordCompensationAudit({
+        authContext,
+        order,
+        status: "success",
+        summary: "已支付积分充值原子恢复订阅",
+        metadata: { ...auditMetadata, confirm_idempotent: confirmResult.idempotent },
+      });
+      return {
+        compensated: false,
+        already_paid: true,
+        trade_state: "SUCCESS",
+        order_id: order.id,
+        out_trade_no: outTradeNo,
+        transaction_id: transactionId,
+        notification_id: order.latest_notification_id,
+        result: confirmResult,
+      };
+    } catch (error) {
+      await this.recordCompensationAudit({
+        authContext,
+        order,
+        status: "failure",
+        summary: "已支付积分充值原子恢复订阅失败",
+        metadata: { ...auditMetadata, error_message: getErrorMessage(error) },
       });
       throw error;
     }

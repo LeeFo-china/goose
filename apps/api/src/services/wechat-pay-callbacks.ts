@@ -264,9 +264,6 @@ export class WechatPayCallbackService {
     if (matched.resource.trade_state !== "SUCCESS") {
       return;
     }
-    if (matched.order.status === "paid" && matched.order.transaction_id) {
-      return;
-    }
     await this.rechargePaymentConfirmation.confirm({
       order: matched.order,
       transaction: matched.resource,
