@@ -22,11 +22,14 @@ import {
 
 type RepositoryPort = Pick<
   typeof billingRechargeRepository,
-  "claimExpiredOrders" | "markOrderClosed" | "releaseCloseClaim"
+  | "claimExpiredOrders"
+  | "renewCloseClaim"
+  | "markOrderClosed"
+  | "releaseCloseClaim"
 >;
 type PaymentConfigRepositoryPort = Pick<
   typeof platformPaymentConfigRepository,
-  "findWechatPayConfig"
+  "findWechatPayConfigById"
 >;
 type SecretBundleServicePort = Pick<typeof wechatPaySecretBundleService, "load">;
 type WechatPayGatewayPort = Pick<
@@ -43,6 +46,7 @@ export type BillingRechargeExpirationTelemetry = {
   closed: number;
   retried: number;
   failed: number;
+  release_failed: number;
 };
 
 export type BillingRechargeExpirationServiceDependencies = {
@@ -60,14 +64,20 @@ type BatchContext = {
   secretBundle: WechatPaySecretBundle;
 };
 
+type DeferredRelease = {
+  orderId: string;
+  claimToken: string;
+  diagnostic: string | null;
+};
+
 type OrderOutcome = "paid" | "closed" | "retried" | "failed";
 
-const RECHARGE_CHANNEL = "tenant_recharge";
 const DEFAULT_LEASE_SECONDS = 60;
 const DIAGNOSTIC = {
-  batchConfigFailed: "BILLING_RECHARGE_EXPIRE_BATCH_CONFIG_FAILED",
+  paymentConfigRequired: "BILLING_RECHARGE_EXPIRE_PAYMENT_CONFIG_REQUIRED",
+  paymentConfigFailed: "BILLING_RECHARGE_EXPIRE_PAYMENT_CONFIG_FAILED",
   outTradeNoRequired: "BILLING_RECHARGE_EXPIRE_OUT_TRADE_NO_REQUIRED",
-  paymentConfigMismatch: "BILLING_RECHARGE_EXPIRE_PAYMENT_CONFIG_MISMATCH",
+  claimRenewFailed: "BILLING_RECHARGE_EXPIRE_CLAIM_RENEW_FAILED",
   queryFailed: "BILLING_RECHARGE_EXPIRE_QUERY_FAILED",
   tradeStateRetry: "BILLING_RECHARGE_EXPIRE_TRADE_STATE_RETRY",
   confirmFailed: "BILLING_RECHARGE_EXPIRE_CONFIRM_FAILED",
@@ -102,97 +112,135 @@ export class BillingRechargeExpirationService {
     );
   }
 
-  async runExpiredOrderChecks(input: { batchSize: number }) {
-    const now = this.nowFactory();
-    const orders = await this.repository.claimExpiredOrders({
-      now,
-      batchSize: clampInteger(input.batchSize, 1, 100),
-      leaseSeconds: this.leaseSeconds,
-    });
-    const telemetry = emptyTelemetry(orders.length);
-    if (orders.length === 0) return telemetry;
+  async runExpiredOrderChecks(
+    input: { batchSize: number },
+  ): Promise<BillingRechargeExpirationTelemetry> {
+    const limit = clampInteger(input.batchSize, 1, 100);
+    const telemetry = emptyTelemetry();
+    const deferred: DeferredRelease[] = [];
+    const contextCache = new Map<string, Promise<BatchContext>>();
+    const seenOrderIds: string[] = [];
 
-    let context: BatchContext;
     try {
-      context = await this.loadBatchContext();
-    } catch {
-      await this.releaseBatchClaims(orders, DIAGNOSTIC.batchConfigFailed);
-      telemetry.failed = orders.length;
-      return telemetry;
-    }
+      for (let index = 0; index < limit; index += 1) {
+        const orders = await this.repository.claimExpiredOrders({
+          now: this.nowFactory(),
+          batchSize: 1,
+          leaseSeconds: this.leaseSeconds,
+          excludedOrderIds: [...seenOrderIds],
+        });
+        const order = orders[0];
+        if (!order) break;
 
-    for (const order of orders) {
-      const outcome = await this.processOrder(order, context, now);
-      telemetry[outcome] += 1;
+        seenOrderIds.push(order.id);
+        telemetry.claimed += 1;
+        await this.processClaimedOrder({
+          order,
+          contextCache,
+          deferred,
+          telemetry,
+        });
+      }
+    } finally {
+      await this.releaseDeferredClaims(deferred, telemetry);
     }
     return telemetry;
   }
 
-  private async loadBatchContext(): Promise<BatchContext> {
-    const config = await this.paymentConfigRepository.findWechatPayConfig();
-    this.assertRechargeConfig(config);
-    const secretBundle = await this.secretBundleService.load(
-      config.encrypted_config_ref,
-    );
-    return { config, secretBundle };
-  }
+  private async processClaimedOrder(input: {
+    order: TenantCreditOrderRecord;
+    contextCache: Map<string, Promise<BatchContext>>;
+    deferred: DeferredRelease[];
+    telemetry: BillingRechargeExpirationTelemetry;
+  }): Promise<void> {
+    const claimToken = optionalString(input.order.close_claim_token);
+    if (!claimToken) {
+      input.telemetry.failed += 1;
+      return;
+    }
 
-  private async processOrder(
-    order: TenantCreditOrderRecord,
-    context: BatchContext,
-    now: Date,
-  ): Promise<OrderOutcome> {
-    const claimToken = optionalString(order.close_claim_token);
-    if (!claimToken) return "failed";
-
-    const outTradeNo = optionalString(order.out_trade_no);
+    const configId = optionalString(input.order.payment_config_id);
+    if (!configId) {
+      this.deferFailure(input, claimToken, DIAGNOSTIC.paymentConfigRequired);
+      return;
+    }
+    const outTradeNo = optionalString(input.order.out_trade_no);
     if (!outTradeNo) {
-      await this.release(order, claimToken, DIAGNOSTIC.outTradeNoRequired);
-      return "failed";
-    }
-    if (order.payment_config_id !== context.config.id) {
-      await this.release(order, claimToken, DIAGNOSTIC.paymentConfigMismatch);
-      return "failed";
+      this.deferFailure(input, claimToken, DIAGNOSTIC.outTradeNoRequired);
+      return;
     }
 
-    let transaction: WechatPayTransactionQueryResult;
+    let context: BatchContext;
     try {
-      transaction = await this.query(context, outTradeNo);
+      context = await this.loadContext(configId, input.contextCache);
     } catch {
-      await this.release(order, claimToken, DIAGNOSTIC.queryFailed);
-      return "failed";
+      this.deferFailure(input, claimToken, DIAGNOSTIC.paymentConfigFailed);
+      return;
     }
-    return this.handleQueriedState({
-      order,
+
+    const renewNow = this.nowFactory();
+    let renewed: TenantCreditOrderRecord | null;
+    try {
+      renewed = await this.repository.renewCloseClaim({
+        orderId: input.order.id,
+        claimToken,
+        now: renewNow,
+        leaseSeconds: this.leaseSeconds,
+      });
+    } catch {
+      this.deferFailure(input, claimToken, DIAGNOSTIC.claimRenewFailed);
+      return;
+    }
+    if (!renewed) {
+      input.telemetry.retried += 1;
+      return;
+    }
+
+    const outcome = await this.reconcileOwnedOrder({
+      order: renewed,
       claimToken,
       outTradeNo,
-      transaction,
       context,
-      now,
+      now: renewNow,
+      deferred: input.deferred,
     });
+    input.telemetry[outcome] += 1;
+  }
+
+  private async reconcileOwnedOrder(input: {
+    order: TenantCreditOrderRecord;
+    claimToken: string;
+    outTradeNo: string;
+    context: BatchContext;
+    now: Date;
+    deferred: DeferredRelease[];
+  }): Promise<OrderOutcome> {
+    let transaction: WechatPayTransactionQueryResult;
+    try {
+      transaction = await this.query(input.context, input.outTradeNo);
+    } catch {
+      this.defer(input, DIAGNOSTIC.queryFailed);
+      return "failed";
+    }
+    return this.handleQueriedState({ ...input, transaction });
   }
 
   private async handleQueriedState(input: {
     order: TenantCreditOrderRecord;
     claimToken: string;
     outTradeNo: string;
-    transaction: WechatPayTransactionQueryResult;
     context: BatchContext;
     now: Date;
+    deferred: DeferredRelease[];
+    transaction: WechatPayTransactionQueryResult;
   }): Promise<OrderOutcome> {
     const tradeState = optionalString(input.transaction.trade_state);
     if (tradeState === "SUCCESS") {
-      return this.confirmPaid(input.order, input.claimToken, input.transaction);
+      return this.confirmPaid(input, input.transaction);
     }
-    if (tradeState === "CLOSED") {
-      return this.markClosed(input.order, input.claimToken, input.now);
-    }
+    if (tradeState === "CLOSED") return this.markClosed(input);
     if (tradeState !== "NOTPAY") {
-      await this.release(
-        input.order,
-        input.claimToken,
-        DIAGNOSTIC.tradeStateRetry,
-      );
+      this.defer(input, DIAGNOSTIC.tradeStateRetry);
       return "retried";
     }
 
@@ -202,7 +250,7 @@ export class BillingRechargeExpirationService {
         outTradeNo: input.outTradeNo,
         secretBundle: input.context.secretBundle,
       });
-      return this.markClosed(input.order, input.claimToken, input.now);
+      return this.markClosed(input);
     } catch {
       return this.reconcileAfterCloseFailure(input);
     }
@@ -214,32 +262,62 @@ export class BillingRechargeExpirationService {
     outTradeNo: string;
     context: BatchContext;
     now: Date;
+    deferred: DeferredRelease[];
   }): Promise<OrderOutcome> {
     let transaction: WechatPayTransactionQueryResult;
     try {
       transaction = await this.query(input.context, input.outTradeNo);
     } catch {
-      await this.release(
-        input.order,
-        input.claimToken,
-        DIAGNOSTIC.secondQueryFailed,
-      );
+      this.defer(input, DIAGNOSTIC.secondQueryFailed);
       return "failed";
     }
 
     const tradeState = optionalString(transaction.trade_state);
-    if (tradeState === "SUCCESS") {
-      return this.confirmPaid(input.order, input.claimToken, transaction);
-    }
-    if (tradeState === "CLOSED") {
-      return this.markClosed(input.order, input.claimToken, input.now);
-    }
-    await this.release(
-      input.order,
-      input.claimToken,
-      DIAGNOSTIC.closeUncertain,
-    );
+    if (tradeState === "SUCCESS") return this.confirmPaid(input, transaction);
+    if (tradeState === "CLOSED") return this.markClosed(input);
+    this.defer(input, DIAGNOSTIC.closeUncertain);
     return "retried";
+  }
+
+  private async confirmPaid(
+    input: {
+      order: TenantCreditOrderRecord;
+      claimToken: string;
+      deferred: DeferredRelease[];
+    },
+    transaction: WechatPayTransactionQueryResult,
+  ): Promise<OrderOutcome> {
+    try {
+      await this.paymentConfirmation.confirm({
+        order: input.order,
+        transaction,
+        notificationId: null,
+        source: "expiration_reconcile",
+      });
+      return "paid";
+    } catch {
+      this.defer(input, DIAGNOSTIC.confirmFailed);
+      return "failed";
+    }
+  }
+
+  private async markClosed(input: {
+    order: TenantCreditOrderRecord;
+    claimToken: string;
+    now: Date;
+    deferred: DeferredRelease[];
+  }): Promise<OrderOutcome> {
+    try {
+      const closed = await this.repository.markOrderClosed({
+        orderId: input.order.id,
+        claimToken: input.claimToken,
+        closedAt: input.now,
+      });
+      return closed ? "closed" : "retried";
+    } catch {
+      this.defer(input, DIAGNOSTIC.markClosedFailed);
+      return "failed";
+    }
   }
 
   private query(context: BatchContext, outTradeNo: string) {
@@ -250,95 +328,100 @@ export class BillingRechargeExpirationService {
     });
   }
 
-  private async confirmPaid(
-    order: TenantCreditOrderRecord,
-    claimToken: string,
-    transaction: WechatPayTransactionQueryResult,
-  ): Promise<OrderOutcome> {
-    try {
-      await this.paymentConfirmation.confirm({
-        order,
-        transaction,
-        notificationId: null,
-        source: "expiration_reconcile",
-      });
-    } catch {
-      await this.release(order, claimToken, DIAGNOSTIC.confirmFailed);
-      return "failed";
-    }
-    await this.release(order, claimToken, null);
-    return "paid";
+  private loadContext(
+    configId: string,
+    cache: Map<string, Promise<BatchContext>>,
+  ): Promise<BatchContext> {
+    const cached = cache.get(configId);
+    if (cached) return cached;
+    const pending = this.loadContextUncached(configId);
+    cache.set(configId, pending);
+    return pending;
   }
 
-  private async markClosed(
-    order: TenantCreditOrderRecord,
-    claimToken: string,
-    now: Date,
-  ): Promise<OrderOutcome> {
-    try {
-      const closed = await this.repository.markOrderClosed({
-        orderId: order.id,
-        claimToken,
-        closedAt: now,
-      });
-      return closed ? "closed" : "retried";
-    } catch {
-      await this.release(order, claimToken, DIAGNOSTIC.markClosedFailed);
-      return "failed";
-    }
+  private async loadContextUncached(configId: string): Promise<BatchContext> {
+    const config = await this.paymentConfigRepository
+      .findWechatPayConfigById(configId);
+    this.assertCleanupConfig(config, configId);
+    const secretBundle = await this.secretBundleService.load(
+      config.encrypted_config_ref,
+    );
+    return { config, secretBundle };
   }
 
-  private async releaseBatchClaims(
-    orders: TenantCreditOrderRecord[],
-    diagnostic: string,
-  ) {
-    for (const order of orders) {
-      const claimToken = optionalString(order.close_claim_token);
-      if (claimToken) await this.release(order, claimToken, diagnostic);
-    }
-  }
-
-  private async release(
-    order: TenantCreditOrderRecord,
-    claimToken: string,
-    errorMessage: string | null,
-  ) {
-    try {
-      await this.repository.releaseCloseClaim({
-        orderId: order.id,
-        claimToken,
-        errorMessage,
-      });
-      return true;
-    } catch {
-      // Isolate one release failure so every later claimed order still gets an attempt.
-      return false;
-    }
-  }
-
-  private assertRechargeConfig(
+  private assertCleanupConfig(
     config: PlatformPaymentConfigRecord | null,
+    configId: string,
   ): asserts config is PlatformPaymentConfigRecord {
-    const isReady = config?.provider === "wechat_pay" &&
+    const commonReady = config?.id === configId &&
+      config.provider === "wechat_pay" &&
       config.profile_code === "platform_direct_recharge" &&
       config.principal_type === "platform" &&
-      config.status === "active" &&
-      config.enabled_channels.includes(RECHARGE_CHANNEL) &&
-      Boolean(config.merchant_id?.trim()) &&
-      Boolean(config.serial_no?.trim()) &&
-      Boolean(config.encrypted_config_ref?.trim());
-    if (!isReady) {
+      ["active", "disabled", "suspended"].includes(config.status) &&
+      Boolean(optionalString(config.merchant_id)) &&
+      Boolean(optionalString(config.app_id)) &&
+      Boolean(optionalString(config.serial_no)) &&
+      Boolean(optionalString(config.encrypted_config_ref));
+    const modeReady = config?.merchant_mode === "direct_merchant" ||
+      (config?.merchant_mode === "service_provider_sub_merchant" &&
+        Boolean(optionalString(config.sub_merchant_id)) &&
+        Boolean(optionalString(config.sub_app_id)));
+    if (!commonReady || !modeReady) {
       throw Errors.business(
         409,
-        "平台微信支付充值配置未就绪",
-        "PLATFORM_WECHAT_PAY_RECHARGE_CONFIG_NOT_READY",
+        "平台微信支付充值清理配置未就绪",
+        "PLATFORM_WECHAT_PAY_RECHARGE_CLEANUP_CONFIG_NOT_READY",
       );
+    }
+  }
+
+  private deferFailure(
+    input: { order: TenantCreditOrderRecord; deferred: DeferredRelease[]; telemetry: BillingRechargeExpirationTelemetry },
+    claimToken: string,
+    diagnostic: string,
+  ) {
+    input.telemetry.failed += 1;
+    input.deferred.push({ orderId: input.order.id, claimToken, diagnostic });
+  }
+
+  private defer(
+    input: { order: TenantCreditOrderRecord; claimToken: string; deferred: DeferredRelease[] },
+    diagnostic: string | null,
+  ) {
+    input.deferred.push({
+      orderId: input.order.id,
+      claimToken: input.claimToken,
+      diagnostic,
+    });
+  }
+
+  private async releaseDeferredClaims(
+    deferred: DeferredRelease[],
+    telemetry: BillingRechargeExpirationTelemetry,
+  ) {
+    for (const item of deferred) {
+      try {
+        await this.repository.releaseCloseClaim({
+          orderId: item.orderId,
+          claimToken: item.claimToken,
+          errorMessage: item.diagnostic,
+        });
+      } catch {
+        telemetry.release_failed += 1;
+      }
     }
   }
 }
 
-function emptyTelemetry(claimed: number): BillingRechargeExpirationTelemetry {
-  return { claimed, paid: 0, closed: 0, retried: 0, failed: 0 };
+function emptyTelemetry(): BillingRechargeExpirationTelemetry {
+  return {
+    claimed: 0,
+    paid: 0,
+    closed: 0,
+    retried: 0,
+    failed: 0,
+    release_failed: 0,
+  };
 }
 
 function optionalString(value: unknown) {
