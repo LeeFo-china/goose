@@ -327,6 +327,33 @@ describe("billing recharge expiration worker", () => {
     expect(stopResolved).toBe(true);
   });
 
+  test("coalesces repeated stop signals while waiting for the active tick", async () => {
+    const deferred = createDeferred<ExpirationTelemetry>();
+    const harness = await createWorkerHarness({ implementation: () => deferred.promise });
+    let shutdownsResolved = false;
+
+    const activeTick = harness.worker.tick();
+    await Promise.resolve();
+    const firstStop = harness.worker.stop("SIGINT");
+    const repeatedStop = harness.worker.stop("SIGINT");
+    const shutdowns = Promise.all([firstStop, repeatedStop]).then(() => {
+      shutdownsResolved = true;
+    });
+    await Promise.resolve();
+
+    expect(shutdownsResolved).toBe(false);
+    expect(harness.entries.filter(
+      (entry) => entry.message === "received SIGINT",
+    )).toHaveLength(1);
+    expect(harness.entries.filter(
+      (entry) => entry.message === "waiting for running tick before shutdown",
+    )).toHaveLength(1);
+
+    deferred.resolve(emptyTelemetry());
+    await Promise.all([activeTick, shutdowns]);
+    expect(shutdownsResolved).toBe(true);
+  });
+
   test("removes shutdown handlers when startup logging throws", async () => {
     const { createBillingRechargeExpirationWorker } = await loadWorkerModule();
     const sigintListeners = process.listenerCount("SIGINT");

@@ -89,6 +89,7 @@ export function createBillingRechargeExpirationWorker(
   let activeTick: Promise<void> | null = null;
   let resolvedService: ExpirationServicePort | null = injectedService ?? null;
   let runLoopActive = false;
+  let shutdownPromise: Promise<void> | null = null;
 
   const loadService = async (): Promise<ExpirationServicePort> => {
     if (resolvedService) return resolvedService;
@@ -143,13 +144,17 @@ export function createBillingRechargeExpirationWorker(
     }
   };
 
-  const stop = async (signal?: ShutdownSignal): Promise<void> => {
+  const stop = (signal?: ShutdownSignal): Promise<void> => {
+    if (shutdownPromise) return shutdownPromise;
     stopping = true;
-    if (signal) log("warn", `received ${signal}`);
     const pending = activeTick;
-    if (!pending) return;
-    log("info", "waiting for running tick before shutdown");
-    await pending;
+    shutdownPromise = (async () => {
+      if (signal) log("warn", `received ${signal}`);
+      if (!pending) return;
+      log("info", "waiting for running tick before shutdown");
+      await pending;
+    })();
+    return shutdownPromise;
   };
 
   const run = async (): Promise<void> => {
@@ -178,11 +183,7 @@ export function createBillingRechargeExpirationWorker(
           sleepFor,
         });
       }
-      const pending = activeTick;
-      if (pending) {
-        log("info", "waiting for running tick before shutdown");
-        await pending;
-      }
+      await stop();
       log("info", "worker stopped");
     } finally {
       process.off("SIGINT", onSigint);

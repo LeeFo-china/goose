@@ -1,5 +1,7 @@
 import { join } from "node:path";
 
+const PROBE_TIMEOUT_MS = 5_000;
+
 export async function runCredentialFreeProbe(source: string) {
   const environment = withoutSupabaseCredentials(process.env);
   const child = Bun.spawn([process.execPath, "-e", source], {
@@ -8,12 +10,16 @@ export async function runCredentialFreeProbe(source: string) {
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [exitCode, stdout, stderr] = await Promise.all([
+  const operation = Promise.all([
     child.exited,
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
-  ]);
-  return { exitCode, stdout, stderr };
+  ]).then(([exitCode, stdout, stderr]) => ({ exitCode, stdout, stderr }));
+  return withProbeTimeout({
+    operation,
+    timeoutMs: PROBE_TIMEOUT_MS,
+    cleanup: () => cleanupChild(child),
+  });
 }
 
 export async function runStandaloneProbe(input: {
@@ -41,12 +47,35 @@ export async function runStandaloneProbe(input: {
       child.kill("SIGTERM");
     }
   };
-  const [exitCode, stdout, stderr] = await Promise.all([
+  const operation = Promise.all([
     child.exited,
     readStream(child.stdout, signalOnMessage),
     readStream(child.stderr, signalOnMessage),
-  ]);
-  return { exitCode, stdout, stderr };
+  ]).then(([exitCode, stdout, stderr]) => ({ exitCode, stdout, stderr }));
+  return withProbeTimeout({
+    operation,
+    timeoutMs: PROBE_TIMEOUT_MS,
+    cleanup: () => cleanupChild(child),
+  });
+}
+
+export async function withProbeTimeout<Result>(input: {
+  operation: Promise<Result>;
+  timeoutMs: number;
+  cleanup: () => Promise<void>;
+}): Promise<Result> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timeoutFailure = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`worker probe timed out after ${input.timeoutMs}ms`));
+    }, input.timeoutMs);
+  });
+  try {
+    return await Promise.race([input.operation, timeoutFailure]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    await input.cleanup();
+  }
 }
 
 export function parseJsonLines(output: string): Array<Record<string, unknown>> {
@@ -85,4 +114,9 @@ function withoutSupabaseCredentials(
 
 function apiDirectory(): string {
   return join(import.meta.dir, "../..");
+}
+
+async function cleanupChild(child: ReturnType<typeof Bun.spawn>): Promise<void> {
+  if (child.exitCode === null) child.kill("SIGKILL");
+  await child.exited;
 }
