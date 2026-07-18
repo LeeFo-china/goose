@@ -29,7 +29,6 @@ type RepositoryPort = Pick<
   | "markRequestRefunding"
   | "markOrderRefundStatus"
   | "saveWechatRefundResult"
-  | "markRequestFailed"
 >;
 
 type PaymentConfigRepositoryPort = Pick<
@@ -137,17 +136,18 @@ export class PlatformBillingRechargeRefundExecutionService {
       refundStatus: "refunding",
     });
 
+    const refundInput = {
+      config,
+      secretBundle,
+      transactionId,
+      outRefundNo,
+      reason: current.reason,
+      refundAmountFen,
+      totalAmountFen,
+    };
     let wechatRefund: WechatPayRequestRefundResult;
     try {
-      wechatRefund = await this.wechatPayGateway.requestRefund({
-        config,
-        secretBundle,
-        transactionId,
-        outRefundNo,
-        reason: current.reason,
-        refundAmountFen,
-        totalAmountFen,
-      });
+      wechatRefund = await this.wechatPayGateway.requestRefund(refundInput);
     } catch (error) {
       try {
         const queriedRefund =
@@ -159,19 +159,23 @@ export class PlatformBillingRechargeRefundExecutionService {
         wechatRefund = toWechatRefundResult(queriedRefund, outRefundNo);
       } catch (queryError) {
         if (getWechatErrorDetailCode(queryError) === "RESOURCE_NOT_EXISTS") {
-          await this.markExecutionFailed({
-            authContext,
-            request: refundingRequest,
-            refundAmountFen,
-            error,
+          try {
+            wechatRefund =
+              await this.wechatPayGateway.requestRefund(refundInput);
+          } catch (retryError) {
+            throw uncertainRefundStatusError({
+              outRefundNo,
+              requestError: error,
+              queryError: retryError,
+            });
+          }
+        } else {
+          throw uncertainRefundStatusError({
+            outRefundNo,
+            requestError: error,
+            queryError,
           });
-          throw error;
         }
-        throw uncertainRefundStatusError({
-          outRefundNo,
-          requestError: error,
-          queryError,
-        });
       }
     }
 
@@ -352,68 +356,6 @@ export class PlatformBillingRechargeRefundExecutionService {
       },
     });
   }
-
-  private async markExecutionFailed(input: {
-    authContext: AuthContext;
-    request: PlatformRechargeRefundRequestRecord;
-    refundAmountFen: number;
-    error: unknown;
-  }) {
-    const failureMessage = getErrorMessage(input.error);
-    const failedRequest = await this.repository.markRequestFailed({
-      id: input.request.id,
-      failureMessage,
-      metadata: {
-        ...metadataRecord(input.request.metadata),
-        wechat_refund_failure: {
-          code: getErrorCode(input.error),
-          message: failureMessage,
-          failed_at: this.nowFactory().toISOString(),
-        },
-      },
-    });
-    if (failedRequest) {
-      await this.repository.markOrderRefundStatus({
-        tenantId: failedRequest.tenant_id,
-        orderId: failedRequest.order_id,
-        refundStatus: "failed",
-      });
-    }
-    await this.auditExecutionFailure({
-      authContext: input.authContext,
-      request: failedRequest ?? input.request,
-      refundAmountFen: input.refundAmountFen,
-      error: input.error,
-    });
-  }
-
-  private auditExecutionFailure(input: {
-    authContext: AuthContext;
-    request: PlatformRechargeRefundRequestRecord;
-    refundAmountFen: number;
-    error: unknown;
-  }) {
-    return this.auditLogService.recordBestEffort({
-      action: "platform_billing_recharge_refund_execute",
-      actorEmployeeId: input.authContext.employeeId,
-      actorUserId: input.authContext.authUserId,
-      targetTenantId: input.request.tenant_id,
-      resourceType: "tenant_credit_refund_request",
-      resourceId: input.request.id,
-      resourceLabel: input.request.request_no,
-      status: "failure",
-      summary: "执行微信积分充值退款失败",
-      metadata: {
-        after_status: input.request.status,
-        order_id: input.request.order_id,
-        order_no: input.request.order?.order_no ?? null,
-        out_refund_no: input.request.out_refund_no,
-        refund_amount_fen: input.refundAmountFen,
-        error_code: getErrorCode(input.error),
-        error_message: getErrorMessage(input.error),
-      },
-    });
-  }
 }
 
 function hasPermission(authContext: AuthContext, permissionCode: string) {
@@ -446,23 +388,6 @@ function invalidExecutionStateError() {
     "积分充值退款申请状态不允许执行退款，请刷新后重试",
     "BILLING_RECHARGE_REFUND_EXECUTE_STATE_INVALID",
   );
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message.trim();
-  }
-  return String(error);
-}
-
-function getErrorCode(error: unknown) {
-  if (error && typeof error === "object" && "code" in error) {
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === "string" && code.trim()) return code.trim();
-  }
-  return null;
 }
 
 export const platformBillingRechargeRefundExecutionService =

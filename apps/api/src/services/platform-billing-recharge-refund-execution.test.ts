@@ -72,7 +72,7 @@ const wechatPayGateway = {
       amount: { total: 10000, currency: "CNY" },
     };
   }),
-  requestRefund: mock(async () => {
+  requestRefund: mock(async (_input?: unknown) => {
     events.push("wechat-refund");
     return {
       out_refund_no: "TRR202607100800000001",
@@ -411,12 +411,60 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
     ]);
   });
 
-  test("marks request failed when upstream refund request fails after refunding state is saved", async () => {
-    wechatPayGateway.requestRefund.mockImplementation(async () => {
+  test("retries the same refund after the immediate query cannot find it", async () => {
+    const refundInputs: unknown[] = [];
+    let requestAttempts = 0;
+    wechatPayGateway.requestRefund.mockImplementation(async (input) => {
       events.push("wechat-refund");
+      refundInputs.push(input);
+      requestAttempts += 1;
+      if (requestAttempts === 1) {
+        throw {
+          code: "WECHAT_PAY_REFUND_REQUEST_FAILED",
+          message: "微信退款请求超时",
+        };
+      }
+      const raw = {
+        out_refund_no: "TRR202607100800000001",
+        refund_id: "5030000000202607150000000001",
+        status: "PROCESSING",
+      };
+      return { ...raw, raw };
+    });
+    wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
+      events.push("wechat-query-refund");
+      throw {
+        code: "WECHAT_PAY_REFUND_QUERY_FAILED",
+        message: "退款单不存在",
+        details: { code: "RESOURCE_NOT_EXISTS" },
+      };
+    });
+    const service = await createService();
+
+    const result = await service.execute(authContext, "refund-request-1");
+
+    expect(wechatPayGateway.requestRefund).toHaveBeenCalledTimes(2);
+    expect(refundInputs[1]).toEqual(refundInputs[0]);
+    expect(refundInputs[1]).toMatchObject({
+      transactionId: "4200000001",
+      outRefundNo: "TRR202607100800000001",
+      reason: "客户误充值，需要申请退款",
+      refundAmountFen: 10000,
+      totalAmountFen: 10000,
+    });
+    expect(repository.markRequestFailed).not.toHaveBeenCalled();
+    expect(repository.saveWechatRefundResult).toHaveBeenCalled();
+    expect(result.wechat_refund).toMatchObject({ status: "PROCESSING" });
+  });
+
+  test("keeps refunding when the same-parameter retry is also uncertain", async () => {
+    const refundInputs: unknown[] = [];
+    wechatPayGateway.requestRefund.mockImplementation(async (input) => {
+      events.push("wechat-refund");
+      refundInputs.push(input);
       throw {
         code: "WECHAT_PAY_REFUND_REQUEST_FAILED",
-        message: "微信退款请求失败",
+        message: "微信退款请求超时",
       };
     });
     wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
@@ -432,31 +480,19 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
     await expect(
       service.execute(authContext, "refund-request-1"),
     ).rejects.toMatchObject({
-      code: "WECHAT_PAY_REFUND_REQUEST_FAILED",
+      code: "BILLING_RECHARGE_REFUND_STATUS_UNKNOWN",
     });
-    expect(repository.markRequestFailed).toHaveBeenCalledWith({
-      id: "refund-request-1",
-      failureMessage: "微信退款请求失败",
-      metadata: expect.objectContaining({
-        wechat_refund_failure: expect.objectContaining({
-          code: "WECHAT_PAY_REFUND_REQUEST_FAILED",
-          message: "微信退款请求失败",
-        }),
-      }),
-    });
-    expect(repository.markOrderRefundStatus).toHaveBeenLastCalledWith({
-      tenantId: "tenant-1",
-      orderId: "order-1",
-      refundStatus: "failed",
-    });
+    expect(wechatPayGateway.requestRefund).toHaveBeenCalledTimes(2);
+    expect(refundInputs[1]).toEqual(refundInputs[0]);
+    expect(repository.markRequestFailed).not.toHaveBeenCalled();
+    expect(repository.markOrderRefundStatus).toHaveBeenCalledTimes(1);
     expect(events).toEqual([
       "wechat-query-transaction",
       "mark-request-refunding",
       "mark-order-refunding",
       "wechat-refund",
       "wechat-query-refund",
-      "mark-request-failed",
-      "mark-order-failed",
+      "wechat-refund",
     ]);
   });
 });
