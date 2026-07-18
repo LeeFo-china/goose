@@ -35,7 +35,7 @@
 
 - `wechat-pay-api-response.ts`: raw APIv3 response reading, signature/timestamp/serial verification, JSON parsing, bounded fetch error mapping.
 - `wechat-pay-refund-contract.ts`: strict refund request/query/callback identity, amount, status, and event binding.
-- `20260718124000_harden_tenant_credit_refund_reconciliation.sql`: schema columns, indexes, atomic begin/claim/reschedule/close/callback/confirm RPC changes, permissions, rollback notes.
+- `20260718124000_harden_tenant_credit_refund_reconciliation.sql`: schema columns, indexes, atomic begin/claim/reschedule/close/callback/claimed-confirm RPC changes, callback-compatible confirm hardening, permissions, rollback notes.
 - `billing-recharge-refund-reconciliation.ts` repository: bounded claim and token-gated finalize calls plus batch hydration.
 - `billing-recharge-refund-reconciliation.ts` service: one refund state machine and batch summary.
 - `billing-reconcile-worker.ts`: scheduling only; it does not contain refund business rules.
@@ -356,6 +356,8 @@ test("adds a bounded partial due index and paired lease fields", () => {
   expect(source).toContain("reconcile_attempt_count integer NOT NULL DEFAULT 0");
   expect(source).toContain("reconcile_claim_token uuid");
   expect(source).toContain("reconcile_claim_expires_at timestamptz");
+  expect(source).toContain("reconcile_last_error text");
+  expect(source).toContain("tenant_credit_refund_reconcile_last_error_check");
   expect(source).toContain("WHERE status = 'refunding'");
 });
 
@@ -363,16 +365,20 @@ test("claims no more than 100 rows with skip locked", () => {
   const source = sql();
   expect(source).toContain("billing_claim_wechat_recharge_refunds");
   expect(source).toMatch(/p_limit NOT BETWEEN 1 AND 100/);
+  expect(source).toMatch(/p_lease_seconds NOT BETWEEN 30 AND 900/);
   expect(source).toContain("FOR UPDATE SKIP LOCKED");
   expect(source).toContain("reconcile_attempt_count =");
+  expect(source).toContain("RETURNS TABLE(");
+  expect(source).not.toContain("RETURNING request.*");
 });
 
 test("finalizes only the matching claim token", () => {
   const source = sql();
   expect(source).toContain("billing_reschedule_wechat_recharge_refund");
   expect(source).toContain("billing_close_wechat_recharge_refund");
+  expect(source).toContain("billing_confirm_claimed_wechat_recharge_refund");
   expect(source.match(/reconcile_claim_token = p_claim_token/g)?.length ?? 0)
-    .toBeGreaterThanOrEqual(2);
+    .toBeGreaterThanOrEqual(3);
 });
 
 test("begins request and order refunding in one transaction", () => {
@@ -390,6 +396,7 @@ test("keeps every reconciliation RPC service-role-only", () => {
     "billing_close_wechat_recharge_refund",
     "billing_apply_wechat_recharge_refund_callback_state",
     "billing_confirm_wechat_recharge_refund",
+    "billing_confirm_claimed_wechat_recharge_refund",
   ] as const;
 
   for (const name of RPC_NAMES) {
@@ -416,7 +423,9 @@ Expected: FAIL because the migration file is absent.
 
 - [ ] **Step 3: Implement the migration**
 
-The migration must run inside `BEGIN/COMMIT`, include rollback comments, use
+The migration must run inside `BEGIN/COMMIT`, include rollback comments that require stopping the
+worker, dropping RPCs/indexes, and proving no active leases before dropping columns, and state
+that completed refunds/ledger entries are never automatically reversed. Use
 `SECURITY DEFINER SET search_path = pg_catalog, public`, and implement these exact contracts:
 
 ```sql
@@ -435,6 +444,9 @@ ALTER TABLE public.tenant_credit_refund_requests
     (reconcile_claim_token IS NULL AND reconcile_claim_expires_at IS NULL)
     OR
     (reconcile_claim_token IS NOT NULL AND reconcile_claim_expires_at IS NOT NULL)
+  ),
+  ADD CONSTRAINT tenant_credit_refund_reconcile_last_error_check CHECK (
+    reconcile_last_error IS NULL OR char_length(reconcile_last_error) <= 200
   );
 
 CREATE INDEX IF NOT EXISTS tenant_credit_refund_reconcile_due_idx
@@ -448,7 +460,17 @@ share one contract:
 ```sql
 billing_begin_wechat_recharge_refund(uuid, text, timestamptz) RETURNS jsonb
 billing_claim_wechat_recharge_refunds(integer, integer, uuid, timestamptz)
-  RETURNS SETOF public.tenant_credit_refund_requests
+  RETURNS TABLE(
+    id uuid,
+    tenant_id uuid,
+    order_id uuid,
+    reason text,
+    requested_amount_fen integer,
+    out_refund_no text,
+    wechat_refund_id text,
+    refund_amount_fen integer,
+    reconcile_attempt_count integer
+  )
 billing_reschedule_wechat_recharge_refund(
   uuid, uuid, timestamptz, timestamptz, text, jsonb, text, integer
 ) RETURNS boolean
@@ -459,15 +481,22 @@ billing_apply_wechat_recharge_refund_callback_state(
 billing_confirm_wechat_recharge_refund(
   uuid, text, text, integer, timestamptz, uuid, jsonb
 ) RETURNS jsonb
+billing_confirm_claimed_wechat_recharge_refund(
+  uuid, uuid, text, text, integer, timestamptz, jsonb
+) RETURNS jsonb
 ```
 
 `billing_begin_wechat_recharge_refund` must lock request then order, conditionally move `approved|failed` to `refunding`, set the order mirror in the same transaction, preserve an existing stable number, and set `reconcile_next_at = p_now + interval '1 minute'`.
 
-`billing_claim_wechat_recharge_refunds` must select due or expired-lease rows ordered by `(reconcile_next_at, id)`, limit to `p_limit`, use `FOR UPDATE SKIP LOCKED`, then assign one `p_claim_token`, expiry, and increment count.
+`billing_claim_wechat_recharge_refunds` must reject lease seconds outside 30..900, select due or
+expired-lease rows ordered by `(reconcile_next_at, id)`, limit to `p_limit`, use
+`FOR UPDATE SKIP LOCKED`, then assign one `p_claim_token`, expiry, and increment count. It returns
+only the nine fields in the `RETURNS TABLE` contract; never return the full request row.
 
 `billing_reschedule_wechat_recharge_refund` must require `status='refunding'` and exact claim token, clear lease, set the supplied next time/check time/error, and merge object metadata.
 It also accepts nullable `p_wechat_refund_id` and `p_refund_amount_fen`; when present, it saves
 them in the same token-gated update. A worker must not perform a separate unclaimed write.
+Reject a supplied blank `p_wechat_refund_id` defensively.
 
 `billing_close_wechat_recharge_refund` must lock request/order, require exact token and `refunding`, set request/order mirror to `failed`, clear the lease, and merge a stable `CLOSED` reason.
 
@@ -477,15 +506,23 @@ to `failed`; `ABNORMAL` keeps both active/refunding, clears any worker lease, an
 next query for 30 minutes later. This RPC is the callback path and does not require a worker claim
 token.
 
-Replace `billing_confirm_wechat_recharge_refund` with the existing function body plus these changes:
+Keep `billing_confirm_wechat_recharge_refund` as the callback SUCCESS compatibility RPC. Replace
+it with the existing function body plus these changes:
 
 ```sql
 latest_notification_id = coalesce(p_notification_id, latest_notification_id)
 ```
 
-and clear all reconciliation scheduling/lease fields when status becomes `refunded`. The nullable UUID parameter remains compatible with callback callers.
+and clear all reconciliation scheduling/lease fields when status becomes `refunded`. Callback
+callers continue passing their real notification UUID.
 
-Revoke all functions from `PUBLIC`, `anon`, and `authenticated`; grant only `service_role`.
+Add `billing_confirm_claimed_wechat_recharge_refund` for worker SUCCESS. It locks the refund
+request, requires exact `status='refunding'` plus `reconcile_claim_token=p_claim_token`, and
+returns SQL `NULL` when callback or another owner won. While holding that lock, call
+`billing_confirm_wechat_recharge_refund` in the same transaction with `p_notification_id` set to
+`NULL::uuid`; do not copy its credit/ledger logic.
+
+Revoke all seven functions from `PUBLIC`, `anon`, and `authenticated`; grant only `service_role`.
 
 - [ ] **Step 4: Verify migration contract GREEN**
 
@@ -571,14 +608,21 @@ await repository.claimDue({
 });
 ```
 
-calls the claim RPC with bounded values, fetches all order IDs with one `.in(...)`, fetches all config IDs with one `.in(...)`, and returns hydrated rows. A limit of 101 must throw `BILLING_RECHARGE_REFUND_RECONCILE_LIMIT_INVALID` before any RPC.
+calls the claim RPC with bounded values, consumes only the nine minimal claim fields from Task 3,
+fetches all order IDs with one `.in(...)`, fetches all config IDs with one `.in(...)`, and returns
+hydrated rows. A limit of 101 must throw
+`BILLING_RECHARGE_REFUND_RECONCILE_LIMIT_INVALID` before any RPC; lease seconds outside 30..900
+must fail before the RPC as well.
 
 Also test token-gated `reschedule`, `close`, and `confirmSuccess` argument mapping.
-`reschedule` carries optional refund ID/amount in the same RPC. `confirmSuccess` must pass
-`notificationId: null` and must not create a fake notification. Change
-`BillingConfirmWechatRechargeRefundInput.notificationId` to `string | null`; callback callers
-continue passing their real notification ID. Callback-repository tests must assert exact mapping
-for `billing_apply_wechat_recharge_refund_callback_state` and no table-by-table terminal writes.
+`reschedule` carries optional refund ID/amount in the same RPC. `confirmSuccess` must call
+`billing_confirm_claimed_wechat_recharge_refund` with the exact `claimToken`; it has no
+notification argument and must not create a fake notification. A SQL `NULL` result means callback
+or another lease owner won and is returned as an idempotent race（幂等竞争）. Keep
+`BillingConfirmWechatRechargeRefundInput.notificationId` non-null for callback SUCCESS, which
+continues calling `billing_confirm_wechat_recharge_refund` with the real notification ID.
+Callback-repository tests must assert exact mapping for
+`billing_apply_wechat_recharge_refund_callback_state` and no table-by-table terminal writes.
 
 - [ ] **Step 4: Implement focused reconciliation repository ports**
 
@@ -588,8 +632,12 @@ Export record/input types and these methods:
 claimDue(input: ClaimDueRefundsInput): Promise<ClaimedRefund[]>;
 reschedule(input: RescheduleClaimedRefundInput): Promise<boolean>;
 close(input: CloseClaimedRefundInput): Promise<boolean>;
-confirmSuccess(input: ConfirmClaimedRefundInput): Promise<ConfirmRefundResult>;
+confirmSuccess(input: ConfirmClaimedRefundInput): Promise<ConfirmRefundResult | null>;
 ```
+
+`null` is the expected idempotent lost-claim/callback race, not a database or financial failure.
+The input must contain `claimToken`, and the repository maps it to
+`billing_confirm_claimed_wechat_recharge_refund` rather than the callback compatibility RPC.
 
 Add `findWechatPayConfigById(id)` using `.select("*").eq("id", id).maybeSingle()` and change
 manual execution to require `order.payment_config_id` and load that exact config instead of the
@@ -697,14 +745,16 @@ Expected: FAIL because the service does not exist.
 
 Add and run each case before its production branch:
 
-1. `SUCCESS` calls `confirmSuccess` once with validated IDs/amount/time and never reschedules.
+1. `SUCCESS` calls `confirmSuccess` once with the exact claim token plus validated
+   IDs/amount/time and never reschedules; a `null` result is an idempotent race.
 2. `PROCESSING` calls `reschedule` with the pure backoff result.
 3. `CLOSED` calls token-gated `close` and does not reschedule.
 4. `ABNORMAL` remains `refunding`, records `WECHAT_REFUND_ABNORMAL`, and schedules 30 minutes.
 5. `RESOURCE_NOT_EXISTS` retries `requestRefund` once using the exact original transaction ID, reason, amounts, config, secret, and `outRefundNo`.
 6. A second uncertain request preserves `refunding` and reschedules.
 7. Invalid signature/field mismatch/timeout reschedules without confirming or closing.
-8. A callback that wins first makes finalize return false; service counts it as an idempotent race, not a failure.
+8. A callback that wins first makes boolean finalize return `false` or claimed SUCCESS return
+   `null`; service counts either as an idempotent race, not a failure.
 9. One row failure does not prevent later claimed rows from running.
 
 - [ ] **Step 4: Implement the smallest state machine**
@@ -936,7 +986,13 @@ supabase gen types typescript \
   --schema public > /tmp/gooes-database.ts
 ```
 
-Inspect the generated diff before replacing the tracked file. It must include the six reconciliation columns and all six refund/reconciliation RPC contracts without unrelated schema loss. Then use `apply_patch` or the repository's accepted generation command to update `apps/api/src/types/database.ts`; do not hand-invent Supabase function types. If the installed CLI cannot generate from `--db-url`, preserve the existing type file, record the exact command/error, and keep untyped repository boundaries already used by this project.
+Inspect the generated diff before replacing the tracked file. It must include the six reconciliation
+columns, the claim RPC's explicit nine-field table result, and all seven refund/reconciliation RPC
+contracts without unrelated schema loss. Then use `apply_patch` or the repository's accepted
+generation command to update `apps/api/src/types/database.ts`; do not hand-invent Supabase
+function types. If the installed CLI cannot generate from `--db-url`, preserve the existing type
+file, record the exact command/error, and keep untyped repository boundaries already used by this
+project.
 
 - [ ] **Step 4: Implement and run focused database smoke without real refund**
 
@@ -945,8 +1001,10 @@ API. It must require `SUPABASE_DB_DIRECT_URL`, never print the URL, and perform 
 
 1. query `pg_indexes` for `tenant_credit_refund_reconcile_due_idx` and `pg_constraint` for
    `tenant_credit_refund_reconcile_attempt_count_check` plus
-   `tenant_credit_refund_reconcile_lease_check`;
-2. call `has_function_privilege` for both `anon` and `authenticated` against all six exact
+   `tenant_credit_refund_reconcile_lease_check` plus
+   `tenant_credit_refund_reconcile_last_error_check`; use `pg_get_constraintdef` to require the
+   last-error definition to enforce a maximum of 200 characters;
+2. call `has_function_privilege` for both `anon` and `authenticated` against all seven exact
    signatures from Task 3, requiring every result to be `false`;
 3. open a `Bun.SQL.begin` transaction, call claim with `p_limit=101`, and require the stable
    `BILLING_RECHARGE_REFUND_RECONCILE_LIMIT_INVALID` database error; the thrown error must force

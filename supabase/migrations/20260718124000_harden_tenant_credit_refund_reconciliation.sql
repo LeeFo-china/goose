@@ -1,7 +1,8 @@
 -- Add bounded leases and atomic state transitions for WeChat refund reconciliation.
--- Rollback: stop refund workers first; revoke and drop the five new RPCs, restore
--- billing_confirm_wechat_recharge_refund from 20260715120000, then drop the due
--- index, the two reconciliation constraints, and the six reconciliation columns.
+-- Rollback: stop the refund worker first; revoke and drop the six new RPCs, restore
+-- billing_confirm_wechat_recharge_refund from 20260715120000, and drop the due index.
+-- Drop constraints and columns only after proving there are no active reconciliation leases.
+-- Never automatically reverse completed refunds or tenant credit ledger entries.
 
 BEGIN;
 
@@ -18,22 +19,22 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_constraint
-    WHERE conname = 'tenant_credit_refund_requests_reconcile_attempt_count_check'
+    WHERE conname = 'tenant_credit_refund_reconcile_attempt_count_check'
       AND conrelid = 'public.tenant_credit_refund_requests'::regclass
   ) THEN
     ALTER TABLE public.tenant_credit_refund_requests
-      ADD CONSTRAINT tenant_credit_refund_requests_reconcile_attempt_count_check
+      ADD CONSTRAINT tenant_credit_refund_reconcile_attempt_count_check
       CHECK (reconcile_attempt_count >= 0);
   END IF;
 
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_constraint
-    WHERE conname = 'tenant_credit_refund_requests_reconcile_claim_lease_check'
+    WHERE conname = 'tenant_credit_refund_reconcile_lease_check'
       AND conrelid = 'public.tenant_credit_refund_requests'::regclass
   ) THEN
     ALTER TABLE public.tenant_credit_refund_requests
-      ADD CONSTRAINT tenant_credit_refund_requests_reconcile_claim_lease_check
+      ADD CONSTRAINT tenant_credit_refund_reconcile_lease_check
       CHECK (
         (
           reconcile_claim_token IS NULL
@@ -43,6 +44,17 @@ BEGIN
           AND reconcile_claim_expires_at IS NOT NULL
         )
       );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint
+    WHERE conname = 'tenant_credit_refund_reconcile_last_error_check'
+      AND conrelid = 'public.tenant_credit_refund_requests'::regclass
+  ) THEN
+    ALTER TABLE public.tenant_credit_refund_requests
+      ADD CONSTRAINT tenant_credit_refund_reconcile_last_error_check
+      CHECK (reconcile_last_error IS NULL OR char_length(reconcile_last_error) <= 200);
   END IF;
 END;
 $$;
@@ -162,7 +174,17 @@ CREATE OR REPLACE FUNCTION public.billing_claim_wechat_recharge_refunds(
   p_claim_token uuid,
   p_now timestamptz
 )
-RETURNS SETOF public.tenant_credit_refund_requests
+RETURNS TABLE(
+  id uuid,
+  tenant_id uuid,
+  order_id uuid,
+  reason text,
+  requested_amount_fen integer,
+  out_refund_no text,
+  wechat_refund_id text,
+  refund_amount_fen integer,
+  reconcile_attempt_count integer
+)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
@@ -174,7 +196,7 @@ BEGIN
       MESSAGE = 'BILLING_RECHARGE_REFUND_RECONCILE_LIMIT_INVALID';
   END IF;
 
-  IF p_lease_seconds IS NULL OR p_lease_seconds NOT BETWEEN 30 AND 3600 THEN
+  IF p_lease_seconds IS NULL OR p_lease_seconds NOT BETWEEN 30 AND 900 THEN
     RAISE EXCEPTION USING
       ERRCODE = '22023',
       MESSAGE = 'BILLING_RECHARGE_REFUND_RECONCILE_LEASE_INVALID';
@@ -218,7 +240,16 @@ BEGIN
     reconcile_claim_expires_at = p_now + make_interval(secs => p_lease_seconds)
   FROM claimed
   WHERE request.id = claimed.id
-  RETURNING request.*;
+  RETURNING
+    request.id,
+    request.tenant_id,
+    request.order_id,
+    request.reason,
+    request.requested_amount_fen,
+    request.out_refund_no,
+    request.wechat_refund_id,
+    request.refund_amount_fen,
+    request.reconcile_attempt_count;
 END;
 $$;
 
@@ -257,6 +288,14 @@ BEGIN
     RAISE EXCEPTION USING
       ERRCODE = '22023',
       MESSAGE = 'BILLING_RECHARGE_REFUND_AMOUNT_INVALID';
+  END IF;
+
+  IF p_wechat_refund_id IS NOT NULL
+    AND btrim(p_wechat_refund_id) = ''
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'BILLING_RECHARGE_REFUND_WECHAT_REFUND_ID_INVALID';
   END IF;
 
   v_metadata := CASE
@@ -696,6 +735,51 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.billing_confirm_claimed_wechat_recharge_refund(
+  p_refund_request_id uuid,
+  p_claim_token uuid,
+  p_out_refund_no text,
+  p_wechat_refund_id text,
+  p_refund_amount_fen integer,
+  p_refunded_at timestamptz,
+  p_metadata jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_request public.tenant_credit_refund_requests%ROWTYPE;
+  v_result jsonb;
+BEGIN
+  SELECT request.*
+  INTO v_request
+  FROM public.tenant_credit_refund_requests AS request
+  WHERE request.id = p_refund_request_id
+    AND request.status = 'refunding'
+    AND request.reconcile_claim_token = p_claim_token
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT public.billing_confirm_wechat_recharge_refund(
+    p_refund_request_id,
+    p_out_refund_no,
+    p_wechat_refund_id,
+    p_refund_amount_fen,
+    p_refunded_at,
+    NULL::uuid,
+    p_metadata
+  )
+  INTO v_result;
+
+  RETURN v_result;
+END;
+$$;
+
 COMMENT ON COLUMN public.tenant_credit_refund_requests.reconcile_next_at
 IS '微信退款下一次可对账时间；为空表示无需继续调度。';
 
@@ -763,6 +847,16 @@ COMMENT ON FUNCTION public.billing_confirm_wechat_recharge_refund(
   jsonb
 ) IS '确认微信支付积分充值退款，清理对账租约并幂等写入反向流水。';
 
+COMMENT ON FUNCTION public.billing_confirm_claimed_wechat_recharge_refund(
+  uuid,
+  uuid,
+  text,
+  text,
+  integer,
+  timestamptz,
+  jsonb
+) IS '仅由当前对账租约持有者确认微信退款成功并复用原子积分反冲逻辑。';
+
 REVOKE ALL ON FUNCTION public.billing_begin_wechat_recharge_refund(uuid, text, timestamptz) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.billing_begin_wechat_recharge_refund(uuid, text, timestamptz) TO service_role;
 
@@ -780,5 +874,8 @@ GRANT EXECUTE ON FUNCTION public.billing_apply_wechat_recharge_refund_callback_s
 
 REVOKE ALL ON FUNCTION public.billing_confirm_wechat_recharge_refund(uuid, text, text, integer, timestamptz, uuid, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge_refund(uuid, text, text, integer, timestamptz, uuid, jsonb) TO service_role;
+
+REVOKE ALL ON FUNCTION public.billing_confirm_claimed_wechat_recharge_refund(uuid, uuid, text, text, integer, timestamptz, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.billing_confirm_claimed_wechat_recharge_refund(uuid, uuid, text, text, integer, timestamptz, jsonb) TO service_role;
 
 COMMIT;

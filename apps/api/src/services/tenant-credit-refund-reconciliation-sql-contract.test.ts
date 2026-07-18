@@ -6,6 +6,16 @@ const migration = new URL(
   import.meta.url,
 );
 
+const design = new URL(
+  "../../../../docs/superpowers/specs/2026-07-18-tenant-credit-refund-reconciliation-design.md",
+  import.meta.url,
+);
+
+const plan = new URL(
+  "../../../../docs/superpowers/plans/2026-07-18-tenant-credit-refund-reconciliation.md",
+  import.meta.url,
+);
+
 const RPC_NAMES = [
   "billing_begin_wechat_recharge_refund",
   "billing_claim_wechat_recharge_refunds",
@@ -13,6 +23,7 @@ const RPC_NAMES = [
   "billing_close_wechat_recharge_refund",
   "billing_apply_wechat_recharge_refund_callback_state",
   "billing_confirm_wechat_recharge_refund",
+  "billing_confirm_claimed_wechat_recharge_refund",
 ] as const;
 
 const RPC_SIGNATURES = {
@@ -27,10 +38,16 @@ const RPC_SIGNATURES = {
     "uuid, text, text, timestamptz, jsonb",
   billing_confirm_wechat_recharge_refund:
     "uuid, text, text, integer, timestamptz, uuid, jsonb",
+  billing_confirm_claimed_wechat_recharge_refund:
+    "uuid, uuid, text, text, integer, timestamptz, jsonb",
 } as const;
 
 function sql() {
   return existsSync(migration) ? readFileSync(migration, "utf8") : "";
+}
+
+function text(url: URL) {
+  return readFileSync(url, "utf8");
 }
 
 function functionSql(
@@ -64,14 +81,46 @@ describe("tenant credit refund reconciliation migration", () => {
     );
   });
 
+  test("uses the stable constraint names and bounds the last error", () => {
+    const source = sql();
+
+    expect(source).toContain(
+      "tenant_credit_refund_reconcile_attempt_count_check",
+    );
+    expect(source).toContain("tenant_credit_refund_reconcile_lease_check");
+    expect(source).toContain(
+      "tenant_credit_refund_reconcile_last_error_check",
+    );
+    expect(source).toMatch(
+      /CHECK \(reconcile_last_error IS NULL OR (?:char_)?length\(reconcile_last_error\) <= 200\)/,
+    );
+  });
+
   test("claims a bounded due batch with expiring token leases", () => {
     const source = functionSql(
       sql(),
       "billing_claim_wechat_recharge_refunds",
     );
+    const returnColumns = source
+      .match(/RETURNS TABLE\(([\s\S]*?)\)\s*LANGUAGE/)?.[1]
+      ?.replace(/\s+/g, " ")
+      .trim();
 
-    expect(source).toContain("RETURNS SETOF public.tenant_credit_refund_requests");
+    expect(returnColumns).toBe(
+      "id uuid, tenant_id uuid, order_id uuid, reason text, " +
+        "requested_amount_fen integer, out_refund_no text, " +
+        "wechat_refund_id text, refund_amount_fen integer, " +
+        "reconcile_attempt_count integer",
+    );
+    expect(source).not.toContain(
+      "RETURNS SETOF public.tenant_credit_refund_requests",
+    );
+    expect(source).not.toContain("RETURNING request.*");
     expect(source).toContain("p_limit NOT BETWEEN 1 AND 100");
+    expect(source).toContain("p_lease_seconds NOT BETWEEN 30 AND 900");
+    expect(source).not.toContain(
+      "p_lease_seconds NOT BETWEEN 30 AND 3600",
+    );
     expect(source).toContain(
       "BILLING_RECHARGE_REFUND_RECONCILE_LIMIT_INVALID",
     );
@@ -136,6 +185,9 @@ describe("tenant credit refund reconciliation migration", () => {
     expect(reschedule).toContain("reconcile_next_at = p_reconcile_next_at");
     expect(reschedule).toContain("reconcile_last_checked_at = p_checked_at");
     expect(reschedule).toContain("reconcile_last_error = p_last_error");
+    expect(reschedule).toMatch(
+      /p_wechat_refund_id IS NOT NULL[\s\S]*btrim\(p_wechat_refund_id\) = ''[\s\S]*BILLING_RECHARGE_REFUND_WECHAT_REFUND_ID_INVALID/,
+    );
     expect(close).toContain("failure_message = 'WECHAT_REFUND_CLOSED'");
     expect(close).toContain("reconcile_next_at = NULL");
     expect(close).toMatch(
@@ -192,6 +244,61 @@ describe("tenant credit refund reconciliation migration", () => {
     expect(source).toMatch(
       /status = 'refunded'[\s\S]*reconcile_next_at = NULL[\s\S]*reconcile_claim_token = NULL[\s\S]*reconcile_claim_expires_at = NULL[\s\S]*reconcile_last_error = NULL[\s\S]*reconcile_last_checked_at = v_refunded_at/,
     );
+  });
+
+  test("confirms worker success only for the exact active claim", () => {
+    const source = functionSql(
+      sql(),
+      "billing_confirm_claimed_wechat_recharge_refund",
+    );
+
+    expect(source).toContain("RETURNS jsonb");
+    expect(source).toMatch(
+      /FROM public\.tenant_credit_refund_requests AS request[\s\S]*request\.status = 'refunding'[\s\S]*request\.reconcile_claim_token = p_claim_token[\s\S]*FOR UPDATE/,
+    );
+    expect(source).toContain("RETURN NULL");
+    expect(source).toMatch(
+      /public\.billing_confirm_wechat_recharge_refund\([\s\S]*p_refund_request_id,[\s\S]*p_out_refund_no,[\s\S]*p_wechat_refund_id,[\s\S]*p_refund_amount_fen,[\s\S]*p_refunded_at,[\s\S]*NULL::uuid,[\s\S]*p_metadata[\s\S]*\)/,
+    );
+    expect(source).not.toContain("tenant_credit_accounts");
+    expect(source).not.toContain("tenant_credit_ledger");
+  });
+
+  test("documents a safe irreversible financial rollback boundary", () => {
+    const source = sql();
+
+    expect(source).toMatch(/Rollback:[\s\S]*stop the refund worker/i);
+    expect(source).toMatch(/Rollback:[\s\S]*drop[^\n]*RPC/i);
+    expect(source).toMatch(/Rollback:[\s\S]*drop[^\n]*index/i);
+    expect(source).toMatch(
+      /restore[\s\S]*billing_confirm_wechat_recharge_refund/i,
+    );
+    expect(source).toMatch(/no active reconciliation leases/i);
+    expect(source).toMatch(
+      /never automatically reverse completed refunds or tenant credit ledger entries/i,
+    );
+  });
+
+  test("keeps worker and callback success contracts distinct in design and plan", () => {
+    const designSource = text(design);
+    const planSource = text(plan);
+
+    for (const source of [designSource, planSource]) {
+      expect(source).toContain(
+        "billing_confirm_claimed_wechat_recharge_refund",
+      );
+      expect(source).toMatch(
+        /worker[\s\S]*billing_confirm_claimed_wechat_recharge_refund/i,
+      );
+      expect(source).toMatch(
+        /callback[\s\S]*billing_confirm_wechat_recharge_refund/i,
+      );
+      expect(source).toMatch(/(?:false|null|空)[\s\S]*幂等|幂等[\s\S]*(?:false|null|空)/i);
+    }
+
+    expect(planSource).toContain("RETURNS TABLE(");
+    expect(planSource).toContain("reconcile_last_error_check");
+    expect(planSource).toMatch(/Task 7[\s\S]*all seven|Task 7[\s\S]*全部七个/i);
   });
 
   test("runs atomically and exposes every RPC only to service role", () => {

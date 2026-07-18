@@ -65,7 +65,11 @@ orange。
 - `reconcile_last_error text NULL`：最近一次稳定错误码，最长 200 字符；
 - `reconcile_last_checked_at timestamptz NULL`：最近一次完成微信查询的时间。
 
-约束要求 claim token 与过期时间同时为空或同时非空，attempt count 非负。
+约束要求 claim token 与过期时间同时为空或同时非空，attempt count 非负，最近
+错误不超过 200 字符。约束名固定为
+`tenant_credit_refund_reconcile_attempt_count_check`、
+`tenant_credit_refund_reconcile_lease_check` 和
+`tenant_credit_refund_reconcile_last_error_check`，供 Task 7 精确验收。
 新增部分索引：
 
 ```sql
@@ -87,7 +91,10 @@ migration 同时提供 service-role-only RPC：
    - `p_limit` 必须在 1 到 100；租约必须在 30 到 900 秒；
    - claim 到期任务或回收已过期租约；
    - 设置新 token、租约时间并将 attempt count 加一；
-   - 只返回必要字段，关联订单由 repository 一次 `.in(...)` 批量加载。
+   - 只返回 `id`、`tenant_id`、`order_id`、`reason`、
+     `requested_amount_fen`、`out_refund_no`、`wechat_refund_id`、
+     `refund_amount_fen`、`reconcile_attempt_count`，关联订单由 repository 一次
+     `.in(...)` 批量加载。
 3. `billing_reschedule_wechat_recharge_refund(...)`
    - 仅当前 claim token 可以清租约并写下一次时间、最近错误和元数据；
    - 若回调已经把申请改成终态，则返回空结果并按幂等成功处理。
@@ -95,17 +102,30 @@ migration 同时提供 service-role-only RPC：
    - 仅处理微信明确返回 `CLOSED` 的申请；
    - 同一事务把申请与订单镜像状态改为 `failed` 并清租约；
    - 释放活动申请唯一约束，使人工充值后可用新退款单号重新申请。
+5. `billing_apply_wechat_recharge_refund_callback_state(...)`
+   - 仅供 callback 应用 `CLOSED|ABNORMAL`，不要求 worker claim token；
+   - 锁定申请与订单并保留已由其他路径写入的终态。
+6. `billing_confirm_claimed_wechat_recharge_refund(
+   uuid, uuid, text, text, integer, timestamptz, jsonb)`
+   - 仅供 worker 的 `SUCCESS` finalize，必须匹配 `refunding` 和当前 claim token；
+   - 回调或其他租约持有者先完成时返回 SQL `NULL`，repository/service 将其视为
+     幂等竞争而不是失败；
+   - 持有申请行锁后，在同一事务内调用兼容确认 RPC，并传入
+     `notification_id = NULL`，不复制资金逻辑。
 
-现有 `billing_confirm_wechat_recharge_refund` 做兼容加固：
+现有 `billing_confirm_wechat_recharge_refund(
+uuid, text, text, integer, timestamptz, uuid, jsonb)` 保留为 callback SUCCESS
+兼容入口并做加固：
 
-- `p_notification_id` 允许为 `NULL`，主动查单成功时不伪造通知记录；
+- `p_notification_id` 继续接收 callback 的真实通知 UUID；只有上面的 claimed worker
+  包装 RPC 在内部传 `NULL`；
 - `latest_notification_id` 使用 `coalesce`，不被主动查单清空；
 - 成功终态同时清除对账租约和下一次执行时间；
 - 回调与 worker 并发时仍依靠申请行锁、状态和唯一反向流水保持幂等。
 
-所有 RPC 使用固定 `search_path`，撤销 `PUBLIC/anon/authenticated` 权限，只授权
+全部七个 RPC 使用固定 `search_path`，撤销 `PUBLIC/anon/authenticated` 权限，只授权
 `service_role`。migration 注释中记录回滚顺序：先停止 worker，再删除 RPC/索引，
-最后仅在无活动租约时删除列；不自动回滚已经完成的退款或积分流水。
+最后仅在无活动租约时删除列；绝不自动反冲已经完成的退款或积分流水。
 
 ## 应答可信边界
 
@@ -155,7 +175,10 @@ gateway 所有网络调用使用共享的有界 fetch 包装器，默认 10 秒�
    `payment_config_id` 精确读取，不能使用后来切换的活动配置。
 2. service 加载对应 secret bundle，调用退款查单。
 3. 严格验签并绑定响应后按状态处理：
-   - `SUCCESS`：调用现有确认 RPC，原子扣减积分、写唯一反向流水并更新申请/订单；
+   - `SUCCESS`：worker 调用 token-gated
+     `billing_confirm_claimed_wechat_recharge_refund`，由它在同一事务复用现有确认
+     RPC，原子扣减积分、写唯一反向流水并更新申请/订单；callback SUCCESS 仍调用
+     `billing_confirm_wechat_recharge_refund` 并传真实通知 UUID；
    - `PROCESSING`：保持 `refunding` 并按退避表重排；
    - `CLOSED`：调用 close RPC 原子关闭本地镜像，允许重新申请；
    - `ABNORMAL`：保持 `refunding`，30 分钟后再查并记录需人工处理；
@@ -183,7 +206,8 @@ gateway 所有网络调用使用共享的有界 fetch 包装器，默认 10 秒�
 - `refund reconciliation service`：单笔状态机、响应绑定、退避计算和批次汇总；
 - `wechat gateway`：请求签名、应答验签、超时和原始协议错误；
 - `billing-reconcile-worker`：定时、并发防重入、调用独立批次并输出结构化摘要；
-- callback service：回调验签/解密后复用相同绑定校验与确认 RPC。
+- callback service：回调验签/解密后复用相同绑定校验；SUCCESS 调用兼容确认 RPC，
+  CLOSED/ABNORMAL 调用 callback state RPC，不进入 worker claimed RPC。
 
 不在 controller 中放对账逻辑，不为 worker 增加公开 HTTP 接口。
 
@@ -195,8 +219,9 @@ failed 计数和耗时。单笔错误只记录 request ID、order ID、out refun
 
 ## 测试与验收
 
-1. SQL contract tests：列/约束/索引、`LIMIT <= 100`、`SKIP LOCKED`、token finalize、
-   service-role 权限、原子 begin/close/confirm。
+1. SQL contract tests：列/约束/索引、`LIMIT <= 100`、30..900 秒租约、最小 claim
+   返回字段、`SKIP LOCKED`、token finalize、七个 RPC 的 service-role 权限、原子
+   begin/close/callback/confirm。
 2. repository tests：分页/批量加载，无 N+1，配置按 `payment_config_id` 读取。
 3. gateway tests：普通商户与服务商路径、有效/缺失/过期/错误/SIGNTEST 签名、
    timeout/network mapping、Request-ID。
