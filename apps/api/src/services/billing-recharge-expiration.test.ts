@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Errors } from "@/errors/error-factory";
 import {
   createExpirationHarness,
   makeOrder,
@@ -163,6 +164,31 @@ describe("BillingRechargeExpirationService state matrix", () => {
     });
   });
 
+  test("closes locally when WeChat confirms the order never existed", async () => {
+    const harness = await createExpirationHarness({ orders: [makeOrder()] });
+    harness.queryTransaction.mockImplementationOnce(async () => {
+      throw Errors.business(
+        502,
+        "微信支付查单失败",
+        "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
+        { status: 404, code: "ORDER_NOT_EXIST", message: "订单不存在" },
+      );
+    });
+
+    const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+    expect(harness.calls).toEqual([
+      "claim:order-1",
+      "renew:order-1:claim-1",
+      "query:order-1",
+      "mark:order-1",
+    ]);
+    expect(harness.wechatPayGateway.closeTransactionByOutTradeNo).not
+      .toHaveBeenCalled();
+    expect(harness.repository.releaseCloseClaim).not.toHaveBeenCalled();
+    expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, closed: 1 });
+  });
+
   test.each([
     ["SUCCESS", "paid"],
     ["CLOSED", "closed"],
@@ -211,6 +237,29 @@ describe("BillingRechargeExpirationService state matrix", () => {
       "release:order-1:BILLING_RECHARGE_EXPIRE_SECOND_QUERY_FAILED",
     );
     expect(result.failed).toBe(1);
+  });
+
+  test("closes locally when the post-close query reports no WeChat order", async () => {
+    const harness = await createExpirationHarness({ orders: [makeOrder()] });
+    harness.queryTransaction
+      .mockImplementationOnce(async () => ({ trade_state: "NOTPAY" }))
+      .mockImplementationOnce(async () => {
+        throw Errors.business(
+          502,
+          "微信支付查单失败",
+          "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
+          { status: 404, code: "ORDER_NOT_EXIST", message: "订单不存在" },
+        );
+      });
+    harness.closeTransaction.mockImplementationOnce(async () => {
+      throw new Error("close timeout");
+    });
+
+    const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+    expect(harness.calls.at(-1)).toBe("mark:order-1");
+    expect(harness.repository.releaseCloseClaim).not.toHaveBeenCalled();
+    expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, closed: 1 });
   });
 
   test("does not count a conditional close race as closed", async () => {

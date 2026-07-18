@@ -151,6 +151,7 @@ The externally visible state matrix remains:
 SUCCESS -> atomic confirm+recover -> paid
 CLOSED  -> conditional local closed
 NOTPAY  -> WeChat close -> conditional local closed
+404 / ORDER_NOT_EXIST -> conditional local closed without a close request
 other   -> retain claim, then release for retry
 ```
 
@@ -159,10 +160,15 @@ If close throws, query exactly once more:
 ```text
 SUCCESS -> atomic confirm+recover
 CLOSED  -> conditional local closed
+404 / ORDER_NOT_EXIST -> conditional local closed
 other/query error -> retain claim, then release; never local-close
 ```
 
-Before any close request, the service must still own the renewed token. Local closure remains conditional on the same token. Confirmation remains financially idempotent.
+The `ORDER_NOT_EXIST` branch requires both the exact upstream HTTP status and error code; network,
+timeout, signing, and all other query failures remain retryable. This follows the official WeChat
+query contract, which defines that pair as a merchant order that was not successfully created.
+Before any close request, the service must still own the renewed token. Local closure remains
+conditional on the same token. Confirmation remains financially idempotent.
 
 JSAPI prepay and every query/close request have a ten-second default timeout. Public responses take a
 fresh clock reading after awaited work. If work crosses `payment_expires_at`, the response suppresses
@@ -198,7 +204,7 @@ focused RPC smoke
 ## 6. Local implementation status
 
 The reliability work is implemented on `feat/recharge-payment-expiration`. After final-review
-remediation, the 33 changed API test files passed 268 tests with zero failures and 930 expectations
+remediation, the 33 changed API test files passed 270 tests with zero failures and 937 expectations
 with every remote Supabase/database environment variable removed. API typecheck, build, file-size,
 and `git diff --check` also passed. A credential-free worker shutdown smoke had already passed.
 
