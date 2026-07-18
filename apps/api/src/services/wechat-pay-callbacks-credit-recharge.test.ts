@@ -279,6 +279,37 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
     expect(markCreditNotificationProcessed).not.toHaveBeenCalled();
   });
 
+  test("processes a new notification without reconfirming an already paid recharge", async () => {
+    findCreditOrderByOutTradeNo.mockImplementationOnce(async () => ({
+      ...creditOrder,
+      status: "paid",
+      transaction_id: "4200000000202607020000000001",
+      paid_amount_fen: creditOrder.amount_fen,
+      paid_at: "2026-07-02T08:05:00+08:00",
+    }));
+    const service = await createService();
+
+    const result = await service.handleCallback({
+      rawBody,
+      headers: {
+        "wechatpay-timestamp": "1782873600",
+        "wechatpay-nonce": "callback-nonce",
+        "wechatpay-signature": "signature",
+      },
+    });
+
+    expect(result).toEqual({ code: "SUCCESS", message: "成功" });
+    expect(createCreditNotification).toHaveBeenCalledWith(expect.objectContaining({
+      notify_id: "notify-credit-1",
+      processed: false,
+    }));
+    expect(confirmWechatRecharge).not.toHaveBeenCalled();
+    expect(recoverAfterRecharge).not.toHaveBeenCalled();
+    expect(markCreditNotificationProcessed).toHaveBeenCalledWith({
+      notificationId: "credit-notification-1",
+    });
+  });
+
   test("skips recharge confirmation and recovery for non-success trade state", async () => {
     decryptResource.mockImplementationOnce(() => ({
       ...decryptedResource,
