@@ -214,8 +214,12 @@ describe("BillingRechargeRepository", () => {
     });
   });
 
-  test("claims one bounded page of expired orders through the lease RPC", async () => {
+  test("claims one bounded page with at most 100 excluded order ids", async () => {
     const claimed = [{ id: "order-1", close_claim_token: "claim-1" }];
+    const excludedOrderIds = Array.from(
+      { length: 101 },
+      (_, index) => `excluded-${index + 1}`,
+    );
     rpc.mockImplementationOnce(async () => ({ data: claimed, error: null }));
     const { billingRechargeRepository } = await import("./billing-recharge");
 
@@ -223,12 +227,14 @@ describe("BillingRechargeRepository", () => {
       now: new Date("2026-07-18T03:00:00.000Z"),
       batchSize: 101,
       leaseSeconds: 2,
+      excludedOrderIds,
     });
 
     expect(rpc).toHaveBeenCalledWith("billing_claim_expired_recharge_orders", {
       p_now: "2026-07-18T03:00:00.000Z",
       p_limit: 100,
       p_lease_seconds: 10,
+      p_excluded_ids: excludedOrderIds.slice(0, 100),
     });
     expect(result.map((order) => ({
       id: order.id,
@@ -247,10 +253,72 @@ describe("BillingRechargeRepository", () => {
       now: new Date("2026-07-18T03:00:00.000Z"),
       batchSize: 50,
       leaseSeconds: 60,
+      excludedOrderIds: [],
     })).rejects.toMatchObject({
       statusCode: 500,
       code: "DB_ERROR",
       message: "领取过期积分充值订单失败",
+    });
+  });
+
+  test("renews only the matching pending claim with a clamped lease", async () => {
+    const renewed = {
+      id: "order-1",
+      status: "pending",
+      close_claim_token: "claim-1",
+      close_claim_expires_at: "2026-07-18T03:00:11.000Z",
+    };
+    maybeSingle.mockImplementationOnce(async () => ({ data: renewed, error: null }));
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    const result = await billingRechargeRepository.renewCloseClaim({
+      orderId: "order-1",
+      claimToken: "claim-1",
+      now: new Date("2026-07-18T03:00:01.000Z"),
+      leaseSeconds: 2,
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      close_claim_expires_at: "2026-07-18T03:00:11.000Z",
+    });
+    expect(eq.mock.calls).toEqual(expect.arrayContaining([
+      ["id", "order-1"],
+      ["status", "pending"],
+      ["close_claim_token", "claim-1"],
+    ]));
+    expect(select).toHaveBeenCalledWith("*");
+    expect(maybeSingle).toHaveBeenCalledTimes(1);
+    expect(result?.id).toBe(renewed.id);
+    expect(result?.close_claim_expires_at).toBe(renewed.close_claim_expires_at);
+  });
+
+  test("returns null when renewal ownership is lost", async () => {
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    await expect(billingRechargeRepository.renewCloseClaim({
+      orderId: "order-1",
+      claimToken: "stale-claim",
+      now: new Date("2026-07-18T03:00:01.000Z"),
+      leaseSeconds: 60,
+    })).resolves.toBeNull();
+  });
+
+  test("wraps claim renewal database failures", async () => {
+    maybeSingle.mockImplementationOnce(async () => ({
+      data: null,
+      error: { message: "database detail" },
+    }));
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    await expect(billingRechargeRepository.renewCloseClaim({
+      orderId: "order-1",
+      claimToken: "claim-1",
+      now: new Date("2026-07-18T03:00:01.000Z"),
+      leaseSeconds: 60,
+    })).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "续租积分充值关单领取失败",
     });
   });
 

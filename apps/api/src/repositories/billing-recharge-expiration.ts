@@ -21,6 +21,14 @@ export type ClaimExpiredRechargeOrdersInput = {
   now: Date;
   batchSize: number;
   leaseSeconds: number;
+  excludedOrderIds: string[];
+};
+
+export type RenewRechargeOrderCloseClaimInput = {
+  orderId: string;
+  claimToken: string;
+  now: Date;
+  leaseSeconds: number;
 };
 
 export type MarkClaimedRechargeOrderClosedInput = {
@@ -44,12 +52,33 @@ export async function claimExpiredRechargeOrders(
       p_now: input.now.toISOString(),
       p_limit: clampInteger(input.batchSize, 1, 100),
       p_lease_seconds: clampInteger(input.leaseSeconds, 10, 600),
+      p_excluded_ids: input.excludedOrderIds.slice(0, 100),
     },
   );
   if (error) {
     throw Errors.dbError("领取过期积分充值订单失败", error);
   }
   return (data ?? []) as TenantCreditOrderRecord[];
+}
+
+export async function renewRechargeOrderCloseClaim(
+  input: RenewRechargeOrderCloseClaimInput,
+): Promise<TenantCreditOrderRecord | null> {
+  const leaseSeconds = clampInteger(input.leaseSeconds, 10, 600);
+  const expiresAt = new Date(
+    input.now.getTime() + leaseSeconds * 1000,
+  ).toISOString();
+  const { data, error } = await table()
+    .update({ close_claim_expires_at: expiresAt })
+    .eq("id", input.orderId)
+    .eq("status", "pending")
+    .eq("close_claim_token", input.claimToken)
+    .select("*")
+    .maybeSingle();
+  if (error) {
+    throw Errors.dbError("续租积分充值关单领取失败", error);
+  }
+  return (data as TenantCreditOrderRecord | null) ?? null;
 }
 
 export async function markClaimedRechargeOrderClosed(

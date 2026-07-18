@@ -6,6 +6,7 @@ import {
   claimExpiredRechargeOrders,
   markClaimedRechargeOrderClosed,
   releaseRechargeOrderCloseClaim,
+  renewRechargeOrderCloseClaim,
 } from "@/repositories/billing-recharge-expiration";
 import {
   billingRechargeRefundCallbackRepository,
@@ -163,6 +164,7 @@ type UntypedClient = {
 
 class BillingRechargeRepository {
   readonly claimExpiredOrders = claimExpiredRechargeOrders;
+  readonly renewCloseClaim = renewRechargeOrderCloseClaim;
   readonly markOrderClosed = markClaimedRechargeOrderClosed;
   readonly releaseCloseClaim = releaseRechargeOrderCloseClaim;
   readonly createOrder = createGuardedPendingRechargeOrder;
