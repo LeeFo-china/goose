@@ -43,6 +43,13 @@ const migrateProductionWorkflow = readFileSync(
   new URL("../.github/workflows/migrate-production-database.yml", import.meta.url),
   "utf8",
 );
+const workflowTaskAccessibleRpcMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260709103000_workflow_task_accessible_rpc.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const registryWorkflows = [
   ["build", buildWorkflow],
   ["development deploy", deployDevWorkflow],
@@ -839,6 +846,56 @@ describe("production migration precheck workflow", () => {
     expect(migrateProductionWorkflow).toContain("pending_count: ($pending_count | tonumber)");
     expect(migrateProductionWorkflow).toContain("pending_versions: ($pending_versions | split(\" \")");
     expect(migrateProductionWorkflow).toContain("workflow_run_id: ($workflow_run_id | tonumber)");
+  });
+});
+
+describe("database migration security contracts", () => {
+  test("revokes public workflow RPC access before granting service_role", () => {
+    const executableSql = workflowTaskAccessibleRpcMigration
+      .split(/\r?\n/)
+      .map((line) => line.trimStart().startsWith("--") ? "" : line)
+      .join("\n");
+    const permissionStatements = [
+      ...executableSql.matchAll(/^\s*(?:revoke|grant)\s+[^;]+;/gim),
+    ].map(([permissionStatement]) =>
+      permissionStatement
+        .replace(/\s+/g, " ")
+        .replace(/\s*,\s*/g, ", ")
+        .replace(/\(\s+/g, "(")
+        .replace(/\s+\)/g, ")")
+        .trim()
+        .toLowerCase()
+    );
+    const exactSignatures = [
+      "public.list_accessible_workflow_tasks(uuid, uuid, text[], text[], text, text, text, uuid, integer, integer)",
+      "public.list_accessible_project_workflow_tasks(uuid, uuid, text[], text[], text[], integer)",
+    ] as const;
+
+    for (const exactSignature of exactSignatures) {
+      const expectedRevoke =
+        `revoke all on function ${exactSignature} from public, anon, authenticated;`;
+      const expectedGrant =
+        `grant execute on function ${exactSignature} to service_role;`;
+      const signatureRevokeStatements = permissionStatements.filter(
+        (permissionStatement) => permissionStatement.startsWith(
+          `revoke all on function ${exactSignature} from `,
+        ),
+      );
+      const signatureGrantStatements = permissionStatements.filter(
+        (permissionStatement) => permissionStatement.startsWith(
+          `grant execute on function ${exactSignature} to `,
+        ),
+      );
+
+      expect(signatureRevokeStatements).toEqual([expectedRevoke]);
+      expect(signatureGrantStatements).toEqual([expectedGrant]);
+      expect(signatureGrantStatements.join("\n")).not.toMatch(
+        /\b(?:authenticated|anon)\b/,
+      );
+      expect(permissionStatements.indexOf(expectedRevoke)).toBeLessThan(
+        permissionStatements.indexOf(expectedGrant),
+      );
+    }
   });
 });
 
