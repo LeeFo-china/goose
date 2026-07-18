@@ -60,6 +60,7 @@ export function toWechatRefundResult(
     out_refund_no: optionalString(refund.out_refund_no) ?? outRefundNo,
     refund_id: optionalString(refund.refund_id),
     status: optionalString(refund.status) ?? "UNKNOWN",
+    requestId: refund.requestId,
     raw: refund,
   };
 }

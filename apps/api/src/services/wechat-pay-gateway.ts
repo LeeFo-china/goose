@@ -1,4 +1,6 @@
+import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
+import { readVerifiedWechatPayJson } from "@/services/wechat-pay-api-response";
 import {
   buildWechatPayJsapiPrepayRequest,
   type WechatPayJsapiConfig,
@@ -17,7 +19,13 @@ type WechatPayGatewayDependencies = {
   fetchImpl?: FetchImpl;
   nonceFactory?: () => string;
   timestampFactory?: () => string;
+  requestTimeoutMs?: number;
+  nowSecondsFactory?: () => number;
 };
+
+type WechatPayOperation = "jsapi_prepay" | "transaction_query" | "refund_request" | "refund_query";
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 export type WechatPayCreateJsapiPrepayInput = {
   config: WechatPayJsapiConfig;
@@ -56,6 +64,7 @@ export type WechatPayRefundQueryResult = Record<string, unknown> & {
   refund_id?: string;
   status?: string;
   amount?: Record<string, unknown>;
+  requestId: string | null;
 };
 
 export type WechatPayRequestRefundInput = {
@@ -72,6 +81,7 @@ export type WechatPayRequestRefundResult = {
   out_refund_no: string;
   refund_id: string | null;
   status: string;
+  requestId: string | null;
   raw: Record<string, unknown>;
 };
 
@@ -79,25 +89,22 @@ export class WechatPayGateway {
   private readonly fetchImpl: FetchImpl;
   private readonly nonceFactory?: () => string;
   private readonly timestampFactory?: () => string;
+  private readonly requestTimeoutMs: number;
+  private readonly nowSecondsFactory: () => number;
 
   constructor(dependencies: WechatPayGatewayDependencies = {}) {
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
     this.nonceFactory = dependencies.nonceFactory;
     this.timestampFactory = dependencies.timestampFactory;
+    this.requestTimeoutMs = dependencies.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.nowSecondsFactory = dependencies.nowSecondsFactory ??
+      (() => Math.floor(Date.now() / 1_000));
   }
 
   async createJsapiPrepay(
     input: WechatPayCreateJsapiPrepayInput,
   ): Promise<WechatPayCreateJsapiPrepayResult> {
-    const serialNo = input.config.serial_no?.trim();
-    if (!serialNo) {
-      throw Errors.business(
-        409,
-        "微信支付证书序列号未配置",
-        "WECHAT_PAY_SERIAL_NO_REQUIRED",
-      );
-    }
-
+    const serialNo = requireSerialNo(input.config);
     const prepayRequest = buildWechatPayJsapiPrepayRequest({
       config: input.config,
       order: input.order,
@@ -116,9 +123,12 @@ export class WechatPayGateway {
       nonce,
       timestamp,
     });
-    const response = await this.fetchImpl(
-      `${input.secretBundle.baseUrl}${prepayRequest.urlPath}`,
-      {
+    const result = await this.requestVerifiedJson({
+      operation: "jsapi_prepay",
+      failureMessage: "微信支付预下单失败",
+      failureCode: "WECHAT_PAY_PREPAY_FAILED",
+      url: `${input.secretBundle.baseUrl}${prepayRequest.urlPath}`,
+      init: {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -127,27 +137,16 @@ export class WechatPayGateway {
         },
         body,
       },
-    );
-    const payload = await parseWechatPayJson(response);
-    if (!response.ok) {
-      throw Errors.business(
-        502,
-        "微信支付预下单失败",
-        "WECHAT_PAY_PREPAY_FAILED",
-        {
-          status: response.status,
-          code: stringField(payload, "code"),
-          message: stringField(payload, "message"),
-        },
-      );
-    }
-
+      secretBundle: input.secretBundle,
+    });
+    const { payload } = result;
     const prepayId = stringField(payload, "prepay_id");
     if (!prepayId) {
       throw Errors.business(
         502,
         "微信支付预下单响应缺少 prepay_id",
         "WECHAT_PAY_PREPAY_RESPONSE_INVALID",
+        { operation: "jsapi_prepay", requestId: result.requestId },
       );
     }
 
@@ -166,15 +165,7 @@ export class WechatPayGateway {
   async queryTransactionByOutTradeNo(
     input: WechatPayQueryTransactionByOutTradeNoInput,
   ): Promise<WechatPayTransactionQueryResult> {
-    const serialNo = input.config.serial_no?.trim();
-    if (!serialNo) {
-      throw Errors.business(
-        409,
-        "微信支付证书序列号未配置",
-        "WECHAT_PAY_SERIAL_NO_REQUIRED",
-      );
-    }
-
+    const serialNo = requireSerialNo(input.config);
     const urlPath = buildTransactionQueryUrlPath(input.config, input.outTradeNo);
     const nonce = this.createNonce();
     const timestamp = this.createTimestamp();
@@ -188,45 +179,28 @@ export class WechatPayGateway {
       nonce,
       timestamp,
     });
-    const response = await this.fetchImpl(
-      `${input.secretBundle.baseUrl}${urlPath}`,
-      {
+    const result = await this.requestVerifiedJson({
+      operation: "transaction_query",
+      failureMessage: "微信支付查单失败",
+      failureCode: "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
+      url: `${input.secretBundle.baseUrl}${urlPath}`,
+      init: {
         method: "GET",
         headers: {
           Accept: "application/json",
           Authorization: authorization,
         },
       },
-    );
-    const payload = await parseWechatPayJson(response);
-    if (!response.ok) {
-      throw Errors.business(
-        502,
-        "微信支付查单失败",
-        "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
-        {
-          status: response.status,
-          code: stringField(payload, "code"),
-          message: stringField(payload, "message"),
-        },
-      );
-    }
-
+      secretBundle: input.secretBundle,
+    });
+    const { payload } = result;
     return payload as WechatPayTransactionQueryResult;
   }
 
   async requestRefund(
     input: WechatPayRequestRefundInput,
   ): Promise<WechatPayRequestRefundResult> {
-    const serialNo = input.config.serial_no?.trim();
-    if (!serialNo) {
-      throw Errors.business(
-        409,
-        "微信支付证书序列号未配置",
-        "WECHAT_PAY_SERIAL_NO_REQUIRED",
-      );
-    }
-
+    const serialNo = requireSerialNo(input.config);
     const body = JSON.stringify(buildRefundRequestBody(input));
     const nonce = this.createNonce();
     const timestamp = this.createTimestamp();
@@ -241,9 +215,12 @@ export class WechatPayGateway {
       nonce,
       timestamp,
     });
-    const response = await this.fetchImpl(
-      `${input.secretBundle.baseUrl}${urlPath}`,
-      {
+    const result = await this.requestVerifiedJson({
+      operation: "refund_request",
+      failureMessage: "微信支付申请退款失败",
+      failureCode: "WECHAT_PAY_REFUND_REQUEST_FAILED",
+      url: `${input.secretBundle.baseUrl}${urlPath}`,
+      init: {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -252,25 +229,14 @@ export class WechatPayGateway {
         },
         body,
       },
-    );
-    const payload = await parseWechatPayJson(response);
-    if (!response.ok) {
-      throw Errors.business(
-        502,
-        "微信支付申请退款失败",
-        "WECHAT_PAY_REFUND_REQUEST_FAILED",
-        {
-          status: response.status,
-          code: stringField(payload, "code"),
-          message: stringField(payload, "message"),
-        },
-      );
-    }
-
+      secretBundle: input.secretBundle,
+    });
+    const { payload } = result;
     return {
       out_refund_no: stringField(payload, "out_refund_no") ?? input.outRefundNo,
       refund_id: stringField(payload, "refund_id"),
       status: stringField(payload, "status") ?? "UNKNOWN",
+      requestId: result.requestId,
       raw: payload,
     };
   }
@@ -278,14 +244,7 @@ export class WechatPayGateway {
   async queryRefundByOutRefundNo(
     input: WechatPayQueryRefundByOutRefundNoInput,
   ): Promise<WechatPayRefundQueryResult> {
-    const serialNo = input.config.serial_no?.trim();
-    if (!serialNo) {
-      throw Errors.business(
-        409,
-        "微信支付证书序列号未配置",
-        "WECHAT_PAY_SERIAL_NO_REQUIRED",
-      );
-    }
+    const serialNo = requireSerialNo(input.config);
 
     const urlPath = buildRefundQueryUrlPath(input.config, input.outRefundNo);
     const nonce = this.createNonce();
@@ -300,31 +259,80 @@ export class WechatPayGateway {
       nonce,
       timestamp,
     });
-    const response = await this.fetchImpl(
-      `${input.secretBundle.baseUrl}${urlPath}`,
-      {
+    const result = await this.requestVerifiedJson({
+      operation: "refund_query",
+      failureMessage: "微信支付查询退款失败",
+      failureCode: "WECHAT_PAY_REFUND_QUERY_FAILED",
+      url: `${input.secretBundle.baseUrl}${urlPath}`,
+      init: {
         method: "GET",
         headers: {
           Accept: "application/json",
           Authorization: authorization,
         },
       },
-    );
-    const payload = await parseWechatPayJson(response);
-    if (!response.ok) {
+      secretBundle: input.secretBundle,
+    });
+    const { payload } = result;
+    return { ...payload, requestId: result.requestId } as WechatPayRefundQueryResult;
+  }
+
+  private async requestVerifiedJson(input: {
+    operation: WechatPayOperation;
+    failureMessage: string;
+    failureCode: string;
+    url: string;
+    init: RequestInit;
+    secretBundle: WechatPaySecretBundle;
+  }) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    let requestId: string | null = null;
+    try {
+      const response = await this.fetchImpl(input.url, {
+        ...input.init,
+        signal: controller.signal,
+      });
+      requestId = response.headers.get("request-id")?.trim() || null;
+      const verified = await readVerifiedWechatPayJson({
+        response,
+        publicKeyId: input.secretBundle.wechatPayPublicKeyId,
+        publicKeyPem: input.secretBundle.wechatPayPublicKeyPem,
+        nowSeconds: this.nowSecondsFactory(),
+      });
+      if (!response.ok) {
+        throw Errors.business(502, input.failureMessage, input.failureCode, {
+          status: response.status,
+          code: stringField(verified.payload, "code"),
+          message: stringField(verified.payload, "message"),
+        });
+      }
+      return verified;
+    } catch (error) {
+      const details = { operation: input.operation, requestId };
+      if (controller.signal.aborted || isAbortError(error)) {
+        throw Errors.business(
+          504,
+          "微信支付接口请求超时",
+          "WECHAT_PAY_TRANSPORT_TIMEOUT",
+          details,
+        );
+      }
+      if (error instanceof AppError) {
+        throw Errors.business(error.statusCode, error.message, error.code, {
+          ...recordDetails(error.details),
+          ...details,
+        });
+      }
       throw Errors.business(
         502,
-        "微信支付查询退款失败",
-        "WECHAT_PAY_REFUND_QUERY_FAILED",
-        {
-          status: response.status,
-          code: stringField(payload, "code"),
-          message: stringField(payload, "message"),
-        },
+        "微信支付接口请求失败",
+        "WECHAT_PAY_TRANSPORT_FAILED",
+        details,
       );
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return payload as WechatPayRefundQueryResult;
   }
 
   private createNonce() {
@@ -336,20 +344,31 @@ export class WechatPayGateway {
   }
 }
 
-async function parseWechatPayJson(response: Response): Promise<Record<string, unknown>> {
-  try {
-    const payload = await response.json();
-    return payload && typeof payload === "object" && !Array.isArray(payload)
-      ? payload as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
-  }
-}
-
 function stringField(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function requireSerialNo(config: WechatPayJsapiConfig) {
+  const serialNo = config.serial_no?.trim();
+  if (!serialNo) {
+    throw Errors.business(
+      409,
+      "微信支付证书序列号未配置",
+      "WECHAT_PAY_SERIAL_NO_REQUIRED",
+    );
+  }
+  return serialNo;
+}
+
+function recordDetails(details: unknown) {
+  return details && typeof details === "object" && !Array.isArray(details)
+    ? details as Record<string, unknown>
+    : {};
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function buildTransactionQueryUrlPath(

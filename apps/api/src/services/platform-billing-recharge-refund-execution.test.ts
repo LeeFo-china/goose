@@ -49,9 +49,7 @@ const repository = {
   ),
 };
 
-const paymentConfigRepository = {
-  findWechatPayConfig: mock(async () => paymentConfig),
-};
+const paymentConfigRepository = { findWechatPayConfig: mock(async () => paymentConfig) };
 
 const secretBundleService = {
   load: mock(async () => ({
@@ -79,6 +77,7 @@ const wechatPayGateway = {
       out_refund_no: "TRR202607100800000001",
       refund_id: "5030000000202607150000000001",
       status: "PROCESSING",
+      requestId: "wechat-refund-request-id",
       raw: {
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
@@ -93,13 +92,12 @@ const wechatPayGateway = {
       refund_id: "5030000000202607150000000001",
       status: "PROCESSING",
       amount: { refund: 10000, total: 10000, currency: "CNY" },
+      requestId: "wechat-refund-query-request-id",
     };
   }),
 };
 
-const auditLogService = {
-  recordBestEffort: mock(async () => null),
-};
+const auditLogService = { recordBestEffort: mock(async () => null) };
 
 async function createService() {
   const { PlatformBillingRechargeRefundExecutionService } = await import(
@@ -170,6 +168,7 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
         status: "PROCESSING",
+        requestId: "wechat-refund-request-id",
         raw: {
           out_refund_no: "TRR202607100800000001",
           refund_id: "5030000000202607150000000001",
@@ -184,6 +183,7 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         refund_id: "5030000000202607150000000001",
         status: "PROCESSING",
         amount: { refund: 10000, total: 10000, currency: "CNY" },
+        requestId: "wechat-refund-query-request-id",
       };
     });
   });
@@ -433,7 +433,7 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         refund_id: "5030000000202607150000000001",
         status: "PROCESSING",
       };
-      return { ...raw, raw };
+      return { ...raw, requestId: "wechat-refund-request-id", raw };
     });
     wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
       events.push("wechat-query-refund");

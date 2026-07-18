@@ -147,6 +147,7 @@ const executionService = {
       out_refund_no: "TRR202607100800000001",
       refund_id: "5030000000202607150000000001",
       status: "PROCESSING",
+      requestId: "wechat-refund-request-id",
       raw: {},
     },
   })),
@@ -191,6 +192,7 @@ describe("PlatformBillingRechargeRefundService", () => {
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
         status: "PROCESSING",
+        requestId: "wechat-refund-request-id",
         raw: {},
       },
     }));
