@@ -59,6 +59,9 @@ GET /billing/recharge-orders?page=1&pageSize=20&status=paid&keyword=TC...
 
 `product_title` 优先来自 `metadata.product_snapshot.title`，为空时小程序可 fallback 到 `package_code`。
 
+`refund_action` 的当前契约不包含 `code` 字段。不可用原因只通过
+`disabled_reason` 返回；小程序不应读取或依赖 `refund_action.code`。
+
 ## 退款申请
 
 ```http
@@ -117,6 +120,7 @@ POST /billing/recharge-orders/:id/refund-requests
 ## 小程序展示规则
 
 小程序只消费 `refund_action`，不本地推导退款资格。
+状态分支统一读取 `refund_action.disabled_reason`，不读取 `refund_action.code`。
 
 | 后端状态 | 小程序建议 |
 | --- | --- |

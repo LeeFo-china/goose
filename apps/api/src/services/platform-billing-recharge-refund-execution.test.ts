@@ -1,143 +1,19 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
-import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { PlatformRechargeRefundRequestRecord } from "@/repositories/platform-billing-recharge-refunds";
-import type { AuthContext } from "@/services/authorization";
+import {
+  approvedRequest,
+  authContext,
+  failedRequest,
+  order,
+  paymentConfig,
+  refundingRequest,
+  requestWithWechatResult,
+} from "@/services/platform-billing-recharge-refund-execution.test-fixtures";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const order = {
-  id: "order-1",
-  tenant_id: "tenant-1",
-  order_no: "TC202607020001",
-  idempotency_key: "idem-1",
-  package_code: "credit_1000",
-  credits: 1000,
-  amount_fen: 10000,
-  bonus_credits: 100,
-  channel: "wechat_pay",
-  status: "paid",
-  paid_at: "2026-07-02T08:03:00.000Z",
-  created_by: "employee-1",
-  remark: null,
-  metadata: {},
-  payment_config_id: "platform-config-1",
-  out_trade_no: "TC202607020001",
-  prepay_id: null,
-  transaction_id: "4200000001",
-  paid_amount_fen: 10000,
-  closed_at: null,
-  latest_notification_id: null,
-  refund_status: "approved",
-  refund_requested_at: "2026-07-10T08:00:00.000Z",
-  refunded_at: null,
-  refund_amount_fen: null,
-  created_at: "2026-07-02T08:01:00.000Z",
-  updated_at: "2026-07-10T08:00:00.000Z",
-} satisfies TenantCreditOrderRecord;
-
-const approvedRequest = {
-  id: "refund-request-1",
-  tenant_id: "tenant-1",
-  order_id: "order-1",
-  request_no: "TRR202607100800000001",
-  idempotency_key: "550e8400-e29b-41d4-a716-446655440000",
-  status: "approved",
-  reason: "客户误充值，需要申请退款",
-  requested_amount_fen: 10000,
-  requested_credits: 1100,
-  requested_by_employee_id: "employee-1",
-  reviewed_by_employee_id: "employee-platform",
-  reviewed_at: "2026-07-15T10:00:00.000Z",
-  review_note: "同意退款，进入退款执行",
-  out_refund_no: null,
-  wechat_refund_id: null,
-  refund_amount_fen: null,
-  refunded_at: null,
-  failure_message: null,
-  metadata: {},
-  created_at: "2026-07-10T08:00:00.000Z",
-  updated_at: "2026-07-15T10:00:00.000Z",
-  order,
-  tenant: { id: "tenant-1", name: "固始晴天装饰", slug: "qingtian" },
-} satisfies PlatformRechargeRefundRequestRecord;
-
-const refundingRequest = {
-  ...approvedRequest,
-  status: "refunding",
-  out_refund_no: "TRR202607100800000001",
-} satisfies PlatformRechargeRefundRequestRecord;
-
-const requestWithWechatResult = {
-  ...refundingRequest,
-  wechat_refund_id: "5030000000202607150000000001",
-  refund_amount_fen: 10000,
-  metadata: {
-    wechat_refund_response: {
-      out_refund_no: "TRR202607100800000001",
-      refund_id: "5030000000202607150000000001",
-      status: "PROCESSING",
-    },
-  },
-} satisfies PlatformRechargeRefundRequestRecord;
-
-const failedRequest = {
-  ...refundingRequest,
-  status: "failed",
-  failure_message: "微信退款请求失败",
-} satisfies PlatformRechargeRefundRequestRecord;
-
-const paymentConfig = {
-  id: "platform-config-1",
-  provider: "wechat_pay",
-  profile_code: "platform_direct_recharge",
-  principal_type: "platform",
-  merchant_mode: "direct_merchant",
-  merchant_name: "平台微信支付",
-  merchant_id: "1112582521",
-  sub_merchant_id: null,
-  app_id: "wxbac3b1e168fd968a",
-  sub_app_id: null,
-  encrypted_config_ref: "env://WECHAT_PAY_TEST",
-  serial_no: "SERIALNO",
-  notify_url: "https://api.example.com/pay/wechat/callback",
-  enabled_channels: ["tenant_recharge"],
-  status: "active",
-  validation_status: "valid",
-  last_validated_at: null,
-  risk_switches: {},
-  created_by_employee_id: null,
-  updated_by_employee_id: null,
-  created_at: "2026-07-01T00:00:00.000Z",
-  updated_at: "2026-07-01T00:00:00.000Z",
-} satisfies PlatformPaymentConfigRecord;
-
-const authContext = {
-  authUserId: "auth-platform",
-  employeeId: "employee-platform",
-  tenantId: null,
-  tenantName: null,
-  tenantSlug: null,
-  tenantStatus: null,
-  isPlatformAdmin: true,
-  employeeName: "平台超管",
-  employeeStatus: "active",
-  departmentId: null,
-  tenantDepartmentId: null,
-  departmentCode: null,
-  departmentName: null,
-  postId: null,
-  postName: null,
-  avatar: null,
-  roleCodes: ["platform_admin"],
-  roles: [],
-  permissions: [
-    { code: "platform.billing.recharge_refund.read", scope: "all" },
-    { code: "platform.billing.recharge_refund.review", scope: "all" },
-  ],
-} satisfies AuthContext;
 
 const events: string[] = [];
 
@@ -187,6 +63,15 @@ const secretBundleService = {
 };
 
 const wechatPayGateway = {
+  queryTransactionByOutTradeNo: mock(async () => {
+    events.push("wechat-query-transaction");
+    return {
+      out_trade_no: "TC202607020001",
+      transaction_id: "4200000001",
+      trade_state: "SUCCESS",
+      amount: { total: 10000, currency: "CNY" },
+    };
+  }),
   requestRefund: mock(async () => {
     events.push("wechat-refund");
     return {
@@ -198,6 +83,15 @@ const wechatPayGateway = {
         refund_id: "5030000000202607150000000001",
         status: "PROCESSING",
       },
+    };
+  }),
+  queryRefundByOutRefundNo: mock(async () => {
+    events.push("wechat-query-refund");
+    return {
+      out_refund_no: "TRR202607100800000001",
+      refund_id: "5030000000202607150000000001",
+      status: "PROCESSING",
+      amount: { refund: 10000, total: 10000, currency: "CNY" },
     };
   }),
 };
@@ -260,6 +154,15 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       wechatPayPublicKeyPem: null,
       baseUrl: "https://api.mch.weixin.qq.com",
     }));
+    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
+      events.push("wechat-query-transaction");
+      return {
+        out_trade_no: "TC202607020001",
+        transaction_id: "4200000001",
+        trade_state: "SUCCESS",
+        amount: { total: 10000, currency: "CNY" },
+      };
+    });
     wechatPayGateway.requestRefund.mockImplementation(async () => {
       events.push("wechat-refund");
       return {
@@ -273,6 +176,15 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         },
       };
     });
+    wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
+      events.push("wechat-query-refund");
+      return {
+        out_refund_no: "TRR202607100800000001",
+        refund_id: "5030000000202607150000000001",
+        status: "PROCESSING",
+        amount: { refund: 10000, total: 10000, currency: "CNY" },
+      };
+    });
   });
 
   test("executes an approved refund request after marking request and order refunding", async () => {
@@ -280,6 +192,11 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
 
     const result = await service.execute(authContext, "refund-request-1");
 
+    expect(wechatPayGateway.queryTransactionByOutTradeNo).toHaveBeenCalledWith({
+      config: paymentConfig,
+      outTradeNo: "TC202607020001",
+      secretBundle: expect.objectContaining({ apiV3Key: "api-v3-key" }),
+    });
     expect(repository.markRequestRefunding).toHaveBeenCalledWith({
       id: "refund-request-1",
       fromStatuses: ["approved", "failed"],
@@ -300,6 +217,7 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       totalAmountFen: 10000,
     });
     expect(events).toEqual([
+      "wechat-query-transaction",
       "mark-request-refunding",
       "mark-order-refunding",
       "wechat-refund",
@@ -363,12 +281,150 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
     expect(wechatPayGateway.requestRefund).not.toHaveBeenCalled();
   });
 
+  test("rejects execution before state changes when WeChat order is not paid", async () => {
+    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
+      events.push("wechat-query-transaction");
+      return {
+        out_trade_no: "TC202607020001",
+        transaction_id: "4200000001",
+        trade_state: "NOTPAY",
+        amount: { total: 10000, currency: "CNY" },
+      };
+    });
+    const service = await createService();
+
+    await expect(
+      service.execute(authContext, "refund-request-1"),
+    ).rejects.toMatchObject({
+      code: "BILLING_RECHARGE_WECHAT_TRANSACTION_NOT_SUCCESS",
+    });
+    expect(repository.markRequestRefunding).not.toHaveBeenCalled();
+    expect(events).toEqual(["wechat-query-transaction"]);
+  });
+
+  test("rejects execution before state changes when WeChat transaction id differs", async () => {
+    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
+      events.push("wechat-query-transaction");
+      return {
+        out_trade_no: "TC202607020001",
+        transaction_id: "4200000002",
+        trade_state: "SUCCESS",
+        amount: { total: 10000, currency: "CNY" },
+      };
+    });
+    const service = await createService();
+
+    await expect(
+      service.execute(authContext, "refund-request-1"),
+    ).rejects.toMatchObject({
+      code: "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
+    });
+    expect(repository.markRequestRefunding).not.toHaveBeenCalled();
+  });
+
+  test("rejects execution before state changes when WeChat paid amount differs", async () => {
+    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
+      events.push("wechat-query-transaction");
+      return {
+        out_trade_no: "TC202607020001",
+        transaction_id: "4200000001",
+        trade_state: "SUCCESS",
+        amount: { total: 9900, currency: "CNY" },
+      };
+    });
+    const service = await createService();
+
+    await expect(
+      service.execute(authContext, "refund-request-1"),
+    ).rejects.toMatchObject({
+      code: "BILLING_RECHARGE_WECHAT_AMOUNT_MISMATCH",
+    });
+    expect(repository.markRequestRefunding).not.toHaveBeenCalled();
+  });
+
+  test("saves the queried refund when the refund request result is uncertain", async () => {
+    wechatPayGateway.requestRefund.mockImplementation(async () => {
+      events.push("wechat-refund");
+      throw {
+        code: "WECHAT_PAY_REFUND_REQUEST_FAILED",
+        message: "微信退款请求超时",
+      };
+    });
+    const service = await createService();
+
+    const result = await service.execute(authContext, "refund-request-1");
+
+    expect(wechatPayGateway.queryRefundByOutRefundNo).toHaveBeenCalledWith({
+      config: paymentConfig,
+      outRefundNo: "TRR202607100800000001",
+      secretBundle: expect.objectContaining({ apiV3Key: "api-v3-key" }),
+    });
+    expect(repository.markRequestFailed).not.toHaveBeenCalled();
+    expect(repository.saveWechatRefundResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outRefundNo: "TRR202607100800000001",
+        wechatRefundId: "5030000000202607150000000001",
+      }),
+    );
+    expect(events).toEqual([
+      "wechat-query-transaction",
+      "mark-request-refunding",
+      "mark-order-refunding",
+      "wechat-refund",
+      "wechat-query-refund",
+      "save-wechat-result",
+    ]);
+    expect(result.wechat_refund).toMatchObject({ status: "PROCESSING" });
+  });
+
+  test("keeps refunding when both refund request and status query are uncertain", async () => {
+    wechatPayGateway.requestRefund.mockImplementation(async () => {
+      events.push("wechat-refund");
+      throw {
+        code: "WECHAT_PAY_REFUND_REQUEST_FAILED",
+        message: "微信退款请求超时",
+      };
+    });
+    wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
+      events.push("wechat-query-refund");
+      throw {
+        code: "WECHAT_PAY_REFUND_QUERY_FAILED",
+        message: "微信退款查询超时",
+        details: { code: "SYSTEM_ERROR" },
+      };
+    });
+    const service = await createService();
+
+    await expect(
+      service.execute(authContext, "refund-request-1"),
+    ).rejects.toMatchObject({
+      code: "BILLING_RECHARGE_REFUND_STATUS_UNKNOWN",
+    });
+    expect(repository.markRequestFailed).not.toHaveBeenCalled();
+    expect(repository.markOrderRefundStatus).toHaveBeenCalledTimes(1);
+    expect(events).toEqual([
+      "wechat-query-transaction",
+      "mark-request-refunding",
+      "mark-order-refunding",
+      "wechat-refund",
+      "wechat-query-refund",
+    ]);
+  });
+
   test("marks request failed when upstream refund request fails after refunding state is saved", async () => {
     wechatPayGateway.requestRefund.mockImplementation(async () => {
       events.push("wechat-refund");
       throw {
         code: "WECHAT_PAY_REFUND_REQUEST_FAILED",
         message: "微信退款请求失败",
+      };
+    });
+    wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
+      events.push("wechat-query-refund");
+      throw {
+        code: "WECHAT_PAY_REFUND_QUERY_FAILED",
+        message: "退款单不存在",
+        details: { code: "RESOURCE_NOT_EXISTS" },
       };
     });
     const service = await createService();
@@ -394,9 +450,11 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       refundStatus: "failed",
     });
     expect(events).toEqual([
+      "wechat-query-transaction",
       "mark-request-refunding",
       "mark-order-refunding",
       "wechat-refund",
+      "wechat-query-refund",
       "mark-request-failed",
       "mark-order-failed",
     ]);

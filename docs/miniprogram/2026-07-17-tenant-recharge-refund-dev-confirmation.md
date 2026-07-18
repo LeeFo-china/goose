@@ -77,6 +77,8 @@ pnpm --filter api build
 - 使用 `status` 筛选：`pending`、`paid`、`closed`、`refunded`。
 - 使用 `keyword` 搜索 `order_no`、`out_trade_no`、`transaction_id`。
 - 只消费后端返回的 `refund_action`，不要本地推导退款资格。
+- 不可用原因只读取 `refund_action.disabled_reason`；当前契约没有
+  `refund_action.code`，小程序不应读取该字段。
 
 若小程序本期暂不开放退款入口：
 

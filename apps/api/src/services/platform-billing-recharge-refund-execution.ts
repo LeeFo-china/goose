@@ -12,6 +12,12 @@ import {
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
+  assertWechatTransactionMatches,
+  getWechatErrorDetailCode,
+  toWechatRefundResult,
+  uncertainRefundStatusError,
+} from "@/services/platform-billing-recharge-refund-wechat";
+import {
   wechatPayGateway,
   type WechatPayRequestRefundResult,
 } from "@/services/wechat-pay-gateway";
@@ -32,7 +38,12 @@ type PaymentConfigRepositoryPort = Pick<
 >;
 
 type SecretBundleServicePort = Pick<typeof wechatPaySecretBundleService, "load">;
-type WechatPayGatewayPort = Pick<typeof wechatPayGateway, "requestRefund">;
+type WechatPayGatewayPort = Pick<
+  typeof wechatPayGateway,
+  | "queryTransactionByOutTradeNo"
+  | "requestRefund"
+  | "queryRefundByOutRefundNo"
+>;
 type AuditLogServicePort = Pick<typeof platformAuditLogService, "recordBestEffort">;
 
 export type PlatformBillingRechargeRefundExecutionServiceDependencies = {
@@ -83,6 +94,7 @@ export class PlatformBillingRechargeRefundExecutionService {
     const order = this.requireOrder(current);
     this.assertWechatPaidOrder(order);
     const transactionId = this.requireTransactionId(order);
+    const outTradeNo = this.requireOutTradeNo(order);
     const refundAmountFen = this.requirePositiveAmount(
       current.requested_amount_fen,
       "积分充值退款申请金额不正确",
@@ -100,6 +112,17 @@ export class PlatformBillingRechargeRefundExecutionService {
     const secretBundle = await this.secretBundleService.load(
       config.encrypted_config_ref,
     );
+    const wechatTransaction =
+      await this.wechatPayGateway.queryTransactionByOutTradeNo({
+        config,
+        secretBundle,
+        outTradeNo,
+      });
+    assertWechatTransactionMatches({
+      wechatTransaction,
+      transactionId,
+      totalAmountFen,
+    });
 
     const refundingRequest = await this.repository.markRequestRefunding({
       id: requestId,
@@ -126,13 +149,30 @@ export class PlatformBillingRechargeRefundExecutionService {
         totalAmountFen,
       });
     } catch (error) {
-      await this.markExecutionFailed({
-        authContext,
-        request: refundingRequest,
-        refundAmountFen,
-        error,
-      });
-      throw error;
+      try {
+        const queriedRefund =
+          await this.wechatPayGateway.queryRefundByOutRefundNo({
+            config,
+            secretBundle,
+            outRefundNo,
+          });
+        wechatRefund = toWechatRefundResult(queriedRefund, outRefundNo);
+      } catch (queryError) {
+        if (getWechatErrorDetailCode(queryError) === "RESOURCE_NOT_EXISTS") {
+          await this.markExecutionFailed({
+            authContext,
+            request: refundingRequest,
+            refundAmountFen,
+            error,
+          });
+          throw error;
+        }
+        throw uncertainRefundStatusError({
+          outRefundNo,
+          requestError: error,
+          queryError,
+        });
+      }
     }
 
     const request = await this.repository.saveWechatRefundResult({
@@ -214,6 +254,18 @@ export class PlatformBillingRechargeRefundExecutionService {
       );
     }
     return transactionId;
+  }
+
+  private requireOutTradeNo(order: TenantCreditOrderRecord) {
+    const outTradeNo = optionalString(order.out_trade_no);
+    if (!outTradeNo) {
+      throw Errors.business(
+        409,
+        "积分充值订单缺少商户支付单号",
+        "BILLING_RECHARGE_REFUND_OUT_TRADE_NO_REQUIRED",
+      );
+    }
+    return outTradeNo;
   }
 
   private assertPaymentConfigReady(
