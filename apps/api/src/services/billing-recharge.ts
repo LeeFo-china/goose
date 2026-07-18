@@ -17,6 +17,10 @@ import {
 } from "@/services/billing-recharge-views";
 import { parseBillingRechargePaymentExpiration } from "@/services/billing-recharge-payment-expiration";
 import {
+  requireActiveRechargePaymentConfig,
+  requirePostInsertRechargePaymentConfig,
+} from "@/services/billing-recharge-payment-config";
+import {
   BillingRechargeRefundService,
   type BillingRechargeRefundRequestInput,
   type BillingRechargeRefundServiceDependencies,
@@ -62,7 +66,7 @@ type BillingRechargeRepositoryPort = Pick<
 
 type PaymentConfigRepositoryPort = Pick<
   typeof platformPaymentConfigRepository,
-  "findWechatPayConfig"
+  "findWechatPayConfig" | "findWechatPayConfigById"
 >;
 
 type AccessPolicyPort = {
@@ -100,7 +104,6 @@ type BillingRechargeServiceDependencies = {
 
 const RECHARGE_CREATE_PERMISSION = "billing.recharge.create";
 const RECHARGE_READ_PERMISSION = "billing.recharge.read";
-const RECHARGE_CHANNEL = "tenant_recharge";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -225,11 +228,14 @@ export class BillingRechargeService {
       );
     }
 
-    const config = await this.paymentConfigRepository.findWechatPayConfig();
-    this.assertPaymentConfigReady(config);
-    const secretBundle = await this.secretBundleService.load(
-      config.encrypted_config_ref,
+    const initial = requireActiveRechargePaymentConfig(
+      await this.paymentConfigRepository.findWechatPayConfig(),
     );
+    await this.secretBundleService.load(
+      initial.config.encrypted_config_ref,
+    );
+    const config = initial.config;
+    const guardVersion = initial.guardVersion;
     const outTradeNo = this.tradeNoFactory();
     const paymentExpiresAt = new Date(
       now.getTime() + RECHARGE_PAYMENT_WINDOW_MS,
@@ -247,14 +253,28 @@ export class BillingRechargeService {
       status: "pending",
       created_by: authContext.employeeId,
       payment_config_id: config.id,
+      expected_payment_config_guard_version: guardVersion,
       payment_expires_at: paymentExpiresAt,
       metadata: {
         payer_openid: input.payer_openid,
         product_snapshot: toProductSnapshot(product),
       },
     });
+    const orderConfigId = order.payment_config_id;
+    const reloadedConfig = requirePostInsertRechargePaymentConfig({
+      config: orderConfigId
+        ? await this.paymentConfigRepository.findWechatPayConfigById(
+          orderConfigId,
+        )
+        : null,
+      expectedConfigId: config.id,
+      expectedGuardVersion: guardVersion,
+    });
+    const secretBundle = await this.secretBundleService.load(
+      reloadedConfig.encrypted_config_ref,
+    );
     const prepay = await this.wechatPayGateway.createJsapiPrepay({
-      config,
+      config: reloadedConfig,
       order: {
         out_trade_no: order.out_trade_no ?? order.order_no,
         amount: order.amount_fen / 100,
@@ -364,8 +384,9 @@ export class BillingRechargeService {
     now: Date,
   ) {
     const prepayId = this.requireReusablePrepayId(order, now);
-    const config = await this.paymentConfigRepository.findWechatPayConfig();
-    this.assertPaymentConfigReady(config);
+    const { config } = requireActiveRechargePaymentConfig(
+      await this.paymentConfigRepository.findWechatPayConfig(),
+    );
     if (order.payment_config_id !== config.id) {
       throw Errors.business(
         409,
@@ -429,37 +450,6 @@ export class BillingRechargeService {
     return prepayId;
   }
 
-  private assertPaymentConfigReady(
-    config: PlatformPaymentConfigRecord | null,
-  ): asserts config is PlatformPaymentConfigRecord {
-    if (!config || config.status !== "active") {
-      throw Errors.business(
-        409,
-        "平台微信支付配置未启用",
-        "BILLING_RECHARGE_PAYMENT_CONFIG_INVALID",
-      );
-    }
-    if (!config.enabled_channels.includes(RECHARGE_CHANNEL)) {
-      throw Errors.business(
-        409,
-        "平台微信支付配置未启用积分充值",
-        "BILLING_RECHARGE_PAYMENT_CONFIG_INVALID",
-      );
-    }
-    if (
-      !config.merchant_id ||
-      !config.app_id ||
-      !config.encrypted_config_ref ||
-      !config.serial_no ||
-      !config.notify_url
-    ) {
-      throw Errors.business(
-        409,
-        "平台微信支付配置不完整",
-        "BILLING_RECHARGE_PAYMENT_CONFIG_MISSING",
-      );
-    }
-  }
 }
 
 function normalizePositiveInteger(value: number | undefined, fallback: number) {
