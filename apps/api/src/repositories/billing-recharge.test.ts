@@ -224,14 +224,12 @@ describe("BillingRechargeRepository", () => {
     const { billingRechargeRepository } = await import("./billing-recharge");
 
     const result = await billingRechargeRepository.claimExpiredOrders({
-      now: new Date("2026-07-18T03:00:00.000Z"),
       batchSize: 101,
       leaseSeconds: 2,
       excludedOrderIds,
     });
 
     expect(rpc).toHaveBeenCalledWith("billing_claim_expired_recharge_orders", {
-      p_now: "2026-07-18T03:00:00.000Z",
       p_limit: 100,
       p_lease_seconds: 10,
       p_excluded_ids: excludedOrderIds.slice(0, 100),
@@ -250,7 +248,6 @@ describe("BillingRechargeRepository", () => {
     const { billingRechargeRepository } = await import("./billing-recharge");
 
     await expect(billingRechargeRepository.claimExpiredOrders({
-      now: new Date("2026-07-18T03:00:00.000Z"),
       batchSize: 50,
       leaseSeconds: 60,
       excludedOrderIds: [],
@@ -261,50 +258,44 @@ describe("BillingRechargeRepository", () => {
     });
   });
 
-  test("renews only the matching pending claim with a clamped lease", async () => {
+  test("renews only the matching pending claim through the database-clock RPC", async () => {
     const renewed = {
       id: "order-1",
       status: "pending",
       close_claim_token: "claim-1",
       close_claim_expires_at: "2026-07-18T03:00:11.000Z",
     };
-    maybeSingle.mockImplementationOnce(async () => ({ data: renewed, error: null }));
+    rpc.mockImplementationOnce(async () => ({ data: renewed, error: null }));
     const { billingRechargeRepository } = await import("./billing-recharge");
 
     const result = await billingRechargeRepository.renewCloseClaim({
       orderId: "order-1",
       claimToken: "claim-1",
-      now: new Date("2026-07-18T03:00:01.000Z"),
       leaseSeconds: 2,
     });
 
-    expect(update).toHaveBeenCalledWith({
-      close_claim_expires_at: "2026-07-18T03:00:11.000Z",
+    expect(rpc).toHaveBeenCalledWith("billing_renew_recharge_close_claim", {
+      p_order_id: "order-1",
+      p_claim_token: "claim-1",
+      p_lease_seconds: 10,
     });
-    expect(eq.mock.calls).toEqual(expect.arrayContaining([
-      ["id", "order-1"],
-      ["status", "pending"],
-      ["close_claim_token", "claim-1"],
-    ]));
-    expect(select).toHaveBeenCalledWith("*");
-    expect(maybeSingle).toHaveBeenCalledTimes(1);
     expect(result?.id).toBe(renewed.id);
     expect(result?.close_claim_expires_at).toBe(renewed.close_claim_expires_at);
   });
 
   test("returns null when renewal ownership is lost", async () => {
+    rpc.mockImplementationOnce(async () => ({ data: null, error: null }));
     const { billingRechargeRepository } = await import("./billing-recharge");
 
     await expect(billingRechargeRepository.renewCloseClaim({
       orderId: "order-1",
       claimToken: "stale-claim",
-      now: new Date("2026-07-18T03:00:01.000Z"),
       leaseSeconds: 60,
     })).resolves.toBeNull();
   });
 
   test("wraps claim renewal database failures", async () => {
-    maybeSingle.mockImplementationOnce(async () => ({
+    rpc.mockImplementationOnce(async () => ({
       data: null,
       error: { message: "database detail" },
     }));
@@ -313,7 +304,6 @@ describe("BillingRechargeRepository", () => {
     await expect(billingRechargeRepository.renewCloseClaim({
       orderId: "order-1",
       claimToken: "claim-1",
-      now: new Date("2026-07-18T03:00:01.000Z"),
       leaseSeconds: 60,
     })).rejects.toMatchObject({
       statusCode: 500,
