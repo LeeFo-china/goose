@@ -20,7 +20,6 @@ import {
   WechatPayCallbackContextMatcher,
   type WechatPayCallbackContextMatcherDependencies,
 } from "@/services/wechat-pay-callback-context-matcher";
-import { billingSubscriptionService } from "@/services/billing-subscriptions";
 import { BillingRechargePaymentConfirmation } from "@/services/billing-recharge-payment-confirmation";
 import { handleCreditRechargeRefundCallback } from "@/services/wechat-pay-callback-refunds";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
@@ -60,9 +59,6 @@ type WechatPayCallbackServiceDependencies =
   contextMatcher?: Pick<WechatPayCallbackContextMatcher, "match">;
   orderRepository?: OrderRepositoryPort;
   creditRechargeRepository?: CreditRechargeRepositoryPort;
-  billingSubscriptionService?: {
-    recoverAfterRecharge: (tenantId: string) => Promise<unknown>;
-  };
   rechargePaymentConfirmation?: RechargePaymentConfirmationPort;
   paymentRepository?: PaymentRepositoryPort;
   workflowTaskRepository?: WorkflowTaskRepositoryPort;
@@ -91,8 +87,6 @@ export class WechatPayCallbackService {
     this.rechargePaymentConfirmation = dependencies.rechargePaymentConfirmation ??
       new BillingRechargePaymentConfirmation({
         repository: this.creditRechargeRepository,
-        billingSubscriptionService: dependencies.billingSubscriptionService ??
-          billingSubscriptionService,
       });
     this.paymentRepository = dependencies.paymentRepository ?? paymentRepository;
     this.workflowTaskRepository = dependencies.workflowTaskRepository ??

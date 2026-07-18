@@ -181,6 +181,7 @@ const confirmWechatRecharge = mock(async () => ({
   order: {},
   account: {},
   ledger: {},
+  recovery: { recovered: true },
   idempotent: false,
 }));
 const confirmWechatRechargeRefund = mock(async () => ({
@@ -223,7 +224,6 @@ async function createService() {
     },
     paymentRepository: { create: createPayment },
     paymentBridge: { complete: completePaymentTask },
-    billingSubscriptionService: { recoverAfterRecharge },
   });
 }
 
@@ -300,7 +300,6 @@ describe("WechatPayCallbackService credit recharge refund callbacks", () => {
       notificationId: "refund-notification-1",
     });
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
     expect(createPayment).not.toHaveBeenCalled();
     expect(completePaymentTask).not.toHaveBeenCalled();
   });

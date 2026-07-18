@@ -3,7 +3,6 @@ import {
   billingRechargeRepository,
   type TenantCreditOrderRecord,
 } from "@/repositories/billing-recharge";
-import { billingSubscriptionService } from "@/services/billing-subscriptions";
 
 export type BillingRechargePaymentConfirmationSource =
   | "wechat_callback"
@@ -21,25 +20,17 @@ type RepositoryPort = Pick<
   "confirmWechatRecharge"
 >;
 
-type BillingSubscriptionServicePort = {
-  recoverAfterRecharge: (tenantId: string) => Promise<unknown>;
-};
-
 export type BillingRechargePaymentConfirmationDependencies = {
   repository?: RepositoryPort;
-  billingSubscriptionService?: BillingSubscriptionServicePort;
 };
 
 export class BillingRechargePaymentConfirmation {
   private readonly repository: RepositoryPort;
-  private readonly billingSubscriptionService: BillingSubscriptionServicePort;
 
   constructor(
     dependencies: BillingRechargePaymentConfirmationDependencies = {},
   ) {
     this.repository = dependencies.repository ?? billingRechargeRepository;
-    this.billingSubscriptionService = dependencies.billingSubscriptionService ??
-      billingSubscriptionService;
   }
 
   async confirm(input: BillingRechargePaymentConfirmationInput) {
@@ -76,7 +67,7 @@ export class BillingRechargePaymentConfirmation {
       );
     }
 
-    const result = await this.repository.confirmWechatRecharge({
+    return this.repository.confirmWechatRecharge({
       orderId: input.order.id,
       transactionId,
       paidAmountFen,
@@ -88,10 +79,6 @@ export class BillingRechargePaymentConfirmation {
         out_trade_no: input.order.out_trade_no,
       },
     });
-    await this.billingSubscriptionService.recoverAfterRecharge(
-      input.order.tenant_id,
-    );
-    return result;
   }
 }
 

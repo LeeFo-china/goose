@@ -122,6 +122,7 @@ export type BillingConfirmWechatRechargeResult = {
   order: Record<string, unknown> | null;
   account: Record<string, unknown> | null;
   ledger: Record<string, unknown> | null;
+  recovery: Record<string, unknown> | null;
   idempotent: boolean;
 };
 
@@ -152,7 +153,7 @@ type UntypedClient = {
       | "tenant_credit_account_balances",
   ) => UntypedTable;
   rpc: (
-    functionName: "billing_confirm_wechat_recharge",
+    functionName: "billing_confirm_wechat_recharge_and_recover",
     args: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: unknown }>;
 };
@@ -450,7 +451,7 @@ class BillingRechargeRepository {
   async confirmWechatRecharge(input: BillingConfirmWechatRechargeInput) {
     const { data, error } = await (
       SupabaseDB.getAdminClient() as unknown as UntypedClient
-    ).rpc("billing_confirm_wechat_recharge", {
+    ).rpc("billing_confirm_wechat_recharge_and_recover", {
       p_order_id: input.orderId,
       p_transaction_id: input.transactionId,
       p_paid_amount_fen: input.paidAmountFen,

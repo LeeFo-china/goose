@@ -39,25 +39,24 @@ const confirmWechatRecharge = mock(async () => ({
   order: {},
   account: {},
   ledger: {},
+  recovery: { recovered: true },
   idempotent: false,
 }));
-const recoverAfterRecharge = mock(async () => ({ recovered: true }));
 
 function createService() {
   return new BillingRechargePaymentConfirmation({
     repository: { confirmWechatRecharge },
-    billingSubscriptionService: { recoverAfterRecharge },
   });
 }
 
 describe("BillingRechargePaymentConfirmation", () => {
   beforeEach(() => {
     confirmWechatRecharge.mockClear();
-    recoverAfterRecharge.mockClear();
     confirmWechatRecharge.mockImplementation(async () => ({
       order: {},
       account: {},
       ledger: {},
+      recovery: { recovered: true },
       idempotent: false,
     }));
   });
@@ -83,7 +82,7 @@ describe("BillingRechargePaymentConfirmation", () => {
         out_trade_no: order.out_trade_no,
       },
     });
-    expect(recoverAfterRecharge).toHaveBeenCalledWith(order.tenant_id);
+    expect(confirmWechatRecharge).toHaveBeenCalledTimes(1);
   });
 
   test("rejects a recharge transaction whose amount differs from the order", async () => {
@@ -100,7 +99,6 @@ describe("BillingRechargePaymentConfirmation", () => {
     })).rejects.toMatchObject({ code: "BILLING_RECHARGE_AMOUNT_MISMATCH" });
 
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
   });
 
   test("rejects a successful transaction without a transaction id", async () => {
@@ -116,14 +114,14 @@ describe("BillingRechargePaymentConfirmation", () => {
     });
 
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
   });
 
-  test("recovers subscriptions after an idempotent recharge confirmation", async () => {
+  test("uses one atomic repository operation for an idempotent confirmation", async () => {
     confirmWechatRecharge.mockImplementationOnce(async () => ({
       order: {},
       account: {},
       ledger: {},
+      recovery: { recovered: false, reason: "no_past_due_invoice" },
       idempotent: true,
     }));
     const service = createService();
@@ -135,7 +133,7 @@ describe("BillingRechargePaymentConfirmation", () => {
       source: "expiration_reconcile",
     });
 
-    expect(recoverAfterRecharge).toHaveBeenCalledWith(order.tenant_id);
+    expect(confirmWechatRecharge).toHaveBeenCalledTimes(1);
   });
 
   test("rejects a transaction that is not successful", async () => {
@@ -151,10 +149,9 @@ describe("BillingRechargePaymentConfirmation", () => {
     });
 
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
   });
 
-  test("does not recover subscriptions when recharge confirmation fails", async () => {
+  test("propagates an atomic repository failure", async () => {
     confirmWechatRecharge.mockImplementationOnce(async () => {
       throw new Error("confirm failed");
     });
@@ -167,6 +164,6 @@ describe("BillingRechargePaymentConfirmation", () => {
       source: "expiration_reconcile",
     })).rejects.toThrow("confirm failed");
 
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
+    expect(confirmWechatRecharge).toHaveBeenCalledTimes(1);
   });
 });

@@ -60,6 +60,40 @@ describe("BillingRechargeRepository", () => {
     expect(range).toHaveBeenCalledWith(10, 19);
   });
 
+  test("confirms recharge and recovers subscriptions through one atomic RPC", async () => {
+    const atomicResult = {
+      order: { id: "order-1", tenant_id: "tenant-1" },
+      account: { id: "account-1" },
+      ledger: { id: "ledger-1" },
+      recovery: { recovered: true },
+      idempotent: false,
+    };
+    rpc.mockImplementationOnce(async () => ({ data: atomicResult, error: null }));
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    const result = await billingRechargeRepository.confirmWechatRecharge({
+      orderId: "order-1",
+      transactionId: "transaction-1",
+      paidAmountFen: 10000,
+      paidAt: "2026-07-18T03:00:00.000Z",
+      notificationId: null,
+      metadata: { confirmation_source: "expiration_reconcile" },
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "billing_confirm_wechat_recharge_and_recover",
+      {
+        p_order_id: "order-1",
+        p_transaction_id: "transaction-1",
+        p_paid_amount_fen: 10000,
+        p_paid_at: "2026-07-18T03:00:00.000Z",
+        p_notification_id: null,
+        p_metadata: { confirmation_source: "expiration_reconcile" },
+      },
+    );
+    expect(result).toEqual(atomicResult);
+  });
+
   test("claims one bounded page of expired orders through the lease RPC", async () => {
     const claimed = [{ id: "order-1", close_claim_token: "claim-1" }];
     rpc.mockImplementationOnce(async () => ({ data: claimed, error: null }));

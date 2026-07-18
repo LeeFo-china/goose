@@ -197,6 +197,7 @@ const rechargeRepository = {
     order: { ...pendingOrder, status: "paid" },
     account: { id: "account-1", available_credits: 1100 },
     ledger: { id: "ledger-1" },
+    recovery: { recovered: true },
     idempotent: false,
   })),
 };
@@ -227,10 +228,6 @@ const auditLogService = {
   recordBestEffort: mock(async () => null),
 };
 
-const billingSubscriptionService = {
-  recoverAfterRecharge: mock(async () => ({ recovered: true })),
-};
-
 async function createService() {
   const { PlatformBillingRechargeService } = await import("./platform-billing-recharge");
   return new PlatformBillingRechargeService({
@@ -240,7 +237,6 @@ async function createService() {
     secretBundleService,
     wechatPayGateway,
     auditLogService,
-    billingSubscriptionService,
   });
 }
 
@@ -253,7 +249,6 @@ describe("PlatformBillingRechargeService", () => {
       ...Object.values(secretBundleService),
       ...Object.values(wechatPayGateway),
       ...Object.values(auditLogService),
-      ...Object.values(billingSubscriptionService),
     ]) {
       fn.mockClear();
     }
@@ -263,6 +258,7 @@ describe("PlatformBillingRechargeService", () => {
       order: { ...pendingOrder, status: "paid" },
       account: { id: "account-1", available_credits: 1100 },
       ledger: { id: "ledger-1" },
+      recovery: { recovered: true },
       idempotent: false,
     }));
     paymentConfigRepository.findWechatPayConfig.mockImplementation(async () => platformPaymentConfig);
@@ -394,9 +390,7 @@ describe("PlatformBillingRechargeService", () => {
         out_trade_no: "TC202607020001",
       },
     });
-    expect(billingSubscriptionService.recoverAfterRecharge).toHaveBeenCalledWith(
-      "tenant-1",
-    );
+    expect(rechargeRepository.confirmWechatRecharge).toHaveBeenCalledTimes(1);
     expect(rechargeRepository.markWechatNotificationProcessed).toHaveBeenCalledWith({
       notificationId: "notification-compensate-1",
     });
@@ -430,7 +424,6 @@ describe("PlatformBillingRechargeService", () => {
 
     expect(rechargeRepository.createWechatNotification).not.toHaveBeenCalled();
     expect(rechargeRepository.confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(billingSubscriptionService.recoverAfterRecharge).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       compensated: false,
       trade_state: "NOTPAY",
@@ -459,6 +452,23 @@ describe("PlatformBillingRechargeService", () => {
     });
     expect(rechargeRepository.createWechatNotification).not.toHaveBeenCalled();
     expect(rechargeRepository.confirmWechatRecharge).not.toHaveBeenCalled();
+  });
+
+  test("marks compensation notification failed when atomic confirmation rejects", async () => {
+    rechargeRepository.confirmWechatRecharge.mockImplementationOnce(async () => {
+      throw new Error("atomic confirmation failed");
+    });
+    const service = await createService();
+
+    await expect(
+      service.compensateWechatOrder(authContext, pendingOrder.id),
+    ).rejects.toThrow("atomic confirmation failed");
+
+    expect(rechargeRepository.markWechatNotificationFailed).toHaveBeenCalledWith({
+      notificationId: creditNotification.id,
+      errorMessage: "atomic confirmation failed",
+    });
+    expect(rechargeRepository.markWechatNotificationProcessed).not.toHaveBeenCalled();
   });
 
   test("rejects product writes without manage permission", async () => {
