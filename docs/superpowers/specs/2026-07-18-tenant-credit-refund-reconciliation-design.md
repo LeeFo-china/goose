@@ -80,6 +80,13 @@ WHERE status = 'refunding' AND reconcile_next_at IS NOT NULL
 索引只覆盖活动退款，claim RPC 固定 `LIMIT <= 100`，使用
 `FOR UPDATE SKIP LOCKED`，避免全表扫描与多实例重复处理。
 
+migration 使用一次受控 DML 修复历史状态：所有历史 `status='refunding' AND
+reconcile_next_at IS NULL` 申请统一写入同一个事务级 `now()`，使其立即进入 claim。
+同时只修复旧执行入口可能留下的安全镜像缺口：申请仍为 `refunding` 且订单
+`refund_status IS NULL` 或为 `'approved'` 时，将镜像设为 `refunding`。绝不覆盖
+`refunded`、`failed`、`rejected` 或其他订单镜像状态。该 DML 只作用于活动退款，
+不创建退款、不移动积分、不写积分流水。
+
 migration 同时提供 service-role-only RPC：
 
 1. `billing_begin_wechat_recharge_refund(...)`
@@ -112,6 +119,8 @@ migration 同时提供 service-role-only RPC：
      幂等竞争而不是失败；
    - 持有申请行锁后，在同一事务内调用兼容确认 RPC，并传入
      `notification_id = NULL`，不复制资金逻辑。
+   - `request_id` 或 `claim_token` 为 NULL 属于调用错误，必须先抛稳定异常；只有
+     参数有效但 token/状态不再匹配时才返回 SQL `NULL` 表示幂等竞争。
 
 现有 `billing_confirm_wechat_recharge_refund(
 uuid, text, text, integer, timestamptz, uuid, jsonb)` 保留为 callback SUCCESS
@@ -125,7 +134,8 @@ uuid, text, text, integer, timestamptz, uuid, jsonb)` 保留为 callback SUCCESS
 
 全部七个 RPC 使用固定 `search_path`，撤销 `PUBLIC/anon/authenticated` 权限，只授权
 `service_role`。migration 注释中记录回滚顺序：先停止 worker，再删除 RPC/索引，
-最后仅在无活动租约时删除列；绝不自动反冲已经完成的退款或积分流水。
+最后仅在无活动租约时删除列；绝不自动反冲已经完成的退款或积分流水，也不自动
+撤销历史 due-time backfill 或安全订单镜像修复，剩余活动退款必须逐笔核对。
 
 ## 应答可信边界
 
@@ -219,8 +229,9 @@ failed 计数和耗时。单笔错误只记录 request ID、order ID、out refun
 
 ## 测试与验收
 
-1. SQL contract tests：列/约束/索引、`LIMIT <= 100`、30..900 秒租约、最小 claim
-   返回字段、`SKIP LOCKED`、token finalize、七个 RPC 的 service-role 权限、原子
+1. SQL contract tests：列/约束/索引、历史 active backfill 与安全镜像修复、
+   `LIMIT <= 100`、30..900 秒租约、最小 claim 返回字段、`SKIP LOCKED`、token
+   finalize 与 NULL 参数拒绝、七个 RPC 的 service-role 权限、原子
    begin/close/callback/confirm。
 2. repository tests：分页/批量加载，无 N+1，配置按 `payment_config_id` 读取。
 3. gateway tests：普通商户与服务商路径、有效/缺失/过期/错误/SIGNTEST 签名、

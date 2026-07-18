@@ -96,6 +96,33 @@ describe("tenant credit refund reconciliation migration", () => {
     );
   });
 
+  test("backfills historical refunding work and only repairs safe stale mirrors", () => {
+    const source = sql();
+    const constraints = source.indexOf(
+      "tenant_credit_refund_reconcile_last_error_check",
+    );
+    const requestBackfill = source.match(
+      /UPDATE public\.tenant_credit_refund_requests AS request[\s\S]*?SET reconcile_next_at = pg_catalog\.now\(\)[\s\S]*?WHERE request\.status = 'refunding'[\s\S]*?AND request\.reconcile_next_at IS NULL;/,
+    )?.[0] ?? "";
+    const requestBackfillPosition = source.indexOf(requestBackfill);
+    const mirrorRepair = source.match(
+      /UPDATE public\.tenant_credit_orders AS credit_order[\s\S]*?;/,
+    )?.[0] ?? "";
+
+    expect(requestBackfill).not.toBe("");
+    expect(requestBackfillPosition).toBeGreaterThan(constraints);
+    expect(mirrorRepair).toContain(
+      "FROM public.tenant_credit_refund_requests AS request",
+    );
+    expect(mirrorRepair).toContain("request.status = 'refunding'");
+    expect(mirrorRepair).toMatch(
+      /credit_order\.refund_status IS NULL[\s\S]*credit_order\.refund_status = 'approved'/,
+    );
+    expect(mirrorRepair).not.toContain("'refunded'");
+    expect(mirrorRepair).not.toContain("'failed'");
+    expect(mirrorRepair).not.toContain("'rejected'");
+  });
+
   test("claims a bounded due batch with expiring token leases", () => {
     const source = functionSql(
       sql(),
@@ -264,6 +291,28 @@ describe("tenant credit refund reconciliation migration", () => {
     expect(source).not.toContain("tenant_credit_ledger");
   });
 
+  test("rejects missing claimed-success ownership before checking for a race", () => {
+    const source = functionSql(
+      sql(),
+      "billing_confirm_claimed_wechat_recharge_refund",
+    );
+    const requestIdValidation = source.indexOf(
+      "IF p_refund_request_id IS NULL THEN",
+    );
+    const claimTokenValidation = source.indexOf("IF p_claim_token IS NULL THEN");
+    const requestLock = source.indexOf(
+      "FROM public.tenant_credit_refund_requests AS request",
+    );
+
+    expect(requestIdValidation).toBeGreaterThan(0);
+    expect(claimTokenValidation).toBeGreaterThan(requestIdValidation);
+    expect(requestLock).toBeGreaterThan(claimTokenValidation);
+    expect(source).toContain("BILLING_RECHARGE_REFUND_REQUEST_ID_REQUIRED");
+    expect(source).toContain(
+      "BILLING_RECHARGE_REFUND_RECONCILE_TOKEN_REQUIRED",
+    );
+  });
+
   test("documents a safe irreversible financial rollback boundary", () => {
     const source = sql();
 
@@ -299,6 +348,16 @@ describe("tenant credit refund reconciliation migration", () => {
     expect(planSource).toContain("RETURNS TABLE(");
     expect(planSource).toContain("reconcile_last_error_check");
     expect(planSource).toMatch(/Task 7[\s\S]*all seven|Task 7[\s\S]*全部七个/i);
+  });
+
+  test("documents historical scheduling and conservative mirror repair", () => {
+    for (const source of [text(design), text(plan)]) {
+      expect(source).toMatch(/(?:historical|历史)[\s\S]*reconcile_next_at IS NULL/i);
+      expect(source).toMatch(
+        /refund_status IS NULL[\s\S]*(?:approved|'approved')/i,
+      );
+      expect(source).toMatch(/(?:never|不)[\s\S]*(?:refunded|failed|rejected)/i);
+    }
   });
 
   test("runs atomically and exposes every RPC only to service role", () => {

@@ -372,6 +372,16 @@ test("claims no more than 100 rows with skip locked", () => {
   expect(source).not.toContain("RETURNING request.*");
 });
 
+test("backfills historical active requests without overwriting terminal mirrors", () => {
+  const source = sql();
+  expect(source).toMatch(
+    /status = 'refunding'[\s\S]*reconcile_next_at IS NULL/,
+  );
+  expect(source).toMatch(
+    /refund_status IS NULL[\s\S]*refund_status = 'approved'/,
+  );
+});
+
 test("finalizes only the matching claim token", () => {
   const source = sql();
   expect(source).toContain("billing_reschedule_wechat_recharge_refund");
@@ -425,7 +435,8 @@ Expected: FAIL because the migration file is absent.
 
 The migration must run inside `BEGIN/COMMIT`, include rollback comments that require stopping the
 worker, dropping RPCs/indexes, and proving no active leases before dropping columns, and state
-that completed refunds/ledger entries are never automatically reversed. Use
+that completed refunds/ledger entries are never automatically reversed. It must also state that
+the historical due-time backfill and safe mirror repair are not automatically reverted. Use
 `SECURITY DEFINER SET search_path = pg_catalog, public`, and implement these exact contracts:
 
 ```sql
@@ -453,6 +464,31 @@ CREATE INDEX IF NOT EXISTS tenant_credit_refund_reconcile_due_idx
 ON public.tenant_credit_refund_requests(reconcile_next_at, id)
 WHERE status = 'refunding' AND reconcile_next_at IS NOT NULL;
 ```
+
+After the columns and constraints exist, run migration DML for the historical two-write gap:
+
+```sql
+UPDATE public.tenant_credit_refund_requests AS request
+SET reconcile_next_at = pg_catalog.now()
+WHERE request.status = 'refunding'
+  AND request.reconcile_next_at IS NULL;
+
+UPDATE public.tenant_credit_orders AS credit_order
+SET refund_status = 'refunding'
+FROM public.tenant_credit_refund_requests AS request
+WHERE request.order_id = credit_order.id
+  AND request.tenant_id = credit_order.tenant_id
+  AND request.status = 'refunding'
+  AND (
+    credit_order.refund_status IS NULL
+    OR credit_order.refund_status = 'approved'
+  );
+```
+
+The first update makes every historical active refund immediately claimable. The second repairs
+only the safe stale mirror left by the legacy two-write flow; it must never overwrite
+`refunded`, `failed`, `rejected`, or any other mirror state. Neither update moves credits or
+creates ledger entries.
 
 Use these exact function signatures so repository calls, privilege smoke, and generated types
 share one contract:
@@ -521,6 +557,8 @@ request, requires exact `status='refunding'` plus `reconcile_claim_token=p_claim
 returns SQL `NULL` when callback or another owner won. While holding that lock, call
 `billing_confirm_wechat_recharge_refund` in the same transaction with `p_notification_id` set to
 `NULL::uuid`; do not copy its credit/ledger logic.
+Reject NULL `p_refund_request_id` and NULL `p_claim_token` with stable SQL exceptions before the
+lock query. SQL `NULL` return is reserved for valid arguments whose claim/status no longer match.
 
 Revoke all seven functions from `PUBLIC`, `anon`, and `authenticated`; grant only `service_role`.
 
@@ -1006,10 +1044,14 @@ API. It must require `SUPABASE_DB_DIRECT_URL`, never print the URL, and perform 
    last-error definition to enforce a maximum of 200 characters;
 2. call `has_function_privilege` for both `anon` and `authenticated` against all seven exact
    signatures from Task 3, requiring every result to be `false`;
-3. open a `Bun.SQL.begin` transaction, call claim with `p_limit=101`, and require the stable
+3. query for historical `status='refunding' AND reconcile_next_at IS NULL` requests and require
+   zero rows; also join active requests to orders and require zero stale mirrors where
+   `refund_status IS NULL OR refund_status='approved'`. This is read-only evidence that the
+   migration backfill and conservative mirror repair ran; never rewrite other mirror states;
+4. open a `Bun.SQL.begin` transaction, call claim with `p_limit=101`, and require the stable
    `BILLING_RECHARGE_REFUND_RECONCILE_LIMIT_INVALID` database error; the thrown error must force
    rollback;
-4. open a second `Bun.SQL.begin` transaction, claim one row with `p_now` equal to
+5. open a second `Bun.SQL.begin` transaction, claim one row with `p_now` equal to
    `1970-01-01T00:00:00.000Z`, `p_lease_seconds=120`, and a fresh UUID; require an empty result,
    then throw/catch a private sentinel so the transaction is proven rolled back.
 
@@ -1022,8 +1064,9 @@ cd ../..
 ```
 
 Expected output is a secret-free JSON summary with `objects=true`, `privileges=true`,
-`invalid_limit=true`, `empty_claim=true`, and `rolled_back=true`. Do not create a refund, call
-WeChat, alter a business row, or commit transaction data.
+`historical_backfill=true`, `safe_mirror_repair=true`, `invalid_limit=true`, `empty_claim=true`,
+and `rolled_back=true`. Do not create a refund, call WeChat, alter a business row, or commit
+transaction data.
 
 - [ ] **Step 5: Run all changed API tests from the clean release base**
 

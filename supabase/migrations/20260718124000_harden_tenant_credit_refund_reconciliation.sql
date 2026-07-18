@@ -3,6 +3,8 @@
 -- billing_confirm_wechat_recharge_refund from 20260715120000, and drop the due index.
 -- Drop constraints and columns only after proving there are no active reconciliation leases.
 -- Never automatically reverse completed refunds or tenant credit ledger entries.
+-- Do not automatically revert the historical due-time backfill or safe order-mirror repair;
+-- inspect each remaining active refund after the worker has stopped.
 
 BEGIN;
 
@@ -58,6 +60,22 @@ BEGIN
   END IF;
 END;
 $$;
+
+UPDATE public.tenant_credit_refund_requests AS request
+SET reconcile_next_at = pg_catalog.now()
+WHERE request.status = 'refunding'
+  AND request.reconcile_next_at IS NULL;
+
+UPDATE public.tenant_credit_orders AS credit_order
+SET refund_status = 'refunding'
+FROM public.tenant_credit_refund_requests AS request
+WHERE request.order_id = credit_order.id
+  AND request.tenant_id = credit_order.tenant_id
+  AND request.status = 'refunding'
+  AND (
+    credit_order.refund_status IS NULL
+    OR credit_order.refund_status = 'approved'
+  );
 
 CREATE INDEX IF NOT EXISTS tenant_credit_refund_reconcile_due_idx
 ON public.tenant_credit_refund_requests(reconcile_next_at, id)
@@ -753,6 +771,18 @@ DECLARE
   v_request public.tenant_credit_refund_requests%ROWTYPE;
   v_result jsonb;
 BEGIN
+  IF p_refund_request_id IS NULL THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'BILLING_RECHARGE_REFUND_REQUEST_ID_REQUIRED';
+  END IF;
+
+  IF p_claim_token IS NULL THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'BILLING_RECHARGE_REFUND_RECONCILE_TOKEN_REQUIRED';
+  END IF;
+
   SELECT request.*
   INTO v_request
   FROM public.tenant_credit_refund_requests AS request
