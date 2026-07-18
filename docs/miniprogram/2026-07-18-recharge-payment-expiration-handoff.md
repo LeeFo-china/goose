@@ -9,9 +9,12 @@
 服务端截止时间、继续发起同一笔微信支付，以及在截止后轮询订单最终状态。后端 worker
 按“先查微信、必要时关单、再查一次”的顺序将订单收敛为 `paid` 或 `closed`。
 
-本次后端代码仍仅在本地分支 `feat/recharge-payment-expiration`，尚未 push 或部署；远程 dev
-的 5 个 migration 已应用并对齐。小程序侧可完成契约兼容，但应在新 API 与 worker 切换到
-实际联调服务后再开放真实入口。
+截至 2026-07-18，本次后端代码仍仅在本地分支 `feat/recharge-payment-expiration`，远端没有
+同名分支，远程 dev API 未部署，本轮也未执行生产部署；远程 dev 调用新增的继续支付路由
+仍返回 `404 / ROUTE_NOT_FOUND`。5 个 migration 已应用到远程 dev 数据库并对齐，本机 3000 API
+和本机启动的 worker 用于本轮联调。小程序侧已在 orange `7d86536` 完成契约兼容并推送到
+`orange/main`，基于本机 3000 的 dev 待支付链路联调通过；生产入口仍应在新 API 与 worker
+完整上线后再开放。
 
 最终审查修复后，本次变更涉及的 33 个 API 测试文件已聚合通过 274 条测试、0 失败；API
 typecheck、build、文件大小、完整 diff 检查及 worker 禁用态启动/退出 smoke 也已通过。
@@ -37,13 +40,18 @@ typecheck、build、文件大小、完整 diff 检查及 worker 禁用态启动/
   `payment_action.disabled_reason = ORDER_CLOSED`。
 - orange 开发构建的充值记录页真实展示该订单为“已关闭”，首卡没有支付或退款操作按钮；
   已退款订单继续仅按 `refund_action.disabled_reason` 展示“已退款”。
-- orange 当前开发产物写入的 API 地址仍是 `http://192.168.1.19:3000`，但本机当前局域网
-  地址为 `192.168.1.5`，因此未改写时登录页可稳定复现“请求失败(503)”。仅为本轮 UI
-  验证在开发者工具运行时临时将旧地址改写为 `127.0.0.1:3000`，测试结束后已恢复，未写入
-  orange 文件；真实登录产生的凭证仅由小程序按原流程保存在开发者工具内，未输出到终端
-  或验证文档。
-- orange 当前仍未接入 `payment_action`、`payment_expires_at` 和继续支付 service；本轮只能
-  验证后端 pending/closed 状态及现有关闭态 UI，不能视为小程序待支付交互已完成。
+- 早期 UI smoke 使用的 orange 开发产物仍写入 `http://192.168.1.19:3000`，与本机地址不符，
+  因此当时需要在开发者工具运行时临时改写。orange 收口后 `.env.development` 已改为
+  `TARO_APP_BASEURL=http://127.0.0.1:3000`，开发者工具可直接连接本机 API；真实登录产生的
+  凭证仅由小程序按原流程保存在开发者工具内，未输出到终端或验证文档。
+- orange `7d86536` 已接入 `payment_action`、`payment_expires_at`、服务端校准倒计时和继续
+  支付 service；取消支付后可恢复操作，归零后立即禁用并轮询到 `closed`，幂等重放不会因
+  `idempotent = true` 阻止有效 `payment_request`。
+- dev 商品 `smoke_1fen` 曾被改为 `amount_fen = 101`，导致名称“1分钱测试充值”与页面
+  `¥1.01` 不一致。2026-07-18 已通过平台套餐管理接口恢复为 `amount_fen = 1`；当时没有
+  pending 订单，历史订单继续保留各自的商品快照和原始金额。
+- 小程序最终只读复核确认刷新充值页后显示 `¥0.01`，pending 订单为 0；复核过程未创建
+  订单、未拉起微信支付，前端无需追加修改。
 
 ## 接口共同约定
 
@@ -279,36 +287,29 @@ worker 默认每 10 秒扫描一次。倒计时归零后建议沿用现有 1200m
 - 订单 `closed` 后重新充值必须重新调用创建接口并生成新幂等键，不能继续旧
   `out_trade_no`。
 
-## 需要 orange 团队修改的文件
+## orange 落地记录（`7d86536`）
 
-以下文件来自只读核查，小程序团队自行修改；本次后端工作不会写入 orange：
+以下结果来自对 orange 提交的只读核查，本次后端工作未写入 orange：
 
 1. `src/types/api/billing.d.ts`
-   - 给 `BillingRechargeOrder` 增加 `payment_expires_at`、`payment_action`。
-   - 给创建、列表、详情响应增加 `server_time`。
-   - 新增继续支付响应类型。
+   - 已增加 `payment_expires_at`、`payment_action`、各响应 `server_time` 和继续支付类型。
 2. `src/services/billing.ts`
-   - 新增 `BillingService.createRechargePaymentRequest(orderId)`，POST
+   - 已增加 `BillingService.createRechargePaymentRequest(orderId)`，POST
      `/billing/recharge-orders/:id/payment-request`。
 3. `src/packageEmployees/pages/creditRecharge/index.tsx`
-   - 页面进入时恢复最新 pending 订单。
-   - 处理绝对倒计时、前后台恢复、cancel 后继续支付、归零后结果确认。
-   - 当前 `8 × 1200ms` 的支付轮询不足以稳定覆盖 10 秒 worker 周期，需要按上文调整。
-   - 当前代码在 `idempotent = true` 时即使后端返回有效 `payment_request` 也直接提示“订单
-     已存在”，应改为只按 `payment_action` 与 `payment_request` 决定是否拉起支付。
-4. `src/packageEmployees/pages/creditRecharge/model.ts`
-   - 增加支付动作映射、剩余时间计算、倒计时文案和可单测的状态转换。
-5. `src/packageEmployees/pages/creditRecharge/components/RechargeStatusPanels.tsx`
-   - 展示剩余时间、“继续支付”、“正在确认支付结果”和关闭状态。
-6. `src/packageEmployees/pages/rechargeRecords/components/RechargeRecordCard.tsx`
-   - 可选：对 pending 记录展示后端 `payment_action`，并跳转充值页继续支付。
-   - pending/closed 订单应展示 `amount_fen`；当前优先读取 `paid_amount_fen = 0`，会把本轮
-     1 分测试订单显示为 `¥0`。
+   - 已取消 `idempotent = true` 对有效 `payment_request` 的错误拦截。
+4. `src/packageEmployees/pages/rechargeRecords/model.ts` 与
+   `hooks/useRechargePayment.ts`
+   - 已实现服务端时间校准、剩余时间、支付动作映射、归零刷新和取消后恢复。
+5. `src/packageEmployees/pages/rechargeRecords/components/RechargeRecordCard.tsx`
+   - pending/closed 已展示 `amount_fen`，并按 `payment_action` 展示倒计时和继续支付入口。
+6. 支付和退款动作均只读取各自的 `disabled_reason`，没有兼容或依赖 `code`。
 
-当前 orange 的 `.env.development` 指向已失效的 `http://192.168.1.19:3000`。小程序团队
-重新执行 dev 构建前，应将微信开发者工具环境改为 `http://127.0.0.1:3000`，或将真机联调
-环境改为运行 API 的电脑当前局域网 IP；微信开发者工具需关闭合法域名校验。真机不能使用
-`localhost` 指向电脑，生产环境仍必须使用已备案且配置到微信后台的 HTTPS 域名。
+当前 orange 的 `.env.development` 已配置
+`TARO_APP_BASEURL=http://127.0.0.1:3000`，适用于微信开发者工具连接本机 API。真机联调时
+仍需改为运行 API 的电脑当前局域网 IP；微信开发者工具需关闭合法域名校验。真机不能使用
+`localhost` 或 `127.0.0.1` 指向电脑，生产环境仍必须使用已备案且配置到微信后台的 HTTPS
+域名。
 
 ## 关键错误码
 
