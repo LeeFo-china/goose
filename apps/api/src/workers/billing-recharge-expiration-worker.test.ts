@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  parseJsonLines,
+  runCredentialFreeProbe,
+  runStandaloneProbe,
+} from "./billing-recharge-expiration-worker.test-helpers";
 
 const WORKER_ENV_KEYS = [
   "BILLING_RECHARGE_EXPIRATION_WORKER_ENABLED",
@@ -16,9 +21,9 @@ let previousEnvironment: WorkerEnvironment;
 
 beforeEach(() => {
   previousEnvironment = captureEnvironment();
-  process.env.SUPABASE_URL = "http://127.0.0.1:54321";
-  process.env.SUPABASE_PUBLISH = "test-publish-key";
-  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_PUBLISH;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   delete process.env.BILLING_RECHARGE_EXPIRATION_WORKER_ENABLED;
   delete process.env.BILLING_RECHARGE_EXPIRATION_INTERVAL_MS;
   delete process.env.BILLING_RECHARGE_EXPIRATION_BATCH_SIZE;
@@ -76,6 +81,69 @@ describe("getBillingRechargeExpirationWorkerConfig", () => {
 });
 
 describe("billing recharge expiration worker", () => {
+  test("imports without Supabase credentials in a fresh process", async () => {
+    const probe = await runCredentialFreeProbe(`
+      const before = [
+        process.listenerCount("SIGINT"),
+        process.listenerCount("SIGTERM"),
+      ];
+      await import("./src/workers/billing-recharge-expiration-worker.ts");
+      const after = [
+        process.listenerCount("SIGINT"),
+        process.listenerCount("SIGTERM"),
+      ];
+      process.stdout.write(JSON.stringify({ before, after }));
+    `);
+
+    expect(probe.exitCode).toBe(0);
+    expect(JSON.parse(probe.stdout)).toEqual({ before: [0, 0], after: [0, 0] });
+    expect(probe.stderr).toBe("");
+  });
+
+  test("runs the disabled standalone without Supabase and stops on SIGTERM", async () => {
+    const probe = await runStandaloneProbe({
+      waitForMessage: "worker disabled",
+      environment: {
+        BILLING_RECHARGE_EXPIRATION_WORKER_ENABLED: "false",
+      },
+    });
+    const entries = parseJsonLines(`${probe.stdout}\n${probe.stderr}`);
+
+    expect(probe.exitCode).toBe(0);
+    expect(entries).toContainEqual(expect.objectContaining({
+      level: "info",
+      message: "worker disabled",
+    }));
+    expect(entries).toContainEqual(expect.objectContaining({
+      level: "warn",
+      message: "received SIGTERM",
+    }));
+    expect(entries).toContainEqual(expect.objectContaining({
+      level: "info",
+      message: "worker stopped",
+    }));
+    expect(`${probe.stdout}${probe.stderr}`).not.toContain("缺少环境变量");
+  });
+
+  test("logs a credential-free default-service load failure safely", async () => {
+    const probe = await runStandaloneProbe({ waitForMessage: "tick failed" });
+    const entries = parseJsonLines(`${probe.stdout}\n${probe.stderr}`);
+
+    expect(probe.exitCode).toBe(0);
+    expect(entries).toContainEqual(expect.objectContaining({
+      level: "error",
+      message: "tick failed",
+      error_code: "BILLING_RECHARGE_EXPIRATION_TICK_FAILED",
+      error_message: "充值过期收敛执行失败",
+    }));
+    expect(entries).toContainEqual(expect.objectContaining({
+      level: "warn",
+      message: "received SIGTERM",
+    }));
+    expect(`${probe.stdout}${probe.stderr}`).not.toContain("缺少环境变量");
+    expect(`${probe.stdout}${probe.stderr}`).not.toContain("SUPABASE_URL");
+  });
+
   test("does not register shutdown handlers on import", async () => {
     const sigintListeners = process.listenerCount("SIGINT");
     const sigtermListeners = process.listenerCount("SIGTERM");
@@ -194,6 +262,44 @@ describe("billing recharge expiration worker", () => {
     ]);
   });
 
+  test("safely logs a service import failure and retries loading next tick", async () => {
+    const { createBillingRechargeExpirationWorker } = await loadWorkerModule();
+    const entries: LogEntry[] = [];
+    const runExpiredOrderChecks = mock(async () => emptyTelemetry());
+    let loadAttempts = 0;
+    const loadService = mock(async () => {
+      loadAttempts += 1;
+      if (loadAttempts === 1) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY=secret-value");
+      }
+      return { runExpiredOrderChecks };
+    });
+    const worker = createBillingRechargeExpirationWorker({
+      loadService,
+      environment: {},
+      now: () => 1_000,
+      logger: (entry) => entries.push(entry),
+    });
+
+    await worker.tick();
+    await worker.tick();
+
+    expect(loadService).toHaveBeenCalledTimes(2);
+    expect(runExpiredOrderChecks).toHaveBeenCalledTimes(1);
+    expect(entries).toContainEqual(expect.objectContaining({
+      level: "error",
+      message: "tick failed",
+      error_code: "BILLING_RECHARGE_EXPIRATION_TICK_FAILED",
+      error_message: "充值过期收敛执行失败",
+    }));
+    expect(entries).toContainEqual(expect.objectContaining({
+      level: "info",
+      message: "tick completed",
+    }));
+    expect(JSON.stringify(entries)).not.toContain("secret-value");
+    expect(JSON.stringify(entries)).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
+  });
+
   test("graceful stop waits for an active tick to finish", async () => {
     const deferred = createDeferred<ExpirationTelemetry>();
     const harness = await createWorkerHarness({ implementation: () => deferred.promise });
@@ -219,6 +325,49 @@ describe("billing recharge expiration worker", () => {
     deferred.resolve(emptyTelemetry());
     await Promise.all([activeTick, stopping]);
     expect(stopResolved).toBe(true);
+  });
+
+  test("removes shutdown handlers when startup logging throws", async () => {
+    const { createBillingRechargeExpirationWorker } = await loadWorkerModule();
+    const sigintListeners = process.listenerCount("SIGINT");
+    const sigtermListeners = process.listenerCount("SIGTERM");
+    const worker = createBillingRechargeExpirationWorker({
+      service: { runExpiredOrderChecks: mock(async () => emptyTelemetry()) },
+      environment: {},
+      logger: () => {
+        throw new Error("logger unavailable");
+      },
+    });
+
+    await expect(worker.run()).rejects.toThrow("logger unavailable");
+
+    expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
+    expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
+  });
+
+  test("prevents concurrent run loops and registers one handler per signal", async () => {
+    const deferred = createDeferred<ExpirationTelemetry>();
+    const harness = await createWorkerHarness({ implementation: () => deferred.promise });
+    const sigintListeners = process.listenerCount("SIGINT");
+    const sigtermListeners = process.listenerCount("SIGTERM");
+
+    const firstRun = harness.worker.run();
+    await Promise.resolve();
+    const secondRun = harness.worker.run();
+    await Promise.resolve();
+
+    expect(process.listenerCount("SIGINT")).toBe(sigintListeners + 1);
+    expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners + 1);
+    expect(harness.entries).toContainEqual(expect.objectContaining({
+      level: "warn",
+      message: "worker already running",
+    }));
+
+    const stopping = harness.worker.stop();
+    deferred.resolve(emptyTelemetry());
+    await Promise.all([firstRun, secondRun, stopping]);
+    expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
+    expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
   });
 });
 

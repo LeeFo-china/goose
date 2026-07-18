@@ -1,8 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import {
-  billingRechargeExpirationService,
-  type BillingRechargeExpirationTelemetry,
-} from "@/services/billing-recharge-expiration";
+import type { BillingRechargeExpirationTelemetry } from "@/services/billing-recharge-expiration";
 
 const SERVICE_NAME = "billing-recharge-expiration-worker";
 const DEFAULT_INTERVAL_MS = 10_000;
@@ -39,6 +36,7 @@ export type BillingRechargeExpirationWorkerLogEntry = {
 
 export type BillingRechargeExpirationWorkerDependencies = {
   service?: ExpirationServicePort;
+  loadService?: () => Promise<ExpirationServicePort>;
   environment?: WorkerEnvironment;
   logger?: (entry: BillingRechargeExpirationWorkerLogEntry) => void;
   now?: () => number;
@@ -77,13 +75,27 @@ export function getBillingRechargeExpirationWorkerConfig(
 export function createBillingRechargeExpirationWorker(
   dependencies: BillingRechargeExpirationWorkerDependencies = {},
 ): BillingRechargeExpirationWorker {
-  const service = dependencies.service ?? billingRechargeExpirationService;
+  const injectedService = dependencies.service;
+  const serviceLoader = dependencies.loadService ?? (
+    injectedService
+      ? async () => injectedService
+      : loadDefaultExpirationService
+  );
   const environment = dependencies.environment ?? process.env;
   const logger = dependencies.logger ?? writeJsonLog;
   const now = dependencies.now ?? Date.now;
   const sleepFor = dependencies.sleep ?? sleep;
   let stopping = false;
   let activeTick: Promise<void> | null = null;
+  let resolvedService: ExpirationServicePort | null = injectedService ?? null;
+  let runLoopActive = false;
+
+  const loadService = async (): Promise<ExpirationServicePort> => {
+    if (resolvedService) return resolvedService;
+    const service = await serviceLoader();
+    resolvedService = service;
+    return service;
+  };
 
   const log = (
     level: BillingRechargeExpirationWorkerLogEntry["level"],
@@ -118,7 +130,7 @@ export function createBillingRechargeExpirationWorker(
     const startedAt = now();
     const operation = executeTick({
       batchSize: config.batchSize,
-      service,
+      loadService,
       now,
       startedAt,
       log,
@@ -141,17 +153,21 @@ export function createBillingRechargeExpirationWorker(
   };
 
   const run = async (): Promise<void> => {
+    if (runLoopActive) {
+      log("warn", "worker already running");
+      return;
+    }
+    runLoopActive = true;
     const onSigint = (): void => {
       void stop("SIGINT");
     };
     const onSigterm = (): void => {
       void stop("SIGTERM");
     };
-    process.on("SIGINT", onSigint);
-    process.on("SIGTERM", onSigterm);
-    log("info", "worker started", getBillingRechargeExpirationWorkerConfig(environment));
-
     try {
+      process.on("SIGINT", onSigint);
+      process.on("SIGTERM", onSigterm);
+      log("info", "worker started", getBillingRechargeExpirationWorkerConfig(environment));
       while (!stopping) {
         await tick();
         if (stopping) break;
@@ -171,6 +187,7 @@ export function createBillingRechargeExpirationWorker(
     } finally {
       process.off("SIGINT", onSigint);
       process.off("SIGTERM", onSigterm);
+      runLoopActive = false;
     }
   };
 
@@ -179,7 +196,7 @@ export function createBillingRechargeExpirationWorker(
 
 async function executeTick(input: {
   batchSize: number;
-  service: ExpirationServicePort;
+  loadService: () => Promise<ExpirationServicePort>;
   now: () => number;
   startedAt: number;
   log: (
@@ -189,7 +206,8 @@ async function executeTick(input: {
   ) => void;
 }): Promise<void> {
   try {
-    const telemetry = await input.service.runExpiredOrderChecks({
+    const service = await input.loadService();
+    const telemetry = await service.runExpiredOrderChecks({
       batchSize: input.batchSize,
     });
     input.log("info", "tick completed", {
@@ -202,6 +220,13 @@ async function executeTick(input: {
       ...safeErrorFields(error),
     });
   }
+}
+
+async function loadDefaultExpirationService(): Promise<ExpirationServicePort> {
+  const { billingRechargeExpirationService } = await import(
+    "@/services/billing-recharge-expiration"
+  );
+  return billingRechargeExpirationService;
 }
 
 async function sleepUntilNextTick(input: {
