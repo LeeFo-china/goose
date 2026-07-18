@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 describe("wechat pay migration contract", () => {
   test("extends tenant payment configs instead of adding a duplicate config table", () => {
@@ -117,6 +117,120 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).toContain("BILLING_RECHARGE_AMOUNT_MISMATCH");
     expect(migrationSource).not.toContain("finance_ledger_entries");
     expect(migrationSource).not.toContain("wechat_payment_orders");
+  });
+
+  test("adds expiry fields, backfill, validation, and pending lookup index", () => {
+    const migrationSource = readTenantCreditRechargePaymentExpirationMigration();
+
+    expect(migrationSource).toContain(
+      "ADD COLUMN IF NOT EXISTS payment_expires_at timestamptz NULL",
+    );
+    expect(migrationSource).toContain(
+      "ADD COLUMN IF NOT EXISTS close_claim_token uuid NULL",
+    );
+    expect(migrationSource).toContain(
+      "ADD COLUMN IF NOT EXISTS close_claim_expires_at timestamptz NULL",
+    );
+    expect(migrationSource).toContain(
+      "ADD COLUMN IF NOT EXISTS close_attempt_count integer NOT NULL DEFAULT 0",
+    );
+    expect(migrationSource).toContain(
+      "ADD COLUMN IF NOT EXISTS close_last_error text NULL",
+    );
+    expect(migrationSource).toContain(
+      "payment_expires_at = created_at + interval '5 minutes'",
+    );
+    expect(migrationSource).toContain("channel = 'wechat_pay'");
+    expect(migrationSource).toContain("status = 'pending'");
+    expect(migrationSource).toContain("payment_expires_at IS NULL");
+    expect(migrationSource).toContain(
+      "payment_expires_at >= created_at + interval '1 minute'",
+    );
+    expect(migrationSource).toContain(
+      "tenant_credit_orders_payment_expires_at_check",
+    );
+    expect(migrationSource).toContain(
+      "tenant_credit_orders_pending_expiry_idx",
+    );
+    expect(migrationSource).toContain("(payment_expires_at ASC, id)");
+    expect(migrationSource).not.toContain("status = 'expired'");
+  });
+
+  test("clears stale close claims when a recharge order leaves pending", () => {
+    const migrationSource = readTenantCreditRechargePaymentExpirationMigration();
+
+    expect(migrationSource).toContain(
+      "CREATE OR REPLACE FUNCTION public.clear_tenant_credit_order_close_claim()",
+    );
+    expect(migrationSource).toContain("BEFORE UPDATE OF status");
+    expect(migrationSource).toContain("IF NEW.status <> 'pending' THEN");
+    expect(migrationSource).toContain("NEW.close_claim_token := NULL");
+    expect(migrationSource).toContain("NEW.close_claim_expires_at := NULL");
+    expect(migrationSource).toContain("NEW.close_last_error := NULL");
+  });
+
+  test("claims expired recharge orders with bounded skip-locked leases", () => {
+    const migrationSource = readTenantCreditRechargePaymentExpirationMigration();
+
+    expect(migrationSource).toContain(
+      "CREATE OR REPLACE FUNCTION public.billing_claim_expired_recharge_orders(",
+    );
+    expect(migrationSource).toContain("p_now timestamptz");
+    expect(migrationSource).toContain("p_limit integer");
+    expect(migrationSource).toContain("p_lease_seconds integer");
+    expect(migrationSource).toContain(
+      "RETURNS SETOF public.tenant_credit_orders",
+    );
+    expect(migrationSource).toContain("SECURITY DEFINER");
+    expect(migrationSource).toContain("SET search_path = public");
+    expect(migrationSource).toContain(
+      "LEAST(GREATEST(COALESCE(p_limit, 100), 1), 100)",
+    );
+    expect(migrationSource).toContain(
+      "LEAST(GREATEST(COALESCE(p_lease_seconds, 60), 10), 600)",
+    );
+    expect(migrationSource).toContain("payment_expires_at <= p_now");
+    expect(migrationSource).toContain(
+      "close_claim_expires_at IS NULL OR close_claim_expires_at <= p_now",
+    );
+    expect(migrationSource).toContain(
+      "ORDER BY payment_expires_at ASC, id",
+    );
+    expect(migrationSource).toContain("FOR UPDATE SKIP LOCKED");
+    expect(migrationSource).toContain("close_claim_token = gen_random_uuid()");
+    expect(migrationSource).toContain(
+      "close_claim_expires_at = p_now + make_interval(secs => v_lease_seconds)",
+    );
+    expect(migrationSource).toContain(
+      "close_attempt_count = target.close_attempt_count + 1",
+    );
+    expect(migrationSource).toContain("close_last_error = NULL");
+    expect(migrationSource).toContain(
+      "REVOKE ALL ON FUNCTION public.billing_claim_expired_recharge_orders(",
+    );
+    expect(migrationSource).toContain("FROM PUBLIC, anon, authenticated");
+    expect(migrationSource).toContain(
+      "GRANT EXECUTE ON FUNCTION public.billing_claim_expired_recharge_orders(",
+    );
+    expect(migrationSource).toContain("TO service_role");
+    expect(migrationSource).toContain(
+      "COMMENT ON FUNCTION public.billing_claim_expired_recharge_orders(",
+    );
+    expect(migrationSource).toContain(
+      "COMMENT ON COLUMN public.tenant_credit_orders.payment_expires_at",
+    );
+    expect(migrationSource).toContain(
+      "COMMENT ON COLUMN public.tenant_credit_orders.close_claim_token",
+    );
+    expect(migrationSource).toContain(
+      "COMMENT ON COLUMN public.tenant_credit_orders.close_claim_expires_at",
+    );
+    expect(migrationSource).toContain(
+      "COMMENT ON COLUMN public.tenant_credit_orders.close_attempt_count",
+    );
+    expect(migrationSource).toContain(
+      "COMMENT ON COLUMN public.tenant_credit_orders.close_last_error",
+    );
   });
 
   test("binds tenant credit wechat recharge orders to platform payment configs", () => {
@@ -270,6 +384,15 @@ function readPlatformWechatRechargeMigration() {
     ),
     "utf8",
   );
+}
+
+function readTenantCreditRechargePaymentExpirationMigration() {
+  const migrationUrl = new URL(
+    "../../../../supabase/migrations/20260718110000_tenant_credit_recharge_payment_expiration.sql",
+    import.meta.url,
+  );
+
+  return existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
 }
 
 function readPlatformWechatRechargePaymentConfigFkMigration() {
