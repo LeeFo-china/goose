@@ -19,7 +19,11 @@ export async function readVerifiedWechatPayJson(input: {
   try {
     rawBody = await input.response.text();
   } catch {
-    throwInvalidBody();
+    throw Errors.business(
+      502,
+      "微信支付应答正文读取失败",
+      "WECHAT_PAY_TRANSPORT_FAILED",
+    );
   }
   const publicKeyId = input.publicKeyId?.trim();
   const publicKeyPem = input.publicKeyPem?.trim();

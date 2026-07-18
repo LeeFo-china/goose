@@ -190,7 +190,7 @@ describe("readVerifiedWechatPayJson", () => {
     }
   });
 
-  test("maps a response body read failure to a business error", async () => {
+  test("maps a response body read failure to a transport business error", async () => {
     const response = createSignedResponse({ rawBody: "{}" });
     Object.defineProperty(response, "text", {
       value: async () => {
@@ -204,7 +204,7 @@ describe("readVerifiedWechatPayJson", () => {
       publicKeyPem,
       nowSeconds: NOW_SECONDS,
     })).rejects.toMatchObject({
-      code: "WECHAT_PAY_RESPONSE_BODY_INVALID",
+      code: "WECHAT_PAY_TRANSPORT_FAILED",
     });
   });
 });

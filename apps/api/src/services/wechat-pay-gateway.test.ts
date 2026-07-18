@@ -435,15 +435,43 @@ describe("WechatPayGateway", () => {
     });
   });
 
+  test("maps a response body stream failure to a stable transport error", async () => {
+    const response = createWechatPayResponse({}, {
+      requestId: "body-stream-request-id",
+    });
+    Object.defineProperty(response, "text", {
+      value: async () => {
+        throw new TypeError("response stream failed");
+      },
+    });
+    const gateway = await createGateway(mock(async () => response) as unknown as typeof fetch);
+
+    await expect(gateway.queryTransactionByOutTradeNo({
+      config: directConfig,
+      outTradeNo: "WX202607010001",
+      secretBundle,
+    })).rejects.toMatchObject({
+      code: "WECHAT_PAY_TRANSPORT_FAILED",
+      details: expect.objectContaining({
+        operation: "transaction_query",
+        requestId: "body-stream-request-id",
+      }),
+    });
+  });
+
   test("aborts a refund request that exceeds the transport timeout", async () => {
-    const fetchImpl = mock((_url: string | URL | Request, init?: RequestInit) => {
+    const fetchImpl = mock(async (_url: string | URL | Request, init?: RequestInit) => {
       const signal = init?.signal;
       if (!signal) {
-        return Promise.reject(new Error("abort signal missing"));
+        throw new Error("abort signal missing");
       }
-      return new Promise<Response>((_resolve, reject) => {
-        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      const response = createWechatPayResponse({ status: "PROCESSING" });
+      Object.defineProperty(response, "text", {
+        value: () => new Promise<string>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
       });
+      return response;
     }) as unknown as typeof fetch;
     const { WechatPayGateway } = await import("./wechat-pay-gateway");
     const timeoutGateway = new WechatPayGateway({
