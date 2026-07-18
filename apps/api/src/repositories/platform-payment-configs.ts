@@ -110,10 +110,10 @@ class PlatformPaymentConfigRepository {
     return (data as PlatformPaymentConfigRecord | null) ?? null;
   }
 
-  async findWechatPayConfigById(id: string) {
+  async findWechatPayConfigById(configId: string) {
     const { data, error } = await this.from("platform_payment_configs")
       .select("*")
-      .eq("id", id)
+      .eq("id", configId)
       .maybeSingle();
 
     if (error) {

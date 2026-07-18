@@ -5,6 +5,16 @@ import {
 } from "./platform-payment-configs";
 
 describe("UpdatePlatformWechatPayConfigSchema", () => {
+  test("keeps omitted profile and status fields undefined for partial updates", () => {
+    const result = UpdatePlatformWechatPayConfigSchema.parse({
+      enabled_channels: ["tenant_recharge"],
+    });
+
+    expect(result).toEqual({
+      enabled_channels: ["tenant_recharge"],
+    });
+  });
+
   test("rejects plaintext wechat pay secrets", () => {
     const result = UpdatePlatformWechatPayConfigSchema.safeParse({
       merchant_mode: "direct_merchant",
