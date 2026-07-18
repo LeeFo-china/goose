@@ -25,6 +25,7 @@ type WechatPayGatewayDependencies = {
   fetchImpl?: FetchImpl;
   nonceFactory?: () => string;
   timestampFactory?: () => string;
+  closeRequestTimeoutMs?: number;
 };
 
 export type WechatPayCreateJsapiPrepayInput = {
@@ -47,7 +48,6 @@ export type WechatPayQueryTransactionByOutTradeNoInput = {
   outTradeNo: string;
   secretBundle: WechatPaySecretBundle;
 };
-
 export type WechatPayTransactionQueryResult = Record<string, unknown> & {
   out_trade_no?: string;
   transaction_id?: string;
@@ -55,20 +55,17 @@ export type WechatPayTransactionQueryResult = Record<string, unknown> & {
   success_time?: string;
   amount?: Record<string, unknown>;
 };
-
 export type WechatPayQueryRefundByOutRefundNoInput = {
   config: WechatPayJsapiConfig;
   outRefundNo: string;
   secretBundle: WechatPaySecretBundle;
 };
-
 export type WechatPayRefundQueryResult = Record<string, unknown> & {
   out_refund_no?: string;
   refund_id?: string;
   status?: string;
   amount?: Record<string, unknown>;
 };
-
 export type WechatPayRequestRefundInput = {
   config: WechatPayJsapiConfig;
   transactionId: string;
@@ -90,11 +87,13 @@ export class WechatPayGateway {
   private readonly fetchImpl: FetchImpl;
   private readonly nonceFactory?: () => string;
   private readonly timestampFactory?: () => string;
+  private readonly closeRequestTimeoutMs?: number;
 
   constructor(dependencies: WechatPayGatewayDependencies = {}) {
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
     this.nonceFactory = dependencies.nonceFactory;
     this.timestampFactory = dependencies.timestampFactory;
+    this.closeRequestTimeoutMs = dependencies.closeRequestTimeoutMs;
   }
 
   async createJsapiPrepay(
@@ -180,6 +179,7 @@ export class WechatPayGateway {
       fetchImpl: this.fetchImpl,
       nonce: this.createNonce(),
       timestamp: this.createTimestamp(),
+      timeoutMs: this.closeRequestTimeoutMs,
     });
   }
 

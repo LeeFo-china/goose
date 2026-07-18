@@ -130,7 +130,29 @@ function buildWechatPayAmount(amount: number | string) {
 }
 
 function buildPaymentExpiration(order: WechatPayJsapiOrder) {
-  return order.payment_expires_at === undefined
-    ? {}
-    : { time_expire: order.payment_expires_at };
+  const paymentExpiresAt = order.payment_expires_at;
+  if (paymentExpiresAt === undefined) return {};
+  if (!isValidRfc3339DateTime(paymentExpiresAt)) {
+    throw Errors.business(
+      400,
+      "微信支付订单的支付结束时间格式无效",
+      "WECHAT_PAY_PAYMENT_EXPIRES_AT_INVALID",
+    );
+  }
+  return { time_expire: paymentExpiresAt };
+}
+
+function isValidRfc3339DateTime(value: string) {
+  const pattern = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+  if (!pattern.test(value)) return false;
+
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
 }

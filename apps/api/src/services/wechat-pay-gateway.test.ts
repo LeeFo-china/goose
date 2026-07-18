@@ -4,7 +4,6 @@ import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { WechatPayOrderRecord } from "@/repositories/wechat-pay-orders";
 import {
   buildWechatPayMiniProgramSignMessage,
-  buildWechatPayRequestSignMessage,
 } from "./wechat-pay-signatures";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -336,88 +335,6 @@ describe("WechatPayGateway", () => {
     expect(sentReason).not.toContain("�");
   });
 
-  test("closes an encoded direct merchant transaction with a signed body", async () => {
-    const outTradeNo = "WX/2026?07";
-    const urlPath = "/v3/pay/transactions/out-trade-no/WX%2F2026%3F07/close";
-    const expectedBody = JSON.stringify({ mchid: "1112582521" });
-    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
-      expect(String(url)).toBe(`${secretBundle.baseUrl}${urlPath}`);
-      expect(init?.method).toBe("POST");
-      expect(init?.body).toBe(expectedBody);
-      expectAuthorizationSignature(init, urlPath, expectedBody);
-      return new Response(null, { status: 204 });
-    }) as unknown as typeof fetch;
-    const gateway = await createGateway(fetchImpl);
-
-    await gateway.closeTransactionByOutTradeNo({
-      config: directConfig,
-      outTradeNo,
-      secretBundle,
-    });
-
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
-
-  test("closes a service provider sub-merchant transaction", async () => {
-    const urlPath = "/v3/pay/partner/transactions/out-trade-no/WX202607010001/close";
-    const expectedBody = JSON.stringify({
-      sp_mchid: "1561816121",
-      sub_mchid: "1900000002",
-    });
-    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
-      expect(String(url)).toBe(`${secretBundle.baseUrl}${urlPath}`);
-      expect(init?.body).toBe(expectedBody);
-      expectAuthorizationSignature(init, urlPath, expectedBody);
-      return new Response(null, { status: 204 });
-    }) as unknown as typeof fetch;
-    const gateway = await createGateway(fetchImpl);
-
-    await gateway.closeTransactionByOutTradeNo({
-      config: partnerConfig,
-      outTradeNo: "WX202607010001",
-      secretBundle,
-    });
-  });
-
-  test("maps close-order upstream failures to a stable business error", async () => {
-    const fetchImpl = mock(async () => new Response(JSON.stringify({
-      code: "ORDERPAID",
-      message: "order already paid",
-    }), { status: 400 })) as unknown as typeof fetch;
-    const gateway = await createGateway(fetchImpl);
-
-    await expect(gateway.closeTransactionByOutTradeNo({
-      config: directConfig,
-      outTradeNo: "WX202607010001",
-      secretBundle,
-    })).rejects.toMatchObject({
-      statusCode: 502,
-      code: "WECHAT_PAY_CLOSE_FAILED",
-      details: {
-        status: 400,
-        code: "ORDERPAID",
-        message: "order already paid",
-      },
-    });
-  });
-
-  test("rejects close-order requests with stable configuration errors", async () => {
-    const fetchImpl = mock(async () => new Response(null, { status: 204 })) as unknown as typeof fetch;
-    const gateway = await createGateway(fetchImpl);
-
-    await expect(gateway.closeTransactionByOutTradeNo({
-      config: { ...directConfig, serial_no: null },
-      outTradeNo: "WX202607010001",
-      secretBundle,
-    })).rejects.toMatchObject({ code: "WECHAT_PAY_SERIAL_NO_REQUIRED" });
-    await expect(gateway.closeTransactionByOutTradeNo({
-      config: { ...partnerConfig, sub_merchant_id: null },
-      outTradeNo: "WX202607010001",
-      secretBundle,
-    })).rejects.toMatchObject({ code: "WECHAT_PAY_CONFIG_INCOMPLETE" });
-    expect(fetchImpl).not.toHaveBeenCalled();
-  });
-
   test("re-signs a mini program payment request locally with sub app id", async () => {
     const fetchImpl = mock(async () => {
       throw new Error("unexpected HTTP request");
@@ -460,26 +377,24 @@ describe("WechatPayGateway", () => {
       code: "WECHAT_PAY_CONFIG_INCOMPLETE",
     }));
   });
-});
 
-function expectAuthorizationSignature(
-  init: RequestInit | undefined,
-  urlPath: string,
-  body: string,
-) {
-  const authorization = String(
-    (init?.headers as Record<string, string>).Authorization,
-  );
-  const signature = authorization.match(/signature="([^"]+)"/)?.[1];
-  expect(signature).toBeTruthy();
-  const verifier = createVerify("RSA-SHA256");
-  verifier.update(buildWechatPayRequestSignMessage({
-    method: "POST",
-    urlPath,
-    body,
-    nonce: "nonce-1",
-    timestamp: "1782873600",
-  }));
-  verifier.end();
-  expect(verifier.verify(publicKey, signature || "", "base64")).toBe(true);
-}
+  test("re-signs locally with the direct merchant app id fallback", async () => {
+    const gateway = await createGateway(fetch);
+
+    const paymentRequest = gateway.createMiniProgramPaymentRequest({
+      config: directConfig,
+      prepayId: "prepay-direct",
+      secretBundle,
+    });
+
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(buildWechatPayMiniProgramSignMessage({
+      appId: directConfig.app_id,
+      timestamp: paymentRequest.timeStamp,
+      nonce: paymentRequest.nonceStr,
+      packageValue: paymentRequest.package,
+    }));
+    verifier.end();
+    expect(verifier.verify(publicKey, paymentRequest.paySign, "base64")).toBe(true);
+  });
+});

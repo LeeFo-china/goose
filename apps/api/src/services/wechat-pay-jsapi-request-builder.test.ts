@@ -148,4 +148,31 @@ describe("buildWechatPayJsapiPrepayRequest", () => {
 
     expect(request.body).not.toHaveProperty("time_expire");
   });
+
+  test("rejects a blank direct merchant payment expiration", () => {
+    expect(() => buildWechatPayJsapiPrepayRequest({
+      config: baseConfig,
+      order: { ...baseOrder, payment_expires_at: "   " },
+      description: "项目收款",
+    })).toThrow(expect.objectContaining({
+      statusCode: 400,
+      code: "WECHAT_PAY_PAYMENT_EXPIRES_AT_INVALID",
+    }));
+  });
+
+  test("rejects an invalid service provider payment expiration", () => {
+    expect(() => buildWechatPayJsapiPrepayRequest({
+      config: {
+        ...baseConfig,
+        merchant_mode: "service_provider_sub_merchant",
+        sub_merchant_id: "1900000002",
+        sub_app_id: "wxbac3b1e168fd968a",
+      },
+      order: { ...baseOrder, payment_expires_at: "2026-02-30T10:05:00+08:00" },
+      description: "项目收款",
+    })).toThrow(expect.objectContaining({
+      statusCode: 400,
+      code: "WECHAT_PAY_PAYMENT_EXPIRES_AT_INVALID",
+    }));
+  });
 });
