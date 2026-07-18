@@ -1,6 +1,11 @@
 import { Errors } from "@/errors/error-factory";
 import type { BillingAccountBalance } from "@/repositories/billing";
 import {
+  claimExpiredRechargeOrders,
+  markClaimedRechargeOrderClosed,
+  releaseRechargeOrderCloseClaim,
+} from "@/repositories/billing-recharge-expiration";
+import {
   billingRechargeRefundCallbackRepository,
   type BillingApplyWechatRechargeRefundCallbackStateInput,
   type BillingConfirmWechatRechargeRefundInput,
@@ -44,6 +49,10 @@ export type TenantCreditOrderRecord = {
   out_trade_no: string | null;
   prepay_id: string | null;
   payment_expires_at?: string | null;
+  close_claim_token?: string | null;
+  close_claim_expires_at?: string | null;
+  close_attempt_count?: number;
+  close_last_error?: string | null;
   transaction_id: string | null;
   paid_amount_fen: number;
   closed_at: string | null;
@@ -149,6 +158,10 @@ type UntypedClient = {
 };
 
 class BillingRechargeRepository {
+  readonly claimExpiredOrders = claimExpiredRechargeOrders;
+  readonly markOrderClosed = markClaimedRechargeOrderClosed;
+  readonly releaseCloseClaim = releaseRechargeOrderCloseClaim;
+
   private from(table: Parameters<UntypedClient["from"]>[0]) {
     return (SupabaseDB.getAdminClient() as unknown as UntypedClient).from(table);
   }

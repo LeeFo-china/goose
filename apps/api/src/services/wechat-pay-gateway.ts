@@ -10,6 +10,10 @@ import {
   buildWechatPayRefundRequestBody,
   buildWechatPayTransactionQueryUrlPath,
 } from "@/services/wechat-pay-gateway-request-builders";
+import {
+  type WechatPayQueryTransactionByOutTradeNoInput,
+  type WechatPayTransactionQueryResult,
+} from "@/services/wechat-pay-gateway-query-transaction";
 import { stringField } from "@/services/wechat-pay-gateway-response";
 import {
   buildWechatPayJsapiPrepayRequest,
@@ -31,6 +35,7 @@ type WechatPayGatewayDependencies = {
   requestTimeoutMs?: number;
   nowSecondsFactory?: () => number;
   closeRequestTimeoutMs?: number;
+  queryRequestTimeoutMs?: number;
 };
 type WechatPayOperation = "jsapi_prepay" | "transaction_query" | "refund_request" | "refund_query";
 export const DEFAULT_WECHAT_PAY_REQUEST_TIMEOUT_MS = 10_000;
@@ -49,18 +54,10 @@ export type WechatPayCreateMiniProgramPaymentRequestInput = {
   prepayId: string;
   secretBundle: WechatPaySecretBundle;
 };
-export type WechatPayQueryTransactionByOutTradeNoInput = {
-  config: WechatPayJsapiConfig;
-  outTradeNo: string;
-  secretBundle: WechatPaySecretBundle;
-};
-export type WechatPayTransactionQueryResult = Record<string, unknown> & {
-  out_trade_no?: string;
-  transaction_id?: string;
-  trade_state?: string;
-  success_time?: string;
-  amount?: Record<string, unknown>;
-};
+export type {
+  WechatPayQueryTransactionByOutTradeNoInput,
+  WechatPayTransactionQueryResult,
+} from "@/services/wechat-pay-gateway-query-transaction";
 export type WechatPayQueryRefundByOutRefundNoInput = {
   config: WechatPayJsapiConfig;
   outRefundNo: string;
@@ -101,6 +98,7 @@ export class WechatPayGateway {
   private readonly requestTimeoutMs: number;
   private readonly nowSecondsFactory: () => number;
   private readonly closeRequestTimeoutMs?: number;
+  private readonly queryRequestTimeoutMs?: number;
 
   constructor(dependencies: WechatPayGatewayDependencies = {}) {
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
@@ -111,6 +109,7 @@ export class WechatPayGateway {
     this.nowSecondsFactory = dependencies.nowSecondsFactory ??
       (() => Math.floor(Date.now() / 1_000));
     this.closeRequestTimeoutMs = dependencies.closeRequestTimeoutMs;
+    this.queryRequestTimeoutMs = dependencies.queryRequestTimeoutMs;
   }
 
   async createJsapiPrepay(
@@ -234,6 +233,7 @@ export class WechatPayGateway {
         },
       },
       secretBundle: input.secretBundle,
+      timeoutMs: this.queryRequestTimeoutMs,
     });
     const { payload } = result;
     return payload as WechatPayTransactionQueryResult;
@@ -326,9 +326,13 @@ export class WechatPayGateway {
     url: string;
     init: RequestInit;
     secretBundle: WechatPaySecretBundle;
+    timeoutMs?: number;
   }) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      input.timeoutMs ?? this.requestTimeoutMs,
+    );
     let requestId: string | null = null;
     try {
       const response = await this.fetchImpl(input.url, {
