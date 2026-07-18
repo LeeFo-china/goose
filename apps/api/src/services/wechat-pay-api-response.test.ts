@@ -163,6 +163,12 @@ describe("readVerifiedWechatPayJson", () => {
     });
   });
 
+  test("rejects signed malformed JSON", async () => {
+    await expect(readSigned('{"status":')).rejects.toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_BODY_INVALID",
+    });
+  });
+
   test("does not expose a rejected signature or raw body", async () => {
     const rawBody = '{"secret":"must-not-leak"}';
     const signature = "WECHATPAY/SIGNTEST/must-not-leak";

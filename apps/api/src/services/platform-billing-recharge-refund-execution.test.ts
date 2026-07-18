@@ -49,7 +49,9 @@ const repository = {
   ),
 };
 
-const paymentConfigRepository = { findWechatPayConfig: mock(async () => paymentConfig) };
+const paymentConfigRepository = {
+  findWechatPayConfig: mock(async () => paymentConfig),
+};
 
 const secretBundleService = {
   load: mock(async () => ({
@@ -76,8 +78,7 @@ const wechatPayGateway = {
     return {
       out_refund_no: "TRR202607100800000001",
       refund_id: "5030000000202607150000000001",
-      status: "PROCESSING",
-      requestId: "wechat-refund-request-id",
+      status: "PROCESSING", requestId: "wechat-refund-request-id",
       raw: {
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
@@ -90,14 +91,15 @@ const wechatPayGateway = {
     return {
       out_refund_no: "TRR202607100800000001",
       refund_id: "5030000000202607150000000001",
-      status: "PROCESSING",
+      status: "PROCESSING", requestId: "wechat-refund-query-request-id",
       amount: { refund: 10000, total: 10000, currency: "CNY" },
-      requestId: "wechat-refund-query-request-id",
     };
   }),
 };
 
-const auditLogService = { recordBestEffort: mock(async () => null) };
+const auditLogService = {
+  recordBestEffort: mock(async () => null),
+};
 
 async function createService() {
   const { PlatformBillingRechargeRefundExecutionService } = await import(
@@ -167,8 +169,7 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       return {
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
-        status: "PROCESSING",
-        requestId: "wechat-refund-request-id",
+        status: "PROCESSING", requestId: "wechat-refund-request-id",
         raw: {
           out_refund_no: "TRR202607100800000001",
           refund_id: "5030000000202607150000000001",
@@ -181,9 +182,8 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       return {
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
-        status: "PROCESSING",
+        status: "PROCESSING", requestId: "wechat-refund-query-request-id",
         amount: { refund: 10000, total: 10000, currency: "CNY" },
-        requestId: "wechat-refund-query-request-id",
       };
     });
   });
