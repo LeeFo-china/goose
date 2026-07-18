@@ -2,6 +2,16 @@ import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import { readVerifiedWechatPayJson } from "@/services/wechat-pay-api-response";
 import {
+  closeWechatPayTransactionByOutTradeNo,
+  type WechatPayCloseTransactionByOutTradeNoInput,
+} from "@/services/wechat-pay-gateway-close-transaction";
+import {
+  buildWechatPayRefundQueryUrlPath,
+  buildWechatPayRefundRequestBody,
+  buildWechatPayTransactionQueryUrlPath,
+} from "@/services/wechat-pay-gateway-request-builders";
+import { stringField } from "@/services/wechat-pay-gateway-response";
+import {
   buildWechatPayJsapiPrepayRequest,
   type WechatPayJsapiConfig,
   type WechatPayJsapiOrder,
@@ -29,12 +39,15 @@ export type WechatPayCreateJsapiPrepayInput = {
   description: string;
   secretBundle: WechatPaySecretBundle;
 };
-
 export type WechatPayCreateJsapiPrepayResult = {
   prepayId: string;
   paymentRequest: WechatPayMiniProgramPaymentRequest;
 };
-
+export type WechatPayCreateMiniProgramPaymentRequestInput = {
+  config: WechatPayJsapiConfig;
+  prepayId: string;
+  secretBundle: WechatPaySecretBundle;
+};
 export type WechatPayQueryTransactionByOutTradeNoInput = {
   config: WechatPayJsapiConfig;
   outTradeNo: string;
@@ -152,21 +165,50 @@ export class WechatPayGateway {
 
     return {
       prepayId,
-      paymentRequest: buildWechatPayMiniProgramPaymentRequest({
-        appId: input.config.sub_app_id || input.config.app_id || "",
+      paymentRequest: this.createMiniProgramPaymentRequest({
+        config: input.config,
         prepayId,
-        privateKeyPem: input.secretBundle.privateKeyPem,
-        nonce,
-        timestamp,
+        secretBundle: input.secretBundle,
       }),
     };
+  }
+
+  async closeTransactionByOutTradeNo(
+    input: WechatPayCloseTransactionByOutTradeNoInput,
+  ): Promise<void> {
+    await closeWechatPayTransactionByOutTradeNo({
+      ...input,
+      fetchImpl: this.fetchImpl,
+      nonce: this.createNonce(),
+      timestamp: this.createTimestamp(),
+    });
+  }
+
+  createMiniProgramPaymentRequest(
+    input: WechatPayCreateMiniProgramPaymentRequestInput,
+  ): WechatPayMiniProgramPaymentRequest {
+    const appId = input.config.sub_app_id || input.config.app_id;
+    if (!appId) {
+      throw Errors.business(
+        409,
+        "微信支付小程序 AppID 配置不完整",
+        "WECHAT_PAY_CONFIG_INCOMPLETE",
+      );
+    }
+    return buildWechatPayMiniProgramPaymentRequest({
+      appId,
+      prepayId: input.prepayId,
+      privateKeyPem: input.secretBundle.privateKeyPem,
+      nonce: this.createNonce(),
+      timestamp: this.createTimestamp(),
+    });
   }
 
   async queryTransactionByOutTradeNo(
     input: WechatPayQueryTransactionByOutTradeNoInput,
   ): Promise<WechatPayTransactionQueryResult> {
     const serialNo = requireSerialNo(input.config);
-    const urlPath = buildTransactionQueryUrlPath(input.config, input.outTradeNo);
+    const urlPath = buildWechatPayTransactionQueryUrlPath(input.config, input.outTradeNo);
     const nonce = this.createNonce();
     const timestamp = this.createTimestamp();
     const authorization = buildWechatPayAuthorization({
@@ -201,7 +243,7 @@ export class WechatPayGateway {
     input: WechatPayRequestRefundInput,
   ): Promise<WechatPayRequestRefundResult> {
     const serialNo = requireSerialNo(input.config);
-    const body = JSON.stringify(buildRefundRequestBody(input));
+    const body = JSON.stringify(buildWechatPayRefundRequestBody(input));
     const nonce = this.createNonce();
     const timestamp = this.createTimestamp();
     const urlPath = "/v3/refund/domestic/refunds";
@@ -246,7 +288,7 @@ export class WechatPayGateway {
   ): Promise<WechatPayRefundQueryResult> {
     const serialNo = requireSerialNo(input.config);
 
-    const urlPath = buildRefundQueryUrlPath(input.config, input.outRefundNo);
+    const urlPath = buildWechatPayRefundQueryUrlPath(input.config, input.outRefundNo);
     const nonce = this.createNonce();
     const timestamp = this.createTimestamp();
     const authorization = buildWechatPayAuthorization({
@@ -344,11 +386,6 @@ export class WechatPayGateway {
   }
 }
 
-function stringField(record: Record<string, unknown>, key: string) {
-  const value = record[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 function requireSerialNo(config: WechatPayJsapiConfig) {
   const serialNo = config.serial_no?.trim();
   if (!serialNo) {
@@ -369,131 +406,6 @@ function recordDetails(details: unknown) {
 
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
-}
-
-function buildTransactionQueryUrlPath(
-  config: WechatPayJsapiConfig,
-  outTradeNo: string,
-) {
-  const encodedOutTradeNo = encodeURIComponent(outTradeNo);
-  if (config.merchant_mode === "service_provider_sub_merchant") {
-    if (!config.merchant_id || !config.sub_merchant_id) {
-      throw Errors.business(
-        409,
-        "微信支付服务商子商户配置不完整",
-        "WECHAT_PAY_CONFIG_INCOMPLETE",
-      );
-    }
-    const query = new URLSearchParams({
-      sp_mchid: config.merchant_id,
-      sub_mchid: config.sub_merchant_id,
-    });
-    return `/v3/pay/partner/transactions/out-trade-no/${encodedOutTradeNo}?${query.toString()}`;
-  }
-
-  if (!config.merchant_id) {
-    throw Errors.business(
-      409,
-      "微信支付商户号未配置",
-      "WECHAT_PAY_CONFIG_INCOMPLETE",
-    );
-  }
-  const query = new URLSearchParams({ mchid: config.merchant_id });
-  return `/v3/pay/transactions/out-trade-no/${encodedOutTradeNo}?${query.toString()}`;
-}
-
-function buildRefundRequestBody(input: WechatPayRequestRefundInput) {
-  if (!input.config.merchant_id) {
-    throw Errors.business(
-      409,
-      "微信支付商户号未配置",
-      "WECHAT_PAY_CONFIG_INCOMPLETE",
-    );
-  }
-  if (input.config.merchant_mode === "service_provider_sub_merchant") {
-    if (!input.config.sub_merchant_id) {
-      throw Errors.business(
-        409,
-        "微信支付服务商子商户配置不完整",
-        "WECHAT_PAY_CONFIG_INCOMPLETE",
-      );
-    }
-    return withRefundNotifyUrl(input.config, {
-      sp_mchid: input.config.merchant_id,
-      sub_mchid: input.config.sub_merchant_id,
-      transaction_id: input.transactionId,
-      out_refund_no: input.outRefundNo,
-      reason: normalizeRefundReason(input.reason),
-      amount: buildRefundAmount(input),
-    });
-  }
-
-  return withRefundNotifyUrl(input.config, {
-    transaction_id: input.transactionId,
-    out_refund_no: input.outRefundNo,
-    reason: normalizeRefundReason(input.reason),
-    amount: buildRefundAmount(input),
-  });
-}
-
-function buildRefundQueryUrlPath(
-  config: WechatPayJsapiConfig,
-  outRefundNo: string,
-) {
-  const encodedOutRefundNo = encodeURIComponent(outRefundNo);
-  if (config.merchant_mode === "service_provider_sub_merchant") {
-    if (!config.merchant_id || !config.sub_merchant_id) {
-      throw Errors.business(
-        409,
-        "微信支付服务商子商户配置不完整",
-        "WECHAT_PAY_CONFIG_INCOMPLETE",
-      );
-    }
-    const query = new URLSearchParams({
-      sub_mchid: config.sub_merchant_id,
-    });
-    return `/v3/refund/domestic/refunds/${encodedOutRefundNo}?${query.toString()}`;
-  }
-  if (!config.merchant_id) {
-    throw Errors.business(
-      409,
-      "微信支付商户号未配置",
-      "WECHAT_PAY_CONFIG_INCOMPLETE",
-    );
-  }
-  return `/v3/refund/domestic/refunds/${encodedOutRefundNo}`;
-}
-
-function normalizeRefundReason(reason: string) {
-  const normalized = reason.trim();
-  const encoder = new TextEncoder();
-  let byteLength = 0;
-  let result = "";
-
-  for (const character of normalized) {
-    const characterByteLength = encoder.encode(character).byteLength;
-    if (byteLength + characterByteLength > 80) break;
-    result += character;
-    byteLength += characterByteLength;
-  }
-
-  return result;
-}
-
-function withRefundNotifyUrl(
-  config: WechatPayJsapiConfig,
-  body: Record<string, unknown>,
-) {
-  const notifyUrl = config.notify_url?.trim();
-  return notifyUrl ? { ...body, notify_url: notifyUrl } : body;
-}
-
-function buildRefundAmount(input: WechatPayRequestRefundInput) {
-  return {
-    refund: input.refundAmountFen,
-    total: input.totalAmountFen,
-    currency: "CNY",
-  };
 }
 
 export const wechatPayGateway = new WechatPayGateway();

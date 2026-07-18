@@ -14,6 +14,7 @@ export type WechatPayJsapiOrder = {
   out_trade_no: string;
   amount: number | string;
   payer_openid: string | null;
+  payment_expires_at?: string;
 };
 
 export type WechatPayJsapiPrepayRequestInput = {
@@ -59,6 +60,7 @@ function buildDirectMerchantPrepayRequest(
       mchid: input.config.merchant_id,
       description: input.description,
       out_trade_no: input.order.out_trade_no,
+      ...buildPaymentExpiration(input.order),
       notify_url: input.config.notify_url,
       amount: buildWechatPayAmount(input.order.amount),
       payer: {
@@ -93,6 +95,7 @@ function buildServiceProviderPrepayRequest(
       sub_mchid: input.config.sub_merchant_id,
       description: input.description,
       out_trade_no: input.order.out_trade_no,
+      ...buildPaymentExpiration(input.order),
       notify_url: input.config.notify_url,
       amount: buildWechatPayAmount(input.order.amount),
       payer: {
@@ -124,4 +127,10 @@ function buildWechatPayAmount(amount: number | string) {
     total: Math.round(Number(amount) * 100),
     currency: "CNY",
   };
+}
+
+function buildPaymentExpiration(order: WechatPayJsapiOrder) {
+  return order.payment_expires_at === undefined
+    ? {}
+    : { time_expire: order.payment_expires_at };
 }

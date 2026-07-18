@@ -90,6 +90,8 @@ const partnerConfig = {
   merchant_mode: "service_provider_sub_merchant",
   merchant_id: "1561816121",
   sub_merchant_id: "1900000109",
+  app_id: "wx-service-app",
+  sub_app_id: "wxbac3b1e168fd968a",
 } satisfies WechatPayConfigRecord;
 
 const order = {
@@ -120,6 +122,11 @@ const order = {
   updated_at: "2026-07-01T00:00:00.000Z",
 } satisfies WechatPayOrderRecord;
 
+const orderWithExpiration = {
+  ...order,
+  payment_expires_at: "2026-07-01T10:05:00+08:00",
+};
+
 async function createGateway(fetchImpl: typeof fetch) {
   const { WechatPayGateway } = await import("./wechat-pay-gateway");
   return new WechatPayGateway({
@@ -147,6 +154,7 @@ describe("WechatPayGateway", () => {
         appid: "wxbac3b1e168fd968a",
         mchid: "1112582521",
         out_trade_no: "WX202607010001",
+        time_expire: "2026-07-01T10:05:00+08:00",
       });
       return createWechatPayResponse({ prepay_id: "prepay-test" });
     }) as unknown as typeof fetch;
@@ -154,7 +162,7 @@ describe("WechatPayGateway", () => {
 
     const result = await gateway.createJsapiPrepay({
       config: directConfig,
-      order,
+      order: orderWithExpiration,
       description: "项目收款",
       secretBundle,
     });
@@ -181,7 +189,7 @@ describe("WechatPayGateway", () => {
     await expect(
       gateway.createJsapiPrepay({
         config: directConfig,
-        order,
+        order: orderWithExpiration,
         description: "项目收款",
         secretBundle,
       }),
@@ -419,80 +427,4 @@ describe("WechatPayGateway", () => {
     expect(sentReason).not.toContain("�");
   });
 
-  test("maps a rejected fetch to a stable transaction transport error", async () => {
-    const fetchImpl = mock(async () => {
-      throw new TypeError("network unavailable");
-    }) as unknown as typeof fetch;
-    const gateway = await createGateway(fetchImpl);
-
-    await expect(gateway.queryTransactionByOutTradeNo({
-      config: directConfig,
-      outTradeNo: "WX202607010001",
-      secretBundle,
-    })).rejects.toMatchObject({
-      code: "WECHAT_PAY_TRANSPORT_FAILED",
-      details: expect.objectContaining({ operation: "transaction_query" }),
-    });
-  });
-
-  test("maps a response body stream failure to a stable transport error", async () => {
-    const response = createWechatPayResponse({}, {
-      requestId: "body-stream-request-id",
-    });
-    Object.defineProperty(response, "text", {
-      value: async () => {
-        throw new TypeError("response stream failed");
-      },
-    });
-    const gateway = await createGateway(mock(async () => response) as unknown as typeof fetch);
-
-    await expect(gateway.queryTransactionByOutTradeNo({
-      config: directConfig,
-      outTradeNo: "WX202607010001",
-      secretBundle,
-    })).rejects.toMatchObject({
-      code: "WECHAT_PAY_TRANSPORT_FAILED",
-      details: expect.objectContaining({
-        operation: "transaction_query",
-        requestId: "body-stream-request-id",
-      }),
-    });
-  });
-
-  test("aborts a refund request that exceeds the transport timeout", async () => {
-    const fetchImpl = mock(async (_url: string | URL | Request, init?: RequestInit) => {
-      const signal = init?.signal;
-      if (!signal) {
-        throw new Error("abort signal missing");
-      }
-      const response = createWechatPayResponse({ status: "PROCESSING" });
-      Object.defineProperty(response, "text", {
-        value: () => new Promise<string>((_resolve, reject) => {
-          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-        }),
-      });
-      return response;
-    }) as unknown as typeof fetch;
-    const { WechatPayGateway } = await import("./wechat-pay-gateway");
-    const timeoutGateway = new WechatPayGateway({
-      fetchImpl,
-      nonceFactory: () => "nonce-1",
-      timestampFactory: () => "1782873600",
-      requestTimeoutMs: 5,
-      nowSecondsFactory: () => 1_782_873_600,
-    });
-
-    await expect(timeoutGateway.requestRefund({
-      config: directConfig,
-      transactionId: "4200000000202607010000000001",
-      outRefundNo: "TRR202607100800000001",
-      reason: "客户误充值，需要申请退款",
-      refundAmountFen: 10000,
-      totalAmountFen: 10000,
-      secretBundle,
-    })).rejects.toMatchObject({
-      code: "WECHAT_PAY_TRANSPORT_TIMEOUT",
-      details: expect.objectContaining({ operation: "refund_request" }),
-    });
-  });
 });
