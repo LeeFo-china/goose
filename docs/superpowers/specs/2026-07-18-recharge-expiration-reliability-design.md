@@ -1,7 +1,7 @@
 # Recharge Expiration Reliability Design
 
 **Date:** 2026-07-18  
-**Status:** Approved for implementation
+**Status:** Implemented and verified in code; migrations not applied by this work
 **Scope:** Harden the pending-recharge expiration work already implemented on `feat/recharge-payment-expiration`.
 
 ## Context
@@ -165,6 +165,32 @@ supabase migration up --local
 supabase gen types typescript --local
 focused RPC smoke
 ```
+
+## 6. Local implementation status
+
+The reliability work is implemented on `feat/recharge-payment-expiration` and has completed
+implementation, specification review, and quality review locally.
+
+Verification completed on 2026-07-18:
+
+- 261 focused API, repository, migration-contract, WeChat gateway/callback, expiration, and worker
+  tests passed with zero failures;
+- API TypeScript typecheck, production build, and file-size checks passed;
+- `git diff --check` passed;
+- a credential-free disabled-worker smoke started with the documented defaults, handled one
+  `SIGINT`, logged `worker stopped`, and exited with code 0;
+- the mini-program contract and smoke checklist are recorded in
+  `docs/miniprogram/2026-07-18-recharge-payment-expiration-handoff.md`.
+
+Database and real-payment verification remain intentionally unexecuted:
+
+- `supabase status` cannot inspect local services because the Docker daemon is not running;
+- `supabase migration list --local` cannot connect to local PostgreSQL at `127.0.0.1:54322`;
+- no remote migration, deployment, or database mutation was performed;
+- no real WeChat payment/query/close smoke was run against an unconfirmed database target.
+
+The next database step is to start local Docker/Supabase, apply the five recharge migrations
+locally, verify the local migration list, and then run bounded RPC and real-payment smoke tests.
 
 ## Rollback
 
