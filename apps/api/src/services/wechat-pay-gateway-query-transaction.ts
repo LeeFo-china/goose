@@ -29,6 +29,7 @@ type QueryTransactionInput = WechatPayQueryTransactionByOutTradeNoInput & {
 };
 
 const DEFAULT_QUERY_REQUEST_TIMEOUT_MS = 10_000;
+const MIN_QUERY_REQUEST_TIMEOUT_MS = 1_000;
 const MAX_QUERY_REQUEST_TIMEOUT_MS = 60_000;
 
 export async function queryWechatPayTransactionByOutTradeNo(
@@ -76,7 +77,9 @@ async function fetchTransaction(input: {
   urlPath: string;
   authorization: string;
 }) {
-  const timeoutMs = normalizeQueryRequestTimeout(input.input.timeoutMs);
+  const timeoutMs = normalizeWechatPayQueryRequestTimeout(
+    input.input.timeoutMs,
+  );
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -137,12 +140,14 @@ function buildTransactionQueryUrlPath(
   return `/v3/pay/transactions/out-trade-no/${encodedOutTradeNo}?${query.toString()}`;
 }
 
-function normalizeQueryRequestTimeout(timeoutMs: number | undefined) {
+export function normalizeWechatPayQueryRequestTimeout(
+  timeoutMs: number | undefined,
+) {
   if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs)) {
     return DEFAULT_QUERY_REQUEST_TIMEOUT_MS;
   }
   return Math.max(
-    1,
+    MIN_QUERY_REQUEST_TIMEOUT_MS,
     Math.min(Math.floor(timeoutMs), MAX_QUERY_REQUEST_TIMEOUT_MS),
   );
 }
