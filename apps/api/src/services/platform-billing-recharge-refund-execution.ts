@@ -14,7 +14,8 @@ import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
   assertWechatTransactionMatches,
   getWechatErrorDetailCode,
-  toWechatRefundResult,
+  toWechatQueriedRefundPayload,
+  toWechatRequestedRefundPayload,
   uncertainRefundStatusError,
 } from "@/services/platform-billing-recharge-refund-wechat";
 import { wechatPayGateway } from "@/services/wechat-pay-gateway";
@@ -151,7 +152,7 @@ export class PlatformBillingRechargeRefundExecutionService {
     try {
       const requestedRefund =
         await this.wechatPayGateway.requestRefund(refundInput);
-      wechatRefundResponse = toWechatRefundResult(requestedRefund);
+      wechatRefundResponse = toWechatRequestedRefundPayload(requestedRefund);
     } catch (error) {
       try {
         const queriedRefund =
@@ -160,13 +161,15 @@ export class PlatformBillingRechargeRefundExecutionService {
             secretBundle,
             outRefundNo,
           });
-        wechatRefundResponse = toWechatRefundResult(queriedRefund);
+        wechatRefundResponse = toWechatQueriedRefundPayload(queriedRefund);
       } catch (queryError) {
         if (getWechatErrorDetailCode(queryError) === "RESOURCE_NOT_EXISTS") {
           try {
             const retriedRefund =
               await this.wechatPayGateway.requestRefund(refundInput);
-            wechatRefundResponse = toWechatRefundResult(retriedRefund);
+            wechatRefundResponse = toWechatRequestedRefundPayload(
+              retriedRefund,
+            );
           } catch (retryError) {
             throw uncertainRefundStatusError({
               outRefundNo,

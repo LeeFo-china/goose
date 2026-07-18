@@ -135,7 +135,10 @@ gateway 所有网络调用使用共享的有界 fetch 包装器，默认 10 秒�
 - `transaction_id`、`out_trade_no` 等于充值订单；
 - `amount.refund` 等于申请退款金额；
 - `amount.total` 等于本地已支付金额；
-- `amount.currency` 等于 `CNY`；
+- 申请退款和退款查单 API 应答必须包含 `amount.currency=CNY`；官方普通商户与合作
+  伙伴退款回调解密资源不定义 `amount.currency`，回调在校验文档定义的退款/交易
+  ID、退款/订单金额和商户身份后，按本地产品绑定隐含为 `CNY`；若扩展回调显式
+  携带 `amount.currency`，则非 `CNY` 必须拒绝；
 - `status` 只能是 `PROCESSING|SUCCESS|CLOSED|ABNORMAL`；
 - API 请求按订单的支付配置构造并签名；普通商户请求绑定 `mchid`，服务商请求
   绑定 `sp_mchid` 与 `sub_mchid`，不要求应答回显契约未定义的商户字段；

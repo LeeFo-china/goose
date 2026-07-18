@@ -237,7 +237,7 @@ expect(() => parseAndAssertWechatRefund({ ...response, out_refund_no: "other" },
   .toThrow(expect.objectContaining({ code: "BILLING_RECHARGE_WECHAT_REFUND_MISMATCH" }));
 ```
 
-Repeat the negative assertion for missing `refund_id`, wrong transaction/trade number, wrong refund/total amount, non-CNY currency, and unsupported status. Add a separate case with a non-null stored `expected.wechatRefundId` and reject a different response `refund_id`.
+Repeat the negative assertion for missing `refund_id`, wrong transaction/trade number, wrong refund/total amount, missing or non-CNY API response currency, and unsupported status. Add a separate case with a non-null stored `expected.wechatRefundId` and reject a different response `refund_id`.
 
 Add callback-event tests requiring exact pairs:
 
@@ -249,7 +249,11 @@ expect(() => assertWechatRefundEventMatches("REFUND.SUCCESS", "CLOSED"))
 Also test `parseAndAssertWechatRefundCallback(resource, expected)` with the callback field
 `refund_status`. Direct-merchant callbacks require `resource.mchid === expected.merchantId`;
 service-provider callbacks require both `resource.sp_mchid === expected.merchantId` and
-`resource.sub_mchid === expected.subMerchantId`.
+`resource.sub_mchid === expected.subMerchantId`. Use official-shaped direct and partner callback
+fixtures containing the documented refund/transaction IDs and amounts. Their `amount` objects do
+not define `currency`; after those fields and merchant identities match, bind the result to the
+trusted local product currency `CNY`. If an extension supplies `amount.currency`, reject any value
+other than `CNY`.
 
 - [ ] **Step 2: Run the new contract test and confirm RED**
 
@@ -289,7 +293,9 @@ export function assertWechatRefundEventMatches(
 
 The parsers share the same identity/amount/status core and must not substitute a
 missing/different `out_refund_no`, `refund_id`, status, amount, or identity with a local fallback.
-Error details may contain IDs and integer amounts, but not raw payloads.
+API request/query results require `amount.currency=CNY`; callback resources use the official
+schema without that field and apply the callback rule above. Error details may contain IDs and
+integer amounts, but not raw payloads.
 
 - [ ] **Step 4: Use the contract in the execution flow**
 

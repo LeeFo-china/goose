@@ -75,6 +75,7 @@ export function parseAndAssertWechatRefund(
     payload,
     expected,
     statusField: "status",
+    currencyRequired: true,
     requestId: payload.requestId,
   });
 }
@@ -88,6 +89,7 @@ export function parseAndAssertWechatRefundCallback(
     payload: resource,
     expected,
     statusField: "refund_status",
+    currencyRequired: false,
     requestId: null,
   });
 }
@@ -113,6 +115,7 @@ function parseAndAssertRefundCore(input: {
   payload: Record<string, unknown>;
   expected: WechatRefundExpectedBinding;
   statusField: "status" | "refund_status";
+  currencyRequired: boolean;
   requestId: string | null;
 }): WechatRefundValidatedResult {
   const outRefundNo = exactString(input.payload.out_refund_no);
@@ -134,16 +137,21 @@ function parseAndAssertRefundCore(input: {
   assertMatches("out_trade_no", outTradeNo, input.expected.outTradeNo);
 
   const amount = recordField(input.payload.amount);
-  const refundAmountFen = numberField(amount, "refund");
+  const refundAmountFen = positiveIntegerField(amount, "refund");
   assertMatches(
     "amount.refund",
     refundAmountFen,
     input.expected.refundAmountFen,
   );
-  const totalAmountFen = numberField(amount, "total");
+  const totalAmountFen = positiveIntegerField(amount, "total");
   assertMatches("amount.total", totalAmountFen, input.expected.totalAmountFen);
-  const currency = exactString(amount?.currency);
-  assertMatches("amount.currency", currency, input.expected.currency);
+  if (
+    input.currencyRequired ||
+    Boolean(amount && Object.hasOwn(amount, "currency"))
+  ) {
+    const currency = exactString(amount?.currency);
+    assertMatches("amount.currency", currency, input.expected.currency);
+  }
 
   const status = exactString(input.payload[input.statusField]);
   if (!isWechatRefundStatus(status)) throwRefundMismatch(input.statusField);
@@ -215,12 +223,12 @@ function recordField(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function numberField(
+function positiveIntegerField(
   record: Record<string, unknown> | null,
   field: string,
 ): number | null {
   const value = record?.[field];
-  return typeof value === "number" && Number.isSafeInteger(value)
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
     ? value
     : null;
 }

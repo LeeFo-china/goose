@@ -1,105 +1,25 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
-import { platformBillingRechargeRefundRepository, type PlatformRechargeRefundRequestRecord } from "@/repositories/platform-billing-recharge-refunds";
+import { beforeEach, describe, expect, test } from "bun:test";
+import type { PlatformRechargeRefundRequestRecord } from "@/repositories/platform-billing-recharge-refunds";
 import {
   approvedRequest,
+  auditLogService,
   authContext,
+  createRefundPayload,
+  createRefundRequestResult,
+  events,
   order,
   partnerPaymentConfig,
   paymentConfig,
-  refundingRequest,
-  requestWithWechatResult,
+  paymentConfigRepository,
+  repository,
+  resetExecutionMocks,
+  secretBundleService,
+  wechatPayGateway,
 } from "@/services/platform-billing-recharge-refund-execution.test-fixtures";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-const events: string[] = [];
-const refundPayload = {
-  out_refund_no: "TRR202607100800000001",
-  refund_id: "5030000000202607150000000001",
-  transaction_id: "4200000001",
-  out_trade_no: "TC202607020001",
-  status: "PROCESSING",
-  amount: { refund: 10000, total: 10000, currency: "CNY" },
-};
-function createRefundPayload(overrides: Partial<typeof refundPayload> = {}) {
-  return { ...refundPayload, ...overrides };
-}
-function createRefundRequestResult(
-  overrides: Partial<typeof refundPayload> = {},
-  requestId = "wechat-refund-request-id",
-) {
-  const raw = createRefundPayload(overrides);
-  return {
-    out_refund_no: raw.out_refund_no,
-    refund_id: raw.refund_id,
-    status: raw.status,
-    requestId,
-    raw,
-  };
-}
-const repository = {
-  findRequestById: mock(
-    async (): Promise<PlatformRechargeRefundRequestRecord | null> =>
-      approvedRequest,
-  ),
-  markRequestRefunding: mock(
-    async (): Promise<PlatformRechargeRefundRequestRecord | null> => {
-      events.push("mark-request-refunding");
-      return refundingRequest;
-    },
-  ),
-  markOrderRefundStatus: mock(async (input: {
-    refundStatus: string;
-  }): Promise<TenantCreditOrderRecord> => {
-    events.push(`mark-order-${input.refundStatus}`);
-    return { ...order, refund_status: "refunding" };
-  }),
-  saveWechatRefundResult: mock(
-    async (_input: Parameters<typeof platformBillingRechargeRefundRepository.saveWechatRefundResult>[0]): Promise<PlatformRechargeRefundRequestRecord> => {
-      events.push("save-wechat-result");
-      return requestWithWechatResult;
-    },
-  ),
-};
-const paymentConfigRepository = {
-  findWechatPayConfig: mock(async () => paymentConfig),
-};
-const secretBundleService = {
-  load: mock(async () => ({
-    privateKeyPem: "private-key",
-    apiV3Key: "api-v3-key",
-    wechatPayPublicKeyId: null,
-    wechatPayPublicKeyPem: null,
-    baseUrl: "https://api.mch.weixin.qq.com",
-  })),
-};
-const wechatPayGateway = {
-  queryTransactionByOutTradeNo: mock(async () => {
-    events.push("wechat-query-transaction");
-    return {
-      out_trade_no: "TC202607020001",
-      transaction_id: "4200000001",
-      trade_state: "SUCCESS",
-      amount: { total: 10000, currency: "CNY" },
-    };
-  }),
-  requestRefund: mock(async (_input?: unknown) => {
-    events.push("wechat-refund");
-    return createRefundRequestResult();
-  }),
-  queryRefundByOutRefundNo: mock(async () => {
-    events.push("wechat-query-refund");
-    return {
-      ...createRefundPayload(),
-      requestId: "wechat-refund-query-request-id",
-    };
-  }),
-};
-const auditLogService = {
-  recordBestEffort: mock(async () => null),
-};
 async function createService() {
   const { PlatformBillingRechargeRefundExecutionService } = await import(
     "./platform-billing-recharge-refund-execution"
@@ -110,6 +30,7 @@ async function createService() {
     secretBundleService,
     wechatPayGateway,
     auditLogService,
+    nowFactory: () => new Date("2026-07-18T04:00:00.000Z"),
   });
 }
 async function expectExecuteRejectsWithCode(code: string) {
@@ -119,61 +40,7 @@ async function expectExecuteRejectsWithCode(code: string) {
 }
 describe("PlatformBillingRechargeRefundExecutionService", () => {
   beforeEach(() => {
-    events.length = 0;
-    for (const fn of [
-      ...Object.values(repository),
-      ...Object.values(paymentConfigRepository),
-      ...Object.values(secretBundleService),
-      ...Object.values(wechatPayGateway),
-      ...Object.values(auditLogService),
-    ]) {
-      fn.mockClear();
-    }
-    repository.findRequestById.mockImplementation(async () => approvedRequest);
-    repository.markRequestRefunding.mockImplementation(async () => {
-      events.push("mark-request-refunding");
-      return refundingRequest;
-    });
-    repository.markOrderRefundStatus.mockImplementation(async (input: {
-      refundStatus: string;
-    }) => {
-      events.push(`mark-order-${input.refundStatus}`);
-      return { ...order, refund_status: "refunding" };
-    });
-    repository.saveWechatRefundResult.mockImplementation(async () => {
-      events.push("save-wechat-result");
-      return requestWithWechatResult;
-    });
-    paymentConfigRepository.findWechatPayConfig.mockImplementation(
-      async () => paymentConfig,
-    );
-    secretBundleService.load.mockImplementation(async () => ({
-      privateKeyPem: "private-key",
-      apiV3Key: "api-v3-key",
-      wechatPayPublicKeyId: null,
-      wechatPayPublicKeyPem: null,
-      baseUrl: "https://api.mch.weixin.qq.com",
-    }));
-    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
-      events.push("wechat-query-transaction");
-      return {
-        out_trade_no: "TC202607020001",
-        transaction_id: "4200000001",
-        trade_state: "SUCCESS",
-        amount: { total: 10000, currency: "CNY" },
-      };
-    });
-    wechatPayGateway.requestRefund.mockImplementation(async () => {
-      events.push("wechat-refund");
-      return createRefundRequestResult();
-    });
-    wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
-      events.push("wechat-query-refund");
-      return {
-        ...createRefundPayload(),
-        requestId: "wechat-refund-query-request-id",
-      };
-    });
+    resetExecutionMocks();
   });
 
   test("executes an approved refund request after marking request and order refunding", async () => {
@@ -224,16 +91,34 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
     const service = await createService();
     const result = await service.execute(authContext, "refund-request-1");
     const saveInput = repository.saveWechatRefundResult.mock.calls[0]?.[0];
-    expect(saveInput).toMatchObject({
+    const expectedMetadata = {
+      correlation_id: "refund-correlation-1",
+      wechat_refund_status: "PROCESSING",
+      wechat_request_id: "wechat-refund-request-id",
+      wechat_refund_executed_at: "2026-07-18T04:00:00.000Z",
+    };
+    expect(saveInput).toEqual({
+      id: "refund-request-1",
       outRefundNo: "TRR202607100800000001",
       wechatRefundId: "5030000000202607150000000001",
       refundAmountFen: 10000,
-      metadata: {
-        wechat_refund_status: "PROCESSING",
-        wechat_request_id: "wechat-refund-request-id",
-      },
+      metadata: expectedMetadata,
     });
-    expect(saveInput?.metadata).not.toHaveProperty("wechat_refund_response");
+    expect(result.request.metadata).toEqual(expectedMetadata);
+    const auditInput = auditLogService.recordBestEffort.mock.calls[0]?.[0];
+    expect(auditInput?.metadata).toEqual({
+      before_status: "approved",
+      after_status: "refunding",
+      order_id: "order-1",
+      order_no: "TC202607020001",
+      out_refund_no: "TRR202607100800000001",
+      wechat_refund_id: "5030000000202607150000000001",
+      wechat_refund_status: "PROCESSING",
+      wechat_request_id: "wechat-refund-request-id",
+      refund_amount_fen: 10000,
+    });
+    expect(JSON.stringify({ saveInput, auditInput }))
+      .not.toContain("old-untrusted-authorization");
     expect(result.wechat_refund).toEqual({
       outRefundNo: "TRR202607100800000001",
       wechatRefundId: "5030000000202607150000000001",

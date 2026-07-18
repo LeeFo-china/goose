@@ -1,5 +1,10 @@
+import { mock } from "bun:test";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
-import type { PlatformRechargeRefundRequestRecord } from "@/repositories/platform-billing-recharge-refunds";
+import type { PlatformAuditLogCreateInput } from "@/repositories/platform-audit-logs";
+import {
+  platformBillingRechargeRefundRepository,
+  type PlatformRechargeRefundRequestRecord,
+} from "@/repositories/platform-billing-recharge-refunds";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { AuthContext } from "@/services/authorization";
 
@@ -63,17 +68,10 @@ export const refundingRequest = {
   ...approvedRequest,
   status: "refunding",
   out_refund_no: "TRR202607100800000001",
-} satisfies PlatformRechargeRefundRequestRecord;
-
-export const requestWithWechatResult = {
-  ...refundingRequest,
-  wechat_refund_id: "5030000000202607150000000001",
-  refund_amount_fen: 10000,
   metadata: {
+    correlation_id: "refund-correlation-1",
     wechat_refund_response: {
-      out_refund_no: "TRR202607100800000001",
-      refund_id: "5030000000202607150000000001",
-      status: "PROCESSING",
+      authorization: "old-untrusted-authorization",
     },
   },
 } satisfies PlatformRechargeRefundRequestRecord;
@@ -141,3 +139,174 @@ export const authContext = {
     { code: "platform.billing.recharge_refund.review", scope: "all" },
   ],
 } satisfies AuthContext;
+
+export const events: string[] = [];
+
+export const refundPayload = {
+  out_refund_no: "TRR202607100800000001",
+  refund_id: "5030000000202607150000000001",
+  transaction_id: "4200000001",
+  out_trade_no: "TC202607020001",
+  status: "PROCESSING",
+  amount: { refund: 10000, total: 10000, currency: "CNY" },
+};
+
+export function createRefundPayload(
+  overrides: Partial<typeof refundPayload> = {},
+) {
+  return { ...refundPayload, ...overrides };
+}
+
+export function createRefundRequestResult(
+  overrides: Partial<typeof refundPayload> = {},
+  requestId = "wechat-refund-request-id",
+) {
+  const raw = createRefundPayload(overrides);
+  return {
+    out_refund_no: raw.out_refund_no,
+    refund_id: raw.refund_id,
+    status: raw.status,
+    requestId,
+    raw,
+  };
+}
+
+export const repository = {
+  findRequestById: mock(
+    async (): Promise<PlatformRechargeRefundRequestRecord | null> =>
+      approvedRequest,
+  ),
+  markRequestRefunding: mock(
+    async (): Promise<PlatformRechargeRefundRequestRecord | null> => {
+      events.push("mark-request-refunding");
+      return refundingRequest;
+    },
+  ),
+  markOrderRefundStatus: mock(async (input: {
+    refundStatus: string;
+  }): Promise<TenantCreditOrderRecord> => {
+    events.push(`mark-order-${input.refundStatus}`);
+    return { ...order, refund_status: "refunding" };
+  }),
+  saveWechatRefundResult: mock(
+    async (
+      input: Parameters<
+        typeof platformBillingRechargeRefundRepository.saveWechatRefundResult
+      >[0],
+    ): Promise<PlatformRechargeRefundRequestRecord> => {
+      events.push("save-wechat-result");
+      return {
+        ...refundingRequest,
+        out_refund_no: input.outRefundNo,
+        wechat_refund_id: input.wechatRefundId,
+        refund_amount_fen: input.refundAmountFen,
+        metadata: input.metadata,
+      };
+    },
+  ),
+};
+
+export const paymentConfigRepository = {
+  findWechatPayConfig: mock(async () => paymentConfig),
+};
+
+export const secretBundleService = {
+  load: mock(async () => ({
+    privateKeyPem: "private-key",
+    apiV3Key: "api-v3-key",
+    wechatPayPublicKeyId: null,
+    wechatPayPublicKeyPem: null,
+    baseUrl: "https://api.mch.weixin.qq.com",
+  })),
+};
+
+export const wechatPayGateway = {
+  queryTransactionByOutTradeNo: mock(async () => {
+    events.push("wechat-query-transaction");
+    return {
+      out_trade_no: "TC202607020001",
+      transaction_id: "4200000001",
+      trade_state: "SUCCESS",
+      amount: { total: 10000, currency: "CNY" },
+    };
+  }),
+  requestRefund: mock(async (_input?: unknown) => {
+    events.push("wechat-refund");
+    return createRefundRequestResult();
+  }),
+  queryRefundByOutRefundNo: mock(async () => {
+    events.push("wechat-query-refund");
+    return {
+      ...createRefundPayload(),
+      requestId: "wechat-refund-query-request-id",
+    };
+  }),
+};
+
+export const auditLogService = {
+  recordBestEffort: mock(async (_input: PlatformAuditLogCreateInput) => null),
+};
+
+export function resetExecutionMocks() {
+  events.length = 0;
+  for (const fn of [
+    ...Object.values(repository),
+    ...Object.values(paymentConfigRepository),
+    ...Object.values(secretBundleService),
+    ...Object.values(wechatPayGateway),
+    ...Object.values(auditLogService),
+  ]) {
+    fn.mockClear();
+  }
+  repository.findRequestById.mockImplementation(async () => approvedRequest);
+  repository.markRequestRefunding.mockImplementation(async () => {
+    events.push("mark-request-refunding");
+    return refundingRequest;
+  });
+  repository.markOrderRefundStatus.mockImplementation(async (input: {
+    refundStatus: string;
+  }) => {
+    events.push(`mark-order-${input.refundStatus}`);
+    return { ...order, refund_status: "refunding" };
+  });
+  repository.saveWechatRefundResult.mockImplementation(async (input) => {
+    events.push("save-wechat-result");
+    return {
+      ...refundingRequest,
+      out_refund_no: input.outRefundNo,
+      wechat_refund_id: input.wechatRefundId,
+      refund_amount_fen: input.refundAmountFen,
+      metadata: input.metadata,
+    };
+  });
+  paymentConfigRepository.findWechatPayConfig.mockImplementation(
+    async () => paymentConfig,
+  );
+  secretBundleService.load.mockImplementation(async () => ({
+    privateKeyPem: "private-key",
+    apiV3Key: "api-v3-key",
+    wechatPayPublicKeyId: null,
+    wechatPayPublicKeyPem: null,
+    baseUrl: "https://api.mch.weixin.qq.com",
+  }));
+  wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
+    events.push("wechat-query-transaction");
+    return {
+      out_trade_no: "TC202607020001",
+      transaction_id: "4200000001",
+      trade_state: "SUCCESS",
+      amount: { total: 10000, currency: "CNY" },
+    };
+  });
+  wechatPayGateway.requestRefund.mockImplementation(async () => {
+    events.push("wechat-refund");
+    return createRefundRequestResult();
+  });
+  wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
+    events.push("wechat-query-refund");
+    return {
+      ...createRefundPayload(),
+      requestId: "wechat-refund-query-request-id",
+    };
+  });
+}

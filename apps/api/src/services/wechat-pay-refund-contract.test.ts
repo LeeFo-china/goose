@@ -185,6 +185,34 @@ describe("parseAndAssertWechatRefund", () => {
     ).toThrow(expect.objectContaining({ code: mismatchCode }));
   });
 
+  for (const field of ["refund", "total"] as const) {
+    for (
+      const value of [
+        0,
+        -1,
+        1.5,
+        "10000",
+        Number.MAX_SAFE_INTEGER + 1,
+      ] as const
+    ) {
+      test(`rejects invalid ${field} amount ${String(value)}`, () => {
+        const expectedField = field === "refund"
+          ? "refundAmountFen"
+          : "totalAmountFen";
+        const matchingExpected = typeof value === "number"
+          ? { ...expected, [expectedField]: value }
+          : expected;
+
+        expect(() =>
+          parseAndAssertWechatRefund(
+            withAmount({ ...response.amount, [field]: value }),
+            matchingExpected,
+          )
+        ).toThrow(expect.objectContaining({ code: mismatchCode }));
+      });
+    }
+  }
+
   test("rejects a missing amount currency", () => {
     expect(() =>
       parseAndAssertWechatRefund(
@@ -266,7 +294,7 @@ describe("parseAndAssertWechatRefund", () => {
 });
 
 describe("parseAndAssertWechatRefundCallback", () => {
-  const callbackResource = {
+  const callbackPayload = {
     mchid: "1112582521",
     out_refund_no: "TRR202607100800000001",
     refund_id: "5030000000202607150000000001",
@@ -279,7 +307,6 @@ describe("parseAndAssertWechatRefundCallback", () => {
       total: 10000,
       payer_refund: 10000,
       payer_total: 10000,
-      currency: "CNY",
     },
   };
   const directExpected = {
@@ -287,6 +314,7 @@ describe("parseAndAssertWechatRefundCallback", () => {
     merchantMode: "direct_merchant",
     merchantId: "1112582521",
   } satisfies WechatRefundCallbackExpectedBinding;
+  const callbackResource = callbackPayload;
 
   test("validates a direct-merchant callback using refund_status", () => {
     expect(
@@ -320,8 +348,13 @@ describe("parseAndAssertWechatRefundCallback", () => {
     subMerchantId: "1900000109",
   } satisfies WechatRefundCallbackExpectedBinding;
   const partnerResource = {
-    ...callbackResource,
-    mchid: undefined,
+    out_refund_no: callbackPayload.out_refund_no,
+    refund_id: callbackPayload.refund_id,
+    transaction_id: callbackPayload.transaction_id,
+    out_trade_no: callbackPayload.out_trade_no,
+    refund_status: callbackPayload.refund_status,
+    success_time: callbackPayload.success_time,
+    amount: callbackPayload.amount,
     sp_mchid: "1561816121",
     sub_mchid: "1900000109",
   };
@@ -346,6 +379,18 @@ describe("parseAndAssertWechatRefundCallback", () => {
       parseAndAssertWechatRefundCallback(
         { ...partnerResource, sub_mchid: "1900000110" },
         partnerExpected,
+      )
+    ).toThrow(expect.objectContaining({ code: mismatchCode }));
+  });
+
+  test("rejects an optional non-CNY callback currency", () => {
+    expect(() =>
+      parseAndAssertWechatRefundCallback(
+        {
+          ...callbackResource,
+          amount: { ...callbackResource.amount, currency: "USD" },
+        },
+        directExpected,
       )
     ).toThrow(expect.objectContaining({ code: mismatchCode }));
   });

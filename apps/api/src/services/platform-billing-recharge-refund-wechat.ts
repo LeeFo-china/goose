@@ -53,17 +53,23 @@ export function assertWechatTransactionMatches(input: {
   }
 }
 
-export function toWechatRefundResult(
-  refund: WechatPayRefundQueryResult | WechatPayRequestRefundResult,
+export function toWechatRequestedRefundPayload(
+  refund: WechatPayRequestRefundResult,
 ): WechatRefundApiPayload {
-  if (isRequestRefundResult(refund)) {
-    return { ...refund.raw, requestId: refund.requestId };
-  }
+  return { ...refund.raw, requestId: refund.requestId };
+}
 
-  const { requestId, ...payload } = refund;
+export function toWechatQueriedRefundPayload(
+  refund: WechatPayRefundQueryResult,
+): WechatRefundApiPayload {
   return {
-    ...payload,
-    requestId,
+    out_refund_no: refund.out_refund_no,
+    refund_id: refund.refund_id,
+    transaction_id: refund.transaction_id,
+    out_trade_no: refund.out_trade_no,
+    status: refund.status,
+    amount: refund.amount,
+    requestId: refund.requestId,
   };
 }
 
@@ -96,14 +102,6 @@ export function uncertainRefundStatusError(input: {
 
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function isRequestRefundResult(
-  refund: WechatPayRefundQueryResult | WechatPayRequestRefundResult,
-): refund is WechatPayRequestRefundResult {
-  return "raw" in refund && Boolean(
-    refund.raw && typeof refund.raw === "object" && !Array.isArray(refund.raw),
-  );
 }
 
 function numberField(value: unknown, key: string) {
