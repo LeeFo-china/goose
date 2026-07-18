@@ -29,18 +29,26 @@ describe("atomic recharge confirmation migration", () => {
       "CREATE OR REPLACE FUNCTION public.billing_confirm_wechat_recharge_and_recover",
     );
     expect(migration).toMatch(
-      /FROM public\.tenant_credit_orders[\s\S]*FROM public\.tenant_subscription_invoices[\s\S]*FOR UPDATE[\s\S]*FROM public\.tenant_billing_subscriptions[\s\S]*FOR UPDATE[\s\S]*billing_confirm_wechat_recharge\([\s\S]*billing_recover_subscription_after_recharge\(/,
+      /FROM public\.tenant_credit_orders[\s\S]*FROM public\.tenant_subscription_invoices[\s\S]*FOR UPDATE[\s\S]*FROM public\.tenant_billing_subscriptions[\s\S]*FOR UPDATE[\s\S]*billing_confirm_wechat_recharge_core\([\s\S]*billing_recover_subscription_after_recharge\(/,
     );
     expect(migration).toContain("SET search_path = public");
     expect(migration).toContain("BILLING_RECHARGE_ORDER_NOT_FOUND");
     expect(migration).toContain("'recovery', v_recovery");
   });
 
-  test("prevents direct service-role calls from bypassing the canonical lock order", () => {
+  test("keeps the legacy RPC compatible without exposing the non-atomic core", () => {
     expect(migration).toContain(
-      "REVOKE EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge(",
+      "RENAME TO billing_confirm_wechat_recharge_core",
     );
-    expect(migration).toContain("FROM service_role");
+    expect(migration).toContain(
+      "REVOKE ALL ON FUNCTION public.billing_confirm_wechat_recharge_core(",
+    );
+    expect(migration).toMatch(
+      /billing_confirm_wechat_recharge_core\([\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
+    );
+    expect(migration).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.billing_confirm_wechat_recharge\([\s\S]*billing_confirm_wechat_recharge_and_recover\(/,
+    );
   });
 
   test("uses the same deterministic recoverable invoice in prelock and recovery", () => {
