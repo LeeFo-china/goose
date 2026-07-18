@@ -37,6 +37,16 @@ const secretBundle = {
 } satisfies WechatPaySecretBundle;
 
 describe("queryWechatPayTransactionByOutTradeNo", () => {
+  test("normalizes query timeout to the supported 1 to 60 second range", async () => {
+    const { normalizeWechatPayQueryRequestTimeout } = await import(
+      "./wechat-pay-gateway-query-transaction"
+    );
+
+    expect(normalizeWechatPayQueryRequestTimeout(undefined)).toBe(10_000);
+    expect(normalizeWechatPayQueryRequestTimeout(999)).toBe(1_000);
+    expect(normalizeWechatPayQueryRequestTimeout(60_001)).toBe(60_000);
+  });
+
   test("queries and signs an encoded direct merchant transaction", async () => {
     const path = "/v3/pay/transactions/out-trade-no/WX%2F2026%3F07?mchid=1112582521";
     const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
@@ -106,7 +116,7 @@ describe("queryWechatPayTransactionByOutTradeNo", () => {
     })).rejects.toMatchObject({
       statusCode: 502,
       code: "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
-      details: { reason: "timeout", timeout_ms: 5 },
+      details: { reason: "timeout", timeout_ms: 1_000 },
     });
     expect(didAbort).toBe(true);
   });
