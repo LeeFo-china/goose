@@ -225,7 +225,8 @@ The user-authorized remote dev verification is complete:
   added; final dev state has zero pending orders and zero active claims;
 - the managed local port-3000 API job now runs this worktree, registered the list and continue-payment
   routes, and returned the expected `401 / TOKEN_MISSING` without credentials. The port-3010 Admin
-  service remains unchanged;
+  service remains unchanged. A separate local expiration-worker job is enabled at the default
+  10-second interval and completed an empty tick with all telemetry counters at zero;
 - no code was pushed or remotely deployed; the port-3000 switch is local and reversible.
 
 The machine still has no Docker CLI or local PostgreSQL. Therefore the Supabase CLI cannot regenerate
