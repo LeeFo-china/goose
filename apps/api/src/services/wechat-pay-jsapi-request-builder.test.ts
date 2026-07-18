@@ -67,11 +67,16 @@ const baseOrder = {
   updated_at: "2026-07-01T00:00:00.000Z",
 } satisfies WechatPayOrderRecord;
 
+const paymentExpiresAt = "2026-07-01T10:05:00+08:00";
+
 describe("buildWechatPayJsapiPrepayRequest", () => {
   test("builds direct merchant jsapi request", () => {
     const request = buildWechatPayJsapiPrepayRequest({
       config: baseConfig,
-      order: baseOrder,
+      order: {
+        ...baseOrder,
+        payment_expires_at: paymentExpiresAt,
+      },
       description: "项目收款",
     });
 
@@ -82,6 +87,7 @@ describe("buildWechatPayJsapiPrepayRequest", () => {
         mchid: "1112582521",
         description: "项目收款",
         out_trade_no: "WX202607010001",
+        time_expire: paymentExpiresAt,
         notify_url: "https://api.example.com/pay/wechat/callback",
         amount: {
           total: 1000050,
@@ -104,7 +110,10 @@ describe("buildWechatPayJsapiPrepayRequest", () => {
         app_id: "wx-service-app",
         sub_app_id: "wxbac3b1e168fd968a",
       },
-      order: baseOrder,
+      order: {
+        ...baseOrder,
+        payment_expires_at: paymentExpiresAt,
+      },
       description: "项目收款",
     });
 
@@ -117,6 +126,7 @@ describe("buildWechatPayJsapiPrepayRequest", () => {
         sub_mchid: "1900000002",
         description: "项目收款",
         out_trade_no: "WX202607010001",
+        time_expire: paymentExpiresAt,
         notify_url: "https://api.example.com/pay/wechat/callback",
         amount: {
           total: 1000050,
@@ -127,5 +137,15 @@ describe("buildWechatPayJsapiPrepayRequest", () => {
         },
       },
     });
+  });
+
+  test("keeps legacy orders without a payment expiration compatible", () => {
+    const request = buildWechatPayJsapiPrepayRequest({
+      config: baseConfig,
+      order: baseOrder,
+      description: "项目收款",
+    });
+
+    expect(request.body).not.toHaveProperty("time_expire");
   });
 });

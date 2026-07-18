@@ -1,5 +1,13 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  closeWechatPayTransactionByOutTradeNo,
+  type WechatPayCloseTransactionByOutTradeNoInput,
+} from "@/services/wechat-pay-gateway-close-transaction";
+import {
+  parseWechatPayJson,
+  stringField,
+} from "@/services/wechat-pay-gateway-response";
+import {
   buildWechatPayJsapiPrepayRequest,
   type WechatPayJsapiConfig,
   type WechatPayJsapiOrder,
@@ -25,12 +33,15 @@ export type WechatPayCreateJsapiPrepayInput = {
   description: string;
   secretBundle: WechatPaySecretBundle;
 };
-
 export type WechatPayCreateJsapiPrepayResult = {
   prepayId: string;
   paymentRequest: WechatPayMiniProgramPaymentRequest;
 };
-
+export type WechatPayCreateMiniProgramPaymentRequestInput = {
+  config: WechatPayJsapiConfig;
+  prepayId: string;
+  secretBundle: WechatPaySecretBundle;
+};
 export type WechatPayQueryTransactionByOutTradeNoInput = {
   config: WechatPayJsapiConfig;
   outTradeNo: string;
@@ -153,14 +164,43 @@ export class WechatPayGateway {
 
     return {
       prepayId,
-      paymentRequest: buildWechatPayMiniProgramPaymentRequest({
-        appId: input.config.sub_app_id || input.config.app_id || "",
+      paymentRequest: this.createMiniProgramPaymentRequest({
+        config: input.config,
         prepayId,
-        privateKeyPem: input.secretBundle.privateKeyPem,
-        nonce,
-        timestamp,
+        secretBundle: input.secretBundle,
       }),
     };
+  }
+
+  async closeTransactionByOutTradeNo(
+    input: WechatPayCloseTransactionByOutTradeNoInput,
+  ): Promise<void> {
+    await closeWechatPayTransactionByOutTradeNo({
+      ...input,
+      fetchImpl: this.fetchImpl,
+      nonce: this.createNonce(),
+      timestamp: this.createTimestamp(),
+    });
+  }
+
+  createMiniProgramPaymentRequest(
+    input: WechatPayCreateMiniProgramPaymentRequestInput,
+  ): WechatPayMiniProgramPaymentRequest {
+    const appId = input.config.sub_app_id || input.config.app_id;
+    if (!appId) {
+      throw Errors.business(
+        409,
+        "微信支付小程序 AppID 配置不完整",
+        "WECHAT_PAY_CONFIG_INCOMPLETE",
+      );
+    }
+    return buildWechatPayMiniProgramPaymentRequest({
+      appId,
+      prepayId: input.prepayId,
+      privateKeyPem: input.secretBundle.privateKeyPem,
+      nonce: this.createNonce(),
+      timestamp: this.createTimestamp(),
+    });
   }
 
   async queryTransactionByOutTradeNo(
@@ -334,22 +374,6 @@ export class WechatPayGateway {
   private createTimestamp() {
     return this.timestampFactory?.() ?? undefined;
   }
-}
-
-async function parseWechatPayJson(response: Response): Promise<Record<string, unknown>> {
-  try {
-    const payload = await response.json();
-    return payload && typeof payload === "object" && !Array.isArray(payload)
-      ? payload as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function stringField(record: Record<string, unknown>, key: string) {
-  const value = record[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function buildTransactionQueryUrlPath(
