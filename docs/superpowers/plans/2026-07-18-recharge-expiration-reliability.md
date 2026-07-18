@@ -16,6 +16,7 @@
 
 - `supabase/migrations/20260718121000_confirm_recharge_and_recover_atomically.sql`: service-role-only transactional confirmation wrapper.
 - `supabase/migrations/20260718122000_guard_pending_recharge_payment_config.sql`: database guards for critical config and secret changes.
+- `supabase/migrations/20260718122500_serialize_recharge_config_creation.sql`: serialize order creation with config/secret mutation using a guard-version CAS RPC and deletion triggers.
 - `supabase/migrations/20260718123000_extend_recharge_claim_exclusions.sql`: claim RPC with a bounded in-run exclusion list.
 - `apps/api/src/services/billing-recharge-atomic-confirmation-contract.test.ts`: SQL wrapper contract.
 - `apps/api/src/services/platform-payment-config-pending-orders-contract.test.ts`: SQL trigger contract.
@@ -37,6 +38,23 @@
 - `apps/api/src/services/platform-payment-configs.test.ts`: rotation-block and noncritical-change tests.
 - `apps/api/src/services/billing-recharge-expiration.ts`: per-order claim, renewal, deferred release, config cache, and release telemetry.
 - `apps/api/src/services/billing-recharge-expiration.test.ts`: multi-run and multi-worker state tests.
+
+## Final-review addendum
+
+The implemented design also requires these release blockers before database smoke:
+
+- canonical invoice -> subscription -> credit-account locking before atomic confirmation;
+- database-owned `clock_timestamp()` claim and renewal leases;
+- a second token-conditioned renewal immediately before WeChat close;
+- exact HTTP 204 acceptance for close and bounded prepay/query/close timeouts;
+- fresh response clocks and suppression of payment parameters after expiration;
+- conditional late-prepay persistence while the order is still pending and unexpired;
+- dependency-injected system-setting repository tests so an aggregate run cannot fall through to a configured remote client.
+
+The `1225` migration is part of the architecture, not an optional follow-up: config and secret
+triggers increment `recharge_guard_version`; the creation RPC locks the chosen config, compares the
+service-observed version, and inserts the pending order atomically. It also guards config and secret
+deletion while referenced by pending recharge orders.
 
 ---
 
