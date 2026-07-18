@@ -169,6 +169,7 @@ const confirmWechatRecharge = mock(async () => ({
   order: {},
   account: {},
   ledger: {},
+  recovery: { recovered: true },
   idempotent: false,
 }));
 const confirmWechatRechargeRefund = mock(async () => ({
@@ -182,7 +183,6 @@ const markWechatRechargeRefundFailed = mock(async () => ({
   request: refundRequest,
   order: creditOrder,
 }));
-const recoverAfterRecharge = mock(async () => ({ recovered: true }));
 const createPayment = mock(async (): Promise<PaymentRecord> => {
   throw new Error("project payment should not be created for credit refund");
 });
@@ -214,7 +214,6 @@ async function createService() {
     },
     paymentRepository: { create: createPayment },
     paymentBridge: { complete: completePaymentTask },
-    billingSubscriptionService: { recoverAfterRecharge },
   });
 }
 
@@ -235,7 +234,6 @@ describe("WechatPayCallbackService credit recharge refund callbacks", () => {
       confirmWechatRecharge,
       confirmWechatRechargeRefund,
       markWechatRechargeRefundFailed,
-      recoverAfterRecharge,
       createPayment,
       completePaymentTask,
     ]) {
@@ -291,7 +289,6 @@ describe("WechatPayCallbackService credit recharge refund callbacks", () => {
       notificationId: "refund-notification-1",
     });
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
     expect(createPayment).not.toHaveBeenCalled();
     expect(completePaymentTask).not.toHaveBeenCalled();
   });

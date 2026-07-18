@@ -139,6 +139,7 @@ const confirmWechatRecharge = mock(async () => ({
   order: { ...creditOrder, status: "paid" },
   account: { id: "account-1", available_credits: 3100 },
   ledger: { id: "ledger-1" },
+  recovery: { recovered: true },
   idempotent: false,
 }));
 const confirmWechatRechargeRefund = mock(async () => ({
@@ -151,9 +152,6 @@ const confirmWechatRechargeRefund = mock(async () => ({
 const markWechatRechargeRefundFailed = mock(async () => ({
   request: {} as TenantCreditRefundRequestRecord,
   order: creditOrder,
-}));
-const recoverAfterRecharge = mock(async () => ({
-  recovered: true,
 }));
 const createPayment = mock(async (): Promise<PaymentRecord> => {
   throw new Error("project payment should not be created for credit recharge");
@@ -186,7 +184,6 @@ async function createService() {
     },
     paymentRepository: { create: createPayment },
     paymentBridge: { complete: completePaymentTask },
-    billingSubscriptionService: { recoverAfterRecharge },
   });
 }
 
@@ -207,7 +204,6 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
       confirmWechatRecharge,
       confirmWechatRechargeRefund,
       markWechatRechargeRefundFailed,
-      recoverAfterRecharge,
       createPayment,
       completePaymentTask,
     ]) {
@@ -252,7 +248,7 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
         out_trade_no: "TC202607020001",
       },
     });
-    expect(recoverAfterRecharge).toHaveBeenCalledWith("tenant-1");
+    expect(confirmWechatRecharge).toHaveBeenCalledTimes(1);
     expect(markCreditNotificationProcessed).toHaveBeenCalledWith({
       notificationId: "credit-notification-1",
     });
@@ -279,7 +275,6 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
     expect(result).toEqual({ code: "SUCCESS", message: "成功" });
     expect(createCreditNotification).not.toHaveBeenCalled();
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
     expect(markCreditNotificationProcessed).not.toHaveBeenCalled();
   });
 
@@ -317,7 +312,6 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
       processed: false,
     }));
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
     expect(markCreditNotificationProcessed).toHaveBeenCalledWith({
       notificationId: "credit-notification-new",
     });
@@ -341,13 +335,12 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
 
     expect(result).toEqual({ code: "SUCCESS", message: "成功" });
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
     expect(markCreditNotificationProcessed).toHaveBeenCalledWith({
       notificationId: "credit-notification-1",
     });
   });
 
-  test("does not recover and marks notification failed when recharge confirmation fails", async () => {
+  test("marks the notification failed when atomic confirmation rejects", async () => {
     confirmWechatRecharge.mockImplementationOnce(async () => {
       throw new Error("confirm failed");
     });
@@ -362,7 +355,7 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
       },
     })).rejects.toThrow("confirm failed");
 
-    expect(recoverAfterRecharge).not.toHaveBeenCalled();
+    expect(confirmWechatRecharge).toHaveBeenCalledTimes(1);
     expect(markCreditNotificationFailed).toHaveBeenCalledWith({
       notificationId: "credit-notification-1",
       errorMessage: "confirm failed",
@@ -370,26 +363,4 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
     expect(markCreditNotificationProcessed).not.toHaveBeenCalled();
   });
 
-  test("marks notification failed when subscription recovery fails after confirmation", async () => {
-    recoverAfterRecharge.mockImplementationOnce(async () => {
-      throw new Error("recover failed");
-    });
-    const service = await createService();
-
-    await expect(service.handleCallback({
-      rawBody,
-      headers: {
-        "wechatpay-timestamp": "1782873600",
-        "wechatpay-nonce": "callback-nonce",
-        "wechatpay-signature": "signature",
-      },
-    })).rejects.toThrow("recover failed");
-
-    expect(confirmWechatRecharge).toHaveBeenCalledTimes(1);
-    expect(markCreditNotificationFailed).toHaveBeenCalledWith({
-      notificationId: "credit-notification-1",
-      errorMessage: "recover failed",
-    });
-    expect(markCreditNotificationProcessed).not.toHaveBeenCalled();
-  });
 });
