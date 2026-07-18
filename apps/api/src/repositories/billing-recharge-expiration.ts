@@ -12,13 +12,14 @@ type ExpirationTable = {
 type ExpirationClient = {
   from: (table: "tenant_credit_orders") => ExpirationTable;
   rpc: (
-    functionName: "billing_claim_expired_recharge_orders",
+    functionName:
+      | "billing_claim_expired_recharge_orders"
+      | "billing_renew_recharge_close_claim",
     args: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: unknown }>;
 };
 
 export type ClaimExpiredRechargeOrdersInput = {
-  now: Date;
   batchSize: number;
   leaseSeconds: number;
   excludedOrderIds: string[];
@@ -27,7 +28,6 @@ export type ClaimExpiredRechargeOrdersInput = {
 export type RenewRechargeOrderCloseClaimInput = {
   orderId: string;
   claimToken: string;
-  now: Date;
   leaseSeconds: number;
 };
 
@@ -49,7 +49,6 @@ export async function claimExpiredRechargeOrders(
   const { data, error } = await client().rpc(
     "billing_claim_expired_recharge_orders",
     {
-      p_now: input.now.toISOString(),
       p_limit: clampInteger(input.batchSize, 1, 100),
       p_lease_seconds: clampInteger(input.leaseSeconds, 10, 600),
       p_excluded_ids: input.excludedOrderIds.slice(0, 100),
@@ -64,17 +63,14 @@ export async function claimExpiredRechargeOrders(
 export async function renewRechargeOrderCloseClaim(
   input: RenewRechargeOrderCloseClaimInput,
 ): Promise<TenantCreditOrderRecord | null> {
-  const leaseSeconds = clampInteger(input.leaseSeconds, 10, 600);
-  const expiresAt = new Date(
-    input.now.getTime() + leaseSeconds * 1000,
-  ).toISOString();
-  const { data, error } = await table()
-    .update({ close_claim_expires_at: expiresAt })
-    .eq("id", input.orderId)
-    .eq("status", "pending")
-    .eq("close_claim_token", input.claimToken)
-    .select("*")
-    .maybeSingle();
+  const { data, error } = await client().rpc(
+    "billing_renew_recharge_close_claim",
+    {
+      p_order_id: input.orderId,
+      p_claim_token: input.claimToken,
+      p_lease_seconds: clampInteger(input.leaseSeconds, 10, 600),
+    },
+  );
   if (error) {
     throw Errors.dbError("续租积分充值关单领取失败", error);
   }

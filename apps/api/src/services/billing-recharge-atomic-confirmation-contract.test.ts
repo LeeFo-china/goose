@@ -24,16 +24,33 @@ const compensationSource = readFileSync(
 );
 
 describe("atomic recharge confirmation migration", () => {
-  test("confirms credits before recovering the confirmed order tenant subscription", () => {
+  test("locks recoverable invoice and subscription before credit confirmation", () => {
     expect(migration).toContain(
       "CREATE OR REPLACE FUNCTION public.billing_confirm_wechat_recharge_and_recover",
     );
     expect(migration).toMatch(
-      /billing_confirm_wechat_recharge\([\s\S]*billing_recover_subscription_after_recharge\(/,
+      /FROM public\.tenant_credit_orders[\s\S]*FROM public\.tenant_subscription_invoices[\s\S]*FOR UPDATE[\s\S]*FROM public\.tenant_billing_subscriptions[\s\S]*FOR UPDATE[\s\S]*billing_confirm_wechat_recharge\([\s\S]*billing_recover_subscription_after_recharge\(/,
     );
     expect(migration).toContain("SET search_path = public");
-    expect(migration).toContain("v_confirmation->'order'->>'tenant_id'");
+    expect(migration).toContain("BILLING_RECHARGE_ORDER_NOT_FOUND");
     expect(migration).toContain("'recovery', v_recovery");
+  });
+
+  test("prevents direct service-role calls from bypassing the canonical lock order", () => {
+    expect(migration).toContain(
+      "REVOKE EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge(",
+    );
+    expect(migration).toContain("FROM service_role");
+  });
+
+  test("uses the same deterministic recoverable invoice in prelock and recovery", () => {
+    expect(migration).toContain(
+      "CREATE OR REPLACE FUNCTION public.billing_recover_subscription_after_recharge",
+    );
+    expect(migration).toContain(
+      "ORDER BY invoices.due_at ASC, invoices.id ASC",
+    );
+    expect(migration).toContain("ORDER BY due_at ASC, id ASC");
   });
 
   test("exposes the wrapper only to service_role", () => {
