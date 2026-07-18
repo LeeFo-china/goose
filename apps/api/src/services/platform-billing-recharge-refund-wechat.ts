@@ -4,6 +4,7 @@ import type {
   WechatPayRequestRefundResult,
   WechatPayTransactionQueryResult,
 } from "@/services/wechat-pay-gateway";
+import type { WechatRefundApiPayload } from "@/services/wechat-pay-refund-contract";
 
 export function assertWechatTransactionMatches(input: {
   wechatTransaction: WechatPayTransactionQueryResult;
@@ -53,15 +54,16 @@ export function assertWechatTransactionMatches(input: {
 }
 
 export function toWechatRefundResult(
-  refund: WechatPayRefundQueryResult,
-  outRefundNo: string,
-): WechatPayRequestRefundResult {
+  refund: WechatPayRefundQueryResult | WechatPayRequestRefundResult,
+): WechatRefundApiPayload {
+  if (isRequestRefundResult(refund)) {
+    return { ...refund.raw, requestId: refund.requestId };
+  }
+
+  const { requestId, ...payload } = refund;
   return {
-    out_refund_no: optionalString(refund.out_refund_no) ?? outRefundNo,
-    refund_id: optionalString(refund.refund_id),
-    status: optionalString(refund.status) ?? "UNKNOWN",
-    requestId: refund.requestId,
-    raw: refund,
+    ...payload,
+    requestId,
   };
 }
 
@@ -94,6 +96,14 @@ export function uncertainRefundStatusError(input: {
 
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isRequestRefundResult(
+  refund: WechatPayRefundQueryResult | WechatPayRequestRefundResult,
+): refund is WechatPayRequestRefundResult {
+  return "raw" in refund && Boolean(
+    refund.raw && typeof refund.raw === "object" && !Array.isArray(refund.raw),
+  );
 }
 
 function numberField(value: unknown, key: string) {

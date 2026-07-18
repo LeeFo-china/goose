@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
-import type { PlatformRechargeRefundRequestRecord } from "@/repositories/platform-billing-recharge-refunds";
+import { platformBillingRechargeRefundRepository, type PlatformRechargeRefundRequestRecord } from "@/repositories/platform-billing-recharge-refunds";
 import {
   approvedRequest,
   authContext,
-  failedRequest,
   order,
   partnerPaymentConfig,
   paymentConfig,
@@ -15,9 +14,31 @@ import {
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const events: string[] = [];
-
+const refundPayload = {
+  out_refund_no: "TRR202607100800000001",
+  refund_id: "5030000000202607150000000001",
+  transaction_id: "4200000001",
+  out_trade_no: "TC202607020001",
+  status: "PROCESSING",
+  amount: { refund: 10000, total: 10000, currency: "CNY" },
+};
+function createRefundPayload(overrides: Partial<typeof refundPayload> = {}) {
+  return { ...refundPayload, ...overrides };
+}
+function createRefundRequestResult(
+  overrides: Partial<typeof refundPayload> = {},
+  requestId = "wechat-refund-request-id",
+) {
+  const raw = createRefundPayload(overrides);
+  return {
+    out_refund_no: raw.out_refund_no,
+    refund_id: raw.refund_id,
+    status: raw.status,
+    requestId,
+    raw,
+  };
+}
 const repository = {
   findRequestById: mock(
     async (): Promise<PlatformRechargeRefundRequestRecord | null> =>
@@ -36,23 +57,15 @@ const repository = {
     return { ...order, refund_status: "refunding" };
   }),
   saveWechatRefundResult: mock(
-    async (): Promise<PlatformRechargeRefundRequestRecord> => {
+    async (_input: Parameters<typeof platformBillingRechargeRefundRepository.saveWechatRefundResult>[0]): Promise<PlatformRechargeRefundRequestRecord> => {
       events.push("save-wechat-result");
       return requestWithWechatResult;
     },
   ),
-  markRequestFailed: mock(
-    async (): Promise<PlatformRechargeRefundRequestRecord | null> => {
-      events.push("mark-request-failed");
-      return failedRequest;
-    },
-  ),
 };
-
 const paymentConfigRepository = {
   findWechatPayConfig: mock(async () => paymentConfig),
 };
-
 const secretBundleService = {
   load: mock(async () => ({
     privateKeyPem: "private-key",
@@ -62,7 +75,6 @@ const secretBundleService = {
     baseUrl: "https://api.mch.weixin.qq.com",
   })),
 };
-
 const wechatPayGateway = {
   queryTransactionByOutTradeNo: mock(async () => {
     events.push("wechat-query-transaction");
@@ -75,32 +87,19 @@ const wechatPayGateway = {
   }),
   requestRefund: mock(async (_input?: unknown) => {
     events.push("wechat-refund");
-    return {
-      out_refund_no: "TRR202607100800000001",
-      refund_id: "5030000000202607150000000001",
-      status: "PROCESSING", requestId: "wechat-refund-request-id",
-      raw: {
-        out_refund_no: "TRR202607100800000001",
-        refund_id: "5030000000202607150000000001",
-        status: "PROCESSING",
-      },
-    };
+    return createRefundRequestResult();
   }),
   queryRefundByOutRefundNo: mock(async () => {
     events.push("wechat-query-refund");
     return {
-      out_refund_no: "TRR202607100800000001",
-      refund_id: "5030000000202607150000000001",
-      status: "PROCESSING", requestId: "wechat-refund-query-request-id",
-      amount: { refund: 10000, total: 10000, currency: "CNY" },
+      ...createRefundPayload(),
+      requestId: "wechat-refund-query-request-id",
     };
   }),
 };
-
 const auditLogService = {
   recordBestEffort: mock(async () => null),
 };
-
 async function createService() {
   const { PlatformBillingRechargeRefundExecutionService } = await import(
     "./platform-billing-recharge-refund-execution"
@@ -113,7 +112,11 @@ async function createService() {
     auditLogService,
   });
 }
-
+async function expectExecuteRejectsWithCode(code: string) {
+  const service = await createService();
+  await expect(service.execute(authContext, "refund-request-1"))
+    .rejects.toMatchObject({ code });
+}
 describe("PlatformBillingRechargeRefundExecutionService", () => {
   beforeEach(() => {
     events.length = 0;
@@ -141,10 +144,6 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       events.push("save-wechat-result");
       return requestWithWechatResult;
     });
-    repository.markRequestFailed.mockImplementation(async () => {
-      events.push("mark-request-failed");
-      return failedRequest;
-    });
     paymentConfigRepository.findWechatPayConfig.mockImplementation(
       async () => paymentConfig,
     );
@@ -166,33 +165,20 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
     });
     wechatPayGateway.requestRefund.mockImplementation(async () => {
       events.push("wechat-refund");
-      return {
-        out_refund_no: "TRR202607100800000001",
-        refund_id: "5030000000202607150000000001",
-        status: "PROCESSING", requestId: "wechat-refund-request-id",
-        raw: {
-          out_refund_no: "TRR202607100800000001",
-          refund_id: "5030000000202607150000000001",
-          status: "PROCESSING",
-        },
-      };
+      return createRefundRequestResult();
     });
     wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
       events.push("wechat-query-refund");
       return {
-        out_refund_no: "TRR202607100800000001",
-        refund_id: "5030000000202607150000000001",
-        status: "PROCESSING", requestId: "wechat-refund-query-request-id",
-        amount: { refund: 10000, total: 10000, currency: "CNY" },
+        ...createRefundPayload(),
+        requestId: "wechat-refund-query-request-id",
       };
     });
   });
 
   test("executes an approved refund request after marking request and order refunding", async () => {
     const service = await createService();
-
     const result = await service.execute(authContext, "refund-request-1");
-
     expect(wechatPayGateway.queryTransactionByOutTradeNo).toHaveBeenCalledWith({
       config: paymentConfig,
       outTradeNo: "TC202607020001",
@@ -234,7 +220,42 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       wechat_refund: { status: "PROCESSING" },
     });
   });
-
+  test("persists only validated refund metadata and returns a safe domain result", async () => {
+    const service = await createService();
+    const result = await service.execute(authContext, "refund-request-1");
+    const saveInput = repository.saveWechatRefundResult.mock.calls[0]?.[0];
+    expect(saveInput).toMatchObject({
+      outRefundNo: "TRR202607100800000001",
+      wechatRefundId: "5030000000202607150000000001",
+      refundAmountFen: 10000,
+      metadata: {
+        wechat_refund_status: "PROCESSING",
+        wechat_request_id: "wechat-refund-request-id",
+      },
+    });
+    expect(saveInput?.metadata).not.toHaveProperty("wechat_refund_response");
+    expect(result.wechat_refund).toEqual({
+      outRefundNo: "TRR202607100800000001",
+      wechatRefundId: "5030000000202607150000000001",
+      transactionId: "4200000001",
+      outTradeNo: "TC202607020001",
+      status: "PROCESSING",
+      refundAmountFen: 10000,
+      totalAmountFen: 10000,
+      currency: "CNY",
+      requestId: "wechat-refund-request-id",
+    });
+  });
+  test("rejects a mismatched refund response without persisting it", async () => {
+    wechatPayGateway.requestRefund.mockImplementation(async () => {
+      events.push("wechat-refund");
+      return createRefundRequestResult({ out_refund_no: "TRR-OTHER" });
+    });
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_WECHAT_REFUND_MISMATCH",
+    );
+    expect(repository.saveWechatRefundResult).not.toHaveBeenCalled();
+  });
   test("reuses existing out refund no when retrying a failed request", async () => {
     repository.findRequestById.mockImplementation(async () => ({
       ...approvedRequest,
@@ -243,45 +264,44 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       failure_message: "上次微信退款请求失败",
     } satisfies PlatformRechargeRefundRequestRecord));
     const service = await createService();
-
     await service.execute(authContext, "refund-request-1");
-
     expect(repository.markRequestRefunding).toHaveBeenCalledWith(
       expect.objectContaining({ outRefundNo: "TRR202607100800000001" }),
     );
   });
-
+  test("rejects a response whose refund id differs from the stored id", async () => {
+    repository.findRequestById.mockImplementation(async () => ({
+      ...approvedRequest,
+      status: "failed",
+      out_refund_no: "TRR202607100800000001",
+      wechat_refund_id: "5030000000202607150000009999",
+    } satisfies PlatformRechargeRefundRequestRecord));
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_WECHAT_REFUND_MISMATCH",
+    );
+    expect(repository.saveWechatRefundResult).not.toHaveBeenCalled();
+  });
   test("rejects execution when request is not approved or failed", async () => {
     repository.findRequestById.mockImplementation(async () => ({
       ...approvedRequest,
       status: "pending_review",
     } satisfies PlatformRechargeRefundRequestRecord));
-    const service = await createService();
-
-    await expect(
-      service.execute(authContext, "refund-request-1"),
-    ).rejects.toMatchObject({
-      code: "BILLING_RECHARGE_REFUND_EXECUTE_STATE_INVALID",
-    });
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_REFUND_EXECUTE_STATE_INVALID",
+    );
     expect(wechatPayGateway.requestRefund).not.toHaveBeenCalled();
   });
-
   test("rejects execution when order has no transaction id", async () => {
     repository.findRequestById.mockImplementation(async () => ({
       ...approvedRequest,
       order: { ...order, transaction_id: null },
     } satisfies PlatformRechargeRefundRequestRecord));
-    const service = await createService();
-
-    await expect(
-      service.execute(authContext, "refund-request-1"),
-    ).rejects.toMatchObject({
-      code: "BILLING_RECHARGE_REFUND_TRANSACTION_ID_REQUIRED",
-    });
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_REFUND_TRANSACTION_ID_REQUIRED",
+    );
     expect(repository.markRequestRefunding).not.toHaveBeenCalled();
     expect(wechatPayGateway.requestRefund).not.toHaveBeenCalled();
   });
-
   test("rejects execution before state changes when WeChat order is not paid", async () => {
     wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
       events.push("wechat-query-transaction");
@@ -292,17 +312,12 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         amount: { total: 10000, currency: "CNY" },
       };
     });
-    const service = await createService();
-
-    await expect(
-      service.execute(authContext, "refund-request-1"),
-    ).rejects.toMatchObject({
-      code: "BILLING_RECHARGE_WECHAT_TRANSACTION_NOT_SUCCESS",
-    });
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_WECHAT_TRANSACTION_NOT_SUCCESS",
+    );
     expect(repository.markRequestRefunding).not.toHaveBeenCalled();
     expect(events).toEqual(["wechat-query-transaction"]);
   });
-
   test("rejects execution before state changes when WeChat transaction id differs", async () => {
     wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
       events.push("wechat-query-transaction");
@@ -313,16 +328,11 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         amount: { total: 10000, currency: "CNY" },
       };
     });
-    const service = await createService();
-
-    await expect(
-      service.execute(authContext, "refund-request-1"),
-    ).rejects.toMatchObject({
-      code: "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
-    });
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
+    );
     expect(repository.markRequestRefunding).not.toHaveBeenCalled();
   });
-
   test("rejects execution before state changes when WeChat paid amount differs", async () => {
     wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
       events.push("wechat-query-transaction");
@@ -333,16 +343,11 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         amount: { total: 9900, currency: "CNY" },
       };
     });
-    const service = await createService();
-
-    await expect(
-      service.execute(authContext, "refund-request-1"),
-    ).rejects.toMatchObject({
-      code: "BILLING_RECHARGE_WECHAT_AMOUNT_MISMATCH",
-    });
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_WECHAT_AMOUNT_MISMATCH",
+    );
     expect(repository.markRequestRefunding).not.toHaveBeenCalled();
   });
-
   test("saves the queried refund when the refund request result is uncertain", async () => {
     wechatPayGateway.requestRefund.mockImplementation(async () => {
       events.push("wechat-refund");
@@ -352,15 +357,12 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       };
     });
     const service = await createService();
-
     const result = await service.execute(authContext, "refund-request-1");
-
     expect(wechatPayGateway.queryRefundByOutRefundNo).toHaveBeenCalledWith({
       config: paymentConfig,
       outRefundNo: "TRR202607100800000001",
       secretBundle: expect.objectContaining({ apiV3Key: "api-v3-key" }),
     });
-    expect(repository.markRequestFailed).not.toHaveBeenCalled();
     expect(repository.saveWechatRefundResult).toHaveBeenCalledWith(
       expect.objectContaining({
         outRefundNo: "TRR202607100800000001",
@@ -377,7 +379,23 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
     ]);
     expect(result.wechat_refund).toMatchObject({ status: "PROCESSING" });
   });
-
+  test("strictly checks a refund-query recovery result before persistence", async () => {
+    wechatPayGateway.requestRefund.mockImplementation(async () => {
+      events.push("wechat-refund");
+      throw { code: "WECHAT_PAY_REFUND_REQUEST_FAILED" };
+    });
+    wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
+      events.push("wechat-query-refund");
+      return {
+        ...createRefundPayload({ transaction_id: "4200000002" }),
+        requestId: "wechat-refund-query-request-id",
+      };
+    });
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_WECHAT_REFUND_MISMATCH",
+    );
+    expect(repository.saveWechatRefundResult).not.toHaveBeenCalled();
+  });
   test("keeps refunding when both refund request and status query are uncertain", async () => {
     wechatPayGateway.requestRefund.mockImplementation(async () => {
       events.push("wechat-refund");
@@ -394,14 +412,9 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         details: { code: "SYSTEM_ERROR" },
       };
     });
-    const service = await createService();
-
-    await expect(
-      service.execute(authContext, "refund-request-1"),
-    ).rejects.toMatchObject({
-      code: "BILLING_RECHARGE_REFUND_STATUS_UNKNOWN",
-    });
-    expect(repository.markRequestFailed).not.toHaveBeenCalled();
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_REFUND_STATUS_UNKNOWN",
+    );
     expect(repository.markOrderRefundStatus).toHaveBeenCalledTimes(1);
     expect(events).toEqual([
       "wechat-query-transaction",
@@ -411,7 +424,6 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       "wechat-query-refund",
     ]);
   });
-
   test("retries the same refund after the immediate query cannot find it", async () => {
     const refundInputs: unknown[] = [];
     let requestAttempts = 0;
@@ -428,12 +440,7 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
           message: "微信退款请求超时",
         };
       }
-      const raw = {
-        out_refund_no: "TRR202607100800000001",
-        refund_id: "5030000000202607150000000001",
-        status: "PROCESSING",
-      };
-      return { ...raw, requestId: "wechat-refund-request-id", raw };
+      return createRefundRequestResult();
     });
     wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
       events.push("wechat-query-refund");
@@ -444,9 +451,7 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       };
     });
     const service = await createService();
-
     const result = await service.execute(authContext, "refund-request-1");
-
     expect(wechatPayGateway.requestRefund).toHaveBeenCalledTimes(2);
     expect(wechatPayGateway.queryRefundByOutRefundNo).toHaveBeenCalledWith(
       expect.objectContaining({ config: partnerPaymentConfig }),
@@ -460,11 +465,9 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       refundAmountFen: 10000,
       totalAmountFen: 10000,
     });
-    expect(repository.markRequestFailed).not.toHaveBeenCalled();
     expect(repository.saveWechatRefundResult).toHaveBeenCalled();
     expect(result.wechat_refund).toMatchObject({ status: "PROCESSING" });
   });
-
   test("keeps refunding when the same-parameter retry is also uncertain", async () => {
     const refundInputs: unknown[] = [];
     wechatPayGateway.requestRefund.mockImplementation(async (input) => {
@@ -483,16 +486,11 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
         details: { code: "RESOURCE_NOT_EXISTS" },
       };
     });
-    const service = await createService();
-
-    await expect(
-      service.execute(authContext, "refund-request-1"),
-    ).rejects.toMatchObject({
-      code: "BILLING_RECHARGE_REFUND_STATUS_UNKNOWN",
-    });
+    await expectExecuteRejectsWithCode(
+      "BILLING_RECHARGE_REFUND_STATUS_UNKNOWN",
+    );
     expect(wechatPayGateway.requestRefund).toHaveBeenCalledTimes(2);
     expect(refundInputs[1]).toEqual(refundInputs[0]);
-    expect(repository.markRequestFailed).not.toHaveBeenCalled();
     expect(repository.markOrderRefundStatus).toHaveBeenCalledTimes(1);
   });
 });

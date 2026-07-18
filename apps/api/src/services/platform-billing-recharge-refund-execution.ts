@@ -17,10 +17,12 @@ import {
   toWechatRefundResult,
   uncertainRefundStatusError,
 } from "@/services/platform-billing-recharge-refund-wechat";
+import { wechatPayGateway } from "@/services/wechat-pay-gateway";
 import {
-  wechatPayGateway,
-  type WechatPayRequestRefundResult,
-} from "@/services/wechat-pay-gateway";
+  parseAndAssertWechatRefund,
+  type WechatRefundApiPayload,
+  type WechatRefundValidatedResult,
+} from "@/services/wechat-pay-refund-contract";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
 
 type RepositoryPort = Pick<
@@ -145,9 +147,11 @@ export class PlatformBillingRechargeRefundExecutionService {
       refundAmountFen,
       totalAmountFen,
     };
-    let wechatRefund: WechatPayRequestRefundResult;
+    let wechatRefundResponse: WechatRefundApiPayload;
     try {
-      wechatRefund = await this.wechatPayGateway.requestRefund(refundInput);
+      const requestedRefund =
+        await this.wechatPayGateway.requestRefund(refundInput);
+      wechatRefundResponse = toWechatRefundResult(requestedRefund);
     } catch (error) {
       try {
         const queriedRefund =
@@ -156,12 +160,13 @@ export class PlatformBillingRechargeRefundExecutionService {
             secretBundle,
             outRefundNo,
           });
-        wechatRefund = toWechatRefundResult(queriedRefund, outRefundNo);
+        wechatRefundResponse = toWechatRefundResult(queriedRefund);
       } catch (queryError) {
         if (getWechatErrorDetailCode(queryError) === "RESOURCE_NOT_EXISTS") {
           try {
-            wechatRefund =
+            const retriedRefund =
               await this.wechatPayGateway.requestRefund(refundInput);
+            wechatRefundResponse = toWechatRefundResult(retriedRefund);
           } catch (retryError) {
             throw uncertainRefundStatusError({
               outRefundNo,
@@ -179,15 +184,24 @@ export class PlatformBillingRechargeRefundExecutionService {
       }
     }
 
+    const wechatRefund = parseAndAssertWechatRefund(wechatRefundResponse, {
+      outRefundNo,
+      wechatRefundId: optionalString(current.wechat_refund_id),
+      transactionId,
+      outTradeNo,
+      refundAmountFen,
+      totalAmountFen,
+      currency: "CNY",
+    });
     const request = await this.repository.saveWechatRefundResult({
       id: requestId,
-      outRefundNo: wechatRefund.out_refund_no,
-      wechatRefundId: wechatRefund.refund_id,
-      refundAmountFen,
+      outRefundNo: wechatRefund.outRefundNo,
+      wechatRefundId: wechatRefund.wechatRefundId,
+      refundAmountFen: wechatRefund.refundAmountFen,
       metadata: {
-        ...metadataRecord(refundingRequest.metadata),
-        wechat_refund_response: wechatRefund.raw,
+        ...withoutWechatRefundResponse(refundingRequest.metadata),
         wechat_refund_status: wechatRefund.status,
+        wechat_request_id: wechatRefund.requestId,
         wechat_refund_executed_at: this.nowFactory().toISOString(),
       },
     });
@@ -197,7 +211,6 @@ export class PlatformBillingRechargeRefundExecutionService {
       before: current,
       after: request,
       wechatRefund,
-      refundAmountFen,
     });
 
     return {
@@ -332,8 +345,7 @@ export class PlatformBillingRechargeRefundExecutionService {
     authContext: AuthContext;
     before: PlatformRechargeRefundRequestRecord;
     after: PlatformRechargeRefundRequestRecord;
-    wechatRefund: WechatPayRequestRefundResult;
-    refundAmountFen: number;
+    wechatRefund: WechatRefundValidatedResult;
   }) {
     return this.auditLogService.recordBestEffort({
       action: "platform_billing_recharge_refund_execute",
@@ -349,10 +361,11 @@ export class PlatformBillingRechargeRefundExecutionService {
         after_status: input.after.status,
         order_id: input.after.order_id,
         order_no: input.after.order?.order_no ?? null,
-        out_refund_no: input.wechatRefund.out_refund_no,
-        wechat_refund_id: input.wechatRefund.refund_id,
+        out_refund_no: input.wechatRefund.outRefundNo,
+        wechat_refund_id: input.wechatRefund.wechatRefundId,
         wechat_refund_status: input.wechatRefund.status,
-        refund_amount_fen: input.refundAmountFen,
+        wechat_request_id: input.wechatRefund.requestId,
+        refund_amount_fen: input.wechatRefund.refundAmountFen,
       },
     });
   }
@@ -372,6 +385,14 @@ function metadataRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function withoutWechatRefundResponse(value: unknown) {
+  return Object.fromEntries(
+    Object.entries(metadataRecord(value)).filter(
+      ([key]) => key !== "wechat_refund_response",
+    ),
+  );
 }
 
 function requestNotFoundError() {
