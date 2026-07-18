@@ -10,9 +10,10 @@ import {
   buildWechatPayRefundRequestBody,
   buildWechatPayTransactionQueryUrlPath,
 } from "@/services/wechat-pay-gateway-request-builders";
-import {
-  type WechatPayQueryTransactionByOutTradeNoInput,
-  type WechatPayTransactionQueryResult,
+import { normalizeWechatPayPrepayRequestTimeout } from "@/services/wechat-pay-gateway-create-prepay";
+import type {
+  WechatPayQueryTransactionByOutTradeNoInput,
+  WechatPayTransactionQueryResult,
 } from "@/services/wechat-pay-gateway-query-transaction";
 import { stringField } from "@/services/wechat-pay-gateway-response";
 import {
@@ -35,6 +36,7 @@ type WechatPayGatewayDependencies = {
   requestTimeoutMs?: number;
   nowSecondsFactory?: () => number;
   closeRequestTimeoutMs?: number;
+  prepayRequestTimeoutMs?: number;
   queryRequestTimeoutMs?: number;
 };
 type WechatPayOperation = "jsapi_prepay" | "transaction_query" | "refund_request" | "refund_query";
@@ -98,6 +100,7 @@ export class WechatPayGateway {
   private readonly requestTimeoutMs: number;
   private readonly nowSecondsFactory: () => number;
   private readonly closeRequestTimeoutMs?: number;
+  private readonly prepayRequestTimeoutMs?: number;
   private readonly queryRequestTimeoutMs?: number;
 
   constructor(dependencies: WechatPayGatewayDependencies = {}) {
@@ -109,6 +112,7 @@ export class WechatPayGateway {
     this.nowSecondsFactory = dependencies.nowSecondsFactory ??
       (() => Math.floor(Date.now() / 1_000));
     this.closeRequestTimeoutMs = dependencies.closeRequestTimeoutMs;
+    this.prepayRequestTimeoutMs = dependencies.prepayRequestTimeoutMs;
     this.queryRequestTimeoutMs = dependencies.queryRequestTimeoutMs;
   }
 
@@ -149,6 +153,7 @@ export class WechatPayGateway {
         body,
       },
       secretBundle: input.secretBundle,
+      timeoutMs: normalizeWechatPayPrepayRequestTimeout(this.prepayRequestTimeoutMs),
     });
     const { payload } = result;
     const prepayId = stringField(payload, "prepay_id");
@@ -329,10 +334,10 @@ export class WechatPayGateway {
     timeoutMs?: number;
   }) {
     const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
+    const timeoutMs = normalizeWechatPayPrepayRequestTimeout(
       input.timeoutMs ?? this.requestTimeoutMs,
     );
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let requestId: string | null = null;
     try {
       const response = await this.fetchImpl(input.url, {
@@ -361,7 +366,7 @@ export class WechatPayGateway {
           504,
           "微信支付接口请求超时",
           "WECHAT_PAY_TRANSPORT_TIMEOUT",
-          details,
+          { ...details, reason: "timeout", timeout_ms: timeoutMs },
         );
       }
       if (error instanceof AppError) {
@@ -374,7 +379,7 @@ export class WechatPayGateway {
         502,
         "微信支付接口请求失败",
         "WECHAT_PAY_TRANSPORT_FAILED",
-        details,
+        { ...details, reason: "network_error" },
       );
     } finally {
       clearTimeout(timeout);
@@ -389,6 +394,8 @@ export class WechatPayGateway {
     return this.timestampFactory?.() ?? undefined;
   }
 }
+
+export { normalizeWechatPayPrepayRequestTimeout };
 
 function requireSerialNo(config: WechatPayJsapiConfig) {
   const serialNo = config.serial_no?.trim();

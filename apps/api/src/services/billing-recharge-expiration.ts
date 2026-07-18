@@ -47,6 +47,14 @@ export type BillingRechargeExpirationTelemetry = {
   retried: number;
   failed: number;
   release_failed: number;
+  release_failures?: BillingRechargeExpirationReleaseFailure[];
+};
+
+export type BillingRechargeExpirationReleaseFailure = {
+  order_id: string;
+  diagnostic: string | null;
+  error_code: "BILLING_RECHARGE_EXPIRE_RELEASE_FAILED";
+  error_message: "释放充值过期订单租约失败";
 };
 
 export type BillingRechargeExpirationServiceDependencies = {
@@ -124,7 +132,6 @@ export class BillingRechargeExpirationService {
     try {
       for (let index = 0; index < limit; index += 1) {
         const orders = await this.repository.claimExpiredOrders({
-          now: this.nowFactory(),
           batchSize: 1,
           leaseSeconds: this.leaseSeconds,
           excludedOrderIds: [...seenOrderIds],
@@ -178,13 +185,11 @@ export class BillingRechargeExpirationService {
       return;
     }
 
-    const renewNow = this.nowFactory();
     let renewed: TenantCreditOrderRecord | null;
     try {
       renewed = await this.repository.renewCloseClaim({
         orderId: input.order.id,
         claimToken,
-        now: renewNow,
         leaseSeconds: this.leaseSeconds,
       });
     } catch {
@@ -241,15 +246,29 @@ export class BillingRechargeExpirationService {
       return "retried";
     }
 
+    let renewed: TenantCreditOrderRecord | null;
+    try {
+      renewed = await this.repository.renewCloseClaim({
+        orderId: input.order.id,
+        claimToken: input.claimToken,
+        leaseSeconds: this.leaseSeconds,
+      });
+    } catch {
+      this.defer(input, DIAGNOSTIC.claimRenewFailed);
+      return "failed";
+    }
+    if (!renewed) return "retried";
+    const ownedInput = { ...input, order: renewed };
+
     try {
       await this.wechatPayGateway.closeTransactionByOutTradeNo({
-        config: input.context.config,
-        outTradeNo: input.outTradeNo,
-        secretBundle: input.context.secretBundle,
+        config: ownedInput.context.config,
+        outTradeNo: ownedInput.outTradeNo,
+        secretBundle: ownedInput.context.secretBundle,
       });
-      return this.markClosed(input);
+      return this.markClosed(ownedInput);
     } catch {
-      return this.reconcileAfterCloseFailure(input);
+      return this.reconcileAfterCloseFailure(ownedInput);
     }
   }
 
@@ -403,6 +422,13 @@ export class BillingRechargeExpirationService {
         });
       } catch {
         telemetry.release_failed += 1;
+        telemetry.release_failures ??= [];
+        telemetry.release_failures.push({
+          order_id: item.orderId,
+          diagnostic: item.diagnostic,
+          error_code: "BILLING_RECHARGE_EXPIRE_RELEASE_FAILED",
+          error_message: "释放充值过期订单租约失败",
+        });
       }
     }
   }

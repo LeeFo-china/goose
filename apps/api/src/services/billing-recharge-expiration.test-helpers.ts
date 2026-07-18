@@ -118,7 +118,6 @@ export async function createExpirationHarness(input: {
   );
   const calls: string[] = [];
   const claimExpiredOrders = mock(async (_input: {
-    now: Date;
     batchSize: number;
     leaseSeconds: number;
     excludedOrderIds: string[];
@@ -130,6 +129,7 @@ export async function createExpirationHarness(input: {
   const renewCloseClaim = mock(async (renewInput: {
     orderId: string;
     claimToken: string;
+    leaseSeconds: number;
   }) => {
     calls.push(`renew:${renewInput.orderId}:${renewInput.claimToken}`);
     return orders.find((order) =>

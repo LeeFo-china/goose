@@ -53,7 +53,7 @@ export async function closeWechatPayTransactionByOutTradeNo(
     authorization,
     body,
   });
-  if (response.ok) return;
+  if (response.status === 204) return;
 
   const payload = await parseWechatPayJson(response);
   throw Errors.business(
