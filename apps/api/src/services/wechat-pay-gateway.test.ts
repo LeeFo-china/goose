@@ -203,6 +203,46 @@ describe("WechatPayGateway", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  test("queries direct merchant refund by out refund no", async () => {
+    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe(
+        "https://api.mch.weixin.qq.com/v3/refund/domestic/refunds/TRR202607100800000001",
+      );
+      expect(init?.method).toBe("GET");
+      expect(String((init?.headers as Record<string, string>).Authorization))
+        .toContain('mchid="1112582521"');
+      return new Response(JSON.stringify({
+        out_refund_no: "TRR202607100800000001",
+        refund_id: "5030000000202607150000000001",
+        status: "PROCESSING",
+        amount: { refund: 10000, total: 10000, currency: "CNY" },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    const result = await gateway.queryRefundByOutRefundNo({
+      config: directConfig,
+      outRefundNo: "TRR202607100800000001",
+      secretBundle: {
+        privateKeyPem: privateKey,
+        apiV3Key: "api-v3-key",
+        wechatPayPublicKeyId: null,
+        wechatPayPublicKeyPem: null,
+        baseUrl: "https://api.mch.weixin.qq.com",
+      },
+    });
+
+    expect(result).toMatchObject({
+      out_refund_no: "TRR202607100800000001",
+      refund_id: "5030000000202607150000000001",
+      status: "PROCESSING",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   test("requests direct merchant refund by transaction id", async () => {
     const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("https://api.mch.weixin.qq.com/v3/refund/domestic/refunds");
@@ -264,5 +304,44 @@ describe("WechatPayGateway", () => {
       },
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test("limits refund reason to 80 UTF-8 bytes without splitting characters", async () => {
+    const longReason = "客户误充值，需要申请退款。".repeat(10);
+    let sentReason = "";
+    const fetchImpl = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { reason?: unknown };
+      sentReason = typeof body.reason === "string" ? body.reason : "";
+      return new Response(JSON.stringify({
+        out_refund_no: "TRR202607100800000001",
+        refund_id: "5030000000202607150000000001",
+        status: "PROCESSING",
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    await gateway.requestRefund({
+      config: directConfig,
+      transactionId: "4200000000202607010000000001",
+      outRefundNo: "TRR202607100800000001",
+      reason: longReason,
+      refundAmountFen: 10000,
+      totalAmountFen: 10000,
+      secretBundle: {
+        privateKeyPem: privateKey,
+        apiV3Key: "api-v3-key",
+        wechatPayPublicKeyId: null,
+        wechatPayPublicKeyPem: null,
+        baseUrl: "https://api.mch.weixin.qq.com",
+      },
+    });
+
+    expect(new TextEncoder().encode(sentReason).byteLength).toBeLessThanOrEqual(80);
+    expect(sentReason.length).toBeGreaterThan(0);
+    expect(longReason.startsWith(sentReason)).toBe(true);
+    expect(sentReason).not.toContain("�");
   });
 });

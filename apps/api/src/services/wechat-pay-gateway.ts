@@ -45,6 +45,19 @@ export type WechatPayTransactionQueryResult = Record<string, unknown> & {
   amount?: Record<string, unknown>;
 };
 
+export type WechatPayQueryRefundByOutRefundNoInput = {
+  config: WechatPayJsapiConfig;
+  outRefundNo: string;
+  secretBundle: WechatPaySecretBundle;
+};
+
+export type WechatPayRefundQueryResult = Record<string, unknown> & {
+  out_refund_no?: string;
+  refund_id?: string;
+  status?: string;
+  amount?: Record<string, unknown>;
+};
+
 export type WechatPayRequestRefundInput = {
   config: WechatPayJsapiConfig;
   transactionId: string;
@@ -262,6 +275,58 @@ export class WechatPayGateway {
     };
   }
 
+  async queryRefundByOutRefundNo(
+    input: WechatPayQueryRefundByOutRefundNoInput,
+  ): Promise<WechatPayRefundQueryResult> {
+    const serialNo = input.config.serial_no?.trim();
+    if (!serialNo) {
+      throw Errors.business(
+        409,
+        "微信支付证书序列号未配置",
+        "WECHAT_PAY_SERIAL_NO_REQUIRED",
+      );
+    }
+
+    const urlPath = buildRefundQueryUrlPath(input.config, input.outRefundNo);
+    const nonce = this.createNonce();
+    const timestamp = this.createTimestamp();
+    const authorization = buildWechatPayAuthorization({
+      method: "GET",
+      urlPath,
+      body: "",
+      merchantId: input.config.merchant_id || "",
+      serialNo,
+      privateKeyPem: input.secretBundle.privateKeyPem,
+      nonce,
+      timestamp,
+    });
+    const response = await this.fetchImpl(
+      `${input.secretBundle.baseUrl}${urlPath}`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: authorization,
+        },
+      },
+    );
+    const payload = await parseWechatPayJson(response);
+    if (!response.ok) {
+      throw Errors.business(
+        502,
+        "微信支付查询退款失败",
+        "WECHAT_PAY_REFUND_QUERY_FAILED",
+        {
+          status: response.status,
+          code: stringField(payload, "code"),
+          message: stringField(payload, "message"),
+        },
+      );
+    }
+
+    return payload as WechatPayRefundQueryResult;
+  }
+
   private createNonce() {
     return this.nonceFactory?.() ?? undefined;
   }
@@ -339,7 +404,7 @@ function buildRefundRequestBody(input: WechatPayRequestRefundInput) {
       sub_mchid: input.config.sub_merchant_id,
       transaction_id: input.transactionId,
       out_refund_no: input.outRefundNo,
-      reason: input.reason,
+      reason: normalizeRefundReason(input.reason),
       amount: buildRefundAmount(input),
     });
   }
@@ -347,9 +412,46 @@ function buildRefundRequestBody(input: WechatPayRequestRefundInput) {
   return withRefundNotifyUrl(input.config, {
     transaction_id: input.transactionId,
     out_refund_no: input.outRefundNo,
-    reason: input.reason,
+    reason: normalizeRefundReason(input.reason),
     amount: buildRefundAmount(input),
   });
+}
+
+function buildRefundQueryUrlPath(
+  config: WechatPayJsapiConfig,
+  outRefundNo: string,
+) {
+  if (config.merchant_mode === "service_provider_sub_merchant") {
+    throw Errors.business(
+      409,
+      "当前暂不支持查询服务商子商户退款",
+      "WECHAT_PAY_REFUND_QUERY_MODE_UNSUPPORTED",
+    );
+  }
+  if (!config.merchant_id) {
+    throw Errors.business(
+      409,
+      "微信支付商户号未配置",
+      "WECHAT_PAY_CONFIG_INCOMPLETE",
+    );
+  }
+  return `/v3/refund/domestic/refunds/${encodeURIComponent(outRefundNo)}`;
+}
+
+function normalizeRefundReason(reason: string) {
+  const normalized = reason.trim();
+  const encoder = new TextEncoder();
+  let byteLength = 0;
+  let result = "";
+
+  for (const character of normalized) {
+    const characterByteLength = encoder.encode(character).byteLength;
+    if (byteLength + characterByteLength > 80) break;
+    result += character;
+    byteLength += characterByteLength;
+  }
+
+  return result;
 }
 
 function withRefundNotifyUrl(
