@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   createExpirationHarness,
+  defaultPaymentConfig,
+  defaultSecretBundle,
   makeOrder,
   makePaymentConfig,
   successTransaction,
@@ -74,31 +76,107 @@ describe("BillingRechargeExpirationService lease reliability", () => {
     expect(result.failed).toBe(1);
   });
 
-  test("only the worker whose token renews may query and close", async () => {
-    const stale = makeOrder(1, { close_claim_token: "claim-stale" });
-    const owner = makeOrder(1, { close_claim_token: "claim-owner" });
-    const staleWorker = await createExpirationHarness({ orders: [stale] });
-    const ownerWorker = await createExpirationHarness({ orders: [owner] });
-    staleWorker.repository.renewCloseClaim.mockImplementationOnce(async () => null);
-    ownerWorker.queryTransaction.mockImplementationOnce(async () => ({
-      trade_state: "NOTPAY",
-    }));
+  test("two workers share one lease and only the renewed owner acts remotely", async () => {
+    let currentToken: string | null = null;
+    let status = "pending";
+    let claimSequence = 0;
+    let resolveClaims: (() => void) | null = null;
+    const bothClaimed = new Promise<void>((resolve) => {
+      resolveClaims = resolve;
+    });
+    const tokenByWorker = new Map<string, string>();
+    const queryWorkers: string[] = [];
+    const closeWorkers: string[] = [];
+    const markWorkers: string[] = [];
+    const markTokens: string[] = [];
 
-    await Promise.all([
-      staleWorker.service.runExpiredOrderChecks({ batchSize: 1 }),
-      ownerWorker.service.runExpiredOrderChecks({ batchSize: 1 }),
-    ]);
-
-    expect(staleWorker.wechatPayGateway.queryTransactionByOutTradeNo).not
-      .toHaveBeenCalled();
-    expect(staleWorker.repository.markOrderClosed).not.toHaveBeenCalled();
-    expect(ownerWorker.wechatPayGateway.queryTransactionByOutTradeNo)
-      .toHaveBeenCalledTimes(1);
-    expect(ownerWorker.wechatPayGateway.closeTransactionByOutTradeNo)
-      .toHaveBeenCalledTimes(1);
-    expect(ownerWorker.repository.markOrderClosed).toHaveBeenCalledWith(
-      expect.objectContaining({ claimToken: "claim-owner" }),
+    const claimForWorker = async (workerId: string) => {
+      claimSequence += 1;
+      const claimToken = `claim-${claimSequence}`;
+      currentToken = claimToken;
+      tokenByWorker.set(workerId, claimToken);
+      if (claimSequence === 2) resolveClaims?.();
+      await bothClaimed;
+      return [makeOrder(1, { close_claim_token: claimToken })];
+    };
+    const renewCloseClaim = mock(async (input: {
+      claimToken: string;
+    }) => {
+      if (status !== "pending" || input.claimToken !== currentToken) return null;
+      return makeOrder(1, { close_claim_token: input.claimToken });
+    });
+    const markOrderClosed = mock(async (input: {
+      claimToken: string;
+      workerId?: string;
+    }) => {
+      if (status !== "pending" || input.claimToken !== currentToken) return null;
+      status = "closed";
+      markTokens.push(input.claimToken);
+      if (input.workerId) markWorkers.push(input.workerId);
+      return makeOrder(1, { status: "closed", close_claim_token: null });
+    });
+    const { BillingRechargeExpirationService } = await import(
+      "./billing-recharge-expiration"
     );
+    const createWorker = (workerId: string) => {
+      const repository = {
+        claimExpiredOrders: mock(async () => claimForWorker(workerId)),
+        renewCloseClaim,
+        markOrderClosed: mock(async (input: {
+          orderId: string;
+          claimToken: string;
+          closedAt: Date;
+        }) => markOrderClosed({ ...input, workerId })),
+        releaseCloseClaim: mock(async () => null),
+      };
+      return new BillingRechargeExpirationService({
+        repository,
+        paymentConfigRepository: {
+          findWechatPayConfigById: mock(async () => defaultPaymentConfig),
+        },
+        secretBundleService: { load: mock(async () => defaultSecretBundle) },
+        wechatPayGateway: {
+          queryTransactionByOutTradeNo: mock(async () => {
+            queryWorkers.push(workerId);
+            return { trade_state: "NOTPAY" };
+          }),
+          closeTransactionByOutTradeNo: mock(async () => {
+            closeWorkers.push(workerId);
+          }),
+        },
+        paymentConfirmation: { confirm: mock(async () => ({})) },
+      });
+    };
+    const workers = [
+      { id: "worker-a", service: createWorker("worker-a") },
+      { id: "worker-b", service: createWorker("worker-b") },
+    ];
+
+    const results = await Promise.all(workers.map(({ service }) =>
+      service.runExpiredOrderChecks({ batchSize: 1 })
+    ));
+
+    const winnerIndex = results.findIndex((result) => result.closed === 1);
+    const loserIndex = results.findIndex((result) => result.retried === 1);
+    expect(winnerIndex).toBeGreaterThanOrEqual(0);
+    expect(loserIndex).toBeGreaterThanOrEqual(0);
+    const winner = workers[winnerIndex];
+    const loser = workers[loserIndex];
+    const winnerToken = winner ? tokenByWorker.get(winner.id) : null;
+    if (!winner || !loser || !winnerToken || typeof currentToken !== "string") {
+      throw new Error("shared lease test did not select one winner and one loser");
+    }
+    const winnerId = winner.id;
+    const loserId = loser.id;
+    expect(queryWorkers).toEqual([winnerId]);
+    expect(closeWorkers).toEqual([winnerId]);
+    expect(queryWorkers).not.toContain(loserId);
+    expect(closeWorkers).not.toContain(loserId);
+    expect(markWorkers).toEqual([winnerId]);
+    expect(markTokens).toEqual([winnerToken]);
+    expect(markTokens).toEqual([currentToken]);
+    expect(renewCloseClaim).toHaveBeenCalledTimes(2);
+    expect(markOrderClosed).toHaveBeenCalledTimes(1);
   });
 
   test("retries atomic confirmation on a later run after release", async () => {

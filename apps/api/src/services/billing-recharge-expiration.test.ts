@@ -77,6 +77,12 @@ describe("BillingRechargeExpirationService state matrix", () => {
     ]);
     expect(harness.wechatPayGateway.closeTransactionByOutTradeNo).not
       .toHaveBeenCalled();
+    expect(harness.repository.markOrderClosed).toHaveBeenCalledWith({
+      orderId: "order-1",
+      claimToken: "claim-1",
+      closedAt: new Date("2026-07-18T03:00:02.000Z"),
+    });
+    expect(harness.nowFactory).toHaveBeenCalledTimes(3);
     expect(result.closed).toBe(1);
   });
 
@@ -95,6 +101,12 @@ describe("BillingRechargeExpirationService state matrix", () => {
       "close:order-1",
       "mark:order-1",
     ]);
+    expect(harness.repository.markOrderClosed).toHaveBeenCalledWith({
+      orderId: "order-1",
+      claimToken: "claim-1",
+      closedAt: new Date("2026-07-18T03:00:02.000Z"),
+    });
+    expect(harness.nowFactory).toHaveBeenCalledTimes(3);
     expect(result.closed).toBe(1);
   });
 
