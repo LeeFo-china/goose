@@ -48,21 +48,27 @@ billing_confirm_wechat_recharge_and_recover(...)
 The wrapper first obtains the order tenant and deterministically selects an invoice by
 `due_at, id`, then follows the same lock order as
 `billing_charge_subscription_invoice`: recoverable invoice, subscription, and finally the credit
-account inside confirmation. It then calls, in the same PostgreSQL transaction:
+account inside confirmation. The migration renames the original implementation to
+`billing_confirm_wechat_recharge_core(...)`, removes every application-role grant from that core,
+and then calls, in the same PostgreSQL transaction:
 
-1. `billing_confirm_wechat_recharge(...)`;
+1. `billing_confirm_wechat_recharge_core(...)`;
 2. `billing_recover_subscription_after_recharge(tenant_id)`.
 
 The tenant ID is read from the persisted order, not accepted independently from the application.
-The base confirmation RPC is no longer executable by `service_role`; application callers must use
-the wrapper so they cannot bypass the canonical lock order. The result keeps the existing
-confirmation keys and adds a `recovery` object.
+The non-atomic core is no longer executable by `service_role`. New application code uses the
+wrapper directly. For expand/contract compatibility with an API process that has not yet been
+deployed, the migration recreates the legacy `billing_confirm_wechat_recharge(...)` name as a thin
+`SECURITY DEFINER` entry that forwards to the same atomic wrapper. Therefore neither old nor new
+application callers can bypass the canonical lock order. The result keeps the existing confirmation
+keys and adds a `recovery` object.
 
 If recovery raises, PostgreSQL rolls back the credit confirmation, order status change, ledger entry, balance update, and claim-clearing trigger together. The order therefore remains retryable. The idempotent paid branch also invokes recovery, so older paid orders can safely retry the wrapper.
 
 `BillingRechargeRepository.confirmWechatRecharge` will call only the wrapper. `BillingRechargePaymentConfirmation` will stop calling `billingSubscriptionService.recoverAfterRecharge` separately. Callback and expiration paths continue sharing the same service.
 
-The new function is `SECURITY DEFINER`, fixes `search_path`, revokes `PUBLIC`, `anon`, and `authenticated`, and grants only `service_role`.
+Both application entry functions are `SECURITY DEFINER`, fix `search_path`, revoke `PUBLIC`, `anon`,
+and `authenticated`, and grant only `service_role`. The renamed core also revokes `service_role`.
 
 ## 2. Per-order lease ownership
 
@@ -192,7 +198,7 @@ focused RPC smoke
 ## 6. Local implementation status
 
 The reliability work is implemented on `feat/recharge-payment-expiration`. After final-review
-remediation, the 33 changed API test files passed 267 tests with zero failures and 925 expectations
+remediation, the 33 changed API test files passed 268 tests with zero failures and 930 expectations
 with every remote Supabase/database environment variable removed. API typecheck, build, file-size,
 and `git diff --check` also passed. A credential-free worker shutdown smoke had already passed.
 
@@ -306,21 +312,28 @@ ALTER TABLE public.platform_payment_configs
   DROP CONSTRAINT IF EXISTS platform_payment_configs_recharge_guard_version_check,
   DROP COLUMN IF EXISTS recharge_guard_version;
 
--- 3. Restore direct confirmation access only after the application no longer
---    calls the atomic wrapper, then remove that wrapper.
-GRANT EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge(
+-- 3. Remove the compatibility entry and wrapper, then restore the original
+--    implementation name and direct service-role access.
+DROP FUNCTION IF EXISTS public.billing_confirm_wechat_recharge(
   uuid, text, integer, timestamptz, uuid, jsonb
-) TO service_role;
+);
 DROP FUNCTION IF EXISTS public.billing_confirm_wechat_recharge_and_recover(
   uuid, text, integer, timestamptz, uuid, jsonb
 );
+ALTER FUNCTION public.billing_confirm_wechat_recharge_core(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) RENAME TO billing_confirm_wechat_recharge;
+GRANT EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) TO service_role;
 
 COMMIT;
 ```
 
 This rollback deliberately restores the reviewed risks: caller-clock leases, direct noncanonical
 confirmation locking, non-atomic subscription recovery, and mutable credentials during pending
-orders. It must be exercised against an isolated schema first. A full feature rollback would also
+orders. It retains only the harmless deterministic `due_at, id` invoice ordering. It must be
+exercised against an isolated schema first. A full feature rollback would also
 need a separate forward migration to remove the `20260718110000` expiry columns/trigger/index after
 all pending orders and workers are drained; that destructive data change is not part of the routine
 reliability rollback.

@@ -1,3 +1,11 @@
+ALTER FUNCTION public.billing_confirm_wechat_recharge(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) RENAME TO billing_confirm_wechat_recharge_core;
+
+REVOKE ALL ON FUNCTION public.billing_confirm_wechat_recharge_core(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION public.billing_recover_subscription_after_recharge(
   p_tenant_id uuid
 )
@@ -93,7 +101,7 @@ BEGIN
     END IF;
   END IF;
 
-  SELECT public.billing_confirm_wechat_recharge(
+  SELECT public.billing_confirm_wechat_recharge_core(
     p_order_id,
     p_transaction_id,
     p_paid_amount_fen,
@@ -110,10 +118,6 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge(
-  uuid, text, integer, timestamptz, uuid, jsonb
-) FROM service_role;
-
 REVOKE ALL ON FUNCTION public.billing_confirm_wechat_recharge_and_recover(
   uuid, text, integer, timestamptz, uuid, jsonb
 ) FROM PUBLIC;
@@ -127,6 +131,44 @@ GRANT EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge_and_recover(
   uuid, text, integer, timestamptz, uuid, jsonb
 ) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.billing_confirm_wechat_recharge(
+  p_order_id uuid,
+  p_transaction_id text,
+  p_paid_amount_fen integer,
+  p_paid_at timestamptz,
+  p_notification_id uuid,
+  p_metadata jsonb DEFAULT '{}'::jsonb
+)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT public.billing_confirm_wechat_recharge_and_recover(
+    p_order_id,
+    p_transaction_id,
+    p_paid_amount_fen,
+    p_paid_at,
+    p_notification_id,
+    p_metadata
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.billing_confirm_wechat_recharge(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.billing_confirm_wechat_recharge(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) TO service_role;
+
 COMMENT ON FUNCTION public.billing_confirm_wechat_recharge_and_recover(
   uuid, text, integer, timestamptz, uuid, jsonb
 ) IS '在同一事务中确认微信充值入账并恢复该订单租户的订阅。';
+
+COMMENT ON FUNCTION public.billing_confirm_wechat_recharge_core(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) IS '仅供原子充值包装函数调用的内部确认实现，不授予应用角色。';
+
+COMMENT ON FUNCTION public.billing_confirm_wechat_recharge(
+  uuid, text, integer, timestamptz, uuid, jsonb
+) IS '兼容旧调用方的原子充值确认入口，内部转发到确认并恢复包装函数。';
