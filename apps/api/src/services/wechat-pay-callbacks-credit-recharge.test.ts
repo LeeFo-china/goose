@@ -244,7 +244,7 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
       paidAt: "2026-07-02T08:05:00+08:00",
       notificationId: "credit-notification-1",
       metadata: {
-        callback_notify_id: "notify-credit-1",
+        confirmation_source: "wechat_callback",
         out_trade_no: "TC202607020001",
       },
     });
