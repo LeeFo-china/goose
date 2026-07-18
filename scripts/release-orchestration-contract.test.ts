@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -240,11 +241,132 @@ function extractWorkflowRunScript(step: string): string {
 function extractShellFunction(script: string, functionName: string): string {
   const lines = script.split(/\r?\n/);
   const start = lines.findIndex((line) => line.trim() === `${functionName}() {`);
-  const end = lines.findIndex((line, index) => index > start && line.trim() === "}");
+  const functionIndentation = lines[start]?.match(/^\s*/)?.[0] ?? "";
+  const end = lines.findIndex(
+    (line, index) => index > start && line === `${functionIndentation}}`,
+  );
 
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
   return lines.slice(start, end + 1).join("\n");
+}
+
+function runExplicitTransactionMigrationHelper(
+  migrationSql: string,
+  historyStatement: string,
+): { exitCode: number; stderr: string; stdout: string } {
+  const planAndApplyScript = extractWorkflowRunScript(
+    sliceWorkflowStep(migrateProductionWorkflow, "Plan and apply migrations"),
+  );
+  const scanner = extractShellFunction(
+    planAndApplyScript,
+    "scan_top_level_transaction_controls",
+  );
+  const helper = extractShellFunction(
+    planAndApplyScript,
+    "emit_explicit_transaction_migration",
+  );
+  const root = mkdtempSync(join(tmpdir(), "explicit-transaction-migration-"));
+  const migrationPath = join(root, "20260718120000_atomic_history.sql");
+  writeFileSync(migrationPath, migrationSql);
+
+  try {
+    const result = Bun.spawnSync(
+      [
+        "bash",
+        "-c",
+        `${scanner}\n${helper}\nemit_explicit_transaction_migration "\${MIGRATION_FILE}" "\${HISTORY_STATEMENT}"`,
+      ],
+      {
+        env: {
+          ...process.env,
+          HISTORY_STATEMENT: historyStatement,
+          MIGRATION_FILE: migrationPath,
+        },
+        stderr: "pipe",
+        stdout: "pipe",
+      },
+    );
+    return {
+      exitCode: result.exitCode,
+      stderr: result.stderr.toString("utf8"),
+      stdout: result.stdout.toString("utf8"),
+    };
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+}
+
+const pinnedPsqlProdCommand =
+  "  docker exec -i --env 'PGOPTIONS=-c standard_conforming_strings=on' supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 \"$@\"";
+const pinnedPsqlProdFunction = [
+  "psql_prod() {",
+  pinnedPsqlProdCommand,
+  "}",
+].join("\n");
+const unpinnedPsqlProdCommand =
+  '  docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"';
+const migrationVersionValidation = [
+  '    if [[ ! "${version}" =~ ^[0-9]{14}$ ]]; then',
+  '      echo "error=invalid_migration_version file=${file} version=${version}" >&2',
+  "      exit 1",
+  "    fi",
+].join("\n");
+const migrationNameValidation = [
+  '    if [[ ! "${name}" =~ ^[a-z0-9_]+$ ]]; then',
+  '      echo "error=invalid_migration_name file=${file} name=${name}" >&2',
+  "      exit 1",
+  "    fi",
+].join("\n");
+const migrationHistoryConstruction =
+  '    printf -v history_statement "insert into supabase_migrations.schema_migrations(version, name, statements) values (\'%s\', \'%s\', array[\'applied_by_migrate_production_database_workflow\']) on conflict (version) do nothing;" "${version}" "${name}"';
+const explicitMigrationApplyPipe =
+  '      emit_explicit_transaction_migration "${file}" "${history_statement}" | psql_prod';
+const explicitMigrationRoutingPredicate =
+  '    if [ "${top_level_start_count}" -ne 0 ] || [ "${top_level_end_count}" -ne 0 ]; then';
+const nonExplicitMigrationApplyBranch = [
+  "    else",
+  "      {",
+  '        echo "begin;"',
+  '        cat "${file}"',
+  '        printf "\\n%s\\n" "${history_statement}"',
+  '        echo "commit;"',
+  "      } | psql_prod",
+  "    fi",
+].join("\n");
+
+function validatesProductionMigrationApplyBranch(script: string): boolean {
+  const applyStart = script.indexOf('if [ "${MIGRATE_MODE}" = "apply" ]; then');
+  const applyEnd = script.indexOf(
+    'if [ "${migration_table_exists}" = "t" ] || [ "${MIGRATE_MODE}" = "apply" ]; then',
+    applyStart + 1,
+  );
+  if (applyStart < 0 || applyEnd <= applyStart) {
+    return false;
+  }
+
+  const applyBranch = script.slice(applyStart, applyEnd);
+  const versionValidationIndex = applyBranch.indexOf(migrationVersionValidation);
+  const nameValidationIndex = applyBranch.indexOf(migrationNameValidation);
+  const historyConstructionIndex = applyBranch.indexOf(migrationHistoryConstruction);
+  const applyBranchLines = applyBranch.split(/\r?\n/);
+  const routingPredicateCount = applyBranchLines
+    .filter((line) => line === explicitMigrationRoutingPredicate).length;
+  const explicitPipeCount = applyBranchLines
+    .filter((line) => line === explicitMigrationApplyPipe).length;
+  const explicitRoutingBranch = [
+    explicitMigrationRoutingPredicate,
+    explicitMigrationApplyPipe,
+  ].join("\n");
+
+  return script.includes(pinnedPsqlProdFunction) &&
+    versionValidationIndex >= 0 &&
+    nameValidationIndex > versionValidationIndex &&
+    historyConstructionIndex > nameValidationIndex &&
+    routingPredicateCount === 1 &&
+    explicitPipeCount === 1 &&
+    applyBranch.includes(explicitRoutingBranch) &&
+    applyBranch.includes(nonExplicitMigrationApplyBranch);
 }
 
 type DigestRetryMockMode = "always-fail" | "nonzero-valid" | "succeed-fifth";
@@ -846,6 +968,330 @@ describe("production migration precheck workflow", () => {
     expect(migrateProductionWorkflow).toContain("pending_count: ($pending_count | tonumber)");
     expect(migrateProductionWorkflow).toContain("pending_versions: ($pending_versions | split(\" \")");
     expect(migrateProductionWorkflow).toContain("workflow_run_id: ($workflow_run_id | tonumber)");
+  });
+
+  test("pins every production psql session to standard-conforming strings", () => {
+    const planAndApplyScript = extractWorkflowRunScript(
+      sliceWorkflowStep(migrateProductionWorkflow, "Plan and apply migrations"),
+    );
+    const psqlProd = extractShellFunction(planAndApplyScript, "psql_prod");
+
+    expect(psqlProd).toBe(pinnedPsqlProdFunction);
+  });
+
+  test("locks the actual migration apply branch and rejects unsafe mutations", () => {
+    const planAndApplyScript = extractWorkflowRunScript(
+      sliceWorkflowStep(migrateProductionWorkflow, "Plan and apply migrations"),
+    );
+    const pinnedBaseline = planAndApplyScript.includes(pinnedPsqlProdCommand)
+      ? planAndApplyScript
+      : planAndApplyScript.replace(unpinnedPsqlProdCommand, pinnedPsqlProdCommand);
+    const directCatMutation = pinnedBaseline.replace(
+      explicitMigrationApplyPipe,
+      [
+        "      {",
+        '        cat "${file}"',
+        '        printf "\\n%s\\n" "${history_statement}"',
+        "      } | psql_prod",
+      ].join("\n"),
+    );
+    const moveValidationAfterHistory = (validation: string): string => {
+      return pinnedBaseline
+        .replace(`${validation}\n`, "")
+        .replace(
+          migrationHistoryConstruction,
+          `${migrationHistoryConstruction}\n${validation}`,
+        );
+    };
+
+    expect(validatesProductionMigrationApplyBranch(pinnedBaseline)).toBe(true);
+    expect(validatesProductionMigrationApplyBranch(directCatMutation)).toBe(false);
+    expect(
+      validatesProductionMigrationApplyBranch(
+        pinnedBaseline.replace(migrationVersionValidation, ""),
+      ),
+    ).toBe(false);
+    expect(
+      validatesProductionMigrationApplyBranch(
+        moveValidationAfterHistory(migrationVersionValidation),
+      ),
+    ).toBe(false);
+    expect(
+      validatesProductionMigrationApplyBranch(
+        pinnedBaseline.replace(migrationNameValidation, ""),
+      ),
+    ).toBe(false);
+    expect(
+      validatesProductionMigrationApplyBranch(
+        moveValidationAfterHistory(migrationNameValidation),
+      ),
+    ).toBe(false);
+    expect(validatesProductionMigrationApplyBranch(planAndApplyScript)).toBe(true);
+  });
+
+  test.each([
+    [
+      "uses AND instead of OR",
+      (script: string) =>
+        script.replace(
+          explicitMigrationRoutingPredicate,
+          explicitMigrationRoutingPredicate.replace(" || ", " && "),
+        ),
+    ],
+    [
+      "inverts the explicit routing condition",
+      (script: string) =>
+        script.replace(
+          explicitMigrationRoutingPredicate,
+          '    if [ "${top_level_start_count}" -eq 0 ] && [ "${top_level_end_count}" -eq 0 ]; then',
+        ),
+    ],
+    [
+      "removes the BEGIN control arm",
+      (script: string) =>
+        script.replace(
+          explicitMigrationRoutingPredicate,
+          '    if [ "${top_level_end_count}" -ne 0 ]; then',
+        ),
+    ],
+    [
+      "removes the COMMIT control arm",
+      (script: string) =>
+        script.replace(
+          explicitMigrationRoutingPredicate,
+          '    if [ "${top_level_start_count}" -ne 0 ]; then',
+        ),
+    ],
+    [
+      "bypasses the predicate before the explicit branch",
+      (script: string) =>
+        script
+          .replace(explicitMigrationRoutingPredicate, "    if true; then")
+          .replace(
+            nonExplicitMigrationApplyBranch,
+            [
+              nonExplicitMigrationApplyBranch,
+              explicitMigrationRoutingPredicate,
+              "      :",
+              "    fi",
+            ].join("\n"),
+          ),
+    ],
+  ])("rejects an explicit routing mutation that %s", (_mutation, mutate) => {
+    const planAndApplyScript = extractWorkflowRunScript(
+      sliceWorkflowStep(migrateProductionWorkflow, "Plan and apply migrations"),
+    );
+    const mutatedScript = mutate(planAndApplyScript);
+
+    expect(mutatedScript).not.toBe(planAndApplyScript);
+    expect(validatesProductionMigrationApplyBranch(mutatedScript)).toBe(false);
+  });
+
+  test("registers explicit-transaction migration history before the final commit", () => {
+    const migrationBody = "create table public.atomic_history_fixture(id bigint);";
+    const historyStatement =
+      "insert into supabase_migrations.schema_migrations(version, name, statements) values ('20260718120000', 'atomic_history', array['exact_history_statement']);";
+    const result = runExplicitTransactionMigrationHelper(
+      ["BEGIN;", migrationBody, "COMMIT;"].join("\n"),
+      historyStatement,
+    );
+    const migrationBodyIndex = result.stdout.indexOf(migrationBody);
+    const historyIndex = result.stdout.indexOf(historyStatement);
+    const finalCommitIndex = result.stdout.lastIndexOf("COMMIT;");
+
+    expect(result.exitCode).toBe(0);
+    expect(migrationBodyIndex).toBeGreaterThanOrEqual(0);
+    expect(historyIndex).toBeGreaterThan(migrationBodyIndex);
+    expect(finalCommitIndex).toBeGreaterThan(historyIndex);
+    expect(result.stdout.split(historyStatement).length - 1).toBe(1);
+  });
+
+  test("renders every currently pending explicit migration through the real helper", () => {
+    const migrationsDirectory = new URL("../supabase/migrations/", import.meta.url);
+    const pendingExplicitMigrations = readdirSync(migrationsDirectory)
+      .filter((fileName) => fileName.endsWith(".sql"))
+      .filter((fileName) => fileName.slice(0, 14) > "20260707223000")
+      .map((fileName) => ({
+        fileName,
+        sql: readFileSync(new URL(fileName, migrationsDirectory), "utf8"),
+      }))
+      .filter(({ sql }) => /^\s*BEGIN;\s*$/im.test(sql));
+
+    expect(pendingExplicitMigrations).toHaveLength(9);
+    for (const { fileName, sql } of pendingExplicitMigrations) {
+      const version = fileName.slice(0, 14);
+      const historyMarker =
+        `insert into supabase_migrations.schema_migrations(version, name, statements) values ('${version}', 'pending_explicit_fixture', array['pending_explicit_history_marker']);`;
+      const result = runExplicitTransactionMigrationHelper(sql, historyMarker);
+      const outputLines = result.stdout.trimEnd().split(/\r?\n/);
+      const finalCommitIndex = outputLines
+        .map((line) => line.trim().toLowerCase())
+        .lastIndexOf("commit;");
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.split(historyMarker).length - 1).toBe(1);
+      expect(finalCommitIndex).toBe(outputLines.length - 1);
+      expect(outputLines[finalCommitIndex - 1]).toBe(historyMarker);
+    }
+  });
+
+  test("ignores transaction words inside non-top-level lexical contexts", () => {
+    const historyStatement =
+      "insert into supabase_migrations.schema_migrations(version) values ('20260718120000');";
+    const result = runExplicitTransactionMigrationHelper(
+      [
+        "BEGIN;",
+        "-- \\gexec BEGIN; COMMIT;",
+        "/* BEGIN; outer block comment",
+        "   /* \\include ignored.sql COMMIT; nested block comment */",
+        "   COMMIT; */",
+        "select 'BEGIN; COMMIT; it''s safe';",
+        "select E'BEGIN; COMMIT; escape prefix safe';",
+        "select \"BEGIN;\"\"quoted\", \"COMMIT;\\\\identifier\";",
+        "create procedure lexical_fixture()",
+        "language plpgsql",
+        "as $body$",
+        "begin",
+        "  -- \\gexec remains inside the dollar body",
+        "  commit;",
+        "end;",
+        "$body$;",
+        "do $$",
+        "begin",
+        "  perform 'BEGIN; COMMIT;';",
+        "end;",
+        "$$;",
+        "COMMIT;",
+      ].join("\n"),
+      historyStatement,
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.split(historyStatement).length - 1).toBe(1);
+    expect(result.stdout.indexOf("  commit;")).toBeLessThan(
+      result.stdout.indexOf(historyStatement),
+    );
+    expect(result.stdout.indexOf(historyStatement)).toBeLessThan(
+      result.stdout.lastIndexOf("COMMIT;"),
+    );
+  });
+
+  test.each([
+    ["two standalone commits", ["BEGIN;", "select 1;", "COMMIT;", "COMMIT;"].join("\n")],
+    ["no standalone begin", ["select 1;", "COMMIT;"].join("\n")],
+    [
+      "line-start commit with trailing executable SQL",
+      ["BEGIN;", "select 1;", "COMMIT; select 2;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "line-start begin with trailing executable SQL",
+      ["BEGIN; select 1;", "BEGIN;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "embedded commit token",
+      ["BEGIN;", "select 1; COMMIT;", "select 2;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "embedded begin token",
+      ["BEGIN;", "select 1; BEGIN;", "select 2;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "commit with block-comment whitespace",
+      [
+        "BEGIN;",
+        "select 1;",
+        "COMMIT /* valid comment whitespace */;",
+        "COMMIT;",
+      ].join("\n"),
+    ],
+    [
+      "commit with newline whitespace",
+      ["BEGIN;", "select 1;", "COMMIT", "  ;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "unclosed single-quoted string",
+      ["BEGIN;", "select 'unterminated", "COMMIT;"].join("\n"),
+    ],
+    [
+      "rollback terminator",
+      ["BEGIN;", "select 1;", "ROLLBACK;", "COMMIT;"].join("\n"),
+    ],
+    ["abort terminator", ["BEGIN;", "ABORT;", "COMMIT;"].join("\n")],
+    ["end terminator", ["BEGIN;", "END;", "COMMIT;"].join("\n")],
+    [
+      "commit and chain terminator",
+      ["BEGIN;", "COMMIT AND CHAIN;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "commit and no chain terminator",
+      ["BEGIN;", "COMMIT AND NO CHAIN;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "additional start transaction",
+      ["START TRANSACTION;", "BEGIN;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "prepare transaction terminator",
+      ["BEGIN;", "PREPARE TRANSACTION 'atomic_history';", "COMMIT;"].join("\n"),
+    ],
+    [
+      "commit before begin",
+      ["COMMIT;", "BEGIN;", "select 1;"].join("\n"),
+    ],
+    [
+      "executable SQL before begin",
+      ["select 0;", "BEGIN;", "select 1;", "COMMIT;"].join("\n"),
+    ],
+    [
+      "executable SQL after commit with semicolon",
+      ["BEGIN;", "select 1;", "COMMIT;", "select 2;"].join("\n"),
+    ],
+    [
+      "executable SQL after commit without semicolon",
+      ["BEGIN;", "select 1;", "COMMIT;", "select 2"].join("\n"),
+    ],
+    [
+      "psql gexec meta-command",
+      ["BEGIN;", "SELECT 'COMMIT'", "\\gexec", ";", "COMMIT;"].join("\n"),
+    ],
+    [
+      "psql include meta-command",
+      ["BEGIN;", "SELECT 1", "\\include /tmp/review.sql", ";", "COMMIT;"].join("\n"),
+    ],
+    [
+      "psql connect meta-command",
+      ["BEGIN;", "SELECT 1", "\\connect postgres", ";", "COMMIT;"].join("\n"),
+    ],
+    [
+      "psql set meta-command",
+      ["BEGIN;", "SELECT 1", "\\set review_value COMMIT", ";", "COMMIT;"].join("\n"),
+    ],
+    [
+      "psql quit meta-command",
+      ["BEGIN;", "SELECT 1", "\\quit", ";", "COMMIT;"].join("\n"),
+    ],
+    [
+      "ordinary string backslash semantic split",
+      [
+        "BEGIN;",
+        "CREATE TABLE public.review_split(id int);",
+        "SELECT '\\'; COMMIT; SELECT $x$'--$x$",
+        ";",
+        "COMMIT;",
+      ].join("\n"),
+    ],
+    [
+      "escape string backslash",
+      ["BEGIN;", "select E'BEGIN; COMMIT; backslash \\\\';", "COMMIT;"].join("\n"),
+    ],
+  ])("fails closed for explicit transaction shape: %s", (_shape, migrationSql) => {
+    const result = runExplicitTransactionMigrationHelper(
+      migrationSql,
+      "insert into supabase_migrations.schema_migrations(version) values ('20260718120000');",
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("explicit_transaction_shape_invalid");
   });
 });
 
