@@ -223,10 +223,10 @@ The user-authorized remote dev verification is complete:
   `404 / ORDER_NOT_EXIST` and were conditionally closed locally, and one stored-prepay historical
   order returned the same contradiction and was closed during diagnosis before the safer guard was
   added; final dev state has zero pending orders and zero active claims;
-- the current worktree API registered the list and continue-payment routes on temporary port 3002 and
-  returned the expected `401 / TOKEN_MISSING` without credentials; it was then stopped. The managed
-  port-3000 service still runs the main-workspace API and was not overwritten;
-- no code was pushed or deployed.
+- the managed local port-3000 API job now runs this worktree, registered the list and continue-payment
+  routes, and returned the expected `401 / TOKEN_MISSING` without credentials. The port-3010 Admin
+  service remains unchanged;
+- no code was pushed or remotely deployed; the port-3000 switch is local and reversible.
 
 The machine still has no Docker CLI or local PostgreSQL. Therefore the Supabase CLI cannot regenerate
 `apps/api/src/types/database.ts` from the custom dev database; the existing hosted project generator
