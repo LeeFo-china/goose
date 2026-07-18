@@ -121,6 +121,7 @@ describe("wechat pay migration contract", () => {
 
   test("adds expiry fields, backfill, validation, and pending lookup index", () => {
     const migrationSource = readTenantCreditRechargePaymentExpirationMigration();
+    const normalizedMigrationSource = migrationSource.replace(/\s+/g, " ").trim();
 
     expect(migrationSource).toContain(
       "ADD COLUMN IF NOT EXISTS payment_expires_at timestamptz NULL",
@@ -149,10 +150,11 @@ describe("wechat pay migration contract", () => {
     expect(migrationSource).toContain(
       "tenant_credit_orders_payment_expires_at_check",
     );
-    expect(migrationSource).toContain(
-      "tenant_credit_orders_pending_expiry_idx",
+    expect(normalizedMigrationSource).toContain(
+      "CREATE INDEX IF NOT EXISTS tenant_credit_orders_pending_expiry_idx " +
+        "ON public.tenant_credit_orders(payment_expires_at ASC, id) " +
+        "WHERE channel = 'wechat_pay' AND status = 'pending';",
     );
-    expect(migrationSource).toContain("(payment_expires_at ASC, id)");
     expect(migrationSource).not.toContain("status = 'expired'");
   });
 
@@ -171,6 +173,7 @@ describe("wechat pay migration contract", () => {
 
   test("claims expired recharge orders with bounded skip-locked leases", () => {
     const migrationSource = readTenantCreditRechargePaymentExpirationMigration();
+    const normalizedMigrationSource = migrationSource.replace(/\s+/g, " ").trim();
 
     expect(migrationSource).toContain(
       "CREATE OR REPLACE FUNCTION public.billing_claim_expired_recharge_orders(",
@@ -183,6 +186,12 @@ describe("wechat pay migration contract", () => {
     );
     expect(migrationSource).toContain("SECURITY DEFINER");
     expect(migrationSource).toContain("SET search_path = public");
+    expect(normalizedMigrationSource).toContain(
+      "BEGIN IF p_now IS NULL THEN RAISE EXCEPTION USING " +
+        "ERRCODE = '22023', " +
+        "MESSAGE = 'BILLING_RECHARGE_CLAIM_NOW_REQUIRED'; " +
+        "END IF; v_limit :=",
+    );
     expect(migrationSource).toContain(
       "LEAST(GREATEST(COALESCE(p_limit, 100), 1), 100)",
     );

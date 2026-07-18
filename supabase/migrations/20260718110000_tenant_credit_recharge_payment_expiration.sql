@@ -74,6 +74,12 @@ DECLARE
   v_limit integer;
   v_lease_seconds integer;
 BEGIN
+  IF p_now IS NULL THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'BILLING_RECHARGE_CLAIM_NOW_REQUIRED';
+  END IF;
+
   v_limit := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 100);
   v_lease_seconds := LEAST(GREATEST(COALESCE(p_lease_seconds, 60), 10), 600);
 
