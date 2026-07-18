@@ -35,6 +35,7 @@ export type PlatformPaymentConfigRecord = {
   validation_status: PlatformPaymentValidationStatus;
   last_validated_at: string | null;
   risk_switches: Record<string, unknown>;
+  recharge_guard_version?: number;
   created_by_employee_id: string | null;
   updated_by_employee_id: string | null;
   created_at: string;

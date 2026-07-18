@@ -26,6 +26,7 @@ const existingConfig = {
   enabled_channels: ["tenant_recharge"],
   status: "active",
   validation_status: "valid",
+  recharge_guard_version: 3,
   last_validated_at: "2026-07-02T08:00:00.000Z",
   risk_switches: {},
   created_by_employee_id: "employee-old",
@@ -186,6 +187,7 @@ describe("PlatformPaymentConfigService", () => {
       has_encrypted_config_ref: true,
     });
     expect(result.config).not.toHaveProperty("serial_no");
+    expect(result.config).not.toHaveProperty("recharge_guard_version");
   });
 
   test("rejects save without manage permission", async () => {

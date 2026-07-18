@@ -103,6 +103,71 @@ describe("BillingRechargeRepository", () => {
     expect(result).toEqual(atomicResult);
   });
 
+  test("creates pending recharge only through the config-version CAS RPC", async () => {
+    const created = { id: "order-1", status: "pending" };
+    rpc.mockImplementationOnce(async () => ({ data: created, error: null }));
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    const result = await billingRechargeRepository.createOrder({
+      tenant_id: "tenant-1",
+      order_no: "order-no-1",
+      out_trade_no: "trade-no-1",
+      idempotency_key: null,
+      package_code: "credit_1000",
+      credits: 1000,
+      bonus_credits: 100,
+      amount_fen: 10000,
+      channel: "wechat_pay",
+      status: "pending",
+      created_by: "employee-1",
+      payment_config_id: "config-1",
+      expected_payment_config_guard_version: 7,
+      payment_expires_at: "2026-07-18T02:05:00.000Z",
+      metadata: { payer_openid: "openid-1" },
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "billing_create_pending_wechat_recharge_order",
+      expect.objectContaining({
+        p_payment_config_id: "config-1",
+        p_expected_guard_version: 7,
+      }),
+    );
+    expect(result).toMatchObject(created);
+  });
+
+  test("maps only the exact config-version CAS failure to a retryable 409", async () => {
+    rpc.mockImplementationOnce(async () => ({
+      data: null,
+      error: {
+        code: "23514",
+        message: "BILLING_RECHARGE_PAYMENT_CONFIG_VERSION_CHANGED",
+      },
+    }));
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    await expect(billingRechargeRepository.createOrder({
+      tenant_id: "tenant-1",
+      order_no: "order-no-1",
+      out_trade_no: "trade-no-1",
+      idempotency_key: null,
+      package_code: "credit_1000",
+      credits: 1000,
+      bonus_credits: 100,
+      amount_fen: 10000,
+      channel: "wechat_pay",
+      status: "pending",
+      created_by: "employee-1",
+      payment_config_id: "config-1",
+      expected_payment_config_guard_version: 7,
+      payment_expires_at: "2026-07-18T02:05:00.000Z",
+      metadata: {},
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BILLING_RECHARGE_PAYMENT_CONFIG_VERSION_CHANGED",
+    });
+  });
+
   test("checks one matching pending wechat order by payment config id", async () => {
     queryResult = { data: [{ id: "order-1" }], error: null, count: null };
     const { billingRechargeRepository } = await import("./billing-recharge");

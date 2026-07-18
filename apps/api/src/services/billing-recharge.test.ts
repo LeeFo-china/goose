@@ -73,6 +73,7 @@ const platformConfig = {
   validation_status: "valid",
   last_validated_at: null,
   risk_switches: {},
+  recharge_guard_version: 1,
   created_by_employee_id: null,
   updated_by_employee_id: null,
   created_at: "2026-07-02T08:00:00.000Z",
@@ -134,6 +135,9 @@ const rechargeRepository = {
 
 const paymentConfigRepository = {
   findWechatPayConfig: mock(
+    async (): Promise<PlatformPaymentConfigRecord> => platformConfig,
+  ),
+  findWechatPayConfigById: mock(
     async (): Promise<PlatformPaymentConfigRecord> => platformConfig,
   ),
 };
@@ -228,6 +232,7 @@ describe("BillingRechargeService", () => {
     for (const item of [
       ...Object.values(rechargeRepository),
       paymentConfigRepository.findWechatPayConfig,
+      paymentConfigRepository.findWechatPayConfigById,
       accessPolicy.assertTenantContext,
       accessPolicy.hasPermission,
       secretBundleService.load,
@@ -242,6 +247,9 @@ describe("BillingRechargeService", () => {
     rechargeRepository.findOrderById.mockImplementation(async () => paidOrder);
     rechargeRepository.getAccountByTenantId.mockImplementation(async () => account);
     paymentConfigRepository.findWechatPayConfig.mockImplementation(
+      async (): Promise<PlatformPaymentConfigRecord> => platformConfig,
+    );
+    paymentConfigRepository.findWechatPayConfigById.mockImplementation(
       async (): Promise<PlatformPaymentConfigRecord> => platformConfig,
     );
   });
@@ -339,6 +347,7 @@ describe("BillingRechargeService", () => {
       status: "pending",
       created_by: "employee-1",
       payment_config_id: "platform-config-1",
+      expected_payment_config_guard_version: 1,
       payment_expires_at: "2026-07-18T02:05:00.000Z",
       metadata: {
         payer_openid: "openid-1",
@@ -374,6 +383,52 @@ describe("BillingRechargeService", () => {
       credits: 1000,
       bonus_credits: 100,
     });
+    expect(secretBundleService.load).toHaveBeenCalledTimes(2);
+    expect(paymentConfigRepository.findWechatPayConfigById)
+      .toHaveBeenCalledWith("platform-config-1");
+  });
+
+  test("uses the post-insert config and secret rather than the preflight snapshot", async () => {
+    const reloadedConfig = {
+      ...platformConfig,
+      merchant_name: "事务后重新加载的配置",
+    };
+    paymentConfigRepository.findWechatPayConfigById.mockImplementationOnce(
+      async () => reloadedConfig,
+    );
+    const service = await createService();
+
+    await service.createOrder(authContext, {
+      package_code: "credit_1000",
+      payer_openid: "openid-1",
+    });
+
+    expect(wechatPayGateway.createJsapiPrepay).toHaveBeenCalledWith(
+      expect.objectContaining({ config: reloadedConfig }),
+    );
+  });
+
+  test("returns a stable retryable conflict without prepay when config CAS loses", async () => {
+    rechargeRepository.createOrder.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("配置已轮换"), {
+        statusCode: 409,
+        code: "BILLING_RECHARGE_PAYMENT_CONFIG_VERSION_CHANGED",
+      });
+    });
+    const service = await createService();
+
+    await expect(service.createOrder(authContext, {
+      package_code: "credit_1000",
+      payer_openid: "openid-1",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BILLING_RECHARGE_PAYMENT_CONFIG_VERSION_CHANGED",
+    });
+
+    expect(paymentConfigRepository.findWechatPayConfigById).not
+      .toHaveBeenCalled();
+    expect(wechatPayGateway.createJsapiPrepay).not.toHaveBeenCalled();
+    expect(rechargeRepository.markPrepayCreated).not.toHaveBeenCalled();
   });
 
   test("rejects recharge when platform wechat pay config is not active", async () => {

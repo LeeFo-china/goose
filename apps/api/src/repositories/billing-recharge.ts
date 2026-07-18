@@ -1,5 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import type { BillingAccountBalance } from "@/repositories/billing";
+import { createGuardedPendingRechargeOrder } from "@/repositories/billing-recharge-order-creation";
 import { hasPendingWechatOrdersForPaymentConfig } from "@/repositories/billing-recharge-payment-config";
 import {
   claimExpiredRechargeOrders,
@@ -80,6 +81,7 @@ export type TenantCreditOrderCreateInput = {
   status: "pending";
   created_by: string;
   payment_config_id: string;
+  expected_payment_config_guard_version: number;
   payment_expires_at: string;
   metadata: Record<string, unknown>;
 };
@@ -164,6 +166,7 @@ class BillingRechargeRepository {
   readonly claimExpiredOrders = claimExpiredRechargeOrders;
   readonly markOrderClosed = markClaimedRechargeOrderClosed;
   readonly releaseCloseClaim = releaseRechargeOrderCloseClaim;
+  readonly createOrder = createGuardedPendingRechargeOrder;
   readonly hasPendingWechatOrdersForPaymentConfig =
     hasPendingWechatOrdersForPaymentConfig;
 
@@ -297,19 +300,6 @@ class BillingRechargeRepository {
     }
 
     return (data as TenantCreditOrderRecord | null) ?? null;
-  }
-
-  async createOrder(input: TenantCreditOrderCreateInput) {
-    const { data, error } = await this.from("tenant_credit_orders")
-      .insert(input)
-      .select("*")
-      .single();
-
-    if (error) {
-      throw Errors.dbError("创建积分充值订单失败", error);
-    }
-
-    return data as TenantCreditOrderRecord;
   }
 
   async markPrepayCreated(input: {

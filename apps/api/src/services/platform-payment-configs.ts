@@ -14,6 +14,7 @@ import {
   assertPaymentSecretChangeAllowed,
   type PendingRechargeOrderPort,
 } from "@/services/platform-payment-config-pending-orders";
+import { runPlatformPaymentConfigMutation } from "@/services/platform-payment-config-mutation";
 import { systemSettingsService } from "@/services/system-settings";
 
 export type SavePlatformWechatPayConfigInput = {
@@ -41,7 +42,7 @@ export type SavePlatformWechatPaySecretBundleInput = {
 
 export type PlatformWechatPayConfigView = Omit<
   PlatformPaymentConfigRecord,
-  "serial_no"
+  "serial_no" | "recharge_guard_version"
 > & {
   serial_no_masked: string | null;
   has_encrypted_config_ref: boolean;
@@ -187,15 +188,17 @@ export class PlatformPaymentConfigService {
         current?.created_by_employee_id ?? authContext.employeeId,
       updated_by_employee_id: authContext.employeeId,
     } satisfies PlatformPaymentConfigUpsertInput;
+    if (merchantMode !== "direct_merchant") {
+      throw Errors.badRequest("商户模式与支付配置 profile 不匹配");
+    }
     await assertCriticalPaymentConfigChangeAllowed({
       current,
       next,
       pendingRechargeOrders: this.pendingRechargeOrders,
     });
-    if (merchantMode !== "direct_merchant") {
-      throw Errors.badRequest("商户模式与支付配置 profile 不匹配");
-    }
-    const saved = await this.repository.upsertWechatPayConfig(next);
+    const saved = await runPlatformPaymentConfigMutation(() =>
+      this.repository.upsertWechatPayConfig(next)
+    );
 
     return {
       configured: true,
@@ -297,15 +300,17 @@ export class PlatformPaymentConfigService {
         current?.created_by_employee_id ?? authContext.employeeId,
       updated_by_employee_id: authContext.employeeId,
     } satisfies PlatformPaymentConfigUpsertInput;
+    if (merchantMode !== definition.merchant_mode) {
+      throw Errors.badRequest("商户模式与支付配置 profile 不匹配");
+    }
     await assertCriticalPaymentConfigChangeAllowed({
       current,
       next,
       pendingRechargeOrders: this.pendingRechargeOrders,
     });
-    if (merchantMode !== definition.merchant_mode) {
-      throw Errors.badRequest("商户模式与支付配置 profile 不匹配");
-    }
-    const saved = await this.repository.upsertWechatPayConfig(next);
+    const saved = await runPlatformPaymentConfigMutation(() =>
+      this.repository.upsertWechatPayConfig(next)
+    );
 
     return this.toProfileView(definition, saved);
   }
@@ -339,35 +344,39 @@ export class PlatformPaymentConfigService {
       base_url: input.base_url?.trim() || DEFAULT_WECHAT_PAY_BASE_URL,
     };
 
-    await this.settingsService.updateSetting(
-      authContext,
-      definition.secret_setting_key,
-      JSON.stringify(secretBundle),
+    await runPlatformPaymentConfigMutation(() =>
+      this.settingsService.updateSetting(
+        authContext,
+        definition.secret_setting_key,
+        JSON.stringify(secretBundle),
+      )
     );
 
-    const saved = await this.repository.upsertWechatPayConfig({
-      provider: "wechat_pay",
-      profile_code: profileCode,
-      principal_type: "platform",
-      merchant_mode: current?.merchant_mode ?? definition.merchant_mode,
-      merchant_name: current?.merchant_name ?? null,
-      merchant_id: current?.merchant_id ?? null,
-      sub_merchant_id: current?.sub_merchant_id ?? null,
-      app_id: current?.app_id ?? null,
-      sub_app_id: current?.sub_app_id ?? null,
-      encrypted_config_ref: encryptedConfigRef,
-      serial_no: current?.serial_no ?? null,
-      notify_url: current?.notify_url ?? null,
-      enabled_channels: current?.enabled_channels ??
-        definition.enabled_channels,
-      status: current?.status ?? "pending",
-      validation_status: "unchecked",
-      last_validated_at: null,
-      risk_switches: current?.risk_switches ?? {},
-      created_by_employee_id:
-        current?.created_by_employee_id ?? authContext.employeeId,
-      updated_by_employee_id: authContext.employeeId,
-    } satisfies PlatformPaymentConfigUpsertInput);
+    const saved = await runPlatformPaymentConfigMutation(() =>
+      this.repository.upsertWechatPayConfig({
+        provider: "wechat_pay",
+        profile_code: profileCode,
+        principal_type: "platform",
+        merchant_mode: current?.merchant_mode ?? definition.merchant_mode,
+        merchant_name: current?.merchant_name ?? null,
+        merchant_id: current?.merchant_id ?? null,
+        sub_merchant_id: current?.sub_merchant_id ?? null,
+        app_id: current?.app_id ?? null,
+        sub_app_id: current?.sub_app_id ?? null,
+        encrypted_config_ref: encryptedConfigRef,
+        serial_no: current?.serial_no ?? null,
+        notify_url: current?.notify_url ?? null,
+        enabled_channels: current?.enabled_channels ??
+          definition.enabled_channels,
+        status: current?.status ?? "pending",
+        validation_status: "unchecked",
+        last_validated_at: null,
+        risk_switches: current?.risk_switches ?? {},
+        created_by_employee_id:
+          current?.created_by_employee_id ?? authContext.employeeId,
+        updated_by_employee_id: authContext.employeeId,
+      } satisfies PlatformPaymentConfigUpsertInput)
+    );
 
     return this.toProfileView(definition, saved);
   }
@@ -408,7 +417,11 @@ export class PlatformPaymentConfigService {
   private toView(
     config: PlatformPaymentConfigRecord,
   ): PlatformWechatPayConfigView {
-    const { serial_no: _serialNo, ...safeConfig } = config;
+    const {
+      serial_no: _serialNo,
+      recharge_guard_version: _guardVersion,
+      ...safeConfig
+    } = config;
     return {
       ...safeConfig,
       serial_no_masked: this.maskSerialNo(config.serial_no),

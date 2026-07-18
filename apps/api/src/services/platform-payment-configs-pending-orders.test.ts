@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { Errors } from "@/errors/error-factory";
 import type {
   PlatformPaymentConfigRecord,
   PlatformPaymentConfigUpsertInput,
@@ -115,9 +116,6 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
   });
 
   test.each([
-    ["merchant mode", "platform_direct_recharge", {
-      merchant_mode: "service_provider_sub_merchant",
-    }],
     ["merchant id", "platform_direct_recharge", { merchant_id: "1900000002" }],
     ["app id", "platform_direct_recharge", { app_id: "wx-direct-app-v2" }],
     ["serial number", "platform_direct_recharge", { serial_no: "DIRECT-SERIAL-V2" }],
@@ -154,6 +152,23 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
       expect(upsertWechatPayConfig).not.toHaveBeenCalled();
     },
   );
+
+  test("rejects an invalid profile merchant mode before checking pending orders", async () => {
+    hasPendingWechatOrdersForPaymentConfig.mockImplementation(async () => true);
+    const service = await createService();
+
+    await expect(service.saveWechatPayProfile(
+      authContext,
+      "platform_direct_recharge",
+      { merchant_mode: "service_provider_sub_merchant" },
+    )).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+
+    expect(hasPendingWechatOrdersForPaymentConfig).not.toHaveBeenCalled();
+    expect(upsertWechatPayConfig).not.toHaveBeenCalled();
+  });
 
   test.each([
     ["status", { status: "disabled" as const }],
@@ -228,5 +243,65 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
       merchant_id: "1900000002",
       app_id: directConfig.app_id,
     }));
+  });
+
+  test("maps an exact raw config-trigger race to the stable 409", async () => {
+    upsertWechatPayConfig.mockImplementationOnce(async () => {
+      throw {
+        code: "23514",
+        message: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      };
+    });
+    const service = await createService();
+
+    await expect(service.saveWechatPayProfile(
+      authContext,
+      "platform_direct_recharge",
+      { merchant_id: "1900000002" },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+    });
+  });
+
+  test("maps the wrapped secret-trigger race to the stable 409", async () => {
+    updateSetting.mockImplementationOnce(async () => {
+      throw Errors.dbError("更新系统配置失败", {
+        code: "23514",
+        message: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      });
+    });
+    const service = await createService();
+
+    await expect(service.saveWechatPaySecretBundle(
+      authContext,
+      "platform_direct_recharge",
+      {
+        private_key_pem: "-----BEGIN PRIVATE KEY-----\\nnew\\n-----END PRIVATE KEY-----",
+        api_v3_key: "12345678901234567890123456789012",
+      },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+    });
+  });
+
+  test("keeps unrelated database errors as database errors", async () => {
+    upsertWechatPayConfig.mockImplementationOnce(async () => {
+      throw Errors.dbError("保存平台微信支付配置失败", {
+        code: "23514",
+        message: "OTHER_CHECK_CONSTRAINT",
+      });
+    });
+    const service = await createService();
+
+    await expect(service.saveWechatPayProfile(
+      authContext,
+      "platform_direct_recharge",
+      { merchant_id: "1900000002" },
+    )).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+    });
   });
 });

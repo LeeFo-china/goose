@@ -51,6 +51,7 @@ const platformConfig = {
   enabled_channels: ["tenant_recharge"],
   status: "active",
   validation_status: "valid",
+  recharge_guard_version: 1,
   last_validated_at: null,
   risk_switches: {},
   created_by_employee_id: null,
@@ -90,6 +91,9 @@ const rechargeRepository = {
 
 const paymentConfigRepository = {
   findWechatPayConfig: mock(
+    async (): Promise<PlatformPaymentConfigRecord | null> => platformConfig,
+  ),
+  findWechatPayConfigById: mock(
     async (): Promise<PlatformPaymentConfigRecord | null> => platformConfig,
   ),
 };
@@ -176,6 +180,7 @@ describe("BillingRechargeService payment request", () => {
     for (const item of [
       ...Object.values(rechargeRepository),
       paymentConfigRepository.findWechatPayConfig,
+      paymentConfigRepository.findWechatPayConfigById,
       accessPolicy.assertTenantContext,
       accessPolicy.hasPermission,
       secretBundleService.load,
@@ -188,6 +193,9 @@ describe("BillingRechargeService payment request", () => {
     rechargeRepository.findOrderById.mockImplementation(async () => pendingOrder);
     rechargeRepository.findOrderByIdempotencyKey.mockImplementation(async () => null);
     paymentConfigRepository.findWechatPayConfig.mockImplementation(
+      async () => platformConfig,
+    );
+    paymentConfigRepository.findWechatPayConfigById.mockImplementation(
       async () => platformConfig,
     );
   });
