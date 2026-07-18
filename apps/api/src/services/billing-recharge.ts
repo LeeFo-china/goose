@@ -398,6 +398,13 @@ export class BillingRechargeService {
         "BILLING_RECHARGE_ORDER_NOT_PENDING",
       );
     }
+    if (order.channel !== "wechat_pay") {
+      throw Errors.business(
+        409,
+        "积分充值订单不支持使用当前支付渠道继续支付",
+        "BILLING_RECHARGE_PAYMENT_CHANNEL_UNSUPPORTED",
+      );
+    }
     const paymentExpiration = parseBillingRechargePaymentExpiration(
       order.payment_expires_at,
     );
