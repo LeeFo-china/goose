@@ -286,6 +286,27 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
     });
   });
 
+  test("keeps an already mapped system-setting conflict unchanged", async () => {
+    const conflict = Errors.business(
+      409,
+      "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
+      "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+    );
+    updateSetting.mockImplementationOnce(async () => {
+      throw conflict;
+    });
+    const service = await createService();
+
+    await expect(service.saveWechatPaySecretBundle(
+      authContext,
+      "platform_direct_recharge",
+      {
+        private_key_pem: "-----BEGIN PRIVATE KEY-----\nnew\n-----END PRIVATE KEY-----",
+        api_v3_key: "12345678901234567890123456789012",
+      },
+    )).rejects.toBe(conflict);
+  });
+
   test("keeps unrelated database errors as database errors", async () => {
     upsertWechatPayConfig.mockImplementationOnce(async () => {
       throw Errors.dbError("保存平台微信支付配置失败", {
