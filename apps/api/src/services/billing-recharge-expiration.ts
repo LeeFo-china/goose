@@ -201,7 +201,6 @@ export class BillingRechargeExpirationService {
       claimToken,
       outTradeNo,
       context,
-      now: renewNow,
       deferred: input.deferred,
     });
     input.telemetry[outcome] += 1;
@@ -212,7 +211,6 @@ export class BillingRechargeExpirationService {
     claimToken: string;
     outTradeNo: string;
     context: BatchContext;
-    now: Date;
     deferred: DeferredRelease[];
   }): Promise<OrderOutcome> {
     let transaction: WechatPayTransactionQueryResult;
@@ -230,7 +228,6 @@ export class BillingRechargeExpirationService {
     claimToken: string;
     outTradeNo: string;
     context: BatchContext;
-    now: Date;
     deferred: DeferredRelease[];
     transaction: WechatPayTransactionQueryResult;
   }): Promise<OrderOutcome> {
@@ -261,7 +258,6 @@ export class BillingRechargeExpirationService {
     claimToken: string;
     outTradeNo: string;
     context: BatchContext;
-    now: Date;
     deferred: DeferredRelease[];
   }): Promise<OrderOutcome> {
     let transaction: WechatPayTransactionQueryResult;
@@ -304,14 +300,13 @@ export class BillingRechargeExpirationService {
   private async markClosed(input: {
     order: TenantCreditOrderRecord;
     claimToken: string;
-    now: Date;
     deferred: DeferredRelease[];
   }): Promise<OrderOutcome> {
     try {
       const closed = await this.repository.markOrderClosed({
         orderId: input.order.id,
         claimToken: input.claimToken,
-        closedAt: input.now,
+        closedAt: this.nowFactory(),
       });
       return closed ? "closed" : "retried";
     } catch {
