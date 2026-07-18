@@ -5,6 +5,7 @@ import { SupabaseDB } from "@/utils/supabase/index";
 type ExpirationTable = {
   update: (patch: Record<string, unknown>) => ExpirationTable;
   eq: (column: string, value: unknown) => ExpirationTable;
+  is: (column: string, value: unknown) => ExpirationTable;
   select: (columns: string) => ExpirationTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
 };
@@ -35,6 +36,7 @@ export type MarkClaimedRechargeOrderClosedInput = {
   orderId: string;
   claimToken: string;
   closedAt: Date;
+  requireMissingPrepay?: boolean;
 };
 
 export type ReleaseRechargeOrderCloseClaimInput = {
@@ -80,7 +82,7 @@ export async function renewRechargeOrderCloseClaim(
 export async function markClaimedRechargeOrderClosed(
   input: MarkClaimedRechargeOrderClosedInput,
 ): Promise<TenantCreditOrderRecord | null> {
-  const { data, error } = await table()
+  let query = table()
     .update({
       status: "closed",
       closed_at: input.closedAt.toISOString(),
@@ -90,9 +92,11 @@ export async function markClaimedRechargeOrderClosed(
     })
     .eq("id", input.orderId)
     .eq("status", "pending")
-    .eq("close_claim_token", input.claimToken)
-    .select("*")
-    .maybeSingle();
+    .eq("close_claim_token", input.claimToken);
+  if (input.requireMissingPrepay) {
+    query = query.is("prepay_id", null);
+  }
+  const { data, error } = await query.select("*").maybeSingle();
   if (error) {
     throw Errors.dbError("关闭过期积分充值订单失败", error);
   }

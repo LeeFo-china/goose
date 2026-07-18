@@ -151,7 +151,7 @@ The externally visible state matrix remains:
 SUCCESS -> atomic confirm+recover -> paid
 CLOSED  -> conditional local closed
 NOTPAY  -> WeChat close -> conditional local closed
-404 / ORDER_NOT_EXIST -> conditional local closed without a close request
+404 / ORDER_NOT_EXIST + no persisted prepay_id -> conditional local closed without a close request
 other   -> retain claim, then release for retry
 ```
 
@@ -160,13 +160,17 @@ If close throws, query exactly once more:
 ```text
 SUCCESS -> atomic confirm+recover
 CLOSED  -> conditional local closed
-404 / ORDER_NOT_EXIST -> conditional local closed
+404 / ORDER_NOT_EXIST + no persisted prepay_id -> conditional local closed
 other/query error -> retain claim, then release; never local-close
 ```
 
-The `ORDER_NOT_EXIST` branch requires both the exact upstream HTTP status and error code; network,
-timeout, signing, and all other query failures remain retryable. This follows the official WeChat
-query contract, which defines that pair as a merchant order that was not successfully created.
+The `ORDER_NOT_EXIST` branch requires the exact upstream HTTP status and error code plus an absent
+persisted `prepay_id`. A stored prepay ID is contradictory evidence that may indicate a historical
+merchant/config mismatch, so that case remains retryable for manual reconciliation. Network,
+timeout, signing, and all other query failures also remain retryable. This follows the official
+WeChat query contract, which requires the merchant to verify that the order number was successfully
+created. The final local-close update repeats `prepay_id IS NULL` in the same status/claim-token CAS,
+so a prepay ID persisted while the query is in flight makes the close lose the race and retry.
 Before any close request, the service must still own the renewed token. Local closure remains
 conditional on the same token. Confirmation remains financially idempotent.
 
@@ -204,22 +208,30 @@ focused RPC smoke
 ## 6. Local implementation status
 
 The reliability work is implemented on `feat/recharge-payment-expiration`. After final-review
-remediation, the 33 changed API test files passed 270 tests with zero failures and 937 expectations
+remediation, the 33 changed API test files passed 274 tests with zero failures and 946 expectations
 with every remote Supabase/database environment variable removed. API typecheck, build, file-size,
 and `git diff --check` also passed. A credential-free worker shutdown smoke had already passed.
 
-Database and real-payment verification remain intentionally unexecuted:
+The user-authorized remote dev verification is complete:
 
-- the machine has no Docker CLI or local PostgreSQL, so local Supabase cannot be used;
-- the user authorized the remote dev database, and read-only preflight confirmed exactly five pending
-  migrations plus 11 historical pending WeChat recharge orders, but no migration had been applied at
-  the time of this status update;
-- no remote migration, deployment, or database mutation was performed;
-- no real WeChat payment/query/close smoke was run against an unconfirmed database target.
+- all five migrations were applied through `supabase db push`; `migration list` is aligned through
+  `20260718123000`, and a final dry-run reports the database is up to date;
+- service-role RPC smoke proved the non-atomic core returns permission denied, while both legacy and
+  new atomic entry names reach the same guarded order-not-found path;
+- a bounded real WeChat worker smoke reconciled the 11 historical pending orders: two existing WeChat
+  orders were remotely closed, eight no-prepay placeholders returned exact
+  `404 / ORDER_NOT_EXIST` and were conditionally closed locally, and one stored-prepay historical
+  order returned the same contradiction and was closed during diagnosis before the safer guard was
+  added; final dev state has zero pending orders and zero active claims;
+- the current worktree API registered the list and continue-payment routes on temporary port 3002 and
+  returned the expected `401 / TOKEN_MISSING` without credentials; it was then stopped. The managed
+  port-3000 service still runs the main-workspace API and was not overwritten;
+- no code was pushed or deployed.
 
-The next database step is to apply the five confirmed migrations to the authorized remote dev target,
-verify migration alignment, regenerate database types from that schema, and run bounded RPC and
-real-payment smoke tests.
+The machine still has no Docker CLI or local PostgreSQL. Therefore the Supabase CLI cannot regenerate
+`apps/api/src/types/database.ts` from the custom dev database; the existing hosted project generator
+is a different/inactive target and was deliberately not used. Type generation remains the only
+environmental release gate.
 
 ## Rollback
 

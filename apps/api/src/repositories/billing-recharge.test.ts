@@ -11,6 +11,7 @@ const rpc = mock(async (
 const select = mock((_columns?: string, _options?: unknown) => query);
 const update = mock((_patch: Record<string, unknown>) => query);
 const eq = mock((_column: string, _value: unknown) => query);
+const is = mock((_column: string, _value: unknown) => query);
 const range = mock((_from: number, _to: number) => query);
 const limit = mock((_value: number) => query);
 const maybeSingle = mock(async () => ({ data: null as unknown, error: null as unknown }));
@@ -23,6 +24,7 @@ const query = {
   select,
   update,
   eq,
+  is,
   or: mock(() => query),
   order: mock(() => query),
   range,
@@ -45,6 +47,7 @@ describe("BillingRechargeRepository", () => {
     select.mockClear();
     update.mockClear();
     eq.mockClear();
+    is.mockClear();
     range.mockClear();
     limit.mockClear();
     maybeSingle.mockClear();
@@ -336,6 +339,19 @@ describe("BillingRechargeRepository", () => {
       ["close_claim_token", "claim-1"],
     ]));
     expect(result).toMatchObject(closed);
+  });
+
+  test("atomically requires a missing prepay id for placeholder closure", async () => {
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    await billingRechargeRepository.markOrderClosed({
+      orderId: "order-1",
+      claimToken: "claim-1",
+      closedAt: new Date("2026-07-18T03:00:01.000Z"),
+      requireMissingPrepay: true,
+    });
+
+    expect(is).toHaveBeenCalledWith("prepay_id", null);
   });
 
   test("releases only the matching claim and truncates diagnostics", async () => {
