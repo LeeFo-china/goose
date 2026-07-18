@@ -104,7 +104,7 @@ export type BillingConfirmWechatRechargeInput = {
   transactionId: string;
   paidAmountFen: number;
   paidAt: string | null;
-  notificationId: string;
+  notificationId: string | null;
   metadata: Record<string, unknown>;
 };
 

@@ -21,6 +21,7 @@ import {
   type WechatPayCallbackContextMatcherDependencies,
 } from "@/services/wechat-pay-callback-context-matcher";
 import { billingSubscriptionService } from "@/services/billing-subscriptions";
+import { BillingRechargePaymentConfirmation } from "@/services/billing-recharge-payment-confirmation";
 import { handleCreditRechargeRefundCallback } from "@/services/wechat-pay-callback-refunds";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
 
@@ -49,6 +50,11 @@ type CreditRechargeRepositoryPort = Pick<
   | "markWechatRechargeRefundFailed"
 >;
 
+type RechargePaymentConfirmationPort = Pick<
+  BillingRechargePaymentConfirmation,
+  "confirm"
+>;
+
 type WechatPayCallbackServiceDependencies =
   WechatPayCallbackContextMatcherDependencies & {
   contextMatcher?: Pick<WechatPayCallbackContextMatcher, "match">;
@@ -57,6 +63,7 @@ type WechatPayCallbackServiceDependencies =
   billingSubscriptionService?: {
     recoverAfterRecharge: (tenantId: string) => Promise<unknown>;
   };
+  rechargePaymentConfirmation?: RechargePaymentConfirmationPort;
   paymentRepository?: PaymentRepositoryPort;
   workflowTaskRepository?: WorkflowTaskRepositoryPort;
   paymentBridge?: PaymentBridgePort;
@@ -69,9 +76,7 @@ export class WechatPayCallbackService {
   private readonly contextMatcher: Pick<WechatPayCallbackContextMatcher, "match">;
   private readonly orderRepository: OrderRepositoryPort;
   private readonly creditRechargeRepository: CreditRechargeRepositoryPort;
-  private readonly billingSubscriptionService: {
-    recoverAfterRecharge: (tenantId: string) => Promise<unknown>;
-  };
+  private readonly rechargePaymentConfirmation: RechargePaymentConfirmationPort;
   private readonly paymentRepository: PaymentRepositoryPort;
   private readonly workflowTaskRepository: WorkflowTaskRepositoryPort;
   private readonly paymentBridge: PaymentBridgePort;
@@ -83,8 +88,12 @@ export class WechatPayCallbackService {
       wechatPayOrderRepository;
     this.creditRechargeRepository = dependencies.creditRechargeRepository ??
       billingRechargeRepository;
-    this.billingSubscriptionService = dependencies.billingSubscriptionService ??
-      billingSubscriptionService;
+    this.rechargePaymentConfirmation = dependencies.rechargePaymentConfirmation ??
+      new BillingRechargePaymentConfirmation({
+        repository: this.creditRechargeRepository,
+        billingSubscriptionService: dependencies.billingSubscriptionService ??
+          billingSubscriptionService,
+      });
     this.paymentRepository = dependencies.paymentRepository ?? paymentRepository;
     this.workflowTaskRepository = dependencies.workflowTaskRepository ??
       workflowTaskRepository;
@@ -261,43 +270,12 @@ export class WechatPayCallbackService {
     if (matched.resource.trade_state !== "SUCCESS") {
       return;
     }
-    if (matched.order.status === "paid" && matched.order.transaction_id) {
-      return;
-    }
-
-    const paidAmountFen = this.getResourceAmountTotal(matched.resource);
-    if (paidAmountFen !== matched.order.amount_fen) {
-      throw Errors.business(
-        409,
-        "微信支付积分充值回调金额与订单金额不一致",
-        "BILLING_RECHARGE_CALLBACK_AMOUNT_MISMATCH",
-        {
-          order_amount_fen: matched.order.amount_fen,
-          callback_amount_fen: paidAmountFen,
-          out_trade_no: matched.order.out_trade_no,
-        },
-      );
-    }
-
-    await this.creditRechargeRepository.confirmWechatRecharge({
-      orderId: matched.order.id,
-      transactionId: this.requireString(
-        matched.resource,
-        "transaction_id",
-        "微信支付交易号缺失",
-      ),
-      paidAmountFen,
-      paidAt: this.optionalString(matched.resource.success_time) ??
-        new Date().toISOString(),
+    await this.rechargePaymentConfirmation.confirm({
+      order: matched.order,
+      transaction: matched.resource,
       notificationId: notification.id,
-      metadata: {
-        callback_notify_id: notification.notify_id,
-        out_trade_no: matched.order.out_trade_no,
-      },
+      source: "wechat_callback",
     });
-    await this.billingSubscriptionService.recoverAfterRecharge(
-      matched.order.tenant_id,
-    );
   }
 
   private buildPaymentInput(matched: ProjectPaymentCallbackContext) {
