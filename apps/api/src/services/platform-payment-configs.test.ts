@@ -71,6 +71,7 @@ const upsertWechatPayConfig = mock(
 const updateSetting = mock(async () => ({
   key: "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
 }));
+const hasPendingWechatOrdersForPaymentConfig = mock(async () => false);
 
 const platformRole = {
   id: "role-platform",
@@ -130,6 +131,9 @@ async function createService() {
     settingsService: {
       updateSetting,
     },
+    pendingRechargeOrders: {
+      hasPendingWechatOrdersForPaymentConfig,
+    },
   });
 }
 
@@ -139,12 +143,14 @@ describe("PlatformPaymentConfigService", () => {
     findWechatPayConfigByProfile.mockClear();
     upsertWechatPayConfig.mockClear();
     updateSetting.mockClear();
+    hasPendingWechatOrdersForPaymentConfig.mockClear();
     findWechatPayConfig.mockImplementation(async () => existingConfig);
     findWechatPayConfigByProfile.mockImplementation(async (profileCode) => {
       if (profileCode === "platform_direct_recharge") return existingConfig;
       if (profileCode === "tenant_service_provider") return serviceProviderConfig;
       return null;
     });
+    hasPendingWechatOrdersForPaymentConfig.mockImplementation(async () => false);
   });
 
   test("rejects non-platform admins", async () => {
@@ -240,6 +246,26 @@ describe("PlatformPaymentConfigService", () => {
       created_by_employee_id: "employee-old",
       updated_by_employee_id: "employee-platform",
     });
+  });
+
+  test("blocks legacy direct-config critical rotation while a matching order is pending", async () => {
+    hasPendingWechatOrdersForPaymentConfig.mockImplementationOnce(
+      async () => true,
+    );
+    const service = await createService();
+
+    await expect(service.saveWechatPayConfig(
+      platformAuth([{ code: "platform.payment.config.manage", scope: "all" }]),
+      { merchant_id: "1900000002" },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+    });
+
+    expect(hasPendingWechatOrdersForPaymentConfig).toHaveBeenCalledWith(
+      existingConfig.id,
+    );
+    expect(upsertWechatPayConfig).not.toHaveBeenCalled();
   });
 
   test("lists direct recharge and tenant service provider payment profiles", async () => {
@@ -363,5 +389,49 @@ describe("PlatformPaymentConfigService", () => {
     expect(result.config?.has_encrypted_config_ref).toBe(true);
     expect(JSON.stringify(result)).not.toContain("12345678901234567890123456789012");
     expect(JSON.stringify(result)).not.toContain("BEGIN PRIVATE KEY");
+  });
+
+  test("blocks referenced secret rotation before writing the setting", async () => {
+    hasPendingWechatOrdersForPaymentConfig.mockImplementationOnce(
+      async () => true,
+    );
+    const service = await createService();
+
+    await expect(service.saveWechatPaySecretBundle(
+      platformAuth([{ code: "platform.payment.config.manage", scope: "all" }]),
+      "platform_direct_recharge",
+      {
+        private_key_pem: "-----BEGIN PRIVATE KEY-----\\nnew\\n-----END PRIVATE KEY-----",
+        api_v3_key: "12345678901234567890123456789012",
+      },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+    });
+
+    expect(hasPendingWechatOrdersForPaymentConfig).toHaveBeenCalledWith(
+      existingConfig.id,
+    );
+    expect(updateSetting).not.toHaveBeenCalled();
+    expect(upsertWechatPayConfig).not.toHaveBeenCalled();
+  });
+
+  test("allows an unrelated service-provider secret update without pending recharge orders", async () => {
+    const service = await createService();
+
+    await service.saveWechatPaySecretBundle(
+      platformAuth([{ code: "platform.payment.config.manage", scope: "all" }]),
+      "tenant_service_provider",
+      {
+        private_key_pem: "-----BEGIN PRIVATE KEY-----\\nnew\\n-----END PRIVATE KEY-----",
+        api_v3_key: "12345678901234567890123456789012",
+      },
+    );
+
+    expect(hasPendingWechatOrdersForPaymentConfig).toHaveBeenCalledWith(
+      serviceProviderConfig.id,
+    );
+    expect(updateSetting).toHaveBeenCalledTimes(1);
+    expect(upsertWechatPayConfig).toHaveBeenCalledTimes(1);
   });
 });

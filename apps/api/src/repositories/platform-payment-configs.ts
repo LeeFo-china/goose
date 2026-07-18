@@ -110,6 +110,19 @@ class PlatformPaymentConfigRepository {
     return (data as PlatformPaymentConfigRecord | null) ?? null;
   }
 
+  async findWechatPayConfigById(configId: string) {
+    const { data, error } = await this.from("platform_payment_configs")
+      .select("*")
+      .eq("id", configId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询平台微信支付配置失败", error);
+    }
+
+    return (data as PlatformPaymentConfigRecord | null) ?? null;
+  }
+
   async listCallbackCandidateConfigs() {
     const { data, error } = await this.from("platform_payment_configs")
       .select("*")

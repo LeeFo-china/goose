@@ -12,7 +12,13 @@ const select = mock((_columns?: string, _options?: unknown) => query);
 const update = mock((_patch: Record<string, unknown>) => query);
 const eq = mock((_column: string, _value: unknown) => query);
 const range = mock((_from: number, _to: number) => query);
+const limit = mock((_value: number) => query);
 const maybeSingle = mock(async () => ({ data: null as unknown, error: null as unknown }));
+let queryResult: { data: unknown[] | null; error: unknown; count: number | null } = {
+  data: [],
+  error: null,
+  count: 0,
+};
 const query = {
   select,
   update,
@@ -20,10 +26,11 @@ const query = {
   or: mock(() => query),
   order: mock(() => query),
   range,
+  limit,
   maybeSingle,
   then: (
-    resolve: (value: { data: unknown[]; error: null; count: number }) => unknown,
-  ) => Promise.resolve({ data: [], error: null, count: 0 }).then(resolve),
+    resolve: (value: typeof queryResult) => unknown,
+  ) => Promise.resolve(queryResult).then(resolve),
 };
 
 mock.module("@/utils/supabase/index", () => ({
@@ -39,7 +46,9 @@ describe("BillingRechargeRepository", () => {
     update.mockClear();
     eq.mockClear();
     range.mockClear();
+    limit.mockClear();
     maybeSingle.mockClear();
+    queryResult = { data: [], error: null, count: 0 };
     rpc.mockImplementation(async () => ({ data: [], error: null }));
     maybeSingle.mockImplementation(async () => ({ data: null, error: null }));
   });
@@ -92,6 +101,52 @@ describe("BillingRechargeRepository", () => {
       },
     );
     expect(result).toEqual(atomicResult);
+  });
+
+  test("checks one matching pending wechat order by payment config id", async () => {
+    queryResult = { data: [{ id: "order-1" }], error: null, count: null };
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    const result = await billingRechargeRepository
+      .hasPendingWechatOrdersForPaymentConfig("config-1");
+
+    expect(select).toHaveBeenCalledWith("id");
+    expect(eq.mock.calls).toEqual(expect.arrayContaining([
+      ["payment_config_id", "config-1"],
+      ["channel", "wechat_pay"],
+      ["status", "pending"],
+    ]));
+    expect(limit).toHaveBeenCalledWith(1);
+    expect(result).toBe(true);
+  });
+
+  test("returns false when the payment config has no pending wechat order", async () => {
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    await expect(
+      billingRechargeRepository.hasPendingWechatOrdersForPaymentConfig(
+        "config-1",
+      ),
+    ).resolves.toBe(false);
+  });
+
+  test("wraps pending-order existence query failures", async () => {
+    queryResult = {
+      data: null,
+      error: { message: "database detail" },
+      count: null,
+    };
+    const { billingRechargeRepository } = await import("./billing-recharge");
+
+    await expect(
+      billingRechargeRepository.hasPendingWechatOrdersForPaymentConfig(
+        "config-1",
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "检查微信充值待支付订单失败",
+    });
   });
 
   test("claims one bounded page of expired orders through the lease RPC", async () => {

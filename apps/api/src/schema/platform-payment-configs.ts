@@ -2,7 +2,8 @@ import { z } from "zod";
 
 const nullableText = (max: number, message: string) =>
   z.preprocess((value) => {
-    if (value == null) return null;
+    if (value === undefined) return undefined;
+    if (value === null) return null;
     if (typeof value !== "string") return value;
     const normalized = value.trim();
     return normalized || null;
@@ -27,7 +28,7 @@ export const UpdatePlatformWechatPayConfigSchema = z.object({
   merchant_mode: z.enum(
     ["direct_merchant", "service_provider_sub_merchant"],
     { message: "无效的平台支付商户模式" },
-  ).default("direct_merchant"),
+  ).optional(),
   merchant_name: nullableText(100, "商户名称不能超过 100 个字符"),
   merchant_id: nullableText(64, "商户号不能超过 64 个字符"),
   sub_merchant_id: nullableText(64, "子商户号不能超过 64 个字符"),
@@ -36,7 +37,8 @@ export const UpdatePlatformWechatPayConfigSchema = z.object({
   encrypted_config_ref: nullableText(300, "密钥引用不能超过 300 个字符"),
   serial_no: nullableText(128, "证书序列号不能超过 128 个字符"),
   notify_url: z.preprocess((value) => {
-    if (value == null) return null;
+    if (value === undefined) return undefined;
+    if (value === null) return null;
     if (typeof value !== "string") return value;
     const normalized = value.trim();
     return normalized || null;
@@ -45,7 +47,7 @@ export const UpdatePlatformWechatPayConfigSchema = z.object({
     .min(1, "至少启用一个平台支付渠道")
     .max(5, "启用渠道过多")
     .optional(),
-  status: PlatformPaymentConfigStatusSchema.default("pending"),
+  status: PlatformPaymentConfigStatusSchema.optional(),
   risk_switches: z.record(z.string(), z.unknown()).optional(),
 }).strict();
 

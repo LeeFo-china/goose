@@ -1,5 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import type { BillingAccountBalance } from "@/repositories/billing";
+import { hasPendingWechatOrdersForPaymentConfig } from "@/repositories/billing-recharge-payment-config";
 import {
   claimExpiredRechargeOrders,
   markClaimedRechargeOrderClosed,
@@ -163,6 +164,8 @@ class BillingRechargeRepository {
   readonly claimExpiredOrders = claimExpiredRechargeOrders;
   readonly markOrderClosed = markClaimedRechargeOrderClosed;
   readonly releaseCloseClaim = releaseRechargeOrderCloseClaim;
+  readonly hasPendingWechatOrdersForPaymentConfig =
+    hasPendingWechatOrdersForPaymentConfig;
 
   private from(table: Parameters<UntypedClient["from"]>[0]) {
     return (SupabaseDB.getAdminClient() as unknown as UntypedClient).from(table);
