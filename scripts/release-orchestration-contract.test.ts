@@ -2989,6 +2989,14 @@ describe("production orchestrator", () => {
     expect(loopback).toContain("This workflow does not install or reload production Nginx");
     expect(deployProductionWorkflow).not.toMatch(/(?:sudo\s+)?nginx\s+-t/);
     expect(deployProductionWorkflow).not.toMatch(/systemctl\s+reload\s+nginx/);
+    expect(deployProductionWorkflow).not.toMatch(
+      /docker\s+exec\s+supabase-nginx/,
+    );
+    expect(deployProductionWorkflow).not.toContain("certbot");
+    expect(deployProductionWorkflow).not.toContain("gooes-www-cert-renew");
+    expect(deployProductionWorkflow).not.toContain(
+      "/opt/supabase/docker/volumes/proxy/nginx/supabase-nginx.conf.tpl",
+    );
     expect(deployProductionWorkflow).not.toContain("/etc/nginx");
   });
 
