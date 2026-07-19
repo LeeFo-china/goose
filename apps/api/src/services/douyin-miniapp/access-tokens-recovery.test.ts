@@ -185,6 +185,9 @@ describe("DouyinMiniappAccessTokenService recovery boundaries", () => {
         deploymentKey: "merchant-a", rejectedAccessToken: "provider-rejected-token" }))
       .resolves.toBe("refreshed-token");
     expect(claim).toHaveBeenCalledTimes(1);
+    expect(claim).toHaveBeenCalledWith(INSTALLATION_ID, {
+      expectedAccessTokenCiphertext: rejected.ciphertext,
+    });
     expect(openPlatform.refreshAuthorizerToken).toHaveBeenCalledTimes(1);
   });
 

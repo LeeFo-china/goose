@@ -75,11 +75,11 @@ export interface ComponentTokenRepository {
   }): Promise<boolean>;
 }
 export interface AuthorizerTokenRepository {
-  findActiveMerchant(
-    authorizerAppId: string,
-    deploymentKey: string,
-  ): Promise<DouyinMiniappInstallationRecord | null>;
-  claimAccessTokenRefresh(installationId: string): Promise<DouyinRefreshLease | null>;
+  findActiveMerchant(authorizerAppId: string, deploymentKey: string):
+    Promise<DouyinMiniappInstallationRecord | null>;
+  claimAccessTokenRefresh(installationId: string,
+    force?: { readonly expectedAccessTokenCiphertext: string },
+  ): Promise<DouyinRefreshLease | null>;
   completeAccessTokenRefresh(input: {
     readonly installationId: string;
     readonly claimToken: string;
@@ -109,7 +109,6 @@ export class DouyinMiniappAccessTokenService {
   private readonly sleep: (milliseconds: number) => Promise<void>;
   private readonly setTimeout: SetTimer;
   private readonly clearTimeout: ClearTimer;
-
   constructor(private readonly options: ServiceOptions) {
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? sleepWithTimer;
@@ -125,7 +124,6 @@ export class DouyinMiniappAccessTokenService {
     }
     const stored = this.openValidAccessToken(row);
     if (stored) return stored;
-
     const lease = await this.options.componentRepository.claimAccessTokenRefresh(
       this.options.componentAppId,
     );
@@ -159,9 +157,11 @@ export class DouyinMiniappAccessTokenService {
     assertComponentBinding(installation.component_appid, this.options.componentAppId);
     const stored = this.openValidAccessToken(installation);
     if (stored && stored !== rejectedAccessToken) return stored;
-
     const lease = await this.options.installationRepository.claimAccessTokenRefresh(
       installation.id,
+      stored === rejectedAccessToken && installation.access_token_ciphertext
+        ? { expectedAccessTokenCiphertext: installation.access_token_ciphertext }
+        : undefined,
     );
     if (!lease) return this.pollAuthorizerAccessToken(input, rejectedAccessToken);
     return this.refreshAuthorizerAccessToken(installation, lease);

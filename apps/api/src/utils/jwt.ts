@@ -252,7 +252,7 @@ export function verifyTokenDetailed(token: string): {
         return { payload: null, reason: "invalid" };
       }
     } else if (payload.token_type === "douyin_miniapp") {
-      if (!isValidDouyinMiniappPayload(payload)) {
+      if (!isValidDouyinMiniappPayload(payload, now)) {
         return { payload: null, reason: "invalid" };
       }
     } else if (!payload.sub) {
@@ -325,6 +325,7 @@ export function getDouyinMiniappTokenExpiresInSeconds() {
 
 function isValidDouyinMiniappPayload(
   payload: JwtPayload,
+  now: number,
 ): payload is DouyinMiniappTokenPayload {
   return Object.keys(payload).every((claim) => DOUYIN_MINIAPP_CLAIMS.has(claim))
     && payload.login_channel === "douyin"
@@ -345,7 +346,8 @@ function isValidDouyinMiniappPayload(
     && Number.isSafeInteger(payload.iat)
     && Number.isSafeInteger(payload.exp)
     && payload.iat! >= 0
-    && payload.exp! >= payload.iat!
+    && payload.iat! <= now + 60
+    && payload.exp! > payload.iat!
     && payload.exp! - payload.iat! <= DOUYIN_MINIAPP_MAX_EXPIRES_IN_SECONDS;
 }
 

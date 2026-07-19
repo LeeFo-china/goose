@@ -222,6 +222,22 @@ describe("DouyinMiniappInstallationsRepository refresh RPCs", () => {
       .rejects.toMatchObject({ code: "DOUYIN_INSTALLATION_REPOSITORY_RESPONSE_INVALID" });
   });
 
+  test("uses the exact-token CAS RPC for a provider-forced refresh claim", async () => {
+    const lease = [{ claim_token: "11111111-1111-4111-8111-111111111111",
+      claim_expires_at: "2026-07-20T00:00:30.000Z" }];
+    const { client, calls } = createClient([{ data: lease, error: null }]);
+    const repository = new DouyinMiniappInstallationsRepository(client);
+
+    await expect(repository.claimAccessTokenRefresh(installationRow.id, {
+      expectedAccessTokenCiphertext: "rejected-access-ciphertext",
+    })).resolves.toMatchObject({ claimToken: lease[0]!.claim_token });
+    expect(calls.find((call) => call.method === "rpc")?.args).toEqual([
+      "claim_douyin_authorizer_token_force_refresh",
+      { p_installation_id: installationRow.id,
+        p_expected_access_token_ciphertext: "rejected-access-ciphertext" },
+    ]);
+  });
+
   test("complete input enforces five all-string or five all-null rotation fields", async () => {
     const noRotation: AuthorizerRefreshRotation = {
       ciphertext: null, iv: null, tag: null, keyVersion: null, expiresAt: null,

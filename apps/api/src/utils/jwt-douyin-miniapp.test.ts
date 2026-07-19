@@ -103,4 +103,20 @@ describe("Douyin miniapp JWT", () => {
       });
     }
   });
+
+  test("rejects a Douyin session issued too far in the future", () => {
+    const realNow = Date.now;
+    let token: string;
+    try {
+      Date.now = () => realNow() + 5 * 60 * 1000;
+      token = jwt.signDouyinMiniappToken(payload);
+    } finally {
+      Date.now = realNow;
+    }
+
+    expect(jwt.verifyTokenDetailed(token!)).toMatchObject({
+      payload: null,
+      reason: "invalid",
+    });
+  });
 });

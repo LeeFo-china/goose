@@ -96,6 +96,11 @@ describe("douyin miniapp database types", () => {
       },
     ];
     const claimReturn = claimReturns[0]!;
+    const forceClaimArgs:
+      DouyinFunctions["claim_douyin_authorizer_token_force_refresh"]["Args"] = {
+        p_expected_access_token_ciphertext: "rejected-access-ciphertext",
+        p_installation_id: claimArgs.p_installation_id,
+      };
     const completeArgs: DouyinFunctions["complete_douyin_authorizer_token_refresh"]["Args"] = {
       p_access_token_ciphertext: "access-ciphertext",
       p_access_token_expires_at: "2026-07-19T11:00:00.000Z",
@@ -120,12 +125,13 @@ describe("douyin miniapp database types", () => {
 
     expect([
       claimArgs.p_installation_id,
+      forceClaimArgs.p_expected_access_token_ciphertext,
       claimReturn.claim_expires_at,
       completeArgs.p_access_token_key_version,
       completeArgs.p_refresh_token_key_version,
       failArgs.p_last_refresh_error_code,
       completeReturns,
       failReturns,
-    ]).toHaveLength(7);
+    ]).toHaveLength(8);
   });
 });

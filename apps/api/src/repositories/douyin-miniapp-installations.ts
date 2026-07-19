@@ -153,11 +153,19 @@ export class DouyinMiniappInstallationsRepository {
     });
   }
 
-  async claimAccessTokenRefresh(installationId: string): Promise<DouyinRefreshLease | null> {
+  async claimAccessTokenRefresh(
+    installationId: string,
+    force?: { readonly expectedAccessTokenCiphertext: string },
+  ): Promise<DouyinRefreshLease | null> {
     return executeInstallationOperation("申领抖音授权凭证刷新租约失败", async () => {
-      const result = await this.client.rpc("claim_douyin_authorizer_token_refresh", {
-        p_installation_id: installationId,
-      });
+      const result = force
+        ? await this.client.rpc("claim_douyin_authorizer_token_force_refresh", {
+          p_installation_id: installationId,
+          p_expected_access_token_ciphertext: force.expectedAccessTokenCiphertext,
+        })
+        : await this.client.rpc("claim_douyin_authorizer_token_refresh", {
+          p_installation_id: installationId,
+        });
       assertDatabaseSuccess(result, "申领抖音授权凭证刷新租约失败");
       return parseLease(result.data);
     });

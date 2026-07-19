@@ -12446,6 +12446,16 @@ export type Database = {
           claim_token: string
         }[]
       }
+      claim_douyin_authorizer_token_force_refresh: {
+        Args: {
+          p_expected_access_token_ciphertext: string
+          p_installation_id: string
+        }
+        Returns: {
+          claim_expires_at: string
+          claim_token: string
+        }[]
+      }
       claim_douyin_authorizer_token_refresh: {
         Args: { p_installation_id: string }
         Returns: {
