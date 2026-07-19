@@ -50,7 +50,6 @@ const InstallationRowSchema = z.object({
   token_refresh_claim_token: NullableString,
   token_refresh_claim_expires_at: NullableString,
 });
-const TenantRowSchema = z.object({ id: z.string().min(1), status: z.literal("active") });
 const LeaseRowSchema = z.object({
   claim_token: z.string().uuid(),
   claim_expires_at: z.string().min(1),
@@ -138,35 +137,18 @@ export class DouyinMiniappInstallationsRepository {
     readonly authorizerAppId: string;
     readonly tenantId: string;
     readonly deploymentKey: string;
+    readonly runtimeConfig: unknown;
   }): Promise<DouyinMiniappInstallationRecord> {
     return executeInstallationOperation("绑定抖音小程序租户失败", async () => {
-      const tenant = await this.client
-        .from("tenants")
-        .select("id,status")
-        .eq("id", input.tenantId)
-        .eq("status", "active")
-        .maybeSingle();
-      assertDatabaseSuccess(tenant, "校验抖音小程序绑定租户失败");
-      if (!TenantRowSchema.safeParse(tenant.data).success) {
-        throw Errors.business(409, "租户不存在或未启用", "DOUYIN_TENANT_NOT_ACTIVE");
-      }
-
-      const result = await this.client
-        .from("douyin_miniapp_installations")
-        .update({
-          tenant_id: input.tenantId,
-          deployment_key: input.deploymentKey,
-          authorization_status: "active",
-        })
-        .eq("authorizer_appid", input.authorizerAppId)
-        .eq("installation_kind", "merchant")
-        .in("authorization_status", ["authorized_unbound", "active"])
-        .select(INSTALLATION_SELECT)
-        .maybeSingle();
+      const result = await this.client.rpc("bind_douyin_miniapp_installation", {
+        p_authorizer_appid: input.authorizerAppId,
+        p_tenant_id: input.tenantId,
+        p_deployment_key: input.deploymentKey,
+        p_runtime_config: input.runtimeConfig,
+      });
+      assertBindingSuccess(result);
       const installation = parseInstallationResult(result, "绑定抖音小程序租户失败");
-      if (!installation) {
-        throw Errors.business(409, "抖音小程序授权不可绑定", "DOUYIN_INSTALLATION_BIND_CONFLICT");
-      }
+      if (!installation) throw invalidResponseError();
       return installation;
     });
   }
@@ -298,6 +280,23 @@ function assertDatabaseSuccess(
   if (result.error) {
     throw Errors.business(500, message, "DOUYIN_INSTALLATION_REPOSITORY_ERROR");
   }
+}
+
+function assertBindingSuccess(result: DouyinInstallationDatabaseResult): void {
+  if (!result.error) return;
+  const message = databaseErrorMessage(result.error);
+  if (message === "DOUYIN_TENANT_NOT_ACTIVE") {
+    throw Errors.business(409, "租户不存在或未启用", message);
+  }
+  if (message === "DOUYIN_INSTALLATION_BIND_CONFLICT") {
+    throw Errors.business(409, "抖音小程序授权不可绑定", message);
+  }
+  throw Errors.business(500, "绑定抖音小程序租户失败", "DOUYIN_INSTALLATION_REPOSITORY_ERROR");
+}
+
+function databaseErrorMessage(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("message" in error)) return undefined;
+  return typeof error.message === "string" ? error.message : undefined;
 }
 
 function invalidResponseError() {

@@ -99,39 +99,49 @@ describe("DouyinMiniappInstallationsRepository lookups", () => {
     expect(calls).toContainEqual({ method: "eq", args: ["authorization_status", "active"] });
   });
 
-  test("tenant binding rejects a nonexistent or inactive tenant before mutation", async () => {
-    for (const tenantResult of [null, { id: "tenant-id", status: "disabled" }]) {
-      const { client, calls } = createClient([{ data: tenantResult, error: null }]);
-      await expect(new DouyinMiniappInstallationsRepository(client).bindActiveTenant({
-        authorizerAppId: "authorizer-appid",
-        tenantId: "tenant-id",
-        deploymentKey: "merchant-a",
-      })).rejects.toMatchObject({ code: "DOUYIN_TENANT_NOT_ACTIVE" });
-      expect(calls.some((call) => call.method === "update")).toBe(false);
-    }
-  });
-
-  test("tenant binding verifies active status then updates the matching merchant", async () => {
-    const { client, calls } = createClient([
-      { data: { id: "tenant-id", status: "active" }, error: null },
-      { data: installationRow, error: null },
-    ]);
+  test("tenant binding delegates validation and serialization to one RPC", async () => {
+    const { client, calls } = createClient([{ data: installationRow, error: null }]);
     const repository = new DouyinMiniappInstallationsRepository(client);
 
     await expect(repository.bindActiveTenant({
       authorizerAppId: "authorizer-appid",
       tenantId: "tenant-id",
       deploymentKey: "merchant-a",
+      runtimeConfig: { brand: { name: "Merchant A" } },
     })).resolves.toEqual(installationRow);
 
-    expect(calls).toContainEqual({ method: "eq", args: ["id", "tenant-id"] });
-    expect(calls).toContainEqual({ method: "eq", args: ["status", "active"] });
-    expect(calls).toContainEqual({ method: "update", args: [{
-      tenant_id: "tenant-id",
-      deployment_key: "merchant-a",
-      authorization_status: "active",
-    }] });
-    expect(calls).toContainEqual({ method: "eq", args: ["authorizer_appid", "authorizer-appid"] });
+    expect(calls).toContainEqual({ method: "rpc", args: [
+      "bind_douyin_miniapp_installation",
+      { p_authorizer_appid: "authorizer-appid", p_tenant_id: "tenant-id",
+        p_deployment_key: "merchant-a", p_runtime_config: { brand: { name: "Merchant A" } } },
+    ] });
+    expect(calls.some((call) => call.method === "from" || call.method === "update")).toBe(false);
+  });
+
+  test("maps inactive tenant binding to a stable conflict", async () => {
+    const { client } = createClient([{
+      data: null, error: { message: "DOUYIN_TENANT_NOT_ACTIVE", details: "tenant-id" },
+    }]);
+    await expect(new DouyinMiniappInstallationsRepository(client).bindActiveTenant({
+      authorizerAppId: "authorizer-appid", tenantId: "tenant-id",
+      deploymentKey: "merchant-a", runtimeConfig: {},
+    })).rejects.toMatchObject({ statusCode: 409, code: "DOUYIN_TENANT_NOT_ACTIVE" });
+  });
+
+  test("keeps active cross-tenant and parameter changes serialized as RPC conflicts", async () => {
+    for (const input of [
+      { tenantId: "other-tenant", deploymentKey: "merchant-a", runtimeConfig: {} },
+      { tenantId: "tenant-id", deploymentKey: "merchant-b", runtimeConfig: { changed: true } },
+    ]) {
+      const { client, calls } = createClient([{
+        data: null, error: { message: "DOUYIN_INSTALLATION_BIND_CONFLICT" },
+      }]);
+      await expect(new DouyinMiniappInstallationsRepository(client).bindActiveTenant({
+        authorizerAppId: "authorizer-appid", ...input,
+      })).rejects.toMatchObject({ statusCode: 409, code: "DOUYIN_INSTALLATION_BIND_CONFLICT" });
+      expect(calls.filter((call) => call.method === "rpc")).toHaveLength(1);
+      expect(calls.some((call) => call.method === "from" || call.method === "update")).toBe(false);
+    }
   });
 
   test("wraps rejected database operations without exposing their exception", async () => {
