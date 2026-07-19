@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PaginationQuerySchema } from "@/schema/request";
 
 const DouyinEntryPathSchema = z.enum([
   "pages/home/index",
@@ -38,6 +39,19 @@ export const DouyinMiniappSessionRequestSchema = z.strictObject({
   launch_context: DouyinLaunchContextSchema,
 });
 
+export const DouyinContentPageQuerySchema = PaginationQuerySchema.strict();
+
+export const DouyinCaseListQuerySchema = PaginationQuerySchema.extend({
+  style: z.string().trim().min(1).max(40).optional(),
+  layout: z.string().trim().min(1).max(40).optional(),
+}).strict();
+
+export const DouyinContentIdParamsSchema = z.strictObject({
+  id: z.uuid("无效的公开内容 ID"),
+});
+
 export type DouyinMiniappSessionRequest = z.infer<
   typeof DouyinMiniappSessionRequestSchema
 >;
+export type DouyinContentPageQuery = z.infer<typeof DouyinContentPageQuerySchema>;
+export type DouyinCaseListQuery = z.infer<typeof DouyinCaseListQuerySchema>;
