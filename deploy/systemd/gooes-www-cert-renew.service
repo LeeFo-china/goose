@@ -5,6 +5,7 @@ After=docker.service
 
 [Service]
 Type=oneshot
-ExecStartPre=/usr/bin/docker exec supabase-nginx rm -f /tmp/gooes-www-cert-renew-hook-failed
-ExecStart=/usr/bin/docker exec supabase-nginx certbot renew --cert-name www.goodcms.cn --non-interactive --quiet --no-directory-hooks --deploy-hook "nginx -t && nginx -s reload || { touch /tmp/gooes-www-cert-renew-hook-failed; exit 1; }"
-ExecStartPost=/usr/bin/docker exec supabase-nginx test ! -e /tmp/gooes-www-cert-renew-hook-failed
+ExecStartPre=/opt/gooes/cert-renewal/gooes-www-cert-renew prepare
+ExecStart=/opt/gooes/cert-renewal/gooes-www-cert-renew renew
+ExecStopPost=/opt/gooes/cert-renewal/gooes-www-cert-renew cleanup
+TimeoutStartSec=15min
