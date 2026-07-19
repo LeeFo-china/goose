@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  type KeyObject,
+} from "node:crypto";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 
@@ -9,7 +14,7 @@ const STANDARD_BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-
 
 export type DouyinCredentialKeyring = {
   readonly activeKeyVersion: string;
-  readonly keys: Readonly<Record<string, Buffer>>;
+  readonly keys: Readonly<Record<string, KeyObject>>;
 };
 
 export type DouyinCredentialEnvelope = {
@@ -24,7 +29,7 @@ export function sealDouyinCredential(
   keyring: DouyinCredentialKeyring,
 ): DouyinCredentialEnvelope {
   const key = keyring.keys[keyring.activeKeyVersion];
-  if (!key || key.length !== CREDENTIAL_KEY_BYTES) {
+  if (!isValidCredentialKey(key)) {
     throw Errors.business(
       503,
       "抖音授权凭证活动密钥不可用",
@@ -32,19 +37,23 @@ export function sealDouyinCredential(
     );
   }
 
-  const iv = randomBytes(GCM_IV_BYTES);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ciphertext = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
+  try {
+    const iv = randomBytes(GCM_IV_BYTES);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const ciphertext = Buffer.concat([
+      cipher.update(plaintext, "utf8"),
+      cipher.final(),
+    ]);
 
-  return {
-    ciphertext: ciphertext.toString("base64"),
-    iv: iv.toString("base64"),
-    tag: cipher.getAuthTag().toString("base64"),
-    keyVersion: keyring.activeKeyVersion,
-  };
+    return {
+      ciphertext: ciphertext.toString("base64"),
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      keyVersion: keyring.activeKeyVersion,
+    };
+  } catch {
+    throw credentialEncryptError();
+  }
 }
 
 export function openDouyinCredential(
@@ -52,7 +61,7 @@ export function openDouyinCredential(
   keyring: DouyinCredentialKeyring,
 ): string {
   const key = keyring.keys[envelope.keyVersion];
-  if (!key || key.length !== CREDENTIAL_KEY_BYTES) {
+  if (!isValidCredentialKey(key)) {
     throw Errors.business(
       500,
       "抖音授权凭证密钥版本不可用",
@@ -100,4 +109,16 @@ function credentialDecryptError(): AppError {
     "抖音授权凭证解密失败",
     "DOUYIN_CREDENTIAL_DECRYPT_FAILED",
   );
+}
+
+function credentialEncryptError(): AppError {
+  return Errors.business(
+    500,
+    "抖音授权凭证加密失败",
+    "DOUYIN_CREDENTIAL_ENCRYPT_FAILED",
+  );
+}
+
+function isValidCredentialKey(key: KeyObject | undefined): key is KeyObject {
+  return key?.type === "secret" && key.symmetricKeySize === CREDENTIAL_KEY_BYTES;
 }

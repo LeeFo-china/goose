@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createSecretKey } from "node:crypto";
 import { AppError } from "@/errors/app-error";
 import { loadDouyinMiniappConfig } from "./config";
 
@@ -40,6 +41,18 @@ function captureAppError(action: () => unknown): AppError {
   return caught as AppError;
 }
 
+function expectConfigErrorWithoutValues(
+  env: Record<string, string>,
+  values: readonly string[],
+): void {
+  const error = captureAppError(() => loadDouyinMiniappConfig(env));
+  const details = JSON.stringify(error.details);
+  for (const value of values) {
+    expect(error.message).not.toContain(value);
+    expect(details).not.toContain(value);
+  }
+}
+
 describe("douyin miniapp config", () => {
   test("loads all static configuration and decoded credential keys", () => {
     const config = loadDouyinMiniappConfig(validEnv());
@@ -47,8 +60,17 @@ describe("douyin miniapp config", () => {
     expect(config.componentAppId).toBe("tt-component-1");
     expect(config.templateAppId).toBe("tt-template-1");
     expect(config.credentialKeyring.activeKeyVersion).toBe("v2");
-    expect(config.credentialKeyring.keys.v1).toEqual(Buffer.alloc(32, 0x31));
-    expect(config.credentialKeyring.keys.v2).toEqual(Buffer.alloc(32, 0x32));
+    expect(Buffer.isBuffer(config.credentialKeyring.keys.v1)).toBe(false);
+    expect(config.credentialKeyring.keys.v1).toMatchObject({
+      type: "secret",
+      symmetricKeySize: 32,
+    });
+    expect(config.credentialKeyring.keys.v1?.equals(
+      createSecretKey(Buffer.alloc(32, 0x31)),
+    )).toBe(true);
+    expect(config.credentialKeyring.keys.v2?.equals(
+      createSecretKey(Buffer.alloc(32, 0x32)),
+    )).toBe(true);
   });
 
   test("rejects credential keys JSON that is not an object", () => {
@@ -90,6 +112,36 @@ describe("douyin miniapp config", () => {
 
     captureAppError(() => loadDouyinMiniappConfig(env));
   });
+
+  test("rejects duplicate decoded credential key versions", () => {
+    const env = validEnv();
+    const duplicateJson = `{"v1":"${keyV1}","v1":"${keyV2}"}`;
+    env.DOUYIN_CREDENTIAL_KEYS_JSON = duplicateJson;
+    env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = "v1";
+
+    expectConfigErrorWithoutValues(env, [duplicateJson, keyV1, keyV2]);
+  });
+
+  test("rejects duplicate versions after JSON string escape decoding", () => {
+    const env = validEnv();
+    const escapedDuplicateJson = `{"v\\u0031":"${keyV1}","v1":"${keyV2}"}`;
+    env.DOUYIN_CREDENTIAL_KEYS_JSON = escapedDuplicateJson;
+    env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = "v1";
+
+    expectConfigErrorWithoutValues(env, [escapedDuplicateJson, keyV1, keyV2]);
+  });
+
+  test.each(["__proto__", "constructor", "prototype"])(
+    "rejects reserved credential key version %s without silently dropping it",
+    (reservedVersion) => {
+      const env = validEnv();
+      const reservedJson = `{"v1":"${keyV1}","${reservedVersion}":"${keyV2}"}`;
+      env.DOUYIN_CREDENTIAL_KEYS_JSON = reservedJson;
+      env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = "v1";
+
+      expectConfigErrorWithoutValues(env, [reservedJson, keyV1, keyV2]);
+    },
+  );
 
   test("accepts the maximum of 16 credential key versions", () => {
     const env = validEnv();

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createSecretKey } from "node:crypto";
 import { AppError } from "@/errors/app-error";
 import {
   openDouyinCredential,
@@ -6,15 +7,15 @@ import {
   type DouyinCredentialKeyring,
 } from "./credential-envelope";
 
-const v1Key = Buffer.alloc(32, 0x11);
-const v2Key = Buffer.alloc(32, 0x22);
+const v1Key = createSecretKey(Buffer.alloc(32, 0x11));
+const v2Key = createSecretKey(Buffer.alloc(32, 0x22));
 
 const keyring: DouyinCredentialKeyring = {
   activeKeyVersion: "v2",
   keys: { v1: v1Key, v2: v2Key },
 };
 
-function expectAppError(action: () => unknown, code: string): void {
+function expectAppError(action: () => unknown, code: string): AppError {
   let caught: unknown;
   try {
     action();
@@ -24,6 +25,7 @@ function expectAppError(action: () => unknown, code: string): void {
 
   expect(caught).toBeInstanceOf(AppError);
   expect(caught).toMatchObject({ code });
+  return caught as AppError;
 }
 
 describe("douyin credential envelope", () => {
@@ -41,6 +43,20 @@ describe("douyin credential envelope", () => {
     const second = sealDouyinCredential("isvrft.secret", keyring);
 
     expect(first.iv).not.toBe(second.iv);
+  });
+
+  test("keeps key material independent from the mutable source buffer", () => {
+    const source = Buffer.alloc(32, 0x44);
+    const protectedKey = createSecretKey(source);
+    source.fill(0);
+    const protectedKeyring: DouyinCredentialKeyring = {
+      activeKeyVersion: "v1",
+      keys: { v1: protectedKey },
+    };
+
+    const sealed = sealDouyinCredential("protected.secret", protectedKeyring);
+
+    expect(openDouyinCredential(sealed, protectedKeyring)).toBe("protected.secret");
   });
 
   test("decrypts an old-version envelope while the old key remains", () => {
@@ -70,6 +86,17 @@ describe("douyin credential envelope", () => {
       }),
       "DOUYIN_CREDENTIAL_ACTIVE_KEY_MISSING",
     );
+  });
+
+  test("wraps encryption runtime failures without exposing their cause", () => {
+    const error = expectAppError(
+      () => sealDouyinCredential(Symbol("invalid-plaintext") as never, keyring),
+      "DOUYIN_CREDENTIAL_ENCRYPT_FAILED",
+    );
+
+    expect(error.statusCode).toBe(500);
+    expect(error.details).toBeUndefined();
+    expect(error.cause).toBeUndefined();
   });
 
   test("rejects a tampered authentication tag", () => {

@@ -95,7 +95,12 @@ describe("douyin callback crypto", () => {
     })).toEqual(fixture.message);
   });
 
-  test("rejects an invalid signature", () => {
+  test.each([
+    ["uppercase", (signature: string) => signature.toUpperCase()],
+    ["non-hex", (signature: string) => `${signature.slice(0, -1)}g`],
+    ["39-character", (signature: string) => signature.slice(0, -1)],
+    ["41-character", (signature: string) => `${signature}0`],
+  ])("rejects a %s signature", (_caseName, mutateSignature) => {
     const fixture = encryptFixture();
 
     expect(verifyDouyinCallbackSignature({
@@ -103,7 +108,7 @@ describe("douyin callback crypto", () => {
       timestamp: TIMESTAMP,
       nonce: NONCE,
       encrypted: fixture.encrypted,
-      signature: `0${fixture.signature.slice(1)}`,
+      signature: mutateSignature(fixture.signature),
     })).toBe(false);
   });
 
