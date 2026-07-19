@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createVerify, generateKeyPairSync } from "node:crypto";
+import { createVerify, generateKeyPairSync, sign } from "node:crypto";
 import type { WechatPayJsapiConfig } from "./wechat-pay-jsapi-request-builder";
 import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
 import { buildWechatPayRequestSignMessage } from "./wechat-pay-signatures";
@@ -8,6 +8,9 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
+const RESPONSE_TIMESTAMP = "1782873600";
+const RESPONSE_NONCE = "response-nonce";
+const PUBLIC_KEY_ID = "PUB_KEY_ID_TEST";
 const { privateKey, publicKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
@@ -31,12 +34,12 @@ const partnerConfig = {
 const secretBundle = {
   privateKeyPem: privateKey,
   apiV3Key: "api-v3-key",
-  wechatPayPublicKeyId: null,
-  wechatPayPublicKeyPem: null,
+  wechatPayPublicKeyId: PUBLIC_KEY_ID,
+  wechatPayPublicKeyPem: publicKey,
   baseUrl: "https://api.mch.weixin.qq.com",
 } satisfies WechatPaySecretBundle;
 
-describe("queryWechatPayTransactionByOutTradeNo", () => {
+describe("WechatPayGateway query transaction", () => {
   test("normalizes query timeout to the supported 1 to 60 second range", async () => {
     const { normalizeWechatPayQueryRequestTimeout } = await import(
       "./wechat-pay-gateway-query-transaction"
@@ -53,19 +56,14 @@ describe("queryWechatPayTransactionByOutTradeNo", () => {
       expect(String(url)).toBe(`${secretBundle.baseUrl}${path}`);
       expect(init?.method).toBe("GET");
       expectSignature(init, path);
-      return jsonResponse({ trade_state: "NOTPAY" });
+      return signedJsonResponse({ trade_state: "NOTPAY" });
     }) as unknown as typeof fetch;
-    const { queryWechatPayTransactionByOutTradeNo } = await import(
-      "./wechat-pay-gateway-query-transaction"
-    );
+    const gateway = await createGateway(fetchImpl);
 
-    const result = await queryWechatPayTransactionByOutTradeNo({
+    const result = await gateway.queryTransactionByOutTradeNo({
       config: directConfig,
       outTradeNo: "WX/2026?07",
       secretBundle,
-      fetchImpl,
-      nonce: "nonce-1",
-      timestamp: "1782873600",
     });
 
     expect(result.trade_state).toBe("NOTPAY");
@@ -76,23 +74,18 @@ describe("queryWechatPayTransactionByOutTradeNo", () => {
     const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe(`${secretBundle.baseUrl}${path}`);
       expectSignature(init, path);
-      return jsonResponse({ trade_state: "SUCCESS" });
+      return signedJsonResponse({ trade_state: "SUCCESS" });
     }) as unknown as typeof fetch;
-    const { queryWechatPayTransactionByOutTradeNo } = await import(
-      "./wechat-pay-gateway-query-transaction"
-    );
+    const gateway = await createGateway(fetchImpl);
 
-    await queryWechatPayTransactionByOutTradeNo({
+    await gateway.queryTransactionByOutTradeNo({
       config: partnerConfig,
       outTradeNo: "WX1",
       secretBundle,
-      fetchImpl,
-      nonce: "nonce-1",
-      timestamp: "1782873600",
     });
   });
 
-  test("aborts a timed-out query with a stable diagnostic", async () => {
+  test("aborts a timed-out query with the source timeout contract", async () => {
     let didAbort = false;
     const fetchImpl = mock((_url: string | URL | Request, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
@@ -103,20 +96,21 @@ describe("queryWechatPayTransactionByOutTradeNo", () => {
           reject(signal.reason);
         }, { once: true });
       })) as unknown as typeof fetch;
-    const { queryWechatPayTransactionByOutTradeNo } = await import(
-      "./wechat-pay-gateway-query-transaction"
-    );
+    const gateway = await createGateway(fetchImpl, 5);
 
-    await expect(queryWechatPayTransactionByOutTradeNo({
+    await expect(gateway.queryTransactionByOutTradeNo({
       config: directConfig,
       outTradeNo: "WX1",
       secretBundle,
-      fetchImpl,
-      timeoutMs: 5,
     })).rejects.toMatchObject({
-      statusCode: 502,
-      code: "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
-      details: { reason: "timeout", timeout_ms: 1_000 },
+      statusCode: 504,
+      code: "WECHAT_PAY_TRANSPORT_TIMEOUT",
+      details: {
+        operation: "transaction_query",
+        requestId: null,
+        reason: "timeout",
+        timeout_ms: 1_000,
+      },
     });
     expect(didAbort).toBe(true);
   });
@@ -125,53 +119,74 @@ describe("queryWechatPayTransactionByOutTradeNo", () => {
     const fetchImpl = mock(async () => {
       throw new TypeError("connect ECONNRESET internal.example");
     }) as unknown as typeof fetch;
-    const { queryWechatPayTransactionByOutTradeNo } = await import(
-      "./wechat-pay-gateway-query-transaction"
-    );
+    const gateway = await createGateway(fetchImpl);
 
-    await expect(queryWechatPayTransactionByOutTradeNo({
+    const request = gateway.queryTransactionByOutTradeNo({
       config: directConfig,
       outTradeNo: "WX1",
       secretBundle,
-      fetchImpl,
-    })).rejects.toMatchObject({
-      statusCode: 502,
-      code: "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
-      details: { reason: "network_error" },
     });
+    await expect(request).rejects.toMatchObject({
+      statusCode: 502,
+      code: "WECHAT_PAY_TRANSPORT_FAILED",
+      details: {
+        operation: "transaction_query",
+        requestId: null,
+        reason: "network_error",
+      },
+    });
+    await expect(request).rejects.not.toThrow("internal.example");
   });
 
-  test("preserves upstream status, code and message", async () => {
-    const fetchImpl = mock(async () => jsonResponse({
+  test("preserves verified upstream status, code and message", async () => {
+    const fetchImpl = mock(async () => signedJsonResponse({
       code: "PARAM_ERROR",
       message: "invalid mchid",
     }, 400)) as unknown as typeof fetch;
-    const { queryWechatPayTransactionByOutTradeNo } = await import(
-      "./wechat-pay-gateway-query-transaction"
-    );
+    const gateway = await createGateway(fetchImpl);
 
-    await expect(queryWechatPayTransactionByOutTradeNo({
+    await expect(gateway.queryTransactionByOutTradeNo({
       config: directConfig,
       outTradeNo: "WX1",
       secretBundle,
-      fetchImpl,
     })).rejects.toMatchObject({
       code: "WECHAT_PAY_TRANSACTION_QUERY_FAILED",
-      details: { status: 400, code: "PARAM_ERROR", message: "invalid mchid" },
+      details: {
+        operation: "transaction_query",
+        requestId: "wechat-request-id",
+        status: 400,
+        code: "PARAM_ERROR",
+        message: "invalid mchid",
+      },
+    });
+  });
+
+  test("does not trust an unsigned upstream error", async () => {
+    const fetchImpl = mock(async () => new Response(JSON.stringify({
+      code: "PARAM_ERROR",
+      message: "untrusted message",
+    }), { status: 400 })) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    await expect(gateway.queryTransactionByOutTradeNo({
+      config: directConfig,
+      outTradeNo: "WX1",
+      secretBundle,
+    })).rejects.toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_SIGNATURE_REQUIRED",
     });
   });
 
   test("does not wrap configuration or signing errors as transport failures", async () => {
-    const fetchImpl = mock(async () => jsonResponse({ trade_state: "NOTPAY" })) as unknown as typeof fetch;
-    const { queryWechatPayTransactionByOutTradeNo } = await import(
-      "./wechat-pay-gateway-query-transaction"
-    );
+    const fetchImpl = mock(async () => signedJsonResponse({
+      trade_state: "NOTPAY",
+    })) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
     const run = (config: WechatPayJsapiConfig, bundle = secretBundle) =>
-      queryWechatPayTransactionByOutTradeNo({
+      gateway.queryTransactionByOutTradeNo({
         config,
         outTradeNo: "WX1",
         secretBundle: bundle,
-        fetchImpl,
       });
 
     await expect(run({ ...directConfig, serial_no: null })).rejects
@@ -181,15 +196,39 @@ describe("queryWechatPayTransactionByOutTradeNo", () => {
     await expect(run(directConfig, {
       ...secretBundle,
       privateKeyPem: "invalid-private-key",
-    })).rejects.not.toMatchObject({ code: "WECHAT_PAY_TRANSACTION_QUERY_FAILED" });
+    })).rejects.not.toMatchObject({ code: "WECHAT_PAY_TRANSPORT_FAILED" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), {
+async function createGateway(fetchImpl: typeof fetch, timeoutMs?: number) {
+  const { WechatPayGateway } = await import("./wechat-pay-gateway");
+  return new WechatPayGateway({
+    fetchImpl,
+    nonceFactory: () => "nonce-1",
+    timestampFactory: () => RESPONSE_TIMESTAMP,
+    nowSecondsFactory: () => Number(RESPONSE_TIMESTAMP),
+    queryRequestTimeoutMs: timeoutMs,
+  });
+}
+
+function signedJsonResponse(body: Record<string, unknown>, status = 200) {
+  const rawBody = JSON.stringify(body);
+  const signature = sign(
+    "RSA-SHA256",
+    Buffer.from(`${RESPONSE_TIMESTAMP}\n${RESPONSE_NONCE}\n${rawBody}\n`),
+    privateKey,
+  ).toString("base64");
+  return new Response(rawBody, {
     status,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "request-id": "wechat-request-id",
+      "wechatpay-timestamp": RESPONSE_TIMESTAMP,
+      "wechatpay-nonce": RESPONSE_NONCE,
+      "wechatpay-serial": PUBLIC_KEY_ID,
+      "wechatpay-signature": signature,
+    },
   });
 }
 
@@ -205,7 +244,7 @@ function expectSignature(init: RequestInit | undefined, urlPath: string) {
     urlPath,
     body: "",
     nonce: "nonce-1",
-    timestamp: "1782873600",
+    timestamp: RESPONSE_TIMESTAMP,
   }));
   verifier.end();
   expect(verifier.verify(publicKey, signature || "", "base64")).toBe(true);

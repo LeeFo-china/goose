@@ -15,6 +15,7 @@ import type {
   WechatPayQueryTransactionByOutTradeNoInput,
   WechatPayTransactionQueryResult,
 } from "@/services/wechat-pay-gateway-query-transaction";
+import { normalizeWechatPayQueryRequestTimeout } from "@/services/wechat-pay-gateway-query-transaction";
 import { stringField } from "@/services/wechat-pay-gateway-response";
 import {
   buildWechatPayJsapiPrepayRequest,
@@ -183,6 +184,7 @@ export class WechatPayGateway {
       ...input,
       fetchImpl: this.fetchImpl,
       nonce: this.createNonce(),
+      nowSeconds: this.nowSecondsFactory(),
       timestamp: this.createTimestamp(),
       timeoutMs: this.closeRequestTimeoutMs,
     });
@@ -238,7 +240,9 @@ export class WechatPayGateway {
         },
       },
       secretBundle: input.secretBundle,
-      timeoutMs: this.queryRequestTimeoutMs,
+      timeoutMs: normalizeWechatPayQueryRequestTimeout(
+        this.queryRequestTimeoutMs,
+      ),
     });
     const { payload } = result;
     return payload as WechatPayTransactionQueryResult;

@@ -1,6 +1,9 @@
 import { Errors } from "@/errors/error-factory";
 import {
-  parseWechatPayJson,
+  readVerifiedWechatPayEmptyResponse,
+  readVerifiedWechatPayRawResponse,
+} from "@/services/wechat-pay-api-response";
+import {
   stringField,
 } from "@/services/wechat-pay-gateway-response";
 import type { WechatPayJsapiConfig } from "@/services/wechat-pay-jsapi-request-builder";
@@ -16,6 +19,7 @@ export type WechatPayCloseTransactionByOutTradeNoInput = {
 type CloseTransactionInput = WechatPayCloseTransactionByOutTradeNoInput & {
   fetchImpl: typeof fetch;
   nonce?: string;
+  nowSeconds?: number;
   timestamp?: string;
   timeoutMs?: number;
 };
@@ -53,9 +57,19 @@ export async function closeWechatPayTransactionByOutTradeNo(
     authorization,
     body,
   });
-  if (response.status === 204) return;
+  const verificationInput = {
+    response,
+    publicKeyId: input.secretBundle.wechatPayPublicKeyId,
+    publicKeyPem: input.secretBundle.wechatPayPublicKeyPem,
+    nowSeconds: input.nowSeconds,
+  };
+  if (response.status === 204) {
+    await readVerifiedWechatPayEmptyResponse(verificationInput);
+    return;
+  }
 
-  const payload = await parseWechatPayJson(response);
+  const verified = await readVerifiedWechatPayRawResponse(verificationInput);
+  const payload = parseVerifiedErrorPayload(verified.rawBody);
   throw Errors.business(
     502,
     "微信支付关单失败",
@@ -66,6 +80,17 @@ export async function closeWechatPayTransactionByOutTradeNo(
       message: stringField(payload, "message"),
     },
   );
+}
+
+function parseVerifiedErrorPayload(rawBody: string): Record<string, unknown> {
+  try {
+    const payload: unknown = JSON.parse(rawBody);
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? payload as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 async function fetchCloseTransaction(input: {

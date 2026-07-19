@@ -3,18 +3,25 @@ import { verifyWechatPayCallbackSignature } from "@/services/wechat-pay-callback
 
 const MAX_RESPONSE_CLOCK_SKEW_SECONDS = 300;
 
-export type VerifiedWechatPayJson = {
-  payload: Record<string, unknown>;
+export type VerifiedWechatPayRawResponse = {
   requestId: string | null;
   rawBody: string;
 };
 
-export async function readVerifiedWechatPayJson(input: {
+type ReadVerifiedWechatPayResponseInput = {
   response: Response;
   publicKeyId: string | null;
   publicKeyPem: string | null;
   nowSeconds?: number;
-}): Promise<VerifiedWechatPayJson> {
+};
+
+export type VerifiedWechatPayJson = VerifiedWechatPayRawResponse & {
+  payload: Record<string, unknown>;
+};
+
+export async function readVerifiedWechatPayRawResponse(
+  input: ReadVerifiedWechatPayResponseInput,
+): Promise<VerifiedWechatPayRawResponse> {
   let rawBody: string;
   try {
     rawBody = await input.response.text();
@@ -72,9 +79,29 @@ export async function readVerifiedWechatPayJson(input: {
     );
   }
 
+  return {
+    requestId: input.response.headers.get("request-id")?.trim() || null,
+    rawBody,
+  };
+}
+
+export async function readVerifiedWechatPayEmptyResponse(
+  input: ReadVerifiedWechatPayResponseInput,
+): Promise<VerifiedWechatPayRawResponse> {
+  const verified = await readVerifiedWechatPayRawResponse(input);
+  if (verified.rawBody !== "") {
+    throwInvalidBody();
+  }
+  return verified;
+}
+
+export async function readVerifiedWechatPayJson(
+  input: ReadVerifiedWechatPayResponseInput,
+): Promise<VerifiedWechatPayJson> {
+  const verified = await readVerifiedWechatPayRawResponse(input);
   let payload: unknown;
   try {
-    payload = JSON.parse(rawBody);
+    payload = JSON.parse(verified.rawBody);
   } catch {
     throwInvalidBody();
   }
@@ -84,8 +111,7 @@ export async function readVerifiedWechatPayJson(input: {
 
   return {
     payload: payload as Record<string, unknown>,
-    requestId: input.response.headers.get("request-id")?.trim() || null,
-    rawBody,
+    ...verified,
   };
 }
 

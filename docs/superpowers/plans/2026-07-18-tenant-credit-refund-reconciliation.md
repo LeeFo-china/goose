@@ -1017,6 +1017,32 @@ After Task 6 passes implementer, spec, and code-quality review:
    a method-level comparison proving the original behavior and the reconciliation hardening are
    both present. Then run the expanded release path-boundary check covering both the original
    36-commit path union and this approved reconciliation plan's files.
+
+   The following table is the complete approved method-level exception map. These paths are
+   **approved integration exceptions**, not silent drift. Every source-owned path outside this
+   table remains patch-equivalent; in particular, 非重叠 production 文件 must remain
+   source-equivalent after replay.
+
+   | Path | Source responsibility retained | Approved integration adaptation |
+   | --- | --- | --- |
+   | `apps/api/src/services/wechat-pay-gateway.ts` | JSAPI prepay, query, close, local mini-program signing, source timeout behavior | Keeps refund request/query methods and routes every JSON response through `readVerifiedWechatPayJson`; close delegates to the strict empty/raw response path. |
+   | `apps/api/src/services/wechat-pay-api-response.ts` | None before reconciliation | Owns the single raw-body read, APIv3 header/serial/timestamp/RSA verification, strict empty-body validation, and verified JSON parsing used by every active transport. |
+   | `apps/api/src/services/wechat-pay-gateway-close-transaction.ts` | Direct/partner URL/body construction, request signing, close timeout/network mapping | A signed `204` succeeds only with an exact empty body; non-204 body parsing occurs only after strict raw verification. |
+   | `apps/api/src/services/wechat-pay-gateway-close-transaction.test.ts` | Source close request, configuration, signing, timeout, and network cases | Source-owned test adapted to signed fixtures and expanded with missing/wrong signature headers, serial, timestamp, empty-body, unsigned, and tamper cases. |
+   | `apps/api/src/services/wechat-pay-gateway-create-prepay.ts` | Prepay timeout normalization | Redundant raw transport export removed; active `WechatPayGateway.createJsapiPrepay` is the only prepay transport and uses the strict verified JSON layer. |
+   | `apps/api/src/services/wechat-pay-gateway-query-transaction.ts` | Query input/result types and 1-to-60-second timeout normalization | Redundant raw transport export removed; active `WechatPayGateway.queryTransactionByOutTradeNo` retains the source timeout contract and uses strict verified JSON. |
+   | `apps/api/src/services/wechat-pay-gateway-query-transaction.test.ts` | Source query URL/signing/configuration/timeout/network cases | Source-owned test adapted to the active gateway and signed fixtures so it cannot exercise or normalize an unsigned response bypass. |
+   | `apps/api/src/services/wechat-pay-gateway-response.ts` | Safe scalar field extraction | Raw `parseWechatPayJson` bypass removed; this file now contains only the harmless post-verification `stringField` helper. |
+   | `apps/api/src/services/wechat-pay-gateway-request-builders.ts` | Transaction query URL rules from the source query helper | Integration-only extraction combines query/refund builders so `wechat-pay-gateway.ts` retains all methods below the 500-line repository limit without duplicating merchant-mode validation. |
+   | `apps/api/src/services/wechat-pay-gateway-transport.test.ts` | None before reconciliation | Integration-only signed transport/error tests keep shared gateway security coverage out of `wechat-pay-gateway.test.ts`, which would otherwise exceed 500 lines. |
+   | `apps/api/src/services/wechat-pay-gateway-prepay-transport.test.ts` | Source prepay timeout/network contract | Exercises the active gateway after the redundant prepay transport removal; no unsigned response fixture or test bypass is permitted. |
+   | `apps/api/src/services/wechat-pay-callbacks-credit-recharge.test.ts` | Atomic recharge confirmation and subscription recovery cases | Replaces the obsolete refund-failure mock with the reconciliation callback-state RPC while preserving source confirmation/recovery assertions. |
+   | `apps/api/src/services/wechat-pay-callbacks-credit-refund.test.ts` | Recharge refund callback routing and idempotency cases | Binds direct/partner merchant identity and terminal callback states to atomic reconciliation RPCs instead of the obsolete non-atomic failure method. |
+   | `apps/api/src/workers/billing-reconcile-worker.ts` and `.test.ts` | Source subscription and recharge-expiration tasks, global no-overlap | Adds refund reconciliation as an independently isolated child and keeps a scalar-only combined summary; none of the three child failures suppresses later children. |
+
+   The static contract
+   `apps/api/src/services/wechat-pay-gateway-strict-response-contract.test.ts` locks the strict
+   response routing, removed raw exports/parser, and every security-related exception path above.
 4. Dispatch a fresh pre-migration reviewer over `90e75b37..HEAD`; fix all Critical and Important
    findings and rerun changed tests plus `bun run api:check`.
 5. Confirm local migration files now include `20260718110000`, `20260718121000`,

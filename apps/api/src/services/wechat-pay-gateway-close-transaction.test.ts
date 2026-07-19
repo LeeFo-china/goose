@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createVerify, generateKeyPairSync } from "node:crypto";
+import { createVerify, generateKeyPairSync, sign } from "node:crypto";
 import type { WechatPayJsapiConfig } from "./wechat-pay-jsapi-request-builder";
 import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
 import {
@@ -44,6 +44,9 @@ const secretBundle = {
   baseUrl: "https://api.mch.weixin.qq.com",
 } satisfies WechatPaySecretBundle;
 
+const RESPONSE_TIMESTAMP = "1782873600";
+const RESPONSE_NONCE = "response-nonce";
+
 async function createGateway(
   fetchImpl: typeof fetch,
   closeRequestTimeoutMs?: number,
@@ -68,7 +71,7 @@ describe("WechatPayGateway close transaction and local payment request", () => {
       expect(init?.method).toBe("POST");
       expect(init?.body).toBe(expectedBody);
       expectAuthorizationSignature(init, urlPath, expectedBody);
-      return new Response(null, { status: 204 });
+      return signedCloseResponse("", 204);
     }) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
@@ -91,7 +94,7 @@ describe("WechatPayGateway close transaction and local payment request", () => {
       expect(String(url)).toBe(`${secretBundle.baseUrl}${urlPath}`);
       expect(init?.body).toBe(expectedBody);
       expectAuthorizationSignature(init, urlPath, expectedBody);
-      return new Response(null, { status: 204 });
+      return signedCloseResponse("", 204);
     }) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
@@ -103,10 +106,10 @@ describe("WechatPayGateway close transaction and local payment request", () => {
   });
 
   test("maps close-order upstream failures to a stable business error", async () => {
-    const fetchImpl = mock(async () => new Response(JSON.stringify({
+    const fetchImpl = mock(async () => signedCloseResponse(JSON.stringify({
       code: "ORDERPAID",
       message: "order already paid",
-    }), { status: 400 })) as unknown as typeof fetch;
+    }), 400)) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
     await expect(closeTransaction(gateway)).rejects.toMatchObject({
@@ -121,9 +124,7 @@ describe("WechatPayGateway close transaction and local payment request", () => {
   });
 
   test("rejects an unexpected successful status instead of assuming closure", async () => {
-    const fetchImpl = mock(async () => new Response(null, {
-      status: 202,
-    })) as unknown as typeof fetch;
+    const fetchImpl = mock(async () => signedCloseResponse("{}", 202)) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
     await expect(closeTransaction(gateway)).rejects.toMatchObject({
@@ -134,10 +135,10 @@ describe("WechatPayGateway close transaction and local payment request", () => {
   });
 
   test("maps non-JSON close-order failures without inventing fields", async () => {
-    const fetchImpl = mock(async () => new Response("upstream unavailable", {
-      status: 503,
-      headers: { "content-type": "text/plain" },
-    })) as unknown as typeof fetch;
+    const fetchImpl = mock(async () => signedCloseResponse(
+      "upstream unavailable",
+      503,
+    )) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
     await expect(closeTransaction(gateway)).rejects.toMatchObject({
@@ -148,7 +149,7 @@ describe("WechatPayGateway close transaction and local payment request", () => {
   });
 
   test("rejects close-order requests with stable configuration errors", async () => {
-    const fetchImpl = mock(async () => new Response(null, { status: 204 })) as unknown as typeof fetch;
+    const fetchImpl = mock(async () => signedCloseResponse("", 204)) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
     await expect(closeTransaction(gateway, {
@@ -224,7 +225,7 @@ describe("WechatPayGateway close transaction and local payment request", () => {
   });
 
   test("does not wrap signing failures as close transport failures", async () => {
-    const fetchImpl = mock(async () => new Response(null, { status: 204 })) as unknown as typeof fetch;
+    const fetchImpl = mock(async () => signedCloseResponse("", 204)) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
     let caughtError: unknown;
 
@@ -279,6 +280,125 @@ describe("WechatPayGateway close transaction and local payment request", () => {
       details: { reason: "network_error" },
     });
   });
+
+  test.each([
+    "wechatpay-timestamp",
+    "wechatpay-nonce",
+    "wechatpay-serial",
+    "wechatpay-signature",
+  ])("rejects a 204 response missing %s", async (header) => {
+    const response = signedCloseResponse("", 204);
+    response.headers.delete(header);
+    const gateway = await createGateway(
+      mock(async () => response) as unknown as typeof fetch,
+    );
+
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_SIGNATURE_REQUIRED",
+    });
+  });
+
+  test("rejects a 204 response with a wrong signature", async () => {
+    const response = signedCloseResponse("", 204, {
+      signature: "WECHATPAY/SIGNTEST/invalid",
+    });
+    const gateway = await createGateway(
+      mock(async () => response) as unknown as typeof fetch,
+    );
+
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_SIGNATURE_INVALID",
+    });
+  });
+
+  test("rejects a 204 response signed by an unexpected key id", async () => {
+    const response = signedCloseResponse("", 204, { serial: "OTHER_KEY" });
+    const gateway = await createGateway(
+      mock(async () => response) as unknown as typeof fetch,
+    );
+
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_SERIAL_MISMATCH",
+    });
+  });
+
+  test("rejects a stale signed 204 response", async () => {
+    const response = signedCloseResponse("", 204, {
+      timestamp: String(Number(RESPONSE_TIMESTAMP) - 301),
+    });
+    const gateway = await createGateway(
+      mock(async () => response) as unknown as typeof fetch,
+    );
+
+    await expect(closeTransaction(gateway)).rejects.toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_TIMESTAMP_INVALID",
+    });
+  });
+
+  test.each(["{}", "not-json"])(
+    "rejects a signed 204 response with nonempty body %s",
+    async (rawBody) => {
+      const response = signedCloseResponse(rawBody, 204);
+      const gateway = await createGateway(
+        mock(async () => response) as unknown as typeof fetch,
+      );
+
+      await expect(closeTransaction(gateway)).rejects.toMatchObject({
+        code: "WECHAT_PAY_RESPONSE_BODY_INVALID",
+      });
+    },
+  );
+
+  test("does not trust an unsigned non-204 error payload", async () => {
+    const rawBody = JSON.stringify({
+      code: "ORDERPAID",
+      message: "untrusted-upstream-message",
+    });
+    const response = new Response(rawBody, { status: 400 });
+    const gateway = await createGateway(
+      mock(async () => response) as unknown as typeof fetch,
+    );
+    let caught: unknown;
+
+    try {
+      await closeTransaction(gateway);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_SIGNATURE_REQUIRED",
+    });
+    expect(JSON.stringify(caught)).not.toContain("untrusted-upstream-message");
+  });
+
+  test("does not trust a tampered non-204 error payload", async () => {
+    const response = signedCloseResponse(JSON.stringify({
+      code: "ORDERPAID",
+      message: "signed-message",
+    }), 400);
+    Object.defineProperty(response, "text", {
+      value: async () => JSON.stringify({
+        code: "ORDERPAID",
+        message: "tampered-upstream-message",
+      }),
+    });
+    const gateway = await createGateway(
+      mock(async () => response) as unknown as typeof fetch,
+    );
+    let caught: unknown;
+
+    try {
+      await closeTransaction(gateway);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_SIGNATURE_INVALID",
+    });
+    expect(JSON.stringify(caught)).not.toContain("tampered-upstream-message");
+  });
 });
 
 async function closeTransaction(
@@ -313,4 +433,36 @@ function expectAuthorizationSignature(
   }));
   verifier.end();
   expect(verifier.verify(publicKey, signature || "", "base64")).toBe(true);
+}
+
+function signedCloseResponse(
+  rawBody: string,
+  status: number,
+  overrides: {
+    timestamp?: string;
+    serial?: string;
+    signature?: string;
+  } = {},
+) {
+  const timestamp = overrides.timestamp ?? RESPONSE_TIMESTAMP;
+  const signature = overrides.signature ?? sign(
+    "RSA-SHA256",
+    Buffer.from(`${timestamp}\n${RESPONSE_NONCE}\n${rawBody}\n`),
+    privateKey,
+  ).toString("base64");
+  const response = new Response(status === 204 ? null : rawBody, {
+    status,
+    headers: {
+      "content-type": "application/json",
+      "request-id": "wechat-request-id",
+      "wechatpay-timestamp": timestamp,
+      "wechatpay-nonce": RESPONSE_NONCE,
+      "wechatpay-serial": overrides.serial ?? "PUB_KEY_ID_TEST",
+      "wechatpay-signature": signature,
+    },
+  });
+  if (status === 204 && rawBody) {
+    Object.defineProperty(response, "text", { value: async () => rawBody });
+  }
+  return response;
 }
