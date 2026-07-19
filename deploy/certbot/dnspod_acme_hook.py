@@ -55,6 +55,10 @@ class DnsProtocolError(HookError):
     pass
 
 
+class DnsTransportError(DnsProtocolError):
+    pass
+
+
 class DnsPropagationError(HookError):
     pass
 
@@ -257,7 +261,7 @@ def query_dns(
             dns_socket.sendto(packet, destination)
             response, peer = dns_socket.recvfrom(65535)
     except (OSError, TimeoutError):
-        raise DnsProtocolError("DNS query failed") from None
+        raise DnsTransportError("DNS query failed") from None
 
     try:
         peer_matches = (
@@ -458,7 +462,11 @@ class AuthoritativeTxtVerifier:
                     raise DnsPropagationError("DNS propagation timed out")
                 try:
                     answers = self._query(address, name, min(2.0, remaining))
+                except DnsTransportError:
+                    continue
                 except DnsProtocolError:
+                    current_reachable += 1
+                    last_observed_matches[address] = False
                     continue
                 current_reachable += 1
                 last_observed_matches[address] = (value in answers) is present
@@ -466,7 +474,9 @@ class AuthoritativeTxtVerifier:
             current_time = self._monotonic()
             elapsed = max(0.0, current_time - started_at)
             observed = len(last_observed_matches)
-            matched = sum(1 for value_matches in last_observed_matches.values() if value_matches)
+            matched = sum(
+                1 for value_matches in last_observed_matches.values() if value_matches
+            )
             print(
                 f"dns-{stage} {matched}/{observed} "
                 f"reachable={current_reachable}/{total} elapsed={elapsed:.1f}s",

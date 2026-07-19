@@ -656,6 +656,7 @@ class DnsQueryTests(unittest.TestCase):
                     with self.assertRaises(hook.DnsProtocolError) as caught:
                         hook.query_dns("192.0.2.53", query_name, 16)
 
+                self.assertIsInstance(caught.exception, hook.DnsTransportError)
                 self.assertTrue(fake_socket.closed)
                 self.assertNotIn(query_name, str(caught.exception))
 
@@ -884,7 +885,7 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
         def query(_address, _name, timeout):
             query_timeouts.append(timeout)
             if len(query_timeouts) == 1:
-                raise hook.DnsProtocolError("temporary DNS timeout")
+                raise hook.DnsTransportError("temporary DNS timeout")
             return {"token"}
 
         verifier = hook.AuthoritativeTxtVerifier(
@@ -909,7 +910,7 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
         def query(address, _name, _timeout):
             queried.append(address)
             if address == "192.0.2.2":
-                raise hook.DnsProtocolError("DNS timeout")
+                raise hook.DnsTransportError("DNS timeout")
             return {"token"}
 
         verifier = hook.AuthoritativeTxtVerifier(
@@ -931,7 +932,7 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
     def test_reachable_authority_without_value_still_blocks_propagation(self):
         def query(address, _name, _timeout):
             if address == "192.0.2.2":
-                raise hook.DnsProtocolError("DNS timeout")
+                raise hook.DnsTransportError("DNS timeout")
             return set()
 
         verifier = hook.AuthoritativeTxtVerifier(
@@ -957,7 +958,28 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
             if address == "192.0.2.1":
                 if calls[address] == 1:
                     return set()
-                raise hook.DnsProtocolError("DNS timeout")
+                raise hook.DnsTransportError("DNS timeout")
+            return {"token"}
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1", "192.0.2.2"),
+            query=query,
+            sleep=lambda _seconds: None,
+            monotonic=itertools.count(0, 0.1).__next__,
+        )
+
+        with self.assertRaises(hook.DnsPropagationError):
+            verifier.wait_present(
+                "_acme-challenge.www.goodcms.cn",
+                "token",
+                timeout=1,
+                interval=0,
+            )
+
+    def test_dns_protocol_response_error_blocks_propagation(self):
+        def query(address, _name, _timeout):
+            if address == "192.0.2.2":
+                raise hook.DnsProtocolError("DNS response returned an error")
             return {"token"}
 
         verifier = hook.AuthoritativeTxtVerifier(
