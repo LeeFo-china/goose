@@ -196,7 +196,7 @@ export class DouyinAuthorizationEventsService {
   private async handleTicket(message: DouyinTicketEvent, wrapperTime: string): Promise<void> {
     const occurredAt = eventOccurredAt(message, wrapperTime);
     const ticket = sealDouyinCredential(message.Ticket, this.options.credentialKeyring);
-    const eventKey = this.createEventKey("PUSH", null, occurredAt);
+    const eventKey = this.createEventKey("PUSH", null, occurredAt, [message.Ticket]);
     const claim = await this.claimEvent(eventKey, "PUSH", null, occurredAt);
     if (!claim) return;
     const completed = await this.options.eventRepository.completeTicketEvent({
@@ -378,6 +378,7 @@ export class DouyinAuthorizationEventsService {
     eventName: string,
     authorizerAppId: string | null,
     occurredAt: string,
+    additionalIdentity: readonly string[] = [],
   ): string {
     const hmac = createHmac("sha256", this.options.subjectHashKey);
     for (const value of [
@@ -386,6 +387,7 @@ export class DouyinAuthorizationEventsService {
       eventName,
       authorizerAppId ?? "",
       occurredAt,
+      ...additionalIdentity,
     ]) {
       const bytes = Buffer.from(value, "utf8");
       const length = Buffer.alloc(4);
@@ -433,8 +435,8 @@ function eventOccurredAt(
   event: { readonly EventTime?: string; readonly CreateTime?: string },
   wrapperTime: string,
 ): string {
-  const seconds = Number(event.EventTime ?? event.CreateTime ?? wrapperTime);
-  return new Date(seconds * 1000).toISOString();
+  return event.EventTime ?? event.CreateTime ??
+    new Date(Number(wrapperTime) * 1000).toISOString();
 }
 
 function expiryFromSeconds(now: number, expiresIn: number): string {

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { createCipheriv, createHash, createHmac, createSecretKey } from "node:crypto";
 import { AppError } from "@/errors/app-error";
+import { parseDouyinDecryptedEvent } from "@/schema/douyin-third-party-events";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -209,13 +210,14 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
     const context = fixture();
     await context.service.handleCallback(callback({
       Ticket: "ticket-value", MsgType: "Ticket", Event: "PUSH",
+      FromUserName: "official-sender", CreateTime: "2019-01-14 12:45:10",
     }));
     const claim = context.eventRepository.claimEvent.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(claim).toMatchObject({
       componentAppId: COMPONENT_APP_ID,
       eventName: "PUSH",
       authorizerAppId: null,
-      occurredAt: "2026-07-20T08:00:00.000Z",
+      occurredAt: "2019-01-14T04:45:10.000Z",
     });
     expect(claim.eventKey).toMatch(/^[0-9a-f]{64}$/);
     const completion = context.eventRepository.completeTicketEvent.mock.calls[0]?.[0] as {
@@ -224,6 +226,24 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
     expect(completion.ticket).not.toMatchObject({ ciphertext: "ticket-value" });
     expect(JSON.stringify([claim, completion])).not.toContain("ticket-value");
     expect(JSON.stringify(context.log.info.mock.calls)).not.toContain("ticket-value");
+  });
+
+  test("uses ticket identity in the digest without exposing its plaintext", async () => {
+    const first = fixture();
+    const repeated = fixture();
+    const different = fixture();
+    const ticket = (value: string) => callback({
+      Ticket: value, MsgType: "Ticket", Event: "PUSH",
+    });
+    await first.service.handleCallback(ticket("ticket-a"));
+    await repeated.service.handleCallback(ticket("ticket-a"));
+    await different.service.handleCallback(ticket("ticket-b"));
+    const key = (context: ReturnType<typeof fixture>) =>
+      (context.eventRepository.claimEvent.mock.calls[0]?.[0] as { eventKey: string }).eventKey;
+    expect(key(first)).toBe(key(repeated));
+    expect(key(first)).not.toBe(key(different));
+    expect(key(first)).toMatch(/^[0-9a-f]{64}$/);
+    expect(key(first)).not.toContain("ticket-a");
   });
 
   test("claims before exchanging AUTHORIZED and stores only encrypted credentials", async () => {
@@ -277,6 +297,43 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
         eventName: "UPDATE_AUTHORIZED",
         occurredAt: "2026-07-20T07:59:50.000Z",
       }));
+  });
+
+  test("accepts official authorization metadata but strips contact fields", async () => {
+    const context = fixture();
+    const officialMessage = {
+      ...authorizationMessage(),
+      EventTime: "2019-01-14 12:45:10",
+      AppName: "装修营销小程序",
+      AppIcon: "https://example.test/icon.png",
+      CompanyName: "装修公司",
+      AppSuperAdminEmail: "admin@example.test",
+      AppSuperAdminMobile: "13800000000",
+    };
+    const parsed = parseDouyinDecryptedEvent(officialMessage);
+    expect(parsed).not.toBeNull();
+    expect(parsed).not.toHaveProperty("AppSuperAdminMobile");
+    expect(parsed).not.toHaveProperty("CompanyName");
+    await context.service.handleCallback(callback(officialMessage));
+    const calls = JSON.stringify([
+      context.eventRepository.claimEvent.mock.calls,
+      context.eventRepository.completeAuthorizationEvent.mock.calls,
+      context.log.info.mock.calls,
+    ]);
+    expect(context.eventRepository.completeAuthorizationEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ occurredAt: "2019-01-14T04:45:10.000Z" }),
+    );
+    expect(calls).not.toContain("admin@example.test");
+    expect(calls).not.toContain("13800000000");
+    expect(calls).not.toContain("CompanyName");
+  });
+
+  test("rejects invalid official calendar timestamps", async () => {
+    const context = fixture();
+    await expect(context.service.handleCallback(callback({
+      ...authorizationMessage(), EventTime: "2019-02-29 12:45:10",
+    }))).rejects.toMatchObject({ code: "DOUYIN_CALLBACK_MESSAGE_INVALID" });
+    expect(context.eventRepository.claimEvent).not.toHaveBeenCalled();
   });
 
   test("retrieves a fresh code for a reclaimed authorization lease", async () => {
@@ -381,17 +438,31 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
 
   test("acks unsupported trusted events and logs only their normalized name", async () => {
     const context = fixture();
-    await context.service.handleCallback(callback({
+    const officialMessage = {
       AppId: AUTHORIZER_APP_ID,
       TpAppId: COMPONENT_APP_ID,
-      Event: "PERMISSION_CHANGED",
+      Event: "PACKAGE_AUDIT",
       EventTime: Number(NOW_SECONDS),
-    }));
+      AuditResults: [{ host: "sensitive-host", status: "REJECTED" }],
+      EventContent: { contact: "13800000000" },
+    };
+    const parsed = parseDouyinDecryptedEvent(officialMessage);
+    expect(parsed).not.toBeNull();
+    expect(parsed).not.toHaveProperty("AuditResults");
+    expect(parsed).not.toHaveProperty("EventContent");
+    await context.service.handleCallback(callback(officialMessage));
     expect(context.eventRepository.completeUnsupportedEvent).toHaveBeenCalled();
     expect(context.log.info).toHaveBeenCalledWith(
-      { eventName: "PERMISSION_CHANGED" },
+      { eventName: "PACKAGE_AUDIT" },
       "ignored trusted Douyin callback event",
     );
+    const safeOutput = JSON.stringify([
+      context.eventRepository.claimEvent.mock.calls,
+      context.eventRepository.completeUnsupportedEvent.mock.calls,
+      context.log.info.mock.calls,
+    ]);
     expect(JSON.stringify(context.log.info.mock.calls)).not.toContain(AUTHORIZER_APP_ID);
+    expect(safeOutput).not.toContain("sensitive-host");
+    expect(safeOutput).not.toContain("13800000000");
   });
 });
