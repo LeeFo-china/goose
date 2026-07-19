@@ -53,12 +53,18 @@ systemctl daemon-reload
 systemd-analyze verify gooes-www-cert-renew.service gooes-www-cert-renew.timer
 ```
 
-安装前备份 `/etc/letsencrypt/renewal/www.goodcms.cn.conf`（带 UTC 时间戳和 SHA-256）。先执行 `gooes-www-cert-renew prepare`，然后使用 staging：
+安装前备份 `/etc/letsencrypt/renewal/www.goodcms.cn.conf`（带 UTC 时间戳和 SHA-256）。先执行 staging reconfigure；该子命令退出时会清理容器运行目录：
 
 ```bash
+/opt/gooes/cert-renewal/gooes-www-cert-renew prepare
 /opt/gooes/cert-renewal/gooes-www-cert-renew reconfigure
+```
+
+再重新准备运行目录并执行 dry-run：
+
+```bash
+/opt/gooes/cert-renewal/gooes-www-cert-renew prepare
 /opt/gooes/cert-renewal/gooes-www-cert-renew dry-run
-/opt/gooes/cert-renewal/gooes-www-cert-renew cleanup
 ```
 
 验证成功后启用定时器：

@@ -46,8 +46,17 @@ describe("DNSPod certificate renewal contract", () => {
     expect(runner).toContain("--run-deploy-hooks");
   });
 
-  test("cleanup removes runtime even when command fails", () => {
+  test("prepare preserves runtime for the following certbot command", () => {
+    expect(runner).not.toMatch(/^trap cleanup EXIT$/m);
+    expect(runner).toContain("prepare) prepare ;;");
+  });
+
+  test("certbot commands remove runtime even when command fails", () => {
+    expect(runner).toContain("with_cleanup() {");
     expect(runner).toContain("trap cleanup EXIT");
+    expect(runner).toContain("renew) with_cleanup renew ;;");
+    expect(runner).toContain("reconfigure) with_cleanup reconfigure ;;");
+    expect(runner).toContain("dry-run) with_cleanup dry_run ;;");
     expect(runner).toContain("docker exec supabase-nginx rm -rf /run/gooes-dnspod-acme");
   });
 

@@ -19,7 +19,11 @@ cleanup() {
     docker exec supabase-nginx rm -rf /run/gooes-dnspod-acme >/dev/null 2>&1 || true
   fi
 }
-trap cleanup EXIT
+
+with_cleanup() {
+  trap cleanup EXIT
+  "$@"
+}
 
 check_credentials() {
   [[ -f "${HOST_CREDENTIALS}" ]] || die "credentials file is missing"
@@ -79,9 +83,9 @@ main() {
   require_root
   case "${1:-}" in
     prepare) prepare ;;
-    renew) renew ;;
-    reconfigure) reconfigure ;;
-    dry-run) dry_run ;;
+    renew) with_cleanup renew ;;
+    reconfigure) with_cleanup reconfigure ;;
+    dry-run) with_cleanup dry_run ;;
     cleanup) cleanup ;;
     *) die "usage: $0 {prepare|renew|reconfigure|dry-run|cleanup}" ;;
   esac
