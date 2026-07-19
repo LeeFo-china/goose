@@ -5,6 +5,7 @@ import type {
   DouyinInstallationDatabaseResult,
   DouyinInstallationQuery,
 } from "./douyin-miniapp-installations";
+import type { PlatformDouyinMiniappSafeRecord } from "@/schema/platform-douyin-miniapps";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -24,7 +25,7 @@ function createClient(results: DouyinInstallationDatabaseResult[]) {
   let index = 0;
   class Query implements DouyinInstallationQuery {
     private chain(method: string, args: readonly unknown[]) { calls.push({ method, args }); return this; }
-    select(columns: string) { return this.chain("select", [columns]); }
+    select(columns: string, options?: unknown) { return this.chain("select", [columns, options]); }
     insert(value: unknown) { return this.chain("insert", [value]); }
     update(value: unknown) { return this.chain("update", [value]); }
     eq(column: string, value: unknown) { return this.chain("eq", [column, value]); }
@@ -84,7 +85,7 @@ const installationRow = {
   token_refresh_claim_expires_at: null,
 };
 
-const managementRow = {
+const managementRow: PlatformDouyinMiniappSafeRecord = {
   id: installationRow.id,
   tenant_id: installationRow.tenant_id,
   component_appid: installationRow.component_appid,
@@ -107,8 +108,8 @@ const managementRow = {
   last_audited_at: null,
   last_released_at: null,
   revoked_at: null,
-  created_at: "2026-07-19T00:00:00.000Z",
-  updated_at: "2026-07-20T00:00:00.000Z",
+  created_at: "2026-07-19T00:00:00+00:00",
+  updated_at: "2026-07-20T00:00:00+00:00",
   tenant: {
     id: installationRow.tenant_id,
     name: "示例装饰",
@@ -313,10 +314,17 @@ describe("DouyinMiniappInstallationsRepository lookups", () => {
   test("wraps rejected database operations without exposing their exception", async () => {
     const query: DouyinInstallationQuery = {
       select: () => query,
+      insert: () => query,
       update: () => query,
       eq: () => query,
       in: () => query,
+      order: () => query,
+      range: () => query,
       maybeSingle: async () => { throw new TypeError("network leaked refresh-ciphertext"); },
+      single: async () => { throw new TypeError("network leaked refresh-ciphertext"); },
+      then: (onfulfilled, onrejected) => Promise.reject(
+        new TypeError("network leaked refresh-ciphertext"),
+      ).then(onfulfilled, onrejected),
     };
     const client: DouyinInstallationDatabaseClient = {
       from: () => query,

@@ -1,9 +1,15 @@
-import { describe, expect, mock, test } from "bun:test";
-import { PlatformDouyinMiniappsController } from ".";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+let PlatformDouyinMiniappsController:
+  typeof import(".").PlatformDouyinMiniappsController;
+
+beforeAll(async () => {
+  ({ PlatformDouyinMiniappsController } = await import("."));
+});
 
 const runtimeConfig = {
   brand: { logo_url: null, qualifications: [] },
@@ -17,7 +23,10 @@ const runtimeConfig = {
 
 function createController() {
   const service = {
-    list: mock(async () => ({ list: [] })),
+    list: mock(async () => ({
+      list: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    })),
     get: mock(async () => ({ id: "installation" })),
     bind: mock(async () => ({ id: "installation" })),
     createTemplateDevelopment: mock(async () => ({ id: "installation" })),
@@ -62,7 +71,13 @@ describe("PlatformDouyinMiniappsController", () => {
     const result = await controller.listInstallations({ query: {} } as never, {} as never);
 
     expect(service.list).toHaveBeenCalledWith(authContext, { page: 1, pageSize: 20 });
-    expect(result).toEqual({ data: { list: [] }, message: "success" });
+    expect(result).toEqual({
+      data: {
+        list: [],
+        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      },
+      message: "success",
+    });
   });
 
   test("rejects list page sizes above 100 before calling the service", async () => {

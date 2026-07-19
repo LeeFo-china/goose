@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
+import {
+  PlatformDouyinMiniappSafeRecordSchema,
+  type DouyinRuntimeConfig,
+  type PlatformDouyinMiniappListQuery,
+  type PlatformDouyinMiniappSafeRecord,
+} from "@/schema/platform-douyin-miniapps";
 import { SupabaseDB } from "@/utils/supabase";
 import type { DouyinRefreshLease, DouyinTokenEnvelopeInput } from "./douyin-third-party-components";
 
@@ -25,6 +31,26 @@ const INSTALLATION_SELECT = [
   "permission_snapshot",
   "token_refresh_claim_token",
   "token_refresh_claim_expires_at",
+].join(",");
+
+const PLATFORM_INSTALLATION_SELECT = [
+  "id",
+  "tenant_id",
+  "component_appid",
+  "authorizer_appid",
+  "installation_kind",
+  "authorization_status",
+  "permission_snapshot",
+  "runtime_config",
+  "template_id",
+  "template_version",
+  "last_submitted_at",
+  "last_audited_at",
+  "last_released_at",
+  "revoked_at",
+  "created_at",
+  "updated_at",
+  "tenant:tenants(id,name,slug,status)",
 ].join(",");
 
 const NullableString = z.string().nullable();
@@ -58,14 +84,23 @@ const LeaseRowSchema = z.object({
 export type DouyinInstallationDatabaseResult = {
   readonly data: unknown;
   readonly error: unknown;
+  readonly count?: number | null;
 };
 
 export interface DouyinInstallationQuery {
-  select(columns: string): DouyinInstallationQuery;
+  select(columns: string, options?: unknown): DouyinInstallationQuery;
+  insert(value: unknown): DouyinInstallationQuery;
   update(value: unknown): DouyinInstallationQuery;
   eq(column: string, value: unknown): DouyinInstallationQuery;
   in(column: string, values: readonly string[]): DouyinInstallationQuery;
+  order(column: string, options: unknown): DouyinInstallationQuery;
+  range(from: number, to: number): DouyinInstallationQuery;
   maybeSingle(): Promise<DouyinInstallationDatabaseResult>;
+  single(): Promise<DouyinInstallationDatabaseResult>;
+  then<TResult1 = DouyinInstallationDatabaseResult, TResult2 = never>(
+    onfulfilled?: ((value: DouyinInstallationDatabaseResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
 }
 
 export interface DouyinInstallationDatabaseClient {
@@ -101,6 +136,112 @@ export class DouyinMiniappInstallationsRepository {
     private readonly client: DouyinInstallationDatabaseClient =
       SupabaseDB.getAdminClient() as unknown as DouyinInstallationDatabaseClient,
   ) {}
+
+  async listForPlatform(
+    query: PlatformDouyinMiniappListQuery,
+  ): Promise<{ list: PlatformDouyinMiniappSafeRecord[]; total: number }> {
+    return executeInstallationOperation("查询抖音小程序安装列表失败", async () => {
+      const from = (query.page - 1) * query.pageSize;
+      const to = from + query.pageSize - 1;
+      const result = await this.client
+        .from("douyin_miniapp_installations")
+        .select(PLATFORM_INSTALLATION_SELECT, { count: "exact" })
+        .order("updated_at", { ascending: false })
+        .range(from, to);
+      assertDatabaseSuccess(result, "查询抖音小程序安装列表失败");
+      if (!Array.isArray(result.data)) throw invalidResponseError();
+      return {
+        list: result.data.map(parsePlatformInstallation),
+        total: result.count ?? 0,
+      };
+    });
+  }
+
+  async findForPlatformById(
+    installationId: string,
+  ): Promise<PlatformDouyinMiniappSafeRecord | null> {
+    return this.findPlatformInstallation("id", installationId);
+  }
+
+  async findForPlatformByAuthorizerAppId(
+    authorizerAppId: string,
+  ): Promise<PlatformDouyinMiniappSafeRecord | null> {
+    return this.findPlatformInstallation("authorizer_appid", authorizerAppId);
+  }
+
+  async createTemplateDevelopment(input: {
+    readonly componentAppId: string;
+    readonly authorizerAppId: string;
+    readonly tenantId: string;
+    readonly runtimeConfig: DouyinRuntimeConfig;
+  }): Promise<PlatformDouyinMiniappSafeRecord> {
+    return executeInstallationOperation("创建抖音模板开发安装失败", async () => {
+      const result = await this.client
+        .from("douyin_miniapp_installations")
+        .insert({
+          component_appid: input.componentAppId,
+          authorizer_appid: input.authorizerAppId,
+          tenant_id: input.tenantId,
+          installation_kind: "template_development",
+          authorization_status: "active",
+          runtime_config: input.runtimeConfig,
+        })
+        .select(PLATFORM_INSTALLATION_SELECT)
+        .single();
+      if (result.error && databaseErrorCode(result.error) === "23505") {
+        throw Errors.business(
+          409,
+          "模板开发小程序已登记",
+          "DOUYIN_TEMPLATE_INSTALLATION_CONFLICT",
+        );
+      }
+      assertDatabaseSuccess(result, "创建抖音模板开发安装失败");
+      return parsePlatformInstallation(result.data);
+    });
+  }
+
+  async updateRuntimeConfig(
+    installationId: string,
+    runtimeConfig: DouyinRuntimeConfig,
+  ): Promise<PlatformDouyinMiniappSafeRecord | null> {
+    return this.updatePlatformInstallation(
+      installationId,
+      { runtime_config: runtimeConfig },
+      ["active", "disabled"],
+      "更新抖音小程序运行配置失败",
+    );
+  }
+
+  async rotateDeploymentKey(
+    installationId: string,
+    deploymentKey: string,
+  ): Promise<PlatformDouyinMiniappSafeRecord | null> {
+    return executeInstallationOperation("轮换抖音小程序部署标识失败", async () => {
+      const result = await this.client
+        .from("douyin_miniapp_installations")
+        .update({ deployment_key: deploymentKey })
+        .eq("id", installationId)
+        .eq("installation_kind", "merchant")
+        .in("authorization_status", ["active"])
+        .select(PLATFORM_INSTALLATION_SELECT)
+        .maybeSingle();
+      assertDatabaseSuccess(result, "轮换抖音小程序部署标识失败");
+      return result.data === null ? null : parsePlatformInstallation(result.data);
+    });
+  }
+
+  async transitionAuthorizationStatus(
+    installationId: string,
+    fromStatus: "active" | "disabled",
+    toStatus: "active" | "disabled",
+  ): Promise<PlatformDouyinMiniappSafeRecord | null> {
+    return this.updatePlatformInstallation(
+      installationId,
+      { authorization_status: toStatus },
+      [fromStatus],
+      toStatus === "active" ? "启用抖音小程序安装失败" : "停用抖音小程序安装失败",
+    );
+  }
 
   async findActiveByAuthorizerAppId(
     authorizerAppId: string,
@@ -203,6 +344,40 @@ export class DouyinMiniappInstallationsRepository {
       return parseBooleanResult(result, "标记抖音授权凭证刷新失败");
     });
   }
+
+  private async findPlatformInstallation(
+    column: "id" | "authorizer_appid",
+    value: string,
+  ): Promise<PlatformDouyinMiniappSafeRecord | null> {
+    return executeInstallationOperation("查询抖音小程序安装失败", async () => {
+      const result = await this.client
+        .from("douyin_miniapp_installations")
+        .select(PLATFORM_INSTALLATION_SELECT)
+        .eq(column, value)
+        .maybeSingle();
+      assertDatabaseSuccess(result, "查询抖音小程序安装失败");
+      return result.data === null ? null : parsePlatformInstallation(result.data);
+    });
+  }
+
+  private async updatePlatformInstallation(
+    installationId: string,
+    patch: Record<string, unknown>,
+    allowedStatuses: readonly string[],
+    message: string,
+  ): Promise<PlatformDouyinMiniappSafeRecord | null> {
+    return executeInstallationOperation(message, async () => {
+      const result = await this.client
+        .from("douyin_miniapp_installations")
+        .update(patch)
+        .eq("id", installationId)
+        .in("authorization_status", allowedStatuses)
+        .select(PLATFORM_INSTALLATION_SELECT)
+        .maybeSingle();
+      assertDatabaseSuccess(result, message);
+      return result.data === null ? null : parsePlatformInstallation(result.data);
+    });
+  }
 }
 
 function assertRefreshRotation(rotation: AuthorizerRefreshRotation): void {
@@ -251,6 +426,12 @@ function parseInstallationResult(
   assertDatabaseSuccess(result, message);
   if (result.data === null) return null;
   const parsed = InstallationRowSchema.safeParse(result.data);
+  if (!parsed.success) throw invalidResponseError();
+  return parsed.data;
+}
+
+function parsePlatformInstallation(data: unknown): PlatformDouyinMiniappSafeRecord {
+  const parsed = PlatformDouyinMiniappSafeRecordSchema.safeParse(data);
   if (!parsed.success) throw invalidResponseError();
   return parsed.data;
 }

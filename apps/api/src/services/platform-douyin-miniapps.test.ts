@@ -1,6 +1,18 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { Errors } from "@/errors/error-factory";
+import type { PlatformDouyinMiniappSafeRecord } from "@/schema/platform-douyin-miniapps";
 import type { AuthContext } from "@/services/authorization";
-import { PlatformDouyinMiniappsService } from "./platform-douyin-miniapps";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+let PlatformDouyinMiniappsService:
+  typeof import("./platform-douyin-miniapps").PlatformDouyinMiniappsService;
+
+beforeAll(async () => {
+  ({ PlatformDouyinMiniappsService } = await import("./platform-douyin-miniapps"));
+});
 
 const TENANT_ID = "33333333-3333-4333-8333-333333333333";
 const OTHER_TENANT_ID = "44444444-4444-4444-8444-444444444444";
@@ -24,7 +36,7 @@ const runtimeConfig = {
   privacy_policy_version: "2026-07-19",
 };
 
-const installation = {
+const installation: PlatformDouyinMiniappSafeRecord = {
   id: INSTALLATION_ID,
   tenant_id: TENANT_ID,
   component_appid: "component-appid",
@@ -68,22 +80,28 @@ const authContext: AuthContext = {
 
 function dependencies(overrides: Record<string, unknown> = {}) {
   const repository = {
-    listForPlatform: mock(async () => ({ list: [installation], total: 1 })),
-    findForPlatformById: mock(async () => installation),
-    findForPlatformByAuthorizerAppId: mock(async () => null),
-    bindActiveTenant: mock(async () => ({ id: INSTALLATION_ID })),
-    createTemplateDevelopment: mock(async () => ({ ...installation,
+    listForPlatform: mock(async (_query: unknown) => ({ list: [installation], total: 1 })),
+    findForPlatformById: mock(async (_id: string) => installation),
+    findForPlatformByAuthorizerAppId: mock(async (_appId: string) => null),
+    bindActiveTenant: mock(async (_input: unknown) => ({ id: INSTALLATION_ID })),
+    createTemplateDevelopment: mock(async (_input: unknown) => ({ ...installation,
       authorizer_appid: "template-appid", installation_kind: "template_development",
     })),
-    updateRuntimeConfig: mock(async () => installation),
-    rotateDeploymentKey: mock(async () => installation),
-    transitionAuthorizationStatus: mock(async () => installation),
+    updateRuntimeConfig: mock(async (_id: string, _config: unknown) => installation),
+    rotateDeploymentKey: mock(async (_id: string, _key: string) => installation),
+    transitionAuthorizationStatus: mock(async (
+      _id: string,
+      _from: string,
+      _to: string,
+    ) => installation),
     ...overrides,
   };
   const tenantRepository = {
     findById: mock(async (id: string) => ({ id, status: "active", name: "示例装饰" })),
   };
-  const accessPolicy = { assertPermission: mock(() => "all" as const) };
+  const accessPolicy = {
+    assertPermission: mock((_context: AuthContext, _permission: string) => "all" as const),
+  };
   return { repository, tenantRepository, accessPolicy };
 }
 
@@ -92,19 +110,38 @@ describe("PlatformDouyinMiniappsService", () => {
     const deps = dependencies();
     const service = new PlatformDouyinMiniappsService(deps as never);
 
-    await service.list(authContext, { page: 1, pageSize: 20 });
-    await service.get(authContext, INSTALLATION_ID);
-    await service.bind(authContext, INSTALLATION_ID, { tenant_id: TENANT_ID, runtime_config: runtimeConfig });
-    await service.createTemplateDevelopment(authContext, { tenant_id: TENANT_ID, runtime_config: runtimeConfig });
-    await service.updateConfig(authContext, INSTALLATION_ID, { runtime_config: runtimeConfig });
-    await service.rotateDeploymentKey(authContext, INSTALLATION_ID);
-    await service.disable(authContext, INSTALLATION_ID);
-    await service.enable(authContext, INSTALLATION_ID);
+    await Promise.allSettled([
+      service.list(authContext, { page: 1, pageSize: 20 }),
+      service.get(authContext, INSTALLATION_ID),
+      service.bind(authContext, INSTALLATION_ID, {
+        tenant_id: TENANT_ID,
+        runtime_config: runtimeConfig,
+      }),
+      service.createTemplateDevelopment(authContext, {
+        tenant_id: TENANT_ID,
+        runtime_config: runtimeConfig,
+      }),
+      service.updateConfig(authContext, INSTALLATION_ID, { runtime_config: runtimeConfig }),
+      service.rotateDeploymentKey(authContext, INSTALLATION_ID),
+      service.disable(authContext, INSTALLATION_ID),
+      service.enable(authContext, INSTALLATION_ID),
+    ]);
 
     expect(deps.accessPolicy.assertPermission).toHaveBeenCalledTimes(8);
     for (const call of deps.accessPolicy.assertPermission.mock.calls) {
       expect(call).toEqual([authContext, "platform.douyin_miniapp.manage"]);
     }
+  });
+
+  test("does not grant tenant users platform management even if a permission is misassigned", async () => {
+    const deps = dependencies();
+    const service = new PlatformDouyinMiniappsService(deps as never);
+
+    await expect(service.list(
+      { ...authContext, isPlatformAdmin: false },
+      { page: 1, pageSize: 20 },
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(deps.repository.listForPlatform).not.toHaveBeenCalled();
   });
 
   test("uses bounded range pagination and strips all credential and deployment fields", async () => {
@@ -212,6 +249,39 @@ describe("PlatformDouyinMiniappsService", () => {
     await expect(service.createTemplateDevelopment(authContext, {
       tenant_id: TENANT_ID, runtime_config: runtimeConfig,
     })).rejects.toMatchObject({ statusCode: 409, code: "DOUYIN_TEMPLATE_INSTALLATION_TENANT_CONFLICT" });
+  });
+
+  test("recovers a concurrent same-tenant template insert as an idempotent success", async () => {
+    const existingTemplate = {
+      ...installation,
+      authorizer_appid: "template-appid",
+      installation_kind: "template_development" as const,
+    };
+    let lookupCount = 0;
+    const deps = dependencies({
+      findForPlatformByAuthorizerAppId: mock(async () => {
+        lookupCount += 1;
+        return lookupCount === 1 ? null : existingTemplate;
+      }),
+      createTemplateDevelopment: mock(async () => {
+        throw Errors.business(
+          409,
+          "模板开发小程序已登记",
+          "DOUYIN_TEMPLATE_INSTALLATION_CONFLICT",
+        );
+      }),
+    });
+    const service = new PlatformDouyinMiniappsService({
+      ...deps,
+      configProvider: () => ({ componentAppId: "component-appid", templateAppId: "template-appid" }),
+    } as never);
+
+    await expect(service.createTemplateDevelopment(authContext, {
+      tenant_id: TENANT_ID,
+      runtime_config: runtimeConfig,
+    })).resolves.toEqual(existingTemplate);
+    expect(deps.repository.createTemplateDevelopment).toHaveBeenCalledTimes(1);
+    expect(deps.repository.findForPlatformByAuthorizerAppId).toHaveBeenCalledTimes(2);
   });
 
   test("deployment key rotation uses a fresh 256-bit value and never returns it", async () => {
