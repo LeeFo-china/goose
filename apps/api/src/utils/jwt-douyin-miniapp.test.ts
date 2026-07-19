@@ -42,6 +42,17 @@ describe("Douyin miniapp JWT", () => {
     }
   });
 
+  test("falls back to the two-hour Douyin session lifetime for unsafe settings", () => {
+    for (const unsafeValue of ["invalid", "0", "0s", "-1", "25h", "999999999"]) {
+      process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN = unsafeValue;
+      const result = jwt.verifyTokenDetailed(jwt.signDouyinMiniappToken(payload));
+
+      expect(result.payload!.exp! - result.payload!.iat!).toBe(7200);
+      expect(jwt.getDouyinMiniappTokenExpiresInSeconds()).toBe(7200);
+    }
+    delete process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN;
+  });
+
   test("rejects a signed Douyin token when any required claim is absent or inconsistent", () => {
     const complete = {
       ...payload,
@@ -62,6 +73,31 @@ describe("Douyin miniapp JWT", () => {
     for (const invalid of invalidPayloads) {
       const token = jwt.signToken(invalid as never);
       expect(jwt.verifyTokenDetailed(token)).toMatchObject({
+        payload: null,
+        reason: "invalid",
+      });
+    }
+  });
+
+  test("rejects signed Douyin payloads with raw identity or cross-domain claims", () => {
+    const complete = {
+      ...payload,
+      sub: payload.subject_hash,
+      token_type: "douyin_miniapp",
+      login_channel: "douyin",
+      roles: ["douyin_miniapp"],
+    } as const;
+    const invalidPayloads = [
+      { ...complete, openid: "raw-openid" },
+      { ...complete, unionid: "raw-unionid" },
+      { ...complete, employee_id: "44444444-4444-4444-8444-444444444444" },
+      { ...complete, customer_id: "55555555-5555-4555-8555-555555555555" },
+      { ...complete, roles: ["platform_admin"] },
+      { ...complete, roles: ["douyin_miniapp", "platform_admin"] },
+    ];
+
+    for (const invalid of invalidPayloads) {
+      expect(jwt.verifyTokenDetailed(jwt.signToken(invalid as never))).toMatchObject({
         payload: null,
         reason: "invalid",
       });

@@ -22,7 +22,10 @@ import { DouyinMiniappAccessTokenService } from "./access-tokens";
 import { loadDouyinMiniappConfig } from "./config";
 
 type SessionInstallationRepository = Pick<DouyinMiniappSessionsRepository, "findByAppId">;
-type AccessTokens = Pick<DouyinMiniappAccessTokenService, "getAuthorizerAccessToken">;
+type AccessTokens = Pick<
+  DouyinMiniappAccessTokenService,
+  "getAuthorizerAccessToken" | "forceRefreshAuthorizerAccessToken"
+>;
 type SessionGateway = Pick<
   DouyinOpenPlatformGateway,
   "code2Session" | "code2SessionForTemplate"
@@ -133,6 +136,30 @@ export class DouyinMiniappSessionService {
       authorizerAppId: installation.authorizer_appid,
       deploymentKey: input.deployment_key,
     });
+    try {
+      return await this.exchangeMerchantCode(installation, input, authorizerAccessToken);
+    } catch (error) {
+      if (
+        !(error instanceof AppError)
+        || error.code !== "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_EXPIRED"
+      ) {
+        throw error;
+      }
+      const refreshedAccessToken = await this.options.accessTokens
+        .forceRefreshAuthorizerAccessToken({
+          authorizerAppId: installation.authorizer_appid,
+          deploymentKey: input.deployment_key,
+          rejectedAccessToken: authorizerAccessToken,
+        });
+      return this.exchangeMerchantCode(installation, input, refreshedAccessToken);
+    }
+  }
+
+  private exchangeMerchantCode(
+    installation: DouyinMiniappSessionRecord,
+    input: DouyinMiniappSessionRequest,
+    authorizerAccessToken: string,
+  ) {
     return this.options.openPlatform.code2Session({
       authorizerAccessToken,
       appId: installation.authorizer_appid,

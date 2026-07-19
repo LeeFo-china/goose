@@ -162,6 +162,32 @@ function authorizerRepository(overrides: Partial<AuthorizerTokenRepository>): Au
 }
 
 describe("DouyinMiniappAccessTokenService recovery boundaries", () => {
+  test("force-refreshes a provider-rejected merchant token under the database lease", async () => {
+    const rejected = sealed("provider-rejected-token");
+    const row = {
+      ...installationRow(),
+      access_token_ciphertext: rejected.ciphertext,
+      access_token_iv: rejected.iv,
+      access_token_tag: rejected.tag,
+      access_token_key_version: rejected.keyVersion,
+      access_token_expires_at: new Date(NOW_MS + 301_000).toISOString(),
+    };
+    const claim = mock(async () => ({ claimToken: CLAIM_TOKEN,
+      claimExpiresAt: new Date(NOW_MS + 30_000).toISOString() }));
+    const repository = authorizerRepository({
+      findActiveMerchant: mock(async () => row),
+      claimAccessTokenRefresh: claim,
+    });
+    const openPlatform = gateway();
+
+    await expect(authorizerService(repository, openPlatform)
+      .forceRefreshAuthorizerAccessToken({ authorizerAppId: "authorizer-appid",
+        deploymentKey: "merchant-a", rejectedAccessToken: "provider-rejected-token" }))
+      .resolves.toBe("refreshed-token");
+    expect(claim).toHaveBeenCalledTimes(1);
+    expect(openPlatform.refreshAuthorizerToken).toHaveBeenCalledTimes(1);
+  });
+
   test("bounds a stalled fail RPC and consumes its late rejection without masking the original error", async () => {
     let rejectLate: (error: unknown) => void = () => undefined;
     const stalledFail = new Promise<boolean>((_resolve, reject) => { rejectLate = reject; });

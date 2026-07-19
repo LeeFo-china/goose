@@ -74,7 +74,6 @@ export interface ComponentTokenRepository {
     readonly errorCode: string;
   }): Promise<boolean>;
 }
-
 export interface AuthorizerTokenRepository {
   findActiveMerchant(
     authorizerAppId: string,
@@ -93,7 +92,6 @@ export interface AuthorizerTokenRepository {
     readonly errorCode: string;
   }): Promise<boolean>;
 }
-
 type ServiceOptions = {
   readonly componentAppId: string;
   readonly componentAppSecret: string;
@@ -106,7 +104,6 @@ type ServiceOptions = {
   readonly setTimeout?: SetTimer;
   readonly clearTimeout?: ClearTimer;
 };
-
 export class DouyinMiniappAccessTokenService {
   private readonly now: () => number;
   private readonly sleep: (milliseconds: number) => Promise<void>;
@@ -119,7 +116,6 @@ export class DouyinMiniappAccessTokenService {
     this.setTimeout = options.setTimeout ?? globalThis.setTimeout;
     this.clearTimeout = options.clearTimeout ?? globalThis.clearTimeout;
   }
-
   async getComponentAccessToken(): Promise<string> {
     const row = await this.options.componentRepository.findActive(
       this.options.componentAppId,
@@ -136,11 +132,23 @@ export class DouyinMiniappAccessTokenService {
     if (!lease) return this.pollComponentAccessToken();
     return this.refreshComponentAccessToken(row, lease);
   }
-
   async getAuthorizerAccessToken(input: {
     readonly authorizerAppId: string;
     readonly deploymentKey: string;
   }): Promise<string> {
+    return this.resolveAuthorizerAccessToken(input);
+  }
+  async forceRefreshAuthorizerAccessToken(input: {
+    readonly authorizerAppId: string;
+    readonly deploymentKey: string;
+    readonly rejectedAccessToken: string;
+  }): Promise<string> {
+    return this.resolveAuthorizerAccessToken(input, input.rejectedAccessToken);
+  }
+  private async resolveAuthorizerAccessToken(
+    input: { readonly authorizerAppId: string; readonly deploymentKey: string },
+    rejectedAccessToken?: string,
+  ): Promise<string> {
     const installation = await this.options.installationRepository.findActiveMerchant(
       input.authorizerAppId,
       input.deploymentKey,
@@ -150,15 +158,14 @@ export class DouyinMiniappAccessTokenService {
     }
     assertComponentBinding(installation.component_appid, this.options.componentAppId);
     const stored = this.openValidAccessToken(installation);
-    if (stored) return stored;
+    if (stored && stored !== rejectedAccessToken) return stored;
 
     const lease = await this.options.installationRepository.claimAccessTokenRefresh(
       installation.id,
     );
-    if (!lease) return this.pollAuthorizerAccessToken(input);
+    if (!lease) return this.pollAuthorizerAccessToken(input, rejectedAccessToken);
     return this.refreshAuthorizerAccessToken(installation, lease);
   }
-
   private async refreshComponentAccessToken(
     row: DouyinThirdPartyComponentRecord,
     lease: DouyinRefreshLease,
@@ -191,7 +198,6 @@ export class DouyinMiniappAccessTokenService {
       throw preserveAppError(error, componentRefreshError());
     }
   }
-
   private async refreshAuthorizerAccessToken(
     installation: DouyinMiniappInstallationRecord,
     lease: DouyinRefreshLease,
@@ -274,7 +280,7 @@ export class DouyinMiniappAccessTokenService {
   private async pollAuthorizerAccessToken(input: {
     readonly authorizerAppId: string;
     readonly deploymentKey: string;
-  }): Promise<string> {
+  }, rejectedAccessToken?: string): Promise<string> {
     const deadline = this.now() + REFRESH_POLL_LIMIT_MS;
     while (true) {
       const remaining = deadline - this.now();
@@ -292,7 +298,7 @@ export class DouyinMiniappAccessTokenService {
       if (!row) break;
       assertComponentBinding(row.component_appid, this.options.componentAppId);
       const stored = this.openValidAccessToken(row);
-      if (stored) return stored;
+      if (stored && stored !== rejectedAccessToken) return stored;
     }
     throw pollTimeoutError();
   }

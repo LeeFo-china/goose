@@ -62,11 +62,11 @@ const authPlugin = (app: FastifyInstance) => {
       verifyTokenDetailed(token)
     );
     const payload = tokenResult.payload;
-    if (!payload) {
+    if (!payload || tokenResult.reason !== "valid") {
       const reason = tokenResult.reason === "expired" ? "expired" : "invalid";
       const error = getTokenError(reason);
       logAuthReject(request, reason);
-      return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
+      throw error;
     }
 
     const isDouyinRoute = isDouyinMiniappRoute(url);

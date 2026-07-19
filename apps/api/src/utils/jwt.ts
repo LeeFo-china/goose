@@ -53,6 +53,20 @@ type JwtHeader = {
 };
 
 const encoder = new TextEncoder();
+const DOUYIN_MINIAPP_DEFAULT_EXPIRES_IN_SECONDS = 2 * 60 * 60;
+const DOUYIN_MINIAPP_MAX_EXPIRES_IN_SECONDS = 24 * 60 * 60;
+const DOUYIN_MINIAPP_CLAIMS = new Set([
+  "sub",
+  "token_type",
+  "login_channel",
+  "roles",
+  "tenant_id",
+  "douyin_installation_id",
+  "douyin_app_id",
+  "subject_hash",
+  "iat",
+  "exp",
+]);
 
 function toBase64Url(value: string | Uint8Array) {
   const input = typeof value === "string"
@@ -183,7 +197,7 @@ export function signDouyinMiniappToken(payload: DouyinMiniappTokenInput) {
       login_channel: "douyin",
       roles: ["douyin_miniapp"],
     },
-    process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN || "2h",
+    `${getDouyinMiniappTokenExpiresInSeconds()}s`,
   );
 }
 
@@ -297,15 +311,26 @@ export function getH5MarketingTokenExpiresAt(now = Date.now()) {
 }
 
 export function getDouyinMiniappTokenExpiresInSeconds() {
-  return parseJwtExpiresIn(
-    process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN || "2h",
-  );
+  const configured = process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN;
+  const parsed = configured
+    ? parseJwtExpiresIn(configured)
+    : DOUYIN_MINIAPP_DEFAULT_EXPIRES_IN_SECONDS;
+
+  return Number.isSafeInteger(parsed)
+    && parsed > 0
+    && parsed <= DOUYIN_MINIAPP_MAX_EXPIRES_IN_SECONDS
+    ? parsed
+    : DOUYIN_MINIAPP_DEFAULT_EXPIRES_IN_SECONDS;
 }
 
 function isValidDouyinMiniappPayload(
   payload: JwtPayload,
 ): payload is DouyinMiniappTokenPayload {
-  return payload.login_channel === "douyin"
+  return Object.keys(payload).every((claim) => DOUYIN_MINIAPP_CLAIMS.has(claim))
+    && payload.login_channel === "douyin"
+    && Array.isArray(payload.roles)
+    && payload.roles.length === 1
+    && payload.roles[0] === "douyin_miniapp"
     && typeof payload.tenant_id === "string"
     && UUID_PATTERN.test(payload.tenant_id)
     && typeof payload.douyin_installation_id === "string"
@@ -316,7 +341,12 @@ function isValidDouyinMiniappPayload(
     && payload.douyin_app_id.length <= 128
     && typeof payload.subject_hash === "string"
     && /^[a-f0-9]{64}$/.test(payload.subject_hash)
-    && payload.sub === payload.subject_hash;
+    && payload.sub === payload.subject_hash
+    && Number.isSafeInteger(payload.iat)
+    && Number.isSafeInteger(payload.exp)
+    && payload.iat! >= 0
+    && payload.exp! >= payload.iat!
+    && payload.exp! - payload.iat! <= DOUYIN_MINIAPP_MAX_EXPIRES_IN_SECONDS;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;

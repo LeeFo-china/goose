@@ -43,6 +43,7 @@ function dependencies(
   };
   const accessTokens = {
     getAuthorizerAccessToken: mock(async (_input: unknown) => "authorizer-access-token"),
+    forceRefreshAuthorizerAccessToken: mock(async (_input: unknown) => "refreshed-token"),
   };
   const openPlatform = {
     code2Session: mock(async (_input: unknown) => ({
@@ -105,6 +106,36 @@ describe("DouyinMiniappSessionService", () => {
     expect(JSON.stringify(result)).not.toMatch(
       /tenant_id|installation_id|app_id|open.?id|session.?key|deployment/i,
     );
+  });
+
+  test("force-refreshes a provider-rejected merchant token and replays only once", async () => {
+    const deps = dependencies();
+    const expired = Errors.business(
+      401,
+      "抖音开放平台访问令牌已过期",
+      "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_EXPIRED",
+    );
+    deps.openPlatform.code2Session = mock(async () => ({
+      sessionKey: "raw-session-key",
+      openId: "raw-open-id",
+    })).mockRejectedValueOnce(expired) as never;
+
+    await new DouyinMiniappSessionService(deps).exchange(request);
+
+    expect(deps.accessTokens.forceRefreshAuthorizerAccessToken).toHaveBeenCalledWith({
+      authorizerAppId: request.app_id,
+      deploymentKey: request.deployment_key,
+      rejectedAccessToken: "authorizer-access-token",
+    });
+    expect(deps.openPlatform.code2Session).toHaveBeenCalledTimes(2);
+    expect(deps.openPlatform.code2Session.mock.calls[1]?.[0]).toMatchObject({
+      authorizerAccessToken: "refreshed-token",
+    });
+
+    deps.openPlatform.code2Session = mock(async () => { throw expired; }) as never;
+    await expect(new DouyinMiniappSessionService(deps).exchange(request))
+      .rejects.toMatchObject({ code: "DOUYIN_SESSION_EXCHANGE_FAILED" });
+    expect(deps.openPlatform.code2Session).toHaveBeenCalledTimes(2);
   });
 
   test("uses ordinary code2Session only for the explicit template-development AppID", async () => {
