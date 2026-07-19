@@ -397,7 +397,7 @@ describe("production official website cutover contracts", () => {
       hasActiveShellLine(server, "server_name admin.goodcms.cn;"),
     );
 
-    expect(servers).toHaveLength(2);
+    expect(servers).toHaveLength(4);
     expect(webServer).toBeDefined();
     expect(adminServer).toBeDefined();
     expect(validatesNginxIngress(nginx)).toBe(true);
@@ -405,9 +405,9 @@ describe("production official website cutover contracts", () => {
       "must be merged into /opt/supabase/docker/volumes/proxy/nginx/supabase-nginx.conf.tpl",
     );
     expect(nginx).toContain("uses the template's global Docker resolver");
-    expect(nginx.match(/listen 443 ssl;/g)).toHaveLength(2);
-    expect(nginx.match(/listen \[::\]:443 ssl;/g)).toHaveLength(2);
-    expect(nginx.match(/http2 on;/g)).toHaveLength(2);
+    expect(nginx.match(/listen 443 ssl;/g)).toHaveLength(3);
+    expect(nginx.match(/listen \[::\]:443 ssl;/g)).toHaveLength(3);
+    expect(nginx.match(/http2 on;/g)).toHaveLength(3);
     expect(nginx).toContain("server_name www.goodcms.cn;");
     expect(nginx).toContain(
       "ssl_certificate /etc/letsencrypt/live/www.goodcms.cn/fullchain.pem;",
