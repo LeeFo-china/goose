@@ -16,7 +16,7 @@
 | 容器运行目录 | `/run/gooes-dnspod-acme`（0700） |
 | 状态目录 | `/run/gooes-dnspod-acme/state`（0700，临时 TXT 状态） |
 | Certbot | 容器 `supabase-nginx` 内的 `www.goodcms.cn` renewal 配置 |
-| systemd | `gooes-www-cert-ren.service` / `.timer` |
+| systemd | `gooes-www-cert-renew.service` / `.timer` |
 
 运行目录和状态在清理步骤中删除，状态文件只记录本次 hook 创建的 `RecordId`；cleanup 不会删除其他记录。
 
