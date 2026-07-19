@@ -16,21 +16,52 @@ import type {
 import {
   openDouyinCredential,
   sealDouyinCredential,
-  type DouyinCredentialEnvelope,
   type DouyinCredentialKeyring,
 } from "./credential-envelope";
-
-const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+import {
+  AUTHORIZATION_EXPIRED_ERROR,
+  AUTHORIZER_REFRESH_ERROR,
+  COMPONENT_REFRESH_ERROR,
+  assertAuthorizerAppId,
+  assertComponentBinding,
+  authorizationExpiredError,
+  authorizerPersistenceRecoverableError,
+  authorizerRefreshError,
+  componentRefreshError,
+  hasLeaseHeadroom,
+  hasMinimumLeaseWindow,
+  isLeaseMismatch,
+  isPersistenceOperationTimeout,
+  isRecoverableRefreshRejection,
+  isStrictlyFuture,
+  isTerminalAuthorizerRefreshError,
+  isValidBeyondBuffer,
+  leaseInsufficientError,
+  leaseMismatchError,
+  matchesPersistedTokens,
+  pollTimeoutError,
+  persistenceOperationTimeoutError,
+  preserveAppError,
+  raceOperation,
+  requiredComponentTicket,
+  requiredDeploymentKey,
+  requiredEnvelope,
+  requiredRefreshToken,
+  settleBestEffortWithin,
+  type ClearTimer,
+  type SealedAuthorizerTokens,
+  type SetTimer,
+} from "./access-token-support";
 const REFRESH_POLL_LIMIT_MS = 3_000;
 const REFRESH_POLL_INTERVAL_MS = 100;
-const MIN_LEASE_REMAINING_MS = 10_000;
-const COMPONENT_REFRESH_ERROR = "DOUYIN_COMPONENT_TOKEN_REFRESH_FAILED";
-const AUTHORIZER_REFRESH_ERROR = "DOUYIN_AUTHORIZER_TOKEN_REFRESH_FAILED";
-const AUTHORIZATION_EXPIRED_ERROR = "DOUYIN_AUTHORIZATION_EXPIRED";
-type TimerHandle = ReturnType<typeof globalThis.setTimeout>;
-type SetTimer = (callback: () => void, milliseconds: number) => TimerHandle;
-type ClearTimer = (handle: TimerHandle) => void;
-
+const BEST_EFFORT_FAIL_TIMEOUT_MS = 500;
+const PERSISTENCE_OPERATION_TIMEOUT_MS = 1_000;
+const RECOVERY_START_HEADROOM_MS = 22_000;
+const RECOVERY_EXCHANGE_HEADROOM_MS = 12_000;
+type PersistenceOutcome = {
+  readonly persisted: boolean;
+  readonly safeToCompensate: boolean;
+};
 export interface ComponentTokenRepository {
   findActive(componentAppId: string): Promise<DouyinThirdPartyComponentRecord | null>;
   claimAccessTokenRefresh(componentAppId: string): Promise<DouyinRefreshLease | null>;
@@ -177,18 +208,36 @@ export class DouyinMiniappAccessTokenService {
         this.options.credentialKeyring,
       );
       await this.assertAuthorizerLeaseWindow(installation.id, lease);
-      const refreshed = await this.options.openPlatform.refreshAuthorizerToken({
-        componentAccessToken,
-        authorizerRefreshToken: refreshToken,
-      });
+      let refreshed: AuthorizerTokenResult;
+      try {
+        refreshed = await this.options.openPlatform.refreshAuthorizerToken({
+          componentAccessToken,
+          authorizerRefreshToken: refreshToken,
+        });
+      } catch (error) {
+        if (isRecoverableRefreshRejection(error)) {
+          return await this.compensateAuthorizerAccessToken(
+            installation,
+            lease,
+            componentAccessToken,
+          );
+        }
+        throw error;
+      }
       assertAuthorizerAppId(refreshed, installation.authorizer_appid);
-      const completed = await this.options.installationRepository.completeAccessTokenRefresh({
-        installationId: installation.id,
-        claimToken: lease.claimToken,
+      const tokens = {
         accessToken: this.sealToken(refreshed.accessToken, refreshed.expiresIn),
         refreshToken: this.sealRefreshToken(refreshed),
-      });
-      if (!completed) throw leaseMismatchError();
+      };
+      const persistence = await this.persistAuthorizerTokens(installation, lease, tokens, 2);
+      if (!persistence.persisted) {
+        if (!persistence.safeToCompensate) throw authorizerPersistenceRecoverableError();
+        return await this.compensateAuthorizerAccessToken(
+          installation,
+          lease,
+          componentAccessToken,
+        );
+      }
       return refreshed.accessToken;
     } catch (error) {
       if (isTerminalAuthorizerRefreshError(error)) throw error;
@@ -258,25 +307,9 @@ export class DouyinMiniappAccessTokenService {
   ): Promise<Result> {
     const remaining = deadline - this.now();
     if (remaining <= 0) return Promise.reject(pollTimeoutError());
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      let timer: TimerHandle | undefined;
-      const settle = (complete: () => void) => {
-        if (settled) return;
-        settled = true;
-        if (timer !== undefined) this.clearTimeout(timer);
-        complete();
-      };
-      timer = this.setTimeout(
-        () => settle(() => reject(pollTimeoutError())),
-        remaining,
-      );
-      if (settled) this.clearTimeout(timer);
-      Promise.resolve().then(read).then(
-        (result) => settle(() => resolve(result)),
-        (error: unknown) => settle(() => reject(error)),
-      );
-    });
+    return raceOperation({ operation: read, timeout: remaining,
+      setTimer: this.setTimeout, clearTimer: this.clearTimeout,
+      timeoutError: pollTimeoutError });
   }
 
   private openValidAccessToken(row: {
@@ -338,17 +371,107 @@ export class DouyinMiniappAccessTokenService {
     throw authorizationExpiredError();
   }
 
+  private async persistAuthorizerTokens(
+    installation: DouyinMiniappInstallationRecord,
+    lease: DouyinRefreshLease,
+    tokens: SealedAuthorizerTokens,
+    attempts: number,
+  ): Promise<PersistenceOutcome> {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (!isStrictlyFuture(lease.claimExpiresAt, this.now())) {
+        return { persisted: false, safeToCompensate: false };
+      }
+      let completionTimedOut = false;
+      try {
+        const completed = await this.runPersistenceOperation(
+          () => this.options.installationRepository.completeAccessTokenRefresh({
+            installationId: installation.id,
+            claimToken: lease.claimToken,
+            ...tokens,
+          }),
+          lease,
+        );
+        if (completed) return { persisted: true, safeToCompensate: true };
+      } catch (error) {
+        completionTimedOut = isPersistenceOperationTimeout(error);
+      }
+      if (!isStrictlyFuture(lease.claimExpiresAt, this.now())) {
+        return { persisted: false, safeToCompensate: false };
+      }
+      let row: DouyinMiniappInstallationRecord | null = null;
+      try {
+        row = await this.runPersistenceOperation(
+          () => this.options.installationRepository.findActiveMerchant(
+            installation.authorizer_appid,
+            requiredDeploymentKey(installation),
+          ),
+          lease,
+        );
+      } catch {
+        row = null;
+      }
+      if (row && matchesPersistedTokens(row, tokens)) {
+        return { persisted: true, safeToCompensate: true };
+      }
+      if (completionTimedOut) return { persisted: false, safeToCompensate: false };
+    }
+    return { persisted: false, safeToCompensate: true };
+  }
+
+  private async compensateAuthorizerAccessToken(
+    installation: DouyinMiniappInstallationRecord,
+    lease: DouyinRefreshLease,
+    componentAccessToken: string,
+  ): Promise<string> {
+    if (!hasLeaseHeadroom(lease.claimExpiresAt, this.now(), RECOVERY_START_HEADROOM_MS)) {
+      throw authorizerPersistenceRecoverableError();
+    }
+    const authorizationCode = await this.options.openPlatform.retrieveAuthorizationCode({
+      componentAccessToken,
+      authorizationAppId: installation.authorizer_appid,
+    });
+    if (!hasLeaseHeadroom(lease.claimExpiresAt, this.now(), RECOVERY_EXCHANGE_HEADROOM_MS)) {
+      throw authorizerPersistenceRecoverableError();
+    }
+    const recovered = await this.options.openPlatform.exchangeAuthorizationCode({
+      componentAccessToken,
+      authorizationCode,
+    });
+    assertAuthorizerAppId(recovered, installation.authorizer_appid);
+    const tokens = {
+      accessToken: this.sealToken(recovered.accessToken, recovered.expiresIn),
+      refreshToken: this.sealRefreshToken(recovered),
+    };
+    const persistence = await this.persistAuthorizerTokens(installation, lease, tokens, 1);
+    if (!persistence.persisted) throw authorizerPersistenceRecoverableError();
+    return recovered.accessToken;
+  }
+
+  private runPersistenceOperation<Result>(
+    operation: () => Promise<Result>,
+    lease: DouyinRefreshLease,
+  ): Promise<Result> {
+    const leaseRemaining = Date.parse(lease.claimExpiresAt) - this.now();
+    const timeout = Math.min(PERSISTENCE_OPERATION_TIMEOUT_MS, leaseRemaining);
+    if (!Number.isFinite(timeout) || timeout <= 0) {
+      return Promise.reject(authorizerPersistenceRecoverableError());
+    }
+    return raceOperation({ operation, timeout, setTimer: this.setTimeout,
+      clearTimer: this.clearTimeout,
+      timeoutError: persistenceOperationTimeoutError });
+  }
+
   private async bestEffortFailComponentLease(
     claimToken: string,
     errorCode: string,
   ): Promise<void> {
-    try {
-      await this.options.componentRepository.failAccessTokenRefresh({
+    await this.settleBestEffort(
+      () => this.options.componentRepository.failAccessTokenRefresh({
         componentAppId: this.options.componentAppId,
         claimToken,
         errorCode,
-      });
-    } catch { return; }
+      }),
+    );
   }
 
   private async bestEffortFailAuthorizerLease(
@@ -356,129 +479,19 @@ export class DouyinMiniappAccessTokenService {
     claimToken: string,
     errorCode: string,
   ): Promise<void> {
-    try {
-      await this.options.installationRepository.failAccessTokenRefresh({
+    await this.settleBestEffort(
+      () => this.options.installationRepository.failAccessTokenRefresh({
         installationId,
         claimToken,
         errorCode,
-      });
-    } catch { return; }
-  }
-}
-
-function requiredComponentTicket(row: DouyinThirdPartyComponentRecord): DouyinCredentialEnvelope {
-  return requiredEnvelope({
-    ciphertext: row.component_ticket_ciphertext,
-    iv: row.component_ticket_iv,
-    tag: row.component_ticket_tag,
-    keyVersion: row.component_ticket_key_version,
-  });
-}
-
-function requiredRefreshToken(row: DouyinMiniappInstallationRecord): DouyinCredentialEnvelope {
-  return requiredEnvelope({
-    ciphertext: row.refresh_token_ciphertext,
-    iv: row.refresh_token_iv,
-    tag: row.refresh_token_tag,
-    keyVersion: row.refresh_token_key_version,
-  });
-}
-
-function requiredEnvelope(input: {
-  readonly ciphertext: string | null;
-  readonly iv: string | null;
-  readonly tag: string | null;
-  readonly keyVersion: string | null;
-}): DouyinCredentialEnvelope {
-  if (!input.ciphertext || !input.iv || !input.tag || !input.keyVersion) {
-    throw Errors.business(500, "抖音凭证存储状态无效", "DOUYIN_CREDENTIAL_STATE_INVALID");
-  }
-  return {
-    ciphertext: input.ciphertext,
-    iv: input.iv,
-    tag: input.tag,
-    keyVersion: input.keyVersion,
-  };
-}
-
-function isValidBeyondBuffer(expiresAt: string | null, now: number): boolean {
-  if (!expiresAt) return false;
-  const expiresAtMs = Date.parse(expiresAt);
-  return Number.isFinite(expiresAtMs) && expiresAtMs > now + TOKEN_EXPIRY_BUFFER_MS;
-}
-
-function isStrictlyFuture(expiresAt: string | null, now: number): boolean {
-  if (!expiresAt) return false;
-  const expiresAtMs = Date.parse(expiresAt);
-  return Number.isFinite(expiresAtMs) && expiresAtMs > now;
-}
-
-function hasMinimumLeaseWindow(claimExpiresAt: string, now: number): boolean {
-  const expiresAtMs = Date.parse(claimExpiresAt);
-  return Number.isFinite(expiresAtMs) && expiresAtMs > now + MIN_LEASE_REMAINING_MS;
-}
-
-function assertComponentBinding(actual: string, expected: string): void {
-  if (actual !== expected) {
-    throw Errors.business(
-      409,
-      "抖音小程序授权组件不匹配",
-      "DOUYIN_COMPONENT_APP_ID_MISMATCH",
+      }),
     );
   }
-}
 
-function assertAuthorizerAppId(result: AuthorizerTokenResult, expected: string): void {
-  if (result.authorizerAppId !== expected) {
-    throw Errors.business(
-      502,
-      "抖音授权小程序标识不匹配",
-      "DOUYIN_AUTHORIZER_APP_ID_MISMATCH",
-    );
+  private settleBestEffort(operation: () => Promise<unknown>): Promise<void> {
+    return settleBestEffortWithin({ operation, timeout: BEST_EFFORT_FAIL_TIMEOUT_MS,
+      setTimer: this.setTimeout, clearTimer: this.clearTimeout });
   }
-}
-
-function isLeaseMismatch(error: unknown): boolean {
-  return error instanceof AppError && error.code === "DOUYIN_TOKEN_REFRESH_LEASE_MISMATCH";
-}
-
-function isTerminalAuthorizerRefreshError(error: unknown): boolean {
-  return error instanceof AppError && [
-    "DOUYIN_TOKEN_REFRESH_LEASE_MISMATCH",
-    "DOUYIN_TOKEN_REFRESH_LEASE_INSUFFICIENT",
-  ].includes(error.code);
-}
-
-function preserveAppError(error: unknown, fallback: AppError): AppError {
-  return error instanceof AppError ? error : fallback;
-}
-
-function leaseMismatchError(): AppError {
-  return Errors.business(409, "抖音凭证刷新租约已失效", "DOUYIN_TOKEN_REFRESH_LEASE_MISMATCH");
-}
-
-function leaseInsufficientError(): AppError {
-  return Errors.business(
-    503,
-    "抖音凭证刷新租约剩余时间不足",
-    "DOUYIN_TOKEN_REFRESH_LEASE_INSUFFICIENT",
-  );
-}
-
-function componentRefreshError(): AppError {
-  return Errors.business(502, "抖音组件凭证刷新失败", COMPONENT_REFRESH_ERROR);
-}
-
-function authorizerRefreshError(): AppError {
-  return Errors.business(502, "抖音授权凭证刷新失败", AUTHORIZER_REFRESH_ERROR);
-}
-
-function authorizationExpiredError(): AppError {
-  return Errors.business(401, "抖音小程序需要重新授权", AUTHORIZATION_EXPIRED_ERROR);
-}
-
-function pollTimeoutError(): AppError {
-  return Errors.business(503, "等待抖音凭证刷新超时", "DOUYIN_TOKEN_REFRESH_POLL_TIMEOUT");
 }
 
 function sleepWithTimer(milliseconds: number): Promise<void> {

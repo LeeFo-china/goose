@@ -447,6 +447,28 @@ describe("DouyinOpenPlatformClient failures", () => {
       })).rejects.toMatchObject({ code: fixture.code, details: { log_id: fixture.body.log_id } });
     }
   });
+
+  test("maps missing retrieve authorization relationships to stable 401 errors", async () => {
+    for (const errNo of [40_004, 40_022]) {
+      const client = new DouyinOpenPlatformClient({
+        fetch: async (_input, _init) => jsonResponse({
+          err_no: errNo, err_msg: `sensitive provider ${errNo}`, log_id: "retrieve-expired-log",
+        }),
+      });
+      let caught: unknown;
+      try {
+        await client.retrieveAuthorizationCode({
+          componentAccessToken: COMPONENT_TOKEN,
+          authorizationAppId: "authorizer-appid",
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toMatchObject({ statusCode: 401, code: "DOUYIN_AUTHORIZATION_EXPIRED",
+        details: { log_id: "retrieve-expired-log" } });
+      expect(JSON.stringify(caught)).not.toContain(String(errNo));
+    }
+  });
 });
 
 function authorizerSuccess(): Record<string, unknown> {

@@ -4,6 +4,7 @@ import { Errors } from "@/errors/error-factory";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const EXPIRED_ACCESS_TOKEN_ERROR = 28_001_008;
+const RETRIEVE_AUTHORIZATION_EXPIRED_ERRORS = new Set([40_004, 40_022]);
 const COMPONENT_TOKEN_URL = "https://open.douyin.com/openapi/v2/auth/tp/token/";
 const AUTHORIZER_TOKEN_URL = "https://open.douyin.com/api/tpapp/v2/auth/get_auth_token/";
 const RETRIEVE_AUTH_CODE_URL = "https://open.douyin.com/api/tpapp/v2/auth/retrieve_auth_code/";
@@ -193,7 +194,7 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
       },
       body: JSON.stringify({ authorization_appid: input.authorizationAppId }),
     });
-    assertOpenApiSuccess(body);
+    assertRetrieveAuthorizationSuccess(body);
     const parsed = RetrieveAuthorizationCodeSuccessSchema.safeParse(body);
     if (!parsed.success) throw invalidResponseError(safeLogId(body));
     return parsed.data.data.authorization_code;
@@ -335,6 +336,19 @@ function assertOpenApiSuccess(body: Record<string, unknown>): void {
     ? "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_EXPIRED"
     : "DOUYIN_OPEN_PLATFORM_API_ERROR";
   throw openPlatformError(code, "抖音开放平台请求失败", envelope.data.log_id);
+}
+
+function assertRetrieveAuthorizationSuccess(body: Record<string, unknown>): void {
+  const envelope = OpenApiEnvelopeSchema.safeParse(body);
+  if (envelope.success && RETRIEVE_AUTHORIZATION_EXPIRED_ERRORS.has(envelope.data.err_no)) {
+    throw Errors.business(
+      401,
+      "抖音小程序需要重新授权",
+      "DOUYIN_AUTHORIZATION_EXPIRED",
+      envelope.data.log_id ? { log_id: envelope.data.log_id } : undefined,
+    );
+  }
+  assertOpenApiSuccess(body);
 }
 
 function safeLogId(body: unknown): string | undefined {
