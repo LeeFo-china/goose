@@ -1479,6 +1479,100 @@ export type Database = {
           },
         ]
       }
+      douyin_authorization_event_deliveries: {
+        Row: {
+          authorizer_appid: string | null
+          claim_expires_at: string | null
+          claim_token: string | null
+          completed_at: string | null
+          component_appid: string
+          created_at: string
+          event_key: string
+          event_name: string
+          occurred_at: string
+          processing_state: string
+          updated_at: string
+        }
+        Insert: {
+          authorizer_appid?: string | null
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          completed_at?: string | null
+          component_appid: string
+          created_at?: string
+          event_key: string
+          event_name: string
+          occurred_at: string
+          processing_state?: string
+          updated_at?: string
+        }
+        Update: {
+          authorizer_appid?: string | null
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          completed_at?: string | null
+          component_appid?: string
+          created_at?: string
+          event_key?: string
+          event_name?: string
+          occurred_at?: string
+          processing_state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_authorization_event_deliveries_component_appid_fkey"
+            columns: ["component_appid"]
+            isOneToOne: false
+            referencedRelation: "douyin_third_party_components"
+            referencedColumns: ["component_appid"]
+          },
+        ]
+      }
+      douyin_authorization_event_subject_leases: {
+        Row: {
+          active_event_key: string | null
+          active_event_name: string | null
+          active_occurred_at: string | null
+          authorizer_appid: string
+          claim_expires_at: string | null
+          claim_token: string | null
+          component_appid: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          active_event_key?: string | null
+          active_event_name?: string | null
+          active_occurred_at?: string | null
+          authorizer_appid: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          component_appid: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          active_event_key?: string | null
+          active_event_name?: string | null
+          active_occurred_at?: string | null
+          authorizer_appid?: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          component_appid?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_authorization_event_subject_leases_component_appid_fkey"
+            columns: ["component_appid"]
+            isOneToOne: false
+            referencedRelation: "douyin_third_party_components"
+            referencedColumns: ["component_appid"]
+          },
+        ]
+      }
       douyin_miniapp_installations: {
         Row: {
           access_token_ciphertext: string | null
@@ -1486,6 +1580,7 @@ export type Database = {
           access_token_iv: string | null
           access_token_key_version: string | null
           access_token_tag: string | null
+          authorization_event_occurred_at: string | null
           authorization_status: string
           authorizer_appid: string
           component_appid: string
@@ -1518,6 +1613,7 @@ export type Database = {
           access_token_iv?: string | null
           access_token_key_version?: string | null
           access_token_tag?: string | null
+          authorization_event_occurred_at?: string | null
           authorization_status?: string
           authorizer_appid: string
           component_appid: string
@@ -1550,6 +1646,7 @@ export type Database = {
           access_token_iv?: string | null
           access_token_key_version?: string | null
           access_token_tag?: string | null
+          authorization_event_occurred_at?: string | null
           authorization_status?: string
           authorizer_appid?: string
           component_appid?: string
@@ -12290,6 +12387,7 @@ export type Database = {
           access_token_iv: string | null
           access_token_key_version: string | null
           access_token_tag: string | null
+          authorization_event_occurred_at: string | null
           authorization_status: string
           authorizer_appid: string
           component_appid: string
@@ -12333,6 +12431,20 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      claim_douyin_authorization_event: {
+        Args: {
+          p_authorizer_appid: string
+          p_component_appid: string
+          p_event_key: string
+          p_event_name: string
+          p_occurred_at: string
+        }
+        Returns: {
+          claim_expires_at: string
+          claim_state: string
+          claim_token: string
+        }[]
       }
       claim_douyin_authorizer_token_refresh: {
         Args: { p_installation_id: string }
@@ -12498,6 +12610,28 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      complete_douyin_authorization_event: {
+        Args: {
+          p_access_token_ciphertext: string
+          p_access_token_expires_at: string
+          p_access_token_iv: string
+          p_access_token_key_version: string
+          p_access_token_tag: string
+          p_authorizer_appid: string
+          p_claim_token: string
+          p_component_appid: string
+          p_event_key: string
+          p_event_name: string
+          p_occurred_at: string
+          p_permissions: Json
+          p_refresh_token_ciphertext: string
+          p_refresh_token_expires_at: string
+          p_refresh_token_iv: string
+          p_refresh_token_key_version: string
+          p_refresh_token_tag: string
+        }
+        Returns: boolean
+      }
       complete_douyin_authorizer_token_refresh: {
         Args: {
           p_access_token_ciphertext: string
@@ -12525,6 +12659,33 @@ export type Database = {
           p_claim_token: string
           p_component_appid: string
         }
+        Returns: boolean
+      }
+      complete_douyin_revocation_event: {
+        Args: {
+          p_authorizer_appid: string
+          p_claim_token: string
+          p_component_appid: string
+          p_event_key: string
+          p_occurred_at: string
+        }
+        Returns: boolean
+      }
+      complete_douyin_ticket_event: {
+        Args: {
+          p_claim_token: string
+          p_component_appid: string
+          p_event_key: string
+          p_received_at: string
+          p_ticket_ciphertext: string
+          p_ticket_iv: string
+          p_ticket_key_version: string
+          p_ticket_tag: string
+        }
+        Returns: boolean
+      }
+      complete_douyin_unsupported_event: {
+        Args: { p_claim_token: string; p_event_key: string }
         Returns: boolean
       }
       complete_workflow_instance_node: {
@@ -12696,6 +12857,10 @@ export type Database = {
           rating_count: number
           stage_code: string
         }[]
+      }
+      get_douyin_authorization_event_state: {
+        Args: { p_event_key: string }
+        Returns: string
       }
       get_employee_permission_context_fast: {
         Args: { p_employee_id: string }
@@ -13089,6 +13254,10 @@ export type Database = {
           like_count: number
           liked: boolean
         }[]
+      }
+      prune_douyin_authorization_event_deliveries: {
+        Args: { p_before: string; p_limit?: number }
+        Returns: number
       }
       publish_site_content: {
         Args: { p_actor_id: string; p_entry_id: string; p_version_id: string }
