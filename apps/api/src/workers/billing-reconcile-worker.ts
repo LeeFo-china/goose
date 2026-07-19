@@ -8,6 +8,7 @@ import {
   type RefundReconciliationSummary,
 } from "@/services/billing-recharge-refund-reconciliation";
 import type { BillingRechargeExpirationTelemetry } from "@/services/billing-recharge-expiration";
+import { markBillingReconcileWorkerHealthy } from "@/workers/billing-reconcile-worker-health";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const MIN_INTERVAL_MS = 10_000;
@@ -45,6 +46,7 @@ type BillingReconcileWorkerDependencies = {
     runBatch(input: { limit: number }): Promise<RefundReconciliationSummary>;
   };
   logger?: WorkerLogger;
+  healthEvidence?: { markHealthy(): Promise<void> };
 };
 
 type ChildResult<Result> =
@@ -179,12 +181,27 @@ export async function tick(
     const hasErrors = subscription.status === "rejected" ||
       rechargeExpiration.status === "rejected" ||
       refund.status === "rejected";
+    let healthEvidenceFailed = false;
+    if (!hasErrors) {
+      try {
+        const healthEvidence = dependencies.healthEvidence ?? {
+          markHealthy: markBillingReconcileWorkerHealthy,
+        };
+        await healthEvidence.markHealthy();
+      } catch {
+        healthEvidenceFailed = true;
+      }
+    }
 
-    logger(hasErrors ? "error" : "info", hasErrors
+    const tickFailed = hasErrors || healthEvidenceFailed;
+    logger(tickFailed ? "error" : "info", tickFailed
       ? "tick completed with errors"
       : "tick completed", {
       duration_ms: Date.now() - startedAt,
       result: { subscription, recharge_expiration: rechargeExpiration, refund },
+      ...(healthEvidenceFailed
+        ? { error_code: "BILLING_RECONCILE_HEALTH_WRITE_FAILED" }
+        : {}),
     });
   } finally {
     running = false;

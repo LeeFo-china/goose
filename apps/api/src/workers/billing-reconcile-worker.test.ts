@@ -364,6 +364,45 @@ describe("tick", () => {
     expect(rechargeExpirationService.runExpiredOrderChecks).toHaveBeenCalledTimes(1);
     expect(refundReconciliationService.runBatch).toHaveBeenCalledTimes(1);
   });
+
+  test("refreshes health only after all children succeed and recovers later", async () => {
+    const subscriptionService = {
+      runDueChecks: mock(async () => SUBSCRIPTION_RESULT),
+    };
+    const rechargeExpirationService = {
+      runExpiredOrderChecks: mock(async () => RECHARGE_EXPIRATION_RESULT),
+    };
+    const refundReconciliationService = {
+      runBatch: mock(async () => REFUND_RESULT),
+    };
+    const markHealthy = mock(async () => {});
+    const logger = mock(() => {});
+    const { tick } = await import("./billing-reconcile-worker");
+    const dependencies = {
+      subscriptionService,
+      rechargeExpirationService,
+      refundReconciliationService,
+      healthEvidence: { markHealthy },
+      logger,
+    };
+
+    await tick(dependencies);
+    expect(markHealthy).toHaveBeenCalledTimes(1);
+
+    subscriptionService.runDueChecks.mockImplementation(async () => {
+      throw new Error("distinctive subscription secret");
+    });
+    await tick(dependencies);
+    await tick(dependencies);
+    expect(markHealthy).toHaveBeenCalledTimes(1);
+
+    subscriptionService.runDueChecks.mockImplementation(async () => SUBSCRIPTION_RESULT);
+    await tick(dependencies);
+    expect(markHealthy).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(logger.mock.calls)).not.toContain(
+      "distinctive subscription secret",
+    );
+  });
 });
 
 const WORKER_ENV_KEYS = [
