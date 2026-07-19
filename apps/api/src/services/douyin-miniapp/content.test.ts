@@ -135,6 +135,38 @@ describe("DouyinMiniappContentService", () => {
     expect(suspended.repository.listSites).not.toHaveBeenCalled();
   });
 
+  test("does not query or expose case and site content when runtime features are disabled", async () => {
+    const disabled = dependencies({
+      findActiveInstallation: mock(async () => ({
+        ...installation,
+        runtime_config: {
+          ...runtime,
+          features: { ...runtime.features, cases: false, sites: false },
+        },
+      })),
+    });
+    const service = new DouyinMiniappContentService(disabled as never);
+
+    const bootstrap = await service.bootstrap(user);
+    expect(bootstrap.content).toMatchObject({ featured_cases: [], active_sites: [] });
+    expect(disabled.repository.listCases).not.toHaveBeenCalled();
+    expect(disabled.repository.listSites).not.toHaveBeenCalled();
+
+    await expect(service.listCases(user, { page: 1, pageSize: 20 }))
+      .rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_CONTENT_FEATURE_DISABLED" });
+    await expect(service.getCase(user, PROJECT_ID))
+      .rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_CONTENT_FEATURE_DISABLED" });
+    await expect(service.listSites(user, { page: 1, pageSize: 20 }))
+      .rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_CONTENT_FEATURE_DISABLED" });
+    await expect(service.getSite(user, PROJECT_ID))
+      .rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_CONTENT_FEATURE_DISABLED" });
+    await expect(service.listSiteLogs(user, PROJECT_ID, { page: 1, pageSize: 20 }))
+      .rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_CONTENT_FEATURE_DISABLED" });
+    expect(disabled.repository.findCase).not.toHaveBeenCalled();
+    expect(disabled.repository.findSite).not.toHaveBeenCalled();
+    expect(disabled.repository.listSiteLogs).not.toHaveBeenCalled();
+  });
+
   test("returns bounded HTTPS-only progress images without raw content", async () => {
     const deps = dependencies();
     const result = await new DouyinMiniappContentService(deps as never).listSiteLogs(

@@ -37,11 +37,16 @@ export class DouyinMiniappContentService {
 
   async bootstrap(user?: JwtPayload) {
     const context = await this.loadContext(user);
+    const emptyProjects = Promise.resolve({ rows: [] as DouyinContentProject[], total: 0 });
     const [profile, areas, cases, sites] = await Promise.all([
       this.repository.findPublishedCompany(context.tenantId),
       this.repository.listServiceAreas(context.tenantId),
-      this.repository.listCases({ tenantId: context.tenantId, page: 1, pageSize: 6 }),
-      this.repository.listSites({ tenantId: context.tenantId, page: 1, pageSize: 6 }),
+      context.runtime.features.cases
+        ? this.repository.listCases({ tenantId: context.tenantId, page: 1, pageSize: 6 })
+        : emptyProjects,
+      context.runtime.features.sites
+        ? this.repository.listSites({ tenantId: context.tenantId, page: 1, pageSize: 6 })
+        : emptyProjects,
     ]);
     const company = this.mapCompany(context.runtime, requireCompany(profile), areas);
     return {
@@ -73,12 +78,14 @@ export class DouyinMiniappContentService {
 
   async listCases(user: JwtPayload | undefined, query: DouyinCaseListQuery) {
     const context = await this.loadContext(user);
+    requireContentFeature(context, "cases");
     const result = await this.repository.listCases({ tenantId: context.tenantId, ...query });
     return page(result.rows.map(mapProject), query, result.total);
   }
 
   async getCase(user: JwtPayload | undefined, id: string) {
     const context = await this.loadContext(user);
+    requireContentFeature(context, "cases");
     return mapProject(requireProject(await this.repository.findCase({
       tenantId: context.tenantId, id,
     })));
@@ -86,12 +93,14 @@ export class DouyinMiniappContentService {
 
   async listSites(user: JwtPayload | undefined, query: DouyinContentPageQuery) {
     const context = await this.loadContext(user);
+    requireContentFeature(context, "sites");
     const result = await this.repository.listSites({ tenantId: context.tenantId, ...query });
     return page(result.rows.map(mapProject), query, result.total);
   }
 
   async getSite(user: JwtPayload | undefined, id: string) {
     const context = await this.loadContext(user);
+    requireContentFeature(context, "sites");
     return mapProject(requireProject(await this.repository.findSite({
       tenantId: context.tenantId, id,
     })));
@@ -103,6 +112,7 @@ export class DouyinMiniappContentService {
     query: DouyinContentPageQuery,
   ) {
     const context = await this.loadContext(user);
+    requireContentFeature(context, "sites");
     requireProject(await this.repository.findSite({ tenantId: context.tenantId, id: projectId }));
     const result = await this.repository.listSiteLogs({
       tenantId: context.tenantId, projectId, ...query,
@@ -232,6 +242,11 @@ function requireCompany(value: DouyinContentCompany | null) {
 function requireProject(value: DouyinContentProject | null) {
   if (!value) throw Errors.business(404, "公开内容不存在", "DOUYIN_CONTENT_NOT_FOUND");
   return value;
+}
+function requireContentFeature(context: ContentContext, feature: "cases" | "sites") {
+  if (!context.runtime.features[feature]) {
+    throw Errors.business(404, "公开内容模块未开放", "DOUYIN_CONTENT_FEATURE_DISABLED");
+  }
 }
 function installationDisabled() {
   return Errors.business(409, "抖音小程序服务已暂停", "DOUYIN_INSTALLATION_DISABLED");
