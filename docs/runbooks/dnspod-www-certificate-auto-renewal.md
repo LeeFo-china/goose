@@ -18,7 +18,7 @@
 | Certbot | 容器 `supabase-nginx` 内的 `www.goodcms.cn` renewal 配置 |
 | systemd | `gooes-www-cert-renew.service` / `.timer` |
 
-运行目录和状态在清理步骤中删除，状态文件只记录本次 hook 创建的 `RecordId`；cleanup 不会删除其他记录。
+运行目录和状态在清理步骤中删除，状态文件记录本次 hook 创建的 `RecordId` 与 validation hash；cleanup 不会删除其他记录。
 
 ## CAM 最小权限
 
@@ -41,7 +41,7 @@ DNSPOD_SUBDOMAIN=_acme-challenge.www
 
 ## 首次安装与配置
 
-以下命令均在生产主机以 root 执行；先从本次发布分支取得文件，再校验哈希。禁止从未审查的工作区直接复制。
+以下公开文件安装命令在生产主机以 root 执行；先从本次发布分支取得文件，再校验哈希。禁止从未审查的工作区直接复制。
 
 ```bash
 install -o root -g root -m 0755 dnspod_acme_hook.py /opt/gooes/cert-renewal/dnspod_acme_hook.py
@@ -49,12 +49,18 @@ install -o root -g root -m 0755 gooes-www-cert-renew.sh /opt/gooes/cert-renewal/
 install -o root -g root -m 0644 gooes-www-cert-renew.service /etc/systemd/system/gooes-www-cert-renew.service
 install -o root -g root -m 0644 gooes-www-cert-renew.timer /etc/systemd/system/gooes-www-cert-renew.timer
 install -d -o root -g root -m 0700 /etc/gooes
-install -o root -g root -m 0600 /dev/stdin /etc/gooes/dnspod-www-cert.env
 systemctl daemon-reload
 systemd-analyze verify gooes-www-cert-renew.service gooes-www-cert-renew.timer
 ```
 
-`/dev/stdin` 内容为上文 4 个凭据键；执行时不得 echo、tee 或开启 shell trace。安装前通过容器路径备份 renewal 配置（带 UTC 时间戳和 SHA-256）：
+凭据文件单独通过安全 stdin 写入，不要放进连续复制执行的 bootstrap 块。示例在本地执行，`$CREDENTIAL_FILE` 必须是本机 root-only/owner-only 的临时文件，内容为上文 4 个凭据键：
+
+```bash
+ssh ubuntu@1.13.20.39 'sudo install -d -o root -g root -m 0700 /etc/gooes && sudo install -o root -g root -m 0600 /dev/stdin /etc/gooes/dnspod-www-cert.env' < "$CREDENTIAL_FILE"
+ssh ubuntu@1.13.20.39 'sudo stat -c "%a %U:%G %n" /etc/gooes/dnspod-www-cert.env'
+```
+
+不得 echo、tee、开启 shell trace 或把 SecretKey 写进 shell history。安装前通过容器路径备份 renewal 配置（带 UTC 时间戳和 SHA-256）：
 
 ```bash
 backup_dir=/var/backups/gooes-cert-renewal/$(date -u +%Y%m%dT%H%M%SZ)
@@ -105,7 +111,7 @@ curl --fail --silent --show-error --head https://www.goodcms.cn
 
 1. `prepare` 失败：检查 `systemctl is-active docker`、`docker ps --format '{{.Names}} {{.Status}}'`、文件 owner/mode 和凭据键名；修复后重新执行 `prepare`。
 2. DNSPod 4xx/5xx：不要打印响应正文中的敏感字段。确认 CAM 策略的 domainId、主账号 UIN、API 密钥状态和服务器时钟；仅允许 CreateRecord/DeleteRecord。
-3. TXT 未传播：hook 会向权威 NS 查询并在截止时间内重试。确认 `goodcms.cn` 的 NS 委派和 UDP/TCP 网络；超时后 cleanup 仍应执行。
+3. TXT 未传播：hook 会向权威 NS 查询并在截止时间内重试；不可达地址不阻断，但至少一个权威地址必须可达，且所有可达地址都必须匹配目标状态。确认 `goodcms.cn` 的 NS 委派和 UDP/TCP 网络；超时后 cleanup 仍应执行。
 4. `nginx -t` 或 reload 失败：保留当前证书，修复容器内 Nginx 配置后手动运行 `nginx -t`，再重试续期。
 5. 状态文件异常/权限错误：停止服务，检查 `/run/gooes-dnspod-acme/state` 的 0700 和 root 所有权；不要手工删除不属于本次状态的 DNS 记录。
 
