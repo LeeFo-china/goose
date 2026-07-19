@@ -8,6 +8,7 @@ Page({
   data: {
     loading: true,
     error: false,
+    disabled: false,
     project: null as PublicProject | null,
     images: [] as string[],
     styleText: "",
@@ -24,6 +25,10 @@ Page({
       const app = getApp<DouyinAppContext>();
       const bootstrap = await app.startup;
       if (!bootstrap) return;
+      if (!bootstrap.features.cases) {
+        this.setData({ loading: false, disabled: true });
+        return;
+      }
       const project = await fetchCaseDetail(app.api, this.caseId);
       const images = project.cover_image_url
         ? [project.cover_image_url, ...project.public_images.filter((url) =>

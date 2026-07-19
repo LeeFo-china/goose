@@ -21,25 +21,35 @@ Page({
     selectedStyle: "",
     selectedLayout: "",
     disabled: false,
+    featureReady: false,
   },
   onLoad() { void this.initialize(); },
-  onReachBottom() { void this.load("loadMore"); },
-  onPullDownRefresh() { void this.load("refresh"); },
+  onReachBottom() {
+    if (this.data.featureReady) void this.load("loadMore");
+  },
+  onPullDownRefresh() {
+    if (!this.data.featureReady) {
+      void tt.stopPullDownRefresh({});
+      return;
+    }
+    void this.load("refresh");
+  },
   async initialize() {
     try {
       const bootstrap = await getApp<DouyinAppContext>().startup;
       if (!bootstrap) return;
       if (!bootstrap.features.cases) {
-        this.setData({ firstLoading: false, disabled: true });
+        this.setData({ firstLoading: false, disabled: true, featureReady: true });
         return;
       }
+      this.setData({ featureReady: true });
       await this.load("loadMore");
     } catch {
       this.setData({ firstLoading: false, firstError: true });
     }
   },
   async load(mode: "loadMore" | "refresh" | "retry") {
-    if (this.data.disabled) {
+    if (!this.data.featureReady || this.data.disabled) {
       if (mode === "refresh") void tt.stopPullDownRefresh({});
       return;
     }
@@ -79,7 +89,6 @@ Page({
       firstLoading: this.pagination.status === "loading" && this.pagination.items.length === 0,
       firstError: this.pagination.status === "error" && this.pagination.items.length === 0,
       paginationStatus: this.pagination.status,
-      disabled: false,
     });
   },
   onRetry() { void this.load("retry"); },

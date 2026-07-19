@@ -2,10 +2,10 @@
 .page-kicker { color: #9a4124; font-size: 22rpx; font-weight: 600; letter-spacing: 2rpx; }
 .page-title { max-width: 580rpx; margin-top: 10rpx; color: #25211e; font-size: 40rpx; font-weight: 600; line-height: 1.35; }
 .filters { margin-top: 34rpx; padding: 24rpx 0; border-top: 1rpx solid #dfdad5; border-bottom: 1rpx solid #dfdad5; }
-.filter-row { display: flex; min-height: 72rpx; align-items: center; }
+.filter-row { display: flex; min-height: 88rpx; align-items: center; }
 .filter-label { width: 72rpx; flex: none; color: #665f5a; font-size: 23rpx; }
 .filter-scroll { min-width: 0; flex: 1; white-space: nowrap; }
 .filter-options { display: inline-flex; gap: 12rpx; padding-right: 24rpx; }
-.filter-chip { min-width: 96rpx; min-height: 72rpx; margin: 0; padding: 0 22rpx; border: 1rpx solid #ddd6d0; border-radius: 36rpx; background: #fff; color: #514b47; font-size: 23rpx; line-height: 70rpx; }
+.filter-chip { min-width: 104rpx; min-height: 88rpx; margin: 0; padding: 0 24rpx; border: 1rpx solid #ddd6d0; border-radius: 44rpx; background: #fff; color: #514b47; font-size: 24rpx; line-height: 86rpx; }
 .filter-chip--active { border-color: #a84324; background: #a84324; color: #fff; }
 .case-list { display: flex; flex-direction: column; gap: 28rpx; margin-top: 32rpx; }

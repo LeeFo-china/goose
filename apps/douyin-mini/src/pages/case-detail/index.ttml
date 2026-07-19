@@ -1,5 +1,6 @@
 <page-skeleton tt:if="{{loading}}" />
 <error-state tt:elif="{{error}}" title="案例暂时无法查看" description="案例可能已下线，或网络暂时不可用。" bindretry="load" />
+<empty-state tt:elif="{{disabled}}" title="案例模块暂未开放" description="装修公司当前未开放公开案例展示。" />
 <view tt:elif="{{project}}" class="page-content detail-page">
   <view class="detail-kicker">装修案例</view><view class="detail-title">{{project.title}}</view>
   <view class="detail-location">{{project.community || project.city || '区域待定'}}<text tt:if="{{project.district}}"> · {{project.district}}</text></view>
