@@ -25,8 +25,8 @@ class ConfigurationError(RuntimeError):
 
 @dataclasses.dataclass(frozen=True)
 class Credentials:
-    secret_id: str
-    secret_key: str
+    secret_id: str = dataclasses.field(repr=False)
+    secret_key: str = dataclasses.field(repr=False)
     domain: str
     subdomain: str
 
@@ -40,7 +40,10 @@ def utc_date(timestamp: int) -> str:
 
 
 def build_canonical_request(*, host: str, content_type: str, payload: str) -> str:
-    canonical_headers = f"content-type:{content_type.lower()}\nhost:{host.lower()}\n"
+    canonical_headers = (
+        f"content-type:{content_type.strip().lower()}\n"
+        f"host:{host.strip().lower()}\n"
+    )
     return "\n".join(
         ("POST", "/", "", canonical_headers, "content-type;host", sha256_hex(payload))
     )

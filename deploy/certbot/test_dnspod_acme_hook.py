@@ -43,6 +43,31 @@ class Tc3SigningTests(unittest.TestCase):
     def test_date_is_derived_in_utc(self):
         self.assertEqual(hook.utc_date(1551113065), "2019-02-25")
 
+    def test_canonical_headers_strip_whitespace_and_lowercase_values(self):
+        canonical = hook.build_canonical_request(
+            host="  CvM.TencentCloudAPI.com\t",
+            content_type="\tApplication/JSON; Charset=UTF-8 ",
+            payload="{}",
+        )
+
+        expected_headers = (
+            "content-type:application/json; charset=utf-8\n"
+            "host:cvm.tencentcloudapi.com\n"
+        )
+        self.assertEqual(
+            canonical,
+            "\n".join(
+                (
+                    "POST",
+                    "/",
+                    "",
+                    expected_headers,
+                    "content-type;host",
+                    hook.sha256_hex("{}"),
+                )
+            ),
+        )
+
     def test_authorization_uses_complete_tc3_signature(self):
         payload = (
             '{"Limit": 1, "Filters": [{"Values": ["\\u672a\\u547d\\u540d"], '
@@ -93,6 +118,20 @@ class CredentialTests(unittest.TestCase):
         self.assertEqual(credentials.secret_key, TEST_SECRET_KEY)
         self.assertEqual(credentials.domain, "goodcms.cn")
         self.assertEqual(credentials.subdomain, "_acme-challenge.www")
+
+    def test_credentials_repr_hides_secret_id_and_secret_key(self):
+        credentials = hook.Credentials(
+            secret_id=TEST_SECRET_ID,
+            secret_key=TEST_SECRET_KEY,
+            domain="goodcms.cn",
+            subdomain="_acme-challenge.www",
+        )
+
+        representation = repr(credentials)
+        exposes_secret = any(
+            secret in representation for secret in (TEST_SECRET_ID, TEST_SECRET_KEY)
+        )
+        self.assertFalse(exposes_secret, "Credentials repr exposes sensitive fields")
 
     def test_unknown_key_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
