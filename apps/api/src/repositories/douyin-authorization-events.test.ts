@@ -153,4 +153,21 @@ describe("DouyinAuthorizationEventsRepository", () => {
       .findEventState(EVENT_KEY))
       .rejects.toMatchObject({ code: "DOUYIN_AUTHORIZATION_EVENT_REPOSITORY_ERROR" });
   });
+
+  test("rejects a claimed lease with a non-ISO expiry", async () => {
+    const malformed = client([{
+      claim_state: "claimed",
+      claim_token: CLAIM_TOKEN,
+      claim_expires_at: "tomorrow",
+    }]);
+    await expect(new Repository(malformed.client).claimEvent({
+      eventKey: EVENT_KEY,
+      componentAppId: "tt-component-1",
+      eventName: "AUTHORIZED",
+      authorizerAppId: "tt-authorizer-1",
+      occurredAt: OCCURRED_AT,
+    })).rejects.toMatchObject({
+      code: "DOUYIN_AUTHORIZATION_EVENT_REPOSITORY_RESPONSE_INVALID",
+    });
+  });
 });

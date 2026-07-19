@@ -34,12 +34,15 @@ describe("douyin authorization event ledger migration", () => {
     expect(source).toContain("ENABLE ROW LEVEL SECURITY");
     expect(source).toContain("douyin_authorization_events_completed_cleanup_idx");
     expect(source).toContain("CREATE TABLE public.douyin_authorization_event_subject_leases");
-    expect(source).toContain("PRIMARY KEY (component_appid, authorizer_appid)");
+    expect(source).toContain("PRIMARY KEY (authorizer_appid)");
+    expect(source).toContain(
+      "component_appid text NOT NULL REFERENCES public.douyin_third_party_components(component_appid)",
+    );
     expect(source).toContain("active_event_name IN ('AUTHORIZED', 'UPDATE_AUTHORIZED', 'UNAUTHORIZED')");
     expect(source).toContain("ALTER TABLE public.douyin_authorization_event_subject_leases ENABLE ROW LEVEL SECURITY");
   });
 
-  test("serializes lifecycle claims per authorizer without blocking unrelated subjects", () => {
+  test("serializes lifecycle claims globally per authorizer without blocking unrelated subjects", () => {
     const claim = functionBody(sql(), "claim_douyin_authorization_event");
     const lifecycleStart = claim.indexOf(
       "INSERT INTO public.douyin_authorization_event_subject_leases",
@@ -56,11 +59,27 @@ describe("douyin authorization event ledger migration", () => {
     expect(subjectLock).toBeGreaterThan(lifecycleStart);
     expect(deliveryLock).toBeGreaterThan(subjectLock);
     expect(claim.slice(subjectLock, deliveryLock)).toContain(
-      "subject.component_appid = p_component_appid AND subject.authorizer_appid = p_authorizer_appid FOR UPDATE",
+      "subject.authorizer_appid = p_authorizer_appid FOR UPDATE",
     );
+    expect(claim.slice(subjectLock, deliveryLock)).not.toContain(
+      "subject.component_appid = p_component_appid",
+    );
+    expect(claim).toContain("ON CONFLICT (authorizer_appid) DO NOTHING");
     expect(claim).toContain(
       "IF v_subject.claim_expires_at > v_now THEN RETURN QUERY SELECT 'busy'::text",
     );
+    const freshClock = claim.indexOf("v_now := clock_timestamp()", deliveryLock);
+    const busy = claim.indexOf(
+      "IF v_subject.active_event_key IS NOT NULL AND v_subject.claim_expires_at > v_now",
+      freshClock,
+    );
+    const componentMismatch = claim.indexOf(
+      "IF v_subject.component_appid IS DISTINCT FROM p_component_appid",
+      busy,
+    );
+    expect(freshClock).toBeGreaterThan(deliveryLock);
+    expect(busy).toBeGreaterThan(freshClock);
+    expect(componentMismatch).toBeGreaterThan(busy);
     expect(claim).not.toContain("pg_advisory");
     expect(claim).not.toMatch(/LOCK TABLE/);
   });
@@ -97,19 +116,21 @@ describe("douyin authorization event ledger migration", () => {
       "FROM public.douyin_miniapp_installations AS installation",
       delivery,
     );
+    const freshClock = claim.indexOf("v_now := clock_timestamp()", installation);
+    const busy = claim.indexOf(
+      "IF v_subject.active_event_key IS NOT NULL AND v_subject.claim_expires_at > v_now",
+      freshClock,
+    );
     const persistedComparison = claim.indexOf(
       "p_occurred_at < v_installation.authorization_event_occurred_at",
-      installation,
-    );
-    const busy = claim.indexOf(
-      "IF v_subject.claim_expires_at > v_now",
-      persistedComparison,
+      busy,
     );
     expect(subject).toBeGreaterThan(-1);
     expect(delivery).toBeGreaterThan(subject);
     expect(installation).toBeGreaterThan(delivery);
-    expect(persistedComparison).toBeGreaterThan(installation);
-    expect(busy).toBeGreaterThan(persistedComparison);
+    expect(freshClock).toBeGreaterThan(installation);
+    expect(busy).toBeGreaterThan(freshClock);
+    expect(persistedComparison).toBeGreaterThan(busy);
     expect(claim).toContain(
       "v_installation.authorization_status = 'revoked' THEN 2 ELSE 1",
     );
@@ -145,6 +166,13 @@ describe("douyin authorization event ledger migration", () => {
       expect(subject).toBeGreaterThan(-1);
       expect(delivery).toBeGreaterThan(subject);
       expect(installation).toBeGreaterThan(delivery);
+      const freshClock = body.indexOf("v_now := clock_timestamp()", installation);
+      const expiryCheck = body.indexOf(
+        "v_subject.claim_expires_at <= v_now OR v_delivery.claim_expires_at <= v_now",
+        freshClock,
+      );
+      expect(freshClock).toBeGreaterThan(installation);
+      expect(expiryCheck).toBeGreaterThan(freshClock);
       expect(body).toContain(
         "SET active_event_key = NULL, active_event_name = NULL, active_occurred_at = NULL, claim_token = NULL, claim_expires_at = NULL",
       );
@@ -158,7 +186,12 @@ describe("douyin authorization event ledger migration", () => {
   test("claims, observes and reclaims one delivery under a sixty-second lease", () => {
     const source = sql();
     expect(source).toContain("FUNCTION public.claim_douyin_authorization_event(");
-    expect(source).toContain("v_claim_expires_at timestamptz := v_now + interval '60 seconds'");
+    expect(source).toContain("v_claim_expires_at timestamptz");
+    expect(source).not.toContain(
+      "v_claim_expires_at timestamptz := v_now + interval '60 seconds'",
+    );
+    expect(source.match(/v_claim_expires_at := v_now \+ interval '60 seconds'/g)?.length)
+      .toBeGreaterThanOrEqual(3);
     expect(source).toContain("ON CONFLICT (event_key) DO NOTHING");
     expect(source).toContain("FOR UPDATE");
     expect(source).toContain("'claimed'::text");
@@ -168,7 +201,7 @@ describe("douyin authorization event ledger migration", () => {
     expect(source).toContain("FUNCTION public.get_douyin_authorization_event_state(");
   });
 
-  test("finalizes ticket, authorization, revocation and ack only for the active claim", () => {
+  test("refreshes time after finalization locks and rejects an expired active claim", () => {
     const source = sql();
     for (const name of [
       "complete_douyin_ticket_event",
@@ -176,17 +209,32 @@ describe("douyin authorization event ledger migration", () => {
       "complete_douyin_revocation_event",
       "complete_douyin_unsupported_event",
     ]) {
-      const start = source.indexOf(`FUNCTION public.${name}(`);
-      expect(start).toBeGreaterThan(-1);
-      const body = source.slice(start, source.indexOf("$$;", start));
+      const body = functionBody(source, name);
+      expect(body).not.toBe("");
       expect(body).toContain("delivery.processing_state = 'processing'");
       expect(body).toContain("delivery.claim_token = p_claim_token");
-      expect(body).toContain("delivery.claim_expires_at > v_now");
       expect(body).toContain("FOR UPDATE");
+      expect(body).not.toContain("AND delivery.claim_expires_at > v_now");
+      const finalLock = body.lastIndexOf("FOR UPDATE");
+      const freshClock = body.indexOf("v_now := clock_timestamp()", finalLock);
+      const expiryCheck = body.indexOf("claim_expires_at <= v_now", freshClock);
+      expect(freshClock).toBeGreaterThan(finalLock);
+      expect(expiryCheck).toBeGreaterThan(freshClock);
       expect(body).toContain("processing_state = 'completed'");
       expect(body).toContain("claim_token = NULL");
       expect(body).toContain("claim_expires_at = NULL");
     }
+  });
+
+  test("does not let the unsupported-event finalizer consume reserved event kinds", () => {
+    const body = functionBody(sql(), "complete_douyin_unsupported_event");
+    const reservedGuard = body.indexOf(
+      "v_delivery.event_name IN ('PUSH', 'AUTHORIZED', 'UPDATE_AUTHORIZED', 'UNAUTHORIZED')",
+    );
+    const completion = body.indexOf("SET processing_state = 'completed'", reservedGuard);
+    expect(reservedGuard).toBeGreaterThan(-1);
+    expect(body).toContain("DOUYIN_UNSUPPORTED_EVENT_KIND_INVALID");
+    expect(completion).toBeGreaterThan(reservedGuard);
   });
 
   test("keeps authorization lifecycle state and credentials atomic", () => {

@@ -27,7 +27,7 @@ export type ExpiringCredentialEnvelope = DouyinCredentialEnvelope & {
 const ClaimedSchema = z.object({
   claim_state: z.enum(["claimed", "reclaimed"]),
   claim_token: z.string().uuid(),
-  claim_expires_at: z.string().min(1),
+  claim_expires_at: z.iso.datetime({ offset: true }),
 });
 const UnclaimedSchema = z.object({
   claim_state: z.enum(["completed", "busy"]),
