@@ -31,7 +31,6 @@ import {
   hasLeaseHeadroom,
   hasMinimumLeaseWindow,
   isLeaseMismatch,
-  isPersistenceOperationTimeout,
   isRecoverableRefreshRejection,
   isStrictlyFuture,
   isTerminalAuthorizerRefreshError,
@@ -59,8 +58,7 @@ const PERSISTENCE_OPERATION_TIMEOUT_MS = 1_000;
 const RECOVERY_START_HEADROOM_MS = 22_000;
 const RECOVERY_EXCHANGE_HEADROOM_MS = 12_000;
 type PersistenceOutcome = {
-  readonly persisted: boolean;
-  readonly safeToCompensate: boolean;
+  readonly status: "persisted" | "explicitly_rejected" | "unknown";
 };
 export interface ComponentTokenRepository {
   findActive(componentAppId: string): Promise<DouyinThirdPartyComponentRecord | null>;
@@ -230,15 +228,13 @@ export class DouyinMiniappAccessTokenService {
         refreshToken: this.sealRefreshToken(refreshed),
       };
       const persistence = await this.persistAuthorizerTokens(installation, lease, tokens, 2);
-      if (!persistence.persisted) {
-        if (!persistence.safeToCompensate) throw authorizerPersistenceRecoverableError();
-        return await this.compensateAuthorizerAccessToken(
-          installation,
-          lease,
-          componentAccessToken,
-        );
-      }
-      return refreshed.accessToken;
+      if (persistence.status === "persisted") return refreshed.accessToken;
+      if (persistence.status === "unknown") throw authorizerPersistenceRecoverableError();
+      return await this.compensateAuthorizerAccessToken(
+        installation,
+        lease,
+        componentAccessToken,
+      );
     } catch (error) {
       if (isTerminalAuthorizerRefreshError(error)) throw error;
       const isAuthorizationExpired = error instanceof AppError &&
@@ -379,11 +375,11 @@ export class DouyinMiniappAccessTokenService {
   ): Promise<PersistenceOutcome> {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       if (!isStrictlyFuture(lease.claimExpiresAt, this.now())) {
-        return { persisted: false, safeToCompensate: false };
+        return { status: "unknown" };
       }
-      let completionTimedOut = false;
+      let completion: boolean | "unknown" = "unknown";
       try {
-        const completed = await this.runPersistenceOperation(
+        completion = await this.runPersistenceOperation(
           () => this.options.installationRepository.completeAccessTokenRefresh({
             installationId: installation.id,
             claimToken: lease.claimToken,
@@ -391,14 +387,12 @@ export class DouyinMiniappAccessTokenService {
           }),
           lease,
         );
-        if (completed) return { persisted: true, safeToCompensate: true };
-      } catch (error) {
-        completionTimedOut = isPersistenceOperationTimeout(error);
-      }
+        if (completion) return { status: "persisted" };
+      } catch { completion = "unknown"; }
       if (!isStrictlyFuture(lease.claimExpiresAt, this.now())) {
-        return { persisted: false, safeToCompensate: false };
+        return { status: "unknown" };
       }
-      let row: DouyinMiniappInstallationRecord | null = null;
+      let row: DouyinMiniappInstallationRecord | null;
       try {
         row = await this.runPersistenceOperation(
           () => this.options.installationRepository.findActiveMerchant(
@@ -408,14 +402,14 @@ export class DouyinMiniappAccessTokenService {
           lease,
         );
       } catch {
-        row = null;
+        return { status: "unknown" };
       }
       if (row && matchesPersistedTokens(row, tokens)) {
-        return { persisted: true, safeToCompensate: true };
+        return { status: "persisted" };
       }
-      if (completionTimedOut) return { persisted: false, safeToCompensate: false };
+      if (completion === "unknown") return { status: "unknown" };
     }
-    return { persisted: false, safeToCompensate: true };
+    return { status: "explicitly_rejected" };
   }
 
   private async compensateAuthorizerAccessToken(
@@ -443,7 +437,7 @@ export class DouyinMiniappAccessTokenService {
       refreshToken: this.sealRefreshToken(recovered),
     };
     const persistence = await this.persistAuthorizerTokens(installation, lease, tokens, 1);
-    if (!persistence.persisted) throw authorizerPersistenceRecoverableError();
+    if (persistence.status !== "persisted") throw authorizerPersistenceRecoverableError();
     return recovered.accessToken;
   }
 

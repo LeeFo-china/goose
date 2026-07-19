@@ -239,6 +239,25 @@ describe("DouyinMiniappAccessTokenService recovery boundaries", () => {
     expect(find).toHaveBeenCalledTimes(2);
   });
 
+  test("does not retry, compensate, or fail the lease after a thrown completion and mismatched readback", async () => {
+    const repositoryError = Errors.business(
+      500, "database unavailable", "DOUYIN_INSTALLATION_REPOSITORY_ERROR",
+    );
+    const complete = mock(async (_input: CompletionInput) => { throw repositoryError; });
+    const repository = authorizerRepository({ completeAccessTokenRefresh: complete });
+    const openPlatform = gateway();
+
+    await expect(authorizerService(repository, openPlatform).getAuthorizerAccessToken({
+      authorizerAppId: "authorizer-appid", deploymentKey: "merchant-a",
+    })).rejects.toMatchObject({
+      statusCode: 503, code: "DOUYIN_AUTHORIZER_TOKEN_PERSISTENCE_RECOVERABLE",
+    });
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(openPlatform.retrieveAuthorizationCode).not.toHaveBeenCalled();
+    expect(openPlatform.exchangeAuthorizationCode).not.toHaveBeenCalled();
+    expect(repository.failAccessTokenRefresh).not.toHaveBeenCalled();
+  });
+
   test("times out a stalled completion and accepts the committed readback", async () => {
     let completion: CompletionInput | undefined;
     const complete = mock((input: CompletionInput) => {
@@ -267,13 +286,16 @@ describe("DouyinMiniappAccessTokenService recovery boundaries", () => {
   });
 
   test("does not issue another write or compensation while a timed-out completion may land late", async () => {
-    const complete = mock(async (_input: CompletionInput) => true)
-      .mockImplementationOnce(() => new Promise<boolean>(() => undefined));
+    let resolveLate: (completed: boolean) => void = () => undefined;
+    const complete = mock((_input: CompletionInput) => new Promise<boolean>((resolve) => {
+      resolveLate = resolve;
+    }));
     const timers = manualTimers();
     const openPlatform = gateway();
-    const pending = authorizerService(authorizerRepository({
+    const repository = authorizerRepository({
       completeAccessTokenRefresh: complete,
-    }), openPlatform, { timers }).getAuthorizerAccessToken({
+    });
+    const pending = authorizerService(repository, openPlatform, { timers }).getAuthorizerAccessToken({
       authorizerAppId: "authorizer-appid", deploymentKey: "merchant-a",
     });
 
@@ -289,9 +311,14 @@ describe("DouyinMiniappAccessTokenService recovery boundaries", () => {
     });
     expect(complete).toHaveBeenCalledTimes(1);
     expect(openPlatform.retrieveAuthorizationCode).not.toHaveBeenCalled();
+    expect(openPlatform.exchangeAuthorizationCode).not.toHaveBeenCalled();
+    expect(repository.failAccessTokenRefresh).not.toHaveBeenCalled();
+    resolveLate(true);
+    await Bun.sleep(0);
+    expect(complete).toHaveBeenCalledTimes(1);
   });
 
-  test("times out a stalled readback and performs only the next completion attempt", async () => {
+  test("does not retry or compensate when an exact readback times out", async () => {
     const complete = mock(async (_input: CompletionInput) => true).mockResolvedValueOnce(false);
     let reads = 0;
     const find = mock(async () => {
@@ -300,21 +327,27 @@ describe("DouyinMiniappAccessTokenService recovery boundaries", () => {
       return new Promise<DouyinMiniappInstallationRecord | null>(() => undefined);
     });
     const timers = manualTimers();
-    const pending = authorizerService(authorizerRepository({
+    const repository = authorizerRepository({
       findActiveMerchant: find, completeAccessTokenRefresh: complete,
-    }), gateway(), { timers }).getAuthorizerAccessToken({
+    });
+    const openPlatform = gateway();
+    const pending = authorizerService(repository, openPlatform, { timers }).getAuthorizerAccessToken({
       authorizerAppId: "authorizer-appid", deploymentKey: "merchant-a",
     });
 
     await Bun.sleep(0);
     timers.fireNext();
-    const outcome = await Promise.race([pending, Bun.sleep(10).then(() => "still-pending")]);
-    expect(outcome).toBe("refreshed-token");
-    expect(complete).toHaveBeenCalledTimes(2);
+    await expect(pending).rejects.toMatchObject({
+      statusCode: 503, code: "DOUYIN_AUTHORIZER_TOKEN_PERSISTENCE_RECOVERABLE",
+    });
+    expect(complete).toHaveBeenCalledTimes(1);
     expect(find).toHaveBeenCalledTimes(2);
+    expect(openPlatform.retrieveAuthorizationCode).not.toHaveBeenCalled();
+    expect(openPlatform.exchangeAuthorizationCode).not.toHaveBeenCalled();
+    expect(repository.failAccessTokenRefresh).not.toHaveBeenCalled();
   });
 
-  test("runs one official compensation chain after two unconfirmed completions", async () => {
+  test("runs one official compensation chain after two explicitly rejected completions", async () => {
     const complete = mock(async (_input: CompletionInput) => true)
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false);
@@ -365,18 +398,20 @@ describe("DouyinMiniappAccessTokenService recovery boundaries", () => {
     })
       .mockResolvedValueOnce(installationRow());
     const openPlatform = gateway();
-
-    await expect(authorizerService(authorizerRepository({
+    const repository = authorizerRepository({
       findActiveMerchant: find, completeAccessTokenRefresh: complete,
-    }), openPlatform).getAuthorizerAccessToken({
+    });
+
+    await expect(authorizerService(repository, openPlatform).getAuthorizerAccessToken({
       authorizerAppId: "authorizer-appid", deploymentKey: "merchant-a",
     })).rejects.toMatchObject({
       statusCode: 503, code: "DOUYIN_AUTHORIZER_TOKEN_PERSISTENCE_RECOVERABLE",
     });
-    expect(openPlatform.retrieveAuthorizationCode).toHaveBeenCalledTimes(1);
-    expect(openPlatform.exchangeAuthorizationCode).toHaveBeenCalledTimes(1);
-    expect(complete).toHaveBeenCalledTimes(3);
-    expect(find).toHaveBeenCalledTimes(4);
+    expect(openPlatform.retrieveAuthorizationCode).not.toHaveBeenCalled();
+    expect(openPlatform.exchangeAuthorizationCode).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(find).toHaveBeenCalledTimes(2);
+    expect(repository.failAccessTokenRefresh).not.toHaveBeenCalled();
   });
 
   test("does not start compensation without headroom or after the lease expires", async () => {

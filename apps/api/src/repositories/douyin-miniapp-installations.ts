@@ -285,6 +285,9 @@ function assertDatabaseSuccess(
 function assertBindingSuccess(result: DouyinInstallationDatabaseResult): void {
   if (!result.error) return;
   const message = databaseErrorMessage(result.error);
+  if (databaseErrorCode(result.error) === "23505") {
+    throw Errors.business(409, "抖音小程序授权不可绑定", "DOUYIN_INSTALLATION_BIND_CONFLICT");
+  }
   if (message === "DOUYIN_TENANT_NOT_ACTIVE") {
     throw Errors.business(409, "租户不存在或未启用", message);
   }
@@ -297,6 +300,11 @@ function assertBindingSuccess(result: DouyinInstallationDatabaseResult): void {
 function databaseErrorMessage(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("message" in error)) return undefined;
   return typeof error.message === "string" ? error.message : undefined;
+}
+
+function databaseErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  return typeof error.code === "string" ? error.code : undefined;
 }
 
 function invalidResponseError() {

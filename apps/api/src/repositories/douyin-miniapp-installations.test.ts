@@ -144,6 +144,28 @@ describe("DouyinMiniappInstallationsRepository lookups", () => {
     }
   });
 
+  test("maps concurrent deployment-key uniqueness conflicts to a stable safe 409", async () => {
+    const sensitiveDetail = "Key (tenant_id, deployment_key)=(secret-tenant, merchant-a)";
+    const { client } = createClient([{
+      data: null,
+      error: { code: "23505", message: "duplicate key value violates unique constraint",
+        details: sensitiveDetail },
+    }]);
+    let caught: unknown;
+    try {
+      await new DouyinMiniappInstallationsRepository(client).bindActiveTenant({
+        authorizerAppId: "authorizer-appid", tenantId: "tenant-id",
+        deploymentKey: "merchant-a", runtimeConfig: {},
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      statusCode: 409, code: "DOUYIN_INSTALLATION_BIND_CONFLICT",
+    });
+    expect(JSON.stringify(caught)).not.toContain(sensitiveDetail);
+  });
+
   test("wraps rejected database operations without exposing their exception", async () => {
     const query: DouyinInstallationQuery = {
       select: () => query,

@@ -181,16 +181,12 @@ export function isTerminalAuthorizerRefreshError(error: unknown): boolean {
   return error instanceof AppError && [
     "DOUYIN_TOKEN_REFRESH_LEASE_MISMATCH",
     "DOUYIN_TOKEN_REFRESH_LEASE_INSUFFICIENT",
+    "DOUYIN_AUTHORIZER_TOKEN_PERSISTENCE_RECOVERABLE",
   ].includes(error.code);
 }
 
 export function isRecoverableRefreshRejection(error: unknown): boolean {
   return error instanceof AppError && error.code === "DOUYIN_OPEN_PLATFORM_API_ERROR";
-}
-
-export function isPersistenceOperationTimeout(error: unknown): boolean {
-  return error instanceof AppError &&
-    error.code === "DOUYIN_AUTHORIZER_TOKEN_PERSISTENCE_OPERATION_TIMEOUT";
 }
 
 export function preserveAppError(error: unknown, fallback: AppError): AppError {
