@@ -52,8 +52,8 @@ renew() {
     DNSPOD_CREDENTIALS_FILE="${CONTAINER_CREDENTIALS}" \
     DNSPOD_STATE_DIR="${STATE_DIR}" \
     certbot renew --cert-name "${CERT_NAME}" --non-interactive --quiet --no-directory-hooks \
-      --manual-auth-hook "python3 ${CONTAINER_HOOK} auth" \
-      --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup" \
+      --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+      --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
       --deploy-hook 'nginx -t && nginx -s reload'
 }
 
@@ -61,8 +61,8 @@ reconfigure() {
   check_container
   docker exec "${CONTAINER}" certbot reconfigure --cert-name "${CERT_NAME}" --non-interactive \
     --manual --preferred-challenges dns-01 \
-    --manual-auth-hook "python3 ${CONTAINER_HOOK} auth" \
-    --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup" \
+    --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+    --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
     --server "https://acme-staging-v02.api.letsencrypt.org/directory"
 }
 
@@ -70,8 +70,8 @@ dry_run() {
   check_container
   docker exec "${CONTAINER}" certbot renew --cert-name "${CERT_NAME}" --non-interactive --quiet \
     --no-directory-hooks --dry-run --run-deploy-hooks \
-    --manual-auth-hook "python3 ${CONTAINER_HOOK} auth" \
-    --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup" \
+    --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+    --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
     --deploy-hook 'nginx -t && nginx -s reload'
 }
 
