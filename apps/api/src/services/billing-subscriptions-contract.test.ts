@@ -18,7 +18,12 @@ describe("tenant subscription billing migration", () => {
     expect(migrationSource).toContain("CREATE OR REPLACE FUNCTION public.billing_recover_subscription_after_recharge");
     expect(migrationSource).toContain("CREATE OR REPLACE FUNCTION public.billing_ensure_subscription_invoices");
     expect(migrationSource).toContain("current_period_start = v_invoice.period_start");
-    expect(migrationSource).toContain("2026-07-14-gushi-qingtian-subscription-billing-repair");
+    expect(migrationSource).not.toContain(
+      "2026-07-14-gushi-qingtian-subscription-billing-repair",
+    );
+    expect(migrationSource).not.toContain(
+      "3eebca47-961f-4899-b976-a3d3208d326b",
+    );
     expect(migrationSource).toContain("tenant_subscription_invoices_tenant_period_unique_idx");
     expect(migrationSource).toContain("tenant_subscription_invoices_reminder_status_idx");
     expect(migrationSource).toContain("'subscription_monthly_fee'");

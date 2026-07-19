@@ -250,6 +250,19 @@ begin
 end;
 $$;
 
+revoke all on function public.list_accessible_workflow_tasks(
+  uuid,
+  uuid,
+  text[],
+  text[],
+  text,
+  text,
+  text,
+  uuid,
+  integer,
+  integer
+) from public, anon, authenticated;
+
 grant execute on function public.list_accessible_workflow_tasks(
   uuid,
   uuid,
@@ -261,7 +274,16 @@ grant execute on function public.list_accessible_workflow_tasks(
   uuid,
   integer,
   integer
-) to authenticated, service_role;
+) to service_role;
+
+revoke all on function public.list_accessible_project_workflow_tasks(
+  uuid,
+  uuid,
+  text[],
+  text[],
+  text[],
+  integer
+) from public, anon, authenticated;
 
 grant execute on function public.list_accessible_project_workflow_tasks(
   uuid,
@@ -270,4 +292,4 @@ grant execute on function public.list_accessible_project_workflow_tasks(
   text[],
   text[],
   integer
-) to authenticated, service_role;
+) to service_role;

@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule GoodCMS DNS-01 certificate renewal
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+Persistent=true
+RandomizedDelaySec=1800
+Unit=gooes-www-cert-renew.service
+
+[Install]
+WantedBy=timers.target

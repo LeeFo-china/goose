@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew GoodCMS DNS-01 certificates in Supabase Nginx
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/opt/gooes/cert-renewal/gooes-www-cert-renew prepare
+ExecStart=/opt/gooes/cert-renewal/gooes-www-cert-renew renew
+ExecStopPost=/opt/gooes/cert-renewal/gooes-www-cert-renew cleanup
+TimeoutStartSec=15min

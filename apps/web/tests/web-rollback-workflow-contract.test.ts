@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 
 const root = new URL("../../../", import.meta.url);
 const dev = readFileSync(new URL(".github/workflows/deploy-dev.yml", root), "utf8");
@@ -33,7 +33,7 @@ function runRollbackEvidenceCheck(
   workflow: string,
   actualImageId: string,
   configuredImage: string,
-): ReturnType<typeof spawnSync> {
+): SpawnSyncReturns<string> {
   const work = mkdtempSync(join(tmpdir(), "web-rollback-evidence-"));
   roots.push(work);
   const scripts = join(work, "scripts");

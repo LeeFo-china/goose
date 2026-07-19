@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-07-13T07:55:10.710Z",
+  "generatedAt": "2026-07-18T13:47:38.419Z",
   "baseUrl": "http://127.0.0.1:3020",
-  "sourceDigest": "e315acfd2a3e6ebab3fc9d962efc95be79a46e3e923cc0d267727ae078083768",
+  "sourceDigest": "a41f01b40fac42162e5477c5c54c0ec0f89361fbfdd17748d1dbc99e91bf23bb",
   "fixtureDigest": "0caad991a14f93d1f3a10930d04f2bba0b8a43b6a6eee8b49f531d89ba5b460e",
-  "buildId": "cq1XrTpXhjGor4WsYuq3D",
-  "revision": "e315acfd2a3e6ebab3fc9d962efc95be79a46e3e923cc0d267727ae078083768",
+  "buildId": "5WSVbB_ipeUKSt5T9jLt5",
+  "revision": "a41f01b40fac42162e5477c5c54c0ec0f89361fbfdd17748d1dbc99e91bf23bb",
   "lighthouseVersion": "12.8.2",
   "profile": "mobile",
   "thresholds": {
@@ -19,11 +19,11 @@
     {
       "path": "/",
       "samples": 1,
-      "performance": 98,
+      "performance": 97,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2483,
-      "tbtMs": 32,
+      "lcpMs": 2467,
+      "tbtMs": 43,
       "cls": 0
     },
     {
@@ -32,8 +32,8 @@
       "performance": 98,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2358,
-      "tbtMs": 38,
+      "lcpMs": 2334,
+      "tbtMs": 6,
       "cls": 0
     },
     {
@@ -42,8 +42,8 @@
       "performance": 99,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2045,
-      "tbtMs": 39,
+      "lcpMs": 2023,
+      "tbtMs": 16,
       "cls": 0
     },
     {
@@ -52,8 +52,8 @@
       "performance": 99,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2045,
-      "tbtMs": 39,
+      "lcpMs": 2027,
+      "tbtMs": 23,
       "cls": 0
     },
     {
@@ -62,8 +62,8 @@
       "performance": 99,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2057,
-      "tbtMs": 52,
+      "lcpMs": 2027,
+      "tbtMs": 21,
       "cls": 0
     }
   ]

@@ -112,7 +112,7 @@ jobs:
           fi
 
           psql_prod() {
-            docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"
+            docker exec -i --env 'PGOPTIONS=-c standard_conforming_strings=on' supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"
           }
 
           migration_table_exists="$(psql_prod -Atc "select to_regclass('supabase_migrations.schema_migrations') is not null;")"
@@ -135,6 +135,267 @@ jobs:
           for version in "${executed_versions[@]}"; do
             executed_version_map["${version}"]=1
           done
+
+          scan_top_level_transaction_controls() {
+            local file="$1"
+            awk '
+              function is_transaction_end(word) {
+                return word == "commit" || word == "end" || word == "rollback" || word == "abort" || word == "prepare"
+              }
+
+              BEGIN {
+                state = "normal"
+                pending_control = ""
+                at_statement_start = 1
+                current_statement_index = 0
+                single_quote = sprintf("%c", 39)
+              }
+
+              {
+                raw_line = $0
+                text = $0 "\n"
+                text_length = length(text)
+                position = 1
+
+                while (position <= text_length) {
+                  character = substr(text, position, 1)
+                  next_character = substr(text, position + 1, 1)
+
+                  if (state == "single_quote") {
+                    if (character == "\\") {
+                      lexical_error = "backslash_in_single_quote"
+                      exit 2
+                    } else if (character == single_quote) {
+                      if (next_character == single_quote) {
+                        position += 2
+                      } else {
+                        state = "normal"
+                        position++
+                      }
+                    } else {
+                      position++
+                    }
+                    continue
+                  }
+
+                  if (state == "double_quote") {
+                    if (character == "\"") {
+                      if (next_character == "\"") {
+                        position += 2
+                      } else {
+                        state = "normal"
+                        position++
+                      }
+                    } else {
+                      position++
+                    }
+                    continue
+                  }
+
+                  if (state == "line_comment") {
+                    if (character == "\n") {
+                      state = "normal"
+                    }
+                    position++
+                    continue
+                  }
+
+                  if (state == "block_comment") {
+                    if (character == "/" && next_character == "*") {
+                      block_depth++
+                      position += 2
+                    } else if (character == "*" && next_character == "/") {
+                      block_depth--
+                      position += 2
+                      if (block_depth == 0) {
+                        state = "normal"
+                      }
+                    } else {
+                      position++
+                    }
+                    continue
+                  }
+
+                  if (state == "dollar_quote") {
+                    if (substr(text, position, length(dollar_delimiter)) == dollar_delimiter) {
+                      position += length(dollar_delimiter)
+                      state = "normal"
+                    } else {
+                      position++
+                    }
+                    continue
+                  }
+
+                  if (character == "\\") {
+                    lexical_error = "unquoted_backslash"
+                    exit 2
+                  }
+                  if (character == "*" && next_character == "/") {
+                    lexical_error = "unexpected_block_comment_close"
+                    exit 2
+                  }
+                  if (character == "-" && next_character == "-") {
+                    state = "line_comment"
+                    position += 2
+                    continue
+                  }
+                  if (character == "/" && next_character == "*") {
+                    state = "block_comment"
+                    block_depth = 1
+                    position += 2
+                    continue
+                  }
+                  if (character == single_quote) {
+                    pending_control = ""
+                    if (at_statement_start) {
+                      executable_statement_count++
+                      current_statement_index = executable_statement_count
+                    }
+                    at_statement_start = 0
+                    state = "single_quote"
+                    position++
+                    continue
+                  }
+                  if (character == "\"") {
+                    pending_control = ""
+                    if (at_statement_start) {
+                      executable_statement_count++
+                      current_statement_index = executable_statement_count
+                    }
+                    at_statement_start = 0
+                    state = "double_quote"
+                    position++
+                    continue
+                  }
+                  if (character == "$") {
+                    remaining = substr(text, position)
+                    if (match(remaining, /^\$([[:alpha:]_][[:alnum:]_]*)?\$/)) {
+                      pending_control = ""
+                      if (at_statement_start) {
+                        executable_statement_count++
+                        current_statement_index = executable_statement_count
+                      }
+                      at_statement_start = 0
+                      dollar_delimiter = substr(remaining, RSTART, RLENGTH)
+                      state = "dollar_quote"
+                      position += RLENGTH
+                      continue
+                    }
+                  }
+                  if (character ~ /[[:alpha:]_]/) {
+                    word = character
+                    position++
+                    while (position <= text_length && substr(text, position, 1) ~ /[[:alnum:]_$]/) {
+                      word = word substr(text, position, 1)
+                      position++
+                    }
+                    pending_control = ""
+                    normalized_word = tolower(word)
+                    if (at_statement_start) {
+                      executable_statement_count++
+                      current_statement_index = executable_statement_count
+                      if (normalized_word == "begin" || normalized_word == "start") {
+                        transaction_start_count++
+                      } else if (is_transaction_end(normalized_word)) {
+                        transaction_end_count++
+                      }
+                      if (normalized_word == "begin" || normalized_word == "commit") {
+                        pending_control = normalized_word
+                      }
+                      at_statement_start = 0
+                    }
+                    continue
+                  }
+                  if (character == ";") {
+                    normalized_line = tolower(raw_line)
+                    if (pending_control == "begin") {
+                      begin_count++
+                      if (normalized_line ~ /^[[:space:]]*begin[[:space:]]*;[[:space:]]*(--.*)?$/) {
+                        canonical_begin_count++
+                        canonical_begin_statement_index = current_statement_index
+                      }
+                    } else if (pending_control == "commit") {
+                      commit_count++
+                      if (normalized_line ~ /^[[:space:]]*commit[[:space:]]*;[[:space:]]*(--.*)?$/) {
+                        canonical_commit_count++
+                        canonical_commit_line = NR
+                        canonical_commit_statement_index = current_statement_index
+                      }
+                    }
+                    pending_control = ""
+                    at_statement_start = 1
+                    current_statement_index = 0
+                    position++
+                    continue
+                  }
+                  if (character ~ /[[:space:]]/) {
+                    position++
+                    continue
+                  }
+
+                  pending_control = ""
+                  if (at_statement_start) {
+                    executable_statement_count++
+                    current_statement_index = executable_statement_count
+                  }
+                  at_statement_start = 0
+                  position++
+                }
+              }
+
+              END {
+                if (lexical_error != "") {
+                  print "lexer_state_invalid=" lexical_error > "/dev/stderr"
+                  exit 2
+                }
+                if (state != "normal") {
+                  print "lexer_state_invalid=unclosed_" state > "/dev/stderr"
+                  exit 2
+                }
+                print transaction_start_count + 0, transaction_end_count + 0, canonical_begin_count + 0, canonical_commit_count + 0, canonical_commit_line + 0, executable_statement_count + 0, canonical_begin_statement_index + 0, canonical_commit_statement_index + 0
+              }
+            ' "${file}"
+          }
+
+          emit_explicit_transaction_migration() {
+            local file="$1"
+            local history_statement="$2"
+            local scan_result
+            local transaction_start_count
+            local transaction_end_count
+            local canonical_begin_count
+            local canonical_commit_count
+            local canonical_commit_line
+            local executable_statement_count
+            local canonical_begin_statement_index
+            local canonical_commit_statement_index
+
+            if ! scan_result="$(scan_top_level_transaction_controls "${file}")"; then
+              echo "error=explicit_transaction_shape_invalid file=${file} lexical_state_invalid" >&2
+              return 1
+            fi
+            if [[ ! "${scan_result}" =~ ^[0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+$ ]]; then
+              echo "error=explicit_transaction_shape_invalid file=${file} scanner_output_invalid" >&2
+              return 1
+            fi
+            read -r transaction_start_count transaction_end_count canonical_begin_count canonical_commit_count canonical_commit_line executable_statement_count canonical_begin_statement_index canonical_commit_statement_index <<< "${scan_result}"
+
+            if [ "${transaction_start_count}" -ne 1 ] || [ "${canonical_begin_count}" -ne 1 ] || [ "${transaction_end_count}" -ne 1 ] || [ "${canonical_commit_count}" -ne 1 ]; then
+              echo "error=explicit_transaction_shape_invalid file=${file} transaction_starts=${transaction_start_count} canonical_begin=${canonical_begin_count} transaction_ends=${transaction_end_count} canonical_commit=${canonical_commit_count}" >&2
+              return 1
+            fi
+            if [ "${canonical_begin_statement_index}" -ne 1 ] || [ "${canonical_commit_statement_index}" -ne "${executable_statement_count}" ] || [ "${canonical_begin_statement_index}" -ge "${canonical_commit_statement_index}" ]; then
+              echo "error=explicit_transaction_shape_invalid file=${file} executable_statements=${executable_statement_count} canonical_begin_statement=${canonical_begin_statement_index} canonical_commit_statement=${canonical_commit_statement_index}" >&2
+              return 1
+            fi
+
+            awk -v history_statement="${history_statement}" -v commit_line="${canonical_commit_line}" '
+              NR == commit_line {
+                print history_statement
+              }
+              { print }
+            ' "${file}"
+          }
 
           pending_files=()
           while IFS= read -r file; do
@@ -160,18 +421,35 @@ jobs:
               version="${base%%_*}"
               name="${base#${version}_}"
               name="${name%.sql}"
-              escaped_name="${name}"
 
-              if grep -Eiq '^[[:space:]]*(begin|commit)[[:space:]]*;' "${file}"; then
-                {
-                  cat "${file}"
-                  printf "\ninsert into supabase_migrations.schema_migrations(version, name, statements) values ('%s', '%s', array['applied_by_migrate_production_database_workflow']) on conflict (version) do nothing;\n" "${version}" "${escaped_name}"
-                } | psql_prod
+              if [[ ! "${version}" =~ ^[0-9]{14}$ ]]; then
+                echo "error=invalid_migration_version file=${file} version=${version}" >&2
+                exit 1
+              fi
+              if [[ ! "${name}" =~ ^[a-z0-9_]+$ ]]; then
+                echo "error=invalid_migration_name file=${file} name=${name}" >&2
+                exit 1
+              fi
+
+              printf -v history_statement "insert into supabase_migrations.schema_migrations(version, name, statements) values ('%s', '%s', array['applied_by_migrate_production_database_workflow']) on conflict (version) do nothing;" "${version}" "${name}"
+
+              if ! transaction_scan="$(scan_top_level_transaction_controls "${file}")"; then
+                echo "error=explicit_transaction_shape_invalid file=${file} lexical_state_invalid" >&2
+                exit 1
+              fi
+              if [[ ! "${transaction_scan}" =~ ^[0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+[[:space:]][0-9]+$ ]]; then
+                echo "error=explicit_transaction_shape_invalid file=${file} scanner_output_invalid" >&2
+                exit 1
+              fi
+              read -r top_level_start_count top_level_end_count scanned_canonical_begin_count scanned_canonical_commit_count scanned_canonical_commit_line scanned_executable_statement_count scanned_canonical_begin_statement_index scanned_canonical_commit_statement_index <<< "${transaction_scan}"
+
+              if [ "${top_level_start_count}" -ne 0 ] || [ "${top_level_end_count}" -ne 0 ]; then
+                emit_explicit_transaction_migration "${file}" "${history_statement}" | psql_prod
               else
                 {
                   echo "begin;"
                   cat "${file}"
-                  printf "\ninsert into supabase_migrations.schema_migrations(version, name, statements) values ('%s', '%s', array['applied_by_migrate_production_database_workflow']) on conflict (version) do nothing;\n" "${version}" "${escaped_name}"
+                  printf "\n%s\n" "${history_statement}"
                   echo "commit;"
                 } | psql_prod
               fi
