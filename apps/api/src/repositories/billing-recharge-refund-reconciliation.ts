@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { Errors } from "@/errors/error-factory";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
 import type { BillingConfirmWechatRechargeRefundResult } from "@/repositories/billing-recharge-refund-callbacks";
@@ -124,6 +126,27 @@ const CONFIG_COLUMNS = [
   "notify_url",
 ].join(",");
 
+const nonBlankStringSchema = z.string().refine(
+  (value) => value.trim().length > 0,
+);
+const positiveSafeIntegerSchema = z.number().refine(
+  (value) => Number.isSafeInteger(value) && value > 0,
+);
+const nonnegativeSafeIntegerSchema = z.number().refine(
+  (value) => Number.isSafeInteger(value) && value >= 0,
+);
+const refundClaimSchema = z.object({
+  id: z.uuid(),
+  tenant_id: z.uuid(),
+  order_id: z.uuid(),
+  reason: nonBlankStringSchema,
+  requested_amount_fen: positiveSafeIntegerSchema,
+  out_refund_no: nonBlankStringSchema.nullable(),
+  wechat_refund_id: nonBlankStringSchema.nullable(),
+  refund_amount_fen: nonnegativeSafeIntegerSchema.nullable(),
+  reconcile_attempt_count: nonnegativeSafeIntegerSchema,
+});
+
 class BillingRechargeRefundReconciliationRepository {
   private get client() {
     return SupabaseDB.getAdminClient() as unknown as UntypedClient;
@@ -161,9 +184,10 @@ class BillingRechargeRefundReconciliationRepository {
       throw Errors.dbError("领取积分充值微信退款对账任务失败", error);
     }
 
-    const claims = ((data ?? []) as Array<Record<string, unknown>>).map(
-      toRefundClaimRecord,
-    );
+    if (!Array.isArray(data)) {
+      throw Errors.dbError("微信退款对账领取结果格式不正确");
+    }
+    const claims = data.map(toRefundClaimRecord);
     if (claims.length === 0) return [];
 
     const orders = await this.findOrders(
@@ -268,18 +292,14 @@ class BillingRechargeRefundReconciliationRepository {
   }
 }
 
-function toRefundClaimRecord(value: Record<string, unknown>): RefundClaimRecord {
-  return {
-    id: value.id as string,
-    tenant_id: value.tenant_id as string,
-    order_id: value.order_id as string,
-    reason: value.reason as string,
-    requested_amount_fen: value.requested_amount_fen as number,
-    out_refund_no: value.out_refund_no as string | null,
-    wechat_refund_id: value.wechat_refund_id as string | null,
-    refund_amount_fen: value.refund_amount_fen as number | null,
-    reconcile_attempt_count: value.reconcile_attempt_count as number,
-  };
+function toRefundClaimRecord(value: unknown): RefundClaimRecord {
+  const result = refundClaimSchema.safeParse(value);
+  if (!result.success) {
+    throw Errors.dbError("微信退款对账领取结果格式不正确", {
+      issues: result.error.issues,
+    });
+  }
+  return result.data;
 }
 
 function unique(values: Array<string | null | undefined>) {

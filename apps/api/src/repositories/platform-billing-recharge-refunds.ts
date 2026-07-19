@@ -173,32 +173,6 @@ class PlatformBillingRechargeRefundRepository {
     return list[0] ?? null;
   }
 
-  async markRequestRefunding(input: {
-    id: string;
-    fromStatuses: TenantCreditRefundRequestStatus[];
-    outRefundNo: string;
-  }) {
-    const { data, error } = await this.from("tenant_credit_refund_requests")
-      .update({
-        status: "refunding",
-        out_refund_no: input.outRefundNo,
-        failure_message: null,
-      })
-      .eq("id", input.id)
-      .in("status", input.fromStatuses)
-      .select("*")
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("执行积分充值退款申请失败", error);
-    }
-
-    const list = await this.hydrate(
-      data ? [data as TenantCreditRefundRequestRecord] : [],
-    );
-    return list[0] ?? null;
-  }
-
   async saveWechatRefundResult(input: {
     id: string;
     outRefundNo: string;

@@ -6,11 +6,18 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 type TableName = "tenant_credit_orders" | "platform_payment_configs";
 
+const CLAIM_REQUEST_1_ID = "10000000-0000-4000-8000-000000000001";
+const CLAIM_REQUEST_2_ID = "10000000-0000-4000-8000-000000000002";
+const TENANT_1_ID = "20000000-0000-4000-8000-000000000001";
+const TENANT_2_ID = "20000000-0000-4000-8000-000000000002";
+const ORDER_1_ID = "30000000-0000-4000-8000-000000000001";
+const ORDER_2_ID = "30000000-0000-4000-8000-000000000002";
+
 const claimRows = [
   {
-    id: "refund-request-1",
-    tenant_id: "tenant-1",
-    order_id: "order-1",
+    id: CLAIM_REQUEST_1_ID,
+    tenant_id: TENANT_1_ID,
+    order_id: ORDER_1_ID,
     reason: "客户误充值",
     requested_amount_fen: 10000,
     out_refund_no: "TRR202607100800000001",
@@ -20,9 +27,9 @@ const claimRows = [
     ignored: "must-not-leak",
   },
   {
-    id: "refund-request-2",
-    tenant_id: "tenant-2",
-    order_id: "order-2",
+    id: CLAIM_REQUEST_2_ID,
+    tenant_id: TENANT_2_ID,
+    order_id: ORDER_2_ID,
     reason: "重复充值",
     requested_amount_fen: 2000,
     out_refund_no: "TRR202607100800000002",
@@ -34,8 +41,8 @@ const claimRows = [
 
 const orderRows = [
   {
-    id: "order-1",
-    tenant_id: "tenant-1",
+    id: ORDER_1_ID,
+    tenant_id: TENANT_1_ID,
     amount_fen: 10000,
     paid_amount_fen: 10000,
     payment_config_id: "config-1",
@@ -43,8 +50,8 @@ const orderRows = [
     transaction_id: "transaction-1",
   },
   {
-    id: "order-2",
-    tenant_id: "tenant-2",
+    id: ORDER_2_ID,
+    tenant_id: TENANT_2_ID,
     amount_fen: 2000,
     paid_amount_fen: 2000,
     payment_config_id: "config-2",
@@ -139,17 +146,82 @@ describe("billingRechargeRefundReconciliationRepository", () => {
       "platform_payment_configs",
     ]);
     expect(inCalls).toEqual([
-      ["tenant_credit_orders", "id", ["order-1", "order-2"]],
+      ["tenant_credit_orders", "id", [ORDER_1_ID, ORDER_2_ID]],
       ["platform_payment_configs", "id", ["config-1", "config-2"]],
     ]);
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
-      id: "refund-request-1",
+      id: CLAIM_REQUEST_1_ID,
       reconcile_attempt_count: 2,
-      order: { id: "order-1", payment_config_id: "config-1" },
+      order: { id: ORDER_1_ID, payment_config_id: "config-1" },
       config: { id: "config-1", merchant_id: "merchant-1" },
     });
     expect(result[0]).not.toHaveProperty("ignored");
+  });
+
+  test("rejects null and non-array claim RPC results before hydration", async () => {
+    const { billingRechargeRefundReconciliationRepository: repository } =
+      await import("./billing-recharge-refund-reconciliation");
+
+    for (const data of [null, { id: CLAIM_REQUEST_1_ID }]) {
+      rpc.mockImplementationOnce(async () => ({ data, error: null }));
+      await expect(repository.claimDue({
+        limit: 20,
+        leaseSeconds: 120,
+        claimToken: "00000000-0000-4000-8000-000000000001",
+        now: "2026-07-18T12:00:00.000Z",
+      })).rejects.toMatchObject({ code: "DB_ERROR" });
+    }
+    expect(fromCalls).toEqual([]);
+  });
+
+  test("rejects a non-object claim row without a native TypeError", async () => {
+    rpc.mockImplementationOnce(async () => ({ data: [null], error: null }));
+    const { billingRechargeRefundReconciliationRepository: repository } =
+      await import("./billing-recharge-refund-reconciliation");
+
+    await expect(repository.claimDue({
+      limit: 20,
+      leaseSeconds: 120,
+      claimToken: "00000000-0000-4000-8000-000000000001",
+      now: "2026-07-18T12:00:00.000Z",
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
+    expect(fromCalls).toEqual([]);
+  });
+
+  test("rejects malformed claim fields before hydration", async () => {
+    const { billingRechargeRefundReconciliationRepository: repository } =
+      await import("./billing-recharge-refund-reconciliation");
+    const invalidRows = [
+      { ...claimRows[0], reason: undefined },
+      { ...claimRows[0], id: "not-a-uuid" },
+      { ...claimRows[0], tenant_id: "not-a-uuid" },
+      { ...claimRows[0], order_id: "not-a-uuid" },
+      { ...claimRows[0], reason: "   " },
+      { ...claimRows[0], out_refund_no: undefined },
+      { ...claimRows[0], requested_amount_fen: 0 },
+      { ...claimRows[0], requested_amount_fen: 1.5 },
+      { ...claimRows[0], requested_amount_fen: Number.MAX_SAFE_INTEGER + 1 },
+      { ...claimRows[0], out_refund_no: " " },
+      { ...claimRows[0], wechat_refund_id: 1 },
+      { ...claimRows[0], refund_amount_fen: -1 },
+      { ...claimRows[0], refund_amount_fen: 1.5 },
+      { ...claimRows[0], refund_amount_fen: Number.MAX_SAFE_INTEGER + 1 },
+      { ...claimRows[0], reconcile_attempt_count: -1 },
+      { ...claimRows[0], reconcile_attempt_count: 1.5 },
+      { ...claimRows[0], reconcile_attempt_count: Number.MAX_SAFE_INTEGER + 1 },
+    ];
+
+    for (const row of invalidRows) {
+      rpc.mockImplementationOnce(async () => ({ data: [row], error: null }));
+      await expect(repository.claimDue({
+        limit: 20,
+        leaseSeconds: 120,
+        claimToken: "00000000-0000-4000-8000-000000000001",
+        now: "2026-07-18T12:00:00.000Z",
+      })).rejects.toMatchObject({ code: "DB_ERROR" });
+    }
+    expect(fromCalls).toEqual([]);
   });
 
   test("rejects a claim limit above 100 before calling the RPC", async () => {
