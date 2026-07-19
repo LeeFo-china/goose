@@ -225,8 +225,9 @@ The user-authorized remote dev verification is complete:
   added; final dev state has zero pending orders and zero active claims;
 - the managed local port-3000 API job now runs this worktree, registered the list and continue-payment
   routes, and returned the expected `401 / TOKEN_MISSING` without credentials. The port-3010 Admin
-  service remains unchanged. A separate local expiration-worker job is enabled at the default
-  10-second interval and completed an empty tick with all telemetry counters at zero;
+  service remains unchanged. The historical standalone expiration process has been stopped;
+  `worker:billing-reconcile` is now the only scheduler and runs expiration reconciliation as one
+  independently isolated child of its default 60-second, globally non-overlapping tick;
 - no code was pushed or remotely deployed; the port-3000 switch is local and reversible.
 
 The machine still has no Docker CLI or local PostgreSQL. Therefore the Supabase CLI cannot regenerate
@@ -236,8 +237,10 @@ environmental release gate.
 
 ## Rollback
 
-Rollback must deploy an application version compatible with the previous RPC signatures and stop the
-expiration worker before changing database functions. The following dependency order rolls back the
+Rollback must deploy an application version compatible with the previous RPC signatures and stop
+`worker:billing-reconcile` before changing database functions. This also pauses subscription and
+refund reconciliation, so complete the database rollback before restarting that single scheduler.
+The following dependency order rolls back the
 reliability layer while retaining the original payment-expiration columns, index, and claim-clearing
 trigger from `20260718110000`:
 

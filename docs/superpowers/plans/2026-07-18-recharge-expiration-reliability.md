@@ -843,6 +843,11 @@ private async releaseDeferredClaims(
 
 The worker's existing structured result log will include `release_failed`. Do not log raw gateway errors, secret refs, private keys, APIv3 keys, or decrypted transaction bodies.
 
+Final integration correction: `worker:billing-reconcile` is the only scheduler. The former
+`billing-recharge-expiration-worker.ts` entry and all standalone-only tests/helpers are deleted, and
+the package no longer exposes a separate expiration-worker script. Approved integration/path
+contracts must reference the combined worker only.
+
 - [ ] **Step 8: Run the complete reconciliation regression set**
 
 ```bash

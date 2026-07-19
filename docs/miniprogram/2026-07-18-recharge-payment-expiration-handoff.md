@@ -20,8 +20,8 @@
 typecheck、build、文件大小、完整 diff 检查及 worker 禁用态启动/退出 smoke 也已通过。
 远程 dev RPC 权限与真实微信查单/关单 smoke 已完成：原 11 笔待支付历史单已收敛为
 `closed`，当前待支付数和活动租约均为 0。本机受管的 3000 已切换到当前工作树，充值列表和
-继续支付路由均返回预期的无凭证 `401 / TOKEN_MISSING`；独立过期 worker 已按默认 10 秒周期
-启动并完成空队列 tick，3010 Admin 保持原服务不变。
+继续支付路由均返回预期的无凭证 `401 / TOKEN_MISSING`；当时用于联调的独立过期进程已停止，
+当前统一由 `worker:billing-reconcile` 按默认 60 秒周期调度过期收敛，3010 Admin 保持原服务不变。
 
 同日已使用微信开发者工具中的真实 `wx.login` 会话完成本机 3000 登录态回归。当前微信账号
 解析为员工身份，充值列表、创建订单、重新生成支付请求和订单详情均返回 200。测试订单
@@ -263,8 +263,8 @@ Content-Type: application/json
 5. 到零立即禁用支付按钮并显示“正在确认支付结果”，但保持订单状态为后端返回的
    `pending`，直到详情返回 `paid` 或 `closed`。
 
-worker 默认每 10 秒扫描一次。倒计时归零后建议沿用现有 1200ms 轮询间隔，但把这一轮
-确认窗口覆盖到至少两个 worker 周期（约 20 至 25 秒）。超过窗口仍为 `pending` 时停止
+`worker:billing-reconcile` 默认每 60 秒调度一次过期收敛。倒计时归零后建议沿用现有
+1200ms 轮询间隔，但把密集确认窗口限制在约 20 至 25 秒；超过窗口仍为 `pending` 时停止
 密集轮询，提示“支付结果确认中，请稍后刷新”，并在下次 `useDidShow` 或下拉刷新时继续
 查询，避免无限轮询。
 
@@ -356,9 +356,13 @@ openid、支付签名或密钥写入日志；联调反馈只提供订单号、�
    - `20260718122500_serialize_recharge_config_creation.sql`
    - `20260718123000_extend_recharge_claim_exclusions.sql`
 2. 部署包含新接口和状态字段的 API。
-3. 独立启动 `worker:billing-recharge-expiration`，默认 10 秒一次、每批 50 笔且不重叠。
+3. 只启动 `worker:billing-reconcile`，默认 60 秒一次，并在同一全局非重叠 tick 中依次调度
+   订阅、充值过期和退款对账；不得再启动独立充值过期调度器。
 4. 确认 worker 的结构化日志可观测 `claimed/paid/closed/retried/failed/release_failed`。
 5. 完成真实的未支付过期、取消后继续支付、临界点已支付三类 smoke 后，再通知小程序开放。
+
+本地恢复时在 `apps/api` 执行 `bun run worker:billing-reconcile`。停止时向该进程发送
+`SIGTERM`（前台运行可用 `Ctrl-C`）；等待当前 tick 结束后再重启，避免人工制造并发调度。
 
 ## 责任边界
 
