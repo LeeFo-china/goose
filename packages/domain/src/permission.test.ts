@@ -2,6 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { PermissionCodeConfig, PERMISSION_CODE_VALUES } from "./permission";
 
 describe("domain permissions", () => {
+  test("exposes the Douyin miniapp platform permission", () => {
+    expect(PERMISSION_CODE_VALUES).toContain("platform.douyin_miniapp.manage");
+    expect(PermissionCodeConfig["platform.douyin_miniapp.manage"]).toEqual({
+      label: "管理抖音小程序",
+      module: "platform",
+      resource: "douyin_miniapp",
+      action: "manage",
+    });
+  });
+
   test("exposes tenant onboarding workflow permissions", () => {
     expect(PermissionCodeConfig["platform.tenant_onboarding.review"]).toEqual({
       label: "审核装企入驻",

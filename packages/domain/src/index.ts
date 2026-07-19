@@ -4,6 +4,7 @@ export * from './customer';
 export * from './customer-service';
 export * from './department';
 export * from './department-post-rule';
+export * from './douyin-miniapp';
 export * from './employee';
 export * from './expense';
 export * from './marketing-page';

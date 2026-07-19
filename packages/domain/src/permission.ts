@@ -111,6 +111,7 @@ export const PERMISSION_CODE_VALUES = [
   'platform.site_content.read',
   'platform.site_content.manage',
   'platform.site_content.publish',
+  'platform.douyin_miniapp.manage',
   'service_provider.profile.read',
   'service_provider.profile.manage',
   'project_referral.read',
@@ -144,6 +145,13 @@ export type PermissionCode = (typeof PERMISSION_CODE_VALUES)[number];
 export interface PermissionStatusConfigItem {
   label: string;
   type: 'default' | 'primary' | 'success' | 'warning' | 'danger';
+}
+
+export interface PermissionCodeConfigItem {
+  label: string;
+  module: string;
+  resource?: string;
+  action?: string;
 }
 
 export const RoleStatusConfig: Record<
@@ -182,7 +190,7 @@ export const PermissionOverrideEffectConfig: Record<
 
 export const PermissionCodeConfig: Record<
   PermissionCode,
-  { label: string; module: string }
+  PermissionCodeConfigItem
 > = {
   'dashboard.read': { label: '查看工作台', module: 'dashboard' },
   'task_center.read': { label: '查看待办中心', module: 'task_center' },
@@ -432,6 +440,12 @@ export const PermissionCodeConfig: Record<
   'platform.site_content.publish': {
     label: '发布官网内容',
     module: 'platform_site_content',
+  },
+  'platform.douyin_miniapp.manage': {
+    label: '管理抖音小程序',
+    module: 'platform',
+    resource: 'douyin_miniapp',
+    action: 'manage',
   },
   'service_provider.profile.read': {
     label: '查看服务商资料',
