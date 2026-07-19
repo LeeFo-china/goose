@@ -77,6 +77,11 @@ describe("DouyinMiniappContentRepository privacy and pagination", () => {
     expect(select).toBe("id,tenant_id,authorizer_appid,authorization_status,template_version,"
       + "runtime_config,tenant:tenants(id,status)");
     expect(select).not.toMatch(/access_token|refresh_token|encrypted/i);
+    expect(calls).toContainEqual({ method: "eq", args: ["id", suspendedInstallation.id] });
+    expect(calls).toContainEqual({ method: "eq", args: ["tenant_id",
+      suspendedInstallation.tenant_id] });
+    expect(calls).toContainEqual({ method: "eq", args: ["authorizer_appid",
+      suspendedInstallation.authorizer_appid] });
     expect(calls).toContainEqual({ method: "eq", args: ["authorization_status", "active"] });
   });
 
@@ -99,6 +104,8 @@ describe("DouyinMiniappContentRepository privacy and pagination", () => {
 
     expect(calls.filter((call) => call.method === "eq" && call.args[0] === "tenant_id"))
       .toHaveLength(2);
+    expect(calls.filter((call) => call.method === "eq"
+      && call.args[0] === "tenant_id" && call.args[1] === tenantId)).toHaveLength(2);
     expect(calls).toContainEqual({ method: "eq", args: ["status", "published"] });
     expect(calls).toContainEqual({ method: "eq", args: ["status", "active"] });
     expect(calls).toContainEqual({ method: "limit", args: [50] });
