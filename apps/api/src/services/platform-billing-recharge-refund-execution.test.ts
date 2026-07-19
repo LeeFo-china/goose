@@ -7,6 +7,7 @@ import {
   authContext,
   createRefundPayload,
   createRefundRequestResult,
+  createTransactionQueryResult,
   events,
   order,
   partnerPaymentConfig,
@@ -239,12 +240,9 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
   test("rejects execution before state changes when WeChat order is not paid", async () => {
     wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
       events.push("wechat-query-transaction");
-      return {
-        out_trade_no: "TC202607020001",
-        transaction_id: "4200000001",
+      return createTransactionQueryResult(paymentConfig, {
         trade_state: "NOTPAY",
-        amount: { total: 10000, currency: "CNY" },
-      };
+      });
     });
     await expectExecuteRejectsWithCode(
       "BILLING_RECHARGE_WECHAT_TRANSACTION_NOT_SUCCESS",
@@ -255,12 +253,9 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
   test("rejects execution before state changes when WeChat transaction id differs", async () => {
     wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
       events.push("wechat-query-transaction");
-      return {
-        out_trade_no: "TC202607020001",
+      return createTransactionQueryResult(paymentConfig, {
         transaction_id: "4200000002",
-        trade_state: "SUCCESS",
-        amount: { total: 10000, currency: "CNY" },
-      };
+      });
     });
     await expectExecuteRejectsWithCode(
       "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
@@ -270,15 +265,12 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
   test("rejects execution before state changes when WeChat paid amount differs", async () => {
     wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
       events.push("wechat-query-transaction");
-      return {
-        out_trade_no: "TC202607020001",
-        transaction_id: "4200000001",
-        trade_state: "SUCCESS",
+      return createTransactionQueryResult(paymentConfig, {
         amount: { total: 9900, currency: "CNY" },
-      };
+      });
     });
     await expectExecuteRejectsWithCode(
-      "BILLING_RECHARGE_WECHAT_AMOUNT_MISMATCH",
+      "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
     );
     expect(repository.beginWechatRefund).not.toHaveBeenCalled();
   });

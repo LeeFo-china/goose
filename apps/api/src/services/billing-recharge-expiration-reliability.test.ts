@@ -141,7 +141,7 @@ describe("BillingRechargeExpirationService lease reliability", () => {
               mchid: defaultPaymentConfig.merchant_id,
               out_trade_no: input.outTradeNo,
               trade_state: "NOTPAY",
-              requestId: null,
+              requestId: "wechat-expiration-request-id",
             };
           }),
           closeTransactionByOutTradeNo: mock(async () => {

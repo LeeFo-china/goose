@@ -96,7 +96,7 @@ export function successTransaction(order: TenantCreditOrderRecord) {
     trade_state: "SUCCESS",
     success_time: "2026-07-18T02:58:00.000Z",
     amount: { total: order.amount_fen, currency: "CNY" },
-    requestId: null,
+    requestId: "wechat-expiration-request-id",
   };
 }
 
@@ -177,7 +177,7 @@ export async function createExpirationHarness(input: {
     return {
       ...merchantBinding,
       out_trade_no: queryInput.outTradeNo,
-      requestId: null,
+      requestId: "wechat-expiration-request-id",
       ...transaction,
     };
   });

@@ -131,7 +131,7 @@ describe("WeChat payment transaction source converters", () => {
 describe("parseAndAssertWechatPayTransactionQuery", () => {
   test("accepts a bound direct-merchant SUCCESS transaction", () => {
     expect(parseAndAssertWechatPayTransactionQuery(
-      convertWechatPayTransactionQueryPayload(directSuccess, null),
+      convertWechatPayTransactionQueryPayload(directSuccess, "direct-request-id"),
       directExpected,
     )).toEqual({
       merchantMode: "direct_merchant",
@@ -143,7 +143,7 @@ describe("parseAndAssertWechatPayTransactionQuery", () => {
       successTime: "2026-07-19T10:01:02+08:00",
       amountFen: 100,
       currency: "CNY",
-      requestId: null,
+      requestId: "direct-request-id",
     });
   });
 
@@ -174,7 +174,7 @@ describe("parseAndAssertWechatPayTransactionQuery", () => {
           mchid: directExpected.merchantId,
           out_trade_no: directExpected.outTradeNo,
           trade_state: tradeState,
-        }, null),
+        }, "wechat-request-id"),
         directExpected,
       ).tradeState).toBe(tradeState);
     });
@@ -193,7 +193,10 @@ describe("parseAndAssertWechatPayTransactionQuery", () => {
       ? directSuccess
       : partnerSuccess;
     expect(() => parseAndAssertWechatPayTransactionQuery(
-      convertWechatPayTransactionQueryPayload({ ...source, ...override }, null),
+      convertWechatPayTransactionQueryPayload(
+        { ...source, ...override },
+        "wechat-request-id",
+      ),
       expected,
     )).toThrow(expect.objectContaining({ code: mismatchCode }));
   });
@@ -208,7 +211,7 @@ describe("parseAndAssertWechatPayTransactionQuery", () => {
     ["success_time", { ...directSuccess, success_time: undefined }],
   ] as const)("rejects missing SUCCESS field %s", (_field, source) => {
     expect(() => parseAndAssertWechatPayTransactionQuery(
-      convertWechatPayTransactionQueryPayload(source, null),
+      convertWechatPayTransactionQueryPayload(source, "wechat-request-id"),
       directExpected,
     )).toThrow(expect.objectContaining({ code: mismatchCode }));
   });
@@ -221,7 +224,10 @@ describe("parseAndAssertWechatPayTransactionQuery", () => {
     ["amount.total", { amount: { total: Number.MAX_SAFE_INTEGER + 1, currency: "CNY" } }],
   ] as const)("rejects invalid SUCCESS field %s", (_field, override) => {
     expect(() => parseAndAssertWechatPayTransactionQuery(
-      convertWechatPayTransactionQueryPayload({ ...directSuccess, ...override }, null),
+      convertWechatPayTransactionQueryPayload(
+        { ...directSuccess, ...override },
+        "wechat-request-id",
+      ),
       directExpected,
     )).toThrow(expect.objectContaining({ code: mismatchCode }));
   });
@@ -232,10 +238,26 @@ describe("parseAndAssertWechatPayTransactionQuery", () => {
         ...directSuccess,
         mchid: "1900000199",
         out_trade_no: "TC202607190099",
-      }, null),
+      }, "wechat-request-id"),
       directExpected,
     )).toThrow(expect.objectContaining({ code: mismatchCode }));
   });
+
+  test.each([undefined, null, "", " request-id "])(
+    "rejects invalid query request id %s",
+    (requestId) => {
+      expect(() => parseAndAssertWechatPayTransactionQuery(
+        {
+          ...convertWechatPayTransactionQueryPayload(
+            directSuccess,
+            "valid-request-id",
+          ),
+          requestId,
+        },
+        directExpected,
+      )).toThrow(expect.objectContaining({ code: mismatchCode }));
+    },
+  );
 });
 
 describe("parseAndAssertWechatPayTransactionCallback", () => {

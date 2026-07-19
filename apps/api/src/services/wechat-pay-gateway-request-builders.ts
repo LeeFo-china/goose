@@ -60,7 +60,6 @@ export function buildWechatPayRefundRequestBody(
       );
     }
     return withRefundNotifyUrl(input.config, {
-      sp_mchid: input.config.merchant_id,
       sub_mchid: input.config.sub_merchant_id,
       transaction_id: input.transactionId,
       out_refund_no: input.outRefundNo,

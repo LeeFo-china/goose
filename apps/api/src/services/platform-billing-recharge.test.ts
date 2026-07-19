@@ -217,7 +217,7 @@ const successfulWechatQuery = {
   trade_state: "SUCCESS",
   success_time: "2026-07-02T08:05:00+08:00",
   amount: { total: 10000, currency: "CNY" },
-  requestId: null,
+  requestId: "wechat-compensation-request-id",
 };
 const wechatPayGateway = {
   queryTransactionByOutTradeNo: mock(async () => successfulWechatQuery),
@@ -409,7 +409,7 @@ describe("PlatformBillingRechargeService", () => {
       trade_state: "NOTPAY",
       success_time: "",
       amount: { total: 10000, currency: "CNY" },
-      requestId: null,
+      requestId: "wechat-compensation-request-id",
     }));
     const service = await createService();
 

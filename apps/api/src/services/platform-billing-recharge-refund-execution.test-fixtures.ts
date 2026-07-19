@@ -7,6 +7,11 @@ import {
 } from "@/repositories/platform-billing-recharge-refunds";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { AuthContext } from "@/services/authorization";
+import type {
+  WechatPayQueryTransactionByOutTradeNoInput,
+  WechatPayTransactionQueryResult,
+} from "@/services/wechat-pay-gateway";
+import type { WechatPayJsapiConfig } from "@/services/wechat-pay-jsapi-request-builder";
 
 export const order = {
   id: "order-1",
@@ -167,6 +172,28 @@ export function createRefundRequestResult(
   };
 }
 
+export function createTransactionQueryResult(
+  config: WechatPayJsapiConfig = paymentConfig,
+  overrides: Partial<WechatPayTransactionQueryResult> = {},
+): WechatPayTransactionQueryResult {
+  const merchant = config.merchant_mode === "service_provider_sub_merchant"
+    ? {
+      sp_mchid: config.merchant_id,
+      sub_mchid: config.sub_merchant_id,
+    }
+    : { mchid: config.merchant_id };
+  return {
+    ...merchant,
+    out_trade_no: "TC202607020001",
+    transaction_id: "4200000001",
+    trade_state: "SUCCESS",
+    success_time: "2026-07-02T16:03:00+08:00",
+    amount: { total: 10000, currency: "CNY" },
+    requestId: "wechat-transaction-query-request-id",
+    ...overrides,
+  };
+}
+
 export const repository = {
   findRequestById: mock(
     async (): Promise<PlatformRechargeRefundRequestRecord | null> =>
@@ -214,14 +241,11 @@ export const secretBundleService = {
 };
 
 export const wechatPayGateway = {
-  queryTransactionByOutTradeNo: mock(async () => {
+  queryTransactionByOutTradeNo: mock(async (
+    input: WechatPayQueryTransactionByOutTradeNoInput,
+  ) => {
     events.push("wechat-query-transaction");
-    return {
-      out_trade_no: "TC202607020001",
-      transaction_id: "4200000001",
-      trade_state: "SUCCESS",
-      amount: { total: 10000, currency: "CNY" },
-    };
+    return createTransactionQueryResult(input.config);
   }),
   requestRefund: mock(async (_input?: unknown) => {
     events.push("wechat-refund");
@@ -279,14 +303,9 @@ export function resetExecutionMocks() {
     wechatPayPublicKeyPem: null,
     baseUrl: "https://api.mch.weixin.qq.com",
   }));
-  wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => {
+  wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async (input) => {
     events.push("wechat-query-transaction");
-    return {
-      out_trade_no: "TC202607020001",
-      transaction_id: "4200000001",
-      trade_state: "SUCCESS",
-      amount: { total: 10000, currency: "CNY" },
-    };
+    return createTransactionQueryResult(input.config);
   });
   wechatPayGateway.requestRefund.mockImplementation(async () => {
     events.push("wechat-refund");

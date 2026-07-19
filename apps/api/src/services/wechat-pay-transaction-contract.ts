@@ -297,6 +297,6 @@ function isTradeState(value: string | null): value is WechatPayTradeState {
   return value !== null && TRADE_STATES.has(value as WechatPayTradeState);
 }
 
-function isRequestId(value: unknown): value is string | null {
-  return value === null || exactString(value) !== null;
+function isRequestId(value: unknown): value is string {
+  return exactString(value) !== null;
 }

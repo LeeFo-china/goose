@@ -11,7 +11,6 @@ import {
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
-  assertWechatTransactionMatches,
   getWechatErrorDetailCode,
   toWechatQueriedRefundPayload,
   toWechatRequestedRefundPayload,
@@ -24,6 +23,11 @@ import {
   type WechatRefundValidatedResult,
 } from "@/services/wechat-pay-refund-contract";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
+import {
+  assertWechatPaySuccessTransaction,
+  buildWechatPayTransactionExpectedBinding,
+  parseAndAssertWechatPayTransactionQuery,
+} from "@/services/wechat-pay-transaction-contract";
 
 type RepositoryPort = Pick<
   typeof platformBillingRechargeRefundRepository,
@@ -111,17 +115,32 @@ export class PlatformBillingRechargeRefundExecutionService {
     const secretBundle = await this.secretBundleService.load(
       config.encrypted_config_ref,
     );
-    const wechatTransaction =
+    const wechatTransactionResponse =
       await this.wechatPayGateway.queryTransactionByOutTradeNo({
         config,
         secretBundle,
         outTradeNo,
       });
-    assertWechatTransactionMatches({
-      wechatTransaction,
-      transactionId,
-      totalAmountFen,
-    });
+    const wechatTransaction = parseAndAssertWechatPayTransactionQuery(
+      wechatTransactionResponse,
+      buildWechatPayTransactionExpectedBinding({
+        merchantMode: config.merchant_mode,
+        merchantId: config.merchant_id,
+        subMerchantId: config.sub_merchant_id,
+        outTradeNo,
+        amountFen: totalAmountFen,
+        transactionId,
+      }),
+    );
+    if (wechatTransaction.tradeState !== "SUCCESS") {
+      throw Errors.business(
+        409,
+        "微信支付订单不是支付成功状态，不能执行退款",
+        "BILLING_RECHARGE_WECHAT_TRANSACTION_NOT_SUCCESS",
+        { trade_state: wechatTransaction.tradeState },
+      );
+    }
+    assertWechatPaySuccessTransaction(wechatTransaction);
 
     const refundingRequest = await this.repository.beginWechatRefund({
       requestId,
