@@ -2,14 +2,10 @@ import type { ServiceUnavailableCode } from "../models";
 import { ApiRequestError } from "../api/request";
 
 const PAGE_PATHS = new Set([
-  "pages/home/index",
   "pages/company/index",
   "pages/privacy/index",
-  "pages/cases/index",
   "pages/case-detail/index",
-  "pages/sites/index",
   "pages/site-detail/index",
-  "pages/lead/index",
   "pages/lead-success/index",
   "pages/service-unavailable/index",
 ]);
@@ -31,7 +27,7 @@ export function buildPageRoute(path: string): string {
 export function buildTabRoute(tab: TabName): string {
   const path = TAB_PATHS[tab];
   if (!path) throw invalidNavigationTarget();
-  return buildPageRoute(path);
+  return `/${path}`;
 }
 
 export function buildEntityDetailRoute(type: "case" | "site", id: string): string {

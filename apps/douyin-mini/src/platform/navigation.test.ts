@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { buildImageGallery } from "../components/image-gallery/view-model";
+import {
+  buildImageGallery,
+  removeFailedImage,
+} from "../components/image-gallery/view-model";
+import { resolveThemeColor } from "../components/theme";
 import { buildTrustMetrics } from "../components/trust-metrics/view-model";
 import {
   buildEntityDetailRoute,
   buildPageRoute,
   buildTabRoute,
+  navigateToPage,
 } from "./navigation";
 
 const ENTITY_ID = "11111111-1111-4111-8111-111111111111";
@@ -14,6 +19,10 @@ describe("Douyin native navigation and visual view models", () => {
     expect(buildTabRoute("home")).toBe("/pages/home/index");
     expect(buildTabRoute("cases")).toBe("/pages/cases/index");
     expect(buildPageRoute("pages/company/index")).toBe("/pages/company/index");
+    expect(() => buildPageRoute("pages/home/index"))
+      .toThrow("INVALID_NAVIGATION_TARGET");
+    expect(() => navigateToPage("pages/cases/index"))
+      .toThrow("INVALID_NAVIGATION_TARGET");
     expect(() => buildPageRoute("pages/admin/index"))
       .toThrow("INVALID_NAVIGATION_TARGET");
     expect(() => buildTabRoute("admin" as never))
@@ -49,6 +58,9 @@ describe("Douyin native navigation and visual view models", () => {
       url: "https://cdn.example.com/0.jpg", previewIndex: 0,
     });
     expect(images.every((image) => image.url.startsWith("https://"))).toBe(true);
+    expect(removeFailedImage(images, "https://cdn.example.com/0.jpg"))
+      .not.toContainEqual(expect.objectContaining({ url: "https://cdn.example.com/0.jpg" }));
+    expect(removeFailedImage([images[0]!], images[0]!.url)).toEqual([]);
   });
 
   test("trust metrics trim invalid entries and cap the row at four", () => {
@@ -56,6 +68,7 @@ describe("Douyin native navigation and visual view models", () => {
       { label: " 服务家庭 ", value: " 1200+ " },
       { label: "从业年限", value: "12年" },
       { label: "设计师", value: "36人" },
+      { label: "设计师", value: "不应重复" },
       { label: "在建工地", value: "28个" },
       { label: "第五项", value: "不应显示" },
       { label: "", value: "invalid" },
@@ -66,5 +79,17 @@ describe("Douyin native navigation and visual view models", () => {
       { label: "设计师", value: "36人" },
       { label: "在建工地", value: "28个" },
     ]);
+  });
+
+  test("tenant colors always resolve to a readable black or white foreground", () => {
+    for (const color of ["#C45A32", "#FFFFFF", "#FFFF00", "#111111"]) {
+      const theme = resolveThemeColor(color);
+      expect(theme.primaryColor).toBe(color);
+      expect(theme.contrastRatio).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(resolveThemeColor("red; display:none")).toMatchObject({
+      primaryColor: "#C45A32",
+      primaryTextColor: "#000000",
+    });
   });
 });

@@ -3,7 +3,7 @@
   <view>案例加载失败</view><button class="state-action" bindtap="onRetry">重试</button>
 </view>
 <button tt:else class="case" bindtap="onSelect" aria-label="查看案例 {{item.title}}">
-  <image tt:if="{{item.cover_image_url || fallbackImageUrl}}" class="case-image" src="{{item.cover_image_url || fallbackImageUrl}}" mode="aspectFill" />
+  <image tt:if="{{(item.cover_image_url || fallbackImageUrl) && !imageFailed}}" class="case-image" src="{{item.cover_image_url || fallbackImageUrl}}" mode="aspectFill" binderror="onImageError" />
   <view tt:else class="case-image case-image--empty">案例图片待更新</view>
   <view class="case-body">
     <view class="case-title">{{item.title || '装修案例'}}</view>

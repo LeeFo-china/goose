@@ -4,11 +4,11 @@
   <button class="hero-retry" bindtap="onRetry">重新加载</button>
 </view>
 <view tt:else class="hero">
-  <image tt:if="{{imageUrl}}" class="hero-image" src="{{imageUrl}}" mode="aspectFill" />
+  <image tt:if="{{imageUrl && !imageFailed}}" class="hero-image" src="{{imageUrl}}" mode="aspectFill" binderror="onImageError" />
   <view class="hero-overlay"></view>
   <view class="hero-content">
     <view class="hero-title">{{title}}</view>
     <view class="hero-subtitle">{{subtitle}}</view>
-    <button class="hero-action" style="background-color: {{primaryColor}}" bindtap="onAction">{{actionLabel}}</button>
+    <button class="hero-action" style="background-color: {{resolvedPrimaryColor}}; color: {{resolvedPrimaryTextColor}}" bindtap="onAction">{{actionLabel}}</button>
   </view>
 </view>

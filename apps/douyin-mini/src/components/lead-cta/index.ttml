@@ -4,5 +4,5 @@
     <view class="lead-description">{{description}}</view>
   </view>
   <button tt:if="{{error}}" class="lead-action lead-action--error" bindtap="onRetry">重新加载</button>
-  <button tt:else class="lead-action" style="background-color: {{primaryColor}}" loading="{{loading}}" disabled="{{disabled || loading}}" bindtap="onAction">{{loading ? '正在处理' : actionLabel}}</button>
+  <button tt:else class="lead-action" style="background-color: {{resolvedPrimaryColor}}; color: {{resolvedPrimaryTextColor}}" loading="{{loading}}" disabled="{{disabled || loading}}" bindtap="onAction">{{loading ? '正在处理' : actionLabel}}</button>
 </view>

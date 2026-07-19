@@ -3,7 +3,7 @@
   <view>工地加载失败</view><button class="state-action" bindtap="onRetry">重试</button>
 </view>
 <button tt:else class="site" bindtap="onSelect" aria-label="查看工地 {{item.title}}">
-  <image tt:if="{{item.cover_image_url || fallbackImageUrl}}" class="site-image" src="{{item.cover_image_url || fallbackImageUrl}}" mode="aspectFill" />
+  <image tt:if="{{(item.cover_image_url || fallbackImageUrl) && !imageFailed}}" class="site-image" src="{{item.cover_image_url || fallbackImageUrl}}" mode="aspectFill" binderror="onImageError" />
   <view tt:else class="site-image site-image--empty">施工图片待更新</view>
   <view class="site-body">
     <view class="site-row"><view class="site-title">{{item.community || item.title || '在建工地'}}</view><view class="site-stage">{{item.status || '施工中'}}</view></view>
