@@ -23,6 +23,184 @@ beforeAll(async () => {
 });
 
 describe("BillingRechargeRefundReconciliationService lease safety", () => {
+  test("stops before row work when the wall clock rolls back", async () => {
+    const dependencies = createHarness();
+    const clocks = {
+      nowFactory: advancingClock([
+        "2026-07-19T02:00:00.000Z",
+        "2026-07-19T01:59:59.000Z",
+      ]),
+      monotonicNowFactory: advancingNumberClock([0, 1_000]),
+    };
+    const service = new Service({
+      ...dependencies,
+      ...clocks,
+      claimTokenFactory: () => CLAIM_TOKEN,
+    });
+
+    await expect(service.runBatch({ limit: 20 })).rejects.toMatchObject({
+      code: "BILLING_RECHARGE_REFUND_RECONCILE_CLOCK_ROLLBACK",
+    });
+    expect(dependencies.secretBundleService.load).not.toHaveBeenCalled();
+    expect(
+      dependencies.wechatPayGateway.queryRefundByOutRefundNo,
+    ).not.toHaveBeenCalled();
+    expect(dependencies.repository.reschedule).not.toHaveBeenCalled();
+  });
+
+  test("uses monotonic elapsed time when the wall clock freezes", async () => {
+    const dependencies = createHarness();
+    const service = new Service({
+      ...dependencies,
+      nowFactory: advancingClock([
+        "2026-07-19T02:00:00.000Z",
+        "2026-07-19T02:00:00.000Z",
+      ]),
+      monotonicNowFactory: advancingNumberClock([0, 91_000]),
+      claimTokenFactory: () => CLAIM_TOKEN,
+    });
+
+    const result = await service.runBatch({ limit: 20 });
+
+    expect(dependencies.secretBundleService.load).not.toHaveBeenCalled();
+    expect(
+      dependencies.wechatPayGateway.queryRefundByOutRefundNo,
+    ).not.toHaveBeenCalled();
+    expect(dependencies.repository.reschedule).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      claimed: 1,
+      success: 0,
+      processing: 0,
+      closed: 0,
+      abnormal: 0,
+      rescheduled: 0,
+      failed: 0,
+    });
+  });
+
+  test("does not finalize a provider response received after the deadline", async () => {
+    const claim = createClaim();
+    const dependencies = createHarness([claim]);
+    dependencies.wechatPayGateway.queryRefundByOutRefundNo.mockResolvedValue(
+      createWechatRefundPayload(claim, "SUCCESS"),
+    );
+    const service = new Service({
+      ...dependencies,
+      nowFactory: () => new Date("2026-07-19T02:00:00.000Z"),
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        0,
+        0,
+        0,
+        120_001,
+      ]),
+      claimTokenFactory: () => CLAIM_TOKEN,
+    });
+
+    const result = await service.runBatch({ limit: 20 });
+
+    expect(dependencies.repository.confirmSuccess).not.toHaveBeenCalled();
+    expect(dependencies.repository.close).not.toHaveBeenCalled();
+    expect(dependencies.repository.reschedule).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      success: 0,
+      processing: 0,
+      closed: 0,
+      abnormal: 0,
+      rescheduled: 0,
+    });
+  });
+
+  test("does not finalize exactly at the lease deadline", async () => {
+    const claim = createClaim();
+    const dependencies = createHarness([claim]);
+    dependencies.wechatPayGateway.queryRefundByOutRefundNo.mockResolvedValue(
+      createWechatRefundPayload(claim, "SUCCESS"),
+    );
+    const service = new Service({
+      ...dependencies,
+      nowFactory: advancingClock([
+        "2026-07-19T02:00:00.000Z",
+        "2026-07-19T02:00:00.000Z",
+        "2026-07-19T02:00:00.000Z",
+        "2026-07-19T02:00:00.000Z",
+        "2026-07-19T02:01:59.999Z",
+        "2026-07-19T02:02:00.000Z",
+      ]),
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        0,
+        0,
+        0,
+        119_998,
+        119_999,
+      ]),
+      claimTokenFactory: () => CLAIM_TOKEN,
+    });
+
+    const result = await service.runBatch({ limit: 20 });
+
+    expect(dependencies.repository.confirmSuccess).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: 0, rescheduled: 0 });
+  });
+
+  test("allows finalization strictly before the lease deadline", async () => {
+    const claim = createClaim();
+    const dependencies = createHarness([claim]);
+    dependencies.wechatPayGateway.queryRefundByOutRefundNo.mockResolvedValue(
+      createWechatRefundPayload(claim, "SUCCESS"),
+    );
+    const service = new Service({
+      ...dependencies,
+      nowFactory: () => new Date("2026-07-19T02:00:00.000Z"),
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        0,
+        0,
+        0,
+        119_998,
+        119_999,
+      ]),
+      claimTokenFactory: () => CLAIM_TOKEN,
+    });
+
+    const result = await service.runBatch({ limit: 20 });
+
+    expect(dependencies.repository.confirmSuccess).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ success: 1, rescheduled: 0 });
+  });
+
+  test("does not count a status when recovery reaches the deadline", async () => {
+    const claim = createClaim();
+    const dependencies = createHarness([claim]);
+    dependencies.repository.reschedule.mockRejectedValueOnce(
+      Errors.dbError("首次重排失败"),
+    );
+    const service = new Service({
+      ...dependencies,
+      nowFactory: () => new Date("2026-07-19T02:00:00.000Z"),
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        0,
+        0,
+        0,
+        119_997,
+        119_999,
+        120_000,
+      ]),
+      claimTokenFactory: () => CLAIM_TOKEN,
+    });
+
+    const result = await service.runBatch({ limit: 20 });
+
+    expect(dependencies.repository.reschedule).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      processing: 0,
+      rescheduled: 0,
+      failed: 1,
+    });
+  });
+
   test("does not start a later row after the safe lease cutoff", async () => {
     const firstClaim = createClaim();
     const secondClaim = createClaim({
@@ -38,10 +216,20 @@ describe("BillingRechargeRefundReconciliationService lease safety", () => {
       "2026-07-19T02:00:00.000Z",
       "2026-07-19T02:01:31.000Z",
       "2026-07-19T02:01:31.000Z",
+      "2026-07-19T02:01:31.000Z",
     ]);
     const service = new Service({
       ...dependencies,
       nowFactory,
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        0,
+        0,
+        0,
+        91_000,
+        91_000,
+        91_000,
+      ]),
       claimTokenFactory: () => CLAIM_TOKEN,
     });
 
@@ -75,6 +263,12 @@ describe("BillingRechargeRefundReconciliationService lease safety", () => {
         "2026-07-19T02:01:20.000Z",
         "2026-07-19T02:01:20.000Z",
         "2026-07-19T02:01:31.000Z",
+      ]),
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        80_000,
+        80_000,
+        91_000,
       ]),
       claimTokenFactory: () => CLAIM_TOKEN,
     });
@@ -115,6 +309,14 @@ describe("BillingRechargeRefundReconciliationService lease safety", () => {
         "2026-07-19T02:00:00.000Z",
         "2026-07-19T02:01:45.000Z",
       ]),
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        0,
+        0,
+        0,
+        105_000,
+        105_000,
+      ]),
       claimTokenFactory: () => CLAIM_TOKEN,
     });
 
@@ -145,7 +347,16 @@ describe("BillingRechargeRefundReconciliationService lease safety", () => {
         "2026-07-19T02:00:10.000Z",
         "2026-07-19T02:00:10.000Z",
         "2026-07-19T02:00:10.000Z",
+        "2026-07-19T02:00:44.000Z",
         "2026-07-19T02:00:45.000Z",
+      ]),
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        10_000,
+        10_000,
+        10_000,
+        44_000,
+        45_000,
       ]),
       claimTokenFactory: () => CLAIM_TOKEN,
     });
@@ -194,7 +405,17 @@ describe("BillingRechargeRefundReconciliationService lease safety", () => {
         "2026-07-19T02:00:00.000Z",
         "2026-07-19T02:00:00.000Z",
         "2026-07-19T02:00:20.000Z",
+        "2026-07-19T02:00:20.000Z",
         "2026-07-19T02:00:21.000Z",
+      ]),
+      monotonicNowFactory: advancingNumberClock([
+        0,
+        0,
+        0,
+        0,
+        20_000,
+        20_000,
+        21_000,
       ]),
       claimTokenFactory: () => CLAIM_TOKEN,
     });
@@ -228,5 +449,14 @@ function advancingClock(values: string[]) {
     const value = values[Math.min(index, values.length - 1)]!;
     index += 1;
     return new Date(value);
+  };
+}
+
+function advancingNumberClock(values: number[]) {
+  let index = 0;
+  return () => {
+    const value = values[Math.min(index, values.length - 1)]!;
+    index += 1;
+    return value;
   };
 }

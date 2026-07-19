@@ -13,11 +13,16 @@ import {
   DEFAULT_WECHAT_PAY_REQUEST_TIMEOUT_MS,
   wechatPayGateway,
 } from "@/services/wechat-pay-gateway";
+import {
+  defaultRefundReconcileMonotonicNow,
+  RefundReconcileLeaseClock,
+} from "@/services/billing-recharge-refund-reconciliation-clock";
 import { parseAndAssertWechatRefund } from "@/services/wechat-pay-refund-contract";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
 
 const MINUTE_MS = 60_000;
 const RECONCILE_LEASE_SECONDS = 120;
+const RECONCILE_LEASE_MS = RECONCILE_LEASE_SECONDS * 1_000;
 const RECONCILE_FINALIZE_MARGIN_MS = 10_000;
 const RECONCILE_WORST_ROW_BUDGET_MS =
   2 * DEFAULT_WECHAT_PAY_REQUEST_TIMEOUT_MS + RECONCILE_FINALIZE_MARGIN_MS;
@@ -25,8 +30,6 @@ const RECONCILE_RETRY_BUDGET_MS =
   DEFAULT_WECHAT_PAY_REQUEST_TIMEOUT_MS + RECONCILE_FINALIZE_MARGIN_MS;
 const LEASE_BUDGET_ERROR =
   "BILLING_RECHARGE_REFUND_RECONCILE_LEASE_BUDGET_EXHAUSTED";
-const CLOCK_INVALID_ERROR =
-  "BILLING_RECHARGE_REFUND_RECONCILE_CLOCK_INVALID";
 
 export type RefundReconciliationRepositoryPort = Pick<
   typeof billingRechargeRefundReconciliationRepository,
@@ -41,6 +44,7 @@ type Dependencies = {
     "queryRefundByOutRefundNo" | "requestRefund"
   >;
   nowFactory?: () => Date;
+  monotonicNowFactory?: () => number;
   claimTokenFactory?: () => string;
 };
 
@@ -73,6 +77,7 @@ export class BillingRechargeRefundReconciliationService {
     "queryRefundByOutRefundNo" | "requestRefund"
   >;
   private readonly nowFactory: () => Date;
+  private readonly monotonicNowFactory: () => number;
   private readonly claimTokenFactory: () => string;
 
   constructor(dependencies: Dependencies = {}) {
@@ -82,118 +87,118 @@ export class BillingRechargeRefundReconciliationService {
       wechatPaySecretBundleService;
     this.wechatPayGateway = dependencies.wechatPayGateway ?? wechatPayGateway;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
+    this.monotonicNowFactory = dependencies.monotonicNowFactory ??
+      defaultRefundReconcileMonotonicNow;
     this.claimTokenFactory = dependencies.claimTokenFactory ??
       (() => crypto.randomUUID());
   }
 
   async runBatch(input: { limit: number }): Promise<RefundReconciliationSummary> {
     assertLimit(input.limit);
-    const claimTime = this.readNow();
-    const leaseDeadlineMs = claimTime.getTime() +
-      RECONCILE_LEASE_SECONDS * 1_000;
+    const leaseClock = RefundReconcileLeaseClock.capture({
+      wallNowFactory: this.nowFactory,
+      monotonicNowFactory: this.monotonicNowFactory,
+      leaseMs: RECONCILE_LEASE_MS,
+    });
     const claimToken = this.claimTokenFactory();
     const claims = await this.repository.claimDue({
       limit: input.limit,
       leaseSeconds: RECONCILE_LEASE_SECONDS,
       claimToken,
-      now: claimTime.toISOString(),
+      now: leaseClock.claimTime.toISOString(),
     });
     const summary = createSummary(claims.length);
 
     for (const claim of claims) {
-      const rowStartTime = this.readNow();
-      if (!hasLeaseBudget(
-        leaseDeadlineMs,
-        rowStartTime,
-        RECONCILE_WORST_ROW_BUDGET_MS,
-      )) {
+      const rowStart = leaseClock.observe();
+      if (!leaseClock.hasBudget(rowStart, RECONCILE_WORST_ROW_BUDGET_MS)) {
         break;
       }
       try {
         const shouldContinue = await this.processClaim(
           claim,
           claimToken,
-          leaseDeadlineMs,
+          leaseClock,
           summary,
         );
         if (!shouldContinue) break;
       } catch (error) {
-        if (stableErrorCode(error) === CLOCK_INVALID_ERROR) throw error;
+        if (isClockError(error)) throw error;
+        const failedAt = leaseClock.observe();
+        if (!leaseClock.isBeforeDeadline(failedAt)) break;
         summary.failed += 1;
-        const failedAt = this.readNow();
         await this.rescheduleFailedClaim(
           claim,
           claimToken,
-          failedAt,
           error,
           summary,
+          leaseClock,
         );
       }
     }
     return summary;
   }
 
-  private readNow(): Date {
-    const now = this.nowFactory();
-    if (!(now instanceof Date) || !Number.isFinite(now.getTime())) {
-      throw Errors.business(
-        500,
-        "微信退款对账时钟不正确",
-        CLOCK_INVALID_ERROR,
-      );
-    }
-    return now;
-  }
-
   private async rescheduleFailedClaim(
     claim: ClaimedRefund,
     claimToken: string,
-    now: Date,
     error: unknown,
     summary: RefundReconciliationSummary,
+    leaseClock: RefundReconcileLeaseClock,
   ): Promise<void> {
-    const input = {
-      refundRequestId: claim.id,
-      claimToken,
-      reconcileNextAt: addMs(
-        now,
-        refundReconcileDelayMs(claim.reconcile_attempt_count),
-      ),
-      checkedAt: now.toISOString(),
-      lastError: stableErrorCode(error),
-      metadata: createMetadata(now, null, errorRequestId(error)),
-      wechatRefundId: claim.wechat_refund_id,
-      refundAmountFen: claim.refund_amount_fen,
-    } satisfies RescheduleClaimedRefundInput;
-    await this.rescheduleWithRecovery(input, summary, false);
+    await this.rescheduleWithRecovery(
+      (persistTime) => ({
+        refundRequestId: claim.id,
+        claimToken,
+        reconcileNextAt: addMs(
+          persistTime,
+          refundReconcileDelayMs(claim.reconcile_attempt_count),
+        ),
+        checkedAt: persistTime.toISOString(),
+        lastError: stableErrorCode(error),
+        metadata: createMetadata(persistTime, null, errorRequestId(error)),
+        wechatRefundId: claim.wechat_refund_id,
+        refundAmountFen: claim.refund_amount_fen,
+      }),
+      summary,
+      false,
+      leaseClock,
+    );
   }
 
   private async rescheduleWithRecovery(
-    input: RescheduleClaimedRefundInput,
+    createInput: (persistTime: Date) => RescheduleClaimedRefundInput,
     summary: RefundReconciliationSummary,
     countFailureOnFirstError: boolean,
-  ): Promise<void> {
+    leaseClock: RefundReconcileLeaseClock,
+  ): Promise<boolean> {
+    const firstPersist = leaseClock.observe();
+    if (!leaseClock.isBeforeDeadline(firstPersist)) return false;
+    const input = createInput(firstPersist.wallTime);
     try {
       const rescheduled = await this.repository.reschedule(input);
       if (rescheduled) summary.rescheduled += 1;
-      return;
+      return true;
     } catch {
       if (countFailureOnFirstError) summary.failed += 1;
     }
+    const recoveryPersist = leaseClock.observe();
+    if (!leaseClock.isBeforeDeadline(recoveryPersist)) return false;
     try {
       const recovered = await this.repository.reschedule(input);
       if (recovered) summary.rescheduled += 1;
     } catch {
       // The lease expiry keeps the row recoverable after both token-gated
       // persistence attempts fail; later claimed rows must still run.
-      return;
+      return true;
     }
+    return true;
   }
 
   private async processClaim(
     claim: ClaimedRefund,
     claimToken: string,
-    leaseDeadlineMs: number,
+    leaseClock: RefundReconcileLeaseClock,
     summary: RefundReconciliationSummary,
   ): Promise<boolean> {
     const order = requireClaimOrder(claim);
@@ -205,23 +210,15 @@ export class BillingRechargeRefundReconciliationService {
       order.paid_amount_fen || order.amount_fen,
       "支付金额不正确",
     );
-    const providerStartTime = this.readNow();
-    if (!hasLeaseBudget(
-      leaseDeadlineMs,
-      providerStartTime,
-      RECONCILE_WORST_ROW_BUDGET_MS,
-    )) {
+    const providerStart = leaseClock.observe();
+    if (!leaseClock.hasBudget(providerStart, RECONCILE_WORST_ROW_BUDGET_MS)) {
       return false;
     }
     const secretBundle = await this.secretBundleService.load(
       config.encrypted_config_ref,
     );
-    const queryStartTime = this.readNow();
-    if (!hasLeaseBudget(
-      leaseDeadlineMs,
-      queryStartTime,
-      RECONCILE_WORST_ROW_BUDGET_MS,
-    )) {
+    const queryStart = leaseClock.observe();
+    if (!leaseClock.hasBudget(queryStart, RECONCILE_WORST_ROW_BUDGET_MS)) {
       return false;
     }
     let payload;
@@ -236,30 +233,31 @@ export class BillingRechargeRefundReconciliationService {
       if (getWechatErrorDetailCode(error) !== "RESOURCE_NOT_EXISTS") {
         throw error;
       }
-      const retryStartTime = this.readNow();
-      if (!hasLeaseBudget(
-        leaseDeadlineMs,
-        retryStartTime,
-        RECONCILE_RETRY_BUDGET_MS,
-      )) {
+      const retryStart = leaseClock.observe();
+      if (!leaseClock.hasBudget(retryStart, RECONCILE_RETRY_BUDGET_MS)) {
         summary.failed += 1;
-        await this.rescheduleWithRecovery({
-          refundRequestId: claim.id,
-          claimToken,
-          reconcileNextAt: addMs(
-            retryStartTime,
-            refundReconcileDelayMs(claim.reconcile_attempt_count),
-          ),
-          checkedAt: retryStartTime.toISOString(),
-          lastError: LEASE_BUDGET_ERROR,
-          metadata: createMetadata(
-            retryStartTime,
-            null,
-            errorRequestId(error),
-          ),
-          wechatRefundId: claim.wechat_refund_id,
-          refundAmountFen: claim.refund_amount_fen,
-        }, summary, false);
+        await this.rescheduleWithRecovery(
+          (persistTime) => ({
+            refundRequestId: claim.id,
+            claimToken,
+            reconcileNextAt: addMs(
+              persistTime,
+              refundReconcileDelayMs(claim.reconcile_attempt_count),
+            ),
+            checkedAt: persistTime.toISOString(),
+            lastError: LEASE_BUDGET_ERROR,
+            metadata: createMetadata(
+              persistTime,
+              null,
+              errorRequestId(error),
+            ),
+            wechatRefundId: claim.wechat_refund_id,
+            refundAmountFen: claim.refund_amount_fen,
+          }),
+          summary,
+          false,
+          leaseClock,
+        );
         return true;
       }
       const requested = await this.wechatPayGateway.requestRefund({
@@ -286,13 +284,11 @@ export class BillingRechargeRefundReconciliationService {
       },
     );
 
-    const persistTime = this.readNow();
-    const metadata = createMetadata(
-      persistTime,
-      refund.status,
-      refund.requestId,
-    );
+    const responseTime = leaseClock.observe();
+    if (!leaseClock.isBeforeDeadline(responseTime)) return false;
     if (refund.status === "SUCCESS") {
+      const persistTime = this.readPersistTime(leaseClock);
+      if (!persistTime) return false;
       await this.repository.confirmSuccess({
         refundRequestId: claim.id,
         claimToken,
@@ -300,36 +296,47 @@ export class BillingRechargeRefundReconciliationService {
         wechatRefundId: refund.wechatRefundId,
         refundAmountFen: refund.refundAmountFen,
         refundedAt: refund.successTime,
-        metadata,
+        metadata: createMetadata(persistTime, refund.status, refund.requestId),
       });
       summary.success += 1;
       return true;
     }
 
     if (refund.status === "CLOSED") {
+      const persistTime = this.readPersistTime(leaseClock);
+      if (!persistTime) return false;
       await this.repository.close({
         refundRequestId: claim.id,
         claimToken,
         checkedAt: persistTime.toISOString(),
-        metadata,
+        metadata: createMetadata(persistTime, refund.status, refund.requestId),
       });
       summary.closed += 1;
       return true;
     }
 
     if (refund.status === "ABNORMAL") {
-      summary.abnormal += 1;
-      await this.rescheduleWithRecovery({
-        refundRequestId: claim.id,
-        claimToken,
-        reconcileNextAt: addMs(persistTime, 30 * MINUTE_MS),
-        checkedAt: persistTime.toISOString(),
-        lastError: "WECHAT_REFUND_ABNORMAL",
-        metadata,
-        wechatRefundId: refund.wechatRefundId,
-        refundAmountFen: refund.refundAmountFen,
-      }, summary, true);
-      return true;
+      const started = await this.rescheduleWithRecovery(
+        (persistTime) => ({
+          refundRequestId: claim.id,
+          claimToken,
+          reconcileNextAt: addMs(persistTime, 30 * MINUTE_MS),
+          checkedAt: persistTime.toISOString(),
+          lastError: "WECHAT_REFUND_ABNORMAL",
+          metadata: createMetadata(
+            persistTime,
+            refund.status,
+            refund.requestId,
+          ),
+          wechatRefundId: refund.wechatRefundId,
+          refundAmountFen: refund.refundAmountFen,
+        }),
+        summary,
+        true,
+        leaseClock,
+      );
+      if (started) summary.abnormal += 1;
+      return started;
     }
 
     if (refund.status !== "PROCESSING") {
@@ -339,22 +346,39 @@ export class BillingRechargeRefundReconciliationService {
         "BILLING_RECHARGE_REFUND_RECONCILE_STATUS_UNSUPPORTED",
       );
     }
-    summary.processing += 1;
-    const rescheduled = await this.repository.reschedule({
-      refundRequestId: claim.id,
-      claimToken,
-      reconcileNextAt: addMs(
-        persistTime,
-        refundReconcileDelayMs(claim.reconcile_attempt_count),
-      ),
-      checkedAt: persistTime.toISOString(),
-      lastError: null,
-      metadata,
-      wechatRefundId: refund.wechatRefundId,
-      refundAmountFen: refund.refundAmountFen,
-    });
-    if (rescheduled) summary.rescheduled += 1;
-    return true;
+    const started = await this.rescheduleWithRecovery(
+      (persistTime) => ({
+        refundRequestId: claim.id,
+        claimToken,
+        reconcileNextAt: addMs(
+          persistTime,
+          refundReconcileDelayMs(claim.reconcile_attempt_count),
+        ),
+        checkedAt: persistTime.toISOString(),
+        lastError: null,
+        metadata: createMetadata(
+          persistTime,
+          refund.status,
+          refund.requestId,
+        ),
+        wechatRefundId: refund.wechatRefundId,
+        refundAmountFen: refund.refundAmountFen,
+      }),
+      summary,
+      true,
+      leaseClock,
+    );
+    if (started) summary.processing += 1;
+    return started;
+  }
+
+  private readPersistTime(
+    leaseClock: RefundReconcileLeaseClock,
+  ): Date | null {
+    const observation = leaseClock.observe();
+    return leaseClock.isBeforeDeadline(observation)
+      ? observation.wallTime
+      : null;
   }
 }
 
@@ -389,6 +413,10 @@ function stableErrorCode(error: unknown): string {
     if (typeof code === "string" && code.trim()) return code.trim();
   }
   return "BILLING_RECHARGE_REFUND_RECONCILE_FAILED";
+}
+
+function isClockError(error: unknown): boolean {
+  return stableErrorCode(error).includes("_CLOCK_");
 }
 
 function errorRequestId(error: unknown): string | null {
@@ -453,14 +481,6 @@ function requirePositiveAmount(value: number, message: string): number {
 
 function addMs(date: Date, delayMs: number): string {
   return new Date(date.getTime() + delayMs).toISOString();
-}
-
-function hasLeaseBudget(
-  leaseDeadlineMs: number,
-  now: Date,
-  requiredMs: number,
-): boolean {
-  return leaseDeadlineMs - now.getTime() >= requiredMs;
 }
 
 export const billingRechargeRefundReconciliationService =

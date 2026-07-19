@@ -181,11 +181,14 @@ gateway 所有网络调用使用共享的有界 fetch 包装器，默认 10 秒�
 
 每个 tick 默认 claim 20 条，配置最大值 100：
 
-1. service 使用精确 claim 时间计算 120 秒租约截止时间。单行最坏预算绑定 gateway
-   已导出的 10 秒默认超时，按“查单 10 秒 + 同参退款 10 秒 + finalize 10 秒余量”
-   固定为 30 秒；每行开始和调用微信查单前都读取并校验新时间，剩余时间不足时
-   立即停止顺序批次，当前及后续 claim 留待租约自然过期后回收，不再加载密钥、
-   调微信或伪造 checked time。
+1. service 在 claim 时同时捕获墙钟与默认来自 `performance.now()` 的单调时钟，
+   分别计算严格的 120 秒租约截止点。墙钟和单调时钟读数都必须有限且不可回拨；
+   非法或回拨统一抛稳定业务错误。租约仅在两个读数都严格早于各自截止点时有效，
+   恰好到点即视为过期。单行最坏预算绑定 gateway 已导出的 10 秒默认超时，按
+   “查单 10 秒 + 同参退款 10 秒 + finalize 10 秒余量”固定为 30 秒，并只用单调
+   时钟计算剩余持续时间，避免墙钟冻结延长租约。每行开始和调用微信查单前都读取
+   并校验新时间，剩余时间不足时立即停止顺序批次，当前及后续 claim 留待租约自然
+   过期后回收，不再加载密钥、调微信或伪造 checked time。
 2. repository 调 claim RPC，批量加载订单与原支付配置；配置必须按订单的
    `payment_config_id` 精确读取，不能使用后来切换的活动配置。
 3. service 加载对应 secret bundle，调用退款查单。查单返回
@@ -205,10 +208,13 @@ gateway 所有网络调用使用共享的有界 fetch 包装器，默认 10 秒�
      `out_refund_no` 同参重试申请退款一次；成功后保存并重排，仍不确定则保持
      `refunding`；
    - 其他网络、验签、限流或 5xx：保留 `refunding`，写稳定错误并重排。
-   每次 provider 响应后、写入 finalize 或重排前都重新读取并校验时间；
+   每次 provider 响应后，以及紧邻每次 confirm、close、重排或恢复重排写入前，
+   都重新读取并校验双时钟；任一读数恰好到点或超过截止点时不执行写入、不累计
+   provider 状态计数，也不再重排，保留 claim token 等待数据库租约自然过期。
    `checked_at`、metadata 时间和下一次退避均以该行实际完成时间为基准，不能复用
    batch 开始时间。`ABNORMAL` 重排若首次数据库调用抛错，只能用完全相同的
-   30 分钟时间、错误码和 ABNORMAL metadata 再尝试一次，不能降级为通用退避。
+   30 分钟时间、错误码和 ABNORMAL metadata 再尝试一次，且恢复写入前必须再次
+   通过双时钟租约校验，不能降级为通用退避。
 5. 所有 finalize 都携带 claim token。回调先完成时，worker 的 finalize 返回空，
    视为幂等竞争失败，不覆盖终态。
 
@@ -251,7 +257,9 @@ failed 计数和耗时。单笔错误只记录 request ID、order ID、out refun
    timeout/network mapping、Request-ID。
 4. domain tests：所有字段匹配与不匹配、四种退款状态、事件/状态冲突。
 5. service tests：回调丢失后 SUCCESS 主动确认、PROCESSING 退避、CLOSED 关闭、
-   ABNORMAL 保持、RESOURCE_NOT_EXISTS 同参重试、双重不确定、租约竞争。
+   ABNORMAL 保持、RESOURCE_NOT_EXISTS 同参重试、双重不确定、租约竞争；双时钟
+   用例覆盖墙钟回拨、墙钟冻结但单调时钟推进、provider 返回后超期、恰好到期不
+   finalize，以及截止前 1ms 仍可 finalize。
 6. worker tests：tick 防重入、批次上限、订阅与退款子任务互不阻断、结构化摘要。
 7. 回归：退款执行、退款回调、gateway、稳定套件和 `bun run api:check`。
 8. migration：应用前列出待执行文件；应用到已授权 dev 后运行

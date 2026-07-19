@@ -738,7 +738,9 @@ git commit -m "refactor(billing): 原子切换退款执行状态"
 
 **Files:**
 - Create: `apps/api/src/services/billing-recharge-refund-reconciliation.ts`
+- Create: `apps/api/src/services/billing-recharge-refund-reconciliation-clock.ts`
 - Create: `apps/api/src/services/billing-recharge-refund-reconciliation.test.ts`
+- Create if lease cases keep the primary test below 500 lines: `apps/api/src/services/billing-recharge-refund-reconciliation-lease.test.ts`
 - Create if fixtures keep the test below 500 lines: `apps/api/src/services/billing-recharge-refund-reconciliation.test-fixtures.ts`
 - Modify: `apps/api/src/services/wechat-pay-gateway.ts` only if the validated result needs a retained Request-ID field
 
@@ -804,6 +806,15 @@ Add and run each case before its production branch:
     invalid injected Date fails with a stable error before provider or persistence work.
 13. If the first ABNORMAL reschedule throws, the recovery call preserves the exact 30-minute
     schedule, `WECHAT_REFUND_ABNORMAL`, and ABNORMAL metadata instead of generic backoff.
+14. A wall-clock rollback before row work fails with
+    `BILLING_RECHARGE_REFUND_RECONCILE_CLOCK_ROLLBACK` and performs no provider or persistence work.
+15. A frozen wall clock cannot extend the 120-second lease: advancing the injected monotonic clock
+    past the safe cutoff stops work.
+16. A provider response received after the deadline performs no finalize, reschedule, or provider
+    status count.
+17. A second clock read immediately before persistence proves that exactly the lease deadline is
+    expired and performs no finalize.
+18. The same persistence path remains allowed strictly before the deadline.
 
 - [ ] **Step 4: Implement the smallest state machine**
 
@@ -818,18 +829,23 @@ type Dependencies = {
     "queryRefundByOutRefundNo" | "requestRefund"
   >;
   nowFactory?: () => Date;
+  monotonicNowFactory?: () => number;
   claimTokenFactory?: () => string;
 };
 ```
 
 `runBatch` validates `limit` in 1..100, claims once, processes rows sequentially to avoid refund API bursts, catches per-row errors, and never changes a terminal row without its claim token. It must load the secret referenced by the exact stored payment config, use `parseAndAssertWechatRefund`, and never trust raw gateway fields.
 
-Derive the lease deadline from the exact claim timestamp. Bind the worst-row and retry budgets to
-the gateway's exported default timeout (`2 * timeout + 10s finalize margin` and
-`timeout + 10s finalize margin`). Read and validate `nowFactory()` before each row/provider call
-and after every provider response; stop the batch before the safety cutoff, and calculate all
-checked/metadata/next-at values from the actual row completion time. ABNORMAL persistence recovery
-must reuse the exact original token-gated reschedule input.
+Capture the wall clock and an injectable monotonic clock (default `performance.now()`) at the exact
+claim time. Both clocks must be finite and non-decreasing. Keep strict 120-second deadlines for
+both, use monotonic elapsed time for duration budgets, and require both observations to be strictly
+before their deadlines. Bind the worst-row and retry budgets to the gateway's exported default
+timeout (`2 * timeout + 10s finalize margin` and `timeout + 10s finalize margin`). Read and validate
+both clocks before each row/provider call, after every provider response, and immediately before
+every confirm/close/reschedule/recovery write. At or after either deadline, stop without finalize,
+reschedule, or provider status count and leave the token for lease expiry. Calculate all
+checked/metadata/next-at values from the immediate pre-persistence wall time. ABNORMAL persistence
+recovery must recheck the clocks and reuse the exact original token-gated reschedule input.
 
 Use stable metadata keys:
 
@@ -861,7 +877,9 @@ git diff --check
 
 ```bash
 git add apps/api/src/services/billing-recharge-refund-reconciliation.ts \
+  apps/api/src/services/billing-recharge-refund-reconciliation-clock.ts \
   apps/api/src/services/billing-recharge-refund-reconciliation.test.ts \
+  apps/api/src/services/billing-recharge-refund-reconciliation-lease.test.ts \
   apps/api/src/services/billing-recharge-refund-reconciliation.test-fixtures.ts \
   apps/api/src/services/wechat-pay-gateway.ts
 git commit -m "feat(billing): 实现退款主动对账"
