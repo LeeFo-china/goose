@@ -30,7 +30,8 @@ const COPY: Record<ServiceUnavailableCode, { title: string; description: string 
 Page({
   data: COPY.NETWORK_ERROR,
   onLoad(query) {
-    const code = typeof query.code === "string" && Object.hasOwn(COPY, query.code)
+    const code = typeof query.code === "string"
+      && Object.prototype.hasOwnProperty.call(COPY, query.code)
       ? query.code as ServiceUnavailableCode
       : "NETWORK_ERROR";
     this.setData(COPY[code]);

@@ -54,6 +54,7 @@ export class DouyinRequestTransport implements RequestTransport {
   constructor(
     private readonly baseUrl: string,
     private readonly timeoutMs = 10_000,
+    private readonly request: typeof tt.request = tt.request,
   ) {
     if (!baseUrl.startsWith("https://")) {
       throw new ApiRequestError(0, "INVALID_API_CONFIG", "API 地址必须使用 HTTPS");
@@ -67,15 +68,15 @@ export class DouyinRequestTransport implements RequestTransport {
       const finish = (callback: () => void) => {
         if (settled) return;
         settled = true;
-        globalThis.clearTimeout(timer);
+        clearTimeout(timer);
         callback();
       };
-      const timer = globalThis.setTimeout(() => {
+      const timer = setTimeout(() => {
         task?.abort();
         finish(() => reject(new ApiRequestError(0, "NETWORK_ERROR", "网络请求超时")));
       }, this.timeoutMs);
 
-      task = tt.request({
+      task = this.request({
         url: `${this.baseUrl}${normalizePath(input.path)}`,
         method: input.method,
         data: input.data,

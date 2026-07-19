@@ -4,6 +4,10 @@ const SESSION_STORAGE_KEY = "gooes_douyin_session_v1";
 
 export function readStoredSession(): StoredSession | null {
   const value: unknown = tt.getStorageSync(SESSION_STORAGE_KEY);
+  return parseStoredSession(value);
+}
+
+export function parseStoredSession(value: unknown): StoredSession | null {
   if (!isRecord(value)) return null;
   if (Object.keys(value).some((key) => key !== "accessToken" && key !== "expiresAt")) {
     return null;

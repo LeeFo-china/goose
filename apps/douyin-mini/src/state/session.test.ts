@@ -1,5 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import { ApiClient, ApiRequestError, type TransportInput } from "../api/request";
+import {
+  ApiClient,
+  ApiRequestError,
+  DouyinRequestTransport,
+  type TransportInput,
+} from "../api/request";
+import { captureLaunchContext } from "../platform/launch-context";
+import { parseStoredSession } from "../platform/storage";
 import { BootstrapStore } from "./bootstrap";
 import { SessionManager, type SessionDependencies } from "./session";
 
@@ -127,6 +134,109 @@ describe("Douyin native session state", () => {
     })).rejects.toThrow("login unavailable");
     expect(loginOnce).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not refresh again when the one allowed retry also returns 401", async () => {
+    const deps = dependencies({
+      readStoredSession: mock(() => ({ accessToken: "old-token", expiresAt: now + 60_000 })),
+    });
+    const session = new SessionManager(deps);
+    await session.initialize(launchContext);
+    const send = mock(async () => {
+      throw new ApiRequestError(401, "TOKEN_INVALID", "会话已失效");
+    });
+
+    await expect(new ApiClient({ send }, session).request({
+      path: "/douyin-mini/bootstrap", method: "GET",
+    })).rejects.toMatchObject({ statusCode: 401, code: "TOKEN_INVALID" });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(deps.loginOnce).toHaveBeenCalledTimes(1);
+    expect(deps.exchangeSession).toHaveBeenCalledTimes(1);
+  });
+
+  test("request transport unwraps data, attaches only bearer auth and clears its timeout", async () => {
+    const abort = mock(() => {});
+    const requestMock = mock((options: Parameters<typeof tt.request>[0]) => {
+      options.success?.({
+        errMsg: "request:ok", statusCode: 200, header: {}, data: { data: { ok: true } },
+      });
+      return { abort };
+    });
+    const request = requestMock as typeof tt.request;
+    const transport = new DouyinRequestTransport("https://api.goodcms.cn", 5, request);
+
+    await expect(transport.send({
+      path: "/douyin-mini/bootstrap", method: "GET", token: "signed-jwt",
+    })).resolves.toEqual({ ok: true });
+    await Bun.sleep(10);
+
+    expect(requestMock).toHaveBeenCalledTimes(1);
+    const options = requestMock.mock.calls[0]![0];
+    expect(options.url).toBe("https://api.goodcms.cn/douyin-mini/bootstrap");
+    expect(options.header).toEqual({
+      "content-type": "application/json", authorization: "Bearer signed-jwt",
+    });
+    expect(options.data).toBeUndefined();
+    expect(abort).not.toHaveBeenCalled();
+  });
+
+  test("request transport aborts at its deadline and normalizes API failures", async () => {
+    const abort = mock(() => {});
+    const hangingRequest = mock(() => ({ abort })) as unknown as typeof tt.request;
+    const hanging = new DouyinRequestTransport("https://api.goodcms.cn", 2, hangingRequest);
+
+    await expect(hanging.send({ path: "/douyin-mini/company", method: "GET" }))
+      .rejects.toMatchObject({ code: "NETWORK_ERROR", statusCode: 0 });
+    expect(abort).toHaveBeenCalledTimes(1);
+
+    const rejectedRequest = mock((options: Parameters<typeof tt.request>[0]) => {
+      options.success?.({
+        errMsg: "request:ok", statusCode: 403, header: {},
+        data: { code: "TENANT_NOT_AVAILABLE", message: "装修公司服务已暂停" },
+      });
+      return { abort: mock(() => {}) };
+    }) as typeof tt.request;
+
+    await expect(new DouyinRequestTransport("https://api.goodcms.cn", 10, rejectedRequest)
+      .send({ path: "/douyin-mini/company", method: "GET" }))
+      .rejects.toMatchObject({
+        statusCode: 403,
+        code: "TENANT_NOT_AVAILABLE",
+        message: "装修公司服务已暂停",
+      });
+  });
+
+  test("stored session parsing rejects extra fields and launch attribution is allowlisted", () => {
+    expect(parseStoredSession({ accessToken: "jwt", expiresAt: now })).toEqual({
+      accessToken: "jwt", expiresAt: now,
+    });
+    expect(parseStoredSession({ accessToken: "jwt", expiresAt: now, tenant_id: "forged" }))
+      .toBeNull();
+
+    expect(captureLaunchContext({
+      path: "/pages/case-detail/index",
+      scene: "021001",
+      query: {
+        source_type: "short_video",
+        campaign_code: "summer-2026",
+        content_id: "video-100",
+        tenant_id: "forged",
+        deployment_key: "forged",
+        raw_query: "do-not-copy",
+      },
+    })).toEqual({
+      entry_path: "pages/case-detail/index",
+      scene: "021001",
+      source_type: "short_video",
+      campaign_code: "summer-2026",
+      content_id: "video-100",
+    });
+    expect(captureLaunchContext({
+      path: "pages/admin/index", scene: "not-a-scene",
+      query: { source_type: "forged", campaign_code: "x".repeat(65) },
+    })).toEqual({
+      entry_path: "pages/home/index", scene: "0", source_type: "direct",
+    });
   });
 
   test("blocking bootstrap errors navigate to the safe service-unavailable page", async () => {
