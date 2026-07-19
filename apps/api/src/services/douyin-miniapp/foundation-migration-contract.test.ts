@@ -184,9 +184,8 @@ function literalAfterCode(sql: string, anchor: string): string {
 function expectContains(source: string, values: readonly string[]): void { for (const value of values) expect(source).toContain(value); }
 function expectEnvelope(source: string, fields: readonly string[]): void {
   for (const field of fields) { expect(source).toContain(`${field} IS NULL`); expect(source).toContain(`${field} IS NOT NULL`); }
-  const nullBranch = fields.map((field) => `${field} IS NULL`).join(" AND ");
-  const presentBranch = fields.flatMap((field) => field.endsWith("_at") ? [`${field} IS NOT NULL`] : [`${field} IS NOT NULL`, `btrim(${field}) <>`]).join(" AND ");
-  expect(source).toContain(`( ${nullBranch} ) OR ( ${presentBranch} )`); expect(source).not.toMatch(/\bOR\s+TRUE\b/i);
+  const nullBranch = fields.map((field) => `${field} IS NULL`).join(" AND "), presentBranch = fields.flatMap((field) => field.endsWith("_at") ? [`${field} IS NOT NULL`] : [`${field} IS NOT NULL`, `btrim(${field}) <>`]).join(" AND ");
+  const expression = normalize(source.slice(source.search(/\bCHECK\b/i))).toUpperCase(); expect(expression).toBe(`CHECK ( ( ${nullBranch} ) OR ( ${presentBranch} ) )`.toUpperCase()); expect(source).not.toMatch(/\bOR\s+TRUE\b/i);
 }
 describe("douyin miniapp foundation migration", () => {
   test("strips SQL and PL/pgSQL comments but preserves every literal form", () => {
@@ -258,10 +257,11 @@ describe("douyin miniapp foundation migration", () => {
     ];
     const ticket = normalize(codeOnlyStructure(extractTableConstraint(sql, targetTables[0], "douyin_components_ticket_envelope_check")));
     expectEnvelope(ticket, ticketFields);
-    for (const weakened of [ticket.replace("component_ticket_ciphertext IS NULL AND component_ticket_iv IS NULL", "component_ticket_ciphertext IS NULL OR component_ticket_iv IS NULL"),
-      ticket.replace("component_ticket_received_at IS NULL ) OR (", "component_ticket_received_at IS NULL OR TRUE ) OR (")]) {
-      expect(weakened).not.toBe(ticket); expect(() => expectEnvelope(weakened, ticketFields)).toThrow();
-    }
+    const weakened = [ticket.replace("component_ticket_ciphertext IS NULL AND component_ticket_iv IS NULL", "component_ticket_ciphertext IS NULL OR component_ticket_iv IS NULL"), ticket.replace("component_ticket_received_at IS NULL ) OR (", "component_ticket_received_at IS NULL OR TRUE ) OR ("),
+      ticket.replace(/ \) \)$/, " ) OR (TRUE) )"), ticket.replace(/ \) \)$/, " ) OR (component_ticket_ciphertext IS NULL) )")];
+    expect(weakened).not.toContain(ticket);
+    const rejected = weakened.map((candidate) => { try { expectEnvelope(candidate, ticketFields); return false; } catch { return true; } });
+    expect(rejected).toEqual([true, true, true, true]);
     expectEnvelope(normalize(codeOnlyStructure(extractTableConstraint(sql, targetTables[0], "douyin_components_access_token_envelope_check"))), accessFields);
     const leaseRaw = extractTableConstraint(sql, targetTables[0], "douyin_components_refresh_lease_check");
     const lease = normalize(codeOnlyStructure(leaseRaw));
