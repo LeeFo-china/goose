@@ -21,6 +21,7 @@ function isBootstrap(value: unknown): value is BootstrapData {
     && typeof value.company.name === "string"
     && typeof value.company.service_phone === "string"
     && typeof value.theme.primary_color === "string"
+    && /^#[0-9a-f]{6}$/i.test(value.theme.primary_color)
     && (value.theme.navigation_text_color === "black"
       || value.theme.navigation_text_color === "white")
     && Object.values(value.features).every((feature) =>

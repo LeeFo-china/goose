@@ -1,0 +1,6 @@
+<view class="page-content tab-placeholder">
+  <empty-state
+    title="咨询入口准备中"
+    description="预约咨询表单将在完成初始化后开放。"
+  />
+</view>

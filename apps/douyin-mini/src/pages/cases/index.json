@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "装修案例",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/index"
+  }
+}

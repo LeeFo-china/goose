@@ -1,0 +1,6 @@
+<view class="page-content tab-placeholder">
+  <empty-state
+    title="案例内容准备中"
+    description="装修案例将在完成初始化后展示。"
+  />
+</view>

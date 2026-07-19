@@ -1,0 +1,1 @@
+.tab-placeholder { display: flex; min-height: 760rpx; align-items: center; justify-content: center; }

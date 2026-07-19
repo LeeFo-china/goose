@@ -1,0 +1,15 @@
+.site { box-sizing: border-box; display: flex; width: 100%; min-height: 220rpx; overflow: hidden; padding: 0; border: 1rpx solid #e6e1dc; border-radius: 24rpx; background: #fff; color: #25211e; text-align: left; }
+.site-image { width: 240rpx; min-height: 220rpx; flex: none; background: #e8e4df; }
+.site-image--empty { display: flex; align-items: center; justify-content: center; padding: 20rpx; color: #706862; font-size: 22rpx; text-align: center; }
+.site-body { min-width: 0; flex: 1; padding: 28rpx 26rpx; }
+.site-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
+.site-title { overflow: hidden; font-size: 30rpx; font-weight: 600; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.site-stage { flex: none; padding: 6rpx 12rpx; border-radius: 8rpx; background: #e9f0eb; color: #356044; font-size: 22rpx; }
+.site-meta, .site-time { margin-top: 14rpx; color: #665f5a; font-size: 23rpx; line-height: 1.5; }
+.site-time { margin-top: 20rpx; color: #7a726c; font-size: 21rpx; }
+.site--loading, .site--state { align-items: center; justify-content: center; }
+.site-skeleton { width: calc(100% - 48rpx); height: 172rpx; border-radius: 18rpx; background: #ece9e5; animation: site-pulse 1.4s ease-in-out infinite; }
+.site--state { flex-direction: column; color: #665f5a; font-size: 26rpx; }
+.state-action { min-width: 144rpx; min-height: 88rpx; margin-top: 18rpx; border-radius: 12rpx; background: #25211e; color: #fff; font-size: 26rpx; line-height: 88rpx; }
+@keyframes site-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .site-skeleton { animation: none; opacity: .65; } }

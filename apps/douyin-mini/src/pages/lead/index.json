@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "免费咨询",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/index"
+  }
+}

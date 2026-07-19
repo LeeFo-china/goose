@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "在建工地",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/index"
+  }
+}

@@ -1,0 +1,6 @@
+<view class="page-content tab-placeholder">
+  <empty-state
+    title="工地内容准备中"
+    description="在建工地进度将在完成初始化后展示。"
+  />
+</view>

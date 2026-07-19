@@ -1,0 +1,6 @@
+<view class="pagination">
+  <view tt:if="{{status === 'loading'}}" class="pagination-copy">正在加载更多内容…</view>
+  <view tt:elif="{{status === 'end'}}" class="pagination-copy">已展示全部内容</view>
+  <button tt:elif="{{status === 'error'}}" class="pagination-action" bindtap="onRetry">加载失败，点击重试</button>
+  <button tt:else class="pagination-action" bindtap="onLoadMore">加载更多</button>
+</view>

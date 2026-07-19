@@ -1,0 +1,11 @@
+<view tt:if="{{loading}}" class="metrics metrics--loading">
+  <view tt:for="{{skeletonItems}}" tt:key="*this" class="metric-skeleton"></view>
+</view>
+<view tt:elif="{{error}}" class="metrics-state">服务数据暂不可用</view>
+<view tt:elif="{{!items.length}}" class="metrics-state">更多服务数据正在完善</view>
+<view tt:else class="metrics">
+  <view tt:for="{{items}}" tt:key="label" class="metric">
+    <view class="metric-value">{{item.value}}</view>
+    <view class="metric-label">{{item.label}}</view>
+  </view>
+</view>
