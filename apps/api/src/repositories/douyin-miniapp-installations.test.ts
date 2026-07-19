@@ -208,6 +208,29 @@ describe("DouyinMiniappInstallationsRepository refresh RPCs", () => {
     ]);
   });
 
+  test("rejects runtime partial, empty and invalid-date refresh rotations before RPC", async () => {
+    const invalidRotations = [
+      { ciphertext: "cipher", iv: null, tag: null, keyVersion: null, expiresAt: null },
+      { ciphertext: "cipher", iv: "", tag: "tag", keyVersion: "v2", expiresAt: "2026-08-20T00:00:00.000Z" },
+      { ciphertext: "cipher", iv: "iv", tag: "tag", keyVersion: "v2", expiresAt: "not-a-date" },
+    ];
+
+    for (const refreshToken of invalidRotations) {
+      const { client, calls } = createClient([{ data: true, error: null }]);
+      const repository = new DouyinMiniappInstallationsRepository(client);
+      await expect(repository.completeAccessTokenRefresh({
+        installationId: installationRow.id,
+        claimToken: "11111111-1111-4111-8111-111111111111",
+        accessToken: {
+          ciphertext: "access-cipher", iv: "access-iv", tag: "access-tag",
+          keyVersion: "v2", expiresAt: "2026-07-20T02:00:00.000Z",
+        },
+        refreshToken: refreshToken as unknown as AuthorizerRefreshRotation,
+      })).rejects.toMatchObject({ code: "DOUYIN_AUTHORIZER_REFRESH_ROTATION_INVALID" });
+      expect(calls.some((call) => call.method === "rpc")).toBe(false);
+    }
+  });
+
   test("fails a matching lease with only a stable non-sensitive error code", async () => {
     const { client, calls } = createClient([{ data: false, error: null }]);
     const repository = new DouyinMiniappInstallationsRepository(client);

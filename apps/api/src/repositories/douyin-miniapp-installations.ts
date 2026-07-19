@@ -188,6 +188,7 @@ export class DouyinMiniappInstallationsRepository {
     readonly refreshToken: AuthorizerRefreshRotation;
   }): Promise<boolean> {
     return executeInstallationOperation("完成抖音授权凭证刷新失败", async () => {
+      assertRefreshRotation(input.refreshToken);
       const result = await this.client.rpc("complete_douyin_authorizer_token_refresh", {
         p_installation_id: input.installationId,
         p_claim_token: input.claimToken,
@@ -220,6 +221,33 @@ export class DouyinMiniappInstallationsRepository {
       return parseBooleanResult(result, "标记抖音授权凭证刷新失败");
     });
   }
+}
+
+function assertRefreshRotation(rotation: AuthorizerRefreshRotation): void {
+  const values = [
+    rotation.ciphertext,
+    rotation.iv,
+    rotation.tag,
+    rotation.keyVersion,
+    rotation.expiresAt,
+  ];
+  if (values.every((value) => value === null)) return;
+
+  const stringsArePresent = values.every(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  );
+  if (
+    stringsArePresent &&
+    typeof rotation.expiresAt === "string" &&
+    Number.isFinite(Date.parse(rotation.expiresAt))
+  ) {
+    return;
+  }
+  throw Errors.business(
+    500,
+    "抖音授权刷新凭证轮换参数无效",
+    "DOUYIN_AUTHORIZER_REFRESH_ROTATION_INVALID",
+  );
 }
 
 async function executeInstallationOperation<Result>(
