@@ -76,18 +76,23 @@ class FakeDnsSocket:
         self.transaction_id_delta = transaction_id_delta
         self.error = error
         self.sent = b""
+        self.destination = None
+        self.timeout = None
+        self.closed = False
 
     def __enter__(self):
         return self
 
     def __exit__(self, _exc_type, _exc_value, _traceback):
+        self.closed = True
         return False
 
-    def settimeout(self, _timeout):
-        pass
+    def settimeout(self, timeout):
+        self.timeout = timeout
 
-    def sendto(self, packet, _destination):
+    def sendto(self, packet, destination):
         self.sent = packet
+        self.destination = destination
 
     def recvfrom(self, _size):
         if self.error:
@@ -423,15 +428,91 @@ class DnsQueryTests(unittest.TestCase):
     def test_query_rejects_nonzero_rcode(self):
         self._assert_query_rejected(FakeDnsSocket(flags=0x8003))
 
-    def test_query_translates_socket_timeout_without_exposing_query_name(self):
+    def test_query_ipv4_success_uses_udp_53_and_matching_16_bit_id(self):
+        fake_socket = FakeDnsSocket(flags=0x8000)
+        socket_arguments = []
+        requested_bit_counts = []
+
+        def socket_factory(family, socket_type):
+            socket_arguments.append((family, socket_type))
+            return fake_socket
+
+        def fake_randbits(bit_count):
+            requested_bit_counts.append(bit_count)
+            return 0xBEEF
+
+        with (
+            mock.patch.object(hook.socket, "socket", side_effect=socket_factory),
+            mock.patch.object(hook.secrets, "randbits", side_effect=fake_randbits),
+        ):
+            response = hook.query_dns("192.0.2.53", "www.goodcms.cn", 16)
+
+        request_id = struct.unpack_from("!H", fake_socket.sent)[0]
+        response_id = struct.unpack_from("!H", response)[0]
+        self.assertEqual(request_id, 0xBEEF)
+        self.assertEqual(response_id, request_id)
+        self.assertEqual(requested_bit_counts, [16])
+        self.assertEqual(socket_arguments, [(socket.AF_INET, socket.SOCK_DGRAM)])
+        self.assertEqual(fake_socket.destination, ("192.0.2.53", 53))
+        self.assertEqual(fake_socket.timeout, 2.0)
+        self.assertTrue(fake_socket.closed)
+
+    def test_query_sets_rd_only_when_requested(self):
+        for recursion_desired in (False, True):
+            with self.subTest(recursion_desired=recursion_desired):
+                fake_socket = FakeDnsSocket(flags=0x8000)
+                with mock.patch.object(
+                    hook.socket,
+                    "socket",
+                    return_value=fake_socket,
+                ):
+                    hook.query_dns(
+                        "192.0.2.53",
+                        "www.goodcms.cn",
+                        2,
+                        recursion_desired=recursion_desired,
+                    )
+
+                request_flags = struct.unpack_from("!H", fake_socket.sent, 2)[0]
+                self.assertEqual(
+                    bool(request_flags & 0x0100),
+                    recursion_desired,
+                )
+
+    def test_query_ipv6_success_uses_ipv6_socket_and_destination(self):
+        fake_socket = FakeDnsSocket(flags=0x8000)
+        socket_arguments = []
+
+        def socket_factory(family, socket_type):
+            socket_arguments.append((family, socket_type))
+            return fake_socket
+
+        with mock.patch.object(
+            hook.socket,
+            "socket",
+            side_effect=socket_factory,
+        ):
+            hook.query_dns("2001:db8::53", "www.goodcms.cn", 16)
+
+        self.assertEqual(socket_arguments, [(socket.AF_INET6, socket.SOCK_DGRAM)])
+        self.assertEqual(fake_socket.destination, ("2001:db8::53", 53, 0, 0))
+        self.assertTrue(fake_socket.closed)
+
+    def test_query_closes_socket_on_timeout_and_os_error_without_exposing_name(self):
         query_name = "sensitive-query.goodcms.cn"
-        fake_socket = FakeDnsSocket(flags=0x8000, error=socket.timeout())
+        for error in (socket.timeout(), OSError("network failure")):
+            with self.subTest(error=type(error).__name__):
+                fake_socket = FakeDnsSocket(flags=0x8000, error=error)
+                with mock.patch.object(
+                    hook.socket,
+                    "socket",
+                    return_value=fake_socket,
+                ):
+                    with self.assertRaises(hook.DnsProtocolError) as caught:
+                        hook.query_dns("192.0.2.53", query_name, 16)
 
-        with mock.patch.object(hook.socket, "socket", return_value=fake_socket):
-            with self.assertRaises(hook.DnsProtocolError) as caught:
-                hook.query_dns("192.0.2.53", query_name, 16)
-
-        self.assertNotIn(query_name, str(caught.exception))
+                self.assertTrue(fake_socket.closed)
+                self.assertNotIn(query_name, str(caught.exception))
 
 
 class AuthoritativeDiscoveryTests(unittest.TestCase):
@@ -475,6 +556,11 @@ class AuthoritativeDiscoveryTests(unittest.TestCase):
             ]
 
         with (
+            mock.patch.object(
+                hook.Path,
+                "read_text",
+                return_value="nameserver 192.0.2.53\n",
+            ),
             mock.patch.object(hook, "query_dns", return_value=response),
             mock.patch.object(hook.socket, "getaddrinfo", side_effect=fake_getaddrinfo),
         ):
@@ -484,6 +570,84 @@ class AuthoritativeDiscoveryTests(unittest.TestCase):
             addresses,
             ["192.0.2.1", "2001:db8::1", "192.0.2.2"],
         )
+
+    def test_uses_first_valid_resolver_for_recursive_ns_query(self):
+        response = build_test_response(
+            name="goodcms.cn",
+            question_type=2,
+            answers=(
+                build_test_record(
+                    record_type=2,
+                    record_class=1,
+                    rdata=encode_test_name("ns1.goodcms.cn"),
+                ),
+            ),
+        )
+        queries = []
+
+        def fake_query(
+            address,
+            name,
+            qtype,
+            timeout=2.0,
+            *,
+            recursion_desired=False,
+        ):
+            queries.append((address, name, qtype, timeout, recursion_desired))
+            return response
+
+        resolver_config = """\
+# nameserver 192.0.2.50
+nameserver not-an-address
+search goodcms.cn
+nameserver 192.0.2.53 # first valid resolver
+nameserver 192.0.2.54
+"""
+        with (
+            mock.patch.object(hook.Path, "read_text", return_value=resolver_config),
+            mock.patch.object(hook, "query_dns", side_effect=fake_query),
+            mock.patch.object(
+                hook.socket,
+                "getaddrinfo",
+                return_value=[
+                    (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("192.0.2.1", 53))
+                ],
+            ),
+        ):
+            addresses = hook.discover_authoritative_addresses("goodcms.cn")
+
+        self.assertEqual(addresses, ["192.0.2.1"])
+        self.assertEqual(
+            queries,
+            [("192.0.2.53", "goodcms.cn", 2, 2.0, True)],
+        )
+
+    def test_discovery_fails_closed_without_ns_or_nameserver_addresses(self):
+        no_ns_response = build_test_response(name="goodcms.cn", question_type=2)
+        ns_without_addresses_response = build_test_response(
+            name="goodcms.cn",
+            question_type=2,
+            answers=(
+                build_test_record(
+                    record_type=2,
+                    record_class=1,
+                    rdata=encode_test_name("ns1.goodcms.cn"),
+                ),
+            ),
+        )
+        for response in (no_ns_response, ns_without_addresses_response):
+            with self.subTest(has_ns=response is ns_without_addresses_response):
+                with (
+                    mock.patch.object(
+                        hook.Path,
+                        "read_text",
+                        return_value="nameserver 192.0.2.53\n",
+                    ),
+                    mock.patch.object(hook, "query_dns", return_value=response),
+                    mock.patch.object(hook.socket, "getaddrinfo", return_value=[]),
+                ):
+                    with self.assertRaises(hook.DnsProtocolError):
+                        hook.discover_authoritative_addresses("goodcms.cn")
 
 
 class AuthoritativeTxtVerifierTests(unittest.TestCase):
