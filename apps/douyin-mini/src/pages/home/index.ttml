@@ -18,7 +18,7 @@
   <view tt:if="{{sitesEnabled}}" class="home-section">
     <view class="section-heading"><view><view class="section-kicker">透明施工</view><view class="section-title">在建工地</view></view><button class="section-link" bindtap="onViewSites">查看全部</button></view>
     <view tt:if="{{activeSites.length}}" class="site-list">
-      <view tt:for="{{activeSites}}" tt:key="id"><site-card item="{{item}}" /></view>
+      <view tt:for="{{activeSites}}" tt:key="id"><site-card item="{{item}}" bindselect="onSiteSelect" /></view>
     </view>
     <empty-state tt:else title="暂无公开工地" description="在建项目将由装修公司确认公开后展示。" />
   </view>

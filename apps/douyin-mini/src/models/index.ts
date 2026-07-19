@@ -126,6 +126,16 @@ export type PaginationMeta = {
 
 export type PublicProjectPage = { items: PublicProject[]; pagination: PaginationMeta };
 
+export type PublicSiteLog = {
+  id: string;
+  stage_code: string | null;
+  node_name: string | null;
+  images: string[];
+  created_at: string;
+};
+
+export type PublicSiteLogPage = { items: PublicSiteLog[]; pagination: PaginationMeta };
+
 export type ServiceUnavailableCode =
   | "DOUYIN_INSTALLATION_MISSING"
   | "DOUYIN_INSTALLATION_DISABLED"

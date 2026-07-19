@@ -4,6 +4,8 @@ import type {
   HomeBanner,
   PublicProject,
   PublicProjectPage,
+  PublicSiteLog,
+  PublicSiteLogPage,
   ServiceRegion,
 } from "../models";
 
@@ -129,6 +131,36 @@ export function parseProjectPage(value: unknown): PublicProjectPage | null {
 
 export function isPublicContentId(value: string): boolean {
   return UUID_PATTERN.test(value);
+}
+
+export function parseSiteLogPage(value: unknown): PublicSiteLogPage | null {
+  if (!isRecord(value) || !Array.isArray(value.items) || !isRecord(value.pagination)
+    || value.items.length > 100) return null;
+  const logs = value.items.map(parseSiteLog);
+  const { page, pageSize, total, totalPages } = value.pagination;
+  if (!logs.every((log): log is PublicSiteLog => log !== null)
+    || !isIntegerInRange(page, 1, 10_000) || !isIntegerInRange(pageSize, 1, 100)
+    || !isIntegerInRange(total, 0, 10_000_000)
+    || !isIntegerInRange(totalPages, 0, 10_000)
+    || logs.length > pageSize || logs.length > total
+    || (totalPages > 0 && page > totalPages)
+    || totalPages !== (total === 0 ? 0 : Math.ceil(total / pageSize))) return null;
+  return { items: logs, pagination: { page, pageSize, total, totalPages } };
+}
+
+function parseSiteLog(value: unknown): PublicSiteLog | null {
+  if (!isRecord(value) || typeof value.id !== "string" || !UUID_PATTERN.test(value.id)
+    || !isNullableBoundedString(value.stage_code, 80)
+    || !isNullableBoundedString(value.node_name, 120)
+    || !isBoundedString(value.created_at, 1, 80)) return null;
+  const images = parseHttpsArray(value.images, 9);
+  return images ? {
+    id: value.id,
+    stage_code: value.stage_code,
+    node_name: value.node_name,
+    images,
+    created_at: value.created_at,
+  } : null;
 }
 
 function parseProjects(value: unknown, limit: number): PublicProject[] | null {

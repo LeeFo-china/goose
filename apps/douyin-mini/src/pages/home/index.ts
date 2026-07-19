@@ -58,6 +58,7 @@ Page({
         activeSites: bootstrap.content.active_sites.map((site) => ({
           ...site,
           status: site.status === "started" ? "已开工" : "施工中",
+          updated_at: site.updated_at.slice(0, 10),
         })),
         casesEnabled: bootstrap.features.cases,
         sitesEnabled: bootstrap.features.sites,
@@ -74,6 +75,9 @@ Page({
   onViewPrivacy() { navigateWithFeedback(navigateToPage("pages/privacy/index")); },
   onCaseSelect(event: { detail: { id?: string } }) {
     if (event.detail.id) navigateWithFeedback(navigateToEntityDetail("case", event.detail.id));
+  },
+  onSiteSelect(event: { detail: { id?: string } }) {
+    if (event.detail.id) navigateWithFeedback(navigateToEntityDetail("site", event.detail.id));
   },
 });
 

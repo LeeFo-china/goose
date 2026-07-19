@@ -1,5 +1,6 @@
 import type { DouyinAppContext } from "../../app";
 import { fetchCases } from "../../api/cases";
+import { isApiRequestErrorCode } from "../../api/request";
 import type { PublicProject } from "../../models";
 import { navigateToEntityDetail } from "../../platform/navigation";
 import {
@@ -76,8 +77,13 @@ Page({
               .filter((item): item is string => Boolean(item))),
         });
       }
-    } catch {
-      this.pagination = rejectPaginationRequest(this.pagination, pending.request);
+    } catch (error) {
+      if (isApiRequestErrorCode(error, "DOUYIN_CONTENT_FEATURE_DISABLED")) {
+        this.pagination = createPaginationState<PublicProject>(20);
+        this.setData({ disabled: true });
+      } else {
+        this.pagination = rejectPaginationRequest(this.pagination, pending.request);
+      }
     } finally {
       this.syncState();
       if (mode === "refresh") void tt.stopPullDownRefresh({});

@@ -26,6 +26,10 @@ export class ApiRequestError extends Error {
   }
 }
 
+export function isApiRequestErrorCode(error: unknown, code: string): error is ApiRequestError {
+  return error instanceof ApiRequestError && error.code === code;
+}
+
 export class ApiClient {
   constructor(
     private readonly transport: RequestTransport,

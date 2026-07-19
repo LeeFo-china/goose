@@ -1,1 +1,5 @@
-.tab-placeholder { display: flex; min-height: 760rpx; align-items: center; justify-content: center; }
+.sites-page { padding-bottom: 36rpx; }
+.page-kicker { color: #9a4124; font-size: 22rpx; font-weight: 600; letter-spacing: 2rpx; }
+.page-title { max-width: 580rpx; margin-top: 10rpx; color: #25211e; font-size: 40rpx; font-weight: 600; line-height: 1.35; }
+.privacy-note { margin-top: 24rpx; padding: 22rpx 24rpx; border-left: 6rpx solid #a84324; background: #eeeae6; color: #665f5a; font-size: 23rpx; line-height: 1.65; }
+.site-list { display: flex; flex-direction: column; gap: 24rpx; margin-top: 34rpx; }

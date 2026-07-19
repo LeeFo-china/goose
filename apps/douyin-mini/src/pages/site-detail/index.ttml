@@ -1,0 +1,25 @@
+<page-skeleton tt:if="{{loading}}" />
+<error-state tt:elif="{{error}}" title="工地暂时无法查看" description="工地可能已停止公开，或网络暂时不可用。" bindretry="onRetryPage" />
+<empty-state tt:elif="{{disabled}}" title="工地模块暂未开放" description="装修公司当前未开放在建工地展示。" />
+<view tt:elif="{{project}}" class="page-content detail-page">
+  <view class="detail-kicker">公开在建工地</view><view class="detail-title">{{project.community || project.title}}</view>
+  <view class="location-copy">{{project.city || '区域待定'}}<text tt:if="{{project.district}}"> · {{project.district}}</text></view>
+  <view class="fact-row"><view class="fact"><view class="fact-label">施工状态</view><view class="fact-value status-value">{{statusLabel}}</view></view><view class="fact"><view class="fact-label">户型面积</view><view class="fact-value">{{project.layout || '待完善'}}<text tt:if="{{project.area}}"> · {{project.area}}㎡</text></view></view></view>
+
+  <view class="progress-section">
+    <view class="section-kicker">施工记录</view><view class="section-title">公开进度时间线</view>
+    <view class="privacy-note">只展示装修公司确认公开的施工节点和现场图片。</view>
+    <view tt:if="{{progressFirstLoading}}" class="progress-loading"><view class="progress-loading-bar"></view><view class="progress-loading-bar"></view></view>
+    <error-state tt:elif="{{progressFirstError}}" title="施工进度加载失败" bindretry="onRetryProgress" />
+    <view tt:elif="{{progress.length}}" class="timeline">
+      <view tt:for="{{progress}}" tt:key="id" class="timeline-item">
+        <view class="timeline-rail"><view class="timeline-dot"></view></view>
+        <view class="timeline-content"><view class="progress-date">{{item.date}}</view><view class="progress-title">{{item.title}}</view><view tt:if="{{item.images.length}}" class="progress-images"><image-gallery items="{{item.images}}" /></view></view>
+      </view>
+    </view>
+    <empty-state tt:else title="施工记录待更新" description="装修公司尚未发布该工地的公开施工进度。" />
+    <pagination-loader tt:if="{{progress.length}}" status="{{progressStatus}}" bindloadmore="onLoadMoreProgress" bindretry="onRetryProgress" />
+  </view>
+  <view class="update-copy">工地信息最近更新：{{updatedDate}}</view>
+  <view class="detail-cta"><lead-cta primary-color="{{primaryColor}}" bindaction="onLead" /></view>
+</view>

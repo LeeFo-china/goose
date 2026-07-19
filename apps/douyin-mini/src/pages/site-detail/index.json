@@ -1,8 +1,9 @@
 {
-  "navigationBarTitleText": "在建工地",
+  "navigationBarTitleText": "工地详情",
   "enablePullDownRefresh": true,
   "usingComponents": {
-    "site-card": "/components/site-card/index",
+    "image-gallery": "/components/image-gallery/index",
+    "lead-cta": "/components/lead-cta/index",
     "pagination-loader": "/components/pagination-loader/index",
     "empty-state": "/components/empty-state/index",
     "error-state": "/components/error-state/index",

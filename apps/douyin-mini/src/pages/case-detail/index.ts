@@ -1,5 +1,6 @@
 import type { DouyinAppContext } from "../../app";
 import { fetchCaseDetail } from "../../api/cases";
+import { isApiRequestErrorCode } from "../../api/request";
 import type { PublicProject } from "../../models";
 import { switchToTab } from "../../platform/navigation";
 
@@ -42,8 +43,10 @@ Page({
         updatedDate: project.updated_at.slice(0, 10),
         primaryColor: bootstrap.theme.primary_color,
       });
-    } catch {
-      this.setData({ loading: false, error: true });
+    } catch (error) {
+      this.setData(isApiRequestErrorCode(error, "DOUYIN_CONTENT_FEATURE_DISABLED")
+        ? { loading: false, error: false, disabled: true, project: null }
+        : { loading: false, error: true });
     }
   },
   onLead() {

@@ -1,6 +1,10 @@
-<view class="page-content tab-placeholder">
-  <empty-state
-    title="工地内容准备中"
-    description="在建工地进度将在完成初始化后展示。"
-  />
+<page-skeleton tt:if="{{firstLoading}}" />
+<error-state tt:elif="{{firstError}}" title="工地暂时无法加载" bindretry="onRetry" />
+<view tt:else class="page-content sites-page">
+  <view class="page-kicker">公开施工</view><view class="page-title">看看装修如何一步步落地</view>
+  <view class="privacy-note">仅展示装修公司确认公开的社区级位置与施工进度，不展示业主姓名、电话或门牌号。</view>
+  <view tt:if="{{items.length}}" class="site-list"><view tt:for="{{items}}" tt:key="id"><site-card item="{{item}}" bindselect="onSiteSelect" /></view></view>
+  <empty-state tt:elif="{{disabled}}" title="工地模块暂未开放" description="装修公司当前未开放在建工地展示。" />
+  <empty-state tt:else title="暂无公开工地" description="在建项目将由装修公司确认公开后展示。" />
+  <pagination-loader tt:if="{{items.length}}" status="{{paginationStatus}}" bindloadmore="onLoadMore" bindretry="onRetry" />
 </view>
