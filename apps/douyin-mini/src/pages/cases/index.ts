@@ -55,13 +55,17 @@ Page({
         ...(this.data.selectedStyle ? { style: this.data.selectedStyle } : {}),
         ...(this.data.selectedLayout ? { layout: this.data.selectedLayout } : {}),
       });
+      const isCurrentRequest = pending.request.sequence === this.pagination.requestSequence;
       this.pagination = resolvePaginationRequest(this.pagination, pending.request, result);
-      this.setData({
-        styleOptions: mergeOptions(this.data.styleOptions,
-          result.items.flatMap((item) => item.style_tags)),
-        layoutOptions: mergeOptions(this.data.layoutOptions,
-          result.items.map((item) => item.layout).filter((item): item is string => Boolean(item))),
-      });
+      if (isCurrentRequest) {
+        this.setData({
+          styleOptions: mergeOptions(this.data.styleOptions,
+            result.items.flatMap((item) => item.style_tags)),
+          layoutOptions: mergeOptions(this.data.layoutOptions,
+            result.items.map((item) => item.layout)
+              .filter((item): item is string => Boolean(item))),
+        });
+      }
     } catch {
       this.pagination = rejectPaginationRequest(this.pagination, pending.request);
     } finally {
