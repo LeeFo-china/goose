@@ -79,7 +79,8 @@ renew() {
     docker exec "${CONTAINER}" env \
       DNSPOD_CREDENTIALS_FILE="${CONTAINER_CREDENTIALS}" \
       DNSPOD_STATE_DIR="${STATE_DIR}" \
-      certbot renew --cert-name "${cert_name}" --non-interactive --quiet --no-directory-hooks \
+      certbot renew --cert-name "${cert_name}" --non-interactive --quiet \
+        --no-directory-hooks --no-random-sleep-on-renew \
         --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
         --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
         --deploy-hook 'nginx -t && nginx -s reload'
@@ -104,7 +105,7 @@ dry_run() {
   local cert_name
   for cert_name in "${cert_names[@]}"; do
     docker exec "${CONTAINER}" certbot renew --cert-name "${cert_name}" --non-interactive --quiet \
-      --no-directory-hooks --dry-run --run-deploy-hooks \
+      --no-directory-hooks --no-random-sleep-on-renew --dry-run --run-deploy-hooks \
       --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
       --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
       --deploy-hook 'nginx -t && nginx -s reload'

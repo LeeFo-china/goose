@@ -37,6 +37,7 @@ describe("DNSPod certificate renewal contract", () => {
     expect(runner).toContain("nginx -t && nginx -s reload");
     expect(runner).toContain("--non-interactive");
     expect(runner).toContain("--no-directory-hooks");
+    expect(runner).toContain("--no-random-sleep-on-renew");
   });
 
   test("runner covers existing goodcms DNS-01 certificates and supports override", () => {
