@@ -214,6 +214,7 @@ def query_dns(
     timeout: float = 2.0,
     *,
     recursion_desired: bool = False,
+    require_authoritative: bool = False,
 ) -> bytes:
     if not 0 <= qtype <= 0xFFFF:
         raise DnsProtocolError("invalid DNS query type")
@@ -231,21 +232,51 @@ def query_dns(
         with socket.socket(family, socket.SOCK_DGRAM) as dns_socket:
             dns_socket.settimeout(timeout)
             dns_socket.sendto(packet, destination)
-            response, _ = dns_socket.recvfrom(65535)
+            response, peer = dns_socket.recvfrom(65535)
     except (OSError, TimeoutError):
         raise DnsProtocolError("DNS query failed") from None
 
+    try:
+        peer_matches = (
+            peer[1] == 53
+            and socket.inet_pton(family, peer[0])
+            == socket.inet_pton(family, address)
+        )
+    except (IndexError, OSError, TypeError):
+        peer_matches = False
+    if not peer_matches:
+        raise DnsProtocolError("DNS response peer mismatch")
     if len(response) < 12:
         raise DnsProtocolError("truncated DNS response header")
-    response_id, response_flags = struct.unpack_from("!HH", response)
+    response_id, response_flags, question_count = struct.unpack_from(
+        "!HHH", response
+    )
     if response_id != transaction_id:
         raise DnsProtocolError("DNS response transaction ID mismatch")
     if not response_flags & 0x8000:
         raise DnsProtocolError("DNS response flag is missing")
+    if response_flags & 0x7800:
+        raise DnsProtocolError("DNS response opcode mismatch")
     if response_flags & 0x0200:
         raise DnsProtocolError("truncated DNS response")
     if response_flags & 0x000F:
         raise DnsProtocolError("DNS response returned an error")
+    if require_authoritative and not response_flags & 0x0400:
+        raise DnsProtocolError("DNS response is not authoritative")
+    if question_count != 1:
+        raise DnsProtocolError("DNS response question count mismatch")
+
+    question_name, question_end = decode_name(response, 12)
+    if question_end + 4 > len(response):
+        raise DnsProtocolError("truncated DNS response question")
+    question_type, question_class = struct.unpack_from("!HH", response, question_end)
+    expected_name = name[:-1] if name.endswith(".") else name
+    if (
+        question_name.lower() != expected_name.lower()
+        or question_type != qtype
+        or question_class != 1
+    ):
+        raise DnsProtocolError("DNS response question mismatch")
     return response
 
 
@@ -291,6 +322,7 @@ def discover_authoritative_addresses(domain: str) -> list[str]:
         domain,
         2,
         recursion_desired=True,
+        require_authoritative=False,
     )
     nameservers = _parse_ns_names(response)
     if not nameservers:
@@ -325,8 +357,20 @@ def discover_authoritative_addresses(domain: str) -> list[str]:
     return addresses
 
 
-def _query_authoritative_txt(address: str, name: str) -> set[str]:
-    return parse_txt_answers(query_dns(address, name, 16))
+def _query_authoritative_txt(
+    address: str,
+    name: str,
+    timeout: float,
+) -> set[str]:
+    return parse_txt_answers(
+        query_dns(
+            address,
+            name,
+            16,
+            timeout=timeout,
+            require_authoritative=True,
+        )
+    )
 
 
 class AuthoritativeTxtVerifier:
@@ -334,7 +378,7 @@ class AuthoritativeTxtVerifier:
         self,
         *,
         nameserver_addresses: Iterable[str],
-        query: Callable[[str, str], set[str]] = _query_authoritative_txt,
+        query: Callable[[str, str, float], set[str]] = _query_authoritative_txt,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -377,27 +421,34 @@ class AuthoritativeTxtVerifier:
             raise DnsPropagationError("invalid DNS propagation timing")
 
         started_at = self._monotonic()
+        deadline = started_at + timeout
         total = len(self.nameserver_addresses)
         stage = "present" if present else "absent"
         while True:
             passed = 0
             for address in self.nameserver_addresses:
-                answers = self._query(address, name)
+                remaining = deadline - self._monotonic()
+                if remaining <= 0:
+                    raise DnsPropagationError("DNS propagation timed out")
+                try:
+                    answers = self._query(address, name, min(2.0, remaining))
+                except DnsProtocolError:
+                    continue
                 if (value in answers) is present:
                     passed += 1
 
-            elapsed = max(0.0, self._monotonic() - started_at)
+            current_time = self._monotonic()
+            elapsed = max(0.0, current_time - started_at)
             print(
                 f"dns-{stage} {passed}/{total} elapsed={elapsed:.1f}s",
                 file=sys.stderr,
             )
-            if passed == total:
+            if passed == total and current_time <= deadline:
                 return
-            if elapsed >= timeout:
-                raise DnsPropagationError(
-                    f"DNS {stage} propagation timed out after {elapsed:.1f}s"
-                )
-            self._sleep(min(interval, max(0.0, timeout - elapsed)))
+            remaining = deadline - current_time
+            if remaining <= 0:
+                raise DnsPropagationError("DNS propagation timed out")
+            self._sleep(min(interval, remaining))
 
 
 @dataclasses.dataclass(frozen=True)

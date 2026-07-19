@@ -71,10 +71,22 @@ def build_test_txt_rdata(*segments: bytes) -> bytes:
 
 
 class FakeDnsSocket:
-    def __init__(self, *, flags: int, transaction_id_delta: int = 0, error=None):
+    def __init__(
+        self,
+        *,
+        flags: int,
+        transaction_id_delta: int = 0,
+        error=None,
+        peer=None,
+        response_question=None,
+        question_count: int = 1,
+    ):
         self.flags = flags
         self.transaction_id_delta = transaction_id_delta
         self.error = error
+        self.peer = peer
+        self.response_question = response_question
+        self.question_count = question_count
         self.sent = b""
         self.destination = None
         self.timeout = None
@@ -98,16 +110,21 @@ class FakeDnsSocket:
         if self.error:
             raise self.error
         transaction_id = struct.unpack_from("!H", self.sent)[0]
+        question = (
+            self.sent[12:]
+            if self.response_question is None
+            else self.response_question
+        )
         response = struct.pack(
             "!HHHHHH",
             (transaction_id + self.transaction_id_delta) & 0xFFFF,
             self.flags,
+            self.question_count,
             0,
             0,
             0,
-            0,
-        )
-        return response, ("192.0.2.53", 53)
+        ) + question
+        return response, self.destination if self.peer is None else self.peer
 
 
 class Tc3SigningTests(unittest.TestCase):
@@ -428,8 +445,42 @@ class DnsQueryTests(unittest.TestCase):
     def test_query_rejects_nonzero_rcode(self):
         self._assert_query_rejected(FakeDnsSocket(flags=0x8003))
 
-    def test_query_ipv4_success_uses_udp_53_and_matching_16_bit_id(self):
+    def test_query_rejects_wrong_peer(self):
+        self._assert_query_rejected(
+            FakeDnsSocket(flags=0x8000, peer=("192.0.2.54", 53))
+        )
+
+    def test_query_rejects_mismatched_or_non_in_question(self):
+        expected_name = encode_test_name("www.goodcms.cn")
+        cases = (
+            {
+                "response_question": encode_test_name("other.goodcms.cn")
+                + struct.pack("!HH", 16, 1)
+            },
+            {"response_question": expected_name + struct.pack("!HH", 2, 1)},
+            {"response_question": expected_name + struct.pack("!HH", 16, 3)},
+            {"question_count": 2},
+        )
+        for options in cases:
+            with self.subTest(options=options):
+                self._assert_query_rejected(FakeDnsSocket(flags=0x8000, **options))
+
+    def test_query_rejects_non_query_opcode(self):
+        self._assert_query_rejected(FakeDnsSocket(flags=0x8800))
+
+    def test_direct_query_requires_authoritative_answer_flag(self):
         fake_socket = FakeDnsSocket(flags=0x8000)
+        with mock.patch.object(hook.socket, "socket", return_value=fake_socket):
+            with self.assertRaises(hook.DnsProtocolError):
+                hook.query_dns(
+                    "192.0.2.53",
+                    "www.goodcms.cn",
+                    16,
+                    require_authoritative=True,
+                )
+
+    def test_query_ipv4_success_uses_udp_53_and_matching_16_bit_id(self):
+        fake_socket = FakeDnsSocket(flags=0x8400)
         socket_arguments = []
         requested_bit_counts = []
 
@@ -445,7 +496,12 @@ class DnsQueryTests(unittest.TestCase):
             mock.patch.object(hook.socket, "socket", side_effect=socket_factory),
             mock.patch.object(hook.secrets, "randbits", side_effect=fake_randbits),
         ):
-            response = hook.query_dns("192.0.2.53", "www.goodcms.cn", 16)
+            response = hook.query_dns(
+                "192.0.2.53",
+                "www.goodcms.cn",
+                16,
+                require_authoritative=True,
+            )
 
         request_id = struct.unpack_from("!H", fake_socket.sent)[0]
         response_id = struct.unpack_from("!H", response)[0]
@@ -480,7 +536,7 @@ class DnsQueryTests(unittest.TestCase):
                 )
 
     def test_query_ipv6_success_uses_ipv6_socket_and_destination(self):
-        fake_socket = FakeDnsSocket(flags=0x8000)
+        fake_socket = FakeDnsSocket(flags=0x8400)
         socket_arguments = []
 
         def socket_factory(family, socket_type):
@@ -492,7 +548,12 @@ class DnsQueryTests(unittest.TestCase):
             "socket",
             side_effect=socket_factory,
         ):
-            hook.query_dns("2001:db8::53", "www.goodcms.cn", 16)
+            hook.query_dns(
+                "2001:db8::53",
+                "www.goodcms.cn",
+                16,
+                require_authoritative=True,
+            )
 
         self.assertEqual(socket_arguments, [(socket.AF_INET6, socket.SOCK_DGRAM)])
         self.assertEqual(fake_socket.destination, ("2001:db8::53", 53, 0, 0))
@@ -592,8 +653,18 @@ class AuthoritativeDiscoveryTests(unittest.TestCase):
             timeout=2.0,
             *,
             recursion_desired=False,
+            require_authoritative=False,
         ):
-            queries.append((address, name, qtype, timeout, recursion_desired))
+            queries.append(
+                (
+                    address,
+                    name,
+                    qtype,
+                    timeout,
+                    recursion_desired,
+                    require_authoritative,
+                )
+            )
             return response
 
         resolver_config = """\
@@ -619,7 +690,7 @@ nameserver 192.0.2.54
         self.assertEqual(addresses, ["192.0.2.1"])
         self.assertEqual(
             queries,
-            [("192.0.2.53", "goodcms.cn", 2, 2.0, True)],
+            [("192.0.2.53", "goodcms.cn", 2, 2.0, True, False)],
         )
 
     def test_discovery_fails_closed_without_ns_or_nameserver_addresses(self):
@@ -670,7 +741,7 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
         }
         queried = []
 
-        def query(address, _name):
+        def query(address, _name, _timeout):
             queried.append(address)
             return next(answers[address])
 
@@ -700,7 +771,7 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
         }
         queried = []
 
-        def query(address, _name):
+        def query(address, _name, _timeout):
             queried.append(address)
             return next(answers[address])
 
@@ -723,11 +794,135 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
             ["192.0.2.1", "192.0.2.2", "192.0.2.1", "192.0.2.2"],
         )
 
+    def test_wait_retries_dns_protocol_error_then_succeeds(self):
+        query_timeouts = []
+
+        def query(_address, _name, timeout):
+            query_timeouts.append(timeout)
+            if len(query_timeouts) == 1:
+                raise hook.DnsProtocolError("temporary DNS timeout")
+            return {"token"}
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1",),
+            query=query,
+            sleep=lambda _seconds: None,
+            monotonic=itertools.count(0, 0.1).__next__,
+        )
+
+        verifier.wait_present(
+            "_acme-challenge.www.goodcms.cn",
+            "token",
+            timeout=1,
+            interval=0,
+        )
+
+        self.assertEqual(len(query_timeouts), 2)
+
+    def test_continuous_dns_errors_raise_generic_timeout_without_secrets(self):
+        secret_value = "secret-test-token"
+
+        def query(_address, _name, _timeout):
+            raise hook.DnsProtocolError(f"internal failure: {secret_value}")
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1",),
+            query=query,
+            sleep=lambda _seconds: None,
+            monotonic=itertools.count(0, 0.25).__next__,
+        )
+        stderr = io.StringIO()
+
+        with redirect_stderr(stderr):
+            with self.assertRaises(hook.DnsPropagationError) as caught:
+                verifier.wait_present(
+                    "_acme-challenge.www.goodcms.cn",
+                    secret_value,
+                    timeout=1,
+                    interval=0,
+                )
+
+        self.assertEqual(str(caught.exception), "DNS propagation timed out")
+        self.assertNotIn(secret_value, stderr.getvalue())
+
+    def test_deadline_exhaustion_stops_before_later_authority(self):
+        queried = []
+
+        def query(address, _name, _timeout):
+            queried.append(address)
+            return set()
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1", "192.0.2.2"),
+            query=query,
+            sleep=lambda _seconds: None,
+            monotonic=iter((0.0, 0.5, 1.0, 1.0)).__next__,
+        )
+
+        with self.assertRaises(hook.DnsPropagationError):
+            verifier.wait_present(
+                "_acme-challenge.www.goodcms.cn",
+                "token",
+                timeout=1,
+                interval=0,
+            )
+
+        self.assertEqual(queried, ["192.0.2.1"])
+
+    def test_query_timeout_is_capped_to_remaining_budget(self):
+        query_timeouts = []
+
+        def query(_address, _name, timeout):
+            query_timeouts.append(timeout)
+            return {"token"}
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1",),
+            query=query,
+            sleep=lambda _seconds: None,
+            monotonic=iter((0.0, 0.75, 0.8)).__next__,
+        )
+
+        verifier.wait_present(
+            "_acme-challenge.www.goodcms.cn",
+            "token",
+            timeout=1,
+            interval=0,
+        )
+
+        self.assertEqual(query_timeouts, [0.25])
+
+    def test_sleep_is_capped_and_does_not_allow_query_after_deadline(self):
+        queried = []
+        sleeps = []
+
+        def query(address, _name, _timeout):
+            queried.append(address)
+            return set()
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1",),
+            query=query,
+            sleep=sleeps.append,
+            monotonic=iter((0.0, 0.25, 0.5, 1.0)).__next__,
+        )
+
+        with self.assertRaises(hook.DnsPropagationError):
+            verifier.wait_present(
+                "_acme-challenge.www.goodcms.cn",
+                "token",
+                timeout=1,
+                interval=5,
+            )
+
+        self.assertEqual(queried, ["192.0.2.1"])
+        self.assertEqual(sleeps, [0.5])
+
     def test_wait_present_and_absent_time_out_without_exposing_value(self):
         secret_value = "secret-test-token"
         cases = (
-            ("wait_present", lambda _address, _name: set()),
-            ("wait_absent", lambda _address, _name: {secret_value}),
+            ("wait_present", lambda _address, _name, _timeout: set()),
+            ("wait_absent", lambda _address, _name, _timeout: {secret_value}),
         )
 
         for method_name, query in cases:
@@ -736,7 +931,7 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
                     nameserver_addresses=("192.0.2.1",),
                     query=query,
                     sleep=lambda _seconds: None,
-                    monotonic=iter((0, 2)).__next__,
+                    monotonic=iter((0, 0, 2)).__next__,
                 )
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
