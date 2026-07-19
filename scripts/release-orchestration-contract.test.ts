@@ -2823,6 +2823,22 @@ describe("production orchestrator", () => {
     }
   });
 
+  test("accepts curl status lines with reason phrases in production Web smokes", () => {
+    const acceptedOkStatus =
+      "printf '%s' \"${normalized_headers}\" | grep -Eq '^HTTP/[^ ]+ 200([[:space:]].*)?$'";
+    const acceptedRedirectStatus =
+      "printf '%s' \"${normalized_preview_headers}\" | grep -Eq '^HTTP/[^ ]+ 303([[:space:]].*)?$'";
+
+    expect(deployProductionWorkflow.split(acceptedOkStatus)).toHaveLength(3);
+    expect(deployProductionWorkflow.split(acceptedRedirectStatus)).toHaveLength(3);
+    expect(deployProductionWorkflow).not.toContain(
+      "grep -Eq '^HTTP/[^ ]+ 200$'",
+    );
+    expect(deployProductionWorkflow).not.toContain(
+      "grep -Eq '^HTTP/[^ ]+ 303$'",
+    );
+  });
+
   test("isolates direct production Web deployment behind standalone build and wrapper gate evidence", () => {
     const triggerEnd = deployProductionWorkflow.indexOf("permissions:");
     const trigger = deployProductionWorkflow.slice(0, triggerEnd);

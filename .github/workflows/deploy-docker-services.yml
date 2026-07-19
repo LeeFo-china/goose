@@ -635,7 +635,7 @@ jobs:
                 -H 'Host: www.goodcms.cn' -D - -o /dev/null \
                 --retry 5 --retry-delay 3 "http://127.0.0.1:3020${path}")"
               normalized_headers="$(printf '%s' "${headers}" | tr -d '\r')"
-              printf '%s' "${normalized_headers}" | grep -Eq '^HTTP/[^ ]+ 200$'
+              printf '%s' "${normalized_headers}" | grep -Eq '^HTTP/[^ ]+ 200([[:space:]].*)?$'
               printf '%s' "${normalized_headers}" | grep -iq '^x-gooes-service: web$'
               printf '%s' "${normalized_headers}" | grep -iq "^x-gooes-revision: ${SOURCE_SHA}$"
             }
@@ -647,7 +647,7 @@ jobs:
               -H 'Host: www.goodcms.cn' -D - -o /dev/null \
               "http://127.0.0.1:3020/api/preview")"
             normalized_preview_headers="$(printf '%s' "${preview_headers}" | tr -d '\r')"
-            printf '%s' "${normalized_preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303$'
+            printf '%s' "${normalized_preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303([[:space:]].*)?$'
             printf '%s' "${normalized_preview_headers}" | grep -iq '^location: /preview-error$'
             printf '%s' "${normalized_preview_headers}" | grep -iq '^cache-control: no-store$'
             echo "WEB_ROLLBACK_STATUS=not_requested" >> "${GITHUB_ENV}"
@@ -693,7 +693,7 @@ jobs:
               -H 'Host: www.goodcms.cn' -D - -o /dev/null \
               --retry 5 --retry-delay 3 "http://127.0.0.1:3020${path}")"
             normalized_headers="$(printf '%s' "${headers}" | tr -d '\r')"
-            printf '%s' "${normalized_headers}" | grep -Eq '^HTTP/[^ ]+ 200$'
+            printf '%s' "${normalized_headers}" | grep -Eq '^HTTP/[^ ]+ 200([[:space:]].*)?$'
             printf '%s' "${normalized_headers}" | grep -iq '^x-gooes-service: web$'
             printf '%s' "${normalized_headers}" | grep -iq "^x-gooes-revision: ${WEB_OLD_REVISION}$"
           }
@@ -705,7 +705,7 @@ jobs:
             -H 'Host: www.goodcms.cn' -D - -o /dev/null \
             "http://127.0.0.1:3020/api/preview")"
           normalized_preview_headers="$(printf '%s' "${preview_headers}" | tr -d '\r')"
-          printf '%s' "${normalized_preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303$'
+          printf '%s' "${normalized_preview_headers}" | grep -Eq '^HTTP/[^ ]+ 303([[:space:]].*)?$'
           printf '%s' "${normalized_preview_headers}" | grep -iq '^location: /preview-error$'
           printf '%s' "${normalized_preview_headers}" | grep -iq '^cache-control: no-store$'
           echo "WEB_ROLLBACK_STATUS=success" >> "${GITHUB_ENV}"
