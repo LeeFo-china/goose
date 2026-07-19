@@ -8,6 +8,11 @@ RUNTIME_DIR="/run/gooes-dnspod-acme"
 CONTAINER_HOOK="${RUNTIME_DIR}/dnspod_acme_hook.py"
 CONTAINER_CREDENTIALS="${RUNTIME_DIR}/dnspod-www-cert.env"
 STATE_DIR="${RUNTIME_DIR}/state"
+WWW_CERT_NAME="www.goodcms.cn"
+WWW_CERT_DOMAINS=(
+  "www.goodcms.cn"
+  "goodcms.cn"
+)
 DEFAULT_CERT_NAMES=(
   "www.goodcms.cn"
   "admin.goodcms.cn"
@@ -57,6 +62,12 @@ load_cert_names() {
   done
 }
 
+certbot_manual_hook_args=(
+  --manual --preferred-challenges dns-01
+  --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}"
+  --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}"
+)
+
 prepare() {
   require_root
   [[ -f "${HOST_HOOK}" ]] || die "hook is missing"
@@ -71,6 +82,23 @@ prepare() {
   docker exec "${CONTAINER}" chmod 600 "${CONTAINER_CREDENTIALS}"
 }
 
+expand_www() {
+  check_container
+  local domain_args=()
+  local domain
+  for domain in "${WWW_CERT_DOMAINS[@]}"; do
+    domain_args+=(-d "${domain}")
+  done
+  docker exec "${CONTAINER}" env \
+    DNSPOD_CREDENTIALS_FILE="${CONTAINER_CREDENTIALS}" \
+    DNSPOD_STATE_DIR="${STATE_DIR}" \
+    certbot certonly --cert-name "${WWW_CERT_NAME}" --expand --non-interactive \
+      --no-directory-hooks \
+      "${certbot_manual_hook_args[@]}" \
+      --deploy-hook 'nginx -t && nginx -s reload' \
+      "${domain_args[@]}"
+}
+
 renew() {
   check_container
   load_cert_names
@@ -81,8 +109,7 @@ renew() {
       DNSPOD_STATE_DIR="${STATE_DIR}" \
       certbot renew --cert-name "${cert_name}" --non-interactive --quiet \
         --no-directory-hooks --no-random-sleep-on-renew \
-        --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-        --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+        "${certbot_manual_hook_args[@]}" \
         --deploy-hook 'nginx -t && nginx -s reload'
   done
 }
@@ -93,9 +120,7 @@ reconfigure() {
   local cert_name
   for cert_name in "${cert_names[@]}"; do
     docker exec "${CONTAINER}" certbot reconfigure --cert-name "${cert_name}" --non-interactive \
-      --manual --preferred-challenges dns-01 \
-      --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-      --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}"
+      "${certbot_manual_hook_args[@]}"
   done
 }
 
@@ -106,8 +131,7 @@ dry_run() {
   for cert_name in "${cert_names[@]}"; do
     docker exec "${CONTAINER}" certbot renew --cert-name "${cert_name}" --non-interactive --quiet \
       --no-directory-hooks --no-random-sleep-on-renew --dry-run --run-deploy-hooks \
-      --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-      --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+      "${certbot_manual_hook_args[@]}" \
       --deploy-hook 'nginx -t && nginx -s reload'
   done
 }
@@ -116,11 +140,12 @@ main() {
   require_root
   case "${1:-}" in
     prepare) prepare ;;
+    expand-www) with_cleanup expand_www ;;
     renew) with_cleanup renew ;;
     reconfigure) with_cleanup reconfigure ;;
     dry-run) with_cleanup dry_run ;;
     cleanup) cleanup ;;
-    *) die "usage: $0 {prepare|renew|reconfigure|dry-run|cleanup}" ;;
+    *) die "usage: $0 {prepare|expand-www|renew|reconfigure|dry-run|cleanup}" ;;
   esac
 }
 main "$@"

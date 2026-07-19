@@ -79,6 +79,14 @@ describe("phase one SEO and standalone deployment", () => {
     expect(nginx).toContain("immutable");
   });
 
+  test("redirects the bare production domain only after presenting a matching certificate", () => {
+    const nginx = read(repositoryRoot, "deploy/nginx/gooes-web.conf");
+    expect(nginx).toContain("server_name goodcms.cn;");
+    expect(nginx).toContain("/etc/letsencrypt/live/www.goodcms.cn/fullchain.pem");
+    expect(nginx).toContain("/etc/letsencrypt/live/www.goodcms.cn/privkey.pem");
+    expect(nginx).toContain("return 301 https://www.goodcms.cn$request_uri;");
+  });
+
   test("includes web in all three deployment workflows without weakening migration gates", () => {
     const dev = read(repositoryRoot, ".github/workflows/deploy-dev.yml");
     const build = read(repositoryRoot, ".github/workflows/build-docker-images.yml");

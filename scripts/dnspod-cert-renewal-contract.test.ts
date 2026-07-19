@@ -16,7 +16,7 @@ describe("DNSPod certificate renewal contract", () => {
     expect(runner).toContain("/opt/gooes/cert-renewal/dnspod_acme_hook.py");
     expect(runner).toContain("/etc/gooes/dnspod-www-cert.env");
     expect(runner).toContain("/run/gooes-dnspod-acme");
-    expect(runner).toContain("prepare|renew|reconfigure|dry-run|cleanup");
+    expect(runner).toContain("prepare|expand-www|renew|reconfigure|dry-run|cleanup");
   });
 
   test("runner validates root, modes, container and stages runtime files", () => {
@@ -55,6 +55,13 @@ describe("DNSPod certificate renewal contract", () => {
     expect(runner).toContain("CERT_NAMES");
     expect(runner).toContain('for cert_name in "${cert_names[@]}"');
     expect(runner).toContain('--cert-name "${cert_name}"');
+  });
+
+  test("runner includes the bare goodcms domain for browser-safe redirects", () => {
+    expect(runner).toContain('"goodcms.cn"');
+    expect(runner).toContain("certbot certonly");
+    expect(runner).toContain('--cert-name "${WWW_CERT_NAME}"');
+    expect(runner).toContain("--expand");
   });
 
   test("reconfigure does not persist a staging ACME server", () => {

@@ -373,6 +373,10 @@ class CredentialTests(unittest.TestCase):
 class DomainValidationTests(unittest.TestCase):
     def test_configured_certbot_domains_are_accepted_and_mapped(self):
         expected = {
+            "goodcms.cn": (
+                "_acme-challenge",
+                "_acme-challenge.goodcms.cn",
+            ),
             "www.goodcms.cn": (
                 "_acme-challenge.www",
                 "_acme-challenge.www.goodcms.cn",
@@ -406,7 +410,6 @@ class DomainValidationTests(unittest.TestCase):
 
     def test_domain_variants_are_rejected(self):
         invalid_domains = (
-            "goodcms.cn",
             "assets.goodcms.cn",
             "www.goodcms.cn.",
             "WWW.goodcms.cn",

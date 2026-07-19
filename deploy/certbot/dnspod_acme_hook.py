@@ -26,6 +26,7 @@ from typing import Callable, Iterable
 EXPECTED_DOMAIN = "www.goodcms.cn"
 EXPECTED_ROOT_DOMAIN = "goodcms.cn"
 DOMAIN_CHALLENGE_SUBDOMAINS = {
+    "goodcms.cn": "_acme-challenge",
     "www.goodcms.cn": "_acme-challenge.www",
     "admin.goodcms.cn": "_acme-challenge.admin",
     "api.goodcms.cn": "_acme-challenge.api",
