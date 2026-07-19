@@ -68,7 +68,7 @@ CLI 在 schema inspect 阶段失败，稳定错误为：`failed to inspect docke
 
 ## 数据库 smoke
 
-`apps/api/src/scripts/tenant-credit-refund-reconciliation-smoke.ts` 使用已安装 Bun `SQL.begin`/`SQL.array` API。契约测试先验证了模块缺失时的 RED，再在实现后获得 3 个测试、5 个断言全部通过。
+`apps/api/src/scripts/tenant-credit-refund-reconciliation-smoke.ts` 使用已安装 Bun `SQL.begin`/`SQL.array` API。契约测试经 RED/GREEN 验证后获得 4 个测试、15 个断言全部通过。非法 limit 仅接受 Bun 运行时的精确错误三元组 `code=ERR_POSTGRES_SERVER_ERROR`、`errno=22023` 和稳定 message；CLI 失败只输出固定安全码，不透传数据库错误或连接信息。
 
 dev smoke 的完整安全输出为：
 
@@ -87,7 +87,7 @@ dev smoke 的完整安全输出为：
 
 ## 代码与测试门禁
 
-- 提交后 changed-test：53 个文件，512 个测试，1606 个断言，0 失败；
+- 提交后 changed-test：53 个文件，513 个测试，1616 个断言，0 失败；
 - 稳定工作区套件：
   - release-contracts：142 个测试，1537 个断言，0 失败；
   - domain：28 个测试，152 个断言，0 失败；

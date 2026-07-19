@@ -34,8 +34,21 @@ export type TenantCreditRefundReconciliationSmokeSummary = {
   rolled_back: boolean;
 };
 
+type SmokeCliInput = {
+  databaseUrl: string | undefined;
+  runSmoke?: (
+    databaseUrl: string,
+  ) => Promise<TenantCreditRefundReconciliationSmokeSummary>;
+  writeStdout?: (message: string) => void;
+  writeStderr?: (message: string) => void;
+};
+
 const INVALID_LIMIT_ERROR =
   "BILLING_RECHARGE_REFUND_RECONCILE_LIMIT_INVALID";
+const BUN_POSTGRES_SERVER_ERROR = "ERR_POSTGRES_SERVER_ERROR";
+const INVALID_PARAMETER_VALUE_SQLSTATE = "22023";
+export const TENANT_CREDIT_REFUND_RECONCILIATION_SMOKE_FAILED =
+  "TENANT_CREDIT_REFUND_RECONCILIATION_SMOKE_FAILED";
 const REQUIRED_INDEX = "tenant_credit_refund_reconcile_due_idx";
 const REQUIRED_CONSTRAINTS = [
   "tenant_credit_refund_reconcile_attempt_count_check",
@@ -74,7 +87,11 @@ export function buildTenantCreditRefundReconciliationSmokeSummary(
 
 export function isInvalidReconciliationLimitError(error: unknown): boolean {
   return error instanceof Error &&
-    error.message.includes(INVALID_LIMIT_ERROR);
+    "code" in error &&
+    error.code === BUN_POSTGRES_SERVER_ERROR &&
+    "errno" in error &&
+    error.errno === INVALID_PARAMETER_VALUE_SQLSTATE &&
+    error.message === INVALID_LIMIT_ERROR;
 }
 
 function validateObjects(rows: ObjectRow[]): boolean {
@@ -251,24 +268,41 @@ function allChecksPassed(
   return Object.values(summary).every((value) => value === true);
 }
 
-async function main(): Promise<void> {
-  const databaseUrl = process.env.SUPABASE_DB_DIRECT_URL;
+export async function runTenantCreditRefundReconciliationSmokeCli(
+  input: SmokeCliInput,
+): Promise<0 | 1> {
+  const runSmoke = input.runSmoke ?? runTenantCreditRefundReconciliationSmoke;
+  const writeStdout = input.writeStdout ?? console.log;
+  const writeStderr = input.writeStderr ?? console.error;
+
+  const databaseUrl = input.databaseUrl;
   if (!databaseUrl) {
-    console.error("missing SUPABASE_DB_DIRECT_URL");
-    process.exitCode = 1;
-    return;
+    writeStderr(TENANT_CREDIT_REFUND_RECONCILIATION_SMOKE_FAILED);
+    return 1;
   }
 
-  const summary = await runTenantCreditRefundReconciliationSmoke(databaseUrl);
-  console.log(JSON.stringify(summary));
-  if (!allChecksPassed(summary)) process.exitCode = 1;
+  try {
+    const summary = await runSmoke(databaseUrl);
+    writeStdout(JSON.stringify(summary));
+    if (allChecksPassed(summary)) return 0;
+  } catch {
+    writeStderr(TENANT_CREDIT_REFUND_RECONCILIATION_SMOKE_FAILED);
+    return 1;
+  }
+
+  writeStderr(TENANT_CREDIT_REFUND_RECONCILIATION_SMOKE_FAILED);
+  return 1;
+}
+
+async function main(): Promise<void> {
+  process.exitCode = await runTenantCreditRefundReconciliationSmokeCli({
+    databaseUrl: process.env.SUPABASE_DB_DIRECT_URL,
+  });
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
-    console.error(
-      error instanceof Error ? error.message : "refund reconciliation smoke failed",
-    );
+  main().catch(() => {
+    console.error(TENANT_CREDIT_REFUND_RECONCILIATION_SMOKE_FAILED);
     process.exitCode = 1;
   });
 }
