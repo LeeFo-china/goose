@@ -1,0 +1,11 @@
+<page-skeleton tt:if="{{loading}}" />
+<error-state tt:elif="{{error}}" title="案例暂时无法查看" description="案例可能已下线，或网络暂时不可用。" bindretry="load" />
+<view tt:elif="{{project}}" class="page-content detail-page">
+  <view class="detail-kicker">装修案例</view><view class="detail-title">{{project.title}}</view>
+  <view class="detail-location">{{project.community || project.city || '区域待定'}}<text tt:if="{{project.district}}"> · {{project.district}}</text></view>
+  <view class="gallery-block"><view tt:if="{{images.length}}"><image-gallery items="{{images}}" /></view><empty-state tt:else title="案例图片待更新" description="装修公司尚未发布该案例的公开图片。" /></view>
+  <view class="fact-grid"><view class="fact"><view class="fact-label">户型</view><view class="fact-value">{{project.layout || '待完善'}}</view></view><view class="fact"><view class="fact-label">面积</view><view class="fact-value">{{project.area ? project.area + '㎡' : '待完善'}}</view></view><view class="fact"><view class="fact-label">预算区间</view><view class="fact-value">{{project.budget_band || '面议'}}</view></view><view class="fact"><view class="fact-label">装修风格</view><view class="fact-value">{{styleText || '待完善'}}</view></view></view>
+  <view class="description-section"><view class="section-title">设计说明</view><view class="description-copy">{{project.description || '该案例的公开设计说明正在完善，具体方案需结合你的户型与需求沟通。'}}</view></view>
+  <view class="update-copy">内容最近更新：{{updatedDate}}</view>
+  <view class="detail-cta"><lead-cta primary-color="{{primaryColor}}" bindaction="onLead" /></view>
+</view>

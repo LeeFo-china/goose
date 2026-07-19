@@ -1,1 +1,102 @@
-Page({});
+import type { DouyinAppContext } from "../../app";
+import { fetchCases } from "../../api/cases";
+import type { PublicProject } from "../../models";
+import { navigateToEntityDetail } from "../../platform/navigation";
+import {
+  beginPaginationRequest,
+  createPaginationState,
+  rejectPaginationRequest,
+  resolvePaginationRequest,
+} from "../../utils/pagination";
+
+Page({
+  pagination: createPaginationState<PublicProject>(20),
+  data: {
+    items: [] as PublicProject[],
+    firstLoading: true,
+    firstError: false,
+    paginationStatus: "idle",
+    styleOptions: [] as string[],
+    layoutOptions: [] as string[],
+    selectedStyle: "",
+    selectedLayout: "",
+    disabled: false,
+  },
+  onLoad() { void this.initialize(); },
+  onReachBottom() { void this.load("loadMore"); },
+  onPullDownRefresh() { void this.load("refresh"); },
+  async initialize() {
+    try {
+      const bootstrap = await getApp<DouyinAppContext>().startup;
+      if (!bootstrap) return;
+      if (!bootstrap.features.cases) {
+        this.setData({ firstLoading: false, disabled: true });
+        return;
+      }
+      await this.load("loadMore");
+    } catch {
+      this.setData({ firstLoading: false, firstError: true });
+    }
+  },
+  async load(mode: "loadMore" | "refresh" | "retry") {
+    if (this.data.disabled) {
+      if (mode === "refresh") void tt.stopPullDownRefresh({});
+      return;
+    }
+    if (mode === "loadMore" && (this.pagination.status === "loading"
+      || this.pagination.status === "end")) return;
+    const pending = beginPaginationRequest(this.pagination, mode);
+    this.pagination = pending.state;
+    this.syncState();
+    try {
+      const result = await fetchCases(getApp<DouyinAppContext>().api, {
+        page: pending.request.page,
+        pageSize: pending.request.pageSize,
+        ...(this.data.selectedStyle ? { style: this.data.selectedStyle } : {}),
+        ...(this.data.selectedLayout ? { layout: this.data.selectedLayout } : {}),
+      });
+      this.pagination = resolvePaginationRequest(this.pagination, pending.request, result);
+      this.setData({
+        styleOptions: mergeOptions(this.data.styleOptions,
+          result.items.flatMap((item) => item.style_tags)),
+        layoutOptions: mergeOptions(this.data.layoutOptions,
+          result.items.map((item) => item.layout).filter((item): item is string => Boolean(item))),
+      });
+    } catch {
+      this.pagination = rejectPaginationRequest(this.pagination, pending.request);
+    } finally {
+      this.syncState();
+      if (mode === "refresh") void tt.stopPullDownRefresh({});
+    }
+  },
+  syncState() {
+    this.setData({
+      items: this.pagination.items,
+      firstLoading: this.pagination.status === "loading" && this.pagination.items.length === 0,
+      firstError: this.pagination.status === "error" && this.pagination.items.length === 0,
+      paginationStatus: this.pagination.status,
+      disabled: false,
+    });
+  },
+  onRetry() { void this.load("retry"); },
+  onLoadMore() { void this.load("loadMore"); },
+  onSelectStyle(event: { currentTarget: { dataset: { value?: string } } }) {
+    const value = event.currentTarget.dataset.value || "";
+    this.setData({ selectedStyle: this.data.selectedStyle === value ? "" : value });
+    void this.load("refresh");
+  },
+  onSelectLayout(event: { currentTarget: { dataset: { value?: string } } }) {
+    const value = event.currentTarget.dataset.value || "";
+    this.setData({ selectedLayout: this.data.selectedLayout === value ? "" : value });
+    void this.load("refresh");
+  },
+  onCaseSelect(event: { detail: { id?: string } }) {
+    if (!event.detail.id) return;
+    void navigateToEntityDetail("case", event.detail.id)
+      .catch(() => tt.showToast({ title: "页面跳转失败，请重试", icon: "none" }));
+  },
+});
+
+function mergeOptions(current: string[], incoming: string[]) {
+  return [...new Set([...current, ...incoming])].slice(0, 8);
+}

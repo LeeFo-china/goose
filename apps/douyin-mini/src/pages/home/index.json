@@ -1,6 +1,14 @@
 {
-  "navigationBarTitleText": "首页",
+  "navigationBarTitleText": "装修服务",
   "usingComponents": {
-    "empty-state": "/components/empty-state/index"
+    "tenant-brand": "/components/tenant-brand/index",
+    "hero-banner": "/components/hero-banner/index",
+    "trust-metrics": "/components/trust-metrics/index",
+    "case-card": "/components/case-card/index",
+    "site-card": "/components/site-card/index",
+    "lead-cta": "/components/lead-cta/index",
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "page-skeleton": "/components/page-skeleton/index"
   }
 }

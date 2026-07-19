@@ -4,6 +4,9 @@
     "pages/cases/index",
     "pages/sites/index",
     "pages/lead/index",
+    "pages/company/index",
+    "pages/privacy/index",
+    "pages/case-detail/index",
     "pages/service-unavailable/index"
   ],
   "window": {

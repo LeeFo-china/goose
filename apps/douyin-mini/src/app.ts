@@ -2,7 +2,7 @@ import { exchangeDouyinSession } from "./api/auth";
 import { fetchBootstrap } from "./api/bootstrap";
 import { ApiClient, DouyinRequestTransport } from "./api/request";
 import { API_BASE_URL, API_TIMEOUT_MS } from "./config";
-import type { LaunchContext } from "./models";
+import type { BootstrapData, LaunchContext } from "./models";
 import { readDouyinEnvironment } from "./platform/env-info";
 import { readDeploymentConfig } from "./platform/ext-config";
 import { captureLaunchContext } from "./platform/launch-context";
@@ -33,17 +33,27 @@ const bootstrap = new BootstrapStore(
   navigateToServiceUnavailable,
 );
 
+export type DouyinAppContext = {
+  api: ApiClient;
+  bootstrap: BootstrapStore;
+  startup: Promise<BootstrapData | null>;
+};
+
 App({
+  api,
+  bootstrap,
+  startup: Promise.resolve(null) as Promise<BootstrapData | null>,
   onLaunch(options) {
-    void startApplication(captureLaunchContext(options));
+    this.startup = startApplication(captureLaunchContext(options));
   },
 });
 
-async function startApplication(launchContext: LaunchContext): Promise<void> {
+async function startApplication(launchContext: LaunchContext): Promise<BootstrapData | null> {
   try {
     await session.initialize(launchContext);
-    await bootstrap.load();
+    return await bootstrap.load();
   } catch (error) {
     await navigateToServiceUnavailable(toServiceUnavailableCode(error));
+    return null;
   }
 }

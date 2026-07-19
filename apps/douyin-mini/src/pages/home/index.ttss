@@ -1,1 +1,22 @@
-.tab-placeholder { display: flex; min-height: 760rpx; align-items: center; justify-content: center; }
+.home-page { padding-bottom: 56rpx; }
+.home-block { margin-top: 30rpx; }
+.home-hero { margin-top: 26rpx; }
+.home-section { margin-top: 64rpx; }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24rpx; margin-bottom: 26rpx; }
+.section-kicker { color: #9a4124; font-size: 22rpx; font-weight: 600; letter-spacing: 2rpx; line-height: 1.4; }
+.section-title { margin-top: 8rpx; color: #25211e; font-size: 36rpx; font-weight: 600; line-height: 1.35; }
+.section-link, .text-action, .privacy-link { min-height: 88rpx; margin: 0; padding: 0 8rpx; background: transparent; color: #8b371f; font-size: 26rpx; line-height: 88rpx; }
+.card-list, .site-list { display: flex; flex-direction: column; gap: 24rpx; }
+.process-list { margin-top: 28rpx; border-top: 1rpx solid #dfdad5; }
+.process-item { display: flex; gap: 24rpx; padding: 28rpx 0; border-bottom: 1rpx solid #dfdad5; }
+.process-index { width: 64rpx; flex: none; color: #a84324; font-size: 24rpx; font-weight: 600; }
+.process-title { color: #25211e; font-size: 28rpx; font-weight: 600; }
+.process-description, .process-note, .company-copy, .section-empty { margin-top: 8rpx; color: #665f5a; font-size: 24rpx; line-height: 1.65; }
+.process-note { margin-top: 20rpx; font-size: 22rpx; }
+.region-list { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 26rpx; }
+.region-tag { padding: 14rpx 20rpx; border: 1rpx solid #ddd6d0; border-radius: 10rpx; background: #fff; color: #514b47; font-size: 24rpx; }
+.section-empty { margin-top: 24rpx; }
+.company-summary { padding: 36rpx; border-radius: 24rpx; background: #fff; box-shadow: 0 4rpx 16rpx rgba(37,33,30,.07); }
+.company-copy { margin-top: 20rpx; }
+.text-action { margin-top: 12rpx; }
+.privacy-link { width: 100%; margin-top: 28rpx; color: #6b645f; font-size: 23rpx; text-align: center; }

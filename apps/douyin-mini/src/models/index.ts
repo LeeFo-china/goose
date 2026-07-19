@@ -54,17 +54,77 @@ export type SessionExchangeResult = {
 
 export type BootstrapData = {
   installation: { status: "active"; template_version: string | null };
-  company: {
-    name: string;
-    logo_url: string | null;
-    summary: string | null;
-    service_phone: string;
-  };
+  company: CompanyData;
   theme: { primary_color: string; navigation_text_color: "black" | "white" };
-  features: Record<string, boolean | string>;
-  content: Record<string, unknown>;
+  features: {
+    cases: boolean;
+    sites: boolean;
+    sms_lead: boolean;
+    douyin_phone: false;
+    phone_capture_mode: "sms";
+  };
+  content: {
+    home_banners: HomeBanner[];
+    trust_metrics: Array<{ label: string; value: string }>;
+    featured_cases: PublicProject[];
+    active_sites: PublicProject[];
+  };
   privacy_policy_version: string;
 };
+
+export type HomeBanner = {
+  image_url: string;
+  title: string;
+  subtitle: string;
+};
+
+export type ServiceRegion = {
+  province: string | null;
+  city: string;
+  district: string | null;
+};
+
+export type CompanyData = {
+  name: string;
+  logo_url: string | null;
+  summary: string | null;
+  service_phone: string;
+  public_address: string | null;
+  address_region: {
+    province: string | null;
+    city: string | null;
+    district: string | null;
+  };
+  service_regions: ServiceRegion[];
+  qualifications: Array<{ title: string; image_url: string | null }>;
+};
+
+export type PublicProject = {
+  id: string;
+  title: string;
+  cover_image_url: string | null;
+  public_images: string[];
+  style_tags: string[];
+  layout: string | null;
+  area: number | null;
+  budget_band: string | null;
+  community: string;
+  city: string | null;
+  district: string | null;
+  status: string | null;
+  start_date: string | null;
+  updated_at: string;
+  description: string | null;
+};
+
+export type PaginationMeta = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export type PublicProjectPage = { items: PublicProject[]; pagination: PaginationMeta };
 
 export type ServiceUnavailableCode =
   | "DOUYIN_INSTALLATION_MISSING"

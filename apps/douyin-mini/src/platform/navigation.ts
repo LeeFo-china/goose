@@ -44,6 +44,10 @@ export function switchToTab(tab: TabName): Promise<void> {
   return navigate("switchTab", buildTabRoute(tab));
 }
 
+export function navigateToEntityDetail(type: "case" | "site", id: string): Promise<void> {
+  return navigate("navigateTo", buildEntityDetailRoute(type, id));
+}
+
 export function navigateToServiceUnavailable(code: ServiceUnavailableCode): Promise<void> {
   return new Promise((resolve, reject) => {
     tt.reLaunch({

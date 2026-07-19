@@ -10,10 +10,25 @@ const bootstrap = {
     logo_url: null,
     summary: null,
     service_phone: "0371-00000000",
+    public_address: null,
+    address_region: { province: null, city: "郑州市", district: null },
+    service_regions: [],
+    qualifications: [],
   },
   theme: { primary_color: "#C45A32", navigation_text_color: "black" },
-  features: { cases_enabled: true },
-  content: {},
+  features: {
+    cases: true,
+    sites: true,
+    sms_lead: true,
+    douyin_phone: false,
+    phone_capture_mode: "sms",
+  },
+  content: {
+    home_banners: [],
+    trust_metrics: [],
+    featured_cases: [],
+    active_sites: [],
+  },
   privacy_policy_version: "2026-07-19",
 } satisfies BootstrapData;
 
