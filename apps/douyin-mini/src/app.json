@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "pages/service-unavailable/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "装修服务",
+    "navigationBarBackgroundColor": "#F7F4EF",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F7F4EF"
+  }
+}

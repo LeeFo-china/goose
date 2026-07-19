@@ -1,0 +1,12 @@
+{
+  "description": "Gooes 装修行业抖音原生小程序模板",
+  "miniprogramRoot": "src/",
+  "projectname": "gooes-douyin-decoration",
+  "setting": {
+    "es6": true,
+    "minified": true,
+    "postcss": true,
+    "urlCheck": true,
+    "useCompilerPlugins": ["typescript"]
+  }
+}
