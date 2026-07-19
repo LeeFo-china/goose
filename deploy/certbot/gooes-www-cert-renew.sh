@@ -66,8 +66,7 @@ reconfigure() {
   docker exec "${CONTAINER}" certbot reconfigure --cert-name "${CERT_NAME}" --non-interactive \
     --manual --preferred-challenges dns-01 \
     --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-    --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-    --server "https://acme-staging-v02.api.letsencrypt.org/directory"
+    --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}"
 }
 
 dry_run() {

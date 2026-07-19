@@ -14,7 +14,7 @@
 | Runner | `/opt/gooes/cert-renewal/gooes-www-cert-renew`（root:root，0755） |
 | 凭据 | `/etc/gooes/dnspod-www-cert.env`（root:root，0600） |
 | 容器运行目录 | `/run/gooes-dnspod-acme`（0700） |
-| 状态目录 | `/run/gooes-dnspod-acme/state`（0700，临时 TXT 状态） |
+| 状态目录 | `/run/gooes-dnspod-acme/state`（0700，临时 TXT RecordId 与 validation hash） |
 | Certbot | 容器 `supabase-nginx` 内的 `www.goodcms.cn` renewal 配置 |
 | systemd | `gooes-www-cert-renew.service` / `.timer` |
 
@@ -48,17 +48,30 @@ install -o root -g root -m 0755 dnspod_acme_hook.py /opt/gooes/cert-renewal/dnsp
 install -o root -g root -m 0755 gooes-www-cert-renew.sh /opt/gooes/cert-renewal/gooes-www-cert-renew
 install -o root -g root -m 0644 gooes-www-cert-renew.service /etc/systemd/system/gooes-www-cert-renew.service
 install -o root -g root -m 0644 gooes-www-cert-renew.timer /etc/systemd/system/gooes-www-cert-renew.timer
-install -o root -g root -m 0600 dnspod-www-cert-renew.env /etc/gooes/dnspod-www-cert.env
+install -d -o root -g root -m 0700 /etc/gooes
+install -o root -g root -m 0600 /dev/stdin /etc/gooes/dnspod-www-cert.env
 systemctl daemon-reload
 systemd-analyze verify gooes-www-cert-renew.service gooes-www-cert-renew.timer
 ```
 
-安装前备份 `/etc/letsencrypt/renewal/www.goodcms.cn.conf`（带 UTC 时间戳和 SHA-256）。先执行 staging reconfigure；该子命令退出时会清理容器运行目录：
+`/dev/stdin` 内容为上文 4 个凭据键；执行时不得 echo、tee 或开启 shell trace。安装前通过容器路径备份 renewal 配置（带 UTC 时间戳和 SHA-256）：
+
+```bash
+backup_dir=/var/backups/gooes-cert-renewal/$(date -u +%Y%m%dT%H%M%SZ)
+install -d -o root -g root -m 0700 "$backup_dir"
+docker cp supabase-nginx:/etc/letsencrypt/renewal/www.goodcms.cn.conf "$backup_dir/www.goodcms.cn.conf"
+sha256sum "$backup_dir/www.goodcms.cn.conf"
+```
+
+先执行 `reconfigure`。Certbot 会用新的续期参数对 staging 做测试，测试成功后保存参数；runner 不传 `--server`，避免把将来正式续期指向 staging：
 
 ```bash
 /opt/gooes/cert-renewal/gooes-www-cert-renew prepare
 /opt/gooes/cert-renewal/gooes-www-cert-renew reconfigure
+docker exec supabase-nginx awk -F' = ' '/^server = /{print $2}' /etc/letsencrypt/renewal/www.goodcms.cn.conf
 ```
+
+上一步输出必须是 `https://acme-v02.api.letsencrypt.org/directory`，否则先恢复备份，不要启用 timer。
 
 再重新准备运行目录并执行 dry-run：
 
@@ -103,7 +116,7 @@ curl --fail --silent --show-error --head https://www.goodcms.cn
 ```bash
 systemctl disable --now gooes-www-cert-renew.timer
 systemctl stop gooes-www-cert-renew.service || true
-cp /var/backups/gooes-cert-renewal/<timestamp>/www.goodcms.cn.conf /etc/letsencrypt/renewal/www.goodcms.cn.conf
+docker cp /var/backups/gooes-cert-renewal/<timestamp>/www.goodcms.cn.conf supabase-nginx:/etc/letsencrypt/renewal/www.goodcms.cn.conf
 systemctl daemon-reload
 ```
 

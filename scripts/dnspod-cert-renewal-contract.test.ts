@@ -39,10 +39,14 @@ describe("DNSPod certificate renewal contract", () => {
     expect(runner).toContain("--no-directory-hooks");
   });
 
-  test("reconfigure stages and uses staging endpoint, dry-run remains non-production", () => {
+  test("reconfigure does not persist a staging ACME server", () => {
     expect(runner).toContain("certbot reconfigure");
+    expect(runner).not.toContain("acme-staging-v02.api.letsencrypt.org");
+    expect(runner).not.toMatch(/reconfigure\(\)[\s\S]*--server/);
+  });
+
+  test("dry-run remains non-production", () => {
     expect(runner).toContain("--dry-run");
-    expect(runner).toContain("acme-staging-v02.api.letsencrypt.org");
     expect(runner).toContain("--run-deploy-hooks");
   });
 
