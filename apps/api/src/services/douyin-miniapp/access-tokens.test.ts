@@ -4,21 +4,13 @@ import { Errors } from "@/errors/error-factory";
 import type { DouyinOpenPlatformGateway } from "@/gateways/douyin-open-platform/client";
 import type { DouyinThirdPartyComponentRecord } from "@/repositories/douyin-third-party-components";
 import type { DouyinMiniappInstallationRecord } from "@/repositories/douyin-miniapp-installations";
-import {
-  openDouyinCredential,
-  sealDouyinCredential,
-  type DouyinCredentialKeyring,
-} from "./credential-envelope";
-import type {
-  ComponentTokenRepository,
-  AuthorizerTokenRepository,
-} from "./access-tokens";
-
+import { openDouyinCredential, sealDouyinCredential,
+  type DouyinCredentialKeyring } from "./credential-envelope";
+import type { ComponentTokenRepository, AuthorizerTokenRepository } from "./access-tokens";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-let DouyinMiniappAccessTokenService:
-  typeof import("./access-tokens").DouyinMiniappAccessTokenService;
+let DouyinMiniappAccessTokenService: typeof import("./access-tokens").DouyinMiniappAccessTokenService;
 beforeAll(async () => ({ DouyinMiniappAccessTokenService } = await import("./access-tokens")));
 const NOW_MS = Date.parse("2026-07-20T00:00:00.000Z");
 const CLAIM_TOKEN = "11111111-1111-4111-8111-111111111111";
@@ -32,49 +24,32 @@ function componentRow(options: { accessToken?: string; expiresAt?: string } = {}
   const access = options.accessToken ? envelope(options.accessToken) : null;
   return {
     component_appid: "component-appid",
-    component_ticket_ciphertext: ticket.ciphertext,
-    component_ticket_iv: ticket.iv,
-    component_ticket_tag: ticket.tag,
-    component_ticket_key_version: ticket.keyVersion,
+    component_ticket_ciphertext: ticket.ciphertext, component_ticket_iv: ticket.iv,
+    component_ticket_tag: ticket.tag, component_ticket_key_version: ticket.keyVersion,
     component_ticket_received_at: new Date(NOW_MS).toISOString(),
-    access_token_ciphertext: access?.ciphertext ?? null,
-    access_token_iv: access?.iv ?? null,
-    access_token_tag: access?.tag ?? null,
-    access_token_key_version: access?.keyVersion ?? null,
+    access_token_ciphertext: access?.ciphertext ?? null, access_token_iv: access?.iv ?? null,
+    access_token_tag: access?.tag ?? null, access_token_key_version: access?.keyVersion ?? null,
     access_token_expires_at: options.expiresAt ?? null,
-    token_refresh_claim_token: null,
-    token_refresh_claim_expires_at: null,
+    token_refresh_claim_token: null, token_refresh_claim_expires_at: null,
   };
 }
-function installationRow(options: {
-  accessToken?: string; expiresAt?: string; componentAppId?: string; refreshExpiresAt?: string;
-} = {}): DouyinMiniappInstallationRecord {
+function installationRow(options: { accessToken?: string; expiresAt?: string;
+  componentAppId?: string; refreshExpiresAt?: string } = {}): DouyinMiniappInstallationRecord {
   const access = options.accessToken ? envelope(options.accessToken) : null;
   const refresh = envelope("refresh-secret");
   return {
-    id: INSTALLATION_ID,
-    tenant_id: "33333333-3333-4333-8333-333333333333",
-    component_appid: options.componentAppId ?? "component-appid",
-    authorizer_appid: "authorizer-appid",
-    deployment_key: "merchant-a",
-    installation_kind: "merchant",
-    authorization_status: "active",
-    access_token_ciphertext: access?.ciphertext ?? null,
-    access_token_iv: access?.iv ?? null,
-    access_token_tag: access?.tag ?? null,
-    access_token_key_version: access?.keyVersion ?? null,
+    id: INSTALLATION_ID, tenant_id: "33333333-3333-4333-8333-333333333333",
+    component_appid: options.componentAppId ?? "component-appid", authorizer_appid: "authorizer-appid",
+    deployment_key: "merchant-a", installation_kind: "merchant", authorization_status: "active",
+    access_token_ciphertext: access?.ciphertext ?? null, access_token_iv: access?.iv ?? null,
+    access_token_tag: access?.tag ?? null, access_token_key_version: access?.keyVersion ?? null,
     access_token_expires_at: options.expiresAt ?? null,
-    refresh_token_ciphertext: refresh.ciphertext,
-    refresh_token_iv: refresh.iv,
-    refresh_token_tag: refresh.tag,
-    refresh_token_key_version: refresh.keyVersion,
+    refresh_token_ciphertext: refresh.ciphertext, refresh_token_iv: refresh.iv,
+    refresh_token_tag: refresh.tag, refresh_token_key_version: refresh.keyVersion,
     refresh_token_expires_at: options.refreshExpiresAt ?? "2026-08-20T00:00:00.000Z",
-    permission_snapshot: [],
-    token_refresh_claim_token: null,
-    token_refresh_claim_expires_at: null,
+    permission_snapshot: [], token_refresh_claim_token: null, token_refresh_claim_expires_at: null,
   };
 }
-
 function gateway(overrides: Partial<DouyinOpenPlatformGateway> = {}): DouyinOpenPlatformGateway {
   return {
     getComponentAccessToken: mock(async () => ({ accessToken: "new-component-token", expiresIn: 7200 })),
@@ -90,10 +65,11 @@ function gateway(overrides: Partial<DouyinOpenPlatformGateway> = {}): DouyinOpen
     ...overrides,
   };
 }
-
 function service(input: { componentRepository: ComponentTokenRepository;
   installationRepository?: AuthorizerTokenRepository; openPlatform?: DouyinOpenPlatformGateway;
-  now?: () => number; sleep?: (milliseconds: number) => Promise<void> }) {
+  now?: () => number; sleep?: (milliseconds: number) => Promise<void>;
+  setTimeout?: (callback: () => void, milliseconds: number) => ReturnType<typeof globalThis.setTimeout>;
+  clearTimeout?: (handle: ReturnType<typeof globalThis.setTimeout>) => void }) {
   return new DouyinMiniappAccessTokenService({
     componentAppId: "component-appid",
     componentAppSecret: "component-secret",
@@ -103,9 +79,10 @@ function service(input: { componentRepository: ComponentTokenRepository;
     openPlatform: input.openPlatform ?? gateway(),
     now: input.now ?? (() => NOW_MS),
     sleep: input.sleep ?? (async () => undefined),
+    setTimeout: input.setTimeout,
+    clearTimeout: input.clearTimeout,
   });
 }
-
 function emptyInstallationRepository(): AuthorizerTokenRepository {
   return {
     findActiveMerchant: mock(async () => null),
@@ -114,7 +91,24 @@ function emptyInstallationRepository(): AuthorizerTokenRepository {
     failAccessTokenRefresh: mock(async () => false),
   };
 }
-
+function pollingRepository(read: () => Promise<DouyinThirdPartyComponentRecord | null>): ComponentTokenRepository {
+  let reads = 0;
+  return {
+    findActive: mock(async () => reads++ === 0 ? componentRow() : read()),
+    claimAccessTokenRefresh: mock(async () => null),
+    completeAccessTokenRefresh: mock(async () => false),
+    failAccessTokenRefresh: mock(async () => false),
+  };
+}
+function pollTimer() {
+  let fire: (() => void) | undefined;
+  const handle = 1 as unknown as ReturnType<typeof globalThis.setTimeout>;
+  const clearTimeout = mock((_handle: ReturnType<typeof globalThis.setTimeout>) => undefined);
+  const setTimeout = mock((callback: () => void, _milliseconds: number) => {
+    fire = callback; return handle;
+  });
+  return { setTimeout, clearTimeout, fire: () => fire?.(), handle };
+}
 describe("DouyinMiniappAccessTokenService fast paths", () => {
   test("decrypts and returns a component token valid for more than five minutes without claiming", async () => {
     const claim = mock(async () => null);
@@ -127,12 +121,10 @@ describe("DouyinMiniappAccessTokenService fast paths", () => {
       completeAccessTokenRefresh: mock(async () => false),
       failAccessTokenRefresh: mock(async () => false),
     };
-
     await expect(service({ componentRepository: repository }).getComponentAccessToken())
       .resolves.toBe("stored-component-token");
     expect(claim).not.toHaveBeenCalled();
   });
-
   test("decrypts and returns a valid merchant token without claiming", async () => {
     const componentRepository = validComponentRepository();
     const claim = mock(async () => null);
@@ -145,13 +137,11 @@ describe("DouyinMiniappAccessTokenService fast paths", () => {
       completeAccessTokenRefresh: mock(async () => false),
       failAccessTokenRefresh: mock(async () => false),
     };
-
     await expect(service({ componentRepository, installationRepository })
       .getAuthorizerAccessToken({ authorizerAppId: "authorizer-appid", deploymentKey: "merchant-a" }))
       .resolves.toBe("stored-authorizer-token");
     expect(claim).not.toHaveBeenCalled();
   });
-
   test("rejects an installation bound to another component before decrypt or external calls", async () => {
     const componentRepository = validComponentRepository();
     const openPlatform = gateway();
@@ -165,7 +155,6 @@ describe("DouyinMiniappAccessTokenService fast paths", () => {
       completeAccessTokenRefresh: mock(async () => false),
       failAccessTokenRefresh: mock(async () => false),
     };
-
     await expect(service({ componentRepository, installationRepository, openPlatform })
       .getAuthorizerAccessToken({ authorizerAppId: "authorizer-appid", deploymentKey: "merchant-a" }))
       .rejects.toMatchObject({ code: "DOUYIN_COMPONENT_APP_ID_MISMATCH" });
@@ -174,7 +163,6 @@ describe("DouyinMiniappAccessTokenService fast paths", () => {
     expect(installationRepository.claimAccessTokenRefresh).not.toHaveBeenCalled();
   });
 });
-
 describe("DouyinMiniappAccessTokenService lease orchestration", () => {
   test("seals refreshed component credentials and completes the matching lease", async () => {
     const complete = mock(async (
@@ -190,7 +178,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
       completeAccessTokenRefresh: complete,
       failAccessTokenRefresh: mock(async () => false),
     };
-
     await expect(service({ componentRepository: repository, openPlatform }).getComponentAccessToken())
       .resolves.toBe("new-component-token");
     expect(openPlatform.getComponentAccessToken).toHaveBeenCalledWith({
@@ -203,7 +190,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
     expect(completion?.accessToken.expiresAt).toBe(new Date(NOW_MS + 7_200_000).toISOString());
     expect(openDouyinCredential(completion!.accessToken, keyring)).toBe("new-component-token");
   });
-
   test("two concurrent callers trigger only one gateway refresh", async () => {
     let row = componentRow();
     let claimed = false;
@@ -246,7 +232,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
         await Promise.resolve();
       },
     });
-
     const [first, second] = await Promise.all([
       tokenService.getComponentAccessToken(),
       tokenService.getComponentAccessToken(),
@@ -254,7 +239,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
     expect([first, second]).toEqual(["new-component-token", "new-component-token"]);
     expect(openPlatform.getComponentAccessToken).toHaveBeenCalledTimes(1);
   });
-
   test("fails closed on completion mismatch and bounded poll timeout", async () => {
     const mismatchRepository: ComponentTokenRepository = {
       findActive: mock(async () => componentRow()),
@@ -267,7 +251,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
     };
     await expect(service({ componentRepository: mismatchRepository }).getComponentAccessToken())
       .rejects.toMatchObject({ code: "DOUYIN_TOKEN_REFRESH_LEASE_MISMATCH" });
-
     let time = NOW_MS;
     let sleeps = 0;
     const pollingRepository: ComponentTokenRepository = {
@@ -284,7 +267,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
     expect(time - NOW_MS).toBe(3_000);
     expect(sleeps).toBe(30);
   });
-
   test("rejects expired or invalid refresh-token expiry before decrypt and best-effort fails the lease", async () => {
     for (const refreshExpiresAt of [new Date(NOW_MS).toISOString(), "invalid-date"]) {
       const componentRepository = validComponentRepository();
@@ -302,7 +284,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
         completeAccessTokenRefresh: complete,
         failAccessTokenRefresh: fail,
       };
-
       await expect(service({ componentRepository, installationRepository, openPlatform })
         .getAuthorizerAccessToken({ authorizerAppId: "authorizer-appid", deploymentKey: "merchant-a" }))
         .rejects.toMatchObject({ code: "DOUYIN_AUTHORIZATION_EXPIRED" });
@@ -316,7 +297,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
       });
     }
   });
-
   test("requires more than the gateway timeout window on component and authorizer leases", async () => {
     const componentGateway = gateway();
     const componentComplete = mock(async () => true);
@@ -336,7 +316,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
       .rejects.toMatchObject({ code: "DOUYIN_TOKEN_REFRESH_LEASE_INSUFFICIENT" });
     expect(componentGateway.getComponentAccessToken).not.toHaveBeenCalled();
     expect(componentComplete).not.toHaveBeenCalled();
-
     let time = NOW_MS;
     const nestedComponentRepository = validComponentRepository();
     nestedComponentRepository.findActive = mock(async () => {
@@ -367,7 +346,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
     expect(authorizerGateway.refreshAuthorizerToken).not.toHaveBeenCalled();
     expect(authorizerComplete).not.toHaveBeenCalled();
   });
-
   test("does not accept a token returned by a poll read that crosses the three-second deadline", async () => {
     let time = NOW_MS;
     let reads = 0;
@@ -391,7 +369,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
       sleep: async (milliseconds) => { time += milliseconds; },
     }).getComponentAccessToken()).rejects.toMatchObject({ code: "DOUYIN_TOKEN_REFRESH_POLL_TIMEOUT" });
   });
-
   test("caps the last poll sleep and does not issue a read at the deadline", async () => {
     let time = NOW_MS;
     let reads = 0;
@@ -414,7 +391,37 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
     expect(sleeps).toEqual([100, 50]);
     expect(reads).toBe(2);
   });
-
+  test("bounds stalled poll reads and cleans timers for timeout, resolve, and rejection", async () => {
+    let resolveLate: (row: DouyinThirdPartyComponentRecord | null) => void = () => undefined;
+    const never = new Promise<DouyinThirdPartyComponentRecord | null>((resolve) => { resolveLate = resolve; });
+    const stalledTimer = pollTimer();
+    const stalled = service({ componentRepository: pollingRepository(() => never),
+      setTimeout: stalledTimer.setTimeout, clearTimeout: stalledTimer.clearTimeout }).getComponentAccessToken();
+    await Bun.sleep(0); stalledTimer.fire();
+    const outcome = await Promise.race([
+      stalled.then(() => "resolved", (error: { code?: string }) => error.code),
+      Bun.sleep(10).then(() => "still-pending"),
+    ]);
+    expect(outcome).toBe("DOUYIN_TOKEN_REFRESH_POLL_TIMEOUT");
+    expect(stalledTimer.setTimeout).toHaveBeenCalledWith(expect.any(Function), 3_000);
+    expect(stalledTimer.clearTimeout).toHaveBeenCalledWith(stalledTimer.handle);
+    resolveLate(componentRow({ accessToken: "late-token", expiresAt: new Date(NOW_MS + 1_000_000).toISOString() }));
+    await Bun.sleep(0);
+    await expect(stalled).rejects.toMatchObject({ code: "DOUYIN_TOKEN_REFRESH_POLL_TIMEOUT" });
+    const resolvedTimer = pollTimer();
+    const polledRow = componentRow({ accessToken: "polled-token",
+      expiresAt: new Date(NOW_MS + 1_000_000).toISOString() });
+    await expect(service({ componentRepository: pollingRepository(async () => polledRow),
+      setTimeout: resolvedTimer.setTimeout, clearTimeout: resolvedTimer.clearTimeout }).getComponentAccessToken())
+      .resolves.toBe("polled-token");
+    expect(resolvedTimer.clearTimeout).toHaveBeenCalledWith(resolvedTimer.handle);
+    const repositoryError = Errors.business(503, "repository unavailable", "DOUYIN_COMPONENT_REPOSITORY_ERROR");
+    const rejectedTimer = pollTimer();
+    const rejectedRead = pollingRepository(async () => { throw repositoryError; });
+    await expect(service({ componentRepository: rejectedRead, setTimeout: rejectedTimer.setTimeout,
+      clearTimeout: rejectedTimer.clearTimeout }).getComponentAccessToken()).rejects.toBe(repositoryError);
+    expect(rejectedTimer.clearTimeout).toHaveBeenCalledWith(rejectedTimer.handle);
+  });
   test("records a stable error code and fails closed when the fail RPC itself fails", async () => {
     const fail = mock(async () => { throw Errors.business(500, "db raw", "DOUYIN_INSTALLATION_REPOSITORY_ERROR"); });
     const repository: ComponentTokenRepository = {
@@ -429,7 +436,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
     const openPlatform = gateway({
       getComponentAccessToken: mock(async () => { throw Errors.business(502, "gateway raw", "DOUYIN_OPEN_PLATFORM_API_ERROR"); }),
     });
-
     await expect(service({ componentRepository: repository, openPlatform }).getComponentAccessToken())
       .rejects.toMatchObject({ code: "DOUYIN_OPEN_PLATFORM_API_ERROR" });
     expect(fail).toHaveBeenCalledWith({
@@ -438,12 +444,10 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
       errorCode: "DOUYIN_COMPONENT_TOKEN_REFRESH_FAILED",
     });
   });
-
   test("rotates authorizer refresh credentials and preserves transient gateway failures", async () => {
     const componentRepository = validComponentRepository();
-    const complete = mock(async (
-      _input: Parameters<AuthorizerTokenRepository["completeAccessTokenRefresh"]>[0],
-    ) => true);
+    const complete = mock(async (_input:
+      Parameters<AuthorizerTokenRepository["completeAccessTokenRefresh"]>[0]) => true);
     const fail = mock(async () => true);
     const installationRepository: AuthorizerTokenRepository = {
       findActiveMerchant: mock(async () => installationRow()),
@@ -468,7 +472,6 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
       throw Errors.business(500, "test rotation missing", "TEST_ROTATION_MISSING");
     }
     expect(openDouyinCredential(rotation, keyring)).toBe("rotated-refresh-token");
-
     const transientGateway = gateway({
       refreshAuthorizerToken: mock(async () => {
         throw Errors.business(502, "network safe", "DOUYIN_OPEN_PLATFORM_NETWORK_ERROR");
@@ -484,13 +487,10 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
     });
   });
 });
-
 function validComponentRepository(): ComponentTokenRepository {
   return {
-    findActive: mock(async () => componentRow({
-      accessToken: "stored-component-token",
-      expiresAt: new Date(NOW_MS + 301_000).toISOString(),
-    })),
+    findActive: mock(async () => componentRow({ accessToken: "stored-component-token",
+      expiresAt: new Date(NOW_MS + 301_000).toISOString() })),
     claimAccessTokenRefresh: mock(async () => null),
     completeAccessTokenRefresh: mock(async () => false),
     failAccessTokenRefresh: mock(async () => false),

@@ -27,6 +27,9 @@ const MIN_LEASE_REMAINING_MS = 10_000;
 const COMPONENT_REFRESH_ERROR = "DOUYIN_COMPONENT_TOKEN_REFRESH_FAILED";
 const AUTHORIZER_REFRESH_ERROR = "DOUYIN_AUTHORIZER_TOKEN_REFRESH_FAILED";
 const AUTHORIZATION_EXPIRED_ERROR = "DOUYIN_AUTHORIZATION_EXPIRED";
+type TimerHandle = ReturnType<typeof globalThis.setTimeout>;
+type SetTimer = (callback: () => void, milliseconds: number) => TimerHandle;
+type ClearTimer = (handle: TimerHandle) => void;
 
 export interface ComponentTokenRepository {
   findActive(componentAppId: string): Promise<DouyinThirdPartyComponentRecord | null>;
@@ -71,15 +74,21 @@ type ServiceOptions = {
   readonly openPlatform: DouyinOpenPlatformGateway;
   readonly now?: () => number;
   readonly sleep?: (milliseconds: number) => Promise<void>;
+  readonly setTimeout?: SetTimer;
+  readonly clearTimeout?: ClearTimer;
 };
 
 export class DouyinMiniappAccessTokenService {
   private readonly now: () => number;
   private readonly sleep: (milliseconds: number) => Promise<void>;
+  private readonly setTimeout: SetTimer;
+  private readonly clearTimeout: ClearTimer;
 
   constructor(private readonly options: ServiceOptions) {
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? sleepWithTimer;
+    this.setTimeout = options.setTimeout ?? globalThis.setTimeout;
+    this.clearTimeout = options.clearTimeout ?? globalThis.clearTimeout;
   }
 
   async getComponentAccessToken(): Promise<string> {
@@ -205,8 +214,9 @@ export class DouyinMiniappAccessTokenService {
       if (remaining <= 0) break;
       await this.sleep(Math.min(REFRESH_POLL_INTERVAL_MS, remaining));
       if (this.now() >= deadline) break;
-      const row = await this.options.componentRepository.findActive(
-        this.options.componentAppId,
+      const row = await this.readWithinDeadline(
+        () => this.options.componentRepository.findActive(this.options.componentAppId),
+        deadline,
       );
       if (this.now() >= deadline) break;
       if (!row) break;
@@ -226,9 +236,12 @@ export class DouyinMiniappAccessTokenService {
       if (remaining <= 0) break;
       await this.sleep(Math.min(REFRESH_POLL_INTERVAL_MS, remaining));
       if (this.now() >= deadline) break;
-      const row = await this.options.installationRepository.findActiveMerchant(
-        input.authorizerAppId,
-        input.deploymentKey,
+      const row = await this.readWithinDeadline(
+        () => this.options.installationRepository.findActiveMerchant(
+          input.authorizerAppId,
+          input.deploymentKey,
+        ),
+        deadline,
       );
       if (this.now() >= deadline) break;
       if (!row) break;
@@ -237,6 +250,33 @@ export class DouyinMiniappAccessTokenService {
       if (stored) return stored;
     }
     throw pollTimeoutError();
+  }
+
+  private readWithinDeadline<Result>(
+    read: () => Promise<Result>,
+    deadline: number,
+  ): Promise<Result> {
+    const remaining = deadline - this.now();
+    if (remaining <= 0) return Promise.reject(pollTimeoutError());
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timer: TimerHandle | undefined;
+      const settle = (complete: () => void) => {
+        if (settled) return;
+        settled = true;
+        if (timer !== undefined) this.clearTimeout(timer);
+        complete();
+      };
+      timer = this.setTimeout(
+        () => settle(() => reject(pollTimeoutError())),
+        remaining,
+      );
+      if (settled) this.clearTimeout(timer);
+      Promise.resolve().then(read).then(
+        (result) => settle(() => resolve(result)),
+        (error: unknown) => settle(() => reject(error)),
+      );
+    });
   }
 
   private openValidAccessToken(row: {
