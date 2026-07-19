@@ -6,6 +6,8 @@ const AES_KEY_BYTES = 32;
 const MAX_ID_LENGTH = 128;
 const MAX_SECRET_LENGTH = 512;
 const MAX_KEY_VERSION_LENGTH = 64;
+const MAX_CREDENTIAL_KEY_VERSIONS = 16;
+const MAX_CREDENTIAL_KEYS_JSON_BYTES = 16 * 1024;
 const STANDARD_BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const ENCODING_AES_KEY_PATTERN = /^[A-Za-z0-9+/]{43}$/;
 const KEY_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -28,6 +30,11 @@ const CredentialKeySchema = z.string().superRefine((value, context) => {
 }).transform((value) => Buffer.from(value, "base64"));
 
 const CredentialKeysJsonSchema = z.string().transform((value, context) => {
+  if (Buffer.byteLength(value, "utf8") > MAX_CREDENTIAL_KEYS_JSON_BYTES) {
+    context.addIssue({ code: "custom", message: "凭证密钥配置超过长度限制" });
+    return z.NEVER;
+  }
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
@@ -36,9 +43,20 @@ const CredentialKeysJsonSchema = z.string().transform((value, context) => {
     return z.NEVER;
   }
 
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    context.addIssue({ code: "custom", message: "凭证密钥配置必须是 JSON object" });
+    return z.NEVER;
+  }
+
+  const keyCount = Object.keys(parsed).length;
+  if (keyCount < 1 || keyCount > MAX_CREDENTIAL_KEY_VERSIONS) {
+    context.addIssue({ code: "custom", message: "凭证密钥版本数量无效" });
+    return z.NEVER;
+  }
+
   const result = z.record(KeyVersionSchema, CredentialKeySchema).safeParse(parsed);
-  if (!result.success || Object.keys(result.data).length === 0) {
-    context.addIssue({ code: "custom", message: "凭证密钥配置必须是非空 JSON object" });
+  if (!result.success) {
+    context.addIssue({ code: "custom", message: "凭证密钥配置格式无效" });
     return z.NEVER;
   }
   return result.data;

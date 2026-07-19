@@ -4,6 +4,14 @@ import { loadDouyinMiniappConfig } from "./config";
 
 const keyV1 = Buffer.alloc(32, 0x31).toString("base64");
 const keyV2 = Buffer.alloc(32, 0x32).toString("base64");
+const MAX_CREDENTIAL_KEY_VERSIONS = 16;
+const MAX_CREDENTIAL_KEYS_JSON_BYTES = 16 * 1024;
+
+function credentialKeys(count: number): Record<string, string> {
+  return Object.fromEntries(
+    Array.from({ length: count }, (_, index) => [`v${index + 1}`, keyV1]),
+  );
+}
 
 function validEnv(): Record<string, string> {
   return {
@@ -81,6 +89,48 @@ describe("douyin miniapp config", () => {
     env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = "toString";
 
     captureAppError(() => loadDouyinMiniappConfig(env));
+  });
+
+  test("accepts the maximum of 16 credential key versions", () => {
+    const env = validEnv();
+    env.DOUYIN_CREDENTIAL_KEYS_JSON = JSON.stringify(
+      credentialKeys(MAX_CREDENTIAL_KEY_VERSIONS),
+    );
+    env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = "v16";
+
+    const config = loadDouyinMiniappConfig(env);
+
+    expect(Object.keys(config.credentialKeyring.keys)).toHaveLength(16);
+  });
+
+  test("rejects 17 credential key versions without echoing the keyring", () => {
+    const env = validEnv();
+    const oversizedKeyring = JSON.stringify(
+      credentialKeys(MAX_CREDENTIAL_KEY_VERSIONS + 1),
+    );
+    env.DOUYIN_CREDENTIAL_KEYS_JSON = oversizedKeyring;
+    env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = "v17";
+
+    const error = captureAppError(() => loadDouyinMiniappConfig(env));
+
+    expect(error.message).not.toContain(oversizedKeyring);
+    expect(JSON.stringify(error.details)).not.toContain(oversizedKeyring);
+  });
+
+  test("rejects credential keys JSON over 16 KiB before parsing", () => {
+    const env = validEnv();
+    const oversizedJson = `${JSON.stringify({ v1: keyV1 })}${" ".repeat(
+      MAX_CREDENTIAL_KEYS_JSON_BYTES,
+    )}`;
+    env.DOUYIN_CREDENTIAL_KEYS_JSON = oversizedJson;
+    env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = "v1";
+
+    expect(Buffer.byteLength(oversizedJson, "utf8")).toBeGreaterThan(
+      MAX_CREDENTIAL_KEYS_JSON_BYTES,
+    );
+    const error = captureAppError(() => loadDouyinMiniappConfig(env));
+    expect(error.message).not.toContain(oversizedJson);
+    expect(JSON.stringify(error.details)).not.toContain(oversizedJson);
   });
 
   test("rejects missing or unreasonably long static values without echoing secrets", () => {
