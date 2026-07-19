@@ -118,10 +118,8 @@ function normalize(sql: string): string { return sql.replace(/\s+/g, " ").trim()
 function normalizeAcl(sql: string): string { return normalize(sql).replace(/\(\s+/g, "(").replace(/\s+\)/g, ")"); }
 function structuralSql(): string { return stripSqlComments(readMigration()); }
 function extractRpc(sql: string, name: (typeof rpcNames)[number]): string {
-  const code = maskSqlLiterals(sql);
-  const match = code.match(
-    new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`),
-  );
+  const match = maskSqlLiterals(sql).match(
+    new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`));
   return match?.index === undefined ? "" : sql.slice(match.index, match.index + match[0].length);
 }
 function closingParen(code: string, open: number): number {
@@ -179,19 +177,16 @@ function stringLiterals(sql: string): string[] {
   return literals;
 }
 function literalAfterCode(sql: string, anchor: string): string {
-  const code = codeOnlyRpc(sql);
-  const start = code.indexOf(anchor);
-  if (start < 0) return "";
+  const code = codeOnlyRpc(sql), start = code.indexOf(anchor);
   const literalStart = sql.indexOf("'", start + anchor.length);
-  if (literalStart < 0 || !/^\s*$/.test(sql.slice(start + anchor.length, literalStart))) return "";
-  return sql.slice(literalStart, quotedEnd(sql, literalStart, "'"));
-}
+  if (start < 0 || literalStart < 0 || !/^\s*$/.test(sql.slice(start + anchor.length, literalStart))) return "";
+  return sql.slice(literalStart, quotedEnd(sql, literalStart, "'")); }
 function expectContains(source: string, values: readonly string[]): void { for (const value of values) expect(source).toContain(value); }
 function expectEnvelope(source: string, fields: readonly string[]): void {
-  for (const field of fields) {
-    expect(source).toContain(`${field} IS NULL`);
-    expect(source).toContain(`${field} IS NOT NULL`);
-  }
+  for (const field of fields) { expect(source).toContain(`${field} IS NULL`); expect(source).toContain(`${field} IS NOT NULL`); }
+  const nullBranch = fields.map((field) => `${field} IS NULL`).join(" AND ");
+  const presentBranch = fields.flatMap((field) => field.endsWith("_at") ? [`${field} IS NOT NULL`] : [`${field} IS NOT NULL`, `btrim(${field}) <>`]).join(" AND ");
+  expect(source).toContain(`( ${nullBranch} ) OR ( ${presentBranch} )`); expect(source).not.toMatch(/\bOR\s+TRUE\b/i);
 }
 describe("douyin miniapp foundation migration", () => {
   test("strips SQL and PL/pgSQL comments but preserves every literal form", () => {
@@ -261,7 +256,12 @@ describe("douyin miniapp foundation migration", () => {
       "access_token_ciphertext", "access_token_iv", "access_token_tag",
       "access_token_key_version", "access_token_expires_at",
     ];
-    expectEnvelope(normalize(codeOnlyStructure(extractTableConstraint(sql, targetTables[0], "douyin_components_ticket_envelope_check"))), ticketFields);
+    const ticket = normalize(codeOnlyStructure(extractTableConstraint(sql, targetTables[0], "douyin_components_ticket_envelope_check")));
+    expectEnvelope(ticket, ticketFields);
+    for (const weakened of [ticket.replace("component_ticket_ciphertext IS NULL AND component_ticket_iv IS NULL", "component_ticket_ciphertext IS NULL OR component_ticket_iv IS NULL"),
+      ticket.replace("component_ticket_received_at IS NULL ) OR (", "component_ticket_received_at IS NULL OR TRUE ) OR (")]) {
+      expect(weakened).not.toBe(ticket); expect(() => expectEnvelope(weakened, ticketFields)).toThrow();
+    }
     expectEnvelope(normalize(codeOnlyStructure(extractTableConstraint(sql, targetTables[0], "douyin_components_access_token_envelope_check"))), accessFields);
     const leaseRaw = extractTableConstraint(sql, targetTables[0], "douyin_components_refresh_lease_check");
     const lease = normalize(codeOnlyStructure(leaseRaw));
