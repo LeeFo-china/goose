@@ -12700,6 +12700,53 @@ export type Database = {
         }
         Returns: Json
       }
+      create_douyin_template_development_installation: {
+        Args: {
+          p_authorizer_appid: string
+          p_component_appid: string
+          p_runtime_config: Json
+          p_tenant_id: string
+        }
+        Returns: {
+          access_token_ciphertext: string | null
+          access_token_expires_at: string | null
+          access_token_iv: string | null
+          access_token_key_version: string | null
+          access_token_tag: string | null
+          authorization_event_occurred_at: string | null
+          authorization_status: string
+          authorizer_appid: string
+          component_appid: string
+          created_at: string
+          deployment_key: string | null
+          id: string
+          installation_kind: string
+          last_audited_at: string | null
+          last_released_at: string | null
+          last_submitted_at: string | null
+          permission_snapshot: Json
+          refresh_token_ciphertext: string | null
+          refresh_token_expires_at: string | null
+          refresh_token_iv: string | null
+          refresh_token_key_version: string | null
+          refresh_token_tag: string | null
+          revoked_at: string | null
+          runtime_config: Json
+          template_id: string | null
+          template_version: string | null
+          tenant_id: string | null
+          token_refresh_claim_expires_at: string | null
+          token_refresh_claim_token: string | null
+          token_refresh_last_error: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "douyin_miniapp_installations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_project_log_fast: {
         Args: {
           p_content: string
@@ -12729,6 +12776,48 @@ export type Database = {
           p_title: string
         }
         Returns: Json
+      }
+      enable_douyin_miniapp_installation: {
+        Args: { p_installation_id: string }
+        Returns: {
+          access_token_ciphertext: string | null
+          access_token_expires_at: string | null
+          access_token_iv: string | null
+          access_token_key_version: string | null
+          access_token_tag: string | null
+          authorization_event_occurred_at: string | null
+          authorization_status: string
+          authorizer_appid: string
+          component_appid: string
+          created_at: string
+          deployment_key: string | null
+          id: string
+          installation_kind: string
+          last_audited_at: string | null
+          last_released_at: string | null
+          last_submitted_at: string | null
+          permission_snapshot: Json
+          refresh_token_ciphertext: string | null
+          refresh_token_expires_at: string | null
+          refresh_token_iv: string | null
+          refresh_token_key_version: string | null
+          refresh_token_tag: string | null
+          revoked_at: string | null
+          runtime_config: Json
+          template_id: string | null
+          template_version: string | null
+          tenant_id: string | null
+          token_refresh_claim_expires_at: string | null
+          token_refresh_claim_token: string | null
+          token_refresh_last_error: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "douyin_miniapp_installations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       expire_tenant_onboarding_partner_assists: {
         Args: { p_cutoff: string; p_partner_id?: string }
