@@ -142,11 +142,15 @@ export async function tick(
       billingRechargeRefundReconciliationService;
 
   try {
-    const subscription = await runChild(() =>
-      subscriptionService.runDueChecks({ batchSize: config.batchSize })
+    const subscription = await runChild(
+      () => subscriptionService.runDueChecks({ batchSize: config.batchSize }),
+      summarizeSubscriptionResult,
     );
-    const refund = await runChild(() =>
-      refundReconciliationService.runBatch({ limit: config.refundBatchSize })
+    const refund = await runChild(
+      () => refundReconciliationService.runBatch({
+        limit: config.refundBatchSize,
+      }),
+      summarizeRefundResult,
     );
     const hasErrors = subscription.status === "rejected" ||
       refund.status === "rejected";
@@ -162,14 +166,38 @@ export async function tick(
   }
 }
 
-async function runChild<Result>(
+async function runChild<Result, Summary>(
   operation: () => Promise<Result>,
-): Promise<ChildResult<Result>> {
+  summarize: (result: Result) => Summary,
+): Promise<ChildResult<Summary>> {
   try {
-    return { status: "fulfilled", result: await operation() };
+    return { status: "fulfilled", result: summarize(await operation()) };
   } catch {
     return { status: "rejected" };
   }
+}
+
+function summarizeSubscriptionResult(result: BillingDueCheckResult) {
+  return {
+    ensured: result.ensured,
+    reminded: result.reminded,
+    charged: result.charged,
+    locked: result.locked,
+    skipped: result.skipped,
+    error_count: result.errors.length,
+  };
+}
+
+function summarizeRefundResult(result: RefundReconciliationSummary) {
+  return {
+    claimed: result.claimed,
+    success: result.success,
+    processing: result.processing,
+    closed: result.closed,
+    abnormal: result.abnormal,
+    rescheduled: result.rescheduled,
+    failed: result.failed,
+  };
 }
 
 function registerShutdownSignalHandlers(): void {

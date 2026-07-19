@@ -16,6 +16,15 @@ const SUBSCRIPTION_RESULT = {
   errors: [],
 };
 
+const SUBSCRIPTION_SUMMARY = {
+  ensured: 1,
+  reminded: 2,
+  charged: 3,
+  locked: 4,
+  skipped: 5,
+  error_count: 0,
+};
+
 const REFUND_RESULT = {
   claimed: 2,
   success: 1,
@@ -126,11 +135,37 @@ describe("tick", () => {
       "tick completed",
       expect.objectContaining({
         result: {
-          subscription: { status: "fulfilled", result: SUBSCRIPTION_RESULT },
+          subscription: { status: "fulfilled", result: SUBSCRIPTION_SUMMARY },
           refund: { status: "fulfilled", result: REFUND_RESULT },
         },
       }),
     );
+  });
+
+  test("whitelists scalar child summaries without logging returned error text", async () => {
+    const subscriptionService = {
+      runDueChecks: mock(async () => ({
+        ...SUBSCRIPTION_RESULT,
+        errors: ["distinctive subscription raw secret"],
+      })),
+    };
+    const refundReconciliationService = {
+      runBatch: mock(async () => ({
+        ...REFUND_RESULT,
+        raw_secret: "distinctive refund raw secret",
+      })),
+    };
+    const logger = mock(() => {});
+    const { tick } = await import("./billing-reconcile-worker");
+
+    await tick({ subscriptionService, refundReconciliationService, logger });
+
+    const logged = JSON.stringify(logger.mock.calls);
+    expect(logged).toContain('"error_count":1');
+    expect(logged).toContain('"claimed":2');
+    expect(logged).not.toContain("distinctive subscription raw secret");
+    expect(logged).not.toContain("distinctive refund raw secret");
+    expect(logged).not.toContain("raw_secret");
   });
 
   test("still runs refunds when subscriptions fail", async () => {
@@ -173,7 +208,7 @@ describe("tick", () => {
       "tick completed with errors",
       expect.objectContaining({
         result: {
-          subscription: { status: "fulfilled", result: SUBSCRIPTION_RESULT },
+          subscription: { status: "fulfilled", result: SUBSCRIPTION_SUMMARY },
           refund: { status: "rejected" },
         },
       }),
