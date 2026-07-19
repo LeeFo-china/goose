@@ -517,6 +517,18 @@ class DnsQueryTests(unittest.TestCase):
     def test_query_rejects_nonzero_rcode(self):
         self._assert_query_rejected(FakeDnsSocket(flags=0x8003))
 
+    def test_authoritative_txt_query_treats_name_error_as_absent(self):
+        fake_socket = FakeDnsSocket(flags=0x8403)
+        with mock.patch.object(hook.socket, "socket", return_value=fake_socket):
+            self.assertEqual(
+                hook._query_authoritative_txt(
+                    "192.0.2.53",
+                    "_acme-challenge.www.goodcms.cn",
+                    2.0,
+                ),
+                set(),
+            )
+
     def test_query_rejects_wrong_peer(self):
         self._assert_query_rejected(
             FakeDnsSocket(flags=0x8000, peer=("192.0.2.54", 53))

@@ -237,6 +237,7 @@ def query_dns(
     *,
     recursion_desired: bool = False,
     require_authoritative: bool = False,
+    allow_name_error: bool = False,
 ) -> bytes:
     if not 0 <= qtype <= 0xFFFF:
         raise DnsProtocolError("invalid DNS query type")
@@ -281,7 +282,8 @@ def query_dns(
         raise DnsProtocolError("DNS response opcode mismatch")
     if response_flags & 0x0200:
         raise DnsProtocolError("truncated DNS response")
-    if response_flags & 0x000F:
+    response_code = response_flags & 0x000F
+    if response_code and not (allow_name_error and response_code == 3):
         raise DnsProtocolError("DNS response returned an error")
     if require_authoritative and not response_flags & 0x0400:
         raise DnsProtocolError("DNS response is not authoritative")
@@ -391,6 +393,7 @@ def _query_authoritative_txt(
             16,
             timeout=timeout,
             require_authoritative=True,
+            allow_name_error=True,
         )
     )
 
