@@ -54,6 +54,61 @@ const project = {
 };
 
 describe("DouyinMiniappContentRepository privacy and pagination", () => {
+  test("reads installation tenant status without turning suspension into a repository error", async () => {
+    const suspendedInstallation = {
+      id: "22222222-2222-4222-8222-222222222222",
+      tenant_id: "33333333-3333-4333-8333-333333333333",
+      authorizer_appid: "tt-authorizer-1",
+      authorization_status: "active",
+      template_version: "1.0.0",
+      runtime_config: {},
+      tenant: { id: "33333333-3333-4333-8333-333333333333", status: "suspended" },
+    };
+    const { client, calls } = clientWith([{ data: suspendedInstallation, error: null }]);
+    const repository = new Repository(client as never);
+
+    await expect(repository.findActiveInstallation({
+      installationId: suspendedInstallation.id,
+      tenantId: suspendedInstallation.tenant_id,
+      appId: suspendedInstallation.authorizer_appid,
+    })).resolves.toMatchObject({ tenant: { status: "suspended" } });
+
+    const select = String(calls.find((call) => call.method === "select")?.args[0]);
+    expect(select).toBe("id,tenant_id,authorizer_appid,authorization_status,template_version,"
+      + "runtime_config,tenant:tenants(id,status)");
+    expect(select).not.toMatch(/access_token|refresh_token|encrypted/i);
+    expect(calls).toContainEqual({ method: "eq", args: ["authorization_status", "active"] });
+  });
+
+  test("bounds published company profile and active service-area reads", async () => {
+    const company = {
+      public_name: "示例装饰", introduction: "公开简介", public_phone: "13912349000",
+      address_province: "河南省", address_city: "郑州市", address_district: "金水区",
+      address: "公开门店地址", status: "published", published_at: "2026-07-01T00:00:00.000Z",
+    };
+    const area = { province: "河南省", city: "郑州市", district: "金水区", priority: 10 };
+    const { client, calls } = clientWith([
+      { data: company, error: null },
+      { data: [area], error: null },
+    ]);
+    const repository = new Repository(client as never);
+    const tenantId = "33333333-3333-4333-8333-333333333333";
+
+    await repository.findPublishedCompany(tenantId);
+    await repository.listServiceAreas(tenantId);
+
+    expect(calls.filter((call) => call.method === "eq" && call.args[0] === "tenant_id"))
+      .toHaveLength(2);
+    expect(calls).toContainEqual({ method: "eq", args: ["status", "published"] });
+    expect(calls).toContainEqual({ method: "eq", args: ["status", "active"] });
+    expect(calls).toContainEqual({ method: "limit", args: [50] });
+    const selects = calls.filter((call) => call.method === "select")
+      .map((call) => String(call.args[0]));
+    expect(selects[0]).toBe("public_name,introduction,public_phone,address_province,"
+      + "address_city,address_district,address,status,published_at");
+    expect(selects[1]).toBe("province,city,district,priority");
+  });
+
   test("lists tenant-scoped public cases with exact filters and a bounded range", async () => {
     const { client, calls } = clientWith([{ data: [project], error: null, count: 21 }]);
     const repository = new Repository(client as never);

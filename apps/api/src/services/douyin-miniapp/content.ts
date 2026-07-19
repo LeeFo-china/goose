@@ -131,6 +131,9 @@ export class DouyinMiniappContentService {
     ) {
       throw installationDisabled();
     }
+    if (installation.tenant.status !== "active") {
+      throw Errors.business(403, "装修公司服务已暂停", "TENANT_NOT_AVAILABLE");
+    }
     const runtime = DouyinRuntimeConfigSchema.safeParse(installation.runtime_config);
     if (!runtime.success) throw installationDisabled();
     return { tenantId: user.tenant_id, installation, runtime: runtime.data };

@@ -123,6 +123,18 @@ describe("DouyinMiniappContentService", () => {
       .rejects.toMatchObject({ code: "DOUYIN_CONTENT_NOT_FOUND", statusCode: 404 });
   });
 
+  test("returns the stable tenant unavailable error after a signed-in tenant is suspended", async () => {
+    const suspended = dependencies({ findActiveInstallation: mock(async () => ({
+      ...installation, tenant: { id: TENANT_ID, status: "suspended" },
+    })) });
+
+    await expect(new DouyinMiniappContentService(suspended as never).bootstrap(user))
+      .rejects.toMatchObject({ code: "TENANT_NOT_AVAILABLE", statusCode: 403 });
+    expect(suspended.repository.findPublishedCompany).not.toHaveBeenCalled();
+    expect(suspended.repository.listCases).not.toHaveBeenCalled();
+    expect(suspended.repository.listSites).not.toHaveBeenCalled();
+  });
+
   test("returns bounded HTTPS-only progress images without raw content", async () => {
     const deps = dependencies();
     const result = await new DouyinMiniappContentService(deps as never).listSiteLogs(

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TENANT_STATUS_VALUES } from "@gooes/domain";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
@@ -27,7 +28,7 @@ const InstallationSchema = z.object({
   id: z.uuid(), tenant_id: z.uuid(), authorizer_appid: z.string().min(1),
   authorization_status: z.literal("active"), template_version: NullableString,
   runtime_config: z.unknown(),
-  tenant: z.object({ id: z.uuid(), status: z.literal("active") }),
+  tenant: z.object({ id: z.uuid(), status: z.enum(TENANT_STATUS_VALUES) }),
 }).strict();
 const CompanySchema = z.object({
   public_name: z.string().min(1), introduction: NullableString,
