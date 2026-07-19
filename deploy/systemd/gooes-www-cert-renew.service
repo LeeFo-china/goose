@@ -1,5 +1,5 @@
 [Unit]
-Description=Renew the www.goodcms.cn certificate in Supabase Nginx
+Description=Renew GoodCMS DNS-01 certificates in Supabase Nginx
 Requires=docker.service
 After=docker.service
 

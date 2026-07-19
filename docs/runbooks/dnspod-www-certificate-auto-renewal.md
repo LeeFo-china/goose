@@ -1,8 +1,8 @@
-# www.goodcms.cn DNSPod ACME 证书自动续期运行手册
+# GoodCMS DNSPod ACME 证书自动续期运行手册
 
 ## 目的与范围
 
-本手册覆盖生产服务器 `ubuntu@1.13.20.39` 上 `www.goodcms.cn` 的 Let's Encrypt DNS-01 续期。证书由容器 `supabase-nginx` 中的 Certbot 管理，TXT 挑战记录通过腾讯云 DNSPod API 3.0 临时创建并在验证后删除。
+本手册覆盖生产服务器 `ubuntu@1.13.20.39` 上 GoodCMS 生产证书的 Let's Encrypt DNS-01 续期。默认覆盖 `www.goodcms.cn`、`admin.goodcms.cn`、`api.goodcms.cn`、`h5.goodcms.cn`、`sock.goodcms.cn`、`supabase.goodcms.cn`。证书由容器 `supabase-nginx` 中的 Certbot 管理，TXT 挑战记录通过腾讯云 DNSPod API 3.0 临时创建并在验证后删除。
 
 自动化只负责续期和 Nginx reload，不替换现有证书以外的站点配置。不要在开发域名 `www-dev.goodcms.cn` 上复用生产凭据。
 
@@ -15,7 +15,7 @@
 | 凭据 | `/etc/gooes/dnspod-www-cert.env`（root:root，0600） |
 | 容器运行目录 | `/run/gooes-dnspod-acme`（0700） |
 | 状态目录 | `/run/gooes-dnspod-acme/state`（0700，临时 TXT RecordId 与 validation hash） |
-| Certbot | 容器 `supabase-nginx` 内的 `www.goodcms.cn` renewal 配置 |
+| Certbot | 容器 `supabase-nginx` 内上述证书的 renewal 配置 |
 | systemd | `gooes-www-cert-renew.service` / `.timer` |
 
 运行目录和状态在清理步骤中删除，状态文件记录本次 hook 创建的 `RecordId` 与 validation hash；cleanup 不会删除其他记录。
@@ -30,7 +30,7 @@
 
 不要授予 DNSPod 全管理、查询全域、控制台登录或其他云产品权限。API 密钥只在生产主机凭据文件中保存；创建后立即记录密钥 ID 的归属，SecretKey 不写入 Git、工单、聊天、日志、shell history 或镜像。
 
-凭据文件固定只含以下键，域名值必须匹配：
+凭据文件固定只含以下键，域名值必须匹配。`DNSPOD_SUBDOMAIN` 保留兼容值；hook 会按 `CERTBOT_DOMAIN` 选择本次实际 `_acme-challenge.<subdomain>`：
 
 ```dotenv
 TENCENTCLOUD_SECRET_ID=<CAM secret id>
@@ -65,8 +65,10 @@ ssh ubuntu@1.13.20.39 'sudo stat -c "%a %U:%G %n" /etc/gooes/dnspod-www-cert.env
 ```bash
 backup_dir=/var/backups/gooes-cert-renewal/$(date -u +%Y%m%dT%H%M%SZ)
 install -d -o root -g root -m 0700 "$backup_dir"
-docker cp supabase-nginx:/etc/letsencrypt/renewal/www.goodcms.cn.conf "$backup_dir/www.goodcms.cn.conf"
-sha256sum "$backup_dir/www.goodcms.cn.conf"
+for cert_name in www.goodcms.cn admin.goodcms.cn api.goodcms.cn h5.goodcms.cn sock.goodcms.cn supabase.goodcms.cn; do
+  docker cp "supabase-nginx:/etc/letsencrypt/renewal/${cert_name}.conf" "$backup_dir/${cert_name}.conf"
+done
+sha256sum "$backup_dir"/*.conf
 ```
 
 先执行 `reconfigure`。Certbot 会用新的续期参数对 staging 做测试，测试成功后保存参数；runner 不传 `--server`，避免把将来正式续期指向 staging：
@@ -74,7 +76,7 @@ sha256sum "$backup_dir/www.goodcms.cn.conf"
 ```bash
 /opt/gooes/cert-renewal/gooes-www-cert-renew prepare
 /opt/gooes/cert-renewal/gooes-www-cert-renew reconfigure
-docker exec supabase-nginx awk -F' = ' '/^server = /{print $2}' /etc/letsencrypt/renewal/www.goodcms.cn.conf
+docker exec supabase-nginx awk -F' = ' '/^server = /{print FILENAME, $2}' /etc/letsencrypt/renewal/*.conf
 ```
 
 上一步输出必须是 `https://acme-v02.api.letsencrypt.org/directory`，否则先恢复备份，不要启用 timer。
@@ -105,7 +107,7 @@ docker exec supabase-nginx nginx -t
 curl --fail --silent --show-error --head https://www.goodcms.cn
 ```
 
-检查证书 SAN、有效期和 HTTPS 返回值；日志中不得出现 SecretId、SecretKey、签名、Authorization 或 ACME validation。DNS 检查应确认 `_acme-challenge.www.goodcms.cn` 没有遗留 TXT。
+检查证书 SAN、有效期和 HTTPS 返回值；日志中不得出现 SecretId、SecretKey、签名、Authorization 或 ACME validation。DNS 检查应确认默认覆盖域名对应的 `_acme-challenge.*.goodcms.cn` 没有遗留 TXT。临时只续部分证书时可通过 root 环境变量覆盖，例如：`CERT_NAMES="www.goodcms.cn api.goodcms.cn" /opt/gooes/cert-renewal/gooes-www-cert-renew dry-run`。
 
 ## 故障排查
 
@@ -122,7 +124,9 @@ curl --fail --silent --show-error --head https://www.goodcms.cn
 ```bash
 systemctl disable --now gooes-www-cert-renew.timer
 systemctl stop gooes-www-cert-renew.service || true
-docker cp /var/backups/gooes-cert-renewal/<timestamp>/www.goodcms.cn.conf supabase-nginx:/etc/letsencrypt/renewal/www.goodcms.cn.conf
+for cert_name in www.goodcms.cn admin.goodcms.cn api.goodcms.cn h5.goodcms.cn sock.goodcms.cn supabase.goodcms.cn; do
+  docker cp "/var/backups/gooes-cert-renewal/<timestamp>/${cert_name}.conf" "supabase-nginx:/etc/letsencrypt/renewal/${cert_name}.conf"
+done
 systemctl daemon-reload
 ```
 

@@ -371,13 +371,43 @@ class CredentialTests(unittest.TestCase):
 
 
 class DomainValidationTests(unittest.TestCase):
-    def test_exact_certbot_domain_is_accepted(self):
-        hook.validate_certbot_domain("www.goodcms.cn")
+    def test_configured_certbot_domains_are_accepted_and_mapped(self):
+        expected = {
+            "www.goodcms.cn": (
+                "_acme-challenge.www",
+                "_acme-challenge.www.goodcms.cn",
+            ),
+            "admin.goodcms.cn": (
+                "_acme-challenge.admin",
+                "_acme-challenge.admin.goodcms.cn",
+            ),
+            "api.goodcms.cn": (
+                "_acme-challenge.api",
+                "_acme-challenge.api.goodcms.cn",
+            ),
+            "h5.goodcms.cn": (
+                "_acme-challenge.h5",
+                "_acme-challenge.h5.goodcms.cn",
+            ),
+            "sock.goodcms.cn": (
+                "_acme-challenge.sock",
+                "_acme-challenge.sock.goodcms.cn",
+            ),
+            "supabase.goodcms.cn": (
+                "_acme-challenge.supabase",
+                "_acme-challenge.supabase.goodcms.cn",
+            ),
+        }
+        for domain, (subdomain, fqdn) in expected.items():
+            with self.subTest(domain=domain):
+                hook.validate_certbot_domain(domain)
+                self.assertEqual(hook.challenge_subdomain_for_domain(domain), subdomain)
+                self.assertEqual(hook.challenge_fqdn_for_domain(domain), fqdn)
 
     def test_domain_variants_are_rejected(self):
         invalid_domains = (
             "goodcms.cn",
-            "api.goodcms.cn",
+            "assets.goodcms.cn",
             "www.goodcms.cn.",
             "WWW.goodcms.cn",
         )
@@ -1126,12 +1156,12 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
 
 
 class DnsPodClientTests(unittest.TestCase):
-    def make_credentials(self):
+    def make_credentials(self, *, subdomain="_acme-challenge.www"):
         return hook.Credentials(
             TEST_SECRET_ID,
             TEST_SECRET_KEY,
             "goodcms.cn",
-            "_acme-challenge.www",
+            subdomain,
         )
 
     def test_create_txt_signs_and_sends_the_exact_fixed_json_bytes(self):
@@ -1199,6 +1229,21 @@ class DnsPodClientTests(unittest.TestCase):
         self.assertEqual(headers["x-tc-version"], "2021-03-23")
         self.assertEqual(headers["content-type"], "application/json; charset=utf-8")
         self.assertTrue(transport.response.closed)
+
+    def test_create_txt_uses_the_configured_challenge_subdomain(self):
+        response = json.dumps(
+            {"Response": {"RecordId": 731, "RequestId": "request-12345678"}}
+        )
+        transport = FakeTransport(response)
+        client = hook.DnsPodClient(
+            self.make_credentials(subdomain="_acme-challenge.api"),
+            transport=transport,
+        )
+
+        client.create_txt("validation-sensitive")
+
+        request, _timeout = transport.calls[0]
+        self.assertEqual(json.loads(request.data)["SubDomain"], "_acme-challenge.api")
 
     def test_delete_record_sends_only_fixed_domain_and_positive_record_id(self):
         response = json.dumps({"Response": {"RequestId": "request-12345678"}})
@@ -1301,7 +1346,7 @@ class DnsPodClientTests(unittest.TestCase):
                     500,
                     " ".join(secret_values),
                     None,
-                    None,
+                    io.BytesIO(b""),
                 ),
             ),
             FakeTransport(
@@ -1311,15 +1356,19 @@ class DnsPodClientTests(unittest.TestCase):
         )
         for transport in cases:
             with self.subTest(error=type(transport.error).__name__):
-                client = hook.DnsPodClient(
-                    self.make_credentials(),
-                    transport=transport,
-                )
-                stdout = io.StringIO()
-                stderr = io.StringIO()
-                with redirect_stdout(stdout), redirect_stderr(stderr):
-                    with self.assertRaises(hook.DnsPodApiError) as caught:
-                        client.create_txt(validation)
+                try:
+                    client = hook.DnsPodClient(
+                        self.make_credentials(),
+                        transport=transport,
+                    )
+                    stdout = io.StringIO()
+                    stderr = io.StringIO()
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        with self.assertRaises(hook.DnsPodApiError) as caught:
+                            client.create_txt(validation)
+                finally:
+                    if hasattr(transport.error, "close"):
+                        transport.error.close()
 
                 combined = stdout.getvalue() + stderr.getvalue() + str(caught.exception)
                 for secret in secret_values:
@@ -1659,13 +1708,36 @@ class HookWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(hook.ConfigurationError):
                 hook.run_auth(
-                    domain="api.goodcms.cn",
+                    domain="assets.goodcms.cn",
                     validation=self.validation,
                     client=client,
                     verifier=verifier,
                     state_dir=Path(tmp),
                 )
         self.assertEqual(client.created, [])
+
+    def test_auth_uses_domain_specific_challenge_name(self):
+        client = FakeClient(record_id=731)
+        verifier = FakeVerifier()
+        with tempfile.TemporaryDirectory() as tmp:
+            hook.run_auth(
+                domain="api.goodcms.cn",
+                validation=self.validation,
+                client=client,
+                verifier=verifier,
+                state_dir=Path(tmp),
+            )
+
+        self.assertEqual(
+            verifier.events,
+            [
+                (
+                    "wait_present",
+                    "_acme-challenge.api.goodcms.cn",
+                    self.validation,
+                ),
+            ],
+        )
 
     def test_create_failure_does_not_write_state_or_delete_another_record(self):
         failure = hook.DnsPodApiError("safe create failure")
@@ -1813,6 +1885,32 @@ class HookWorkflowTests(unittest.TestCase):
                 ("delete", 731),
                 ("state_visible", 731),
                 ("wait_absent", self.fqdn, self.validation),
+            ],
+        )
+
+    def test_cleanup_uses_domain_specific_challenge_name(self):
+        client = FakeClient(record_id=999)
+        verifier = FakeVerifier()
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            hook.write_state(state_dir, "api.goodcms.cn", self.validation, 731)
+
+            hook.run_cleanup(
+                domain="api.goodcms.cn",
+                validation=self.validation,
+                client=client,
+                verifier=verifier,
+                state_dir=state_dir,
+            )
+
+        self.assertEqual(
+            verifier.events,
+            [
+                (
+                    "wait_absent",
+                    "_acme-challenge.api.goodcms.cn",
+                    self.validation,
+                ),
             ],
         )
 
@@ -1982,6 +2080,79 @@ class CliTests(unittest.TestCase):
                 combined = stdout.getvalue() + stderr.getvalue()
                 for secret in (TEST_SECRET_ID, TEST_SECRET_KEY, "validation-sensitive"):
                     self.assertNotIn(secret, combined)
+
+    def test_cli_uses_certbot_domain_to_select_dns_challenge_subdomain(self):
+        credentials = hook.Credentials(
+            TEST_SECRET_ID,
+            TEST_SECRET_KEY,
+            "goodcms.cn",
+            "_acme-challenge.www",
+        )
+        environment = {
+            "CERTBOT_DOMAIN": "api.goodcms.cn",
+            "CERTBOT_IDENTIFIER": "api.goodcms.cn",
+            "CERTBOT_VALIDATION": "validation-sensitive",
+        }
+        captured = {}
+
+        def build_verifier(*, nameserver_addresses, query):
+            captured["query"] = query
+            return object()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            credentials_path = state_dir.parent / "credentials.env"
+            with (
+                mock.patch.dict(hook.os.environ, environment, clear=True),
+                mock.patch.object(
+                    hook,
+                    "load_credentials",
+                    return_value=credentials,
+                ),
+                mock.patch.object(
+                    hook,
+                    "discover_authoritative_addresses",
+                    return_value=["192.0.2.1"],
+                ),
+                mock.patch.object(hook, "DnsPodClient") as client_type,
+                mock.patch.object(
+                    hook,
+                    "AuthoritativeTxtVerifier",
+                    side_effect=build_verifier,
+                ),
+                mock.patch.object(hook, "run_auth") as workflow,
+                mock.patch.object(
+                    hook,
+                    "_query_authoritative_txt",
+                    return_value={"answer"},
+                ) as query_txt,
+            ):
+                exit_code = hook.main(
+                    [
+                        "auth",
+                        "--credentials",
+                        str(credentials_path),
+                        "--state-dir",
+                        str(state_dir),
+                    ]
+                )
+                query_result = captured["query"](
+                    "192.0.2.1",
+                    "_acme-challenge.api.goodcms.cn",
+                    0.75,
+                )
+
+        self.assertEqual(exit_code, 0)
+        client_credentials = client_type.call_args.args[0]
+        self.assertEqual(client_credentials.domain, "goodcms.cn")
+        self.assertEqual(client_credentials.subdomain, "_acme-challenge.api")
+        self.assertEqual(query_result, {"answer"})
+        query_txt.assert_called_once_with(
+            "192.0.2.1",
+            "_acme-challenge.api.goodcms.cn",
+            0.75,
+        )
+        workflow.assert_called_once()
 
     def test_cli_rejects_missing_extra_and_unknown_arguments_without_echoing_them(self):
         sensitive_extra = "validation-sensitive-extra"
