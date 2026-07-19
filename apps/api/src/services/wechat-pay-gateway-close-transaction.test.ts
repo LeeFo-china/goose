@@ -119,6 +119,7 @@ describe("WechatPayGateway close transaction and local payment request", () => {
         status: 400,
         code: "ORDERPAID",
         message: "order already paid",
+        requestId: "wechat-request-id",
       },
     });
   });

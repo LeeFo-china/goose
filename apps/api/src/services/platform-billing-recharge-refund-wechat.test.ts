@@ -40,19 +40,12 @@ describe("refund response payload conversion", () => {
     const refund = {
       out_refund_no: "TRR202607100800000001",
       refund_id: "5030000000202607150000000001",
-      status: "PROCESSING",
+      transaction_id: "4200000001",
+      out_trade_no: "TC202607020001",
+      status: "SUCCESS",
+      success_time: "2026-07-19T10:01:02+08:00",
+      amount: { refund: 10000, total: 10000, currency: "CNY" },
       requestId: "wechat-refund-request-id",
-      raw: {
-        out_refund_no: "TRR202607100800000001",
-        refund_id: "5030000000202607150000000001",
-        transaction_id: "4200000001",
-        out_trade_no: "TC202607020001",
-        status: "SUCCESS",
-        success_time: "2026-07-19T10:01:02+08:00",
-        amount: { refund: 10000, total: 10000, currency: "CNY" },
-        requestId: "UNTRUSTED-DECOY",
-        authorization: "UNTRUSTED-AUTHORIZATION",
-      },
     } satisfies WechatPayRequestRefundResult;
 
     expect(toWechatRequestedRefundPayload(refund)).toEqual({

@@ -243,14 +243,9 @@ describe("BillingRechargeRefundReconciliationService", () => {
         code: "RESOURCE_NOT_EXISTS",
       }),
     );
-    const raw = createWechatRefundPayload(claim, "SUCCESS");
-    dependencies.wechatPayGateway.requestRefund.mockResolvedValue({
-      out_refund_no: raw.out_refund_no,
-      refund_id: raw.refund_id,
-      status: raw.status,
-      requestId: raw.requestId,
-      raw,
-    });
+    dependencies.wechatPayGateway.requestRefund.mockResolvedValue(
+      createWechatRefundPayload(claim, "SUCCESS"),
+    );
     const service = new BillingRechargeRefundReconciliationService({
       ...dependencies,
       nowFactory: () => NOW,

@@ -152,6 +152,24 @@ describe("readVerifiedWechatPayJson", () => {
     });
   });
 
+  test.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    NOW_SECONDS + 0.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("rejects unsafe injected nowSeconds %s", async (nowSeconds) => {
+    const rawBody = JSON.stringify({ status: "PROCESSING" });
+    await expect(readVerifiedWechatPayJson({
+      response: createSignedResponse({ rawBody }),
+      publicKeyId: PUBLIC_KEY_ID,
+      publicKeyPem,
+      nowSeconds,
+    })).rejects.toMatchObject({
+      code: "WECHAT_PAY_RESPONSE_TIMESTAMP_INVALID",
+    });
+  });
+
   test("rejects invalid and SIGNTEST signatures", async () => {
     await expect(readWithSignature("WECHATPAY/SIGNTEST/invalid"))
       .rejects.toMatchObject({ code: "WECHAT_PAY_RESPONSE_SIGNATURE_INVALID" });

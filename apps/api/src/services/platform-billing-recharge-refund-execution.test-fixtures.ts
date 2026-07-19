@@ -161,13 +161,9 @@ export function createRefundRequestResult(
   overrides: Partial<typeof refundPayload> = {},
   requestId = "wechat-refund-request-id",
 ) {
-  const raw = createRefundPayload(overrides);
   return {
-    out_refund_no: raw.out_refund_no,
-    refund_id: raw.refund_id,
-    status: raw.status,
+    ...createRefundPayload(overrides),
     requestId,
-    raw,
   };
 }
 

@@ -101,16 +101,9 @@ export function createHarness(claims: ClaimedRefund[] = [createClaim()]) {
     queryRefundByOutRefundNo: mock(async () =>
       createWechatRefundPayload(claims[0] ?? createClaim())
     ),
-    requestRefund: mock(async () => {
-      const raw = createWechatRefundPayload(claims[0] ?? createClaim());
-      return {
-        out_refund_no: raw.out_refund_no,
-        refund_id: raw.refund_id,
-        status: raw.status,
-        requestId: raw.requestId,
-        raw,
-      };
-    }),
+    requestRefund: mock(async () =>
+      createWechatRefundPayload(claims[0] ?? createClaim())
+    ),
   };
   return { repository, secretBundleService, wechatPayGateway };
 }

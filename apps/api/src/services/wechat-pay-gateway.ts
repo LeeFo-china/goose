@@ -88,11 +88,14 @@ export type WechatPayRequestRefundInput = {
 };
 
 export type WechatPayRequestRefundResult = {
-  out_refund_no: string;
-  refund_id: string | null;
-  status: string;
+  out_refund_no?: unknown;
+  refund_id?: unknown;
+  transaction_id?: unknown;
+  out_trade_no?: unknown;
+  status?: unknown;
+  success_time?: unknown;
+  amount?: unknown;
   requestId: string | null;
-  raw: Record<string, unknown>;
 };
 
 export class WechatPayGateway {
@@ -287,11 +290,14 @@ export class WechatPayGateway {
     });
     const { payload } = result;
     return {
-      out_refund_no: stringField(payload, "out_refund_no") ?? input.outRefundNo,
-      refund_id: stringField(payload, "refund_id"),
-      status: stringField(payload, "status") ?? "UNKNOWN",
+      out_refund_no: payload.out_refund_no,
+      refund_id: payload.refund_id,
+      transaction_id: payload.transaction_id,
+      out_trade_no: payload.out_trade_no,
+      status: payload.status,
+      success_time: payload.success_time,
+      amount: payload.amount,
       requestId: result.requestId,
-      raw: payload,
     };
   }
 

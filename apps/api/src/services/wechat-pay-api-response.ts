@@ -56,6 +56,9 @@ export async function readVerifiedWechatPayRawResponse(
 
   const responseTimestamp = parseTimestamp(timestamp);
   const nowSeconds = input.nowSeconds ?? Math.floor(Date.now() / 1_000);
+  if (!Number.isSafeInteger(nowSeconds)) {
+    throwInvalidTimestamp();
+  }
   if (Math.abs(nowSeconds - responseTimestamp) > MAX_RESPONSE_CLOCK_SKEW_SECONDS) {
     throw Errors.business(
       502,

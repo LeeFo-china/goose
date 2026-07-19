@@ -85,6 +85,7 @@ export async function closeWechatPayTransactionByOutTradeNo(
         status: response.status,
         code: stringField(payload, "code"),
         message: stringField(payload, "message"),
+        requestId: verified.requestId,
       },
     );
   } catch (error) {

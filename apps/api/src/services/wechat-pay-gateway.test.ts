@@ -388,12 +388,8 @@ describe("WechatPayGateway", () => {
       refund_id: "5030000000202607150000000001",
       status: "PROCESSING",
       requestId: "wechat-request-id",
-      raw: {
-        out_refund_no: "TRR202607100800000001",
-        refund_id: "5030000000202607150000000001",
-        status: "PROCESSING",
-      },
     });
+    expect(result).not.toHaveProperty("raw");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 

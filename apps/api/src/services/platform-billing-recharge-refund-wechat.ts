@@ -56,7 +56,7 @@ export function assertWechatTransactionMatches(input: {
 export function toWechatRequestedRefundPayload(
   refund: WechatPayRequestRefundResult,
 ): WechatRefundApiPayload {
-  return selectWechatRefundPayload(refund.raw, refund.requestId);
+  return selectWechatRefundPayload(refund, refund.requestId);
 }
 
 export function toWechatQueriedRefundPayload(
@@ -66,7 +66,7 @@ export function toWechatQueriedRefundPayload(
 }
 
 function selectWechatRefundPayload(
-  refund: Record<string, unknown>,
+  refund: WechatPayRequestRefundResult | WechatPayRefundQueryResult,
   requestId: string | null,
 ): WechatRefundApiPayload {
   return {
