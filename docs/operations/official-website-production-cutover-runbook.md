@@ -289,8 +289,8 @@ printf 'INSTALLED_HOST_TEMPLATE_SHA256=%s\nINSTALLED_EFFECTIVE_SHA256=%s\n' \
 ## 8. 安装隔离的证书续期 units
 
 镜像的通用自动续期会解析单体配置中的全部域名，本次不依赖该路径。安装仓库中已版本
-控制的 `gooes-www-cert-renew.service` 与 `gooes-www-cert-renew.timer`，它们只续期
-`www.goodcms.cn`，且仅在实际续期后通过单个 deploy hook 先执行 `nginx -t` 再 reload。
+控制的 `gooes-www-cert-renew.service` 与 `gooes-www-cert-renew.timer`，它们默认续期
+GoodCMS 的 DNS-01 证书列表，且仅在实际续期后通过单个 deploy hook 先执行 `nginx -t` 再 reload。
 `--no-directory-hooks` 禁用共享 `/etc/letsencrypt/renewal-hooks/{pre,deploy,post}` 目录中的
 自动 hooks；本 unit 只允许运行经过版本控制和审阅的 CLI `--deploy-hook`。
 Certbot 官方语义不会仅因 hook 非零而让 `renew` 非零，因此 unit 在每次运行前清理失败

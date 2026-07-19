@@ -8,7 +8,14 @@ RUNTIME_DIR="/run/gooes-dnspod-acme"
 CONTAINER_HOOK="${RUNTIME_DIR}/dnspod_acme_hook.py"
 CONTAINER_CREDENTIALS="${RUNTIME_DIR}/dnspod-www-cert.env"
 STATE_DIR="${RUNTIME_DIR}/state"
-CERT_NAME="www.goodcms.cn"
+DEFAULT_CERT_NAMES=(
+  "www.goodcms.cn"
+  "admin.goodcms.cn"
+  "api.goodcms.cn"
+  "h5.goodcms.cn"
+  "sock.goodcms.cn"
+  "supabase.goodcms.cn"
+)
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 die() { echo "gooes-www-cert-renew: $*" >&2; exit 1; }
@@ -36,6 +43,20 @@ check_container() {
     || die "container ${CONTAINER} is not running"
 }
 
+load_cert_names() {
+  if [[ -n "${CERT_NAMES:-}" ]]; then
+    read -r -a cert_names <<< "${CERT_NAMES}"
+  else
+    cert_names=("${DEFAULT_CERT_NAMES[@]}")
+  fi
+
+  ((${#cert_names[@]} > 0)) || die "at least one certificate name is required"
+  local cert_name
+  for cert_name in "${cert_names[@]}"; do
+    [[ "${cert_name}" =~ ^[a-z0-9.-]+$ ]] || die "invalid certificate name"
+  done
+}
+
 prepare() {
   require_root
   [[ -f "${HOST_HOOK}" ]] || die "hook is missing"
@@ -52,30 +73,43 @@ prepare() {
 
 renew() {
   check_container
-  docker exec "${CONTAINER}" env \
-    DNSPOD_CREDENTIALS_FILE="${CONTAINER_CREDENTIALS}" \
-    DNSPOD_STATE_DIR="${STATE_DIR}" \
-    certbot renew --cert-name "${CERT_NAME}" --non-interactive --quiet --no-directory-hooks \
-      --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-      --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-      --deploy-hook 'nginx -t && nginx -s reload'
+  load_cert_names
+  local cert_name
+  for cert_name in "${cert_names[@]}"; do
+    docker exec "${CONTAINER}" env \
+      DNSPOD_CREDENTIALS_FILE="${CONTAINER_CREDENTIALS}" \
+      DNSPOD_STATE_DIR="${STATE_DIR}" \
+      certbot renew --cert-name "${cert_name}" --non-interactive --quiet \
+        --no-directory-hooks --no-random-sleep-on-renew \
+        --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+        --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+        --deploy-hook 'nginx -t && nginx -s reload'
+  done
 }
 
 reconfigure() {
   check_container
-  docker exec "${CONTAINER}" certbot reconfigure --cert-name "${CERT_NAME}" --non-interactive \
-    --manual --preferred-challenges dns-01 \
-    --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-    --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}"
+  load_cert_names
+  local cert_name
+  for cert_name in "${cert_names[@]}"; do
+    docker exec "${CONTAINER}" certbot reconfigure --cert-name "${cert_name}" --non-interactive \
+      --manual --preferred-challenges dns-01 \
+      --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+      --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}"
+  done
 }
 
 dry_run() {
   check_container
-  docker exec "${CONTAINER}" certbot renew --cert-name "${CERT_NAME}" --non-interactive --quiet \
-    --no-directory-hooks --dry-run --run-deploy-hooks \
-    --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-    --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
-    --deploy-hook 'nginx -t && nginx -s reload'
+  load_cert_names
+  local cert_name
+  for cert_name in "${cert_names[@]}"; do
+    docker exec "${CONTAINER}" certbot renew --cert-name "${cert_name}" --non-interactive --quiet \
+      --no-directory-hooks --no-random-sleep-on-renew --dry-run --run-deploy-hooks \
+      --manual-auth-hook "python3 ${CONTAINER_HOOK} auth --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+      --manual-cleanup-hook "python3 ${CONTAINER_HOOK} cleanup --credentials ${CONTAINER_CREDENTIALS} --state-dir ${STATE_DIR}" \
+      --deploy-hook 'nginx -t && nginx -s reload'
+  done
 }
 
 main() {

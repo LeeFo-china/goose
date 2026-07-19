@@ -1,5 +1,5 @@
 [Unit]
-Description=Schedule www.goodcms.cn certificate renewal
+Description=Schedule GoodCMS DNS-01 certificate renewal
 
 [Timer]
 OnCalendar=*-*-* 00,12:00:00

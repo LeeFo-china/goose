@@ -25,8 +25,16 @@ from typing import Callable, Iterable
 
 EXPECTED_DOMAIN = "www.goodcms.cn"
 EXPECTED_ROOT_DOMAIN = "goodcms.cn"
-EXPECTED_SUBDOMAIN = "_acme-challenge.www"
-EXPECTED_CHALLENGE_FQDN = "_acme-challenge.www.goodcms.cn"
+DOMAIN_CHALLENGE_SUBDOMAINS = {
+    "www.goodcms.cn": "_acme-challenge.www",
+    "admin.goodcms.cn": "_acme-challenge.admin",
+    "api.goodcms.cn": "_acme-challenge.api",
+    "h5.goodcms.cn": "_acme-challenge.h5",
+    "sock.goodcms.cn": "_acme-challenge.sock",
+    "supabase.goodcms.cn": "_acme-challenge.supabase",
+}
+EXPECTED_SUBDOMAIN = DOMAIN_CHALLENGE_SUBDOMAINS[EXPECTED_DOMAIN]
+EXPECTED_CHALLENGE_FQDN = f"{EXPECTED_SUBDOMAIN}.{EXPECTED_ROOT_DOMAIN}"
 EXPECTED_KEYS = {
     "TENCENTCLOUD_SECRET_ID",
     "TENCENTCLOUD_SECRET_KEY",
@@ -586,8 +594,17 @@ def load_credentials(path: Path) -> Credentials:
 
 
 def validate_certbot_domain(value: str) -> None:
-    if value != EXPECTED_DOMAIN:
+    if value not in DOMAIN_CHALLENGE_SUBDOMAINS:
         raise ConfigurationError("unexpected CERTBOT_DOMAIN")
+
+
+def challenge_subdomain_for_domain(value: str) -> str:
+    validate_certbot_domain(value)
+    return DOMAIN_CHALLENGE_SUBDOMAINS[value]
+
+
+def challenge_fqdn_for_domain(value: str) -> str:
+    return f"{challenge_subdomain_for_domain(value)}.{EXPECTED_ROOT_DOMAIN}"
 
 
 class DnsPodApiError(HookError):
@@ -630,7 +647,7 @@ class DnsPodClient:
     ) -> None:
         if (
             credentials.domain != EXPECTED_ROOT_DOMAIN
-            or credentials.subdomain != EXPECTED_SUBDOMAIN
+            or credentials.subdomain not in DOMAIN_CHALLENGE_SUBDOMAINS.values()
             or not isinstance(credentials.secret_id, str)
             or not credentials.secret_id
             or not isinstance(credentials.secret_key, str)
@@ -655,7 +672,7 @@ class DnsPodClient:
             "CreateRecord",
             {
                 "Domain": EXPECTED_ROOT_DOMAIN,
-                "SubDomain": EXPECTED_SUBDOMAIN,
+                "SubDomain": self._credentials.subdomain,
                 "RecordType": "TXT",
                 "RecordLine": "默认",
                 "Value": value,
@@ -752,7 +769,7 @@ class DnsPodClient:
                     "TTL",
                 }
                 or payload.get("Domain") != EXPECTED_ROOT_DOMAIN
-                or payload.get("SubDomain") != EXPECTED_SUBDOMAIN
+                or payload.get("SubDomain") != self._credentials.subdomain
                 or payload.get("RecordType") != "TXT"
                 or payload.get("RecordLine") != "默认"
                 or not isinstance(payload.get("Value"), str)
@@ -1040,7 +1057,7 @@ def run_auth(
         raise
 
     try:
-        verifier.wait_present(EXPECTED_CHALLENGE_FQDN, validation)
+        verifier.wait_present(challenge_fqdn_for_domain(domain), validation)
     except DnsPropagationError:
         try:
             client.delete_record(record_id)
@@ -1070,7 +1087,7 @@ def run_cleanup(
     _validate_challenge(domain, validation)
     state = read_state(state_dir, domain, validation)
     client.delete_record(state.record_id)
-    verifier.wait_absent(EXPECTED_CHALLENGE_FQDN, validation)
+    verifier.wait_absent(challenge_fqdn_for_domain(domain), validation)
     _remove_matching_state(
         state_dir,
         domain,
@@ -1134,7 +1151,10 @@ def main(argv: list[str] | None = None) -> int:
         _validate_challenge(domain, validation)
         _validate_state_directory(arguments.state_dir)
 
-        credentials = load_credentials(arguments.credentials)
+        credentials = dataclasses.replace(
+            load_credentials(arguments.credentials),
+            subdomain=challenge_subdomain_for_domain(domain),
+        )
         addresses = discover_authoritative_addresses(EXPECTED_ROOT_DOMAIN)
         client = DnsPodClient(credentials)
         verifier = AuthoritativeTxtVerifier(

@@ -37,6 +37,24 @@ describe("DNSPod certificate renewal contract", () => {
     expect(runner).toContain("nginx -t && nginx -s reload");
     expect(runner).toContain("--non-interactive");
     expect(runner).toContain("--no-directory-hooks");
+    expect(runner).toContain("--no-random-sleep-on-renew");
+  });
+
+  test("runner covers existing goodcms DNS-01 certificates and supports override", () => {
+    for (const certName of [
+      "www.goodcms.cn",
+      "admin.goodcms.cn",
+      "api.goodcms.cn",
+      "h5.goodcms.cn",
+      "sock.goodcms.cn",
+      "supabase.goodcms.cn",
+    ]) {
+      expect(runner).toContain(certName);
+    }
+    expect(runner).toContain("DEFAULT_CERT_NAMES=(");
+    expect(runner).toContain("CERT_NAMES");
+    expect(runner).toContain('for cert_name in "${cert_names[@]}"');
+    expect(runner).toContain('--cert-name "${cert_name}"');
   });
 
   test("reconfigure does not persist a staging ACME server", () => {
