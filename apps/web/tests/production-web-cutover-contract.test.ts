@@ -1,13 +1,4 @@
-import {
-  chmodSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 const repositoryRoot = new URL("../../../", import.meta.url);
@@ -188,86 +179,6 @@ function extractBashFencedBlocks(content: string): string[] {
   return [...content.matchAll(/```bash\r?\n([\s\S]*?)```/g)].map(
     (match) => match[1],
   );
-}
-
-function validatesRenewServiceFailurePropagation(service: string): boolean {
-  const marker = "/tmp/gooes-www-cert-renew-hook-failed";
-  const preflight =
-    `ExecStartPre=/usr/bin/docker exec supabase-nginx rm -f ${marker}`;
-  const renewal =
-    `ExecStart=/usr/bin/docker exec supabase-nginx certbot renew --cert-name www.goodcms.cn --non-interactive --quiet --no-directory-hooks --deploy-hook "nginx -t && nginx -s reload || { touch ${marker}; exit 1; }"`;
-  const postflight =
-    `ExecStartPost=/usr/bin/docker exec supabase-nginx test ! -e ${marker}`;
-  const activeLines = service
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(
-      (line) => line.length > 0 && !line.startsWith("#") && !line.startsWith(";"),
-    );
-  const preflightStart = activeLines.indexOf(preflight);
-  const renewalStart = activeLines.indexOf(renewal);
-  const postflightStart = activeLines.indexOf(postflight);
-  const activeRenewals = activeLines.filter((line) =>
-    line.startsWith("ExecStart="),
-  );
-  const activeRenewal = activeRenewals[0] ?? "";
-
-  return (
-    preflightStart >= 0 &&
-    renewalStart > preflightStart &&
-    postflightStart > renewalStart &&
-    activeRenewals.length === 1 &&
-    activeRenewal === renewal &&
-    activeRenewal.match(/--cert-name/g)?.length === 1 &&
-    activeRenewal.match(/--no-directory-hooks/g)?.length === 1 &&
-    activeRenewal.match(/--deploy-hook/g)?.length === 1
-  );
-}
-
-function simulateRenewHook(
-  service: string,
-  failingPhase: "none" | "test" | "reload",
-): { hookExitCode: number; postflightExitCode: number } {
-  const hook = service.match(/--deploy-hook "([^"]+)"/)?.[1];
-  if (!hook) {
-    return { hookExitCode: -1, postflightExitCode: -1 };
-  }
-
-  const root = mkdtempSync(join(tmpdir(), "gooes-renew-hook-contract-"));
-  const nginx = join(root, "nginx");
-  const marker = join(root, "hook-failed");
-  writeFileSync(
-    nginx,
-    [
-      "#!/bin/sh",
-      'if [ "${NGINX_FAILING_PHASE:-none}" = test ] && [ "${1:-}" = -t ]; then exit 31; fi',
-      'if [ "${NGINX_FAILING_PHASE:-none}" = reload ] && [ "${1:-}" = -s ] && [ "${2:-}" = reload ]; then exit 32; fi',
-      "exit 0",
-      "",
-    ].join("\n"),
-  );
-  chmodSync(nginx, 0o755);
-
-  try {
-    const simulatedHook = hook.replace(
-      "/tmp/gooes-www-cert-renew-hook-failed",
-      marker,
-    );
-    const hookResult = Bun.spawnSync(["sh", "-c", simulatedHook], {
-      env: {
-        ...process.env,
-        NGINX_FAILING_PHASE: failingPhase,
-        PATH: `${root}:${process.env.PATH ?? ""}`,
-      },
-    });
-    const postflightResult = Bun.spawnSync(["test", "!", "-e", marker]);
-    return {
-      hookExitCode: hookResult.exitCode,
-      postflightExitCode: postflightResult.exitCode,
-    };
-  } finally {
-    rmSync(root, { force: true, recursive: true });
-  }
 }
 
 function validatesExecutableCertificatePreflight(section: string): boolean {
@@ -590,7 +501,7 @@ describe("production official website cutover contracts", () => {
     expect(validatesNginxIngress(nginx.replace(/}\s*$/, ""))).toBe(false);
   });
 
-  test("renews only the www certificate from a versioned systemd timer", () => {
+  test("schedules multi-certificate DNS-01 renewal through versioned systemd units", () => {
     const servicePath = "deploy/systemd/gooes-www-cert-renew.service";
     const timerPath = "deploy/systemd/gooes-www-cert-renew.timer";
 
@@ -599,33 +510,27 @@ describe("production official website cutover contracts", () => {
 
     const service = readRepoFile(servicePath);
     const timer = readRepoFile(timerPath);
-    const marker = "/tmp/gooes-www-cert-renew-hook-failed";
-    const preflight =
-      `ExecStartPre=/usr/bin/docker exec supabase-nginx rm -f ${marker}`;
-    const renewal =
-      `ExecStart=/usr/bin/docker exec supabase-nginx certbot renew --cert-name www.goodcms.cn --non-interactive --quiet --no-directory-hooks --deploy-hook "nginx -t && nginx -s reload || { touch ${marker}; exit 1; }"`;
-    const postflight =
-      `ExecStartPost=/usr/bin/docker exec supabase-nginx test ! -e ${marker}`;
 
     expect(service).toBe(
       [
         "[Unit]",
-        "Description=Renew the www.goodcms.cn certificate in Supabase Nginx",
+        "Description=Renew GoodCMS DNS-01 certificates in Supabase Nginx",
         "Requires=docker.service",
         "After=docker.service",
         "",
         "[Service]",
         "Type=oneshot",
-        preflight,
-        renewal,
-        postflight,
+        "ExecStartPre=/opt/gooes/cert-renewal/gooes-www-cert-renew prepare",
+        "ExecStart=/opt/gooes/cert-renewal/gooes-www-cert-renew renew",
+        "ExecStopPost=/opt/gooes/cert-renewal/gooes-www-cert-renew cleanup",
+        "TimeoutStartSec=15min",
         "",
       ].join("\n"),
     );
     expect(timer).toBe(
       [
         "[Unit]",
-        "Description=Schedule www.goodcms.cn certificate renewal",
+        "Description=Schedule GoodCMS DNS-01 certificate renewal",
         "",
         "[Timer]",
         "OnCalendar=*-*-* 00,12:00:00",
@@ -638,58 +543,21 @@ describe("production official website cutover contracts", () => {
         "",
       ].join("\n"),
     );
-    expect(service).toContain(
-      "Description=Renew the www.goodcms.cn certificate in Supabase Nginx",
-    );
+    expect(service).toContain("Description=Renew GoodCMS DNS-01 certificates");
     expect(service).toContain("Requires=docker.service");
     expect(service).toContain("After=docker.service");
     expect(service).toContain("Type=oneshot");
-    expect(validatesRenewServiceFailurePropagation(service)).toBe(true);
-    expect(service.match(/--cert-name/g)).toHaveLength(1);
-    expect(service.match(/--no-directory-hooks/g)).toHaveLength(1);
-    expect(service.match(/--deploy-hook/g)).toHaveLength(1);
-    expect(service).not.toMatch(/(?:password|token|secret|private[_-]?key)\s*=/i);
-
-    expect(simulateRenewHook(service, "none")).toEqual({
-      hookExitCode: 0,
-      postflightExitCode: 0,
-    });
-    expect(simulateRenewHook(service, "test")).toEqual({
-      hookExitCode: 1,
-      postflightExitCode: 1,
-    });
-    expect(simulateRenewHook(service, "reload")).toEqual({
-      hookExitCode: 1,
-      postflightExitCode: 1,
-    });
-    expect(
-      validatesRenewServiceFailurePropagation(service.replace(preflight, "")),
-    ).toBe(false);
-    expect(
-      validatesRenewServiceFailurePropagation(service.replace(postflight, "")),
-    ).toBe(false);
-    expect(
-      validatesRenewServiceFailurePropagation(
-        service.replace("nginx -t && nginx -s reload", "nginx -s reload"),
-      ),
-    ).toBe(false);
-    expect(
-      validatesRenewServiceFailurePropagation(
-        service.replace(postflight, postflight.replace("=", "=-")),
-      ),
-    ).toBe(false);
-    const withoutDirectoryHookIsolation = service.replace(
-      " --no-directory-hooks",
-      "",
+    expect(service).toContain(
+      "ExecStartPre=/opt/gooes/cert-renewal/gooes-www-cert-renew prepare",
     );
-    expect(
-      validatesRenewServiceFailurePropagation(withoutDirectoryHookIsolation),
-    ).toBe(false);
-    expect(
-      validatesRenewServiceFailurePropagation(
-        `${withoutDirectoryHookIsolation}\n# --no-directory-hooks\nDocumentation=--no-directory-hooks\n`,
-      ),
-    ).toBe(false);
+    expect(service).toContain(
+      "ExecStart=/opt/gooes/cert-renewal/gooes-www-cert-renew renew",
+    );
+    expect(service).toContain(
+      "ExecStopPost=/opt/gooes/cert-renewal/gooes-www-cert-renew cleanup",
+    );
+    expect(service).toContain("TimeoutStartSec=15min");
+    expect(service).not.toMatch(/(?:password|token|secret|private[_-]?key)\s*=/i);
 
     expect(timer).toContain("OnCalendar=*-*-* 00,12:00:00");
     expect(timer).toContain("Persistent=true");
@@ -721,16 +589,18 @@ describe("production official website cutover contracts", () => {
     expect(deployWorkflow).toContain("http://127.0.0.1:3020/api/preview");
     expect(deployWorkflow).toContain("--connect-timeout 5 --max-time 30");
     expect(deployWorkflow).toContain("tr -d '\\r'");
-    expect(deployWorkflow).toContain("^HTTP/[^ ]+ 200$");
-    expect(deployWorkflow).toContain("^HTTP/[^ ]+ 303$");
+    const okStatusPattern = "^HTTP/[^ ]+ 200([[:space:]].*)?$";
+    const redirectStatusPattern = "^HTTP/[^ ]+ 303([[:space:]].*)?$";
+    expect(deployWorkflow).toContain(okStatusPattern);
+    expect(deployWorkflow).toContain(redirectStatusPattern);
     expect(deployWorkflow).toContain("^location: /preview-error$");
     expect(deployWorkflow).toContain("^cache-control: no-store$");
     expect(deployWorkflow).toContain("timeout-minutes: 5");
     expect(
       deployWorkflow.match(/--connect-timeout 5 --max-time 30/g),
     ).toHaveLength(4);
-    expect(deployWorkflow.match(/\^HTTP\/\[\^ \]\+ 200\$/g)).toHaveLength(2);
-    expect(deployWorkflow.match(/\^HTTP\/\[\^ \]\+ 303\$/g)).toHaveLength(2);
+    expect(deployWorkflow.split(okStatusPattern)).toHaveLength(3);
+    expect(deployWorkflow.split(redirectStatusPattern)).toHaveLength(3);
     expect(deployWorkflow).not.toMatch(/(?:install|cp).*gooes-web\.conf/);
     expect(deployWorkflow).not.toMatch(/(?:systemctl\s+reload|nginx\s+-s)/);
   });
@@ -766,12 +636,12 @@ describe("production official website cutover contracts", () => {
     expect(rollbackStep).toContain(
       'test "${configured_image}" = "${WEB_ROLLBACK_TAG}"',
     );
-    expect(rollbackStep).toContain("^HTTP/[^ ]+ 303$");
+    expect(rollbackStep).toContain("^HTTP/[^ ]+ 303([[:space:]].*)?$");
     expect(rollbackStep).toContain("^location: /preview-error$");
     expect(rollbackStep).toContain("^cache-control: no-store$");
     expect(rollbackStep).toContain("--connect-timeout 5 --max-time 30");
     expect(rollbackStep).toContain("tr -d '\\r'");
-    expect(rollbackStep).toContain("^HTTP/[^ ]+ 200$");
+    expect(rollbackStep).toContain("^HTTP/[^ ]+ 200([[:space:]].*)?$");
     expect(rollbackStep).toContain("timeout-minutes: 10");
     expect(rollbackStep).not.toContain("https://www.goodcms.cn/partners");
     expect(rollbackStep.indexOf("WEB_ROLLBACK_STATUS=success")).toBeGreaterThan(
