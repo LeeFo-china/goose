@@ -87,7 +87,8 @@ describe("buildReleaseDispatchRequest", () => {
       stage: "build",
       inputs: {
         operation: "build",
-        service: "api,admin,social-video-worker,cos-reconcile-worker",
+        service:
+          "api,admin,social-video-worker,cos-reconcile-worker,billing-reconcile-worker",
         confirm_text: "确认构建生产候选",
         reason: "候选构建",
       },
@@ -104,6 +105,24 @@ describe("buildReleaseDispatchRequest", () => {
 });
 
 describe("runtime service version contracts", () => {
+  test("includes the billing reconcile worker in release and runtime scopes", () => {
+    expect(shared.RELEASE_WORKFLOWS.dev.services).toContain(
+      "billing-reconcile-worker" as never,
+    );
+    expect(shared.RELEASE_WORKFLOWS.production.services).toContain(
+      "billing-reconcile-worker" as never,
+    );
+    expect(shared.expandAdminReleaseServices(["all"]).at(-1)).toBe(
+      "billing-reconcile-worker",
+    );
+    expect(shared.getRuntimeService("gooes-billing-reconcile-worker")).toBe(
+      "billing-reconcile-worker",
+    );
+    expect(shared.getRuntimeService("gooes-billing-reconcile-worker-dev")).toBe(
+      "billing-reconcile-worker",
+    );
+  });
+
   test("recognizes official website containers as runtime-only services", () => {
     expect(shared.getRuntimeService("gooes-web")).toBe("web");
     expect(shared.getRuntimeService("gooes-web-dev")).toBe("web");

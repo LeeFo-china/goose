@@ -3,6 +3,7 @@ const REQUESTED_ORDER = [
   "admin",
   "social-video-worker",
   "cos-reconcile-worker",
+  "billing-reconcile-worker",
 ];
 const BUILD_ORDER = ["api", "admin", "social-video-worker"];
 const ALLOWED_SERVICES = new Set(REQUESTED_ORDER);
@@ -38,7 +39,9 @@ const resolvedServices = mode === "requested"
   ? REQUESTED_ORDER.filter((service) => requestedServices.has(service))
   : BUILD_ORDER.filter((service) =>
     service === "api"
-      ? requestedServices.has("api") || requestedServices.has("cos-reconcile-worker")
+      ? requestedServices.has("api")
+        || requestedServices.has("cos-reconcile-worker")
+        || requestedServices.has("billing-reconcile-worker")
       : requestedServices.has(service)
   );
 

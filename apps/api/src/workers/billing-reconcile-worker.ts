@@ -1,10 +1,18 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { billingSubscriptionService } from "@/services/billing-subscriptions";
+import {
+  billingSubscriptionService,
+  type BillingDueCheckResult,
+} from "@/services/billing-subscriptions";
+import {
+  billingRechargeRefundReconciliationService,
+  type RefundReconciliationSummary,
+} from "@/services/billing-recharge-refund-reconciliation";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const MIN_INTERVAL_MS = 10_000;
 const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 100;
+const DEFAULT_REFUND_BATCH_SIZE = 20;
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 100;
 
@@ -12,7 +20,28 @@ export type BillingReconcileWorkerConfig = {
   enabled: boolean;
   intervalMs: number;
   batchSize: number;
+  refundBatchSize: number;
 };
+
+type WorkerLogger = (
+  level: "info" | "warn" | "error",
+  message: string,
+  meta?: Record<string, unknown>,
+) => void;
+
+type BillingReconcileWorkerDependencies = {
+  subscriptionService?: {
+    runDueChecks(input: { batchSize: number }): Promise<BillingDueCheckResult>;
+  };
+  refundReconciliationService?: {
+    runBatch(input: { limit: number }): Promise<RefundReconciliationSummary>;
+  };
+  logger?: WorkerLogger;
+};
+
+type ChildResult<Result> =
+  | { status: "fulfilled"; result: Result }
+  | { status: "rejected" };
 
 let stopping = false;
 let running = false;
@@ -80,40 +109,66 @@ export function getWorkerConfig(): BillingReconcileWorkerConfig {
       MIN_BATCH_SIZE,
       MAX_BATCH_SIZE,
     ),
+    refundBatchSize: parseNumberEnv(
+      "BILLING_REFUND_RECONCILE_BATCH_SIZE",
+      DEFAULT_REFUND_BATCH_SIZE,
+      MIN_BATCH_SIZE,
+      MAX_BATCH_SIZE,
+    ),
   };
 }
 
-export async function tick(): Promise<void> {
+export async function tick(
+  dependencies: BillingReconcileWorkerDependencies = {},
+): Promise<void> {
+  const logger = dependencies.logger ?? log;
   if (running) {
-    log("warn", "previous tick still running");
+    logger("warn", "previous tick still running");
     return;
   }
 
   const config = getWorkerConfig();
   if (!config.enabled) {
-    log("info", "worker disabled");
+    logger("info", "worker disabled");
     return;
   }
 
   running = true;
   const startedAt = Date.now();
+  const subscriptionService = dependencies.subscriptionService ??
+    billingSubscriptionService;
+  const refundReconciliationService =
+    dependencies.refundReconciliationService ??
+      billingRechargeRefundReconciliationService;
 
   try {
-    const result = await billingSubscriptionService.runDueChecks({
-      batchSize: config.batchSize,
-    });
+    const subscription = await runChild(() =>
+      subscriptionService.runDueChecks({ batchSize: config.batchSize })
+    );
+    const refund = await runChild(() =>
+      refundReconciliationService.runBatch({ limit: config.refundBatchSize })
+    );
+    const hasErrors = subscription.status === "rejected" ||
+      refund.status === "rejected";
 
-    log("info", "tick completed", {
+    logger(hasErrors ? "error" : "info", hasErrors
+      ? "tick completed with errors"
+      : "tick completed", {
       duration_ms: Date.now() - startedAt,
-      result,
-    });
-  } catch (error) {
-    log("error", "tick failed", {
-      duration_ms: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : String(error),
+      result: { subscription, refund },
     });
   } finally {
     running = false;
+  }
+}
+
+async function runChild<Result>(
+  operation: () => Promise<Result>,
+): Promise<ChildResult<Result>> {
+  try {
+    return { status: "fulfilled", result: await operation() };
+  } catch {
+    return { status: "rejected" };
   }
 }
 

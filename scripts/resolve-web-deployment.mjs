@@ -5,6 +5,7 @@ const LEGACY_ALL_SERVICES = [
   "admin",
   "social-video-worker",
   "cos-reconcile-worker",
+  "billing-reconcile-worker",
 ];
 const ALLOWED_SERVICES = new Set([...LEGACY_ALL_SERVICES, "web"]);
 
@@ -38,6 +39,10 @@ if (mode === "deploy" && services.includes("web") && services.length !== 1) {
 }
 
 const normalizedServices = mode === "build"
-  ? services.map((service) => service === "cos-reconcile-worker" ? "api" : service)
+  ? services.map((service) =>
+    service === "cos-reconcile-worker" || service === "billing-reconcile-worker"
+      ? "api"
+      : service
+  )
   : services;
 console.log([...new Set(normalizedServices)].join(" "));

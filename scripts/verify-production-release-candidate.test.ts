@@ -68,6 +68,7 @@ function allServiceEvidence() {
     "admin",
     "social-video-worker",
     "cos-reconcile-worker",
+    "billing-reconcile-worker",
   ];
   evidence.candidate.build_services = ["api", "admin", "social-video-worker"];
   evidence.expected.services = structuredClone(evidence.candidate.requested_services);

@@ -44,7 +44,7 @@ on:
         description: "Service to deploy"
         required: true
         type: choice
-        options: [api, admin, web, social-video-worker, cos-reconcile-worker]
+        options: [api, admin, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker]
       commit_sha:
         description: "Exact 40-character commit SHA already built for development"
         required: true
@@ -103,6 +103,7 @@ jobs:
             web) DEPLOY_SERVICES=web; MANIFEST_SERVICE=web ;;
             social-video-worker) DEPLOY_SERVICES=social-video-worker; MANIFEST_SERVICE=social-video-worker ;;
             cos-reconcile-worker) DEPLOY_SERVICES=cos-reconcile-worker; MANIFEST_SERVICE=api ;;
+            billing-reconcile-worker) DEPLOY_SERVICES=billing-reconcile-worker; MANIFEST_SERVICE=api ;;
             *) echo "Unknown service: ${RELEASE_SERVICE}"; exit 1 ;;
           esac
           echo "DEPLOY_SERVICES=${DEPLOY_SERVICES}" >> "${GITHUB_ENV}"
@@ -308,6 +309,7 @@ jobs:
             admin) compose_service=gooes-admin-dev; export GOOES_ADMIN_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
+            billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
           esac
           cd "${DEV_DEPLOY_DIR}"
           docker compose -f docker-compose.dev.yml --profile workers pull "${compose_service}"
@@ -322,6 +324,7 @@ jobs:
             admin) container=gooes-admin-dev; url=https://admin-dev.goodcms.cn/login ;;
             social-video-worker) container=gooes-social-video-worker-dev; url= ;;
             cos-reconcile-worker) container=gooes-cos-reconcile-worker-dev; url= ;;
+            billing-reconcile-worker) container=gooes-billing-reconcile-worker-dev; url= ;;
           esac
           for _ in $(seq 1 60); do
             state="$(docker inspect -f '{{.State.Status}}' "${container}" 2>/dev/null || true)"

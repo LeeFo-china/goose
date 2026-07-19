@@ -84,6 +84,7 @@ const REQUESTED_SERVICE_ORDER: Array<Exclude<ReleaseService, "all">> = [
   "admin",
   "social-video-worker",
   "cos-reconcile-worker",
+  "billing-reconcile-worker",
 ];
 const BUILD_SERVICE_ORDER = ["api", "admin", "social-video-worker"] as const;
 
@@ -141,7 +142,9 @@ function expectedBuildServices(services: Array<Exclude<ReleaseService, "all">>) 
   const requested = new Set(services);
   return BUILD_SERVICE_ORDER.filter((service) =>
     service === "api"
-      ? requested.has("api") || requested.has("cos-reconcile-worker")
+      ? requested.has("api")
+        || requested.has("cos-reconcile-worker")
+        || requested.has("billing-reconcile-worker")
       : requested.has(service)
   );
 }

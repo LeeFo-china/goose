@@ -281,7 +281,9 @@ jobs:
             > "${evidence_dir}/verified-candidate.json"
           test "$(jq -r '.tag' "${evidence_dir}/verified-candidate.json")" = "${GITHUB_REF_NAME}"
 
-          if [[ ",${requested_services}," == *,api,* || ",${requested_services}," == *,cos-reconcile-worker,* ]]; then
+          if [[ ",${requested_services}," == *,api,* \
+            || ",${requested_services}," == *,cos-reconcile-worker,* \
+            || ",${requested_services}," == *,billing-reconcile-worker,* ]]; then
             api_image="$(jq -er '.image | select(type == "string" and length > 0)' "${evidence_dir}/image-manifest-api.json")"
             api_repository="${api_image%:*}"
             api_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-api.json")"
@@ -488,6 +490,7 @@ jobs:
               web) compose_services+=("gooes-web") ;;
               social-video-worker) compose_services+=("gooes-social-video-worker") ;;
               cos-reconcile-worker) compose_services+=("gooes-cos-reconcile-worker") ;;
+              billing-reconcile-worker) compose_services+=("gooes-billing-reconcile-worker") ;;
             esac
           done
           services="${compose_services[*]}"
@@ -538,6 +541,9 @@ jobs:
           fi
           if service_selected cos-reconcile-worker; then
             docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-cos-reconcile-worker
+          fi
+          if service_selected billing-reconcile-worker; then
+            docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-billing-reconcile-worker
           fi
           if service_selected admin; then
             docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-admin
@@ -592,6 +598,7 @@ jobs:
           if service_selected api; then check_container gooes-api; fi
           if service_selected social-video-worker; then check_container gooes-social-video-worker; fi
           if service_selected cos-reconcile-worker; then check_container gooes-cos-reconcile-worker; fi
+          if service_selected billing-reconcile-worker; then check_container gooes-billing-reconcile-worker; fi
           if service_selected admin; then check_container gooes-admin; fi
           if service_selected web; then check_container gooes-web; fi
           if service_selected api; then
@@ -609,6 +616,10 @@ jobs:
           if service_selected cos-reconcile-worker; then
             test "${ADMIN_CANDIDATE:-false}" = true
             check_runtime_evidence cos-reconcile-worker gooes-cos-reconcile-worker "${GOOES_API_IMAGE}" api
+          fi
+          if service_selected billing-reconcile-worker; then
+            test "${ADMIN_CANDIDATE:-false}" = true
+            check_runtime_evidence billing-reconcile-worker gooes-billing-reconcile-worker "${GOOES_API_IMAGE}" api
           fi
           if service_selected web; then
             test "${WEB_DIRECT_DEPLOY:-false}" = true

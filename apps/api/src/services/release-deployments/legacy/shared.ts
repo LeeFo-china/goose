@@ -49,14 +49,14 @@ export const RELEASE_WORKFLOWS: Record<ReleaseEnvironment, ReleaseWorkflow> = {
     workflowId: "release-dev.yml",
     label: "开发环境",
     defaultRef: "main",
-    services: ["api", "admin", "social-video-worker", "cos-reconcile-worker"],
+    services: ["api", "admin", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"],
   },
   production: {
     environment: "production",
     workflowId: "release-production.yml",
     label: "生产环境",
     defaultRef: "main",
-    services: ["all", "api", "admin", "social-video-worker", "cos-reconcile-worker"],
+    services: ["all", "api", "admin", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"],
   },
 };
 
@@ -66,14 +66,14 @@ export const LEGACY_RELEASE_WORKFLOWS: ReleaseWorkflow[] = [
     workflowId: "deploy-dev.yml",
     label: "开发环境历史发布",
     defaultRef: "main",
-    services: ["api", "admin", "social-video-worker", "cos-reconcile-worker"],
+    services: ["api", "admin", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"],
   },
   {
     environment: "production",
     workflowId: "build-docker-images.yml",
     label: "生产环境历史构建",
     defaultRef: "main",
-    services: ["all", "api", "admin", "social-video-worker", "cos-reconcile-worker"],
+    services: ["all", "api", "admin", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"],
   },
 ];
 
@@ -82,9 +82,9 @@ const ADMIN_RELEASE_SERVICE_ORDER: Array<Exclude<ReleaseService, "all">> = [
   "admin",
   "social-video-worker",
   "cos-reconcile-worker",
+  "billing-reconcile-worker",
 ];
-
-const RUNTIME_RELEASE_SERVICE_ORDER: ReleaseRuntimeService[] = ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker"];
+const RUNTIME_RELEASE_SERVICE_ORDER: ReleaseRuntimeService[] = ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"];
 
 const LEGACY_RELEASE_WORKFLOW_IDS = new Set(LEGACY_RELEASE_WORKFLOWS.map((workflow) => workflow.workflowId));
 
@@ -119,14 +119,15 @@ export const SERVICE_LABELS: Record<ReleaseService, string> = {
   admin: "Admin",
   "social-video-worker": "视频转文本 Worker",
   "cos-reconcile-worker": "COS 对账 Worker",
+  "billing-reconcile-worker": "计费对账 Worker",
 };
-
 export const RUNTIME_SERVICE_LABELS: Record<ReleaseRuntimeService, string> = {
   api: SERVICE_LABELS.api,
   admin: SERVICE_LABELS.admin,
   web: "官网 Web",
   "social-video-worker": SERVICE_LABELS["social-video-worker"],
   "cos-reconcile-worker": SERVICE_LABELS["cos-reconcile-worker"],
+  "billing-reconcile-worker": SERVICE_LABELS["billing-reconcile-worker"],
 };
 
 export const REF_TYPE_LABELS: Record<ReleaseRefType, string> = {
@@ -334,6 +335,7 @@ export function getRuntimeService(name: string): ReleaseRuntimeService | null {
   if (name === "gooes-web" || name === "gooes-web-dev") return "web";
   if (name === "gooes-social-video-worker" || name === "gooes-social-video-worker-dev") return "social-video-worker";
   if (name === "gooes-cos-reconcile-worker" || name === "gooes-cos-reconcile-worker-dev") return "cos-reconcile-worker";
+  if (name === "gooes-billing-reconcile-worker" || name === "gooes-billing-reconcile-worker-dev") return "billing-reconcile-worker";
   return null;
 }
 

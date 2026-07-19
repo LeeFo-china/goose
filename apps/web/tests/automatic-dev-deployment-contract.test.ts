@@ -111,7 +111,7 @@ describe("automatic development image build contract", () => {
       'build_services: ["api", "admin", "web", "social-video-worker"]',
     );
     expect(resolveStep).toContain(
-      'deploy_services: ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker"]',
+      'deploy_services: ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"]',
     );
     expect(resolveStep).toContain('no_op: false');
     expect(resolveStep).not.toMatch(/resolve-dev-change-plan\.mjs[^\n]*(?:\|\||catch)/);

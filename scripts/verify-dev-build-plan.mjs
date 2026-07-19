@@ -26,7 +26,14 @@ const CLASSIFICATIONS = new Set([
   "fallback-all",
 ]);
 const BUILD_ORDER = ["api", "admin", "web", "social-video-worker"];
-const DEPLOY_ORDER = ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker"];
+const DEPLOY_ORDER = [
+  "api",
+  "admin",
+  "web",
+  "social-video-worker",
+  "cos-reconcile-worker",
+  "billing-reconcile-worker",
+];
 const SHA_PATTERN = /^[a-f0-9]{40}$/u;
 const RUN_ID_PATTERN = /^[1-9][0-9]*$/u;
 
@@ -104,7 +111,10 @@ function assertServiceEvidence(plan) {
   assert(plan.no_op === (!hasBuilds && !hasDeploys), "no_op does not match service evidence");
 
   for (const service of deployServices) {
-    const requiredBuild = service === "cos-reconcile-worker" ? "api" : service;
+    const requiredBuild = service === "cos-reconcile-worker"
+      || service === "billing-reconcile-worker"
+      ? "api"
+      : service;
     assert(buildServices.has(requiredBuild), `missing build evidence for ${service}`);
   }
 

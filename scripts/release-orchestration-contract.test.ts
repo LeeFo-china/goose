@@ -786,6 +786,9 @@ describe("Tencent CCR registry configuration", () => {
     expect(apiCompose).toContain(
       "  gooes-cos-reconcile-worker:\n    image: ${GOOES_API_IMAGE:?set GOOES_API_IMAGE}",
     );
+    expect(apiCompose).toContain(
+      "  gooes-billing-reconcile-worker:\n    image: ${GOOES_API_IMAGE:?set GOOES_API_IMAGE}",
+    );
     expect(apiCompose).not.toContain("GOOES_API_IMAGE:-");
     expect(apiCompose).toContain(
       "  gooes-social-video-worker:\n    image: ${GOOES_SOCIAL_VIDEO_WORKER_IMAGE:-useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:main}",
@@ -804,10 +807,16 @@ describe("Tencent CCR registry configuration", () => {
 
 describe("admin release service resolver", () => {
   test.each([
-    ["requested", "all", "api,admin,social-video-worker,cos-reconcile-worker"],
+    [
+      "requested",
+      "all",
+      "api,admin,social-video-worker,cos-reconcile-worker,billing-reconcile-worker",
+    ],
     ["build", "all", "api,admin,social-video-worker"],
     ["requested", "cos-reconcile-worker", "cos-reconcile-worker"],
     ["build", "cos-reconcile-worker", "api"],
+    ["requested", "billing-reconcile-worker", "billing-reconcile-worker"],
+    ["build", "billing-reconcile-worker", "api"],
     ["requested", "admin,api,admin", "api,admin"],
     ["requested", " admin, api, admin ", "api,admin"],
   ])("resolves %s services %s in dependency order", (mode, services, expected) => {
@@ -2314,6 +2323,7 @@ describe("production orchestrator", () => {
       'check_runtime_evidence admin gooes-admin "${GOOES_ADMIN_IMAGE}" admin',
       'check_runtime_evidence social-video-worker gooes-social-video-worker "${GOOES_SOCIAL_VIDEO_WORKER_IMAGE}" social-video-worker',
       'check_runtime_evidence cos-reconcile-worker gooes-cos-reconcile-worker "${GOOES_API_IMAGE}" api',
+      'check_runtime_evidence billing-reconcile-worker gooes-billing-reconcile-worker "${GOOES_API_IMAGE}" api',
       'check_runtime_evidence web gooes-web "${GOOES_WEB_IMAGE}" web',
     ]) {
       expect(runtimeCheck).toContain(mapping);

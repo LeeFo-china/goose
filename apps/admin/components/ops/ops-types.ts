@@ -126,7 +126,13 @@ export type OpsServiceHealth = {
 
 export type ReleaseEnvironment = "dev" | "production";
 
-export type ReleaseService = "api" | "admin" | "social-video-worker" | "cos-reconcile-worker" | "all";
+export type ReleaseService =
+  | "api"
+  | "admin"
+  | "social-video-worker"
+  | "cos-reconcile-worker"
+  | "billing-reconcile-worker"
+  | "all";
 
 export type ReleaseRefType = "branch" | "tag" | "commit";
 export type ReleaseOperation = "release" | "rollback";

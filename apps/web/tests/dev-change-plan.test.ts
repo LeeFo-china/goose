@@ -36,14 +36,26 @@ describe("development change plan", () => {
       "api runtime",
       ["apps/api/src/app.ts"],
       ["api", "social-video-worker"],
-      ["api", "social-video-worker", "cos-reconcile-worker"],
+      [
+        "api",
+        "social-video-worker",
+        "cos-reconcile-worker",
+        "billing-reconcile-worker",
+      ],
     ],
     ["admin runtime", ["apps/admin/app/page.tsx"], ["admin"], ["admin"]],
     [
       "domain runtime",
       ["packages/domain/src/index.ts"],
       ["api", "admin", "web", "social-video-worker"],
-      ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker"],
+      [
+        "api",
+        "admin",
+        "web",
+        "social-video-worker",
+        "cos-reconcile-worker",
+        "billing-reconcile-worker",
+      ],
     ],
   ])("maps %s", (_name, paths, buildServices, deployServices) => {
     const plan = resolveDevChangePlan(paths as string[], metadata);
@@ -75,7 +87,13 @@ describe("development change plan", () => {
       "supabase/migrations/20260713120000_example.sql",
     ]);
     expect(plan.build_services).toEqual(["api", "web", "social-video-worker"]);
-    expect(plan.deploy_services).toEqual(["api", "web", "social-video-worker", "cos-reconcile-worker"]);
+    expect(plan.deploy_services).toEqual([
+      "api",
+      "web",
+      "social-video-worker",
+      "cos-reconcile-worker",
+      "billing-reconcile-worker",
+    ]);
     expect(plan.migration_changed).toBe(true);
     expect(plan.classifications).toEqual(["api", "migration", "web"]);
   });
@@ -120,6 +138,7 @@ describe("development change plan", () => {
       "web",
       "social-video-worker",
       "cos-reconcile-worker",
+      "billing-reconcile-worker",
     ]);
     expect(plan.classifications).toContain("unknown-runtime");
   });
@@ -134,6 +153,7 @@ describe("development change plan", () => {
       "web",
       "social-video-worker",
       "cos-reconcile-worker",
+      "billing-reconcile-worker",
     ]);
     expect(plan.classifications).toEqual(["shared-runtime"]);
   });

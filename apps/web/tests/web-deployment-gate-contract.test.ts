@@ -89,7 +89,9 @@ describe("web deployment hard gates", () => {
     const service = inputSection(dispatch, "service");
     expect(service).toContain("required: true");
     expect(service).toContain("type: choice");
-    expect(service).toContain("options: [api, admin, web, social-video-worker, cos-reconcile-worker]");
+    expect(service).toContain(
+      "options: [api, admin, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker]",
+    );
     for (const input of ["commit_sha", "build_run_id"]) {
       const section = inputSection(dispatch, input);
       expect(section).toContain("required: true");
@@ -383,7 +385,13 @@ describe("web deployment hard gates", () => {
     expect(build).toContain("resolve-web-deployment.mjs build");
     expect(build).toContain("needs.validate-request.outputs.build_services");
     expect(pull).toContain("for item in ${DEPLOY_SERVICES}");
-    for (const service of ["api", "admin", "social-video-worker", "cos-reconcile-worker"]) {
+    for (const service of [
+      "api",
+      "admin",
+      "social-video-worker",
+      "cos-reconcile-worker",
+      "billing-reconcile-worker",
+    ]) {
       expect(pull).toContain(`${service}) compose_services+=`);
     }
   });

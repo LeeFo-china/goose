@@ -18,7 +18,12 @@ const validPlan = {
   changed_files: ["apps/api/src/app.ts"],
   classifications: ["api"],
   build_services: ["api", "social-video-worker"],
-  deploy_services: ["api", "social-video-worker", "cos-reconcile-worker"],
+  deploy_services: [
+    "api",
+    "social-video-worker",
+    "cos-reconcile-worker",
+    "billing-reconcile-worker",
+  ],
   no_op: false,
 };
 
@@ -155,6 +160,11 @@ describe("development build plan verifier", () => {
     ["web deploy without web build", ["api", "social-video-worker"], ["api", "web"]],
     ["worker deploy without worker build", ["api"], ["api", "social-video-worker"]],
     ["COS deploy without API build", ["social-video-worker"], ["social-video-worker", "cos-reconcile-worker"]],
+    [
+      "billing reconcile deploy without API build",
+      ["social-video-worker"],
+      ["social-video-worker", "billing-reconcile-worker"],
+    ],
   ])("rejects %s", (_name, buildServices, deployServices) => {
     const result = runCli({
       ...clonePlan(),
