@@ -6,6 +6,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const EXPIRED_ACCESS_TOKEN_ERROR = 28_001_008;
 const COMPONENT_TOKEN_URL = "https://open.douyin.com/openapi/v2/auth/tp/token/";
 const AUTHORIZER_TOKEN_URL = "https://open.douyin.com/api/tpapp/v2/auth/get_auth_token/";
+const RETRIEVE_AUTH_CODE_URL = "https://open.douyin.com/api/tpapp/v2/auth/retrieve_auth_code/";
 const MERCHANT_CODE2SESSION_URL = "https://open.douyin.com/api/apps/v1/microapp/code2session/";
 const TEMPLATE_CODE2SESSION_URL = "https://developer.toutiao.com/api/apps/v2/jscode2session";
 
@@ -33,6 +34,11 @@ const AuthorizerSuccessSchema = z.looseObject({
     refresh_expires_in: z.number().int().positive(),
     authorize_permission: z.array(z.unknown()),
   }),
+});
+const RetrieveAuthorizationCodeSuccessSchema = z.looseObject({
+  err_no: z.literal(0),
+  log_id: z.string().min(1),
+  data: z.looseObject({ authorization_code: z.string().min(1) }),
 });
 const MerchantCode2SessionSuccessSchema = z.looseObject({
   err_no: z.literal(0),
@@ -76,6 +82,11 @@ export type RefreshAuthorizerTokenInput = {
   readonly authorizerRefreshToken: string;
 };
 
+export type RetrieveAuthorizationCodeInput = {
+  readonly componentAccessToken: string;
+  readonly authorizationAppId: string;
+};
+
 export type AuthorizerTokenResult = {
   readonly accessToken: string;
   readonly authorizerAppId: string;
@@ -108,6 +119,7 @@ export interface DouyinOpenPlatformGateway {
   getComponentAccessToken(input: ComponentTokenInput): Promise<ComponentTokenResult>;
   exchangeAuthorizationCode(input: AuthorizationCodeInput): Promise<AuthorizerTokenResult>;
   refreshAuthorizerToken(input: RefreshAuthorizerTokenInput): Promise<AuthorizerTokenResult>;
+  retrieveAuthorizationCode(input: RetrieveAuthorizationCodeInput): Promise<string>;
   code2Session(input: Code2SessionInput): Promise<Code2SessionResult>;
   code2SessionForTemplate(input: TemplateCode2SessionInput): Promise<Code2SessionResult>;
 }
@@ -172,6 +184,21 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
     });
   }
 
+  async retrieveAuthorizationCode(input: RetrieveAuthorizationCodeInput): Promise<string> {
+    const body = await this.request(RETRIEVE_AUTH_CODE_URL, {
+      method: "POST",
+      headers: {
+        "access-token": input.componentAccessToken,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ authorization_appid: input.authorizationAppId }),
+    });
+    assertOpenApiSuccess(body);
+    const parsed = RetrieveAuthorizationCodeSuccessSchema.safeParse(body);
+    if (!parsed.success) throw invalidResponseError(safeLogId(body));
+    return parsed.data.data.authorization_code;
+  }
+
   async code2Session(input: Code2SessionInput): Promise<Code2SessionResult> {
     try {
       return await this.requestMerchantCode2Session(input, input.authorizerAccessToken);
@@ -186,7 +213,8 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
       let accessToken: string;
       try {
         accessToken = await this.retryAccessToken({ appId: input.appId });
-      } catch {
+      } catch (error) {
+        if (error instanceof AppError) throw error;
         throw accessTokenRefreshError();
       }
       if (!accessToken.trim()) throw accessTokenRefreshError();
@@ -258,15 +286,14 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
     const timer = this.startTimer(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const response = await this.fetch(url, { ...init, signal: controller.signal });
-      const body = await parseJsonObject(response);
       if (!response.ok) {
         throw openPlatformError(
           "DOUYIN_OPEN_PLATFORM_HTTP_ERROR",
           "抖音开放平台 HTTP 请求失败",
-          safeLogId(body),
+          await bestEffortHttpLogId(response),
         );
       }
-      return body;
+      return await parseJsonObject(response);
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) {
         throw openPlatformError("DOUYIN_OPEN_PLATFORM_TIMEOUT", "抖音开放平台请求超时");
@@ -276,6 +303,15 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
     } finally {
       this.stopTimer(timer);
     }
+  }
+}
+
+async function bestEffortHttpLogId(response: Response): Promise<string | undefined> {
+  try {
+    return safeLogId(await response.json());
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    return undefined;
   }
 }
 

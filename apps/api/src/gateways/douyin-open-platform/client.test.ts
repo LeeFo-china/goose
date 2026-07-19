@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { AppError } from "@/errors/app-error";
+import { Errors } from "@/errors/error-factory";
 import { DouyinOpenPlatformClient, type DouyinFetch } from "./client";
 
 const COMPONENT_TOKEN = "component-token-value";
@@ -92,6 +93,28 @@ describe("DouyinOpenPlatformClient requests", () => {
     });
   });
 
+  test("retrieves a replacement authorization code with the exact official request", async () => {
+    const fetch = mock(async (_input: string | URL | Request, _init?: RequestInit) => jsonResponse({
+      err_no: 0,
+      log_id: "retrieve-log",
+      data: { authorization_code: "replacement-code" },
+    }));
+    const client = new DouyinOpenPlatformClient({ fetch });
+
+    await expect(client.retrieveAuthorizationCode({
+      componentAccessToken: COMPONENT_TOKEN,
+      authorizationAppId: "authorizer-appid",
+    })).resolves.toBe("replacement-code");
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "https://open.douyin.com/api/tpapp/v2/auth/retrieve_auth_code/",
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      headers: { "access-token": COMPONENT_TOKEN, "content-type": "application/json" },
+      body: JSON.stringify({ authorization_appid: "authorizer-appid" }),
+    });
+  });
+
   test("posts the exact merchant code2session V2 request", async () => {
     const fetch = mock(async (_input: string | URL | Request, _init?: RequestInit) => jsonResponse({
       err_no: 0,
@@ -157,6 +180,7 @@ describe("DouyinOpenPlatformClient failures", () => {
       logId?: string;
     }> = [
       { fetch: async (_input, _init) => jsonResponse({ log_id: "http-log" }, 502), code: "DOUYIN_OPEN_PLATFORM_HTTP_ERROR", logId: "http-log" },
+      { fetch: async (_input, _init) => new Response("<html>upstream failed</html>", { status: 502 }), code: "DOUYIN_OPEN_PLATFORM_HTTP_ERROR" },
       { fetch: async (_input, _init) => { throw new TypeError("network contained component-secret"); }, code: "DOUYIN_OPEN_PLATFORM_NETWORK_ERROR" },
       { fetch: async (_input, _init) => new Response("not-json"), code: "DOUYIN_OPEN_PLATFORM_RESPONSE_INVALID" },
       { fetch: async (_input, _init) => jsonResponse(["not-object"]), code: "DOUYIN_OPEN_PLATFORM_RESPONSE_INVALID" },
@@ -385,6 +409,43 @@ describe("DouyinOpenPlatformClient failures", () => {
       caught = error;
     }
     expectSafeError(caught, "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_REFRESH_FAILED");
+  });
+
+  test("preserves AppError identity from the access-token retry callback", async () => {
+    const authorizationExpired = Errors.business(
+      401,
+      "抖音小程序需要重新授权",
+      "DOUYIN_AUTHORIZATION_EXPIRED",
+    );
+    const client = new DouyinOpenPlatformClient({
+      fetch: async (_input, _init) => jsonResponse({
+        err_no: 28001008, err_msg: "expired", log_id: "expired-log",
+      }),
+      retryAccessToken: async () => { throw authorizationExpired; },
+    });
+
+    await expect(client.code2Session({
+      authorizerAccessToken: AUTHORIZER_TOKEN,
+      appId: "authorizer-appid",
+      code: "login-code",
+    })).rejects.toBe(authorizationExpired);
+  });
+
+  test("validates retrieve authorization code API failures and response shape", async () => {
+    for (const fixture of [
+      { body: { err_no: 40_001, log_id: "retrieve-error" },
+        code: "DOUYIN_OPEN_PLATFORM_API_ERROR" },
+      { body: { err_no: 0, log_id: "retrieve-invalid", data: {} },
+        code: "DOUYIN_OPEN_PLATFORM_RESPONSE_INVALID" },
+    ]) {
+      const client = new DouyinOpenPlatformClient({
+        fetch: async (_input, _init) => jsonResponse(fixture.body),
+      });
+      await expect(client.retrieveAuthorizationCode({
+        componentAccessToken: COMPONENT_TOKEN,
+        authorizationAppId: "authorizer-appid",
+      })).rejects.toMatchObject({ code: fixture.code, details: { log_id: fixture.body.log_id } });
+    }
   });
 });
 
