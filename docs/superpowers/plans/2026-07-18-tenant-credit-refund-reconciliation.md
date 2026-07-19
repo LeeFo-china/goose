@@ -794,6 +794,16 @@ Add and run each case before its production branch:
 8. A callback that wins first makes boolean finalize return `false` or claimed SUCCESS return
    `null`; service counts either as an idempotent race, not a failure.
 9. One row failure does not prevent later claimed rows from running.
+10. A fake clock proves the service derives a 120-second deadline from the exact claim time and
+    starts no later row/provider call when less than the exported gateway timeout-based 30-second
+    worst-row budget remains; untouched claims wait for lease expiry/reclaim.
+11. After `RESOURCE_NOT_EXISTS`, less than one gateway timeout plus a 10-second finalize margin
+    prevents `requestRefund` and token-reschedules with
+    `BILLING_RECHARGE_REFUND_RECONCILE_LEASE_BUDGET_EXHAUSTED` at the actual query-completion time.
+12. Advancing-clock tests prove checked time and backoff start at actual row completion, and an
+    invalid injected Date fails with a stable error before provider or persistence work.
+13. If the first ABNORMAL reschedule throws, the recovery call preserves the exact 30-minute
+    schedule, `WECHAT_REFUND_ABNORMAL`, and ABNORMAL metadata instead of generic backoff.
 
 - [ ] **Step 4: Implement the smallest state machine**
 
@@ -813,6 +823,13 @@ type Dependencies = {
 ```
 
 `runBatch` validates `limit` in 1..100, claims once, processes rows sequentially to avoid refund API bursts, catches per-row errors, and never changes a terminal row without its claim token. It must load the secret referenced by the exact stored payment config, use `parseAndAssertWechatRefund`, and never trust raw gateway fields.
+
+Derive the lease deadline from the exact claim timestamp. Bind the worst-row and retry budgets to
+the gateway's exported default timeout (`2 * timeout + 10s finalize margin` and
+`timeout + 10s finalize margin`). Read and validate `nowFactory()` before each row/provider call
+and after every provider response; stop the batch before the safety cutoff, and calculate all
+checked/metadata/next-at values from the actual row completion time. ABNORMAL persistence recovery
+must reuse the exact original token-gated reschedule input.
 
 Use stable metadata keys:
 

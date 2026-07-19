@@ -181,10 +181,19 @@ gateway 所有网络调用使用共享的有界 fetch 包装器，默认 10 秒�
 
 每个 tick 默认 claim 20 条，配置最大值 100：
 
-1. repository 调 claim RPC，批量加载订单与原支付配置；配置必须按订单的
+1. service 使用精确 claim 时间计算 120 秒租约截止时间。单行最坏预算绑定 gateway
+   已导出的 10 秒默认超时，按“查单 10 秒 + 同参退款 10 秒 + finalize 10 秒余量”
+   固定为 30 秒；每行开始和调用微信查单前都读取并校验新时间，剩余时间不足时
+   立即停止顺序批次，当前及后续 claim 留待租约自然过期后回收，不再加载密钥、
+   调微信或伪造 checked time。
+2. repository 调 claim RPC，批量加载订单与原支付配置；配置必须按订单的
    `payment_config_id` 精确读取，不能使用后来切换的活动配置。
-2. service 加载对应 secret bundle，调用退款查单。
-3. 严格验签并绑定响应后按状态处理：
+3. service 加载对应 secret bundle，调用退款查单。查单返回
+   `RESOURCE_NOT_EXISTS` 后、同参调用 `requestRefund` 前再次读取时间；剩余时间
+   少于“退款请求 10 秒 + finalize 10 秒余量”时不再发起退款，而用当前 token、
+   实际查单完成时间和稳定错误
+   `BILLING_RECHARGE_REFUND_RECONCILE_LEASE_BUDGET_EXHAUSTED` 重排。
+4. 严格验签并绑定响应后按状态处理：
    - `SUCCESS`：worker 调用 token-gated
      `billing_confirm_claimed_wechat_recharge_refund`，由它在同一事务复用现有确认
      RPC，原子扣减积分、写唯一反向流水并更新申请/订单；callback SUCCESS 仍调用
@@ -196,7 +205,11 @@ gateway 所有网络调用使用共享的有界 fetch 包装器，默认 10 秒�
      `out_refund_no` 同参重试申请退款一次；成功后保存并重排，仍不确定则保持
      `refunding`；
    - 其他网络、验签、限流或 5xx：保留 `refunding`，写稳定错误并重排。
-4. 所有 finalize 都携带 claim token。回调先完成时，worker 的 finalize 返回空，
+   每次 provider 响应后、写入 finalize 或重排前都重新读取并校验时间；
+   `checked_at`、metadata 时间和下一次退避均以该行实际完成时间为基准，不能复用
+   batch 开始时间。`ABNORMAL` 重排若首次数据库调用抛错，只能用完全相同的
+   30 分钟时间、错误码和 ABNORMAL metadata 再尝试一次，不能降级为通用退避。
+5. 所有 finalize 都携带 claim token。回调先完成时，worker 的 finalize 返回空，
    视为幂等竞争失败，不覆盖终态。
 
 退避表以 claim 次数计算：

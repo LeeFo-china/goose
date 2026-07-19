@@ -14,7 +14,6 @@ import {
 } from "@/services/wechat-pay-signatures";
 
 type FetchImpl = typeof fetch;
-
 type WechatPayGatewayDependencies = {
   fetchImpl?: FetchImpl;
   nonceFactory?: () => string;
@@ -22,11 +21,8 @@ type WechatPayGatewayDependencies = {
   requestTimeoutMs?: number;
   nowSecondsFactory?: () => number;
 };
-
 type WechatPayOperation = "jsapi_prepay" | "transaction_query" | "refund_request" | "refund_query";
-
-const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
-
+export const DEFAULT_WECHAT_PAY_REQUEST_TIMEOUT_MS = 10_000;
 export type WechatPayCreateJsapiPrepayInput = {
   config: WechatPayJsapiConfig;
   order: WechatPayJsapiOrder;
@@ -62,7 +58,10 @@ export type WechatPayQueryRefundByOutRefundNoInput = {
 export type WechatPayRefundQueryResult = Record<string, unknown> & {
   out_refund_no?: string;
   refund_id?: string;
+  transaction_id?: string;
+  out_trade_no?: string;
   status?: string;
+  success_time?: string;
   amount?: Record<string, unknown>;
   requestId: string | null;
 };
@@ -96,7 +95,8 @@ export class WechatPayGateway {
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
     this.nonceFactory = dependencies.nonceFactory;
     this.timestampFactory = dependencies.timestampFactory;
-    this.requestTimeoutMs = dependencies.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.requestTimeoutMs = dependencies.requestTimeoutMs ??
+      DEFAULT_WECHAT_PAY_REQUEST_TIMEOUT_MS;
     this.nowSecondsFactory = dependencies.nowSecondsFactory ??
       (() => Math.floor(Date.now() / 1_000));
   }
