@@ -51,35 +51,53 @@ export async function closeWechatPayTransactionByOutTradeNo(
     nonce: input.nonce,
     timestamp: input.timestamp,
   });
-  const response = await fetchCloseTransaction({
-    input,
-    urlPath: request.urlPath,
-    authorization,
-    body,
-  });
-  const verificationInput = {
-    response,
-    publicKeyId: input.secretBundle.wechatPayPublicKeyId,
-    publicKeyPem: input.secretBundle.wechatPayPublicKeyPem,
-    nowSeconds: input.nowSeconds,
-  };
-  if (response.status === 204) {
-    await readVerifiedWechatPayEmptyResponse(verificationInput);
-    return;
-  }
+  const timeoutMs = normalizeCloseRequestTimeout(input.timeoutMs);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let hasResponse = false;
+  try {
+    const response = await fetchCloseTransaction({
+      input,
+      urlPath: request.urlPath,
+      authorization,
+      body,
+      signal: controller.signal,
+    });
+    hasResponse = true;
+    const verificationInput = {
+      response,
+      publicKeyId: input.secretBundle.wechatPayPublicKeyId,
+      publicKeyPem: input.secretBundle.wechatPayPublicKeyPem,
+      nowSeconds: input.nowSeconds,
+    };
+    if (response.status === 204) {
+      await readVerifiedWechatPayEmptyResponse(verificationInput);
+      return;
+    }
 
-  const verified = await readVerifiedWechatPayRawResponse(verificationInput);
-  const payload = parseVerifiedErrorPayload(verified.rawBody);
-  throw Errors.business(
-    502,
-    "微信支付关单失败",
-    "WECHAT_PAY_CLOSE_FAILED",
-    {
-      status: response.status,
-      code: stringField(payload, "code"),
-      message: stringField(payload, "message"),
-    },
-  );
+    const verified = await readVerifiedWechatPayRawResponse(verificationInput);
+    const payload = parseVerifiedErrorPayload(verified.rawBody);
+    throw Errors.business(
+      502,
+      "微信支付关单失败",
+      "WECHAT_PAY_CLOSE_FAILED",
+      {
+        status: response.status,
+        code: stringField(payload, "code"),
+        message: stringField(payload, "message"),
+      },
+    );
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throwCloseTransportFailure({ reason: "timeout", timeout_ms: timeoutMs });
+    }
+    if (!hasResponse) {
+      throwCloseTransportFailure({ reason: "network_error" });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function parseVerifiedErrorPayload(rawBody: string): Record<string, unknown> {
@@ -98,37 +116,35 @@ async function fetchCloseTransaction(input: {
   urlPath: string;
   authorization: string;
   body: string;
+  signal: AbortSignal;
 }) {
-  const timeoutMs = normalizeCloseRequestTimeout(input.input.timeoutMs);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await input.input.fetchImpl(
-      `${input.input.secretBundle.baseUrl}${input.urlPath}`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: input.authorization,
-          "Content-Type": "application/json",
-        },
-        body: input.body,
-        signal: controller.signal,
+  return input.input.fetchImpl(
+    `${input.input.secretBundle.baseUrl}${input.urlPath}`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: input.authorization,
+        "Content-Type": "application/json",
       },
-    );
-  } catch {
-    const details = controller.signal.aborted
-      ? { reason: "timeout", timeout_ms: timeoutMs }
-      : { reason: "network_error" };
-    throw Errors.business(
-      502,
-      "微信支付关单失败",
-      "WECHAT_PAY_CLOSE_FAILED",
-      details,
-    );
-  } finally {
-    clearTimeout(timer);
-  }
+      body: input.body,
+      signal: input.signal,
+    },
+  );
+}
+
+function throwCloseTransportFailure(
+  details: { reason: "network_error" } | {
+    reason: "timeout";
+    timeout_ms: number;
+  },
+): never {
+  throw Errors.business(
+    502,
+    "微信支付关单失败",
+    "WECHAT_PAY_CLOSE_FAILED",
+    details,
+  );
 }
 
 function normalizeCloseRequestTimeout(timeoutMs: number | undefined) {

@@ -44,6 +44,7 @@ describe("Wechat Pay strict response path contract", () => {
       "wechat-pay-gateway.ts",
       "wechat-pay-gateway-close-transaction.ts",
       "wechat-pay-gateway-close-transaction.test.ts",
+      "wechat-pay-gateway-close-timeout.test.ts",
       "wechat-pay-gateway-create-prepay.ts",
       "wechat-pay-gateway-prepay-transport.test.ts",
       "wechat-pay-gateway-query-transaction.ts",
