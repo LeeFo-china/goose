@@ -6,12 +6,12 @@ import type { DouyinCredentialKeyring } from "./credential-envelope";
 const AES_KEY_BYTES = 32;
 const MAX_ID_LENGTH = 128;
 const MAX_SECRET_LENGTH = 512;
-const MAX_KEY_VERSION_LENGTH = 40;
+const MAX_KEY_VERSION_LENGTH = 64;
 const MAX_CREDENTIAL_KEY_VERSIONS = 16;
 const MAX_CREDENTIAL_KEYS_JSON_BYTES = 16 * 1024;
 const STANDARD_BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const ENCODING_AES_KEY_PATTERN = /^[A-Za-z0-9+/]{43}$/;
-const KEY_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/;
+const KEY_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const RESERVED_KEY_VERSIONS = new Set(["constructor", "prototype"]);
 
 const BoundedIdSchema = z.string().trim().min(1).max(MAX_ID_LENGTH);

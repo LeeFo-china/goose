@@ -143,6 +143,30 @@ describe("douyin miniapp config", () => {
     },
   );
 
+  test("accepts a safe 64-character credential key version", () => {
+    const env = validEnv();
+    const version = `v${"a".repeat(63)}`;
+    env.DOUYIN_CREDENTIAL_KEYS_JSON = JSON.stringify({ [version]: keyV1 });
+    env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = version;
+
+    const config = loadDouyinMiniappConfig(env);
+
+    expect(version).toHaveLength(64);
+    expect(config.credentialKeyring.activeKeyVersion).toBe(version);
+    expect(Object.hasOwn(config.credentialKeyring.keys, version)).toBe(true);
+  });
+
+  test("rejects a 65-character credential key version", () => {
+    const env = validEnv();
+    const version = `v${"a".repeat(64)}`;
+    const rawJson = JSON.stringify({ [version]: keyV1 });
+    env.DOUYIN_CREDENTIAL_KEYS_JSON = rawJson;
+    env.DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION = version;
+
+    expect(version).toHaveLength(65);
+    expectConfigErrorWithoutValues(env, [version, rawJson, keyV1]);
+  });
+
   test("accepts the maximum of 16 credential key versions", () => {
     const env = validEnv();
     env.DOUYIN_CREDENTIAL_KEYS_JSON = JSON.stringify(
