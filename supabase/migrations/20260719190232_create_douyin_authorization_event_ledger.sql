@@ -39,6 +39,37 @@ CREATE TABLE public.douyin_authorization_event_deliveries (
   )
 );
 
+CREATE TABLE public.douyin_authorization_event_subject_leases (
+  component_appid text NOT NULL REFERENCES public.douyin_third_party_components(component_appid)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  authorizer_appid text NOT NULL,
+  active_event_key text NULL,
+  active_event_name text NULL,
+  active_occurred_at timestamptz NULL,
+  claim_token uuid NULL,
+  claim_expires_at timestamptz NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (component_appid, authorizer_appid),
+  CONSTRAINT douyin_authorization_subject_authorizer_check
+    CHECK (btrim(authorizer_appid) <> ''),
+  CONSTRAINT douyin_authorization_subject_lease_check CHECK (
+    (
+      active_event_key IS NULL
+      AND active_event_name IS NULL
+      AND active_occurred_at IS NULL
+      AND claim_token IS NULL
+      AND claim_expires_at IS NULL
+    ) OR (
+      active_event_key ~ '^[0-9a-f]{64}$'
+      AND active_event_name IN ('AUTHORIZED', 'UPDATE_AUTHORIZED', 'UNAUTHORIZED')
+      AND active_occurred_at IS NOT NULL
+      AND claim_token IS NOT NULL
+      AND claim_expires_at IS NOT NULL
+    )
+  )
+);
+
 CREATE INDEX douyin_authorization_events_completed_cleanup_idx
   ON public.douyin_authorization_event_deliveries(completed_at, event_key)
   WHERE processing_state = 'completed';
@@ -47,8 +78,15 @@ CREATE TRIGGER tr_douyin_authorization_event_deliveries_updated_at
   BEFORE UPDATE ON public.douyin_authorization_event_deliveries
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+CREATE TRIGGER tr_douyin_authorization_event_subject_leases_updated_at
+  BEFORE UPDATE ON public.douyin_authorization_event_subject_leases
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 ALTER TABLE public.douyin_authorization_event_deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.douyin_authorization_event_subject_leases ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.douyin_authorization_event_deliveries
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON TABLE public.douyin_authorization_event_subject_leases
   FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.claim_douyin_authorization_event(
@@ -68,7 +106,13 @@ DECLARE
   v_claim_token uuid := gen_random_uuid();
   v_claim_expires_at timestamptz := v_now + interval '60 seconds';
   v_delivery public.douyin_authorization_event_deliveries%ROWTYPE;
+  v_active_delivery public.douyin_authorization_event_deliveries%ROWTYPE;
+  v_subject public.douyin_authorization_event_subject_leases%ROWTYPE;
+  v_installation public.douyin_miniapp_installations%ROWTYPE;
   v_component_status text;
+  v_incoming_priority integer;
+  v_active_priority integer;
+  v_installation_priority integer;
 BEGIN
   IF p_event_key IS NULL OR p_event_key !~ '^[0-9a-f]{64}$'
     OR p_component_appid IS NULL OR btrim(p_component_appid) = ''
@@ -90,47 +134,186 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'DOUYIN_COMPONENT_NOT_ACTIVE';
   END IF;
 
+  IF p_event_name NOT IN ('AUTHORIZED', 'UPDATE_AUTHORIZED', 'UNAUTHORIZED') THEN
+    INSERT INTO public.douyin_authorization_event_deliveries(
+      event_key, component_appid, event_name, authorizer_appid, occurred_at,
+      processing_state, claim_token, claim_expires_at
+    ) VALUES (
+      p_event_key, p_component_appid, p_event_name, p_authorizer_appid, p_occurred_at,
+      'processing', v_claim_token, v_claim_expires_at
+    )
+    ON CONFLICT (event_key) DO NOTHING
+    RETURNING * INTO v_delivery;
+    IF FOUND THEN
+      RETURN QUERY SELECT 'claimed'::text, v_claim_token, v_claim_expires_at;
+      RETURN;
+    END IF;
+
+    SELECT delivery.* INTO v_delivery
+    FROM public.douyin_authorization_event_deliveries AS delivery
+    WHERE delivery.event_key = p_event_key
+    FOR UPDATE;
+    IF v_delivery.component_appid IS DISTINCT FROM p_component_appid
+      OR v_delivery.event_name IS DISTINCT FROM p_event_name
+      OR v_delivery.authorizer_appid IS DISTINCT FROM p_authorizer_appid
+      OR v_delivery.occurred_at IS DISTINCT FROM p_occurred_at
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'DOUYIN_EVENT_KEY_COLLISION';
+    END IF;
+    IF v_delivery.processing_state = 'completed' THEN
+      RETURN QUERY SELECT 'completed'::text, NULL::uuid, NULL::timestamptz;
+      RETURN;
+    END IF;
+    IF v_delivery.claim_expires_at > v_now THEN
+      RETURN QUERY SELECT 'busy'::text, NULL::uuid, NULL::timestamptz;
+      RETURN;
+    END IF;
+    UPDATE public.douyin_authorization_event_deliveries AS delivery
+    SET claim_token = v_claim_token, claim_expires_at = v_claim_expires_at
+    WHERE delivery.event_key = p_event_key;
+    RETURN QUERY SELECT 'reclaimed'::text, v_claim_token, v_claim_expires_at;
+    RETURN;
+  END IF;
+
+  IF p_authorizer_appid IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'DOUYIN_LIFECYCLE_AUTHORIZER_REQUIRED';
+  END IF;
+
+  INSERT INTO public.douyin_authorization_event_subject_leases(
+    component_appid, authorizer_appid
+  ) VALUES (p_component_appid, p_authorizer_appid)
+  ON CONFLICT (component_appid, authorizer_appid) DO NOTHING;
+
+  SELECT subject.* INTO v_subject
+  FROM public.douyin_authorization_event_subject_leases AS subject
+  WHERE subject.component_appid = p_component_appid
+    AND subject.authorizer_appid = p_authorizer_appid
+  FOR UPDATE;
+
+  SELECT delivery.* INTO v_delivery
+  FROM public.douyin_authorization_event_deliveries AS delivery
+  WHERE delivery.event_key = p_event_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_delivery.component_appid IS DISTINCT FROM p_component_appid
+      OR v_delivery.event_name IS DISTINCT FROM p_event_name
+      OR v_delivery.authorizer_appid IS DISTINCT FROM p_authorizer_appid
+      OR v_delivery.occurred_at IS DISTINCT FROM p_occurred_at
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'DOUYIN_EVENT_KEY_COLLISION';
+    END IF;
+    IF v_delivery.processing_state = 'completed' THEN
+      RETURN QUERY SELECT 'completed'::text, NULL::uuid, NULL::timestamptz;
+      RETURN;
+    END IF;
+    IF v_subject.active_event_key IS DISTINCT FROM p_event_key
+      OR v_subject.claim_token IS DISTINCT FROM v_delivery.claim_token
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'DOUYIN_SUBJECT_LEASE_INCONSISTENT';
+    END IF;
+    IF v_subject.claim_expires_at > v_now THEN
+      RETURN QUERY SELECT 'busy'::text, NULL::uuid, NULL::timestamptz;
+      RETURN;
+    END IF;
+    UPDATE public.douyin_authorization_event_deliveries AS delivery
+    SET claim_token = v_claim_token, claim_expires_at = v_claim_expires_at
+    WHERE delivery.event_key = p_event_key;
+    UPDATE public.douyin_authorization_event_subject_leases AS subject
+    SET claim_token = v_claim_token, claim_expires_at = v_claim_expires_at
+    WHERE subject.component_appid = p_component_appid
+      AND subject.authorizer_appid = p_authorizer_appid;
+    RETURN QUERY SELECT 'reclaimed'::text, v_claim_token, v_claim_expires_at;
+    RETURN;
+  END IF;
+
+  IF v_subject.active_event_key IS NOT NULL THEN
+    SELECT delivery.* INTO v_active_delivery
+    FROM public.douyin_authorization_event_deliveries AS delivery
+    WHERE delivery.event_key = v_subject.active_event_key
+    FOR UPDATE;
+    IF NOT FOUND OR v_active_delivery.processing_state <> 'processing'
+      OR v_active_delivery.claim_token IS DISTINCT FROM v_subject.claim_token
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'DOUYIN_SUBJECT_LEASE_INCONSISTENT';
+    END IF;
+  END IF;
+
+  SELECT installation.* INTO v_installation
+  FROM public.douyin_miniapp_installations AS installation
+  WHERE installation.authorizer_appid = p_authorizer_appid
+  FOR UPDATE;
+  IF FOUND AND v_installation.installation_kind <> 'merchant' THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'DOUYIN_AUTHORIZATION_KIND_CONFLICT';
+  END IF;
+  IF FOUND AND v_installation.component_appid IS DISTINCT FROM p_component_appid THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'DOUYIN_AUTHORIZATION_COMPONENT_MISMATCH';
+  END IF;
+
+  v_incoming_priority := CASE WHEN p_event_name = 'UNAUTHORIZED' THEN 2 ELSE 1 END;
+  IF v_installation.authorization_event_occurred_at IS NOT NULL THEN
+    v_installation_priority := CASE
+      WHEN v_installation.authorization_status = 'revoked' THEN 2 ELSE 1
+    END;
+    IF p_occurred_at < v_installation.authorization_event_occurred_at
+      OR (p_occurred_at = v_installation.authorization_event_occurred_at
+        AND v_incoming_priority <= v_installation_priority)
+    THEN
+      INSERT INTO public.douyin_authorization_event_deliveries(
+        event_key, component_appid, event_name, authorizer_appid, occurred_at,
+        processing_state, completed_at
+      ) VALUES (
+        p_event_key, p_component_appid, p_event_name, p_authorizer_appid,
+        p_occurred_at, 'completed', v_now
+      );
+      RETURN QUERY SELECT 'completed'::text, NULL::uuid, NULL::timestamptz;
+      RETURN;
+    END IF;
+  END IF;
+
+  IF v_subject.active_event_key IS NOT NULL THEN
+    IF v_subject.claim_expires_at > v_now THEN
+      RETURN QUERY SELECT 'busy'::text, NULL::uuid, NULL::timestamptz;
+      RETURN;
+    END IF;
+
+    v_active_priority := CASE WHEN v_subject.active_event_name = 'UNAUTHORIZED' THEN 2 ELSE 1 END;
+    IF p_occurred_at < v_subject.active_occurred_at
+      OR (p_occurred_at = v_subject.active_occurred_at
+        AND v_incoming_priority <= v_active_priority)
+    THEN
+      INSERT INTO public.douyin_authorization_event_deliveries(
+        event_key, component_appid, event_name, authorizer_appid, occurred_at,
+        processing_state, completed_at
+      ) VALUES (
+        p_event_key, p_component_appid, p_event_name, p_authorizer_appid,
+        p_occurred_at, 'completed', v_now
+      );
+      RETURN QUERY SELECT 'completed'::text, NULL::uuid, NULL::timestamptz;
+      RETURN;
+    END IF;
+
+    UPDATE public.douyin_authorization_event_deliveries AS delivery
+    SET processing_state = 'completed', claim_token = NULL,
+        claim_expires_at = NULL, completed_at = v_now
+    WHERE delivery.event_key = v_subject.active_event_key;
+  END IF;
+
   INSERT INTO public.douyin_authorization_event_deliveries(
     event_key, component_appid, event_name, authorizer_appid, occurred_at,
     processing_state, claim_token, claim_expires_at
   ) VALUES (
     p_event_key, p_component_appid, p_event_name, p_authorizer_appid, p_occurred_at,
     'processing', v_claim_token, v_claim_expires_at
-  )
-  ON CONFLICT (event_key) DO NOTHING
-  RETURNING * INTO v_delivery;
-
-  IF FOUND THEN
-    RETURN QUERY SELECT 'claimed'::text, v_claim_token, v_claim_expires_at;
-    RETURN;
-  END IF;
-
-  SELECT delivery.* INTO v_delivery
-  FROM public.douyin_authorization_event_deliveries AS delivery
-  WHERE delivery.event_key = p_event_key
-  FOR UPDATE;
-
-  IF v_delivery.component_appid IS DISTINCT FROM p_component_appid
-    OR v_delivery.event_name IS DISTINCT FROM p_event_name
-    OR v_delivery.authorizer_appid IS DISTINCT FROM p_authorizer_appid
-    OR v_delivery.occurred_at IS DISTINCT FROM p_occurred_at
-  THEN
-    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'DOUYIN_EVENT_KEY_COLLISION';
-  END IF;
-
-  IF v_delivery.processing_state = 'completed' THEN
-    RETURN QUERY SELECT 'completed'::text, NULL::uuid, NULL::timestamptz;
-    RETURN;
-  END IF;
-  IF v_delivery.claim_expires_at > v_now THEN
-    RETURN QUERY SELECT 'busy'::text, NULL::uuid, NULL::timestamptz;
-    RETURN;
-  END IF;
-
-  UPDATE public.douyin_authorization_event_deliveries AS delivery
-  SET claim_token = v_claim_token, claim_expires_at = v_claim_expires_at
-  WHERE delivery.event_key = p_event_key;
-  RETURN QUERY SELECT 'reclaimed'::text, v_claim_token, v_claim_expires_at;
+  );
+  UPDATE public.douyin_authorization_event_subject_leases AS subject
+  SET active_event_key = p_event_key,
+      active_event_name = p_event_name,
+      active_occurred_at = p_occurred_at,
+      claim_token = v_claim_token,
+      claim_expires_at = v_claim_expires_at
+  WHERE subject.component_appid = p_component_appid
+    AND subject.authorizer_appid = p_authorizer_appid;
+  RETURN QUERY SELECT 'claimed'::text, v_claim_token, v_claim_expires_at;
 END;
 $$;
 
@@ -220,6 +403,7 @@ AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
   v_delivery public.douyin_authorization_event_deliveries%ROWTYPE;
+  v_subject public.douyin_authorization_event_subject_leases%ROWTYPE;
   v_existing public.douyin_miniapp_installations%ROWTYPE;
   v_default_runtime jsonb := '{
     "brand":{"logo_url":null,"qualifications":[]},
@@ -246,6 +430,18 @@ BEGIN
     OR p_permissions IS NULL OR jsonb_typeof(p_permissions) <> 'array'
   THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'DOUYIN_AUTHORIZATION_EVENT_INVALID';
+  END IF;
+
+  SELECT subject.* INTO v_subject
+  FROM public.douyin_authorization_event_subject_leases AS subject
+  WHERE subject.component_appid = p_component_appid
+    AND subject.authorizer_appid = p_authorizer_appid
+  FOR UPDATE;
+  IF NOT FOUND OR v_subject.active_event_key IS DISTINCT FROM p_event_key
+    OR v_subject.claim_token IS DISTINCT FROM p_claim_token
+    OR v_subject.claim_expires_at <= v_now
+  THEN
+    RETURN false;
   END IF;
 
   SELECT delivery.* INTO v_delivery
@@ -336,6 +532,11 @@ BEGIN
   SET processing_state = 'completed', claim_token = NULL,
       claim_expires_at = NULL, completed_at = v_now
   WHERE delivery.event_key = p_event_key;
+  UPDATE public.douyin_authorization_event_subject_leases AS subject
+  SET active_event_key = NULL, active_event_name = NULL,
+      active_occurred_at = NULL, claim_token = NULL, claim_expires_at = NULL
+  WHERE subject.component_appid = p_component_appid
+    AND subject.authorizer_appid = p_authorizer_appid;
   RETURN true;
 END;
 $$;
@@ -352,6 +553,7 @@ AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
   v_delivery public.douyin_authorization_event_deliveries%ROWTYPE;
+  v_subject public.douyin_authorization_event_subject_leases%ROWTYPE;
   v_existing public.douyin_miniapp_installations%ROWTYPE;
   v_default_runtime jsonb := '{
     "brand":{"logo_url":null,"qualifications":[]},
@@ -366,6 +568,18 @@ BEGIN
     OR p_occurred_at IS NULL
   THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'DOUYIN_REVOCATION_EVENT_INVALID';
+  END IF;
+
+  SELECT subject.* INTO v_subject
+  FROM public.douyin_authorization_event_subject_leases AS subject
+  WHERE subject.component_appid = p_component_appid
+    AND subject.authorizer_appid = p_authorizer_appid
+  FOR UPDATE;
+  IF NOT FOUND OR v_subject.active_event_key IS DISTINCT FROM p_event_key
+    OR v_subject.claim_token IS DISTINCT FROM p_claim_token
+    OR v_subject.claim_expires_at <= v_now
+  THEN
+    RETURN false;
   END IF;
 
   SELECT delivery.* INTO v_delivery
@@ -427,6 +641,11 @@ BEGIN
   SET processing_state = 'completed', claim_token = NULL,
       claim_expires_at = NULL, completed_at = v_now
   WHERE delivery.event_key = p_event_key;
+  UPDATE public.douyin_authorization_event_subject_leases AS subject
+  SET active_event_key = NULL, active_event_name = NULL,
+      active_occurred_at = NULL, claim_token = NULL, claim_expires_at = NULL
+  WHERE subject.component_appid = p_component_appid
+    AND subject.authorizer_appid = p_authorizer_appid;
   RETURN true;
 END;
 $$;
@@ -539,11 +758,13 @@ GRANT EXECUTE ON FUNCTION public.prune_douyin_authorization_event_deliveries(tim
 
 COMMENT ON TABLE public.douyin_authorization_event_deliveries IS
   'Fixed-length HMAC event keys and sixty-second processing leases for idempotent Douyin callbacks. Prune completed rows in batches after the operational retention window.';
+COMMENT ON TABLE public.douyin_authorization_event_subject_leases IS
+  'One persistent lifecycle-event lease per Douyin component and authorizer; rows are retained as bounded subject state while active fields are cleared after finalization.';
 COMMENT ON COLUMN public.douyin_miniapp_installations.authorization_event_occurred_at IS
   'Latest applied Douyin authorization lifecycle timestamp; prevents stale callbacks from reversing newer state.';
 
 COMMIT;
 
 -- Rollback: stop both callback endpoints first, then drop the seven RPCs, the
--- delivery table, and authorization_event_occurred_at. Token state written by
+-- delivery and subject-lease tables, and authorization_event_occurred_at. Token state written by
 -- a completed callback is intentionally not reversible.

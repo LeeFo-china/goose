@@ -61,6 +61,30 @@ describe("DouyinAuthorizationEventsRepository", () => {
     });
   });
 
+  test("passes distinct event keys and authorizers independently to the atomic claim RPC", async () => {
+    const fixture = client([{
+      claim_state: "busy", claim_token: null, claim_expires_at: null,
+    }]);
+    const repository = new Repository(fixture.client);
+    for (const [eventKey, authorizerAppId] of [
+      ["b".repeat(64), "tt-authorizer-1"],
+      ["c".repeat(64), "tt-authorizer-2"],
+    ] as const) {
+      await repository.claimEvent({
+        eventKey, componentAppId: "tt-component-1", eventName: "AUTHORIZED",
+        authorizerAppId, occurredAt: OCCURRED_AT,
+      });
+    }
+    expect(fixture.rpc.mock.calls.map((call) => call[1])).toEqual([
+      expect.objectContaining({
+        p_event_key: "b".repeat(64), p_authorizer_appid: "tt-authorizer-1",
+      }),
+      expect.objectContaining({
+        p_event_key: "c".repeat(64), p_authorizer_appid: "tt-authorizer-2",
+      }),
+    ]);
+  });
+
   test("maps encrypted ticket completion without plaintext", async () => {
     const fixture = client(true);
     await expect(new Repository(fixture.client).completeTicketEvent({

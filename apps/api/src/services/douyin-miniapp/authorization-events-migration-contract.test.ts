@@ -12,6 +12,12 @@ function sql(): string {
     : "";
 }
 
+function functionBody(source: string, name: string): string {
+  const start = source.indexOf(`FUNCTION public.${name}(`);
+  const end = source.indexOf("$$;", start);
+  return start < 0 || end < 0 ? "" : source.slice(start, end);
+}
+
 describe("douyin authorization event ledger migration", () => {
   test("creates a fixed HMAC-keyed ledger with strict claim state invariants", () => {
     const source = sql();
@@ -27,6 +33,126 @@ describe("douyin authorization event ledger migration", () => {
     expect(source).toContain("completed_at IS NOT NULL");
     expect(source).toContain("ENABLE ROW LEVEL SECURITY");
     expect(source).toContain("douyin_authorization_events_completed_cleanup_idx");
+    expect(source).toContain("CREATE TABLE public.douyin_authorization_event_subject_leases");
+    expect(source).toContain("PRIMARY KEY (component_appid, authorizer_appid)");
+    expect(source).toContain("active_event_name IN ('AUTHORIZED', 'UPDATE_AUTHORIZED', 'UNAUTHORIZED')");
+    expect(source).toContain("ALTER TABLE public.douyin_authorization_event_subject_leases ENABLE ROW LEVEL SECURITY");
+  });
+
+  test("serializes lifecycle claims per authorizer without blocking unrelated subjects", () => {
+    const claim = functionBody(sql(), "claim_douyin_authorization_event");
+    const lifecycleStart = claim.indexOf(
+      "INSERT INTO public.douyin_authorization_event_subject_leases",
+    );
+    const subjectLock = claim.indexOf(
+      "FROM public.douyin_authorization_event_subject_leases AS subject",
+      lifecycleStart,
+    );
+    const deliveryLock = claim.indexOf(
+      "FROM public.douyin_authorization_event_deliveries AS delivery",
+      subjectLock,
+    );
+    expect(lifecycleStart).toBeGreaterThan(-1);
+    expect(subjectLock).toBeGreaterThan(lifecycleStart);
+    expect(deliveryLock).toBeGreaterThan(subjectLock);
+    expect(claim.slice(subjectLock, deliveryLock)).toContain(
+      "subject.component_appid = p_component_appid AND subject.authorizer_appid = p_authorizer_appid FOR UPDATE",
+    );
+    expect(claim).toContain(
+      "IF v_subject.claim_expires_at > v_now THEN RETURN QUERY SELECT 'busy'::text",
+    );
+    expect(claim).not.toContain("pg_advisory");
+    expect(claim).not.toMatch(/LOCK TABLE/);
+  });
+
+  test("supersedes only an expired older lifecycle claim and completes ignored deliveries", () => {
+    const claim = functionBody(sql(), "claim_douyin_authorization_event");
+    expect(claim).toContain(
+      "v_incoming_priority := CASE WHEN p_event_name = 'UNAUTHORIZED' THEN 2 ELSE 1 END",
+    );
+    expect(claim).toContain(
+      "p_occurred_at < v_subject.active_occurred_at OR (p_occurred_at = v_subject.active_occurred_at AND v_incoming_priority <= v_active_priority)",
+    );
+    expect(claim).toContain(
+      "p_occurred_at, 'completed', v_now",
+    );
+    expect(claim).toContain(
+      "WHERE delivery.event_key = v_subject.active_event_key",
+    );
+    expect(claim).toContain(
+      "SET active_event_key = p_event_key, active_event_name = p_event_name, active_occurred_at = p_occurred_at",
+    );
+  });
+
+  test("ignores stale lifecycle events against the persisted installation before provider work", () => {
+    const claim = functionBody(sql(), "claim_douyin_authorization_event");
+    const subject = claim.indexOf(
+      "FROM public.douyin_authorization_event_subject_leases AS subject",
+    );
+    const delivery = claim.indexOf(
+      "FROM public.douyin_authorization_event_deliveries AS delivery",
+      subject,
+    );
+    const installation = claim.indexOf(
+      "FROM public.douyin_miniapp_installations AS installation",
+      delivery,
+    );
+    const persistedComparison = claim.indexOf(
+      "p_occurred_at < v_installation.authorization_event_occurred_at",
+      installation,
+    );
+    const busy = claim.indexOf(
+      "IF v_subject.claim_expires_at > v_now",
+      persistedComparison,
+    );
+    expect(subject).toBeGreaterThan(-1);
+    expect(delivery).toBeGreaterThan(subject);
+    expect(installation).toBeGreaterThan(delivery);
+    expect(persistedComparison).toBeGreaterThan(installation);
+    expect(busy).toBeGreaterThan(persistedComparison);
+    expect(claim).toContain(
+      "v_installation.authorization_status = 'revoked' THEN 2 ELSE 1",
+    );
+    expect(claim).toContain(
+      "v_incoming_priority <= v_installation_priority",
+    );
+    expect(claim).toContain(
+      "v_installation.installation_kind <> 'merchant'",
+    );
+    expect(claim).toContain(
+      "v_installation.component_appid IS DISTINCT FROM p_component_appid",
+    );
+  });
+
+  test("uses subject then delivery then installation lock order for lifecycle finalization", () => {
+    const source = sql();
+    for (const name of [
+      "complete_douyin_authorization_event",
+      "complete_douyin_revocation_event",
+    ]) {
+      const body = functionBody(source, name);
+      const subject = body.indexOf(
+        "FROM public.douyin_authorization_event_subject_leases AS subject",
+      );
+      const delivery = body.indexOf(
+        "FROM public.douyin_authorization_event_deliveries AS delivery",
+        subject,
+      );
+      const installation = body.indexOf(
+        "FROM public.douyin_miniapp_installations AS installation",
+        delivery,
+      );
+      expect(subject).toBeGreaterThan(-1);
+      expect(delivery).toBeGreaterThan(subject);
+      expect(installation).toBeGreaterThan(delivery);
+      expect(body).toContain(
+        "SET active_event_key = NULL, active_event_name = NULL, active_occurred_at = NULL, claim_token = NULL, claim_expires_at = NULL",
+      );
+    }
+    expect(functionBody(source, "complete_douyin_ticket_event"))
+      .not.toContain("douyin_authorization_event_subject_leases");
+    expect(functionBody(source, "complete_douyin_unsupported_event"))
+      .not.toContain("douyin_authorization_event_subject_leases");
   });
 
   test("claims, observes and reclaims one delivery under a sixty-second lease", () => {
@@ -116,6 +242,7 @@ describe("douyin authorization event ledger migration", () => {
     expect(source).toContain("p_limit > 1000");
     expect(source).toContain("LIMIT p_limit");
     expect(source).toContain("REVOKE ALL ON TABLE public.douyin_authorization_event_deliveries FROM PUBLIC, anon, authenticated, service_role");
+    expect(source).toContain("REVOKE ALL ON TABLE public.douyin_authorization_event_subject_leases FROM PUBLIC, anon, authenticated, service_role");
     expect(source).not.toMatch(/GRANT (?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*douyin_authorization_event_deliveries/);
     for (const name of [
       "claim_douyin_authorization_event", "get_douyin_authorization_event_state",
