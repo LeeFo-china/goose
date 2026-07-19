@@ -1,7 +1,17 @@
+import { mock } from "bun:test";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
-import type { PlatformRechargeRefundRequestRecord } from "@/repositories/platform-billing-recharge-refunds";
+import type { PlatformAuditLogCreateInput } from "@/repositories/platform-audit-logs";
+import {
+  platformBillingRechargeRefundRepository,
+  type PlatformRechargeRefundRequestRecord,
+} from "@/repositories/platform-billing-recharge-refunds";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { AuthContext } from "@/services/authorization";
+import type {
+  WechatPayQueryTransactionByOutTradeNoInput,
+  WechatPayTransactionQueryResult,
+} from "@/services/wechat-pay-gateway";
+import type { WechatPayJsapiConfig } from "@/services/wechat-pay-jsapi-request-builder";
 
 export const order = {
   id: "order-1",
@@ -63,17 +73,10 @@ export const refundingRequest = {
   ...approvedRequest,
   status: "refunding",
   out_refund_no: "TRR202607100800000001",
-} satisfies PlatformRechargeRefundRequestRecord;
-
-export const requestWithWechatResult = {
-  ...refundingRequest,
-  wechat_refund_id: "5030000000202607150000000001",
-  refund_amount_fen: 10000,
   metadata: {
+    correlation_id: "refund-correlation-1",
     wechat_refund_response: {
-      out_refund_no: "TRR202607100800000001",
-      refund_id: "5030000000202607150000000001",
-      status: "PROCESSING",
+      authorization: "old-untrusted-authorization",
     },
   },
 } satisfies PlatformRechargeRefundRequestRecord;
@@ -84,7 +87,7 @@ export const failedRequest = {
   failure_message: "微信退款请求失败",
 } satisfies PlatformRechargeRefundRequestRecord;
 
-export const paymentConfig = {
+export const paymentConfig: PlatformPaymentConfigRecord = {
   id: "platform-config-1",
   provider: "wechat_pay",
   profile_code: "platform_direct_recharge",
@@ -107,6 +110,14 @@ export const paymentConfig = {
   updated_by_employee_id: null,
   created_at: "2026-07-01T00:00:00.000Z",
   updated_at: "2026-07-01T00:00:00.000Z",
+};
+
+export const partnerPaymentConfig = {
+  ...paymentConfig,
+  profile_code: "tenant_service_provider",
+  merchant_mode: "service_provider_sub_merchant",
+  merchant_id: "1561816121",
+  sub_merchant_id: "1900000109",
 } satisfies PlatformPaymentConfigRecord;
 
 export const authContext = {
@@ -133,3 +144,178 @@ export const authContext = {
     { code: "platform.billing.recharge_refund.review", scope: "all" },
   ],
 } satisfies AuthContext;
+
+export const events: string[] = [];
+
+export const refundPayload = {
+  out_refund_no: "TRR202607100800000001",
+  refund_id: "5030000000202607150000000001",
+  transaction_id: "4200000001",
+  out_trade_no: "TC202607020001",
+  status: "PROCESSING",
+  amount: { refund: 10000, total: 10000, currency: "CNY" },
+};
+
+export function createRefundPayload(
+  overrides: Partial<typeof refundPayload> = {},
+) {
+  return { ...refundPayload, ...overrides };
+}
+
+export function createRefundRequestResult(
+  overrides: Partial<typeof refundPayload> = {},
+  requestId = "wechat-refund-request-id",
+) {
+  return {
+    ...createRefundPayload(overrides),
+    requestId,
+  };
+}
+
+export function createTransactionQueryResult(
+  config: WechatPayJsapiConfig = paymentConfig,
+  overrides: Partial<WechatPayTransactionQueryResult> = {},
+): WechatPayTransactionQueryResult {
+  const merchant = config.merchant_mode === "service_provider_sub_merchant"
+    ? {
+      sp_mchid: config.merchant_id,
+      sub_mchid: config.sub_merchant_id,
+    }
+    : { mchid: config.merchant_id };
+  return {
+    ...merchant,
+    out_trade_no: "TC202607020001",
+    transaction_id: "4200000001",
+    trade_state: "SUCCESS",
+    success_time: "2026-07-02T16:03:00+08:00",
+    amount: { total: 10000, currency: "CNY" },
+    requestId: "wechat-transaction-query-request-id",
+    ...overrides,
+  };
+}
+
+export const repository = {
+  findRequestById: mock(
+    async (): Promise<PlatformRechargeRefundRequestRecord | null> =>
+      approvedRequest,
+  ),
+  beginWechatRefund: mock(
+    async (): Promise<PlatformRechargeRefundRequestRecord | null> => {
+      events.push("begin-wechat-refund");
+      return refundingRequest;
+    },
+  ),
+  saveWechatRefundResult: mock(
+    async (
+      input: Parameters<
+        typeof platformBillingRechargeRefundRepository.saveWechatRefundResult
+      >[0],
+    ): Promise<PlatformRechargeRefundRequestRecord> => {
+      events.push("save-wechat-result");
+      return {
+        ...refundingRequest,
+        out_refund_no: input.outRefundNo,
+        wechat_refund_id: input.wechatRefundId,
+        refund_amount_fen: input.refundAmountFen,
+        metadata: input.metadata,
+      };
+    },
+  ),
+};
+
+export const paymentConfigRepository = {
+  findWechatPayConfig: mock(async () => paymentConfig),
+  findWechatPayConfigById: mock(
+    async (): Promise<PlatformPaymentConfigRecord | null> => paymentConfig,
+  ),
+};
+
+export const secretBundleService = {
+  load: mock(async () => ({
+    privateKeyPem: "private-key",
+    apiV3Key: "api-v3-key",
+    wechatPayPublicKeyId: null,
+    wechatPayPublicKeyPem: null,
+    baseUrl: "https://api.mch.weixin.qq.com",
+  })),
+};
+
+export const wechatPayGateway = {
+  queryTransactionByOutTradeNo: mock(async (
+    input: WechatPayQueryTransactionByOutTradeNoInput,
+  ) => {
+    events.push("wechat-query-transaction");
+    return createTransactionQueryResult(input.config);
+  }),
+  requestRefund: mock(async (_input?: unknown) => {
+    events.push("wechat-refund");
+    return createRefundRequestResult();
+  }),
+  queryRefundByOutRefundNo: mock(async () => {
+    events.push("wechat-query-refund");
+    return {
+      ...createRefundPayload(),
+      requestId: "wechat-refund-query-request-id",
+    };
+  }),
+};
+
+export const auditLogService = {
+  recordBestEffort: mock(async (_input: PlatformAuditLogCreateInput) => null),
+};
+
+export function resetExecutionMocks() {
+  events.length = 0;
+  for (const fn of [
+    ...Object.values(repository),
+    ...Object.values(paymentConfigRepository),
+    ...Object.values(secretBundleService),
+    ...Object.values(wechatPayGateway),
+    ...Object.values(auditLogService),
+  ]) {
+    fn.mockClear();
+  }
+  repository.findRequestById.mockImplementation(async () => approvedRequest);
+  repository.beginWechatRefund.mockImplementation(async () => {
+    events.push("begin-wechat-refund");
+    return refundingRequest;
+  });
+  repository.saveWechatRefundResult.mockImplementation(async (input) => {
+    events.push("save-wechat-result");
+    return {
+      ...refundingRequest,
+      out_refund_no: input.outRefundNo,
+      wechat_refund_id: input.wechatRefundId,
+      refund_amount_fen: input.refundAmountFen,
+      metadata: input.metadata,
+    };
+  });
+  paymentConfigRepository.findWechatPayConfig.mockImplementation(
+    async () => paymentConfig,
+  );
+  paymentConfigRepository.findWechatPayConfigById.mockImplementation(
+    async () => paymentConfig,
+  );
+  secretBundleService.load.mockImplementation(async () => ({
+    privateKeyPem: "private-key",
+    apiV3Key: "api-v3-key",
+    wechatPayPublicKeyId: null,
+    wechatPayPublicKeyPem: null,
+    baseUrl: "https://api.mch.weixin.qq.com",
+  }));
+  wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async (input) => {
+    events.push("wechat-query-transaction");
+    return createTransactionQueryResult(input.config);
+  });
+  wechatPayGateway.requestRefund.mockImplementation(async () => {
+    events.push("wechat-refund");
+    return createRefundRequestResult();
+  });
+  wechatPayGateway.queryRefundByOutRefundNo.mockImplementation(async () => {
+    events.push("wechat-query-refund");
+    return {
+      ...createRefundPayload(),
+      requestId: "wechat-refund-query-request-id",
+    };
+  });
+}

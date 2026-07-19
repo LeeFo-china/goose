@@ -140,15 +140,23 @@ const auditLogService = {
   recordBestEffort: mock(async () => null),
 };
 
+const validatedWechatRefund = {
+  outRefundNo: "TRR202607100800000001",
+  wechatRefundId: "5030000000202607150000000001",
+  transactionId: "4200000001",
+  outTradeNo: "TC202607020001",
+  status: "PROCESSING",
+  refundAmountFen: 10000,
+  totalAmountFen: 10000,
+  currency: "CNY",
+  requestId: "wechat-refund-request-id",
+  successTime: null,
+} as const;
+
 const executionService = {
   execute: mock(async () => ({
     request: refundingExecutionRequest,
-    wechat_refund: {
-      out_refund_no: "TRR202607100800000001",
-      refund_id: "5030000000202607150000000001",
-      status: "PROCESSING",
-      raw: {},
-    },
+    wechat_refund: validatedWechatRefund,
   })),
 };
 
@@ -187,12 +195,7 @@ describe("PlatformBillingRechargeRefundService", () => {
     );
     executionService.execute.mockImplementation(async () => ({
       request: refundingExecutionRequest,
-      wechat_refund: {
-        out_refund_no: "TRR202607100800000001",
-        refund_id: "5030000000202607150000000001",
-        status: "PROCESSING",
-        raw: {},
-      },
+      wechat_refund: validatedWechatRefund,
     }));
   });
 

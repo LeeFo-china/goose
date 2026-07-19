@@ -1,0 +1,385 @@
+import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
+
+const migration = new URL(
+  "../../../../supabase/migrations/20260718124000_harden_tenant_credit_refund_reconciliation.sql",
+  import.meta.url,
+);
+
+const design = new URL(
+  "../../../../docs/superpowers/specs/2026-07-18-tenant-credit-refund-reconciliation-design.md",
+  import.meta.url,
+);
+
+const plan = new URL(
+  "../../../../docs/superpowers/plans/2026-07-18-tenant-credit-refund-reconciliation.md",
+  import.meta.url,
+);
+
+const RPC_NAMES = [
+  "billing_begin_wechat_recharge_refund",
+  "billing_claim_wechat_recharge_refunds",
+  "billing_reschedule_wechat_recharge_refund",
+  "billing_close_wechat_recharge_refund",
+  "billing_apply_wechat_recharge_refund_callback_state",
+  "billing_confirm_wechat_recharge_refund",
+  "billing_confirm_claimed_wechat_recharge_refund",
+] as const;
+
+const RPC_SIGNATURES = {
+  billing_begin_wechat_recharge_refund: "uuid, text, timestamptz",
+  billing_claim_wechat_recharge_refunds:
+    "integer, integer, uuid, timestamptz",
+  billing_reschedule_wechat_recharge_refund:
+    "uuid, uuid, timestamptz, timestamptz, text, jsonb, text, integer",
+  billing_close_wechat_recharge_refund:
+    "uuid, uuid, timestamptz, jsonb",
+  billing_apply_wechat_recharge_refund_callback_state:
+    "uuid, text, text, timestamptz, jsonb",
+  billing_confirm_wechat_recharge_refund:
+    "uuid, text, text, integer, timestamptz, uuid, jsonb",
+  billing_confirm_claimed_wechat_recharge_refund:
+    "uuid, uuid, text, text, integer, timestamptz, jsonb",
+} as const;
+
+function sql() {
+  return existsSync(migration) ? readFileSync(migration, "utf8") : "";
+}
+
+function text(url: URL) {
+  return readFileSync(url, "utf8");
+}
+
+function functionSql(
+  source: string,
+  name: (typeof RPC_NAMES)[number],
+) {
+  const start = source.indexOf(`CREATE OR REPLACE FUNCTION public.${name}`);
+  if (start < 0) return "";
+  const end = source.indexOf("$$;", start);
+  return end < 0 ? source.slice(start) : source.slice(start, end + 3);
+}
+
+describe("tenant credit refund reconciliation migration", () => {
+  test("adds bounded reconciliation lease state", () => {
+    const source = sql();
+
+    expect(source).toContain("reconcile_next_at timestamptz");
+    expect(source).toContain(
+      "reconcile_attempt_count integer NOT NULL DEFAULT 0",
+    );
+    expect(source).toContain("reconcile_claim_token uuid");
+    expect(source).toContain("reconcile_claim_expires_at timestamptz");
+    expect(source).toContain("reconcile_last_error text");
+    expect(source).toContain("reconcile_last_checked_at timestamptz");
+    expect(source).toMatch(/CHECK \(reconcile_attempt_count >= 0\)/);
+    expect(source).toMatch(
+      /CHECK \([\s\S]*reconcile_claim_token IS NULL[\s\S]*reconcile_claim_expires_at IS NULL[\s\S]*reconcile_claim_token IS NOT NULL[\s\S]*reconcile_claim_expires_at IS NOT NULL[\s\S]*\)/,
+    );
+    expect(source).toMatch(
+      /CREATE INDEX IF NOT EXISTS tenant_credit_refund_reconcile_due_idx[\s\S]*ON public\.tenant_credit_refund_requests\(reconcile_next_at, id\)[\s\S]*WHERE status = 'refunding' AND reconcile_next_at IS NOT NULL;/,
+    );
+  });
+
+  test("uses the stable constraint names and bounds the last error", () => {
+    const source = sql();
+
+    expect(source).toContain(
+      "tenant_credit_refund_reconcile_attempt_count_check",
+    );
+    expect(source).toContain("tenant_credit_refund_reconcile_lease_check");
+    expect(source).toContain(
+      "tenant_credit_refund_reconcile_last_error_check",
+    );
+    expect(source).toMatch(
+      /CHECK \(reconcile_last_error IS NULL OR (?:char_)?length\(reconcile_last_error\) <= 200\)/,
+    );
+  });
+
+  test("backfills historical refunding work and only repairs safe stale mirrors", () => {
+    const source = sql();
+    const constraints = source.indexOf(
+      "tenant_credit_refund_reconcile_last_error_check",
+    );
+    const requestBackfill = source.match(
+      /UPDATE public\.tenant_credit_refund_requests AS request[\s\S]*?SET reconcile_next_at = pg_catalog\.now\(\)[\s\S]*?WHERE request\.status = 'refunding'[\s\S]*?AND request\.reconcile_next_at IS NULL;/,
+    )?.[0] ?? "";
+    const requestBackfillPosition = source.indexOf(requestBackfill);
+    const mirrorRepair = source.match(
+      /UPDATE public\.tenant_credit_orders AS credit_order[\s\S]*?;/,
+    )?.[0] ?? "";
+
+    expect(requestBackfill).not.toBe("");
+    expect(requestBackfillPosition).toBeGreaterThan(constraints);
+    expect(mirrorRepair).toContain(
+      "FROM public.tenant_credit_refund_requests AS request",
+    );
+    expect(mirrorRepair).toContain("request.status = 'refunding'");
+    expect(mirrorRepair).toMatch(
+      /credit_order\.refund_status IS NULL[\s\S]*credit_order\.refund_status = 'approved'/,
+    );
+    expect(mirrorRepair).not.toContain("'refunded'");
+    expect(mirrorRepair).not.toContain("'failed'");
+    expect(mirrorRepair).not.toContain("'rejected'");
+  });
+
+  test("claims a bounded due batch with expiring token leases", () => {
+    const source = functionSql(
+      sql(),
+      "billing_claim_wechat_recharge_refunds",
+    );
+    const returnColumns = source
+      .match(/RETURNS TABLE\(([\s\S]*?)\)\s*LANGUAGE/)?.[1]
+      ?.replace(/\s+/g, " ")
+      .trim();
+
+    expect(returnColumns).toBe(
+      "id uuid, tenant_id uuid, order_id uuid, reason text, " +
+        "requested_amount_fen integer, out_refund_no text, " +
+        "wechat_refund_id text, refund_amount_fen integer, " +
+        "reconcile_attempt_count integer",
+    );
+    expect(source).not.toContain(
+      "RETURNS SETOF public.tenant_credit_refund_requests",
+    );
+    expect(source).not.toContain("RETURNING request.*");
+    expect(source).toContain("p_limit NOT BETWEEN 1 AND 100");
+    expect(source).toContain("p_lease_seconds NOT BETWEEN 30 AND 900");
+    expect(source).not.toContain(
+      "p_lease_seconds NOT BETWEEN 30 AND 3600",
+    );
+    expect(source).toContain(
+      "BILLING_RECHARGE_REFUND_RECONCILE_LIMIT_INVALID",
+    );
+    expect(source).toContain("FOR UPDATE SKIP LOCKED");
+    expect(source).toContain(
+      "reconcile_attempt_count = request.reconcile_attempt_count + 1",
+    );
+    expect(source).toMatch(
+      /request\.status = 'refunding'[\s\S]*request\.reconcile_next_at <= p_now[\s\S]*request\.reconcile_claim_token IS NULL[\s\S]*request\.reconcile_claim_expires_at <= p_now/,
+    );
+    expect(source).toMatch(
+      /ORDER BY request\.reconcile_next_at, request\.id[\s\S]*LIMIT p_limit[\s\S]*FOR UPDATE SKIP LOCKED/,
+    );
+    expect(source).toContain("reconcile_claim_token = p_claim_token");
+    expect(source).toContain(
+      "reconcile_claim_expires_at = p_now + make_interval(secs => p_lease_seconds)",
+    );
+  });
+
+  test("begins refund execution by locking request then order atomically", () => {
+    const source = functionSql(sql(), "billing_begin_wechat_recharge_refund");
+    const requestLock = source.indexOf(
+      "FROM public.tenant_credit_refund_requests",
+    );
+    const orderLock = source.indexOf("FROM public.tenant_credit_orders");
+
+    expect(requestLock).toBeGreaterThan(0);
+    expect(orderLock).toBeGreaterThan(requestLock);
+    expect(source.match(/FOR UPDATE/g)).toHaveLength(2);
+    expect(source).toContain("v_request.status NOT IN ('approved', 'failed')");
+    expect(source).toContain("RETURN NULL");
+    expect(source).toContain(
+      "v_request.out_refund_no <> p_out_refund_no",
+    );
+    expect(source).toMatch(
+      /UPDATE public\.tenant_credit_refund_requests[\s\S]*status = 'refunding'[\s\S]*out_refund_no = coalesce\(out_refund_no, p_out_refund_no\)[\s\S]*reconcile_next_at = p_now \+ interval '1 minute'[\s\S]*UPDATE public\.tenant_credit_orders[\s\S]*refund_status = 'refunding'/,
+    );
+  });
+
+  test("reschedules and closes only the exact active claim", () => {
+    const reschedule = functionSql(
+      sql(),
+      "billing_reschedule_wechat_recharge_refund",
+    );
+    const close = functionSql(sql(), "billing_close_wechat_recharge_refund");
+
+    for (const source of [reschedule, close]) {
+      expect(source).toContain("request.status = 'refunding'");
+      expect(source).toContain(
+        "request.reconcile_claim_token = p_claim_token",
+      );
+      expect(source).toContain("reconcile_claim_token = NULL");
+      expect(source).toContain("reconcile_claim_expires_at = NULL");
+      expect(source).toContain("RETURNS boolean");
+    }
+    expect(reschedule).toContain(
+      "wechat_refund_id = coalesce(p_wechat_refund_id, wechat_refund_id)",
+    );
+    expect(reschedule).toContain(
+      "refund_amount_fen = coalesce(p_refund_amount_fen, refund_amount_fen)",
+    );
+    expect(reschedule).toContain("reconcile_next_at = p_reconcile_next_at");
+    expect(reschedule).toContain("reconcile_last_checked_at = p_checked_at");
+    expect(reschedule).toContain("reconcile_last_error = p_last_error");
+    expect(reschedule).toMatch(
+      /p_wechat_refund_id IS NOT NULL[\s\S]*btrim\(p_wechat_refund_id\) = ''[\s\S]*BILLING_RECHARGE_REFUND_WECHAT_REFUND_ID_INVALID/,
+    );
+    expect(close).toContain("failure_message = 'WECHAT_REFUND_CLOSED'");
+    expect(close).toContain("reconcile_next_at = NULL");
+    expect(close).toMatch(
+      /UPDATE public\.tenant_credit_orders[\s\S]*refund_status = 'failed'/,
+    );
+  });
+
+  test("applies only validated CLOSED or ABNORMAL callback states", () => {
+    const source = functionSql(
+      sql(),
+      "billing_apply_wechat_recharge_refund_callback_state",
+    );
+    const requestLock = source.indexOf(
+      "FROM public.tenant_credit_refund_requests",
+    );
+    const orderLock = source.indexOf("FROM public.tenant_credit_orders");
+
+    expect(source).toContain("p_status NOT IN ('CLOSED', 'ABNORMAL')");
+    expect(source).toContain(
+      "BILLING_RECHARGE_REFUND_CALLBACK_STATUS_INVALID",
+    );
+    expect(requestLock).toBeGreaterThan(0);
+    expect(orderLock).toBeGreaterThan(requestLock);
+    expect(source.match(/FOR UPDATE/g)).toHaveLength(2);
+    expect(source).toContain("v_request.out_refund_no <> p_out_refund_no");
+    expect(source).toContain("v_request.status <> 'refunding'");
+    expect(source).toContain("RETURN false");
+    expect(source).toContain("failure_message = 'WECHAT_REFUND_CLOSED'");
+    expect(source).toContain("reconcile_last_error = 'WECHAT_REFUND_ABNORMAL'");
+    expect(source).toContain(
+      "reconcile_next_at = p_checked_at + interval '30 minutes'",
+    );
+    expect(source).toContain("refund_status = 'refunding'");
+  });
+
+  test("preserves atomic confirmation and clears reconciliation state", () => {
+    const source = functionSql(
+      sql(),
+      "billing_confirm_wechat_recharge_refund",
+    );
+
+    expect(source).toMatch(
+      /FROM public\.tenant_credit_refund_requests[\s\S]*FOR UPDATE[\s\S]*FROM public\.tenant_credit_orders[\s\S]*FOR UPDATE/,
+    );
+    expect(source).toContain("v_request.status = 'refunded'");
+    expect(source).toContain(
+      "source_type = 'tenant_credit_refund_request'",
+    );
+    expect(source).toContain("event_type = 'wechat_recharge_refund'");
+    expect(source).toContain("INSERT INTO public.tenant_credit_ledger");
+    expect(source).toContain(
+      "latest_notification_id = coalesce(p_notification_id, latest_notification_id)",
+    );
+    expect(source).toMatch(
+      /status = 'refunded'[\s\S]*reconcile_next_at = NULL[\s\S]*reconcile_claim_token = NULL[\s\S]*reconcile_claim_expires_at = NULL[\s\S]*reconcile_last_error = NULL[\s\S]*reconcile_last_checked_at = v_refunded_at/,
+    );
+  });
+
+  test("confirms worker success only for the exact active claim", () => {
+    const source = functionSql(
+      sql(),
+      "billing_confirm_claimed_wechat_recharge_refund",
+    );
+
+    expect(source).toContain("RETURNS jsonb");
+    expect(source).toMatch(
+      /FROM public\.tenant_credit_refund_requests AS request[\s\S]*request\.status = 'refunding'[\s\S]*request\.reconcile_claim_token = p_claim_token[\s\S]*FOR UPDATE/,
+    );
+    expect(source).toContain("RETURN NULL");
+    expect(source).toMatch(
+      /public\.billing_confirm_wechat_recharge_refund\([\s\S]*p_refund_request_id,[\s\S]*p_out_refund_no,[\s\S]*p_wechat_refund_id,[\s\S]*p_refund_amount_fen,[\s\S]*p_refunded_at,[\s\S]*NULL::uuid,[\s\S]*p_metadata[\s\S]*\)/,
+    );
+    expect(source).not.toContain("tenant_credit_accounts");
+    expect(source).not.toContain("tenant_credit_ledger");
+  });
+
+  test("rejects missing claimed-success ownership before checking for a race", () => {
+    const source = functionSql(
+      sql(),
+      "billing_confirm_claimed_wechat_recharge_refund",
+    );
+    const requestIdValidation = source.indexOf(
+      "IF p_refund_request_id IS NULL THEN",
+    );
+    const claimTokenValidation = source.indexOf("IF p_claim_token IS NULL THEN");
+    const requestLock = source.indexOf(
+      "FROM public.tenant_credit_refund_requests AS request",
+    );
+
+    expect(requestIdValidation).toBeGreaterThan(0);
+    expect(claimTokenValidation).toBeGreaterThan(requestIdValidation);
+    expect(requestLock).toBeGreaterThan(claimTokenValidation);
+    expect(source).toContain("BILLING_RECHARGE_REFUND_REQUEST_ID_REQUIRED");
+    expect(source).toContain(
+      "BILLING_RECHARGE_REFUND_RECONCILE_TOKEN_REQUIRED",
+    );
+  });
+
+  test("documents a safe irreversible financial rollback boundary", () => {
+    const source = sql();
+
+    expect(source).toMatch(/Rollback:[\s\S]*stop the refund worker/i);
+    expect(source).toMatch(/Rollback:[\s\S]*drop[^\n]*RPC/i);
+    expect(source).toMatch(/Rollback:[\s\S]*drop[^\n]*index/i);
+    expect(source).toMatch(
+      /restore[\s\S]*billing_confirm_wechat_recharge_refund/i,
+    );
+    expect(source).toMatch(/no active reconciliation leases/i);
+    expect(source).toMatch(
+      /never automatically reverse completed refunds or tenant credit ledger entries/i,
+    );
+  });
+
+  test("keeps worker and callback success contracts distinct in design and plan", () => {
+    const designSource = text(design);
+    const planSource = text(plan);
+
+    for (const source of [designSource, planSource]) {
+      expect(source).toContain(
+        "billing_confirm_claimed_wechat_recharge_refund",
+      );
+      expect(source).toMatch(
+        /worker[\s\S]*billing_confirm_claimed_wechat_recharge_refund/i,
+      );
+      expect(source).toMatch(
+        /callback[\s\S]*billing_confirm_wechat_recharge_refund/i,
+      );
+      expect(source).toMatch(/(?:false|null|空)[\s\S]*幂等|幂等[\s\S]*(?:false|null|空)/i);
+    }
+
+    expect(planSource).toContain("RETURNS TABLE(");
+    expect(planSource).toContain("reconcile_last_error_check");
+    expect(planSource).toMatch(/Task 7[\s\S]*all seven|Task 7[\s\S]*全部七个/i);
+  });
+
+  test("documents historical scheduling and conservative mirror repair", () => {
+    for (const source of [text(design), text(plan)]) {
+      expect(source).toMatch(/(?:historical|历史)[\s\S]*reconcile_next_at IS NULL/i);
+      expect(source).toMatch(
+        /refund_status IS NULL[\s\S]*(?:approved|'approved')/i,
+      );
+      expect(source).toMatch(/(?:never|不)[\s\S]*(?:refunded|failed|rejected)/i);
+    }
+  });
+
+  test("runs atomically and exposes every RPC only to service role", () => {
+    const source = sql();
+
+    expect(source.trimStart().startsWith("--")).toBe(true);
+    expect(source).toMatch(/\bBEGIN;/);
+    expect(source.trimEnd().endsWith("COMMIT;")).toBe(true);
+    expect(source).toMatch(/Rollback:/i);
+
+    for (const name of RPC_NAMES) {
+      const rpc = functionSql(source, name);
+      const signature = RPC_SIGNATURES[name];
+
+      expect(rpc).toContain("SECURITY DEFINER");
+      expect(rpc).toContain("SET search_path = pg_catalog, public");
+      expect(source).toContain(
+        `REVOKE ALL ON FUNCTION public.${name}(${signature}) FROM PUBLIC, anon, authenticated;`,
+      );
+      expect(source).toContain(
+        `GRANT EXECUTE ON FUNCTION public.${name}(${signature}) TO service_role;`,
+      );
+    }
+  });
+});

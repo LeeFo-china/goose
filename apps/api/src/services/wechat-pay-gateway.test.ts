@@ -1,17 +1,53 @@
 import { describe, expect, mock, test } from "bun:test";
-import { generateKeyPairSync } from "node:crypto";
+import { createVerify, generateKeyPairSync, sign } from "node:crypto";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { WechatPayOrderRecord } from "@/repositories/wechat-pay-orders";
+import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
+import { buildWechatPayRequestSignMessage } from "./wechat-pay-signatures";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const { privateKey } = generateKeyPairSync("rsa", {
+const { privateKey, publicKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
   publicKeyEncoding: { format: "pem", type: "spki" },
 });
+
+const WECHAT_PAY_PUBLIC_KEY_ID = "PUB_KEY_ID_TEST";
+const RESPONSE_TIMESTAMP = "1782873600";
+const secretBundle = {
+  privateKeyPem: privateKey,
+  apiV3Key: "api-v3-key",
+  wechatPayPublicKeyId: WECHAT_PAY_PUBLIC_KEY_ID,
+  wechatPayPublicKeyPem: publicKey,
+  baseUrl: "https://api.mch.weixin.qq.com",
+} satisfies WechatPaySecretBundle;
+
+function createWechatPayResponse(
+  payload: Record<string, unknown>,
+  options: { status?: number; requestId?: string } = {},
+) {
+  const rawBody = JSON.stringify(payload);
+  const nonce = "response-nonce";
+  const signature = sign(
+    "RSA-SHA256",
+    Buffer.from(`${RESPONSE_TIMESTAMP}\n${nonce}\n${rawBody}\n`),
+    privateKey,
+  ).toString("base64");
+  return new Response(rawBody, {
+    status: options.status ?? 200,
+    headers: {
+      "content-type": "application/json",
+      "request-id": options.requestId ?? "wechat-request-id",
+      "wechatpay-timestamp": RESPONSE_TIMESTAMP,
+      "wechatpay-nonce": nonce,
+      "wechatpay-serial": WECHAT_PAY_PUBLIC_KEY_ID,
+      "wechatpay-signature": signature,
+    },
+  });
+}
 
 const directConfig = {
   id: "config-1",
@@ -49,6 +85,15 @@ const directConfig = {
   updated_at: "2026-07-01T00:00:00.000Z",
 } satisfies WechatPayConfigRecord;
 
+const partnerConfig = {
+  ...directConfig,
+  merchant_mode: "service_provider_sub_merchant",
+  merchant_id: "1561816121",
+  sub_merchant_id: "1900000109",
+  app_id: "wx-service-app",
+  sub_app_id: "wxbac3b1e168fd968a",
+} satisfies WechatPayConfigRecord;
+
 const order = {
   id: "order-1",
   tenant_id: "tenant-1",
@@ -77,12 +122,18 @@ const order = {
   updated_at: "2026-07-01T00:00:00.000Z",
 } satisfies WechatPayOrderRecord;
 
+const orderWithExpiration = {
+  ...order,
+  payment_expires_at: "2026-07-01T10:05:00+08:00",
+};
+
 async function createGateway(fetchImpl: typeof fetch) {
   const { WechatPayGateway } = await import("./wechat-pay-gateway");
   return new WechatPayGateway({
     fetchImpl,
     nonceFactory: () => "nonce-1",
-    timestampFactory: () => "1782873600",
+    timestampFactory: () => RESPONSE_TIMESTAMP,
+    nowSecondsFactory: () => Number(RESPONSE_TIMESTAMP),
   });
 }
 
@@ -103,25 +154,17 @@ describe("WechatPayGateway", () => {
         appid: "wxbac3b1e168fd968a",
         mchid: "1112582521",
         out_trade_no: "WX202607010001",
+        time_expire: "2026-07-01T10:05:00+08:00",
       });
-      return new Response(JSON.stringify({ prepay_id: "prepay-test" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      return createWechatPayResponse({ prepay_id: "prepay-test" });
     }) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
     const result = await gateway.createJsapiPrepay({
       config: directConfig,
-      order,
+      order: orderWithExpiration,
       description: "项目收款",
-      secretBundle: {
-        privateKeyPem: privateKey,
-        apiV3Key: "api-v3-key",
-        wechatPayPublicKeyId: null,
-        wechatPayPublicKeyPem: null,
-        baseUrl: "https://api.mch.weixin.qq.com",
-      },
+      secretBundle,
     });
 
     expect(result.prepayId).toBe("prepay-test");
@@ -136,29 +179,47 @@ describe("WechatPayGateway", () => {
 
   test("maps upstream failure to stable business error", async () => {
     const fetchImpl = mock(async () =>
-      new Response(JSON.stringify({
+      createWechatPayResponse({
         code: "PARAM_ERROR",
         message: "appid and mchid not match",
-      }), { status: 400 })
+      }, { status: 400, requestId: "wechat-error-request-id" })
     ) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
     await expect(
       gateway.createJsapiPrepay({
         config: directConfig,
-        order,
+        order: orderWithExpiration,
         description: "项目收款",
-        secretBundle: {
-          privateKeyPem: privateKey,
-          apiV3Key: "api-v3-key",
-          wechatPayPublicKeyId: null,
-          wechatPayPublicKeyPem: null,
-          baseUrl: "https://api.mch.weixin.qq.com",
-        },
+        secretBundle,
       }),
     ).rejects.toMatchObject({
       statusCode: 502,
       code: "WECHAT_PAY_PREPAY_FAILED",
+      details: expect.objectContaining({
+        operation: "jsapi_prepay",
+        requestId: "wechat-error-request-id",
+      }),
+    });
+  });
+
+  test("retains request id when a verified prepay payload is invalid", async () => {
+    const fetchImpl = mock(async () =>
+      createWechatPayResponse({}, { requestId: "wechat-invalid-request-id" })
+    ) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    await expect(gateway.createJsapiPrepay({
+      config: directConfig,
+      order,
+      description: "项目收款",
+      secretBundle,
+    })).rejects.toMatchObject({
+      code: "WECHAT_PAY_PREPAY_RESPONSE_INVALID",
+      details: expect.objectContaining({
+        operation: "jsapi_prepay",
+        requestId: "wechat-invalid-request-id",
+      }),
     });
   });
 
@@ -170,15 +231,12 @@ describe("WechatPayGateway", () => {
       expect(init?.method).toBe("GET");
       expect(String((init?.headers as Record<string, string>).Authorization))
         .toContain('mchid="1112582521"');
-      return new Response(JSON.stringify({
+      return createWechatPayResponse({
         out_trade_no: "WX202607010001",
         transaction_id: "4200000000202607010000000001",
         trade_state: "SUCCESS",
         success_time: "2026-07-01T10:00:00+08:00",
         amount: { total: 100, currency: "CNY" },
-      }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
       });
     }) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
@@ -186,13 +244,7 @@ describe("WechatPayGateway", () => {
     const result = await gateway.queryTransactionByOutTradeNo({
       config: directConfig,
       outTradeNo: "WX202607010001",
-      secretBundle: {
-        privateKeyPem: privateKey,
-        apiV3Key: "api-v3-key",
-        wechatPayPublicKeyId: null,
-        wechatPayPublicKeyPem: null,
-        baseUrl: "https://api.mch.weixin.qq.com",
-      },
+      secretBundle,
     });
 
     expect(result).toMatchObject({
@@ -211,14 +263,11 @@ describe("WechatPayGateway", () => {
       expect(init?.method).toBe("GET");
       expect(String((init?.headers as Record<string, string>).Authorization))
         .toContain('mchid="1112582521"');
-      return new Response(JSON.stringify({
+      return createWechatPayResponse({
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
         status: "PROCESSING",
         amount: { refund: 10000, total: 10000, currency: "CNY" },
-      }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
       });
     }) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
@@ -226,21 +275,71 @@ describe("WechatPayGateway", () => {
     const result = await gateway.queryRefundByOutRefundNo({
       config: directConfig,
       outRefundNo: "TRR202607100800000001",
-      secretBundle: {
-        privateKeyPem: privateKey,
-        apiV3Key: "api-v3-key",
-        wechatPayPublicKeyId: null,
-        wechatPayPublicKeyPem: null,
-        baseUrl: "https://api.mch.weixin.qq.com",
-      },
+      secretBundle,
     });
 
     expect(result).toMatchObject({
       out_refund_no: "TRR202607100800000001",
       refund_id: "5030000000202607150000000001",
       status: "PROCESSING",
+      requestId: "wechat-request-id",
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test("queries partner refund with sub merchant id in the signed path", async () => {
+    const urlPath =
+      "/v3/refund/domestic/refunds/TRR202607100800000001?sub_mchid=1900000109";
+    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe(`https://api.mch.weixin.qq.com${urlPath}`);
+      expect(init?.method).toBe("GET");
+      const authorization = String(
+        (init?.headers as Record<string, string>).Authorization,
+      );
+      expect(authorization).toContain('mchid="1561816121"');
+      const signature = authorization.match(/signature="([^"]+)"/)?.[1] ?? "";
+      const verifier = createVerify("RSA-SHA256");
+      verifier.update(buildWechatPayRequestSignMessage({
+        method: "GET",
+        urlPath,
+        body: "",
+        nonce: "nonce-1",
+        timestamp: "1782873600",
+      }));
+      verifier.end();
+      expect(verifier.verify(publicKey, signature, "base64")).toBe(true);
+      return createWechatPayResponse({
+        out_refund_no: "TRR202607100800000001",
+        refund_id: "5030000000202607150000000001",
+        status: "PROCESSING",
+        amount: { refund: 10000, total: 10000, currency: "CNY" },
+      });
+    }) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    const result = await gateway.queryRefundByOutRefundNo({
+      config: partnerConfig,
+      outRefundNo: "TRR202607100800000001",
+      secretBundle,
+    });
+
+    expect(result).toMatchObject({ status: "PROCESSING" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejects partner refund query without sub merchant id", async () => {
+    const fetchImpl = mock(async () => createWechatPayResponse({})) as unknown as typeof fetch;
+    const gateway = await createGateway(fetchImpl);
+
+    await expect(gateway.queryRefundByOutRefundNo({
+      config: { ...partnerConfig, sub_merchant_id: null },
+      outRefundNo: "TRR202607100800000001",
+      secretBundle,
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_CONFIG_INCOMPLETE",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   test("requests direct merchant refund by transaction id", async () => {
@@ -266,13 +365,10 @@ describe("WechatPayGateway", () => {
           currency: "CNY",
         },
       });
-      return new Response(JSON.stringify({
+      return createWechatPayResponse({
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
         status: "PROCESSING",
-      }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
       });
     }) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
@@ -284,25 +380,16 @@ describe("WechatPayGateway", () => {
       reason: "客户误充值，需要申请退款",
       refundAmountFen: 10000,
       totalAmountFen: 10000,
-      secretBundle: {
-        privateKeyPem: privateKey,
-        apiV3Key: "api-v3-key",
-        wechatPayPublicKeyId: null,
-        wechatPayPublicKeyPem: null,
-        baseUrl: "https://api.mch.weixin.qq.com",
-      },
+      secretBundle,
     });
 
     expect(result).toEqual({
       out_refund_no: "TRR202607100800000001",
       refund_id: "5030000000202607150000000001",
       status: "PROCESSING",
-      raw: {
-        out_refund_no: "TRR202607100800000001",
-        refund_id: "5030000000202607150000000001",
-        status: "PROCESSING",
-      },
+      requestId: "wechat-request-id",
     });
+    expect(result).not.toHaveProperty("raw");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
@@ -312,13 +399,10 @@ describe("WechatPayGateway", () => {
     const fetchImpl = mock(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { reason?: unknown };
       sentReason = typeof body.reason === "string" ? body.reason : "";
-      return new Response(JSON.stringify({
+      return createWechatPayResponse({
         out_refund_no: "TRR202607100800000001",
         refund_id: "5030000000202607150000000001",
         status: "PROCESSING",
-      }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
       });
     }) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
@@ -330,13 +414,7 @@ describe("WechatPayGateway", () => {
       reason: longReason,
       refundAmountFen: 10000,
       totalAmountFen: 10000,
-      secretBundle: {
-        privateKeyPem: privateKey,
-        apiV3Key: "api-v3-key",
-        wechatPayPublicKeyId: null,
-        wechatPayPublicKeyPem: null,
-        baseUrl: "https://api.mch.weixin.qq.com",
-      },
+      secretBundle,
     });
 
     expect(new TextEncoder().encode(sentReason).byteLength).toBeLessThanOrEqual(80);
@@ -344,4 +422,5 @@ describe("WechatPayGateway", () => {
     expect(longReason.startsWith(sentReason)).toBe(true);
     expect(sentReason).not.toContain("�");
   });
+
 });

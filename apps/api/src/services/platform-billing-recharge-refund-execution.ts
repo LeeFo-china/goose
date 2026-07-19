@@ -1,6 +1,5 @@
 import { Errors } from "@/errors/error-factory";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
-import type { TenantCreditRefundRequestStatus } from "@/repositories/billing-recharge-refunds";
 import {
   platformBillingRechargeRefundRepository,
   type PlatformRechargeRefundRequestRecord,
@@ -12,29 +11,34 @@ import {
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
-  assertWechatTransactionMatches,
   getWechatErrorDetailCode,
-  toWechatRefundResult,
+  toWechatQueriedRefundPayload,
+  toWechatRequestedRefundPayload,
   uncertainRefundStatusError,
 } from "@/services/platform-billing-recharge-refund-wechat";
+import { wechatPayGateway } from "@/services/wechat-pay-gateway";
 import {
-  wechatPayGateway,
-  type WechatPayRequestRefundResult,
-} from "@/services/wechat-pay-gateway";
+  parseAndAssertWechatRefund,
+  type WechatRefundApiPayload,
+  type WechatRefundValidatedResult,
+} from "@/services/wechat-pay-refund-contract";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
+import {
+  assertWechatPaySuccessTransaction,
+  buildWechatPayTransactionExpectedBinding,
+  parseAndAssertWechatPayTransactionQuery,
+} from "@/services/wechat-pay-transaction-contract";
 
 type RepositoryPort = Pick<
   typeof platformBillingRechargeRefundRepository,
   | "findRequestById"
-  | "markRequestRefunding"
-  | "markOrderRefundStatus"
+  | "beginWechatRefund"
   | "saveWechatRefundResult"
-  | "markRequestFailed"
 >;
 
 type PaymentConfigRepositoryPort = Pick<
   typeof platformPaymentConfigRepository,
-  "findWechatPayConfig"
+  "findWechatPayConfigById"
 >;
 
 type SecretBundleServicePort = Pick<typeof wechatPaySecretBundleService, "load">;
@@ -56,11 +60,7 @@ export type PlatformBillingRechargeRefundExecutionServiceDependencies = {
 };
 
 const REVIEW_PERMISSION = "platform.billing.recharge_refund.review";
-const RECHARGE_CHANNEL = "tenant_recharge";
-const EXECUTABLE_STATUSES: TenantCreditRefundRequestStatus[] = [
-  "approved",
-  "failed",
-];
+const EXECUTABLE_STATUSES = ["approved", "failed"] as const;
 
 export class PlatformBillingRechargeRefundExecutionService {
   private readonly repository: RepositoryPort;
@@ -107,47 +107,62 @@ export class PlatformBillingRechargeRefundExecutionService {
     );
     const outRefundNo = this.buildOutRefundNo(current);
 
-    const config = await this.paymentConfigRepository.findWechatPayConfig();
+    const paymentConfigId = this.requirePaymentConfigId(order);
+    const config = await this.paymentConfigRepository.findWechatPayConfigById(
+      paymentConfigId,
+    );
     this.assertPaymentConfigReady(config, order);
     const secretBundle = await this.secretBundleService.load(
       config.encrypted_config_ref,
     );
-    const wechatTransaction =
+    const wechatTransactionResponse =
       await this.wechatPayGateway.queryTransactionByOutTradeNo({
         config,
         secretBundle,
         outTradeNo,
       });
-    assertWechatTransactionMatches({
-      wechatTransaction,
-      transactionId,
-      totalAmountFen,
-    });
+    const wechatTransaction = parseAndAssertWechatPayTransactionQuery(
+      wechatTransactionResponse,
+      buildWechatPayTransactionExpectedBinding({
+        merchantMode: config.merchant_mode,
+        merchantId: config.merchant_id,
+        subMerchantId: config.sub_merchant_id,
+        outTradeNo,
+        amountFen: totalAmountFen,
+        transactionId,
+      }),
+    );
+    if (wechatTransaction.tradeState !== "SUCCESS") {
+      throw Errors.business(
+        409,
+        "微信支付订单不是支付成功状态，不能执行退款",
+        "BILLING_RECHARGE_WECHAT_TRANSACTION_NOT_SUCCESS",
+        { trade_state: wechatTransaction.tradeState },
+      );
+    }
+    assertWechatPaySuccessTransaction(wechatTransaction);
 
-    const refundingRequest = await this.repository.markRequestRefunding({
-      id: requestId,
-      fromStatuses: EXECUTABLE_STATUSES,
+    const refundingRequest = await this.repository.beginWechatRefund({
+      requestId,
       outRefundNo,
+      now: this.nowFactory().toISOString(),
     });
     if (!refundingRequest) throw invalidExecutionStateError();
 
-    await this.repository.markOrderRefundStatus({
-      tenantId: refundingRequest.tenant_id,
-      orderId: refundingRequest.order_id,
-      refundStatus: "refunding",
-    });
-
-    let wechatRefund: WechatPayRequestRefundResult;
+    const refundInput = {
+      config,
+      secretBundle,
+      transactionId,
+      outRefundNo,
+      reason: current.reason,
+      refundAmountFen,
+      totalAmountFen,
+    };
+    let wechatRefundResponse: WechatRefundApiPayload;
     try {
-      wechatRefund = await this.wechatPayGateway.requestRefund({
-        config,
-        secretBundle,
-        transactionId,
-        outRefundNo,
-        reason: current.reason,
-        refundAmountFen,
-        totalAmountFen,
-      });
+      const requestedRefund =
+        await this.wechatPayGateway.requestRefund(refundInput);
+      wechatRefundResponse = toWechatRequestedRefundPayload(requestedRefund);
     } catch (error) {
       try {
         const queriedRefund =
@@ -156,34 +171,50 @@ export class PlatformBillingRechargeRefundExecutionService {
             secretBundle,
             outRefundNo,
           });
-        wechatRefund = toWechatRefundResult(queriedRefund, outRefundNo);
+        wechatRefundResponse = toWechatQueriedRefundPayload(queriedRefund);
       } catch (queryError) {
         if (getWechatErrorDetailCode(queryError) === "RESOURCE_NOT_EXISTS") {
-          await this.markExecutionFailed({
-            authContext,
-            request: refundingRequest,
-            refundAmountFen,
-            error,
+          try {
+            const retriedRefund =
+              await this.wechatPayGateway.requestRefund(refundInput);
+            wechatRefundResponse = toWechatRequestedRefundPayload(
+              retriedRefund,
+            );
+          } catch (retryError) {
+            throw uncertainRefundStatusError({
+              outRefundNo,
+              requestError: error,
+              queryError: retryError,
+            });
+          }
+        } else {
+          throw uncertainRefundStatusError({
+            outRefundNo,
+            requestError: error,
+            queryError,
           });
-          throw error;
         }
-        throw uncertainRefundStatusError({
-          outRefundNo,
-          requestError: error,
-          queryError,
-        });
       }
     }
 
+    const wechatRefund = parseAndAssertWechatRefund(wechatRefundResponse, {
+      outRefundNo,
+      wechatRefundId: optionalString(current.wechat_refund_id),
+      transactionId,
+      outTradeNo,
+      refundAmountFen,
+      totalAmountFen,
+      currency: "CNY",
+    });
     const request = await this.repository.saveWechatRefundResult({
       id: requestId,
-      outRefundNo: wechatRefund.out_refund_no,
-      wechatRefundId: wechatRefund.refund_id,
-      refundAmountFen,
+      outRefundNo: wechatRefund.outRefundNo,
+      wechatRefundId: wechatRefund.wechatRefundId,
+      refundAmountFen: wechatRefund.refundAmountFen,
       metadata: {
-        ...metadataRecord(refundingRequest.metadata),
-        wechat_refund_response: wechatRefund.raw,
+        ...withoutWechatRefundResponse(refundingRequest.metadata),
         wechat_refund_status: wechatRefund.status,
+        wechat_request_id: wechatRefund.requestId,
         wechat_refund_executed_at: this.nowFactory().toISOString(),
       },
     });
@@ -193,7 +224,6 @@ export class PlatformBillingRechargeRefundExecutionService {
       before: current,
       after: request,
       wechatRefund,
-      refundAmountFen,
     });
 
     return {
@@ -209,7 +239,7 @@ export class PlatformBillingRechargeRefundExecutionService {
   }
 
   private assertExecutableRequest(request: PlatformRechargeRefundRequestRecord) {
-    if (!EXECUTABLE_STATUSES.includes(request.status)) {
+    if (!EXECUTABLE_STATUSES.some((status) => status === request.status)) {
       throw invalidExecutionStateError();
     }
   }
@@ -268,15 +298,27 @@ export class PlatformBillingRechargeRefundExecutionService {
     return outTradeNo;
   }
 
+  private requirePaymentConfigId(order: TenantCreditOrderRecord) {
+    const paymentConfigId = optionalString(order.payment_config_id);
+    if (!paymentConfigId) {
+      throw Errors.business(
+        409,
+        "积分充值订单缺少原支付配置",
+        "BILLING_RECHARGE_PAYMENT_CONFIG_REQUIRED",
+      );
+    }
+    return paymentConfigId;
+  }
+
   private assertPaymentConfigReady(
     config: PlatformPaymentConfigRecord | null,
     order: TenantCreditOrderRecord,
   ): asserts config is PlatformPaymentConfigRecord {
-    if (!config || config.status !== "active") {
+    if (!config) {
       throw Errors.business(
         409,
-        "平台微信支付配置未启用",
-        "PLATFORM_WECHAT_PAY_CONFIG_NOT_ACTIVE",
+        "积分充值订单关联的原支付配置不存在",
+        "BILLING_RECHARGE_PAYMENT_CONFIG_NOT_FOUND",
       );
     }
     if (order.payment_config_id && order.payment_config_id !== config.id) {
@@ -304,13 +346,6 @@ export class PlatformBillingRechargeRefundExecutionService {
         "PLATFORM_WECHAT_PAY_SECRET_REF_REQUIRED",
       );
     }
-    if (!config.enabled_channels.includes(RECHARGE_CHANNEL)) {
-      throw Errors.business(
-        409,
-        "平台微信支付未启用积分充值通道",
-        "PLATFORM_WECHAT_PAY_RECHARGE_CHANNEL_DISABLED",
-      );
-    }
   }
 
   private requirePositiveAmount(value: number, message: string, code: string) {
@@ -328,8 +363,7 @@ export class PlatformBillingRechargeRefundExecutionService {
     authContext: AuthContext;
     before: PlatformRechargeRefundRequestRecord;
     after: PlatformRechargeRefundRequestRecord;
-    wechatRefund: WechatPayRequestRefundResult;
-    refundAmountFen: number;
+    wechatRefund: WechatRefundValidatedResult;
   }) {
     return this.auditLogService.recordBestEffort({
       action: "platform_billing_recharge_refund_execute",
@@ -345,72 +379,11 @@ export class PlatformBillingRechargeRefundExecutionService {
         after_status: input.after.status,
         order_id: input.after.order_id,
         order_no: input.after.order?.order_no ?? null,
-        out_refund_no: input.wechatRefund.out_refund_no,
-        wechat_refund_id: input.wechatRefund.refund_id,
+        out_refund_no: input.wechatRefund.outRefundNo,
+        wechat_refund_id: input.wechatRefund.wechatRefundId,
         wechat_refund_status: input.wechatRefund.status,
-        refund_amount_fen: input.refundAmountFen,
-      },
-    });
-  }
-
-  private async markExecutionFailed(input: {
-    authContext: AuthContext;
-    request: PlatformRechargeRefundRequestRecord;
-    refundAmountFen: number;
-    error: unknown;
-  }) {
-    const failureMessage = getErrorMessage(input.error);
-    const failedRequest = await this.repository.markRequestFailed({
-      id: input.request.id,
-      failureMessage,
-      metadata: {
-        ...metadataRecord(input.request.metadata),
-        wechat_refund_failure: {
-          code: getErrorCode(input.error),
-          message: failureMessage,
-          failed_at: this.nowFactory().toISOString(),
-        },
-      },
-    });
-    if (failedRequest) {
-      await this.repository.markOrderRefundStatus({
-        tenantId: failedRequest.tenant_id,
-        orderId: failedRequest.order_id,
-        refundStatus: "failed",
-      });
-    }
-    await this.auditExecutionFailure({
-      authContext: input.authContext,
-      request: failedRequest ?? input.request,
-      refundAmountFen: input.refundAmountFen,
-      error: input.error,
-    });
-  }
-
-  private auditExecutionFailure(input: {
-    authContext: AuthContext;
-    request: PlatformRechargeRefundRequestRecord;
-    refundAmountFen: number;
-    error: unknown;
-  }) {
-    return this.auditLogService.recordBestEffort({
-      action: "platform_billing_recharge_refund_execute",
-      actorEmployeeId: input.authContext.employeeId,
-      actorUserId: input.authContext.authUserId,
-      targetTenantId: input.request.tenant_id,
-      resourceType: "tenant_credit_refund_request",
-      resourceId: input.request.id,
-      resourceLabel: input.request.request_no,
-      status: "failure",
-      summary: "执行微信积分充值退款失败",
-      metadata: {
-        after_status: input.request.status,
-        order_id: input.request.order_id,
-        order_no: input.request.order?.order_no ?? null,
-        out_refund_no: input.request.out_refund_no,
-        refund_amount_fen: input.refundAmountFen,
-        error_code: getErrorCode(input.error),
-        error_message: getErrorMessage(input.error),
+        wechat_request_id: input.wechatRefund.requestId,
+        refund_amount_fen: input.wechatRefund.refundAmountFen,
       },
     });
   }
@@ -432,6 +405,14 @@ function metadataRecord(value: unknown) {
     : {};
 }
 
+function withoutWechatRefundResponse(value: unknown) {
+  return Object.fromEntries(
+    Object.entries(metadataRecord(value)).filter(
+      ([key]) => key !== "wechat_refund_response",
+    ),
+  );
+}
+
 function requestNotFoundError() {
   return Errors.business(
     404,
@@ -446,23 +427,6 @@ function invalidExecutionStateError() {
     "积分充值退款申请状态不允许执行退款，请刷新后重试",
     "BILLING_RECHARGE_REFUND_EXECUTE_STATE_INVALID",
   );
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message.trim();
-  }
-  return String(error);
-}
-
-function getErrorCode(error: unknown) {
-  if (error && typeof error === "object" && "code" in error) {
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === "string" && code.trim()) return code.trim();
-  }
-  return null;
 }
 
 export const platformBillingRechargeRefundExecutionService =

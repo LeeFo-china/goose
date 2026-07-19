@@ -9,6 +9,7 @@
     "start": "bun src/app.ts",
     "worker:social-video": "bun src/workers/social-video-transcription-worker.ts",
     "worker:project-log-comment-cos-reconcile": "bun src/workers/project-log-comment-cos-reconcile-worker.ts",
+    "worker:billing-reconcile": "bun src/workers/billing-reconcile-worker.ts",
     "storage:migration:dry-run": "bun src/scripts/storage-migration-dry-run.ts",
     "storage:migration:upload": "bun src/scripts/storage-migration-upload.ts",
     "storage:migration:verify": "bun src/scripts/storage-migration-verify.ts",

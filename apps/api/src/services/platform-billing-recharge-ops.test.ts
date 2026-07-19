@@ -140,7 +140,7 @@ async function createService() {
       compensateWechatOrder: mock(async () => ({
         compensated: false,
         already_paid: false,
-        trade_state: null,
+        trade_state: "NOTPAY" as const,
         order_id: "order-1",
         out_trade_no: "TC202607020001",
         transaction_id: null,

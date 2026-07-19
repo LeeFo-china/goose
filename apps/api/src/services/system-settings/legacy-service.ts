@@ -23,8 +23,24 @@ import {
   getBoolean,
 } from './legacy/settings';
 import type { SystemSettingRecord } from './legacy/shared';
+import {
+  systemSettingRepository,
+  type SystemSettingRepository,
+} from '@/repositories/system-settings';
 
-class SystemSettingsService {
+type SystemSettingRepositoryPort = Pick<
+  SystemSettingRepository,
+  'findByKey' | 'updateValue' | 'createValue'
+>;
+
+export class SystemSettingsService {
+  private readonly systemSettingRepository: SystemSettingRepositoryPort;
+
+  constructor(
+    repository: SystemSettingRepositoryPort = systemSettingRepository,
+  ) {
+    this.systemSettingRepository = repository;
+  }
 
   private cache: {
     expiresAt: number;

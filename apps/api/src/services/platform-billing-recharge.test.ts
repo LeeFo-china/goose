@@ -197,6 +197,7 @@ const rechargeRepository = {
     order: { ...pendingOrder, status: "paid" },
     account: { id: "account-1", available_credits: 1100 },
     ledger: { id: "ledger-1" },
+    recovery: { recovered: true },
     idempotent: false,
   })),
 };
@@ -209,26 +210,21 @@ const secretBundleService = {
   load: mock(async () => secretBundle),
 };
 
+const successfulWechatQuery = {
+  mchid: platformPaymentConfig.merchant_id,
+  out_trade_no: "TC202607020001",
+  transaction_id: "4200000000202607020000000001",
+  trade_state: "SUCCESS",
+  success_time: "2026-07-02T08:05:00+08:00",
+  amount: { total: 10000, currency: "CNY" },
+  requestId: "wechat-compensation-request-id",
+};
 const wechatPayGateway = {
-  queryTransactionByOutTradeNo: mock(async () => ({
-    out_trade_no: "TC202607020001",
-    transaction_id: "4200000000202607020000000001",
-    trade_state: "SUCCESS",
-    success_time: "2026-07-02T08:05:00+08:00",
-    amount: {
-      total: 10000,
-      payer_total: 10000,
-      currency: "CNY",
-    },
-  })),
+  queryTransactionByOutTradeNo: mock(async () => successfulWechatQuery),
 };
 
 const auditLogService = {
   recordBestEffort: mock(async () => null),
-};
-
-const billingSubscriptionService = {
-  recoverAfterRecharge: mock(async () => ({ recovered: true })),
 };
 
 async function createService() {
@@ -240,7 +236,6 @@ async function createService() {
     secretBundleService,
     wechatPayGateway,
     auditLogService,
-    billingSubscriptionService,
   });
 }
 
@@ -253,7 +248,6 @@ describe("PlatformBillingRechargeService", () => {
       ...Object.values(secretBundleService),
       ...Object.values(wechatPayGateway),
       ...Object.values(auditLogService),
-      ...Object.values(billingSubscriptionService),
     ]) {
       fn.mockClear();
     }
@@ -263,21 +257,14 @@ describe("PlatformBillingRechargeService", () => {
       order: { ...pendingOrder, status: "paid" },
       account: { id: "account-1", available_credits: 1100 },
       ledger: { id: "ledger-1" },
+      recovery: { recovered: true },
       idempotent: false,
     }));
     paymentConfigRepository.findWechatPayConfig.mockImplementation(async () => platformPaymentConfig);
     secretBundleService.load.mockImplementation(async () => secretBundle);
-    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async () => ({
-      out_trade_no: "TC202607020001",
-      transaction_id: "4200000000202607020000000001",
-      trade_state: "SUCCESS",
-      success_time: "2026-07-02T08:05:00+08:00",
-      amount: {
-        total: 10000,
-        payer_total: 10000,
-        currency: "CNY",
-      },
-    }));
+    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(
+      async () => successfulWechatQuery,
+    );
   });
 
   test("lists recharge products for platform admins", async () => {
@@ -394,9 +381,7 @@ describe("PlatformBillingRechargeService", () => {
         out_trade_no: "TC202607020001",
       },
     });
-    expect(billingSubscriptionService.recoverAfterRecharge).toHaveBeenCalledWith(
-      "tenant-1",
-    );
+    expect(rechargeRepository.confirmWechatRecharge).toHaveBeenCalledTimes(1);
     expect(rechargeRepository.markWechatNotificationProcessed).toHaveBeenCalledWith({
       notificationId: "notification-compensate-1",
     });
@@ -418,11 +403,13 @@ describe("PlatformBillingRechargeService", () => {
 
   test("does not mutate pending orders when WeChat query is not paid", async () => {
     wechatPayGateway.queryTransactionByOutTradeNo.mockImplementationOnce(async () => ({
+      mchid: platformPaymentConfig.merchant_id,
       out_trade_no: "TC202607020001",
       transaction_id: "",
       trade_state: "NOTPAY",
       success_time: "",
-      amount: { total: 10000, payer_total: 10000, currency: "CNY" },
+      amount: { total: 10000, currency: "CNY" },
+      requestId: "wechat-compensation-request-id",
     }));
     const service = await createService();
 
@@ -430,7 +417,6 @@ describe("PlatformBillingRechargeService", () => {
 
     expect(rechargeRepository.createWechatNotification).not.toHaveBeenCalled();
     expect(rechargeRepository.confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(billingSubscriptionService.recoverAfterRecharge).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       compensated: false,
       trade_state: "NOTPAY",
@@ -438,27 +424,49 @@ describe("PlatformBillingRechargeService", () => {
   });
 
   test("rejects WeChat query compensation when paid amount does not match order", async () => {
-    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementationOnce(async () => ({
-      out_trade_no: "TC202607020001",
-      transaction_id: "4200000000202607020000000001",
-      trade_state: "SUCCESS",
-      success_time: "2026-07-02T08:05:00+08:00",
-      amount: {
-        total: 1,
-        payer_total: 1,
-        currency: "CNY",
-      },
-    }));
+    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementationOnce(
+      async () => ({ ...successfulWechatQuery, amount: { total: 1, currency: "CNY" } }),
+    );
     const service = await createService();
 
     await expect(
       service.compensateWechatOrder(authContext, pendingOrder.id),
     ).rejects.toMatchObject({
-      statusCode: 409,
-      code: "BILLING_RECHARGE_QUERY_AMOUNT_MISMATCH",
+      statusCode: 502,
+      code: "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
     });
     expect(rechargeRepository.createWechatNotification).not.toHaveBeenCalled();
     expect(rechargeRepository.confirmWechatRecharge).not.toHaveBeenCalled();
+  });
+
+  test("rejects equal-amount query replay from another merchant before credit", async () => {
+    wechatPayGateway.queryTransactionByOutTradeNo.mockImplementationOnce(
+      async () => ({ ...successfulWechatQuery, mchid: "different-merchant" }),
+    );
+    const service = await createService();
+
+    await expect(
+      service.compensateWechatOrder(authContext, pendingOrder.id),
+    ).rejects.toMatchObject({ code: "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH" });
+    expect(rechargeRepository.createWechatNotification).not.toHaveBeenCalled();
+    expect(rechargeRepository.confirmWechatRecharge).not.toHaveBeenCalled();
+  });
+
+  test("marks compensation notification failed when atomic confirmation rejects", async () => {
+    rechargeRepository.confirmWechatRecharge.mockImplementationOnce(async () => {
+      throw new Error("atomic confirmation failed");
+    });
+    const service = await createService();
+
+    await expect(
+      service.compensateWechatOrder(authContext, pendingOrder.id),
+    ).rejects.toThrow("atomic confirmation failed");
+
+    expect(rechargeRepository.markWechatNotificationFailed).toHaveBeenCalledWith({
+      notificationId: creditNotification.id,
+      errorMessage: "atomic confirmation failed",
+    });
+    expect(rechargeRepository.markWechatNotificationProcessed).not.toHaveBeenCalled();
   });
 
   test("rejects product writes without manage permission", async () => {

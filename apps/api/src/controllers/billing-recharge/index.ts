@@ -84,6 +84,21 @@ class BillingRechargeController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Post("/billing/recharge-orders/:id/payment-request")
+  async createPaymentRequest(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const paramsResult = BillingRechargeOrderParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await billingRechargeService.createPaymentRequest(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Post("/billing/recharge-orders/:id/refund-requests")
   async requestRefund(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getBillingAllowedAuthContext(request);

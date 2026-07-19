@@ -13,7 +13,7 @@ describe("production deploy service resolver", () => {
     const result = resolve("all");
     expect(result.exitCode).toBe(0);
     expect(result.stdout?.toString().trim()).toBe(
-      "api admin social-video-worker cos-reconcile-worker",
+      "api admin social-video-worker cos-reconcile-worker billing-reconcile-worker",
     );
   });
 
@@ -45,5 +45,17 @@ describe("production deploy service resolver", () => {
     ]);
     expect(all.stdout?.toString().trim()).toBe("api admin web social-video-worker");
     expect(selected.stdout?.toString().trim()).toBe("api admin");
+  });
+
+  test("maps billing worker deployment to the shared API image", () => {
+    const result = Bun.spawnSync([
+      "node",
+      script,
+      "build",
+      "billing-reconcile-worker",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout?.toString().trim()).toBe("api");
   });
 });

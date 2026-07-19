@@ -177,6 +177,39 @@ services:
     networks:
       - gooes_dev
 
+  gooes-billing-reconcile-worker-dev:
+    image: ${GOOES_API_IMAGE:?set GOOES_API_IMAGE}
+    container_name: gooes-billing-reconcile-worker-dev
+    restart: unless-stopped
+    profiles:
+      - workers
+    env_file:
+      - ./.env.dev.common
+      - ./.env.dev.api
+    environment:
+      SERVICE_NAME: gooes-billing-reconcile-worker-dev
+      NODE_ENV: production
+      GOOES_DEPLOY_ENV: development
+      BILLING_RECONCILE_HEALTH_FILE: /tmp/gooes-billing-reconcile-worker-health
+      BILLING_RECONCILE_HEALTH_MAX_AGE_MS: "180000"
+    command: ["bun", "src/workers/billing-reconcile-worker.ts"]
+    depends_on:
+      gooes-api-dev:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "bun", "src/workers/billing-reconcile-worker-health.ts"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - gooes_dev
+
 volumes:
   gooes-dev-api-reports:
 

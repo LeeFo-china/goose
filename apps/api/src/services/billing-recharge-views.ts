@@ -2,6 +2,7 @@ import type {
   CreditRechargeProductRecord,
   TenantCreditOrderRecord,
 } from "@/repositories/billing-recharge";
+import { parseBillingRechargePaymentExpiration } from "@/services/billing-recharge-payment-expiration";
 
 export function toProductView(product: CreditRechargeProductRecord) {
   return toProductSnapshot(product);
@@ -17,7 +18,13 @@ export function toProductSnapshot(product: CreditRechargeProductRecord) {
   };
 }
 
-export function toBillingRechargeOrderView(order: TenantCreditOrderRecord) {
+export function toBillingRechargeOrderView(
+  order: TenantCreditOrderRecord,
+  now: Date = new Date(),
+) {
+  const paymentExpiration = parseBillingRechargePaymentExpiration(
+    order.payment_expires_at,
+  );
   return {
     id: order.id,
     tenant_id: order.tenant_id,
@@ -33,6 +40,8 @@ export function toBillingRechargeOrderView(order: TenantCreditOrderRecord) {
     paid_amount_fen: order.paid_amount_fen,
     out_trade_no: order.out_trade_no,
     prepay_id: order.prepay_id,
+    payment_expires_at: paymentExpiration?.value ?? null,
+    payment_action: buildPaymentAction(order, paymentExpiration, now),
     transaction_id: order.transaction_id,
     refund_status: order.refund_status ?? null,
     refund_requested_at: order.refund_requested_at ?? null,
@@ -41,6 +50,56 @@ export function toBillingRechargeOrderView(order: TenantCreditOrderRecord) {
     refund_action: buildRefundAction(order),
     created_at: order.created_at,
     updated_at: order.updated_at,
+  };
+}
+
+function buildPaymentAction(
+  order: TenantCreditOrderRecord,
+  paymentExpiration: ReturnType<
+    typeof parseBillingRechargePaymentExpiration
+  >,
+  now: Date,
+) {
+  if (order.status === "refunded" || order.refund_status === "refunded") {
+    return {
+      enabled: false,
+      label: "已退款",
+      disabled_reason: "ORDER_ALREADY_REFUNDED",
+    };
+  }
+  if (order.status === "paid") {
+    return {
+      enabled: false,
+      label: "已支付",
+      disabled_reason: "ORDER_ALREADY_PAID",
+    };
+  }
+  if (order.status === "closed") {
+    return {
+      enabled: false,
+      label: "订单已关闭",
+      disabled_reason: "ORDER_CLOSED",
+    };
+  }
+
+  if (!paymentExpiration || now.getTime() >= paymentExpiration.expiresAtMs) {
+    return {
+      enabled: false,
+      label: "支付已超时",
+      disabled_reason: "ORDER_PAYMENT_EXPIRED",
+    };
+  }
+  if (!order.prepay_id?.trim()) {
+    return {
+      enabled: false,
+      label: "暂不可支付",
+      disabled_reason: "PAYMENT_REQUEST_UNAVAILABLE",
+    };
+  }
+  return {
+    enabled: true,
+    label: "继续支付",
+    disabled_reason: null,
   };
 }
 

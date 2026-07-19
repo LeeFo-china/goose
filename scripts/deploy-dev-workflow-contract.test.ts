@@ -57,6 +57,7 @@ const requiredImmutableDeploymentFragments = [
   'admin) compose_service=gooes-admin-dev; export GOOES_ADMIN_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
+  'billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'export GOOES_WEB_IMAGE="${DEPLOY_IMAGE_REF}"',
   'configured_image="$(docker inspect -f \'{{.Config.Image}}\' "${container}" 2>/dev/null || true)"',
   'test "${configured_image}" = "${DEPLOY_IMAGE_REF}"',
@@ -132,9 +133,9 @@ sleep() { :; }
 
 describe("deploy-dev workflow", () => {
   test("keeps the test-login bypass limited to development containers", () => {
-    expect(devCompose.match(/GOOES_DEPLOY_ENV: development/g)).toHaveLength(3);
+    expect(devCompose.match(/GOOES_DEPLOY_ENV: development/g)).toHaveLength(4);
     expect(devCompose).not.toContain("GOOES_DEPLOY_ENV: production");
-    expect(productionApiCompose.match(/GOOES_DEPLOY_ENV: production/g)).toHaveLength(3);
+    expect(productionApiCompose.match(/GOOES_DEPLOY_ENV: production/g)).toHaveLength(4);
     expect(productionApiCompose).not.toContain("GOOES_DEPLOY_ENV: development");
   });
 
@@ -213,6 +214,9 @@ describe("deploy-dev workflow", () => {
       deployStep,
     ).toContain(
       'cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
+    );
+    expect(deployStep).toContain(
+      'billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
     );
     expect(deployStep).toContain('cd "${DEV_DEPLOY_DIR}"');
     expect(deployStep).toContain(

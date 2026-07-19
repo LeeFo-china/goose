@@ -14,6 +14,7 @@ export type WechatPayJsapiOrder = {
   out_trade_no: string;
   amount: number | string;
   payer_openid: string | null;
+  payment_expires_at?: string;
 };
 
 export type WechatPayJsapiPrepayRequestInput = {
@@ -59,6 +60,7 @@ function buildDirectMerchantPrepayRequest(
       mchid: input.config.merchant_id,
       description: input.description,
       out_trade_no: input.order.out_trade_no,
+      ...buildPaymentExpiration(input.order),
       notify_url: input.config.notify_url,
       amount: buildWechatPayAmount(input.order.amount),
       payer: {
@@ -93,6 +95,7 @@ function buildServiceProviderPrepayRequest(
       sub_mchid: input.config.sub_merchant_id,
       description: input.description,
       out_trade_no: input.order.out_trade_no,
+      ...buildPaymentExpiration(input.order),
       notify_url: input.config.notify_url,
       amount: buildWechatPayAmount(input.order.amount),
       payer: {
@@ -124,4 +127,32 @@ function buildWechatPayAmount(amount: number | string) {
     total: Math.round(Number(amount) * 100),
     currency: "CNY",
   };
+}
+
+function buildPaymentExpiration(order: WechatPayJsapiOrder) {
+  const paymentExpiresAt = order.payment_expires_at;
+  if (paymentExpiresAt === undefined) return {};
+  if (!isValidRfc3339DateTime(paymentExpiresAt)) {
+    throw Errors.business(
+      400,
+      "微信支付订单的支付结束时间格式无效",
+      "WECHAT_PAY_PAYMENT_EXPIRES_AT_INVALID",
+    );
+  }
+  return { time_expire: paymentExpiresAt };
+}
+
+function isValidRfc3339DateTime(value: string) {
+  const pattern = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+  if (!pattern.test(value)) return false;
+
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
 }

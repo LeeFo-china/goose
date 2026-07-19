@@ -12,13 +12,17 @@ import {
 } from "@/repositories/platform-payment-configs";
 import type { PlatformRechargeOrderCompensateInput } from "@/schema/platform-billing-recharge";
 import type { AuthContext } from "@/services/authorization";
-import { billingSubscriptionService } from "@/services/billing-subscriptions";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
   wechatPayGateway,
-  type WechatPayTransactionQueryResult,
 } from "@/services/wechat-pay-gateway";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
+import {
+  assertWechatPaySuccessTransaction,
+  buildWechatPayTransactionExpectedBinding,
+  parseAndAssertWechatPayTransactionQuery,
+  type WechatPayValidatedSuccessTransaction,
+} from "@/services/wechat-pay-transaction-contract";
 
 type PlatformBillingRechargeRepositoryPort = Pick<
   typeof platformBillingRechargeRepository,
@@ -48,11 +52,6 @@ type WechatPayGatewayPort = Pick<
 
 type AuditLogServicePort = Pick<typeof platformAuditLogService, "recordBestEffort">;
 
-type BillingSubscriptionServicePort = Pick<
-  typeof billingSubscriptionService,
-  "recoverAfterRecharge"
->;
-
 export type PlatformBillingRechargeCompensationServiceDependencies = {
   repository?: PlatformBillingRechargeRepositoryPort;
   rechargeRepository?: BillingRechargeRepositoryPort;
@@ -60,7 +59,6 @@ export type PlatformBillingRechargeCompensationServiceDependencies = {
   secretBundleService?: SecretBundleServicePort;
   wechatPayGateway?: WechatPayGatewayPort;
   auditLogService?: AuditLogServicePort;
-  billingSubscriptionService?: BillingSubscriptionServicePort;
 };
 
 const RECHARGE_CHANNEL = "tenant_recharge";
@@ -72,7 +70,6 @@ export class PlatformBillingRechargeCompensationService {
   private readonly secretBundleService: SecretBundleServicePort;
   private readonly wechatPayGateway: WechatPayGatewayPort;
   private readonly auditLogService: AuditLogServicePort;
-  private readonly billingSubscriptionService: BillingSubscriptionServicePort;
 
   constructor(
     dependencies: PlatformBillingRechargeCompensationServiceDependencies = {},
@@ -87,8 +84,6 @@ export class PlatformBillingRechargeCompensationService {
     this.wechatPayGateway = dependencies.wechatPayGateway ?? wechatPayGateway;
     this.auditLogService =
       dependencies.auditLogService ?? platformAuditLogService;
-    this.billingSubscriptionService =
-      dependencies.billingSubscriptionService ?? billingSubscriptionService;
   }
 
   async compensateWechatOrder(
@@ -108,16 +103,12 @@ export class PlatformBillingRechargeCompensationService {
     const outTradeNo = this.requireOrderOutTradeNo(order);
 
     if (order.status === "paid") {
-      return {
-        compensated: false,
-        already_paid: true,
-        trade_state: "SUCCESS",
-        order_id: order.id,
-        out_trade_no: outTradeNo,
-        transaction_id: order.transaction_id,
-        notification_id: order.latest_notification_id,
-        result: null,
-      };
+      return this.recoverPaidOrder({
+        authContext,
+        order,
+        outTradeNo,
+        reason: input.reason ?? null,
+      });
     }
     if (order.status !== "pending") {
       throw Errors.business(
@@ -133,12 +124,23 @@ export class PlatformBillingRechargeCompensationService {
     const secretBundle = await this.secretBundleService.load(
       config.encrypted_config_ref,
     );
-    const transaction = await this.wechatPayGateway.queryTransactionByOutTradeNo({
+    const queryResult = await this.wechatPayGateway.queryTransactionByOutTradeNo({
       config,
       outTradeNo,
       secretBundle,
     });
-    const tradeState = this.optionalString(transaction.trade_state);
+    const transaction = parseAndAssertWechatPayTransactionQuery(
+      queryResult,
+      buildWechatPayTransactionExpectedBinding({
+        merchantMode: config.merchant_mode,
+        merchantId: config.merchant_id,
+        subMerchantId: config.sub_merchant_id,
+        outTradeNo,
+        amountFen: order.amount_fen,
+        transactionId: order.transaction_id,
+      }),
+    );
+    const tradeState = transaction.tradeState;
     if (tradeState !== "SUCCESS") {
       await this.recordCompensationAudit({
         authContext,
@@ -157,12 +159,13 @@ export class PlatformBillingRechargeCompensationService {
         trade_state: tradeState,
         order_id: order.id,
         out_trade_no: outTradeNo,
-        transaction_id: this.optionalString(transaction.transaction_id),
+        transaction_id: transaction.transactionId,
         notification_id: null,
         result: null,
       };
     }
 
+    assertWechatPaySuccessTransaction(transaction);
     return this.confirmSuccessfulQueriedTransaction({
       authContext,
       order,
@@ -244,29 +247,12 @@ export class PlatformBillingRechargeCompensationService {
     authContext: AuthContext;
     order: TenantCreditOrderRecord;
     outTradeNo: string;
-    transaction: WechatPayTransactionQueryResult;
+    transaction: WechatPayValidatedSuccessTransaction;
     reason: string | null;
   }) {
     const { authContext, order, outTradeNo, transaction, reason } = input;
-    const transactionId = this.requireString(
-      transaction,
-      "transaction_id",
-      "微信支付查单响应缺少 transaction_id",
-      "BILLING_RECHARGE_QUERY_TRANSACTION_ID_REQUIRED",
-    );
-    const paidAmountFen = this.getTransactionAmountTotal(transaction);
-    if (paidAmountFen !== order.amount_fen) {
-      throw Errors.business(
-        409,
-        "微信支付查单金额与积分充值订单金额不一致",
-        "BILLING_RECHARGE_QUERY_AMOUNT_MISMATCH",
-        {
-          order_amount_fen: order.amount_fen,
-          query_amount_fen: paidAmountFen,
-          out_trade_no: outTradeNo,
-        },
-      );
-    }
+    const transactionId = transaction.transactionId;
+    const paidAmountFen = transaction.amountFen;
 
     const notifyId = `query-compensation:${transactionId}`;
     const notification = await this.findOrCreateCompensationNotification({
@@ -280,8 +266,7 @@ export class PlatformBillingRechargeCompensationService {
         orderId: order.id,
         transactionId,
         paidAmountFen,
-        paidAt: this.optionalString(transaction.success_time) ??
-          new Date().toISOString(),
+        paidAt: transaction.successTime,
         notificationId: notification.id,
         metadata: {
           compensation_source: "platform_wechat_query",
@@ -290,7 +275,6 @@ export class PlatformBillingRechargeCompensationService {
           out_trade_no: outTradeNo,
         },
       });
-      await this.billingSubscriptionService.recoverAfterRecharge(order.tenant_id);
       await this.rechargeRepository.markWechatNotificationProcessed({
         notificationId: notification.id,
       });
@@ -337,10 +321,75 @@ export class PlatformBillingRechargeCompensationService {
     }
   }
 
+  private async recoverPaidOrder(input: {
+    authContext: AuthContext;
+    order: TenantCreditOrderRecord;
+    outTradeNo: string;
+    reason: string | null;
+  }) {
+    const { authContext, order, outTradeNo, reason } = input;
+    const transactionId = this.optionalString(order.transaction_id);
+    const auditMetadata = {
+      reason,
+      out_trade_no: outTradeNo,
+      transaction_id: transactionId,
+      notification_id: order.latest_notification_id,
+      paid_amount_fen: order.paid_amount_fen,
+    };
+
+    try {
+      if (!transactionId) {
+        throw Errors.business(
+          409,
+          "已支付积分充值订单缺少微信支付交易号",
+          "BILLING_RECHARGE_TRANSACTION_ID_REQUIRED",
+        );
+      }
+      const confirmResult = await this.rechargeRepository.confirmWechatRecharge({
+        orderId: order.id,
+        transactionId,
+        paidAmountFen: order.paid_amount_fen,
+        paidAt: order.paid_at,
+        notificationId: order.latest_notification_id,
+        metadata: {
+          compensation_source: "platform_paid_recovery",
+          compensation_actor_employee_id: authContext.employeeId ?? null,
+          out_trade_no: outTradeNo,
+        },
+      });
+      await this.recordCompensationAudit({
+        authContext,
+        order,
+        status: "success",
+        summary: "已支付积分充值原子恢复订阅",
+        metadata: { ...auditMetadata, confirm_idempotent: confirmResult.idempotent },
+      });
+      return {
+        compensated: false,
+        already_paid: true,
+        trade_state: "SUCCESS",
+        order_id: order.id,
+        out_trade_no: outTradeNo,
+        transaction_id: transactionId,
+        notification_id: order.latest_notification_id,
+        result: confirmResult,
+      };
+    } catch (error) {
+      await this.recordCompensationAudit({
+        authContext,
+        order,
+        status: "failure",
+        summary: "已支付积分充值原子恢复订阅失败",
+        metadata: { ...auditMetadata, error_message: getErrorMessage(error) },
+      });
+      throw error;
+    }
+  }
+
   private async findOrCreateCompensationNotification(input: {
     order: TenantCreditOrderRecord;
     notifyId: string;
-    transaction: WechatPayTransactionQueryResult;
+    transaction: WechatPayValidatedSuccessTransaction;
   }) {
     const existing =
       await this.rechargeRepository.findWechatNotificationByNotifyId({
@@ -366,17 +415,17 @@ export class PlatformBillingRechargeCompensationService {
   private buildCompensationResult(input: {
     order: TenantCreditOrderRecord;
     outTradeNo: string;
-    transaction: WechatPayTransactionQueryResult;
+    transaction: WechatPayValidatedSuccessTransaction;
     notification: TenantCreditWechatNotificationRecord;
     confirmResult: BillingConfirmWechatRechargeResult;
   }) {
     return {
       compensated: true,
       already_paid: Boolean(input.confirmResult.idempotent),
-      trade_state: this.optionalString(input.transaction.trade_state),
+      trade_state: input.transaction.tradeState,
       order_id: input.order.id,
       out_trade_no: input.outTradeNo,
-      transaction_id: this.optionalString(input.transaction.transaction_id),
+      transaction_id: input.transaction.transactionId,
       notification_id: input.notification.id,
       result: input.confirmResult,
     };
@@ -401,39 +450,6 @@ export class PlatformBillingRechargeCompensationService {
       summary: input.summary,
       metadata: input.metadata,
     });
-  }
-
-  private getTransactionAmountTotal(transaction: WechatPayTransactionQueryResult) {
-    const amount = transaction.amount;
-    if (!amount || typeof amount !== "object" || Array.isArray(amount)) {
-      throw Errors.business(
-        502,
-        "微信支付查单响应缺少金额",
-        "BILLING_RECHARGE_QUERY_AMOUNT_REQUIRED",
-      );
-    }
-    const total = Number((amount as Record<string, unknown>).total ?? 0);
-    if (!Number.isFinite(total) || total <= 0) {
-      throw Errors.business(
-        502,
-        "微信支付查单响应金额不正确",
-        "BILLING_RECHARGE_QUERY_AMOUNT_INVALID",
-      );
-    }
-    return total;
-  }
-
-  private requireString(
-    record: Record<string, unknown>,
-    key: string,
-    message: string,
-    code: string,
-  ) {
-    const value = this.optionalString(record[key]);
-    if (!value) {
-      throw Errors.business(502, message, code);
-    }
-    return value;
   }
 
   private optionalString(value: unknown) {

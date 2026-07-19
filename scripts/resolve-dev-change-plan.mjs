@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const BUILD_ORDER = ["api", "admin", "web", "social-video-worker"];
-const DEPLOY_ORDER = ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker"];
+const DEPLOY_ORDER = [
+  "api",
+  "admin",
+  "web",
+  "social-video-worker",
+  "cos-reconcile-worker",
+  "billing-reconcile-worker",
+];
 const ALL_BUILD = new Set(BUILD_ORDER);
 const ALL_DEPLOY = new Set(DEPLOY_ORDER);
 const NOOP_SCRIPTS = new Set([
@@ -53,6 +60,7 @@ function addApi(build, deploy) {
   deploy.add("api");
   deploy.add("social-video-worker");
   deploy.add("cos-reconcile-worker");
+  deploy.add("billing-reconcile-worker");
 }
 
 export function resolveDevChangePlan(paths, metadata) {

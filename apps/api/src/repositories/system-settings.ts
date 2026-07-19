@@ -1,4 +1,6 @@
+import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
+import { matchesPostgresError } from "@/errors/postgres-error-details";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type SystemSettingValueType = "string" | "number" | "boolean" | "json";
@@ -20,8 +22,10 @@ export type SystemSettingRecord = {
   updated_at: string;
 };
 
-class SystemSettingRepository {
-  private client = SupabaseDB.getAdminClient();
+export class SystemSettingRepository {
+  constructor(
+    private readonly client: unknown = SupabaseDB.getAdminClient(),
+  ) {}
 
   private table() {
     return (this.client as unknown as {
@@ -102,6 +106,18 @@ class SystemSettingRepository {
       .single();
 
     if (error) {
+      if (error instanceof AppError) throw error;
+      if (matchesPostgresError(
+        error,
+        "23514",
+        "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      )) {
+        throw Errors.business(
+          409,
+          "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
+          "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+        );
+      }
       throw Errors.dbError("更新系统配置失败", error);
     }
 

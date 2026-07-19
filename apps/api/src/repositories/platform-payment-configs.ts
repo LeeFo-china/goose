@@ -35,6 +35,7 @@ export type PlatformPaymentConfigRecord = {
   validation_status: PlatformPaymentValidationStatus;
   last_validated_at: string | null;
   risk_switches: Record<string, unknown>;
+  recharge_guard_version?: number;
   created_by_employee_id: string | null;
   updated_by_employee_id: string | null;
   created_at: string;
@@ -101,6 +102,19 @@ class PlatformPaymentConfigRepository {
       .select("*")
       .eq("provider", "wechat_pay")
       .eq("profile_code", profileCode)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询平台微信支付配置失败", error);
+    }
+
+    return (data as PlatformPaymentConfigRecord | null) ?? null;
+  }
+
+  async findWechatPayConfigById(configId: string) {
+    const { data, error } = await this.from("platform_payment_configs")
+      .select("*")
+      .eq("id", configId)
       .maybeSingle();
 
     if (error) {

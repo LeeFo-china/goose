@@ -1,10 +1,21 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { billingSubscriptionService } from "@/services/billing-subscriptions";
+import {
+  billingSubscriptionService,
+  type BillingDueCheckResult,
+} from "@/services/billing-subscriptions";
+import {
+  billingRechargeRefundReconciliationService,
+  type RefundReconciliationSummary,
+} from "@/services/billing-recharge-refund-reconciliation";
+import type { BillingRechargeExpirationTelemetry } from "@/services/billing-recharge-expiration";
+import { markBillingReconcileWorkerHealthy } from "@/workers/billing-reconcile-worker-health";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const MIN_INTERVAL_MS = 10_000;
 const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 100;
+const DEFAULT_RECHARGE_EXPIRATION_BATCH_SIZE = 50;
+const DEFAULT_REFUND_BATCH_SIZE = 20;
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 100;
 
@@ -12,6 +23,57 @@ export type BillingReconcileWorkerConfig = {
   enabled: boolean;
   intervalMs: number;
   batchSize: number;
+  rechargeExpirationBatchSize: number;
+  refundBatchSize: number;
+};
+
+type WorkerLogger = (
+  level: "info" | "warn" | "error",
+  message: string,
+  meta?: Record<string, unknown>,
+) => void;
+
+type BillingReconcileWorkerDependencies = {
+  subscriptionService?: {
+    runDueChecks(input: { batchSize: number }): Promise<BillingDueCheckResult>;
+  };
+  rechargeExpirationService?: {
+    runExpiredOrderChecks(input: {
+      batchSize: number;
+    }): Promise<BillingRechargeExpirationTelemetry>;
+  };
+  refundReconciliationService?: {
+    runBatch(input: { limit: number }): Promise<RefundReconciliationSummary>;
+  };
+  logger?: WorkerLogger;
+  healthEvidence?: { markHealthy(): Promise<void> };
+};
+
+type ChildResult<Result> =
+  | { status: "fulfilled"; result: Result }
+  | { status: "rejected" };
+
+type FulfilledChildResult<Result> = {
+  status: "fulfilled";
+  result: Result;
+};
+
+type BillingReconcileTickResults = {
+  subscription: ChildResult<ReturnType<typeof summarizeSubscriptionResult>>;
+  rechargeExpiration: ChildResult<
+    ReturnType<typeof summarizeRechargeExpirationResult>
+  >;
+  refund: ChildResult<ReturnType<typeof summarizeRefundResult>>;
+};
+
+type SuccessfulBillingReconcileTickResults = {
+  subscription: FulfilledChildResult<
+    ReturnType<typeof summarizeSubscriptionResult>
+  >;
+  rechargeExpiration: FulfilledChildResult<
+    ReturnType<typeof summarizeRechargeExpirationResult>
+  >;
+  refund: FulfilledChildResult<ReturnType<typeof summarizeRefundResult>>;
 };
 
 let stopping = false;
@@ -80,41 +142,163 @@ export function getWorkerConfig(): BillingReconcileWorkerConfig {
       MIN_BATCH_SIZE,
       MAX_BATCH_SIZE,
     ),
+    rechargeExpirationBatchSize: parseNumberEnv(
+      "BILLING_RECHARGE_EXPIRATION_BATCH_SIZE",
+      DEFAULT_RECHARGE_EXPIRATION_BATCH_SIZE,
+      MIN_BATCH_SIZE,
+      MAX_BATCH_SIZE,
+    ),
+    refundBatchSize: parseNumberEnv(
+      "BILLING_REFUND_RECONCILE_BATCH_SIZE",
+      DEFAULT_REFUND_BATCH_SIZE,
+      MIN_BATCH_SIZE,
+      MAX_BATCH_SIZE,
+    ),
   };
 }
 
-export async function tick(): Promise<void> {
+export async function tick(
+  dependencies: BillingReconcileWorkerDependencies = {},
+): Promise<void> {
+  const logger = dependencies.logger ?? log;
   if (running) {
-    log("warn", "previous tick still running");
+    logger("warn", "previous tick still running");
     return;
   }
 
   const config = getWorkerConfig();
   if (!config.enabled) {
-    log("info", "worker disabled");
+    logger("info", "worker disabled");
     return;
   }
 
   running = true;
   const startedAt = Date.now();
+  const subscriptionService = dependencies.subscriptionService ??
+    billingSubscriptionService;
+  const refundReconciliationService =
+    dependencies.refundReconciliationService ??
+      billingRechargeRefundReconciliationService;
 
   try {
-    const result = await billingSubscriptionService.runDueChecks({
-      batchSize: config.batchSize,
-    });
+    const subscription = await runChild(
+      () => subscriptionService.runDueChecks({ batchSize: config.batchSize }),
+      summarizeSubscriptionResult,
+    );
+    const rechargeExpiration = await runChild(
+      async () => {
+        const service = dependencies.rechargeExpirationService ??
+          await loadDefaultRechargeExpirationService();
+        return service.runExpiredOrderChecks({
+          batchSize: config.rechargeExpirationBatchSize,
+        });
+      },
+      summarizeRechargeExpirationResult,
+    );
+    const refund = await runChild(
+      () => refundReconciliationService.runBatch({
+        limit: config.refundBatchSize,
+      }),
+      summarizeRefundResult,
+    );
+    const tickResults = { subscription, rechargeExpiration, refund };
+    const childrenSucceeded = isSuccessfulBillingReconcileTick(tickResults);
+    let healthEvidenceFailed = false;
+    if (childrenSucceeded) {
+      try {
+        const healthEvidence = dependencies.healthEvidence ?? {
+          markHealthy: markBillingReconcileWorkerHealthy,
+        };
+        await healthEvidence.markHealthy();
+      } catch {
+        healthEvidenceFailed = true;
+      }
+    }
 
-    log("info", "tick completed", {
+    const tickFailed = !childrenSucceeded || healthEvidenceFailed;
+    logger(tickFailed ? "error" : "info", tickFailed
+      ? "tick completed with errors"
+      : "tick completed", {
       duration_ms: Date.now() - startedAt,
-      result,
-    });
-  } catch (error) {
-    log("error", "tick failed", {
-      duration_ms: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : String(error),
+      result: { subscription, recharge_expiration: rechargeExpiration, refund },
+      ...(healthEvidenceFailed
+        ? { error_code: "BILLING_RECONCILE_HEALTH_WRITE_FAILED" }
+        : {}),
     });
   } finally {
     running = false;
   }
+}
+
+function isSuccessfulBillingReconcileTick(
+  results: BillingReconcileTickResults,
+): results is SuccessfulBillingReconcileTickResults {
+  if (
+    results.subscription.status !== "fulfilled" ||
+    results.rechargeExpiration.status !== "fulfilled" ||
+    results.refund.status !== "fulfilled"
+  ) {
+    return false;
+  }
+
+  return results.subscription.result.error_count === 0 &&
+    results.rechargeExpiration.result.failed === 0 &&
+    results.rechargeExpiration.result.release_failed === 0 &&
+    results.refund.result.failed === 0;
+}
+
+async function runChild<Result, Summary>(
+  operation: () => Promise<Result>,
+  summarize: (result: Result) => Summary,
+): Promise<ChildResult<Summary>> {
+  try {
+    return { status: "fulfilled", result: summarize(await operation()) };
+  } catch {
+    return { status: "rejected" };
+  }
+}
+
+function summarizeSubscriptionResult(result: BillingDueCheckResult) {
+  return {
+    ensured: result.ensured,
+    reminded: result.reminded,
+    charged: result.charged,
+    locked: result.locked,
+    skipped: result.skipped,
+    error_count: result.errors.length,
+  };
+}
+
+function summarizeRefundResult(result: RefundReconciliationSummary) {
+  return {
+    claimed: result.claimed,
+    success: result.success,
+    processing: result.processing,
+    closed: result.closed,
+    abnormal: result.abnormal,
+    rescheduled: result.rescheduled,
+    failed: result.failed,
+  };
+}
+
+function summarizeRechargeExpirationResult(
+  result: BillingRechargeExpirationTelemetry,
+) {
+  return {
+    claimed: result.claimed,
+    paid: result.paid,
+    closed: result.closed,
+    retried: result.retried,
+    failed: result.failed,
+    release_failed: result.release_failed,
+  };
+}
+
+async function loadDefaultRechargeExpirationService() {
+  const { billingRechargeExpirationService } = await import(
+    "@/services/billing-recharge-expiration"
+  );
+  return billingRechargeExpirationService;
 }
 
 function registerShutdownSignalHandlers(): void {

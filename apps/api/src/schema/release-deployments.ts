@@ -8,6 +8,7 @@ export const ReleaseServiceSchema = z.enum([
   "admin",
   "social-video-worker",
   "cos-reconcile-worker",
+  "billing-reconcile-worker",
   "all",
 ]);
 
@@ -74,7 +75,7 @@ export const ReleaseProductionCandidateParamsSchema = z.object({
 });
 
 export const ReleaseProductionCandidateDeploySchema = z.object({
-  services: z.array(ReleaseServiceSchema.exclude(["all"])).min(1, "请选择部署服务").max(4),
+  services: z.array(ReleaseServiceSchema.exclude(["all"])).min(1, "请选择部署服务").max(5),
   confirm_text: z.literal("确认部署生产环境", {
     error: "部署生产候选需要输入：确认部署生产环境",
   }),

@@ -2,65 +2,34 @@ import { Errors } from "@/errors/error-factory";
 import type {
   WechatPayRefundQueryResult,
   WechatPayRequestRefundResult,
-  WechatPayTransactionQueryResult,
 } from "@/services/wechat-pay-gateway";
+import type { WechatRefundApiPayload } from "@/services/wechat-pay-refund-contract";
 
-export function assertWechatTransactionMatches(input: {
-  wechatTransaction: WechatPayTransactionQueryResult;
-  transactionId: string;
-  totalAmountFen: number;
-}) {
-  const tradeState = optionalString(input.wechatTransaction.trade_state);
-  if (tradeState !== "SUCCESS") {
-    throw Errors.business(
-      409,
-      "微信支付订单不是支付成功状态，不能执行退款",
-      "BILLING_RECHARGE_WECHAT_TRANSACTION_NOT_SUCCESS",
-      { trade_state: tradeState },
-    );
-  }
-
-  const wechatTransactionId = optionalString(
-    input.wechatTransaction.transaction_id,
-  );
-  if (wechatTransactionId !== input.transactionId) {
-    throw Errors.business(
-      409,
-      "微信支付交易号与本地充值订单不一致",
-      "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
-      {
-        local_transaction_id: input.transactionId,
-        wechat_transaction_id: wechatTransactionId,
-      },
-    );
-  }
-
-  const wechatTotalAmountFen = numberField(
-    input.wechatTransaction.amount,
-    "total",
-  );
-  if (wechatTotalAmountFen !== input.totalAmountFen) {
-    throw Errors.business(
-      409,
-      "微信支付金额与本地充值订单不一致",
-      "BILLING_RECHARGE_WECHAT_AMOUNT_MISMATCH",
-      {
-        local_total_amount_fen: input.totalAmountFen,
-        wechat_total_amount_fen: wechatTotalAmountFen,
-      },
-    );
-  }
+export function toWechatRequestedRefundPayload(
+  refund: WechatPayRequestRefundResult,
+): WechatRefundApiPayload {
+  return selectWechatRefundPayload(refund, refund.requestId);
 }
 
-export function toWechatRefundResult(
+export function toWechatQueriedRefundPayload(
   refund: WechatPayRefundQueryResult,
-  outRefundNo: string,
-): WechatPayRequestRefundResult {
+): WechatRefundApiPayload {
+  return selectWechatRefundPayload(refund, refund.requestId);
+}
+
+function selectWechatRefundPayload(
+  refund: WechatPayRequestRefundResult | WechatPayRefundQueryResult,
+  requestId: string | null,
+): WechatRefundApiPayload {
   return {
-    out_refund_no: optionalString(refund.out_refund_no) ?? outRefundNo,
-    refund_id: optionalString(refund.refund_id),
-    status: optionalString(refund.status) ?? "UNKNOWN",
-    raw: refund,
+    out_refund_no: refund.out_refund_no,
+    refund_id: refund.refund_id,
+    transaction_id: refund.transaction_id,
+    out_trade_no: refund.out_trade_no,
+    status: refund.status,
+    success_time: refund.success_time,
+    amount: refund.amount,
+    requestId,
   };
 }
 
@@ -93,12 +62,6 @@ export function uncertainRefundStatusError(input: {
 
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function numberField(value: unknown, key: string) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "number" && Number.isFinite(field) ? field : null;
 }
 
 function getErrorCode(error: unknown) {

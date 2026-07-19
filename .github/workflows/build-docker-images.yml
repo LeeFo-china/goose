@@ -118,7 +118,7 @@ jobs:
                   changed_files: [],
                   classifications: ["fallback-all"],
                   build_services: ["api", "admin", "web", "social-video-worker"],
-                  deploy_services: ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker"],
+                  deploy_services: ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"],
                   no_op: false
                 }' > build-plan.json
             else
@@ -153,7 +153,7 @@ jobs:
             RAW_BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${REQUESTED_SERVICE}")"
             RAW_DEPLOY_SERVICES="$(node scripts/resolve-web-deployment.mjs deploy "${REQUESTED_SERVICE}")"
             BUILD_SERVICES="$(canonicalize_services "${RAW_BUILD_SERVICES}" api admin web social-video-worker)"
-            DEPLOY_SERVICES="$(canonicalize_services "${RAW_DEPLOY_SERVICES}" api admin web social-video-worker cos-reconcile-worker)"
+            DEPLOY_SERVICES="$(canonicalize_services "${RAW_DEPLOY_SERVICES}" api admin web social-video-worker cos-reconcile-worker billing-reconcile-worker)"
             test -n "${BUILD_SERVICES}"
             test -n "${DEPLOY_SERVICES}"
 

@@ -22,6 +22,7 @@ const RELEASE_SERVICE_LABELS: Record<Exclude<ReleaseService, "all">, string> = {
   admin: "Admin",
   "social-video-worker": "社媒视频 Worker",
   "cos-reconcile-worker": "COS 对账 Worker",
+  "billing-reconcile-worker": "计费对账 Worker",
 };
 
 type ReleaseCandidateEvidenceProps = {

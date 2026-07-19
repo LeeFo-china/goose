@@ -1,11 +1,19 @@
 import { Errors } from "@/errors/error-factory";
 import type { BillingAccountBalance } from "@/repositories/billing";
+import { createGuardedPendingRechargeOrder } from "@/repositories/billing-recharge-order-creation";
+import { hasPendingWechatOrdersForPaymentConfig } from "@/repositories/billing-recharge-payment-config";
+import { markPendingRechargePrepayCreated } from "@/repositories/billing-recharge-prepay";
+import {
+  claimExpiredRechargeOrders,
+  markClaimedRechargeOrderClosed,
+  releaseRechargeOrderCloseClaim,
+  renewRechargeOrderCloseClaim,
+} from "@/repositories/billing-recharge-expiration";
 import {
   billingRechargeRefundCallbackRepository,
+  type BillingApplyWechatRechargeRefundCallbackStateInput,
   type BillingConfirmWechatRechargeRefundInput,
   type BillingConfirmWechatRechargeRefundResult,
-  type BillingMarkWechatRechargeRefundFailedInput,
-  type BillingMarkWechatRechargeRefundFailedResult,
   type BillingWechatRefundRequestMatch,
 } from "@/repositories/billing-recharge-refund-callbacks";
 import { SupabaseDB } from "@/utils/supabase/index";
@@ -44,6 +52,11 @@ export type TenantCreditOrderRecord = {
   payment_config_id: string | null;
   out_trade_no: string | null;
   prepay_id: string | null;
+  payment_expires_at?: string | null;
+  close_claim_token?: string | null;
+  close_claim_expires_at?: string | null;
+  close_attempt_count?: number;
+  close_last_error?: string | null;
   transaction_id: string | null;
   paid_amount_fen: number;
   closed_at: string | null;
@@ -69,6 +82,8 @@ export type TenantCreditOrderCreateInput = {
   status: "pending";
   created_by: string;
   payment_config_id: string;
+  expected_payment_config_guard_version: number;
+  payment_expires_at: string;
   metadata: Record<string, unknown>;
 };
 
@@ -104,7 +119,7 @@ export type BillingConfirmWechatRechargeInput = {
   transactionId: string;
   paidAmountFen: number;
   paidAt: string | null;
-  notificationId: string;
+  notificationId: string | null;
   metadata: Record<string, unknown>;
 };
 
@@ -112,6 +127,7 @@ export type BillingConfirmWechatRechargeResult = {
   order: Record<string, unknown> | null;
   account: Record<string, unknown> | null;
   ledger: Record<string, unknown> | null;
+  recovery: Record<string, unknown> | null;
   idempotent: boolean;
 };
 
@@ -142,12 +158,21 @@ type UntypedClient = {
       | "tenant_credit_account_balances",
   ) => UntypedTable;
   rpc: (
-    functionName: "billing_confirm_wechat_recharge",
+    functionName: "billing_confirm_wechat_recharge_and_recover",
     args: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: unknown }>;
 };
 
 class BillingRechargeRepository {
+  readonly claimExpiredOrders = claimExpiredRechargeOrders;
+  readonly renewCloseClaim = renewRechargeOrderCloseClaim;
+  readonly markOrderClosed = markClaimedRechargeOrderClosed;
+  readonly releaseCloseClaim = releaseRechargeOrderCloseClaim;
+  readonly createOrder = createGuardedPendingRechargeOrder;
+  readonly markPrepayCreated = markPendingRechargePrepayCreated;
+  readonly hasPendingWechatOrdersForPaymentConfig =
+    hasPendingWechatOrdersForPaymentConfig;
+
   private from(table: Parameters<UntypedClient["from"]>[0]) {
     return (SupabaseDB.getAdminClient() as unknown as UntypedClient).from(table);
   }
@@ -206,6 +231,7 @@ class BillingRechargeRepository {
           "payment_config_id",
           "out_trade_no",
           "prepay_id",
+          "payment_expires_at",
           "transaction_id",
           "paid_amount_fen",
           "refund_status",
@@ -277,38 +303,6 @@ class BillingRechargeRepository {
     }
 
     return (data as TenantCreditOrderRecord | null) ?? null;
-  }
-
-  async createOrder(input: TenantCreditOrderCreateInput) {
-    const { data, error } = await this.from("tenant_credit_orders")
-      .insert(input)
-      .select("*")
-      .single();
-
-    if (error) {
-      throw Errors.dbError("创建积分充值订单失败", error);
-    }
-
-    return data as TenantCreditOrderRecord;
-  }
-
-  async markPrepayCreated(input: {
-    tenantId: string;
-    orderId: string;
-    prepayId: string;
-  }) {
-    const { data, error } = await this.from("tenant_credit_orders")
-      .update({ prepay_id: input.prepayId })
-      .eq("tenant_id", input.tenantId)
-      .eq("id", input.orderId)
-      .select("*")
-      .single();
-
-    if (error) {
-      throw Errors.dbError("保存积分充值预支付单失败", error);
-    }
-
-    return data as TenantCreditOrderRecord;
   }
 
   async findOrderById(input: { tenantId: string; orderId: string }) {
@@ -435,7 +429,7 @@ class BillingRechargeRepository {
   async confirmWechatRecharge(input: BillingConfirmWechatRechargeInput) {
     const { data, error } = await (
       SupabaseDB.getAdminClient() as unknown as UntypedClient
-    ).rpc("billing_confirm_wechat_recharge", {
+    ).rpc("billing_confirm_wechat_recharge_and_recover", {
       p_order_id: input.orderId,
       p_transaction_id: input.transactionId,
       p_paid_amount_fen: input.paidAmountFen,
@@ -458,19 +452,17 @@ class BillingRechargeRepository {
       .confirmWechatRechargeRefund(input);
   }
 
-  async markWechatRechargeRefundFailed(
-    input: BillingMarkWechatRechargeRefundFailedInput,
+  async applyWechatRechargeRefundCallbackState(
+    input: BillingApplyWechatRechargeRefundCallbackStateInput,
   ) {
     return billingRechargeRefundCallbackRepository
-      .markWechatRechargeRefundFailed(input);
+      .applyWechatRechargeRefundCallbackState(input);
   }
 }
 
 export type {
   BillingConfirmWechatRechargeRefundInput,
   BillingConfirmWechatRechargeRefundResult,
-  BillingMarkWechatRechargeRefundFailedInput,
-  BillingMarkWechatRechargeRefundFailedResult,
   BillingWechatRefundRequestMatch,
 };
 

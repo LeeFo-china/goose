@@ -21,6 +21,12 @@ import {
   verifyWechatPayCallbackSignature,
 } from "@/services/wechat-pay-callback-crypto";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
+import {
+  buildWechatPayTransactionExpectedBinding,
+  convertWechatPayTransactionCallbackResource,
+  parseAndAssertWechatPayTransactionCallback,
+  type WechatPayValidatedSuccessTransaction,
+} from "@/services/wechat-pay-transaction-contract";
 
 export type CallbackHeaders = Record<string, string | string[] | undefined>;
 
@@ -65,7 +71,7 @@ export type CreditRechargeCallbackContext = {
   kind: "credit_recharge";
   config: PlatformPaymentConfigRecord;
   payload: Record<string, unknown>;
-  resource: Record<string, unknown>;
+  transaction: WechatPayValidatedSuccessTransaction;
   order: TenantCreditOrderRecord;
 };
 
@@ -221,8 +227,9 @@ export class WechatPayCallbackContextMatcher {
     for (const config of configs) {
       const decrypted = await this.verifyAndDecrypt({ ...input, config });
       if (!decrypted) continue;
+      const resource = convertWechatPayTransactionCallbackResource(decrypted);
       const outTradeNo = this.requireString(
-        decrypted,
+        resource as unknown as Record<string, unknown>,
         "out_trade_no",
         "微信支付回调缺少商户订单号",
       );
@@ -231,11 +238,26 @@ export class WechatPayCallbackContextMatcher {
           outTradeNo,
         );
       if (order?.payment_config_id === config.id) {
+        const eventType = typeof input.payload.event_type === "string"
+          ? input.payload.event_type
+          : "";
+        const transaction = parseAndAssertWechatPayTransactionCallback(
+          eventType,
+          resource,
+          buildWechatPayTransactionExpectedBinding({
+            merchantMode: config.merchant_mode,
+            merchantId: config.merchant_id,
+            subMerchantId: config.sub_merchant_id,
+            outTradeNo,
+            amountFen: order.amount_fen,
+            transactionId: order.transaction_id,
+          }),
+        );
         return {
           kind: "credit_recharge",
           config,
           payload: input.payload,
-          resource: decrypted,
+          transaction,
           order,
         } satisfies CreditRechargeCallbackContext;
       }
@@ -327,6 +349,7 @@ export class WechatPayCallbackContextMatcher {
     return Boolean(eventType?.startsWith("REFUND."));
   }
 }
+
 
 type MatchInput = {
   rawBody: string;
