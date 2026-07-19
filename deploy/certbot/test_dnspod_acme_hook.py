@@ -949,6 +949,32 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
                 interval=0,
             )
 
+    def test_reachable_mismatch_is_not_forgotten_after_later_timeout(self):
+        calls = {"192.0.2.1": 0, "192.0.2.2": 0}
+
+        def query(address, _name, _timeout):
+            calls[address] += 1
+            if address == "192.0.2.1":
+                if calls[address] == 1:
+                    return set()
+                raise hook.DnsProtocolError("DNS timeout")
+            return {"token"}
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1", "192.0.2.2"),
+            query=query,
+            sleep=lambda _seconds: None,
+            monotonic=itertools.count(0, 0.1).__next__,
+        )
+
+        with self.assertRaises(hook.DnsPropagationError):
+            verifier.wait_present(
+                "_acme-challenge.www.goodcms.cn",
+                "token",
+                timeout=1,
+                interval=0,
+            )
+
     def test_continuous_dns_errors_raise_generic_timeout_without_secrets(self):
         secret_value = "secret-test-token"
 

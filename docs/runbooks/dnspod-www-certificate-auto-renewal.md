@@ -111,7 +111,7 @@ curl --fail --silent --show-error --head https://www.goodcms.cn
 
 1. `prepare` 失败：检查 `systemctl is-active docker`、`docker ps --format '{{.Names}} {{.Status}}'`、文件 owner/mode 和凭据键名；修复后重新执行 `prepare`。
 2. DNSPod 4xx/5xx：不要打印响应正文中的敏感字段。确认 CAM 策略的 domainId、主账号 UIN、API 密钥状态和服务器时钟；仅允许 CreateRecord/DeleteRecord。
-3. TXT 未传播：hook 会向权威 NS 查询并在截止时间内重试；不可达地址不阻断，但至少一个权威地址必须可达，且所有可达地址都必须匹配目标状态。确认 `goodcms.cn` 的 NS 委派和 UDP/TCP 网络；超时后 cleanup 仍应执行。
+3. TXT 未传播：hook 会向权威 NS 查询并在截止时间内重试；始终不可达的地址不阻断，但至少一个权威地址必须可达，且所有曾经可达的地址都必须匹配目标状态。确认 `goodcms.cn` 的 NS 委派和 UDP/TCP 网络；超时后 cleanup 仍应执行。
 4. `nginx -t` 或 reload 失败：保留当前证书，修复容器内 Nginx 配置后手动运行 `nginx -t`，再重试续期。
 5. 状态文件异常/权限错误：停止服务，检查 `/run/gooes-dnspod-acme/state` 的 0700 和 root 所有权；不要手工删除不属于本次状态的 DNS 记录。
 

@@ -448,9 +448,9 @@ class AuthoritativeTxtVerifier:
         started_at = self._monotonic()
         deadline = started_at + timeout
         stage = "present" if present else "absent"
+        last_observed_matches: dict[str, bool] = {}
         while True:
-            matched = 0
-            reachable = 0
+            current_reachable = 0
             total = len(self.nameserver_addresses)
             for address in self.nameserver_addresses:
                 remaining = deadline - self._monotonic()
@@ -460,18 +460,19 @@ class AuthoritativeTxtVerifier:
                     answers = self._query(address, name, min(2.0, remaining))
                 except DnsProtocolError:
                     continue
-                reachable += 1
-                if (value in answers) is present:
-                    matched += 1
+                current_reachable += 1
+                last_observed_matches[address] = (value in answers) is present
 
             current_time = self._monotonic()
             elapsed = max(0.0, current_time - started_at)
+            observed = len(last_observed_matches)
+            matched = sum(1 for value_matches in last_observed_matches.values() if value_matches)
             print(
-                f"dns-{stage} {matched}/{reachable} "
-                f"reachable={reachable}/{total} elapsed={elapsed:.1f}s",
+                f"dns-{stage} {matched}/{observed} "
+                f"reachable={current_reachable}/{total} elapsed={elapsed:.1f}s",
                 file=sys.stderr,
             )
-            if reachable > 0 and matched == reachable and current_time <= deadline:
+            if observed > 0 and matched == observed and current_time <= deadline:
                 return
             remaining = deadline - current_time
             if remaining <= 0:
