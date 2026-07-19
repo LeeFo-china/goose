@@ -56,11 +56,18 @@ export function assertWechatTransactionMatches(input: {
 export function toWechatRequestedRefundPayload(
   refund: WechatPayRequestRefundResult,
 ): WechatRefundApiPayload {
-  return { ...refund.raw, requestId: refund.requestId };
+  return selectWechatRefundPayload(refund.raw, refund.requestId);
 }
 
 export function toWechatQueriedRefundPayload(
   refund: WechatPayRefundQueryResult,
+): WechatRefundApiPayload {
+  return selectWechatRefundPayload(refund, refund.requestId);
+}
+
+function selectWechatRefundPayload(
+  refund: Record<string, unknown>,
+  requestId: string | null,
 ): WechatRefundApiPayload {
   return {
     out_refund_no: refund.out_refund_no,
@@ -68,8 +75,9 @@ export function toWechatQueriedRefundPayload(
     transaction_id: refund.transaction_id,
     out_trade_no: refund.out_trade_no,
     status: refund.status,
+    success_time: refund.success_time,
     amount: refund.amount,
-    requestId: refund.requestId,
+    requestId,
   };
 }
 

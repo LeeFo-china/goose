@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { Errors } from "@/errors/error-factory";
 
 export type WechatRefundStatus =
@@ -45,6 +47,7 @@ export type WechatRefundValidatedResult = {
   totalAmountFen: number;
   currency: "CNY";
   requestId: string | null;
+  successTime: string | null;
 };
 
 const WECHAT_REFUND_STATUSES = new Set<WechatRefundStatus>([
@@ -59,6 +62,7 @@ const REFUND_EVENT_BY_STATUS = {
   CLOSED: "REFUND.CLOSED",
   ABNORMAL: "REFUND.ABNORMAL",
 } as const;
+const rfc3339Schema = z.iso.datetime({ offset: true });
 
 export function parseAndAssertWechatRefund(
   payload: WechatRefundApiPayload,
@@ -155,6 +159,9 @@ function parseAndAssertRefundCore(input: {
 
   const status = exactString(input.payload[input.statusField]);
   if (!isWechatRefundStatus(status)) throwRefundMismatch(input.statusField);
+  const successTime = status === "SUCCESS"
+    ? validatedSuccessTime(input.payload.success_time)
+    : null;
 
   return {
     outRefundNo,
@@ -166,7 +173,14 @@ function parseAndAssertRefundCore(input: {
     totalAmountFen,
     currency: "CNY",
     requestId: input.requestId,
+    successTime,
   };
+}
+
+function validatedSuccessTime(value: unknown): string {
+  const result = rfc3339Schema.safeParse(value);
+  if (!result.success) throwRefundMismatch("success_time");
+  return result.data;
 }
 
 function assertCallbackMerchantMatches(

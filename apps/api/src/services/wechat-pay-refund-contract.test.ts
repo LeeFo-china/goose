@@ -50,8 +50,41 @@ function withAmount(
 }
 
 describe("parseAndAssertWechatRefund", () => {
+  test("retains a validated RFC3339 success time for SUCCESS", () => {
+    expect(parseAndAssertWechatRefund({
+      ...response,
+      status: "SUCCESS",
+      success_time: "2026-07-19T10:01:02+08:00",
+    }, expected)).toMatchObject({
+      status: "SUCCESS",
+      successTime: "2026-07-19T10:01:02+08:00",
+    });
+  });
+
+  test("rejects SUCCESS without its documented success time", () => {
+    expect(() => parseAndAssertWechatRefund({
+      ...response,
+      status: "SUCCESS",
+    }, expected)).toThrow(expect.objectContaining({ code: mismatchCode }));
+  });
+
+  test("rejects SUCCESS with an invalid success time", () => {
+    expect(() => parseAndAssertWechatRefund({
+      ...response,
+      status: "SUCCESS",
+      success_time: "2026-07-19 10:01:02",
+    }, expected)).toThrow(expect.objectContaining({ code: mismatchCode }));
+  });
+
+  test("does not expose a success time for a non-SUCCESS state", () => {
+    expect(parseAndAssertWechatRefund({
+      ...response,
+      success_time: "2026-07-19T10:01:02+08:00",
+    }, expected).successTime).toBeNull();
+  });
+
   for (
-    const status of ["PROCESSING", "SUCCESS", "CLOSED", "ABNORMAL"] as const
+    const status of ["PROCESSING", "CLOSED", "ABNORMAL"] as const
   ) {
     test(`accepts documented ${status} status and retains verified request id`, () => {
       expect(
@@ -66,6 +99,7 @@ describe("parseAndAssertWechatRefund", () => {
         totalAmountFen: 10000,
         currency: "CNY",
         requestId: "wechat-refund-request-id",
+        successTime: null,
       });
     });
   }
@@ -329,7 +363,25 @@ describe("parseAndAssertWechatRefundCallback", () => {
       totalAmountFen: 10000,
       currency: "CNY",
       requestId: null,
+      successTime: "2026-07-10T08:05:00+08:00",
     });
+  });
+
+  test("rejects a SUCCESS callback without success_time", () => {
+    const withoutSuccessTime = { ...callbackResource };
+    delete (withoutSuccessTime as Partial<typeof callbackResource>).success_time;
+    expect(() =>
+      parseAndAssertWechatRefundCallback(withoutSuccessTime, directExpected)
+    ).toThrow(expect.objectContaining({ code: mismatchCode }));
+  });
+
+  test("rejects a SUCCESS callback with invalid success_time", () => {
+    expect(() =>
+      parseAndAssertWechatRefundCallback(
+        { ...callbackResource, success_time: "not-rfc3339" },
+        directExpected,
+      )
+    ).toThrow(expect.objectContaining({ code: mismatchCode }));
   });
 
   test("rejects a direct-merchant callback with a different mchid", () => {

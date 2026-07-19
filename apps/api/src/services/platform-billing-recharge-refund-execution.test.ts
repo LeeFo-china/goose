@@ -177,6 +177,7 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       totalAmountFen: 10000,
       currency: "CNY",
       requestId: "wechat-refund-request-id",
+      successTime: null,
     });
   });
   test("rejects a mismatched refund response without persisting it", async () => {

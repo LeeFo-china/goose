@@ -150,6 +150,7 @@ const validatedWechatRefund = {
   totalAmountFen: 10000,
   currency: "CNY",
   requestId: "wechat-refund-request-id",
+  successTime: null,
 } as const;
 
 const executionService = {

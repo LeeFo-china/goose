@@ -79,8 +79,7 @@ async function processCreditRechargeRefund(input: {
       outRefundNo: refund.outRefundNo,
       wechatRefundId: refund.wechatRefundId,
       refundAmountFen: refund.refundAmountFen,
-      refundedAt: optionalString(matched.resource.success_time) ??
-        new Date().toISOString(),
+      refundedAt: refund.successTime,
       notificationId: notification.id,
       metadata: {
         callback_notify_id: notification.notify_id,
