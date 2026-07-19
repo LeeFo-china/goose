@@ -8,7 +8,7 @@
     "build": "next build && node scripts/sync-standalone-assets.mjs",
     "start": "PORT=${PORT:-3010} HOSTNAME=${GOOES_ADMIN_HOSTNAME:-127.0.0.1} node .next/standalone/apps/admin/server.js",
     "lint": "next lint",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "next typegen && tsc -p tsconfig.typecheck.json --noEmit",
     "check": "pnpm run check:file-size && pnpm run typecheck",
     "test:e2e": "env -u NO_COLOR playwright test",
     "test:e2e:headed": "env -u NO_COLOR playwright test --headed",
