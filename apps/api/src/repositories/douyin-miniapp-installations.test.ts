@@ -25,12 +25,27 @@ function createClient(results: DouyinInstallationDatabaseResult[]) {
   class Query implements DouyinInstallationQuery {
     private chain(method: string, args: readonly unknown[]) { calls.push({ method, args }); return this; }
     select(columns: string) { return this.chain("select", [columns]); }
+    insert(value: unknown) { return this.chain("insert", [value]); }
     update(value: unknown) { return this.chain("update", [value]); }
     eq(column: string, value: unknown) { return this.chain("eq", [column, value]); }
     in(column: string, values: readonly string[]) { return this.chain("in", [column, values]); }
+    order(column: string, options: unknown) { return this.chain("order", [column, options]); }
+    range(from: number, to: number) { return this.chain("range", [from, to]); }
     maybeSingle() {
       calls.push({ method: "maybeSingle", args: [] });
       return Promise.resolve(results[index++] ?? { data: null, error: null });
+    }
+    single() {
+      calls.push({ method: "single", args: [] });
+      return Promise.resolve(results[index++] ?? { data: null, error: null });
+    }
+    then<TResult1 = DouyinInstallationDatabaseResult, TResult2 = never>(
+      onfulfilled?: ((value: DouyinInstallationDatabaseResult) => TResult1 | PromiseLike<TResult1>) | null,
+      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+    ) {
+      calls.push({ method: "then", args: [] });
+      const result = results[index++] ?? { data: null, error: null };
+      return Promise.resolve(result).then(onfulfilled, onrejected);
     }
   }
   const client: DouyinInstallationDatabaseClient = {
@@ -68,6 +83,135 @@ const installationRow = {
   token_refresh_claim_token: null,
   token_refresh_claim_expires_at: null,
 };
+
+const managementRow = {
+  id: installationRow.id,
+  tenant_id: installationRow.tenant_id,
+  component_appid: installationRow.component_appid,
+  authorizer_appid: installationRow.authorizer_appid,
+  installation_kind: "merchant",
+  authorization_status: "active",
+  permission_snapshot: [],
+  runtime_config: {
+    brand: { logo_url: null, qualifications: [] },
+    theme: { primary_color: "#C45A32", navigation_text_color: "black" },
+    features: { cases: true, sites: true, sms_lead: true, douyin_phone: false,
+      phone_capture_mode: "sms" },
+    home_banners: [],
+    trust_metrics: [],
+    privacy_policy_version: "2026-07-19",
+  },
+  template_id: null,
+  template_version: null,
+  last_submitted_at: null,
+  last_audited_at: null,
+  last_released_at: null,
+  revoked_at: null,
+  created_at: "2026-07-19T00:00:00.000Z",
+  updated_at: "2026-07-20T00:00:00.000Z",
+  tenant: {
+    id: installationRow.tenant_id,
+    name: "示例装饰",
+    slug: "demo",
+    status: "active",
+  },
+};
+
+describe("DouyinMiniappInstallationsRepository platform management", () => {
+  test("lists only safe named fields with exact count and bounded range", async () => {
+    const { client, calls } = createClient([{ data: [managementRow], error: null, count: 121 } as never]);
+    const repository = new DouyinMiniappInstallationsRepository(client);
+
+    await expect(repository.listForPlatform({ page: 2, pageSize: 100 })).resolves.toEqual({
+      list: [managementRow],
+      total: 121,
+    });
+
+    expect(calls).toContainEqual({ method: "range", args: [100, 199] });
+    expect(calls).toContainEqual({ method: "order", args: ["updated_at", { ascending: false }] });
+    const select = calls.find((call) => call.method === "select")!;
+    expect(select.args[1]).toEqual({ count: "exact" });
+    const selected = String(select.args[0]);
+    expect(selected).not.toContain("*");
+    expect(selected).not.toMatch(/deployment_key|access_token|refresh_token|claim_token|last_error/);
+    expect(selected).toContain("tenant:tenants");
+  });
+
+  test("finds a safe installation by id and AppID without selecting credentials", async () => {
+    for (const [method, column, value] of [
+      ["findForPlatformById", "id", managementRow.id],
+      ["findForPlatformByAuthorizerAppId", "authorizer_appid", managementRow.authorizer_appid],
+    ] as const) {
+      const { client, calls } = createClient([{ data: managementRow, error: null }]);
+      const repository = new DouyinMiniappInstallationsRepository(client);
+      await expect(repository[method](value)).resolves.toEqual(managementRow);
+      expect(calls).toContainEqual({ method: "eq", args: [column, value] });
+      expect(String(calls.find((call) => call.method === "select")?.args[0]))
+        .not.toMatch(/deployment_key|access_token|refresh_token|claim_token|last_error/);
+    }
+  });
+
+  test("creates template development without deployment or credential columns", async () => {
+    const template = { ...managementRow, authorizer_appid: "template-appid",
+      installation_kind: "template_development" };
+    const { client, calls } = createClient([{ data: template, error: null }]);
+    const repository = new DouyinMiniappInstallationsRepository(client);
+
+    await repository.createTemplateDevelopment({
+      componentAppId: "component-appid",
+      authorizerAppId: "template-appid",
+      tenantId: installationRow.tenant_id,
+      runtimeConfig: managementRow.runtime_config,
+    });
+
+    const insert = calls.find((call) => call.method === "insert")?.args[0];
+    expect(insert).toEqual({
+      component_appid: "component-appid",
+      authorizer_appid: "template-appid",
+      tenant_id: installationRow.tenant_id,
+      installation_kind: "template_development",
+      authorization_status: "active",
+      runtime_config: managementRow.runtime_config,
+    });
+    expect(JSON.stringify(insert)).not.toMatch(/deployment|token|secret|credential/i);
+  });
+
+  test("guards config, rotation and state transitions in the database update", async () => {
+    const actions = [
+      ["updateRuntimeConfig", [managementRow.id, managementRow.runtime_config],
+        ["active", "disabled"]],
+      ["rotateDeploymentKey", [managementRow.id, "new-deployment-key"], ["active"]],
+      ["transitionAuthorizationStatus", [managementRow.id, "active", "disabled"], ["active"]],
+    ] as const;
+
+    for (const [method, args, statuses] of actions) {
+      const { client, calls } = createClient([{ data: managementRow, error: null }]);
+      const repository = new DouyinMiniappInstallationsRepository(client);
+      await (repository[method] as (...values: readonly unknown[]) => Promise<unknown>)(...args);
+      expect(calls).toContainEqual({ method: "in", args: ["authorization_status", statuses] });
+      expect(calls).toContainEqual({ method: "eq", args: ["id", managementRow.id] });
+      expect(calls).toContainEqual({ method: "maybeSingle", args: [] });
+    }
+  });
+
+  test("maps concurrent template AppID conflicts without leaking database details", async () => {
+    const detail = "Key (authorizer_appid)=(template-secret-appid) already exists";
+    const { client } = createClient([{ data: null, error: { code: "23505", details: detail } }]);
+    let caught: unknown;
+    try {
+      await new DouyinMiniappInstallationsRepository(client).createTemplateDevelopment({
+        componentAppId: "component-appid",
+        authorizerAppId: "template-appid",
+        tenantId: installationRow.tenant_id,
+        runtimeConfig: managementRow.runtime_config,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ statusCode: 409, code: "DOUYIN_TEMPLATE_INSTALLATION_CONFLICT" });
+    expect(JSON.stringify(caught)).not.toContain(detail);
+  });
+});
 
 describe("DouyinMiniappInstallationsRepository lookups", () => {
   test("active lookup always filters the authorizer appid and selects named fields", async () => {
