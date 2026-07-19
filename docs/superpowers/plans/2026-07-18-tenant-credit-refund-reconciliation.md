@@ -1001,8 +1001,14 @@ git commit -m "feat(billing): 接入退款对账任务"
 
 After Task 6 passes implementer, spec, and code-quality review:
 
-1. Return to the outer release plan and replay the exact 36 recharge payment-expiration commits
-   from `309bc1868b8673c8e74846f614efd5f6ce27d138..d4f30272` in source order.
+1. Return to the outer release plan and replay, in source order, the exact 36 recharge
+   payment-expiration commits from first commit
+   `50d8f0802e285c39a60d96beec230b59ac66496f` through last commit
+   `d4f30272fb470cff07c35abeb1c0cae421912d3f` (inclusive), using the range
+   `50d8f0802e285c39a60d96beec230b59ac66496f^..d4f30272fb470cff07c35abeb1c0cae421912d3f`.
+   Do not use `309bc1868b8673c8e74846f614efd5f6ce27d138..d4f30272`: it includes 10
+   unrelated or pre-existing commits before the payment-expiration feature and therefore contains
+   46 commits rather than the approved 36.
 2. Resolve overlaps manually. In particular, preserve every gateway method
    (`createJsapiPrepay`, `closeTransactionByOutTradeNo`,
    `queryTransactionByOutTradeNo`, `requestRefund`, `queryRefundByOutRefundNo`) and the new
