@@ -1,12 +1,17 @@
 import io
 import importlib.util
 import itertools
+import json
+import os
 import socket
+import stat
 import struct
 import sys
 import tempfile
+import threading
 import unittest
-from contextlib import redirect_stderr
+import urllib.error
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -125,6 +130,73 @@ class FakeDnsSocket:
             0,
         ) + question
         return response, self.destination if self.peer is None else self.peer
+
+
+class FakeHttpResponse:
+    def __init__(self, body, *, status=200):
+        self.body = body if isinstance(body, bytes) else body.encode("utf-8")
+        self.status = status
+        self.closed = False
+
+    def read(self, _size=-1):
+        return self.body
+
+    def close(self):
+        self.closed = True
+
+
+class FakeTransport:
+    def __init__(self, body, *, error=None, status=200):
+        self.response = FakeHttpResponse(body, status=status)
+        self.error = error
+        self.calls = []
+
+    def __call__(self, request, *, timeout):
+        self.calls.append((request, timeout))
+        if self.error is not None:
+            raise self.error
+        return self.response
+
+
+class FakeClient:
+    def __init__(self, *, record_id=731, create_error=None, delete_errors=()):
+        self.record_id = record_id
+        self.create_error = create_error
+        self.delete_errors = iter(delete_errors)
+        self.created = []
+        self.deleted = []
+        self.events = []
+
+    def create_txt(self, value):
+        self.created.append(value)
+        self.events.append(("create", value))
+        if self.create_error is not None:
+            raise self.create_error
+        return self.record_id
+
+    def delete_record(self, record_id):
+        self.deleted.append(record_id)
+        self.events.append(("delete", record_id))
+        error = next(self.delete_errors, None)
+        if error is not None:
+            raise error
+
+
+class FakeVerifier:
+    def __init__(self, *, present_error=None, absent_error=None, events=None):
+        self.present_error = present_error
+        self.absent_error = absent_error
+        self.events = events if events is not None else []
+
+    def wait_present(self, name, value):
+        self.events.append(("wait_present", name, value))
+        if self.present_error is not None:
+            raise self.present_error
+
+    def wait_absent(self, name, value):
+        self.events.append(("wait_absent", name, value))
+        if self.absent_error is not None:
+            raise self.absent_error
 
 
 class Tc3SigningTests(unittest.TestCase):
@@ -946,6 +1018,1007 @@ class AuthoritativeTxtVerifierTests(unittest.TestCase):
                 self.assertNotIn(secret_value, stderr.getvalue())
                 self.assertNotIn(secret_value, str(caught.exception))
 
+
+class DnsPodClientTests(unittest.TestCase):
+    def make_credentials(self):
+        return hook.Credentials(
+            TEST_SECRET_ID,
+            TEST_SECRET_KEY,
+            "goodcms.cn",
+            "_acme-challenge.www",
+        )
+
+    def test_create_txt_signs_and_sends_the_exact_fixed_json_bytes(self):
+        validation = "validation-敏感值"
+        response = json.dumps(
+            {"Response": {"RecordId": 731, "RequestId": "request-12345678"}}
+        )
+        transport = FakeTransport(response)
+        signed = []
+
+        def fake_authorization(**arguments):
+            signed.append(arguments)
+            return "TC3-HMAC-SHA256 safe-authorization"
+
+        client = hook.DnsPodClient(
+            self.make_credentials(),
+            transport=transport,
+            clock=lambda: 1_700_000_000.9,
+            timeout=999,
+        )
+        with mock.patch.object(
+            hook,
+            "build_authorization",
+            side_effect=fake_authorization,
+        ):
+            record_id = client.create_txt(validation)
+
+        self.assertEqual(record_id, 731)
+        self.assertEqual(len(transport.calls), 1)
+        request, timeout = transport.calls[0]
+        expected_payload = {
+            "Domain": "goodcms.cn",
+            "SubDomain": "_acme-challenge.www",
+            "RecordType": "TXT",
+            "RecordLine": "默认",
+            "Value": validation,
+            "TTL": 600,
+        }
+        expected_bytes = json.dumps(
+            expected_payload,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        self.assertEqual(request.full_url, "https://dnspod.tencentcloudapi.com/")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, expected_bytes)
+        self.assertEqual(signed[0]["payload"].encode("utf-8"), request.data)
+        self.assertEqual(signed[0]["service"], "dnspod")
+        self.assertEqual(signed[0]["timestamp"], 1_700_000_000)
+        self.assertEqual(timeout, 10)
+        headers = {name.lower(): value for name, value in request.header_items()}
+        self.assertEqual(
+            set(headers),
+            {
+                "authorization",
+                "content-type",
+                "host",
+                "x-tc-action",
+                "x-tc-timestamp",
+                "x-tc-version",
+            },
+        )
+        self.assertEqual(headers["host"], "dnspod.tencentcloudapi.com")
+        self.assertEqual(headers["x-tc-action"], "CreateRecord")
+        self.assertEqual(headers["x-tc-version"], "2021-03-23")
+        self.assertEqual(headers["content-type"], "application/json; charset=utf-8")
+        self.assertTrue(transport.response.closed)
+
+    def test_delete_record_sends_only_fixed_domain_and_positive_record_id(self):
+        response = json.dumps({"Response": {"RequestId": "request-12345678"}})
+        transport = FakeTransport(response)
+        client = hook.DnsPodClient(self.make_credentials(), transport=transport)
+
+        client.delete_record(731)
+
+        request, _timeout = transport.calls[0]
+        self.assertEqual(
+            json.loads(request.data),
+            {"Domain": "goodcms.cn", "RecordId": 731},
+        )
+        headers = {name.lower(): value for name, value in request.header_items()}
+        self.assertEqual(headers["x-tc-action"], "DeleteRecord")
+
+    def test_delete_record_rejects_non_positive_integer_ids_without_transport(self):
+        transport = FakeTransport(
+            json.dumps({"Response": {"RequestId": "request-12345678"}})
+        )
+        client = hook.DnsPodClient(self.make_credentials(), transport=transport)
+
+        for record_id in (True, False, 0, -1, "731", 731.0, None):
+            with self.subTest(record_id=record_id), self.assertRaises(
+                hook.DnsPodApiError
+            ):
+                client.delete_record(record_id)
+
+        self.assertEqual(transport.calls, [])
+
+    def test_call_rejects_all_other_api_actions(self):
+        transport = FakeTransport("{}")
+        client = hook.DnsPodClient(self.make_credentials(), transport=transport)
+
+        with self.assertRaises(hook.DnsPodApiError):
+            client.call("DescribeRecordList", {})
+
+        self.assertEqual(transport.calls, [])
+
+    def test_api_response_fails_closed_for_malformed_shapes_and_record_ids(self):
+        bodies = (
+            b"not-json",
+            b"[]",
+            b"{}",
+            json.dumps({"Response": []}),
+            json.dumps({"Response": {"RecordId": 731}}),
+            json.dumps(
+                {"Response": {"RecordId": 731, "RequestId": 12345678}}
+            ),
+            json.dumps(
+                {"Response": {"RecordId": 731, "RequestId": "unsafe/value"}}
+            ),
+            json.dumps({"Response": {"RequestId": "request-12345678"}}),
+            json.dumps(
+                {"Response": {"RecordId": True, "RequestId": "request-12345678"}}
+            ),
+            json.dumps(
+                {"Response": {"RecordId": 0, "RequestId": "request-12345678"}}
+            ),
+            json.dumps(
+                {"Response": {"RecordId": "731", "RequestId": "request-12345678"}}
+            ),
+        )
+        for body in bodies:
+            with self.subTest(body=body):
+                client = hook.DnsPodClient(
+                    self.make_credentials(),
+                    transport=FakeTransport(body),
+                )
+                with self.assertRaises(hook.DnsPodApiError):
+                    client.create_txt("validation-sensitive")
+
+    def test_http_transport_and_api_errors_are_redacted(self):
+        validation = "validation-sensitive"
+        authorization = "Authorization-sensitive"
+        secret_values = (
+            TEST_SECRET_ID,
+            TEST_SECRET_KEY,
+            validation,
+            authorization,
+        )
+        api_body = json.dumps(
+            {
+                "Response": {
+                    "Error": {
+                        "Code": "AuthFailure.SignatureFailure",
+                        "Message": " ".join(secret_values),
+                    },
+                    "RequestId": "request-prefix-12345678",
+                    "Debug": "complete-response-sensitive",
+                }
+            }
+        )
+        cases = (
+            FakeTransport(api_body),
+            FakeTransport(
+                b"",
+                error=urllib.error.HTTPError(
+                    hook.API_ENDPOINT,
+                    500,
+                    " ".join(secret_values),
+                    None,
+                    None,
+                ),
+            ),
+            FakeTransport(
+                b"",
+                error=urllib.error.URLError(" ".join(secret_values)),
+            ),
+        )
+        for transport in cases:
+            with self.subTest(error=type(transport.error).__name__):
+                client = hook.DnsPodClient(
+                    self.make_credentials(),
+                    transport=transport,
+                )
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    with self.assertRaises(hook.DnsPodApiError) as caught:
+                        client.create_txt(validation)
+
+                combined = stdout.getvalue() + stderr.getvalue() + str(caught.exception)
+                for secret in secret_values:
+                    self.assertNotIn(secret, combined)
+                self.assertNotIn("complete-response-sensitive", combined)
+
+        with self.assertRaises(hook.DnsPodApiError) as safe_error_context:
+            hook.DnsPodClient(
+                self.make_credentials(),
+                transport=FakeTransport(api_body),
+            ).create_txt(validation)
+        safe_error = str(safe_error_context.exception)
+        self.assertIn("AuthFailure.SignatureFailure", safe_error)
+        self.assertIn("12345678", safe_error)
+        self.assertNotIn("request-prefix", safe_error)
+
+    def test_error_response_rejects_unsafe_code_or_request_id_without_echoing_it(self):
+        unsafe_values = ("unsafe code validation-sensitive", "unsafe/request")
+        bodies = (
+            {
+                "Response": {
+                    "Error": {"Code": unsafe_values[0], "Message": "ignored"},
+                    "RequestId": "request-12345678",
+                }
+            },
+            {
+                "Response": {
+                    "Error": {"Code": "InternalError", "Message": "ignored"},
+                    "RequestId": unsafe_values[1],
+                }
+            },
+        )
+        for body, unsafe_value in zip(bodies, unsafe_values):
+            client = hook.DnsPodClient(
+                self.make_credentials(),
+                transport=FakeTransport(json.dumps(body)),
+            )
+            with self.assertRaises(hook.DnsPodApiError) as caught:
+                client.create_txt("validation-sensitive")
+            self.assertNotIn(unsafe_value, str(caught.exception))
+
+
+class ChallengeStateTests(unittest.TestCase):
+    domain = "www.goodcms.cn"
+    validation = "validation-sensitive"
+
+    def write_raw_state(self, state_dir, content, *, mode=0o600):
+        path = hook.state_path(state_dir, self.domain, self.validation)
+        path.write_bytes(content if isinstance(content, bytes) else content.encode("utf-8"))
+        path.chmod(mode)
+        return path
+
+    def test_state_path_hashes_domain_and_validation_without_exposing_either(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            path = hook.state_path(state_dir, self.domain, self.validation)
+
+        expected_hash = hook.sha256_hex(f"{self.domain}\0{self.validation}")
+        self.assertEqual(path.name, f"{expected_hash}.json")
+        self.assertNotIn(self.domain, path.name)
+        self.assertNotIn(self.validation, path.name)
+
+    def test_write_state_is_0600_and_contains_only_id_and_validation_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            hook.write_state(state_dir, self.domain, self.validation, 731)
+            path = hook.state_path(state_dir, self.domain, self.validation)
+            document = json.loads(path.read_text(encoding="utf-8"))
+
+            self.assertEqual(
+                document,
+                {
+                    "record_id": 731,
+                    "validation_hash": hook.sha256_hex(self.validation),
+                },
+            )
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertNotIn(self.validation, path.read_text(encoding="utf-8"))
+
+    def test_write_state_rejects_invalid_record_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            for record_id in (True, False, 0, -1, "731", 731.0, None):
+                with self.subTest(record_id=record_id), self.assertRaises(
+                    hook.StateError
+                ):
+                    hook.write_state(
+                        state_dir,
+                        self.domain,
+                        self.validation,
+                        record_id,
+                    )
+            self.assertEqual(list(state_dir.iterdir()), [])
+
+    def test_write_state_replace_failure_preserves_old_state_and_removes_temp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            hook.write_state(state_dir, self.domain, self.validation, 731)
+
+            with mock.patch.object(
+                hook.os,
+                "replace",
+                side_effect=OSError("validation-sensitive"),
+            ):
+                with self.assertRaises(hook.StateError) as caught:
+                    hook.write_state(state_dir, self.domain, self.validation, 999)
+
+            self.assertNotIn(self.validation, str(caught.exception))
+            self.assertEqual(
+                hook.read_state(state_dir, self.domain, self.validation).record_id,
+                731,
+            )
+            self.assertEqual(
+                [path.name for path in state_dir.iterdir()],
+                [hook.state_path(state_dir, self.domain, self.validation).name],
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            hook.write_state(state_dir, self.domain, self.validation, 731)
+            real_replace = hook.os.replace
+            real_unlink = hook.os.unlink
+            replacement_finished = threading.Event()
+            writer_errors = []
+            writers = []
+
+            def tracking_replace(source, destination):
+                real_replace(source, destination)
+                replacement_finished.set()
+
+            def replace_state():
+                try:
+                    hook.write_state(
+                        state_dir,
+                        self.domain,
+                        self.validation,
+                        999,
+                    )
+                except Exception as error:
+                    writer_errors.append(error)
+
+            def racing_unlink(path):
+                writer = threading.Thread(target=replace_state)
+                writers.append(writer)
+                writer.start()
+                replacement_finished.wait(0.1)
+                real_unlink(path)
+
+            with (
+                mock.patch.object(hook.os, "replace", side_effect=tracking_replace),
+                mock.patch.object(hook.os, "unlink", side_effect=racing_unlink),
+            ):
+                hook._remove_matching_state(
+                    state_dir,
+                    self.domain,
+                    self.validation,
+                    731,
+                )
+            for writer in writers:
+                writer.join(1)
+
+            self.assertEqual(writer_errors, [])
+            self.assertEqual(
+                hook.read_state(state_dir, self.domain, self.validation).record_id,
+                999,
+            )
+
+    def test_state_directory_must_be_absolute_regular_owned_and_0700(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wrong_mode = root / "wrong-mode"
+            wrong_mode.mkdir(mode=0o700)
+            wrong_mode.chmod(0o755)
+            file_path = root / "not-directory"
+            file_path.write_text("not a directory", encoding="utf-8")
+            symlink_path = root / "state-link"
+            symlink_path.symlink_to(wrong_mode, target_is_directory=True)
+
+            invalid_dirs = (Path("relative-state"), wrong_mode, file_path, symlink_path)
+            for state_dir in invalid_dirs:
+                with self.subTest(state_dir=state_dir), self.assertRaises(
+                    hook.StateError
+                ):
+                    hook.write_state(
+                        state_dir,
+                        self.domain,
+                        self.validation,
+                        731,
+                    )
+
+            secure_dir = root / "secure"
+            secure_dir.mkdir(mode=0o700)
+            with mock.patch.object(hook.os, "geteuid", return_value=os.geteuid() + 1):
+                with self.assertRaises(hook.StateError):
+                    hook.write_state(
+                        secure_dir,
+                        self.domain,
+                        self.validation,
+                        731,
+                    )
+
+    def test_read_state_rejects_symlink_non_regular_and_unsafe_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            target = state_dir / "target"
+            target.write_text("{}", encoding="utf-8")
+            target.chmod(0o600)
+            path = hook.state_path(state_dir, self.domain, self.validation)
+            path.symlink_to(target)
+            with self.assertRaises(hook.StateError):
+                hook.read_state(state_dir, self.domain, self.validation)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            path = hook.state_path(state_dir, self.domain, self.validation)
+            path.mkdir(mode=0o600)
+            with self.assertRaises(hook.StateError):
+                hook.read_state(state_dir, self.domain, self.validation)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            self.write_raw_state(
+                state_dir,
+                json.dumps(
+                    {
+                        "record_id": 731,
+                        "validation_hash": hook.sha256_hex(self.validation),
+                    }
+                ),
+                mode=0o644,
+            )
+            with self.assertRaises(hook.StateError):
+                hook.read_state(state_dir, self.domain, self.validation)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            self.write_raw_state(
+                state_dir,
+                json.dumps(
+                    {
+                        "record_id": 731,
+                        "validation_hash": hook.sha256_hex(self.validation),
+                    }
+                ),
+            )
+            with mock.patch.object(hook.os, "geteuid", return_value=os.geteuid() + 1):
+                with self.assertRaises(hook.StateError):
+                    hook.read_state(state_dir, self.domain, self.validation)
+
+    def test_read_state_rejects_malformed_unknown_hash_and_invalid_record_id(self):
+        documents = (
+            b"not-json",
+            b"[]",
+            json.dumps({"record_id": 731}),
+            json.dumps(
+                {
+                    "record_id": 731,
+                    "validation_hash": hook.sha256_hex(self.validation),
+                    "unknown": True,
+                }
+            ),
+            json.dumps({"record_id": 731, "validation_hash": "wrong-hash"}),
+            json.dumps(
+                {
+                    "record_id": True,
+                    "validation_hash": hook.sha256_hex(self.validation),
+                }
+            ),
+            json.dumps(
+                {
+                    "record_id": 0,
+                    "validation_hash": hook.sha256_hex(self.validation),
+                }
+            ),
+            json.dumps(
+                {
+                    "record_id": "731",
+                    "validation_hash": hook.sha256_hex(self.validation),
+                }
+            ),
+        )
+        for document in documents:
+            with self.subTest(document=document), tempfile.TemporaryDirectory() as tmp:
+                state_dir = Path(tmp)
+                self.write_raw_state(state_dir, document)
+                with self.assertRaises(hook.StateError):
+                    hook.read_state(state_dir, self.domain, self.validation)
+
+
+class HookWorkflowTests(unittest.TestCase):
+    domain = "www.goodcms.cn"
+    validation = "validation-sensitive"
+    fqdn = "_acme-challenge.www.goodcms.cn"
+
+    def test_auth_orders_create_state_then_wait_present(self):
+        events = []
+        client = FakeClient(record_id=731)
+        client.events = events
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+
+            class StateCheckingVerifier(FakeVerifier):
+                def wait_present(inner_self, name, value):
+                    state = hook.read_state(
+                        state_dir,
+                        self.domain,
+                        self.validation,
+                    )
+                    events.append(("state_visible", state.record_id))
+                    super().wait_present(name, value)
+
+            verifier = StateCheckingVerifier(events=events)
+            hook.run_auth(
+                domain=self.domain,
+                validation=self.validation,
+                client=client,
+                verifier=verifier,
+                state_dir=state_dir,
+            )
+
+            state = hook.read_state(state_dir, self.domain, self.validation)
+
+        self.assertEqual(state.record_id, 731)
+        self.assertEqual(
+            events,
+            [
+                ("create", self.validation),
+                ("state_visible", 731),
+                ("wait_present", self.fqdn, self.validation),
+            ],
+        )
+
+    def test_auth_rejects_wrong_domain_before_create(self):
+        client = FakeClient()
+        verifier = FakeVerifier()
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(hook.ConfigurationError):
+                hook.run_auth(
+                    domain="api.goodcms.cn",
+                    validation=self.validation,
+                    client=client,
+                    verifier=verifier,
+                    state_dir=Path(tmp),
+                )
+        self.assertEqual(client.created, [])
+
+    def test_create_failure_does_not_write_state_or_delete_another_record(self):
+        failure = hook.DnsPodApiError("safe create failure")
+        client = FakeClient(create_error=failure)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            with self.assertRaises(hook.DnsPodApiError) as caught:
+                hook.run_auth(
+                    domain=self.domain,
+                    validation=self.validation,
+                    client=client,
+                    verifier=FakeVerifier(),
+                    state_dir=state_dir,
+                )
+            self.assertIs(caught.exception, failure)
+            self.assertEqual(list(state_dir.iterdir()), [])
+        self.assertEqual(client.deleted, [])
+
+    def test_state_write_failure_best_effort_deletes_only_created_record(self):
+        client = FakeClient(record_id=731)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            state_dir.chmod(0o755)
+            with self.assertRaises(hook.StateError):
+                hook.run_auth(
+                    domain=self.domain,
+                    validation=self.validation,
+                    client=client,
+                    verifier=FakeVerifier(),
+                    state_dir=state_dir,
+                )
+        self.assertEqual(client.created, [self.validation])
+        self.assertEqual(client.deleted, [731])
+
+    def test_propagation_failure_removes_state_when_rollback_delete_succeeds(self):
+        failure = hook.DnsPropagationError("safe propagation failure")
+        client = FakeClient(record_id=731)
+        verifier = FakeVerifier(present_error=failure, events=client.events)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            with self.assertRaises(hook.DnsPropagationError) as caught:
+                hook.run_auth(
+                    domain=self.domain,
+                    validation=self.validation,
+                    client=client,
+                    verifier=verifier,
+                    state_dir=state_dir,
+                )
+            self.assertIs(caught.exception, failure)
+            self.assertFalse(
+                hook.state_path(state_dir, self.domain, self.validation).exists()
+            )
+            with self.assertRaises(hook.StateError):
+                hook.run_cleanup(
+                    domain=self.domain,
+                    validation=self.validation,
+                    client=client,
+                    verifier=FakeVerifier(),
+                    state_dir=state_dir,
+                )
+
+        self.assertEqual(client.deleted, [731])
+        self.assertEqual(
+            client.events,
+            [
+                ("create", self.validation),
+                ("wait_present", self.fqdn, self.validation),
+                ("delete", 731),
+            ],
+        )
+
+    def test_propagation_failure_preserves_state_if_rollback_delete_fails(self):
+        propagation_failure = hook.DnsPropagationError("safe propagation failure")
+        client = FakeClient(
+            record_id=731,
+            delete_errors=(hook.DnsPodApiError("safe delete failure"),),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            with self.assertRaises(hook.DnsPropagationError) as caught:
+                hook.run_auth(
+                    domain=self.domain,
+                    validation=self.validation,
+                    client=client,
+                    verifier=FakeVerifier(present_error=propagation_failure),
+                    state_dir=state_dir,
+                )
+            self.assertIs(caught.exception, propagation_failure)
+            self.assertEqual(
+                hook.read_state(
+                    state_dir,
+                    self.domain,
+                    self.validation,
+                ).record_id,
+                731,
+            )
+
+            hook.run_cleanup(
+                domain=self.domain,
+                validation=self.validation,
+                client=client,
+                verifier=FakeVerifier(),
+                state_dir=state_dir,
+            )
+            self.assertFalse(
+                hook.state_path(state_dir, self.domain, self.validation).exists()
+            )
+
+        self.assertEqual(client.deleted, [731, 731])
+
+    def test_cleanup_orders_delete_wait_absent_then_removes_matching_state(self):
+        events = []
+        client = FakeClient(record_id=999)
+        client.events = events
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            hook.write_state(state_dir, self.domain, self.validation, 731)
+
+            class StateCheckingVerifier(FakeVerifier):
+                def wait_absent(inner_self, name, value):
+                    state = hook.read_state(
+                        state_dir,
+                        self.domain,
+                        self.validation,
+                    )
+                    events.append(("state_visible", state.record_id))
+                    super().wait_absent(name, value)
+
+            hook.run_cleanup(
+                domain=self.domain,
+                validation=self.validation,
+                client=client,
+                verifier=StateCheckingVerifier(events=events),
+                state_dir=state_dir,
+            )
+
+            self.assertFalse(
+                hook.state_path(state_dir, self.domain, self.validation).exists()
+            )
+
+        self.assertEqual(client.deleted, [731])
+        self.assertEqual(
+            events,
+            [
+                ("delete", 731),
+                ("state_visible", 731),
+                ("wait_absent", self.fqdn, self.validation),
+            ],
+        )
+
+    def test_cleanup_without_matching_state_never_calls_delete(self):
+        cases = ("missing", "hash-mismatch")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                state_dir = Path(tmp)
+                if case == "hash-mismatch":
+                    path = hook.state_path(state_dir, self.domain, self.validation)
+                    path.write_text(
+                        json.dumps(
+                            {"record_id": 999, "validation_hash": "wrong"}
+                        ),
+                        encoding="utf-8",
+                    )
+                    path.chmod(0o600)
+                client = FakeClient(record_id=731)
+                with self.assertRaises(hook.StateError):
+                    hook.run_cleanup(
+                        domain=self.domain,
+                        validation=self.validation,
+                        client=client,
+                        verifier=FakeVerifier(),
+                        state_dir=state_dir,
+                    )
+                self.assertEqual(client.deleted, [])
+
+    def test_cleanup_delete_or_absence_failure_preserves_state_for_retry(self):
+        failures = (
+            (
+                FakeClient(
+                    delete_errors=(hook.DnsPodApiError("safe delete failure"),)
+                ),
+                FakeVerifier(),
+                hook.DnsPodApiError,
+            ),
+            (
+                FakeClient(),
+                FakeVerifier(
+                    absent_error=hook.DnsPropagationError("safe absence failure")
+                ),
+                hook.DnsPropagationError,
+            ),
+        )
+        for client, verifier, error_type in failures:
+            with self.subTest(error=error_type.__name__), tempfile.TemporaryDirectory() as tmp:
+                state_dir = Path(tmp)
+                hook.write_state(state_dir, self.domain, self.validation, 731)
+                with self.assertRaises(error_type):
+                    hook.run_cleanup(
+                        domain=self.domain,
+                        validation=self.validation,
+                        client=client,
+                        verifier=verifier,
+                        state_dir=state_dir,
+                    )
+                self.assertEqual(
+                    hook.read_state(
+                        state_dir,
+                        self.domain,
+                        self.validation,
+                    ).record_id,
+                    731,
+                )
+                self.assertEqual(client.deleted, [731])
+
+
+class CliTests(unittest.TestCase):
+    def test_auth_and_cleanup_wire_credentials_authorities_three_arg_query_and_workflow(self):
+        credentials = hook.Credentials(
+            TEST_SECRET_ID,
+            TEST_SECRET_KEY,
+            "goodcms.cn",
+            "_acme-challenge.www",
+        )
+        environment = {
+            "CERTBOT_DOMAIN": "www.goodcms.cn",
+            "CERTBOT_IDENTIFIER": "www.goodcms.cn",
+            "CERTBOT_VALIDATION": "validation-sensitive",
+        }
+
+        for mode, workflow_name in (("auth", "run_auth"), ("cleanup", "run_cleanup")):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                state_dir = Path(tmp)
+                credentials_path = state_dir.parent / "credentials.env"
+                client = object()
+                verifier = object()
+                captured = {}
+
+                def build_verifier(*, nameserver_addresses, query):
+                    captured["addresses"] = nameserver_addresses
+                    captured["query"] = query
+                    return verifier
+
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with (
+                    mock.patch.dict(hook.os.environ, environment, clear=True),
+                    mock.patch.object(
+                        hook,
+                        "load_credentials",
+                        return_value=credentials,
+                    ) as load_credentials,
+                    mock.patch.object(
+                        hook,
+                        "discover_authoritative_addresses",
+                        return_value=["192.0.2.1", "2001:db8::1"],
+                    ) as discover,
+                    mock.patch.object(
+                        hook,
+                        "DnsPodClient",
+                        return_value=client,
+                    ) as client_type,
+                    mock.patch.object(
+                        hook,
+                        "AuthoritativeTxtVerifier",
+                        side_effect=build_verifier,
+                    ),
+                    mock.patch.object(hook, workflow_name) as workflow,
+                    mock.patch.object(
+                        hook,
+                        "_query_authoritative_txt",
+                        return_value={"answer"},
+                    ) as query_txt,
+                    redirect_stdout(stdout),
+                    redirect_stderr(stderr),
+                ):
+                    exit_code = hook.main(
+                        [
+                            mode,
+                            "--credentials",
+                            str(credentials_path),
+                            "--state-dir",
+                            str(state_dir),
+                        ]
+                    )
+                    self.assertEqual(
+                        captured["query"](
+                            "192.0.2.1",
+                            "_acme-challenge.www.goodcms.cn",
+                            0.75,
+                        ),
+                        {"answer"},
+                    )
+
+                self.assertEqual(exit_code, 0)
+                load_credentials.assert_called_once_with(credentials_path)
+                discover.assert_called_once_with("goodcms.cn")
+                client_type.assert_called_once_with(credentials)
+                self.assertEqual(
+                    captured["addresses"],
+                    ["192.0.2.1", "2001:db8::1"],
+                )
+                query_txt.assert_called_once_with(
+                    "192.0.2.1",
+                    "_acme-challenge.www.goodcms.cn",
+                    0.75,
+                )
+                workflow.assert_called_once_with(
+                    domain="www.goodcms.cn",
+                    validation="validation-sensitive",
+                    client=client,
+                    verifier=verifier,
+                    state_dir=state_dir,
+                )
+                combined = stdout.getvalue() + stderr.getvalue()
+                for secret in (TEST_SECRET_ID, TEST_SECRET_KEY, "validation-sensitive"):
+                    self.assertNotIn(secret, combined)
+
+    def test_cli_rejects_missing_extra_and_unknown_arguments_without_echoing_them(self):
+        sensitive_extra = "validation-sensitive-extra"
+        argument_sets = (
+            [],
+            ["other", "--credentials", "/tmp/c", "--state-dir", "/tmp/s"],
+            ["auth"],
+            ["auth", "--credentials", "/tmp/c"],
+            [
+                "auth",
+                "--credentials",
+                "/tmp/c",
+                "--state-dir",
+                "/tmp/s",
+                sensitive_extra,
+            ],
+        )
+        environment = {
+            "CERTBOT_DOMAIN": "www.goodcms.cn",
+            "CERTBOT_VALIDATION": "validation-sensitive",
+        }
+        for arguments in argument_sets:
+            with self.subTest(arguments=arguments):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with (
+                    mock.patch.dict(hook.os.environ, environment, clear=True),
+                    redirect_stdout(stdout),
+                    redirect_stderr(stderr),
+                ):
+                    exit_code = hook.main(arguments)
+
+                self.assertNotEqual(exit_code, 0)
+                combined = stdout.getvalue() + stderr.getvalue()
+                self.assertNotIn(sensitive_extra, combined)
+                self.assertNotIn("validation-sensitive", combined)
+
+        strict_argument_sets = (
+            ["auth", "--cred", "/tmp/c", "--state-dir", "/tmp/s"],
+            [
+                "auth",
+                "--credentials",
+                "/tmp/first",
+                "--credentials",
+                "/tmp/second",
+                "--state-dir",
+                "/tmp/s",
+            ],
+        )
+        for arguments in strict_argument_sets:
+            with self.subTest(arguments=arguments), self.assertRaises(
+                hook.ConfigurationError
+            ):
+                hook._argument_parser().parse_args(arguments)
+
+    def test_cli_rejects_missing_empty_or_mismatched_certbot_environment_first(self):
+        valid_arguments = [
+            "auth",
+            "--credentials",
+            "/tmp/credentials.env",
+            "--state-dir",
+            "/tmp/state",
+        ]
+        environments = (
+            {},
+            {"CERTBOT_DOMAIN": "", "CERTBOT_VALIDATION": "validation-sensitive"},
+            {"CERTBOT_DOMAIN": "www.goodcms.cn", "CERTBOT_VALIDATION": ""},
+            {
+                "CERTBOT_DOMAIN": "www.goodcms.cn",
+                "CERTBOT_VALIDATION": "validation-sensitive",
+                "CERTBOT_IDENTIFIER": "api.goodcms.cn",
+            },
+        )
+        for environment in environments:
+            with self.subTest(environment=environment):
+                stderr = io.StringIO()
+                with (
+                    mock.patch.dict(hook.os.environ, environment, clear=True),
+                    mock.patch.object(hook, "load_credentials") as load_credentials,
+                    redirect_stderr(stderr),
+                ):
+                    exit_code = hook.main(valid_arguments)
+
+                self.assertNotEqual(exit_code, 0)
+                load_credentials.assert_not_called()
+                self.assertNotIn("validation-sensitive", stderr.getvalue())
+
+    def test_cli_returns_nonzero_for_safe_hook_failures_without_printing_secrets(self):
+        environment = {
+            "CERTBOT_DOMAIN": "www.goodcms.cn",
+            "CERTBOT_VALIDATION": "validation-sensitive",
+        }
+        credentials = hook.Credentials(
+            TEST_SECRET_ID,
+            TEST_SECRET_KEY,
+            "goodcms.cn",
+            "_acme-challenge.www",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            stderr = io.StringIO()
+            with (
+                mock.patch.dict(hook.os.environ, environment, clear=True),
+                mock.patch.object(
+                    hook,
+                    "load_credentials",
+                    return_value=credentials,
+                ),
+                mock.patch.object(
+                    hook,
+                    "discover_authoritative_addresses",
+                    return_value=["192.0.2.1"],
+                ),
+                mock.patch.object(hook, "DnsPodClient", return_value=object()),
+                mock.patch.object(
+                    hook,
+                    "AuthoritativeTxtVerifier",
+                    return_value=object(),
+                ),
+                mock.patch.object(
+                    hook,
+                    "run_auth",
+                    side_effect=hook.DnsPodApiError(
+                        "DNSPod API failed: code=InternalError request=12345678"
+                    ),
+                ),
+                redirect_stderr(stderr),
+            ):
+                exit_code = hook.main(
+                    [
+                        "auth",
+                        "--credentials",
+                        "/tmp/credentials.env",
+                        "--state-dir",
+                        str(state_dir),
+                    ]
+                )
+
+        self.assertNotEqual(exit_code, 0)
+        output = stderr.getvalue()
+        self.assertIn("InternalError", output)
+        for secret in (TEST_SECRET_ID, TEST_SECRET_KEY, "validation-sensitive"):
+            self.assertNotIn(secret, output)
 
 if __name__ == "__main__":
     unittest.main()

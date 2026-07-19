@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
+import contextlib
 import dataclasses
 import datetime as dt
+import fcntl
 import hashlib
 import hmac
+import json
+import os
 import secrets
 import socket
+import stat
 import struct
 import sys
+import tempfile
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -17,23 +26,36 @@ from typing import Callable, Iterable
 EXPECTED_DOMAIN = "www.goodcms.cn"
 EXPECTED_ROOT_DOMAIN = "goodcms.cn"
 EXPECTED_SUBDOMAIN = "_acme-challenge.www"
+EXPECTED_CHALLENGE_FQDN = "_acme-challenge.www.goodcms.cn"
 EXPECTED_KEYS = {
     "TENCENTCLOUD_SECRET_ID",
     "TENCENTCLOUD_SECRET_KEY",
     "DNSPOD_DOMAIN",
     "DNSPOD_SUBDOMAIN",
 }
+API_HOST = "dnspod.tencentcloudapi.com"
+API_ENDPOINT = "https://dnspod.tencentcloudapi.com/"
+API_SERVICE = "dnspod"
+API_VERSION = "2021-03-23"
+CONTENT_TYPE = "application/json; charset=utf-8"
+MAX_API_TIMEOUT = 10.0
+MAX_API_RESPONSE_BYTES = 64 * 1024
+MAX_STATE_BYTES = 4096
 
 
-class ConfigurationError(RuntimeError):
+class HookError(RuntimeError):
     pass
 
 
-class DnsProtocolError(RuntimeError):
+class ConfigurationError(HookError):
     pass
 
 
-class DnsPropagationError(RuntimeError):
+class DnsProtocolError(HookError):
+    pass
+
+
+class DnsPropagationError(HookError):
     pass
 
 
@@ -549,3 +571,579 @@ def load_credentials(path: Path) -> Credentials:
 def validate_certbot_domain(value: str) -> None:
     if value != EXPECTED_DOMAIN:
         raise ConfigurationError("unexpected CERTBOT_DOMAIN")
+
+
+class DnsPodApiError(HookError):
+    pass
+
+
+class StateError(HookError):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class ChallengeState:
+    record_id: int
+    validation_hash: str
+
+
+def _is_positive_record_id(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _is_safe_api_identifier(value: object, *, allow_dot: bool = False) -> bool:
+    if not isinstance(value, str) or not 1 <= len(value) <= 128:
+        return False
+    punctuation = "-_." if allow_dot else "-_"
+    return all(
+        character.isascii()
+        and (character.isalnum() or character in punctuation)
+        for character in value
+    )
+
+
+class DnsPodClient:
+    def __init__(
+        self,
+        credentials: Credentials,
+        *,
+        transport: Callable[..., object] = urllib.request.urlopen,
+        clock: Callable[[], float] = time.time,
+        timeout: float = 10,
+    ) -> None:
+        if (
+            credentials.domain != EXPECTED_ROOT_DOMAIN
+            or credentials.subdomain != EXPECTED_SUBDOMAIN
+            or not isinstance(credentials.secret_id, str)
+            or not credentials.secret_id
+            or not isinstance(credentials.secret_key, str)
+            or not credentials.secret_key
+        ):
+            raise ConfigurationError("invalid DNSPod credentials")
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or timeout <= 0
+        ):
+            raise ConfigurationError("invalid DNSPod API timeout")
+        self._credentials = credentials
+        self._transport = transport
+        self._clock = clock
+        self._timeout = min(float(timeout), MAX_API_TIMEOUT)
+
+    def create_txt(self, value: str) -> int:
+        if not isinstance(value, str) or not value:
+            raise DnsPodApiError("invalid DNS challenge value")
+        response = self.call(
+            "CreateRecord",
+            {
+                "Domain": EXPECTED_ROOT_DOMAIN,
+                "SubDomain": EXPECTED_SUBDOMAIN,
+                "RecordType": "TXT",
+                "RecordLine": "默认",
+                "Value": value,
+                "TTL": 600,
+            },
+        )
+        record_id = response.get("RecordId")
+        if not _is_positive_record_id(record_id):
+            raise DnsPodApiError("DNSPod API response was invalid")
+        return record_id
+
+    def delete_record(self, record_id: int) -> None:
+        if not _is_positive_record_id(record_id):
+            raise DnsPodApiError("invalid DNSPod record ID")
+        self.call(
+            "DeleteRecord",
+            {
+                "Domain": EXPECTED_ROOT_DOMAIN,
+                "RecordId": record_id,
+            },
+        )
+
+    def call(self, action: str, payload: dict[str, object]) -> dict[str, object]:
+        self._validate_call(action, payload)
+        payload_text = json.dumps(
+            payload,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        payload_bytes = payload_text.encode("utf-8")
+        try:
+            timestamp = int(self._clock())
+            authorization = build_authorization(
+                secret_id=self._credentials.secret_id,
+                secret_key=self._credentials.secret_key,
+                service=API_SERVICE,
+                host=API_HOST,
+                content_type=CONTENT_TYPE,
+                payload=payload_text,
+                timestamp=timestamp,
+            )
+            request = urllib.request.Request(
+                API_ENDPOINT,
+                data=payload_bytes,
+                headers={
+                    "Authorization": authorization,
+                    "Content-Type": CONTENT_TYPE,
+                    "Host": API_HOST,
+                    "X-TC-Action": action,
+                    "X-TC-Timestamp": str(timestamp),
+                    "X-TC-Version": API_VERSION,
+                },
+                method="POST",
+            )
+            response = self._transport(request, timeout=self._timeout)
+        except Exception:
+            raise DnsPodApiError("DNSPod API request failed") from None
+
+        try:
+            status = getattr(response, "status", 200)
+            if (
+                not isinstance(status, int)
+                or isinstance(status, bool)
+                or not 200 <= status < 300
+            ):
+                raise DnsPodApiError("DNSPod API request failed")
+            body = response.read(MAX_API_RESPONSE_BYTES + 1)
+            if not isinstance(body, bytes) or len(body) > MAX_API_RESPONSE_BYTES:
+                raise DnsPodApiError("DNSPod API response was invalid")
+        except DnsPodApiError:
+            raise
+        except Exception:
+            raise DnsPodApiError("DNSPod API request failed") from None
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass
+
+        return self._parse_response(action, body)
+
+    def _validate_call(self, action: str, payload: dict[str, object]) -> None:
+        if not isinstance(payload, dict):
+            raise DnsPodApiError("invalid DNSPod API request")
+        if action == "CreateRecord":
+            if (
+                set(payload)
+                != {
+                    "Domain",
+                    "SubDomain",
+                    "RecordType",
+                    "RecordLine",
+                    "Value",
+                    "TTL",
+                }
+                or payload.get("Domain") != EXPECTED_ROOT_DOMAIN
+                or payload.get("SubDomain") != EXPECTED_SUBDOMAIN
+                or payload.get("RecordType") != "TXT"
+                or payload.get("RecordLine") != "默认"
+                or not isinstance(payload.get("Value"), str)
+                or not payload.get("Value")
+                or payload.get("TTL") != 600
+            ):
+                raise DnsPodApiError("invalid DNSPod API request")
+            return
+        if action == "DeleteRecord":
+            if (
+                set(payload) != {"Domain", "RecordId"}
+                or payload.get("Domain") != EXPECTED_ROOT_DOMAIN
+                or not _is_positive_record_id(payload.get("RecordId"))
+            ):
+                raise DnsPodApiError("invalid DNSPod API request")
+            return
+        raise DnsPodApiError("unsupported DNSPod API action")
+
+    def _parse_response(
+        self,
+        action: str,
+        body: bytes,
+    ) -> dict[str, object]:
+        try:
+            document = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise DnsPodApiError("DNSPod API response was invalid") from None
+        if not isinstance(document, dict):
+            raise DnsPodApiError("DNSPod API response was invalid")
+        response = document.get("Response")
+        if not isinstance(response, dict):
+            raise DnsPodApiError("DNSPod API response was invalid")
+
+        request_id = response.get("RequestId")
+        if not _is_safe_api_identifier(request_id):
+            raise DnsPodApiError("DNSPod API response was invalid")
+        if "Error" in response:
+            error = response.get("Error")
+            if not isinstance(error, dict):
+                raise DnsPodApiError("DNSPod API response was invalid")
+            code = error.get("Code")
+            if not _is_safe_api_identifier(code, allow_dot=True):
+                raise DnsPodApiError("DNSPod API response was invalid")
+            raise DnsPodApiError(
+                f"DNSPod API {action} failed: code={code} "
+                f"request={request_id[-8:]}"
+            )
+        return response
+
+
+def _trusted_state_uid() -> int:
+    # Production invokes the hook as root, while unprivileged local tests must own
+    # their own state. In both cases the state owner must equal the effective UID.
+    return os.geteuid()
+
+
+def _validate_state_directory(state_dir: Path) -> Path:
+    directory = Path(state_dir)
+    if not directory.is_absolute():
+        raise StateError("state directory must be absolute")
+    try:
+        metadata = os.lstat(directory)
+    except OSError:
+        raise StateError("state directory is unavailable") from None
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != _trusted_state_uid()
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+    ):
+        raise StateError("state directory is unsafe")
+    return directory
+
+
+@contextlib.contextmanager
+def _state_directory_lock(
+    directory: Path,
+    *,
+    exclusive: bool,
+) -> Iterable[None]:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        file_descriptor = os.open(directory, flags)
+        metadata = os.fstat(file_descriptor)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != _trusted_state_uid()
+            or stat.S_IMODE(metadata.st_mode) != 0o700
+        ):
+            raise StateError("state directory is unsafe")
+        fcntl.flock(
+            file_descriptor,
+            fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH,
+        )
+    except StateError:
+        if "file_descriptor" in locals():
+            os.close(file_descriptor)
+        raise
+    except OSError:
+        if "file_descriptor" in locals():
+            try:
+                os.close(file_descriptor)
+            except OSError:
+                pass
+        raise StateError("unable to lock state directory") from None
+    try:
+        yield
+    finally:
+        try:
+            fcntl.flock(file_descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(file_descriptor)
+
+
+def state_path(state_dir: Path, domain: str, validation: str) -> Path:
+    digest = sha256_hex(f"{domain}\0{validation}")
+    return Path(state_dir) / f"{digest}.json"
+
+
+def write_state(
+    state_dir: Path,
+    domain: str,
+    validation: str,
+    record_id: int,
+) -> None:
+    if not _is_positive_record_id(record_id):
+        raise StateError("invalid challenge state record ID")
+    directory = _validate_state_directory(state_dir)
+    target = state_path(directory, domain, validation)
+    body = json.dumps(
+        {
+            "record_id": record_id,
+            "validation_hash": sha256_hex(validation),
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    with _state_directory_lock(directory, exclusive=True):
+        file_descriptor = -1
+        temporary_path: str | None = None
+        try:
+            file_descriptor, temporary_path = tempfile.mkstemp(
+                prefix=".challenge-",
+                suffix=".tmp",
+                dir=directory,
+            )
+            os.fchmod(file_descriptor, 0o600)
+            with os.fdopen(file_descriptor, "wb") as state_file:
+                file_descriptor = -1
+                state_file.write(body)
+                state_file.flush()
+                os.fsync(state_file.fileno())
+            os.replace(temporary_path, target)
+            temporary_path = None
+        except Exception:
+            if file_descriptor >= 0:
+                try:
+                    os.close(file_descriptor)
+                except OSError:
+                    pass
+            if temporary_path is not None:
+                try:
+                    os.unlink(temporary_path)
+                except OSError:
+                    pass
+            raise StateError("unable to write challenge state") from None
+
+
+def _validate_state_file_metadata(metadata: os.stat_result) -> None:
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != _trusted_state_uid()
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+        or metadata.st_nlink != 1
+    ):
+        raise StateError("challenge state file is unsafe")
+
+
+def _read_state_unlocked(
+    directory: Path,
+    domain: str,
+    validation: str,
+) -> ChallengeState:
+    path = state_path(directory, domain, validation)
+    try:
+        path_metadata = os.lstat(path)
+    except OSError:
+        raise StateError("challenge state is unavailable") from None
+    _validate_state_file_metadata(path_metadata)
+
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        file_descriptor = os.open(path, flags)
+        try:
+            opened_metadata = os.fstat(file_descriptor)
+            _validate_state_file_metadata(opened_metadata)
+            if (
+                opened_metadata.st_dev != path_metadata.st_dev
+                or opened_metadata.st_ino != path_metadata.st_ino
+            ):
+                raise StateError("challenge state changed during read")
+            body = os.read(file_descriptor, MAX_STATE_BYTES + 1)
+        finally:
+            os.close(file_descriptor)
+    except StateError:
+        raise
+    except OSError:
+        raise StateError("unable to read challenge state") from None
+    if len(body) > MAX_STATE_BYTES:
+        raise StateError("challenge state is invalid")
+
+    try:
+        document = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise StateError("challenge state is invalid") from None
+    if (
+        not isinstance(document, dict)
+        or set(document) != {"record_id", "validation_hash"}
+        or not _is_positive_record_id(document.get("record_id"))
+        or not isinstance(document.get("validation_hash"), str)
+        or not hmac.compare_digest(
+            document["validation_hash"],
+            sha256_hex(validation),
+        )
+    ):
+        raise StateError("challenge state is invalid")
+    return ChallengeState(
+        record_id=document["record_id"],
+        validation_hash=document["validation_hash"],
+    )
+
+
+def read_state(
+    state_dir: Path,
+    domain: str,
+    validation: str,
+) -> ChallengeState:
+    directory = _validate_state_directory(state_dir)
+    with _state_directory_lock(directory, exclusive=False):
+        return _read_state_unlocked(directory, domain, validation)
+
+
+def _remove_matching_state(
+    state_dir: Path,
+    domain: str,
+    validation: str,
+    record_id: int,
+) -> None:
+    directory = _validate_state_directory(state_dir)
+    with _state_directory_lock(directory, exclusive=True):
+        current_state = _read_state_unlocked(directory, domain, validation)
+        if current_state.record_id != record_id:
+            raise StateError("challenge state record changed")
+        try:
+            os.unlink(state_path(directory, domain, validation))
+        except OSError:
+            raise StateError("unable to remove challenge state") from None
+
+
+def _validate_challenge(domain: str, validation: str) -> None:
+    validate_certbot_domain(domain)
+    if not isinstance(validation, str) or not validation:
+        raise ConfigurationError("missing CERTBOT_VALIDATION")
+
+
+def run_auth(
+    *,
+    domain: str,
+    validation: str,
+    client: DnsPodClient,
+    verifier: AuthoritativeTxtVerifier,
+    state_dir: Path,
+) -> None:
+    _validate_challenge(domain, validation)
+    record_id = client.create_txt(validation)
+    try:
+        write_state(state_dir, domain, validation, record_id)
+    except StateError:
+        try:
+            client.delete_record(record_id)
+        except HookError:
+            pass
+        raise
+
+    try:
+        verifier.wait_present(EXPECTED_CHALLENGE_FQDN, validation)
+    except DnsPropagationError:
+        try:
+            client.delete_record(record_id)
+        except HookError:
+            pass
+        else:
+            try:
+                _remove_matching_state(
+                    state_dir,
+                    domain,
+                    validation,
+                    record_id,
+                )
+            except StateError:
+                pass
+        raise
+
+
+def run_cleanup(
+    *,
+    domain: str,
+    validation: str,
+    client: DnsPodClient,
+    verifier: AuthoritativeTxtVerifier,
+    state_dir: Path,
+) -> None:
+    _validate_challenge(domain, validation)
+    state = read_state(state_dir, domain, validation)
+    client.delete_record(state.record_id)
+    verifier.wait_absent(EXPECTED_CHALLENGE_FQDN, validation)
+    _remove_matching_state(
+        state_dir,
+        domain,
+        validation,
+        state.record_id,
+    )
+
+
+class _SafeArgumentParser(argparse.ArgumentParser):
+    def error(self, _message: str) -> None:
+        raise ConfigurationError("invalid hook arguments")
+
+
+class _SinglePathAction(argparse.Action):
+    def __call__(
+        self,
+        _parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Path,
+        _option_string: str | None = None,
+    ) -> None:
+        if getattr(namespace, self.dest, None) is not None:
+            raise ConfigurationError("invalid hook arguments")
+        setattr(namespace, self.dest, values)
+
+
+def _argument_parser() -> argparse.ArgumentParser:
+    parser = _SafeArgumentParser(add_help=False, allow_abbrev=False)
+    subparsers = parser.add_subparsers(dest="mode", required=True)
+    for mode in ("auth", "cleanup"):
+        command = subparsers.add_parser(
+            mode,
+            add_help=False,
+            allow_abbrev=False,
+        )
+        command.add_argument(
+            "--credentials",
+            required=True,
+            type=Path,
+            action=_SinglePathAction,
+        )
+        command.add_argument(
+            "--state-dir",
+            required=True,
+            type=Path,
+            action=_SinglePathAction,
+        )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        arguments = _argument_parser().parse_args(argv)
+        domain = os.environ.get("CERTBOT_DOMAIN")
+        validation = os.environ.get("CERTBOT_VALIDATION")
+        identifier = os.environ.get("CERTBOT_IDENTIFIER")
+        if not domain or not validation:
+            raise ConfigurationError("missing Certbot challenge environment")
+        if identifier is not None and identifier != domain:
+            raise ConfigurationError("CERTBOT_IDENTIFIER mismatch")
+        _validate_challenge(domain, validation)
+        _validate_state_directory(arguments.state_dir)
+
+        credentials = load_credentials(arguments.credentials)
+        addresses = discover_authoritative_addresses(EXPECTED_ROOT_DOMAIN)
+        client = DnsPodClient(credentials)
+        verifier = AuthoritativeTxtVerifier(
+            nameserver_addresses=addresses,
+            query=lambda address, name, timeout: _query_authoritative_txt(
+                address,
+                name,
+                timeout,
+            ),
+        )
+        workflow = run_auth if arguments.mode == "auth" else run_cleanup
+        workflow(
+            domain=domain,
+            validation=validation,
+            client=client,
+            verifier=verifier,
+            state_dir=arguments.state_dir,
+        )
+        return 0
+    except HookError as error:
+        print(f"dnspod hook failed: {error}", file=sys.stderr)
+        return 1
+    except Exception:
+        print("dnspod hook failed", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
