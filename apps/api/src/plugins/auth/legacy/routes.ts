@@ -191,7 +191,21 @@ export function isPartnerAuthRoute(method: string, url: string) {
 }
 
 export function shouldBypassAuth(method: string, url: string) {
-  return isPartnerAuthRoute(method, url) || isInternalSiteContentPreviewRoute(method, url);
+  return (
+    isPartnerAuthRoute(method, url)
+    || isInternalSiteContentPreviewRoute(method, url)
+    || isDouyinThirdPartyCallbackRoute(method, url)
+  );
+}
+
+function isDouyinThirdPartyCallbackRoute(method: string, url: string) {
+  return (
+    method === "POST"
+    && (
+      url === "/douyin-thirdparty/events/authorization"
+      || url === "/douyin-thirdparty/events/message"
+    )
+  );
 }
 
 function isPublicSiteContentRoute(method: string, url: string) {

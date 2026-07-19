@@ -154,6 +154,27 @@ describe("auth public route allowlist", () => {
     }
   });
 
+  test("bypasses bearer auth only for exact Douyin callback POST routes", () => {
+    const callbackRoutes = [
+      "/douyin-thirdparty/events/authorization",
+      "/douyin-thirdparty/events/message",
+    ];
+
+    for (const route of callbackRoutes) {
+      expect(shouldBypassAuth("POST", route)).toBe(true);
+      expect(isPublicRoute("POST", route)).toBe(false);
+      expect(shouldBypassAuth("GET", route)).toBe(false);
+      expect(shouldBypassAuth("HEAD", route)).toBe(false);
+    }
+
+    expect(shouldBypassAuth("POST", "/douyin-thirdparty/events")).toBe(false);
+    expect(shouldBypassAuth(
+      "POST",
+      "/douyin-thirdparty/events/authorization/extra",
+    )).toBe(false);
+    expect(shouldBypassAuth("POST", "/douyin-thirdparty/events/unknown")).toBe(false);
+  });
+
   test("bypasses partner auth public routes even when a token is present", () => {
     expect(isPartnerAuthRoute("POST", "/partner/auth/login")).toBe(true);
     expect(isPartnerAuthRoute("POST", "/partner/auth/send-code")).toBe(true);
