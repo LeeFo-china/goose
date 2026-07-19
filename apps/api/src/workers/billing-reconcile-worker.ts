@@ -53,6 +53,29 @@ type ChildResult<Result> =
   | { status: "fulfilled"; result: Result }
   | { status: "rejected" };
 
+type FulfilledChildResult<Result> = {
+  status: "fulfilled";
+  result: Result;
+};
+
+type BillingReconcileTickResults = {
+  subscription: ChildResult<ReturnType<typeof summarizeSubscriptionResult>>;
+  rechargeExpiration: ChildResult<
+    ReturnType<typeof summarizeRechargeExpirationResult>
+  >;
+  refund: ChildResult<ReturnType<typeof summarizeRefundResult>>;
+};
+
+type SuccessfulBillingReconcileTickResults = {
+  subscription: FulfilledChildResult<
+    ReturnType<typeof summarizeSubscriptionResult>
+  >;
+  rechargeExpiration: FulfilledChildResult<
+    ReturnType<typeof summarizeRechargeExpirationResult>
+  >;
+  refund: FulfilledChildResult<ReturnType<typeof summarizeRefundResult>>;
+};
+
 let stopping = false;
 let running = false;
 
@@ -178,11 +201,10 @@ export async function tick(
       }),
       summarizeRefundResult,
     );
-    const hasErrors = subscription.status === "rejected" ||
-      rechargeExpiration.status === "rejected" ||
-      refund.status === "rejected";
+    const tickResults = { subscription, rechargeExpiration, refund };
+    const childrenSucceeded = isSuccessfulBillingReconcileTick(tickResults);
     let healthEvidenceFailed = false;
-    if (!hasErrors) {
+    if (childrenSucceeded) {
       try {
         const healthEvidence = dependencies.healthEvidence ?? {
           markHealthy: markBillingReconcileWorkerHealthy,
@@ -193,7 +215,7 @@ export async function tick(
       }
     }
 
-    const tickFailed = hasErrors || healthEvidenceFailed;
+    const tickFailed = !childrenSucceeded || healthEvidenceFailed;
     logger(tickFailed ? "error" : "info", tickFailed
       ? "tick completed with errors"
       : "tick completed", {
@@ -206,6 +228,23 @@ export async function tick(
   } finally {
     running = false;
   }
+}
+
+function isSuccessfulBillingReconcileTick(
+  results: BillingReconcileTickResults,
+): results is SuccessfulBillingReconcileTickResults {
+  if (
+    results.subscription.status !== "fulfilled" ||
+    results.rechargeExpiration.status !== "fulfilled" ||
+    results.refund.status !== "fulfilled"
+  ) {
+    return false;
+  }
+
+  return results.subscription.result.error_count === 0 &&
+    results.rechargeExpiration.result.failed === 0 &&
+    results.rechargeExpiration.result.release_failed === 0 &&
+    results.refund.result.failed === 0;
 }
 
 async function runChild<Result, Summary>(
