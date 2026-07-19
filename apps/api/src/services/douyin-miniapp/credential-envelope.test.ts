@@ -1,0 +1,85 @@
+import { describe, expect, test } from "bun:test";
+import { AppError } from "@/errors/app-error";
+import {
+  openDouyinCredential,
+  sealDouyinCredential,
+  type DouyinCredentialKeyring,
+} from "./credential-envelope";
+
+const v1Key = Buffer.alloc(32, 0x11);
+const v2Key = Buffer.alloc(32, 0x22);
+
+const keyring: DouyinCredentialKeyring = {
+  activeKeyVersion: "v2",
+  keys: { v1: v1Key, v2: v2Key },
+};
+
+function expectAppError(action: () => unknown, code: string): void {
+  let caught: unknown;
+  try {
+    action();
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(caught).toBeInstanceOf(AppError);
+  expect(caught).toMatchObject({ code });
+}
+
+describe("douyin credential envelope", () => {
+  test("seals with the active version and opens the original credential", () => {
+    const sealed = sealDouyinCredential("isvrft.secret", keyring);
+
+    expect(sealed.keyVersion).toBe("v2");
+    expect(sealed.ciphertext).not.toContain("isvrft.secret");
+    expect(Buffer.from(sealed.iv, "base64")).toHaveLength(12);
+    expect(openDouyinCredential(sealed, keyring)).toBe("isvrft.secret");
+  });
+
+  test("uses a fresh random IV for each envelope", () => {
+    const first = sealDouyinCredential("isvrft.secret", keyring);
+    const second = sealDouyinCredential("isvrft.secret", keyring);
+
+    expect(first.iv).not.toBe(second.iv);
+  });
+
+  test("decrypts an old-version envelope while the old key remains", () => {
+    const oldKeyring: DouyinCredentialKeyring = {
+      activeKeyVersion: "v1",
+      keys: keyring.keys,
+    };
+    const sealed = sealDouyinCredential("old.refresh.secret", oldKeyring);
+
+    expect(openDouyinCredential(sealed, keyring)).toBe("old.refresh.secret");
+  });
+
+  test("rejects an envelope whose key version is unavailable", () => {
+    const sealed = sealDouyinCredential("isvrft.secret", keyring);
+
+    expectAppError(
+      () => openDouyinCredential({ ...sealed, keyVersion: "missing-version" }, keyring),
+      "DOUYIN_CREDENTIAL_KEY_VERSION_MISSING",
+    );
+  });
+
+  test("rejects sealing when the active key is unavailable", () => {
+    expectAppError(
+      () => sealDouyinCredential("isvrft.secret", {
+        activeKeyVersion: "v3",
+        keys: keyring.keys,
+      }),
+      "DOUYIN_CREDENTIAL_ACTIVE_KEY_MISSING",
+    );
+  });
+
+  test("rejects a tampered authentication tag", () => {
+    const sealed = sealDouyinCredential("isvrft.secret", keyring);
+    const tag = Buffer.from(sealed.tag, "base64");
+    tag[0] = (tag[0] ?? 0) ^ 0xff;
+
+    expectAppError(
+      () => openDouyinCredential({ ...sealed, tag: tag.toString("base64") }, keyring),
+      "DOUYIN_CREDENTIAL_DECRYPT_FAILED",
+    );
+  });
+});
