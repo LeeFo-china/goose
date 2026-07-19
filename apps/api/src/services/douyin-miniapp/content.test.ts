@@ -162,7 +162,9 @@ describe("DouyinMiniappContentService", () => {
       .rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_CONTENT_FEATURE_DISABLED" });
     await expect(service.listSiteLogs(user, PROJECT_ID, { page: 1, pageSize: 20 }))
       .rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_CONTENT_FEATURE_DISABLED" });
+    expect(disabled.repository.listCases).not.toHaveBeenCalled();
     expect(disabled.repository.findCase).not.toHaveBeenCalled();
+    expect(disabled.repository.listSites).not.toHaveBeenCalled();
     expect(disabled.repository.findSite).not.toHaveBeenCalled();
     expect(disabled.repository.listSiteLogs).not.toHaveBeenCalled();
   });
