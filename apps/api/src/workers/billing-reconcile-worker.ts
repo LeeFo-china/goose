@@ -7,11 +7,13 @@ import {
   billingRechargeRefundReconciliationService,
   type RefundReconciliationSummary,
 } from "@/services/billing-recharge-refund-reconciliation";
+import type { BillingRechargeExpirationTelemetry } from "@/services/billing-recharge-expiration";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const MIN_INTERVAL_MS = 10_000;
 const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 100;
+const DEFAULT_RECHARGE_EXPIRATION_BATCH_SIZE = 50;
 const DEFAULT_REFUND_BATCH_SIZE = 20;
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 100;
@@ -20,6 +22,7 @@ export type BillingReconcileWorkerConfig = {
   enabled: boolean;
   intervalMs: number;
   batchSize: number;
+  rechargeExpirationBatchSize: number;
   refundBatchSize: number;
 };
 
@@ -32,6 +35,11 @@ type WorkerLogger = (
 type BillingReconcileWorkerDependencies = {
   subscriptionService?: {
     runDueChecks(input: { batchSize: number }): Promise<BillingDueCheckResult>;
+  };
+  rechargeExpirationService?: {
+    runExpiredOrderChecks(input: {
+      batchSize: number;
+    }): Promise<BillingRechargeExpirationTelemetry>;
   };
   refundReconciliationService?: {
     runBatch(input: { limit: number }): Promise<RefundReconciliationSummary>;
@@ -109,6 +117,12 @@ export function getWorkerConfig(): BillingReconcileWorkerConfig {
       MIN_BATCH_SIZE,
       MAX_BATCH_SIZE,
     ),
+    rechargeExpirationBatchSize: parseNumberEnv(
+      "BILLING_RECHARGE_EXPIRATION_BATCH_SIZE",
+      DEFAULT_RECHARGE_EXPIRATION_BATCH_SIZE,
+      MIN_BATCH_SIZE,
+      MAX_BATCH_SIZE,
+    ),
     refundBatchSize: parseNumberEnv(
       "BILLING_REFUND_RECONCILE_BATCH_SIZE",
       DEFAULT_REFUND_BATCH_SIZE,
@@ -146,6 +160,16 @@ export async function tick(
       () => subscriptionService.runDueChecks({ batchSize: config.batchSize }),
       summarizeSubscriptionResult,
     );
+    const rechargeExpiration = await runChild(
+      async () => {
+        const service = dependencies.rechargeExpirationService ??
+          await loadDefaultRechargeExpirationService();
+        return service.runExpiredOrderChecks({
+          batchSize: config.rechargeExpirationBatchSize,
+        });
+      },
+      summarizeRechargeExpirationResult,
+    );
     const refund = await runChild(
       () => refundReconciliationService.runBatch({
         limit: config.refundBatchSize,
@@ -153,13 +177,14 @@ export async function tick(
       summarizeRefundResult,
     );
     const hasErrors = subscription.status === "rejected" ||
+      rechargeExpiration.status === "rejected" ||
       refund.status === "rejected";
 
     logger(hasErrors ? "error" : "info", hasErrors
       ? "tick completed with errors"
       : "tick completed", {
       duration_ms: Date.now() - startedAt,
-      result: { subscription, refund },
+      result: { subscription, recharge_expiration: rechargeExpiration, refund },
     });
   } finally {
     running = false;
@@ -198,6 +223,26 @@ function summarizeRefundResult(result: RefundReconciliationSummary) {
     rescheduled: result.rescheduled,
     failed: result.failed,
   };
+}
+
+function summarizeRechargeExpirationResult(
+  result: BillingRechargeExpirationTelemetry,
+) {
+  return {
+    claimed: result.claimed,
+    paid: result.paid,
+    closed: result.closed,
+    retried: result.retried,
+    failed: result.failed,
+    release_failed: result.release_failed,
+  };
+}
+
+async function loadDefaultRechargeExpirationService() {
+  const { billingRechargeExpirationService } = await import(
+    "@/services/billing-recharge-expiration"
+  );
+  return billingRechargeExpirationService;
 }
 
 function registerShutdownSignalHandlers(): void {
