@@ -201,6 +201,39 @@ describe("douyin authorization event ledger migration", () => {
     expect(source).toContain("FUNCTION public.get_douyin_authorization_event_state(");
   });
 
+  test("starts a first non-lifecycle lease after any unique-conflict wait", () => {
+    const claim = functionBody(sql(), "claim_douyin_authorization_event");
+    const branch = claim.indexOf(
+      "IF p_event_name NOT IN ('AUTHORIZED', 'UPDATE_AUTHORIZED', 'UNAUTHORIZED') THEN",
+    );
+    const insert = claim.indexOf(
+      "INSERT INTO public.douyin_authorization_event_deliveries",
+      branch,
+    );
+    const inserted = claim.indexOf("IF FOUND THEN", insert);
+    const freshClock = claim.indexOf("v_now := clock_timestamp()", inserted);
+    const expiry = claim.indexOf(
+      "v_claim_expires_at := v_now + interval '60 seconds'",
+      freshClock,
+    );
+    const refresh = claim.indexOf(
+      "SET claim_expires_at = v_claim_expires_at",
+      expiry,
+    );
+    const claimed = claim.indexOf(
+      "RETURN QUERY SELECT 'claimed'::text, v_claim_token, v_claim_expires_at",
+      refresh,
+    );
+    expect(branch).toBeGreaterThan(-1);
+    expect(insert).toBeGreaterThan(branch);
+    expect(claim.slice(branch, insert)).not.toContain("v_claim_expires_at :=");
+    expect(inserted).toBeGreaterThan(insert);
+    expect(freshClock).toBeGreaterThan(inserted);
+    expect(expiry).toBeGreaterThan(freshClock);
+    expect(refresh).toBeGreaterThan(expiry);
+    expect(claimed).toBeGreaterThan(refresh);
+  });
+
   test("refreshes time after finalization locks and rejects an expired active claim", () => {
     const source = sql();
     for (const name of [

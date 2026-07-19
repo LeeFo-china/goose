@@ -136,18 +136,21 @@ BEGIN
   END IF;
 
   IF p_event_name NOT IN ('AUTHORIZED', 'UPDATE_AUTHORIZED', 'UNAUTHORIZED') THEN
-    v_now := clock_timestamp();
-    v_claim_expires_at := v_now + interval '60 seconds';
     INSERT INTO public.douyin_authorization_event_deliveries(
       event_key, component_appid, event_name, authorizer_appid, occurred_at,
       processing_state, claim_token, claim_expires_at
     ) VALUES (
       p_event_key, p_component_appid, p_event_name, p_authorizer_appid, p_occurred_at,
-      'processing', v_claim_token, v_claim_expires_at
+      'processing', v_claim_token, clock_timestamp()
     )
     ON CONFLICT (event_key) DO NOTHING
     RETURNING * INTO v_delivery;
     IF FOUND THEN
+      v_now := clock_timestamp();
+      v_claim_expires_at := v_now + interval '60 seconds';
+      UPDATE public.douyin_authorization_event_deliveries AS delivery
+      SET claim_expires_at = v_claim_expires_at
+      WHERE delivery.event_key = p_event_key;
       RETURN QUERY SELECT 'claimed'::text, v_claim_token, v_claim_expires_at;
       RETURN;
     END IF;
