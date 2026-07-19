@@ -1,8 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import { DouyinMiniappInstallationsRepository } from "@/repositories/douyin-miniapp-installations";
-import { platformTenantRepository } from "@/repositories/platform-tenants";
+import {
+  PlatformDouyinMiniappsRepository,
+  platformDouyinMiniappsRepository,
+} from "@/repositories/platform-douyin-miniapps";
 import {
   PlatformDouyinMiniappSafeRecordSchema,
   type BindPlatformDouyinMiniappInput,
@@ -18,18 +20,18 @@ import { loadDouyinMiniappConfig } from "@/services/douyin-miniapp/config";
 const MANAGE_PERMISSION = "platform.douyin_miniapp.manage";
 
 type InstallationRepositoryPort = Pick<
-  DouyinMiniappInstallationsRepository,
-  | "listForPlatform"
-  | "findForPlatformById"
-  | "findForPlatformByAuthorizerAppId"
-  | "bindActiveTenant"
-  | "createTemplateDevelopment"
+  PlatformDouyinMiniappsRepository,
+  | "list"
+  | "findById"
+  | "findTenantStatusById"
+  | "createTemplateDevelopmentAtomically"
   | "updateRuntimeConfig"
   | "rotateDeploymentKey"
-  | "transitionAuthorizationStatus"
+  | "disable"
+  | "enableAtomically"
 >;
 
-type TenantRepositoryPort = Pick<typeof platformTenantRepository, "findById">;
+type BindingRepositoryPort = Pick<DouyinMiniappInstallationsRepository, "bindActiveTenant">;
 type AccessPolicyPort = Pick<typeof accessPolicyService, "assertPermission">;
 type PlatformDouyinConfig = {
   readonly componentAppId: string;
@@ -38,7 +40,7 @@ type PlatformDouyinConfig = {
 
 type Dependencies = {
   readonly repository?: InstallationRepositoryPort;
-  readonly tenantRepository?: TenantRepositoryPort;
+  readonly bindingRepository?: BindingRepositoryPort;
   readonly accessPolicy?: AccessPolicyPort;
   readonly configProvider?: () => PlatformDouyinConfig;
   readonly deploymentKeyGenerator?: () => string;
@@ -46,14 +48,15 @@ type Dependencies = {
 
 export class PlatformDouyinMiniappsService {
   private readonly repository: InstallationRepositoryPort;
-  private readonly tenantRepository: TenantRepositoryPort;
+  private readonly bindingRepository: BindingRepositoryPort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly configProvider: () => PlatformDouyinConfig;
   private readonly deploymentKeyGenerator: () => string;
 
   constructor(dependencies: Dependencies = {}) {
-    this.repository = dependencies.repository ?? new DouyinMiniappInstallationsRepository();
-    this.tenantRepository = dependencies.tenantRepository ?? platformTenantRepository;
+    this.repository = dependencies.repository ?? platformDouyinMiniappsRepository;
+    this.bindingRepository = dependencies.bindingRepository
+      ?? new DouyinMiniappInstallationsRepository();
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.configProvider = dependencies.configProvider ?? (() => {
       const config = loadDouyinMiniappConfig();
@@ -65,7 +68,7 @@ export class PlatformDouyinMiniappsService {
 
   async list(authContext: AuthContext, query: PlatformDouyinMiniappListQuery) {
     this.assertCanManage(authContext);
-    const result = await this.repository.listForPlatform(query);
+    const result = await this.repository.list(query);
     if (!Number.isInteger(result.total) || result.total < 0) {
       throw invalidRepositoryResponse();
     }
@@ -95,7 +98,7 @@ export class PlatformDouyinMiniappsService {
     this.assertInstallationState(installation, "authorized_unbound", "merchant");
     await this.requireActiveTenant(input.tenant_id);
 
-    await this.repository.bindActiveTenant({
+    await this.bindingRepository.bindActiveTenant({
       authorizerAppId: installation.authorizer_appid,
       tenantId: input.tenant_id,
       deploymentKey: this.createDeploymentKey(),
@@ -111,34 +114,13 @@ export class PlatformDouyinMiniappsService {
     this.assertCanManage(authContext);
     await this.requireActiveTenant(input.tenant_id);
     const config = this.configProvider();
-    const existing = await this.repository.findForPlatformByAuthorizerAppId(
-      config.templateAppId,
-    );
-    if (existing) {
-      return this.requireMatchingTemplate(existing, input.tenant_id);
-    }
-
-    try {
-      const created = await this.repository.createTemplateDevelopment({
-        componentAppId: config.componentAppId,
-        authorizerAppId: config.templateAppId,
-        tenantId: input.tenant_id,
-        runtimeConfig: input.runtime_config,
-      });
-      return sanitizeInstallation(created);
-    } catch (error) {
-      if (
-        !(error instanceof AppError)
-        || error.code !== "DOUYIN_TEMPLATE_INSTALLATION_CONFLICT"
-      ) {
-        throw error;
-      }
-      const concurrent = await this.repository.findForPlatformByAuthorizerAppId(
-        config.templateAppId,
-      );
-      if (!concurrent) throw error;
-      return this.requireMatchingTemplate(concurrent, input.tenant_id);
-    }
+    const installation = await this.repository.createTemplateDevelopmentAtomically({
+      componentAppId: config.componentAppId,
+      authorizerAppId: config.templateAppId,
+      tenantId: input.tenant_id,
+      runtimeConfig: input.runtime_config,
+    });
+    return sanitizeInstallation(installation);
   }
 
   async updateConfig(
@@ -175,11 +157,7 @@ export class PlatformDouyinMiniappsService {
     this.assertCanManage(authContext);
     const installation = await this.requireInstallation(installationId);
     this.assertInstallationState(installation, "active");
-    const updated = await this.repository.transitionAuthorizationStatus(
-      installationId,
-      "active",
-      "disabled",
-    );
+    const updated = await this.repository.disable(installationId);
     if (!updated) throw stateConflict();
     return sanitizeInstallation(updated);
   }
@@ -190,12 +168,7 @@ export class PlatformDouyinMiniappsService {
     this.assertInstallationState(installation, "disabled");
     if (!installation.tenant_id) throw stateConflict();
     await this.requireActiveTenant(installation.tenant_id);
-    const updated = await this.repository.transitionAuthorizationStatus(
-      installationId,
-      "disabled",
-      "active",
-    );
-    if (!updated) throw stateConflict();
+    const updated = await this.repository.enableAtomically(installationId);
     return sanitizeInstallation(updated);
   }
 
@@ -205,27 +178,10 @@ export class PlatformDouyinMiniappsService {
     if (scope !== "all") throw Errors.forbidden();
   }
 
-  private requireMatchingTemplate(
-    installation: PlatformDouyinMiniappSafeRecord,
-    tenantId: string,
-  ): PlatformDouyinMiniappSafeRecord {
-    if (
-      installation.installation_kind !== "template_development"
-      || installation.tenant_id !== tenantId
-    ) {
-      throw Errors.business(
-        409,
-        "模板开发小程序已绑定其他租户",
-        "DOUYIN_TEMPLATE_INSTALLATION_TENANT_CONFLICT",
-      );
-    }
-    return sanitizeInstallation(installation);
-  }
-
   private async requireInstallation(
     installationId: string,
   ): Promise<PlatformDouyinMiniappSafeRecord> {
-    const installation = await this.repository.findForPlatformById(installationId);
+    const installation = await this.repository.findById(installationId);
     if (!installation) {
       throw Errors.business(404, "抖音小程序安装不存在", "DOUYIN_INSTALLATION_NOT_FOUND");
     }
@@ -233,7 +189,7 @@ export class PlatformDouyinMiniappsService {
   }
 
   private async requireActiveTenant(tenantId: string): Promise<void> {
-    const tenant = await this.tenantRepository.findById(tenantId);
+    const tenant = await this.repository.findTenantStatusById(tenantId);
     if (!tenant || tenant.status !== "active") {
       throw Errors.business(409, "租户不存在或未启用", "DOUYIN_TENANT_NOT_ACTIVE");
     }
@@ -254,7 +210,12 @@ export class PlatformDouyinMiniappsService {
 
   private createDeploymentKey(): string {
     const deploymentKey = this.deploymentKeyGenerator();
-    if (Buffer.from(deploymentKey, "base64url").byteLength < 16) {
+    const decoded = Buffer.from(deploymentKey, "base64url");
+    if (
+      !/^[A-Za-z0-9_-]+$/.test(deploymentKey)
+      || decoded.byteLength !== 32
+      || decoded.toString("base64url") !== deploymentKey
+    ) {
       throw Errors.business(
         500,
         "抖音小程序部署标识生成失败",

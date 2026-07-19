@@ -34,7 +34,10 @@ export const DouyinRuntimeConfigSchema = z.strictObject({
   privacy_policy_version: z.string().trim().min(1).max(40),
 });
 
-export const PlatformDouyinMiniappListQuerySchema = PaginationQuerySchema;
+export const PlatformDouyinMiniappListQuerySchema = PaginationQuerySchema.extend({
+  page: z.coerce.number().int().min(1, "页码必须大于 0")
+    .max(10_000, "页码不能超过 10000").default(1),
+}).strict();
 
 export const PlatformDouyinMiniappIdParamsSchema = z.strictObject({
   id: z.uuid("无效的抖音小程序安装 ID"),

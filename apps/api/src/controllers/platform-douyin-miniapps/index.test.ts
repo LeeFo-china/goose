@@ -87,6 +87,18 @@ describe("PlatformDouyinMiniappsController", () => {
     expect(service.list).not.toHaveBeenCalled();
   });
 
+  test("rejects unknown list fields and pathologically large pages", async () => {
+    for (const query of [
+      { page: 1, pageSize: 20, tenant_id: "forged" },
+      { page: Number.MAX_SAFE_INTEGER, pageSize: 100 },
+    ]) {
+      const { controller, service } = createController();
+      await expect(controller.listInstallations({ query } as never, {} as never))
+        .rejects.toMatchObject({ statusCode: 400 });
+      expect(service.list).not.toHaveBeenCalled();
+    }
+  });
+
   test("bind accepts only tenant_id and a complete strict runtime config", async () => {
     const { controller, service } = createController();
     const params = { id: "22222222-2222-4222-8222-222222222222" };
@@ -108,6 +120,33 @@ describe("PlatformDouyinMiniappsController", () => {
       runtime_config: { brand: runtimeConfig.brand },
     } } as never, {} as never)).rejects.toMatchObject({ statusCode: 400 });
     expect(service.bind).toHaveBeenCalledTimes(1);
+  });
+
+  test("dispatches template, config, rotation, disable and enable actions", async () => {
+    const { controller, service, authContext } = createController();
+    const params = { id: "22222222-2222-4222-8222-222222222222" };
+
+    await controller.createTemplateDevelopment({ body: {
+      tenant_id: "33333333-3333-4333-8333-333333333333",
+      runtime_config: runtimeConfig,
+    } } as never, {} as never);
+    await controller.updateConfig({ params, body: {
+      runtime_config: runtimeConfig,
+    } } as never, {} as never);
+    await controller.rotateDeploymentKey({ params } as never, {} as never);
+    await controller.disableInstallation({ params } as never, {} as never);
+    await controller.enableInstallation({ params } as never, {} as never);
+
+    expect(service.createTemplateDevelopment).toHaveBeenCalledWith(authContext, {
+      tenant_id: "33333333-3333-4333-8333-333333333333",
+      runtime_config: runtimeConfig,
+    });
+    expect(service.updateConfig).toHaveBeenCalledWith(authContext, params.id, {
+      runtime_config: runtimeConfig,
+    });
+    expect(service.rotateDeploymentKey).toHaveBeenCalledWith(authContext, params.id);
+    expect(service.disable).toHaveBeenCalledWith(authContext, params.id);
+    expect(service.enable).toHaveBeenCalledWith(authContext, params.id);
   });
 
   test("validates UUID parameters before service calls", async () => {

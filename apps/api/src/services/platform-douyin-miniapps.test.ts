@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import { Errors } from "@/errors/error-factory";
 import type { PlatformDouyinMiniappSafeRecord } from "@/schema/platform-douyin-miniapps";
 import type { AuthContext } from "@/services/authorization";
 
@@ -15,7 +14,6 @@ beforeAll(async () => {
 });
 
 const TENANT_ID = "33333333-3333-4333-8333-333333333333";
-const OTHER_TENANT_ID = "44444444-4444-4444-8444-444444444444";
 const INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
 
 const runtimeConfig = {
@@ -80,29 +78,27 @@ const authContext: AuthContext = {
 
 function dependencies(overrides: Record<string, unknown> = {}) {
   const repository = {
-    listForPlatform: mock(async (_query: unknown) => ({ list: [installation], total: 1 })),
-    findForPlatformById: mock(async (_id: string) => installation),
-    findForPlatformByAuthorizerAppId: mock(async (_appId: string) => null),
-    bindActiveTenant: mock(async (_input: unknown) => ({ id: INSTALLATION_ID })),
-    createTemplateDevelopment: mock(async (_input: unknown) => ({ ...installation,
+    list: mock(async (_query: unknown) => ({ list: [installation], total: 1 })),
+    findById: mock(async (_id: string) => installation),
+    findTenantStatusById: mock(async (id: string) => ({ id, status: "active" })),
+    createTemplateDevelopmentAtomically: mock(async (_input: unknown) => ({ ...installation,
       authorizer_appid: "template-appid", installation_kind: "template_development",
     })),
     updateRuntimeConfig: mock(async (_id: string, _config: unknown) => installation),
     rotateDeploymentKey: mock(async (_id: string, _key: string) => installation),
-    transitionAuthorizationStatus: mock(async (
-      _id: string,
-      _from: string,
-      _to: string,
-    ) => installation),
+    disable: mock(async (_id: string) => ({
+      ...installation, authorization_status: "disabled" as const,
+    })),
+    enableAtomically: mock(async (_id: string) => installation),
     ...overrides,
   };
-  const tenantRepository = {
-    findById: mock(async (id: string) => ({ id, status: "active", name: "示例装饰" })),
+  const bindingRepository = {
+    bindActiveTenant: mock(async (_input: unknown) => ({ id: INSTALLATION_ID })),
   };
   const accessPolicy = {
     assertPermission: mock((_context: AuthContext, _permission: string) => "all" as const),
   };
-  return { repository, tenantRepository, accessPolicy };
+  return { repository, bindingRepository, accessPolicy };
 }
 
 describe("PlatformDouyinMiniappsService", () => {
@@ -141,7 +137,17 @@ describe("PlatformDouyinMiniappsService", () => {
       { ...authContext, isPlatformAdmin: false },
       { page: 1, pageSize: 20 },
     )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
-    expect(deps.repository.listForPlatform).not.toHaveBeenCalled();
+    expect(deps.repository.list).not.toHaveBeenCalled();
+  });
+
+  test("requires the all scope for platform installation management", async () => {
+    const deps = dependencies();
+    deps.accessPolicy.assertPermission = mock(() => "tenant" as never);
+    const service = new PlatformDouyinMiniappsService(deps as never);
+
+    await expect(service.list(authContext, { page: 1, pageSize: 20 }))
+      .rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(deps.repository.list).not.toHaveBeenCalled();
   });
 
   test("uses bounded range pagination and strips all credential and deployment fields", async () => {
@@ -153,13 +159,13 @@ describe("PlatformDouyinMiniappsService", () => {
       token_refresh_claim_token: "must-not-leak",
     };
     const deps = dependencies({
-      listForPlatform: mock(async () => ({ list: [unsafe], total: 151 })),
+      list: mock(async () => ({ list: [unsafe], total: 151 })),
     });
     const service = new PlatformDouyinMiniappsService(deps as never);
 
     const result = await service.list(authContext, { page: 2, pageSize: 100 });
 
-    expect(deps.repository.listForPlatform).toHaveBeenCalledWith({ page: 2, pageSize: 100 });
+    expect(deps.repository.list).toHaveBeenCalledWith({ page: 2, pageSize: 100 });
     expect(result.pagination).toEqual({ page: 2, pageSize: 100, total: 151, totalPages: 2 });
     expect(JSON.stringify(result)).not.toMatch(/deployment_key|ciphertext|refresh_claim|must-not-leak/);
   });
@@ -167,7 +173,7 @@ describe("PlatformDouyinMiniappsService", () => {
   test("bind validates an active tenant and only binds authorized_unbound merchant once", async () => {
     const unbound = { ...installation, tenant_id: null, tenant: null,
       authorization_status: "authorized_unbound" as const };
-    const deps = dependencies({ findForPlatformById: mock(async () => unbound) });
+    const deps = dependencies({ findById: mock(async () => unbound) });
     const service = new PlatformDouyinMiniappsService(deps as never);
 
     await service.bind(authContext, INSTALLATION_ID, {
@@ -175,29 +181,34 @@ describe("PlatformDouyinMiniappsService", () => {
       runtime_config: runtimeConfig,
     });
 
-    expect(deps.tenantRepository.findById).toHaveBeenCalledWith(TENANT_ID);
-    expect(deps.repository.bindActiveTenant).toHaveBeenCalledTimes(1);
-    const input = deps.repository.bindActiveTenant.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(deps.repository.findTenantStatusById).toHaveBeenCalledWith(TENANT_ID);
+    expect(deps.bindingRepository.bindActiveTenant).toHaveBeenCalledTimes(1);
+    const input = deps.bindingRepository.bindActiveTenant.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
     expect(input).toMatchObject({
       authorizerAppId: "merchant-appid",
       tenantId: TENANT_ID,
       runtimeConfig,
     });
-    expect(Buffer.from(String(input.deploymentKey), "base64url").byteLength).toBeGreaterThanOrEqual(16);
+    expect(Buffer.from(String(input.deploymentKey), "base64url").byteLength).toBe(32);
   });
 
   test("rejects missing or inactive tenants before installation writes", async () => {
     for (const tenant of [null, { id: TENANT_ID, status: "suspended" }]) {
       const unbound = { ...installation, tenant_id: null, tenant: null,
         authorization_status: "authorized_unbound" as const };
-      const deps = dependencies({ findForPlatformById: mock(async () => unbound) });
-      deps.tenantRepository.findById = mock(async () => tenant) as never;
+      const deps = dependencies({
+        findById: mock(async () => unbound),
+        findTenantStatusById: mock(async () => tenant),
+      });
       const service = new PlatformDouyinMiniappsService(deps as never);
 
       await expect(service.bind(authContext, INSTALLATION_ID, {
         tenant_id: TENANT_ID, runtime_config: runtimeConfig,
       })).rejects.toMatchObject({ statusCode: 409, code: "DOUYIN_TENANT_NOT_ACTIVE" });
-      expect(deps.repository.bindActiveTenant).not.toHaveBeenCalled();
+      expect(deps.bindingRepository.bindActiveTenant).not.toHaveBeenCalled();
     }
   });
 
@@ -212,34 +223,25 @@ describe("PlatformDouyinMiniappsService", () => {
       tenant_id: TENANT_ID, runtime_config: runtimeConfig,
     });
 
-    expect(deps.repository.createTemplateDevelopment).toHaveBeenCalledWith({
+    expect(deps.repository.createTemplateDevelopmentAtomically).toHaveBeenCalledWith({
       componentAppId: "component-appid",
       authorizerAppId: "template-appid",
       tenantId: TENANT_ID,
       runtimeConfig,
     });
-    expect(JSON.stringify(deps.repository.createTemplateDevelopment.mock.calls[0]?.[0]))
+    expect(JSON.stringify(
+      deps.repository.createTemplateDevelopmentAtomically.mock.calls[0]?.[0],
+    ))
       .not.toMatch(/deployment|token|secret|credential/i);
-
-    deps.repository.findForPlatformByAuthorizerAppId = mock(async () => ({
-      ...installation,
-      authorizer_appid: "template-appid",
-      installation_kind: "template_development" as const,
-    })) as never;
-    await service.createTemplateDevelopment(authContext, {
-      tenant_id: TENANT_ID, runtime_config: runtimeConfig,
-    });
-    expect(deps.repository.createTemplateDevelopment).toHaveBeenCalledTimes(1);
   });
 
-  test("rejects assigning the configured template AppID to another tenant", async () => {
+  test("propagates the atomic template conflict for another tenant", async () => {
     const deps = dependencies({
-      findForPlatformByAuthorizerAppId: mock(async () => ({
-        ...installation,
-        tenant_id: OTHER_TENANT_ID,
-        authorizer_appid: "template-appid",
-        installation_kind: "template_development" as const,
-      })),
+      createTemplateDevelopmentAtomically: mock(async () => {
+        throw Object.assign(new Error("conflict"), {
+          statusCode: 409, code: "DOUYIN_TEMPLATE_INSTALLATION_CONFLICT",
+        });
+      }),
     });
     const service = new PlatformDouyinMiniappsService({
       ...deps,
@@ -248,28 +250,19 @@ describe("PlatformDouyinMiniappsService", () => {
 
     await expect(service.createTemplateDevelopment(authContext, {
       tenant_id: TENANT_ID, runtime_config: runtimeConfig,
-    })).rejects.toMatchObject({ statusCode: 409, code: "DOUYIN_TEMPLATE_INSTALLATION_TENANT_CONFLICT" });
+    })).rejects.toMatchObject({
+      statusCode: 409, code: "DOUYIN_TEMPLATE_INSTALLATION_CONFLICT",
+    });
   });
 
-  test("recovers a concurrent same-tenant template insert as an idempotent success", async () => {
+  test("returns the atomic RPC result for a concurrent same-tenant template create", async () => {
     const existingTemplate = {
       ...installation,
       authorizer_appid: "template-appid",
       installation_kind: "template_development" as const,
     };
-    let lookupCount = 0;
     const deps = dependencies({
-      findForPlatformByAuthorizerAppId: mock(async () => {
-        lookupCount += 1;
-        return lookupCount === 1 ? null : existingTemplate;
-      }),
-      createTemplateDevelopment: mock(async () => {
-        throw Errors.business(
-          409,
-          "模板开发小程序已登记",
-          "DOUYIN_TEMPLATE_INSTALLATION_CONFLICT",
-        );
-      }),
+      createTemplateDevelopmentAtomically: mock(async () => existingTemplate),
     });
     const service = new PlatformDouyinMiniappsService({
       ...deps,
@@ -280,8 +273,7 @@ describe("PlatformDouyinMiniappsService", () => {
       tenant_id: TENANT_ID,
       runtime_config: runtimeConfig,
     })).resolves.toEqual(existingTemplate);
-    expect(deps.repository.createTemplateDevelopment).toHaveBeenCalledTimes(1);
-    expect(deps.repository.findForPlatformByAuthorizerAppId).toHaveBeenCalledTimes(2);
+    expect(deps.repository.createTemplateDevelopmentAtomically).toHaveBeenCalledTimes(1);
   });
 
   test("deployment key rotation uses a fresh 256-bit value and never returns it", async () => {
@@ -304,6 +296,29 @@ describe("PlatformDouyinMiniappsService", () => {
     expect(JSON.stringify(first)).not.toContain("deployment_key");
   });
 
+  test("rejects padded, malformed and undersized deployment keys before repository writes", async () => {
+    for (const deploymentKey of [
+      "AAAAAAAAAAAAAAAAAAAAAA==",
+      "AAAAAAAAAAAAAAAAAAAAA!",
+      "AAAAAAAAAAAAAAAA",
+      Buffer.alloc(16).toString("base64url"),
+      Buffer.alloc(31).toString("base64url"),
+    ]) {
+      const deps = dependencies();
+      const service = new PlatformDouyinMiniappsService({
+        ...deps,
+        deploymentKeyGenerator: () => deploymentKey,
+      } as never);
+
+      await expect(service.rotateDeploymentKey(authContext, INSTALLATION_ID))
+        .rejects.toMatchObject({
+          statusCode: 500,
+          code: "DOUYIN_DEPLOYMENT_KEY_GENERATION_FAILED",
+        });
+      expect(deps.repository.rotateDeploymentKey).not.toHaveBeenCalled();
+    }
+  });
+
   test("enforces legal config, rotate, disable and enable states", async () => {
     const cases = [
       ["updateConfig", { ...installation, authorization_status: "revoked" }],
@@ -313,7 +328,7 @@ describe("PlatformDouyinMiniappsService", () => {
     ] as const;
 
     for (const [method, record] of cases) {
-      const deps = dependencies({ findForPlatformById: mock(async () => record) });
+      const deps = dependencies({ findById: mock(async () => record) });
       const service = new PlatformDouyinMiniappsService(deps as never);
       const action = method === "updateConfig"
         ? service.updateConfig(authContext, INSTALLATION_ID, { runtime_config: runtimeConfig })
