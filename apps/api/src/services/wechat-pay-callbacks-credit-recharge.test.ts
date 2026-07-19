@@ -91,6 +91,7 @@ const rawBody = JSON.stringify({
 });
 
 const decryptedResource = {
+  mchid: platformConfig.merchant_id,
   out_trade_no: "TC202607020001",
   transaction_id: "4200000000202607020000000001",
   trade_state: "SUCCESS",
@@ -364,27 +365,27 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
     });
   });
 
-  test("skips recharge confirmation and recovery for non-success trade state", async () => {
+  test("rejects TRANSACTION.SUCCESS callback with a non-success trade state", async () => {
     decryptResource.mockImplementationOnce(() => ({
       ...decryptedResource,
       trade_state: "NOTPAY",
     }));
     const service = await createService();
 
-    const result = await service.handleCallback({
+    await expect(service.handleCallback({
       rawBody,
       headers: {
         "wechatpay-timestamp": "1782873600",
         "wechatpay-nonce": "callback-nonce",
         "wechatpay-signature": "signature",
       },
+    })).rejects.toMatchObject({
+      code: "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
     });
 
-    expect(result).toEqual({ code: "SUCCESS", message: "成功" });
     expect(confirmWechatRecharge).not.toHaveBeenCalled();
-    expect(markCreditNotificationProcessed).toHaveBeenCalledWith({
-      notificationId: "credit-notification-1",
-    });
+    expect(createCreditNotification).not.toHaveBeenCalled();
+    expect(markCreditNotificationProcessed).not.toHaveBeenCalled();
   });
 
   test("marks the notification failed when atomic confirmation rejects", async () => {
@@ -408,6 +409,27 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
       errorMessage: "confirm failed",
     });
     expect(markCreditNotificationProcessed).not.toHaveBeenCalled();
+  });
+
+  test("rejects equal-amount callback replay from another merchant before credit", async () => {
+    decryptResource.mockImplementationOnce(() => ({
+      ...decryptedResource,
+      mchid: "different-merchant",
+    }));
+    const service = await createService();
+
+    await expect(service.handleCallback({
+      rawBody,
+      headers: {
+        "wechatpay-timestamp": "1782873600",
+        "wechatpay-nonce": "callback-nonce",
+        "wechatpay-signature": "signature",
+      },
+    })).rejects.toMatchObject({
+      code: "BILLING_RECHARGE_WECHAT_TRANSACTION_MISMATCH",
+    });
+    expect(confirmWechatRecharge).not.toHaveBeenCalled();
+    expect(confirmRechargePayment).not.toHaveBeenCalled();
   });
 
 });

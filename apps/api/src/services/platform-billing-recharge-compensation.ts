@@ -15,9 +15,14 @@ import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
   wechatPayGateway,
-  type WechatPayTransactionQueryResult,
 } from "@/services/wechat-pay-gateway";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
+import {
+  assertWechatPaySuccessTransaction,
+  buildWechatPayTransactionExpectedBinding,
+  parseAndAssertWechatPayTransactionQuery,
+  type WechatPayValidatedSuccessTransaction,
+} from "@/services/wechat-pay-transaction-contract";
 
 type PlatformBillingRechargeRepositoryPort = Pick<
   typeof platformBillingRechargeRepository,
@@ -119,12 +124,23 @@ export class PlatformBillingRechargeCompensationService {
     const secretBundle = await this.secretBundleService.load(
       config.encrypted_config_ref,
     );
-    const transaction = await this.wechatPayGateway.queryTransactionByOutTradeNo({
+    const queryResult = await this.wechatPayGateway.queryTransactionByOutTradeNo({
       config,
       outTradeNo,
       secretBundle,
     });
-    const tradeState = this.optionalString(transaction.trade_state);
+    const transaction = parseAndAssertWechatPayTransactionQuery(
+      queryResult,
+      buildWechatPayTransactionExpectedBinding({
+        merchantMode: config.merchant_mode,
+        merchantId: config.merchant_id,
+        subMerchantId: config.sub_merchant_id,
+        outTradeNo,
+        amountFen: order.amount_fen,
+        transactionId: order.transaction_id,
+      }),
+    );
+    const tradeState = transaction.tradeState;
     if (tradeState !== "SUCCESS") {
       await this.recordCompensationAudit({
         authContext,
@@ -143,12 +159,13 @@ export class PlatformBillingRechargeCompensationService {
         trade_state: tradeState,
         order_id: order.id,
         out_trade_no: outTradeNo,
-        transaction_id: this.optionalString(transaction.transaction_id),
+        transaction_id: transaction.transactionId,
         notification_id: null,
         result: null,
       };
     }
 
+    assertWechatPaySuccessTransaction(transaction);
     return this.confirmSuccessfulQueriedTransaction({
       authContext,
       order,
@@ -230,29 +247,12 @@ export class PlatformBillingRechargeCompensationService {
     authContext: AuthContext;
     order: TenantCreditOrderRecord;
     outTradeNo: string;
-    transaction: WechatPayTransactionQueryResult;
+    transaction: WechatPayValidatedSuccessTransaction;
     reason: string | null;
   }) {
     const { authContext, order, outTradeNo, transaction, reason } = input;
-    const transactionId = this.requireString(
-      transaction,
-      "transaction_id",
-      "微信支付查单响应缺少 transaction_id",
-      "BILLING_RECHARGE_QUERY_TRANSACTION_ID_REQUIRED",
-    );
-    const paidAmountFen = this.getTransactionAmountTotal(transaction);
-    if (paidAmountFen !== order.amount_fen) {
-      throw Errors.business(
-        409,
-        "微信支付查单金额与积分充值订单金额不一致",
-        "BILLING_RECHARGE_QUERY_AMOUNT_MISMATCH",
-        {
-          order_amount_fen: order.amount_fen,
-          query_amount_fen: paidAmountFen,
-          out_trade_no: outTradeNo,
-        },
-      );
-    }
+    const transactionId = transaction.transactionId;
+    const paidAmountFen = transaction.amountFen;
 
     const notifyId = `query-compensation:${transactionId}`;
     const notification = await this.findOrCreateCompensationNotification({
@@ -266,8 +266,7 @@ export class PlatformBillingRechargeCompensationService {
         orderId: order.id,
         transactionId,
         paidAmountFen,
-        paidAt: this.optionalString(transaction.success_time) ??
-          new Date().toISOString(),
+        paidAt: transaction.successTime,
         notificationId: notification.id,
         metadata: {
           compensation_source: "platform_wechat_query",
@@ -390,7 +389,7 @@ export class PlatformBillingRechargeCompensationService {
   private async findOrCreateCompensationNotification(input: {
     order: TenantCreditOrderRecord;
     notifyId: string;
-    transaction: WechatPayTransactionQueryResult;
+    transaction: WechatPayValidatedSuccessTransaction;
   }) {
     const existing =
       await this.rechargeRepository.findWechatNotificationByNotifyId({
@@ -416,17 +415,17 @@ export class PlatformBillingRechargeCompensationService {
   private buildCompensationResult(input: {
     order: TenantCreditOrderRecord;
     outTradeNo: string;
-    transaction: WechatPayTransactionQueryResult;
+    transaction: WechatPayValidatedSuccessTransaction;
     notification: TenantCreditWechatNotificationRecord;
     confirmResult: BillingConfirmWechatRechargeResult;
   }) {
     return {
       compensated: true,
       already_paid: Boolean(input.confirmResult.idempotent),
-      trade_state: this.optionalString(input.transaction.trade_state),
+      trade_state: input.transaction.tradeState,
       order_id: input.order.id,
       out_trade_no: input.outTradeNo,
-      transaction_id: this.optionalString(input.transaction.transaction_id),
+      transaction_id: input.transaction.transactionId,
       notification_id: input.notification.id,
       result: input.confirmResult,
     };
@@ -451,39 +450,6 @@ export class PlatformBillingRechargeCompensationService {
       summary: input.summary,
       metadata: input.metadata,
     });
-  }
-
-  private getTransactionAmountTotal(transaction: WechatPayTransactionQueryResult) {
-    const amount = transaction.amount;
-    if (!amount || typeof amount !== "object" || Array.isArray(amount)) {
-      throw Errors.business(
-        502,
-        "微信支付查单响应缺少金额",
-        "BILLING_RECHARGE_QUERY_AMOUNT_REQUIRED",
-      );
-    }
-    const total = Number((amount as Record<string, unknown>).total ?? 0);
-    if (!Number.isFinite(total) || total <= 0) {
-      throw Errors.business(
-        502,
-        "微信支付查单响应金额不正确",
-        "BILLING_RECHARGE_QUERY_AMOUNT_INVALID",
-      );
-    }
-    return total;
-  }
-
-  private requireString(
-    record: Record<string, unknown>,
-    key: string,
-    message: string,
-    code: string,
-  ) {
-    const value = this.optionalString(record[key]);
-    if (!value) {
-      throw Errors.business(502, message, code);
-    }
-    return value;
   }
 
   private optionalString(value: unknown) {

@@ -59,6 +59,25 @@ describe("BillingRechargeExpirationService state matrix", () => {
     expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, paid: 1 });
   });
 
+  test("rejects an equal-amount SUCCESS replay from another merchant", async () => {
+    const order = makeOrder();
+    const harness = await createExpirationHarness({ orders: [order] });
+    harness.queryTransaction.mockImplementationOnce(async () => ({
+      ...successTransaction(order),
+      mchid: "different-merchant",
+    }));
+
+    const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+    expect(harness.paymentConfirmation.confirm).not.toHaveBeenCalled();
+    expect(harness.repository.releaseCloseClaim).toHaveBeenCalledWith({
+      orderId: order.id,
+      claimToken: order.close_claim_token,
+      errorMessage: "BILLING_RECHARGE_EXPIRE_QUERY_FAILED",
+    });
+    expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, failed: 1 });
+  });
+
   test("mirrors CLOSED locally without another remote close", async () => {
     const harness = await createExpirationHarness({ orders: [makeOrder()] });
     harness.queryTransaction.mockImplementationOnce(async () => ({

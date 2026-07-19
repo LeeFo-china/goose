@@ -2,6 +2,7 @@ import { mock } from "bun:test";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
+import type { WechatPayQueryTransactionByOutTradeNoInput } from "./wechat-pay-gateway-query-transaction";
 
 export const CLOCK_START = new Date("2026-07-18T03:00:00.000Z");
 
@@ -89,11 +90,13 @@ export function makeOrder(
 
 export function successTransaction(order: TenantCreditOrderRecord) {
   return {
+    mchid: defaultPaymentConfig.merchant_id,
     out_trade_no: order.out_trade_no,
     transaction_id: `transaction-${order.id}`,
     trade_state: "SUCCESS",
     success_time: "2026-07-18T02:58:00.000Z",
     amount: { total: order.amount_fen, currency: "CNY" },
+    requestId: null,
   };
 }
 
@@ -159,11 +162,24 @@ export async function createExpirationHarness(input: {
   const closeTransaction = mock(async (_closeInput: { outTradeNo: string }) =>
     undefined
   );
-  const queryTransactionByOutTradeNo = mock(async (queryInput: {
-    outTradeNo: string;
-  }) => {
+  const queryTransactionByOutTradeNo = mock(async (
+    queryInput: WechatPayQueryTransactionByOutTradeNoInput,
+  ) => {
     calls.push(`query:${orderIdFromTradeNo(queryInput.outTradeNo)}`);
-    return queryTransaction(queryInput);
+    const transaction = await queryTransaction(queryInput);
+    const merchantBinding =
+      queryInput.config.merchant_mode === "service_provider_sub_merchant"
+        ? {
+          sp_mchid: queryInput.config.merchant_id,
+          sub_mchid: queryInput.config.sub_merchant_id,
+        }
+        : { mchid: queryInput.config.merchant_id };
+    return {
+      ...merchantBinding,
+      out_trade_no: queryInput.outTradeNo,
+      requestId: null,
+      ...transaction,
+    };
   });
   const closeTransactionByOutTradeNo = mock(async (closeInput: {
     outTradeNo: string;

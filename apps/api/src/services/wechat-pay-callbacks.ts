@@ -261,12 +261,9 @@ export class WechatPayCallbackService {
     notification: TenantCreditWechatNotificationRecord;
   }) {
     const { matched, notification } = input;
-    if (matched.resource.trade_state !== "SUCCESS") {
-      return;
-    }
     await this.rechargePaymentConfirmation.confirm({
       order: matched.order,
-      transaction: matched.resource,
+      transaction: matched.transaction,
       notificationId: notification.id,
       source: "wechat_callback",
     });

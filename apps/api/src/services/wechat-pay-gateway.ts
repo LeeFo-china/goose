@@ -23,6 +23,7 @@ import {
   type WechatPayJsapiOrder,
 } from "@/services/wechat-pay-jsapi-request-builder";
 import type { WechatPaySecretBundle } from "@/services/wechat-pay-secret-bundles";
+import { convertWechatPayTransactionQueryPayload } from "@/services/wechat-pay-transaction-contract";
 import {
   buildWechatPayAuthorization,
   buildWechatPayMiniProgramPaymentRequest,
@@ -244,8 +245,10 @@ export class WechatPayGateway {
         this.queryRequestTimeoutMs,
       ),
     });
-    const { payload } = result;
-    return payload as WechatPayTransactionQueryResult;
+    return convertWechatPayTransactionQueryPayload(
+      result.payload,
+      result.requestId,
+    );
   }
 
   async requestRefund(

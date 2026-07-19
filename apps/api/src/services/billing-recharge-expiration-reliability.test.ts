@@ -135,9 +135,14 @@ describe("BillingRechargeExpirationService lease reliability", () => {
         },
         secretBundleService: { load: mock(async () => defaultSecretBundle) },
         wechatPayGateway: {
-          queryTransactionByOutTradeNo: mock(async () => {
+          queryTransactionByOutTradeNo: mock(async (input) => {
             queryWorkers.push(workerId);
-            return { trade_state: "NOTPAY" };
+            return {
+              mchid: defaultPaymentConfig.merchant_id,
+              out_trade_no: input.outTradeNo,
+              trade_state: "NOTPAY",
+              requestId: null,
+            };
           }),
           closeTransactionByOutTradeNo: mock(async () => {
             closeWorkers.push(workerId);

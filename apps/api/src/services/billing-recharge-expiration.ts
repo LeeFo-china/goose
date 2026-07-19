@@ -11,15 +11,21 @@ import {
   billingRechargePaymentConfirmation,
   type BillingRechargePaymentConfirmationInput,
 } from "@/services/billing-recharge-payment-confirmation";
+import { canCloseNonexistentWechatOrder } from "@/services/billing-recharge-expiration-query-error";
 import {
   wechatPayGateway,
-  type WechatPayTransactionQueryResult,
 } from "@/services/wechat-pay-gateway";
 import {
   wechatPaySecretBundleService,
   type WechatPaySecretBundle,
 } from "@/services/wechat-pay-secret-bundles";
-
+import {
+  assertWechatPaySuccessTransaction,
+  buildWechatPayTransactionExpectedBinding,
+  parseAndAssertWechatPayTransactionQuery,
+  type WechatPayValidatedSuccessTransaction,
+  type WechatPayValidatedTransaction,
+} from "@/services/wechat-pay-transaction-contract";
 type RepositoryPort = Pick<
   typeof billingRechargeRepository,
   | "claimExpiredOrders"
@@ -93,7 +99,6 @@ const DIAGNOSTIC = {
   closeUncertain: "BILLING_RECHARGE_EXPIRE_CLOSE_UNCERTAIN",
   secondQueryFailed: "BILLING_RECHARGE_EXPIRE_SECOND_QUERY_FAILED",
 } as const;
-
 export class BillingRechargeExpirationService {
   private readonly repository: RepositoryPort;
   private readonly paymentConfigRepository: PaymentConfigRepositoryPort;
@@ -218,9 +223,13 @@ export class BillingRechargeExpirationService {
     context: BatchContext;
     deferred: DeferredRelease[];
   }): Promise<OrderOutcome> {
-    let transaction: WechatPayTransactionQueryResult;
+    let transaction: WechatPayValidatedTransaction;
     try {
-      transaction = await this.query(input.context, input.outTradeNo);
+      transaction = await this.query(
+        input.context,
+        input.order,
+        input.outTradeNo,
+      );
     } catch (error) {
       if (canCloseNonexistentWechatOrder(input.order, error)) {
         return this.markClosed(input, { requireMissingPrepay: true });
@@ -237,10 +246,11 @@ export class BillingRechargeExpirationService {
     outTradeNo: string;
     context: BatchContext;
     deferred: DeferredRelease[];
-    transaction: WechatPayTransactionQueryResult;
+    transaction: WechatPayValidatedTransaction;
   }): Promise<OrderOutcome> {
-    const tradeState = optionalString(input.transaction.trade_state);
+    const tradeState = input.transaction.tradeState;
     if (tradeState === "SUCCESS") {
+      assertWechatPaySuccessTransaction(input.transaction);
       return this.confirmPaid(input, input.transaction);
     }
     if (tradeState === "CLOSED") return this.markClosed(input);
@@ -282,9 +292,13 @@ export class BillingRechargeExpirationService {
     context: BatchContext;
     deferred: DeferredRelease[];
   }): Promise<OrderOutcome> {
-    let transaction: WechatPayTransactionQueryResult;
+    let transaction: WechatPayValidatedTransaction;
     try {
-      transaction = await this.query(input.context, input.outTradeNo);
+      transaction = await this.query(
+        input.context,
+        input.order,
+        input.outTradeNo,
+      );
     } catch (error) {
       if (canCloseNonexistentWechatOrder(input.order, error)) {
         return this.markClosed(input, { requireMissingPrepay: true });
@@ -293,8 +307,11 @@ export class BillingRechargeExpirationService {
       return "failed";
     }
 
-    const tradeState = optionalString(transaction.trade_state);
-    if (tradeState === "SUCCESS") return this.confirmPaid(input, transaction);
+    const tradeState = transaction.tradeState;
+    if (tradeState === "SUCCESS") {
+      assertWechatPaySuccessTransaction(transaction);
+      return this.confirmPaid(input, transaction);
+    }
     if (tradeState === "CLOSED") return this.markClosed(input);
     this.defer(input, DIAGNOSTIC.closeUncertain);
     return "retried";
@@ -306,7 +323,7 @@ export class BillingRechargeExpirationService {
       claimToken: string;
       deferred: DeferredRelease[];
     },
-    transaction: WechatPayTransactionQueryResult,
+    transaction: WechatPayValidatedSuccessTransaction,
   ): Promise<OrderOutcome> {
     try {
       await this.paymentConfirmation.confirm({
@@ -343,12 +360,27 @@ export class BillingRechargeExpirationService {
     }
   }
 
-  private query(context: BatchContext, outTradeNo: string) {
-    return this.wechatPayGateway.queryTransactionByOutTradeNo({
+  private async query(
+    context: BatchContext,
+    order: TenantCreditOrderRecord,
+    outTradeNo: string,
+  ) {
+    const transaction = await this.wechatPayGateway.queryTransactionByOutTradeNo({
       config: context.config,
       outTradeNo,
       secretBundle: context.secretBundle,
     });
+    return parseAndAssertWechatPayTransactionQuery(
+      transaction,
+      buildWechatPayTransactionExpectedBinding({
+        merchantMode: context.config.merchant_mode,
+        merchantId: context.config.merchant_id,
+        subMerchantId: context.config.sub_merchant_id,
+        outTradeNo,
+        amountFen: order.amount_fen,
+        transactionId: order.transaction_id,
+      }),
+    );
   }
 
   private loadContext(
@@ -456,19 +488,6 @@ function emptyTelemetry(): BillingRechargeExpirationTelemetry {
 
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function canCloseNonexistentWechatOrder(
-  order: TenantCreditOrderRecord,
-  error: unknown,
-) {
-  if (optionalString(order.prepay_id)) return false;
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; details?: unknown };
-  if (candidate.code !== "WECHAT_PAY_TRANSACTION_QUERY_FAILED") return false;
-  if (!candidate.details || typeof candidate.details !== "object") return false;
-  const details = candidate.details as { status?: unknown; code?: unknown };
-  return details.status === 404 && details.code === "ORDER_NOT_EXIST";
 }
 
 function clampInteger(value: number, minimum: number, maximum: number) {
