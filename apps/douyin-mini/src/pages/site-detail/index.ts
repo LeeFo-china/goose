@@ -13,6 +13,7 @@ import { buildSiteProgress, type SiteProgressItem } from "./site-progress";
 
 Page({
   siteId: "",
+  initializing: false,
   logPagination: createPaginationState<PublicSiteLog>(20),
   data: {
     loading: true,
@@ -43,6 +44,11 @@ Page({
     void this.initialize(true);
   },
   async initialize(refresh = false) {
+    if (this.initializing) {
+      if (refresh) void tt.stopPullDownRefresh({});
+      return;
+    }
+    this.initializing = true;
     if (!refresh) this.setData({ loading: true, error: false });
     try {
       const app = getApp<DouyinAppContext>();
@@ -82,6 +88,7 @@ Page({
         this.setData({ loading: false, error: true });
       }
     } finally {
+      this.initializing = false;
       if (refresh) void tt.stopPullDownRefresh({});
     }
   },
