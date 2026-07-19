@@ -1,11 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isDouyinMiniappRoute,
   isPartnerAuthRoute,
   isPartnerPortalRoute,
   isPublicRoute,
   isVisitorSessionRoute,
   shouldBypassAuth,
 } from "./routes";
+
+describe("Douyin miniapp route isolation", () => {
+  test("bypasses only session exchange and classifies the protected namespace", () => {
+    expect(shouldBypassAuth("POST", "/douyin-mini/auth/session")).toBe(true);
+    expect(shouldBypassAuth("GET", "/douyin-mini/auth/session")).toBe(false);
+    expect(shouldBypassAuth("POST", "/douyin-mini/auth/session/extra")).toBe(false);
+    expect(isDouyinMiniappRoute("/douyin-mini/bootstrap")).toBe(true);
+    expect(isDouyinMiniappRoute("/douyin-mini/cases?page=1")).toBe(true);
+    expect(isDouyinMiniappRoute("/douyin-miniature/bootstrap")).toBe(false);
+  });
+});
 
 describe("isVisitorSessionRoute", () => {
   test("allows applicant routes only with visitor sessions", () => {

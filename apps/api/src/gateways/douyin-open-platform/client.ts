@@ -41,25 +41,35 @@ const RetrieveAuthorizationCodeSuccessSchema = z.looseObject({
   log_id: z.string().min(1),
   data: z.looseObject({ authorization_code: z.string().min(1) }),
 });
+const MerchantSessionIdentitySchema = z.looseObject({
+  session_key: z.string().min(1),
+  open_id: z.string().min(1).optional(),
+  anonymous_open_id: z.string().min(1).optional(),
+  union_id: z.string().optional(),
+}).superRefine((value, context) => {
+  if (!value.open_id && !value.anonymous_open_id) {
+    context.addIssue({ code: "custom", message: "missing Douyin session identity" });
+  }
+});
 const MerchantCode2SessionSuccessSchema = z.looseObject({
   err_no: z.literal(0),
   log_id: z.string().min(1),
-  data: z.looseObject({
-    session_key: z.string().min(1),
-    open_id: z.string().min(1),
-    anonymous_open_id: z.string().optional(),
-    union_id: z.string().optional(),
-  }),
+  data: MerchantSessionIdentitySchema,
+});
+const TemplateSessionIdentitySchema = z.looseObject({
+  session_key: z.string().min(1),
+  openid: z.string().min(1).optional(),
+  anonymous_openid: z.string().min(1).optional(),
+  unionid: z.string().optional(),
+}).superRefine((value, context) => {
+  if (!value.openid && !value.anonymous_openid) {
+    context.addIssue({ code: "custom", message: "missing Douyin session identity" });
+  }
 });
 const TemplateCode2SessionSuccessSchema = z.looseObject({
   err_no: z.literal(0),
   log_id: z.string().min(1),
-  data: z.looseObject({
-    session_key: z.string().min(1),
-    openid: z.string().min(1),
-    anonymous_openid: z.string().optional(),
-    unionid: z.string().optional(),
-  }),
+  data: TemplateSessionIdentitySchema,
 });
 
 export type ComponentTokenInput = {
@@ -111,7 +121,7 @@ export type TemplateCode2SessionInput = {
 
 export type Code2SessionResult = {
   readonly sessionKey: string;
-  readonly openId: string;
+  readonly openId?: string;
   readonly anonymousOpenId?: string;
   readonly unionId?: string;
 };

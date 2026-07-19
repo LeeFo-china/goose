@@ -4,11 +4,12 @@ import { ErrorCodes } from "@/errors/error-codes";
 
 export type JwtPayload = {
   sub?: string;
-  token_type?: "auth" | "visitor_session" | "h5_marketing" | "platform_partner";
+  token_type?: "auth" | "visitor_session" | "h5_marketing" | "platform_partner"
+    | "douyin_miniapp";
   openid?: string;
   unionid?: string | null;
   visitor_id?: string;
-  login_channel?: "wechat" | "admin_web";
+  login_channel?: "wechat" | "admin_web" | "douyin";
   roles?: string[];
   tenant_id?: string | null;
   tenant_slug?: string | null;
@@ -17,6 +18,9 @@ export type JwtPayload = {
   partner_id?: string | null;
   verified_phone?: string | null;
   share_link_id?: string | null;
+  douyin_installation_id?: string;
+  douyin_app_id?: string;
+  subject_hash?: string;
   iat?: number;
   exp?: number;
 };
@@ -28,6 +32,20 @@ export type H5MarketingTokenPayload = JwtPayload & {
   customer_id?: string | null;
   scene?: string | null;
 };
+
+export type DouyinMiniappTokenPayload = JwtPayload & {
+  token_type: "douyin_miniapp";
+  login_channel: "douyin";
+  tenant_id: string;
+  douyin_installation_id: string;
+  douyin_app_id: string;
+  subject_hash: string;
+};
+
+export type DouyinMiniappTokenInput = Pick<
+  DouyinMiniappTokenPayload,
+  "tenant_id" | "douyin_installation_id" | "douyin_app_id" | "subject_hash"
+>;
 
 type JwtHeader = {
   alg: "HS256";
@@ -156,6 +174,19 @@ export function signH5MarketingToken(
   );
 }
 
+export function signDouyinMiniappToken(payload: DouyinMiniappTokenInput) {
+  return signJwtPayload(
+    {
+      ...payload,
+      sub: payload.subject_hash,
+      token_type: "douyin_miniapp",
+      login_channel: "douyin",
+      roles: ["douyin_miniapp"],
+    },
+    process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN || "2h",
+  );
+}
+
 export function verifyTokenDetailed(token: string): {
   payload: JwtPayload | null;
   reason: "valid" | "expired" | "invalid";
@@ -204,6 +235,10 @@ export function verifyTokenDetailed(token: string): {
 
     if (payload.token_type === "visitor_session") {
       if (!payload.openid || !payload.visitor_id) {
+        return { payload: null, reason: "invalid" };
+      }
+    } else if (payload.token_type === "douyin_miniapp") {
+      if (!isValidDouyinMiniappPayload(payload)) {
         return { payload: null, reason: "invalid" };
       }
     } else if (!payload.sub) {
@@ -260,3 +295,28 @@ export function getH5MarketingTokenExpiresAt(now = Date.now()) {
   );
   return new Date(now + expiresIn * 1000).toISOString();
 }
+
+export function getDouyinMiniappTokenExpiresInSeconds() {
+  return parseJwtExpiresIn(
+    process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN || "2h",
+  );
+}
+
+function isValidDouyinMiniappPayload(
+  payload: JwtPayload,
+): payload is DouyinMiniappTokenPayload {
+  return payload.login_channel === "douyin"
+    && typeof payload.tenant_id === "string"
+    && UUID_PATTERN.test(payload.tenant_id)
+    && typeof payload.douyin_installation_id === "string"
+    && UUID_PATTERN.test(payload.douyin_installation_id)
+    && typeof payload.douyin_app_id === "string"
+    && payload.douyin_app_id.trim() === payload.douyin_app_id
+    && payload.douyin_app_id.length > 0
+    && payload.douyin_app_id.length <= 128
+    && typeof payload.subject_hash === "string"
+    && /^[a-f0-9]{64}$/.test(payload.subject_hash)
+    && payload.sub === payload.subject_hash;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;

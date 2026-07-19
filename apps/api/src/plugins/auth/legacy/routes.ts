@@ -1,5 +1,4 @@
 import type { VerifiedJwtPayload } from "./types";
-
 const publicRoutes = new Set([
   "/",
   "/auth",
@@ -7,7 +6,6 @@ const publicRoutes = new Set([
   "/admin/auth/send-code",
   "/admin/auth/login",
 ]);
-
 const partnerPortalRoutes = new Set([
   "/partner/auth/me",
   "/partner/dashboard/summary",
@@ -18,7 +16,6 @@ const partnerPortalRoutes = new Set([
   "/partner/dashboard/commission-ledger",
   "/partner/dashboard/settlements",
 ]);
-
 export function isPublicRoute(method: string, url: string) {
   if (publicRoutes.has(url)) {
     return true;
@@ -189,13 +186,16 @@ export function isPartnerAuthRoute(method: string, url: string) {
     )
   );
 }
-
 export function shouldBypassAuth(method: string, url: string) {
   return (
     isPartnerAuthRoute(method, url)
     || isInternalSiteContentPreviewRoute(method, url)
     || isDouyinThirdPartyCallbackRoute(method, url)
+    || method === "POST" && url === "/douyin-mini/auth/session"
   );
+}
+export function isDouyinMiniappRoute(url: string) {
+  return url === "/douyin-mini" || url.startsWith("/douyin-mini/");
 }
 
 function isDouyinThirdPartyCallbackRoute(method: string, url: string) {

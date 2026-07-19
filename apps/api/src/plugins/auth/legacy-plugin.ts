@@ -19,6 +19,7 @@ import {
   isPartnerPortalRoute,
   isPublicRoute,
   isPureVisitorPayload,
+  isDouyinMiniappRoute,
   isVisitorSessionRoute,
   shouldBypassAuth,
 } from "./legacy/routes";
@@ -66,6 +67,33 @@ const authPlugin = (app: FastifyInstance) => {
       const error = getTokenError(reason);
       logAuthReject(request, reason);
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
+    }
+
+    const isDouyinRoute = isDouyinMiniappRoute(url);
+    if (payload.token_type === "douyin_miniapp") {
+      if (!isDouyinRoute) {
+        const error = Errors.unauthorized(
+          "抖音小程序令牌不支持该操作",
+          ErrorCodes.TOKEN_INVALID,
+        );
+        logAuthReject(request, "unsupported_token_type", {
+          tokenType: payload.token_type,
+        });
+        throw error;
+      }
+      request.user = payload;
+      return;
+    }
+
+    if (isDouyinRoute) {
+      const error = Errors.unauthorized(
+        "该接口仅支持抖音小程序会话",
+        ErrorCodes.TOKEN_INVALID,
+      );
+      logAuthReject(request, "unsupported_token_type", {
+        tokenType: payload.token_type,
+      });
+      throw error;
     }
 
     if (payload.token_type === "visitor_session") {

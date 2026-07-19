@@ -82,6 +82,7 @@ import WorkflowSubjectsController from "@/controllers/workflow-subjects";
 import WorkflowTasksController from "@/controllers/workflow-tasks";
 import WechatPayCallbacksController from "@/controllers/wechat-pay-callbacks";
 import DouyinThirdPartyEventsController from "@/controllers/douyin-third-party-events";
+import DouyinMiniappController from "@/controllers/douyin-miniapp";
 import PlatformDouyinMiniappsController from "@/controllers/platform-douyin-miniapps";
 import SiteContentController from "@/controllers/site-content";
 import ProjectHealthController from "@/controllers/project-health";
@@ -171,6 +172,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   WorkflowTasksController.registerExtraRoutes(app);
   WechatPayCallbacksController.registerExtraRoutes(app);
   DouyinThirdPartyEventsController.registerExtraRoutes(app);
+  DouyinMiniappController.registerExtraRoutes(app);
   PlatformDouyinMiniappsController.registerExtraRoutes(app);
   SiteContentController.registerExtraRoutes(app);
   ProjectHealthController.registerExtraRoutes(app);

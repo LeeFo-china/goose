@@ -170,6 +170,7 @@ describe("DouyinOpenPlatformClient requests", () => {
       body: JSON.stringify({ appid: "template-appid", secret: "component-secret", code: "login-code" }),
     });
   });
+
 });
 
 describe("DouyinOpenPlatformClient failures", () => {
