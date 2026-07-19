@@ -1,8 +1,14 @@
+import io
 import importlib.util
+import itertools
+import socket
+import struct
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 
 MODULE_PATH = Path(__file__).with_name("dnspod_acme_hook.py")
@@ -20,6 +26,83 @@ VALID_VALUES = {
     "DNSPOD_DOMAIN": "goodcms.cn",
     "DNSPOD_SUBDOMAIN": "_acme-challenge.www",
 }
+
+
+def encode_test_name(name: str) -> bytes:
+    return b"".join(
+        bytes((len(label),)) + label.encode("ascii") for label in name.split(".")
+    ) + b"\x00"
+
+
+def build_test_record(
+    *,
+    record_type: int,
+    record_class: int,
+    rdata: bytes,
+    owner: bytes = b"\xc0\x0c",
+) -> bytes:
+    return owner + struct.pack("!HHIH", record_type, record_class, 60, len(rdata)) + rdata
+
+
+def build_test_response(
+    *,
+    name: str = "_acme-challenge.www.goodcms.cn",
+    question_type: int = 16,
+    answers: tuple[bytes, ...] = (),
+    authorities: tuple[bytes, ...] = (),
+    transaction_id: int = 0x1234,
+    flags: int = 0x8400,
+) -> bytes:
+    header = struct.pack(
+        "!HHHHHH",
+        transaction_id,
+        flags,
+        1,
+        len(answers),
+        len(authorities),
+        0,
+    )
+    question = encode_test_name(name) + struct.pack("!HH", question_type, 1)
+    return header + question + b"".join(answers) + b"".join(authorities)
+
+
+def build_test_txt_rdata(*segments: bytes) -> bytes:
+    return b"".join(bytes((len(segment),)) + segment for segment in segments)
+
+
+class FakeDnsSocket:
+    def __init__(self, *, flags: int, transaction_id_delta: int = 0, error=None):
+        self.flags = flags
+        self.transaction_id_delta = transaction_id_delta
+        self.error = error
+        self.sent = b""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc_value, _traceback):
+        return False
+
+    def settimeout(self, _timeout):
+        pass
+
+    def sendto(self, packet, _destination):
+        self.sent = packet
+
+    def recvfrom(self, _size):
+        if self.error:
+            raise self.error
+        transaction_id = struct.unpack_from("!H", self.sent)[0]
+        response = struct.pack(
+            "!HHHHHH",
+            (transaction_id + self.transaction_id_delta) & 0xFFFF,
+            self.flags,
+            0,
+            0,
+            0,
+            0,
+        )
+        return response, ("192.0.2.53", 53)
 
 
 class Tc3SigningTests(unittest.TestCase):
@@ -207,6 +290,302 @@ class DomainValidationTests(unittest.TestCase):
         for value in invalid_domains:
             with self.subTest(value=value), self.assertRaises(hook.ConfigurationError):
                 hook.validate_certbot_domain(value)
+
+
+class DnsProtocolTests(unittest.TestCase):
+    def test_encode_qname_matches_dns_wire_format(self):
+        self.assertEqual(
+            hook.encode_qname("_acme-challenge.www.goodcms.cn"),
+            b"\x0f_acme-challenge\x03www\x07goodcms\x02cn\x00",
+        )
+
+    def test_encode_qname_accepts_one_trailing_dot(self):
+        self.assertEqual(
+            hook.encode_qname("www.goodcms.cn."),
+            encode_test_name("www.goodcms.cn"),
+        )
+
+    def test_encode_qname_rejects_empty_labels(self):
+        for value in ("", ".", ".goodcms.cn", "goodcms..cn"):
+            with self.subTest(value=value), self.assertRaises(hook.DnsProtocolError):
+                hook.encode_qname(value)
+
+    def test_encode_qname_rejects_oversized_label(self):
+        value = f"{'a' * 64}.goodcms.cn"
+
+        with self.assertRaises(hook.DnsProtocolError):
+            hook.encode_qname(value)
+
+    def test_encode_qname_rejects_name_longer_than_253_bytes(self):
+        value = ".".join(("a" * 63, "b" * 63, "c" * 63, "d" * 62))
+        self.assertGreater(len(value.encode("ascii")), 253)
+
+        with self.assertRaises(hook.DnsProtocolError):
+            hook.encode_qname(value)
+
+    def test_encode_qname_rejects_non_ascii_labels(self):
+        with self.assertRaises(hook.DnsProtocolError):
+            hook.encode_qname("www.例子.cn")
+
+    def test_decode_name_reads_plain_and_compressed_names(self):
+        wire_name = encode_test_name("www.goodcms.cn")
+        packet = wire_name + b"\xc0\x00"
+
+        self.assertEqual(
+            hook.decode_name(packet, 0),
+            ("www.goodcms.cn", len(wire_name)),
+        )
+        self.assertEqual(
+            hook.decode_name(packet, len(wire_name)),
+            ("www.goodcms.cn", len(packet)),
+        )
+
+    def test_decode_name_rejects_pointer_loop_and_out_of_bounds_pointer(self):
+        for packet in (b"\xc0\x00", b"\xc0\x10"):
+            with self.subTest(packet=packet), self.assertRaises(hook.DnsProtocolError):
+                hook.decode_name(packet, 0)
+
+    def test_parse_txt_answers_collects_only_in_txt_and_joins_segments(self):
+        answers = (
+            build_test_record(
+                record_type=16,
+                record_class=1,
+                rdata=build_test_txt_rdata(b"challenge-", b"a"),
+            ),
+            build_test_record(
+                record_type=16,
+                record_class=1,
+                rdata=build_test_txt_rdata(b"challenge-b"),
+            ),
+            build_test_record(
+                record_type=16,
+                record_class=3,
+                rdata=build_test_txt_rdata(b"wrong-class"),
+            ),
+            build_test_record(
+                record_type=1,
+                record_class=1,
+                rdata=socket.inet_aton("192.0.2.1"),
+            ),
+        )
+
+        self.assertEqual(
+            hook.parse_txt_answers(build_test_response(answers=answers)),
+            {"challenge-a", "challenge-b"},
+        )
+
+    def test_parse_txt_answers_rejects_truncated_or_malformed_packets(self):
+        valid_answer = build_test_record(
+            record_type=16,
+            record_class=1,
+            rdata=build_test_txt_rdata(b"challenge"),
+        )
+        valid_packet = build_test_response(answers=(valid_answer,))
+        malformed_segment = build_test_record(
+            record_type=16,
+            record_class=1,
+            rdata=b"\x05abc",
+        )
+        invalid_utf8 = build_test_record(
+            record_type=16,
+            record_class=1,
+            rdata=b"\x01\xff",
+        )
+        packets = (
+            b"\x00" * 11,
+            valid_packet[:-1],
+            build_test_response(answers=(malformed_segment,)),
+            build_test_response(answers=(invalid_utf8,)),
+        )
+
+        for packet in packets:
+            with self.subTest(packet=packet), self.assertRaises(hook.DnsProtocolError):
+                hook.parse_txt_answers(packet)
+
+
+class DnsQueryTests(unittest.TestCase):
+    def _assert_query_rejected(self, fake_socket):
+        with mock.patch.object(hook.socket, "socket", return_value=fake_socket):
+            with self.assertRaises(hook.DnsProtocolError):
+                hook.query_dns("192.0.2.53", "www.goodcms.cn", 16)
+
+    def test_query_rejects_transaction_id_mismatch(self):
+        self._assert_query_rejected(
+            FakeDnsSocket(flags=0x8000, transaction_id_delta=1)
+        )
+
+    def test_query_rejects_response_without_qr_flag(self):
+        self._assert_query_rejected(FakeDnsSocket(flags=0x0000))
+
+    def test_query_rejects_truncated_response(self):
+        self._assert_query_rejected(FakeDnsSocket(flags=0x8200))
+
+    def test_query_rejects_nonzero_rcode(self):
+        self._assert_query_rejected(FakeDnsSocket(flags=0x8003))
+
+    def test_query_translates_socket_timeout_without_exposing_query_name(self):
+        query_name = "sensitive-query.goodcms.cn"
+        fake_socket = FakeDnsSocket(flags=0x8000, error=socket.timeout())
+
+        with mock.patch.object(hook.socket, "socket", return_value=fake_socket):
+            with self.assertRaises(hook.DnsProtocolError) as caught:
+                hook.query_dns("192.0.2.53", query_name, 16)
+
+        self.assertNotIn(query_name, str(caught.exception))
+
+
+class AuthoritativeDiscoveryTests(unittest.TestCase):
+    def test_discovers_deduplicated_ns_and_ipv4_ipv6_addresses(self):
+        ns1_rdata = encode_test_name("ns1.goodcms.cn")
+        ns2_rdata = encode_test_name("ns2.goodcms.cn")
+        response = build_test_response(
+            name="goodcms.cn",
+            question_type=2,
+            answers=(
+                build_test_record(record_type=2, record_class=1, rdata=ns1_rdata),
+                build_test_record(record_type=2, record_class=1, rdata=ns1_rdata),
+            ),
+            authorities=(
+                build_test_record(record_type=2, record_class=1, rdata=ns2_rdata),
+            ),
+        )
+        calls = {}
+
+        def fake_getaddrinfo(name, _port, _family, _socket_type):
+            calls[name] = calls.get(name, 0) + 1
+            if name == "ns1.goodcms.cn" and calls[name] == 1:
+                return [
+                    (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("192.0.2.1", 53)),
+                    (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("192.0.2.1", 53)),
+                    (
+                        socket.AF_INET6,
+                        socket.SOCK_DGRAM,
+                        17,
+                        "",
+                        ("2001:db8::1", 53, 0, 0),
+                    ),
+                ]
+            if name == "ns2.goodcms.cn":
+                return [
+                    (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("192.0.2.1", 53)),
+                    (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("192.0.2.2", 53)),
+                ]
+            return [
+                (socket.AF_INET, socket.SOCK_DGRAM, 17, "", ("198.51.100.99", 53))
+            ]
+
+        with (
+            mock.patch.object(hook, "query_dns", return_value=response),
+            mock.patch.object(hook.socket, "getaddrinfo", side_effect=fake_getaddrinfo),
+        ):
+            addresses = hook.discover_authoritative_addresses("goodcms.cn")
+
+        self.assertEqual(
+            addresses,
+            ["192.0.2.1", "2001:db8::1", "192.0.2.2"],
+        )
+
+
+class AuthoritativeTxtVerifierTests(unittest.TestCase):
+    def test_constructor_rejects_empty_addresses_and_deduplicates(self):
+        with self.assertRaises(hook.DnsProtocolError):
+            hook.AuthoritativeTxtVerifier(nameserver_addresses=())
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1", "192.0.2.1", "192.0.2.2")
+        )
+        self.assertEqual(
+            verifier.nameserver_addresses,
+            ("192.0.2.1", "192.0.2.2"),
+        )
+
+    def test_wait_present_polls_until_every_address_contains_value(self):
+        answers = {
+            "192.0.2.1": iter(({"token"}, {"token"})),
+            "192.0.2.2": iter((set(), {"token"})),
+        }
+        queried = []
+
+        def query(address, _name):
+            queried.append(address)
+            return next(answers[address])
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1", "192.0.2.2"),
+            query=query,
+            sleep=lambda _seconds: None,
+            monotonic=itertools.count().__next__,
+        )
+
+        verifier.wait_present(
+            "_acme-challenge.www.goodcms.cn",
+            "token",
+            timeout=10,
+            interval=0,
+        )
+
+        self.assertEqual(
+            queried,
+            ["192.0.2.1", "192.0.2.2", "192.0.2.1", "192.0.2.2"],
+        )
+
+    def test_wait_absent_polls_until_every_address_excludes_value(self):
+        answers = {
+            "192.0.2.1": iter((set(), set())),
+            "192.0.2.2": iter(({"token"}, set())),
+        }
+        queried = []
+
+        def query(address, _name):
+            queried.append(address)
+            return next(answers[address])
+
+        verifier = hook.AuthoritativeTxtVerifier(
+            nameserver_addresses=("192.0.2.1", "192.0.2.2"),
+            query=query,
+            sleep=lambda _seconds: None,
+            monotonic=itertools.count().__next__,
+        )
+
+        verifier.wait_absent(
+            "_acme-challenge.www.goodcms.cn",
+            "token",
+            timeout=10,
+            interval=0,
+        )
+
+        self.assertEqual(
+            queried,
+            ["192.0.2.1", "192.0.2.2", "192.0.2.1", "192.0.2.2"],
+        )
+
+    def test_wait_present_and_absent_time_out_without_exposing_value(self):
+        secret_value = "secret-test-token"
+        cases = (
+            ("wait_present", lambda _address, _name: set()),
+            ("wait_absent", lambda _address, _name: {secret_value}),
+        )
+
+        for method_name, query in cases:
+            with self.subTest(method=method_name):
+                verifier = hook.AuthoritativeTxtVerifier(
+                    nameserver_addresses=("192.0.2.1",),
+                    query=query,
+                    sleep=lambda _seconds: None,
+                    monotonic=iter((0, 2)).__next__,
+                )
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    with self.assertRaises(hook.DnsPropagationError) as caught:
+                        getattr(verifier, method_name)(
+                            "_acme-challenge.www.goodcms.cn",
+                            secret_value,
+                            timeout=1,
+                            interval=0,
+                        )
+
+                self.assertNotIn(secret_value, stderr.getvalue())
+                self.assertNotIn(secret_value, str(caught.exception))
 
 
 if __name__ == "__main__":
