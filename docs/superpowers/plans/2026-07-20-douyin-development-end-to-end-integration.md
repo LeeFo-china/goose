@@ -20,6 +20,8 @@
 | `apps/api/src/services/douyin-miniapp/authorization-events.test.ts` | 修改 | 证明 Ticket 可从空组件状态申领，普通事件仍要求 active 组件 |
 | `apps/api/src/services/douyin-miniapp/authorization-events-migration-contract.test.ts` | 修改 | 固定现有 RPC 的幂等插入、disabled 拒绝和操作顺序 |
 | `apps/api/src/services/douyin-miniapp/authorization-events.ts` | 修改 | 仅让合法 Ticket 绕过服务层预注册查询；不新增数据库写路径 |
+| `apps/api/src/repositories/douyin-authorization-events.test.ts` | 修改 | 用真实 Supabase 错误形态固定 disabled 组件的脱敏 503 契约 |
+| `apps/api/src/repositories/douyin-authorization-events.ts` | 修改 | 仅在 claim RPC 精确映射组件停用错误；其他数据库错误继续统一包装 |
 | `docs/operations/douyin-miniapp-template-runbook.md` | 修改 | 记录环境路由、首 Ticket 启动和开发部署边界 |
 | `docs/operations/douyin-miniapp-template-smoke-checklist.md` | 修改 | 增加开发 Origin、首 Ticket、两租户和“停在 testing”门禁 |
 | `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md` | 新建 | 保存本次不含秘密的逐阶段证据与最终状态 |
@@ -206,6 +208,8 @@ git commit -m "feat(douyin): 区分小程序 API 环境"
 - Modify: `apps/api/src/services/douyin-miniapp/authorization-events.test.ts`
 - Modify: `apps/api/src/services/douyin-miniapp/authorization-events-migration-contract.test.ts`
 - Modify: `apps/api/src/services/douyin-miniapp/authorization-events.ts`
+- Modify: `apps/api/src/repositories/douyin-authorization-events.test.ts`
+- Modify: `apps/api/src/repositories/douyin-authorization-events.ts`
 
 - [ ] **Step 1：编写首 Ticket 失败测试**
 
@@ -292,7 +296,7 @@ test("bootstraps only an active component through the event claim RPC", () => {
   expect(conflict).toBeGreaterThan(insert);
   expect(statusRead).toBeGreaterThan(conflict);
   expect(disabledGuard).toBeGreaterThan(statusRead);
-  expect(claim.slice(insert, disabledGuard)).not.toMatch(
+  expect(claim.slice(0, disabledGuard)).not.toMatch(
     /UPDATE public\.douyin_third_party_components/,
   );
   expect(claim).toContain("MESSAGE = 'DOUYIN_COMPONENT_NOT_ACTIVE'");
@@ -351,27 +355,105 @@ function isTicketPush(message: DouyinDecryptedEvent): message is DouyinTicketEve
 }
 ```
 
-Do not modify repositories or migrations. Do not auto-enable a disabled row.
+Do not modify migrations or add a second write path. Do not auto-enable a disabled row.
 
-- [ ] **Step 5：运行回调、迁移契约和 API 门禁**
+- [ ] **Step 5：让真实 repository 保留脱敏的组件停用错误**
+
+Add a repository test that calls `claimEvent` with the real Supabase response shape:
+
+```ts
+test("preserves inactive-component claim errors without leaking database details", async () => {
+  const fixture = client(null, {
+    message: "DOUYIN_COMPONENT_NOT_ACTIVE",
+    details: "component-secret",
+  });
+  let caught: unknown;
+  try {
+    await new Repository(fixture.client).claimEvent({
+      eventKey: EVENT_KEY,
+      componentAppId: "tt-component-1",
+      eventName: "PUSH",
+      authorizerAppId: null,
+      occurredAt: OCCURRED_AT,
+    });
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toMatchObject({
+    statusCode: 503,
+    code: "DOUYIN_COMPONENT_NOT_ACTIVE",
+  });
+  expect(JSON.stringify(caught)).not.toContain("component-secret");
+});
+```
+
+Run from `apps/api` and confirm RED is the generic repository 500:
+
+```bash
+bun test src/repositories/douyin-authorization-events.test.ts
+```
+
+In `claimEvent`, validate the RPC response before returning it from `execute`:
+
+```ts
+const result = await this.execute(async () => {
+  const response = await this.client.rpc("claim_douyin_authorization_event", {
+    p_event_key: input.eventKey,
+    p_component_appid: input.componentAppId,
+    p_event_name: input.eventName,
+    p_authorizer_appid: input.authorizerAppId,
+    p_occurred_at: input.occurredAt,
+  });
+  assertClaimSuccess(response);
+  return response;
+});
+```
+
+Add a file-local mapper that recognizes only the exact safe message and never returns provider details:
+
+```ts
+function assertClaimSuccess(result: DouyinAuthorizationEventDatabaseResult): void {
+  if (!result.error) return;
+  if (databaseErrorMessage(result.error) === "DOUYIN_COMPONENT_NOT_ACTIVE") {
+    throw Errors.business(
+      503,
+      "抖音第三方组件未启用",
+      "DOUYIN_COMPONENT_NOT_ACTIVE",
+    );
+  }
+  throw repositoryError();
+}
+
+function databaseErrorMessage(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("message" in error)) return undefined;
+  return typeof error.message === "string" ? error.message : undefined;
+}
+```
+
+Other claim errors, rejected operations and every other repository method must retain generic wrapping.
+
+- [ ] **Step 6：运行 repository、回调、迁移契约和 API 门禁**
 
 Run:
 
 ```bash
+(cd apps/api && bun test src/repositories/douyin-authorization-events.test.ts)
 (cd apps/api && bun test src/services/douyin-miniapp/authorization-events.test.ts)
 (cd apps/api && bun test src/services/douyin-miniapp/authorization-events-migration-contract.test.ts)
 (cd apps/api && bun test src/controllers/douyin-third-party-events/index.test.ts)
 bun run api:check
 ```
 
-Expected: all commands exit `0`; Ticket test confirms no `findActive` call, ordinary event test still rejects inactive component, migration contract confirms no status update path.
+Expected: all commands exit `0`; the realistic repository error maps to a detail-safe 503, Ticket test confirms no `findActive` call, ordinary event test still rejects inactive component, and the migration contract confirms no status update path.
 
-- [ ] **Step 6：提交 Ticket 启动修复**
+- [ ] **Step 7：提交 Ticket 启动修复**
 
 ```bash
 git add apps/api/src/services/douyin-miniapp/authorization-events.ts \
   apps/api/src/services/douyin-miniapp/authorization-events.test.ts \
-  apps/api/src/services/douyin-miniapp/authorization-events-migration-contract.test.ts
+  apps/api/src/services/douyin-miniapp/authorization-events-migration-contract.test.ts \
+  apps/api/src/repositories/douyin-authorization-events.ts \
+  apps/api/src/repositories/douyin-authorization-events.test.ts
 git commit -m "fix(douyin): 允许可信 Ticket 初始化组件"
 ```
 
