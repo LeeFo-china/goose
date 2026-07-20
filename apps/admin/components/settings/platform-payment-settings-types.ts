@@ -63,7 +63,7 @@ export type PlatformWechatPayReadinessChecks = {
   has_secret_bundle_revision: boolean;
   has_serial_no: boolean;
   has_callback: boolean;
-  callback_is_https: boolean;
+  callback_is_valid: boolean;
   required_channels_enabled: boolean;
 };
 

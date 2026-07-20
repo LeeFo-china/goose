@@ -109,7 +109,7 @@ describe("PlatformPaymentReadinessService", () => {
             has_secret_bundle_revision: true,
             has_serial_no: true,
             has_callback: true,
-            callback_is_https: true,
+            callback_is_valid: true,
             required_channels_enabled: true,
           },
         },
@@ -131,7 +131,7 @@ describe("PlatformPaymentReadinessService", () => {
             has_secret_bundle_revision: true,
             has_serial_no: true,
             has_callback: true,
-            callback_is_https: true,
+            callback_is_valid: true,
             required_channels_enabled: true,
           },
         },
@@ -180,7 +180,7 @@ describe("PlatformPaymentReadinessService", () => {
         has_secret_bundle_revision: false,
         has_serial_no: false,
         has_callback: false,
-        callback_is_https: false,
+        callback_is_valid: false,
         required_channels_enabled: false,
       },
     });
@@ -226,20 +226,26 @@ describe("PlatformPaymentReadinessService", () => {
     expect(serialized).not.toContain("raw-request-id");
   });
 
-  test("distinguishes a non-HTTPS callback from a missing callback", async () => {
+  test.each([
+    "http://api.example.com/pay/wechat/callback",
+    "https://api.example.com",
+    "https://api.example.com/pay/wechat/callback?tenant=1",
+    "https://localhost/pay/wechat/callback",
+    "https://127.0.0.1/pay/wechat/callback",
+  ])("reports an invalid configured callback %s", async (notifyUrl) => {
     const { result } = await getReadiness({
       tenant_service_provider: {
         ...serviceProviderConfig,
-        notify_url: "http://api.example.com/pay/wechat/callback",
+        notify_url: notifyUrl,
       },
     });
 
     expect(result.profiles[1]?.blockers).toContainEqual({
-      code: "PLATFORM_PAYMENT_CALLBACK_URL_NOT_HTTPS",
-      message: "支付回调地址必须使用 HTTPS",
+      code: "PLATFORM_PAYMENT_CALLBACK_URL_INVALID",
+      message: "支付回调地址必须是无参数的公网 HTTPS 完整路径",
     });
     expect(result.profiles[1]?.checks.has_callback).toBe(true);
-    expect(result.profiles[1]?.checks.callback_is_https).toBe(false);
+    expect(result.profiles[1]?.checks.callback_is_valid).toBe(false);
   });
 
   test("requires both project payment and applyment channels for service provider", async () => {

@@ -107,13 +107,23 @@ describe("WechatPayProfileValidator", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  test("rejects a non-HTTPS callback URL", async () => {
+  test.each([
+    "http://api.example.com/pay/wechat/callback",
+    "https://api.example.com",
+    "https://api.example.com/pay/wechat/callback?tenant=1",
+    "https://api.example.com/pay/wechat/callback#fragment",
+    "https://localhost/pay/wechat/callback",
+    "https://127.0.0.1/pay/wechat/callback",
+    "https://192.168.1.5/pay/wechat/callback",
+    "https://[::1]/pay/wechat/callback",
+    "https://internal/pay/wechat/callback",
+  ])("rejects an invalid callback URL %s", async (notifyUrl) => {
     const validator = await createValidator();
 
     await expect(
       validator.validate({
         ...config(),
-        notify_url: "http://api.example.com/pay/wechat/callback",
+        notify_url: notifyUrl,
       }),
     ).rejects.toMatchObject({
       statusCode: 409,

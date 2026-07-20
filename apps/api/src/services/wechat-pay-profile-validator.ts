@@ -2,6 +2,7 @@ import {
   createPrivateKey,
   createPublicKey,
 } from "node:crypto";
+import { isIP } from "node:net";
 import { Errors } from "@/errors/error-factory";
 import type {
   PlatformPaymentMerchantMode,
@@ -81,9 +82,9 @@ export class WechatPayProfileValidator {
       "微信支付密钥版本未配置",
       "WECHAT_PAY_SECRET_BUNDLE_REVISION_REQUIRED",
     );
-    assertHttpsUrl(
+    assertWechatPayNotifyUrl(
       config.notify_url,
-      "微信支付回调地址必须是 HTTPS URL",
+      "微信支付回调地址必须是无参数的公网 HTTPS 完整路径",
       "WECHAT_PAY_NOTIFY_URL_INVALID",
     );
 
@@ -171,23 +172,43 @@ function requireText(
   return normalized;
 }
 
-function assertHttpsUrl(value: string | null, message: string, code: string) {
+function assertWechatPayNotifyUrl(
+  value: string | null,
+  message: string,
+  code: string,
+) {
+  if (!isValidWechatPayNotifyUrl(value)) {
+    throw Errors.business(409, message, code);
+  }
+}
+
+export function isValidWechatPayNotifyUrl(value: unknown) {
+  if (typeof value !== "string") return false;
   const normalized = value?.trim();
-  if (!normalized) throw Errors.business(409, message, code);
+  if (!normalized || normalized.length > 256) return false;
   try {
     const parsed = new URL(normalized);
-    if (
+    const hostname = parsed.hostname
+      .replace(/^\[/, "")
+      .replace(/\]$/, "")
+      .toLowerCase();
+    return !(
       parsed.protocol !== "https:" ||
-      !parsed.hostname ||
+      !hostname ||
       parsed.username ||
-      parsed.password
-    ) {
-      throw Errors.business(409, message, code);
-    }
-    return normalized.replace(/\/+$/, "");
-  } catch (error) {
-    if (isAppErrorLike(error)) throw error;
-    throw Errors.business(409, message, code);
+      parsed.password ||
+      parsed.pathname === "/" ||
+      parsed.search ||
+      parsed.hash ||
+      isIP(hostname) !== 0 ||
+      !hostname.includes(".") ||
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal")
+    );
+  } catch {
+    return false;
   }
 }
 

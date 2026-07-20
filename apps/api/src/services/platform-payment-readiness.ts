@@ -5,6 +5,7 @@ import {
   type PlatformPaymentProfileCode,
   type PlatformPaymentValidationStatus,
 } from "@/repositories/platform-payment-configs";
+import { isValidWechatPayNotifyUrl } from "@/services/wechat-pay-profile-validator";
 
 export type PlatformPaymentReadinessBlocker = {
   code: string;
@@ -29,7 +30,7 @@ export type PlatformPaymentReadinessProfile = {
     has_secret_bundle_revision: boolean;
     has_serial_no: boolean;
     has_callback: boolean;
-    callback_is_https: boolean;
+    callback_is_valid: boolean;
     required_channels_enabled: boolean;
   };
 };
@@ -125,9 +126,9 @@ const BLOCKERS = {
     code: "PLATFORM_PAYMENT_CALLBACK_URL_MISSING",
     message: "支付配置缺少回调地址",
   },
-  callbackNotHttps: {
-    code: "PLATFORM_PAYMENT_CALLBACK_URL_NOT_HTTPS",
-    message: "支付回调地址必须使用 HTTPS",
+  callbackInvalid: {
+    code: "PLATFORM_PAYMENT_CALLBACK_URL_INVALID",
+    message: "支付回调地址必须是无参数的公网 HTTPS 完整路径",
   },
   channelsMissing: {
     code: "PLATFORM_PAYMENT_REQUIRED_CHANNELS_MISSING",
@@ -181,7 +182,7 @@ export function evaluatePlatformPaymentProfileReadiness(
     has_secret_bundle_revision: hasText(config.secret_bundle_revision),
     has_serial_no: hasText(config.serial_no),
     has_callback: hasText(config.notify_url),
-    callback_is_https: isHttpsUrl(config.notify_url),
+    callback_is_valid: isValidWechatPayNotifyUrl(config.notify_url),
     required_channels_enabled: definition.enabled_channels.every((channel) =>
       config.enabled_channels.includes(channel)
     ),
@@ -198,7 +199,7 @@ export function evaluatePlatformPaymentProfileReadiness(
   }
   if (!checks.has_serial_no) blockers.push(BLOCKERS.serialNoMissing);
   if (!checks.has_callback) blockers.push(BLOCKERS.callbackMissing);
-  else if (!checks.callback_is_https) blockers.push(BLOCKERS.callbackNotHttps);
+  else if (!checks.callback_is_valid) blockers.push(BLOCKERS.callbackInvalid);
   if (!checks.required_channels_enabled) blockers.push(BLOCKERS.channelsMissing);
 
   return {
@@ -233,7 +234,7 @@ function missingProfile(
       has_secret_bundle_revision: false,
       has_serial_no: false,
       has_callback: false,
-      callback_is_https: false,
+      callback_is_valid: false,
       required_channels_enabled: false,
     },
   };
@@ -241,15 +242,6 @@ function missingProfile(
 
 function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function isHttpsUrl(value: unknown) {
-  if (!hasText(value)) return false;
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 export const platformPaymentReadinessService =
