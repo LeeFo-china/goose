@@ -28,6 +28,9 @@ const existingConfig = {
   validation_status: "valid",
   recharge_guard_version: 3,
   last_validated_at: "2026-07-02T08:00:00.000Z",
+  last_validation_error_code: "OLD_VALIDATION_ERROR",
+  last_validation_error_message: "旧验证错误",
+  last_validation_request_id: "old-request-id",
   risk_switches: {},
   created_by_employee_id: "employee-old",
   updated_by_employee_id: "employee-old",
@@ -244,6 +247,9 @@ describe("PlatformPaymentConfigService", () => {
       status: "active",
       validation_status: "unchecked",
       last_validated_at: null,
+      last_validation_error_code: null,
+      last_validation_error_message: null,
+      last_validation_request_id: null,
       risk_switches: {},
       created_by_employee_id: "employee-old",
       updated_by_employee_id: "employee-platform",
@@ -350,6 +356,9 @@ describe("PlatformPaymentConfigService", () => {
       status: "active",
       validation_status: "unchecked",
       last_validated_at: null,
+      last_validation_error_code: null,
+      last_validation_error_message: null,
+      last_validation_request_id: null,
       risk_switches: {},
       created_by_employee_id: "employee-platform",
       updated_by_employee_id: "employee-platform",
@@ -389,6 +398,15 @@ describe("PlatformPaymentConfigService", () => {
     });
     expect(result.profile_code).toBe("tenant_service_provider");
     expect(result.config?.has_encrypted_config_ref).toBe(true);
+    expect(upsertWechatPayConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validation_status: "unchecked",
+        last_validated_at: null,
+        last_validation_error_code: null,
+        last_validation_error_message: null,
+        last_validation_request_id: null,
+      }),
+    );
     expect(JSON.stringify(result)).not.toContain("12345678901234567890123456789012");
     expect(JSON.stringify(result)).not.toContain("BEGIN PRIVATE KEY");
   });

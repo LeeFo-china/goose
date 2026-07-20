@@ -182,4 +182,38 @@ describe("WechatPayProfileValidator", () => {
     });
     expect(probe).not.toHaveBeenCalled();
   });
+
+  test.each([
+    "http://api.mch.weixin.qq.com",
+    "https://api.mch.weixin.qq.com.evil.example",
+    "https://evil.example",
+    "https://user:password@api.mch.weixin.qq.com",
+    "https://api.mch.weixin.qq.com:444",
+    "https://api.mch.weixin.qq.com/v3/certificates",
+    "https://api.mch.weixin.qq.com?target=evil",
+    "https://api.mch.weixin.qq.com#fragment",
+  ])("rejects non-official WeChat Pay API base URL %s", async (baseUrl) => {
+    load.mockImplementationOnce(async () => ({ ...validBundle, baseUrl }));
+    const validator = await createValidator();
+
+    await expect(validator.validate(config())).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_BASE_URL_INVALID",
+    });
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  test("allows the official backup origin and normalizes its trailing slash", async () => {
+    load.mockImplementationOnce(async () => ({
+      ...validBundle,
+      baseUrl: "https://api2.mch.weixin.qq.com/",
+    }));
+    const validator = await createValidator();
+
+    await validator.validate(config());
+
+    expect(probe).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: "https://api2.mch.weixin.qq.com",
+    }));
+  });
 });

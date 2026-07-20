@@ -76,6 +76,7 @@ export class WechatPayProfileValidationGateway {
             "Wechatpay-Serial": input.wechatPayPublicKeyId,
           },
           signal: controller.signal,
+          redirect: "error",
         },
       );
       requestId = response.headers.get("request-id")?.trim() || null;
@@ -96,6 +97,14 @@ export class WechatPayProfileValidationGateway {
           api_v3_key_probe: "format_only",
           request_id: verified.requestId,
         };
+      }
+      if (response.status === 429 || response.status >= 500) {
+        throw Errors.business(
+          503,
+          "微信支付配置验证服务暂时不可用",
+          "WECHAT_PAY_PROFILE_PROBE_UNAVAILABLE",
+          { requestId, status: response.status },
+        );
       }
       if (!response.ok) {
         throw Errors.business(

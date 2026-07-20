@@ -113,6 +113,7 @@ describe("PlatformPaymentConfigRepository", () => {
     const result = await platformPaymentConfigRepository
       .updateWechatPayValidation({
         configId: "config-1",
+        expectedUpdatedAt: "2026-07-18T00:00:00.000Z",
         validationStatus: "invalid",
         lastValidatedAt: "2026-07-20T15:10:00.000Z",
         lastValidationErrorCode: "WECHAT_PAY_PROFILE_PROBE_REJECTED",
@@ -129,7 +130,36 @@ describe("PlatformPaymentConfigRepository", () => {
       last_validation_request_id: "wechat-request-id",
       updated_by_employee_id: "employee-platform",
     });
-    expect(eq).toHaveBeenCalledWith("id", "config-1");
+    expect(eq.mock.calls).toEqual([
+      ["id", "config-1"],
+      ["updated_at", "2026-07-18T00:00:00.000Z"],
+    ]);
     expect(result).toEqual(saved);
+  });
+
+  test("rejects a stale validation write without changing the newer profile", async () => {
+    maybeSingle.mockImplementationOnce(async () => ({ data: null, error: null }));
+    const { platformPaymentConfigRepository } = await import(
+      "./platform-payment-configs"
+    );
+
+    await expect(platformPaymentConfigRepository.updateWechatPayValidation({
+      configId: "config-1",
+      expectedUpdatedAt: "2026-07-18T00:00:00.000Z",
+      validationStatus: "valid",
+      lastValidatedAt: "2026-07-20T15:10:00.000Z",
+      lastValidationErrorCode: null,
+      lastValidationErrorMessage: null,
+      lastValidationRequestId: "wechat-request-id",
+      updatedByEmployeeId: "employee-platform",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "PLATFORM_PAYMENT_PROFILE_CHANGED",
+      message: "支付配置已更新，请重新验证",
+    });
+    expect(eq.mock.calls).toEqual([
+      ["id", "config-1"],
+      ["updated_at", "2026-07-18T00:00:00.000Z"],
+    ]);
   });
 });

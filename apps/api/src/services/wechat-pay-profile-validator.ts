@@ -16,6 +16,11 @@ import {
   type WechatPaySecretBundle,
 } from "@/services/wechat-pay-secret-bundles";
 
+const OFFICIAL_WECHAT_PAY_API_ORIGINS = new Set([
+  "https://api.mch.weixin.qq.com",
+  "https://api2.mch.weixin.qq.com",
+]);
+
 export type WechatPayProfileValidationConfig = {
   profile_code: PlatformPaymentProfileCode;
   merchant_mode: PlatformPaymentMerchantMode;
@@ -89,7 +94,7 @@ export class WechatPayProfileValidator {
       "WECHAT_PAY_PUBLIC_KEY_REQUIRED",
     );
     assertRsaPublicKey(publicKeyPem);
-    const baseUrl = assertHttpsUrl(
+    const baseUrl = assertOfficialWechatPayBaseUrl(
       bundle.baseUrl,
       "微信支付 API 地址必须是 HTTPS URL",
       "WECHAT_PAY_BASE_URL_INVALID",
@@ -117,6 +122,32 @@ export class WechatPayProfileValidator {
         "WECHAT_PAY_PROFILE_MODE_INVALID",
       );
     }
+  }
+}
+
+function assertOfficialWechatPayBaseUrl(
+  value: string | null,
+  message: string,
+  code: string,
+) {
+  const normalized = value?.trim();
+  if (!normalized) throw Errors.business(409, message, code);
+  try {
+    const parsed = new URL(normalized);
+    if (
+      !OFFICIAL_WECHAT_PAY_API_ORIGINS.has(parsed.origin) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw Errors.business(409, message, code);
+    }
+    return parsed.origin;
+  } catch (error) {
+    if (isAppErrorLike(error)) throw error;
+    throw Errors.business(409, message, code);
   }
 }
 

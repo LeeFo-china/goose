@@ -12,8 +12,27 @@ import {
 
 const SAFE_VALIDATION_FAILURE_MESSAGE =
   "微信支付配置验证失败，请检查配置后重试";
+const SAFE_VALIDATION_UNAVAILABLE_MESSAGE =
+  "微信支付配置验证暂时不可用，请稍后重试";
 const GENERIC_VALIDATION_FAILURE_CODE =
   "WECHAT_PAY_PROFILE_VALIDATION_FAILED";
+const DETERMINISTIC_VALIDATION_ERROR_CODES = new Set([
+  "WECHAT_PAY_PROFILE_MODE_INVALID",
+  "WECHAT_PAY_MERCHANT_ID_REQUIRED",
+  "WECHAT_PAY_SERIAL_NO_REQUIRED",
+  "WECHAT_PAY_SECRET_REF_REQUIRED",
+  "WECHAT_PAY_SECRET_BUNDLE_INVALID",
+  "WECHAT_PAY_NOTIFY_URL_INVALID",
+  "WECHAT_PAY_BASE_URL_INVALID",
+  "WECHAT_PAY_API_V3_KEY_INVALID",
+  "WECHAT_PAY_PRIVATE_KEY_INVALID",
+  "WECHAT_PAY_PUBLIC_KEY_REQUIRED",
+  "WECHAT_PAY_PUBLIC_KEY_INVALID",
+  "WECHAT_PAY_PROFILE_PROBE_REJECTED",
+  "WECHAT_PAY_RESPONSE_SERIAL_MISMATCH",
+  "WECHAT_PAY_RESPONSE_SIGNATURE_INVALID",
+  "WECHAT_PAY_PLATFORM_CERTIFICATE_DECRYPT_FAILED",
+]);
 
 type RepositoryPort = Pick<
   typeof platformPaymentConfigRepository,
@@ -83,12 +102,16 @@ export class PlatformPaymentProfileValidationService {
     try {
       probe = await this.validator.validate(config);
     } catch (error) {
-      return this.persistFailure({ config, input, validatedAt, error });
+      if (isDeterministicValidationFailure(error)) {
+        return this.persistFailure({ config, input, validatedAt, error });
+      }
+      throw toSafeUnavailableError(error);
     }
 
     const requestId = sanitizeRequestId(probe.request_id);
     const saved = await this.repository.updateWechatPayValidation({
       configId: config.id,
+      expectedUpdatedAt: config.updated_at,
       validationStatus: "valid",
       lastValidatedAt: validatedAt,
       lastValidationErrorCode: null,
@@ -120,6 +143,7 @@ export class PlatformPaymentProfileValidationService {
       : null;
     const saved = await this.repository.updateWechatPayValidation({
       configId: args.config.id,
+      expectedUpdatedAt: args.config.updated_at,
       validationStatus: "invalid",
       lastValidatedAt: args.validatedAt,
       lastValidationErrorCode: errorCode,
@@ -138,6 +162,28 @@ export class PlatformPaymentProfileValidationService {
       },
     };
   }
+}
+
+function isDeterministicValidationFailure(error: unknown): error is AppError {
+  return error instanceof AppError &&
+    DETERMINISTIC_VALIDATION_ERROR_CODES.has(error.code);
+}
+
+function toSafeUnavailableError(error: unknown) {
+  if (!(error instanceof AppError)) {
+    return Errors.business(
+      502,
+      SAFE_VALIDATION_UNAVAILABLE_MESSAGE,
+      GENERIC_VALIDATION_FAILURE_CODE,
+    );
+  }
+  const requestId = requestIdFromDetails(error.details);
+  return Errors.business(
+    error.statusCode >= 500 ? error.statusCode : 502,
+    SAFE_VALIDATION_UNAVAILABLE_MESSAGE,
+    sanitizeErrorCode(error.code),
+    requestId ? { requestId } : undefined,
+  );
 }
 
 function sanitizeErrorCode(value: string | null) {

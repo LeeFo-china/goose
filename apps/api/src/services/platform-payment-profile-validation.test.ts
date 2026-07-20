@@ -4,6 +4,7 @@ import type {
   PlatformPaymentConfigRecord,
   PlatformPaymentValidationUpdateInput,
 } from "@/repositories/platform-payment-configs";
+import type { WechatPayProfileProbeResult } from "@/services/wechat-pay-profile-validation-gateway";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -51,7 +52,7 @@ const updateWechatPayValidation = mock(
     updated_by_employee_id: input.updatedByEmployeeId,
   }),
 );
-const validate = mock(async () => ({
+const validate = mock(async (): Promise<WechatPayProfileProbeResult> => ({
   ok: true as const,
   probe_mode: "platform_certificate" as const,
   api_v3_key_probe: "decrypted" as const,
@@ -96,6 +97,7 @@ describe("PlatformPaymentProfileValidationService", () => {
 
     expect(updateWechatPayValidation).toHaveBeenCalledWith({
       configId: "platform-config-1",
+      expectedUpdatedAt: "2026-07-20T14:00:00.000Z",
       validationStatus: "valid",
       lastValidatedAt: "2026-07-20T15:10:00.000Z",
       lastValidationErrorCode: null,
@@ -134,6 +136,7 @@ describe("PlatformPaymentProfileValidationService", () => {
 
     expect(updateWechatPayValidation).toHaveBeenCalledWith({
       configId: "platform-config-1",
+      expectedUpdatedAt: "2026-07-20T14:00:00.000Z",
       validationStatus: "invalid",
       lastValidatedAt: "2026-07-20T15:10:00.000Z",
       lastValidationErrorCode: "WECHAT_PAY_PROFILE_PROBE_REJECTED",
@@ -153,25 +156,63 @@ describe("PlatformPaymentProfileValidationService", () => {
     expect(JSON.stringify(result)).not.toContain("BEGIN PRIVATE KEY");
   });
 
-  test("maps unknown validator failures to a stable safe result", async () => {
+  test("wraps unknown validator failures and preserves prior validation status", async () => {
     validate.mockImplementationOnce(async () => {
       throw new TypeError("unexpected secret detail");
     });
     const service = await createService();
 
-    const result = await service.validate({
+    const error = await service.validate({
       profileCode: "platform_direct_recharge",
       employeeId: "employee-platform",
-    });
+    }).catch((caught) => caught);
 
-    expect(result.validation).toMatchObject({
-      ok: false,
-      error_code: "WECHAT_PAY_PROFILE_VALIDATION_FAILED",
-      message: "微信支付配置验证失败，请检查配置后重试",
-      request_id: null,
+    expect(error).toMatchObject({
+      statusCode: 502,
+      code: "WECHAT_PAY_PROFILE_VALIDATION_FAILED",
+      message: "微信支付配置验证暂时不可用，请稍后重试",
     });
-    expect(JSON.stringify(result)).not.toContain("unexpected secret detail");
+    expect(JSON.stringify(error)).not.toContain("unexpected secret detail");
+    expect(updateWechatPayValidation).not.toHaveBeenCalled();
+    expect(config.validation_status).toBe("unchecked");
   });
+
+  test.each([
+    [504, "WECHAT_PAY_PROFILE_PROBE_TIMEOUT"],
+    [502, "WECHAT_PAY_PROFILE_PROBE_TRANSPORT_FAILED"],
+    [503, "WECHAT_PAY_PROFILE_PROBE_UNAVAILABLE"],
+    [502, "WECHAT_PAY_RESPONSE_TIMESTAMP_INVALID"],
+    [502, "WECHAT_PAY_RESPONSE_BODY_INVALID"],
+    [502, "WECHAT_PAY_TRANSPORT_FAILED"],
+    [500, "DB_ERROR"],
+  ] as const)(
+    "propagates unavailable error %s/%s without marking the profile invalid",
+    async (statusCode, code) => {
+      validate.mockImplementationOnce(async () => {
+        throw new AppError(statusCode, "raw infrastructure detail", code, {
+          requestId: "wechat-unavailable-request-id",
+          body: "raw upstream body",
+        });
+      });
+      const service = await createService();
+
+      const error = await service.validate({
+        profileCode: "platform_direct_recharge",
+        employeeId: "employee-platform",
+      }).catch((caught) => caught);
+
+      expect(error).toMatchObject({
+        statusCode,
+        code,
+        message: "微信支付配置验证暂时不可用，请稍后重试",
+        details: { requestId: "wechat-unavailable-request-id" },
+      });
+      expect(JSON.stringify(error)).not.toContain("raw infrastructure detail");
+      expect(JSON.stringify(error)).not.toContain("raw upstream body");
+      expect(updateWechatPayValidation).not.toHaveBeenCalled();
+      expect(config.validation_status).toBe("unchecked");
+    },
+  );
 
   test("returns 404 before probing when the profile is not configured", async () => {
     findWechatPayConfigByProfile.mockImplementationOnce(async () => null);
@@ -199,5 +240,88 @@ describe("PlatformPaymentProfileValidationService", () => {
       employeeId: "employee-platform",
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
     expect(updateWechatPayValidation).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejects a successful probe when profile metadata changed concurrently", async () => {
+    updateWechatPayValidation.mockImplementationOnce(async () => {
+      throw new AppError(
+        409,
+        "支付配置已更新，请重新验证",
+        "PLATFORM_PAYMENT_PROFILE_CHANGED",
+      );
+    });
+    const service = await createService();
+
+    await expect(service.validate({
+      profileCode: "platform_direct_recharge",
+      employeeId: "employee-platform",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "PLATFORM_PAYMENT_PROFILE_CHANGED",
+    });
+    expect(updateWechatPayValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedUpdatedAt: "2026-07-20T14:00:00.000Z",
+        validationStatus: "valid",
+      }),
+    );
+    expect(config.validation_status).toBe("unchecked");
+  });
+
+  test("rejects a failed probe when profile metadata changed concurrently", async () => {
+    validate.mockImplementationOnce(async () => {
+      throw new AppError(
+        502,
+        "微信支付拒绝了配置验证请求",
+        "WECHAT_PAY_PROFILE_PROBE_REJECTED",
+      );
+    });
+    updateWechatPayValidation.mockImplementationOnce(async () => {
+      throw new AppError(
+        409,
+        "支付配置已更新，请重新验证",
+        "PLATFORM_PAYMENT_PROFILE_CHANGED",
+      );
+    });
+    const service = await createService();
+
+    await expect(service.validate({
+      profileCode: "platform_direct_recharge",
+      employeeId: "employee-platform",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "PLATFORM_PAYMENT_PROFILE_CHANGED",
+    });
+    expect(updateWechatPayValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedUpdatedAt: "2026-07-20T14:00:00.000Z",
+        validationStatus: "invalid",
+      }),
+    );
+    expect(config.validation_status).toBe("unchecked");
+  });
+
+  test("keeps signed public-key mode success valid with format-only APIv3 key evidence", async () => {
+    validate.mockImplementationOnce(async () => ({
+      ok: true,
+      probe_mode: "wechat_pay_public_key",
+      api_v3_key_probe: "format_only",
+      request_id: "public-key-request-id",
+    }));
+    const service = await createService();
+
+    const result = await service.validate({
+      profileCode: "platform_direct_recharge",
+      employeeId: "employee-platform",
+    });
+
+    expect(result.validation).toMatchObject({
+      ok: true,
+      probe_mode: "wechat_pay_public_key",
+      api_v3_key_probe: "format_only",
+    });
+    expect(updateWechatPayValidation).toHaveBeenCalledWith(
+      expect.objectContaining({ validationStatus: "valid" }),
+    );
   });
 });

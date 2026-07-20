@@ -62,6 +62,9 @@ export type PlatformPaymentConfigUpsertInput = {
   status: PlatformPaymentConfigStatus;
   validation_status: PlatformPaymentValidationStatus;
   last_validated_at: string | null;
+  last_validation_error_code: string | null;
+  last_validation_error_message: string | null;
+  last_validation_request_id: string | null;
   risk_switches: Record<string, unknown>;
   created_by_employee_id: string | null;
   updated_by_employee_id: string | null;
@@ -69,6 +72,7 @@ export type PlatformPaymentConfigUpsertInput = {
 
 export type PlatformPaymentValidationUpdateInput = {
   configId: string;
+  expectedUpdatedAt: string;
   validationStatus: PlatformPaymentValidationStatus;
   lastValidatedAt: string;
   lastValidationErrorCode: string | null;
@@ -179,11 +183,19 @@ class PlatformPaymentConfigRepository {
         updated_by_employee_id: input.updatedByEmployeeId,
       })
       .eq("id", input.configId)
+      .eq("updated_at", input.expectedUpdatedAt)
       .select("*")
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw Errors.dbError("保存平台微信支付配置验证结果失败", error);
+    }
+    if (!data) {
+      throw Errors.business(
+        409,
+        "支付配置已更新，请重新验证",
+        "PLATFORM_PAYMENT_PROFILE_CHANGED",
+      );
     }
 
     return data as PlatformPaymentConfigRecord;

@@ -143,6 +143,7 @@ describe("WechatPayProfileValidationGateway", () => {
     ];
     expect(url).toBe("https://api.mch.weixin.qq.com/v3/certificates");
     expect(init.method).toBe("GET");
+    expect(init.redirect).toBe("error");
     const headers = new Headers(init.headers);
     expect(headers.get("Accept")).toBe("application/json");
     expect(headers.get("Wechatpay-Serial")).toBe(WECHAT_PAY_PUBLIC_KEY_ID);
@@ -218,6 +219,28 @@ describe("WechatPayProfileValidationGateway", () => {
     });
     expect(JSON.stringify(error)).not.toContain("sensitive upstream detail");
   });
+
+  test.each([429, 500, 503])(
+    "classifies signed upstream status %s as temporarily unavailable",
+    async (status) => {
+      const gateway = await createGateway(
+        mock(async () =>
+          createSignedResponse(
+            { code: "SYSTEM_ERROR", message: "raw upstream detail" },
+            { status, requestId: `unavailable-${status}` },
+          )) as unknown as typeof fetch,
+      );
+
+      const error = await gateway.probe(probeInput()).catch((caught) => caught);
+
+      expect(error).toMatchObject({
+        statusCode: 503,
+        code: "WECHAT_PAY_PROFILE_PROBE_UNAVAILABLE",
+        details: { requestId: `unavailable-${status}`, status },
+      });
+      expect(JSON.stringify(error)).not.toContain("raw upstream detail");
+    },
+  );
 
   test("wraps invalid response signatures with a stable AppError", async () => {
     const unrelatedKey = generateKeyPairSync("rsa", {

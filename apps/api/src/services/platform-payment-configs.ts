@@ -90,6 +90,13 @@ type PlatformPaymentConfigServiceDependencies = {
 
 const PLATFORM_WECHAT_RECHARGE_CHANNEL = "tenant_recharge";
 const DEFAULT_WECHAT_PAY_BASE_URL = "https://api.mch.weixin.qq.com";
+const UNCHECKED_VALIDATION_EVIDENCE = {
+  validation_status: "unchecked" as const,
+  last_validated_at: null,
+  last_validation_error_code: null,
+  last_validation_error_message: null,
+  last_validation_request_id: null,
+};
 
 type PlatformWechatPayProfileDefinition = {
   profile_code: PlatformPaymentProfileCode;
@@ -192,8 +199,7 @@ export class PlatformPaymentConfigService {
         current?.enabled_channels ??
         [PLATFORM_WECHAT_RECHARGE_CHANNEL],
       status: input.status ?? current?.status ?? "pending",
-      validation_status: "unchecked",
-      last_validated_at: null,
+      ...UNCHECKED_VALIDATION_EVIDENCE,
       risk_switches: input.risk_switches ?? current?.risk_switches ?? {},
       created_by_employee_id:
         current?.created_by_employee_id ?? authContext.employeeId,
@@ -304,8 +310,7 @@ export class PlatformPaymentConfigService {
         current?.enabled_channels ??
         definition.enabled_channels,
       status: input.status ?? current?.status ?? "pending",
-      validation_status: "unchecked",
-      last_validated_at: null,
+      ...UNCHECKED_VALIDATION_EVIDENCE,
       risk_switches: input.risk_switches ?? current?.risk_switches ?? {},
       created_by_employee_id:
         current?.created_by_employee_id ?? authContext.employeeId,
@@ -380,8 +385,7 @@ export class PlatformPaymentConfigService {
         enabled_channels: current?.enabled_channels ??
           definition.enabled_channels,
         status: current?.status ?? "pending",
-        validation_status: "unchecked",
-        last_validated_at: null,
+        ...UNCHECKED_VALIDATION_EVIDENCE,
         risk_switches: current?.risk_switches ?? {},
         created_by_employee_id:
           current?.created_by_employee_id ?? authContext.employeeId,
