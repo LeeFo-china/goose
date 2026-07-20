@@ -109,7 +109,7 @@ export default async function MarketingPage({
       <Tabs value={activeTab} className="flex min-h-0 flex-1 flex-col">
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
           <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 py-3 xl:flex-row xl:items-center xl:justify-between">
               <MarketingTabsNav
                 activeTab={activeTab}
                 hrefs={tabHrefs}

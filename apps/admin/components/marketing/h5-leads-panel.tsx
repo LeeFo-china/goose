@@ -11,7 +11,6 @@ import type {
   H5MarketingPageRecord,
   Pagination,
 } from "@/components/marketing/marketing-types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -164,24 +163,16 @@ export function H5LeadsPanel({
         ? "flex shrink-0 flex-col gap-3 border-b bg-card px-4 py-3"
         : "flex flex-col gap-3 border-t px-4 py-4"}
       >
-        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-          {embedded ? (
-            <div className="text-sm text-muted-foreground">
-              按活动页、处理状态、关键词和提交日期筛选线索。
-            </div>
-          ) : (
+        {embedded ? null : (
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
             <div>
               <CardTitle>H5 营销线索</CardTitle>
               <CardDescription>
                 筛选条件作用于下方线索表格，当前共 {pagination.total} 条记录。
               </CardDescription>
             </div>
-          )}
-          <Badge variant="outline">
-            {loading ? <Loader2 className="mr-1 inline size-3 animate-spin" /> : null}
-            第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页
-          </Badge>
-        </div>
+          </div>
+        )}
         <div className="grid gap-3 lg:grid-cols-[150px_210px_1fr_150px_150px_auto]">
           <FormSelect
             id="h5-lead-status-filter"

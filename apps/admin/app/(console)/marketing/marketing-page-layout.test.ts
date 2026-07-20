@@ -10,14 +10,27 @@ function countOccurrences(source: string, value: string) {
 }
 
 describe("Tenant marketing page layout", () => {
+  test("removes helper copy and page badge from the embedded H5 leads filters", () => {
+    const source = readSource("../../../components/marketing/h5-leads-panel.tsx");
+
+    expect(source).not.toContain("按活动页、处理状态、关键词和提交日期筛选线索。");
+    expect(source).not.toContain("第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页");
+  });
+
   test("keeps the right-side status labels from wrapping in every tab", () => {
     const source = readSource("./page.tsx");
+    const headerRowClassName =
+      "flex flex-col gap-3 py-3 xl:flex-row xl:items-center xl:justify-between";
     const statusGroupClassName =
       "flex w-full flex-nowrap items-center gap-2 overflow-x-auto overflow-y-hidden text-sm text-muted-foreground xl:w-auto xl:justify-end";
     const headerStart = source.indexOf(`className="${statusGroupClassName}"`);
     const headerEnd = source.indexOf("</CardHeader>", headerStart);
     const headerSource = source.slice(headerStart, headerEnd);
 
+    expect(source).toContain(`className="${headerRowClassName}"`);
+    expect(source).not.toContain(
+      'className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between"',
+    );
     expect(source).toContain(`className="${statusGroupClassName}"`);
     expect(headerSource).not.toContain(
       'className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"',
