@@ -4,6 +4,10 @@
 
 本清单用于“模板开发安装 + 一个已授权测试商户”的上线前验收。标记为 **[阻断]** 的条目失败、未执行或证据缺失时必须停止发布；其他条目未通过也必须记录负责人、风险接受审批和补测期限。真实模板上传、提审、发布分别取得与环境、安装 UUID、模板版本绑定的授权；远端 migration 单独取得与环境、Supabase project ref、migration 版本集合绑定的授权。
 
+本清单仍覆盖最终上线提审与发布的通用验收。本次开发环境 E2E 的执行证据记录在
+`docs/operations/evidence/2026-07-20-douyin-dev-e2e.md`，到 test-qr / 本地发布状态 `testing` 即停止。
+submit-audit、sync-status 和 publish 均为 `NOT_IN_SCOPE`，本轮不得执行或勾选通过；后续上线验收需另行授权并完成通用 G 项。
+
 ### 执行记录
 
 - 执行日期：`YYYY-MM-DD`
@@ -30,6 +34,10 @@
 - [ ] **[阻断]** 审批单的环境/project ref 与 CLI link 目标逐字符一致。
 - [ ] **[阻断]** 远端 migration 如需应用，已取得明确授权，并用 `--linked` 在应用前后保存证据、确认 Local/Remote 对齐。
 - [ ] **[阻断]** 开放平台两个 HTTPS 回调校验成功，响应为纯文本 `success`。
+- [ ] **[阻断]** `development`、`preview` 只解析到 `api-dev.goodcms.cn`；`production` 只解析到 `api.goodcms.cn`；未知环境失败关闭。
+- [ ] **[阻断]** 首个合法 Ticket 能幂等建立 active 组件；过期、签名错误、AppID 错误和 disabled 组件均无新增写入。
+- [ ] **[阻断]** 模板开发安装与测试商户安装分别绑定两个获批的专用开发测试租户。
+- [ ] **[阻断]** 本轮商户发布记录最高只到 `testing`，没有 submit-audit、sync-status 或 publish 调用。
 - [ ] **[阻断]** 当前测试只针对明确授权的测试商户，不存在批量操作。
 
 规范扫描命令：

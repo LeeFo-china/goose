@@ -33,7 +33,16 @@
 | `DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION` | 当前写入密钥版本 | 必须存在于密钥环中 |
 | `DOUYIN_SUBJECT_HASH_KEY` | OpenID 等主体标识散列密钥 | 至少 32 字符，仅服务端 |
 
-小程序 API 地址当前由 `apps/douyin-mini/src/config/index.ts` 固定为 HTTPS 地址。切换环境时必须审核该文件并重新构建，不能用客户端参数选择租户或 API 主机。
+小程序 API Origin 由 `tt.getEnvInfoSync().microapp.envType` 严格决定：
+
+| envType | API Origin |
+| --- | --- |
+| `development` | `https://api-dev.goodcms.cn` |
+| `preview` | `https://api-dev.goodcms.cn` |
+| `production` | `https://api.goodcms.cn` |
+
+未知环境、缺少环境信息或不支持该 API 时失败关闭，不回落生产。API Origin 不从启动参数、
+`ext.json`、租户配置或远端响应读取；`deployment_key` 仍只用于商户实例识别。
 
 启动前检查：
 
@@ -54,6 +63,10 @@ bun run api:check
 | 消息与 Ticket 事件 | `<API_ORIGIN>/douyin-thirdparty/events/message` | `POST`，HTTP 200，纯文本 `success` |
 
 控制台的消息 Token、EncodingAESKey 必须分别与 `DOUYIN_COMPONENT_MESSAGE_TOKEN`、`DOUYIN_COMPONENT_MESSAGE_AES_KEY` 一致。上线前用控制台校验功能确认公网证书、DNS、WAF 和请求体透传正常。不要把回调 URL 配到普通小程序会话接口。
+
+空环境的首个合法 `PUSH Ticket` 在完成时间窗口、签名、AES 解密和 Component AppID 校验后，
+由 `claim_douyin_authorization_event` 幂等建立 active 组件并保存加密 Ticket。普通授权、撤销或未知事件
+不能注册组件；已有 disabled 组件不会被回调自动启用。成功正文必须精确为小写纯文本 `success`。
 
 ## 4. Migration 门禁
 
