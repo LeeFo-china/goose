@@ -35,7 +35,7 @@
 | Git Commit | 完整 SHA | NOT_RECORDED |
 | Supabase | 只记录开发 project ref | NOT_RECORDED |
 | 开发 API 部署 | `api-dev.goodcms.cn` + 服务标识 + Actions run ID | NOT_RECORDED |
-| API 零调用日志窗口 | UTC 起止时间 + 同一容器 ID + 起止标记计数 | NOT_RECORDED |
+| API 零调用日志窗口 | UTC 起止时间 + 同一容器 ID + 唯一非敏感 marker ID + 起止标记各精确 1 次 | NOT_RECORDED |
 | Component AppID | 只记录尾 4 位 | NOT_RECORDED |
 | Template AppID | 只记录尾 4 位 | NOT_RECORDED |
 | Authorizer AppID | 只记录尾 4 位 | NOT_RECORDED |

@@ -524,8 +524,8 @@ auditable development-only record. It must contain all of the following, initial
 - a prominent boundary that `PASS` covers only `api-dev.goodcms.cn` through test-qr / `testing`
   and never authorizes production, audit or publish;
 - an explicit `PASS` invariant requiring all 13 stages, Android and iOS, a `testing` release
-  with null audit/publish timestamps, and a complete same-container API log window with zero
-  calls to the three prohibited routes;
+  with null audit/publish timestamps, and a complete same-container API log window delimited by
+  unique per-run start/end marker keys with zero calls to the three prohibited routes;
 - executor、reviewer、execution window and overall authorization references;
 - fixed Git/Supabase/API/AppID suffix/tenant/installation/release/masked-phone objects;
 - test-data and cleanup/retention policy, with no manual DDL/DML;
@@ -786,16 +786,22 @@ E2E_API_LOG_START_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 E2E_API_CONTAINER_ID="$(sudo docker inspect -f '{{.Id}}' gooes-api-dev)"
 E2E_API_CONTAINER_REVISION="$(sudo docker inspect \
   -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api-dev)"
+IFS= read -r E2E_API_LOG_MARKER_UUID </proc/sys/kernel/random/uuid
+E2E_API_LOG_MARKER_ID="${E2E_API_LOG_MARKER_UUID//-/}"
+[[ "$E2E_API_LOG_MARKER_ID" =~ ^[0-9a-f]{32}$ ]]
+E2E_API_LOG_START_KEY="douyin_e2e_log_start_${E2E_API_LOG_MARKER_ID}"
 test "$E2E_API_CONTAINER_REVISION" = "$FULL_SHA"
-curl -fsS 'https://api-dev.goodcms.cn/?douyin_e2e_log_start=1' >/dev/null
+curl -fsS --get --data-urlencode "${E2E_API_LOG_START_KEY}=1" \
+  'https://api-dev.goodcms.cn/' >/dev/null
 printf '%s\n' "$E2E_API_LOG_START_UTC" "$E2E_API_CONTAINER_ID" \
-  "$E2E_API_CONTAINER_REVISION"
+  "$E2E_API_CONTAINER_REVISION" "$E2E_API_LOG_MARKER_ID"
 ```
 
-Record only these three non-secret values in the evidence file. The query value is not logged;
-the `douyin_e2e_log_start` query-key marker proves at Task 13 that logs still cover the start of
-the window. If this container is recreated or its logs rotate past the start marker, overall
-status cannot be `PASS` without another complete controlled log source.
+Record only these four non-secret values in the evidence file. The per-run random marker ID is
+an audit correlation identifier, not a credential; its start query key must occur exactly once.
+At Task 13, reconstruct the matching end key from the same ID. If this container is recreated,
+either marker count differs from one or logs rotate past the unique start marker, overall status
+cannot be `PASS` without another complete controlled log source.
 
 ## Task 7：配置真实回调并接收首个 Ticket
 
@@ -1329,16 +1335,21 @@ never called.
 - [ ] **Step 2：用完整受控日志窗口证明禁止路由零调用**
 
 From the evidence file, set the safe `E2E_API_LOG_START_UTC` and
-`E2E_API_CONTAINER_ID` recorded in Task 6. Then, in the same secured read-only server session,
+`E2E_API_CONTAINER_ID` and non-sensitive `E2E_API_LOG_MARKER_ID` recorded in Task 6. Then, in the same secured read-only server session,
 send an end marker and count exact Fastify route templates without printing raw log lines:
 
 ```bash
 set -o pipefail
 : "${E2E_API_LOG_START_UTC:?set from evidence}"
 : "${E2E_API_CONTAINER_ID:?set from evidence}"
+: "${E2E_API_LOG_MARKER_ID:?set from evidence}"
+[[ "$E2E_API_LOG_MARKER_ID" =~ ^[0-9a-f]{32}$ ]]
+E2E_API_LOG_START_KEY="douyin_e2e_log_start_${E2E_API_LOG_MARKER_ID}"
+E2E_API_LOG_END_KEY="douyin_e2e_log_end_${E2E_API_LOG_MARKER_ID}"
 CURRENT_CONTAINER_ID="$(sudo docker inspect -f '{{.Id}}' gooes-api-dev)"
 test "$CURRENT_CONTAINER_ID" = "$E2E_API_CONTAINER_ID"
-curl -fsS 'https://api-dev.goodcms.cn/?douyin_e2e_log_end=1' >/dev/null
+curl -fsS --get --data-urlencode "${E2E_API_LOG_END_KEY}=1" \
+  'https://api-dev.goodcms.cn/' >/dev/null
 E2E_API_LOG_END_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
 count_query_key() {
@@ -1355,16 +1366,16 @@ count_route() {
     wc -l | tr -d ' '
 }
 
-START_MARKERS="$(count_query_key douyin_e2e_log_start)" || exit 1
-END_MARKERS="$(count_query_key douyin_e2e_log_end)" || exit 1
+START_MARKERS="$(count_query_key "$E2E_API_LOG_START_KEY")" || exit 1
+END_MARKERS="$(count_query_key "$E2E_API_LOG_END_KEY")" || exit 1
 SUBMIT_AUDIT_CALLS="$(count_route \
   '/platform/douyin-miniapps/:id/releases/:releaseId/submit-audit')" || exit 1
 SYNC_STATUS_CALLS="$(count_route \
   '/platform/douyin-miniapps/:id/releases/:releaseId/sync-status')" || exit 1
 PUBLISH_CALLS="$(count_route \
   '/platform/douyin-miniapps/:id/releases/:releaseId/publish')" || exit 1
-test "$START_MARKERS" -ge 1
-test "$END_MARKERS" -ge 1
+test "$START_MARKERS" -eq 1
+test "$END_MARKERS" -eq 1
 test "$SUBMIT_AUDIT_CALLS" -eq 0
 test "$SYNC_STATUS_CALLS" -eq 0
 test "$PUBLISH_CALLS" -eq 0
@@ -1373,9 +1384,9 @@ printf 'start_markers=%s\nend_markers=%s\nsubmit_audit=%s\nsync_status=%s\npubli
   "$SYNC_STATUS_CALLS" "$PUBLISH_CALLS"
 ```
 
-Expected: same container ID, both boundary markers present and all three prohibited route counts
-equal zero. Save only UTC window、container ID and five counts. If the container changed, the
-start marker is absent, log retrieval fails or any count is nonzero, overall status cannot be
+Expected: same container ID, the two unique per-run boundary keys each occur exactly once and all
+three prohibited route counts equal zero. Save only UTC window、container ID、marker ID and five
+counts. If the container changed, either marker count differs from one, log retrieval fails or any count is nonzero, overall status cannot be
 `PASS`; release timestamps cannot override this result.
 
 - [ ] **Step 3：重新运行软件与仓库门禁**
@@ -1398,7 +1409,7 @@ Replace every executed `NOT_RUN` / `NOT_RECORDED` with actual safe data and `PAS
 
 - full Git SHA and Actions run ID;
 - dev project ref;
-- API log UTC window、same-container ID、start/end marker counts and zero counts for all three
+- API log UTC window、same-container ID、non-sensitive marker ID、exactly-one start/end counts and zero counts for all three
   prohibited routes;
 - AppID suffixes only;
 - tenant/install/release UUIDs;
@@ -1436,6 +1447,8 @@ unset GOOES_E2E_PLATFORM_ADMIN_PHONE
 unset MAIN_TENANT_ID ISOLATION_TENANT_ID
 unset TEMPLATE_INSTALLATION_ID MERCHANT_INSTALLATION_ID MERCHANT_APP_ID RELEASE_ID
 unset E2E_API_LOG_START_UTC E2E_API_LOG_END_UTC E2E_API_CONTAINER_ID
+unset E2E_API_LOG_MARKER_UUID E2E_API_LOG_MARKER_ID
+unset E2E_API_LOG_START_KEY E2E_API_LOG_END_KEY
 unset E2E_API_CONTAINER_REVISION CURRENT_CONTAINER_ID
 unset START_MARKERS END_MARKERS SUBMIT_AUDIT_CALLS SYNC_STATUS_CALLS PUBLISH_CALLS
 ```
