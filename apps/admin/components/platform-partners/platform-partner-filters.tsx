@@ -285,8 +285,11 @@ function TextFilter({
   defaultValue: string;
 }) {
   return (
-    <Field className="min-w-[220px] flex-1 gap-1 md:max-w-72">
-      <FieldLabel htmlFor={`partner-filter-${name}`} className="text-sm">
+    <Field className="min-w-[220px] flex-1 flex-row items-center gap-2 md:max-w-72">
+      <FieldLabel
+        htmlFor={`partner-filter-${name}`}
+        className="shrink-0 text-sm font-medium text-foreground"
+      >
         {label}
       </FieldLabel>
       <Input
@@ -294,7 +297,7 @@ function TextFilter({
         name={name}
         defaultValue={defaultValue}
         placeholder={placeholder}
-        className="h-9"
+        className="h-9 min-w-0 flex-1"
       />
     </Field>
   );

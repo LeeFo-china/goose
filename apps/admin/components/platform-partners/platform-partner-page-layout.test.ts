@@ -39,6 +39,20 @@ describe("Platform partner operation page", () => {
     expect(source).not.toContain("当前筛选：");
   });
 
+  test("keeps all partner filter labels aligned on the left", () => {
+    const source = readSource("./platform-partner-filters.tsx");
+    const filterSelectSource = readSource("../admin/filter-select.tsx");
+    const textFilterSource = source.slice(
+      source.indexOf("function TextFilter"),
+      source.length,
+    );
+
+    expect(textFilterSource).toContain('className="min-w-[220px] flex-1 flex-row items-center gap-2 md:max-w-72"');
+    expect(textFilterSource).toContain('className="shrink-0 text-sm font-medium text-foreground"');
+    expect(textFilterSource).toContain('className="h-9 min-w-0 flex-1"');
+    expect(filterSelectSource).toContain('className="min-w-fit flex-row items-center gap-2"');
+  });
+
   test("exposes the MVP operation actions through backend endpoints", () => {
     const source = `${readSource("./platform-partner-actions.tsx")}\n${
       readSource("./platform-partner-application-actions.tsx")
