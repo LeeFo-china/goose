@@ -11,7 +11,15 @@ describe("resolveApiBaseUrl", () => {
     expect(resolveApiBaseUrl(envType)).toBe(expected);
   });
 
-  test.each(["", "trial", "release", "Development"])(
+  test.each([
+    "",
+    "trial",
+    "release",
+    "Development",
+    "toString",
+    "constructor",
+    "__proto__",
+  ])(
     "rejects unknown environment %p without falling back to production",
     (envType) => {
       let caught: unknown;
