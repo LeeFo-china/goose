@@ -69,7 +69,6 @@ export const UpdateWechatPayConfigSchema = z.object({
     .max(5, "启用渠道过多")
     .optional(),
   settlement_account_summary: nullableText(200, "结算账户摘要不能超过 200 个字符"),
-  encrypted_config_ref: nullableText(300, "密钥引用不能超过 300 个字符"),
   risk_switches: z.record(z.string(), z.unknown()).optional(),
   serial_no: nullableText(128, "证书序列号不能超过 128 个字符"),
   notify_url: z.preprocess((value) => {

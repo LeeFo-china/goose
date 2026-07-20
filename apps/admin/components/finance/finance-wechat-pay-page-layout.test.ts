@@ -63,6 +63,21 @@ describe("Finance wechat pay admin page layout", () => {
     expect(formSource).toContain("disabled: true");
   });
 
+  test("does not expose the internal secret reference in tenant APIs or forms", () => {
+    const formSource = readFileSync(
+      new URL("./finance-wechat-pay-config-form.tsx", import.meta.url),
+      "utf8",
+    );
+    const requestSource = readFileSync(
+      new URL("./finance-wechat-pay-requests.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(requestSource).not.toMatch(/^\s+encrypted_config_ref:/m);
+    expect(formSource).not.toContain('name="encrypted_config_ref"');
+    expect(formSource).not.toContain('optionalText(form, "encrypted_config_ref")');
+  });
+
   test("config form uses shadcn select components instead of native select controls", () => {
     const formSource = readFileSync(
       new URL("./finance-wechat-pay-config-form.tsx", import.meta.url),

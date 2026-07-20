@@ -21,7 +21,6 @@ export type WechatPayConfigView = {
   status: string;
   enabled_channels: unknown;
   settlement_account_summary: string | null;
-  encrypted_config_ref: string | null;
   has_encrypted_config_ref: boolean;
   risk_switches: unknown;
   serial_no_masked: string | null;

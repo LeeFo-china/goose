@@ -13,7 +13,7 @@ describe("UpdateWechatPayConfigSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  test("accepts safe display fields and encrypted config reference", () => {
+  test("accepts safe display fields", () => {
     const result = UpdateWechatPayConfigSchema.safeParse({
       principal_type: "tenant",
       merchant_mode: "service_provider_sub_merchant",
@@ -31,12 +31,21 @@ describe("UpdateWechatPayConfigSchema", () => {
       status: "pending",
       enabled_channels: ["project_payment"],
       settlement_account_summary: "招商银行 尾号 1234",
-      encrypted_config_ref: "secret://tenant-1/wechat-pay",
       serial_no: "1234567890abcdef",
       notify_url: "https://api.example.com/wechat-pay/notify",
     });
 
     expect(result.success).toBe(true);
+  });
+
+  test("rejects internal encrypted config references from tenant clients", () => {
+    const result = UpdateWechatPayConfigSchema.safeParse({
+      merchant_mode: "direct_merchant",
+      status: "pending",
+      encrypted_config_ref: "secret://tenant-1/wechat-pay",
+    });
+
+    expect(result.success).toBe(false);
   });
 
   test("rejects unknown onboarding states", () => {

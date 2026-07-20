@@ -50,7 +50,6 @@ export type WechatPayConfigView = {
   status: string;
   enabled_channels: unknown;
   settlement_account_summary: string | null;
-  encrypted_config_ref: string | null;
   has_encrypted_config_ref: boolean;
   risk_switches: unknown;
   serial_no_masked: string | null;
@@ -146,9 +145,7 @@ export class WechatPayConfigService {
         current?.enabled_channels ??
         ["project_payment"],
       settlement_account_summary: input.settlement_account_summary ?? null,
-      encrypted_config_ref: input.encrypted_config_ref === undefined
-        ? current?.encrypted_config_ref ?? null
-        : input.encrypted_config_ref,
+      encrypted_config_ref: current?.encrypted_config_ref ?? null,
       risk_switches: (input.risk_switches === undefined
         ? current?.risk_switches ?? {}
         : input.risk_switches) as WechatPayConfigUpsertInput["risk_switches"],
@@ -210,7 +207,6 @@ export class WechatPayConfigService {
       status: config.status,
       enabled_channels: config.enabled_channels,
       settlement_account_summary: config.settlement_account_summary,
-      encrypted_config_ref: config.encrypted_config_ref,
       has_encrypted_config_ref: Boolean(config.encrypted_config_ref),
       risk_switches: config.risk_switches,
       serial_no_masked: this.maskSerialNo(config.serial_no),

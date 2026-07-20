@@ -1,6 +1,7 @@
+import Link from "next/link";
+import { Settings } from "lucide-react";
 import { FilterSelect } from "@/components/admin/filter-select";
 import {
-  PlatformWechatPayConfigButton,
   RecommendedRechargeProductsButton,
   RechargeProductCreateButton,
   RechargeProductEditButton,
@@ -13,6 +14,7 @@ import type {
   PlatformWechatPayConfigResult,
 } from "@/components/billing/billing-types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TabsContent } from "@/components/ui/tabs";
 import { FilterInput, FilterPanel, formatDateTime, SectionHeader } from "./billing-page-shared";
@@ -42,7 +44,21 @@ export function BillingRechargeTab({
             description="员工小程序积分充值使用平台直连商户，租户项目收款仍走服务商/特约商户链路。"
             badge={configStatusLabel(configResult.config?.status)}
             badgeVariant={configResult.config?.status === "active" ? "success" : "outline"}
-            action={<PlatformWechatPayConfigButton configResult={configResult} />}
+            action={
+              configResult.can_manage ? (
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/settings?group=payment">
+                    <Settings data-icon="inline-start" />
+                    管理支付配置
+                  </Link>
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" disabled>
+                  <Settings data-icon="inline-start" />
+                  管理支付配置
+                </Button>
+              )
+            }
           />
           <div className="grid gap-3 rounded-md border bg-background p-3 md:grid-cols-4">
             <InfoItem label="商户号" value={configResult.config?.merchant_id || "-"} />

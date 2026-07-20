@@ -103,7 +103,6 @@ export type PlatformWechatPayConfigView = {
   merchant_name: string | null;
   merchant_id: string | null;
   app_id: string | null;
-  encrypted_config_ref: string | null;
   serial_no_masked: string | null;
   notify_url: string | null;
   enabled_channels: string[];

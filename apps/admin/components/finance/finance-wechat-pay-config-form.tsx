@@ -109,7 +109,6 @@ export function FinanceWechatPayConfigForm({
       status: requiredText(form, "status") || "pending",
       enabled_channels: ["project_payment"],
       settlement_account_summary: optionalText(form, "settlement_account_summary"),
-      encrypted_config_ref: optionalText(form, "encrypted_config_ref"),
       notify_url: optionalText(form, "notify_url"),
     };
     if (serialNo) {
@@ -276,14 +275,6 @@ export function FinanceWechatPayConfigForm({
           type="url"
           defaultValue={config?.notify_url || ""}
           disabled={pending || readonly}
-          className="md:col-span-2"
-        />
-        <TextField
-          label="密钥引用"
-          name="encrypted_config_ref"
-          defaultValue={config?.encrypted_config_ref || ""}
-          disabled={pending || readonly}
-          description={config?.has_encrypted_config_ref ? "已绑定密钥引用" : "保存密钥管理系统中的引用地址"}
           className="md:col-span-2"
         />
         <TextField

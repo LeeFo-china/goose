@@ -147,6 +147,7 @@ describe("WechatPayConfigService", () => {
       has_encrypted_config_ref: true,
     });
     expect(result.config).not.toHaveProperty("serial_no");
+    expect(result.config).not.toHaveProperty("encrypted_config_ref");
   });
 
   test("keeps centrally managed service-provider config read-only", async () => {

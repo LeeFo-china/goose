@@ -35,6 +35,14 @@ describe("platform billing recharge operations UI", () => {
     expect(orderActions).toContain("/api/backend/platform/billing/recharge-orders/${order.id}/compensate");
   });
 
+  test("routes payment configuration to the canonical settings workflow", () => {
+    expect(rechargeTab).toContain('href="/settings?group=payment"');
+    expect(productActions).not.toContain("encrypted_config_ref");
+    expect(productActions).not.toContain(
+      "/api/backend/platform/payment/wechat-pay/config",
+    );
+  });
+
   test("exposes refund review without exposing real refund execution", () => {
     expect(billingPage).toContain("tab: \"refunds\"");
     expect(billingPage).toContain("/platform/billing/recharge-refund-requests?");
