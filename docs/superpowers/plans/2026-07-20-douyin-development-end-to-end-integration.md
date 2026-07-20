@@ -596,6 +596,7 @@ bun run douyin-mini:check
 bun run api:check
 bun test packages/domain/src/douyin-miniapp.test.ts packages/domain/src/permission.test.ts
 (cd apps/api && bun test \
+  src/repositories/douyin-authorization-events.test.ts \
   src/services/douyin-miniapp/authorization-events.test.ts \
   src/services/douyin-miniapp/authorization-events-migration-contract.test.ts \
   src/services/douyin-miniapp/session.test.ts \
