@@ -193,11 +193,13 @@ describe("DouyinMiniappContentService", () => {
     });
     const service = new DouyinMiniappContentService(deps as never);
 
+    const bootstrap = await service.bootstrap(user);
     const list = await service.listSites(user, { page: 1, pageSize: 20 });
     const detail = await service.getSite(user, PROJECT_ID);
 
+    expect(bootstrap.content.active_sites[0]!.title).toBe("示例花园");
     expect(list.items[0]!.title).toBe("示例花园");
     expect(detail.title).toBe("示例花园");
-    expect(JSON.stringify({ list, detail })).not.toContain(privateName);
+    expect(JSON.stringify({ bootstrap, list, detail })).not.toContain(privateName);
   });
 });
