@@ -7120,6 +7120,7 @@ export type Database = {
           merchant_name: string | null
           notify_url: string | null
           opened_at: string | null
+          platform_payment_config_id: string | null
           principal_type: string
           provider: string
           risk_switches: Json
@@ -7155,6 +7156,7 @@ export type Database = {
           merchant_name?: string | null
           notify_url?: string | null
           opened_at?: string | null
+          platform_payment_config_id?: string | null
           principal_type?: string
           provider: string
           risk_switches?: Json
@@ -7190,6 +7192,7 @@ export type Database = {
           merchant_name?: string | null
           notify_url?: string | null
           opened_at?: string | null
+          platform_payment_config_id?: string | null
           principal_type?: string
           provider?: string
           risk_switches?: Json
