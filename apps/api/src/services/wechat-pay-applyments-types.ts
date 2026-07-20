@@ -1,4 +1,8 @@
 import type {
+  PlatformPaymentConfigRecord,
+  PlatformPaymentProfileCode,
+} from "@/repositories/platform-payment-configs";
+import type {
   WechatPayApplymentEventInsert,
   WechatPayApplymentEventRecord,
   WechatPayApplymentInsert,
@@ -46,6 +50,12 @@ export type WechatPayConfigRepositoryPort = {
   }) => Promise<WechatPayConfigRecord>;
 };
 
+export type PlatformPaymentConfigRepositoryPort = {
+  findWechatPayConfigByProfile: (
+    profileCode: PlatformPaymentProfileCode,
+  ) => Promise<PlatformPaymentConfigRecord | null>;
+};
+
 export type AccessPolicyPort = {
   assertTenantContext: (authContext: AuthContext) => string;
   hasPermission: (authContext: AuthContext, permissionCode: string) => boolean;
@@ -54,6 +64,7 @@ export type AccessPolicyPort = {
 export type WechatPayApplymentServiceDependencies = {
   repository?: WechatPayApplymentRepositoryPort;
   configRepository?: WechatPayConfigRepositoryPort;
+  platformPaymentConfigRepository?: PlatformPaymentConfigRepositoryPort;
   accessPolicyService?: AccessPolicyPort;
   applicationNoFactory?: () => string;
   nowFactory?: () => string;

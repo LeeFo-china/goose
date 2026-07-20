@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
+import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
   wechatPayOrderRepository,
   type WechatPayOrderCreateInput,
@@ -32,6 +33,10 @@ import {
   assertWechatPayPendingOrderRetryMatches,
   requireWechatPayPayerOpenid,
 } from "@/services/wechat-pay-order-retry";
+import {
+  loadWechatPayOrderSecretBundle,
+  type PlatformPaymentConfigLookupPort,
+} from "@/services/wechat-pay-order-platform-provenance";
 
 type WorkflowTaskRepositoryPort = Pick<typeof workflowTaskRepository, "findById">;
 type WechatPayConfigRepositoryPort = Pick<
@@ -56,6 +61,7 @@ type WechatPayOrderServiceDependencies = {
   orderRepository?: WechatPayOrderRepositoryPort;
   workflowTaskRepository?: WorkflowTaskRepositoryPort;
   configRepository?: WechatPayConfigRepositoryPort;
+  platformPaymentConfigRepository?: PlatformPaymentConfigLookupPort;
   secretBundleService?: {
     load: (encryptedConfigRef: string | null) => Promise<WechatPaySecretBundle>;
   };
@@ -90,6 +96,8 @@ export class WechatPayOrderService {
   private readonly orderRepository: WechatPayOrderRepositoryPort;
   private readonly workflowTaskRepository: WorkflowTaskRepositoryPort;
   private readonly configRepository: WechatPayConfigRepositoryPort;
+  private readonly platformPaymentConfigRepository:
+    PlatformPaymentConfigLookupPort;
   private readonly secretBundleService: NonNullable<
     WechatPayOrderServiceDependencies["secretBundleService"]
   >;
@@ -105,6 +113,9 @@ export class WechatPayOrderService {
       dependencies.workflowTaskRepository ?? workflowTaskRepository;
     this.configRepository = dependencies.configRepository ??
       wechatPayConfigRepository;
+    this.platformPaymentConfigRepository =
+      dependencies.platformPaymentConfigRepository ??
+        platformPaymentConfigRepository;
     this.secretBundleService = dependencies.secretBundleService ??
       wechatPaySecretBundleService;
     this.wechatPayGateway = dependencies.wechatPayGateway ?? wechatPayGateway;
@@ -147,11 +158,13 @@ export class WechatPayOrderService {
         order: existing,
         request: normalizedInput,
       });
+      const secretBundle = await this.loadOrderSecretBundle(config);
       const resumed = await this.preparePaymentRequest({
         config,
         order: existing,
         taskTitle: task.title,
         tenantId,
+        secretBundle,
       });
       return {
         idempotent: true,
@@ -169,9 +182,7 @@ export class WechatPayOrderService {
 
     const config = await this.configRepository.findWechatPayConfig(tenantId);
     assertWechatPayConfigReadyForOrder(config);
-    const secretBundle = await this.secretBundleService.load(
-      config.encrypted_config_ref,
-    );
+    const secretBundle = await this.loadOrderSecretBundle(config);
     const orderInput = this.buildCreateInput({
       authContext,
       config,
@@ -377,6 +388,14 @@ export class WechatPayOrderService {
       prepayId: prepay.prepayId,
     });
     return { order, paymentRequest: prepay.paymentRequest };
+  }
+
+  private loadOrderSecretBundle(config: WechatPayConfigRecord) {
+    return loadWechatPayOrderSecretBundle({
+      tenantConfig: config,
+      platformConfigRepository: this.platformPaymentConfigRepository,
+      secretBundleService: this.secretBundleService,
+    });
   }
 
   private toReceivablePlanView(plan: WechatPayReceivablePlanRecord) {

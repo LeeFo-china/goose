@@ -88,7 +88,7 @@ describe("wechat pay applyment schemas", () => {
     expect(listResult.data.pageSize).toBe(50);
   });
 
-  test("validates platform review and activation payloads", () => {
+  test("validates platform review and empty activation payload", () => {
     const rejectResult = RejectWechatPayApplymentSchema.safeParse({
       reason: "结算账户摘要缺失",
     });
@@ -101,17 +101,19 @@ describe("wechat pay applyment schemas", () => {
       appid_binding_state: "bound",
       appid_binding_message: "平台小程序已绑定",
     });
-    const activateResult = ActivateWechatPayApplymentConfigSchema.safeParse({
-      merchant_id: "1561816121",
-      app_id: "wxbac3b1e168fd968a",
-      encrypted_config_ref: "secret://tenant/wechat-pay",
-      notify_url: "https://api.goodcms.cn/pay/wechat/callback",
-      serial_no: "35C43EE32058EAB43714A18193927CF0BE31BC02",
-    });
+    const activateResult = ActivateWechatPayApplymentConfigSchema.safeParse({});
 
     expect(rejectResult.success).toBe(true);
     expect(wechatStatusResult.success).toBe(true);
     expect(activateResult.success).toBe(true);
+  });
+
+  test("rejects caller-supplied credentials during activation", () => {
+    const result = ActivateWechatPayApplymentConfigSchema.safeParse({
+      merchant_id: "1561816121",
+    });
+
+    expect(result.success).toBe(false);
   });
 
   test("rejects unsupported applyment states and invalid pagination", () => {

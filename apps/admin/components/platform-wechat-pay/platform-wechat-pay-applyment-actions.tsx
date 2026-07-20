@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -139,19 +144,10 @@ export function PlatformWechatPayApplymentActions({
 
   function handleActivate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
     submitJson(
       `/platform/finance/wechat-pay/applyments/${applyment.id}/activate-config`,
       "POST",
-      {
-        merchant_id: requiredText(form, "merchant_id"),
-        app_id: requiredText(form, "app_id"),
-        merchant_name: optionalText(form, "merchant_name"),
-        encrypted_config_ref: requiredText(form, "encrypted_config_ref"),
-        notify_url: requiredText(form, "notify_url"),
-        serial_no: requiredText(form, "serial_no"),
-        settlement_account_summary: optionalText(form, "settlement_account_summary"),
-      },
+      {},
       "激活微信支付配置失败",
     );
   }
@@ -243,23 +239,13 @@ export function PlatformWechatPayApplymentActions({
       </ActionSection>
 
       <ActionSection title="激活配置" onSubmit={handleActivate}>
-        <FieldGroup className="grid gap-3 md:grid-cols-2">
-          <TextField name="merchant_id" label="服务商商户号" />
-          <TextField name="app_id" label="平台小程序 AppID" />
-          <TextField
-            name="merchant_name"
-            label="商户名称"
-            defaultValue={applyment.merchant_short_name}
-          />
-          <TextField
-            name="settlement_account_summary"
-            label="结算账户摘要"
-            defaultValue={applyment.settlement_account_summary || ""}
-          />
-          <TextField name="encrypted_config_ref" label="密钥引用" />
-          <TextField name="serial_no" label="证书序列号" />
-          <TextField name="notify_url" label="回调地址" className="md:col-span-2" />
-        </FieldGroup>
+        <Field>
+          <FieldLabel>配置来源</FieldLabel>
+          <FieldDescription>
+            商户号、AppID、证书、回调地址和密钥引用来自已验证的中央服务商配置；
+            租户商户名称、子商户号和结算摘要来自当前申请。
+          </FieldDescription>
+        </Field>
         <Button type="submit" disabled={pending}>
           激活支付配置
         </Button>

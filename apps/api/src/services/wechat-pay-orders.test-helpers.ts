@@ -1,3 +1,4 @@
+import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { AuthContext } from "@/services/authorization";
 
@@ -7,6 +8,7 @@ export const receivablePlanId = "22222222-2222-4222-8222-222222222222";
 export const workflowTaskId = "33333333-3333-4333-8333-333333333333";
 export const workflowInstanceId = "44444444-4444-4444-8444-444444444444";
 export const paymentConfigId = "55555555-5555-4555-8555-555555555555";
+export const platformPaymentConfigId = "77777777-7777-4777-8777-777777777777";
 export const employeeId = "66666666-6666-4666-8666-666666666666";
 
 export const paymentCollectionTask = {
@@ -96,6 +98,35 @@ export const activeConfig: WechatPayConfigRecord = {
   created_at: "2026-07-01T09:00:00.000Z",
   updated_at: "2026-07-01T09:00:00.000Z",
 };
+
+export const serviceProviderPlatformConfig = {
+  id: platformPaymentConfigId,
+  provider: "wechat_pay",
+  profile_code: "tenant_service_provider",
+  principal_type: "platform",
+  merchant_mode: "service_provider_sub_merchant",
+  merchant_name: "平台服务商",
+  merchant_id: "service-provider-mchid",
+  sub_merchant_id: null,
+  app_id: "wx-service-app",
+  sub_app_id: null,
+  encrypted_config_ref: "env://WECHAT_PAY_TEST",
+  secret_bundle_revision: "bundle-revision-1",
+  serial_no: "TEST-SERIAL",
+  notify_url: "https://api.example.com/pay/wechat/callback",
+  enabled_channels: ["project_payment", "applyment"],
+  status: "active",
+  validation_status: "valid",
+  last_validated_at: "2026-07-01T09:00:00.000Z",
+  last_validation_error_code: null,
+  last_validation_error_message: null,
+  last_validation_request_id: null,
+  risk_switches: {},
+  created_by_employee_id: null,
+  updated_by_employee_id: null,
+  created_at: "2026-07-01T08:00:00.000Z",
+  updated_at: "2026-07-01T09:00:00.000Z",
+} satisfies PlatformPaymentConfigRecord;
 
 export const pendingOrder = {
   id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",

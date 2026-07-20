@@ -57,9 +57,8 @@ type PlatformPaymentReadinessServiceDependencies = {
   repository?: RepositoryPort;
 };
 
-// Internal profile count is fixed at two, so this auxiliary read is intentionally pageless.
-export const PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS: PlatformWechatPayProfileDefinition[] = [
-  {
+export const PLATFORM_WECHAT_PAY_PROFILE_DEFINITION_BY_CODE = {
+  platform_direct_recharge: {
     profile_code: "platform_direct_recharge",
     label: "平台直连商户",
     description: "用于平台自有积分充值等平台收款场景。",
@@ -67,7 +66,7 @@ export const PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS: PlatformWechatPayProfileDe
     enabled_channels: ["tenant_recharge"],
     secret_setting_key: "PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
   },
-  {
+  tenant_service_provider: {
     profile_code: "tenant_service_provider",
     label: "服务商商户",
     description: "用于服务商进件、租户特约商户和后续租户项目收款能力。",
@@ -75,7 +74,15 @@ export const PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS: PlatformWechatPayProfileDe
     enabled_channels: ["project_payment", "applyment"],
     secret_setting_key: "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
   },
-];
+} satisfies Record<
+  PlatformPaymentProfileCode,
+  PlatformWechatPayProfileDefinition
+>;
+
+// Internal profile count is fixed at two, so this auxiliary read is intentionally pageless.
+export const PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS = Object.values(
+  PLATFORM_WECHAT_PAY_PROFILE_DEFINITION_BY_CODE,
+);
 
 const BLOCKERS = {
   missing: {
@@ -145,7 +152,10 @@ export class PlatformPaymentReadinessService {
     );
     const profiles = PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS.map(
       (definition, index) =>
-        evaluateProfile(definition, configs[index] ?? null),
+        evaluatePlatformPaymentProfileReadiness(
+          definition,
+          configs[index] ?? null,
+        ),
     );
     return {
       ready: profiles.every((profile) => profile.ready),
@@ -154,7 +164,7 @@ export class PlatformPaymentReadinessService {
   }
 }
 
-function evaluateProfile(
+export function evaluatePlatformPaymentProfileReadiness(
   definition: PlatformWechatPayProfileDefinition,
   config: PlatformPaymentConfigRecord | null,
 ): PlatformPaymentReadinessProfile {

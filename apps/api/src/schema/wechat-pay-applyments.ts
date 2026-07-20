@@ -148,18 +148,7 @@ export const UpdateWechatPayApplymentWechatStatusSchema = z.object({
   message: "至少需要提交一个进件状态字段",
 });
 
-export const ActivateWechatPayApplymentConfigSchema = z.object({
-  merchant_id: requiredText(64, "请输入服务商商户号", "服务商商户号不能超过 64 个字符"),
-  app_id: requiredText(64, "请输入平台小程序 AppID", "平台小程序 AppID 不能超过 64 个字符"),
-  merchant_name: optionalText(100, "商户名称不能超过 100 个字符"),
-  encrypted_config_ref: requiredText(300, "请输入密钥引用", "密钥引用不能超过 300 个字符"),
-  notify_url: z.string()
-    .trim()
-    .url("回调地址格式不正确")
-    .max(300, "回调地址不能超过 300 个字符"),
-  serial_no: requiredText(128, "请输入证书序列号", "证书序列号不能超过 128 个字符"),
-  settlement_account_summary: optionalText(200, "结算账户摘要不能超过 200 个字符"),
-}).strict();
+export const ActivateWechatPayApplymentConfigSchema = z.object({}).strict();
 
 export const PlatformWechatPayApplymentListQuerySchema =
   PaginationQuerySchema.extend({

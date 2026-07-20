@@ -71,4 +71,22 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(tableSource).toContain("finance-wechat-pay-applyment-shared");
     expect(tableSource).not.toContain("finance-wechat-pay-applyment-requests");
   });
+
+  test("activates from the validated central service-provider profile", () => {
+    const actionsSource = readSource("./platform-wechat-pay-applyment-actions.tsx");
+
+    expect(actionsSource).toContain("已验证的中央服务商配置");
+    expect(actionsSource).toContain("submitJson(");
+    expect(actionsSource).toMatch(/\/activate-config[\s\S]*?"POST",\s*\{\}/);
+    expect(actionsSource).not.toContain('name="merchant_id"');
+    expect(actionsSource).not.toContain('name="app_id"');
+    expect(actionsSource).not.toContain('name="merchant_name"');
+    expect(actionsSource).not.toContain('name="encrypted_config_ref"');
+    expect(actionsSource).not.toContain('name="serial_no"');
+    expect(actionsSource).not.toContain('name="notify_url"');
+    expect(actionsSource).not.toContain('name="settlement_account_summary"');
+    expect(actionsSource).toContain("StatusAlert");
+    expect(actionsSource).toContain("Field");
+    expect(actionsSource).toContain("Button");
+  });
 });

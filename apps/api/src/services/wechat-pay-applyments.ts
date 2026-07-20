@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
   wechatPayApplymentRepository,
   type WechatPayApplymentEventInsert,
@@ -59,6 +60,8 @@ export class WechatPayApplymentService {
     this.platformActions = new WechatPayApplymentPlatformActions(
       this.repository,
       this.configRepository,
+      dependencies.platformPaymentConfigRepository ??
+        platformPaymentConfigRepository,
       this.nowFactory,
     );
   }
@@ -245,9 +248,9 @@ export class WechatPayApplymentService {
   async activateConfig(
     authContext: AuthContext,
     id: string,
-    input: ActivateWechatPayApplymentConfigInput,
+    _input: ActivateWechatPayApplymentConfigInput,
   ): Promise<ApplymentDetailResult> {
-    return this.platformActions.activateConfig(authContext, id, input);
+    return this.platformActions.activateConfig(authContext, id);
   }
 
   private async toDetail(

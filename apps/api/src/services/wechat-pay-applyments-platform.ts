@@ -4,7 +4,6 @@ import type {
   WechatPayApplymentRecord,
 } from "@/repositories/wechat-pay-applyments";
 import type {
-  ActivateWechatPayApplymentConfigInput,
   ApproveWechatPayApplymentInput,
   MarkWechatPayApplymentApplyingInput,
   PlatformWechatPayApplymentListQuery,
@@ -14,14 +13,21 @@ import type {
 import type { AuthContext } from "@/services/authorization";
 import type {
   ApplymentDetailResult,
+  PlatformPaymentConfigRepositoryPort,
   WechatPayApplymentRepositoryPort,
   WechatPayConfigRepositoryPort,
 } from "@/services/wechat-pay-applyments-types";
+import {
+  evaluatePlatformPaymentProfileReadiness,
+  PLATFORM_WECHAT_PAY_PROFILE_DEFINITION_BY_CODE,
+} from "@/services/platform-payment-readiness";
 
 export class WechatPayApplymentPlatformActions {
   constructor(
     private readonly repository: WechatPayApplymentRepositoryPort,
     private readonly configRepository: WechatPayConfigRepositoryPort,
+    private readonly platformPaymentConfigRepository:
+      PlatformPaymentConfigRepositoryPort,
     private readonly nowFactory: () => string,
   ) {}
 
@@ -204,23 +210,23 @@ export class WechatPayApplymentPlatformActions {
   async activateConfig(
     authContext: AuthContext,
     id: string,
-    input: ActivateWechatPayApplymentConfigInput,
   ): Promise<ApplymentDetailResult> {
     this.assertPlatformAdmin(authContext);
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id });
     this.assertActivatable(current);
+    const platformConfig = await this.getReadyServiceProviderProfile();
     const now = this.nowFactory();
     const config = await this.configRepository.upsertWechatPayConfig({
       tenant_id: current.tenant_id,
       provider: "wechat_pay",
       principal_type: "tenant",
       merchant_mode: "service_provider_sub_merchant",
-      merchant_name: input.merchant_name ?? current.merchant_short_name,
-      merchant_id: input.merchant_id,
+      merchant_name: current.merchant_short_name,
+      merchant_id: platformConfig.merchant_id ?? "",
       sub_merchant_id: current.sub_mchid,
-      app_id: input.app_id,
-      sub_app_id: current.sub_appid,
+      app_id: platformConfig.app_id ?? "",
+      sub_app_id: null,
       applyment_business_code: current.applyment_business_code,
       applyment_id: current.applyment_id,
       applyment_state: "opened",
@@ -230,14 +236,14 @@ export class WechatPayApplymentPlatformActions {
       opened_at: current.opened_at ?? now,
       status: "active",
       enabled_channels: ["project_payment"],
-      settlement_account_summary:
-        input.settlement_account_summary ?? current.settlement_account_summary,
-      encrypted_config_ref: input.encrypted_config_ref,
+      settlement_account_summary: current.settlement_account_summary,
+      encrypted_config_ref: platformConfig.encrypted_config_ref ?? "",
       risk_switches: {},
-      serial_no: input.serial_no,
-      notify_url: input.notify_url,
-      validation_status: "unchecked",
-      last_validated_at: null,
+      serial_no: platformConfig.serial_no ?? "",
+      notify_url: platformConfig.notify_url ?? "",
+      validation_status: platformConfig.validation_status,
+      last_validated_at: platformConfig.last_validated_at,
+      platform_payment_config_id: platformConfig.id,
       created_by_employee_id: employeeId,
       updated_by_employee_id: employeeId,
     });
@@ -260,6 +266,29 @@ export class WechatPayApplymentPlatformActions {
       metadata: { payment_config_id: config.id },
     });
     return this.toPlatformDetail(updated);
+  }
+
+  private async getReadyServiceProviderProfile() {
+    const definition =
+      PLATFORM_WECHAT_PAY_PROFILE_DEFINITION_BY_CODE.tenant_service_provider;
+    const config = await this.platformPaymentConfigRepository
+      .findWechatPayConfigByProfile(definition.profile_code);
+    const readiness = evaluatePlatformPaymentProfileReadiness(
+      definition,
+      config,
+    );
+    if (!config || !readiness.ready) {
+      throw Errors.business(
+        409,
+        "平台服务商支付配置尚未就绪",
+        "PLATFORM_PAYMENT_PROFILE_NOT_READY",
+        {
+          profile_code: definition.profile_code,
+          blocker_codes: readiness.blockers.map((blocker) => blocker.code),
+        },
+      );
+    }
+    return config;
   }
 
   private async toPlatformDetail(

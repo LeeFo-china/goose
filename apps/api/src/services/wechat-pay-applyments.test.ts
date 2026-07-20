@@ -451,49 +451,4 @@ describe("WechatPayApplymentService", () => {
       to_status: "closed",
     }));
   });
-  test("platform activates tenant config without sub app id after opened and appid bound", async () => {
-    findById.mockImplementationOnce(async () => ({
-      ...submittedApplyment,
-      status: "bound",
-      applyment_state: "opened",
-      sub_mchid: "sub-merchant-mchid",
-      sub_appid: null,
-      appid_binding_state: "bound",
-      applyment_business_code: "APPLY-20260701-001",
-      applyment_id: "2000002124775691",
-      opened_at: "2026-07-01T11:00:00.000Z",
-    }));
-    const service = await createService();
-    const platformAuth = platformAdminAuth();
-
-    await service.activateConfig(platformAuth, applymentId, {
-      merchant_id: "service-provider-mchid",
-      app_id: "wx-service-provider-app",
-      encrypted_config_ref: "secret://tenant/wechat-pay",
-      notify_url: "https://api.goodcms.cn/pay/wechat/callback",
-      serial_no: "35C43EE32058EAB43714A18193927CF0BE31BC02",
-    });
-
-    expect(upsertWechatPayConfig).toHaveBeenCalledWith(expect.objectContaining({
-      tenant_id: tenantId,
-      provider: "wechat_pay",
-      principal_type: "tenant",
-      merchant_mode: "service_provider_sub_merchant",
-      merchant_id: "service-provider-mchid",
-      sub_merchant_id: "sub-merchant-mchid",
-      app_id: "wx-service-provider-app",
-      sub_app_id: null,
-      applyment_state: "opened",
-      appid_binding_state: "bound",
-      status: "active",
-    }));
-    expect(updateApplyment).toHaveBeenCalledWith({
-      id: applymentId,
-      patch: expect.objectContaining({
-        status: "active",
-        payment_config_id: "55555555-5555-4555-8555-555555555555",
-        activated_at: "2026-07-01T12:00:00.000Z",
-      }),
-    });
-  });
 });
