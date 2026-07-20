@@ -269,6 +269,18 @@ describe("Platform list page layout", () => {
     expect(source).not.toContain("共 {pagination.total} 个");
   });
 
+  test("removes the platform device tab list header copy", () => {
+    const source = readSource("../../app/(console)/platform/devices/page-sections.tsx");
+
+    expect(source).not.toContain("listHeader=");
+    expect(source).not.toContain("设备归属列表");
+    expect(source).not.toContain("腾讯云设备列表");
+    expect(source).not.toContain("全部厂商");
+    expect(source).not.toContain("全部绑定");
+    expect(source).not.toContain("包含设备基本信息与通道归属");
+    expect(source).not.toContain('activeTab === "ownership" ? "个" : "台"');
+  });
+
   test("removes the tenant account header copy from the billing tenant tab", () => {
     const source = readSource("../../app/(console)/platform/billing/billing-account-tabs.tsx");
 

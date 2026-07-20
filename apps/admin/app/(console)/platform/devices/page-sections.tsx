@@ -9,8 +9,6 @@ import {
 } from "@/components/platform-devices/platform-tencent-device-list-actions";
 import { PlatformTencentDevicesTable } from "@/components/platform-devices/platform-tencent-devices-table";
 import {
-  getPlatformDeviceStatusMeta,
-  getPlatformDeviceVendorLabel,
   type PlatformDeviceListData,
   type PlatformDevicesTabValue,
   type PlatformTencentDeviceListData,
@@ -44,9 +42,6 @@ export function PlatformDevicesContent({
   const error = activeTab === "ownership" ? ownershipData.error : tencentData.error;
   const ownershipSummary = summarizeOwnershipPage(ownershipData.list);
   const tencentSummary = summarizeTencentPage(tencentData.list);
-  const currentTotal = activeTab === "ownership"
-    ? ownershipData.pagination.total
-    : tencentData.pagination.total;
   const currentPageSize = activeTab === "ownership"
     ? ownershipData.pagination.pageSize
     : tencentData.pagination.pageSize;
@@ -104,15 +99,6 @@ export function PlatformDevicesContent({
                 </Link>
               </TabsTrigger>
             </TabsList>
-          }
-          listHeader={
-            <DeviceListHeader
-              activeTab={activeTab}
-              vendor={vendor}
-              status={status}
-              onlyUnbound={onlyUnbound}
-              currentTotal={currentTotal}
-            />
           }
           filters={activeTab === "ownership" ? (
             <PlatformDeviceFilters
@@ -184,42 +170,5 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
         <CardTitle>{value}</CardTitle>
       </CardHeader>
     </Card>
-  );
-}
-
-function DeviceListHeader({
-  activeTab,
-  vendor,
-  status,
-  onlyUnbound,
-  currentTotal,
-}: {
-  activeTab: PlatformDevicesTabValue;
-  vendor: string;
-  status: string;
-  onlyUnbound: boolean;
-  currentTotal: number;
-}) {
-  return (
-    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-      <div>
-        <CardTitle>{activeTab === "ownership" ? "设备归属列表" : "腾讯云设备列表"}</CardTitle>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          {activeTab === "ownership" ? (
-            <>
-              {vendor ? <Badge variant="outline">{getPlatformDeviceVendorLabel(vendor)}</Badge> : <Badge variant="outline">全部厂商</Badge>}
-              {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
-              {onlyUnbound ? <Badge variant="secondary">仅未绑定</Badge> : <Badge variant="outline">全部绑定</Badge>}
-            </>
-          ) : (
-            <>
-              {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
-              <Badge variant="outline">包含设备基本信息与通道归属</Badge>
-            </>
-          )}
-        </div>
-      </div>
-      <Badge variant="outline">共 {currentTotal} {activeTab === "ownership" ? "个" : "台"}</Badge>
-    </div>
   );
 }
