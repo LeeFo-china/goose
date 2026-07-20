@@ -4,6 +4,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -12,6 +13,10 @@ import { CreditCard, Loader2, Save } from "lucide-react";
 import { adminTabsListClassName, adminTabsTriggerWithBadgeClassName } from "@/components/admin/admin-tabs";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { PaymentProfileReadinessSection } from "@/components/settings/platform-payment-readiness-section";
+import {
+  createLatestRequestCoordinator,
+  type LatestRequestCoordinator,
+} from "@/components/settings/platform-payment-readiness-request-coordinator";
 import { SecretBundleForm } from "@/components/settings/platform-payment-secret-form";
 import {
   definitionFor,
@@ -55,6 +60,8 @@ export function PlatformPaymentSettingsPanel({
     useState<PlatformWechatPayReadinessResult | null>(null);
   const [readinessError, setReadinessError] = useState("");
   const [readinessPending, setReadinessPending] = useState(true);
+  const requestCoordinatorRef = useRef<LatestRequestCoordinator | null>(null);
+  requestCoordinatorRef.current ??= createLatestRequestCoordinator();
   const profiles = profileDefinitions.map((definition) =>
     paymentProfiles.profiles.find((profile) =>
       profile.profile_code === definition.profile_code
@@ -62,6 +69,10 @@ export function PlatformPaymentSettingsPanel({
   );
 
   const refreshReadiness = useCallback(async () => {
+    const coordinator = requestCoordinatorRef.current;
+    if (!coordinator) return;
+    const requestToken = coordinator.begin();
+    setReadiness(null);
     setReadinessError("");
     setReadinessPending(true);
     try {
@@ -69,17 +80,29 @@ export function PlatformPaymentSettingsPanel({
         "/platform/payment/wechat-pay/readiness",
         { fallbackMessage: "支付就绪状态加载失败" },
       );
+      if (!coordinator.isCurrent(requestToken)) return;
       setReadiness(result);
     } catch {
-      setReadiness(null);
+      if (!coordinator.isCurrent(requestToken)) return;
       setReadinessError("支付就绪状态加载失败，请稍后重试。");
     } finally {
-      setReadinessPending(false);
+      if (coordinator.isCurrent(requestToken)) {
+        setReadinessPending(false);
+      }
     }
   }, []);
 
+  const handleMutationComplete = useCallback(async () => {
+    await refreshReadiness();
+  }, [refreshReadiness]);
+
   useEffect(() => {
+    const coordinator = requestCoordinatorRef.current;
+    if (!coordinator) return;
     void refreshReadiness();
+    return () => {
+      coordinator.invalidate();
+    };
   }, [refreshReadiness]);
 
   return (
@@ -132,6 +155,7 @@ export function PlatformPaymentSettingsPanel({
               ) || null}
               readinessPending={readinessPending}
               refreshReadiness={refreshReadiness}
+              onMutationComplete={handleMutationComplete}
             />
           </TabsContent>
         ))}
@@ -146,12 +170,14 @@ function PaymentProfileSection({
   readiness,
   readinessPending,
   refreshReadiness,
+  onMutationComplete,
 }: {
   profile: PlatformWechatPayProfileView;
   readonly: boolean;
   readiness: PlatformWechatPayReadinessResult["profiles"][number] | null;
   readinessPending: boolean;
   refreshReadiness: () => Promise<void>;
+  onMutationComplete: () => Promise<void>;
 }) {
   const definition = definitionFor(profile.profile_code);
   const hasStoredSecret = Boolean(
@@ -199,11 +225,13 @@ function PaymentProfileSection({
           profile={profile}
           definition={definition}
           readonly={readonly}
+          onMutationComplete={onMutationComplete}
         />
         <SecretBundleForm
           profile={profile}
           definition={definition}
           readonly={readonly}
+          onMutationComplete={onMutationComplete}
         />
       </div>
     </div>
@@ -214,10 +242,12 @@ function ProfileConfigForm({
   profile,
   definition,
   readonly,
+  onMutationComplete,
 }: {
   profile: PlatformWechatPayProfileView;
   definition: ProfileDefinition;
   readonly: boolean;
+  onMutationComplete: () => Promise<void>;
 }) {
   const router = useRouter();
   const config = profile.config;
@@ -263,6 +293,7 @@ function ProfileConfigForm({
         );
         setSaved(true);
         router.refresh();
+        await onMutationComplete();
       } catch (submitError) {
         setError(submitError instanceof Error
           ? submitError.message

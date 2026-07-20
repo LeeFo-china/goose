@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -28,9 +28,31 @@ type BackendRequestError = Error & {
 
 const VALIDATION_REQUEST_ERROR_MESSAGE =
   "微信支付配置验证请求失败，请稍后重试。";
-const STABLE_ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,99}$/;
+const VALIDATION_HTTP_ERROR_MESSAGES = {
+  PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS:
+    "存在待处理充值订单，请处理后重试。",
+  PLATFORM_PAYMENT_PROFILE_CHANGED:
+    "支付配置已更新，请刷新后重新验证。",
+  PLATFORM_PAYMENT_PROFILE_NOT_FOUND:
+    "支付配置不存在，请先保存商户资料。",
+  WECHAT_PAY_PROFILE_VALIDATION_FAILED:
+    "微信支付配置验证暂时不可用，请稍后重试。",
+  WECHAT_PAY_PROFILE_PROBE_TIMEOUT:
+    "微信支付配置验证超时，请稍后重试。",
+  WECHAT_PAY_PROFILE_PROBE_TRANSPORT_FAILED:
+    "微信支付配置验证暂时不可用，请稍后重试。",
+  WECHAT_PAY_PROFILE_PROBE_UNAVAILABLE:
+    "微信支付配置验证暂时不可用，请稍后重试。",
+  WECHAT_PAY_RESPONSE_TIMESTAMP_INVALID:
+    "微信支付响应校验失败，请稍后重试。",
+  WECHAT_PAY_RESPONSE_BODY_INVALID:
+    "微信支付响应校验失败，请稍后重试。",
+  WECHAT_PAY_TRANSPORT_FAILED:
+    "微信支付配置验证暂时不可用，请稍后重试。",
+  DB_ERROR: "验证结果保存失败，请稍后重试。",
+  FORBIDDEN: "当前账号无权执行支付配置验证。",
+} as const;
 const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
-const MAX_SAFE_ERROR_MESSAGE_LENGTH = 200;
 
 export function PaymentProfileReadinessSection({
   profile,
@@ -56,6 +78,10 @@ export function PaymentProfileReadinessSection({
       config?.last_validation_error_code ||
       config?.last_validation_request_id,
   );
+
+  useEffect(() => {
+    setFeedback(null);
+  }, [profile.config?.updated_at]);
 
   function validateProfile() {
     if (readonly || !profile.configured) return;
@@ -103,6 +129,7 @@ export function PaymentProfileReadinessSection({
   return (
     <section
       aria-label={`${profile.label}上线就绪状态`}
+      aria-busy={loading}
       className="border-b bg-muted/20 px-4 py-3"
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -111,6 +138,8 @@ export function PaymentProfileReadinessSection({
             <ShieldCheck className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-medium">上线就绪</h3>
             <Badge
+              role="status"
+              aria-live="polite"
               variant={readiness?.ready
                 ? "success"
                 : readiness
@@ -218,32 +247,33 @@ export function toSafeValidationRequestFeedback(
   }
 
   const requestError = error as BackendRequestError;
-  const message = safeErrorMessage(error.message) ??
-    VALIDATION_REQUEST_ERROR_MESSAGE;
-  const code = safeDiagnostic(requestError.code, STABLE_ERROR_CODE_PATTERN);
+  const code = knownValidationHttpErrorCode(requestError.code);
   const requestId = safeDiagnostic(
     requestError.requestId,
     SAFE_REQUEST_ID_PATTERN,
   );
   return {
     tone: "error",
-    message,
+    message: code
+      ? VALIDATION_HTTP_ERROR_MESSAGES[code]
+      : VALIDATION_REQUEST_ERROR_MESSAGE,
     ...(code ? { code } : {}),
     ...(requestId ? { requestId } : {}),
   };
 }
 
-function safeErrorMessage(value: unknown) {
+function knownValidationHttpErrorCode(
+  value: unknown,
+): keyof typeof VALIDATION_HTTP_ERROR_MESSAGES | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
-  if (
-    !normalized ||
-    normalized.length > MAX_SAFE_ERROR_MESSAGE_LENGTH ||
-    /[\u0000-\u001f\u007f]/.test(normalized)
-  ) {
-    return null;
-  }
-  return normalized;
+  const isKnownCode = Object.prototype.hasOwnProperty.call(
+    VALIDATION_HTTP_ERROR_MESSAGES,
+    normalized,
+  );
+  return isKnownCode
+    ? normalized as keyof typeof VALIDATION_HTTP_ERROR_MESSAGES
+    : null;
 }
 
 function safeDiagnostic(value: unknown, pattern: RegExp) {

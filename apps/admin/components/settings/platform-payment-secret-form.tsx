@@ -24,10 +24,12 @@ export function SecretBundleForm({
   profile,
   definition,
   readonly,
+  onMutationComplete,
 }: {
   profile: PlatformWechatPayProfileView;
   definition: ProfileDefinition;
   readonly: boolean;
+  onMutationComplete: () => Promise<void>;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -80,6 +82,7 @@ export function SecretBundleForm({
         form.reset();
         setSaved(true);
         router.refresh();
+        await onMutationComplete();
       } catch (submitError) {
         setError(submitError instanceof Error
           ? submitError.message

@@ -128,16 +128,86 @@ describe("platform payment settings panel", () => {
     );
   });
 
-  test("readiness fetch failures clear cached status before showing the error", () => {
+  test("readiness refetch clears cached status before starting the request", () => {
     const panelSource = readSource("./platform-payment-settings-panel.tsx");
-    const catchBody = panelSource.match(
-      /catch\s*\{([\s\S]*?)\}\s*finally/,
+    const refreshBody = panelSource.match(
+      /const refreshReadiness = useCallback\(async \(\) => \{([\s\S]*?)\n  \}, \[\]\);/,
     )?.[1] || "";
 
-    expect(catchBody).toContain("setReadiness(null)");
-    expect(catchBody.indexOf("setReadiness(null)")).toBeLessThan(
-      catchBody.indexOf("setReadinessError"),
+    expect(refreshBody).toContain("setReadiness(null)");
+    expect(refreshBody.indexOf("setReadiness(null)")).toBeLessThan(
+      refreshBody.indexOf("requestBackendJson"),
     );
+  });
+
+  test("config and secret saves share readiness invalidation and refetch", () => {
+    const panelSource = readSource("./platform-payment-settings-panel.tsx");
+    const secretSource = readSource("./platform-payment-secret-form.tsx");
+
+    expect(panelSource).toContain("handleMutationComplete");
+    expect(panelSource).toContain(
+      "onMutationComplete={handleMutationComplete}",
+    );
+    expect(panelSource.match(/onMutationComplete=\{onMutationComplete\}/g))
+      .toHaveLength(2);
+    expect(panelSource).toContain("await onMutationComplete()");
+    expect(secretSource).toContain("onMutationComplete: () => Promise<void>");
+    expect(secretSource).toContain("await onMutationComplete()");
+    expect(panelSource).toContain("router.refresh()");
+    expect(secretSource).toContain("router.refresh()");
+  });
+
+  test("readiness requests are latest-wins and invalidated on unmount", () => {
+    const panelSource = readSource("./platform-payment-settings-panel.tsx");
+
+    expect(panelSource).toContain("useRef");
+    expect(panelSource).toContain("createLatestRequestCoordinator");
+    expect(panelSource).toContain("requestCoordinatorRef");
+    expect(panelSource).toContain("coordinator.begin()");
+    expect(panelSource).toContain("coordinator.isCurrent(requestToken)");
+    expect(panelSource).toContain("coordinator.invalidate()");
+    expect(panelSource).toMatch(
+      /setReadiness\(null\)[\s\S]*requestBackendJson<PlatformWechatPayReadinessResult>/,
+    );
+  });
+
+  test("latest request coordinator rejects stale and invalidated completions", async () => {
+    const coordinatorSource = readOptionalSource(
+      "./platform-payment-readiness-request-coordinator.ts",
+    );
+    expect(coordinatorSource).toContain("createLatestRequestCoordinator");
+    if (!coordinatorSource) return;
+
+    const { createLatestRequestCoordinator } = await import(
+      "./platform-payment-readiness-request-coordinator"
+    );
+    const coordinator = createLatestRequestCoordinator();
+    const committed: string[] = [];
+    let resolveFirst = () => {};
+    let resolveSecond = () => {};
+    const first = new Promise<void>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      resolveSecond = resolve;
+    });
+    async function commitWhenCurrent(promise: Promise<void>, value: string) {
+      const token = coordinator.begin();
+      await promise;
+      if (coordinator.isCurrent(token)) committed.push(value);
+    }
+
+    const firstRun = commitWhenCurrent(first, "first");
+    const secondRun = commitWhenCurrent(second, "second");
+    resolveSecond();
+    await secondRun;
+    resolveFirst();
+    await firstRun;
+    expect(committed).toEqual(["second"]);
+
+    const unmountedToken = coordinator.begin();
+    coordinator.invalidate();
+    expect(coordinator.isCurrent(unmountedToken)).toBeFalse();
   });
 
   test("validation request errors expose only allowlisted safe diagnostics", () => {
@@ -147,12 +217,29 @@ describe("platform payment settings panel", () => {
 
     expect(readinessSource).toContain("toSafeValidationRequestFeedback");
     expect(readinessSource).toContain("error instanceof Error");
-    expect(readinessSource).toContain("error.message");
     expect(readinessSource).toContain("requestError.code");
     expect(readinessSource).toContain("requestError.requestId");
-    expect(readinessSource).toContain("STABLE_ERROR_CODE_PATTERN");
+    expect(readinessSource).toContain("VALIDATION_HTTP_ERROR_MESSAGES");
     expect(readinessSource).toContain("SAFE_REQUEST_ID_PATTERN");
     expect(readinessSource).toContain("VALIDATION_REQUEST_ERROR_MESSAGE");
+    expect(readinessSource).not.toContain("safeErrorMessage");
+    expect(readinessSource).not.toContain("error.message");
+    for (const code of [
+      "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      "PLATFORM_PAYMENT_PROFILE_CHANGED",
+      "PLATFORM_PAYMENT_PROFILE_NOT_FOUND",
+      "WECHAT_PAY_PROFILE_VALIDATION_FAILED",
+      "WECHAT_PAY_PROFILE_PROBE_TIMEOUT",
+      "WECHAT_PAY_PROFILE_PROBE_TRANSPORT_FAILED",
+      "WECHAT_PAY_PROFILE_PROBE_UNAVAILABLE",
+      "WECHAT_PAY_RESPONSE_TIMESTAMP_INVALID",
+      "WECHAT_PAY_RESPONSE_BODY_INVALID",
+      "WECHAT_PAY_TRANSPORT_FAILED",
+      "DB_ERROR",
+      "FORBIDDEN",
+    ]) {
+      expect(readinessSource).toContain(code);
+    }
     expect(readinessSource).toContain("catch (validationError)");
     expect(readinessSource).toContain(
       "setFeedback(toSafeValidationRequestFeedback(validationError))",
@@ -173,7 +260,7 @@ describe("platform payment settings panel", () => {
     }).toSafeValidationRequestFeedback;
 
     expect(normalize).toBeFunction();
-    const requestError = Object.assign(new Error(" 配置已更新 "), {
+    const requestError = Object.assign(new Error("raw backend secret"), {
       code: "PLATFORM_PAYMENT_PROFILE_CHANGED",
       requestId: "request-id:123",
     });
@@ -183,17 +270,18 @@ describe("platform payment settings panel", () => {
     });
     expect(normalize?.(requestError)).toEqual({
       tone: "error",
-      message: "配置已更新",
+      message: "支付配置已更新，请刷新后重新验证。",
       code: "PLATFORM_PAYMENT_PROFILE_CHANGED",
       requestId: "request-id:123",
     });
 
-    expect(normalize?.(Object.assign(new Error("raw\nresponse"), {
-      code: "invalid-code",
-      requestId: "invalid request id",
+    expect(normalize?.(Object.assign(new Error("raw backend message"), {
+      code: "UNKNOWN_BUT_VALID",
+      requestId: "request-id:456",
     }))).toEqual({
       tone: "error",
       message: "微信支付配置验证请求失败，请稍后重试。",
+      requestId: "request-id:456",
     });
     expect(normalize?.({
       message: "arbitrary object message",
@@ -203,6 +291,19 @@ describe("platform payment settings panel", () => {
       tone: "error",
       message: "微信支付配置验证请求失败，请稍后重试。",
     });
+  });
+
+  test("readiness state announces loading and clears stale validation feedback", () => {
+    const readinessSource = readSource(
+      "./platform-payment-readiness-section.tsx",
+    );
+
+    expect(readinessSource).toContain("aria-busy={loading}");
+    expect(readinessSource).toContain('role="status"');
+    expect(readinessSource).toContain('aria-live="polite"');
+    expect(readinessSource).toMatch(
+      /useEffect\(\(\) => \{\s*setFeedback\(null\);\s*\}, \[profile\.config\?\.updated_at\]\)/,
+    );
   });
 
   test("payment readiness renders blockers and safe validation evidence", () => {
