@@ -139,6 +139,8 @@ const GUARDED_CREATE_ERRORS = {
   WECHAT_PAY_PLATFORM_PROFILE_MISMATCH:
     "租户支付配置与平台服务商配置不一致",
 } as const;
+const PENDING_TASK_UNIQUE_CONSTRAINT =
+  "wechat_payment_orders_pending_task_unique_idx";
 
 class WechatPayOrderRepository {
   async findByOutTradeNo(
@@ -215,6 +217,9 @@ class WechatPayOrderRepository {
       .single();
 
     if (error) {
+      if (isPendingTaskUniqueViolation(error)) {
+        throw pendingOrderConcurrentError();
+      }
       throw Errors.dbError("创建微信支付订单失败", error);
     }
 
@@ -248,6 +253,9 @@ class WechatPayOrderRepository {
     );
 
     if (error) {
+      if (isPendingTaskUniqueViolation(error)) {
+        throw pendingOrderConcurrentError();
+      }
       for (const [code, message] of Object.entries(GUARDED_CREATE_ERRORS)) {
         if (matchesPostgresError(error, "23514", code)) {
           throw Errors.business(409, message, code);
@@ -434,6 +442,31 @@ class WechatPayOrderRepository {
       },
     };
   }
+}
+
+function pendingOrderConcurrentError() {
+  return Errors.business(
+    409,
+    "同一流程待办的微信支付订单正在创建",
+    "WECHAT_PAY_PENDING_ORDER_CONCURRENT",
+  );
+}
+
+function isPendingTaskUniqueViolation(error: unknown) {
+  const direct = asErrorRecord(error);
+  const wrapped = asErrorRecord(direct?.details);
+  return [direct, wrapped].some((candidate) =>
+    candidate?.code === "23505" &&
+    (candidate.constraint === PENDING_TASK_UNIQUE_CONSTRAINT ||
+      (typeof candidate.message === "string" &&
+        candidate.message.includes(PENDING_TASK_UNIQUE_CONSTRAINT)))
+  );
+}
+
+function asErrorRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function normalizeReceivablePlan(

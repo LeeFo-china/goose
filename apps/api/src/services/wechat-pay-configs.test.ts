@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const existingConfig = {
+const existingConfig: WechatPayConfigRecord = {
   id: "config-1",
   tenant_id: "tenant-1",
   platform_payment_config_id: null,
@@ -42,7 +43,9 @@ const existingConfig = {
   updated_at: "2026-07-01T10:00:00.000Z",
 };
 
-const findWechatPayConfig = mock(async () => existingConfig);
+const findWechatPayConfig = mock(
+  async (): Promise<WechatPayConfigRecord | null> => existingConfig,
+);
 const upsertWechatPayConfig = mock(async (input: unknown) => ({
   ...existingConfig,
   ...(input as Record<string, unknown>),

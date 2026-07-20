@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
@@ -21,8 +22,8 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import type { JsonObject } from "@/repositories/workflows";
 import {
-  wechatPayGateway,
   type WechatPayCreateJsapiPrepayResult,
+  wechatPayGateway,
 } from "@/services/wechat-pay-gateway";
 import {
   wechatPaySecretBundleService,
@@ -30,12 +31,15 @@ import {
 } from "@/services/wechat-pay-secret-bundles";
 import {
   assertWechatPayConfigReadyForOrder,
-  assertWechatPayPendingOrderRetryMatches,
   requireWechatPayPayerOpenid,
 } from "@/services/wechat-pay-order-retry";
 import {
   createPendingWechatPayOrder,
 } from "@/services/wechat-pay-order-creation";
+import {
+  prepareWechatPayOrderPaymentRequest,
+  resumePendingWechatPayOrder,
+} from "@/services/wechat-pay-order-payment-request";
 import {
   loadWechatPayOrderPaymentContext,
   type PlatformPaymentConfigLookupPort,
@@ -156,27 +160,13 @@ export class WechatPayOrderService {
       workflowTaskId: normalizedInput.workflow_task_id,
     });
     if (existing) {
-      const config = await this.configRepository.findWechatPayConfig(tenantId);
-      assertWechatPayConfigReadyForOrder(config);
-      assertWechatPayPendingOrderRetryMatches({
-        config,
-        order: existing,
-        request: normalizedInput,
-      });
-      const { secretBundle } = await this.loadOrderPaymentContext(config);
-      const resumed = await this.preparePaymentRequest({
-        config,
-        order: existing,
-        taskTitle: task.title,
+      return resumePendingWechatPayOrder({
         tenantId,
-        secretBundle,
+        request: normalizedInput,
+        taskTitle: task.title,
+        order: existing,
+        ...this.paymentRequestDependencies(),
       });
-      return {
-        idempotent: true,
-        payment_request: resumed.paymentRequest,
-        order: this.toOrderView(resumed.order),
-        receivable_plan: null,
-      };
     }
 
     const receivablePlan = await this.orderRepository.findReceivablePlan({
@@ -196,18 +186,42 @@ export class WechatPayOrderService {
       tenantId,
       task,
     });
-    const order = await createPendingWechatPayOrder({
-      config,
-      orderInput,
-      paymentContext,
-      orderRepository: this.orderRepository,
-    });
-    const prepared = await this.preparePaymentRequest({
+    let order: WechatPayOrderRecord;
+    try {
+      order = await createPendingWechatPayOrder({
+        config,
+        orderInput,
+        paymentContext,
+        orderRepository: this.orderRepository,
+      });
+    } catch (error) {
+      if (
+        !(error instanceof AppError) ||
+        error.code !== "WECHAT_PAY_PENDING_ORDER_CONCURRENT"
+      ) {
+        throw error;
+      }
+      const concurrentOrder = await this.orderRepository
+        .findPendingByWorkflowTask({
+          tenantId,
+          workflowTaskId: normalizedInput.workflow_task_id,
+        });
+      if (!concurrentOrder) throw error;
+      return resumePendingWechatPayOrder({
+        tenantId,
+        request: normalizedInput,
+        taskTitle: task.title,
+        order: concurrentOrder,
+        ...this.paymentRequestDependencies(),
+      });
+    }
+    const prepared = await prepareWechatPayOrderPaymentRequest({
       config,
       order,
       taskTitle: task.title,
       tenantId,
       secretBundle: paymentContext.secretBundle,
+      ...this.paymentRequestDependencies(),
     });
 
     return {
@@ -367,37 +381,14 @@ export class WechatPayOrderService {
     };
   }
 
-  private async preparePaymentRequest(input: {
-    config: WechatPayConfigRecord;
-    order: WechatPayOrderRecord;
-    taskTitle: string;
-    tenantId: string;
-    secretBundle?: WechatPaySecretBundle;
-  }) {
-    const secretBundle = input.secretBundle ??
-      await this.secretBundleService.load(input.config.encrypted_config_ref);
-    if (input.order.prepay_id) {
-      return {
-        order: input.order,
-        paymentRequest: this.wechatPayGateway.createMiniProgramPaymentRequest({
-          config: input.config,
-          prepayId: input.order.prepay_id,
-          secretBundle,
-        }),
-      };
-    }
-    const prepay = await this.wechatPayGateway.createJsapiPrepay({
-      config: input.config,
-      order: input.order,
-      description: input.taskTitle || "项目收款",
-      secretBundle,
-    });
-    const order = await this.orderRepository.markPrepayCreated({
-      tenantId: input.tenantId,
-      orderId: input.order.id,
-      prepayId: prepay.prepayId,
-    });
-    return { order, paymentRequest: prepay.paymentRequest };
+  private paymentRequestDependencies() {
+    return {
+      configRepository: this.configRepository,
+      orderRepository: this.orderRepository,
+      platformPaymentConfigRepository: this.platformPaymentConfigRepository,
+      secretBundleService: this.secretBundleService,
+      wechatPayGateway: this.wechatPayGateway,
+    };
   }
 
   private loadOrderPaymentContext(config: WechatPayConfigRecord) {

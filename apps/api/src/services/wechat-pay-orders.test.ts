@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { AppError } from "@/errors/app-error";
 import type { WechatPayOrderRecord } from "@/repositories/wechat-pay-orders";
 import type { AuthContext } from "@/services/authorization";
 import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
@@ -209,6 +210,41 @@ describe("WechatPayOrderService", () => {
       id: receivablePlanId,
       remaining_amount: 8000,
     });
+  });
+
+  test("recovers a concurrent first insert as an idempotent pending order", async () => {
+    findPendingByWorkflowTask
+      .mockImplementationOnce(async () => null)
+      .mockImplementationOnce(async () => ({
+        ...pendingOrder,
+        payer_openid: "o-test-openid",
+        prepay_id: "existing-prepay",
+      }));
+    createOrder.mockImplementationOnce(async () => {
+      throw new AppError(
+        409,
+        "同一流程待办的微信支付订单正在创建",
+        "WECHAT_PAY_PENDING_ORDER_CONCURRENT",
+      );
+    });
+    const service = await createService();
+
+    const result = await service.createOrder(authContext(), {
+      project_id: projectId,
+      receivable_plan_id: receivablePlanId,
+      workflow_task_id: workflowTaskId,
+      amount: 8000,
+      payer_openid: "o-test-openid",
+    });
+
+    expect(findPendingByWorkflowTask).toHaveBeenCalledTimes(2);
+    expect(result.idempotent).toBe(true);
+    expect(result.receivable_plan).toBeNull();
+    expect(result.order.id).toBe(pendingOrder.id);
+    expect(createMiniProgramPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ prepayId: "existing-prepay" }),
+    );
+    expect(createJsapiPrepay).not.toHaveBeenCalled();
   });
 
   test("rejects order creation when payment config is not active", async () => {

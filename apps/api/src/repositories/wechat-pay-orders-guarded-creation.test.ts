@@ -11,10 +11,19 @@ const rpc = mock(async (
   data: { id: "order-1", status: "pending" },
   error: null,
 }));
+const single = mock(async (): Promise<{ data: unknown; error: unknown }> => ({
+  data: { id: "order-1", status: "pending" },
+  error: null,
+}));
+const from = mock(() => ({
+  insert: () => ({
+    select: () => ({ single }),
+  }),
+}));
 
 mock.module("@/utils/supabase/index", () => ({
   SupabaseDB: {
-    getAdminClient: () => ({ rpc }),
+    getAdminClient: () => ({ rpc, from }),
   },
 }));
 
@@ -40,7 +49,12 @@ const input = {
 describe("WechatPayOrderRepository guarded creation", () => {
   beforeEach(() => {
     rpc.mockClear();
+    single.mockClear();
     rpc.mockImplementation(async () => ({
+      data: { id: "order-1", status: "pending" },
+      error: null,
+    }));
+    single.mockImplementation(async () => ({
       data: { id: "order-1", status: "pending" },
       error: null,
     }));
@@ -101,6 +115,43 @@ describe("WechatPayOrderRepository guarded creation", () => {
     await expect(
       wechatPayOrderRepository.createServiceProviderOrder(input),
     ).rejects.toMatchObject({ statusCode: 409, code: businessCode });
+  });
+
+  test("maps a concurrent pending-task insert to a retryable conflict", async () => {
+    rpc.mockImplementationOnce(async () => ({
+      data: null,
+      error: {
+        code: "23505",
+        message:
+          'duplicate key value violates unique constraint "wechat_payment_orders_pending_task_unique_idx"',
+      },
+    }));
+    const { wechatPayOrderRepository } = await import("./wechat-pay-orders");
+
+    await expect(
+      wechatPayOrderRepository.createServiceProviderOrder(input),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_PENDING_ORDER_CONCURRENT",
+    });
+  });
+
+  test("maps the same concurrent conflict for direct merchant inserts", async () => {
+    single.mockImplementationOnce(async () => ({
+      data: null,
+      error: {
+        code: "23505",
+        constraint: "wechat_payment_orders_pending_task_unique_idx",
+      },
+    }));
+    const { wechatPayOrderRepository } = await import("./wechat-pay-orders");
+
+    await expect(
+      wechatPayOrderRepository.createOrder(input),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_PENDING_ORDER_CONCURRENT",
+    });
   });
 
   test("wraps other RPC failures through Errors.dbError", async () => {
