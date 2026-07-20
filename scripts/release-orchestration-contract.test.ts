@@ -1126,7 +1126,7 @@ describe("production migration precheck workflow", () => {
       }))
       .filter(({ sql }) => /^\s*BEGIN;\s*$/im.test(sql));
 
-    expect(pendingExplicitMigrations).toHaveLength(10);
+    expect(pendingExplicitMigrations).toHaveLength(15);
     for (const { fileName, sql } of pendingExplicitMigrations) {
       const version = fileName.slice(0, 14);
       const historyMarker =

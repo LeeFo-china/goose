@@ -15,12 +15,17 @@ const VALID_WRAPPER = {
 };
 
 type RouteHandler = (
-  request: { body?: unknown },
+  request: { body?: unknown; log?: { info: (...args: unknown[]) => void } },
   reply: ReturnType<typeof createReply>["reply"],
 ) => Promise<unknown>;
 
 async function createRoutes(
-  service: { handleCallback: (wrapper: typeof VALID_WRAPPER) => Promise<void> },
+  service: {
+    handleCallback: (
+      wrapper: typeof VALID_WRAPPER,
+      log?: { info: (metadata: { eventName: string }, message: string) => void },
+    ) => Promise<void>;
+  },
 ) {
   const { DouyinThirdPartyEventsController } = await import(".");
   const routes: Array<{ path: string; handler: RouteHandler }> = [];
@@ -93,8 +98,27 @@ describe("DouyinThirdPartyEventsController", () => {
       });
     }
     expect(handleCallback).toHaveBeenCalledTimes(2);
-    expect(handleCallback).toHaveBeenNthCalledWith(1, VALID_WRAPPER);
-    expect(handleCallback).toHaveBeenNthCalledWith(2, VALID_WRAPPER);
+    expect(handleCallback).toHaveBeenNthCalledWith(1, VALID_WRAPPER, expect.any(Object));
+    expect(handleCallback).toHaveBeenNthCalledWith(2, VALID_WRAPPER, expect.any(Object));
+  });
+
+  test("passes the request logger to callback processing without a console fallback", async () => {
+    const info = mock(() => undefined);
+    const handleCallback = mock(async (
+      _wrapper: typeof VALID_WRAPPER,
+      log?: { info: (metadata: { eventName: string }, message: string) => void },
+    ) => {
+      log?.info({ eventName: "PACKAGE_AUDIT" }, "ignored trusted Douyin callback event");
+    });
+    const [route] = await createRoutes({ handleCallback });
+
+    await route!.handler({ body: VALID_WRAPPER, log: { info } }, createReply().reply);
+
+    expect(handleCallback).toHaveBeenCalledWith(VALID_WRAPPER, expect.any(Object));
+    expect(info).toHaveBeenCalledWith(
+      { eventName: "PACKAGE_AUDIT" },
+      "ignored trusted Douyin callback event",
+    );
   });
 
   test("sends raw plaintext through Fastify and fails closed on service errors", async () => {

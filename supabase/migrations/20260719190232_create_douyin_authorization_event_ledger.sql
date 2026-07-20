@@ -810,8 +810,8 @@ COMMENT ON TABLE public.douyin_authorization_event_subject_leases IS
 COMMENT ON COLUMN public.douyin_miniapp_installations.authorization_event_occurred_at IS
   'Latest applied Douyin authorization lifecycle timestamp; prevents stale callbacks from reversing newer state.';
 
-COMMIT;
-
 -- Rollback: stop both callback endpoints first, then drop the seven RPCs, the
 -- delivery and subject-lease tables, and authorization_event_occurred_at. Token state written by
 -- a completed callback is intentionally not reversible.
+
+COMMIT;

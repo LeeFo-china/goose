@@ -81,14 +81,17 @@ export class DouyinAuthorizationEventsService {
     this.sleep = options.sleep ?? sleepWithTimer;
   }
 
-  async handleCallback(wrapper: DouyinCallbackWrapper): Promise<void> {
+  async handleCallback(
+    wrapper: DouyinCallbackWrapper,
+    log: EventLogger = this.options.log,
+  ): Promise<void> {
     try {
       this.assertFreshTimestamp(wrapper.TimeStamp);
       this.assertSignature(wrapper);
       const message = this.decryptAndParse(wrapper);
       this.assertMessageComponent(message);
       await this.assertRegisteredComponent();
-      await this.dispatch(message, wrapper.TimeStamp);
+      await this.dispatch(message, wrapper.TimeStamp, log);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw Errors.business(
@@ -168,7 +171,11 @@ export class DouyinAuthorizationEventsService {
     }
   }
 
-  private async dispatch(message: DouyinDecryptedEvent, wrapperTime: string): Promise<void> {
+  private async dispatch(
+    message: DouyinDecryptedEvent,
+    wrapperTime: string,
+    log: EventLogger,
+  ): Promise<void> {
     if (message.Event === "PUSH" && "Ticket" in message) {
       await this.handleTicket(message, wrapperTime);
       return;
@@ -190,7 +197,7 @@ export class DouyinAuthorizationEventsService {
       }, wrapperTime);
       return;
     }
-    await this.handleUnsupported(message, wrapperTime);
+    await this.handleUnsupported(message, wrapperTime, log);
   }
 
   private async handleTicket(message: DouyinTicketEvent, wrapperTime: string): Promise<void> {
@@ -298,8 +305,9 @@ export class DouyinAuthorizationEventsService {
   private async handleUnsupported(
     message: DouyinUnsupportedEvent,
     wrapperTime: string,
+    log: EventLogger,
   ): Promise<void> {
-    this.options.log.info(
+    log.info(
       { eventName: message.Event },
       "ignored trusted Douyin callback event",
     );
@@ -424,9 +432,7 @@ export function getDouyinAuthorizationEventsService(): DouyinAuthorizationEvents
     componentRepository,
     accessTokens,
     openPlatform,
-    log: {
-      info: (metadata, message) => console.info(metadata, message),
-    },
+    log: { info: () => undefined },
   });
   return defaultService;
 }

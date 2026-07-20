@@ -1,3 +1,6 @@
+-- Rollback: stop platform installation binding calls, then drop
+-- public.bind_douyin_miniapp_installation(text, uuid, text, jsonb).
+-- Existing installation-to-tenant bindings are intentionally preserved.
 CREATE OR REPLACE FUNCTION public.bind_douyin_miniapp_installation(
   p_authorizer_appid text,
   p_tenant_id uuid,

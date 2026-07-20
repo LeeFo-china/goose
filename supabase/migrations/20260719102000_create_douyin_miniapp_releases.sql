@@ -32,7 +32,7 @@ CREATE TABLE public.douyin_miniapp_releases (
   CONSTRAINT douyin_miniapp_releases_template_version_check CHECK (
     length(template_version) <= 64
     AND template_version ~
-      '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+      '^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)([.](0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?([+][0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?$'
   ),
   CONSTRAINT douyin_miniapp_releases_description_check
     CHECK (description = btrim(description) AND length(description) BETWEEN 1 AND 200),

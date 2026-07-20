@@ -698,9 +698,9 @@ IS '抖音第三方平台组件票据、组件令牌密文信封及刷新租约�
 COMMENT ON TABLE public.douyin_miniapp_installations
 IS '抖音授权小程序、租户绑定、令牌密文信封与运行配置的唯一事实来源。';
 
-COMMIT;
-
 -- Rollback reminder: disable callbacks and session issuance first; drop refresh
 -- RPCs before tables; drop installations before components; remove
 -- role_permissions before the permission row. Credential token loss requires
 -- merchant re-authorization.
+
+COMMIT;

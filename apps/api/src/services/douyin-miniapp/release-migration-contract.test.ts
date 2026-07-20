@@ -44,10 +44,10 @@ describe("douyin miniapp release migration", () => {
     expect(source).toContain("template_id ~ '^[1-9][0-9]{0,18}$'");
     expect(source).toContain("length(template_version) <= 64");
     expect(source).toContain(
-      "template_version ~ '^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)",
+      "template_version ~ '^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)",
     );
-    expect(source).toContain("(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$'");
-    expect(source).not.toContain("template_version ~ '^[0-9]+\\.[0-9]+\\.[0-9]+");
+    expect(source).toContain("([+][0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?$'");
+    expect(source).not.toContain("template_version ~ '^[0-9]+[.][0-9]+[.][0-9]+");
     expect(source).toContain("channel IN ('default', '1')");
     for (const status of [
       "created", "uploaded", "testing", "audit_pending", "audit_rejected",

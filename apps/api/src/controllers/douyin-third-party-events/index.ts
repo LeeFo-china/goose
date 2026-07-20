@@ -7,7 +7,10 @@ import {
 import { getDouyinAuthorizationEventsService } from "@/services/douyin-miniapp/authorization-events";
 
 interface DouyinAuthorizationEventHandler {
-  handleCallback(wrapper: DouyinCallbackWrapper): Promise<void>;
+  handleCallback(
+    wrapper: DouyinCallbackWrapper,
+    log: { info(metadata: { eventName: string }, message: string): void },
+  ): Promise<void>;
 }
 
 export class DouyinThirdPartyEventsController {
@@ -34,7 +37,9 @@ export class DouyinThirdPartyEventsController {
     const bodyResult = DouyinCallbackWrapperSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
-    await this.getAuthorizationEventHandler().handleCallback(bodyResult.data);
+    await this.getAuthorizationEventHandler().handleCallback(bodyResult.data, {
+      info: (metadata, message) => request.log.info(metadata, message),
+    });
     return reply.type("text/plain").status(200).send("success");
   };
 }
