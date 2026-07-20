@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlatformListPageShell, type PlatformListPagination } from "@/components/platform/platform-list-shell";
@@ -313,9 +314,9 @@ export default async function PlatformPartnersPage({
           action={hasPlatformAccess ? actionForTab(tab, levelsResult.data, activePartners, memberPartner) : null}
           error={activeError}
           tabs={
-            <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
+            <TabsList className={platformTabsListClassName}>
               {PARTNER_TABS.map((item) => (
-                <TabsTrigger key={item.value} value={item.value} asChild className="shrink-0">
+                <TabsTrigger key={item.value} value={item.value} asChild className={platformTabsTriggerClassName}>
                   <Link href={buildPartnerHref({ tab: item.value })}>{item.label}</Link>
                 </TabsTrigger>
               ))}

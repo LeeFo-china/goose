@@ -24,10 +24,28 @@ const platformPages: ReadonlyArray<{
   },
 ];
 
+const platformTabbedSources: ReadonlyArray<{
+  name: string;
+  path: string;
+}> = [
+  { name: "devices", path: "../../app/(console)/platform/devices/page-sections.tsx" },
+  { name: "billing", path: "../../app/(console)/platform/billing/page.tsx" },
+  { name: "partners", path: "../../app/(console)/platform/partners/page.tsx" },
+  { name: "tenant onboarding", path: "../../app/(console)/platform/tenant-onboarding/page.tsx" },
+  { name: "picture library", path: "../../app/(console)/platform/picture-library/page.tsx" },
+  { name: "usage", path: "../../app/(console)/platform/usage/page.tsx" },
+  { name: "device tabs nav", path: "../../components/platform-devices/platform-device-tabs-nav.tsx" },
+  { name: "identity diagnostics result", path: "../../components/platform-identity-diagnostics/identity-diagnostics-result.tsx" },
+];
+
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
   expect(existsSync(url), path).toBe(true);
   return existsSync(url) ? readFileSync(url, "utf8") : "";
+}
+
+function readTabsTriggerTags(source: string) {
+  return source.match(/<TabsTrigger[\s\S]*?>/g) ?? [];
 }
 
 function readSummarySource(path: string) {
@@ -156,8 +174,8 @@ describe("Platform list page layout", () => {
     expect(listHeaderStart).toBeGreaterThan(tabsStart);
     expect(filtersStart).toBeGreaterThan(listHeaderStart);
     expect(tabsSource).toContain("<TabsList");
-    expect(tabsSource).toContain('className="w-full justify-start overflow-x-auto overflow-y-hidden"');
-    expect(tabsSource).toContain('className="shrink-0"');
+    expect(tabsSource).toContain("className={platformTabsListClassName}");
+    expect(tabsSource).toContain("className={platformTabsTriggerClassName}");
     expect(listHeaderSource).toContain('activeTab === "health"');
     expect(listHeaderSource).toContain(": null}");
     expect(source).not.toContain("<CardTitle>图片列表</CardTitle>");
@@ -190,8 +208,8 @@ describe("Platform list page layout", () => {
     expect(source).toContain("AI 明细");
     expect(source).toContain("短信明细");
     expect(source).toContain("短视频明细");
-    expect(tabsSource).toContain('className="w-full justify-start overflow-x-auto overflow-y-hidden"');
-    expect(tabsSource).toContain('className="shrink-0"');
+    expect(tabsSource).toContain("className={platformTabsListClassName}");
+    expect(tabsSource).toContain("className={platformTabsTriggerClassName}");
     expect(listHeaderSource).toContain('tab === "summary"');
     expect(listHeaderSource).toContain("<UsageSummaryCards");
     expect(source).toContain('<TabsContent value="summary" className="m-0 min-h-full"');
@@ -250,7 +268,36 @@ describe("Platform list page layout", () => {
     expect(source).not.toContain("<CardTitle>本租户用量</CardTitle>");
   });
 
-  test("keeps billing center tabs left aligned without the segmented background", () => {
+  test("keeps platform tabs left aligned without the segmented background", () => {
+    const shared = readSource("./platform-tabs.ts");
+
+    expect(shared).toContain(
+      'export const platformTabsListClassName = "h-auto w-full justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0";',
+    );
+    expect(shared).toContain(
+      'export const platformTabsTriggerClassName = "shrink-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-2 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground";',
+    );
+    expect(shared).toContain(
+      'export const platformTabsTriggerWithBadgeClassName = `${platformTabsTriggerClassName} gap-2 whitespace-nowrap`;',
+    );
+
+    for (const item of platformTabbedSources) {
+      const source = readSource(item.path);
+      const triggerTags = readTabsTriggerTags(source);
+
+      expect(source, item.name).toContain("@/components/platform/platform-tabs");
+      expect(source, item.name).toContain("className={platformTabsListClassName}");
+      expect(triggerTags.length, item.name).toBeGreaterThan(0);
+      for (const triggerTag of triggerTags) {
+        expect(triggerTag, item.name).toMatch(/className=\{platformTabsTrigger(?:WithBadge)?ClassName\}/);
+      }
+      expect(source, item.name).not.toContain('className="w-full justify-start overflow-x-auto overflow-y-hidden"');
+      expect(source, item.name).not.toContain('className="h-auto w-full justify-start overflow-x-auto"');
+      expect(source, item.name).not.toContain('className="flex flex-wrap justify-start"');
+    }
+  });
+
+  test("keeps billing center tabs inside the platform list workspace", () => {
     const source = readSource("../../app/(console)/platform/billing/page.tsx");
     const tabsStart = source.indexOf("tabs={");
     const listHeaderStart = source.indexOf("listHeader=", tabsStart);
@@ -259,14 +306,8 @@ describe("Platform list page layout", () => {
 
     expect(tabsStart).toBeGreaterThanOrEqual(0);
     expect(paginationStart).toBeGreaterThan(tabsStart);
-    expect(source).toContain(
-      'const billingTabsListClassName = "h-auto w-full justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0";',
-    );
-    expect(source).toContain(
-      'const billingTabsTriggerClassName = "shrink-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-2 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground";',
-    );
-    expect(tabsSource).toContain("className={billingTabsListClassName}");
-    expect(tabsSource).toContain("className={billingTabsTriggerClassName}");
+    expect(tabsSource).toContain("className={platformTabsListClassName}");
+    expect(tabsSource).toContain("className={platformTabsTriggerClassName}");
     expect(tabsSource).not.toContain("<TabsList>");
     expect(source).not.toContain("listHeader=");
     expect(source).not.toContain("<CardTitle>计费运营</CardTitle>");

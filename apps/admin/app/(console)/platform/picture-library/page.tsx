@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
+import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
 import { CreatePictureAssetButton } from "@/components/picture-library/picture-asset-actions";
 import { CreatePictureCategoryButton } from "@/components/picture-library/picture-category-actions";
 import {
@@ -336,9 +337,9 @@ export default async function PlatformPictureLibraryPage({
             </div>
           }
           tabs={
-            <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
+            <TabsList className={platformTabsListClassName}>
               {PICTURE_LIBRARY_TABS.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value} asChild className="shrink-0">
+                <TabsTrigger key={tab.value} value={tab.value} asChild className={platformTabsTriggerClassName}>
                   <Link href={buildHref(tab.value)}>
                     {tab.label}
                     <span className="ml-2 text-xs text-muted-foreground">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
+import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
 import { PlatformUsageTable } from "@/components/usage/platform-usage-table";
 import {
   UsageFilters,
@@ -207,13 +208,13 @@ export default async function PlatformUsagePage({
           titleMeta={<Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>}
           error={activeError}
           tabs={
-            <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
+            <TabsList className={platformTabsListClassName}>
               {USAGE_TABS.map((usageTab) => (
                 <TabsTrigger
                   key={usageTab.value}
                   value={usageTab.value}
                   asChild
-                  className="shrink-0"
+                  className={platformTabsTriggerClassName}
                 >
                   <Link href={buildTabHref(usageTab.value)}>{usageTab.label}</Link>
                 </TabsTrigger>

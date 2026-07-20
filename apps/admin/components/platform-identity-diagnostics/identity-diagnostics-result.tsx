@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -33,15 +34,15 @@ export function IdentityDiagnosticsResult({ data }: { data: IdentityDiagnosticDa
         <CardContent className="p-0">
           <Tabs defaultValue="current-memberships" className="flex flex-col gap-3">
             <div className="px-4">
-              <TabsList className="flex flex-wrap justify-start">
-                <TabsTrigger value="current-memberships">当前身份</TabsTrigger>
-                <TabsTrigger value="history-memberships">历史身份</TabsTrigger>
-                <TabsTrigger value="profiles">客户/员工</TabsTrigger>
-                <TabsTrigger value="current-oauth">当前 OAuth</TabsTrigger>
-                <TabsTrigger value="history-oauth">历史 OAuth</TabsTrigger>
-                <TabsTrigger value="legacy">旧微信表</TabsTrigger>
-                <TabsTrigger value="users">Auth Users</TabsTrigger>
-                <TabsTrigger value="events">事件</TabsTrigger>
+              <TabsList className={platformTabsListClassName}>
+                <TabsTrigger value="current-memberships" className={platformTabsTriggerClassName}>当前身份</TabsTrigger>
+                <TabsTrigger value="history-memberships" className={platformTabsTriggerClassName}>历史身份</TabsTrigger>
+                <TabsTrigger value="profiles" className={platformTabsTriggerClassName}>客户/员工</TabsTrigger>
+                <TabsTrigger value="current-oauth" className={platformTabsTriggerClassName}>当前 OAuth</TabsTrigger>
+                <TabsTrigger value="history-oauth" className={platformTabsTriggerClassName}>历史 OAuth</TabsTrigger>
+                <TabsTrigger value="legacy" className={platformTabsTriggerClassName}>旧微信表</TabsTrigger>
+                <TabsTrigger value="users" className={platformTabsTriggerClassName}>Auth Users</TabsTrigger>
+                <TabsTrigger value="events" className={platformTabsTriggerClassName}>事件</TabsTrigger>
               </TabsList>
             </div>
             <Separator />

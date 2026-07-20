@@ -4,6 +4,7 @@ import { ClipboardCheck } from "lucide-react";
 
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
+import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
 import { ServiceProviderPublicationTable } from "@/components/tenant-onboarding/service-provider-publication-table";
 import {
   TenantOnboardingFilters,
@@ -116,13 +117,13 @@ export default async function PlatformTenantOnboardingPage({
           titleMeta={<Badge variant="outline">平台复核</Badge>}
           error={activeError}
           tabs={
-            <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
-              <TabsTrigger value="applications" asChild className="shrink-0">
+            <TabsList className={platformTabsListClassName}>
+              <TabsTrigger value="applications" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/tenant-onboarding?tab=applications${tabPageSize}`}>
                   入驻申请
                 </Link>
               </TabsTrigger>
-              <TabsTrigger value="publications" asChild className="shrink-0">
+              <TabsTrigger value="publications" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/tenant-onboarding?tab=publications${tabPageSize}`}>
                   公开发布
                 </Link>

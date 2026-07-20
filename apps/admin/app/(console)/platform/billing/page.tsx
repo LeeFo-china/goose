@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertCircle, Coins, CreditCard, WalletCards } from "lucide-react";
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
+import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession } from "@/lib/auth";
@@ -23,9 +24,6 @@ import type {
   PlatformRechargeRefundRequestListData,
   PlatformWechatPayConfigResult,
 } from "@/components/billing/billing-types";
-
-const billingTabsListClassName = "h-auto w-full justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0";
-const billingTabsTriggerClassName = "shrink-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-2 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground";
 
 export default async function PlatformBillingPage({
   searchParams,
@@ -318,26 +316,26 @@ export default async function PlatformBillingPage({
             </div>
           }
           tabs={
-            <TabsList className={billingTabsListClassName}>
-              <TabsTrigger value="tenants" asChild className={billingTabsTriggerClassName}>
+            <TabsList className={platformTabsListClassName}>
+              <TabsTrigger value="tenants" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/billing?${buildQuery({ tab: "tenants", pageSize })}`}>租户账户</Link>
               </TabsTrigger>
-              <TabsTrigger value="events" asChild className={billingTabsTriggerClassName}>
+              <TabsTrigger value="events" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/billing?${buildQuery({ tab: "events", eventPageSize })}`}>影子计费</Link>
               </TabsTrigger>
-              <TabsTrigger value="ai" asChild className={billingTabsTriggerClassName}>
+              <TabsTrigger value="ai" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/billing?${buildQuery({ tab: "ai" })}`}>AI 观察</Link>
               </TabsTrigger>
-              <TabsTrigger value="pricing" asChild className={billingTabsTriggerClassName}>
+              <TabsTrigger value="pricing" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/billing?${buildQuery({ tab: "pricing", rulePageSize })}`}>价格规则</Link>
               </TabsTrigger>
-              <TabsTrigger value="ledger" asChild className={billingTabsTriggerClassName}>
+              <TabsTrigger value="ledger" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/billing?${buildQuery({ tab: "ledger", ledgerPageSize })}`}>计费流水</Link>
               </TabsTrigger>
-              <TabsTrigger value="recharge" asChild className={billingTabsTriggerClassName}>
+              <TabsTrigger value="recharge" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/billing?${buildQuery({ tab: "recharge", rechargeOrderPageSize })}`}>微信充值</Link>
               </TabsTrigger>
-              <TabsTrigger value="refunds" asChild className={billingTabsTriggerClassName}>
+              <TabsTrigger value="refunds" asChild className={platformTabsTriggerClassName}>
                 <Link href={`/platform/billing?${buildQuery({ tab: "refunds", rechargeRefundPageSize })}`}>退款审核</Link>
               </TabsTrigger>
             </TabsList>

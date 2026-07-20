@@ -14,6 +14,7 @@ import {
   type PlatformTencentDeviceListData,
 } from "@/components/platform-devices/platform-device-types";
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
+import { platformTabsListClassName, platformTabsTriggerWithBadgeClassName } from "@/components/platform/platform-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -65,8 +66,8 @@ export function PlatformDevicesContent({
             />
           )}
           tabs={
-            <TabsList className="h-auto w-full justify-start overflow-x-auto">
-              <TabsTrigger value="ownership" asChild className="gap-2 whitespace-nowrap">
+            <TabsList className={platformTabsListClassName}>
+              <TabsTrigger value="ownership" asChild className={platformTabsTriggerWithBadgeClassName}>
                 <Link
                   href={buildPlatformDevicesHref({
                     tab: "ownership",
@@ -83,7 +84,7 @@ export function PlatformDevicesContent({
                   ) : null}
                 </Link>
               </TabsTrigger>
-              <TabsTrigger value="tencent" asChild className="gap-2 whitespace-nowrap">
+              <TabsTrigger value="tencent" asChild className={platformTabsTriggerWithBadgeClassName}>
                 <Link
                   href={buildPlatformDevicesHref({
                     tab: "tencent",
