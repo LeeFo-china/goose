@@ -64,7 +64,7 @@ describe("douyin authorization event ledger migration", () => {
     expect(conflict).toBeGreaterThan(insert);
     expect(statusRead).toBeGreaterThan(conflict);
     expect(disabledGuard).toBeGreaterThan(statusRead);
-    expect(claim.slice(insert, disabledGuard)).not.toMatch(
+    expect(claim.slice(0, disabledGuard)).not.toMatch(
       /UPDATE public\.douyin_third_party_components/,
     );
     expect(claim).toContain("MESSAGE = 'DOUYIN_COMPONENT_NOT_ACTIVE'");
