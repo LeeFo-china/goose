@@ -1,6 +1,32 @@
 import { z } from "zod";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
+import {
+  DouyinMiniappReleaseClient,
+  SafeDouyinLogIdSchema,
+  type AuthorizerRequestInput,
+  type AvailableAuditHostsResult,
+  type DouyinMiniappReleaseGateway,
+  type DouyinVersionListResult,
+  type ReleaseOperationResult,
+  type SubmitVersionAuditInput,
+  type TestQrCodeResult,
+  type UploadTemplateVersionInput,
+  type UploadTemplateVersionResult,
+} from "./release-client";
+export type {
+  AuthorizerRequestInput,
+  AvailableAuditHostsResult,
+  DouyinMiniappReleaseGateway,
+  DouyinTemplateExtJson,
+  DouyinVersionListResult,
+  ReleaseOperationResult,
+  SafeDouyinVersionStage,
+  SubmitVersionAuditInput,
+  TestQrCodeResult,
+  UploadTemplateVersionInput,
+  UploadTemplateVersionResult,
+} from "./release-client";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const EXPIRED_ACCESS_TOKEN_ERROR = 28_001_008;
@@ -12,7 +38,7 @@ const MERCHANT_CODE2SESSION_URL = "https://open.douyin.com/api/apps/v1/microapp/
 const TEMPLATE_CODE2SESSION_URL = "https://developer.toutiao.com/api/apps/v2/jscode2session";
 
 const JsonObjectSchema = z.looseObject({});
-const SafeLogSchema = z.looseObject({ log_id: z.string().min(1).optional() });
+const SafeLogSchema = z.looseObject({ log_id: SafeDouyinLogIdSchema.optional() });
 const ComponentSuccessSchema = z.looseObject({
   component_access_token: z.string().min(1),
   expires_in: z.number().int().positive(),
@@ -147,11 +173,13 @@ type ClientOptions = {
   readonly retryAccessToken?: (input: { readonly appId: string }) => Promise<string>;
 };
 
-export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
+export class DouyinOpenPlatformClient
+  implements DouyinOpenPlatformGateway, DouyinMiniappReleaseGateway {
   private readonly fetch: DouyinFetch;
   private readonly startTimer: NonNullable<ClientOptions["setTimeout"]>;
   private readonly stopTimer: NonNullable<ClientOptions["clearTimeout"]>;
   private readonly retryAccessToken?: ClientOptions["retryAccessToken"];
+  private readonly releases: DouyinMiniappReleaseClient;
 
   constructor(options: ClientOptions = {}) {
     this.fetch = options.fetch ?? globalThis.fetch;
@@ -160,6 +188,15 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
     this.stopTimer = options.clearTimeout ?? ((handle) =>
       globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>));
     this.retryAccessToken = options.retryAccessToken;
+    this.releases = new DouyinMiniappReleaseClient({
+      request: (url, init) => this.request(url, init),
+      executeWithAuthorizerToken: (input, operation) =>
+        this.withAuthorizerAccessToken(input, operation),
+      assertSuccess: assertOpenApiSuccess,
+      invalidResponse: (body) => {
+        throw invalidResponseError(safeLogId(body));
+      },
+    });
   }
 
   async getComponentAccessToken(input: ComponentTokenInput): Promise<ComponentTokenResult> {
@@ -211,26 +248,8 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
   }
 
   async code2Session(input: Code2SessionInput): Promise<Code2SessionResult> {
-    try {
-      return await this.requestMerchantCode2Session(input, input.authorizerAccessToken);
-    } catch (error) {
-      if (
-        !(error instanceof AppError) ||
-        error.code !== "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_EXPIRED" ||
-        !this.retryAccessToken
-      ) {
-        throw error;
-      }
-      let accessToken: string;
-      try {
-        accessToken = await this.retryAccessToken({ appId: input.appId });
-      } catch (error) {
-        if (error instanceof AppError) throw error;
-        throw accessTokenRefreshError();
-      }
-      if (!accessToken.trim()) throw accessTokenRefreshError();
-      return this.requestMerchantCode2Session(input, accessToken);
-    }
+    return this.withAuthorizerAccessToken(input, (accessToken) =>
+      this.requestMerchantCode2Session(input, accessToken));
   }
 
   async code2SessionForTemplate(input: TemplateCode2SessionInput): Promise<Code2SessionResult> {
@@ -248,6 +267,36 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
       anonymousOpenId: parsed.data.data.anonymous_openid,
       unionId: parsed.data.data.unionid,
     };
+  }
+
+  async uploadTemplateVersion(
+    input: UploadTemplateVersionInput,
+  ): Promise<UploadTemplateVersionResult> {
+    return this.releases.uploadTemplateVersion(input);
+  }
+
+  async getTestQrCode(input: AuthorizerRequestInput): Promise<TestQrCodeResult> {
+    return this.releases.getTestQrCode(input);
+  }
+
+  async getAvailableAuditHosts(
+    input: AuthorizerRequestInput,
+  ): Promise<AvailableAuditHostsResult> {
+    return this.releases.getAvailableAuditHosts(input);
+  }
+
+  async submitVersionAudit(
+    input: SubmitVersionAuditInput,
+  ): Promise<ReleaseOperationResult> {
+    return this.releases.submitVersionAudit(input);
+  }
+
+  async getVersionList(input: AuthorizerRequestInput): Promise<DouyinVersionListResult> {
+    return this.releases.getVersionList(input);
+  }
+
+  async releaseVersion(input: AuthorizerRequestInput): Promise<ReleaseOperationResult> {
+    return this.releases.releaseVersion(input);
   }
 
   private async requestAuthorizerToken(
@@ -290,6 +339,32 @@ export class DouyinOpenPlatformClient implements DouyinOpenPlatformGateway {
       anonymousOpenId: parsed.data.data.anonymous_open_id,
       unionId: parsed.data.data.union_id,
     };
+  }
+
+  private async withAuthorizerAccessToken<Result>(
+    input: AuthorizerRequestInput,
+    operation: (accessToken: string) => Promise<Result>,
+  ): Promise<Result> {
+    try {
+      return await operation(input.authorizerAccessToken);
+    } catch (error) {
+      if (
+        !(error instanceof AppError) ||
+        error.code !== "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_EXPIRED" ||
+        !this.retryAccessToken
+      ) {
+        throw error;
+      }
+      let accessToken: string;
+      try {
+        accessToken = await this.retryAccessToken({ appId: input.appId });
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw accessTokenRefreshError();
+      }
+      if (!accessToken.trim()) throw accessTokenRefreshError();
+      return operation(accessToken);
+    }
   }
 
   private async request(url: string, init: RequestInit): Promise<Record<string, unknown>> {
@@ -345,7 +420,7 @@ function assertOpenApiSuccess(body: Record<string, unknown>): void {
   const code = envelope.data.err_no === EXPIRED_ACCESS_TOKEN_ERROR
     ? "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_EXPIRED"
     : "DOUYIN_OPEN_PLATFORM_API_ERROR";
-  throw openPlatformError(code, "抖音开放平台请求失败", envelope.data.log_id);
+  throw openPlatformError(code, "抖音开放平台请求失败", safeLogId(body));
 }
 
 function assertRetrieveAuthorizationSuccess(body: Record<string, unknown>): void {
@@ -355,7 +430,7 @@ function assertRetrieveAuthorizationSuccess(body: Record<string, unknown>): void
       401,
       "抖音小程序需要重新授权",
       "DOUYIN_AUTHORIZATION_EXPIRED",
-      envelope.data.log_id ? { log_id: envelope.data.log_id } : undefined,
+      safeLogId(body) ? { log_id: safeLogId(body) } : undefined,
     );
   }
   assertOpenApiSuccess(body);

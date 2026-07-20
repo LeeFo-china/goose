@@ -1690,6 +1690,87 @@ export type Database = {
           },
         ]
       }
+      douyin_miniapp_releases: {
+        Row: {
+          audit_host_names: string[]
+          audit_note: string | null
+          audit_result: Json | null
+          audited_at: string | null
+          channel: string
+          created_at: string
+          description: string
+          douyin_log_id: string | null
+          ext_json: Json
+          id: string
+          installation_id: string
+          platform_operator_id: string
+          released_at: string | null
+          status: string
+          submitted_at: string | null
+          template_id: string
+          template_version: string
+          test_qr_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          audit_host_names?: string[]
+          audit_note?: string | null
+          audit_result?: Json | null
+          audited_at?: string | null
+          channel?: string
+          created_at?: string
+          description: string
+          douyin_log_id?: string | null
+          ext_json: Json
+          id?: string
+          installation_id: string
+          platform_operator_id: string
+          released_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          template_id: string
+          template_version: string
+          test_qr_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          audit_host_names?: string[]
+          audit_note?: string | null
+          audit_result?: Json | null
+          audited_at?: string | null
+          channel?: string
+          created_at?: string
+          description?: string
+          douyin_log_id?: string | null
+          ext_json?: Json
+          id?: string
+          installation_id?: string
+          platform_operator_id?: string
+          released_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          template_id?: string
+          template_version?: string
+          test_qr_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_miniapp_releases_installation_id_fkey"
+            columns: ["installation_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_releases_platform_operator_id_fkey"
+            columns: ["platform_operator_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       douyin_miniapp_lead_submissions: {
         Row: {
           already_submitted: boolean

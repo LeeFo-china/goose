@@ -100,6 +100,40 @@ describe("douyin miniapp database types", () => {
     expect(fields).toHaveLength(16);
   });
 
+  test("exposes the Douyin miniapp release ledger contract", () => {
+    const release = {} as Tables<"douyin_miniapp_releases">;
+    const releaseInsert: Inserts<"douyin_miniapp_releases"> = {
+      installation_id: "00000000-0000-4000-8000-000000000001",
+      template_id: "9133504853504535288",
+      template_version: "1.0.0",
+      description: "装修模板首个测试版本",
+      channel: "default",
+      ext_json: {
+        extEnable: true,
+        extAppid: "tt-authorizer",
+        ext: { deployment_key: "00000000-0000-4000-8000-000000000002" },
+      },
+      platform_operator_id: "00000000-0000-4000-8000-000000000003",
+    };
+    const releaseUpdate: Updates<"douyin_miniapp_releases"> = {
+      status: "audit_approved",
+      audit_result: { status: "approved" },
+      audited_at: "2026-07-20T10:00:00.000Z",
+    };
+
+    expect([
+      release.installation_id,
+      release.template_id,
+      release.template_version,
+      release.ext_json,
+      release.test_qr_url,
+      release.audit_host_names,
+      release.platform_operator_id,
+      releaseInsert.channel,
+      releaseUpdate.audit_result,
+    ]).toHaveLength(9);
+  });
+
   test("exposes component refresh RPC signatures and returns", () => {
     const claimArgs: DouyinFunctions["claim_douyin_component_token_refresh"]["Args"] = {
       p_component_appid: "tt-component",
