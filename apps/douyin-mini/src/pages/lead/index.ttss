@@ -1,1 +1,8 @@
-.tab-placeholder { display: flex; min-height: 760rpx; align-items: center; justify-content: center; }
+.lead-page { padding-bottom: 64rpx; }
+.lead-kicker { color: #9a4124; font-size: 22rpx; font-weight: 600; letter-spacing: 2rpx; }
+.lead-title { max-width: 620rpx; margin-top: 10rpx; color: #25211e; font-size: 42rpx; font-weight: 600; line-height: 1.35; }
+.lead-description { margin-top: 18rpx; color: #665f5a; font-size: 25rpx; line-height: 1.75; }
+.form-block { margin-top: 34rpx; }
+.form-error { margin-top: 22rpx; padding: 20rpx 24rpx; border-left: 6rpx solid #a84324; background: #f5e7e1; color: #7f2f19; font-size: 24rpx; line-height: 1.6; }
+.security-note { margin-top: 28rpx; color: #7a726c; font-size: 22rpx; line-height: 1.65; text-align: center; }
+.phone-action { min-height: 88rpx; margin-top: 20rpx; padding: 0 16rpx; background: transparent; color: #8b371f; font-size: 25rpx; line-height: 88rpx; }

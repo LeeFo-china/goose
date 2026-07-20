@@ -37,6 +37,7 @@ Page({
     }
   },
   onLead() {
+    getApp<DouyinAppContext>().recordAnalytics("lead_cta_click");
     void switchToTab("lead")
       .catch(() => tt.showToast({ title: "页面跳转失败，请重试", icon: "none" }));
   },

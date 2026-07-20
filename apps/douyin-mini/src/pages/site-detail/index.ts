@@ -72,6 +72,7 @@ Page({
         primaryColor: bootstrap.theme.primary_color,
         progress: [],
       });
+      app.recordAnalytics("site_view", project.id);
       await this.loadLogs("loadMore");
     } catch (error) {
       if (isApiRequestErrorCode(error, "DOUYIN_CONTENT_FEATURE_DISABLED")) {
@@ -131,6 +132,7 @@ Page({
   onRetryProgress() { void this.loadLogs("retry"); },
   onLoadMoreProgress() { void this.loadLogs("loadMore"); },
   onLead() {
+    getApp<DouyinAppContext>().recordAnalytics("lead_cta_click", this.siteId);
     void switchToTab("lead")
       .catch(() => tt.showToast({ title: "页面跳转失败，请重试", icon: "none" }));
   },

@@ -1,0 +1,6 @@
+.consent-row { display: flex; align-items: flex-start; gap: 18rpx; }
+.consent-check { box-sizing: border-box; width: 40rpx; min-width: 40rpx; height: 40rpx; min-height: 40rpx; margin: 3rpx 0 0; padding: 0; border: 2rpx solid #aaa19b; border-radius: 8rpx; background: #fff; color: #fff; font-size: 26rpx; line-height: 36rpx; }
+.consent-check--active { border-color: #a84324; background: #a84324; }
+.consent-check[disabled] { opacity: .55; }
+.consent-copy { flex: 1; color: #716963; font-size: 23rpx; line-height: 1.7; }
+.policy-link { color: #91391f; text-decoration: underline; }

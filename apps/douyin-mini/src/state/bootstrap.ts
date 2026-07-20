@@ -12,13 +12,31 @@ const BLOCKING_CODES = new Set<ServiceUnavailableCode>([
 export class BootstrapStore {
   status: "idle" | "loading" | "ready" | "unavailable" | "error" = "idle";
   data: BootstrapData | null = null;
+  private loadFlight: Promise<BootstrapData | null> | null = null;
 
   constructor(
     private readonly fetchBootstrap: () => Promise<BootstrapData>,
     private readonly navigateUnavailable: (code: ServiceUnavailableCode) => Promise<void>,
   ) {}
 
-  async load(): Promise<BootstrapData | null> {
+  load(): Promise<BootstrapData | null> {
+    if (this.loadFlight) return this.loadFlight;
+    const flight = this.performLoad();
+    this.loadFlight = flight;
+    void flight.then(
+      () => { if (this.loadFlight === flight) this.loadFlight = null; },
+      () => { if (this.loadFlight === flight) this.loadFlight = null; },
+    );
+    return flight;
+  }
+
+  getReadyOrLoad(): Promise<BootstrapData | null> {
+    return this.status === "ready" && this.data
+      ? Promise.resolve(this.data)
+      : this.load();
+  }
+
+  private async performLoad(): Promise<BootstrapData | null> {
     this.status = "loading";
     try {
       this.data = await this.fetchBootstrap();

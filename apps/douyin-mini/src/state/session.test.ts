@@ -7,6 +7,7 @@ import {
 } from "../api/request";
 import { captureLaunchContext } from "../platform/launch-context";
 import { parseStoredSession } from "../platform/storage";
+import type { BootstrapData } from "../models";
 import { BootstrapStore } from "./bootstrap";
 import { SessionManager, type SessionDependencies } from "./session";
 
@@ -249,5 +250,30 @@ describe("Douyin native session state", () => {
     await expect(store.load()).resolves.toBeNull();
     expect(store.status).toBe("unavailable");
     expect(navigateUnavailable).toHaveBeenCalledWith("TENANT_NOT_AVAILABLE");
+  });
+
+  test("joins an in-flight bootstrap refresh instead of exposing stale data", async () => {
+    let releaseRefresh: ((value: BootstrapData) => void) | null = null;
+    const refreshed = { marker: "new" } as unknown as BootstrapData;
+    const initial = { marker: "old" } as unknown as BootstrapData;
+    let calls = 0;
+    const store = new BootstrapStore(
+      async () => {
+        calls += 1;
+        if (calls === 1) return initial;
+        return await new Promise<BootstrapData>((resolve) => { releaseRefresh = resolve; });
+      },
+      async () => undefined,
+    );
+    await expect(store.load()).resolves.toBe(initial);
+
+    const refresh = store.load();
+    const reader = store.getReadyOrLoad();
+    expect(store.status).toBe("loading");
+    expect(calls).toBe(2);
+    (releaseRefresh as ((value: BootstrapData) => void) | null)?.(refreshed);
+
+    await expect(Promise.all([refresh, reader])).resolves.toEqual([refreshed, refreshed]);
+    expect(store.data).toBe(refreshed);
   });
 });

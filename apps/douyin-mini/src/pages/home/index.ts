@@ -61,11 +61,15 @@ Page({
         sitesEnabled: bootstrap.features.sites,
         serviceRegions: formatRegions(bootstrap.company.service_regions),
       });
+      getApp<DouyinAppContext>().recordAnalytics("page_view");
     } catch {
       this.setData({ loading: false, error: true });
     }
   },
-  onLead() { navigateWithFeedback(switchToTab("lead")); },
+  onLead() {
+    getApp<DouyinAppContext>().recordAnalytics("lead_cta_click");
+    navigateWithFeedback(switchToTab("lead"));
+  },
   onViewCases() { navigateWithFeedback(switchToTab("cases")); },
   onViewSites() { navigateWithFeedback(switchToTab("sites")); },
   onViewCompany() { navigateWithFeedback(navigateToPage("pages/company/index")); },

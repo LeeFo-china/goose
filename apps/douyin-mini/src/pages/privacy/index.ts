@@ -12,7 +12,8 @@ Page({
   async load() {
     this.setData({ loading: true, error: false });
     try {
-      const bootstrap = await getApp<DouyinAppContext>().startup;
+      const app = getApp<DouyinAppContext>();
+      const bootstrap = await app.bootstrap.getReadyOrLoad();
       if (!bootstrap) return;
       this.setData({
         loading: false,

@@ -1,0 +1,13 @@
+.lead-form { padding: 34rpx; border-radius: 24rpx; background: #fff; box-shadow: 0 4rpx 18rpx rgba(37,33,30,.07); }
+.field-group { margin-top: 30rpx; }
+.field-group:first-child { margin-top: 0; }
+.field-row { display: flex; gap: 18rpx; }
+.field-half { min-width: 0; flex: 1; }
+.field-label { margin-bottom: 14rpx; color: #514b47; font-size: 25rpx; font-weight: 600; }
+.required { color: #a84324; }
+.field-input, .field-textarea { box-sizing: border-box; width: 100%; border: 1rpx solid #d8d1cb; border-radius: 14rpx; background: #fff; color: #25211e; font-size: 27rpx; }
+.field-input { height: 92rpx; padding: 0 24rpx; }
+.field-textarea { min-height: 184rpx; padding: 22rpx 24rpx; line-height: 1.6; }
+.consent-block { margin-top: 34rpx; }
+.submit-button { box-sizing: border-box; width: 100%; min-height: 96rpx; margin-top: 34rpx; border-radius: 14rpx; color: #fff; font-size: 29rpx; font-weight: 600; line-height: 96rpx; }
+.submit-button[disabled] { opacity: .6; }

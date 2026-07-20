@@ -9,12 +9,17 @@ import { captureLaunchContext } from "./platform/launch-context";
 import { loginOnce } from "./platform/login";
 import { navigateToServiceUnavailable } from "./platform/navigation";
 import {
+  AnalyticsQueue,
+  type ClientAnalyticsEventName,
+} from "./platform/analytics";
+import {
   clearStoredSession,
   readStoredSession,
   writeStoredSession,
 } from "./platform/storage";
 import { BootstrapStore, toServiceUnavailableCode } from "./state/bootstrap";
 import { SessionManager } from "./state/session";
+import { createUuidV4IdempotencyKey } from "./utils/idempotency";
 
 const transport = new DouyinRequestTransport(API_BASE_URL, API_TIMEOUT_MS);
 const session = new SessionManager({
@@ -28,6 +33,7 @@ const session = new SessionManager({
   clearStoredSession,
 });
 const api = new ApiClient(transport, session);
+const analytics = new AnalyticsQueue(api);
 const bootstrap = new BootstrapStore(
   () => fetchBootstrap(api),
   navigateToServiceUnavailable,
@@ -35,16 +41,42 @@ const bootstrap = new BootstrapStore(
 
 export type DouyinAppContext = {
   api: ApiClient;
+  analytics: AnalyticsQueue;
   bootstrap: BootstrapStore;
+  launchContext: LaunchContext;
+  recordAnalytics(eventName: ClientAnalyticsEventName, entityId?: string): void;
   startup: Promise<BootstrapData | null>;
+};
+
+const DEFAULT_LAUNCH_CONTEXT: LaunchContext = {
+  entry_path: "pages/home/index",
+  scene: "0",
+  source_type: "direct",
 };
 
 App({
   api,
+  analytics,
   bootstrap,
+  launchContext: DEFAULT_LAUNCH_CONTEXT,
   startup: Promise.resolve(null) as Promise<BootstrapData | null>,
   onLaunch(options) {
-    this.startup = startApplication(captureLaunchContext(options));
+    this.launchContext = captureLaunchContext(options);
+    this.analytics.record({
+      event_id: createUuidV4IdempotencyKey(),
+      event_name: "app_launch",
+      attribution: this.launchContext,
+    });
+    this.startup = startApplication(this.launchContext);
+  },
+  onHide() { void this.analytics.handleAppHide(); },
+  recordAnalytics(eventName: ClientAnalyticsEventName, entityId?: string) {
+    this.analytics.record({
+      event_id: createUuidV4IdempotencyKey(),
+      event_name: eventName,
+      attribution: this.launchContext,
+      ...(entityId ? { entity_id: entityId } : {}),
+    });
   },
 });
 

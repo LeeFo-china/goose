@@ -43,6 +43,7 @@ Page({
         updatedDate: project.updated_at.slice(0, 10),
         primaryColor: bootstrap.theme.primary_color,
       });
+      app.recordAnalytics("case_view", project.id);
     } catch (error) {
       this.setData(isApiRequestErrorCode(error, "DOUYIN_CONTENT_FEATURE_DISABLED")
         ? { loading: false, error: false, disabled: true, project: null }
@@ -50,6 +51,7 @@ Page({
     }
   },
   onLead() {
+    getApp<DouyinAppContext>().recordAnalytics("lead_cta_click", this.caseId);
     void switchToTab("lead")
       .catch(() => tt.showToast({ title: "页面跳转失败，请重试", icon: "none" }));
   },

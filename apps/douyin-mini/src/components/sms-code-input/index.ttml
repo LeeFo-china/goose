@@ -1,0 +1,6 @@
+<view class="sms-row">
+  <input class="sms-input" type="number" maxlength="6" value="{{value}}" placeholder="请输入6位验证码" disabled="{{sending}}" bindinput="onInput" />
+  <button class="sms-button" disabled="{{!phoneReady || sending || cooldown > 0}}" loading="{{sending}}" bindtap="onSend">
+    {{cooldown > 0 ? cooldown + '秒后重发' : (sending ? '发送中' : '获取验证码')}}
+  </button>
+</view>

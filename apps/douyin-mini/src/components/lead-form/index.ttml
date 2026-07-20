@@ -1,0 +1,38 @@
+<form class="lead-form" bindsubmit="onSubmit">
+  <view class="field-group">
+    <view class="field-label">怎么称呼你 <text class="required">*</text></view>
+    <input class="field-input" data-field="name" maxlength="40" value="{{value.name}}" placeholder="例如：李先生" disabled="{{submitting}}" bindinput="onInput" />
+  </view>
+  <view class="field-group">
+    <view class="field-label">联系电话 <text class="required">*</text></view>
+    <input class="field-input" data-field="phone" type="number" maxlength="11" value="{{value.phone}}" placeholder="请输入手机号" disabled="{{submitting}}" bindinput="onInput" />
+  </view>
+  <view class="field-group">
+    <view class="field-label">短信验证码 <text class="required">*</text></view>
+    <sms-code-input value="{{value.sms_code}}" phone-ready="{{phoneReady && !submitting}}" sending="{{smsSending || submitting}}" cooldown="{{smsCooldown}}" bindchange="onSmsCodeChange" bindsend="onSendSms" />
+  </view>
+  <view class="field-group">
+    <view class="field-label">小区名称</view>
+    <input class="field-input" data-field="community" maxlength="80" value="{{value.community}}" placeholder="例如：示例花园" disabled="{{submitting}}" bindinput="onInput" />
+  </view>
+  <view class="field-row">
+    <view class="field-group field-half">
+      <view class="field-label">房屋面积</view>
+      <input class="field-input" data-field="area" type="digit" maxlength="8" value="{{value.area}}" placeholder="㎡" disabled="{{submitting}}" bindinput="onInput" />
+    </view>
+    <view class="field-group field-half">
+      <view class="field-label">预算范围</view>
+      <input class="field-input" data-field="budget" maxlength="40" value="{{value.budget}}" placeholder="例如：20-30万" disabled="{{submitting}}" bindinput="onInput" />
+    </view>
+  </view>
+  <view class="field-group">
+    <view class="field-label">计划开工时间</view>
+    <input class="field-input" data-field="start_time" maxlength="40" value="{{value.start_time}}" placeholder="例如：三个月内" disabled="{{submitting}}" bindinput="onInput" />
+  </view>
+  <view class="field-group">
+    <view class="field-label">装修需求</view>
+    <textarea class="field-textarea" data-field="demand" maxlength="1000" value="{{value.demand}}" placeholder="可填写户型、风格、收纳等重点需求" disabled="{{submitting}}" bindinput="onInput" />
+  </view>
+  <view class="consent-block"><privacy-consent checked="{{consented}}" company-name="{{companyName}}" disabled="{{submitting}}" bindchange="onConsentChange" bindopenpolicy="onOpenPolicy" /></view>
+  <button class="submit-button" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交装修需求'}}</button>
+</form>
