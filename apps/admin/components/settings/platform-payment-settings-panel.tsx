@@ -1,10 +1,17 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, Loader2, Save } from "lucide-react";
 import { adminTabsListClassName, adminTabsTriggerWithBadgeClassName } from "@/components/admin/admin-tabs";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { PaymentProfileReadinessSection } from "@/components/settings/platform-payment-readiness-section";
 import { SecretBundleForm } from "@/components/settings/platform-payment-secret-form";
 import {
   definitionFor,
@@ -28,6 +35,7 @@ import type {
   PlatformPaymentProfileCode,
   PlatformWechatPayProfileListResult,
   PlatformWechatPayProfileView,
+  PlatformWechatPayReadinessResult,
 } from "@/components/settings/platform-payment-settings-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,20 +51,45 @@ export function PlatformPaymentSettingsPanel({
   const [activeProfile, setActiveProfile] = useState<PlatformPaymentProfileCode>(
     "platform_direct_recharge",
   );
+  const [readiness, setReadiness] =
+    useState<PlatformWechatPayReadinessResult | null>(null);
+  const [readinessError, setReadinessError] = useState("");
+  const [readinessPending, setReadinessPending] = useState(true);
   const profiles = profileDefinitions.map((definition) =>
     paymentProfiles.profiles.find((profile) =>
       profile.profile_code === definition.profile_code
     ) || emptyProfile(definition)
   );
 
+  const refreshReadiness = useCallback(async () => {
+    setReadinessError("");
+    setReadinessPending(true);
+    try {
+      const result = await requestBackendJson<PlatformWechatPayReadinessResult>(
+        "/platform/payment/wechat-pay/readiness",
+        { fallbackMessage: "支付就绪状态加载失败" },
+      );
+      setReadiness(result);
+    } catch {
+      setReadinessError("支付就绪状态加载失败，请稍后重试。");
+    } finally {
+      setReadinessPending(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshReadiness();
+  }, [refreshReadiness]);
+
   return (
     <div className="flex min-h-0 flex-col gap-4 p-4">
       {paymentProfiles.error ? (
         <StatusAlert>{paymentProfiles.error}</StatusAlert>
       ) : null}
+      {readinessError ? <StatusAlert>{readinessError}</StatusAlert> : null}
       {!paymentProfiles.can_manage ? (
         <StatusAlert tone="warning">
-          当前账号只有查看权限，不能修改平台微信支付配置或上传密钥。
+          当前账号只有查看权限，不能修改配置、上传密钥或执行验证。
         </StatusAlert>
       ) : null}
 
@@ -93,6 +126,11 @@ export function PlatformPaymentSettingsPanel({
             <PaymentProfileSection
               profile={profile}
               readonly={!paymentProfiles.can_manage}
+              readiness={readiness?.profiles.find((item) =>
+                item.profile_code === profile.profile_code
+              ) || null}
+              readinessPending={readinessPending}
+              refreshReadiness={refreshReadiness}
             />
           </TabsContent>
         ))}
@@ -104,11 +142,21 @@ export function PlatformPaymentSettingsPanel({
 function PaymentProfileSection({
   profile,
   readonly,
+  readiness,
+  readinessPending,
+  refreshReadiness,
 }: {
   profile: PlatformWechatPayProfileView;
   readonly: boolean;
+  readiness: PlatformWechatPayReadinessResult["profiles"][number] | null;
+  readinessPending: boolean;
+  refreshReadiness: () => Promise<void>;
 }) {
   const definition = definitionFor(profile.profile_code);
+  const hasStoredSecret = Boolean(
+    profile.config?.has_encrypted_config_ref &&
+      profile.config.has_secret_bundle_revision,
+  );
 
   return (
     <div className="rounded-md border bg-background">
@@ -130,12 +178,20 @@ function PaymentProfileSection({
             {validationLabel(profile.config?.validation_status)}
           </Badge>
           <Badge
-            variant={profile.config?.has_encrypted_config_ref ? "success" : "warning"}
+            variant={hasStoredSecret ? "success" : "warning"}
           >
-            {profile.config?.has_encrypted_config_ref ? "密钥已绑定" : "未上传密钥"}
+            {hasStoredSecret ? "密钥已安全保存" : "尚未上传"}
           </Badge>
         </div>
       </div>
+
+      <PaymentProfileReadinessSection
+        profile={profile}
+        readiness={readiness}
+        readonly={readonly}
+        loading={readinessPending}
+        refreshReadiness={refreshReadiness}
+      />
 
       <div className="grid gap-5 p-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
         <ProfileConfigForm
@@ -283,11 +339,6 @@ function ProfileConfigForm({
           defaultValue={config?.notify_url}
           disabled={pending || readonly}
           required
-          className="md:col-span-2"
-        />
-        <ReadonlyField
-          label="密钥引用"
-          value={config?.encrypted_config_ref || `setting://${definition.secret_setting_key}`}
           className="md:col-span-2"
         />
       </FieldGroup>

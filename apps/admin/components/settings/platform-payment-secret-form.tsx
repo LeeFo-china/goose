@@ -14,6 +14,7 @@ import {
   textValue,
 } from "@/components/settings/platform-payment-settings-shared";
 import type { PlatformWechatPayProfileView } from "@/components/settings/platform-payment-settings-types";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldError, FieldGroup } from "@/components/ui/field";
 import { Separator } from "@/components/ui/separator";
@@ -32,6 +33,10 @@ export function SecretBundleForm({
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
+  const hasStoredSecret = Boolean(
+    profile.config?.has_encrypted_config_ref &&
+      profile.config.has_secret_bundle_revision,
+  );
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,10 +95,12 @@ export function SecretBundleForm({
         title="证书与密钥"
         description="文件只用于本次上传，保存后页面不回显私钥或接口 v3 密钥。"
       />
-      <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
-        当前密钥引用：{profile.config?.encrypted_config_ref ||
-          `setting://${definition.secret_setting_key}`}
-      </div>
+      <Badge
+        variant={hasStoredSecret ? "success" : "warning"}
+        className="w-fit"
+      >
+        {hasStoredSecret ? "密钥已安全保存" : "尚未上传"}
+      </Badge>
       {error ? <FieldError>{error}</FieldError> : null}
       {saved ? <StatusAlert tone="success">证书与密钥已上传。</StatusAlert> : null}
 
