@@ -3966,6 +3966,111 @@ export type Database = {
           },
         ]
       }
+      platform_payment_configs: {
+        Row: {
+          app_id: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          enabled_channels: string[]
+          encrypted_config_ref: string | null
+          id: string
+          last_validated_at: string | null
+          last_validation_error_code: string | null
+          last_validation_error_message: string | null
+          last_validation_request_id: string | null
+          merchant_id: string | null
+          merchant_mode: string
+          merchant_name: string | null
+          notify_url: string | null
+          principal_type: string
+          profile_code: string
+          provider: string
+          recharge_guard_version: number
+          risk_switches: Json
+          secret_bundle_revision: string | null
+          serial_no: string | null
+          status: string
+          sub_app_id: string | null
+          sub_merchant_id: string | null
+          updated_at: string
+          updated_by_employee_id: string | null
+          validation_status: string
+        }
+        Insert: {
+          app_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          enabled_channels?: string[]
+          encrypted_config_ref?: string | null
+          id?: string
+          last_validated_at?: string | null
+          last_validation_error_code?: string | null
+          last_validation_error_message?: string | null
+          last_validation_request_id?: string | null
+          merchant_id?: string | null
+          merchant_mode?: string
+          merchant_name?: string | null
+          notify_url?: string | null
+          principal_type?: string
+          profile_code?: string
+          provider?: string
+          recharge_guard_version?: number
+          risk_switches?: Json
+          secret_bundle_revision?: string | null
+          serial_no?: string | null
+          status?: string
+          sub_app_id?: string | null
+          sub_merchant_id?: string | null
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          validation_status?: string
+        }
+        Update: {
+          app_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          enabled_channels?: string[]
+          encrypted_config_ref?: string | null
+          id?: string
+          last_validated_at?: string | null
+          last_validation_error_code?: string | null
+          last_validation_error_message?: string | null
+          last_validation_request_id?: string | null
+          merchant_id?: string | null
+          merchant_mode?: string
+          merchant_name?: string | null
+          notify_url?: string | null
+          principal_type?: string
+          profile_code?: string
+          provider?: string
+          recharge_guard_version?: number
+          risk_switches?: Json
+          secret_bundle_revision?: string | null
+          serial_no?: string | null
+          status?: string
+          sub_app_id?: string | null
+          sub_merchant_id?: string | null
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          validation_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_payment_configs_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_payment_configs_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           base_salary: number | null

@@ -1,4 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Errors } from "@/errors/error-factory";
+import type { Database, Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 export type PlatformPaymentProvider = "wechat_pay";
@@ -38,7 +40,7 @@ export type PlatformPaymentConfigRecord = {
   last_validation_error_code?: string | null;
   last_validation_error_message?: string | null;
   last_validation_request_id?: string | null;
-  risk_switches: Record<string, unknown>;
+  risk_switches: Record<string, Json | undefined>;
   recharge_guard_version?: number;
   created_by_employee_id: string | null;
   updated_by_employee_id: string | null;
@@ -67,7 +69,7 @@ export type PlatformPaymentConfigUpsertInput = {
   last_validation_error_code: string | null;
   last_validation_error_message: string | null;
   last_validation_request_id: string | null;
-  risk_switches: Record<string, unknown>;
+  risk_switches: Record<string, Json | undefined>;
   created_by_employee_id: string | null;
   updated_by_employee_id: string | null;
 };
@@ -83,24 +85,9 @@ export type PlatformPaymentValidationUpdateInput = {
   updatedByEmployeeId: string;
 };
 
-type UntypedTable = {
-  select: (...args: unknown[]) => UntypedTable;
-  upsert: (...args: unknown[]) => UntypedTable;
-  update: (...args: unknown[]) => UntypedTable;
-  eq: (...args: unknown[]) => UntypedTable;
-  limit: (...args: unknown[]) => UntypedTable;
-  maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
-  single: () => Promise<{ data: unknown; error: unknown }>;
-  then: Promise<{ data: unknown; error: unknown }>["then"];
-};
-
-type UntypedClient = {
-  from: (table: "platform_payment_configs") => UntypedTable;
-};
-
 class PlatformPaymentConfigRepository {
   private from(table: "platform_payment_configs") {
-    return (SupabaseDB.getAdminClient() as unknown as UntypedClient).from(table);
+    return (SupabaseDB.getAdminClient() as SupabaseClient<Database>).from(table);
   }
 
   async findWechatPayConfig() {

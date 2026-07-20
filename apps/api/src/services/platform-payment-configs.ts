@@ -28,6 +28,7 @@ import {
   platformPaymentReadinessService,
 } from "@/services/platform-payment-readiness";
 import { systemSettingsService } from "@/services/system-settings";
+import type { Json } from "@/types/database";
 
 export type SavePlatformWechatPayConfigInput = {
   merchant_mode?: PlatformPaymentMerchantMode;
@@ -41,7 +42,7 @@ export type SavePlatformWechatPayConfigInput = {
   notify_url?: string | null;
   enabled_channels?: string[];
   status?: PlatformPaymentConfigStatus;
-  risk_switches?: Record<string, unknown>;
+  risk_switches?: Record<string, Json | undefined>;
 };
 
 export type SavePlatformWechatPaySecretBundleInput = {

@@ -48,7 +48,7 @@ export const UpdatePlatformWechatPayConfigSchema = z.object({
     .max(5, "启用渠道过多")
     .optional(),
   status: PlatformPaymentConfigStatusSchema.optional(),
-  risk_switches: z.record(z.string(), z.unknown()).optional(),
+  risk_switches: z.record(z.string(), z.json()).optional(),
 }).strict();
 
 export type UpdatePlatformWechatPayConfigInput =
