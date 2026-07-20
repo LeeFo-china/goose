@@ -6,6 +6,59 @@ import type { Inserts, Tables, Updates } from "./db";
 type DouyinFunctions = Database["public"]["Functions"];
 
 describe("douyin miniapp database types", () => {
+  test("exposes atomic marketing tables and RPC contracts", () => {
+    const lead = {} as Tables<"marketing_leads">;
+    const event = {} as Tables<"marketing_events">;
+    const submission = {} as Tables<"douyin_miniapp_lead_submissions">;
+    const submissionInsert: Inserts<"douyin_miniapp_lead_submissions"> = {
+      already_submitted: false,
+      douyin_miniapp_installation_id: "00000000-0000-4000-8000-000000000001",
+      idempotency_key: "00000000-0000-4000-8000-000000000002",
+      marketing_lead_id: "00000000-0000-4000-8000-000000000003",
+      message: "你已提交预约，我们将尽快联系你",
+      request_digest: "a".repeat(64),
+      sms_verification_code_id: "00000000-0000-4000-8000-000000000004",
+      tenant_id: "00000000-0000-4000-8000-000000000005",
+      updated_existing: false,
+    };
+    const args: DouyinFunctions["submit_douyin_miniapp_lead"]["Args"] = {
+      p_area: 120,
+      p_attribution: { entry_path: "pages/home/index" },
+      p_budget: "20-30万",
+      p_community: "示例花园",
+      p_consented_at: "2026-07-19T10:00:00.000Z",
+      p_demand: "旧房改造",
+      p_douyin_miniapp_installation_id: submissionInsert.douyin_miniapp_installation_id,
+      p_idempotency_key: submissionInsert.idempotency_key,
+      p_name: "李先生",
+      p_phone: "13800000000",
+      p_privacy_policy_version: "2026-07-19",
+      p_request_digest: submissionInsert.request_digest,
+      p_request_ip: "127.0.0.1",
+      p_sms_code: "123456",
+      p_start_time: "三个月内",
+      p_subject_hash: "b".repeat(64),
+      p_tenant_id: submissionInsert.tenant_id,
+      p_user_agent: "Douyin Miniapp",
+    };
+    const returns: DouyinFunctions["submit_douyin_miniapp_lead"]["Returns"] = [{
+      already_submitted: false,
+      lead_id: submissionInsert.marketing_lead_id,
+      message: submissionInsert.message,
+      updated_existing: false,
+    }];
+
+    expect([
+      lead.douyin_miniapp_installation_id,
+      event.douyin_miniapp_installation_id,
+      event.source,
+      event.subject_hash,
+      submission.sms_verification_code_id,
+      args.p_idempotency_key,
+      returns[0]!.lead_id,
+    ]).toHaveLength(7);
+  });
+
   test("exposes component and installation table contracts", () => {
     const component = {} as Tables<"douyin_third_party_components">;
     const installation = {} as Tables<"douyin_miniapp_installations">;

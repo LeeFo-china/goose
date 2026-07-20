@@ -1690,6 +1690,77 @@ export type Database = {
           },
         ]
       }
+      douyin_miniapp_lead_submissions: {
+        Row: {
+          already_submitted: boolean
+          created_at: string
+          douyin_miniapp_installation_id: string
+          id: string
+          idempotency_key: string
+          marketing_lead_id: string
+          message: string
+          request_digest: string
+          sms_verification_code_id: string
+          tenant_id: string
+          updated_existing: boolean
+        }
+        Insert: {
+          already_submitted: boolean
+          created_at?: string
+          douyin_miniapp_installation_id: string
+          id?: string
+          idempotency_key: string
+          marketing_lead_id: string
+          message: string
+          request_digest: string
+          sms_verification_code_id: string
+          tenant_id: string
+          updated_existing: boolean
+        }
+        Update: {
+          already_submitted?: boolean
+          created_at?: string
+          douyin_miniapp_installation_id?: string
+          id?: string
+          idempotency_key?: string
+          marketing_lead_id?: string
+          message?: string
+          request_digest?: string
+          sms_verification_code_id?: string
+          tenant_id?: string
+          updated_existing?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_lead_submissions_installation_id_fkey"
+            columns: ["douyin_miniapp_installation_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_lead_submissions_marketing_lead_id_fkey"
+            columns: ["marketing_lead_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_lead_submissions_sms_verification_code_id_fkey"
+            columns: ["sms_verification_code_id"]
+            isOneToOne: true
+            referencedRelation: "sms_verification_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_lead_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       douyin_third_party_components: {
         Row: {
           access_token_ciphertext: string | null
@@ -3184,12 +3255,15 @@ export type Database = {
           block_id: string | null
           created_at: string
           customer_id: string | null
+          douyin_miniapp_installation_id: string | null
           event_name: string
           id: string
           page_id: string | null
           page_version_id: string | null
           payload: Json
           request_ip: string | null
+          source: string
+          subject_hash: string | null
           tenant_id: string | null
           user_agent: string | null
           wx_openid: string | null
@@ -3198,12 +3272,15 @@ export type Database = {
           block_id?: string | null
           created_at?: string
           customer_id?: string | null
+          douyin_miniapp_installation_id?: string | null
           event_name: string
           id?: string
           page_id?: string | null
           page_version_id?: string | null
           payload?: Json
           request_ip?: string | null
+          source?: string
+          subject_hash?: string | null
           tenant_id?: string | null
           user_agent?: string | null
           wx_openid?: string | null
@@ -3212,17 +3289,27 @@ export type Database = {
           block_id?: string | null
           created_at?: string
           customer_id?: string | null
+          douyin_miniapp_installation_id?: string | null
           event_name?: string
           id?: string
           page_id?: string | null
           page_version_id?: string | null
           payload?: Json
           request_ip?: string | null
+          source?: string
+          subject_hash?: string | null
           tenant_id?: string | null
           user_agent?: string | null
           wx_openid?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "marketing_events_douyin_miniapp_installation_id_fkey"
+            columns: ["douyin_miniapp_installation_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "marketing_events_customer_id_fkey"
             columns: ["customer_id"]
@@ -3259,6 +3346,7 @@ export type Database = {
           community: string | null
           created_at: string
           customer_id: string | null
+          douyin_miniapp_installation_id: string | null
           follow_remark: string | null
           followed_at: string | null
           followed_by: string | null
@@ -3280,6 +3368,7 @@ export type Database = {
           community?: string | null
           created_at?: string
           customer_id?: string | null
+          douyin_miniapp_installation_id?: string | null
           follow_remark?: string | null
           followed_at?: string | null
           followed_by?: string | null
@@ -3301,6 +3390,7 @@ export type Database = {
           community?: string | null
           created_at?: string
           customer_id?: string | null
+          douyin_miniapp_installation_id?: string | null
           follow_remark?: string | null
           followed_at?: string | null
           followed_by?: string | null
@@ -3318,6 +3408,13 @@ export type Database = {
           wx_openid?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "marketing_leads_douyin_miniapp_installation_id_fkey"
+            columns: ["douyin_miniapp_installation_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "marketing_leads_customer_id_fkey"
             columns: ["customer_id"]
@@ -13609,6 +13706,34 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      submit_douyin_miniapp_lead: {
+        Args: {
+          p_area: number
+          p_attribution: Json
+          p_budget: string
+          p_community: string
+          p_consented_at: string
+          p_demand: string
+          p_douyin_miniapp_installation_id: string
+          p_idempotency_key: string
+          p_name: string
+          p_phone: string
+          p_privacy_policy_version: string
+          p_request_digest: string
+          p_request_ip: string
+          p_sms_code: string
+          p_start_time: string
+          p_subject_hash: string
+          p_tenant_id: string
+          p_user_agent: string
+        }
+        Returns: {
+          already_submitted: boolean
+          lead_id: string
+          message: string
+          updated_existing: boolean
+        }[]
       }
       submit_tenant_onboarding_application: {
         Args: {
