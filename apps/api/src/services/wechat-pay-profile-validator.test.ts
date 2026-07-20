@@ -136,15 +136,18 @@ describe("WechatPayProfileValidator", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  test.each([null, "different-revision"])(
+  test.each([
+    [null, "WECHAT_PAY_SECRET_BUNDLE_REVISION_REQUIRED"],
+    ["different-revision", "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH"],
+  ])(
     "rejects a secret bundle whose revision does not match the profile: %s",
-    async (revision) => {
+    async (revision, expectedCode) => {
       load.mockImplementationOnce(async () => ({ ...validBundle, revision }));
       const validator = await createValidator();
 
       await expect(validator.validate(config())).rejects.toMatchObject({
         statusCode: 409,
-        code: "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH",
+        code: expectedCode,
       });
       expect(probe).not.toHaveBeenCalled();
     },

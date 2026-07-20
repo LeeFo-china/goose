@@ -19,6 +19,7 @@ import {
 } from "@/services/billing-recharge-refund-reconciliation-clock";
 import { parseAndAssertWechatRefund } from "@/services/wechat-pay-refund-contract";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
+import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-payment-secret-bundle-revision";
 
 const MINUTE_MS = 60_000;
 const RECONCILE_LEASE_SECONDS = 120;
@@ -214,8 +215,9 @@ export class BillingRechargeRefundReconciliationService {
     if (!leaseClock.hasBudget(providerStart, RECONCILE_WORST_ROW_BUDGET_MS)) {
       return false;
     }
-    const secretBundle = await this.secretBundleService.load(
-      config.encrypted_config_ref,
+    const secretBundle = requireMatchingPlatformPaymentSecretBundle(
+      config,
+      await this.secretBundleService.load(config.encrypted_config_ref),
     );
     const queryStart = leaseClock.observe();
     if (!leaseClock.hasBudget(queryStart, RECONCILE_WORST_ROW_BUDGET_MS)) {

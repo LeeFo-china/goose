@@ -23,6 +23,7 @@ const platformConfig = {
   app_id: "wx-platform-app",
   sub_app_id: null,
   encrypted_config_ref: "env://WECHAT_PAY_PLATFORM",
+  secret_bundle_revision: "bundle-revision-1",
   serial_no: "platform-serial",
   notify_url: "https://api.example.com/pay/wechat/callback",
   enabled_channels: ["tenant_recharge"],
@@ -108,13 +109,17 @@ const decryptedResource = {
 
 const listProjectCallbackCandidateConfigs = mock(async () => []);
 const listPlatformCallbackCandidateConfigs = mock(async () => [platformConfig]);
-const loadSecretBundle = mock(async (): Promise<WechatPaySecretBundle> => ({
+const secretBundle = {
   privateKeyPem: "private-key",
   apiV3Key: "12345678901234567890123456789012",
   wechatPayPublicKeyId: "PUB_KEY_ID_TEST",
   wechatPayPublicKeyPem: "public-key",
   baseUrl: "https://api.mch.weixin.qq.com",
-}));
+  revision: "bundle-revision-1",
+} satisfies WechatPaySecretBundle;
+const loadSecretBundle = mock(async (): Promise<WechatPaySecretBundle> =>
+  secretBundle
+);
 const verifySignature = mock(() => true);
 const decryptResource = mock((): Record<string, unknown> => decryptedResource);
 const findCreditOrderByOutTradeNo = mock(
@@ -262,6 +267,48 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
     });
     expect(createPayment).not.toHaveBeenCalled();
     expect(completePaymentTask).not.toHaveBeenCalled();
+  });
+
+  test("skips a mismatched platform candidate without decrypting it", async () => {
+    const nextConfig = {
+      ...platformConfig,
+      id: "platform-config-2",
+      encrypted_config_ref: "env://WECHAT_PAY_PLATFORM_2",
+      secret_bundle_revision: "bundle-revision-2",
+    } satisfies PlatformPaymentConfigRecord;
+    listPlatformCallbackCandidateConfigs.mockImplementationOnce(async () => [
+      platformConfig,
+      nextConfig,
+    ]);
+    loadSecretBundle
+      .mockImplementationOnce(async () => ({
+        ...secretBundle,
+        revision: "different-revision",
+      }))
+      .mockImplementationOnce(async () => ({
+        ...secretBundle,
+        revision: "bundle-revision-2",
+      }));
+    findCreditOrderByOutTradeNo.mockImplementationOnce(async () => ({
+      ...creditOrder,
+      payment_config_id: nextConfig.id,
+    }));
+    const service = await createService();
+
+    const result = await service.handleCallback({
+      rawBody,
+      headers: {
+        "wechatpay-timestamp": "1782873600",
+        "wechatpay-nonce": "callback-nonce",
+        "wechatpay-signature": "signature",
+      },
+    });
+
+    expect(result).toEqual({ code: "SUCCESS", message: "成功" });
+    expect(loadSecretBundle).toHaveBeenCalledTimes(2);
+    expect(verifySignature).toHaveBeenCalledTimes(1);
+    expect(decryptResource).toHaveBeenCalledTimes(1);
+    expect(findCreditOrderByOutTradeNo).toHaveBeenCalledTimes(1);
   });
 
   test("returns success without recharge side effects for duplicate processed notification", async () => {

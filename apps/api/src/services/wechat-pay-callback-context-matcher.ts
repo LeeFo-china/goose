@@ -20,6 +20,10 @@ import {
   decryptWechatPayResource,
   verifyWechatPayCallbackSignature,
 } from "@/services/wechat-pay-callback-crypto";
+import {
+  isPlatformPaymentSecretBundleRevisionError,
+  requireMatchingPlatformPaymentSecretBundle,
+} from "@/services/platform-payment-secret-bundle-revision";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
 import {
   buildWechatPayTransactionExpectedBinding,
@@ -196,7 +200,11 @@ export class WechatPayCallbackContextMatcher {
     const configs =
       await this.platformConfigRepository.listCallbackCandidateConfigs();
     for (const config of configs) {
-      const decrypted = await this.verifyAndDecrypt({ ...input, config });
+      const decrypted = await this.verifyAndDecrypt({
+        ...input,
+        config,
+        platformConfig: config,
+      });
       if (!decrypted) continue;
       const outRefundNo = this.requireString(
         decrypted,
@@ -225,7 +233,11 @@ export class WechatPayCallbackContextMatcher {
     const configs =
       await this.platformConfigRepository.listCallbackCandidateConfigs();
     for (const config of configs) {
-      const decrypted = await this.verifyAndDecrypt({ ...input, config });
+      const decrypted = await this.verifyAndDecrypt({
+        ...input,
+        config,
+        platformConfig: config,
+      });
       if (!decrypted) continue;
       const resource = convertWechatPayTransactionCallbackResource(decrypted);
       const outTradeNo = this.requireString(
@@ -268,10 +280,23 @@ export class WechatPayCallbackContextMatcher {
   private async verifyAndDecrypt(input: MatchInput & {
     config: Pick<WechatPayConfigRecord, "encrypted_config_ref"> |
       Pick<PlatformPaymentConfigRecord, "encrypted_config_ref">;
+    platformConfig?: PlatformPaymentConfigRecord;
   }) {
-    const bundle = await this.secretBundleService.load(
+    const loadedBundle = await this.secretBundleService.load(
       input.config.encrypted_config_ref,
     );
+    let bundle = loadedBundle;
+    if (input.platformConfig) {
+      try {
+        bundle = requireMatchingPlatformPaymentSecretBundle(
+          input.platformConfig,
+          loadedBundle,
+        );
+      } catch (error) {
+        if (isPlatformPaymentSecretBundleRevisionError(error)) return null;
+        throw error;
+      }
+    }
     if (!bundle.wechatPayPublicKeyPem) return null;
     if (
       input.callbackSerial &&

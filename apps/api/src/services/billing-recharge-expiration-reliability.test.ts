@@ -378,6 +378,7 @@ describe("BillingRechargeExpirationService cleanup configuration", () => {
             wechatPayPublicKeyId: null,
             wechatPayPublicKeyPem: null,
             baseUrl: "https://api.mch.weixin.qq.com",
+            revision: defaultSecretBundle.revision,
           };
         });
       }

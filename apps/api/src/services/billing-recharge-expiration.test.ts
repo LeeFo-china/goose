@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Errors } from "@/errors/error-factory";
 import {
   createExpirationHarness,
+  defaultSecretBundle,
   makeOrder,
   successTransaction,
 } from "./billing-recharge-expiration.test-helpers";
@@ -75,6 +76,22 @@ describe("BillingRechargeExpirationService state matrix", () => {
       claimToken: order.close_claim_token,
       errorMessage: "BILLING_RECHARGE_EXPIRE_QUERY_FAILED",
     });
+    expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, failed: 1 });
+  });
+
+  test("does not query WeChat with a mismatched platform secret revision", async () => {
+    const harness = await createExpirationHarness({ orders: [makeOrder()] });
+    harness.secretBundleService.load.mockImplementationOnce(async () => ({
+      ...defaultSecretBundle,
+      revision: "different-revision",
+    }));
+
+    const result = await harness.service.runExpiredOrderChecks({ batchSize: 1 });
+
+    expect(harness.wechatPayGateway.queryTransactionByOutTradeNo).not
+      .toHaveBeenCalled();
+    expect(harness.wechatPayGateway.closeTransactionByOutTradeNo).not
+      .toHaveBeenCalled();
     expect(result).toEqual({ ...EMPTY_TELEMETRY, claimed: 1, failed: 1 });
   });
 

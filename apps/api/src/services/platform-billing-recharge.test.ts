@@ -108,6 +108,7 @@ const platformPaymentConfig = {
   app_id: "wx-platform-app",
   sub_app_id: null,
   encrypted_config_ref: "env://WECHAT_PAY_PLATFORM",
+  secret_bundle_revision: "bundle-revision-1",
   serial_no: "platform-serial",
   notify_url: "https://api.example.com/pay/wechat/callback",
   enabled_channels: ["tenant_recharge"],
@@ -127,6 +128,7 @@ const secretBundle = {
   wechatPayPublicKeyId: "PUB_KEY_ID_TEST",
   wechatPayPublicKeyPem: "public-key",
   baseUrl: "https://api.mch.weixin.qq.com",
+  revision: "bundle-revision-1",
 } satisfies WechatPaySecretBundle;
 
 const platformRole = {

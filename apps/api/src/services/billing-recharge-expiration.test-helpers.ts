@@ -18,6 +18,7 @@ export const defaultPaymentConfig = {
   app_id: "wx-app",
   sub_app_id: null,
   encrypted_config_ref: "secret://PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
+  secret_bundle_revision: "bundle-revision-1",
   serial_no: "SERIALNO",
   notify_url: "https://api.example.com/callback",
   enabled_channels: ["tenant_recharge"],
@@ -37,6 +38,7 @@ export const defaultSecretBundle = {
   wechatPayPublicKeyId: null,
   wechatPayPublicKeyPem: null,
   baseUrl: "https://api.mch.weixin.qq.com",
+  revision: "bundle-revision-1",
 } satisfies WechatPaySecretBundle;
 
 export function makePaymentConfig(

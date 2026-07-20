@@ -7,6 +7,7 @@ import type {
   PlatformPaymentMerchantMode,
   PlatformPaymentProfileCode,
 } from "@/repositories/platform-payment-configs";
+import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-payment-secret-bundle-revision";
 import {
   wechatPayProfileValidationGateway,
   type WechatPayProfileProbeResult,
@@ -75,7 +76,7 @@ export class WechatPayProfileValidator {
       "微信支付密钥引用未配置",
       "WECHAT_PAY_SECRET_REF_REQUIRED",
     );
-    const secretBundleRevision = requireText(
+    requireText(
       config.secret_bundle_revision,
       "微信支付密钥版本未配置",
       "WECHAT_PAY_SECRET_BUNDLE_REVISION_REQUIRED",
@@ -86,14 +87,10 @@ export class WechatPayProfileValidator {
       "WECHAT_PAY_NOTIFY_URL_INVALID",
     );
 
-    const bundle = await this.secretBundleService.load(encryptedConfigRef);
-    if (bundle.revision !== secretBundleRevision) {
-      throw Errors.business(
-        409,
-        "微信支付密钥版本与支付配置不匹配",
-        "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH",
-      );
-    }
+    const bundle = requireMatchingPlatformPaymentSecretBundle(
+      config,
+      await this.secretBundleService.load(encryptedConfigRef),
+    );
     assertApiV3Key(bundle.apiV3Key);
     assertRsaPrivateKey(bundle.privateKeyPem);
     const publicKeyId = requireText(

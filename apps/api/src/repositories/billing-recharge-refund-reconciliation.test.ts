@@ -154,8 +154,14 @@ describe("billingRechargeRefundReconciliationRepository", () => {
       id: CLAIM_REQUEST_1_ID,
       reconcile_attempt_count: 2,
       order: { id: ORDER_1_ID, payment_config_id: "config-1" },
-      config: { id: "config-1", merchant_id: "merchant-1" },
+      config: {
+        id: "config-1",
+        merchant_id: "merchant-1",
+        secret_bundle_revision: "bundle-revision-config-1",
+      },
     });
+    expect(selectCalls.find(([table]) => table === "platform_payment_configs")?.[1])
+      .toContain("secret_bundle_revision");
     expect(result[0]).not.toHaveProperty("ignored");
   });
 
@@ -407,6 +413,7 @@ function createConfig(id: string, merchantId: string) {
     app_id: "wx-app",
     sub_app_id: null,
     encrypted_config_ref: `env://${id}`,
+    secret_bundle_revision: `bundle-revision-${id}`,
     serial_no: `${id}-serial`,
     notify_url: "https://api.example.com/pay/wechat/callback",
     enabled_channels: ["tenant_recharge"],

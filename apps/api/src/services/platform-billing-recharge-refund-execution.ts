@@ -10,6 +10,7 @@ import {
 } from "@/repositories/platform-payment-configs";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-payment-secret-bundle-revision";
 import {
   getWechatErrorDetailCode,
   toWechatQueriedRefundPayload,
@@ -112,8 +113,9 @@ export class PlatformBillingRechargeRefundExecutionService {
       paymentConfigId,
     );
     this.assertPaymentConfigReady(config, order);
-    const secretBundle = await this.secretBundleService.load(
-      config.encrypted_config_ref,
+    const secretBundle = requireMatchingPlatformPaymentSecretBundle(
+      config,
+      await this.secretBundleService.load(config.encrypted_config_ref),
     );
     const wechatTransactionResponse =
       await this.wechatPayGateway.queryTransactionByOutTradeNo({

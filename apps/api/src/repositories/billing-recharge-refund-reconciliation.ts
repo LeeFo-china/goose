@@ -75,6 +75,7 @@ export type RefundWechatPayConfig = Pick<
   | "app_id"
   | "sub_app_id"
   | "encrypted_config_ref"
+  | "secret_bundle_revision"
   | "serial_no"
   | "notify_url"
 >;
@@ -122,6 +123,7 @@ const CONFIG_COLUMNS = [
   "app_id",
   "sub_app_id",
   "encrypted_config_ref",
+  "secret_bundle_revision",
   "serial_no",
   "notify_url",
 ].join(",");

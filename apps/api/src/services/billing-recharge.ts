@@ -23,6 +23,7 @@ import {
   requireActiveRechargePaymentConfig,
   requirePostInsertRechargePaymentConfig,
 } from "@/services/billing-recharge-payment-config";
+import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-payment-secret-bundle-revision";
 import {
   BillingRechargeRefundService,
   type BillingRechargeRefundRequestInput,
@@ -239,8 +240,9 @@ export class BillingRechargeService {
     const initial = requireActiveRechargePaymentConfig(
       await this.paymentConfigRepository.findWechatPayConfig(),
     );
-    await this.secretBundleService.load(
-      initial.config.encrypted_config_ref,
+    requireMatchingPlatformPaymentSecretBundle(
+      initial.config,
+      await this.secretBundleService.load(initial.config.encrypted_config_ref),
     );
     const config = initial.config;
     const guardVersion = initial.guardVersion;
@@ -279,8 +281,9 @@ export class BillingRechargeService {
       expectedConfigId: config.id,
       expectedGuardVersion: guardVersion,
     });
-    const secretBundle = await this.secretBundleService.load(
-      reloadedConfig.encrypted_config_ref,
+    const secretBundle = requireMatchingPlatformPaymentSecretBundle(
+      reloadedConfig,
+      await this.secretBundleService.load(reloadedConfig.encrypted_config_ref),
     );
     const prepay = await this.wechatPayGateway.createJsapiPrepay({
       config: reloadedConfig,
@@ -428,8 +431,9 @@ export class BillingRechargeService {
         },
       );
     }
-    const secretBundle = await this.secretBundleService.load(
-      config.encrypted_config_ref,
+    const secretBundle = requireMatchingPlatformPaymentSecretBundle(
+      config,
+      await this.secretBundleService.load(config.encrypted_config_ref),
     );
     if (!isBillingRechargePaymentWindowOpen(order, this.nowFactory())) return null;
     return this.wechatPayGateway.createMiniProgramPaymentRequest({
@@ -480,7 +484,6 @@ export class BillingRechargeService {
     }
     return prepayId;
   }
-
 }
 
 function normalizePositiveInteger(value: number | undefined, fallback: number) {

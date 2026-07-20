@@ -11,10 +11,9 @@ import {
   billingRechargePaymentConfirmation,
   type BillingRechargePaymentConfirmationInput,
 } from "@/services/billing-recharge-payment-confirmation";
+import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-payment-secret-bundle-revision";
 import { canCloseNonexistentWechatOrder } from "@/services/billing-recharge-expiration-query-error";
-import {
-  wechatPayGateway,
-} from "@/services/wechat-pay-gateway";
+import { wechatPayGateway } from "@/services/wechat-pay-gateway";
 import {
   wechatPaySecretBundleService,
   type WechatPaySecretBundle,
@@ -398,8 +397,9 @@ export class BillingRechargeExpirationService {
     const config = await this.paymentConfigRepository
       .findWechatPayConfigById(configId);
     this.assertCleanupConfig(config, configId);
-    const secretBundle = await this.secretBundleService.load(
-      config.encrypted_config_ref,
+    const secretBundle = requireMatchingPlatformPaymentSecretBundle(
+      config,
+      await this.secretBundleService.load(config.encrypted_config_ref),
     );
     return { config, secretBundle };
   }

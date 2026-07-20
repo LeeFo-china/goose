@@ -165,6 +165,7 @@ const secretBundleService = {
     wechatPayPublicKeyId: null,
     wechatPayPublicKeyPem: null,
     baseUrl: "https://api.mch.weixin.qq.com",
+    revision: "bundle-revision-1",
   })),
 };
 
@@ -387,6 +388,28 @@ describe("BillingRechargeService", () => {
     expect(secretBundleService.load).toHaveBeenCalledTimes(2);
     expect(paymentConfigRepository.findWechatPayConfigById)
       .toHaveBeenCalledWith("platform-config-1");
+  });
+
+  test("rejects a mismatched secret revision before order insertion", async () => {
+    secretBundleService.load.mockImplementationOnce(async () => ({
+      privateKeyPem: "private-key",
+      apiV3Key: "api-v3-key",
+      wechatPayPublicKeyId: null,
+      wechatPayPublicKeyPem: null,
+      baseUrl: "https://api.mch.weixin.qq.com",
+      revision: "different-revision",
+    }));
+    const service = await createService();
+
+    await expect(service.createOrder(authContext, {
+      package_code: "credit_1000",
+      payer_openid: "openid-1",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH",
+    });
+    expect(rechargeRepository.createOrder).not.toHaveBeenCalled();
+    expect(wechatPayGateway.createJsapiPrepay).not.toHaveBeenCalled();
   });
 
   test("uses the post-insert config and secret rather than the preflight snapshot", async () => {

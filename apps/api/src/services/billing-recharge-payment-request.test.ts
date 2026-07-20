@@ -71,6 +71,7 @@ const secretBundle = {
   wechatPayPublicKeyId: null,
   wechatPayPublicKeyPem: null,
   baseUrl: "https://api.mch.weixin.qq.com",
+  revision: "bundle-revision-1",
 };
 
 const rechargeRepository = {

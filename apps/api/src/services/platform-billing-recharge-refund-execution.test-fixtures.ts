@@ -99,6 +99,7 @@ export const paymentConfig: PlatformPaymentConfigRecord = {
   app_id: "wxbac3b1e168fd968a",
   sub_app_id: null,
   encrypted_config_ref: "env://WECHAT_PAY_TEST",
+  secret_bundle_revision: "bundle-revision-1",
   serial_no: "SERIALNO",
   notify_url: "https://api.example.com/pay/wechat/callback",
   enabled_channels: ["tenant_recharge"],
@@ -237,6 +238,7 @@ export const secretBundleService = {
     wechatPayPublicKeyId: null,
     wechatPayPublicKeyPem: null,
     baseUrl: "https://api.mch.weixin.qq.com",
+    revision: "bundle-revision-1",
   })),
 };
 
@@ -302,6 +304,7 @@ export function resetExecutionMocks() {
     wechatPayPublicKeyId: null,
     wechatPayPublicKeyPem: null,
     baseUrl: "https://api.mch.weixin.qq.com",
+    revision: "bundle-revision-1",
   }));
   wechatPayGateway.queryTransactionByOutTradeNo.mockImplementation(async (input) => {
     events.push("wechat-query-transaction");

@@ -18,6 +18,7 @@ export const secretBundle = {
   wechatPayPublicKeyId: "PUB_KEY_ID_1",
   wechatPayPublicKeyPem: "public-key",
   baseUrl: "https://api.mch.weixin.qq.com",
+  revision: "bundle-revision-1",
 };
 
 export function createClaim(
@@ -50,6 +51,7 @@ export function createClaim(
       app_id: "wx-app-id",
       sub_app_id: null,
       encrypted_config_ref: "secret://wechat-pay-config-1",
+      secret_bundle_revision: "bundle-revision-1",
       serial_no: "SERIAL-1",
       notify_url: "https://api.example.com/pay/wechat/callback",
     },

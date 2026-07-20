@@ -100,6 +100,23 @@ describe("PlatformBillingRechargeRefundExecutionService", () => {
       .toHaveBeenCalledWith("platform-config-1");
     expect(paymentConfigRepository.findWechatPayConfig).not.toHaveBeenCalled();
   });
+  test("rejects a mismatched secret revision before querying or refunding", async () => {
+    secretBundleService.load.mockImplementationOnce(async () => ({
+      privateKeyPem: "private-key",
+      apiV3Key: "api-v3-key",
+      wechatPayPublicKeyId: null,
+      wechatPayPublicKeyPem: null,
+      baseUrl: "https://api.mch.weixin.qq.com",
+      revision: "different-revision",
+    }));
+
+    await expectExecuteRejectsWithCode(
+      "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH",
+    );
+    expect(wechatPayGateway.queryTransactionByOutTradeNo).not.toHaveBeenCalled();
+    expect(wechatPayGateway.requestRefund).not.toHaveBeenCalled();
+    expect(repository.beginWechatRefund).not.toHaveBeenCalled();
+  });
   test("uses a complete historical config after it stops accepting new charges", async () => {
     const historicalConfig = {
       ...paymentConfig,
