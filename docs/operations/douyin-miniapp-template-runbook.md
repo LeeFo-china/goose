@@ -55,7 +55,12 @@ bun run api:check
 
 ## 3. 开放平台回调配置
 
-将 `<API_ORIGIN>` 替换为生产 API 的 HTTPS Origin，不附加多余路径或查询参数。
+按本次获批的目标环境替换 `<API_ORIGIN>`，不附加多余路径或查询参数，禁止跨环境复用回调配置：
+
+| 目标环境 | `<API_ORIGIN>` | 授权边界 |
+| --- | --- | --- |
+| 开发联调 | `https://api-dev.goodcms.cn` | 仅用于开发 E2E，需取得开发回调配置授权 |
+| 生产上线 | `https://api.goodcms.cn` | 不属于开发 E2E，需另行取得生产配置授权 |
 
 | 控制台用途 | 回调 URL | 方法与成功响应 |
 | --- | --- | --- |
@@ -64,9 +69,11 @@ bun run api:check
 
 控制台的消息 Token、EncodingAESKey 必须分别与 `DOUYIN_COMPONENT_MESSAGE_TOKEN`、`DOUYIN_COMPONENT_MESSAGE_AES_KEY` 一致。上线前用控制台校验功能确认公网证书、DNS、WAF 和请求体透传正常。不要把回调 URL 配到普通小程序会话接口。
 
-空环境的首个合法 `PUSH Ticket` 在完成时间窗口、签名、AES 解密和 Component AppID 校验后，
-由 `claim_douyin_authorization_event` 幂等建立 active 组件并保存加密 Ticket。普通授权、撤销或未知事件
-不能注册组件；已有 disabled 组件不会被回调自动启用。成功正文必须精确为小写纯文本 `success`。
+空环境的首个合法 `PUSH Ticket` 在完成回调时间窗口、签名、AES 解密和 Component AppID 校验后，
+先由 `claim_douyin_authorization_event` 幂等建立 active 组件并申领事件，再由
+`complete_douyin_ticket_event` 保存服务端封装后的 Ticket 密文信封并完成事件。首次处理只有完成函数返回成功后
+才能响应小写纯文本 `success`；已完成的重复事件可幂等响应 `success`。普通授权、撤销或未知事件不能注册组件，
+已有 disabled 组件不会被回调自动启用。不得手工插入组件、事件或 Ticket 数据，也不得绕过两个 RPC 直接写表。
 
 ## 4. Migration 门禁
 
