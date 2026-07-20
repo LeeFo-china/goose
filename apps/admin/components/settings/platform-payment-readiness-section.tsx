@@ -30,7 +30,7 @@ const VALIDATION_REQUEST_ERROR_MESSAGE =
   "微信支付配置验证请求失败，请稍后重试。";
 const VALIDATION_HTTP_ERROR_MESSAGES = {
   PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS:
-    "存在待处理充值订单，请处理后重试。",
+    "存在使用当前支付配置的待处理订单，请处理后重试。",
   PLATFORM_PAYMENT_PROFILE_CHANGED:
     "支付配置已更新，请刷新后重新验证。",
   PLATFORM_PAYMENT_PROFILE_NOT_FOUND:
@@ -80,8 +80,10 @@ export function PaymentProfileReadinessSection({
   );
 
   useEffect(() => {
-    setFeedback(null);
-  }, [profile.config?.updated_at]);
+    if (shouldClearValidationFeedback(profile.config)) {
+      setFeedback(null);
+    }
+  }, [profile.config?.updated_at, profile.config?.validation_status]);
 
   function validateProfile() {
     if (readonly || !profile.configured) return;
@@ -234,6 +236,12 @@ export function PaymentProfileReadinessSection({
       ) : null}
     </section>
   );
+}
+
+export function shouldClearValidationFeedback(
+  config: PlatformWechatPayProfileView["config"],
+) {
+  return !config || config.validation_status === "unchecked";
 }
 
 export function toSafeValidationRequestFeedback(

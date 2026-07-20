@@ -293,7 +293,43 @@ describe("platform payment settings panel", () => {
     });
   });
 
-  test("readiness state announces loading and clears stale validation feedback", () => {
+  test("pending-order validation error covers every current payment use", async () => {
+    const readinessModule = await import(
+      "./platform-payment-readiness-section"
+    );
+    const normalize = (readinessModule as unknown as {
+      toSafeValidationRequestFeedback?: (error: unknown) => unknown;
+    }).toSafeValidationRequestFeedback;
+
+    expect(normalize?.(Object.assign(new Error("ignored backend message"), {
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+    }))).toEqual({
+      tone: "error",
+      message: "存在使用当前支付配置的待处理订单，请处理后重试。",
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+    });
+  });
+
+  test("validation feedback clears only for absent or unchecked config", async () => {
+    const readinessModule = await import(
+      "./platform-payment-readiness-section"
+    );
+    const shouldClear = (readinessModule as unknown as {
+      shouldClearValidationFeedback?: (
+        config: { validation_status: string } | null,
+      ) => boolean;
+    }).shouldClearValidationFeedback;
+
+    expect(shouldClear).toBeFunction();
+    if (!shouldClear) return;
+
+    expect(shouldClear(null)).toBeTrue();
+    expect(shouldClear({ validation_status: "unchecked" })).toBeTrue();
+    expect(shouldClear({ validation_status: "valid" })).toBeFalse();
+    expect(shouldClear({ validation_status: "invalid" })).toBeFalse();
+  });
+
+  test("readiness state announces loading and conditionally clears validation feedback", () => {
     const readinessSource = readSource(
       "./platform-payment-readiness-section.tsx",
     );
@@ -302,7 +338,10 @@ describe("platform payment settings panel", () => {
     expect(readinessSource).toContain('role="status"');
     expect(readinessSource).toContain('aria-live="polite"');
     expect(readinessSource).toMatch(
-      /useEffect\(\(\) => \{\s*setFeedback\(null\);\s*\}, \[profile\.config\?\.updated_at\]\)/,
+      /if \(shouldClearValidationFeedback\(profile\.config\)\) \{\s*setFeedback\(null\);\s*\}/,
+    );
+    expect(readinessSource).toContain(
+      "profile.config?.validation_status",
     );
   });
 
