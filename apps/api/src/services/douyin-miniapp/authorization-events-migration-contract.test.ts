@@ -42,6 +42,34 @@ describe("douyin authorization event ledger migration", () => {
     expect(source).toContain("ALTER TABLE public.douyin_authorization_event_subject_leases ENABLE ROW LEVEL SECURITY");
   });
 
+  test("bootstraps only an active component through the event claim RPC", () => {
+    const claim = functionBody(sql(), "claim_douyin_authorization_event");
+    const insert = claim.indexOf(
+      "INSERT INTO public.douyin_third_party_components(component_appid)",
+    );
+    const conflict = claim.indexOf(
+      "ON CONFLICT (component_appid) DO NOTHING",
+      insert,
+    );
+    const statusRead = claim.indexOf(
+      "FROM public.douyin_third_party_components AS component",
+      conflict,
+    );
+    const disabledGuard = claim.indexOf(
+      "IF v_component_status IS DISTINCT FROM 'active'",
+      statusRead,
+    );
+
+    expect(insert).toBeGreaterThan(-1);
+    expect(conflict).toBeGreaterThan(insert);
+    expect(statusRead).toBeGreaterThan(conflict);
+    expect(disabledGuard).toBeGreaterThan(statusRead);
+    expect(claim.slice(insert, disabledGuard)).not.toMatch(
+      /UPDATE public\.douyin_third_party_components/,
+    );
+    expect(claim).toContain("MESSAGE = 'DOUYIN_COMPONENT_NOT_ACTIVE'");
+  });
+
   test("serializes lifecycle claims globally per authorizer without blocking unrelated subjects", () => {
     const claim = functionBody(sql(), "claim_douyin_authorization_event");
     const lifecycleStart = claim.indexOf(

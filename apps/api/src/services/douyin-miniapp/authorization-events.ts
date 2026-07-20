@@ -90,7 +90,7 @@ export class DouyinAuthorizationEventsService {
       this.assertSignature(wrapper);
       const message = this.decryptAndParse(wrapper);
       this.assertMessageComponent(message);
-      await this.assertRegisteredComponent();
+      if (!isTicketPush(message)) await this.assertRegisteredComponent();
       await this.dispatch(message, wrapper.TimeStamp, log);
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -176,7 +176,7 @@ export class DouyinAuthorizationEventsService {
     wrapperTime: string,
     log: EventLogger,
   ): Promise<void> {
-    if (message.Event === "PUSH" && "Ticket" in message) {
+    if (isTicketPush(message)) {
       await this.handleTicket(message, wrapperTime);
       return;
     }
@@ -404,6 +404,10 @@ export class DouyinAuthorizationEventsService {
     }
     return hmac.digest("hex");
   }
+}
+
+function isTicketPush(message: DouyinDecryptedEvent): message is DouyinTicketEvent {
+  return message.Event === "PUSH" && "Ticket" in message;
 }
 
 let defaultService: DouyinAuthorizationEventsService | undefined;

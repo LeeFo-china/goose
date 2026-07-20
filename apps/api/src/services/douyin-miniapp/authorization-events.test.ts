@@ -206,6 +206,37 @@ describe("DouyinAuthorizationEventsService trust boundary", () => {
 });
 
 describe("DouyinAuthorizationEventsService delivery handling", () => {
+  test("allows a trusted PUSH ticket to claim before the component row exists", async () => {
+    const findActive = mock(async () => null);
+    const context = fixture({ componentRepository: { findActive } });
+
+    await context.service.handleCallback(callback({
+      Ticket: "first-ticket", MsgType: "Ticket", Event: "PUSH",
+    }));
+    expect(findActive).not.toHaveBeenCalled();
+    expect(context.eventRepository.claimEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        componentAppId: COMPONENT_APP_ID,
+        eventName: "PUSH",
+        authorizerAppId: null,
+      }),
+    );
+    expect(context.eventRepository.completeTicketEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test("preserves a disabled-component rejection returned by the claim RPC", async () => {
+    const context = fixture({ componentRepository: { findActive: mock(async () => null) } });
+    context.eventRepository.claimEvent.mockRejectedValue(new AppError(
+      503, "抖音第三方组件未启用", "DOUYIN_COMPONENT_NOT_ACTIVE",
+    ));
+
+    await expect(context.service.handleCallback(callback({
+      Ticket: "disabled-ticket", MsgType: "Ticket", Event: "PUSH",
+    }))).rejects.toMatchObject({ code: "DOUYIN_COMPONENT_NOT_ACTIVE" });
+
+    expect(context.eventRepository.completeTicketEvent).not.toHaveBeenCalled();
+  });
+
   test("encrypts and atomically stores a PUSH ticket without sensitive logs", async () => {
     const context = fixture();
     await context.service.handleCallback(callback({
