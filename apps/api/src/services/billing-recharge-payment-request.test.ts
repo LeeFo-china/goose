@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TenantCreditOrderRecord } from "@/repositories/billing-recharge";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type { AuthContext } from "@/services/authorization";
+import {
+  requireActiveRechargePaymentConfig,
+  requirePostInsertRechargePaymentConfig,
+} from "./billing-recharge-payment-config";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -452,4 +456,36 @@ describe("BillingRechargeService payment request", () => {
     expect(rechargeRepository.createOrder).not.toHaveBeenCalled();
     expect(createJsapiPrepay).not.toHaveBeenCalled();
   });
+});
+
+describe("billing recharge payment validation gates", () => {
+  test.each(["unchecked", "invalid"] as const)(
+    "rejects %s validation before inserting a recharge order",
+    (validationStatus) => {
+      expect(() => requireActiveRechargePaymentConfig({
+        ...platformConfig,
+        validation_status: validationStatus,
+      })).toThrow(expect.objectContaining({
+        statusCode: 409,
+        code: "BILLING_RECHARGE_PAYMENT_CONFIG_INVALID",
+      }));
+    },
+  );
+
+  test.each(["unchecked", "invalid"] as const)(
+    "rejects %s validation after inserting and before upstream prepay",
+    (validationStatus) => {
+      expect(() => requirePostInsertRechargePaymentConfig({
+        config: {
+          ...platformConfig,
+          validation_status: validationStatus,
+        },
+        expectedConfigId: platformConfig.id,
+        expectedGuardVersion: platformConfig.recharge_guard_version,
+      })).toThrow(expect.objectContaining({
+        statusCode: 409,
+        code: "BILLING_RECHARGE_PAYMENT_CONFIG_INVALID",
+      }));
+    },
+  );
 });

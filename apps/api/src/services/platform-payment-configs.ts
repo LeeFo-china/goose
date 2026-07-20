@@ -16,6 +16,11 @@ import {
 } from "@/services/platform-payment-config-pending-orders";
 import { runPlatformPaymentConfigMutation } from "@/services/platform-payment-config-mutation";
 import { platformPaymentProfileValidationService } from "@/services/platform-payment-profile-validation";
+import {
+  PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS,
+  platformPaymentReadinessService,
+  type PlatformWechatPayProfileDefinition,
+} from "@/services/platform-payment-readiness";
 import { systemSettingsService } from "@/services/system-settings";
 
 export type SavePlatformWechatPayConfigInput = {
@@ -86,6 +91,10 @@ type PlatformPaymentConfigServiceDependencies = {
     typeof platformPaymentProfileValidationService,
     "validate"
   >;
+  readinessService?: Pick<
+    typeof platformPaymentReadinessService,
+    "getReadiness"
+  >;
 };
 
 const PLATFORM_WECHAT_RECHARGE_CHANNEL = "tenant_recharge";
@@ -98,34 +107,6 @@ const UNCHECKED_VALIDATION_EVIDENCE = {
   last_validation_request_id: null,
 };
 
-type PlatformWechatPayProfileDefinition = {
-  profile_code: PlatformPaymentProfileCode;
-  label: string;
-  description: string;
-  merchant_mode: PlatformPaymentMerchantMode;
-  enabled_channels: string[];
-  secret_setting_key: string;
-};
-
-const WECHAT_PAY_PROFILE_DEFINITIONS: PlatformWechatPayProfileDefinition[] = [
-  {
-    profile_code: "platform_direct_recharge",
-    label: "平台直连商户",
-    description: "用于平台自有积分充值等平台收款场景。",
-    merchant_mode: "direct_merchant",
-    enabled_channels: [PLATFORM_WECHAT_RECHARGE_CHANNEL],
-    secret_setting_key: "PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
-  },
-  {
-    profile_code: "tenant_service_provider",
-    label: "服务商商户",
-    description: "用于服务商进件、租户特约商户和后续租户项目收款能力。",
-    merchant_mode: "service_provider_sub_merchant",
-    enabled_channels: ["project_payment", "applyment"],
-    secret_setting_key: "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
-  },
-];
-
 export class PlatformPaymentConfigService {
   private readonly repository: PlatformPaymentConfigRepositoryPort;
   private readonly settingsService: PlatformSystemSettingsPort;
@@ -133,6 +114,10 @@ export class PlatformPaymentConfigService {
   private readonly profileValidationService: Pick<
     typeof platformPaymentProfileValidationService,
     "validate"
+  >;
+  private readonly readinessService: Pick<
+    typeof platformPaymentReadinessService,
+    "getReadiness"
   >;
 
   constructor(dependencies: PlatformPaymentConfigServiceDependencies = {}) {
@@ -142,6 +127,8 @@ export class PlatformPaymentConfigService {
       billingRechargeRepository;
     this.profileValidationService = dependencies.profileValidationService ??
       platformPaymentProfileValidationService;
+    this.readinessService = dependencies.readinessService ??
+      platformPaymentReadinessService;
   }
 
   async getWechatPayConfig(
@@ -229,7 +216,7 @@ export class PlatformPaymentConfigService {
   ): Promise<PlatformWechatPayProfileListResult> {
     this.assertReadable(authContext);
     const profiles = await Promise.all(
-      WECHAT_PAY_PROFILE_DEFINITIONS.map(async (definition) => {
+      PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS.map(async (definition) => {
         const config = await this.repository.findWechatPayConfigByProfile(
           definition.profile_code,
         );
@@ -241,6 +228,11 @@ export class PlatformPaymentConfigService {
       can_manage: this.canManage(authContext),
       profiles,
     };
+  }
+
+  async getWechatPayReadiness(authContext: AuthContext) {
+    this.assertReadable(authContext);
+    return this.readinessService.getReadiness();
   }
 
   async getWechatPayProfileConfig(
@@ -476,7 +468,7 @@ export class PlatformPaymentConfigService {
   }
 
   private getProfileDefinition(profileCode: PlatformPaymentProfileCode) {
-    const definition = WECHAT_PAY_PROFILE_DEFINITIONS.find((item) =>
+    const definition = PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS.find((item) =>
       item.profile_code === profileCode
     );
     if (!definition) {

@@ -48,6 +48,15 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/platform/payment/wechat-pay/readiness")
+  async getWechatPayReadiness(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const data = await platformPaymentConfigService.getWechatPayReadiness(
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Get("/platform/payment/wechat-pay/profiles/:profileCode/config")
   async getWechatPayProfileConfig(
     request: FastifyRequest,

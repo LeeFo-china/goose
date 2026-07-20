@@ -24,6 +24,16 @@ function assertPaymentMaterial(
   }
 }
 
+function assertPaymentValidated(config: PlatformPaymentConfigRecord) {
+  if (config.validation_status !== "valid") {
+    throw Errors.business(
+      409,
+      "平台微信支付配置未通过验证",
+      "BILLING_RECHARGE_PAYMENT_CONFIG_INVALID",
+    );
+  }
+}
+
 function requireGuardVersion(config: PlatformPaymentConfigRecord) {
   const version = config.recharge_guard_version;
   if (!Number.isSafeInteger(version) || Number(version) <= 0) {
@@ -53,6 +63,7 @@ export function requireActiveRechargePaymentConfig(
       "BILLING_RECHARGE_PAYMENT_CONFIG_INVALID",
     );
   }
+  assertPaymentValidated(config);
   assertPaymentMaterial(config);
   return { config, guardVersion: requireGuardVersion(config) };
 }
@@ -73,6 +84,7 @@ export function requirePostInsertRechargePaymentConfig(input: {
       VERSION_CHANGED,
     );
   }
+  assertPaymentValidated(input.config);
   assertPaymentMaterial(input.config);
   return input.config;
 }

@@ -26,6 +26,13 @@ export function assertWechatPayConfigReadyForOrder(
       "WECHAT_PAY_CONFIG_NOT_ACTIVE",
     );
   }
+  if (config.validation_status !== "valid") {
+    throw Errors.business(
+      409,
+      "微信支付配置未通过验证",
+      "WECHAT_PAY_CONFIG_NOT_VALIDATED",
+    );
+  }
 
   const requiredFields = [
     "merchant_id",

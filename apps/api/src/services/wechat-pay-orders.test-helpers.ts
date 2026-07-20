@@ -89,7 +89,7 @@ export const activeConfig: WechatPayConfigRecord = {
   risk_switches: {},
   serial_no: "TEST-SERIAL",
   notify_url: "https://api.example.com/pay/wechat/callback",
-  validation_status: "unchecked",
+  validation_status: "valid",
   last_validated_at: null,
   created_by_employee_id: null,
   updated_by_employee_id: null,

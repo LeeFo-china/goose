@@ -20,6 +20,7 @@ describe("PlatformPaymentConfigsController routes", () => {
       { method: "GET", path: "/platform/payment/wechat-pay/config" },
       { method: "PUT", path: "/platform/payment/wechat-pay/config" },
       { method: "GET", path: "/platform/payment/wechat-pay/profiles" },
+      { method: "GET", path: "/platform/payment/wechat-pay/readiness" },
       {
         method: "GET",
         path: "/platform/payment/wechat-pay/profiles/:profileCode/config",

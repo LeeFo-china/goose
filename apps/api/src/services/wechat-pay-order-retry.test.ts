@@ -99,4 +99,17 @@ describe("wechat pay pending order retry", () => {
       appid_binding_state: "bound",
     })).not.toThrow();
   });
+
+  test.each(["unchecked", "invalid"] as const)(
+    "rejects a tenant payment config with %s validation before prepay",
+    (validationStatus) => {
+      expect(() => assertWechatPayConfigReadyForOrder({
+        ...readyConfig,
+        validation_status: validationStatus,
+      })).toThrow(expect.objectContaining({
+        statusCode: 409,
+        code: "WECHAT_PAY_CONFIG_NOT_VALIDATED",
+      }));
+    },
+  );
 });
