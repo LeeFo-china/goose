@@ -342,3 +342,12 @@ and this migration does not enable `FORCE ROW LEVEL SECURITY`.
 If emergency rollback is required, disable RLS only on the table names listed
 above and restore only the specific direct grants that are proven necessary.
 Do not use blanket direct grants for anon/authenticated.
+
+## Post-Baseline Follow-Up
+
+Tables created after this baseline must enable RLS in their own create
+migration. The 2026-07-20 follow-up found and hardened two service-role-only
+tables that missed this invariant, and added a regression contract covering
+future public table migrations:
+
+- [Post-Baseline Service-Role Table RLS Hardening](./2026-07-20-post-baseline-rls-hardening.md)
