@@ -7216,6 +7216,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tenant_payment_configs_platform_payment_config_id_fkey"
+            columns: ["platform_payment_config_id"]
+            isOneToOne: false
+            referencedRelation: "platform_payment_configs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tenant_payment_configs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -10593,6 +10600,51 @@ export type Database = {
           oauth_matched: boolean
           user_profile: Json
         }[]
+      }
+      wechat_pay_create_pending_service_provider_order: {
+        Args: {
+          p_amount: number
+          p_created_by_employee_id: string | null
+          p_expected_platform_guard_version: number
+          p_expected_tenant_config_updated_at: string
+          p_metadata?: Json
+          p_out_trade_no: string
+          p_payer_openid: string | null
+          p_payment_config_id: string | null
+          p_platform_payment_config_id: string
+          p_project_id: string
+          p_receivable_plan_id: string | null
+          p_tenant_id: string
+          p_workflow_instance_id: string | null
+          p_workflow_task_id: string | null
+        }
+        Returns: {
+          amount: number
+          closed_at: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          currency: string
+          failed_at: string | null
+          failure_reason: string | null
+          id: string
+          latest_notification_id: string | null
+          metadata: Json
+          out_trade_no: string
+          paid_amount: number
+          paid_at: string | null
+          payer_openid: string | null
+          payment_config_id: string | null
+          payment_id: string | null
+          prepay_id: string | null
+          project_id: string
+          receivable_plan_id: string | null
+          status: string
+          tenant_id: string
+          transaction_id: string | null
+          updated_at: string
+          workflow_instance_id: string | null
+          workflow_task_id: string | null
+        }
       }
       workflow_edge_condition_matches: {
         Args: { p_condition: Json; p_output: Json }

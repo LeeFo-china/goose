@@ -125,13 +125,6 @@ const RECEIVABLE_PLAN_SELECT = [
   "due_date",
 ].join(", ");
 
-type UntypedRpcClient = {
-  rpc: (
-    functionName: "wechat_pay_create_pending_service_provider_order",
-    args: Record<string, unknown>,
-  ) => Promise<{ data: unknown; error: unknown }>;
-};
-
 const GUARDED_CREATE_ERRORS = {
   WECHAT_PAY_PAYMENT_CONFIG_VERSION_CHANGED:
     "微信支付配置已更新，请重新发起支付",
@@ -229,26 +222,25 @@ class WechatPayOrderRepository {
   async createServiceProviderOrder(
     input: ServiceProviderWechatPayOrderCreateInput,
   ): Promise<WechatPayOrderRecord> {
-    const client = SupabaseDB.getAdminClient() as unknown as UntypedRpcClient;
-    const { data, error } = await client.rpc(
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
       "wechat_pay_create_pending_service_provider_order",
       {
         p_tenant_id: input.tenant_id,
-        p_payment_config_id: input.payment_config_id,
+        p_payment_config_id: input.payment_config_id ?? null,
         p_platform_payment_config_id: input.platform_payment_config_id,
         p_expected_platform_guard_version:
           input.expected_platform_guard_version,
         p_expected_tenant_config_updated_at:
           input.expected_tenant_config_updated_at,
         p_project_id: input.project_id,
-        p_workflow_instance_id: input.workflow_instance_id,
-        p_workflow_task_id: input.workflow_task_id,
-        p_receivable_plan_id: input.receivable_plan_id,
+        p_workflow_instance_id: input.workflow_instance_id ?? null,
+        p_workflow_task_id: input.workflow_task_id ?? null,
+        p_receivable_plan_id: input.receivable_plan_id ?? null,
         p_out_trade_no: input.out_trade_no,
         p_amount: input.amount,
-        p_payer_openid: input.payer_openid,
-        p_created_by_employee_id: input.created_by_employee_id,
-        p_metadata: input.metadata,
+        p_payer_openid: input.payer_openid ?? null,
+        p_created_by_employee_id: input.created_by_employee_id ?? null,
+        p_metadata: input.metadata ?? {},
       },
     );
 
