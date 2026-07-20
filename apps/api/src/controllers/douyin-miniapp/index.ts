@@ -2,8 +2,11 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { Errors } from "@/errors/error-factory";
 import {
   DouyinCaseListQuerySchema,
+  DouyinAnalyticsRequestSchema,
   DouyinContentIdParamsSchema,
   DouyinContentPageQuerySchema,
+  DouyinLeadRequestSchema,
+  DouyinLeadSmsRequestSchema,
   DouyinMiniappSessionRequestSchema,
 } from "@/schema/douyin-miniapp";
 import {
@@ -11,20 +14,28 @@ import {
   type DouyinMiniappContentService,
 } from "@/services/douyin-miniapp/content";
 import {
+  getDouyinMiniappMarketingService,
+  type DouyinMiniappMarketingService,
+} from "@/services/douyin-miniapp/marketing";
+import {
   getDouyinMiniappSessionService,
   type DouyinMiniappSessionService,
 } from "@/services/douyin-miniapp/session";
 import { ResponseHandler } from "@/utils/response";
+import { resolveTrustedClientIp } from "@/utils/trusted-proxy-client-ip";
 
 type SessionService = Pick<DouyinMiniappSessionService, "exchange">;
 type ContentService = Pick<DouyinMiniappContentService,
   | "bootstrap" | "company" | "listCases" | "getCase"
   | "listSites" | "getSite" | "listSiteLogs">;
+type MarketingService = Pick<DouyinMiniappMarketingService,
+  "sendCode" | "submitLead" | "recordEvents">;
 
 export class DouyinMiniappController {
   constructor(
     private readonly sessionService?: SessionService,
     private readonly contentService?: ContentService,
+    private readonly marketingService?: MarketingService,
   ) {}
 
   registerExtraRoutes(fastify: FastifyInstance): void {
@@ -36,6 +47,9 @@ export class DouyinMiniappController {
     fastify.get("/douyin-mini/sites", this.listSites);
     fastify.get("/douyin-mini/sites/:id", this.getSite);
     fastify.get("/douyin-mini/sites/:id/logs", this.listSiteLogs);
+    fastify.post("/douyin-mini/sms/send", this.sendLeadCode);
+    fastify.post("/douyin-mini/leads", this.submitLead);
+    fastify.post("/douyin-mini/events", this.recordEvents);
   }
 
   createSession = async (request: FastifyRequest) => {
@@ -81,9 +95,46 @@ export class DouyinMiniappController {
     );
   };
 
+  sendLeadCode = async (request: FastifyRequest) => ResponseHandler.success(
+    await this.marketing().sendCode(
+      request.user,
+      parse(DouyinLeadSmsRequestSchema, request.body || {}),
+      requestMetadata(request),
+    ),
+  );
+
+  submitLead = async (request: FastifyRequest) => ResponseHandler.success(
+    await this.marketing().submitLead(
+      request.user,
+      parse(DouyinLeadRequestSchema, request.body || {}),
+      requestMetadata(request),
+    ),
+  );
+
+  recordEvents = async (request: FastifyRequest) => ResponseHandler.success(
+    await this.marketing().recordEvents(
+      request.user,
+      parse(DouyinAnalyticsRequestSchema, request.body || {}),
+      requestMetadata(request),
+    ),
+  );
+
   private content(): ContentService {
     return this.contentService ?? getDouyinMiniappContentService();
   }
+
+  private marketing(): MarketingService {
+    return this.marketingService ?? getDouyinMiniappMarketingService();
+  }
+}
+
+function requestMetadata(request: FastifyRequest) {
+  const rawUserAgent = request.headers?.["user-agent"];
+  const userAgent = Array.isArray(rawUserAgent) ? rawUserAgent[0] : rawUserAgent;
+  return {
+    requestIp: resolveTrustedClientIp(request),
+    userAgent: userAgent ?? null,
+  };
 }
 
 function parse<T>(schema: { safeParse(value: unknown):

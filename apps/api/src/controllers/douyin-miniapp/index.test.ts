@@ -53,6 +53,9 @@ describe("DouyinMiniappController", () => {
       "GET /douyin-mini/sites",
       "GET /douyin-mini/sites/:id",
       "GET /douyin-mini/sites/:id/logs",
+      "POST /douyin-mini/sms/send",
+      "POST /douyin-mini/leads",
+      "POST /douyin-mini/events",
     ]);
     await expect(routes[0]!.handler({ body })).resolves.toEqual({
       data: {
@@ -102,5 +105,46 @@ describe("DouyinMiniappController", () => {
         .rejects.toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR" });
       expect(exchange).not.toHaveBeenCalled();
     }
+  });
+
+  test("strictly validates marketing bodies and passes trusted request metadata", async () => {
+    const sendCode = mock(async () => ({ success: true, cooldown_seconds: 60 }));
+    const submitLead = mock(async () => ({ lead_id:
+      "55555555-5555-4555-8555-555555555555" }));
+    const recordEvents = mock(async () => ({ accepted: 1 }));
+    const controller = new DouyinMiniappController(undefined, undefined, {
+      sendCode, submitLead, recordEvents,
+    } as never);
+    const user = { token_type: "douyin_miniapp", tenant_id:
+      "33333333-3333-4333-8333-333333333333" };
+    const attribution = body.launch_context;
+    const request = { user, ip: "127.0.0.1", headers: { "user-agent": "Douyin" } };
+
+    await controller.sendLeadCode({ ...request, body: {
+      phone: "13800000000", attribution,
+    } } as never);
+    expect(sendCode).toHaveBeenCalledWith(user, {
+      phone: "13800000000", attribution,
+    }, { requestIp: "127.0.0.1", userAgent: "Douyin" });
+
+    const leadBody = {
+      name: "李先生", phone: "13800000000", sms_code: "123456",
+      privacy_policy_version: "2026-07-19",
+      consented_at: "2026-07-19T10:00:00.000Z",
+      idempotency_key: "44444444-4444-4444-8444-444444444444",
+      attribution,
+    };
+    await controller.submitLead({ ...request, body: leadBody } as never);
+    expect(submitLead).toHaveBeenCalledWith(user, leadBody,
+      { requestIp: "127.0.0.1", userAgent: "Douyin" });
+
+    await expect(controller.submitLead({ ...request, body: {
+      ...leadBody, tenant_id: "99999999-9999-4999-8999-999999999999",
+    } } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(controller.recordEvents({ ...request, body: { events: [{
+      event_name: "lead_submit_success", occurred_at: "2026-07-19T10:00:00.000Z",
+      attribution,
+    }] } } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    expect(recordEvents).not.toHaveBeenCalled();
   });
 });
