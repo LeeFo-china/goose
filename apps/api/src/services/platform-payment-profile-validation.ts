@@ -6,6 +6,9 @@ import {
   type PlatformPaymentProfileCode,
 } from "@/repositories/platform-payment-configs";
 import {
+  runPlatformPaymentConfigMutation,
+} from "@/services/platform-payment-config-mutation";
+import {
   wechatPayProfileValidator,
   type WechatPayProfileValidator,
 } from "@/services/wechat-pay-profile-validator";
@@ -111,16 +114,18 @@ export class PlatformPaymentProfileValidationService {
     }
 
     const requestId = sanitizeRequestId(probe.request_id);
-    const saved = await this.repository.updateWechatPayValidation({
-      configId: config.id,
-      expectedUpdatedAt: config.updated_at,
-      validationStatus: "valid",
-      lastValidatedAt: validatedAt,
-      lastValidationErrorCode: null,
-      lastValidationErrorMessage: null,
-      lastValidationRequestId: requestId,
-      updatedByEmployeeId: input.employeeId,
-    });
+    const saved = await runPlatformPaymentConfigMutation(() =>
+      this.repository.updateWechatPayValidation({
+        configId: config.id,
+        expectedUpdatedAt: config.updated_at,
+        validationStatus: "valid",
+        lastValidatedAt: validatedAt,
+        lastValidationErrorCode: null,
+        lastValidationErrorMessage: null,
+        lastValidationRequestId: requestId,
+        updatedByEmployeeId: input.employeeId,
+      })
+    );
     return {
       config: saved,
       validation: {
@@ -143,16 +148,18 @@ export class PlatformPaymentProfileValidationService {
     const requestId = args.error instanceof AppError
       ? requestIdFromDetails(args.error.details)
       : null;
-    const saved = await this.repository.updateWechatPayValidation({
-      configId: args.config.id,
-      expectedUpdatedAt: args.config.updated_at,
-      validationStatus: "invalid",
-      lastValidatedAt: args.validatedAt,
-      lastValidationErrorCode: errorCode,
-      lastValidationErrorMessage: SAFE_VALIDATION_FAILURE_MESSAGE,
-      lastValidationRequestId: requestId,
-      updatedByEmployeeId: args.input.employeeId,
-    });
+    const saved = await runPlatformPaymentConfigMutation(() =>
+      this.repository.updateWechatPayValidation({
+        configId: args.config.id,
+        expectedUpdatedAt: args.config.updated_at,
+        validationStatus: "invalid",
+        lastValidatedAt: args.validatedAt,
+        lastValidationErrorCode: errorCode,
+        lastValidationErrorMessage: SAFE_VALIDATION_FAILURE_MESSAGE,
+        lastValidationRequestId: requestId,
+        updatedByEmployeeId: args.input.employeeId,
+      })
+    );
     return {
       config: saved,
       validation: {

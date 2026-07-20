@@ -243,6 +243,42 @@ describe("PlatformPaymentProfileValidationService", () => {
     expect(updateWechatPayValidation).toHaveBeenCalledTimes(1);
   });
 
+  test.each([
+    ["successful validation", false, "valid"],
+    ["deterministic failure", true, "invalid"],
+  ] as const)(
+    "maps a wrapped pending-order conflict during %s persistence",
+    async (_label, validationFails, expectedStatus) => {
+      if (validationFails) {
+        validate.mockImplementationOnce(async () => {
+          throw new AppError(
+            502,
+            "微信支付拒绝了配置验证请求",
+            "WECHAT_PAY_PROFILE_PROBE_REJECTED",
+          );
+        });
+      }
+      updateWechatPayValidation.mockImplementationOnce(async () => {
+        throw new AppError(500, "保存平台微信支付配置验证结果失败", "DB_ERROR", {
+          code: "23514",
+          message: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+        });
+      });
+      const service = await createService();
+
+      await expect(service.validate({
+        profileCode: "platform_direct_recharge",
+        employeeId: "employee-platform",
+      })).rejects.toMatchObject({
+        statusCode: 409,
+        code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      });
+      expect(updateWechatPayValidation).toHaveBeenCalledWith(
+        expect.objectContaining({ validationStatus: expectedStatus }),
+      );
+    },
+  );
+
   test("rejects a successful probe when profile metadata changed concurrently", async () => {
     updateWechatPayValidation.mockImplementationOnce(async () => {
       throw new AppError(
