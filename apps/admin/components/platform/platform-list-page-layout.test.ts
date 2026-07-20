@@ -250,7 +250,7 @@ describe("Platform list page layout", () => {
     expect(source).not.toContain("<CardTitle>本租户用量</CardTitle>");
   });
 
-  test("keeps billing center tabs standard and removes the billing list header copy", () => {
+  test("keeps billing center tabs left aligned without the segmented background", () => {
     const source = readSource("../../app/(console)/platform/billing/page.tsx");
     const tabsStart = source.indexOf("tabs={");
     const listHeaderStart = source.indexOf("listHeader=", tabsStart);
@@ -259,8 +259,15 @@ describe("Platform list page layout", () => {
 
     expect(tabsStart).toBeGreaterThanOrEqual(0);
     expect(paginationStart).toBeGreaterThan(tabsStart);
-    expect(tabsSource).toContain("<TabsList>");
-    expect(tabsSource).not.toContain('className="w-full justify-start overflow-x-auto"');
+    expect(source).toContain(
+      'const billingTabsListClassName = "h-auto w-full justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0";',
+    );
+    expect(source).toContain(
+      'const billingTabsTriggerClassName = "shrink-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-2 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground";',
+    );
+    expect(tabsSource).toContain("className={billingTabsListClassName}");
+    expect(tabsSource).toContain("className={billingTabsTriggerClassName}");
+    expect(tabsSource).not.toContain("<TabsList>");
     expect(source).not.toContain("listHeader=");
     expect(source).not.toContain("<CardTitle>计费运营</CardTitle>");
     expect(source).not.toContain("账户、试算、价格和流水集中在同一管理区内。");
@@ -417,6 +424,21 @@ describe("Platform list page layout", () => {
     expect(loading).not.toContain("flex flex-col justify-between gap-3 md:flex-row md:items-center");
     expect(loading).not.toContain('Skeleton className="h-5 w-24"');
     expect(loading).not.toContain('Skeleton className="mt-2 h-4 w-40"');
+  });
+
+  test("keeps platform site content loading aligned with the fixed-height list shell", () => {
+    const loading = readSource("../../app/(console)/platform/site-content/loading.tsx");
+
+    expect(loading).toContain("h-[calc(100vh-6.5625rem)]");
+    expect(loading).toContain("min-h-0 flex-col gap-5 overflow-hidden");
+    expect(loading).toContain("flex min-h-0 flex-1 flex-col overflow-hidden shadow-none");
+    expect(loading).toContain("shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3");
+    expect(loading).toContain("md:grid-cols-[150px_150px_minmax(220px,1fr)_72px]");
+    expect(loading).toContain("min-h-0 flex-1 overflow-hidden");
+    expect(loading).toContain("shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3");
+    expect(loading).not.toContain("h-full");
+    expect(loading).not.toContain("grid gap-4 md:grid-cols-2");
+    expect(loading).not.toContain("min-h-52 flex-1");
   });
 
   test("keeps platform audit loading aligned with the fixed-height list shell", () => {
