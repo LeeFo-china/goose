@@ -616,24 +616,39 @@ Expected: inspect every hit. Field names and tests are allowed; any real credent
 Run from the repository worktree:
 
 ```bash
+set -euo pipefail
+set +x
+EXPECTED_DEV_REF=fclnkyatvfvmzgzdqlba
 set -a
 source /Users/leefo/Public/work/gooes/.env
 set +a
-ACTUAL_DEV_REF="$(SUPABASE_DB_URL="$SUPABASE_DB_DIRECT_URL" \
+: "${SUPABASE_DB_URL:?SUPABASE_DB_URL is required}"
+: "${SUPABASE_DB_DIRECT_URL:?SUPABASE_DB_DIRECT_URL is required}"
+ACTUAL_DEV_REF="$(SUPABASE_PROJECT_REF="$EXPECTED_DEV_REF" \
   node scripts/validate-dev-database-target.mjs --resolve-project-ref)"
-node scripts/validate-dev-database-target.mjs \
-  "$SUPABASE_DB_DIRECT_URL" "$ACTUAL_DEV_REF" \
-  api-dev.goodcms.cn fclnkyatvfvmzgzdqlba \
-  'api.goodcms.cn 1.13.20.39' unqhypivjkpwldhufpjc
+test "$ACTUAL_DEV_REF" = "$EXPECTED_DEV_REF"
+for database_url in "$SUPABASE_DB_URL" "$SUPABASE_DB_DIRECT_URL"; do
+  node scripts/validate-dev-database-target.mjs \
+    "$database_url" "$ACTUAL_DEV_REF" \
+    api-dev.goodcms.cn "$EXPECTED_DEV_REF" \
+    'api.goodcms.cn 1.13.20.39' unqhypivjkpwldhufpjc
+done
+printf 'validated_dev_project_ref=%s\n' "$ACTUAL_DEV_REF"
 ```
 
-Expected: exit `0`, resolved ref is `fclnkyatvfvmzgzdqlba`; command output must not print connection strings.
+The self-hosted development proxy deliberately uses the recognized
+`postgres.your-tenant-id` username and the local `.env` does not persist
+`SUPABASE_PROJECT_REF`. Supply the already-approved development ref only to the resolver process;
+do not edit `.env`. Expected: strict shell exits `0`, both DB URLs resolve to the development host,
+the validated ref is `fclnkyatvfvmzgzdqlba`, and output contains no connection string. Any failure
+stops before migration inspection.
 
 - [ ] **Step 4：只读验证 migration 已对齐**
 
 Run:
 
 ```bash
+: "${SUPABASE_DB_DIRECT_URL:?run Step 3 in the same strict shell first}"
 bun x supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"
 bun x supabase db push --dry-run --include-all --db-url "$SUPABASE_DB_DIRECT_URL"
 ```
