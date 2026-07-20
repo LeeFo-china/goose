@@ -57,8 +57,8 @@ Run:
 
 ```bash
 bun run douyin-mini:check
-bun test apps/api/src/services/douyin-miniapp/authorization-events.test.ts
-bun test apps/api/src/services/douyin-miniapp/authorization-events-migration-contract.test.ts
+(cd apps/api && bun test src/services/douyin-miniapp/authorization-events.test.ts)
+(cd apps/api && bun test src/services/douyin-miniapp/authorization-events-migration-contract.test.ts)
 bun run api:check
 ```
 
@@ -260,7 +260,7 @@ Keep the existing `requires the configured component to be active and match TpAp
 Run:
 
 ```bash
-bun test apps/api/src/services/douyin-miniapp/authorization-events.test.ts
+(cd apps/api && bun test src/services/douyin-miniapp/authorization-events.test.ts)
 ```
 
 Expected: the new first-Ticket test FAILs with `DOUYIN_COMPONENT_NOT_ACTIVE`; existing trust-boundary tests remain valid.
@@ -302,7 +302,7 @@ test("bootstraps only an active component through the event claim RPC", () => {
 Run:
 
 ```bash
-bun test apps/api/src/services/douyin-miniapp/authorization-events-migration-contract.test.ts
+(cd apps/api && bun test src/services/douyin-miniapp/authorization-events-migration-contract.test.ts)
 ```
 
 Expected: PASS against the already-applied RPC. A failure means the design assumption is false; stop rather than add an application insert.
@@ -358,9 +358,9 @@ Do not modify repositories or migrations. Do not auto-enable a disabled row.
 Run:
 
 ```bash
-bun test apps/api/src/services/douyin-miniapp/authorization-events.test.ts
-bun test apps/api/src/services/douyin-miniapp/authorization-events-migration-contract.test.ts
-bun test apps/api/src/controllers/douyin-third-party-events/index.test.ts
+(cd apps/api && bun test src/services/douyin-miniapp/authorization-events.test.ts)
+(cd apps/api && bun test src/services/douyin-miniapp/authorization-events-migration-contract.test.ts)
+(cd apps/api && bun test src/controllers/douyin-third-party-events/index.test.ts)
 bun run api:check
 ```
 
@@ -513,14 +513,15 @@ Run:
 bun run douyin-mini:check
 bun run api:check
 bun test packages/domain/src/douyin-miniapp.test.ts packages/domain/src/permission.test.ts
-bun test apps/api/src/services/douyin-miniapp/authorization-events.test.ts \
-  apps/api/src/services/douyin-miniapp/authorization-events-migration-contract.test.ts \
-  apps/api/src/services/douyin-miniapp/session.test.ts \
-  apps/api/src/services/douyin-miniapp/content.test.ts \
-  apps/api/src/services/douyin-miniapp/marketing.test.ts \
-  apps/api/src/services/platform-douyin-miniapps.test.ts \
-  apps/api/src/services/platform-douyin-miniapp-releases.test.ts \
-  apps/api/src/services/platform-douyin-miniapp-releases/operation-service.recovery.test.ts
+(cd apps/api && bun test \
+  src/services/douyin-miniapp/authorization-events.test.ts \
+  src/services/douyin-miniapp/authorization-events-migration-contract.test.ts \
+  src/services/douyin-miniapp/session.test.ts \
+  src/services/douyin-miniapp/content.test.ts \
+  src/services/douyin-miniapp/marketing.test.ts \
+  src/services/platform-douyin-miniapps.test.ts \
+  src/services/platform-douyin-miniapp-releases.test.ts \
+  src/services/platform-douyin-miniapp-releases/operation-service.recovery.test.ts)
 bun run test
 git diff --check
 ```
