@@ -17,6 +17,20 @@ describe("Tenant marketing page layout", () => {
     expect(source).not.toContain("第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页");
   });
 
+  test("lets the embedded H5 leads table fill the marketing tab data area", () => {
+    const source = readSource("../../../components/marketing/h5-leads-panel.tsx");
+
+    expect(source).toContain(
+      'return <div className="flex min-h-0 flex-1 flex-col">{content}</div>;',
+    );
+    expect(source).toContain(
+      'embedded ? "relative flex min-h-0 flex-1 flex-col" : "relative flex flex-col gap-4"',
+    );
+    expect(source).toContain(
+      'embedded ? "min-h-0 flex-1 overflow-auto" : ""',
+    );
+  });
+
   test("keeps the right-side status labels from wrapping in every tab", () => {
     const source = readSource("./page.tsx");
     const headerRowClassName =
