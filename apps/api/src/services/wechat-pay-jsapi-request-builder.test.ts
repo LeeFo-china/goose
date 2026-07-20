@@ -6,6 +6,7 @@ import { buildWechatPayJsapiPrepayRequest } from "./wechat-pay-jsapi-request-bui
 const baseConfig = {
   id: "config-1",
   tenant_id: "tenant-1",
+  platform_payment_config_id: null,
   provider: "wechat_pay",
   principal_type: "tenant",
   merchant_mode: "direct_merchant",

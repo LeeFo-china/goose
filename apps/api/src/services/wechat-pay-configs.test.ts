@@ -8,6 +8,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const existingConfig = {
   id: "config-1",
   tenant_id: "tenant-1",
+  platform_payment_config_id: null,
   provider: "wechat_pay",
   principal_type: "tenant",
   merchant_mode: "direct_merchant",

@@ -63,6 +63,7 @@ export const receivablePlan = {
 export const activeConfig: WechatPayConfigRecord = {
   id: paymentConfigId,
   tenant_id: tenantId,
+  platform_payment_config_id: null,
   provider: "wechat_pay",
   principal_type: "tenant",
   merchant_mode: "direct_merchant",
