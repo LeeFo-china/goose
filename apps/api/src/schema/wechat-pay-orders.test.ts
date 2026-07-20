@@ -40,6 +40,17 @@ describe("wechat pay order schemas", () => {
     expect(result.success).toBe(false);
   });
 
+  test("requires payer openid before order creation", () => {
+    const result = CreateWechatPayOrderSchema.safeParse({
+      project_id: projectId,
+      receivable_plan_id: receivablePlanId,
+      workflow_task_id: workflowTaskId,
+      amount: 100,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   test("parses paginated order list filters", () => {
     const result = WechatPayOrderListQuerySchema.safeParse({
       page: "2",

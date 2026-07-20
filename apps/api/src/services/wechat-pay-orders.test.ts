@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { WechatPayOrderRecord } from "@/repositories/wechat-pay-orders";
 import type { AuthContext } from "@/services/authorization";
 import type { WechatPaySecretBundle } from "./wechat-pay-secret-bundles";
 import {
@@ -22,7 +23,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const findById = mock(async () => paymentCollectionTask);
 const findPendingByWorkflowTask = mock(
-  async (): Promise<typeof pendingOrder | null> => null,
+  async (): Promise<WechatPayOrderRecord | null> => null,
 );
 const findReceivablePlan = mock(
   async (): Promise<typeof receivablePlan | null> => receivablePlan,
@@ -66,6 +67,13 @@ const createJsapiPrepay = mock(async () => ({
     paySign: "pay-sign",
   },
 }));
+const createMiniProgramPaymentRequest = mock(() => ({
+  timeStamp: "1782873601",
+  nonceStr: "retry-nonce",
+  package: "prepay_id=existing-prepay",
+  signType: "RSA" as const,
+  paySign: "retry-pay-sign",
+}));
 const assertTenantContext = mock((authContext: AuthContext) => {
   if (!authContext.tenantId) {
     throw Object.assign(new Error("缺少租户上下文"), {
@@ -100,6 +108,7 @@ async function createService() {
     },
     wechatPayGateway: {
       createJsapiPrepay,
+      createMiniProgramPaymentRequest,
     },
     accessPolicyService: {
       assertTenantContext,
@@ -120,6 +129,7 @@ describe("WechatPayOrderService", () => {
     findWechatPayConfig.mockClear();
     loadSecretBundle.mockClear();
     createJsapiPrepay.mockClear();
+    createMiniProgramPaymentRequest.mockClear();
     assertTenantContext.mockClear();
     hasPermission.mockClear();
     findById.mockImplementation(async () => paymentCollectionTask);
@@ -197,8 +207,8 @@ describe("WechatPayOrderService", () => {
     findWechatPayConfig.mockImplementationOnce(async () => ({
       ...activeConfig,
       merchant_mode: "service_provider_sub_merchant",
-      merchant_id: "1561816121",
-      sub_merchant_id: "1900000002",
+      merchant_id: "service-provider-mchid",
+      sub_merchant_id: "sub-merchant-mchid",
       app_id: "wx-service-app",
       sub_app_id: "wx-platform-app",
       applyment_state: "opened",
@@ -220,8 +230,8 @@ describe("WechatPayOrderService", () => {
         metadata: expect.objectContaining({
           principal_type: "tenant",
           merchant_mode: "service_provider_sub_merchant",
-          merchant_id: "1561816121",
-          sub_merchant_id: "1900000002",
+          merchant_id: "service-provider-mchid",
+          sub_merchant_id: "sub-merchant-mchid",
           app_id: "wx-service-app",
           sub_app_id: "wx-platform-app",
         }),
@@ -274,9 +284,10 @@ describe("WechatPayOrderService", () => {
       service.createOrder(authContext(), {
         project_id: projectId,
         receivable_plan_id: receivablePlanId,
-        workflow_task_id: workflowTaskId,
-        amount: 8000,
-      }),
+      workflow_task_id: workflowTaskId,
+      amount: 8000,
+      payer_openid: "o-test-openid",
+    }),
     ).rejects.toMatchObject({
       statusCode: 409,
       code: "WECHAT_PAY_CONFIG_NOT_ACTIVE",
@@ -289,7 +300,7 @@ describe("WechatPayOrderService", () => {
     findWechatPayConfig.mockImplementationOnce(async () => ({
       ...activeConfig,
       merchant_mode: "service_provider_sub_merchant",
-      merchant_id: "1561816121",
+      merchant_id: "service-provider-mchid",
       sub_merchant_id: null,
       app_id: "wx-service-app",
       sub_app_id: "wx-platform-app",
@@ -304,6 +315,7 @@ describe("WechatPayOrderService", () => {
         receivable_plan_id: receivablePlanId,
         workflow_task_id: workflowTaskId,
         amount: 8000,
+        payer_openid: "o-test-openid",
       }),
     ).rejects.toMatchObject({
       statusCode: 409,
@@ -313,8 +325,9 @@ describe("WechatPayOrderService", () => {
     expect(createOrder).not.toHaveBeenCalled();
   });
 
-  test("returns existing pending order for same workflow task without inserting", async () => {
-    findPendingByWorkflowTask.mockImplementationOnce(async () => pendingOrder);
+  test("retries prepay for an existing pending order without prepay id", async () => {
+    const existing = { ...pendingOrder, payer_openid: "o-test-openid" };
+    findPendingByWorkflowTask.mockImplementationOnce(async () => existing);
     const service = await createService();
 
     const result = await service.createOrder(authContext(), {
@@ -322,11 +335,64 @@ describe("WechatPayOrderService", () => {
       receivable_plan_id: receivablePlanId,
       workflow_task_id: workflowTaskId,
       amount: 8000,
+      payer_openid: "o-test-openid",
     });
 
     expect(createOrder).not.toHaveBeenCalled();
+    expect(createJsapiPrepay).toHaveBeenCalledWith(expect.objectContaining({
+      order: existing,
+    }));
+    expect(markPrepayCreated).toHaveBeenCalledWith({
+      tenantId,
+      orderId: pendingOrder.id,
+      prepayId: "prepay-test",
+    });
     expect(result.idempotent).toBe(true);
     expect(result.order.id).toBe(pendingOrder.id);
+    expect(result.payment_request?.paySign).toBe("pay-sign");
+  });
+
+  test("re-signs an existing prepay id without another upstream prepay", async () => {
+    const existing = {
+      ...pendingOrder,
+      payer_openid: "o-test-openid",
+      prepay_id: "existing-prepay",
+    };
+    findPendingByWorkflowTask.mockImplementationOnce(async () => existing);
+    const service = await createService();
+
+    const result = await service.createOrder(authContext(), {
+      project_id: projectId,
+      receivable_plan_id: receivablePlanId,
+      workflow_task_id: workflowTaskId,
+      amount: 8000,
+      payer_openid: "o-test-openid",
+    });
+
+    expect(createJsapiPrepay).not.toHaveBeenCalled();
+    expect(markPrepayCreated).not.toHaveBeenCalled();
+    expect(createMiniProgramPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ prepayId: "existing-prepay" }),
+    );
+    expect(result.payment_request?.paySign).toBe("retry-pay-sign");
+  });
+
+  test("rejects blank payer openid before creating an order", async () => {
+    const service = await createService();
+
+    await expect(service.createOrder(authContext(), {
+      project_id: projectId,
+      receivable_plan_id: receivablePlanId,
+      workflow_task_id: workflowTaskId,
+      amount: 8000,
+      payer_openid: "   ",
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "WECHAT_PAY_PAYER_OPENID_REQUIRED",
+    });
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(createOrder).not.toHaveBeenCalled();
   });
 
   test("rejects order creation when employee cannot execute task", async () => {
@@ -338,6 +404,7 @@ describe("WechatPayOrderService", () => {
         receivable_plan_id: receivablePlanId,
         workflow_task_id: workflowTaskId,
         amount: 8000,
+        payer_openid: "o-test-openid",
       }),
     ).rejects.toMatchObject({
       statusCode: 403,
@@ -361,6 +428,7 @@ describe("WechatPayOrderService", () => {
         receivable_plan_id: receivablePlanId,
         workflow_task_id: workflowTaskId,
         amount: 8000,
+        payer_openid: "o-test-openid",
       }),
     ).rejects.toMatchObject({
       statusCode: 409,
@@ -379,6 +447,7 @@ describe("WechatPayOrderService", () => {
         receivable_plan_id: receivablePlanId,
         workflow_task_id: workflowTaskId,
         amount: 8000.01,
+        payer_openid: "o-test-openid",
       }),
     ).rejects.toMatchObject({
       statusCode: 409,
