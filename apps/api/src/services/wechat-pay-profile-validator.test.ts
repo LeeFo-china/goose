@@ -27,6 +27,7 @@ const validBundle = {
   wechatPayPublicKeyId: "PUB_KEY_ID_TEST",
   wechatPayPublicKeyPem: rsaKeys.publicKey,
   baseUrl: "https://api.mch.weixin.qq.com",
+  revision: "bundle-revision-1",
 };
 const load = mock(async (): Promise<WechatPaySecretBundle> => validBundle);
 const probe = mock(async () => ({
@@ -46,6 +47,7 @@ function config(
     merchant_id: "1561816121",
     serial_no: "MERCHANT_CERT_SERIAL",
     encrypted_config_ref: "setting://PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
+    secret_bundle_revision: "bundle-revision-1",
     notify_url: "https://api.example.com/pay/wechat/callback",
   };
 }
@@ -119,6 +121,34 @@ describe("WechatPayProfileValidator", () => {
     });
     expect(load).not.toHaveBeenCalled();
   });
+
+  test("requires the platform profile to declare a secret bundle revision", async () => {
+    const validator = await createValidator();
+
+    await expect(validator.validate({
+      ...config(),
+      secret_bundle_revision: " ",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_SECRET_BUNDLE_REVISION_REQUIRED",
+    });
+    expect(load).not.toHaveBeenCalled();
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  test.each([null, "different-revision"])(
+    "rejects a secret bundle whose revision does not match the profile: %s",
+    async (revision) => {
+      load.mockImplementationOnce(async () => ({ ...validBundle, revision }));
+      const validator = await createValidator();
+
+      await expect(validator.validate(config())).rejects.toMatchObject({
+        statusCode: 409,
+        code: "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH",
+      });
+      expect(probe).not.toHaveBeenCalled();
+    },
+  );
 
   test("rejects an APIv3 key that is not exactly 32 bytes", async () => {
     load.mockImplementationOnce(async () => ({

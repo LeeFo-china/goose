@@ -7,6 +7,7 @@ export type WechatPaySecretBundle = {
   wechatPayPublicKeyId: string | null;
   wechatPayPublicKeyPem: string | null;
   baseUrl: string;
+  revision?: string | null;
 };
 
 type SettingsServicePort = {
@@ -84,6 +85,7 @@ export function parseWechatPaySecretBundle(raw: string): WechatPaySecretBundle {
     wechatPayPublicKeyId: stringField(record, "wechat_pay_public_key_id"),
     wechatPayPublicKeyPem: stringField(record, "wechat_pay_public_key_pem"),
     baseUrl: stringField(record, "base_url") || DEFAULT_WECHAT_PAY_BASE_URL,
+    revision: stringField(record, "revision"),
   };
 }
 

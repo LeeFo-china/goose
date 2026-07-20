@@ -16,6 +16,7 @@ import {
   shouldClearLegacyTenantSmsOverrides,
   clearLegacyTenantSmsOverrides,
   updateSetting,
+  updatePlatformPaymentSecretSetting,
   getString,
   getSecretString,
   getTenantOverrideString,
@@ -62,6 +63,7 @@ export class SystemSettingsService {
   private shouldClearLegacyTenantSmsOverrides = shouldClearLegacyTenantSmsOverrides;
   private clearLegacyTenantSmsOverrides = clearLegacyTenantSmsOverrides;
   updateSetting = updateSetting;
+  updatePlatformPaymentSecretSetting = updatePlatformPaymentSecretSetting;
   getString = getString;
   getSecretString = getSecretString;
   getTenantOverrideString = getTenantOverrideString;

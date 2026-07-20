@@ -27,6 +27,7 @@ export type WechatPayProfileValidationConfig = {
   merchant_id: string | null;
   serial_no: string | null;
   encrypted_config_ref: string | null;
+  secret_bundle_revision?: string | null;
   notify_url: string | null;
 };
 
@@ -74,6 +75,11 @@ export class WechatPayProfileValidator {
       "微信支付密钥引用未配置",
       "WECHAT_PAY_SECRET_REF_REQUIRED",
     );
+    const secretBundleRevision = requireText(
+      config.secret_bundle_revision,
+      "微信支付密钥版本未配置",
+      "WECHAT_PAY_SECRET_BUNDLE_REVISION_REQUIRED",
+    );
     assertHttpsUrl(
       config.notify_url,
       "微信支付回调地址必须是 HTTPS URL",
@@ -81,6 +87,13 @@ export class WechatPayProfileValidator {
     );
 
     const bundle = await this.secretBundleService.load(encryptedConfigRef);
+    if (bundle.revision !== secretBundleRevision) {
+      throw Errors.business(
+        409,
+        "微信支付密钥版本与支付配置不匹配",
+        "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH",
+      );
+    }
     assertApiV3Key(bundle.apiV3Key);
     assertRsaPrivateKey(bundle.privateKeyPem);
     const publicKeyId = requireText(
@@ -152,7 +165,7 @@ function assertOfficialWechatPayBaseUrl(
 }
 
 function requireText(
-  value: string | null,
+  value: string | null | undefined,
   message: string,
   code: string,
 ) {

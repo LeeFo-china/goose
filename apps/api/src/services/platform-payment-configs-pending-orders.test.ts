@@ -24,6 +24,7 @@ const directConfig = {
   app_id: "wx-direct-app",
   sub_app_id: null,
   encrypted_config_ref: "setting://PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
+  secret_bundle_revision: "bundle-revision-direct",
   serial_no: "DIRECT-SERIAL",
   notify_url: "https://api.example.com/wechat/callback",
   enabled_channels: ["tenant_recharge"],
@@ -61,7 +62,9 @@ const upsertWechatPayConfig = mock(async (input: PlatformPaymentConfigUpsertInpu
   ...directConfig,
   ...input,
 }));
-const updateSetting = mock(async () => ({ key: "setting-key" }));
+const updatePlatformPaymentSecretSetting = mock(async () => ({
+  key: "setting-key",
+}));
 const hasPendingWechatOrdersForPaymentConfig = mock(async () => false);
 
 const authContext = {
@@ -96,7 +99,9 @@ async function createService() {
       findWechatPayConfigByProfile,
       upsertWechatPayConfig,
     },
-    settingsService: { updateSetting },
+    settingsService: { updatePlatformPaymentSecretSetting },
+    secretBundleRevisionFactory: () =>
+      "11111111-1111-4111-8111-111111111111",
     pendingRechargeOrders: { hasPendingWechatOrdersForPaymentConfig },
   });
 }
@@ -106,7 +111,7 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
     findWechatPayConfig.mockClear();
     findWechatPayConfigByProfile.mockClear();
     upsertWechatPayConfig.mockClear();
-    updateSetting.mockClear();
+    updatePlatformPaymentSecretSetting.mockClear();
     hasPendingWechatOrdersForPaymentConfig.mockClear();
     findWechatPayConfig.mockImplementation(async () => directConfig);
     findWechatPayConfigByProfile.mockImplementation(async (profileCode) =>
@@ -265,7 +270,7 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
   });
 
   test("maps the wrapped secret-trigger race to the stable 409", async () => {
-    updateSetting.mockImplementationOnce(async () => {
+    updatePlatformPaymentSecretSetting.mockImplementationOnce(async () => {
       throw Errors.dbError("更新系统配置失败", {
         code: "23514",
         message: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
@@ -292,7 +297,7 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
       "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
       "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
     );
-    updateSetting.mockImplementationOnce(async () => {
+    updatePlatformPaymentSecretSetting.mockImplementationOnce(async () => {
       throw conflict;
     });
     const service = await createService();

@@ -66,6 +66,7 @@ const platformConfig = {
   app_id: "wx-platform-app",
   sub_app_id: null,
   encrypted_config_ref: "secret://platform/wechat-pay",
+  secret_bundle_revision: "bundle-revision-1",
   serial_no: "SERIALNO",
   notify_url: "https://api.example.com/pay/wechat/callback",
   enabled_channels: ["tenant_recharge"],

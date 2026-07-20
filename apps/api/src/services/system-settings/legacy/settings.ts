@@ -30,6 +30,11 @@ import {
   validateSettingValue,
 } from './crypto';
 
+const PLATFORM_PAYMENT_SECRET_SETTING_KEYS = new Set([
+  'PLATFORM_WECHAT_PAY_SECRET_BUNDLE',
+  'PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE',
+]);
+
 export async function listSettings(this: any, authContext?: AuthContext) {
     const records = await this.listRecords();
     const isTenantContext = Boolean(authContext && !authContext.isPlatformAdmin);
@@ -109,6 +114,38 @@ export async function clearLegacyTenantSmsOverrides(this: any, input: {
   }
 
 export async function updateSetting(this: any, authContext: AuthContext, key: string, value: string | null) {
+    if (PLATFORM_PAYMENT_SECRET_SETTING_KEYS.has(key)) {
+      throw Errors.business(
+        409,
+        '支付密钥只能通过支付配置专用接口更新',
+        'SYSTEM_SETTING_PAYMENT_SECRET_PROTECTED',
+      );
+    }
+    return persistSetting.call(this, authContext, key, value);
+  }
+
+export async function updatePlatformPaymentSecretSetting(
+    this: any,
+    authContext: AuthContext,
+    key: string,
+    value: string,
+  ) {
+    if (!PLATFORM_PAYMENT_SECRET_SETTING_KEYS.has(key)) {
+      throw Errors.business(
+        409,
+        '支付密钥专用接口不支持该配置项',
+        'SYSTEM_SETTING_PAYMENT_SECRET_KEY_INVALID',
+      );
+    }
+    return persistSetting.call(this, authContext, key, value);
+  }
+
+async function persistSetting(
+    this: any,
+    authContext: AuthContext,
+    key: string,
+    value: string | null,
+  ) {
     const tenantId = authContext.isPlatformAdmin
       ? null
       : accessPolicyService.assertTenantId(authContext);

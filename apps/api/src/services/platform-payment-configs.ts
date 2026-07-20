@@ -1,9 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
 import { billingRechargeRepository } from "@/repositories/billing-recharge";
 import {
   platformPaymentConfigRepository,
   type PlatformPaymentProfileCode,
-  type PlatformPaymentConfigRecord,
   type PlatformPaymentConfigStatus,
   type PlatformPaymentConfigUpsertInput,
   type PlatformPaymentMerchantMode,
@@ -15,11 +15,17 @@ import {
   type PendingRechargeOrderPort,
 } from "@/services/platform-payment-config-pending-orders";
 import { runPlatformPaymentConfigMutation } from "@/services/platform-payment-config-mutation";
+import {
+  toPlatformWechatPayConfigView,
+  toPlatformWechatPayProfileView,
+  type PlatformWechatPayConfigResult,
+  type PlatformWechatPayProfileListResult,
+  type PlatformWechatPayProfileView,
+} from "@/services/platform-payment-config-views";
 import { platformPaymentProfileValidationService } from "@/services/platform-payment-profile-validation";
 import {
   PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS,
   platformPaymentReadinessService,
-  type PlatformWechatPayProfileDefinition,
 } from "@/services/platform-payment-readiness";
 import { systemSettingsService } from "@/services/system-settings";
 
@@ -46,33 +52,11 @@ export type SavePlatformWechatPaySecretBundleInput = {
   base_url?: string;
 };
 
-export type PlatformWechatPayConfigView = Omit<
-  PlatformPaymentConfigRecord,
-  "serial_no" | "recharge_guard_version"
-> & {
-  serial_no_masked: string | null;
-  has_encrypted_config_ref: boolean;
-};
-
-export type PlatformWechatPayConfigResult = {
-  configured: boolean;
-  can_manage: boolean;
-  config: PlatformWechatPayConfigView | null;
-};
-
-export type PlatformWechatPayProfileView = {
-  profile_code: PlatformPaymentProfileCode;
-  label: string;
-  description: string;
-  secret_setting_key: string;
-  configured: boolean;
-  config: PlatformWechatPayConfigView | null;
-};
-
-export type PlatformWechatPayProfileListResult = {
-  can_manage: boolean;
-  profiles: PlatformWechatPayProfileView[];
-};
+export type {
+  PlatformWechatPayConfigResult,
+  PlatformWechatPayProfileListResult,
+  PlatformWechatPayProfileView,
+} from "@/services/platform-payment-config-views";
 
 type PlatformPaymentConfigRepositoryPort = Pick<
   typeof platformPaymentConfigRepository,
@@ -81,7 +65,10 @@ type PlatformPaymentConfigRepositoryPort = Pick<
   | "upsertWechatPayConfig"
 >;
 
-type PlatformSystemSettingsPort = Pick<typeof systemSettingsService, "updateSetting">;
+type PlatformSystemSettingsPort = Pick<
+  typeof systemSettingsService,
+  "updatePlatformPaymentSecretSetting"
+>;
 
 type PlatformPaymentConfigServiceDependencies = {
   repository?: PlatformPaymentConfigRepositoryPort;
@@ -95,6 +82,7 @@ type PlatformPaymentConfigServiceDependencies = {
     typeof platformPaymentReadinessService,
     "getReadiness"
   >;
+  secretBundleRevisionFactory?: () => string;
 };
 
 const PLATFORM_WECHAT_RECHARGE_CHANNEL = "tenant_recharge";
@@ -119,6 +107,7 @@ export class PlatformPaymentConfigService {
     typeof platformPaymentReadinessService,
     "getReadiness"
   >;
+  private readonly secretBundleRevisionFactory: () => string;
 
   constructor(dependencies: PlatformPaymentConfigServiceDependencies = {}) {
     this.repository = dependencies.repository ?? platformPaymentConfigRepository;
@@ -129,6 +118,8 @@ export class PlatformPaymentConfigService {
       platformPaymentProfileValidationService;
     this.readinessService = dependencies.readinessService ??
       platformPaymentReadinessService;
+    this.secretBundleRevisionFactory = dependencies.secretBundleRevisionFactory ??
+      randomUUID;
   }
 
   async getWechatPayConfig(
@@ -139,7 +130,7 @@ export class PlatformPaymentConfigService {
     return {
       configured: Boolean(config),
       can_manage: this.canManage(authContext),
-      config: config ? this.toView(config) : null,
+      config: config ? toPlatformWechatPayConfigView(config) : null,
     };
   }
 
@@ -176,6 +167,7 @@ export class PlatformPaymentConfigService {
         ? current?.encrypted_config_ref ??
           this.settingRef("PLATFORM_WECHAT_PAY_SECRET_BUNDLE")
         : input.encrypted_config_ref,
+      secret_bundle_revision: current?.secret_bundle_revision ?? null,
       serial_no: input.serial_no === undefined
         ? current?.serial_no ?? null
         : input.serial_no,
@@ -207,7 +199,7 @@ export class PlatformPaymentConfigService {
     return {
       configured: true,
       can_manage: true,
-      config: this.toView(saved),
+      config: toPlatformWechatPayConfigView(saved),
     };
   }
 
@@ -220,7 +212,7 @@ export class PlatformPaymentConfigService {
         const config = await this.repository.findWechatPayConfigByProfile(
           definition.profile_code,
         );
-        return this.toProfileView(definition, config);
+        return toPlatformWechatPayProfileView(definition, config);
       }),
     );
 
@@ -244,7 +236,7 @@ export class PlatformPaymentConfigService {
     const config = await this.repository.findWechatPayConfigByProfile(
       profileCode,
     );
-    return this.toProfileView(definition, config);
+    return toPlatformWechatPayProfileView(definition, config);
   }
 
   async saveWechatPayProfile(
@@ -292,6 +284,7 @@ export class PlatformPaymentConfigService {
         ? current?.encrypted_config_ref ??
           this.settingRef(definition.secret_setting_key)
         : input.encrypted_config_ref,
+      secret_bundle_revision: current?.secret_bundle_revision ?? null,
       serial_no: input.serial_no === undefined
         ? current?.serial_no ?? null
         : input.serial_no,
@@ -320,7 +313,7 @@ export class PlatformPaymentConfigService {
       this.repository.upsertWechatPayConfig(next)
     );
 
-    return this.toProfileView(definition, saved);
+    return toPlatformWechatPayProfileView(definition, saved);
   }
 
   async saveWechatPaySecretBundle(
@@ -342,6 +335,14 @@ export class PlatformPaymentConfigService {
       pendingRechargeOrders: this.pendingRechargeOrders,
     });
     const encryptedConfigRef = this.settingRef(definition.secret_setting_key);
+    const secretBundleRevision = this.secretBundleRevisionFactory().trim();
+    if (!secretBundleRevision) {
+      throw Errors.business(
+        500,
+        "支付密钥版本生成失败",
+        "PLATFORM_PAYMENT_SECRET_REVISION_GENERATION_FAILED",
+      );
+    }
     const secretBundle = {
       private_key_pem: input.private_key_pem.trim(),
       api_v3_key: input.api_v3_key.trim(),
@@ -350,15 +351,8 @@ export class PlatformPaymentConfigService {
       wechat_pay_public_key_pem:
         input.wechat_pay_public_key_pem?.trim() || null,
       base_url: input.base_url?.trim() || DEFAULT_WECHAT_PAY_BASE_URL,
+      revision: secretBundleRevision,
     };
-
-    await runPlatformPaymentConfigMutation(() =>
-      this.settingsService.updateSetting(
-        authContext,
-        definition.secret_setting_key,
-        JSON.stringify(secretBundle),
-      )
-    );
 
     const saved = await runPlatformPaymentConfigMutation(() =>
       this.repository.upsertWechatPayConfig({
@@ -372,6 +366,7 @@ export class PlatformPaymentConfigService {
         app_id: current?.app_id ?? null,
         sub_app_id: current?.sub_app_id ?? null,
         encrypted_config_ref: encryptedConfigRef,
+        secret_bundle_revision: secretBundleRevision,
         serial_no: current?.serial_no ?? null,
         notify_url: current?.notify_url ?? null,
         enabled_channels: current?.enabled_channels ??
@@ -385,7 +380,15 @@ export class PlatformPaymentConfigService {
       } satisfies PlatformPaymentConfigUpsertInput)
     );
 
-    return this.toProfileView(definition, saved);
+    await runPlatformPaymentConfigMutation(() =>
+      this.settingsService.updatePlatformPaymentSecretSetting(
+        authContext,
+        definition.secret_setting_key,
+        JSON.stringify(secretBundle),
+      )
+    );
+
+    return toPlatformWechatPayProfileView(definition, saved);
   }
 
   async validateWechatPayProfile(
@@ -400,7 +403,7 @@ export class PlatformPaymentConfigService {
       employeeId: authContext.employeeId,
     });
     return {
-      profile: this.toProfileView(definition, result.config),
+      profile: toPlatformWechatPayProfileView(definition, result.config),
       validation: result.validation,
     };
   }
@@ -438,35 +441,6 @@ export class PlatformPaymentConfigService {
     );
   }
 
-  private toView(
-    config: PlatformPaymentConfigRecord,
-  ): PlatformWechatPayConfigView {
-    const {
-      serial_no: _serialNo,
-      recharge_guard_version: _guardVersion,
-      ...safeConfig
-    } = config;
-    return {
-      ...safeConfig,
-      serial_no_masked: this.maskSerialNo(config.serial_no),
-      has_encrypted_config_ref: Boolean(config.encrypted_config_ref),
-    };
-  }
-
-  private toProfileView(
-    definition: PlatformWechatPayProfileDefinition,
-    config: PlatformPaymentConfigRecord | null,
-  ): PlatformWechatPayProfileView {
-    return {
-      profile_code: definition.profile_code,
-      label: definition.label,
-      description: definition.description,
-      secret_setting_key: definition.secret_setting_key,
-      configured: Boolean(config),
-      config: config ? this.toView(config) : null,
-    };
-  }
-
   private getProfileDefinition(profileCode: PlatformPaymentProfileCode) {
     const definition = PLATFORM_WECHAT_PAY_PROFILE_DEFINITIONS.find((item) =>
       item.profile_code === profileCode
@@ -481,11 +455,6 @@ export class PlatformPaymentConfigService {
     return `setting://${settingKey}`;
   }
 
-  private maskSerialNo(serialNo: string | null) {
-    if (!serialNo) return null;
-    if (serialNo.length <= 8) return "****";
-    return `${serialNo.slice(0, 8)}****${serialNo.slice(-4)}`;
-  }
 }
 
 export const platformPaymentConfigService = new PlatformPaymentConfigService();

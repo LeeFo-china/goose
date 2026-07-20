@@ -18,6 +18,7 @@ const config = {
   app_id: "wxbac3b1e168fd968a",
   sub_app_id: null,
   encrypted_config_ref: "setting://PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
+  secret_bundle_revision: "bundle-revision-1",
   serial_no: "MERCHANT_CERT_SERIAL",
   notify_url: "https://api.example.com/pay/wechat/callback",
   enabled_channels: ["tenant_recharge"],
@@ -83,7 +84,9 @@ async function createService() {
       findWechatPayConfigByProfile,
       upsertWechatPayConfig,
     },
-    settingsService: { updateSetting: mock(async () => ({})) },
+    settingsService: {
+      updatePlatformPaymentSecretSetting: mock(async () => ({})),
+    },
     pendingRechargeOrders: {
       hasPendingWechatOrdersForPaymentConfig: mock(async () => false),
     },
@@ -125,6 +128,7 @@ describe("PlatformPaymentConfigService profile validation", () => {
           validation_status: "valid",
           serial_no_masked: "MERCHANT****RIAL",
           has_encrypted_config_ref: true,
+          has_secret_bundle_revision: true,
         },
       },
       validation: {
@@ -134,5 +138,7 @@ describe("PlatformPaymentConfigService profile validation", () => {
       },
     });
     expect(JSON.stringify(result)).not.toContain("MERCHANT_CERT_SERIAL");
+    expect(result.profile.config).not.toHaveProperty("encrypted_config_ref");
+    expect(result.profile.config).not.toHaveProperty("secret_bundle_revision");
   });
 });

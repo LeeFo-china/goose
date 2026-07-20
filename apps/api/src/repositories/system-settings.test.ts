@@ -141,7 +141,79 @@ describe("SystemSettingRepository payment config trigger errors", () => {
 });
 
 describe("platform system settings payment secret update", () => {
-  test("propagates the pending recharge conflict from the repository", async () => {
+  beforeEach(() => {
+    maybeSingle.mockClear();
+    single.mockClear();
+    insert.mockClear();
+    query.update.mockClear();
+    from.mockClear();
+    maybeSingleResults = [];
+    updateResult = { data: null, error: null };
+  });
+
+  test.each([
+    "PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
+    "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
+  ])("blocks generic writes to protected payment secret %s", async (key) => {
+    const { SystemSettingsService } = await import(
+      "@/services/system-settings/legacy-service"
+    );
+    const systemSettingsService = new SystemSettingsService(
+      await createRepository(),
+    );
+
+    await expect(systemSettingsService.updateSetting(
+      platformAuth,
+      key,
+      "protected-value",
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SYSTEM_SETTING_PAYMENT_SECRET_PROTECTED",
+      message: "支付密钥只能通过支付配置专用接口更新",
+    });
+    expect(maybeSingle).not.toHaveBeenCalled();
+  });
+
+  test("allows the dedicated internal writer for a protected payment secret", async () => {
+    queueExistingSettings(3);
+    updateResult = { data: existingSetting, error: null };
+    const { SystemSettingsService } = await import(
+      "@/services/system-settings/legacy-service"
+    );
+    const systemSettingsService = new SystemSettingsService(
+      await createRepository(),
+    );
+
+    const result = await systemSettingsService.updatePlatformPaymentSecretSetting(
+      platformAuth,
+      existingSetting.key,
+      JSON.stringify({ revision: "revision-1" }),
+    );
+
+    expect(result.key).toBe(existingSetting.key);
+    expect(query.update).toHaveBeenCalled();
+  });
+
+  test("rejects non-payment keys through the dedicated internal writer", async () => {
+    const { SystemSettingsService } = await import(
+      "@/services/system-settings/legacy-service"
+    );
+    const systemSettingsService = new SystemSettingsService(
+      await createRepository(),
+    );
+
+    await expect(systemSettingsService.updatePlatformPaymentSecretSetting(
+      platformAuth,
+      "SOME_OTHER_SECRET",
+      "value",
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SYSTEM_SETTING_PAYMENT_SECRET_KEY_INVALID",
+    });
+    expect(maybeSingle).not.toHaveBeenCalled();
+  });
+
+  test("propagates pending recharge conflicts from the dedicated writer", async () => {
     queueExistingSettings(3);
     updateResult = { data: null, error: pendingConfigError };
     const { SystemSettingsService } = await import(
@@ -151,7 +223,7 @@ describe("platform system settings payment secret update", () => {
       await createRepository(),
     );
 
-    await expect(systemSettingsService.updateSetting(
+    await expect(systemSettingsService.updatePlatformPaymentSecretSetting(
       platformAuth,
       existingSetting.key,
       JSON.stringify({

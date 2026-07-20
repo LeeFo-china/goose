@@ -19,6 +19,7 @@ describe("WechatPaySecretBundleService", () => {
       wechat_pay_public_key_id: "PUB_KEY_ID_TEST",
       wechat_pay_public_key_pem: "public-key",
       base_url: "https://api.mch.weixin.qq.com",
+      revision: "bundle-revision-1",
     });
     const { WechatPaySecretBundleService } = await createService();
     const service = new WechatPaySecretBundleService({
@@ -35,6 +36,7 @@ describe("WechatPaySecretBundleService", () => {
       wechatPayPublicKeyId: "PUB_KEY_ID_TEST",
       wechatPayPublicKeyPem: "public-key",
       baseUrl: "https://api.mch.weixin.qq.com",
+      revision: "bundle-revision-1",
     });
     delete process.env.WECHAT_PAY_TEST_BUNDLE;
   });
@@ -57,8 +59,25 @@ describe("WechatPaySecretBundleService", () => {
     expect(bundle).toMatchObject({
       privateKeyPem: "private-key",
       apiV3Key: "api-v3-key",
+      revision: null,
     });
     expect(getSecretString).toHaveBeenCalledWith("WECHAT_PAY_TENANT_1");
+  });
+
+  test("parses an optional opaque bundle revision without breaking legacy bundles", async () => {
+    const getSecretString = mock(async () => JSON.stringify({
+      private_key_pem: "private-key",
+      api_v3_key: "api-v3-key",
+      revision: "  revision-20260720  ",
+    }));
+    const { WechatPaySecretBundleService } = await createService();
+    const service = new WechatPaySecretBundleService({
+      settingsService: { getSecretString },
+    });
+
+    const bundle = await service.load("setting://PLATFORM_WECHAT_PAY_SECRET_BUNDLE");
+
+    expect(bundle.revision).toBe("revision-20260720");
   });
 
   test("rejects missing or malformed secret bundle without leaking values", async () => {

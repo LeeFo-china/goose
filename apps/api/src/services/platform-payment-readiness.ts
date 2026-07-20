@@ -26,6 +26,7 @@ export type PlatformPaymentReadinessProfile = {
     has_merchant_id: boolean;
     has_app_id: boolean;
     has_secret_ref: boolean;
+    has_secret_bundle_revision: boolean;
     has_serial_no: boolean;
     has_callback: boolean;
     callback_is_https: boolean;
@@ -105,6 +106,10 @@ const BLOCKERS = {
     code: "PLATFORM_PAYMENT_SECRET_REF_MISSING",
     message: "支付配置缺少密钥引用",
   },
+  secretBundleRevisionMissing: {
+    code: "PLATFORM_PAYMENT_SECRET_BUNDLE_REVISION_MISSING",
+    message: "支付配置缺少密钥版本",
+  },
   serialNoMissing: {
     code: "PLATFORM_PAYMENT_SERIAL_NO_MISSING",
     message: "支付配置缺少商户证书序列号",
@@ -163,6 +168,7 @@ function evaluateProfile(
     has_merchant_id: hasText(config.merchant_id),
     has_app_id: hasText(config.app_id),
     has_secret_ref: hasText(config.encrypted_config_ref),
+    has_secret_bundle_revision: hasText(config.secret_bundle_revision),
     has_serial_no: hasText(config.serial_no),
     has_callback: hasText(config.notify_url),
     callback_is_https: isHttpsUrl(config.notify_url),
@@ -177,6 +183,9 @@ function evaluateProfile(
   if (!checks.has_merchant_id) blockers.push(BLOCKERS.merchantIdMissing);
   if (!checks.has_app_id) blockers.push(BLOCKERS.appIdMissing);
   if (!checks.has_secret_ref) blockers.push(BLOCKERS.secretRefMissing);
+  if (!checks.has_secret_bundle_revision) {
+    blockers.push(BLOCKERS.secretBundleRevisionMissing);
+  }
   if (!checks.has_serial_no) blockers.push(BLOCKERS.serialNoMissing);
   if (!checks.has_callback) blockers.push(BLOCKERS.callbackMissing);
   else if (!checks.callback_is_https) blockers.push(BLOCKERS.callbackNotHttps);
@@ -211,6 +220,7 @@ function missingProfile(
       has_merchant_id: false,
       has_app_id: false,
       has_secret_ref: false,
+      has_secret_bundle_revision: false,
       has_serial_no: false,
       has_callback: false,
       callback_is_https: false,

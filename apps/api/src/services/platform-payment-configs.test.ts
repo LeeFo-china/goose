@@ -21,6 +21,7 @@ const existingConfig = {
   app_id: "wx-platform-app",
   sub_app_id: null,
   encrypted_config_ref: "secret://platform/wechat-pay",
+  secret_bundle_revision: "bundle-revision-old",
   serial_no: "1234567890abcdef",
   notify_url: "https://api.example.com/pay/wechat/callback",
   enabled_channels: ["tenant_recharge"],
@@ -72,9 +73,12 @@ const upsertWechatPayConfig = mock(
   created_at: existingConfig.created_at,
   updated_at: "2026-07-02T09:00:00.000Z",
 }));
-const updateSetting = mock(async () => ({
+const updatePlatformPaymentSecretSetting = mock(async () => ({
   key: "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
 }));
+const secretBundleRevisionFactory = mock(
+  () => "11111111-1111-4111-8111-111111111111",
+);
 const hasPendingWechatOrdersForPaymentConfig = mock(async () => false);
 
 const platformRole = {
@@ -133,8 +137,9 @@ async function createService() {
       upsertWechatPayConfig,
     },
     settingsService: {
-      updateSetting,
+      updatePlatformPaymentSecretSetting,
     },
+    secretBundleRevisionFactory,
     pendingRechargeOrders: {
       hasPendingWechatOrdersForPaymentConfig,
     },
@@ -146,7 +151,11 @@ describe("PlatformPaymentConfigService", () => {
     findWechatPayConfig.mockClear();
     findWechatPayConfigByProfile.mockClear();
     upsertWechatPayConfig.mockClear();
-    updateSetting.mockClear();
+    updatePlatformPaymentSecretSetting.mockClear();
+    updatePlatformPaymentSecretSetting.mockImplementation(async () => ({
+      key: "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
+    }));
+    secretBundleRevisionFactory.mockClear();
     hasPendingWechatOrdersForPaymentConfig.mockClear();
     findWechatPayConfig.mockImplementation(async () => existingConfig);
     findWechatPayConfigByProfile.mockImplementation(async (profileCode) => {
@@ -188,9 +197,12 @@ describe("PlatformPaymentConfigService", () => {
       validation_status: "valid",
       serial_no_masked: "12345678****cdef",
       has_encrypted_config_ref: true,
+      has_secret_bundle_revision: true,
     });
     expect(result.config).not.toHaveProperty("serial_no");
     expect(result.config).not.toHaveProperty("recharge_guard_version");
+    expect(result.config).not.toHaveProperty("encrypted_config_ref");
+    expect(result.config).not.toHaveProperty("secret_bundle_revision");
   });
 
   test("rejects save without manage permission", async () => {
@@ -241,6 +253,7 @@ describe("PlatformPaymentConfigService", () => {
       app_id: "wx-platform-app-2",
       sub_app_id: null,
       encrypted_config_ref: "secret://platform/wechat-pay-v2",
+      secret_bundle_revision: "bundle-revision-old",
       serial_no: "abcdef1234567890",
       notify_url: "https://api.example.com/pay/wechat/callback",
       enabled_channels: ["tenant_recharge"],
@@ -350,6 +363,7 @@ describe("PlatformPaymentConfigService", () => {
       sub_app_id: null,
       encrypted_config_ref:
         "setting://PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
+      secret_bundle_revision: null,
       serial_no: "SERVICEPROVIDERSERIALNO",
       notify_url: "https://api.example.com/pay/wechat/callback",
       enabled_channels: ["project_payment", "applyment"],
@@ -379,8 +393,8 @@ describe("PlatformPaymentConfigService", () => {
       },
     );
 
-    expect(updateSetting).toHaveBeenCalledTimes(1);
-    const updateSettingCall = updateSetting.mock.calls[0];
+    expect(updatePlatformPaymentSecretSetting).toHaveBeenCalledTimes(1);
+    const updateSettingCall = updatePlatformPaymentSecretSetting.mock.calls[0];
     expect(updateSettingCall).toBeDefined();
     const [authContext, key, rawValue] = updateSettingCall as unknown as [
       AuthContext,
@@ -395,11 +409,16 @@ describe("PlatformPaymentConfigService", () => {
       wechat_pay_public_key_id: "PUB_KEY_ID_TEST",
       wechat_pay_public_key_pem: "-----BEGIN PUBLIC KEY-----\\nabc\\n-----END PUBLIC KEY-----",
       base_url: "https://api.mch.weixin.qq.com",
+      revision: "11111111-1111-4111-8111-111111111111",
     });
     expect(result.profile_code).toBe("tenant_service_provider");
     expect(result.config?.has_encrypted_config_ref).toBe(true);
+    expect(result.config?.has_secret_bundle_revision).toBe(true);
+    expect(result.config).not.toHaveProperty("encrypted_config_ref");
+    expect(result.config).not.toHaveProperty("secret_bundle_revision");
     expect(upsertWechatPayConfig).toHaveBeenCalledWith(
       expect.objectContaining({
+        secret_bundle_revision: "11111111-1111-4111-8111-111111111111",
         validation_status: "unchecked",
         last_validated_at: null,
         last_validation_error_code: null,
@@ -432,7 +451,7 @@ describe("PlatformPaymentConfigService", () => {
     expect(hasPendingWechatOrdersForPaymentConfig).toHaveBeenCalledWith(
       existingConfig.id,
     );
-    expect(updateSetting).not.toHaveBeenCalled();
+    expect(updatePlatformPaymentSecretSetting).not.toHaveBeenCalled();
     expect(upsertWechatPayConfig).not.toHaveBeenCalled();
   });
 
@@ -451,7 +470,8 @@ describe("PlatformPaymentConfigService", () => {
     expect(hasPendingWechatOrdersForPaymentConfig).toHaveBeenCalledWith(
       serviceProviderConfig.id,
     );
-    expect(updateSetting).toHaveBeenCalledTimes(1);
+    expect(updatePlatformPaymentSecretSetting).toHaveBeenCalledTimes(1);
     expect(upsertWechatPayConfig).toHaveBeenCalledTimes(1);
   });
+
 });

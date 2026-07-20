@@ -28,6 +28,7 @@ export type PlatformPaymentConfigRecord = {
   app_id: string | null;
   sub_app_id: string | null;
   encrypted_config_ref: string | null;
+  secret_bundle_revision?: string | null;
   serial_no: string | null;
   notify_url: string | null;
   enabled_channels: string[];
@@ -56,6 +57,7 @@ export type PlatformPaymentConfigUpsertInput = {
   app_id: string | null;
   sub_app_id: string | null;
   encrypted_config_ref: string | null;
+  secret_bundle_revision: string | null;
   serial_no: string | null;
   notify_url: string | null;
   enabled_channels: string[];

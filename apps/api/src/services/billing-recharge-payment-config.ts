@@ -13,6 +13,7 @@ function assertPaymentMaterial(
     !config.merchant_id ||
     !config.app_id ||
     !config.encrypted_config_ref ||
+    !config.secret_bundle_revision?.trim() ||
     !config.serial_no ||
     !config.notify_url
   ) {
