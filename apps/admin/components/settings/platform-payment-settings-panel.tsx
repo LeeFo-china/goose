@@ -3,6 +3,7 @@
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, Loader2, Save } from "lucide-react";
+import { adminTabsListClassName, adminTabsTriggerWithBadgeClassName } from "@/components/admin/admin-tabs";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { SecretBundleForm } from "@/components/settings/platform-payment-secret-form";
 import {
@@ -67,12 +68,12 @@ export function PlatformPaymentSettingsPanel({
         className="flex min-h-0 flex-col gap-4"
       >
         <div className="-mx-4 overflow-x-auto overflow-y-hidden px-4">
-          <TabsList className="h-auto min-w-max justify-start rounded-none border-0 border-b bg-transparent p-0 text-muted-foreground">
+          <TabsList className={adminTabsListClassName}>
             {profiles.map((profile) => (
               <TabsTrigger
                 key={profile.profile_code}
                 value={profile.profile_code}
-                className="gap-2 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-3 py-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
+                className={adminTabsTriggerWithBadgeClassName}
               >
                 <span>{profile.label}</span>
                 <Badge variant={profile.configured ? "success" : "warning"}>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { adminTabsListClassName, adminTabsTriggerWithBadgeClassName } from "@/components/admin/admin-tabs";
 import { Badge } from "@/components/ui/badge";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -16,11 +17,11 @@ export function MarketingTabsNav({
   counts: Record<MarketingTabValue, number>;
 }) {
   return (
-    <TabsList className="h-auto w-full justify-start overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0 xl:w-auto">
+    <TabsList className={adminTabsListClassName}>
       <TabsTrigger
         value="campaigns"
         asChild
-        className="gap-1.5 whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-3 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
+        className={adminTabsTriggerWithBadgeClassName}
       >
         <Link href={hrefs.campaigns}>
           活动管理
@@ -35,7 +36,7 @@ export function MarketingTabsNav({
       <TabsTrigger
         value="h5"
         asChild
-        className="ml-5 gap-1.5 whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-3 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
+        className={adminTabsTriggerWithBadgeClassName}
       >
         <Link href={hrefs.h5}>
           H5 活动页
@@ -50,7 +51,7 @@ export function MarketingTabsNav({
       <TabsTrigger
         value="leads"
         asChild
-        className="ml-5 gap-1.5 whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-3 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
+        className={adminTabsTriggerWithBadgeClassName}
       >
         <Link href={hrefs.leads}>
           H5 线索

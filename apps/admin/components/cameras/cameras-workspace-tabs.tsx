@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { adminTabsListClassName, adminTabsTriggerClassName } from "@/components/admin/admin-tabs";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -23,15 +24,15 @@ export function CamerasWorkspaceTabs({
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <TabsList className="h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0">
+            <TabsList className={adminTabsListClassName}>
               <TabsTrigger
-                className="rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-3 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
+                className={adminTabsTriggerClassName}
                 value="cameras"
               >
                 项目摄像头
               </TabsTrigger>
               <TabsTrigger
-                className="rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-3 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
+                className={adminTabsTriggerClassName}
                 value="devices"
               >
                 设备接入

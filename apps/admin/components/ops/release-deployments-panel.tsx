@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import type { ReleaseEnvironment, ReleaseRefType, ReleaseSuccessfulRef } from "@/components/ops/ops-types";
-import { OpsTabsList } from "@/components/ops/ops-tabs";
+import { OpsTabsList, OpsTabsTrigger } from "@/components/ops/ops-tabs";
 import { useReleaseDeploymentStore } from "@/components/ops/release-deployments-store";
 import { RuntimeVersionsPanel } from "@/components/ops/release-deployments-dialogs";
 import { ProductionMigrationAssistCard } from "@/components/ops/production-migration-assist-card";
@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 type ReleaseMode = "service-release" | "web-release" | "database-migration";
 
@@ -326,9 +326,9 @@ export function ReleaseDeploymentsPanel({
                 <CardDescription>{releaseModeDescription(releaseMode)}</CardDescription>
               </div>
               <OpsTabsList className="md:w-auto">
-                <TabsTrigger value="service-release">服务发布</TabsTrigger>
-                <TabsTrigger value="web-release">官网发布</TabsTrigger>
-                <TabsTrigger value="database-migration">数据库迁移</TabsTrigger>
+                <OpsTabsTrigger value="service-release">服务发布</OpsTabsTrigger>
+                <OpsTabsTrigger value="web-release">官网发布</OpsTabsTrigger>
+                <OpsTabsTrigger value="database-migration">数据库迁移</OpsTabsTrigger>
               </OpsTabsList>
             </CardHeader>
             <CardContent>

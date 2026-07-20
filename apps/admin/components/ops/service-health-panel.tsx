@@ -5,11 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Container, Loader2, RefreshCw, Server, ShieldCheck, TriangleAlert } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { OpsServiceHealth } from "@/components/ops/ops-types";
-import { OpsTabsList } from "@/components/ops/ops-tabs";
+import { OpsTabsList, OpsTabsTrigger } from "@/components/ops/ops-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -249,22 +249,22 @@ export function ServiceHealthPanel() {
 
         <Tabs defaultValue="business" className="flex flex-col gap-3">
           <OpsTabsList>
-            <TabsTrigger value="business">
+            <OpsTabsTrigger value="business">
               业务服务
               <span className="ml-2 text-xs text-muted-foreground">{containersByGroup.business.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="supabase">
+            </OpsTabsTrigger>
+            <OpsTabsTrigger value="supabase">
               Supabase
               <span className="ml-2 text-xs text-muted-foreground">{containersByGroup.supabase.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="infrastructure">
+            </OpsTabsTrigger>
+            <OpsTabsTrigger value="infrastructure">
               基础设施
               <span className="ml-2 text-xs text-muted-foreground">{containersByGroup.infrastructure.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="all">
+            </OpsTabsTrigger>
+            <OpsTabsTrigger value="all">
               全部
               <span className="ml-2 text-xs text-muted-foreground">{containersByGroup.all.length}</span>
-            </TabsTrigger>
+            </OpsTabsTrigger>
           </OpsTabsList>
           <TabsContent value="business" className="mt-0">
             <ContainersTable containers={containersByGroup.business} />

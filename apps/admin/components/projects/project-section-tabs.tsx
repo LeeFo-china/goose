@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { adminTabsListClassName, adminTabsTriggerClassName } from "@/components/admin/admin-tabs";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AdminSession } from "@/lib/backend";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ export function ProjectSectionTabs({
     <Tabs value={activeTab} className="flex overflow-x-auto">
       <TabsList
         aria-label="项目分区"
-        className="h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0"
+        className={adminTabsListClassName}
       >
         {visibleTabs.map((tab) => {
           const active = tab.key === activeTab;
@@ -50,7 +51,7 @@ export function ProjectSectionTabs({
               value={tab.key}
               asChild
               className={cn(
-                "rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 py-2 text-sm text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground",
+                adminTabsTriggerClassName,
                 active && "pointer-events-none",
               )}
             >

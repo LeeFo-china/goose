@@ -44,6 +44,7 @@ import {
   formatFinanceMoney,
   formatFinancePercent,
 } from "@/components/finance/finance-ledger-utils";
+import { adminTabsListClassName, adminTabsTriggerClassName } from "@/components/admin/admin-tabs";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -331,12 +332,12 @@ export default async function FinanceReportsPage({
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
             <Tabs defaultValue="operating" className="flex min-h-full flex-col">
-              <div className="shrink-0 overflow-x-auto border-b bg-muted/20 px-4 py-3">
-                <TabsList className="w-max">
-                  <TabsTrigger value="operating">运营报表</TabsTrigger>
-                  <TabsTrigger value="project-ranking">项目排行</TabsTrigger>
-                  <TabsTrigger value="cost-category">成本分类</TabsTrigger>
-                  <TabsTrigger value="receivable-aging">应收账龄</TabsTrigger>
+              <div className="shrink-0 overflow-x-auto border-b px-4 py-3">
+                <TabsList className={adminTabsListClassName}>
+                  <TabsTrigger value="operating" className={adminTabsTriggerClassName}>运营报表</TabsTrigger>
+                  <TabsTrigger value="project-ranking" className={adminTabsTriggerClassName}>项目排行</TabsTrigger>
+                  <TabsTrigger value="cost-category" className={adminTabsTriggerClassName}>成本分类</TabsTrigger>
+                  <TabsTrigger value="receivable-aging" className={adminTabsTriggerClassName}>应收账龄</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="operating" className="m-0 min-h-0 flex-1 overflow-auto">

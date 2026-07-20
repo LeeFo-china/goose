@@ -1,3 +1,4 @@
+import { adminTabsListClassName } from "@/components/admin/admin-tabs";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -12,7 +13,7 @@ export default function CamerasLoading() {
               data-testid="camera-workspace-tabs-loading"
               className="flex overflow-x-auto"
             >
-              <div className="flex h-auto min-w-max justify-start gap-5 overflow-x-auto overflow-y-hidden rounded-none border-0 bg-transparent p-0">
+              <div className={`flex ${adminTabsListClassName}`}>
                 <Skeleton className="h-10 w-20 rounded-none" />
                 <Skeleton className="h-10 w-16 rounded-none" />
               </div>

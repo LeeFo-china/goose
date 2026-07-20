@@ -2,7 +2,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
 import { OpsScriptsPanel } from "@/components/ops/ops-scripts-panel";
-import { OpsTabsList } from "@/components/ops/ops-tabs";
+import { OpsTabsList, OpsTabsTrigger } from "@/components/ops/ops-tabs";
 import { LocationMetricsPanel } from "@/components/ops/location-metrics-panel";
 import { ReleaseDeploymentsPanel } from "@/components/ops/release-deployments-panel";
 import { ServiceHealthPanel } from "@/components/ops/service-health-panel";
@@ -22,7 +22,7 @@ import type {
 } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
@@ -336,12 +336,12 @@ export default async function OpsPage({
       <Tabs defaultValue={activeTab} className="flex flex-col gap-3">
         <OpsTabsList>
           {opsTabs.map((item) => (
-            <TabsTrigger key={item.value} value={item.value} asChild>
+            <OpsTabsTrigger key={item.value} value={item.value} asChild>
               <Link href={item.href}>
                 {item.label}
                 {item.count ? <span className="ml-2 text-xs text-muted-foreground">{item.count}</span> : null}
               </Link>
-            </TabsTrigger>
+            </OpsTabsTrigger>
           ))}
         </OpsTabsList>
 

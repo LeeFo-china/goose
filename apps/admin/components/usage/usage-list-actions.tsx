@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Search, X } from "lucide-react";
+import { adminTabsListClassName, adminTabsTriggerClassName } from "@/components/admin/admin-tabs";
 import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,8 +37,8 @@ export function UsageTabsNav({
   socialVideoStatus,
   socialVideoBillable,
   summaryLabel = "租户汇总",
-  tabsListClassName,
-  tabsTriggerClassName,
+  tabsListClassName = adminTabsListClassName,
+  tabsTriggerClassName = adminTabsTriggerClassName,
 }: {
   basePath: string;
   tab: UsageTab;

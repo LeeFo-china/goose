@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type MouseEvent, type PointerEvent, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { adminTabsListClassName, adminTabsTriggerWithBadgeClassName } from "@/components/admin/admin-tabs";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export type FinanceProjectSummaryView = "all" | "danger" | "info";
@@ -75,7 +76,7 @@ export function FinanceProjectSummaryViewTabs({
       aria-busy={currentPendingView !== null || undefined}
       className="overflow-x-auto overflow-y-hidden"
     >
-      <TabsList className="h-auto min-w-max justify-start">
+      <TabsList className={adminTabsListClassName}>
         {tabs.map((tab) => {
           const pending = currentPendingView === tab.value;
 
@@ -84,7 +85,7 @@ export function FinanceProjectSummaryViewTabs({
               key={tab.value}
               value={tab.value}
               asChild
-              className="gap-1.5 whitespace-nowrap"
+              className={adminTabsTriggerWithBadgeClassName}
             >
               <Link
                 href={hrefs[tab.value]}

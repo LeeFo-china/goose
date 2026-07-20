@@ -1,7 +1,8 @@
 "use client";
 
 import type { ComponentPropsWithoutRef } from "react";
-import { TabsList } from "@/components/ui/tabs";
+import { adminTabsListClassName, adminTabsTriggerClassName } from "@/components/admin/admin-tabs";
+import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 export function OpsTabsList({
@@ -11,9 +12,21 @@ export function OpsTabsList({
   return (
     <TabsList
       className={cn(
-        "h-auto min-h-9 w-full flex-wrap justify-start gap-1 overflow-visible",
+        adminTabsListClassName,
         className,
       )}
+      {...props}
+    />
+  );
+}
+
+export function OpsTabsTrigger({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof TabsTrigger>) {
+  return (
+    <TabsTrigger
+      className={cn(adminTabsTriggerClassName, className)}
       {...props}
     />
   );

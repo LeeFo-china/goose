@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { adminTabsListClassName, adminTabsTriggerClassName } from "@/components/admin/admin-tabs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProjectLogsPanel } from "@/components/projects/project-logs-dialog";
 import { ProjectAcceptancesPanel } from "@/components/projects/project-acceptances-panel";
@@ -115,11 +116,11 @@ export function ProjectDetailDialog({
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
           <div className="shrink-0 border-b px-5 pt-4">
-            <TabsList>
-              <TabsTrigger value="overview">概览</TabsTrigger>
-              <TabsTrigger value="members">成员</TabsTrigger>
-              <TabsTrigger value="logs">施工日志</TabsTrigger>
-              <TabsTrigger value="acceptances">工序验收</TabsTrigger>
+            <TabsList className={adminTabsListClassName}>
+              <TabsTrigger value="overview" className={adminTabsTriggerClassName}>概览</TabsTrigger>
+              <TabsTrigger value="members" className={adminTabsTriggerClassName}>成员</TabsTrigger>
+              <TabsTrigger value="logs" className={adminTabsTriggerClassName}>施工日志</TabsTrigger>
+              <TabsTrigger value="acceptances" className={adminTabsTriggerClassName}>工序验收</TabsTrigger>
             </TabsList>
           </div>
           <div

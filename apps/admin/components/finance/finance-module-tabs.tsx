@@ -1,3 +1,4 @@
+import { adminTabsListClassName, adminTabsTriggerClassName } from "@/components/admin/admin-tabs";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export type FinanceModuleTab =
@@ -38,14 +39,14 @@ export function FinanceModuleTabs({
       aria-label="财务模块"
       className="shrink-0 overflow-x-auto overflow-y-hidden border-b"
     >
-      <TabsList className="h-auto min-w-max justify-start">
+      <TabsList className={adminTabsListClassName}>
         {FINANCE_MODULE_TABS.map((tab) => {
           return (
             <TabsTrigger
               key={tab.value}
               value={tab.value}
               asChild
-              className="whitespace-nowrap"
+              className={adminTabsTriggerClassName}
             >
               <a href={tab.href}>{tab.label}</a>
             </TabsTrigger>

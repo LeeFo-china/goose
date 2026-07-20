@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Building2 } from "lucide-react";
+import { adminTabsListClassName, adminTabsTriggerWithBadgeClassName } from "@/components/admin/admin-tabs";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { DepartmentsClientShell } from "@/components/organization/departments-client-shell";
 import type {
@@ -92,7 +93,7 @@ export function OrganizationTabs({
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
           <CardHeader className="shrink-0 border-b bg-card px-4 py-3">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <TabsList className="h-auto w-full justify-start overflow-x-auto md:w-auto">
+              <TabsList className={adminTabsListClassName}>
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
 
@@ -100,7 +101,7 @@ export function OrganizationTabs({
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="gap-2 whitespace-nowrap"
+                      className={adminTabsTriggerWithBadgeClassName}
                     >
                       <Icon data-icon="inline-start" />
                       {tab.label}
