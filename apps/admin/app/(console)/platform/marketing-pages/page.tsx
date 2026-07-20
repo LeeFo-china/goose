@@ -165,17 +165,6 @@ export default async function PlatformMarketingPagesPage({
             </Card>
           </div>
         }
-        listHeader={
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>H5 活动页列表</CardTitle>
-              <CardDescription>
-                统一管理平台公域 H5 页面，发布后通过 `h5.goodcms.cn` 对外访问。
-              </CardDescription>
-            </div>
-            <Badge variant="outline">共 {pagination.total} 个</Badge>
-          </div>
-        }
         pagination={pagination}
         currentCount={list.length}
         tableViewportTestId="platform-h5-page-list-table-viewport"

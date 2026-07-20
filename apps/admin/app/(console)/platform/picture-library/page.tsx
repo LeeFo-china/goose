@@ -20,7 +20,6 @@ import type {
   PictureCommentListData,
   PictureLibraryHealthReport,
 } from "@/components/picture-library/picture-library-types";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
@@ -337,9 +336,9 @@ export default async function PlatformPictureLibraryPage({
             </div>
           }
           tabs={
-            <TabsList>
+            <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
               {PICTURE_LIBRARY_TABS.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value} asChild>
+                <TabsTrigger key={tab.value} value={tab.value} asChild className="shrink-0">
                   <Link href={buildHref(tab.value)}>
                     {tab.label}
                     <span className="ml-2 text-xs text-muted-foreground">
@@ -350,27 +349,7 @@ export default async function PlatformPictureLibraryPage({
               ))}
             </TabsList>
           }
-          listHeader={activeTab === "categories" ? (
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <CardTitle>分类管理</CardTitle>
-                <CardDescription>
-                  已停用 {summary.inactiveCategories} 个，启用中的分类会提供给小程序端展示。
-                </CardDescription>
-              </div>
-              <Badge variant="outline">共 {categories.length} 个</Badge>
-            </div>
-          ) : activeTab === "comments" ? (
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div>
-                <CardTitle>评论治理</CardTitle>
-                <CardDescription>
-                  本页可见 {summary.currentVisibleComments} 条，已隐藏 {summary.currentHiddenComments} 条。
-                </CardDescription>
-              </div>
-              <Badge variant="outline">共 {comments.pagination.total} 条</Badge>
-            </div>
-          ) : activeTab === "health" ? (
+          listHeader={activeTab === "health" ? (
             <div className="flex flex-col gap-1">
               <CardTitle>健康检查</CardTitle>
               <CardDescription>资源引用、图片变体和分类状态检查。</CardDescription>

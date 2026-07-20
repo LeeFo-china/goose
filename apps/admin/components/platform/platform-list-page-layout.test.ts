@@ -115,6 +115,15 @@ describe("Platform list page layout", () => {
     expect(source).not.toContain("pageSize: 100");
   });
 
+  test("removes the platform H5 page list header copy", () => {
+    const source = readSource("../../app/(console)/platform/marketing-pages/page.tsx");
+
+    expect(source).not.toContain("listHeader=");
+    expect(source).not.toContain("<CardTitle>H5 活动页列表</CardTitle>");
+    expect(source).not.toContain("统一管理平台公域 H5 页面");
+    expect(source).not.toContain("共 {pagination.total} 个");
+  });
+
   test("uses shadcn tabs directly for platform tabbed lists", () => {
     const devicesPage = readSource("../../app/(console)/platform/devices/page-sections.tsx");
     const usagePage = readSource("../../app/(console)/platform/usage/page.tsx");
@@ -147,10 +156,18 @@ describe("Platform list page layout", () => {
     expect(listHeaderStart).toBeGreaterThan(tabsStart);
     expect(filtersStart).toBeGreaterThan(listHeaderStart);
     expect(tabsSource).toContain("<TabsList");
-    expect(tabsSource).not.toContain('className="w-full justify-start overflow-x-auto"');
+    expect(tabsSource).toContain('className="w-full justify-start overflow-x-auto overflow-y-hidden"');
+    expect(tabsSource).toContain('className="shrink-0"');
     expect(listHeaderSource).toContain('activeTab === "health"');
     expect(listHeaderSource).toContain(": null}");
     expect(source).not.toContain("<CardTitle>图片列表</CardTitle>");
+    expect(source).not.toContain("<CardTitle>分类管理</CardTitle>");
+    expect(source).not.toContain("已停用 {summary.inactiveCategories} 个");
+    expect(source).not.toContain("共 {categories.length} 个");
+    expect(source).not.toContain("<CardTitle>评论治理</CardTitle>");
+    expect(source).not.toContain("本页可见 {summary.currentVisibleComments} 条");
+    expect(source).not.toContain("已隐藏 {summary.currentHiddenComments} 条");
+    expect(source).not.toContain("共 {comments.pagination.total} 条");
     expect(source).not.toContain("当前筛选：");
     expect(source).not.toContain("全部分类");
     expect(source).not.toContain("共 {assets.pagination.total} 张");
@@ -394,9 +411,12 @@ describe("Platform list page layout", () => {
     expect(loading).toContain("min-h-0 flex-col gap-5 overflow-hidden");
     expect(loading).toContain("flex min-h-0 flex-1 flex-col overflow-hidden shadow-none");
     expect(loading).toContain("shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3");
+    expect(loading).toContain("md:grid-cols-[180px_1fr_72px]");
     expect(loading).toContain("min-h-0 flex-1 overflow-hidden");
     expect(loading).toContain("shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3");
-    expect(loading).not.toContain("<Card>");
+    expect(loading).not.toContain("flex flex-col justify-between gap-3 md:flex-row md:items-center");
+    expect(loading).not.toContain('Skeleton className="h-5 w-24"');
+    expect(loading).not.toContain('Skeleton className="mt-2 h-4 w-40"');
   });
 
   test("keeps platform audit loading aligned with the fixed-height list shell", () => {
