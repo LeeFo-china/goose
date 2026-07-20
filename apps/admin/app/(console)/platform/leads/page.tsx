@@ -4,14 +4,12 @@ import {
 } from "@/components/platform-leads/platform-lead-list-actions";
 import { PlatformLeadsTable } from "@/components/platform-leads/platform-leads-table";
 import {
-  getPlatformLeadStatusMeta,
   type PlatformLeadListData,
   type PlatformLeadRecord,
   type PlatformLeadStatus,
 } from "@/components/platform-leads/platform-lead-types";
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -120,7 +118,6 @@ export default async function PlatformLeadsPage({
       error: "当前账号不是平台超管，无法访问平台线索",
     };
   const summary = summarizeCurrentPage(list);
-  const filterMeta = status ? getPlatformLeadStatusMeta(status) : null;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -160,18 +157,6 @@ export default async function PlatformLeadsPage({
                 <CardTitle>{summary.assignedWithCustomer}</CardTitle>
               </CardHeader>
             </Card>
-          </div>
-        }
-        listHeader={
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>线索列表</CardTitle>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                当前筛选：
-                {filterMeta ? <Badge variant={filterMeta.variant}>{filterMeta.label}</Badge> : <Badge variant="outline">全部状态</Badge>}
-              </div>
-            </div>
-            <Badge variant="outline">共 {pagination.total} 条</Badge>
           </div>
         }
         filters={<PlatformLeadFilters status={status} keyword={keyword} />}

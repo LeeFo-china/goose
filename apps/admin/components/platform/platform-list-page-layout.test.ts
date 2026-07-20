@@ -269,6 +269,16 @@ describe("Platform list page layout", () => {
     expect(source).not.toContain("共 {pagination.total} 个");
   });
 
+  test("removes the platform lead list header copy", () => {
+    const source = readSource("../../app/(console)/platform/leads/page.tsx");
+
+    expect(source).not.toContain("listHeader=");
+    expect(source).not.toContain("<CardTitle>线索列表</CardTitle>");
+    expect(source).not.toContain("当前筛选：");
+    expect(source).not.toContain('<Badge variant="outline">全部状态</Badge>');
+    expect(source).not.toContain("共 {pagination.total} 条");
+  });
+
   test("removes the platform device tab list header copy", () => {
     const source = readSource("../../app/(console)/platform/devices/page-sections.tsx");
 
