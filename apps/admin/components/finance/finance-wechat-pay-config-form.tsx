@@ -30,7 +30,11 @@ import type {
 
 const MERCHANT_MODE_OPTIONS = [
   { value: "direct_merchant", label: "普通商户" },
-  { value: "service_provider_sub_merchant", label: "服务商子商户" },
+  {
+    value: "service_provider_sub_merchant",
+    label: "服务商子商户（由平台开通）",
+    disabled: true,
+  },
 ];
 
 const PRINCIPAL_TYPE_OPTIONS = [
@@ -73,7 +77,8 @@ export function FinanceWechatPayConfigForm({
 }) {
   const router = useRouter();
   const config = data.config;
-  const readonly = !data.can_manage;
+  const managedByPlatform = Boolean(data.config?.managed_by_platform);
+  const readonly = !data.can_manage || managedByPlatform;
   const [error, setError] = useState(data.error || "");
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -135,7 +140,11 @@ export function FinanceWechatPayConfigForm({
       {saved ? (
         <StatusAlert tone="success">微信支付配置已保存，校验状态已重置为待校验。</StatusAlert>
       ) : null}
-      {readonly ? (
+      {managedByPlatform ? (
+        <StatusAlert tone="warning">
+          当前服务商配置由平台进件激活流程统一维护，租户侧只读。
+        </StatusAlert>
+      ) : readonly ? (
         <StatusAlert tone="warning">当前账号只有查看权限，不能修改微信支付配置。</StatusAlert>
       ) : null}
 
@@ -347,7 +356,7 @@ function SelectField({
   label: string;
   name: string;
   defaultValue: string;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; disabled?: boolean }>;
   disabled?: boolean;
 }) {
   const [value, setValue] = useState(defaultValue);
@@ -368,7 +377,11 @@ function SelectField({
         <SelectContent>
           <SelectGroup>
             {options.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                disabled={option.disabled}
+              >
                 {option.label}
               </SelectItem>
             ))}

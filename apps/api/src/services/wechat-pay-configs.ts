@@ -61,6 +61,7 @@ export type WechatPayConfigView = {
   updated_at: string;
   created_by_employee_id: string | null;
   updated_by_employee_id: string | null;
+  managed_by_platform: boolean;
 };
 
 export type WechatPayConfigResult = {
@@ -86,7 +87,7 @@ export class WechatPayConfigService {
     const config = await this.repository.findWechatPayConfig(tenantId);
     return {
       configured: Boolean(config),
-      can_manage: this.canManage(authContext),
+      can_manage: this.canManage(authContext) && !isPlatformManaged(config),
       config: config ? this.toView(config) : null,
     };
   }
@@ -104,6 +105,16 @@ export class WechatPayConfigService {
     }
 
     const current = await this.repository.findWechatPayConfig(tenantId);
+    if (
+      isPlatformManaged(current) ||
+      input.merchant_mode === "service_provider_sub_merchant"
+    ) {
+      throw Errors.business(
+        409,
+        "服务商微信支付配置由平台进件激活流程统一维护",
+        "WECHAT_PAY_CONFIG_PLATFORM_MANAGED",
+      );
+    }
     const saved = await this.repository.upsertWechatPayConfig({
       tenant_id: tenantId,
       provider: "wechat_pay",
@@ -210,6 +221,7 @@ export class WechatPayConfigService {
       updated_at: config.updated_at,
       created_by_employee_id: config.created_by_employee_id,
       updated_by_employee_id: config.updated_by_employee_id,
+      managed_by_platform: isPlatformManaged(config),
     };
   }
 
@@ -218,6 +230,14 @@ export class WechatPayConfigService {
     if (serialNo.length <= 8) return "****";
     return `${serialNo.slice(0, 8)}****${serialNo.slice(-4)}`;
   }
+}
+
+function isPlatformManaged(config: WechatPayConfigRecord | null) {
+  return Boolean(
+    config &&
+      (config.platform_payment_config_id ||
+        config.merchant_mode === "service_provider_sub_merchant"),
+  );
 }
 
 export const wechatPayConfigService = new WechatPayConfigService();

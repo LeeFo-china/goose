@@ -146,6 +146,24 @@ describe("WechatPayConfigService", () => {
     expect(result.config).not.toHaveProperty("serial_no");
   });
 
+  test("keeps centrally managed service-provider config read-only", async () => {
+    findWechatPayConfig.mockImplementation(async () => ({
+      ...existingConfig,
+      platform_payment_config_id: "platform-config-1",
+      merchant_mode: "service_provider_sub_merchant",
+    }));
+    const service = await createService();
+
+    const result = await service.getConfig(
+      authContextWithPermissions([
+        { code: "wechat_pay.config.manage", scope: "all" },
+      ]),
+    );
+
+    expect(result.can_manage).toBe(false);
+    expect(result.config).toMatchObject({ managed_by_platform: true });
+  });
+
   test("rejects config save without manage permission", async () => {
     const service = await createService();
 
@@ -219,5 +237,51 @@ describe("WechatPayConfigService", () => {
       created_by_employee_id: "employee-old",
       updated_by_employee_id: "employee-1",
     });
+  });
+
+  test("rejects tenant mutation of centrally managed service-provider config", async () => {
+    findWechatPayConfig.mockImplementation(async () => ({
+      ...existingConfig,
+      platform_payment_config_id: "platform-config-1",
+      merchant_mode: "service_provider_sub_merchant",
+    }));
+    const service = await createService();
+
+    await expect(
+      service.saveConfig(
+        authContextWithPermissions([
+          { code: "wechat_pay.config.manage", scope: "all" },
+        ]),
+        {
+          merchant_mode: "service_provider_sub_merchant",
+          status: "active",
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_CONFIG_PLATFORM_MANAGED",
+    });
+    expect(upsertWechatPayConfig).not.toHaveBeenCalled();
+  });
+
+  test("rejects tenant creation of a service-provider config", async () => {
+    findWechatPayConfig.mockImplementation(async () => null);
+    const service = await createService();
+
+    await expect(
+      service.saveConfig(
+        authContextWithPermissions([
+          { code: "wechat_pay.config.manage", scope: "all" },
+        ]),
+        {
+          merchant_mode: "service_provider_sub_merchant",
+          status: "pending",
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_CONFIG_PLATFORM_MANAGED",
+    });
+    expect(upsertWechatPayConfig).not.toHaveBeenCalled();
   });
 });

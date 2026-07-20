@@ -47,6 +47,22 @@ describe("Finance wechat pay admin page layout", () => {
     expect(formSource).toContain("AppID 绑定状态");
   });
 
+  test("keeps centrally managed service-provider config read-only", () => {
+    const formSource = readFileSync(
+      new URL("./finance-wechat-pay-config-form.tsx", import.meta.url),
+      "utf8",
+    );
+    const requestSource = readFileSync(
+      new URL("./finance-wechat-pay-requests.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(requestSource).toContain("managed_by_platform: boolean");
+    expect(formSource).toContain("data.config?.managed_by_platform");
+    expect(formSource).toContain("由平台进件激活流程统一维护");
+    expect(formSource).toContain("disabled: true");
+  });
+
   test("config form uses shadcn select components instead of native select controls", () => {
     const formSource = readFileSync(
       new URL("./finance-wechat-pay-config-form.tsx", import.meta.url),

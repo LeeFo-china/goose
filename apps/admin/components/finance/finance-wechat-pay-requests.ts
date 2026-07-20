@@ -32,6 +32,7 @@ export type WechatPayConfigView = {
   updated_at: string;
   created_by_employee_id: string | null;
   updated_by_employee_id: string | null;
+  managed_by_platform: boolean;
 };
 
 export type WechatPayConfigData = {
