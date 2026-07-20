@@ -19,7 +19,6 @@ import {
   formatFinancePercent,
 } from "@/components/finance/finance-ledger-utils";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
 type FinancePageSearchParams = {
@@ -122,7 +121,7 @@ export default async function FinancePage({
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-2 overflow-hidden">
-      <div className="shrink-0 flex flex-col justify-between gap-2 md:flex-row md:items-end">
+      <div className="shrink-0 flex flex-col gap-2">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
             <LineChart aria-hidden="true" className="size-4" />
@@ -133,11 +132,6 @@ export default async function FinancePage({
               项目收入、回款、成本、利润与财务风险总览
             </p>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="w-fit tabular-nums">
-            第 {data.pagination.page || 1} / {Math.max(data.pagination.totalPages || 0, 1)} 页
-          </Badge>
         </div>
       </div>
 
