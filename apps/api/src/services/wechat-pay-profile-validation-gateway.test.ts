@@ -93,7 +93,7 @@ function encryptCertificate(plaintext = CERTIFICATE_PEM) {
 
 function probeInput() {
   return {
-    merchantId: "1561816121",
+    merchantId: "1900000109",
     serialNo: "MERCHANT_CERT_SERIAL",
     privateKeyPem: merchantKeys.privateKey,
     apiV3Key: API_V3_KEY,
@@ -149,7 +149,7 @@ describe("WechatPayProfileValidationGateway", () => {
     expect(headers.get("Wechatpay-Serial")).toBe(WECHAT_PAY_PUBLIC_KEY_ID);
     const authorization = headers.get("Authorization") ?? "";
     expect(authorization).toStartWith("WECHATPAY2-SHA256-RSA2048 ");
-    expect(authorization).toContain('mchid="1561816121"');
+    expect(authorization).toContain('mchid="1900000109"');
     expect(authorization).toContain('serial_no="MERCHANT_CERT_SERIAL"');
     const signature = authorization.match(/signature="([^"]+)"/)?.[1];
     expect(signature).toBeDefined();

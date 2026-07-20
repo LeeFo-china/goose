@@ -44,7 +44,7 @@ function config(
   return {
     profile_code: profileCode,
     merchant_mode: merchantMode,
-    merchant_id: "1561816121",
+    merchant_id: "1900000109",
     serial_no: "MERCHANT_CERT_SERIAL",
     encrypted_config_ref: "setting://PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
     secret_bundle_revision: "bundle-revision-1",
@@ -82,7 +82,7 @@ describe("WechatPayProfileValidator", () => {
       "setting://PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
     );
     expect(probe).toHaveBeenCalledWith({
-      merchantId: "1561816121",
+      merchantId: "1900000109",
       serialNo: "MERCHANT_CERT_SERIAL",
       privateKeyPem: rsaKeys.privateKey,
       apiV3Key: "12345678901234567890123456789012",

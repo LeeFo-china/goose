@@ -97,7 +97,7 @@ describe("wechat pay applyment schemas", () => {
       applyment_id: "2000002124775691",
       applyment_state: "opened",
       sub_mchid: "1900000002",
-      sub_appid: "wxbac3b1e168fd968a",
+      sub_appid: "wx0000000000000000",
       appid_binding_state: "bound",
       appid_binding_message: "平台小程序已绑定",
     });
@@ -110,7 +110,7 @@ describe("wechat pay applyment schemas", () => {
 
   test("rejects caller-supplied credentials during activation", () => {
     const result = ActivateWechatPayApplymentConfigSchema.safeParse({
-      merchant_id: "1561816121",
+      merchant_id: "1900000109",
     });
 
     expect(result.success).toBe(false);
