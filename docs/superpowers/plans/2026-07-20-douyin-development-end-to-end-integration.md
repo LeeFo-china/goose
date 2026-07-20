@@ -481,14 +481,27 @@ Replace the paragraph that says the API address is fixed with:
 `ext.json`、租户配置或远端响应读取；`deployment_key` 仍只用于商户实例识别。
 ```
 
+Replace the production-only callback instruction with an explicit target matrix:
+
+```markdown
+| 目标环境 | `<API_ORIGIN>` | 授权边界 |
+| --- | --- | --- |
+| 开发联调 | `https://api-dev.goodcms.cn` | 仅用于开发 E2E，需取得开发回调配置授权 |
+| 生产上线 | `https://api.goodcms.cn` | 不属于开发 E2E，需另行取得生产配置授权 |
+```
+
+Operators must not reuse callback configuration across environments.
+
 - [ ] **Step 2：记录首 Ticket 启动边界**
 
 Add below the callback URL table:
 
 ```markdown
-空环境的首个合法 `PUSH Ticket` 在完成时间窗口、签名、AES 解密和 Component AppID 校验后，
-由 `claim_douyin_authorization_event` 幂等建立 active 组件并保存加密 Ticket。普通授权、撤销或未知事件
-不能注册组件；已有 disabled 组件不会被回调自动启用。成功正文必须精确为小写纯文本 `success`。
+空环境的首个合法 `PUSH Ticket` 在完成回调时间窗口、签名、AES 解密和 Component AppID 校验后，
+先由 `claim_douyin_authorization_event` 幂等建立 active 组件并申领事件，再由
+`complete_douyin_ticket_event` 保存服务端封装后的 Ticket 密文信封并完成事件。首次处理只有完成函数返回成功后
+才能响应小写纯文本 `success`；已完成的重复事件可幂等响应 `success`。普通授权、撤销或未知事件不能注册组件，
+已有 disabled 组件不会被回调自动启用。不得手工插入组件、事件或 Ticket 数据，也不得绕过两个 RPC 直接写表。
 ```
 
 - [ ] **Step 3：扩充 Smoke 阻断项**
@@ -497,65 +510,35 @@ Add to section A:
 
 ```markdown
 - [ ] **[阻断]** `development`、`preview` 只解析到 `api-dev.goodcms.cn`；`production` 只解析到 `api.goodcms.cn`；未知环境失败关闭。
-- [ ] **[阻断]** 首个合法 Ticket 能幂等建立 active 组件；过期、签名错误、AppID 错误和 disabled 组件均无新增写入。
-- [ ] **[阻断]** 模板开发安装与测试商户安装分别绑定两个获批的专用开发测试租户。
+- [ ] **[阻断]** 首个合法 Ticket 能按“申领事件 → 保存密文信封”完成并幂等重放；回调时间戳超窗、签名错误、AES 解密失败、Component AppID 错误、Ticket 为空或超长、组件为 disabled 时均无新增数据库写入。
+- [ ] **[阻断]** 模板开发安装绑定获批的隔离测试租户，测试商户安装绑定获批的主测试租户，两个 UUID 不同。
 - [ ] **[阻断]** 本轮商户发布记录最高只到 `testing`，没有 submit-audit、sync-status 或 publish 调用。
 ```
 
 - [ ] **Step 4：创建不含秘密的执行记录**
 
-Create `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md`:
+Create `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md` as an independently
+auditable development-only record. It must contain all of the following, initially set to
+`NOT_RUN` / `NOT_RECORDED`:
 
-```markdown
-# 抖音装修小程序开发环境全链路执行记录
+- a prominent boundary that `PASS` covers only `api-dev.goodcms.cn` through test-qr / `testing`
+  and never authorizes production, audit or publish;
+- an explicit `PASS` invariant requiring all 13 stages, Android and iOS, a `testing` release
+  with null audit/publish timestamps, and a complete same-container API log window with zero
+  calls to the three prohibited routes;
+- executor、reviewer、execution window and overall authorization references;
+- fixed Git/Supabase/API/AppID suffix/tenant/installation/release/masked-phone objects;
+- test-data and cleanup/retention policy, with no manual DDL/DML;
+- separate stage evidence rules and stage execution records;
+- one row per action-time authorization for A01–A15: dev env update, Git push, API workflow,
+  callback save, template installation, merchant authorization, merchant binding, IDE upload,
+  template-library add, merchant release upload, test-qr, two SMS/lead flows, disable and enable;
+- template development bound to the isolation tenant and merchant bound to the main tenant;
+- immutable evidence references and a prohibition on secrets、Ticket、raw provider payloads、
+  full phone、OpenID、session key and deployment key.
 
-**总体状态：** NOT_RUN
-
-**允许终态：** PASS / FAIL / BLOCKED / WAITING_FOR_DEVICE_ACCEPTANCE
-
-## 固定对象
-
-| 对象 | 记录规则 | 当前状态 |
-| --- | --- | --- |
-| Git Commit | 完整 SHA | NOT_RECORDED |
-| Supabase | 只记录开发 project ref | NOT_RECORDED |
-| Component AppID | 只记录尾 4 位 | NOT_RECORDED |
-| Template AppID | 只记录尾 4 位 | NOT_RECORDED |
-| Authorizer AppID | 只记录尾 4 位 | NOT_RECORDED |
-| 主测试租户 | tenant UUID + 名称 | NOT_RECORDED |
-| 隔离测试租户 | tenant UUID + 名称 | NOT_RECORDED |
-| 模板开发安装 | installation UUID | NOT_RECORDED |
-| 测试商户安装 | installation UUID | NOT_RECORDED |
-| 模板交付 | template ID / SemVer / release UUID | NOT_RECORDED |
-| 测试手机号 | 仅掩码 | NOT_RECORDED |
-
-## 阶段证据
-
-| 阶段 | 状态 | 允许记录的证据 |
-| --- | --- | --- |
-| 静态门禁 | NOT_RUN | 命令、退出码、测试计数 |
-| 开发 migration 对齐 | NOT_RUN | project ref、Local/Remote 版本结论 |
-| API 开发部署 | NOT_RUN | Actions run ID、SHA、健康状态 |
-| 回调与 Ticket | NOT_RUN | 控制台校验、时间、组件尾号、布尔信封状态 |
-| 模板开发安装 | NOT_RUN | 安装 UUID、租户 UUID、接口状态 |
-| 模板登录与内容 | NOT_RUN | IDE 版本、截图编号、分页结论 |
-| 测试商户授权/绑定 | NOT_RUN | 安装 UUID、租户 UUID、安全错误码 |
-| 短信与留资 | NOT_RUN | 掩码手机号、lead/submission/event UUID |
-| 模板 upload/test-qr | NOT_RUN | template ID、SemVer、release UUID、截图编号 |
-| Android 真机 | NOT_RUN | 设备/系统版本、截图编号 |
-| iOS 真机 | NOT_RUN | 设备/系统版本、截图编号 |
-| disable/enable | NOT_RUN | 安装 UUID、安全错误码、恢复结论 |
-| 收尾 | NOT_RUN | 保留/停用对象和未完成项 |
-
-## 禁止记录
-
-不得写入 AppSecret、Token、Ticket、EncodingAESKey、短信验证码、完整手机号、OpenID、session key、
-deployment key、二维码原始响应或 provider 原始响应。
-
-## 最终结论
-
-NOT_RUN
-```
+Stage-level authorization must reference the corresponding A01–A15 rows and must not replace
+the per-action timestamp、executor、authorization and recovery evidence.
 
 - [ ] **Step 5：验证并提交文档**
 
@@ -563,7 +546,7 @@ Run:
 
 ```bash
 git diff --check
-rg -n 'api-dev\.goodcms\.cn|首个合法|最高只到 `testing`|NOT_RUN' \
+rg -n 'api-dev\.goodcms\.cn|complete_douyin_ticket_event|最高只到 `testing`|逐动作授权记录|NOT_RUN' \
   docs/operations/douyin-miniapp-template-runbook.md \
   docs/operations/douyin-miniapp-template-smoke-checklist.md \
   docs/operations/evidence/2026-07-20-douyin-dev-e2e.md
@@ -791,6 +774,28 @@ test "$(curl -sS -o /dev/null -w '%{http_code}' \
 ```
 
 Expected: malformed public callback/session bodies are rejected by controller validation with 400, never by ordinary auth with 401.
+
+- [ ] **Step 6：固定完整 API 日志审计窗口**
+
+After the deployment smoke and before any Task 7 action, use the existing secured server
+management session on `gooes-dev-vm-0-11`:
+
+```bash
+: "${FULL_SHA:?set to the exact SHA recorded in Task 6 Step 1}"
+E2E_API_LOG_START_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+E2E_API_CONTAINER_ID="$(sudo docker inspect -f '{{.Id}}' gooes-api-dev)"
+E2E_API_CONTAINER_REVISION="$(sudo docker inspect \
+  -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api-dev)"
+test "$E2E_API_CONTAINER_REVISION" = "$FULL_SHA"
+curl -fsS 'https://api-dev.goodcms.cn/?douyin_e2e_log_start=1' >/dev/null
+printf '%s\n' "$E2E_API_LOG_START_UTC" "$E2E_API_CONTAINER_ID" \
+  "$E2E_API_CONTAINER_REVISION"
+```
+
+Record only these three non-secret values in the evidence file. The query value is not logged;
+the `douyin_e2e_log_start` query-key marker proves at Task 13 that logs still cover the start of
+the window. If this container is recreated or its logs rotate past the start marker, overall
+status cannot be `PASS` without another complete controlled log source.
 
 ## Task 7：配置真实回调并接收首个 Ticket
 
@@ -1300,7 +1305,7 @@ Expected: PASS; otherwise the full E2E goal is not complete.
 **Files:**
 - Modify: `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md`
 
-- [ ] **Step 1：只读证明发布链路停在 testing**
+- [ ] **Step 1：只读证明发布状态停在 testing**
 
 Run:
 
@@ -1317,9 +1322,63 @@ jq -e --arg id "$RELEASE_ID" \
 unset RELEASES_RESPONSE
 ```
 
-Expected: exact release remains `testing`; no audit/publish timestamps.
+Expected: exact release remains `testing`; no audit/publish timestamps. This proves no
+successful audit/publish transition, but it does not by itself prove the prohibited routes were
+never called.
 
-- [ ] **Step 2：重新运行软件与仓库门禁**
+- [ ] **Step 2：用完整受控日志窗口证明禁止路由零调用**
+
+From the evidence file, set the safe `E2E_API_LOG_START_UTC` and
+`E2E_API_CONTAINER_ID` recorded in Task 6. Then, in the same secured read-only server session,
+send an end marker and count exact Fastify route templates without printing raw log lines:
+
+```bash
+set -o pipefail
+: "${E2E_API_LOG_START_UTC:?set from evidence}"
+: "${E2E_API_CONTAINER_ID:?set from evidence}"
+CURRENT_CONTAINER_ID="$(sudo docker inspect -f '{{.Id}}' gooes-api-dev)"
+test "$CURRENT_CONTAINER_ID" = "$E2E_API_CONTAINER_ID"
+curl -fsS 'https://api-dev.goodcms.cn/?douyin_e2e_log_end=1' >/dev/null
+E2E_API_LOG_END_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+count_query_key() {
+  sudo docker logs --since "$E2E_API_LOG_START_UTC" --until "$E2E_API_LOG_END_UTC" \
+    "$E2E_API_CONTAINER_ID" 2>&1 |
+    jq -Rr --arg key "$1" \
+      'fromjson? | select((.queryKeys // []) | index($key)) | 1' |
+    wc -l | tr -d ' '
+}
+count_route() {
+  sudo docker logs --since "$E2E_API_LOG_START_UTC" --until "$E2E_API_LOG_END_UTC" \
+    "$E2E_API_CONTAINER_ID" 2>&1 |
+    jq -Rr --arg route "$1" 'fromjson? | select(.route == $route) | 1' |
+    wc -l | tr -d ' '
+}
+
+START_MARKERS="$(count_query_key douyin_e2e_log_start)" || exit 1
+END_MARKERS="$(count_query_key douyin_e2e_log_end)" || exit 1
+SUBMIT_AUDIT_CALLS="$(count_route \
+  '/platform/douyin-miniapps/:id/releases/:releaseId/submit-audit')" || exit 1
+SYNC_STATUS_CALLS="$(count_route \
+  '/platform/douyin-miniapps/:id/releases/:releaseId/sync-status')" || exit 1
+PUBLISH_CALLS="$(count_route \
+  '/platform/douyin-miniapps/:id/releases/:releaseId/publish')" || exit 1
+test "$START_MARKERS" -ge 1
+test "$END_MARKERS" -ge 1
+test "$SUBMIT_AUDIT_CALLS" -eq 0
+test "$SYNC_STATUS_CALLS" -eq 0
+test "$PUBLISH_CALLS" -eq 0
+printf 'start_markers=%s\nend_markers=%s\nsubmit_audit=%s\nsync_status=%s\npublish=%s\n' \
+  "$START_MARKERS" "$END_MARKERS" "$SUBMIT_AUDIT_CALLS" \
+  "$SYNC_STATUS_CALLS" "$PUBLISH_CALLS"
+```
+
+Expected: same container ID, both boundary markers present and all three prohibited route counts
+equal zero. Save only UTC window、container ID and five counts. If the container changed, the
+start marker is absent, log retrieval fails or any count is nonzero, overall status cannot be
+`PASS`; release timestamps cannot override this result.
+
+- [ ] **Step 3：重新运行软件与仓库门禁**
 
 Run:
 
@@ -1333,22 +1392,25 @@ git status --short
 
 Expected: checks pass; only the evidence file may be modified.
 
-- [ ] **Step 3：完成证据文件**
+- [ ] **Step 4：完成证据文件**
 
 Replace every executed `NOT_RUN` / `NOT_RECORDED` with actual safe data and `PASS`、`FAIL`、`BLOCKED` or `WAITING_FOR_DEVICE_ACCEPTANCE`. Include:
 
 - full Git SHA and Actions run ID;
 - dev project ref;
+- API log UTC window、same-container ID、start/end marker counts and zero counts for all three
+  prohibited routes;
 - AppID suffixes only;
 - tenant/install/release UUIDs;
 - masked phone only;
 - boolean credential-envelope evidence;
 - test counts and screenshot references;
+- A01–A15 individual action timestamps、executors、authorization references and recovery results;
 - objects retained、disabled or requiring later cleanup.
 
 Do not include any forbidden value listed in the file.
 
-- [ ] **Step 4：安全扫描证据并提交**
+- [ ] **Step 5：安全扫描证据并提交**
 
 Run:
 
@@ -1364,7 +1426,7 @@ git commit -m "docs(douyin): 记录开发环境全链路证据"
 
 Expected: secret/phone scan has no matches and commit succeeds.
 
-- [ ] **Step 5：清理进程内敏感变量并判定最终状态**
+- [ ] **Step 6：清理进程内敏感变量并判定最终状态**
 
 Run:
 
@@ -1373,6 +1435,9 @@ unset ADMIN_TOKEN RUNTIME_CONFIG TEMPLATE_ID TEMPLATE_VERSION
 unset GOOES_E2E_PLATFORM_ADMIN_PHONE
 unset MAIN_TENANT_ID ISOLATION_TENANT_ID
 unset TEMPLATE_INSTALLATION_ID MERCHANT_INSTALLATION_ID MERCHANT_APP_ID RELEASE_ID
+unset E2E_API_LOG_START_UTC E2E_API_LOG_END_UTC E2E_API_CONTAINER_ID
+unset E2E_API_CONTAINER_REVISION CURRENT_CONTAINER_ID
+unset START_MARKERS END_MARKERS SUBMIT_AUDIT_CALLS SYNC_STATUS_CALLS PUBLISH_CALLS
 ```
 
 Mark the goal complete only if every design acceptance requirement has direct evidence, including Android and iOS. If a real device、test phone、console authorization or external permission remains unavailable, leave the goal active with the exact `BLOCKED` or `WAITING_FOR_DEVICE_ACCEPTANCE` item; do not redefine success as “code ready”.

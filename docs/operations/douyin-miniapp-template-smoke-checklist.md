@@ -36,7 +36,7 @@ submit-audit、sync-status 和 publish 均为 `NOT_IN_SCOPE`，本轮不得执�
 - [ ] **[阻断]** 开放平台两个 HTTPS 回调校验成功，响应为纯文本 `success`。
 - [ ] **[阻断]** `development`、`preview` 只解析到 `api-dev.goodcms.cn`；`production` 只解析到 `api.goodcms.cn`；未知环境失败关闭。
 - [ ] **[阻断]** 首个合法 Ticket 能按“申领事件 → 保存密文信封”完成并幂等重放；回调时间戳超窗、签名错误、AES 解密失败、Component AppID 错误、Ticket 为空或超长、组件为 disabled 时均无新增数据库写入。
-- [ ] **[阻断]** 模板开发安装与测试商户安装分别绑定两个获批的专用开发测试租户。
+- [ ] **[阻断]** 模板开发安装绑定获批的隔离测试租户，测试商户安装绑定获批的主测试租户，两个 UUID 不同。
 - [ ] **[阻断]** 本轮商户发布记录最高只到 `testing`，没有 submit-audit、sync-status 或 publish 调用。
 - [ ] **[阻断]** 当前测试只针对明确授权的测试商户，不存在批量操作。
 
