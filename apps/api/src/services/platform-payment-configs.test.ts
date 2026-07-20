@@ -305,7 +305,6 @@ describe("PlatformPaymentConfigService", () => {
     expect(result.profiles[0]).toMatchObject({
       profile_code: "platform_direct_recharge",
       label: "平台直连商户",
-      secret_setting_key: "PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
       configured: true,
       config: {
         merchant_mode: "direct_merchant",
@@ -318,7 +317,6 @@ describe("PlatformPaymentConfigService", () => {
     expect(serviceProviderProfile).toMatchObject({
       profile_code: "tenant_service_provider",
       label: "服务商商户",
-      secret_setting_key: "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
       configured: true,
       config: {
         merchant_mode: "service_provider_sub_merchant",
@@ -327,6 +325,8 @@ describe("PlatformPaymentConfigService", () => {
         enabled_channels: ["project_payment", "applyment"],
       },
     });
+    expect(result.profiles[0]).not.toHaveProperty("secret_setting_key");
+    expect(serviceProviderProfile).not.toHaveProperty("secret_setting_key");
     expect(serviceProviderProfile?.config).not.toHaveProperty("serial_no");
   });
 

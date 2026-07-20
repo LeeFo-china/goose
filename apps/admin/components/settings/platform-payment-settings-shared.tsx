@@ -29,7 +29,6 @@ export type ProfileDefinition = {
   description: string;
   merchant_mode: PlatformPaymentMerchantMode;
   enabled_channels: string[];
-  secret_setting_key: string;
 };
 
 export const profileDefinitions: ProfileDefinition[] = [
@@ -39,7 +38,6 @@ export const profileDefinitions: ProfileDefinition[] = [
     description: "用于平台积分充值等平台自有收款。",
     merchant_mode: "direct_merchant",
     enabled_channels: ["tenant_recharge"],
-    secret_setting_key: "PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
   },
   {
     profile_code: "tenant_service_provider",
@@ -47,7 +45,6 @@ export const profileDefinitions: ProfileDefinition[] = [
     description: "用于租户特约商户进件和后续租户项目收款。",
     merchant_mode: "service_provider_sub_merchant",
     enabled_channels: ["project_payment", "applyment"],
-    secret_setting_key: "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
   },
 ];
 
@@ -206,7 +203,6 @@ export function emptyProfile(
     profile_code: definition.profile_code,
     label: definition.label,
     description: definition.description,
-    secret_setting_key: definition.secret_setting_key,
     configured: false,
     config: null,
   };

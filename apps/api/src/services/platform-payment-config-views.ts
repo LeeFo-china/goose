@@ -26,7 +26,6 @@ export type PlatformWechatPayProfileView = {
   profile_code: PlatformPaymentProfileCode;
   label: string;
   description: string;
-  secret_setting_key: string;
   configured: boolean;
   config: PlatformWechatPayConfigView | null;
 };
@@ -62,7 +61,6 @@ export function toPlatformWechatPayProfileView(
     profile_code: definition.profile_code,
     label: definition.label,
     description: definition.description,
-    secret_setting_key: definition.secret_setting_key,
     configured: Boolean(config),
     config: config ? toPlatformWechatPayConfigView(config) : null,
   };

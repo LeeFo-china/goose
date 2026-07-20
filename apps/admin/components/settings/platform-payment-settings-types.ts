@@ -41,7 +41,6 @@ export type PlatformWechatPayProfileView = {
   profile_code: PlatformPaymentProfileCode;
   label: string;
   description: string;
-  secret_setting_key: string;
   configured: boolean;
   config: PlatformWechatPayConfigView | null;
 };
