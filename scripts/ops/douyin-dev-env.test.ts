@@ -3,8 +3,11 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -64,8 +67,32 @@ const EXPECTED_METADATA_KEYS: string[] = [
 ];
 
 const SCRIPT_PATH = fileURLToPath(new URL("./douyin-dev-env.ts", import.meta.url));
+const REMOTE_SCRIPT = fileURLToPath(
+  new URL("./apply-douyin-dev-env-remote.sh", import.meta.url),
+);
 const API_DIRECTORY = fileURLToPath(new URL("../../apps/api/", import.meta.url));
 const textEncoder = new TextEncoder();
+
+const REMOTE_SECRET_SENTINELS = [
+  COMPONENT_SECRET,
+  TEMPLATE_SECRET,
+  MESSAGE_TOKEN,
+  MESSAGE_AES_KEY,
+  CREDENTIAL_KEY,
+  CREDENTIAL_KEYS_JSON,
+  SUBJECT_HASH_KEY,
+  COMPONENT_APP_ID,
+  TEMPLATE_APP_ID,
+] as const;
+
+const REMOTE_ORIGINAL = "SUPABASE_URL=https://dev.invalid\nJWT_SECRET=existing\n";
+const REMOTE_CONTAINER_INSPECT_FORMAT =
+  "{{.Id}}|{{.State.StartedAt}}|{{.Config.Image}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}";
+const REMOTE_TEMPORARY_ROOTS = new Set<string>();
+
+const LOCAL_USER = readIdValue("-un");
+const LOCAL_GROUP = readIdValue("-gn");
+const EXPECTED_OWNER = `${LOCAL_USER}:${LOCAL_GROUP}`;
 
 type ExpectedValidationCode =
   | "DOUYIN_DEV_ENV_PAYLOAD_INVALID"
@@ -83,6 +110,175 @@ interface InvalidValueCase {
   readonly key: DouyinEnvKey;
   readonly value: string;
   readonly code: ExpectedValidationCode;
+}
+
+interface RemoteHarnessPaths {
+  readonly root: string;
+  readonly targetDir: string;
+  readonly targetFile: string;
+  readonly payloadFile: string;
+  readonly testBin: string;
+  readonly original: Buffer;
+  readonly payload: Buffer;
+}
+
+interface RemoteHarnessOptions {
+  readonly original?: string;
+  readonly payload?: string;
+  readonly expectedPayloadSha?: string;
+  readonly functionOverrides?: string;
+  readonly prepare?: (paths: RemoteHarnessPaths) => void;
+}
+
+interface RemoteHarnessResult extends RemoteHarnessPaths {
+  readonly result: CliResult;
+}
+
+function readIdValue(flag: "-un" | "-gn"): string {
+  const result = Bun.spawnSync({
+    cmd: ["id", flag],
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  if (result.exitCode !== 0) {
+    return "local-id-command-failed";
+  }
+
+  return result.stdout.toString().trim();
+}
+
+function sha256Bytes(value: Uint8Array): string {
+  return Bun.CryptoHasher.hash("sha256", value, "hex");
+}
+
+function runRemoteTransaction(
+  options: RemoteHarnessOptions = {},
+): RemoteHarnessResult {
+  const root = mkdtempSync(join(tmpdir(), "gooes-douyin-remote-env-"));
+  REMOTE_TEMPORARY_ROOTS.add(root);
+
+  const targetDir = join(root, "opt", "gooes-dev", "docker");
+  const targetFile = join(targetDir, ".env.dev.api");
+  const payloadFile = join(targetDir, ".douyin-env-upload.ABC123");
+  const testBin = join(root, "test-bin");
+  const original = Buffer.from(options.original ?? REMOTE_ORIGINAL, "utf8");
+  const payload = Buffer.from(options.payload ?? buildPayload(), "utf8");
+
+  mkdirSync(targetDir, { recursive: true, mode: 0o700 });
+  mkdirSync(testBin, { mode: 0o700 });
+  writeFileSync(targetFile, original, { mode: 0o600 });
+  writeFileSync(payloadFile, payload, { mode: 0o600 });
+  chmodSync(targetFile, 0o600);
+  chmodSync(payloadFile, 0o600);
+
+  const fakeFlock = join(testBin, "flock");
+  const fakeDocker = join(testBin, "docker");
+  writeFileSync(fakeFlock, "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
+  writeFileSync(
+    fakeDocker,
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `if [[ "$#" -ne 4 || "$1" != "inspect" || "$2" != "--format" || "$3" != '${REMOTE_CONTAINER_INSPECT_FORMAT}' || "$4" != "gooes-api-dev" ]]; then`,
+      "  exit 64",
+      "fi",
+      "printf '%s\\n' 'fixed-id|fixed-start|fixed-image|healthy'",
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  chmodSync(fakeFlock, 0o700);
+  chmodSync(fakeDocker, 0o700);
+
+  const paths: RemoteHarnessPaths = {
+    root,
+    targetDir,
+    targetFile,
+    payloadFile,
+    testBin,
+    original,
+    payload,
+  };
+  options.prepare?.(paths);
+
+  const expectedPayloadSha = options.expectedPayloadSha ?? sha256Bytes(payload);
+  const bashProgram = [
+    "set -euo pipefail",
+    'source "$REMOTE_SCRIPT"',
+    options.functionOverrides ?? ":",
+    'apply_douyin_env_transaction "$TARGET_DIR" "$TARGET_FILE" "$PAYLOAD_FILE" "$EXPECTED_OWNER" "gooes-api-dev" "$EXPECTED_PAYLOAD_SHA"',
+  ].join("\n");
+  const spawned = Bun.spawnSync({
+    cmd: ["/bin/bash", "-c", bashProgram],
+    cwd: root,
+    env: {
+      ...process.env,
+      DOUYIN_DEV_ENV_SOURCE_ONLY: "1",
+      EXPECTED_OWNER,
+      EXPECTED_PAYLOAD_SHA: expectedPayloadSha,
+      PATH: `${testBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      PAYLOAD_FILE: payloadFile,
+      REMOTE_SCRIPT,
+      TARGET_DIR: targetDir,
+      TARGET_FILE: targetFile,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  return {
+    ...paths,
+    result: {
+      exitCode: spawned.exitCode,
+      stdout: spawned.stdout.toString(),
+      stderr: spawned.stderr.toString(),
+    },
+  };
+}
+
+function cleanupRemoteTemporaryRoots(): void {
+  for (const root of REMOTE_TEMPORARY_ROOTS) {
+    rmSync(root, { recursive: true, force: true });
+    expect(existsSync(root)).toBe(false);
+  }
+  REMOTE_TEMPORARY_ROOTS.clear();
+}
+
+function expectFileBytes(path: string, expected: Uint8Array): void {
+  expect(readFileSync(path).equals(Buffer.from(expected))).toBe(true);
+}
+
+function expectMode600(path: string): void {
+  expect(statSync(path).mode & 0o7777).toBe(0o600);
+}
+
+function findOnlyBackup(targetDir: string): string {
+  const backupNames = readdirSync(targetDir).filter((name) =>
+    /^\.env\.dev\.api\.backup-[0-9]{14}$/.test(name)
+  );
+  expect(backupNames).toHaveLength(1);
+  return join(targetDir, backupNames[0] ?? "missing-backup");
+}
+
+function expectNoRemoteSecrets(
+  result: CliResult,
+  extraSentinels: readonly string[] = [],
+): void {
+  const combinedOutput = `${result.stdout}${result.stderr}`;
+  for (const sentinel of [...REMOTE_SECRET_SENTINELS, ...extraSentinels]) {
+    expect(combinedOutput.includes(sentinel)).toBe(false);
+  }
+}
+
+function expectRedactedFailure(
+  result: CliResult,
+  expectedCode: string,
+  extraSentinels: readonly string[] = [],
+): void {
+  expectNoRemoteSecrets(result, extraSentinels);
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr.split("\n")).toContain(expectedCode);
 }
 
 function buildPayload(
@@ -596,4 +792,344 @@ describe("douyin development environment payload", () => {
       }
     },
   );
+});
+
+describe("remote douyin env transaction success", () => {
+  afterEach(cleanupRemoteTemporaryRoots);
+
+  test("appends the exact payload, creates one validated backup, and cleans upload", () => {
+    const harness = runRemoteTransaction();
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+
+    expectNoRemoteSecrets(harness.result);
+    expect(harness.result.exitCode).toBe(0);
+    expect(harness.result.stderr).toBe("");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expect(existsSync(harness.payloadFile)).toBe(false);
+    expectMode600(harness.targetFile);
+
+    const backupPath = findOnlyBackup(harness.targetDir);
+    expectFileBytes(backupPath, harness.original);
+    expectMode600(backupPath);
+    const metadataLines = harness.result.stdout.split("\n");
+    expect(harness.result.stdout).toContain("logical_server=gooes-dev-vm-0-11\n");
+    expect(metadataLines).toContain("target=/opt/gooes-dev/docker/.env.dev.api");
+    expect(metadataLines).toContain(`backup=${backupPath}`);
+    expect(harness.result.stdout.includes("fixed_target=")).toBe(false);
+    expect(harness.result.stdout.includes("backup_path=")).toBe(false);
+    expect(harness.result.stdout).toContain("nine_keys_valid=true\n");
+    expect(harness.result.stdout).toContain("remote_cleanup=true\n");
+  });
+
+  test("replaces one old copy of every target key on rerun", () => {
+    const oldEntries = DOUYIN_ENV_KEYS.map((key, index) => {
+      const secret = `old-fake-secret-${index}`;
+      return { record: `${key}=${secret}`, secret };
+    });
+    const originalText = [
+      "BASE=value",
+      ...oldEntries.map(({ record }) => record),
+      "",
+    ].join("\n");
+    const harness = runRemoteTransaction({ original: originalText });
+    const expectedTarget = Buffer.from(`BASE=value\n${buildPayload()}`, "utf8");
+
+    expectNoRemoteSecrets(
+      harness.result,
+      oldEntries.map(({ secret }) => secret),
+    );
+    expect(harness.result.exitCode).toBe(0);
+    expectFileBytes(harness.targetFile, expectedTarget);
+    const updatedTarget = readFileSync(harness.targetFile, "utf8");
+    const updatedLines = updatedTarget.split("\n");
+    for (const key of DOUYIN_ENV_KEYS) {
+      expect(
+        updatedLines.filter((line) => line.startsWith(`${key}=`)),
+      ).toHaveLength(1);
+    }
+    for (const { secret } of oldEntries) {
+      expect(updatedTarget.includes(secret)).toBe(false);
+    }
+
+    const backupPath = findOnlyBackup(harness.targetDir);
+    expectFileBytes(backupPath, harness.original);
+  });
+
+  test("adds exactly one LF separator when the original has no final LF", () => {
+    const harness = runRemoteTransaction({ original: "BASE=value" });
+    const expectedTarget = Buffer.from(`BASE=value\n${buildPayload()}`, "utf8");
+
+    expectNoRemoteSecrets(harness.result);
+    expect(harness.result.exitCode).toBe(0);
+    expectFileBytes(harness.targetFile, expectedTarget);
+    const backupPath = findOnlyBackup(harness.targetDir);
+    expectFileBytes(backupPath, harness.original);
+  });
+
+  test("preserves complex non-target bytes while appending the payload", () => {
+    const originalText = [
+      "# keep this comment",
+      "",
+      "SPACED_KEY = value with spaces  ",
+      "装修平台=启用",
+      "EQUALS=a=b=c",
+      "",
+    ].join("\n");
+    const harness = runRemoteTransaction({ original: originalText });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+
+    expectNoRemoteSecrets(harness.result);
+    expect(harness.result.exitCode).toBe(0);
+    expectFileBytes(harness.targetFile, expectedTarget);
+    const backupPath = findOnlyBackup(harness.targetDir);
+    expectFileBytes(backupPath, harness.original);
+  });
+
+  test("rejects a colliding fixed backup timestamp without deleting the collision", () => {
+    const fixedTimestamp = "20260720112233";
+    const collisionBytes = Buffer.from("pre-existing-collision\n", "utf8");
+    let collisionPath = "";
+    const harness = runRemoteTransaction({
+      functionOverrides: `backup_timestamp() { printf '%s\\n' '${fixedTimestamp}'; }`,
+      prepare: (paths) => {
+        collisionPath = `${paths.targetFile}.backup-${fixedTimestamp}`;
+        writeFileSync(collisionPath, collisionBytes, { mode: 0o600 });
+        chmodSync(collisionPath, 0o600);
+      },
+    });
+
+    expectRedactedFailure(harness.result, "REMOTE_BACKUP_FAILED");
+    expectFileBytes(harness.targetFile, harness.original);
+    expectFileBytes(collisionPath, collisionBytes);
+    expect(existsSync(collisionPath)).toBe(true);
+  });
+});
+
+describe("remote douyin env transaction baseline rejection", () => {
+  afterEach(cleanupRemoteTemporaryRoots);
+
+  test("does not let source-only mode bypass main during direct execution", () => {
+    const spawned = Bun.spawnSync({
+      cmd: ["/bin/bash", REMOTE_SCRIPT],
+      env: {
+        ...process.env,
+        DOUYIN_DEV_ENV_SOURCE_ONLY: "1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const result: CliResult = {
+      exitCode: spawned.exitCode,
+      stdout: spawned.stdout.toString(),
+      stderr: spawned.stderr.toString(),
+    };
+
+    expectRedactedFailure(result, "REMOTE_USAGE_INVALID");
+  });
+
+  test("marks the target as possibly replaced before the atomic move", () => {
+    const source = readFileSync(REMOTE_SCRIPT, "utf8");
+    const riskMarker = '  TARGET_REPLACED=true\n';
+    const moveMarker = '  if ! mv "$CANDIDATE_PATH" "$target_file"';
+    const riskIndex = source.indexOf(riskMarker);
+    const moveIndex = source.indexOf(moveMarker);
+
+    expect(riskIndex).toBeGreaterThan(-1);
+    expect(moveIndex).toBeGreaterThan(-1);
+    expect(riskIndex).toBeLessThan(moveIndex);
+  });
+
+  test("reports replacement uncertainty when TERM arrives at the atomic move", () => {
+    const functionOverrides = [
+      "mv() {",
+      '  kill -TERM "$$"',
+      "}",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+    const targetWarnings = harness.result.stderr
+      .split("\n")
+      .filter((line) => line === "target_may_be_updated=true");
+
+    expectNoRemoteSecrets(harness.result);
+    expect(harness.result.exitCode).toBe(143);
+    expect(targetWarnings).toHaveLength(1);
+    expect(harness.result.stdout).toContain("remote_cleanup=true\n");
+    expectFileBytes(harness.targetFile, harness.original);
+  });
+
+  test("rejects a wrong expected payload digest without replacing target", () => {
+    const harness = runRemoteTransaction({
+      expectedPayloadSha: "0".repeat(64),
+    });
+
+    expectRedactedFailure(harness.result, "REMOTE_PAYLOAD_INVALID");
+    expectFileBytes(harness.targetFile, harness.original);
+  });
+
+  const malformedRemotePayloadCases: ReadonlyArray<{
+    readonly name: string;
+    readonly payload: string;
+  }> = [
+    {
+      name: "missing final LF",
+      payload: buildPayload().slice(0, -1),
+    },
+    {
+      name: "carriage return",
+      payload: buildPayload().replace("\n", "\r\n"),
+    },
+    {
+      name: "NUL byte",
+      payload: buildPayload().replace("=", "=\0"),
+    },
+    {
+      name: "wrong record count",
+      payload: `${payloadLines().slice(0, -1).join("\n")}\n`,
+    },
+    {
+      name: "wrong key order",
+      payload: (() => {
+        const lines = payloadLines();
+        const first = lines[0] ?? "";
+        lines[0] = lines[1] ?? "";
+        lines[1] = first;
+        return `${lines.join("\n")}\n`;
+      })(),
+    },
+    {
+      name: "empty value",
+      payload: buildPayload({ DOUYIN_COMPONENT_APP_SECRET: "" }),
+    },
+  ];
+
+  test.each(malformedRemotePayloadCases)(
+    "rejects malformed remote payload without replacing target: $name",
+    ({ payload }) => {
+      const harness = runRemoteTransaction({ payload });
+
+      expectRedactedFailure(harness.result, "REMOTE_PAYLOAD_INVALID");
+      expectFileBytes(harness.targetFile, harness.original);
+    },
+  );
+
+  test("rejects duplicate known keys in the existing target", () => {
+    const harness = runRemoteTransaction({
+      original: [
+        "BASE=value",
+        "DOUYIN_COMPONENT_APP_ID=old-one",
+        "DOUYIN_COMPONENT_APP_ID=old-two",
+        "",
+      ].join("\n"),
+    });
+
+    expectRedactedFailure(harness.result, "REMOTE_TARGET_STATE_INVALID");
+    expectFileBytes(harness.targetFile, harness.original);
+  });
+
+  test("rejects an unknown DOUYIN key in the existing target", () => {
+    const harness = runRemoteTransaction({
+      original: "BASE=value\nDOUYIN_UNAPPROVED_KEY=value\n",
+    });
+
+    expectRedactedFailure(harness.result, "REMOTE_TARGET_STATE_INVALID");
+    expectFileBytes(harness.targetFile, harness.original);
+  });
+
+  const insecureFileCases: ReadonlyArray<{
+    readonly name: string;
+    readonly functionOverrides?: string;
+    readonly prepare?: (paths: RemoteHarnessPaths) => void;
+  }> = [
+    {
+      name: "target symlink",
+      prepare: (paths) => {
+        const sourcePath = join(paths.root, "target-source.env");
+        writeFileSync(sourcePath, paths.original, { mode: 0o600 });
+        chmodSync(sourcePath, 0o600);
+        rmSync(paths.targetFile);
+        symlinkSync(sourcePath, paths.targetFile);
+      },
+    },
+    {
+      name: "payload symlink",
+      prepare: (paths) => {
+        const sourcePath = join(paths.root, "payload-source.env");
+        writeFileSync(sourcePath, paths.payload, { mode: 0o600 });
+        chmodSync(sourcePath, 0o600);
+        rmSync(paths.payloadFile);
+        symlinkSync(sourcePath, paths.payloadFile);
+      },
+    },
+    {
+      name: "target mode 0644",
+      prepare: (paths) => chmodSync(paths.targetFile, 0o644),
+    },
+    {
+      name: "payload mode 0644",
+      prepare: (paths) => chmodSync(paths.payloadFile, 0o644),
+    },
+    {
+      name: "injected wrong target owner",
+      functionOverrides: [
+        "file_owner() {",
+        '  local path="$1"',
+        '  if [[ "$path" == "$TARGET_FILE" ]]; then',
+        "    printf '%s\\n' 'wrong-owner:wrong-group'",
+        "  else",
+        "    printf '%s\\n' \"$EXPECTED_OWNER\"",
+        "  fi",
+        "}",
+      ].join("\n"),
+    },
+    {
+      name: "injected wrong upload owner",
+      functionOverrides: [
+        "file_owner() {",
+        '  local path="$1"',
+        '  if [[ "$path" == "$PAYLOAD_FILE" ]]; then',
+        "    printf '%s\\n' 'wrong-owner:wrong-group'",
+        "  else",
+        "    printf '%s\\n' \"$EXPECTED_OWNER\"",
+        "  fi",
+        "}",
+      ].join("\n"),
+    },
+  ];
+
+  test.each(insecureFileCases)(
+    "fails safely without replacing target for $name",
+    ({ functionOverrides, prepare }) => {
+      const harness = runRemoteTransaction({ functionOverrides, prepare });
+      expectNoRemoteSecrets(harness.result);
+      const stableCodes = harness.result.stderr
+        .split("\n")
+        .filter((line) => /^REMOTE_[A-Z_]+$/.test(line));
+
+      expect(harness.result.exitCode).not.toBe(0);
+      expect(stableCodes.length).toBeGreaterThan(0);
+      expectFileBytes(harness.targetFile, harness.original);
+    },
+  );
+
+  test("surfaces upload cleanup failure after an otherwise successful replacement", () => {
+    const functionOverrides = [
+      "remove_temp_path() {",
+      '  local path="$1"',
+      '  if [[ "$path" == "$PAYLOAD_FILE" ]]; then',
+      "    return 1",
+      "  fi",
+      '  if [[ -e "$path" || -L "$path" ]]; then',
+      '    rm -f "$path"',
+      "  fi",
+      "}",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+
+    expectRedactedFailure(harness.result, "CLEANUP_FAILED");
+    expect(harness.result.stderr).toContain("target_may_be_updated=true\n");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expect(existsSync(harness.payloadFile)).toBe(true);
+    expect(statSync(harness.payloadFile).isFile()).toBe(true);
+  });
 });
