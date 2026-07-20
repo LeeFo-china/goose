@@ -78,7 +78,7 @@ CREATE TABLE public.douyin_miniapp_releases (
     AND (ext_json ->> 'extAppid') = btrim(ext_json ->> 'extAppid')
     AND jsonb_typeof(ext_json -> 'ext') = 'object'
     AND ext_json -> 'ext' ? 'deployment_key'
-    AND ext_json -> 'ext' - 'deployment_key' = '{}'::jsonb
+    AND (ext_json -> 'ext') - 'deployment_key'::text = '{}'::jsonb
     AND jsonb_typeof(ext_json -> 'ext' -> 'deployment_key') = 'string'
     AND length(ext_json -> 'ext' ->> 'deployment_key') BETWEEN 1 AND 128
     AND (ext_json -> 'ext' ->> 'deployment_key')
@@ -308,7 +308,7 @@ BEGIN
     OR p_ext_json ->> 'extAppid' <> btrim(p_ext_json ->> 'extAppid')
     OR jsonb_typeof(p_ext_json -> 'ext') <> 'object'
     OR NOT (p_ext_json -> 'ext' ? 'deployment_key')
-    OR p_ext_json -> 'ext' - 'deployment_key' <> '{}'::jsonb
+    OR (p_ext_json -> 'ext') - 'deployment_key'::text <> '{}'::jsonb
     OR jsonb_typeof(p_ext_json -> 'ext' -> 'deployment_key') <> 'string'
     OR length(p_ext_json -> 'ext' ->> 'deployment_key') NOT BETWEEN 1 AND 128
     OR p_ext_json -> 'ext' ->> 'deployment_key'

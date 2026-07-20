@@ -63,7 +63,13 @@ describe("douyin miniapp release migration", () => {
     expect(source).toContain("ext_json ?& ARRAY['extEnable', 'extAppid', 'ext']::text[]");
     expect(source).toContain("ext_json -> 'extEnable' = 'true'::jsonb");
     expect(source).toContain("jsonb_typeof(ext_json -> 'extAppid') = 'string'");
-    expect(source).toContain("ext_json -> 'ext' - 'deployment_key' = '{}'::jsonb");
+    expect(source).toContain(
+      "(ext_json -> 'ext') - 'deployment_key'::text = '{}'::jsonb",
+    );
+    expect(source).toContain(
+      "(p_ext_json -> 'ext') - 'deployment_key'::text <> '{}'::jsonb",
+    );
+    expect(source).not.toMatch(/\b(?:p_)?ext_json -> 'ext' - 'deployment_key'/);
     expect(source).toContain("ext_json -> 'ext' ? 'deployment_key'");
     expect(source).not.toContain("ext_json::text !~* '(token|secret|phone|openid)'");
     expect(source).toContain(
