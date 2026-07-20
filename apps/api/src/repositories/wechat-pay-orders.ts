@@ -1,10 +1,17 @@
 import { Errors } from "@/errors/error-factory";
+import { matchesPostgresError } from "@/errors/postgres-error-details";
 import type { Inserts, Tables } from "@/types/db";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { WechatPayOrderListQuery } from "@/schema/wechat-pay-orders";
 
 export type WechatPayOrderRecord = Tables<"wechat_payment_orders">;
 export type WechatPayOrderCreateInput = Inserts<"wechat_payment_orders">;
+export type ServiceProviderWechatPayOrderCreateInput =
+  WechatPayOrderCreateInput & {
+    platform_payment_config_id: string;
+    expected_platform_guard_version: number;
+    expected_tenant_config_updated_at: string;
+  };
 export type WechatPayNotificationRecord = Tables<"wechat_payment_notifications">;
 export type WechatPayNotificationCreateInput =
   Inserts<"wechat_payment_notifications">;
@@ -118,6 +125,21 @@ const RECEIVABLE_PLAN_SELECT = [
   "due_date",
 ].join(", ");
 
+type UntypedRpcClient = {
+  rpc: (
+    functionName: "wechat_pay_create_pending_service_provider_order",
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
+};
+
+const GUARDED_CREATE_ERRORS = {
+  WECHAT_PAY_PAYMENT_CONFIG_VERSION_CHANGED:
+    "微信支付配置已更新，请重新发起支付",
+  WECHAT_PAY_PLATFORM_PROFILE_NOT_READY: "平台服务商支付配置尚未就绪",
+  WECHAT_PAY_PLATFORM_PROFILE_MISMATCH:
+    "租户支付配置与平台服务商配置不一致",
+} as const;
+
 class WechatPayOrderRepository {
   async findByOutTradeNo(
     outTradeNo: string,
@@ -194,6 +216,44 @@ class WechatPayOrderRepository {
 
     if (error) {
       throw Errors.dbError("创建微信支付订单失败", error);
+    }
+
+    return data as WechatPayOrderRecord;
+  }
+
+  async createServiceProviderOrder(
+    input: ServiceProviderWechatPayOrderCreateInput,
+  ): Promise<WechatPayOrderRecord> {
+    const client = SupabaseDB.getAdminClient() as unknown as UntypedRpcClient;
+    const { data, error } = await client.rpc(
+      "wechat_pay_create_pending_service_provider_order",
+      {
+        p_tenant_id: input.tenant_id,
+        p_payment_config_id: input.payment_config_id,
+        p_platform_payment_config_id: input.platform_payment_config_id,
+        p_expected_platform_guard_version:
+          input.expected_platform_guard_version,
+        p_expected_tenant_config_updated_at:
+          input.expected_tenant_config_updated_at,
+        p_project_id: input.project_id,
+        p_workflow_instance_id: input.workflow_instance_id,
+        p_workflow_task_id: input.workflow_task_id,
+        p_receivable_plan_id: input.receivable_plan_id,
+        p_out_trade_no: input.out_trade_no,
+        p_amount: input.amount,
+        p_payer_openid: input.payer_openid,
+        p_created_by_employee_id: input.created_by_employee_id,
+        p_metadata: input.metadata,
+      },
+    );
+
+    if (error) {
+      for (const [code, message] of Object.entries(GUARDED_CREATE_ERRORS)) {
+        if (matchesPostgresError(error, "23514", code)) {
+          throw Errors.business(409, message, code);
+        }
+      }
+      throw Errors.dbError("创建服务商微信支付订单失败", error);
     }
 
     return data as WechatPayOrderRecord;

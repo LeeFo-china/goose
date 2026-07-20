@@ -34,7 +34,10 @@ import {
   requireWechatPayPayerOpenid,
 } from "@/services/wechat-pay-order-retry";
 import {
-  loadWechatPayOrderSecretBundle,
+  createPendingWechatPayOrder,
+} from "@/services/wechat-pay-order-creation";
+import {
+  loadWechatPayOrderPaymentContext,
   type PlatformPaymentConfigLookupPort,
 } from "@/services/wechat-pay-order-platform-provenance";
 
@@ -48,6 +51,8 @@ type WechatPayOrderRepositoryPort = {
   findPendingByWorkflowTask: typeof wechatPayOrderRepository.findPendingByWorkflowTask;
   findReceivablePlan: typeof wechatPayOrderRepository.findReceivablePlan;
   createOrder: typeof wechatPayOrderRepository.createOrder;
+  createServiceProviderOrder:
+    typeof wechatPayOrderRepository.createServiceProviderOrder;
   markPrepayCreated: typeof wechatPayOrderRepository.markPrepayCreated;
   listOrders: typeof wechatPayOrderRepository.listOrders;
 };
@@ -158,7 +163,7 @@ export class WechatPayOrderService {
         order: existing,
         request: normalizedInput,
       });
-      const secretBundle = await this.loadOrderSecretBundle(config);
+      const { secretBundle } = await this.loadOrderPaymentContext(config);
       const resumed = await this.preparePaymentRequest({
         config,
         order: existing,
@@ -182,7 +187,7 @@ export class WechatPayOrderService {
 
     const config = await this.configRepository.findWechatPayConfig(tenantId);
     assertWechatPayConfigReadyForOrder(config);
-    const secretBundle = await this.loadOrderSecretBundle(config);
+    const paymentContext = await this.loadOrderPaymentContext(config);
     const orderInput = this.buildCreateInput({
       authContext,
       config,
@@ -191,13 +196,18 @@ export class WechatPayOrderService {
       tenantId,
       task,
     });
-    const order = await this.orderRepository.createOrder(orderInput);
+    const order = await createPendingWechatPayOrder({
+      config,
+      orderInput,
+      paymentContext,
+      orderRepository: this.orderRepository,
+    });
     const prepared = await this.preparePaymentRequest({
       config,
       order,
       taskTitle: task.title,
       tenantId,
-      secretBundle,
+      secretBundle: paymentContext.secretBundle,
     });
 
     return {
@@ -390,8 +400,8 @@ export class WechatPayOrderService {
     return { order, paymentRequest: prepay.paymentRequest };
   }
 
-  private loadOrderSecretBundle(config: WechatPayConfigRecord) {
-    return loadWechatPayOrderSecretBundle({
+  private loadOrderPaymentContext(config: WechatPayConfigRecord) {
+    return loadWechatPayOrderPaymentContext({
       tenantConfig: config,
       platformConfigRepository: this.platformPaymentConfigRepository,
       secretBundleService: this.secretBundleService,

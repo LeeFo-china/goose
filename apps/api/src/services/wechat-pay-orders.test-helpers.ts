@@ -122,6 +122,7 @@ export const serviceProviderPlatformConfig = {
   last_validation_error_message: null,
   last_validation_request_id: null,
   risk_switches: {},
+  recharge_guard_version: 7,
   created_by_employee_id: null,
   updated_by_employee_id: null,
   created_at: "2026-07-01T08:00:00.000Z",

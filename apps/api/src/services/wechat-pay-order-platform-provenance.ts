@@ -18,6 +18,11 @@ type SecretBundleLoaderPort = {
   load: (encryptedConfigRef: string | null) => Promise<WechatPaySecretBundle>;
 };
 
+export type WechatPayOrderPaymentContext = {
+  secretBundle: WechatPaySecretBundle;
+  platformConfig: PlatformPaymentConfigRecord | null;
+};
+
 const PROVENANCE_FIELDS = [
   "merchant_mode",
   "merchant_id",
@@ -36,10 +41,22 @@ export async function loadWechatPayOrderSecretBundle(input: {
   platformConfigRepository: PlatformPaymentConfigLookupPort;
   secretBundleService: SecretBundleLoaderPort;
 }): Promise<WechatPaySecretBundle> {
+  const context = await loadWechatPayOrderPaymentContext(input);
+  return context.secretBundle;
+}
+
+export async function loadWechatPayOrderPaymentContext(input: {
+  tenantConfig: WechatPayConfigRecord;
+  platformConfigRepository: PlatformPaymentConfigLookupPort;
+  secretBundleService: SecretBundleLoaderPort;
+}): Promise<WechatPayOrderPaymentContext> {
   if (input.tenantConfig.merchant_mode !== "service_provider_sub_merchant") {
-    return input.secretBundleService.load(
-      input.tenantConfig.encrypted_config_ref,
-    );
+    return {
+      secretBundle: await input.secretBundleService.load(
+        input.tenantConfig.encrypted_config_ref,
+      ),
+      platformConfig: null,
+    };
   }
 
   const platformConfigId = input.tenantConfig.platform_payment_config_id;
@@ -101,10 +118,13 @@ export async function loadWechatPayOrderSecretBundle(input: {
   const secretBundle = await input.secretBundleService.load(
     platformConfig.encrypted_config_ref,
   );
-  return requireMatchingPlatformPaymentSecretBundle(
+  return {
+    secretBundle: requireMatchingPlatformPaymentSecretBundle(
+      platformConfig,
+      secretBundle,
+    ),
     platformConfig,
-    secretBundle,
-  );
+  };
 }
 
 function hasText(value: unknown): value is string {

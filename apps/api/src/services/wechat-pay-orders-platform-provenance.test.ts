@@ -49,6 +49,11 @@ const createOrder = mock(async (input: Record<string, unknown>) => ({
   ...input,
   id: "88888888-8888-4888-8888-888888888888",
 }));
+const createServiceProviderOrder = mock(async (input: Record<string, unknown>) => ({
+  ...pendingOrder,
+  ...input,
+  id: "88888888-8888-4888-8888-888888888888",
+}));
 const markPrepayCreated = mock(async (input: { orderId: string; prepayId: string }) => ({
   ...pendingOrder,
   id: input.orderId,
@@ -94,6 +99,7 @@ async function createService() {
       findPendingByWorkflowTask,
       findReceivablePlan: mock(async () => receivablePlan),
       createOrder,
+      createServiceProviderOrder,
       markPrepayCreated,
       listOrders: mock(async () => ({
         list: [],
@@ -144,6 +150,7 @@ describe("WechatPayOrderService platform profile provenance", () => {
   beforeEach(() => {
     findPendingByWorkflowTask.mockClear();
     createOrder.mockClear();
+    createServiceProviderOrder.mockClear();
     markPrepayCreated.mockClear();
     findWechatPayConfig.mockClear();
     findPlatformConfigById.mockClear();
@@ -182,6 +189,7 @@ describe("WechatPayOrderService platform profile provenance", () => {
       });
 
       expect(createOrder).not.toHaveBeenCalled();
+      expect(createServiceProviderOrder).not.toHaveBeenCalled();
       expect(loadSecretBundle).not.toHaveBeenCalled();
       expect(createJsapiPrepay).not.toHaveBeenCalled();
     },
@@ -201,6 +209,7 @@ describe("WechatPayOrderService platform profile provenance", () => {
 
     expect(findPlatformConfigById).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
+    expect(createServiceProviderOrder).not.toHaveBeenCalled();
   });
 
   test("rejects tenant metadata that no longer matches the central profile", async () => {
@@ -217,6 +226,7 @@ describe("WechatPayOrderService platform profile provenance", () => {
     });
 
     expect(createOrder).not.toHaveBeenCalled();
+    expect(createServiceProviderOrder).not.toHaveBeenCalled();
     expect(loadSecretBundle).not.toHaveBeenCalled();
   });
 
@@ -253,6 +263,7 @@ describe("WechatPayOrderService platform profile provenance", () => {
       });
 
       expect(createOrder).not.toHaveBeenCalled();
+      expect(createServiceProviderOrder).not.toHaveBeenCalled();
       expect(markPrepayCreated).not.toHaveBeenCalled();
       expect(loadSecretBundle).not.toHaveBeenCalled();
       expect(createJsapiPrepay).not.toHaveBeenCalled();
@@ -281,6 +292,7 @@ describe("WechatPayOrderService platform profile provenance", () => {
     });
 
     expect(createOrder).not.toHaveBeenCalled();
+    expect(createServiceProviderOrder).not.toHaveBeenCalled();
     expect(markPrepayCreated).not.toHaveBeenCalled();
     expect(loadSecretBundle).not.toHaveBeenCalled();
     expect(createJsapiPrepay).not.toHaveBeenCalled();
@@ -304,6 +316,7 @@ describe("WechatPayOrderService platform profile provenance", () => {
     });
 
     expect(createOrder).not.toHaveBeenCalled();
+    expect(createServiceProviderOrder).not.toHaveBeenCalled();
     expect(createJsapiPrepay).not.toHaveBeenCalled();
   });
 
@@ -314,8 +327,11 @@ describe("WechatPayOrderService platform profile provenance", () => {
 
     expect(findPlatformConfigById).toHaveBeenCalledWith(platformConfigId);
     expect(loadSecretBundle).toHaveBeenCalledWith(centralProfile.encrypted_config_ref);
-    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({
+    expect(createServiceProviderOrder).toHaveBeenCalledWith(expect.objectContaining({
       payment_config_id: paymentConfigId,
+      platform_payment_config_id: platformConfigId,
+      expected_platform_guard_version: 7,
+      expected_tenant_config_updated_at: serviceProviderConfig.updated_at,
       metadata: expect.objectContaining({
         principal_type: "tenant",
         merchant_mode: "service_provider_sub_merchant",
@@ -325,6 +341,7 @@ describe("WechatPayOrderService platform profile provenance", () => {
         sub_app_id: null,
       }),
     }));
+    expect(createOrder).not.toHaveBeenCalled();
     expect(createJsapiPrepay).toHaveBeenCalledWith(expect.objectContaining({
       config: expect.objectContaining({ sub_app_id: null }),
       secretBundle: expect.objectContaining({ revision: "bundle-revision-1" }),
@@ -341,7 +358,8 @@ describe("WechatPayOrderService platform profile provenance", () => {
 
     const result = await service.createOrder(authContext(), orderInput);
 
-    expect(createOrder).toHaveBeenCalledTimes(1);
+    expect(createServiceProviderOrder).toHaveBeenCalledTimes(1);
+    expect(createOrder).not.toHaveBeenCalled();
     expect(createJsapiPrepay).toHaveBeenCalledWith(expect.objectContaining({
       config: expect.objectContaining({ sub_app_id: null }),
     }));
@@ -370,5 +388,41 @@ describe("WechatPayOrderService platform profile provenance", () => {
 
     expect(createMiniProgramPaymentRequest).not.toHaveBeenCalled();
     expect(createJsapiPrepay).not.toHaveBeenCalled();
+  });
+
+  test("calls the guarded insert only after readiness and secret revision checks", async () => {
+    const events: string[] = [];
+    findPlatformConfigById.mockImplementationOnce(async () => {
+      events.push("central-ready");
+      return centralProfile;
+    });
+    loadSecretBundle.mockImplementationOnce(async () => {
+      events.push("secret-revision-valid");
+      return {
+        privateKeyPem: "private-key",
+        apiV3Key: "api-v3-key",
+        wechatPayPublicKeyId: "PUB_KEY_ID_TEST",
+        wechatPayPublicKeyPem: "wechat-public-key",
+        baseUrl: "https://api.mch.weixin.qq.com",
+        revision: "bundle-revision-1",
+      };
+    });
+    createServiceProviderOrder.mockImplementationOnce(async (input) => {
+      events.push("guarded-insert");
+      return {
+        ...pendingOrder,
+        ...input,
+        id: "88888888-8888-4888-8888-888888888888",
+      };
+    });
+    const service = await createService();
+
+    await service.createOrder(authContext(), orderInput);
+
+    expect(events).toEqual([
+      "central-ready",
+      "secret-revision-valid",
+      "guarded-insert",
+    ]);
   });
 });

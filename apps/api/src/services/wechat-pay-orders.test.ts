@@ -35,6 +35,10 @@ const createOrder = mock(async (input: Record<string, unknown>) => ({
   created_at: "2026-07-01T10:02:00.000Z",
   updated_at: "2026-07-01T10:02:00.000Z",
 }));
+const createServiceProviderOrder = mock(async (input: Record<string, unknown>) => ({
+  ...pendingOrder,
+  ...input,
+}));
 const markPrepayCreated = mock(async (input: Record<string, unknown>) => ({
   ...pendingOrder,
   id: String(input.orderId || pendingOrder.id),
@@ -95,6 +99,7 @@ async function createService() {
       findPendingByWorkflowTask,
       findReceivablePlan,
       createOrder,
+      createServiceProviderOrder,
       markPrepayCreated,
       listOrders,
     },
@@ -125,6 +130,7 @@ describe("WechatPayOrderService", () => {
     findPendingByWorkflowTask.mockClear();
     findReceivablePlan.mockClear();
     createOrder.mockClear();
+    createServiceProviderOrder.mockClear();
     markPrepayCreated.mockClear();
     listOrders.mockClear();
     findWechatPayConfig.mockClear();
@@ -173,6 +179,7 @@ describe("WechatPayOrderService", () => {
         created_by_employee_id: employeeId,
       }),
     );
+    expect(createServiceProviderOrder).not.toHaveBeenCalled();
     expect(result.idempotent).toBe(false);
     expect(loadSecretBundle).toHaveBeenCalledWith("env://WECHAT_PAY_TEST");
     expect(createJsapiPrepay).toHaveBeenCalledWith({
