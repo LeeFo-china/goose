@@ -2,7 +2,7 @@
 <error-state tt:elif="{{error}}" title="工地暂时无法查看" description="工地可能已停止公开，或网络暂时不可用。" bindretry="onRetryPage" />
 <empty-state tt:elif="{{disabled}}" title="工地模块暂未开放" description="装修公司当前未开放在建工地展示。" />
 <view tt:elif="{{project}}" class="page-content detail-page">
-  <view class="detail-kicker">公开在建工地</view><view class="detail-title">{{project.community || project.title}}</view>
+  <view class="detail-kicker">公开在建工地</view><view class="detail-title">{{project.community || '公开在建工地'}}</view>
   <view class="location-copy">{{project.city || '区域待定'}}<text tt:if="{{project.district}}"> · {{project.district}}</text></view>
   <view class="fact-row"><view class="fact"><view class="fact-label">施工状态</view><view class="fact-value status-value">{{statusLabel}}</view></view><view class="fact"><view class="fact-label">户型面积</view><view class="fact-value">{{project.layout || '待完善'}}<text tt:if="{{project.area}}"> · {{project.area}}㎡</text></view></view></view>
 

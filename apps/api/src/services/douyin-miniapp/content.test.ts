@@ -183,4 +183,21 @@ describe("DouyinMiniappContentService", () => {
     expect(result.items[0]!.images.every((url) => url.startsWith("https://"))).toBe(true);
     expect(JSON.stringify(result)).not.toMatch(/content|employee|customer|address/i);
   });
+
+  test("never exposes an internal project name as a public site title", async () => {
+    const privateName = "张先生 1号楼101室装修";
+    const privateSite = { ...project, name: privateName };
+    const deps = dependencies({
+      listSites: mock(async () => ({ rows: [privateSite], total: 1 })),
+      findSite: mock(async () => privateSite),
+    });
+    const service = new DouyinMiniappContentService(deps as never);
+
+    const list = await service.listSites(user, { page: 1, pageSize: 20 });
+    const detail = await service.getSite(user, PROJECT_ID);
+
+    expect(list.items[0]!.title).toBe("示例花园");
+    expect(detail.title).toBe("示例花园");
+    expect(JSON.stringify({ list, detail })).not.toContain(privateName);
+  });
 });

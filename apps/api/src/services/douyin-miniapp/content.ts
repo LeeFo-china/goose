@@ -61,7 +61,7 @@ export class DouyinMiniappContentService {
         home_banners: context.runtime.home_banners,
         trust_metrics: context.runtime.trust_metrics,
         featured_cases: cases.rows.map(mapProject),
-        active_sites: sites.rows.map(mapProject),
+        active_sites: sites.rows.map(mapSiteProject),
       },
       privacy_policy_version: context.runtime.privacy_policy_version,
     };
@@ -95,13 +95,13 @@ export class DouyinMiniappContentService {
     const context = await this.loadContext(user);
     requireContentFeature(context, "sites");
     const result = await this.repository.listSites({ tenantId: context.tenantId, ...query });
-    return page(result.rows.map(mapProject), query, result.total);
+    return page(result.rows.map(mapSiteProject), query, result.total);
   }
 
   async getSite(user: JwtPayload | undefined, id: string) {
     const context = await this.loadContext(user);
     requireContentFeature(context, "sites");
-    return mapProject(requireProject(await this.repository.findSite({
+    return mapSiteProject(requireProject(await this.repository.findSite({
       tenantId: context.tenantId, id,
     })));
   }
@@ -192,6 +192,16 @@ function mapProject(project: DouyinContentProject) {
     start_date: project.start_date,
     updated_at: project.updated_at,
     description: null,
+  };
+}
+
+function mapSiteProject(project: DouyinContentProject) {
+  const mapped = mapProject(project);
+  const community = project.property.community.trim();
+  return {
+    ...mapped,
+    title: community || "公开在建工地",
+    community,
   };
 }
 

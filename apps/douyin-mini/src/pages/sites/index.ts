@@ -9,6 +9,7 @@ import {
   rejectPaginationRequest,
   resolvePaginationRequest,
 } from "../../utils/pagination";
+import { toPublicSitePresentation } from "./view-model";
 
 Page({
   pagination: createPaginationState<PublicProject>(20),
@@ -75,7 +76,7 @@ Page({
   },
   syncState() {
     this.setData({
-      items: this.pagination.items.map(toSiteCard),
+      items: this.pagination.items.map(toPublicSitePresentation),
       firstLoading: this.pagination.status === "loading" && this.pagination.items.length === 0,
       firstError: this.pagination.status === "error" && this.pagination.items.length === 0,
       paginationStatus: this.pagination.status,
@@ -89,11 +90,3 @@ Page({
       .catch(() => tt.showToast({ title: "页面跳转失败，请重试", icon: "none" }));
   },
 });
-
-function toSiteCard(site: PublicProject): PublicProject {
-  return {
-    ...site,
-    status: site.status === "started" ? "已开工" : "施工中",
-    updated_at: site.updated_at.slice(0, 10),
-  };
-}

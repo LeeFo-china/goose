@@ -10,6 +10,7 @@ import {
   resolvePaginationRequest,
 } from "../../utils/pagination";
 import { buildSiteProgress, type SiteProgressItem } from "./site-progress";
+import { toPublicSitePresentation } from "../sites/view-model";
 
 Page({
   siteId: "",
@@ -58,7 +59,7 @@ Page({
         this.setData({ loading: false, disabled: true, featureReady: true });
         return;
       }
-      const project = await fetchSiteDetail(app.api, this.siteId);
+      const project = toPublicSitePresentation(await fetchSiteDetail(app.api, this.siteId));
       this.logPagination = createPaginationState<PublicSiteLog>(20);
       this.setData({
         loading: false,

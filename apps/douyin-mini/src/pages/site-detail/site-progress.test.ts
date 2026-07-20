@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import type { PublicProject } from "../../models";
+import { toPublicSitePresentation } from "../sites/view-model";
 import { appendSiteProgress, buildSiteProgress } from "./site-progress";
 
 const FIRST_ID = "11111111-1111-4111-8111-111111111111";
@@ -66,5 +68,28 @@ describe("public site progress presentation", () => {
     }]);
 
     expect(JSON.stringify(progress)).not.toMatch(/owner|customer|phone|address|employee|13800000000|101室/i);
+  });
+
+  test("never falls back to an internal project name when community is missing", () => {
+    const site = toPublicSitePresentation({
+      id: FIRST_ID,
+      title: "张先生 1号楼101室装修",
+      cover_image_url: null,
+      public_images: [],
+      style_tags: [],
+      layout: null,
+      area: null,
+      budget_band: null,
+      community: "",
+      city: "郑州市",
+      district: "金水区",
+      status: "constructing",
+      start_date: null,
+      updated_at: "2026-07-20T08:00:00.000Z",
+      description: null,
+    } satisfies PublicProject);
+
+    expect(site.title).toBe("公开在建工地");
+    expect(JSON.stringify(site)).not.toContain("张先生 1号楼101室装修");
   });
 });

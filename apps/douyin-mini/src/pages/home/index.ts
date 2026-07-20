@@ -6,6 +6,7 @@ import {
   navigateToPage,
   switchToTab,
 } from "../../platform/navigation";
+import { toPublicSitePresentation } from "../sites/view-model";
 
 const SERVICE_PROCESS = [
   { id: "consult", index: "01", title: "沟通需求", description: "了解户型、预算和装修计划" },
@@ -55,11 +56,7 @@ Page({
         primaryColor: bootstrap.theme.primary_color,
         metrics: buildTrustMetrics(bootstrap.content.trust_metrics),
         featuredCases: bootstrap.content.featured_cases,
-        activeSites: bootstrap.content.active_sites.map((site) => ({
-          ...site,
-          status: site.status === "started" ? "已开工" : "施工中",
-          updated_at: site.updated_at.slice(0, 10),
-        })),
+        activeSites: bootstrap.content.active_sites.map(toPublicSitePresentation),
         casesEnabled: bootstrap.features.cases,
         sitesEnabled: bootstrap.features.sites,
         serviceRegions: formatRegions(bootstrap.company.service_regions),
