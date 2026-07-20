@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, FileText, Loader2, RotateCw } from "lucide-react";
+import { Building2, ExternalLink, FileText, Loader2, RotateCw } from "lucide-react";
 
 import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -204,6 +205,14 @@ export function TenantOnboardingDetailDialog({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 id="onboarding-company-detail" className="text-base font-semibold">申请资料</h2>
                     <div className="flex flex-wrap gap-2">
+                      {detail.converted_tenant_id ? (
+                        <Button asChild variant="outline">
+                          <Link href={`/platform/tenants/${detail.converted_tenant_id}`}>
+                            <Building2 data-icon="inline-start" />
+                            查看已创建租户
+                          </Link>
+                        </Button>
+                      ) : null}
                       <Button type="button" variant="outline" disabled={licensePending} onClick={requestLicense}>
                         {licensePending
                           ? <Loader2 className="animate-spin" data-icon="inline-start" />

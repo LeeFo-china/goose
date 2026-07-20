@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Building2 } from "lucide-react";
 import { CreatePlatformTenantButton } from "@/components/platform-tenants/platform-tenant-mutations";
 import {
   PlatformTenantFilters,
@@ -9,9 +10,11 @@ import {
   type PlatformTenantRecord,
   type PlatformTenantStatus,
 } from "@/components/platform-tenants/platform-tenant-types";
+import { TenantManagementTabs } from "@/components/platform-tenants/tenant-management-tabs";
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -123,56 +126,68 @@ export default async function PlatformTenantsPage({
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <PlatformListPageShell
-        title="平台租户"
-        description="管理入驻装修公司、初始化管理员账号，并查看租户基础用量。"
-        action={hasPlatformAccess ? <CreatePlatformTenantButton /> : null}
-        error={error}
-        summary={
-          <div className="grid gap-3 md:grid-cols-5">
-            <Card key="total">
-              <CardHeader className="pb-2">
-                <CardDescription>租户总数</CardDescription>
-                <CardTitle>{pagination.total}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card key="active">
-              <CardHeader className="pb-2">
-                <CardDescription>本页正常</CardDescription>
-                <CardTitle>{summary.active}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card key="suspended">
-              <CardHeader className="pb-2">
-                <CardDescription>本页停用</CardDescription>
-                <CardTitle>{summary.suspended}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card key="employees">
-              <CardHeader className="pb-2">
-                <CardDescription>本页员工</CardDescription>
-                <CardTitle>{summary.employees}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card key="projects">
-              <CardHeader className="pb-2">
-                <CardDescription>本页项目</CardDescription>
-                <CardTitle>{summary.projects}</CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
-        }
-        listHeader={
-          <CardTitle>租户列表</CardTitle>
-        }
-        filters={<PlatformTenantFilters status={status} keyword={keyword} />}
-        pagination={pagination}
-        currentCount={list.length}
-        tableViewportTestId="platform-tenant-list-table-viewport"
-        unit="个租户"
-      >
-        <PlatformTenantsTable tenants={list} />
-      </PlatformListPageShell>
+      <Tabs value="tenants" className="contents">
+        <PlatformListPageShell
+          title="租户管理"
+          description="维护租户基础资料、初始化管理员账号，并查看当前业务用量。"
+          leading={
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+              <Building2 className="size-4" aria-hidden="true" />
+            </span>
+          }
+          action={hasPlatformAccess ? <CreatePlatformTenantButton /> : null}
+          error={error}
+          summary={
+            <div className="grid gap-3 md:grid-cols-5">
+              <Card key="total">
+                <CardHeader className="pb-2">
+                  <CardDescription>租户总数</CardDescription>
+                  <CardTitle>{pagination.total}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card key="active">
+                <CardHeader className="pb-2">
+                  <CardDescription>本页正常</CardDescription>
+                  <CardTitle>{summary.active}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card key="suspended">
+                <CardHeader className="pb-2">
+                  <CardDescription>本页停用</CardDescription>
+                  <CardTitle>{summary.suspended}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card key="employees">
+                <CardHeader className="pb-2">
+                  <CardDescription>本页员工</CardDescription>
+                  <CardTitle>{summary.employees}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card key="projects">
+                <CardHeader className="pb-2">
+                  <CardDescription>本页项目</CardDescription>
+                  <CardTitle>{summary.projects}</CardTitle>
+                </CardHeader>
+              </Card>
+            </div>
+          }
+          tabs={
+            <TenantManagementTabs
+              activeTab="tenants"
+              permissions={session.permissions}
+              pageSize={pageSize}
+            />
+          }
+          listHeader={<CardTitle>租户列表</CardTitle>}
+          filters={<PlatformTenantFilters status={status} keyword={keyword} />}
+          pagination={pagination}
+          currentCount={list.length}
+          tableViewportTestId="platform-tenant-list-table-viewport"
+          unit="个租户"
+        >
+          <PlatformTenantsTable tenants={list} />
+        </PlatformListPageShell>
+      </Tabs>
     </div>
   );
 }

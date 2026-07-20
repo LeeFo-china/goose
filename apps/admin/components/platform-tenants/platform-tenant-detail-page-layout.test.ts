@@ -35,4 +35,17 @@ describe("Platform tenant detail page layout", () => {
     expect(page).toContain('InfoRow label="公司地址" value={text(tenant.address)}');
     expect(card).toContain("formatServiceProviderAddress(profile)");
   });
+
+  test("shows the tenant source and links onboarding-created tenants back to review records", () => {
+    const page = readSource("../../app/(console)/platform/tenants/[id]/page.tsx");
+    const types = readSource("./platform-tenant-types.ts");
+
+    expect(types).toContain("unified_social_credit_code: string | null");
+    expect(page).toContain('label="租户来源"');
+    expect(page).toContain('label="统一社会信用代码"');
+    expect(page).toContain("入驻审核创建");
+    expect(page).toContain("平台创建或历史导入");
+    expect(page).toContain("查看入驻记录");
+    expect(page).toContain("/platform/tenant-onboarding?");
+  });
 });

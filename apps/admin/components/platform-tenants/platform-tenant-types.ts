@@ -54,6 +54,7 @@ export type PlatformTenantRecord = {
   name: string;
   slug: string;
   status: PlatformTenantStatus | string;
+  unified_social_credit_code: string | null;
   address: string | null;
   address_title: string | null;
   address_poi_id: string | null;

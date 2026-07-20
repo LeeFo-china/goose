@@ -46,6 +46,19 @@ function addressSourceText(value?: string | null) {
   return "-";
 }
 
+function tenantSourceText(creditCode?: string | null) {
+  return creditCode ? "入驻审核创建" : "平台创建或历史导入";
+}
+
+function buildOnboardingRecordHref(creditCode: string) {
+  const query = new URLSearchParams({
+    tab: "applications",
+    status: "approved",
+    keyword: creditCode,
+  });
+  return `/platform/tenant-onboarding?${query.toString()}`;
+}
+
 async function getPlatformTenant(id: string) {
   const token = await getAdminToken();
   if (!token) {
@@ -239,6 +252,9 @@ export default async function PlatformTenantDetailPage({
           { data: null, error: null },
         ];
   const statusMeta = tenant ? getPlatformTenantStatusMeta(tenant.status) : null;
+  const canReviewApplications = session.permissions.some(
+    ({ code }) => code === "platform.tenant_onboarding.review",
+  );
   const initialization = tenant?.initialization ?? null;
   const adminEmployee = initialization?.admin_employee ?? tenant?.admin_employees?.[0] ?? null;
   const adminRole = initialization?.admin_role ?? null;
@@ -265,6 +281,18 @@ export default async function PlatformTenantDetailPage({
             </p>
           </div>
         </div>
+        {tenant?.unified_social_credit_code && canReviewApplications ? (
+          <Button asChild variant="outline" className="w-fit shrink-0">
+            <Link
+              href={buildOnboardingRecordHref(
+                tenant.unified_social_credit_code,
+              )}
+            >
+              <ClipboardList data-icon="inline-start" />
+              查看入驻记录
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
@@ -289,6 +317,14 @@ export default async function PlatformTenantDetailPage({
               <CardContent className="grid gap-3 md:grid-cols-2">
                 <InfoRow label="租户 ID" value={tenant.id} />
                 <InfoRow label="slug" value={tenant.slug} />
+                <InfoRow
+                  label="租户来源"
+                  value={tenantSourceText(tenant.unified_social_credit_code)}
+                />
+                <InfoRow
+                  label="统一社会信用代码"
+                  value={text(tenant.unified_social_credit_code)}
+                />
                 <InfoRow label="公司地址" value={text(tenant.address)} />
                 <InfoRow label="地址标题" value={text(tenant.address_title)} />
                 <InfoRow

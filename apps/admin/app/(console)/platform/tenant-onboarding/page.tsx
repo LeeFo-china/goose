@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ClipboardCheck } from "lucide-react";
+import { Building2 } from "lucide-react";
 
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
-import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
+import { TenantManagementTabs } from "@/components/platform-tenants/tenant-management-tabs";
 import { ServiceProviderPublicationTable } from "@/components/tenant-onboarding/service-provider-publication-table";
 import {
   TenantOnboardingFilters,
@@ -17,7 +16,7 @@ import type {
   TenantOnboardingApplicationListRecord,
 } from "@/components/tenant-onboarding/tenant-onboarding-types";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -68,11 +67,24 @@ export default async function PlatformTenantOnboardingPage({
   const keyword = cleanParam(params.keyword, 120);
   const regionCode = cleanParam(params.region_code, 6);
   const hasPlatformAccess = session.roles.includes("platform_admin");
-  const accessError = hasPlatformAccess
-    ? null
-    : "当前账号不是平台超管，无法访问服务商入驻审核";
+  const canReviewApplications = hasPlatformAccess && session.permissions.some(
+    ({ code }) => code === "platform.tenant_onboarding.review",
+  );
+  const canPublishProfiles = hasPlatformAccess && session.permissions.some(
+    ({ code }) => code === "platform.service_provider.publish",
+  );
+  const canAccessActiveTab = tab === "applications"
+    ? canReviewApplications
+    : canPublishProfiles;
+  const accessError = !hasPlatformAccess
+    ? "当前账号不是平台超管，无法访问租户管理"
+    : canAccessActiveTab
+      ? null
+      : tab === "applications"
+        ? "当前账号缺少入驻申请审核权限"
+        : "当前账号缺少服务商公开发布权限";
 
-  const applicationsResult = tab === "applications" && hasPlatformAccess
+  const applicationsResult = tab === "applications" && canReviewApplications
     ? await fetchBackend<ListData<TenantOnboardingApplicationListRecord>>(
       `/platform/tenant-onboarding/applications?${buildQuery({
         page,
@@ -86,7 +98,7 @@ export default async function PlatformTenantOnboardingPage({
       emptyList<TenantOnboardingApplicationListRecord>(page, pageSize),
     )
     : { data: emptyList<TenantOnboardingApplicationListRecord>(page, pageSize), error: null };
-  const publicationsResult = tab === "publications" && hasPlatformAccess
+  const publicationsResult = tab === "publications" && canPublishProfiles
     ? await fetchBackend<ListData<ServiceProviderPublicationListRecord>>(
       `/platform/service-provider-publications?${buildQuery({
         page,
@@ -101,34 +113,32 @@ export default async function PlatformTenantOnboardingPage({
     ? applicationsResult.data
     : publicationsResult.data;
   const activeError = accessError || applicationsResult.error || publicationsResult.error;
-  const tabPageSize = pageSize > 0 ? `&pageSize=${pageSize}` : "";
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <Tabs value={tab} className="contents">
         <PlatformListPageShell
-          title="服务商入驻"
-          description="审核装修公司入驻申请，并控制公开资料和区域展示状态。"
+          title="租户管理"
+          description={tab === "applications"
+            ? "复核装修公司入驻资料，并跟踪申请到租户创建的完整状态。"
+            : "审核服务商公开资料，并控制面向用户的区域展示状态。"}
           leading={
             <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-              <ClipboardCheck className="size-4" aria-hidden="true" />
+              <Building2 className="size-4" aria-hidden="true" />
             </span>
           }
-          titleMeta={<Badge variant="outline">平台复核</Badge>}
+          titleMeta={
+            <Badge variant="outline">
+              {tab === "applications" ? "入驻复核" : "发布审核"}
+            </Badge>
+          }
           error={activeError}
           tabs={
-            <TabsList className={platformTabsListClassName}>
-              <TabsTrigger value="applications" asChild className={platformTabsTriggerClassName}>
-                <Link href={`/platform/tenant-onboarding?tab=applications${tabPageSize}`}>
-                  入驻申请
-                </Link>
-              </TabsTrigger>
-              <TabsTrigger value="publications" asChild className={platformTabsTriggerClassName}>
-                <Link href={`/platform/tenant-onboarding?tab=publications${tabPageSize}`}>
-                  公开发布
-                </Link>
-              </TabsTrigger>
-            </TabsList>
+            <TenantManagementTabs
+              activeTab={tab}
+              permissions={session.permissions}
+              pageSize={pageSize}
+            />
           }
           filters={
             <TenantOnboardingFilters

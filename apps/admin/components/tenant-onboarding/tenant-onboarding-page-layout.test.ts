@@ -12,11 +12,26 @@ describe("platform tenant onboarding page", () => {
     const pageSource = readSource(
       "../../app/(console)/platform/tenant-onboarding/page.tsx",
     );
+    const tenantPageSource = readSource(
+      "../../app/(console)/platform/tenants/page.tsx",
+    );
+    const tabsSource = readSource(
+      "../platform-tenants/tenant-management-tabs.tsx",
+    );
 
     expect(pageSource).toContain("PlatformListPageShell");
     expect(pageSource).toContain("normalizePlatformListPageSize");
-    expect(pageSource).toContain('value="applications"');
-    expect(pageSource).toContain('value="publications"');
+    expect(pageSource).toContain('title="租户管理"');
+    expect(pageSource).toContain("<TenantManagementTabs");
+    expect(pageSource).toContain("activeTab={tab}");
+    expect(tenantPageSource).toContain('title="租户管理"');
+    expect(tenantPageSource).toContain("<TenantManagementTabs");
+    expect(tenantPageSource).toContain('activeTab="tenants"');
+    expect(tabsSource).toContain("租户列表");
+    expect(tabsSource).toContain("入驻申请");
+    expect(tabsSource).toContain("公开发布");
+    expect(tabsSource).toContain("platform.tenant_onboarding.review");
+    expect(tabsSource).toContain("platform.service_provider.publish");
     expect(pageSource).toContain("h-[calc(100vh-6.5625rem)]");
     expect(pageSource).toContain("min-h-0 flex-col gap-5 overflow-hidden");
   });
@@ -52,6 +67,9 @@ describe("platform tenant onboarding page", () => {
     expect(applicationDetailSource).toContain("加载更多");
     expect(applicationDetailSource).toContain("refreshApplicationAfterConflict");
     expect(applicationDetailSource).toContain("retryError.code");
+    expect(applicationDetailSource).toContain("converted_tenant_id");
+    expect(applicationDetailSource).toContain("查看已创建租户");
+    expect(applicationDetailSource).toContain("/platform/tenants/");
     expect(publicationDetailSource).toContain("/areas?");
     expect(publicationDetailSource).toContain("pageSize=10");
     expect(publicationDetailSource).toContain("加载更多");
@@ -71,10 +89,18 @@ describe("platform tenant onboarding page", () => {
     expect(filtersSource).toContain('aria-label={props.tab');
   });
 
-  test("exposes the workflow through the dedicated platform permission", () => {
+  test("exposes one platform tenant menu while keeping workflow permissions separate", () => {
     const menuSource = readSource("../layout/menu-config.ts");
+    const tabsSource = readSource(
+      "../platform-tenants/tenant-management-tabs.tsx",
+    );
 
-    expect(menuSource).toContain('href: "/platform/tenant-onboarding"');
-    expect(menuSource).toContain('permission: "platform.tenant_onboarding.review"');
+    expect(menuSource).toContain('label: "租户管理"');
+    expect(menuSource).toContain(
+      'activeHrefs: ["/platform/tenant-onboarding"]',
+    );
+    expect(menuSource).not.toContain('label: "服务商入驻"');
+    expect(tabsSource).toContain('code === "platform.tenant_onboarding.review"');
+    expect(tabsSource).toContain('code === "platform.service_provider.publish"');
   });
 });

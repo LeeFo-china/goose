@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Users } from "lucide-react";
 import { getVisibleGroups, hasMenuItemAccess } from "./admin-nav-visibility";
 import {
+  platformNavGroups,
   tenantNavGroups,
   type AdminMenuGroup,
   type AdminMenuItem,
@@ -34,6 +35,20 @@ function createSession(permissions: AdminPermission[]): AdminSession {
 }
 
 describe("admin nav visibility", () => {
+  test("consolidates tenant operations into one platform nav item", () => {
+    const platformItems = platformNavGroups.flatMap((group) => group.items);
+    const tenantManagementItem = platformItems.find(
+      (item) => item.href === "/platform/tenants",
+    );
+
+    expect(tenantManagementItem?.label).toBe("租户管理");
+    expect(tenantManagementItem?.activeHrefs).toEqual([
+      "/platform/tenant-onboarding",
+    ]);
+    expect(tenantManagementItem?.permission).toBeUndefined();
+    expect(platformItems.some((item) => item.label === "服务商入驻")).toBe(false);
+  });
+
   test("keeps project list and risk under one tenant project nav item", () => {
     const businessItems = tenantNavGroups.find((group) => group.label === "业务")
       ?.items ?? [];

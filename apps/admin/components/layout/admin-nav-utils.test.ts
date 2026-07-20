@@ -15,6 +15,24 @@ describe("admin nav active matching", () => {
     expect(isActivePath("/projects/health", "/projects")).toBe(true);
   });
 
+  test("supports route aliases for one consolidated nav item", () => {
+    const options = { activeHrefs: ["/platform/tenant-onboarding"] };
+
+    expect(isActivePath("/platform/tenants", "/platform/tenants", options)).toBe(
+      true,
+    );
+    expect(
+      isActivePath("/platform/tenant-onboarding", "/platform/tenants", options),
+    ).toBe(true);
+    expect(
+      isActivePath(
+        "/platform/tenant-onboarding/application-1",
+        "/platform/tenants",
+        options,
+      ),
+    ).toBe(true);
+  });
+
   test("keeps tenant settings inactive on service provider profile route", () => {
     const systemItems = tenantNavGroups.find((group) => group.label === "系统")
       ?.items ?? [];

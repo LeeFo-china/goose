@@ -35,6 +35,7 @@ export function AdminNav({
           {group.items.map((item) => {
             const active = isActivePath(pathname, item.href, {
               exact: item.activeMatch === "exact",
+              activeHrefs: item.activeHrefs,
             });
             const Icon = item.icon;
 
