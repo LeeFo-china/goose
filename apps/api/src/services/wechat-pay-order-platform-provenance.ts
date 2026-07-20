@@ -22,10 +22,11 @@ const PROVENANCE_FIELDS = [
   "merchant_mode",
   "merchant_id",
   "app_id",
-  "sub_app_id",
   "encrypted_config_ref",
   "serial_no",
   "notify_url",
+  "validation_status",
+  "last_validated_at",
 ] as const satisfies ReadonlyArray<
   keyof PlatformPaymentConfigRecord & keyof WechatPayConfigRecord
 >;
@@ -73,6 +74,15 @@ export async function loadWechatPayOrderSecretBundle(input: {
   const mismatchFields: string[] = PROVENANCE_FIELDS.filter((field) =>
     input.tenantConfig[field] !== platformConfig[field]
   );
+  if (!haveSameStringValues(
+    input.tenantConfig.enabled_channels,
+    platformConfig.enabled_channels,
+  )) {
+    mismatchFields.push("enabled_channels");
+  }
+  if (input.tenantConfig.sub_app_id !== null) {
+    mismatchFields.push("sub_app_id");
+  }
   if (
     platformConfig.id !== platformConfigId ||
     platformConfig.profile_code !== definition.profile_code
@@ -99,4 +109,14 @@ export async function loadWechatPayOrderSecretBundle(input: {
 
 function hasText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function haveSameStringValues(left: unknown, right: string[]): boolean {
+  if (!Array.isArray(left) || !left.every((value) => typeof value === "string")) {
+    return false;
+  }
+  if (left.length !== right.length) return false;
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+  return sortedLeft.every((value, index) => value === sortedRight[index]);
 }

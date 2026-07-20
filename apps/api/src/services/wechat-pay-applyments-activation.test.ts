@@ -73,7 +73,7 @@ const centralProfile: PlatformPaymentConfigRecord = {
   merchant_id: "service-provider-mchid",
   sub_merchant_id: "central-sub-mchid-must-not-copy",
   app_id: "wx-service-provider-app",
-  sub_app_id: null,
+  sub_app_id: "wx-central-default-sub-app",
   encrypted_config_ref: "setting://PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
   secret_bundle_revision: "bundle-revision-1",
   serial_no: "SERVICE-PROVIDER-SERIAL",
@@ -138,7 +138,7 @@ const upsertWechatPayConfig = mock(
     status: "active",
     enabled_at: null,
     disabled_at: null,
-    enabled_channels: ["project_payment"],
+    enabled_channels: centralProfile.enabled_channels,
     settlement_account_summary: activatableApplyment.settlement_account_summary,
     encrypted_config_ref: centralProfile.encrypted_config_ref,
     risk_switches: {},
@@ -276,7 +276,7 @@ describe("WechatPayApplymentService activation", () => {
       platform_payment_config_id: platformConfigId,
       settlement_account_summary: "中国银行 尾号 1234",
       status: "active",
-      enabled_channels: ["project_payment"],
+      enabled_channels: centralProfile.enabled_channels,
     }));
     expect(upsertWechatPayConfig.mock.calls[0]?.[0]).not.toMatchObject({
       sub_merchant_id: centralProfile.sub_merchant_id,

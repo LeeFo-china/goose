@@ -235,7 +235,7 @@ export class WechatPayApplymentPlatformActions {
       appid_binding_message: current.appid_binding_message,
       opened_at: current.opened_at ?? now,
       status: "active",
-      enabled_channels: ["project_payment"],
+      enabled_channels: platformConfig.enabled_channels,
       settlement_account_summary: current.settlement_account_summary,
       encrypted_config_ref: platformConfig.encrypted_config_ref ?? "",
       risk_switches: {},

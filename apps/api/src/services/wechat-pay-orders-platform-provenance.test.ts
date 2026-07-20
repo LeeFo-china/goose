@@ -36,6 +36,7 @@ const serviceProviderConfig: WechatPayConfigRecord = {
   encrypted_config_ref: centralProfile.encrypted_config_ref,
   serial_no: centralProfile.serial_no,
   notify_url: centralProfile.notify_url,
+  enabled_channels: [...centralProfile.enabled_channels],
   validation_status: "valid",
   last_validated_at: centralProfile.last_validated_at,
 };
@@ -130,6 +131,14 @@ const orderInput = {
   amount: 8000,
   payer_openid: "o-test-openid",
 };
+
+const staleTenantProvenanceCases: Array<[
+  string,
+  Partial<WechatPayConfigRecord>,
+]> = [
+  ["enabled_channels", { enabled_channels: ["project_payment"] }],
+  ["last_validated_at", { last_validated_at: "2026-06-30T09:00:00.000Z" }],
+];
 
 describe("WechatPayOrderService platform profile provenance", () => {
   beforeEach(() => {
@@ -228,6 +237,56 @@ describe("WechatPayOrderService platform profile provenance", () => {
     expect(loadSecretBundle).not.toHaveBeenCalled();
   });
 
+  test.each(staleTenantProvenanceCases)(
+    "rejects stale tenant %s before order side effects",
+    async (field, patch) => {
+      findWechatPayConfig.mockImplementationOnce(async () => ({
+        ...serviceProviderConfig,
+        ...patch,
+      }));
+      const service = await createService();
+
+      await expect(service.createOrder(authContext(), orderInput)).rejects.toMatchObject({
+        statusCode: 409,
+        code: "WECHAT_PAY_PLATFORM_PROFILE_MISMATCH",
+        details: { mismatch_fields: [field] },
+      });
+
+      expect(createOrder).not.toHaveBeenCalled();
+      expect(markPrepayCreated).not.toHaveBeenCalled();
+      expect(loadSecretBundle).not.toHaveBeenCalled();
+      expect(createJsapiPrepay).not.toHaveBeenCalled();
+      expect(createMiniProgramPaymentRequest).not.toHaveBeenCalled();
+    },
+  );
+
+  test("rejects stale tenant validation status before loading central secrets", async () => {
+    const { loadWechatPayOrderSecretBundle } = await import(
+      "./wechat-pay-order-platform-provenance"
+    );
+
+    await expect(loadWechatPayOrderSecretBundle({
+      tenantConfig: {
+        ...serviceProviderConfig,
+        validation_status: "unchecked",
+      },
+      platformConfigRepository: {
+        findWechatPayConfigById: findPlatformConfigById,
+      },
+      secretBundleService: { load: loadSecretBundle },
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_PLATFORM_PROFILE_MISMATCH",
+      details: { mismatch_fields: ["validation_status"] },
+    });
+
+    expect(createOrder).not.toHaveBeenCalled();
+    expect(markPrepayCreated).not.toHaveBeenCalled();
+    expect(loadSecretBundle).not.toHaveBeenCalled();
+    expect(createJsapiPrepay).not.toHaveBeenCalled();
+    expect(createMiniProgramPaymentRequest).not.toHaveBeenCalled();
+  });
+
   test("rejects a secret bundle revision mismatch before inserting an order", async () => {
     loadSecretBundle.mockImplementationOnce(async () => ({
       privateKeyPem: "private-key",
@@ -269,6 +328,22 @@ describe("WechatPayOrderService platform profile provenance", () => {
     expect(createJsapiPrepay).toHaveBeenCalledWith(expect.objectContaining({
       config: expect.objectContaining({ sub_app_id: null }),
       secretBundle: expect.objectContaining({ revision: "bundle-revision-1" }),
+    }));
+    expect(result.idempotent).toBe(false);
+  });
+
+  test("allows a tenant without sub AppID when the central profile has a default", async () => {
+    findPlatformConfigById.mockImplementationOnce(async () => ({
+      ...centralProfile,
+      sub_app_id: "wx-central-default-sub-app",
+    }));
+    const service = await createService();
+
+    const result = await service.createOrder(authContext(), orderInput);
+
+    expect(createOrder).toHaveBeenCalledTimes(1);
+    expect(createJsapiPrepay).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ sub_app_id: null }),
     }));
     expect(result.idempotent).toBe(false);
   });
