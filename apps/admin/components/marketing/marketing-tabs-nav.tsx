@@ -17,7 +17,7 @@ export function MarketingTabsNav({
   counts: Record<MarketingTabValue, number>;
 }) {
   return (
-    <TabsList className={adminTabsListClassName}>
+    <TabsList className={`${adminTabsListClassName} xl:w-auto`}>
       <TabsTrigger
         value="campaigns"
         asChild

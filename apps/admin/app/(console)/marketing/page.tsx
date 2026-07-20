@@ -27,6 +27,8 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildTabHref, getCampaigns, getH5Leads, getH5Pages, getProjects, isCurrentPublishedH5Page, normalizeTab, statusLabel, type MarketingPageSearchParams } from "@/app/(console)/marketing/marketing-page-data";
 
+const marketingHeaderStatusBadgeClassName = "shrink-0 whitespace-nowrap tabular-nums";
+
 export default async function MarketingPage({
   searchParams,
 }: {
@@ -117,44 +119,44 @@ export default async function MarketingPage({
                   leads: h5Leads.pagination.total,
                 }}
               />
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto overflow-y-hidden text-sm text-muted-foreground xl:w-auto xl:justify-end">
                 {activeTab === "campaigns" ? (
                   <>
-                    <Badge variant="success" className="tabular-nums">
+                    <Badge variant="success" className={marketingHeaderStatusBadgeClassName}>
                       <PlayCircle data-icon="inline-start" />
                       {statusLabel.active} {activeCount}
                     </Badge>
-                    <Badge variant="warning" className="tabular-nums">
+                    <Badge variant="warning" className={marketingHeaderStatusBadgeClassName}>
                       <PauseCircle data-icon="inline-start" />
                       {statusLabel.paused} {pausedCount}
                     </Badge>
                   </>
                 ) : activeTab === "h5" ? (
                   <>
-                    <Badge variant="success" className="tabular-nums">
+                    <Badge variant="success" className={marketingHeaderStatusBadgeClassName}>
                       <PlayCircle data-icon="inline-start" />
                       生效中 {activePublishedH5Count}
                     </Badge>
-                    <Badge variant="outline" className="tabular-nums">
+                    <Badge variant="outline" className={marketingHeaderStatusBadgeClassName}>
                       <ClipboardList data-icon="inline-start" />
                       草稿 {draftH5Count}
                     </Badge>
-                    <Badge variant="warning" className="tabular-nums">
+                    <Badge variant="warning" className={marketingHeaderStatusBadgeClassName}>
                       <PauseCircle data-icon="inline-start" />
                       下线 {offlineH5Count}
                     </Badge>
                   </>
                 ) : (
                   <>
-                    <Badge variant="default" className="tabular-nums">
+                    <Badge variant="default" className={marketingHeaderStatusBadgeClassName}>
                       <ClipboardList data-icon="inline-start" />
                       新线索 {newLeadCount}
                     </Badge>
-                    <Badge variant="success" className="tabular-nums">
+                    <Badge variant="success" className={marketingHeaderStatusBadgeClassName}>
                       <PlayCircle data-icon="inline-start" />
                       已转化 {convertedLeadCount}
                     </Badge>
-                    <Badge variant="secondary" className="tabular-nums">
+                    <Badge variant="secondary" className={marketingHeaderStatusBadgeClassName}>
                       <PauseCircle data-icon="inline-start" />
                       已作废 {invalidLeadCount}
                     </Badge>
