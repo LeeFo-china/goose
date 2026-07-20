@@ -229,6 +229,40 @@ describe("WechatPayOrderService", () => {
     );
   });
 
+  test("creates service provider order without sub app id", async () => {
+    findWechatPayConfig.mockImplementationOnce(async () => ({
+      ...activeConfig,
+      merchant_mode: "service_provider_sub_merchant",
+      merchant_id: "service-provider-mchid",
+      sub_merchant_id: "sub-merchant-mchid",
+      app_id: "wx-service-provider-app",
+      sub_app_id: null,
+      applyment_state: "opened",
+      appid_binding_state: "bound",
+      encrypted_config_ref: "env://WECHAT_PAY_TEST",
+    }));
+    const service = await createService();
+
+    const result = await service.createOrder(authContext(), {
+      project_id: projectId,
+      receivable_plan_id: receivablePlanId,
+      workflow_task_id: workflowTaskId,
+      amount: 8000,
+      payer_openid: "o-service-provider-openid",
+    });
+
+    expect(createJsapiPrepay).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        app_id: "wx-service-provider-app",
+        sub_app_id: null,
+      }),
+      order: expect.objectContaining({
+        payer_openid: "o-service-provider-openid",
+      }),
+    }));
+    expect(result.idempotent).toBe(false);
+  });
+
   test("rejects order creation when payment config is not active", async () => {
     findWechatPayConfig.mockImplementationOnce(async () => ({
       ...activeConfig,

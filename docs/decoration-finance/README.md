@@ -82,6 +82,7 @@
 - [2026-07-01-phase9-submerchant-onboarding-model-smoke.md](./2026-07-01-phase9-submerchant-onboarding-model-smoke.md)：Phase 9 租户特约商户进件模型 smoke，覆盖 `tenant_payment_configs` 进件/AppID 绑定字段、API/Admin 配置扩展、验证命令和小程序边界。
 - [2026-07-01-phase9-wechat-pay-onboarding-application-prd.md](./2026-07-01-phase9-wechat-pay-onboarding-application-prd.md)：Phase 9 微信支付开通申请流程 PRD，定义租户提交申请、平台人工进件、`sub_mchid` 回填、AppID 绑定、配置激活和真实小额支付 smoke 前置条件。
 - [2026-07-01-phase9-wechat-pay-task4-prepay-primitives.md](./2026-07-01-phase9-wechat-pay-task4-prepay-primitives.md)：Phase 9 微信支付 Task 4 前置，覆盖 API v3 请求签名、小程序支付参数签名、直连/服务商 JSAPI 请求体构造和 `payer_openid` 支持。
+- [2026-07-20-service-provider-miniprogram-jsapi-contract-fix.md](./2026-07-20-service-provider-miniprogram-jsapi-contract-fix.md)：修正服务商小程序支付契约，明确 `sub_appid` 可选、`sp_openid/sub_openid` 映射、调起支付签名 AppID 和小程序边界。
 - [2026-06-30-phase7-7-7-8-miniprogram-boundary.md](./2026-06-30-phase7-7-7-8-miniprogram-boundary.md)：Phase 7.7/7.8 小程序边界说明，明确本轮无必改和后续可选员工端摘要口径。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
 - [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。

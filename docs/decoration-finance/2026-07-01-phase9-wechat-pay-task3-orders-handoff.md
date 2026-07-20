@@ -112,7 +112,7 @@
 - 本轮不会推进 workflow。
 - 创建订单前会校验微信支付配置：
   - 配置必须为 `active`。
-  - 服务商子商户模式必须已有 `sub_mchid` / `sub_appid`。
+  - 服务商子商户模式必须已有 `sub_mchid`；服务商小程序模式可不配置 `sub_appid`，子商户自有小程序模式才要求该字段。
   - 服务商子商户模式必须 `applyment_state=opened` 且 `appid_binding_state=bound`。
 - 订单 `metadata` 会记录非敏感路由信息：
   - `principal_type`

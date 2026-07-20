@@ -76,8 +76,7 @@ function buildServiceProviderPrepayRequest(
   if (
     !input.config.merchant_id ||
     !input.config.sub_merchant_id ||
-    !input.config.app_id ||
-    !input.config.sub_app_id
+    !input.config.app_id
   ) {
     throw Errors.business(
       409,
@@ -86,21 +85,27 @@ function buildServiceProviderPrepayRequest(
     );
   }
 
+  const appScope = input.config.sub_app_id
+    ? {
+      sub_appid: input.config.sub_app_id,
+      payer: { sub_openid: input.order.payer_openid },
+    }
+    : {
+      payer: { sp_openid: input.order.payer_openid },
+    };
+
   return {
     urlPath: "/v3/pay/partner/transactions/jsapi",
     body: {
       sp_appid: input.config.app_id,
       sp_mchid: input.config.merchant_id,
-      sub_appid: input.config.sub_app_id,
       sub_mchid: input.config.sub_merchant_id,
+      ...appScope,
       description: input.description,
       out_trade_no: input.order.out_trade_no,
       ...buildPaymentExpiration(input.order),
       notify_url: input.config.notify_url,
       amount: buildWechatPayAmount(input.order.amount),
-      payer: {
-        sub_openid: input.order.payer_openid,
-      },
     },
   };
 }

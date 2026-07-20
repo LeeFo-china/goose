@@ -50,7 +50,7 @@
 
 6. 微信支付订单创建 guard：
    - 配置必须为 `active`。
-   - 服务商子商户必须已有 `sub_mchid` / `sub_appid`。
+   - 服务商子商户必须已有 `sub_mchid`；服务商小程序模式可不配置 `sub_appid`，子商户自有小程序模式才要求该字段。
    - 服务商子商户必须 `applyment_state=opened` 且 `appid_binding_state=bound`。
    - 订单 `metadata` 记录非敏感路由信息，供后续真实下单和回调闭环使用。
 

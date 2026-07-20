@@ -139,6 +139,44 @@ describe("buildWechatPayJsapiPrepayRequest", () => {
     });
   });
 
+  test("builds service provider app jsapi request without sub app id", () => {
+    const request = buildWechatPayJsapiPrepayRequest({
+      config: {
+        ...baseConfig,
+        merchant_mode: "service_provider_sub_merchant",
+        merchant_id: "service-provider-mchid",
+        sub_merchant_id: "sub-merchant-mchid",
+        app_id: "wx-service-provider-app",
+        sub_app_id: null,
+      },
+      order: {
+        ...baseOrder,
+        payment_expires_at: paymentExpiresAt,
+      },
+      description: "项目收款",
+    });
+
+    expect(request).toEqual({
+      urlPath: "/v3/pay/partner/transactions/jsapi",
+      body: {
+        sp_appid: "wx-service-provider-app",
+        sp_mchid: "service-provider-mchid",
+        sub_mchid: "sub-merchant-mchid",
+        description: "项目收款",
+        out_trade_no: "WX202607010001",
+        time_expire: paymentExpiresAt,
+        notify_url: "https://api.example.com/pay/wechat/callback",
+        amount: {
+          total: 1000050,
+          currency: "CNY",
+        },
+        payer: {
+          sp_openid: "o-openid",
+        },
+      },
+    });
+  });
+
   test("keeps legacy orders without a payment expiration compatible", () => {
     const request = buildWechatPayJsapiPrepayRequest({
       config: baseConfig,

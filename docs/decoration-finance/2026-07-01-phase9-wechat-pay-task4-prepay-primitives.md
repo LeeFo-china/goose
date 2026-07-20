@@ -1,5 +1,9 @@
 # Phase 9 微信支付 Task 4：JSAPI 预下单基础闭环
 
+> 2026-07-20 契约修正：服务商小程序场景使用 `sp_appid + sp_openid`，且
+> `sub_appid` 可为空；仅子商户小程序场景使用 `sub_appid + sub_openid`。详见
+> [2026-07-20-service-provider-miniprogram-jsapi-contract-fix.md](./2026-07-20-service-provider-miniprogram-jsapi-contract-fix.md)。
+
 日期：2026-07-01
 
 分支：`feature/phase9-wechat-pay-baseline`
@@ -31,7 +35,7 @@
    - 服务商子商户：`/v3/pay/partner/transactions/jsapi`
    - 金额从元转换为分。
    - 直连模式使用 `payer.openid`。
-   - 服务商子商户模式使用 `payer.sub_openid`。
+   - 服务商小程序模式使用 `payer.sp_openid`；子商户自有小程序模式才使用 `payer.sub_openid`。
 
 4. 创建订单接口支持 `payer_openid`：
    - `POST /finance/wechat-pay/orders` 可接收 `payer_openid`。

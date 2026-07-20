@@ -314,12 +314,10 @@ export class WechatPayApplymentPlatformActions {
     applyment: WechatPayApplymentRecord,
   ): asserts applyment is WechatPayApplymentRecord & {
     sub_mchid: string;
-    sub_appid: string;
   } {
     if (
       applyment.applyment_state === "opened" &&
       applyment.sub_mchid &&
-      applyment.sub_appid &&
       applyment.appid_binding_state === "bound"
     ) {
       return;
@@ -332,7 +330,6 @@ export class WechatPayApplymentPlatformActions {
         applyment_state: applyment.applyment_state,
         appid_binding_state: applyment.appid_binding_state,
         has_sub_mchid: Boolean(applyment.sub_mchid),
-        has_sub_appid: Boolean(applyment.sub_appid),
       },
     );
   }

@@ -1,5 +1,9 @@
 # Phase 9 微信支付开通申请流程 PRD
 
+> 2026-07-20 契约修正：服务商小程序场景下 `sub_appid` 为可选字段，租户配置
+> 激活不再以其非空为前提。详见
+> [2026-07-20-service-provider-miniprogram-jsapi-contract-fix.md](./2026-07-20-service-provider-miniprogram-jsapi-contract-fix.md)。
+
 日期：2026-07-01
 
 ## 背景
@@ -14,7 +18,7 @@ Phase 9 已完成微信支付配置、订单、JSAPI 预下单、回调闭环、
 - 资料是否被平台驳回。
 - 是否已在微信服务商后台发起特约商户申请。
 - 是否已经拿到 `sub_mchid`。
-- 平台小程序 AppID 是否已经绑定到该 `sub_mchid`。
+- 该 `sub_mchid` 是否已完成服务商小程序支付授权或关联；若使用子商户自有小程序，`sub_appid` 是否已绑定。
 - 当前是否可以执行真实项目收款。
 
 因此需要新增独立的“微信支付开通申请”流程，跑通后再进入真实小额支付 smoke。
@@ -23,9 +27,9 @@ Phase 9 已完成微信支付配置、订单、JSAPI 预下单、回调闭环、
 
 1. 租户 Admin 可以发起微信支付开通申请。
 2. 平台 Admin 可以审核租户提交的资料，并记录人工进件进度。
-3. 平台 Admin 可以回填 `sub_mchid`、`sub_appid`、进件状态和 AppID 绑定状态。
+3. 平台 Admin 可以回填 `sub_mchid`、可选的 `sub_appid`、进件状态和 AppID 绑定状态。
 4. 申请完成后自动或半自动生成可用于收款的 `tenant_payment_configs` 微信支付配置。
-5. 后端支付订单创建继续使用现有校验：服务商子商户模式必须具备 `sub_mchid` / `sub_appid`，且 `applyment_state=opened`、`appid_binding_state=bound`。
+5. 后端支付订单创建继续使用现有校验：服务商子商户模式必须具备 `sub_mchid`，且 `applyment_state=opened`、`appid_binding_state=bound`；只有子商户自有小程序模式要求 `sub_appid`。
 6. 通过该流程准备出真实小额支付 smoke 所需的租户支付配置。
 
 ## 非目标
@@ -103,12 +107,12 @@ approved -> applying -> reviewing -> account_verifying -> signing
 
 ### 4. AppID 绑定
 
-由于平台统一小程序服务多个租户子商户，每个租户 `sub_mchid` 都必须确认平台小程序 AppID 绑定。
+平台统一的服务商小程序可以服务多个租户子商户。每个租户 `sub_mchid` 都必须确认已完成服务商小程序支付授权或关联；只有使用子商户自有小程序时，才额外要求 `sub_appid` 绑定。
 
 系统记录：
 
-- 平台小程序 AppID。
-- 子商户 AppID，也就是服务商支付请求中的 `sub_appid`。
+- 服务商小程序 AppID，也就是服务商支付请求中的 `sp_appid`。
+- 子商户自有小程序 AppID，也就是服务商支付请求中的可选 `sub_appid`。
 - AppID 绑定状态 `appid_binding_state`。
 - AppID 绑定说明。
 
@@ -120,8 +124,8 @@ approved -> applying -> reviewing -> account_verifying -> signing
 
 - 申请状态为 `opened`。
 - 已回填 `sub_mchid`。
-- 已配置 `sub_appid`。
 - `appid_binding_state=bound`。
+- 子商户自有小程序模式已配置 `sub_appid`；服务商统一小程序模式不要求。
 - 已配置 `encrypted_config_ref`。
 - 已配置 `notify_url`。
 - 已配置证书序列号或必要的签名材料引用。
@@ -134,8 +138,8 @@ principal_type = tenant
 merchant_mode = service_provider_sub_merchant
 merchant_id = 服务商商户号
 sub_merchant_id = 租户 sub_mchid
-app_id = 平台小程序 AppID
-sub_app_id = 平台小程序 AppID
+app_id = 服务商小程序 AppID
+sub_app_id = null（仅子商户自有小程序模式填写）
 applyment_state = opened
 appid_binding_state = bound
 status = active
@@ -195,7 +199,7 @@ enabled_channels = ["project_payment"]
 - `applyment_state`
 - `applyment_state_message`
 - `sub_mchid`
-- `sub_appid`
+- `sub_appid`，仅子商户自有小程序模式填写
 - `appid_binding_state`
 - `appid_binding_message`
 - `payment_config_id`
@@ -273,7 +277,7 @@ enabled_channels = ["project_payment"]
 - 详情抽屉或详情页。
 - 审核动作。
 - 人工进件状态回填。
-- `sub_mchid` / `sub_appid` 回填。
+- `sub_mchid` / 可选 `sub_appid` 回填。
 - 一键激活配置。
 
 ## 权限建议
@@ -330,7 +334,7 @@ enabled_channels = ["project_payment"]
 2. 租户 Admin 可以看到申请当前状态、驳回原因、进件进度和开通结果。
 3. 平台 Admin 可以分页查看申请列表。
 4. 平台 Admin 可以审核通过或驳回申请。
-5. 平台 Admin 可以回填微信申请单、进件状态、`sub_mchid`、`sub_appid` 和 AppID 绑定状态。
+5. 平台 Admin 可以回填微信申请单、进件状态、`sub_mchid`、可选 `sub_appid` 和 AppID 绑定状态。
 6. 平台 Admin 可以在条件满足后激活租户微信支付配置。
 7. 激活后 `tenant_payment_configs` 满足服务商子商户支付校验。
 8. 未开通或未绑定 AppID 的租户不能创建微信支付订单，返回稳定错误码。
@@ -345,7 +349,7 @@ enabled_channels = ["project_payment"]
 - 已配置真实 secret bundle。
 - 租户申请状态已到 `active`。
 - `sub_mchid` 已回填。
-- 平台小程序 AppID 已绑定到该 `sub_mchid`。
+- 服务商小程序支付授权或关联已确认；子商户自有小程序模式已完成 `sub_appid` 绑定。
 - 测试环境回调域名可被微信支付访问。
 - 有一个真实 pending 收款 workflow task。
 - 有一个平台小程序 AppID 下的真实用户 `openid`。

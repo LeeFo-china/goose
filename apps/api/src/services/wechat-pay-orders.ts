@@ -312,7 +312,6 @@ export class WechatPayOrderService {
     }
     if (
       !config.sub_merchant_id ||
-      !config.sub_app_id ||
       config.applyment_state !== "opened" ||
       config.appid_binding_state !== "bound"
     ) {
@@ -324,7 +323,6 @@ export class WechatPayOrderService {
           applyment_state: config.applyment_state,
           appid_binding_state: config.appid_binding_state,
           has_sub_merchant_id: Boolean(config.sub_merchant_id),
-          has_sub_app_id: Boolean(config.sub_app_id),
         },
       );
     }

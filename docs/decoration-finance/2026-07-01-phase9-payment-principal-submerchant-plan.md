@@ -1,5 +1,10 @@
 # Phase 9 支付主体与租户特约商户管理方案
 
+> 2026-07-20 契约修正：服务商小程序场景不要求 `sub_appid`，付款人使用
+> `sp_openid`；子商户小程序场景才使用 `sub_appid + sub_openid`。以后续文档
+> [2026-07-20-service-provider-miniprogram-jsapi-contract-fix.md](./2026-07-20-service-provider-miniprogram-jsapi-contract-fix.md)
+> 为准。
+
 日期：2026-07-01
 
 ## 背景
@@ -20,9 +25,9 @@
 | 场景 | 收款主体 | 微信模式 | 商户参数 | 资金归属 |
 | --- | --- | --- | --- | --- |
 | 平台自收款 | 平台 | 直连商户 | `mchid + appid` | 平台商户号 |
-| 租户项目收款 | 租户 | 服务商子商户 | `sp_mchid + sub_mchid + sub_appid` | 租户特约商户 |
+| 租户项目收款 | 租户 | 服务商子商户 | `sp_mchid + sub_mchid + sp_appid`；子商户自有小程序场景再带 `sub_appid` | 租户特约商户 |
 
-平台统一小程序可以服务多个租户子商户，但每个租户的 `sub_mchid` 都需要单独完成平台小程序 AppID 绑定。
+平台统一的服务商小程序可以服务多个租户子商户。每个租户的 `sub_mchid` 都需要完成服务商小程序支付授权或关联确认；只有改用子商户自有小程序时，才需要额外配置并绑定 `sub_appid`。
 
 ## 微信支付模式
 
@@ -53,15 +58,16 @@
 - `merchant_mode = service_provider_sub_merchant`
 - `merchant_id = 服务商商户号`
 - `sub_merchant_id = 租户特约商户号`
-- `app_id = 服务商/平台 AppID`
-- `sub_app_id = 平台统一小程序 AppID`
+- `app_id = 服务商统一小程序 AppID`，对应下单参数 `sp_appid`
+- `sub_app_id = null`；仅子商户自有小程序模式填写对应 AppID
 
 下单方式：
 
 - 服务商 JSAPI/小程序支付。
 - 使用服务商商户证书和 APIv3 密钥签名。
 - 请求必须带 `sub_mchid`。
-- 使用平台统一小程序时，传 `sub_appid = 平台小程序 AppID`，`payer.sub_openid = 用户在平台小程序下的 openid`。
+- 使用服务商统一小程序时，不传 `sub_appid`，付款人使用 `payer.sp_openid`。
+- 使用子商户自有小程序时，传 `sub_appid`，付款人使用该小程序 AppID 下的 `payer.sub_openid`。
 
 参考：
 
@@ -85,7 +91,7 @@
 5. 租户完成账户验证。
 6. 租户签约。
 7. 平台回填 `sub_mchid`。
-8. 平台把统一小程序 AppID 绑定到该 `sub_mchid`。
+8. 平台确认该 `sub_mchid` 已完成服务商小程序支付授权或关联；子商户自有小程序模式再完成 `sub_appid` 绑定。
 9. Admin 标记租户微信支付配置为 `pending` 或 `active`。
 
 ### 第二阶段：API 进件
@@ -131,7 +137,7 @@ Admin 需要提供“租户微信支付进件/配置”管理能力。
 - `sp_mchid`。
 - `sub_mchid`。
 - `sp_appid`。
-- `sub_appid`。
+- `sub_appid`，仅子商户自有小程序模式填写。
 - 商户简称。
 - 结算账户摘要。
 - 超级管理员摘要。
@@ -309,6 +315,6 @@ Admin 不负责：
 还不够让租户直接上线收款，因为每个租户仍缺：
 
 - `sub_mchid`
-- 平台小程序 AppID 与该 `sub_mchid` 的绑定确认
+- 服务商小程序支付授权或关联确认；子商户自有小程序模式还需 `sub_appid` 绑定确认
 - 租户结算账户审核和签约状态
 - 生产密钥轮换后的密钥引用
