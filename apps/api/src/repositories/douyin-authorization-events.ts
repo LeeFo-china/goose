@@ -85,13 +85,17 @@ implements DouyinAuthorizationEventRepository {
   ) {}
 
   async claimEvent(input: Parameters<DouyinAuthorizationEventRepository["claimEvent"]>[0]) {
-    const result = await this.execute(() => this.client.rpc("claim_douyin_authorization_event", {
-      p_event_key: input.eventKey,
-      p_component_appid: input.componentAppId,
-      p_event_name: input.eventName,
-      p_authorizer_appid: input.authorizerAppId,
-      p_occurred_at: input.occurredAt,
-    }));
+    const result = await this.execute(async () => {
+      const response = await this.client.rpc("claim_douyin_authorization_event", {
+        p_event_key: input.eventKey,
+        p_component_appid: input.componentAppId,
+        p_event_name: input.eventName,
+        p_authorizer_appid: input.authorizerAppId,
+        p_occurred_at: input.occurredAt,
+      });
+      assertClaimSuccess(response);
+      return response;
+    });
     const rows = Array.isArray(result.data) ? result.data : [];
     const parsed = rows.length === 1 ? ClaimRowSchema.safeParse(rows[0]) : null;
     if (!parsed?.success) throw invalidResponseError();
@@ -191,6 +195,23 @@ implements DouyinAuthorizationEventRepository {
       throw repositoryError();
     }
   }
+}
+
+function assertClaimSuccess(result: DouyinAuthorizationEventDatabaseResult): void {
+  if (!result.error) return;
+  if (databaseErrorMessage(result.error) === "DOUYIN_COMPONENT_NOT_ACTIVE") {
+    throw Errors.business(
+      503,
+      "抖音第三方组件未启用",
+      "DOUYIN_COMPONENT_NOT_ACTIVE",
+    );
+  }
+  throw repositoryError();
+}
+
+function databaseErrorMessage(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("message" in error)) return undefined;
+  return typeof error.message === "string" ? error.message : undefined;
 }
 
 function invalidResponseError(): AppError {

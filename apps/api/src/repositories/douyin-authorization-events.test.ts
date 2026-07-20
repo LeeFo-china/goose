@@ -52,6 +52,30 @@ describe("DouyinAuthorizationEventsRepository", () => {
     });
   });
 
+  test("preserves inactive-component claim errors without leaking database details", async () => {
+    const fixture = client(null, {
+      message: "DOUYIN_COMPONENT_NOT_ACTIVE",
+      details: "component-secret",
+    });
+    let caught: unknown;
+    try {
+      await new Repository(fixture.client).claimEvent({
+        eventKey: EVENT_KEY,
+        componentAppId: "tt-component-1",
+        eventName: "PUSH",
+        authorizerAppId: null,
+        occurredAt: OCCURRED_AT,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      statusCode: 503,
+      code: "DOUYIN_COMPONENT_NOT_ACTIVE",
+    });
+    expect(JSON.stringify(caught)).not.toContain("component-secret");
+  });
+
   test("reads only the stable processing state", async () => {
     const fixture = client("completed");
     await expect(new Repository(fixture.client).findEventState(EVENT_KEY))
