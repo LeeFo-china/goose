@@ -247,6 +247,39 @@ describe("WechatPayOrderService", () => {
     expect(createJsapiPrepay).not.toHaveBeenCalled();
   });
 
+  test("does not duplicate upstream prepay while the winning request is still creating it", async () => {
+    findPendingByWorkflowTask
+      .mockImplementationOnce(async () => null)
+      .mockImplementationOnce(async () => ({
+        ...pendingOrder,
+        payer_openid: "o-test-openid",
+        prepay_id: null,
+      }));
+    createOrder.mockImplementationOnce(async () => {
+      throw new AppError(
+        409,
+        "同一流程待办的微信支付订单正在创建",
+        "WECHAT_PAY_PENDING_ORDER_CONCURRENT",
+      );
+    });
+    const service = await createService();
+    await expect(
+      service.createOrder(authContext(), {
+        project_id: projectId,
+        receivable_plan_id: receivablePlanId,
+        workflow_task_id: workflowTaskId,
+        amount: 8000,
+        payer_openid: "o-test-openid",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_PENDING_ORDER_CONCURRENT",
+    });
+    expect(findPendingByWorkflowTask).toHaveBeenCalledTimes(2);
+    expect(createJsapiPrepay).not.toHaveBeenCalled();
+    expect(createMiniProgramPaymentRequest).not.toHaveBeenCalled();
+  });
+
   test("rejects order creation when payment config is not active", async () => {
     findWechatPayConfig.mockImplementationOnce(async () => ({
       ...activeConfig,

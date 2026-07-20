@@ -206,7 +206,7 @@ export class WechatPayOrderService {
           tenantId,
           workflowTaskId: normalizedInput.workflow_task_id,
         });
-      if (!concurrentOrder) throw error;
+      if (!concurrentOrder?.prepay_id) throw error;
       return resumePendingWechatPayOrder({
         tenantId,
         request: normalizedInput,
