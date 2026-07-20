@@ -128,6 +128,83 @@ describe("platform payment settings panel", () => {
     );
   });
 
+  test("readiness fetch failures clear cached status before showing the error", () => {
+    const panelSource = readSource("./platform-payment-settings-panel.tsx");
+    const catchBody = panelSource.match(
+      /catch\s*\{([\s\S]*?)\}\s*finally/,
+    )?.[1] || "";
+
+    expect(catchBody).toContain("setReadiness(null)");
+    expect(catchBody.indexOf("setReadiness(null)")).toBeLessThan(
+      catchBody.indexOf("setReadinessError"),
+    );
+  });
+
+  test("validation request errors expose only allowlisted safe diagnostics", () => {
+    const readinessSource = readSource(
+      "./platform-payment-readiness-section.tsx",
+    );
+
+    expect(readinessSource).toContain("toSafeValidationRequestFeedback");
+    expect(readinessSource).toContain("error instanceof Error");
+    expect(readinessSource).toContain("error.message");
+    expect(readinessSource).toContain("requestError.code");
+    expect(readinessSource).toContain("requestError.requestId");
+    expect(readinessSource).toContain("STABLE_ERROR_CODE_PATTERN");
+    expect(readinessSource).toContain("SAFE_REQUEST_ID_PATTERN");
+    expect(readinessSource).toContain("VALIDATION_REQUEST_ERROR_MESSAGE");
+    expect(readinessSource).toContain("catch (validationError)");
+    expect(readinessSource).toContain(
+      "setFeedback(toSafeValidationRequestFeedback(validationError))",
+    );
+    expect(readinessSource).not.toContain("validationError.payload");
+    expect(readinessSource).not.toContain("validationError.details");
+    expect(readinessSource).not.toContain("JSON.stringify(validationError)");
+    expect(readinessSource).not.toContain("Object.values(validationError)");
+    expect(readinessSource).not.toContain("Object.entries(validationError)");
+  });
+
+  test("validation error normalization rejects invalid and hidden fields", async () => {
+    const readinessModule = await import(
+      "./platform-payment-readiness-section"
+    );
+    const normalize = (readinessModule as unknown as {
+      toSafeValidationRequestFeedback?: (error: unknown) => unknown;
+    }).toSafeValidationRequestFeedback;
+
+    expect(normalize).toBeFunction();
+    const requestError = Object.assign(new Error(" 配置已更新 "), {
+      code: "PLATFORM_PAYMENT_PROFILE_CHANGED",
+      requestId: "request-id:123",
+    });
+    Object.defineProperties(requestError, {
+      payload: { get: () => { throw new Error("payload accessed"); } },
+      details: { get: () => { throw new Error("details accessed"); } },
+    });
+    expect(normalize?.(requestError)).toEqual({
+      tone: "error",
+      message: "配置已更新",
+      code: "PLATFORM_PAYMENT_PROFILE_CHANGED",
+      requestId: "request-id:123",
+    });
+
+    expect(normalize?.(Object.assign(new Error("raw\nresponse"), {
+      code: "invalid-code",
+      requestId: "invalid request id",
+    }))).toEqual({
+      tone: "error",
+      message: "微信支付配置验证请求失败，请稍后重试。",
+    });
+    expect(normalize?.({
+      message: "arbitrary object message",
+      code: "ARBITRARY_OBJECT_CODE",
+      requestId: "arbitrary-object-id",
+    })).toEqual({
+      tone: "error",
+      message: "微信支付配置验证请求失败，请稍后重试。",
+    });
+  });
+
   test("payment readiness renders blockers and safe validation evidence", () => {
     const readinessSource = readOptionalSource(
       "./platform-payment-readiness-section.tsx",

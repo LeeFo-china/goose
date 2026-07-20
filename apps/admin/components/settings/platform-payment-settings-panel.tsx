@@ -71,6 +71,7 @@ export function PlatformPaymentSettingsPanel({
       );
       setReadiness(result);
     } catch {
+      setReadiness(null);
       setReadinessError("支付就绪状态加载失败，请稍后重试。");
     } finally {
       setReadinessPending(false);

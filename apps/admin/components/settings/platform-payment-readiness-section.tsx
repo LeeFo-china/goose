@@ -21,6 +21,17 @@ type ValidationFeedback = {
   requestId?: string | null;
 };
 
+type BackendRequestError = Error & {
+  code?: unknown;
+  requestId?: unknown;
+};
+
+const VALIDATION_REQUEST_ERROR_MESSAGE =
+  "微信支付配置验证请求失败，请稍后重试。";
+const STABLE_ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,99}$/;
+const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+const MAX_SAFE_ERROR_MESSAGE_LENGTH = 200;
+
 export function PaymentProfileReadinessSection({
   profile,
   readiness,
@@ -58,7 +69,7 @@ export function PaymentProfileReadinessSection({
           `/platform/payment/wechat-pay/profiles/${profile.profile_code}/validate`,
           {
             method: "POST",
-            fallbackMessage: "微信支付配置验证请求失败",
+            fallbackMessage: VALIDATION_REQUEST_ERROR_MESSAGE,
           },
         );
         setFeedback(result.validation.ok
@@ -75,11 +86,8 @@ export function PaymentProfileReadinessSection({
           });
         router.refresh();
         await refreshReadiness();
-      } catch {
-        setFeedback({
-          tone: "error",
-          message: "微信支付配置验证请求失败，请稍后重试。",
-        });
+      } catch (validationError) {
+        setFeedback(toSafeValidationRequestFeedback(validationError));
       }
     });
   }
@@ -197,4 +205,49 @@ export function PaymentProfileReadinessSection({
       ) : null}
     </section>
   );
+}
+
+export function toSafeValidationRequestFeedback(
+  error: unknown,
+): ValidationFeedback {
+  if (!(error instanceof Error)) {
+    return {
+      tone: "error",
+      message: VALIDATION_REQUEST_ERROR_MESSAGE,
+    };
+  }
+
+  const requestError = error as BackendRequestError;
+  const message = safeErrorMessage(error.message) ??
+    VALIDATION_REQUEST_ERROR_MESSAGE;
+  const code = safeDiagnostic(requestError.code, STABLE_ERROR_CODE_PATTERN);
+  const requestId = safeDiagnostic(
+    requestError.requestId,
+    SAFE_REQUEST_ID_PATTERN,
+  );
+  return {
+    tone: "error",
+    message,
+    ...(code ? { code } : {}),
+    ...(requestId ? { requestId } : {}),
+  };
+}
+
+function safeErrorMessage(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (
+    !normalized ||
+    normalized.length > MAX_SAFE_ERROR_MESSAGE_LENGTH ||
+    /[\u0000-\u001f\u007f]/.test(normalized)
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+function safeDiagnostic(value: unknown, pattern: RegExp) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return pattern.test(normalized) ? normalized : null;
 }
