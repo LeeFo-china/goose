@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -259,6 +261,70 @@ function findOnlyBackup(targetDir: string): string {
   );
   expect(backupNames).toHaveLength(1);
   return join(targetDir, backupNames[0] ?? "missing-backup");
+}
+
+function findBackupNames(targetDir: string): string[] {
+  return readdirSync(targetDir).filter((name) =>
+    /^\.env\.dev\.api\.backup-[0-9]{14}$/.test(name)
+  );
+}
+
+function expectValidBackup(harness: RemoteHarnessResult): string {
+  const backupPath = findOnlyBackup(harness.targetDir);
+  expectFileBytes(backupPath, harness.original);
+  expectMode600(backupPath);
+  return backupPath;
+}
+
+function countExactKeyRecords(path: string, key: DouyinEnvKey): number {
+  const bytes = readFileSync(path);
+  const prefix = Buffer.from(`${key}=`, "utf8");
+  let count = 0;
+  let offset = 0;
+
+  while (offset <= bytes.length) {
+    const nextLf = bytes.indexOf(0x0a, offset);
+    const lineEnd = nextLf === -1 ? bytes.length : nextLf;
+    const line = bytes.subarray(offset, lineEnd);
+    if (
+      line.length >= prefix.length &&
+      line.subarray(0, prefix.length).equals(prefix)
+    ) {
+      count += 1;
+    }
+    if (nextLf === -1) {
+      break;
+    }
+    offset = nextLf + 1;
+  }
+
+  return count;
+}
+
+function expectTargetKeyRecordCount(path: string, expectedCount: number): void {
+  for (const key of DOUYIN_ENV_KEYS) {
+    expect(countExactKeyRecords(path, key)).toBe(expectedCount);
+  }
+}
+
+function expectNoRemoteTransactionTemps(
+  targetDir: string,
+  allowedNames: readonly string[] = [],
+): void {
+  const allowed = new Set(allowedNames);
+  const tempNames = readdirSync(targetDir).filter(
+    (name) =>
+      /^\.douyin-env-(?:upload|candidate|before|after|target-block|restore)\./.test(
+        name,
+      ) && !allowed.has(name),
+  );
+  expect(tempNames).toEqual([]);
+}
+
+function targetUpdateWarningCount(result: CliResult): number {
+  return result.stderr
+    .split("\n")
+    .filter((line) => line === "target_may_be_updated=true").length;
 }
 
 function expectNoRemoteSecrets(
@@ -1034,14 +1100,22 @@ describe("remote douyin env transaction baseline rejection", () => {
     expectRedactedFailure(harness.result, "REMOTE_TARGET_STATE_INVALID");
     expectFileBytes(harness.targetFile, harness.original);
   });
+});
+
+describe("remote douyin env transaction failures", () => {
+  afterEach(cleanupRemoteTemporaryRoots);
 
   const insecureFileCases: ReadonlyArray<{
     readonly name: string;
+    readonly expectedCode:
+      | "REMOTE_TARGET_STATE_INVALID"
+      | "REMOTE_PAYLOAD_INVALID";
     readonly functionOverrides?: string;
     readonly prepare?: (paths: RemoteHarnessPaths) => void;
   }> = [
     {
       name: "target symlink",
+      expectedCode: "REMOTE_TARGET_STATE_INVALID",
       prepare: (paths) => {
         const sourcePath = join(paths.root, "target-source.env");
         writeFileSync(sourcePath, paths.original, { mode: 0o600 });
@@ -1051,7 +1125,17 @@ describe("remote douyin env transaction baseline rejection", () => {
       },
     },
     {
+      name: "target directory symlink",
+      expectedCode: "REMOTE_TARGET_STATE_INVALID",
+      prepare: (paths) => {
+        const realTargetDir = join(paths.root, "real-docker");
+        renameSync(paths.targetDir, realTargetDir);
+        symlinkSync(realTargetDir, paths.targetDir, "dir");
+      },
+    },
+    {
       name: "payload symlink",
+      expectedCode: "REMOTE_PAYLOAD_INVALID",
       prepare: (paths) => {
         const sourcePath = join(paths.root, "payload-source.env");
         writeFileSync(sourcePath, paths.payload, { mode: 0o600 });
@@ -1062,14 +1146,17 @@ describe("remote douyin env transaction baseline rejection", () => {
     },
     {
       name: "target mode 0644",
+      expectedCode: "REMOTE_TARGET_STATE_INVALID",
       prepare: (paths) => chmodSync(paths.targetFile, 0o644),
     },
     {
       name: "payload mode 0644",
+      expectedCode: "REMOTE_PAYLOAD_INVALID",
       prepare: (paths) => chmodSync(paths.payloadFile, 0o644),
     },
     {
       name: "injected wrong target owner",
+      expectedCode: "REMOTE_TARGET_STATE_INVALID",
       functionOverrides: [
         "file_owner() {",
         '  local path="$1"',
@@ -1083,6 +1170,7 @@ describe("remote douyin env transaction baseline rejection", () => {
     },
     {
       name: "injected wrong upload owner",
+      expectedCode: "REMOTE_PAYLOAD_INVALID",
       functionOverrides: [
         "file_owner() {",
         '  local path="$1"',
@@ -1098,18 +1186,432 @@ describe("remote douyin env transaction baseline rejection", () => {
 
   test.each(insecureFileCases)(
     "fails safely without replacing target for $name",
-    ({ functionOverrides, prepare }) => {
+    ({ expectedCode, functionOverrides, name, prepare }) => {
       const harness = runRemoteTransaction({ functionOverrides, prepare });
-      expectNoRemoteSecrets(harness.result);
-      const stableCodes = harness.result.stderr
-        .split("\n")
-        .filter((line) => /^REMOTE_[A-Z_]+$/.test(line));
 
-      expect(harness.result.exitCode).not.toBe(0);
-      expect(stableCodes.length).toBeGreaterThan(0);
+      expectRedactedFailure(harness.result, expectedCode);
       expectFileBytes(harness.targetFile, harness.original);
+      if (name === "target symlink") {
+        expect(lstatSync(harness.targetFile).isSymbolicLink()).toBe(true);
+      }
+      if (name === "target directory symlink") {
+        expect(lstatSync(harness.targetDir).isSymbolicLink()).toBe(true);
+      }
     },
   );
+
+  const candidateTempCases = [
+    { name: "candidate", templateToken: ".douyin-env-candidate." },
+    { name: "before view", templateToken: ".douyin-env-before." },
+    { name: "after view", templateToken: ".douyin-env-after." },
+    { name: "target block", templateToken: ".douyin-env-target-block." },
+  ] as const;
+
+  test.each(candidateTempCases)(
+    "rejects an insecure $name temp before any write-producing helper runs",
+    ({ templateToken }) => {
+      const writeProbeName = ".temp-write-producing-helper-ran";
+      const functionOverrides = [
+        "create_transaction_temp() {",
+        '  local variable_name="$1"',
+        '  local template="$2"',
+        "  local temp_path",
+        '  temp_path="$(mktemp "$template")" || return 1',
+        '  printf -v "$variable_name" \'%s\' "$temp_path"',
+        `  if [[ "$template" == *"${templateToken}"* ]]; then`,
+        '    command install -m 644 /dev/null "$temp_path" >/dev/null 2>&1',
+        "  else",
+        '    command install -m 600 /dev/null "$temp_path" >/dev/null 2>&1',
+        "  fi",
+        "}",
+        "filter_non_target() {",
+        `  : > "$TARGET_DIR/${writeProbeName}"`,
+        "  return 1",
+        "}",
+      ].join("\n");
+      const harness = runRemoteTransaction({ functionOverrides });
+
+      expectRedactedFailure(harness.result, "REMOTE_CANDIDATE_INVALID");
+      expectFileBytes(harness.targetFile, harness.original);
+      expectValidBackup(harness);
+      expect(existsSync(join(harness.targetDir, writeProbeName))).toBe(false);
+      expect(targetUpdateWarningCount(harness.result)).toBe(0);
+      expectNoRemoteTransactionTemps(harness.targetDir);
+    },
+  );
+
+  test("rejects an insecure restore temp before copying backup bytes", () => {
+    const copyProbeName = ".temp-backup-copy-ran";
+    const functionOverrides = [
+      "create_transaction_temp() {",
+      '  local variable_name="$1"',
+      '  local template="$2"',
+      "  local temp_path",
+      '  temp_path="$(mktemp "$template")" || return 1',
+      '  printf -v "$variable_name" \'%s\' "$temp_path"',
+      '  if [[ "$template" == *".douyin-env-restore."* ]]; then',
+      '    command install -m 644 /dev/null "$temp_path" >/dev/null 2>&1',
+      "  else",
+      '    command install -m 600 /dev/null "$temp_path" >/dev/null 2>&1',
+      "  fi",
+      "}",
+      "install() {",
+      '  if [[ "$#" -eq 4 && "$1" == "-m" && "$3" == "$BACKUP_PATH" ]]; then',
+      `    : > "$TARGET_DIR/${copyProbeName}"`,
+      "  fi",
+      '  command install "$@"',
+      "}",
+      "verify_post_move() { return 1; }",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+
+    expectRedactedFailure(harness.result, "REMOTE_ROLLBACK_FAILED");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expectValidBackup(harness);
+    expect(existsSync(join(harness.targetDir, copyProbeName))).toBe(false);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+    expectNoRemoteTransactionTemps(harness.targetDir);
+  });
+
+  test.each(candidateTempCases)(
+    "revalidates the $name temp after its write step",
+    ({ templateToken }) => {
+      const modeCheckProbeName = ".temp-mode-check-seen";
+      const functionOverrides = [
+        "file_mode() {",
+        '  local path="$1"',
+        `  if [[ "$path" == *"${templateToken}"* ]]; then`,
+        `    if [[ -e "$TARGET_DIR/${modeCheckProbeName}" ]]; then`,
+        "      printf '%s\\n' '644'",
+        "    else",
+        `      : > "$TARGET_DIR/${modeCheckProbeName}"`,
+        "      printf '%s\\n' '600'",
+        "    fi",
+        "    return 0",
+        "  fi",
+        "  printf '%s\\n' '600'",
+        "}",
+      ].join("\n");
+      const harness = runRemoteTransaction({ functionOverrides });
+
+      expectRedactedFailure(harness.result, "REMOTE_CANDIDATE_INVALID");
+      expectFileBytes(harness.targetFile, harness.original);
+      expectValidBackup(harness);
+      expect(targetUpdateWarningCount(harness.result)).toBe(0);
+    },
+  );
+
+  test("revalidates the restore temp after copying backup bytes", () => {
+    const modeCheckProbeName = ".restore-temp-mode-check-seen";
+    const functionOverrides = [
+      "file_mode() {",
+      '  local path="$1"',
+      '  if [[ "$path" == *"/.douyin-env-restore."* ]]; then',
+      `    if [[ -e "$TARGET_DIR/${modeCheckProbeName}" ]]; then`,
+      "      printf '%s\\n' '644'",
+      "    else",
+      `      : > "$TARGET_DIR/${modeCheckProbeName}"`,
+      "      printf '%s\\n' '600'",
+      "    fi",
+      "    return 0",
+      "  fi",
+      "  printf '%s\\n' '600'",
+      "}",
+      "verify_post_move() { return 1; }",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+
+    expectRedactedFailure(harness.result, "REMOTE_ROLLBACK_FAILED");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+  });
+
+  const invalidTargetTextCases = [
+    { name: "carriage return", original: "BASE=value\r\n" },
+    { name: "NUL byte", original: "BASE=value\0\n" },
+  ] as const;
+
+  test.each(invalidTargetTextCases)(
+    "rejects existing target text containing $name before backup",
+    ({ original }) => {
+      const harness = runRemoteTransaction({ original });
+
+      expectRedactedFailure(harness.result, "REMOTE_TARGET_STATE_INVALID");
+      expectFileBytes(harness.targetFile, harness.original);
+      expectTargetKeyRecordCount(harness.targetFile, 0);
+      expect(findBackupNames(harness.targetDir)).toEqual([]);
+    },
+  );
+
+  test("rejects a failing pre-move hook without replacing the target", () => {
+    const harness = runRemoteTransaction({
+      functionOverrides: "before_atomic_move() { return 1; }",
+    });
+
+    expectRedactedFailure(harness.result, "REMOTE_CANDIDATE_INVALID");
+    expectFileBytes(harness.targetFile, harness.original);
+    expectValidBackup(harness);
+    expect(targetUpdateWarningCount(harness.result)).toBe(0);
+  });
+
+  test("detects a target mutation made by the pre-move hook", () => {
+    const externalChange = Buffer.from("EXTERNAL=change\n", "utf8");
+    const harness = runRemoteTransaction({
+      functionOverrides: [
+        "before_atomic_move() {",
+        "  printf '%s\\n' 'EXTERNAL=change' >> \"$TARGET_FILE\"",
+        "  return 0",
+        "}",
+      ].join("\n"),
+    });
+
+    expectRedactedFailure(harness.result, "REMOTE_CONCURRENT_CHANGE");
+    expectFileBytes(
+      harness.targetFile,
+      Buffer.concat([harness.original, externalChange]),
+    );
+    expectValidBackup(harness);
+    expect(targetUpdateWarningCount(harness.result)).toBe(0);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+  });
+
+  test("atomically restores the original target after post-move verification fails", () => {
+    const harness = runRemoteTransaction({
+      functionOverrides: "verify_post_move() { return 1; }",
+    });
+
+    expectRedactedFailure(harness.result, "REMOTE_APPLY_FAILED");
+    expectFileBytes(harness.targetFile, harness.original);
+    expectMode600(harness.targetFile);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(0);
+    expectNoRemoteTransactionTemps(harness.targetDir);
+  });
+
+  test("reports rollback failure once and cleans only recorded temp paths", () => {
+    const decoyNames = [
+      ".douyin-env-upload.keep",
+      ".douyin-env-candidate.keep",
+      ".douyin-env-before.keep",
+      ".douyin-env-after.keep",
+      ".douyin-env-target-block.keep",
+      ".douyin-env-restore.keep",
+    ] as const;
+    const decoyBytes = Buffer.from("test-decoy-must-remain\n", "utf8");
+    const harness = runRemoteTransaction({
+      functionOverrides: [
+        "verify_post_move() { return 1; }",
+        "restore_target_from_backup() { return 1; }",
+      ].join("\n"),
+      prepare: (paths) => {
+        for (const name of decoyNames) {
+          writeFileSync(join(paths.targetDir, name), decoyBytes, {
+            mode: 0o600,
+          });
+        }
+      },
+    });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+
+    expectRedactedFailure(harness.result, "REMOTE_ROLLBACK_FAILED");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+    for (const name of decoyNames) {
+      expectFileBytes(join(harness.targetDir, name), decoyBytes);
+    }
+    expectNoRemoteTransactionTemps(harness.targetDir, decoyNames);
+  });
+
+  test("does not roll back a post-move external target mutation", () => {
+    const externalChange = Buffer.from(
+      "EXTERNAL_AFTER_MOVE=change\n",
+      "utf8",
+    );
+    const harness = runRemoteTransaction({
+      functionOverrides: [
+        "verify_post_move() {",
+        "  printf '%s\\n' 'EXTERNAL_AFTER_MOVE=change' >> \"$1\"",
+        "  return 1",
+        "}",
+      ].join("\n"),
+    });
+    const expectedTarget = Buffer.concat([
+      harness.original,
+      harness.payload,
+      externalChange,
+    ]);
+
+    expectRedactedFailure(harness.result, "REMOTE_CONCURRENT_CHANGE");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expectTargetKeyRecordCount(harness.targetFile, 1);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+  });
+
+  test("does not roll back a same-content post-move mode change", () => {
+    const harness = runRemoteTransaction({
+      functionOverrides: [
+        "verify_post_move() {",
+        '  chmod 644 "$1"',
+        "  return 1",
+        "}",
+      ].join("\n"),
+    });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+
+    expectRedactedFailure(harness.result, "REMOTE_CONCURRENT_CHANGE");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expect(statSync(harness.targetFile).mode & 0o7777).toBe(0o644);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+  });
+
+  test("does not roll back a same-bytes post-move inode replacement", () => {
+    const identityLinkName = ".external-replacement-identity";
+    const functionOverrides = [
+      "verify_post_move() {",
+      '  local replacement="$TARGET_DIR/.external-same-bytes-replacement"',
+      `  local identity_link="$TARGET_DIR/${identityLinkName}"`,
+      '  cp "$1" "$replacement"',
+      '  chmod 600 "$replacement"',
+      '  ln "$replacement" "$identity_link"',
+      '  mv "$replacement" "$1"',
+      "  return 1",
+      "}",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+    const identityLink = join(harness.targetDir, identityLinkName);
+
+    expectRedactedFailure(harness.result, "REMOTE_CONCURRENT_CHANGE");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expect(statSync(harness.targetFile).ino).toBe(statSync(identityLink).ino);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+  });
+
+  test("does not overwrite content changed during restore candidate construction", () => {
+    const externalChange = Buffer.from(
+      "EXTERNAL_DURING_RESTORE=change\n",
+      "utf8",
+    );
+    const functionOverrides = [
+      "verify_post_move() { return 1; }",
+      "install() {",
+      '  if [[ "$#" -eq 4 && "$1" == "-m" && "$3" == "$BACKUP_PATH" ]]; then',
+      '    command install "$@" || return 1',
+      "    printf '%s\\n' 'EXTERNAL_DURING_RESTORE=change' >> \"$TARGET_FILE\" || return 1",
+      "    return 0",
+      "  fi",
+      '  command install "$@"',
+      "}",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+    const expectedTarget = Buffer.concat([
+      harness.original,
+      harness.payload,
+      externalChange,
+    ]);
+
+    expectRedactedFailure(harness.result, "REMOTE_CONCURRENT_CHANGE");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expectTargetKeyRecordCount(harness.targetFile, 1);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+    expectNoRemoteTransactionTemps(harness.targetDir);
+  });
+
+  test("does not overwrite a same-bytes inode replacement during restore candidate construction", () => {
+    const identityLinkName = ".external-during-restore-identity";
+    const functionOverrides = [
+      "verify_post_move() { return 1; }",
+      "install() {",
+      '  if [[ "$#" -eq 4 && "$1" == "-m" && "$3" == "$BACKUP_PATH" ]]; then',
+      '    local replacement="$TARGET_DIR/.external-during-restore-replacement"',
+      `    local identity_link="$TARGET_DIR/${identityLinkName}"`,
+      '    command install "$@" || return 1',
+      '    cp "$TARGET_FILE" "$replacement" || return 1',
+      '    chmod 600 "$replacement" || return 1',
+      '    ln "$replacement" "$identity_link" || return 1',
+      '    mv "$replacement" "$TARGET_FILE" || return 1',
+      "    return 0",
+      "  fi",
+      '  command install "$@"',
+      "}",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+    const identityLink = join(harness.targetDir, identityLinkName);
+
+    expectRedactedFailure(harness.result, "REMOTE_CONCURRENT_CHANGE");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expect(statSync(harness.targetFile).ino).toBe(statSync(identityLink).ino);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+    expectNoRemoteTransactionTemps(harness.targetDir);
+  });
+
+  test("does not warn about target uncertainty when cleanup fails after verified rollback", () => {
+    const functionOverrides = [
+      "verify_post_move() { return 1; }",
+      "remove_temp_path() {",
+      '  local path="$1"',
+      '  if [[ "$path" == "$PAYLOAD_FILE" ]]; then',
+      "    return 1",
+      "  fi",
+      '  if [[ -e "$path" || -L "$path" ]]; then',
+      '    rm -f "$path"',
+      "  fi",
+      "}",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+
+    expectRedactedFailure(harness.result, "CLEANUP_FAILED");
+    expect(harness.result.stderr).toContain("REMOTE_APPLY_FAILED\n");
+    expect(harness.result.stdout).toContain("rollback_restored=true\n");
+    expectFileBytes(harness.targetFile, harness.original);
+    expectMode600(harness.targetFile);
+    expectValidBackup(harness);
+    expect(existsSync(harness.payloadFile)).toBe(true);
+    expect(targetUpdateWarningCount(harness.result)).toBe(0);
+  });
+
+  test("keeps a verified new target when the container identity changes", () => {
+    const functionOverrides = [
+      "container_snapshot() {",
+      '  local marker="$TARGET_DIR/.container-snapshot-test-marker"',
+      '  if [[ ! -e "$marker" ]]; then',
+      '    : > "$marker"',
+      "    printf '%s\\n' 'fixed-id|fixed-start|fixed-image|healthy'",
+      "    return 0",
+      "  fi",
+      "  printf '%s\\n' 'changed-id|fixed-start|fixed-image|healthy'",
+      "}",
+    ].join("\n");
+    const harness = runRemoteTransaction({ functionOverrides });
+    const expectedTarget = Buffer.concat([harness.original, harness.payload]);
+
+    expectRedactedFailure(harness.result, "REMOTE_CONTAINER_CHANGED");
+    expectFileBytes(harness.targetFile, expectedTarget);
+    expectTargetKeyRecordCount(harness.targetFile, 1);
+    expectMode600(harness.targetFile);
+    expectValidBackup(harness);
+    expect(harness.result.stdout).not.toContain("rollback_restored=true\n");
+    expect(targetUpdateWarningCount(harness.result)).toBe(1);
+  });
 
   test("surfaces upload cleanup failure after an otherwise successful replacement", () => {
     const functionOverrides = [

@@ -26,6 +26,7 @@ BACKUP_CREATED=false
 BACKUP_VALID=false
 TARGET_REPLACED=false
 TARGET_WARNING_EMITTED=false
+RESTORE_CONCURRENT_STATUS=2
 
 emit_target_update_warning() {
   if [[ "$TARGET_WARNING_EMITTED" != true ]]; then
@@ -74,6 +75,21 @@ file_owner() {
   return 1
 }
 
+file_identity() {
+  local path="$1"
+  local identity
+
+  if identity="$(stat -c '%d:%i' "$path" 2>/dev/null)"; then
+    printf '%s\n' "$identity"
+    return 0
+  fi
+  if identity="$(stat -f '%d:%i' "$path" 2>/dev/null)"; then
+    printf '%s\n' "$identity"
+    return 0
+  fi
+  return 1
+}
+
 sha256_file() {
   local path="$1"
 
@@ -100,6 +116,21 @@ contains_cr() {
 
   od -An -v -t x1 "$path" 2>/dev/null \
     | LC_ALL=C grep -Eq '(^|[[:space:]])0d([[:space:]]|$)'
+}
+
+validate_target_text() {
+  local path="$1"
+
+  od -An -v -t x1 "$path" 2>/dev/null \
+    | LC_ALL=C awk '
+      {
+        for (byte_index = 1; byte_index <= NF; byte_index += 1) {
+          if ($byte_index == "00" || $byte_index == "0d") {
+            exit 1
+          }
+        }
+      }
+    ' >/dev/null
 }
 
 validate_target_directory_chain() {
@@ -325,7 +356,9 @@ remote_cleanup_handler() {
   fi
 
   printf '%s\n' "CLEANUP_FAILED" >&2
-  emit_target_update_warning
+  if [[ "$TARGET_REPLACED" == true ]]; then
+    emit_target_update_warning
+  fi
   exit 74
 }
 
@@ -368,6 +401,93 @@ append_payload_records() {
   done < "$payload_path"
 }
 
+before_atomic_move() {
+  return 0
+}
+
+verify_post_move() {
+  local target_file="$1"
+  local expected_owner="$2"
+  local candidate_sha="$3"
+  local expected_payload_sha="$4"
+  local expected_candidate_identity="${5:-}"
+  local installed_target_sha
+  local installed_target_identity
+  local target_block_sha
+
+  validate_secure_regular_file "$target_file" "$expected_owner" || return 1
+  validate_target_text "$target_file" || return 1
+  installed_target_identity="$(file_identity "$target_file")" || return 1
+  if [[ -n "$expected_candidate_identity" ]]; then
+    [[ "$installed_target_identity" == "$expected_candidate_identity" ]] || return 1
+  fi
+  installed_target_sha="$(sha256_file "$target_file")" || return 1
+  [[ "$installed_target_sha" == "$candidate_sha" ]] || return 1
+  validate_target_key_state "$target_file" || return 1
+  [[ -n "$TARGET_BLOCK_PATH" ]] || return 1
+  validate_secure_regular_file "$TARGET_BLOCK_PATH" "$expected_owner" || return 1
+  : > "$TARGET_BLOCK_PATH" || return 1
+  extract_target_block "$target_file" > "$TARGET_BLOCK_PATH" || return 1
+  validate_secure_regular_file "$TARGET_BLOCK_PATH" "$expected_owner" || return 1
+  [[ -s "$TARGET_BLOCK_PATH" ]] || return 1
+  validate_payload_shape "$TARGET_BLOCK_PATH" || return 1
+  target_block_sha="$(sha256_file "$TARGET_BLOCK_PATH")" || return 1
+  [[ "$target_block_sha" == "$expected_payload_sha" ]]
+}
+
+restore_target_from_backup() {
+  local target_dir="$1"
+  local target_file="$2"
+  local backup_path="$3"
+  local expected_owner="$4"
+  local before_sha="$5"
+  local expected_candidate_sha="${6:-}"
+  local expected_candidate_identity="${7:-}"
+  local backup_sha
+  local current_target_identity
+  local current_target_sha
+  local restore_sha
+  local restored_target_sha
+
+  validate_target_directory_chain "$target_dir" || return 1
+  validate_secure_regular_file "$backup_path" "$expected_owner" || return 1
+  validate_target_text "$backup_path" || return 1
+  backup_sha="$(sha256_file "$backup_path")" || return 1
+  [[ "$backup_sha" == "$before_sha" ]] || return 1
+
+  create_transaction_temp RESTORE_PATH "$target_dir/.douyin-env-restore.XXXXXX" \
+    || return 1
+  validate_secure_regular_file "$RESTORE_PATH" "$expected_owner" || return 1
+  install -m 600 "$backup_path" "$RESTORE_PATH" >/dev/null 2>&1 || return 1
+  validate_secure_regular_file "$RESTORE_PATH" "$expected_owner" || return 1
+  validate_target_text "$RESTORE_PATH" || return 1
+  restore_sha="$(sha256_file "$RESTORE_PATH")" || return 1
+  [[ "$restore_sha" == "$before_sha" ]] || return 1
+
+  validate_secure_regular_file "$target_file" "$expected_owner" \
+    || return "$RESTORE_CONCURRENT_STATUS"
+  current_target_sha="$(sha256_file "$target_file")" \
+    || return "$RESTORE_CONCURRENT_STATUS"
+  if [[ -n "$expected_candidate_sha" ]]; then
+    [[ "$current_target_sha" == "$expected_candidate_sha" ]] \
+      || return "$RESTORE_CONCURRENT_STATUS"
+  fi
+  current_target_identity="$(file_identity "$target_file")" \
+    || return "$RESTORE_CONCURRENT_STATUS"
+  if [[ -n "$expected_candidate_identity" ]]; then
+    [[ "$current_target_identity" == "$expected_candidate_identity" ]] \
+      || return "$RESTORE_CONCURRENT_STATUS"
+  fi
+
+  mv "$RESTORE_PATH" "$target_file" >/dev/null 2>&1 || return 1
+  RESTORE_PATH=""
+  validate_secure_regular_file "$target_file" "$expected_owner" || return 1
+  validate_target_text "$target_file" || return 1
+  restored_target_sha="$(sha256_file "$target_file")" || return 1
+  [[ "$restored_target_sha" == "$before_sha" ]] || return 1
+  TARGET_REPLACED=false
+}
+
 apply_douyin_env_transaction() {
   local target_dir="$1"
   local target_file="$2"
@@ -379,9 +499,12 @@ apply_douyin_env_transaction() {
   local target_before_sha
   local current_target_sha
   local candidate_sha
-  local installed_target_sha
+  local candidate_identity
+  local current_target_identity
+  local installed_candidate_identity
   local target_block_sha
   local backup_sha
+  local restore_status
   local timestamp
   local before_container_snapshot
   local after_container_snapshot
@@ -411,8 +534,12 @@ apply_douyin_env_transaction() {
     die "REMOTE_TARGET_STATE_INVALID"
     return 1
   fi
-  if ! validate_secure_regular_file "$payload_path" "$expected_owner"; then
+  if ! validate_target_text "$target_file"; then
     die "REMOTE_TARGET_STATE_INVALID"
+    return 1
+  fi
+  if ! validate_secure_regular_file "$payload_path" "$expected_owner"; then
+    die "REMOTE_PAYLOAD_INVALID"
     return 1
   fi
   if [[ ${#expected_payload_sha} -ne 64 || "$expected_payload_sha" == *[!a-f0-9]* ]]; then
@@ -445,8 +572,12 @@ apply_douyin_env_transaction() {
     die "REMOTE_TARGET_STATE_INVALID"
     return 1
   fi
-  if ! validate_secure_regular_file "$payload_path" "$expected_owner"; then
+  if ! validate_target_text "$target_file"; then
     die "REMOTE_TARGET_STATE_INVALID"
+    return 1
+  fi
+  if ! validate_secure_regular_file "$payload_path" "$expected_owner"; then
+    die "REMOTE_PAYLOAD_INVALID"
     return 1
   fi
   if ! validate_payload_shape "$payload_path"; then
@@ -508,19 +639,35 @@ apply_douyin_env_transaction() {
   BACKUP_VALID=true
 
   if ! create_transaction_temp CANDIDATE_PATH "$target_dir/.douyin-env-candidate.XXXXXX"; then
-    die "REMOTE_TEMP_FAILED"
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
+  if ! validate_secure_regular_file "$CANDIDATE_PATH" "$expected_owner"; then
+    die "REMOTE_CANDIDATE_INVALID"
     return 1
   fi
   if ! create_transaction_temp BEFORE_VIEW_PATH "$target_dir/.douyin-env-before.XXXXXX"; then
-    die "REMOTE_TEMP_FAILED"
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
+  if ! validate_secure_regular_file "$BEFORE_VIEW_PATH" "$expected_owner"; then
+    die "REMOTE_CANDIDATE_INVALID"
     return 1
   fi
   if ! create_transaction_temp AFTER_VIEW_PATH "$target_dir/.douyin-env-after.XXXXXX"; then
-    die "REMOTE_TEMP_FAILED"
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
+  if ! validate_secure_regular_file "$AFTER_VIEW_PATH" "$expected_owner"; then
+    die "REMOTE_CANDIDATE_INVALID"
     return 1
   fi
   if ! create_transaction_temp TARGET_BLOCK_PATH "$target_dir/.douyin-env-target-block.XXXXXX"; then
-    die "REMOTE_TEMP_FAILED"
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
+  if ! validate_secure_regular_file "$TARGET_BLOCK_PATH" "$expected_owner"; then
+    die "REMOTE_CANDIDATE_INVALID"
     return 1
   fi
 
@@ -533,6 +680,10 @@ apply_douyin_env_transaction() {
     return 1
   fi
   if ! validate_secure_regular_file "$CANDIDATE_PATH" "$expected_owner"; then
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
+  if ! validate_target_text "$CANDIDATE_PATH"; then
     die "REMOTE_CANDIDATE_INVALID"
     return 1
   fi
@@ -549,7 +700,15 @@ apply_douyin_env_transaction() {
     die "REMOTE_CANDIDATE_INVALID"
     return 1
   fi
+  if ! validate_secure_regular_file "$BEFORE_VIEW_PATH" "$expected_owner"; then
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
   if ! filter_non_target "$CANDIDATE_PATH" > "$AFTER_VIEW_PATH"; then
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
+  if ! validate_secure_regular_file "$AFTER_VIEW_PATH" "$expected_owner"; then
     die "REMOTE_CANDIDATE_INVALID"
     return 1
   fi
@@ -558,6 +717,10 @@ apply_douyin_env_transaction() {
     return 1
   fi
   if ! extract_target_block "$CANDIDATE_PATH" > "$TARGET_BLOCK_PATH"; then
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
+  if ! validate_secure_regular_file "$TARGET_BLOCK_PATH" "$expected_owner"; then
     die "REMOTE_CANDIDATE_INVALID"
     return 1
   fi
@@ -574,6 +737,18 @@ apply_douyin_env_transaction() {
     return 1
   fi
 
+  candidate_sha="$(sha256_file "$CANDIDATE_PATH")" || {
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  }
+  candidate_identity="$(file_identity "$CANDIDATE_PATH")" || {
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  }
+  if ! before_atomic_move; then
+    die "REMOTE_CANDIDATE_INVALID"
+    return 1
+  fi
   current_target_sha="$(sha256_file "$target_file")" || {
     die "REMOTE_CONCURRENT_CHANGE"
     return 1
@@ -582,10 +757,6 @@ apply_douyin_env_transaction() {
     die "REMOTE_CONCURRENT_CHANGE"
     return 1
   fi
-  candidate_sha="$(sha256_file "$CANDIDATE_PATH")" || {
-    die "REMOTE_CANDIDATE_INVALID"
-    return 1
-  }
 
   TARGET_REPLACED=true
   if ! mv "$CANDIDATE_PATH" "$target_file" >/dev/null 2>&1; then
@@ -593,16 +764,60 @@ apply_douyin_env_transaction() {
     return 1
   fi
   CANDIDATE_PATH=""
-  if ! validate_secure_regular_file "$target_file" "$expected_owner"; then
-    die "REMOTE_REPLACE_FAILED"
-    return 1
-  fi
-  installed_target_sha="$(sha256_file "$target_file")" || {
-    die "REMOTE_REPLACE_FAILED"
+  installed_candidate_identity="$(file_identity "$target_file")" || {
+    die "REMOTE_CONCURRENT_CHANGE"
     return 1
   }
-  if [[ "$installed_target_sha" != "$candidate_sha" ]]; then
-    die "REMOTE_REPLACE_FAILED"
+  if [[ "$installed_candidate_identity" != "$candidate_identity" ]]; then
+    die "REMOTE_CONCURRENT_CHANGE"
+    return 1
+  fi
+  if ! verify_post_move \
+    "$target_file" \
+    "$expected_owner" \
+    "$candidate_sha" \
+    "$expected_payload_sha" \
+    "$installed_candidate_identity"; then
+    if ! validate_secure_regular_file "$target_file" "$expected_owner"; then
+      die "REMOTE_CONCURRENT_CHANGE"
+      return 1
+    fi
+    current_target_sha="$(sha256_file "$target_file")" || {
+      die "REMOTE_CONCURRENT_CHANGE"
+      return 1
+    }
+    if [[ "$current_target_sha" != "$candidate_sha" ]]; then
+      die "REMOTE_CONCURRENT_CHANGE"
+      return 1
+    fi
+    current_target_identity="$(file_identity "$target_file")" || {
+      die "REMOTE_CONCURRENT_CHANGE"
+      return 1
+    }
+    if [[ "$current_target_identity" != "$installed_candidate_identity" ]]; then
+      die "REMOTE_CONCURRENT_CHANGE"
+      return 1
+    fi
+
+    if restore_target_from_backup \
+      "$target_dir" \
+      "$target_file" \
+      "$BACKUP_PATH" \
+      "$expected_owner" \
+      "$target_before_sha" \
+      "$candidate_sha" \
+      "$installed_candidate_identity"; then
+      printf '%s\n' "rollback_restored=true"
+      die "REMOTE_APPLY_FAILED"
+      return 1
+    else
+      restore_status=$?
+    fi
+    if [[ "$restore_status" -eq "$RESTORE_CONCURRENT_STATUS" ]]; then
+      die "REMOTE_CONCURRENT_CHANGE"
+      return 1
+    fi
+    die "REMOTE_ROLLBACK_FAILED"
     return 1
   fi
 
