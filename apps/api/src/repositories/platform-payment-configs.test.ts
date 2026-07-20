@@ -6,6 +6,7 @@ process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const select = mock((_columns: string) => query);
+const update = mock((_values: Record<string, unknown>) => query);
 const eq = mock((_column: string, _value: unknown) => query);
 const maybeSingle = mock(async (): Promise<{ data: unknown; error: unknown }> => ({
   data: null,
@@ -13,8 +14,10 @@ const maybeSingle = mock(async (): Promise<{ data: unknown; error: unknown }> =>
 }));
 const query = {
   select,
+  update,
   eq,
   maybeSingle,
+  single: maybeSingle,
 };
 
 mock.module("@/utils/supabase/index", () => ({
@@ -51,6 +54,7 @@ const baseConfig = {
 describe("PlatformPaymentConfigRepository", () => {
   beforeEach(() => {
     select.mockClear();
+    update.mockClear();
     eq.mockClear();
     maybeSingle.mockClear();
     maybeSingle.mockImplementation(async () => ({ data: null, error: null }));
@@ -90,5 +94,42 @@ describe("PlatformPaymentConfigRepository", () => {
       code: "DB_ERROR",
       message: "查询平台微信支付配置失败",
     });
+  });
+
+  test("persists sanitized validation evidence by immutable config id", async () => {
+    const saved = {
+      ...baseConfig,
+      validation_status: "invalid" as const,
+      last_validated_at: "2026-07-20T15:10:00.000Z",
+      last_validation_error_code: "WECHAT_PAY_PROFILE_PROBE_REJECTED",
+      last_validation_error_message: "微信支付配置验证失败，请检查配置后重试",
+      last_validation_request_id: "wechat-request-id",
+    };
+    maybeSingle.mockImplementationOnce(async () => ({ data: saved, error: null }));
+    const { platformPaymentConfigRepository } = await import(
+      "./platform-payment-configs"
+    );
+
+    const result = await platformPaymentConfigRepository
+      .updateWechatPayValidation({
+        configId: "config-1",
+        validationStatus: "invalid",
+        lastValidatedAt: "2026-07-20T15:10:00.000Z",
+        lastValidationErrorCode: "WECHAT_PAY_PROFILE_PROBE_REJECTED",
+        lastValidationErrorMessage: "微信支付配置验证失败，请检查配置后重试",
+        lastValidationRequestId: "wechat-request-id",
+        updatedByEmployeeId: "employee-platform",
+      });
+
+    expect(update).toHaveBeenCalledWith({
+      validation_status: "invalid",
+      last_validated_at: "2026-07-20T15:10:00.000Z",
+      last_validation_error_code: "WECHAT_PAY_PROFILE_PROBE_REJECTED",
+      last_validation_error_message: "微信支付配置验证失败，请检查配置后重试",
+      last_validation_request_id: "wechat-request-id",
+      updated_by_employee_id: "employee-platform",
+    });
+    expect(eq).toHaveBeenCalledWith("id", "config-1");
+    expect(result).toEqual(saved);
   });
 });

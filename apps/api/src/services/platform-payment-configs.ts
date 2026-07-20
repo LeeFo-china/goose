@@ -15,6 +15,7 @@ import {
   type PendingRechargeOrderPort,
 } from "@/services/platform-payment-config-pending-orders";
 import { runPlatformPaymentConfigMutation } from "@/services/platform-payment-config-mutation";
+import { platformPaymentProfileValidationService } from "@/services/platform-payment-profile-validation";
 import { systemSettingsService } from "@/services/system-settings";
 
 export type SavePlatformWechatPayConfigInput = {
@@ -81,6 +82,10 @@ type PlatformPaymentConfigServiceDependencies = {
   repository?: PlatformPaymentConfigRepositoryPort;
   settingsService?: PlatformSystemSettingsPort;
   pendingRechargeOrders?: PendingRechargeOrderPort;
+  profileValidationService?: Pick<
+    typeof platformPaymentProfileValidationService,
+    "validate"
+  >;
 };
 
 const PLATFORM_WECHAT_RECHARGE_CHANNEL = "tenant_recharge";
@@ -118,12 +123,18 @@ export class PlatformPaymentConfigService {
   private readonly repository: PlatformPaymentConfigRepositoryPort;
   private readonly settingsService: PlatformSystemSettingsPort;
   private readonly pendingRechargeOrders: PendingRechargeOrderPort;
+  private readonly profileValidationService: Pick<
+    typeof platformPaymentProfileValidationService,
+    "validate"
+  >;
 
   constructor(dependencies: PlatformPaymentConfigServiceDependencies = {}) {
     this.repository = dependencies.repository ?? platformPaymentConfigRepository;
     this.settingsService = dependencies.settingsService ?? systemSettingsService;
     this.pendingRechargeOrders = dependencies.pendingRechargeOrders ??
       billingRechargeRepository;
+    this.profileValidationService = dependencies.profileValidationService ??
+      platformPaymentProfileValidationService;
   }
 
   async getWechatPayConfig(
@@ -379,6 +390,23 @@ export class PlatformPaymentConfigService {
     );
 
     return this.toProfileView(definition, saved);
+  }
+
+  async validateWechatPayProfile(
+    authContext: AuthContext,
+    profileCode: PlatformPaymentProfileCode,
+  ) {
+    this.assertManageable(authContext);
+    if (!authContext.employeeId) throw Errors.forbidden();
+    const definition = this.getProfileDefinition(profileCode);
+    const result = await this.profileValidationService.validate({
+      profileCode,
+      employeeId: authContext.employeeId,
+    });
+    return {
+      profile: this.toProfileView(definition, result.config),
+      validation: result.validation,
+    };
   }
 
   private assertReadable(authContext: AuthContext) {

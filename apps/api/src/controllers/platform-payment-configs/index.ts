@@ -6,7 +6,7 @@ import {
   UpdatePlatformWechatPaySecretBundleSchema,
 } from "@/schema/platform-payment-configs";
 import { platformPaymentConfigService } from "@/services/platform-payment-configs";
-import { Get, Put } from "@/utils/decorators/route";
+import { Get, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -98,6 +98,20 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
       authContext,
       profileCode,
       bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/payment/wechat-pay/profiles/:profileCode/validate")
+  async validateWechatPayProfile(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const profileCode = this.parseProfileCode(request);
+    const data = await platformPaymentConfigService.validateWechatPayProfile(
+      authContext,
+      profileCode,
     );
     return ResponseHandler.success(data);
   }

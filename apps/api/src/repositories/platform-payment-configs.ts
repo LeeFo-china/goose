@@ -34,6 +34,9 @@ export type PlatformPaymentConfigRecord = {
   status: PlatformPaymentConfigStatus;
   validation_status: PlatformPaymentValidationStatus;
   last_validated_at: string | null;
+  last_validation_error_code?: string | null;
+  last_validation_error_message?: string | null;
+  last_validation_request_id?: string | null;
   risk_switches: Record<string, unknown>;
   recharge_guard_version?: number;
   created_by_employee_id: string | null;
@@ -64,9 +67,20 @@ export type PlatformPaymentConfigUpsertInput = {
   updated_by_employee_id: string | null;
 };
 
+export type PlatformPaymentValidationUpdateInput = {
+  configId: string;
+  validationStatus: PlatformPaymentValidationStatus;
+  lastValidatedAt: string;
+  lastValidationErrorCode: string | null;
+  lastValidationErrorMessage: string | null;
+  lastValidationRequestId: string | null;
+  updatedByEmployeeId: string;
+};
+
 type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   upsert: (...args: unknown[]) => UntypedTable;
+  update: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
   limit: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
@@ -149,6 +163,27 @@ class PlatformPaymentConfigRepository {
 
     if (error) {
       throw Errors.dbError("保存平台微信支付配置失败", error);
+    }
+
+    return data as PlatformPaymentConfigRecord;
+  }
+
+  async updateWechatPayValidation(input: PlatformPaymentValidationUpdateInput) {
+    const { data, error } = await this.from("platform_payment_configs")
+      .update({
+        validation_status: input.validationStatus,
+        last_validated_at: input.lastValidatedAt,
+        last_validation_error_code: input.lastValidationErrorCode,
+        last_validation_error_message: input.lastValidationErrorMessage,
+        last_validation_request_id: input.lastValidationRequestId,
+        updated_by_employee_id: input.updatedByEmployeeId,
+      })
+      .eq("id", input.configId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("保存平台微信支付配置验证结果失败", error);
     }
 
     return data as PlatformPaymentConfigRecord;

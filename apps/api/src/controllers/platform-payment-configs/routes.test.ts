@@ -10,6 +10,7 @@ describe("PlatformPaymentConfigsController routes", () => {
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
       get: (path: string) => routes.push({ method: "GET", path }),
+      post: (path: string) => routes.push({ method: "POST", path }),
       put: (path: string) => routes.push({ method: "PUT", path }),
     };
 
@@ -30,6 +31,10 @@ describe("PlatformPaymentConfigsController routes", () => {
       {
         method: "PUT",
         path: "/platform/payment/wechat-pay/profiles/:profileCode/secret-bundle",
+      },
+      {
+        method: "POST",
+        path: "/platform/payment/wechat-pay/profiles/:profileCode/validate",
       },
     ]);
   });
