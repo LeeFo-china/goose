@@ -2,6 +2,8 @@ import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
 
 const HttpsUrlSchema = z.url({ protocol: /^https$/ });
+const SensitiveReleaseMetadataPattern = /token|secret|phone|openid/i;
+const ReleaseSemverPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export const DouyinRuntimeConfigSchema = z.strictObject({
   brand: z.strictObject({
@@ -41,6 +43,47 @@ export const PlatformDouyinMiniappListQuerySchema = PaginationQuerySchema.extend
 
 export const PlatformDouyinMiniappIdParamsSchema = z.strictObject({
   id: z.uuid("无效的抖音小程序安装 ID"),
+});
+
+export const PlatformDouyinMiniappReleaseParamsSchema = z.strictObject({
+  id: z.uuid("无效的抖音小程序安装 ID"),
+  releaseId: z.uuid("无效的抖音小程序发布记录 ID"),
+});
+
+export const PlatformDouyinMiniappReleaseEmptyObjectSchema = z.strictObject({});
+
+export const PlatformDouyinMiniappReleaseListQuerySchema = z.strictObject({
+  page: z.coerce.number().int("页码必须为整数").min(1, "页码必须大于 0")
+    .max(10_000, "页码不能超过 10000").default(1),
+  pageSize: z.coerce.number().int("每页数量必须为整数").min(1, "每页数量必须大于 0")
+    .max(100, "每页数量不能超过 100").default(20),
+});
+
+export const UploadPlatformDouyinMiniappReleaseSchema = z.strictObject({
+  template_id: z.string().regex(/^[1-9][0-9]{0,18}$/, "无效的抖音模板 ID"),
+  template_version: z.string().max(64, "模板版本不能超过 64 个字符")
+    .regex(ReleaseSemverPattern, "模板版本必须符合 SemVer 格式"),
+  description: z.string().trim().min(1, "版本描述不能为空")
+    .max(200, "版本描述不能超过 200 个字符"),
+  channel: z.enum(["default", "1"], "无效的发布通道"),
+});
+
+export const SubmitPlatformDouyinMiniappReleaseAuditSchema = z.strictObject({
+  host_names: z.array(
+    z.string().min(1, "宿主名称不能为空").max(253, "宿主名称不能超过 253 个字符")
+      .regex(/^[A-Za-z0-9.-]+$/, "宿主名称格式无效")
+      .refine((value) => !SensitiveReleaseMetadataPattern.test(value), {
+        error: "宿主名称不能包含敏感信息",
+      }),
+  ).min(1, "至少需要一个宿主名称").max(20, "宿主名称不能超过 20 个")
+    .refine((values) => new Set(values).size === values.length, {
+      error: "宿主名称不能重复",
+    }),
+  audit_note: z.string().trim().min(1, "审核说明不能为空")
+    .max(1000, "审核说明不能超过 1000 个字符")
+    .refine((value) => !SensitiveReleaseMetadataPattern.test(value), {
+      error: "审核说明不能包含敏感信息",
+    }),
 });
 
 export const BindPlatformDouyinMiniappSchema = z.strictObject({

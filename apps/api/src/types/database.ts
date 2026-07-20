@@ -1600,6 +1600,7 @@ export type Database = {
           revoked_at: string | null
           runtime_config: Json
           template_id: string | null
+          template_release_id: string | null
           template_version: string | null
           tenant_id: string | null
           token_refresh_claim_expires_at: string | null
@@ -1633,6 +1634,7 @@ export type Database = {
           revoked_at?: string | null
           runtime_config?: Json
           template_id?: string | null
+          template_release_id?: string | null
           template_version?: string | null
           tenant_id?: string | null
           token_refresh_claim_expires_at?: string | null
@@ -1666,6 +1668,7 @@ export type Database = {
           revoked_at?: string | null
           runtime_config?: Json
           template_id?: string | null
+          template_release_id?: string | null
           template_version?: string | null
           tenant_id?: string | null
           token_refresh_claim_expires_at?: string | null
@@ -1688,6 +1691,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "douyin_miniapp_installations_template_release_owner_fkey"
+            columns: ["template_release_id", "id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_releases"
+            referencedColumns: ["id", "installation_id"]
+          },
         ]
       }
       douyin_miniapp_releases: {
@@ -1703,6 +1713,9 @@ export type Database = {
           ext_json: Json
           id: string
           installation_id: string
+          operation_claim_expires_at: string | null
+          operation_claim_token: string | null
+          operation_name: string | null
           platform_operator_id: string
           released_at: string | null
           status: string
@@ -1724,6 +1737,9 @@ export type Database = {
           ext_json: Json
           id?: string
           installation_id: string
+          operation_claim_expires_at?: string | null
+          operation_claim_token?: string | null
+          operation_name?: string | null
           platform_operator_id: string
           released_at?: string | null
           status?: string
@@ -1745,6 +1761,9 @@ export type Database = {
           ext_json?: Json
           id?: string
           installation_id?: string
+          operation_claim_expires_at?: string | null
+          operation_claim_token?: string | null
+          operation_name?: string | null
           platform_operator_id?: string
           released_at?: string | null
           status?: string
@@ -12648,6 +12667,22 @@ export type Database = {
           claim_token: string
         }[]
       }
+      claim_douyin_miniapp_release_operation: {
+        Args: {
+          p_claim_expires_at: string
+          p_claim_token: string
+          p_expected_statuses: string[]
+          p_operation_name: string
+          p_operator_id: string
+          p_release_id: string
+        }
+        Returns: {
+          claim_expires_at: string
+          claim_token: string
+          recovery_required: boolean
+          release_id: string
+        }[]
+      }
       claim_next_social_video_transcription:
         | {
             Args: never
@@ -13155,6 +13190,52 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      get_or_create_and_claim_douyin_miniapp_release_upload: {
+        Args: {
+          p_channel: string
+          p_claim_expires_at: string
+          p_claim_token: string
+          p_description: string
+          p_ext_json: Json
+          p_installation_id: string
+          p_operator_id: string
+          p_template_id: string
+          p_template_version: string
+        }
+        Returns: {
+          audit_host_names: string[]
+          audit_note: string | null
+          audit_result: Json | null
+          audited_at: string | null
+          channel: string
+          created_at: string
+          description: string
+          douyin_log_id: string | null
+          ext_json: Json
+          id: string
+          installation_id: string
+          operation_claim_expires_at: string | null
+          operation_claim_token: string | null
+          operation_name: string | null
+          platform_operator_id: string
+          recovery_required: boolean
+          released_at: string | null
+          status: string
+          submitted_at: string | null
+          template_id: string
+          template_version: string
+          test_qr_url: string | null
+          updated_at: string
+        }[]
+      }
+      sync_douyin_miniapp_release_metadata: {
+        Args: {
+          p_claim_token: string
+          p_installation_id: string
+          p_release_id: string
+        }
+        Returns: boolean
       }
       get_partner_dashboard_monthly_summary: {
         Args: { p_end_at: string; p_partner_id: string; p_start_at: string }

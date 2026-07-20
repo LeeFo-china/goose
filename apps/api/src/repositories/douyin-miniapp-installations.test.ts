@@ -70,6 +70,53 @@ const installationRow = {
 };
 
 describe("DouyinMiniappInstallationsRepository lookups", () => {
+  test("release target lookup selects no credential columns", async () => {
+    const safeTarget = {
+      id: installationRow.id,
+      authorizer_appid: installationRow.authorizer_appid,
+      deployment_key: installationRow.deployment_key,
+      installation_kind: installationRow.installation_kind,
+      authorization_status: installationRow.authorization_status,
+      permission_snapshot: installationRow.permission_snapshot,
+    };
+    const { client, calls } = createClient([{ data: safeTarget, error: null }]);
+    const repository = new DouyinMiniappInstallationsRepository(client);
+
+    await expect(repository.findReleaseTargetById(installationRow.id)).resolves.toEqual(safeTarget);
+
+    const selected = String(calls.find((call) => call.method === "select")?.args[0]);
+    expect(selected).toBe(
+      "id,authorizer_appid,deployment_key,installation_kind,authorization_status,permission_snapshot",
+    );
+    expect(selected).not.toMatch(/token|secret|ciphertext|iv|tag/i);
+    expect(calls).toContainEqual({ method: "eq", args: ["id", installationRow.id] });
+  });
+
+  test("release metadata sync delegates release and exact claim identity to one RPC", async () => {
+    const { client, calls } = createClient([{ data: true, error: null }]);
+    const repository = new DouyinMiniappInstallationsRepository(client);
+    const releaseId = "11111111-1111-4111-8111-111111111111";
+    const claimToken = "77777777-7777-4777-8777-777777777777";
+    await expect(repository.syncReleaseMetadata(installationRow.id, releaseId, claimToken))
+      .resolves.toBe(true);
+    expect(calls).toContainEqual({ method: "rpc", args: [
+      "sync_douyin_miniapp_release_metadata",
+      { p_installation_id: installationRow.id, p_release_id: releaseId, p_claim_token: claimToken },
+    ] });
+    expect(calls.some((call) => call.method === "update")).toBe(false);
+  });
+
+  test("release metadata sync fails closed on stale claim false", async () => {
+    const { client } = createClient([{ data: false, error: null }]);
+    const repository = new DouyinMiniappInstallationsRepository(client);
+    await expect(repository.syncReleaseMetadata(
+      installationRow.id,
+      "11111111-1111-4111-8111-111111111111",
+      "77777777-7777-4777-8777-777777777777",
+    )).resolves.toBe(false);
+    expect((repository as unknown as Record<string, unknown>).patchReleaseMetadata).toBeUndefined();
+  });
+
   test("active lookup always filters the authorizer appid and selects named fields", async () => {
     const { client, calls } = createClient([{ data: installationRow, error: null }]);
     const repository = new DouyinMiniappInstallationsRepository(client);

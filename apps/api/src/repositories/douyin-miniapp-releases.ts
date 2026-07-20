@@ -2,6 +2,13 @@ import { z } from "zod";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
+import {
+  DOUYIN_MINIAPP_RELEASE_OPERATIONS,
+  type ClaimDouyinMiniappReleaseOperationInput,
+  type DouyinMiniappReleaseOperationClaim,
+} from "./douyin-miniapp-releases-claims";
+
+export * from "./douyin-miniapp-releases-claims";
 
 export const DOUYIN_MINIAPP_RELEASE_STATUSES = [
   "created",
@@ -94,14 +101,35 @@ const ReleaseSchema = z.strictObject({
   created_at: DateTimeSchema,
   updated_at: DateTimeSchema,
 });
+const OperationNameSchema = z.enum(DOUYIN_MINIAPP_RELEASE_OPERATIONS);
+const OperationClaimRowSchema = z.strictObject({
+  release_id: z.string().uuid(),
+  claim_token: z.string().uuid(),
+  claim_expires_at: DateTimeSchema,
+  recovery_required: z.boolean(),
+});
+const ClaimedUploadReleaseSchema = ReleaseSchema.extend({
+  operation_name: OperationNameSchema.nullable(),
+  operation_claim_token: z.string().uuid().nullable(),
+  operation_claim_expires_at: NullableDateTimeSchema,
+  recovery_required: z.boolean(),
+}).refine((value) => {
+  const claim = [
+    value.operation_name,
+    value.operation_claim_token,
+    value.operation_claim_expires_at,
+  ];
+  return claim.every((item) => item === null) || claim.every((item) => item !== null);
+});
 
 export type DouyinMiniappReleaseStatus =
   (typeof DOUYIN_MINIAPP_RELEASE_STATUSES)[number];
 export type DouyinMiniappReleaseExtJson = z.infer<typeof ExtJsonSchema>;
 export type DouyinMiniappReleaseAuditResult = z.infer<typeof AuditResultSchema>;
 export type DouyinMiniappReleaseRecord = z.infer<typeof ReleaseSchema>;
+export type DouyinMiniappClaimedUploadRelease = z.infer<typeof ClaimedUploadReleaseSchema>;
 
-export type CreateDouyinMiniappReleaseInput = {
+export type GetOrCreateAndClaimDouyinMiniappUploadInput = {
   readonly installationId: string;
   readonly templateId: string;
   readonly templateVersion: string;
@@ -109,6 +137,8 @@ export type CreateDouyinMiniappReleaseInput = {
   readonly channel: "default" | "1";
   readonly extJson: DouyinMiniappReleaseExtJson;
   readonly platformOperatorId: string;
+  readonly claimToken: string;
+  readonly claimExpiresAt: string;
 };
 
 export type UpdateDouyinMiniappReleaseInput = {
@@ -132,13 +162,11 @@ export type DouyinMiniappReleaseDatabaseResult = {
 
 export interface DouyinMiniappReleaseQuery {
   select(columns: string, options?: unknown): DouyinMiniappReleaseQuery;
-  insert(value: unknown): DouyinMiniappReleaseQuery;
   update(value: unknown): DouyinMiniappReleaseQuery;
   eq(column: string, value: unknown): DouyinMiniappReleaseQuery;
   order(column: string, options: unknown): DouyinMiniappReleaseQuery;
   range(from: number, to: number): DouyinMiniappReleaseQuery;
   maybeSingle(): Promise<DouyinMiniappReleaseDatabaseResult>;
-  single(): Promise<DouyinMiniappReleaseDatabaseResult>;
   then<TResult1 = DouyinMiniappReleaseDatabaseResult, TResult2 = never>(
     onfulfilled?: (
       (value: DouyinMiniappReleaseDatabaseResult) => TResult1 | PromiseLike<TResult1>
@@ -149,6 +177,7 @@ export interface DouyinMiniappReleaseQuery {
 
 export interface DouyinMiniappReleaseDatabaseClient {
   from(table: string): DouyinMiniappReleaseQuery;
+  rpc(name: string, args: Record<string, unknown>): PromiseLike<DouyinMiniappReleaseDatabaseResult>;
 }
 
 export class DouyinMiniappReleasesRepository {
@@ -191,39 +220,98 @@ export class DouyinMiniappReleasesRepository {
     });
   }
 
-  async create(input: CreateDouyinMiniappReleaseInput): Promise<DouyinMiniappReleaseRecord> {
-    const extJson = parseInput(ExtJsonSchema, input.extJson);
-    const value = parseInput(CreateRowSchema, {
-      installation_id: input.installationId,
-      template_id: input.templateId,
-      template_version: input.templateVersion,
-      description: input.description,
-      channel: input.channel,
-      ext_json: extJson,
-      status: "created",
-      platform_operator_id: input.platformOperatorId,
-    });
+  async claimOperation(
+    input: ClaimDouyinMiniappReleaseOperationInput,
+  ): Promise<DouyinMiniappReleaseOperationClaim | null> {
+    const claim = parseInput(ClaimOperationInputSchema, input);
     return execute(async () => {
-      const result = await this.client
-        .from("douyin_miniapp_releases")
-        .insert(value)
-        .select(RELEASE_SELECT)
-        .single();
+      const result = await this.client.rpc("claim_douyin_miniapp_release_operation", {
+        p_release_id: claim.releaseId,
+        p_expected_statuses: claim.expectedStatuses,
+        p_operation_name: claim.operationName,
+        p_claim_token: claim.claimToken,
+        p_claim_expires_at: claim.claimExpiresAt,
+        p_operator_id: claim.platformOperatorId,
+      });
       assertSuccess(result);
-      return parseRelease(result.data);
+      if (!Array.isArray(result.data) || result.data.length > 1) throw invalidResponse();
+      if (result.data.length === 0) return null;
+      const parsed = OperationClaimRowSchema.safeParse(result.data[0]);
+      if (!parsed.success) throw invalidResponse();
+      return {
+        releaseId: parsed.data.release_id,
+        claimToken: parsed.data.claim_token,
+        claimExpiresAt: parsed.data.claim_expires_at,
+        recoveryRequired: parsed.data.recovery_required,
+      };
     });
   }
 
-  async update(
+  async getOrCreateAndClaimUpload(
+    input: GetOrCreateAndClaimDouyinMiniappUploadInput,
+  ): Promise<DouyinMiniappClaimedUploadRelease | null> {
+    const claim = parseInput(UploadClaimInputSchema, input);
+    return execute(async () => {
+      const result = await this.client.rpc(
+        "get_or_create_and_claim_douyin_miniapp_release_upload",
+        {
+          p_installation_id: claim.installationId,
+          p_template_id: claim.templateId,
+          p_template_version: claim.templateVersion,
+          p_description: claim.description,
+          p_channel: claim.channel,
+          p_ext_json: claim.extJson,
+          p_claim_token: claim.claimToken,
+          p_claim_expires_at: claim.claimExpiresAt,
+          p_operator_id: claim.platformOperatorId,
+        },
+      );
+      assertUploadClaimSuccess(result);
+      if (!Array.isArray(result.data) || result.data.length > 1) throw invalidResponse();
+      if (result.data.length === 0) return null;
+      const parsed = ClaimedUploadReleaseSchema.safeParse(result.data[0]);
+      if (!parsed.success) throw invalidResponse();
+      return parsed.data;
+    });
+  }
+
+  async updateClaimed(
     releaseId: string,
+    claimToken: string,
     input: UpdateDouyinMiniappReleaseInput,
   ): Promise<DouyinMiniappReleaseRecord | null> {
+    return this.writeClaimed(releaseId, claimToken, input, true);
+  }
+
+  async patchClaimed(
+    releaseId: string,
+    claimToken: string,
+    input: UpdateDouyinMiniappReleaseInput,
+  ): Promise<DouyinMiniappReleaseRecord | null> {
+    return this.writeClaimed(releaseId, claimToken, input, false);
+  }
+
+  private async writeClaimed(
+    releaseId: string,
+    claimToken: string,
+    input: UpdateDouyinMiniappReleaseInput,
+    releaseClaim: boolean,
+  ): Promise<DouyinMiniappReleaseRecord | null> {
+    const identity = parseInput(ClaimIdentitySchema, { releaseId, claimToken });
     const value = parseInput(UpdateRowSchema, compactUpdate(input));
     return execute(async () => {
       const result = await this.client
         .from("douyin_miniapp_releases")
-        .update(value)
-        .eq("id", releaseId)
+        .update({
+          ...value,
+          ...(releaseClaim ? {
+            operation_name: null,
+            operation_claim_token: null,
+            operation_claim_expires_at: null,
+          } : {}),
+        })
+        .eq("id", identity.releaseId)
+        .eq("operation_claim_token", identity.claimToken)
         .select(RELEASE_SELECT)
         .maybeSingle();
       assertSuccess(result);
@@ -232,21 +320,35 @@ export class DouyinMiniappReleasesRepository {
   }
 }
 
-const CreateRowSchema = z.strictObject({
-  installation_id: z.string().uuid(),
-  template_id: TemplateIdSchema,
-  template_version: TemplateVersionSchema,
-  description: z.string().trim().min(1).max(200),
-  channel: z.enum(["default", "1"]),
-  ext_json: ExtJsonSchema,
-  status: z.literal("created"),
-  platform_operator_id: z.string().uuid(),
-});
-
 const ListInputSchema = z.strictObject({
   installationId: z.string().uuid(),
   page: z.number().int().positive(),
   pageSize: z.number().int().min(1).max(100),
+});
+
+const ClaimOperationInputSchema = z.strictObject({
+  releaseId: z.string().uuid(),
+  expectedStatuses: z.array(z.enum(DOUYIN_MINIAPP_RELEASE_STATUSES)).min(1).max(8)
+    .refine((statuses) => new Set(statuses).size === statuses.length),
+  operationName: OperationNameSchema,
+  claimToken: z.string().uuid(),
+  claimExpiresAt: DateTimeSchema,
+  platformOperatorId: z.string().uuid(),
+});
+const UploadClaimInputSchema = z.strictObject({
+  installationId: z.string().uuid(),
+  templateId: TemplateIdSchema,
+  templateVersion: TemplateVersionSchema,
+  description: z.string().trim().min(1).max(200),
+  channel: z.enum(["default", "1"]),
+  extJson: ExtJsonSchema,
+  platformOperatorId: z.string().uuid(),
+  claimToken: z.string().uuid(),
+  claimExpiresAt: DateTimeSchema,
+});
+const ClaimIdentitySchema = z.strictObject({
+  releaseId: z.string().uuid(),
+  claimToken: z.string().uuid(),
 });
 
 const UpdateRowSchema = z.strictObject({
@@ -299,6 +401,23 @@ async function execute<Result>(operation: () => Promise<Result>): Promise<Result
 
 function assertSuccess(result: DouyinMiniappReleaseDatabaseResult): void {
   if (result.error) throw repositoryError();
+}
+
+function assertUploadClaimSuccess(result: DouyinMiniappReleaseDatabaseResult): void {
+  if (!result.error) return;
+  if (databaseErrorMessage(result.error) === "DOUYIN_MINIAPP_RELEASE_DELIVERY_CONFLICT") {
+    throw Errors.business(
+      409,
+      "抖音小程序同版本发布参数冲突",
+      "DOUYIN_MINIAPP_RELEASE_DELIVERY_CONFLICT",
+    );
+  }
+  throw repositoryError();
+}
+
+function databaseErrorMessage(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("message" in error)) return undefined;
+  return typeof error.message === "string" ? error.message : undefined;
 }
 
 function parseRelease(data: unknown): DouyinMiniappReleaseRecord {

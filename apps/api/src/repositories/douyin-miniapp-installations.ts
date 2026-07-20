@@ -27,6 +27,15 @@ const INSTALLATION_SELECT = [
   "token_refresh_claim_expires_at",
 ].join(",");
 
+const RELEASE_TARGET_SELECT = [
+  "id",
+  "authorizer_appid",
+  "deployment_key",
+  "installation_kind",
+  "authorization_status",
+  "permission_snapshot",
+].join(",");
+
 const NullableString = z.string().nullable();
 const InstallationRowSchema = z.object({
   id: z.string().uuid(),
@@ -54,6 +63,19 @@ const LeaseRowSchema = z.object({
   claim_token: z.string().uuid(),
   claim_expires_at: z.string().min(1),
 });
+const ReleaseTargetSchema = z.strictObject({
+  id: z.string().uuid(),
+  authorizer_appid: z.string().min(1),
+  deployment_key: z.string().min(1).nullable(),
+  installation_kind: z.string().min(1),
+  authorization_status: z.string().min(1),
+  permission_snapshot: z.unknown(),
+});
+const ReleaseMetadataSyncSchema = z.strictObject({
+  installationId: z.string().uuid(),
+  releaseId: z.string().uuid(),
+  claimToken: z.string().uuid(),
+});
 
 export type DouyinInstallationDatabaseResult = {
   readonly data: unknown;
@@ -77,6 +99,7 @@ export interface DouyinInstallationDatabaseClient {
 }
 
 export type DouyinMiniappInstallationRecord = z.infer<typeof InstallationRowSchema>;
+export type DouyinMiniappReleaseTarget = z.infer<typeof ReleaseTargetSchema>;
 
 type StringRefreshRotation = {
   readonly ciphertext: string;
@@ -101,6 +124,36 @@ export class DouyinMiniappInstallationsRepository {
     private readonly client: DouyinInstallationDatabaseClient =
       SupabaseDB.getAdminClient() as unknown as DouyinInstallationDatabaseClient,
   ) {}
+
+  async findReleaseTargetById(
+    installationId: string,
+  ): Promise<DouyinMiniappReleaseTarget | null> {
+    return executeInstallationOperation("查询抖音小程序发布目标失败", async () => {
+      const result = await this.client
+        .from("douyin_miniapp_installations")
+        .select(RELEASE_TARGET_SELECT)
+        .eq("id", installationId)
+        .maybeSingle();
+      return parseReleaseTarget(result, "查询抖音小程序发布目标失败");
+    });
+  }
+
+  async syncReleaseMetadata(
+    installationId: string,
+    releaseId: string,
+    claimToken: string,
+  ): Promise<boolean> {
+    return executeInstallationOperation("更新抖音小程序发布元数据失败", async () => {
+      const parsed = ReleaseMetadataSyncSchema.safeParse({ installationId, releaseId, claimToken });
+      if (!parsed.success) throw invalidResponseError();
+      const result = await this.client.rpc("sync_douyin_miniapp_release_metadata", {
+        p_installation_id: parsed.data.installationId,
+        p_release_id: parsed.data.releaseId,
+        p_claim_token: parsed.data.claimToken,
+      });
+      return parseBooleanResult(result, "更新抖音小程序发布元数据失败");
+    });
+  }
 
   async findActiveByAuthorizerAppId(
     authorizerAppId: string,
@@ -260,6 +313,17 @@ function parseInstallationResult(
   assertDatabaseSuccess(result, message);
   if (result.data === null) return null;
   const parsed = InstallationRowSchema.safeParse(result.data);
+  if (!parsed.success) throw invalidResponseError();
+  return parsed.data;
+}
+
+function parseReleaseTarget(
+  result: DouyinInstallationDatabaseResult,
+  message: string,
+): DouyinMiniappReleaseTarget | null {
+  assertDatabaseSuccess(result, message);
+  if (result.data === null) return null;
+  const parsed = ReleaseTargetSchema.safeParse(result.data);
   if (!parsed.success) throw invalidResponseError();
   return parsed.data;
 }

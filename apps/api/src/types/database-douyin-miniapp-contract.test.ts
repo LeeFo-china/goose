@@ -93,11 +93,12 @@ describe("douyin miniapp database types", () => {
       installation.runtime_config,
       installation.refresh_token_expires_at,
       installation.token_refresh_claim_expires_at,
+      installation.template_release_id,
       installationInsert.authorizer_appid,
       installationUpdate.runtime_config,
     ];
 
-    expect(fields).toHaveLength(16);
+    expect(fields).toHaveLength(17);
   });
 
   test("exposes the Douyin miniapp release ledger contract", () => {
@@ -119,6 +120,9 @@ describe("douyin miniapp database types", () => {
       status: "audit_approved",
       audit_result: { status: "approved" },
       audited_at: "2026-07-20T10:00:00.000Z",
+      operation_name: null,
+      operation_claim_token: null,
+      operation_claim_expires_at: null,
     };
 
     expect([
@@ -128,10 +132,60 @@ describe("douyin miniapp database types", () => {
       release.ext_json,
       release.test_qr_url,
       release.audit_host_names,
+      release.operation_name,
+      release.operation_claim_token,
+      release.operation_claim_expires_at,
       release.platform_operator_id,
       releaseInsert.channel,
       releaseUpdate.audit_result,
-    ]).toHaveLength(9);
+    ]).toHaveLength(12);
+  });
+
+  test("exposes Douyin release operation claim RPC contracts", () => {
+    const claimArgs: DouyinFunctions["claim_douyin_miniapp_release_operation"]["Args"] = {
+      p_release_id: "00000000-0000-4000-8000-000000000001",
+      p_expected_statuses: ["uploaded", "testing"],
+      p_operation_name: "test_qr",
+      p_claim_token: "00000000-0000-4000-8000-000000000002",
+      p_claim_expires_at: "2026-07-20T10:05:00.000Z",
+      p_operator_id: "00000000-0000-4000-8000-000000000003",
+    };
+    const claimReturns:
+      DouyinFunctions["claim_douyin_miniapp_release_operation"]["Returns"] = [{
+        release_id: claimArgs.p_release_id,
+        claim_token: claimArgs.p_claim_token,
+        claim_expires_at: claimArgs.p_claim_expires_at,
+        recovery_required: false,
+      }];
+    const uploadArgs:
+      DouyinFunctions["get_or_create_and_claim_douyin_miniapp_release_upload"]["Args"] = {
+        p_installation_id: "00000000-0000-4000-8000-000000000004",
+        p_template_id: "9133504853504535288",
+        p_template_version: "1.0.0",
+        p_description: "装修模板首发",
+        p_channel: "default",
+        p_ext_json: { extEnable: true, extAppid: "tt-app", ext: { deployment_key: "demo" } },
+        p_claim_token: claimArgs.p_claim_token,
+        p_claim_expires_at: claimArgs.p_claim_expires_at,
+        p_operator_id: claimArgs.p_operator_id,
+      };
+    const uploadReturn = {} as
+      DouyinFunctions["get_or_create_and_claim_douyin_miniapp_release_upload"]["Returns"][number];
+    const syncArgs: DouyinFunctions["sync_douyin_miniapp_release_metadata"]["Args"] = {
+      p_installation_id: uploadArgs.p_installation_id,
+      p_release_id: claimArgs.p_release_id,
+      p_claim_token: claimArgs.p_claim_token,
+    };
+    const syncReturn: DouyinFunctions["sync_douyin_miniapp_release_metadata"]["Returns"] = true;
+
+    expect([
+      claimReturns[0]!.recovery_required,
+      uploadArgs.p_template_version,
+      uploadReturn.operation_claim_token,
+      uploadReturn.recovery_required,
+      syncArgs.p_release_id,
+      syncReturn,
+    ]).toHaveLength(6);
   });
 
   test("exposes component refresh RPC signatures and returns", () => {
