@@ -1,7 +1,7 @@
 import { exchangeDouyinSession } from "./api/auth";
 import { fetchBootstrap } from "./api/bootstrap";
 import { ApiClient, DouyinRequestTransport } from "./api/request";
-import { API_BASE_URL, API_TIMEOUT_MS } from "./config";
+import { API_TIMEOUT_MS, resolveApiBaseUrl } from "./config";
 import type { BootstrapData, LaunchContext } from "./models";
 import { readDouyinEnvironment } from "./platform/env-info";
 import { readDeploymentConfig } from "./platform/ext-config";
@@ -21,10 +21,14 @@ import { BootstrapStore, toServiceUnavailableCode } from "./state/bootstrap";
 import { SessionManager } from "./state/session";
 import { createUuidV4IdempotencyKey } from "./utils/idempotency";
 
-const transport = new DouyinRequestTransport(API_BASE_URL, API_TIMEOUT_MS);
+const environment = readDouyinEnvironment();
+const transport = new DouyinRequestTransport(
+  resolveApiBaseUrl(environment.envType),
+  API_TIMEOUT_MS,
+);
 const session = new SessionManager({
   now: () => Date.now(),
-  readEnvironment: readDouyinEnvironment,
+  readEnvironment: () => environment,
   readDeploymentConfig,
   loginOnce,
   exchangeSession: (input) => exchangeDouyinSession(transport, input),
