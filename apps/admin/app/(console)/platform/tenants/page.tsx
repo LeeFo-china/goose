@@ -5,14 +5,12 @@ import {
 } from "@/components/platform-tenants/platform-tenant-list-actions";
 import { PlatformTenantsTable } from "@/components/platform-tenants/platform-tenants-table";
 import {
-  getPlatformTenantStatusMeta,
   type PlatformTenantListData,
   type PlatformTenantRecord,
   type PlatformTenantStatus,
 } from "@/components/platform-tenants/platform-tenant-types";
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -165,16 +163,7 @@ export default async function PlatformTenantsPage({
           </div>
         }
         listHeader={
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>租户列表</CardTitle>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                当前筛选：
-                {status ? <Badge variant={getPlatformTenantStatusMeta(status).variant}>{getPlatformTenantStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
-              </div>
-            </div>
-            <Badge variant="outline">共 {pagination.total} 个</Badge>
-          </div>
+          <CardTitle>租户列表</CardTitle>
         }
         filters={<PlatformTenantFilters status={status} keyword={keyword} />}
         pagination={pagination}

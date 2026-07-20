@@ -260,6 +260,15 @@ describe("Platform list page layout", () => {
     expect(source).not.toContain("共 {pagination.total} 条");
   });
 
+  test("removes the platform tenant list header filter and total copy", () => {
+    const source = readSource("../../app/(console)/platform/tenants/page.tsx");
+
+    expect(source).toContain("<CardTitle>租户列表</CardTitle>");
+    expect(source).not.toContain("当前筛选：");
+    expect(source).not.toContain('<Badge variant="outline">全部状态</Badge>');
+    expect(source).not.toContain("共 {pagination.total} 个");
+  });
+
   test("removes the tenant account header copy from the billing tenant tab", () => {
     const source = readSource("../../app/(console)/platform/billing/billing-account-tabs.tsx");
 
