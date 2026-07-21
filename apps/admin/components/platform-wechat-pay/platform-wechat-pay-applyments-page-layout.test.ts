@@ -52,6 +52,7 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(filtersSource).toContain('@/components/ui/input');
     expect(filtersSource).toContain('@/components/ui/select');
     expect(filtersSource).toContain("全部状态");
+    expect(filtersSource).toContain("申请 ID");
     expect(filtersSource).toContain("重置");
     expect(filtersSource).not.toContain("<select");
     expect(filtersSource).not.toContain("<input");

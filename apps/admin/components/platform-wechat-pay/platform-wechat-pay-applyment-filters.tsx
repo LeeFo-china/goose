@@ -102,7 +102,7 @@ export function PlatformWechatPayApplymentFilters({
             id="platform-applyment-keyword"
             value={draftKeyword}
             disabled={pending}
-            placeholder="搜索申请编号、租户、进件编号、子商户号"
+            placeholder="申请 ID / 编号、租户、微信进件号、子商户号"
             className="bg-card shadow-none"
             onChange={(event) => setDraftKeyword(event.target.value)}
           />

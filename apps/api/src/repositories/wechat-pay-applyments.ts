@@ -136,6 +136,9 @@ const APPLYMENT_MEDIA_SELECT = [
   "request_id",
 ].join(", ");
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 class WechatPayApplymentRepository {
   async claimSubmission(input: {
     applymentId: string;
@@ -405,15 +408,19 @@ class WechatPayApplymentRepository {
     if (input.query.status) request = request.eq("status", input.query.status);
     if (input.query.tenant_id) request = request.eq("tenant_id", input.query.tenant_id);
     if (input.query.keyword) {
-      const keyword = `%${input.query.keyword}%`;
-      request = request.or([
-        `application_no.ilike.${keyword}`,
-        `merchant_short_name.ilike.${keyword}`,
-        `license_name.ilike.${keyword}`,
-        `applyment_business_code.ilike.${keyword}`,
-        `applyment_id.ilike.${keyword}`,
-        `sub_mchid.ilike.${keyword}`,
-      ].join(","));
+      if (UUID_PATTERN.test(input.query.keyword)) {
+        request = request.eq("id", input.query.keyword);
+      } else {
+        const keyword = `%${input.query.keyword}%`;
+        request = request.or([
+          `application_no.ilike.${keyword}`,
+          `merchant_short_name.ilike.${keyword}`,
+          `license_name.ilike.${keyword}`,
+          `applyment_business_code.ilike.${keyword}`,
+          `applyment_id.ilike.${keyword}`,
+          `sub_mchid.ilike.${keyword}`,
+        ].join(","));
+      }
     }
 
     const { data, error, count } = await request
