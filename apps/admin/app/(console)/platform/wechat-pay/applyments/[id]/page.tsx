@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, ExternalLink, FileCheck2, Paperclip } from "lucide-react";
+import {
+  findWechatPaySettlementRule,
+  type WechatPayApplymentSubjectType,
+} from "@gooes/domain";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   buildWechatPayApplymentAttachmentPreviewUrl,
@@ -10,6 +14,7 @@ import {
   getWechatPayApplymentAttachmentCategoryLabel,
   getWechatPayApplymentStatusMeta,
   type WechatPayApplymentAttachment,
+  type WechatPayApplymentRecord,
 } from "@/components/finance/finance-wechat-pay-applyment-shared";
 import { PlatformWechatPayApplymentActions } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-actions";
 import { PlatformWechatPayApplymentProgress } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-progress";
@@ -51,6 +56,7 @@ export default async function PlatformWechatPayApplymentDetailPage({
     };
   const applyment = data.applyment;
   const statusMeta = getWechatPayApplymentStatusMeta(applyment?.status);
+  const settlementRule = resolveSettlementRule(applyment);
 
   return (
     <div className="flex min-h-0 flex-col gap-5 overflow-visible lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden">
@@ -203,10 +209,13 @@ export default async function PlatformWechatPayApplymentDetailPage({
                       label="结算账户摘要"
                       value={applyment.settlement_account_summary}
                     />
-                    <InfoItem label="结算规则" value={applyment.settlement_id} />
                     <InfoItem
-                      label="所属行业"
-                      value={applyment.qualification_type}
+                      label="经营行业与结算规则"
+                      value={settlementRule
+                        ? `${settlementRule.label} · ${settlementRule.rateLabel} · ${settlementRule.settlementCycleLabel}`
+                        : "未识别规则"}
+                      description={`微信规则 ID：${applyment.settlement_id || "-"}；所属行业：${applyment.qualification_type || "-"}`}
+                      className="md:col-span-2"
                     />
                   </InfoSection>
 
@@ -350,16 +359,23 @@ function WechatPayApplymentAttachmentList({
 function InfoItem({
   label,
   value,
+  description,
   className,
 }: {
   label: string;
   value?: string | null;
+  description?: string | null;
   className?: string;
 }) {
   return (
     <div className={className}>
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 break-words text-sm">{value || "-"}</div>
+      {description ? (
+        <div className="mt-1 break-words text-xs text-muted-foreground">
+          {description}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -405,4 +421,27 @@ function formatSettlementAccountType(value?: string | null) {
   if (value === "BANK_ACCOUNT_TYPE_CORPORATE") return "对公银行账户";
   if (value === "BANK_ACCOUNT_TYPE_PERSONAL") return "经营者个人银行卡";
   return value || "-";
+}
+
+function resolveSettlementRule(applyment: WechatPayApplymentRecord | null) {
+  if (
+    !applyment ||
+    !isSupportedSubjectType(applyment.subject_type) ||
+    !applyment.settlement_id ||
+    !applyment.qualification_type
+  ) {
+    return undefined;
+  }
+  return findWechatPaySettlementRule(
+    applyment.subject_type,
+    applyment.settlement_id,
+    applyment.qualification_type,
+  );
+}
+
+function isSupportedSubjectType(
+  value?: string | null,
+): value is WechatPayApplymentSubjectType {
+  return value === "SUBJECT_TYPE_ENTERPRISE" ||
+    value === "SUBJECT_TYPE_INDIVIDUAL";
 }

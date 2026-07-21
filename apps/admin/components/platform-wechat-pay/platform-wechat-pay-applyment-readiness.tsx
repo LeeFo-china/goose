@@ -64,6 +64,8 @@ const BLOCKER_MESSAGES: Record<string, string> = {
   APPLYMENT_MEDIA_TYPE_UNSUPPORTED: "附件格式不受支持，请退回租户重新上传",
   APPLYMENT_MEDIA_SIZE_INVALID: "附件大小异常，请退回租户重新上传",
   APPLYMENT_MEDIA_TOO_LARGE: "附件超过 2MB，请退回租户压缩后上传",
+  APPLYMENT_SETTLEMENT_RULE_INVALID:
+    "结算规则与主体或所属行业不匹配，请退回租户重新选择",
   APPLYMENT_SUBMISSION_LEASE_INVALID: "正式进件任务状态异常，请联系平台技术人员处理",
   APPLYMENT_SUBMISSION_IN_PROGRESS: "已有正式进件请求正在处理中",
   APPLYMENT_NOT_FOUND: "申请记录已不存在，请返回列表刷新",

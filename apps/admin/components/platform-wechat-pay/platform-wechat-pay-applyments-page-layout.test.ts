@@ -163,6 +163,32 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(tableSource).not.toContain("finance-wechat-pay-applyment-requests");
   });
 
+  test("shows a readable settlement rule while retaining raw audit values", () => {
+    const pageSource = readFileSync(
+      new URL(
+        "../../app/(console)/platform/wechat-pay/applyments/[id]/page.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(pageSource).toContain("findWechatPaySettlementRule");
+    expect(pageSource).toContain('label="经营行业与结算规则"');
+    expect(pageSource).toContain("settlementRule.label");
+    expect(pageSource).toContain("微信规则 ID");
+    expect(pageSource).toContain("applyment.settlement_id");
+    expect(pageSource).toContain("applyment.qualification_type");
+  });
+
+  test("explains an invalid historical settlement rule in preflight", () => {
+    const readinessSource = readSource(
+      "./platform-wechat-pay-applyment-readiness.tsx",
+    );
+
+    expect(readinessSource).toContain("APPLYMENT_SETTLEMENT_RULE_INVALID");
+    expect(readinessSource).toContain("结算规则与主体或所属行业不匹配");
+  });
+
   test("activates from the validated central profile only when backend exposes it", () => {
     const actionsSource = readSource("./platform-wechat-pay-applyment-actions.tsx");
 
