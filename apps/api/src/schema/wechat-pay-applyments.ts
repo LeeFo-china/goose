@@ -1,5 +1,10 @@
-import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
+import {
+  findWechatPaySettlementRule,
+  getWechatPaySettlementRulesForSubject,
+  type WechatPayApplymentSubjectType,
+} from "@gooes/domain";
+import { PaginationQuerySchema } from "@/schema/request";
 
 const optionalText = (max: number, message: string) =>
   z.preprocess((value) => {
@@ -177,9 +182,91 @@ const TenantApplymentFields = {
   remark: optionalText(500, "备注不能超过 500 个字符"),
 };
 
+type SettlementRuleFields = {
+  subject_type?: WechatPayApplymentSubjectType;
+  settlement_id?: string;
+  qualification_type?: string;
+};
+
+type SettlementRuleIssue = {
+  field: keyof SettlementRuleFields;
+  message: string;
+};
+
+const SETTLEMENT_RULE_FIELD_NAMES = [
+  "subject_type",
+  "settlement_id",
+  "qualification_type",
+] as const;
+
+function getSettlementRuleIssues(
+  input: SettlementRuleFields,
+  requireComplete: boolean,
+): SettlementRuleIssue[] {
+  const providedFields = SETTLEMENT_RULE_FIELD_NAMES.filter(
+    (field) => input[field] !== undefined,
+  );
+  if (!requireComplete && providedFields.length === 0) return [];
+  if (providedFields.length !== SETTLEMENT_RULE_FIELD_NAMES.length) {
+    return SETTLEMENT_RULE_FIELD_NAMES
+      .filter((field) => input[field] === undefined)
+      .map((field) => ({
+        field,
+        message: "修改结算规则时必须同时提交主体类型、结算规则和所属行业",
+      }));
+  }
+
+  const { subject_type: subjectType, settlement_id: settlementId } = input;
+  const qualificationType = input.qualification_type;
+  if (!subjectType || !settlementId || !qualificationType) return [];
+
+  const ruleForSubject = getWechatPaySettlementRulesForSubject(subjectType)
+    .find((rule) => rule.id === settlementId);
+  if (!ruleForSubject) {
+    return [{
+      field: "settlement_id",
+      message: "请选择当前主体可用的结算规则",
+    }];
+  }
+  if (
+    !findWechatPaySettlementRule(
+      subjectType,
+      settlementId,
+      qualificationType,
+    )
+  ) {
+    return [{
+      field: "qualification_type",
+      message: "所属行业与结算规则不匹配",
+    }];
+  }
+  return [];
+}
+
+function addSettlementRuleIssues(
+  issues: SettlementRuleIssue[],
+  addIssue: (issue: {
+    code: "custom";
+    path: [keyof SettlementRuleFields];
+    message: string;
+  }) => void,
+) {
+  for (const issue of issues) {
+    addIssue({
+      code: "custom",
+      path: [issue.field],
+      message: issue.message,
+    });
+  }
+}
+
 export const CreateWechatPayApplymentSchema = z.object(TenantApplymentFields)
   .strict()
   .superRefine((input, context) => {
+    addSettlementRuleIssues(
+      getSettlementRuleIssues(input, true),
+      (issue) => context.addIssue(issue),
+    );
     if (
       input.subject_type === "SUBJECT_TYPE_ENTERPRISE" &&
       !input.identity_address
@@ -237,9 +324,16 @@ export const CreateWechatPayApplymentSchema = z.object(TenantApplymentFields)
 
 export const UpdateWechatPayApplymentSchema = z.object(
   TenantApplymentFields,
-).partial().strict().refine((value) => Object.keys(value).length > 0, {
-  message: "至少需要提交一个更新字段",
-});
+).partial().strict()
+  .superRefine((input, context) => {
+    addSettlementRuleIssues(
+      getSettlementRuleIssues(input, false),
+      (issue) => context.addIssue(issue),
+    );
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "至少需要提交一个更新字段",
+  });
 
 export const SubmitWechatPayApplymentSchema = z.object({
   remark: optionalText(500, "备注不能超过 500 个字符"),

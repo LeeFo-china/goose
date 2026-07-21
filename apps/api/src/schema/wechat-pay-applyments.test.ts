@@ -35,8 +35,8 @@ const baseApplymentInput = {
   settlement_bank_full_name: "中国银行股份有限公司固始支行",
   settlement_bank_branch_id: "104515080123",
   settlement_account_number: "6212345678901234",
-  settlement_id: "719",
-  qualification_type: "生活服务/家装服务",
+  settlement_id: "716",
+  qualification_type: "零售批发/生活娱乐/网上商城/其他",
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
   attachments: [
@@ -152,6 +152,55 @@ describe("wechat pay applyment schemas", () => {
         subject_type: "SUBJECT_TYPE_INDIVIDUAL",
         identity_address: undefined,
         settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+        settlement_id: "719",
+        qualification_type: "零售批发/生活娱乐/其他",
+      }).success,
+    ).toBe(true);
+  });
+
+  test("rejects a settlement rule that does not belong to the subject", () => {
+    const result = CreateWechatPayApplymentSchema.safeParse({
+      ...baseApplymentInput,
+      settlement_id: "719",
+      qualification_type: "零售批发/生活娱乐/其他",
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({
+        path: ["settlement_id"],
+        message: "请选择当前主体可用的结算规则",
+      }),
+    );
+  });
+
+  test("rejects an industry that does not match the settlement rule", () => {
+    const result = CreateWechatPayApplymentSchema.safeParse({
+      ...baseApplymentInput,
+      qualification_type: "生活服务/家装服务",
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({
+        path: ["qualification_type"],
+        message: "所属行业与结算规则不匹配",
+      }),
+    );
+  });
+
+  test("requires linked settlement fields together during draft update", () => {
+    expect(
+      UpdateWechatPayApplymentSchema.safeParse({ settlement_id: "716" })
+        .success,
+    ).toBe(false);
+    expect(
+      UpdateWechatPayApplymentSchema.safeParse({
+        subject_type: "SUBJECT_TYPE_ENTERPRISE",
+        settlement_id: "716",
+        qualification_type: "零售批发/生活娱乐/网上商城/其他",
       }).success,
     ).toBe(true);
   });
