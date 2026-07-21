@@ -8,6 +8,7 @@ import type {
   WechatPayApplymentInsert,
   WechatPayApplymentListResult,
   WechatPayApplymentRecord,
+  WechatPayApplymentSensitiveRecord,
   WechatPayApplymentUpdate,
 } from "@/repositories/wechat-pay-applyments";
 import type {
@@ -24,6 +25,10 @@ export type WechatPayApplymentRepositoryPort = {
     id: string;
     tenantId?: string;
   }) => Promise<WechatPayApplymentRecord | null>;
+  findSensitivePayloadById: (input: {
+    id: string;
+    tenantId?: string;
+  }) => Promise<WechatPayApplymentSensitiveRecord | null>;
   createApplyment: (input: WechatPayApplymentInsert) => Promise<WechatPayApplymentRecord>;
   updateApplyment: (input: {
     id: string;
@@ -67,6 +72,8 @@ export type WechatPayApplymentServiceDependencies = {
   platformPaymentConfigRepository?: PlatformPaymentConfigRepositoryPort;
   accessPolicyService?: AccessPolicyPort;
   applicationNoFactory?: () => string;
+  applymentIdFactory?: () => string;
+  encryptionRootSecretFactory?: () => string | null | undefined;
   nowFactory?: () => string;
 };
 

@@ -11,6 +11,7 @@ import type {
   UpdateWechatPayApplymentWechatStatusInput,
 } from "@/schema/wechat-pay-applyments";
 import type { AuthContext } from "@/services/authorization";
+import { sanitizeApplymentRecord } from "@/services/wechat-pay-applyment-draft";
 import type {
   ApplymentDetailResult,
   PlatformPaymentConfigRepositoryPort,
@@ -295,7 +296,7 @@ export class WechatPayApplymentPlatformActions {
     applyment: WechatPayApplymentRecord,
   ): Promise<ApplymentDetailResult> {
     return {
-      applyment,
+      applyment: sanitizeApplymentRecord(applyment),
       events: await this.repository.findEvents({
         tenantId: applyment.tenant_id,
         applymentId: applyment.id,

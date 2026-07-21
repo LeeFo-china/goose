@@ -43,25 +43,24 @@ const activatableApplyment: WechatPayApplymentRecord = {
   contact_identity_doc_type: null,
   contact_identity_period_begin: null,
   contact_identity_period_end: null,
-  contact_type: null,
-  has_sensitive_payload: false,
-  identity_address_masked: null,
-  identity_doc_type: null,
-  identity_period_begin: null,
-  identity_period_end: null,
+  contact_type: "LEGAL",
+  has_sensitive_payload: true,
+  identity_address_masked: "河南省信阳市***1号",
+  identity_doc_type: "IDENTIFICATION_TYPE_IDCARD",
+  identity_period_begin: "2020-01-01",
+  identity_period_end: "2040-01-01",
   last_wechat_request_id: null,
   last_wechat_synced_at: null,
-  license_address: null,
-  license_period_begin: null,
-  license_period_end: null,
-  qualification_type: null,
-  sensitive_payload_ciphertext: null,
-  sensitive_payload_updated_at: null,
-  sensitive_payload_version: null,
-  service_phone: null,
-  settlement_id: null,
+  license_address: "河南省信阳市固始县示例大道1号",
+  license_period_begin: "2020-01-01",
+  license_period_end: "长期",
+  qualification_type: "生活服务/家装服务",
+  sensitive_payload_updated_at: "2026-07-01T09:00:00.000Z",
+  sensitive_payload_version: 1,
+  service_phone: "0376-1234567",
+  settlement_id: "719",
   sign_url: null,
-  subject_type: null,
+  subject_type: "SUBJECT_TYPE_ENTERPRISE",
   submission_attempt_count: 0,
   submission_claimed_at: null,
   wechat_applyment_state_raw: null,
@@ -132,6 +131,7 @@ const eventRecord = {
 } satisfies WechatPayApplymentEventRecord;
 
 const findById = mock(async () => activatableApplyment);
+const findSensitivePayloadById = mock(async () => null);
 const findEvents = mock(async () => [eventRecord]);
 const updateApplyment = mock(async (input: {
   id: string;
@@ -224,6 +224,7 @@ async function createService() {
     repository: {
       findLatestByTenant: mock(async () => activatableApplyment),
       findById,
+      findSensitivePayloadById,
       createApplyment: mock(async () => activatableApplyment),
       updateApplyment,
       insertEvent,

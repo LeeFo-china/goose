@@ -3,14 +3,24 @@ import type { Inserts, Tables, Updates } from "@/types/db";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
 
+type WechatPayApplymentTableRow = Tables<"tenant_wechat_pay_applyments">;
+
 export type WechatPayApplymentRecord =
-  Tables<"tenant_wechat_pay_applyments"> & {
+  Omit<WechatPayApplymentTableRow, "sensitive_payload_ciphertext"> & {
     tenant?: {
       id: string;
       name: string | null;
       slug: string | null;
     } | null;
   };
+export type WechatPayApplymentSensitiveRecord = Pick<
+  WechatPayApplymentTableRow,
+  | "id"
+  | "tenant_id"
+  | "has_sensitive_payload"
+  | "sensitive_payload_ciphertext"
+  | "sensitive_payload_version"
+>;
 export type WechatPayApplymentInsert =
   Inserts<"tenant_wechat_pay_applyments">;
 export type WechatPayApplymentUpdate =
@@ -30,8 +40,77 @@ export type WechatPayApplymentListResult = {
   };
 };
 
+const APPLYMENT_SAFE_COLUMNS = [
+  "id",
+  "tenant_id",
+  "application_no",
+  "status",
+  "merchant_short_name",
+  "license_name",
+  "license_code",
+  "license_address",
+  "license_period_begin",
+  "license_period_end",
+  "legal_representative_name",
+  "identity_doc_type",
+  "identity_address_masked",
+  "identity_period_begin",
+  "identity_period_end",
+  "contact_type",
+  "super_admin_name",
+  "super_admin_phone_masked",
+  "super_admin_email",
+  "contact_identity_doc_type",
+  "contact_identity_period_begin",
+  "contact_identity_period_end",
+  "service_phone",
+  "settlement_account_type",
+  "settlement_account_name",
+  "settlement_bank_name",
+  "settlement_bank_full_name",
+  "settlement_bank_branch_id",
+  "settlement_account_number_masked",
+  "settlement_account_summary",
+  "settlement_id",
+  "qualification_type",
+  "business_scene_description",
+  "contact_address",
+  "attachments",
+  "remark",
+  "applyment_business_code",
+  "applyment_id",
+  "applyment_state",
+  "applyment_state_message",
+  "wechat_applyment_state_raw",
+  "sign_url",
+  "audit_detail",
+  "last_wechat_request_id",
+  "last_wechat_synced_at",
+  "sub_mchid",
+  "sub_appid",
+  "appid_binding_state",
+  "appid_binding_message",
+  "payment_config_id",
+  "has_sensitive_payload",
+  "sensitive_payload_version",
+  "sensitive_payload_updated_at",
+  "submission_claimed_at",
+  "submission_attempt_count",
+  "submitted_at",
+  "approved_at",
+  "opened_at",
+  "activated_at",
+  "rejected_at",
+  "rejected_reason",
+  "created_by_employee_id",
+  "updated_by_employee_id",
+  "reviewed_by_employee_id",
+  "created_at",
+  "updated_at",
+].join(", ");
+
 const APPLYMENT_SELECT = [
-  "*",
+  APPLYMENT_SAFE_COLUMNS,
   "tenant:tenants!tenant_wechat_pay_applyments_tenant_id_fkey(id, name, slug)",
 ].join(", ");
 
@@ -74,6 +153,32 @@ class WechatPayApplymentRepository {
     }
 
     return (data as unknown as WechatPayApplymentRecord | null) ?? null;
+  }
+
+  async findSensitivePayloadById(input: {
+    id: string;
+    tenantId?: string;
+  }): Promise<WechatPayApplymentSensitiveRecord | null> {
+    let request = SupabaseDB.getAdminClient()
+      .from("tenant_wechat_pay_applyments")
+      .select([
+        "id",
+        "tenant_id",
+        "has_sensitive_payload",
+        "sensitive_payload_ciphertext",
+        "sensitive_payload_version",
+      ].join(", "))
+      .eq("id", input.id);
+
+    if (input.tenantId) {
+      request = request.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await request.maybeSingle();
+    if (error) {
+      throw Errors.dbError("查询微信支付进件敏感资料失败", error);
+    }
+    return (data as WechatPayApplymentSensitiveRecord | null) ?? null;
   }
 
   async createApplyment(

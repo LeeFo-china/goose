@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { randomUUID } from "node:crypto";
 import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
   wechatPayApplymentRepository,
@@ -18,9 +19,21 @@ import type {
   UpdateWechatPayApplymentInput,
   UpdateWechatPayApplymentWechatStatusInput,
 } from "@/schema/wechat-pay-applyments";
-import { WechatPayApplymentAttachmentCategorySchema } from "@/schema/wechat-pay-applyments";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  buildCreateSensitivePayload,
+  buildTenantApplymentSafePatch,
+  hasSensitiveReplacement,
+  mergeSensitivePayload,
+  sanitizeApplymentRecord,
+} from "@/services/wechat-pay-applyment-draft";
+import {
+  decryptApplymentSensitivePayload,
+  encryptApplymentSensitivePayload,
+  type ApplymentSensitivePayload,
+} from "@/services/wechat-pay-applyment-sensitive-payload";
+import { assertApplymentSubmitReady } from "@/services/wechat-pay-applyment-readiness";
 import { WechatPayApplymentPlatformActions } from "@/services/wechat-pay-applyments-platform";
 import type {
   AccessPolicyPort,
@@ -34,17 +47,13 @@ import {
   TENANT_SUBMIT_PERMISSION,
 } from "@/services/wechat-pay-applyments-types";
 
-const REQUIRED_APPLYMENT_ATTACHMENT_CATEGORIES = [
-  "license_copy",
-  "legal_representative_id_card_front",
-  "legal_representative_id_card_back",
-] as const;
-
 export class WechatPayApplymentService {
   private readonly repository: WechatPayApplymentRepositoryPort;
   private readonly configRepository: WechatPayConfigRepositoryPort;
   private readonly accessPolicyService: AccessPolicyPort;
   private readonly applicationNoFactory: () => string;
+  private readonly applymentIdFactory: () => string;
+  private readonly encryptionRootSecretFactory: () => string | null | undefined;
   private readonly nowFactory: () => string;
   private readonly platformActions: WechatPayApplymentPlatformActions;
 
@@ -56,6 +65,10 @@ export class WechatPayApplymentService {
       dependencies.accessPolicyService ?? accessPolicyService;
     this.applicationNoFactory =
       dependencies.applicationNoFactory ?? createApplicationNo;
+    this.applymentIdFactory = dependencies.applymentIdFactory ?? randomUUID;
+    this.encryptionRootSecretFactory =
+      dependencies.encryptionRootSecretFactory ??
+      (() => process.env.APP_CONFIG_ENCRYPTION_KEY);
     this.nowFactory = dependencies.nowFactory ?? (() => new Date().toISOString());
     this.platformActions = new WechatPayApplymentPlatformActions(
       this.repository,
@@ -103,14 +116,31 @@ export class WechatPayApplymentService {
       );
     }
 
+    const applymentId = this.applymentIdFactory();
+    const sensitivePayloadVersion = 1;
+    const now = this.nowFactory();
+    const sensitivePayloadCiphertext = encryptApplymentSensitivePayload({
+      context: {
+        tenantId,
+        applymentId,
+        version: sensitivePayloadVersion,
+      },
+      payload: buildCreateSensitivePayload(input),
+      rootSecret: this.encryptionRootSecretFactory(),
+    });
     const created = await this.repository.createApplyment({
-      ...this.toTenantApplymentPatch(input),
+      ...buildTenantApplymentSafePatch(input),
+      id: applymentId,
       tenant_id: tenantId,
       application_no: this.applicationNoFactory(),
       merchant_short_name: input.merchant_short_name,
       status: "draft",
       applyment_state: "draft",
       appid_binding_state: "not_bound",
+      has_sensitive_payload: true,
+      sensitive_payload_ciphertext: sensitivePayloadCiphertext,
+      sensitive_payload_version: sensitivePayloadVersion,
+      sensitive_payload_updated_at: now,
       created_by_employee_id: employeeId,
       updated_by_employee_id: employeeId,
     });
@@ -137,11 +167,17 @@ export class WechatPayApplymentService {
     const current = await this.getRequiredApplyment({ id, tenantId });
     this.assertEditable(current);
 
+    const sensitivePatch = await this.buildSensitivePayloadUpdate({
+      current,
+      input,
+      tenantId,
+    });
     const updated = await this.repository.updateApplyment({
       id,
       tenantId,
       patch: {
-        ...this.toTenantApplymentPatch(input),
+        ...buildTenantApplymentSafePatch(input),
+        ...sensitivePatch,
         status: "draft",
         applyment_state: "draft",
         rejected_reason: null,
@@ -171,7 +207,7 @@ export class WechatPayApplymentService {
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id, tenantId });
     this.assertEditable(current);
-    this.assertSubmitReady(current);
+    assertApplymentSubmitReady(current);
     const now = this.nowFactory();
 
     const updated = await this.repository.updateApplyment({
@@ -258,7 +294,7 @@ export class WechatPayApplymentService {
     applyment: WechatPayApplymentRecord | null,
   ): Promise<ApplymentDetailResult> {
     return {
-      applyment,
+      applyment: applyment ? sanitizeApplymentRecord(applyment) : null,
       events: applyment
         ? await this.repository.findEvents({
           tenantId: applyment.tenant_id,
@@ -271,51 +307,63 @@ export class WechatPayApplymentService {
     };
   }
 
-  private toTenantApplymentPatch(
-    input: CreateWechatPayApplymentInput | UpdateWechatPayApplymentInput,
-  ): WechatPayApplymentUpdate {
-    const patch: WechatPayApplymentUpdate = {};
-    assignIfDefined(patch, "merchant_short_name", input.merchant_short_name);
-    assignIfDefined(patch, "license_name", input.license_name);
-    assignIfDefined(patch, "license_code", input.license_code);
-    assignIfDefined(
-      patch,
-      "legal_representative_name",
-      input.legal_representative_name,
-    );
-    assignIfDefined(patch, "super_admin_name", input.super_admin_name);
-    assignIfDefined(patch, "super_admin_email", input.super_admin_email);
-    assignIfDefined(patch, "settlement_account_type", input.settlement_account_type);
-    assignIfDefined(patch, "settlement_account_name", input.settlement_account_name);
-    assignIfDefined(patch, "settlement_bank_name", input.settlement_bank_name);
-    assignIfDefined(patch, "settlement_bank_full_name", input.settlement_bank_full_name);
-    assignIfDefined(patch, "settlement_bank_branch_id", input.settlement_bank_branch_id);
-    if (input.settlement_account_number !== undefined) {
-      const accountNumber = input.settlement_account_number.trim();
-      patch.settlement_account_number_masked = maskBankAccountNumber(accountNumber);
-      patch.settlement_account_summary = buildSettlementAccountSummary(
-        input.settlement_bank_name,
-        accountNumber,
-      );
-    } else {
-      assignIfDefined(
-        patch,
-        "settlement_account_summary",
-        input.settlement_account_summary,
-      );
+  private async buildSensitivePayloadUpdate(input: {
+    current: WechatPayApplymentRecord;
+    input: UpdateWechatPayApplymentInput;
+    tenantId: string;
+  }): Promise<WechatPayApplymentUpdate> {
+    if (
+      input.current.has_sensitive_payload &&
+      !hasSensitiveReplacement(input.input)
+    ) {
+      return {};
     }
-    assignIfDefined(
-      patch,
-      "business_scene_description",
-      input.business_scene_description,
-    );
-    assignIfDefined(patch, "contact_address", input.contact_address);
-    assignIfDefined(patch, "attachments", input.attachments);
-    assignIfDefined(patch, "remark", input.remark);
-    if (input.super_admin_phone !== undefined) {
-      patch.super_admin_phone_masked = maskPhone(input.super_admin_phone);
+
+    const stored = input.current.has_sensitive_payload
+      ? await this.repository.findSensitivePayloadById({
+        id: input.current.id,
+        tenantId: input.tenantId,
+      })
+      : null;
+    const version = stored?.sensitive_payload_version ?? 1;
+    let currentPayload: Partial<ApplymentSensitivePayload> = {};
+    if (input.current.has_sensitive_payload) {
+      if (!stored?.sensitive_payload_ciphertext || !stored.sensitive_payload_version) {
+        throw Errors.business(
+          500,
+          "微信支付进件敏感资料缺失",
+          "WECHAT_PAY_APPLYMENT_SENSITIVE_PAYLOAD_MISSING",
+        );
+      }
+      currentPayload = decryptApplymentSensitivePayload({
+        context: {
+          tenantId: input.tenantId,
+          applymentId: input.current.id,
+          version: stored.sensitive_payload_version,
+        },
+        ciphertext: stored.sensitive_payload_ciphertext,
+        rootSecret: this.encryptionRootSecretFactory(),
+      });
     }
-    return patch;
+    const nextPayload = mergeSensitivePayload({
+      current: currentPayload,
+      patch: input.input,
+      contactType: input.input.contact_type ?? input.current.contact_type,
+    });
+    return {
+      has_sensitive_payload: true,
+      sensitive_payload_ciphertext: encryptApplymentSensitivePayload({
+        context: {
+          tenantId: input.tenantId,
+          applymentId: input.current.id,
+          version,
+        },
+        payload: nextPayload,
+        rootSecret: this.encryptionRootSecretFactory(),
+      }),
+      sensitive_payload_version: version,
+      sensitive_payload_updated_at: this.nowFactory(),
+    };
   }
 
   private assertTenantRead(authContext: AuthContext) {
@@ -371,40 +419,6 @@ export class WechatPayApplymentService {
     }
   }
 
-  private assertSubmitReady(applyment: WechatPayApplymentRecord) {
-    const missing = [
-      ["merchant_short_name", applyment.merchant_short_name],
-      ["license_name", applyment.license_name],
-      ["license_code", applyment.license_code],
-      ["legal_representative_name", applyment.legal_representative_name],
-      ["super_admin_name", applyment.super_admin_name],
-      ["super_admin_phone_masked", applyment.super_admin_phone_masked],
-      ["settlement_account_type", applyment.settlement_account_type],
-      ["settlement_account_name", applyment.settlement_account_name],
-      ["settlement_bank_name", applyment.settlement_bank_name],
-      ["settlement_account_number_masked", applyment.settlement_account_number_masked],
-      ["settlement_account_summary", applyment.settlement_account_summary],
-      ["business_scene_description", applyment.business_scene_description],
-      ["contact_address", applyment.contact_address],
-    ]
-      .filter(([, value]) => !String(value ?? "").trim())
-      .map(([field]) => field);
-    const attachmentCategories = collectAttachmentCategories(applyment.attachments);
-    for (const category of REQUIRED_APPLYMENT_ATTACHMENT_CATEGORIES) {
-      if (!attachmentCategories.has(category)) {
-        missing.push(`attachments.${category}`);
-      }
-    }
-    if (missing.length > 0) {
-      throw Errors.business(
-        400,
-        "微信支付开通申请资料不完整",
-        "WECHAT_PAY_APPLYMENT_REQUIRED_FIELDS_MISSING",
-        { missing },
-      );
-    }
-  }
-
   private async recordEvent(input: {
     applyment: WechatPayApplymentRecord;
     eventType: string;
@@ -425,55 +439,6 @@ export class WechatPayApplymentService {
       metadata: (input.metadata ?? {}) as WechatPayApplymentEventInsert["metadata"],
     });
   }
-}
-
-function assignIfDefined<K extends keyof WechatPayApplymentUpdate>(
-  target: WechatPayApplymentUpdate,
-  key: K,
-  value: WechatPayApplymentUpdate[K] | undefined,
-) {
-  if (value !== undefined) {
-    target[key] = value;
-  }
-}
-
-function maskPhone(phone: string | null | undefined) {
-  const normalized = phone?.trim() ?? "";
-  if (normalized.length < 7) return normalized || null;
-  return `${normalized.slice(0, 3)}****${normalized.slice(-4)}`;
-}
-
-function maskBankAccountNumber(accountNumber: string) {
-  const normalized = accountNumber.trim();
-  if (normalized.length <= 6) return normalized;
-  return `${normalized.slice(0, 2)}${"*".repeat(Math.max(normalized.length - 6, 4))}${normalized.slice(-4)}`;
-}
-
-function buildSettlementAccountSummary(
-  bankName: string | null | undefined,
-  accountNumber: string,
-) {
-  const tail = accountNumber.trim().slice(-4);
-  const prefix = bankName?.trim();
-  return [prefix, tail ? `尾号 ${tail}` : null].filter(Boolean).join(" ");
-}
-
-function collectAttachmentCategories(attachments: unknown) {
-  const categories = new Set<string>();
-  if (!Array.isArray(attachments)) return categories;
-
-  for (const attachment of attachments) {
-    if (!attachment || typeof attachment !== "object" || Array.isArray(attachment)) {
-      continue;
-    }
-    const category = (attachment as { category?: unknown }).category;
-    const parsed = WechatPayApplymentAttachmentCategorySchema.safeParse(category);
-    if (parsed.success) {
-      categories.add(parsed.data);
-    }
-  }
-
-  return categories;
 }
 
 function createApplicationNo() {

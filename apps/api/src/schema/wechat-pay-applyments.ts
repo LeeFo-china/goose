@@ -27,9 +27,11 @@ export const WechatPayApplymentStatusSchema = z.enum([
   "rejected",
   "approved",
   "applying",
+  "wechat_editing",
   "reviewing",
   "account_verifying",
   "signing",
+  "opening",
   "opened",
   "bound",
   "active",
@@ -62,6 +64,8 @@ export const WechatPayApplymentAttachmentCategorySchema = z.enum([
   "license_copy",
   "legal_representative_id_card_front",
   "legal_representative_id_card_back",
+  "contact_id_card_front",
+  "contact_id_card_back",
   "settlement_account_proof",
   "business_scene_material",
 ] as const, { message: "无效的微信支付开通申请附件类型" });
@@ -70,6 +74,43 @@ export const WechatPayApplymentSettlementAccountTypeSchema = z.enum([
   "BANK_ACCOUNT_TYPE_CORPORATE",
   "BANK_ACCOUNT_TYPE_PERSONAL",
 ] as const, { message: "无效的微信支付结算账户类型" });
+
+export const WechatPayApplymentSubjectTypeSchema = z.enum([
+  "SUBJECT_TYPE_ENTERPRISE",
+  "SUBJECT_TYPE_INDIVIDUAL",
+] as const, { message: "首版仅支持企业或个体工商户" });
+
+export const WechatPayApplymentIdentityDocTypeSchema = z.literal(
+  "IDENTIFICATION_TYPE_IDCARD",
+  { message: "首版仅支持中国大陆居民身份证" },
+);
+
+export const WechatPayApplymentContactTypeSchema = z.enum([
+  "LEGAL",
+  "SUPER",
+] as const, { message: "无效的超级管理员类型" });
+
+const dateText = (message: string) => z.iso.date({ message });
+const periodEndText = (message: string) => z.union([
+  z.iso.date({ message }),
+  z.literal("长期"),
+]);
+
+const optionalDateText = (message: string) => z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") return value;
+  const normalized = value.trim();
+  return normalized || null;
+}, dateText(message).nullable().optional());
+
+const optionalPeriodEndText = (message: string) => z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") return value;
+  const normalized = value.trim();
+  return normalized || null;
+}, periodEndText(message).nullable().optional());
 
 const AttachmentSchema = z.object({
   category: WechatPayApplymentAttachmentCategorySchema.optional(),
@@ -80,19 +121,45 @@ const AttachmentSchema = z.object({
 }).strict();
 
 const TenantApplymentFields = {
+  subject_type: WechatPayApplymentSubjectTypeSchema,
   merchant_short_name: requiredText(64, "请输入商户简称", "商户简称不能超过 64 个字符"),
   license_name: requiredText(100, "请输入营业执照主体名称", "主体名称不能超过 100 个字符"),
   license_code: requiredText(64, "请输入统一社会信用代码", "统一社会信用代码不能超过 64 个字符"),
+  license_address: optionalText(128, "营业执照注册地址不能超过 128 个字符"),
+  license_period_begin: optionalDateText("营业执照有效期开始日期格式无效"),
+  license_period_end: optionalPeriodEndText("营业执照有效期结束日期格式无效"),
   legal_representative_name: requiredText(50, "请输入法人姓名", "法人姓名不能超过 50 个字符"),
+  identity_doc_type: WechatPayApplymentIdentityDocTypeSchema,
+  identity_name: requiredText(100, "请输入证件姓名", "证件姓名不能超过 100 个字符"),
+  identity_number: z.string()
+    .trim()
+    .regex(/^\d{17}[\dXx]$/, "身份证号码格式不正确")
+    .transform((value) => value.toUpperCase()),
+  identity_address: optionalText(128, "身份证居住地址不能超过 128 个字符"),
+  identity_period_begin: dateText("身份证有效期开始日期格式无效"),
+  identity_period_end: periodEndText("身份证有效期结束日期格式无效"),
+  contact_type: WechatPayApplymentContactTypeSchema,
   super_admin_name: requiredText(50, "请输入超级管理员姓名", "超级管理员姓名不能超过 50 个字符"),
   super_admin_phone: z.string()
     .trim()
     .regex(/^1[3-9]\d{9}$/, "超级管理员手机号格式不正确"),
-  super_admin_email: optionalText(120, "超级管理员邮箱不能超过 120 个字符")
-    .refine((value) => {
-      if (!value) return true;
-      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-    }, "超级管理员邮箱格式不正确"),
+  super_admin_email: z.string()
+    .trim()
+    .min(1, "请输入超级管理员邮箱")
+    .max(120, "超级管理员邮箱不能超过 120 个字符")
+    .email("超级管理员邮箱格式不正确"),
+  contact_identity_doc_type: WechatPayApplymentIdentityDocTypeSchema.optional(),
+  contact_identity_number: z.string()
+    .trim()
+    .regex(/^\d{17}[\dXx]$/, "经办人身份证号码格式不正确")
+    .transform((value) => value.toUpperCase())
+    .optional(),
+  contact_identity_address: optionalText(128, "经办人身份证地址不能超过 128 个字符"),
+  contact_identity_period_begin: dateText("经办人证件有效期开始日期格式无效").optional(),
+  contact_identity_period_end: periodEndText("经办人证件有效期结束日期格式无效").optional(),
+  service_phone: z.string()
+    .trim()
+    .regex(/^(?:1[3-9]\d{9}|[\d+-]{5,20})$/, "客服电话格式不正确"),
   settlement_account_type: WechatPayApplymentSettlementAccountTypeSchema,
   settlement_account_name: requiredText(100, "请输入结算账户开户名", "结算账户开户名不能超过 100 个字符"),
   settlement_bank_name: requiredText(100, "请输入结算账户开户银行", "开户银行不能超过 100 个字符"),
@@ -102,15 +169,71 @@ const TenantApplymentFields = {
     .trim()
     .regex(/^\d{8,32}$/, "银行账号应为 8 到 32 位数字"),
   settlement_account_summary: optionalText(120, "结算账户摘要不能超过 120 个字符"),
+  settlement_id: requiredText(32, "请选择结算规则", "结算规则 ID 不能超过 32 个字符"),
+  qualification_type: requiredText(200, "请选择所属行业", "所属行业不能超过 200 个字符"),
   business_scene_description: requiredText(500, "请输入经营场景说明", "经营场景说明不能超过 500 个字符"),
   contact_address: requiredText(200, "请输入联系地址", "联系地址不能超过 200 个字符"),
   attachments: z.array(AttachmentSchema).max(20, "附件数量不能超过 20").optional(),
   remark: optionalText(500, "备注不能超过 500 个字符"),
 };
 
-export const CreateWechatPayApplymentSchema = z.object(
-  TenantApplymentFields,
-).strict();
+export const CreateWechatPayApplymentSchema = z.object(TenantApplymentFields)
+  .strict()
+  .superRefine((input, context) => {
+    if (
+      input.subject_type === "SUBJECT_TYPE_ENTERPRISE" &&
+      !input.identity_address
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["identity_address"],
+        message: "企业主体必须填写法人身份证居住地址",
+      });
+    }
+    if (
+      input.subject_type === "SUBJECT_TYPE_ENTERPRISE" &&
+      input.settlement_account_type !== "BANK_ACCOUNT_TYPE_CORPORATE"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["settlement_account_type"],
+        message: "企业主体只能使用对公银行账户",
+      });
+    }
+    if (input.contact_type === "SUPER") {
+      const requiredAgentFields = [
+        ["contact_identity_doc_type", input.contact_identity_doc_type],
+        ["contact_identity_number", input.contact_identity_number],
+        ["contact_identity_address", input.contact_identity_address],
+        ["contact_identity_period_begin", input.contact_identity_period_begin],
+        ["contact_identity_period_end", input.contact_identity_period_end],
+      ] as const;
+      for (const [field, value] of requiredAgentFields) {
+        if (!value) {
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: "经办人超级管理员必须完整填写身份证资料",
+          });
+        }
+      }
+      const categories = new Set(
+        (input.attachments ?? []).map((attachment) => attachment.category),
+      );
+      for (const category of [
+        "contact_id_card_front",
+        "contact_id_card_back",
+      ] as const) {
+        if (!categories.has(category)) {
+          context.addIssue({
+            code: "custom",
+            path: ["attachments"],
+            message: `经办人必须上传${category === "contact_id_card_front" ? "身份证人像面" : "身份证国徽面"}`,
+          });
+        }
+      }
+    }
+  });
 
 export const UpdateWechatPayApplymentSchema = z.object(
   TenantApplymentFields,

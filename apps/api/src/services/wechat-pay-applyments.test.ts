@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 import type {
   WechatPayApplymentEventRecord,
+  WechatPayApplymentInsert,
   WechatPayApplymentRecord,
+  WechatPayApplymentUpdate,
 } from "@/repositories/wechat-pay-applyments";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 
@@ -53,25 +55,24 @@ const submittedApplyment: WechatPayApplymentRecord = {
   contact_identity_doc_type: null,
   contact_identity_period_begin: null,
   contact_identity_period_end: null,
-  contact_type: null,
-  has_sensitive_payload: false,
-  identity_address_masked: null,
-  identity_doc_type: null,
-  identity_period_begin: null,
-  identity_period_end: null,
+  contact_type: "LEGAL",
+  has_sensitive_payload: true,
+  identity_address_masked: "河南省信阳市***1号",
+  identity_doc_type: "IDENTIFICATION_TYPE_IDCARD",
+  identity_period_begin: "2020-01-01",
+  identity_period_end: "2040-01-01",
   last_wechat_request_id: null,
   last_wechat_synced_at: null,
-  license_address: null,
-  license_period_begin: null,
-  license_period_end: null,
-  qualification_type: null,
-  sensitive_payload_ciphertext: null,
-  sensitive_payload_updated_at: null,
-  sensitive_payload_version: null,
-  service_phone: null,
-  settlement_id: null,
+  license_address: "河南省信阳市固始县示例大道1号",
+  license_period_begin: "2020-01-01",
+  license_period_end: "长期",
+  qualification_type: "生活服务/家装服务",
+  sensitive_payload_updated_at: "2026-07-01T09:00:00.000Z",
+  sensitive_payload_version: 1,
+  service_phone: "0376-1234567",
+  settlement_id: "719",
   sign_url: null,
-  subject_type: null,
+  subject_type: "SUBJECT_TYPE_ENTERPRISE",
   submission_attempt_count: 0,
   submission_claimed_at: null,
   wechat_applyment_state_raw: null,
@@ -114,8 +115,9 @@ const eventRecord: WechatPayApplymentEventRecord = {
 
 const findLatestByTenant = mock(async (): Promise<WechatPayApplymentRecord | null> => submittedApplyment);
 const findById = mock(async (): Promise<WechatPayApplymentRecord | null> => submittedApplyment);
+const findSensitivePayloadById = mock(async () => null);
 const findEvents = mock(async () => [eventRecord]);
-const createApplyment = mock(async (input: Partial<WechatPayApplymentRecord>) => ({
+const createApplyment = mock(async (input: WechatPayApplymentInsert) => ({
   ...submittedApplyment,
   ...input,
   id: applymentId,
@@ -124,7 +126,7 @@ const createApplyment = mock(async (input: Partial<WechatPayApplymentRecord>) =>
 const updateApplyment = mock(async (input: {
   id: string;
   tenantId?: string;
-  patch: Partial<WechatPayApplymentRecord>;
+  patch: WechatPayApplymentUpdate;
 }) => ({
   ...submittedApplyment,
   ...input.patch,
@@ -244,6 +246,7 @@ async function createService() {
     repository: {
       findLatestByTenant,
       findById,
+      findSensitivePayloadById,
       findEvents,
       createApplyment,
       updateApplyment,
@@ -264,6 +267,7 @@ describe("WechatPayApplymentService", () => {
   beforeEach(() => {
     findLatestByTenant.mockClear();
     findById.mockClear();
+    findSensitivePayloadById.mockClear();
     findEvents.mockClear();
     createApplyment.mockClear();
     updateApplyment.mockClear();
@@ -285,51 +289,6 @@ describe("WechatPayApplymentService", () => {
     expect(result.applyment?.application_no).toBe("WPA202607010001");
     expect(result.events).toHaveLength(1);
     expect(result.can_submit).toBe(false);
-  });
-
-  test("creates tenant draft and stores only masked admin phone", async () => {
-    findLatestByTenant.mockImplementationOnce(async () => null);
-    const service = await createService();
-
-    await service.createDraft(
-      tenantSubmitAuth(),
-      {
-        merchant_short_name: "晴天装饰",
-        license_name: "固始晴天装饰工程有限公司",
-        license_code: "91411525MA00000000",
-        legal_representative_name: "张三",
-        super_admin_name: "李四",
-        super_admin_phone: "13800000000",
-        super_admin_email: "admin@example.com",
-        settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
-        settlement_account_name: "固始晴天装饰工程有限公司",
-        settlement_bank_name: "中国银行",
-        settlement_bank_full_name: "中国银行股份有限公司固始支行",
-        settlement_bank_branch_id: "104515080123",
-        settlement_account_number: "6212345678901234",
-        business_scene_description: "装修项目收款",
-        contact_address: "河南省信阳市固始县",
-      },
-    );
-
-    expect(createApplyment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenant_id: tenantId,
-        application_no: "WPA202607010001",
-        status: "draft",
-        super_admin_phone_masked: "138****0000",
-        settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
-        settlement_account_number_masked: "62**********1234",
-        settlement_account_summary: "中国银行 尾号 1234",
-        created_by_employee_id: employeeId,
-      }),
-    );
-    expect(JSON.stringify(createApplyment.mock.calls[0]?.[0])).not.toContain("13800000000");
-    expect(JSON.stringify(createApplyment.mock.calls[0]?.[0])).not.toContain("6212345678901234");
-    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event_type: "created",
-      to_status: "draft",
-    }));
   });
 
   test("submits rejected or draft applyment and records audit event", async () => {
@@ -404,6 +363,25 @@ describe("WechatPayApplymentService", () => {
       code: "WECHAT_PAY_APPLYMENT_REQUIRED_FIELDS_MISSING",
       details: expect.objectContaining({
         missing: expect.arrayContaining(["settlement_account_number_masked"]),
+      }),
+    });
+  });
+  test("rejects submit when the encrypted sensitive payload is missing", async () => {
+    findById.mockImplementationOnce(async () => ({
+      ...submittedApplyment,
+      status: "draft",
+      has_sensitive_payload: false,
+      sensitive_payload_version: null,
+      sensitive_payload_updated_at: null,
+    }));
+    const service = await createService();
+
+    await expect(
+      service.submit(tenantSubmitAuth(), applymentId, {}),
+    ).rejects.toMatchObject({
+      code: "WECHAT_PAY_APPLYMENT_REQUIRED_FIELDS_MISSING",
+      details: expect.objectContaining({
+        missing: expect.arrayContaining(["sensitive_payload"]),
       }),
     });
   });

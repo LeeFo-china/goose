@@ -10,19 +10,33 @@ import {
 } from "./wechat-pay-applyments";
 
 const baseApplymentInput = {
+  subject_type: "SUBJECT_TYPE_ENTERPRISE",
   merchant_short_name: " 固始晴天装饰 ",
   license_name: "固始晴天装饰工程有限公司",
   license_code: "91411525MA00000000",
+  license_address: "河南省信阳市固始县示例大道1号",
+  license_period_begin: "2020-01-01",
+  license_period_end: "长期",
   legal_representative_name: "张三",
+  identity_doc_type: "IDENTIFICATION_TYPE_IDCARD",
+  identity_name: "张三",
+  identity_number: "41000019900101001X",
+  identity_address: "河南省信阳市固始县示例路1号",
+  identity_period_begin: "2020-01-01",
+  identity_period_end: "2040-01-01",
+  contact_type: "LEGAL",
   super_admin_name: "李四",
   super_admin_phone: "13800000000",
   super_admin_email: "admin@example.com",
+  service_phone: "0376-1234567",
   settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
   settlement_account_name: "固始晴天装饰工程有限公司",
   settlement_bank_name: "中国银行",
   settlement_bank_full_name: "中国银行股份有限公司固始支行",
   settlement_bank_branch_id: "104515080123",
   settlement_account_number: "6212345678901234",
+  settlement_id: "719",
+  qualification_type: "生活服务/家装服务",
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
   attachments: [
@@ -57,6 +71,89 @@ describe("wechat pay applyment schemas", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  test("requires official identity contact and settlement fields on create", () => {
+    const requiredFields = [
+      "subject_type",
+      "identity_name",
+      "identity_number",
+      "identity_period_begin",
+      "identity_period_end",
+      "contact_type",
+      "super_admin_email",
+      "service_phone",
+      "settlement_id",
+      "qualification_type",
+    ] as const;
+
+    for (const field of requiredFields) {
+      const input = { ...baseApplymentInput } as Record<string, unknown>;
+      delete input[field];
+      expect(CreateWechatPayApplymentSchema.safeParse(input).success).toBe(false);
+    }
+  });
+
+  test("requires agent identity fields and attachments for SUPER contact", () => {
+    const superContactInput = {
+      ...baseApplymentInput,
+      contact_type: "SUPER",
+      contact_identity_doc_type: "IDENTIFICATION_TYPE_IDCARD",
+      contact_identity_number: "41000019920202002X",
+      contact_identity_address: "河南省信阳市固始县经办人路2号",
+      contact_identity_period_begin: "2021-01-01",
+      contact_identity_period_end: "2041-01-01",
+      attachments: [
+        ...baseApplymentInput.attachments,
+        {
+          category: "contact_id_card_front",
+          object_key: "tenants/tenant-1/wechat-pay-applyment/contact-front.jpg",
+        },
+        {
+          category: "contact_id_card_back",
+          object_key: "tenants/tenant-1/wechat-pay-applyment/contact-back.jpg",
+        },
+      ],
+    };
+
+    expect(CreateWechatPayApplymentSchema.safeParse(superContactInput).success)
+      .toBe(true);
+    expect(
+      CreateWechatPayApplymentSchema.safeParse({
+        ...superContactInput,
+        contact_identity_number: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateWechatPayApplymentSchema.safeParse({
+        ...superContactInput,
+        attachments: baseApplymentInput.attachments,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("requires enterprise identity address and corporate bank account", () => {
+    expect(
+      CreateWechatPayApplymentSchema.safeParse({
+        ...baseApplymentInput,
+        identity_address: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateWechatPayApplymentSchema.safeParse({
+        ...baseApplymentInput,
+        settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      CreateWechatPayApplymentSchema.safeParse({
+        ...baseApplymentInput,
+        subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+        identity_address: undefined,
+        settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+      }).success,
+    ).toBe(true);
   });
 
   test("allows draft update without plaintext secret fields", () => {
