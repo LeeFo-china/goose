@@ -20,7 +20,7 @@
 - Create: `apps/api/src/services/wechat-pay-official-applyment-migration-contract.test.ts`
 - Modify: `apps/api/src/types/database.ts`
 
-- [ ] **Step 1: Write the failing migration contract test**
+- [x] **Step 1: Write the failing migration contract test**
 
 Create a Bun test that reads the migration and asserts the sensitive payload, official evidence, media table, permissions, and claim RPC exist:
 
@@ -50,7 +50,7 @@ describe("official WeChat Pay applyment migration", () => {
 });
 ```
 
-- [ ] **Step 2: Run the contract test and verify RED**
+- [x] **Step 2: Run the contract test and verify RED**
 
 Run:
 
@@ -61,7 +61,7 @@ bun test src/services/wechat-pay-official-applyment-migration-contract.test.ts
 
 Expected: FAIL because the migration does not exist.
 
-- [ ] **Step 3: Add the additive migration**
+- [x] **Step 3: Add the additive migration**
 
 Add these application columns with non-blank/JSON constraints where applicable:
 
@@ -99,7 +99,7 @@ Support `wechat_editing` and `opening` in the main status constraint. Add the me
 
 Implement `claim_wechat_pay_applyment_submission(p_applyment_id, p_employee_id)` as `SECURITY DEFINER`, lock the application row `FOR UPDATE`, allow only `approved`, `wechat_editing`, or retryable `applying`, reject a live claim newer than five minutes, increment attempts, set `status='applying'`, and return the claimed row. Revoke public execution and grant only `service_role`.
 
-- [ ] **Step 4: Synchronize generated database types**
+- [x] **Step 4: Synchronize generated database types**
 
 Apply the migration to the configured Supabase project, then run:
 
@@ -110,7 +110,7 @@ pnpm run gen
 
 Expected: Local/Remote include `20260721130000`; `apps/api/src/types/database.ts` contains all new columns, the media table, and the claim RPC signature. If project-linked generation is unavailable, query the applied catalog and update only the exact generated table/RPC blocks; never replace the file with an empty result.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -142,7 +142,7 @@ git commit -m "feat(finance): add official applyment persistence"
 - Modify: `apps/api/src/services/wechat-pay-applyments.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyments.test.ts`
 
-- [ ] **Step 1: Write failing crypto and schema tests**
+- [x] **Step 1: Write failing crypto and schema tests**
 
 Cover round trips, tenant/application AAD isolation, wrong keys, partial draft updates, and conditional enterprise/individual fields:
 
@@ -170,7 +170,7 @@ expect(decryptApplymentSensitivePayload({ context, ciphertext: encrypted, rootSe
 
 Schema tests must require `subject_type`, mainland identity validity dates, service phone, settlement ID, qualification type, contact email, and the original sensitive values on first create. When `contact_type=SUPER`, also require the agent identity number, address, validity dates, and identity attachments. Update schemas allow omitted sensitive fields only when an existing encrypted payload already contains them.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -183,7 +183,7 @@ bun test src/services/wechat-pay-applyment-sensitive-payload.test.ts \
 
 Expected: FAIL because the cipher and new fields do not exist.
 
-- [ ] **Step 3: Implement the purpose-bound cipher**
+- [x] **Step 3: Implement the purpose-bound cipher**
 
 Implement AES-256-GCM with a key derived from `APP_CONFIG_ENCRYPTION_KEY` using HKDF-SHA256:
 
@@ -209,7 +209,7 @@ const aad = Buffer.from(
 
 Serialize as `wpa:v1:<iv-base64url>:<tag-base64url>:<ciphertext-base64url>`. Wrap missing/invalid keys with `Errors.business(...)`; do not use `throw new Error()`.
 
-- [ ] **Step 4: Persist encrypted payloads and safe projections**
+- [x] **Step 4: Persist encrypted payloads and safe projections**
 
 Generate the application UUID in the service before insert so AAD is stable. On create, encrypt all sensitive values; on update, decrypt and merge only supplied fields. Store only masked phone, masked bank account, safe names/email, `has_sensitive_payload=true`, and ciphertext metadata in the application row. Strip `sensitive_payload_ciphertext` from every tenant/platform detail view.
 
@@ -222,7 +222,7 @@ const nextSensitive = {
 };
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run the focused tests and `bun run api:typecheck`; expected PASS.
 
@@ -250,7 +250,7 @@ git commit -m "feat(finance): encrypt applyment sensitive data"
 - Create: `apps/api/src/services/wechat-pay-applyment-gateway.test.ts`
 - Modify: `apps/api/src/services/wechat-pay-api-response.ts`
 
-- [ ] **Step 1: Write failing RSA, multipart, submit, and query tests**
+- [x] **Step 1: Write failing RSA, multipart, submit, and query tests**
 
 Generate RSA keys in tests and prove OAEP-SHA1 compatibility by decrypting the result:
 
@@ -272,7 +272,7 @@ Mock `fetch` and assert:
 - all responses are signature verified;
 - timeout and signed WeChat failures expose sanitized request IDs and codes.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -285,7 +285,7 @@ bun test src/services/wechat-pay-applyment-crypto.test.ts \
 
 Expected: FAIL because the gateway files do not exist.
 
-- [ ] **Step 3: Implement sensitive-field encryption and payload building**
+- [x] **Step 3: Implement sensitive-field encryption and payload building**
 
 Use only Node APIs verified by the installed Node type definitions:
 
@@ -299,7 +299,7 @@ publicEncrypt({
 
 Build a typed `WechatPayApplymentSubmitRequest` containing `contact_info`, `subject_info`, `business_info`, `settlement_info`, and `bank_account_info`. Fix the business scene to the central profile AppID. Never log or include the request body in AppError details.
 
-- [ ] **Step 4: Implement media, submit, and query transport**
+- [x] **Step 4: Implement media, submit, and query transport**
 
 Expose:
 
@@ -313,7 +313,7 @@ interface WechatPayApplymentGatewayPort {
 
 Reuse `buildWechatPayAuthorization()` and `readVerifiedWechatPayJson()`. Use a ten-second abort timeout and `Errors.business` codes prefixed `WECHAT_PAY_APPLYMENT_`.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run focused tests plus `bun run api:typecheck`; expected PASS.
 
@@ -340,7 +340,7 @@ git commit -m "feat(payments): add official applyment gateway"
 - Modify: `apps/api/src/services/wechat-pay-applyments-types.ts`
 - Modify: `apps/api/src/services/files/file-url-resolver.ts`
 
-- [ ] **Step 1: Write failing media orchestration tests**
+- [x] **Step 1: Write failing media orchestration tests**
 
 Test valid JPG/PNG/BMP magic bytes, rejected WebP/HEIC, size limits, object-key-only access, SHA256 reuse, and replacement uploads:
 
@@ -357,21 +357,21 @@ expect(repository.findMediaByDigest).toHaveBeenCalledWith(expect.objectContainin
 }));
 ```
 
-- [ ] **Step 2: Run the media tests and verify RED**
+- [x] **Step 2: Run the media tests and verify RED**
 
 Run `cd apps/api && bun test src/services/wechat-pay-applyment-media.test.ts`.
 
 Expected: FAIL because the service and repository media methods do not exist.
 
-- [ ] **Step 3: Implement bounded download and validation**
+- [x] **Step 3: Implement bounded download and validation**
 
 Resolve only private COS object keys with `resolveSignedStoredFileUrl()`. Fetch with abort timeout, reject redirects to non-COS hosts, cap image reads at 2MB, compute SHA256, and identify JPG/PNG/BMP from magic bytes. Normalize the filename to the matching extension before upload.
 
-- [ ] **Step 4: Persist and reuse MediaIDs**
+- [x] **Step 4: Persist and reuse MediaIDs**
 
 Add repository methods `findMediaByDigest()` and `upsertMedia()`. Never query all media rows. Use `(applyment_id, object_key, sha256)` and select only the six required columns.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run focused tests and API typecheck; expected PASS.
 
@@ -400,7 +400,7 @@ git commit -m "feat(finance): upload applyment media to wechat"
 - Modify: `apps/api/src/controllers/platform-wechat-pay-applyments/index.ts`
 - Modify: `apps/api/src/controllers/platform-wechat-pay-applyments/routes.test.ts`
 
-- [ ] **Step 1: Write failing submission service tests**
+- [x] **Step 1: Write failing submission service tests**
 
 Cover profile readiness, complete sensitive payload, required attachment categories, claim contention, MediaID reuse, successful submit, timeout recovery through query, explicit not-found retry, and sanitized events:
 
@@ -416,7 +416,7 @@ expect(repository.claimSubmission).toHaveBeenCalledTimes(1);
 expect(gateway.submit).toHaveBeenCalledTimes(1);
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -428,7 +428,7 @@ bun test src/services/wechat-pay-applyment-submission.test.ts \
 
 Expected: FAIL on the missing service and route.
 
-- [ ] **Step 3: Implement the submission orchestration**
+- [x] **Step 3: Implement the submission orchestration**
 
 Sequence:
 
@@ -446,7 +446,7 @@ assert platform permission
 
 The service must not accept merchant ID, AppID, certificate, public key, or secret reference from the request body.
 
-- [ ] **Step 4: Add the platform route**
+- [x] **Step 4: Add the platform route**
 
 Add strict empty-body schema and controller route:
 
@@ -456,7 +456,7 @@ POST /platform/finance/wechat-pay/applyments/:id/submit-to-wechat
 
 Return the safe detail view with `available_actions[]`.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run focused tests, API typecheck, and API file-size check; expected PASS.
 
@@ -486,7 +486,7 @@ git commit -m "feat(finance): submit official wechat applyments"
 - Modify: `apps/api/src/controllers/platform-wechat-pay-applyments/index.ts`
 - Modify: `apps/api/src/controllers/platform-wechat-pay-applyments/routes.test.ts`
 
-- [ ] **Step 1: Write failing state mapping and activation tests**
+- [x] **Step 1: Write failing state mapping and activation tests**
 
 Assert every official state maps exactly as specified, preserves `sign_url`, `audit_detail`, request ID, and `sub_mchid`, and exposes the correct actions:
 
@@ -499,11 +499,11 @@ expect(mapWechatApplymentState({
 
 Activation must reject anything except official `APPLYMENT_STATE_FINISHED` with `sub_mchid`, central profile readiness, and platform AppID mode.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run focused status, activation, and route tests. Expected: FAIL.
 
-- [ ] **Step 3: Implement status synchronization**
+- [x] **Step 3: Implement status synchronization**
 
 Add:
 
@@ -513,7 +513,7 @@ POST /platform/finance/wechat-pay/applyments/:id/sync-wechat-status
 
 Load the exact central profile/secret revision, query by business code, map and persist official evidence, and write a status-change event only when the effective state changed. Never allow the normal endpoint to accept a caller-supplied status.
 
-- [ ] **Step 4: Harden activation and clear high-risk payloads**
+- [x] **Step 4: Harden activation and clear high-risk payloads**
 
 On successful activation, copy only central profile runtime fields and tenant `sub_mchid`, then set:
 
@@ -529,11 +529,11 @@ On successful activation, copy only central profile runtime fields and tenant `s
 
 Retain masked projections, official evidence, audit detail, and events.
 
-- [ ] **Step 5: Move manual repair behind a separate permission**
+- [x] **Step 5: Move manual repair behind a separate permission**
 
 Rename the normal `wechat-status` operation to `repair-wechat-state`, require `platform.wechat_pay.applyment.repair`, require a non-empty reason, and remove it from `available_actions` unless the authenticated operator has that permission.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run focused tests and `bun run api:check`; expected PASS.
 
@@ -562,11 +562,11 @@ git commit -m "feat(finance): synchronize official applyment states"
 - Modify: `apps/admin/components/finance/finance-wechat-pay-applyment-shared.ts`
 - Modify: `apps/admin/components/finance/finance-wechat-pay-applyment-page-layout.test.ts`
 
-- [ ] **Step 1: Read the UI skills and audit the current rendered page**
+- [x] **Step 1: Read the UI skills and audit the current rendered page**
 
 Read `admin-design`, `impeccable`, `shadcn`, and `design-taste-frontend` skill instructions. Start the worktree Admin only after static imports/types are valid, then capture the existing desktop and mobile page for comparison.
 
-- [ ] **Step 2: Write failing form contract tests**
+- [x] **Step 2: Write failing form contract tests**
 
 Require four steps, conditional subject/account fields, shadcn controls, masked sensitive state, official image types, and no raw `<select>`/visible secret values:
 
@@ -579,7 +579,7 @@ expect(attachmentSource).not.toContain("image/webp");
 expect(panelSource).not.toMatch(/<select\b/);
 ```
 
-- [ ] **Step 3: Run the UI tests and verify RED**
+- [x] **Step 3: Run the UI tests and verify RED**
 
 Run:
 
@@ -590,7 +590,7 @@ bun test components/finance/finance-wechat-pay-applyment-page-layout.test.ts
 
 Expected: FAIL on the new form structure.
 
-- [ ] **Step 4: Implement the four-step form**
+- [x] **Step 4: Implement the four-step form**
 
 Use shadcn `Tabs` as the controlled step surface, `Progress` for completion, `Field` for labels/errors, `Select` for enums, `Checkbox` for confirmations, and `AlertDialog` for final submit. Keep fixed step dimensions and responsive one/two-column grids. The steps are:
 
@@ -603,11 +603,11 @@ Use shadcn `Tabs` as the controlled step surface, `Progress` for completion, `Fi
 
 Sensitive fields render only blank replacement inputs plus `已安全保存` badges when masked values exist. Build request payloads from the current form without sending empty replacement fields. Identity document type is fixed to mainland resident ID in the first release. Selecting `contact_type=SUPER` reveals agent identity number/address/validity fields and required front/back attachment slots; selecting `LEGAL` removes those agent-only values from the outgoing payload.
 
-- [ ] **Step 5: Make attachment validation match WeChat**
+- [x] **Step 5: Make attachment validation match WeChat**
 
-Accept only JPEG, PNG, and BMP with a 2MB per-image limit. Keep private COS direct upload, show per-slot readiness, and support multiple business-scene screenshots up to five entries while preserving one attachment per required identity/license category. Add conditional `super_admin_id_card_front` and `super_admin_id_card_back` slots for `contact_type=SUPER`.
+Accept only JPEG, PNG, and BMP with a 2MB per-image limit. Keep private COS direct upload, show per-slot readiness, and support multiple business-scene screenshots up to five entries while preserving one attachment per required identity/license category. Add conditional `contact_id_card_front` and `contact_id_card_back` slots for `contact_type=SUPER`.
 
-- [ ] **Step 6: Verify responsive rendering and commit**
+- [x] **Step 6: Verify responsive rendering and commit**
 
 Run:
 
@@ -639,7 +639,7 @@ git commit -m "feat(admin): complete tenant applyment form"
 - Modify: `apps/admin/components/platform-wechat-pay/platform-wechat-pay-applyment-requests.ts`
 - Modify: `apps/admin/components/platform-wechat-pay/platform-wechat-pay-applyments-page-layout.test.ts`
 
-- [ ] **Step 1: Write failing platform UI tests**
+- [x] **Step 1: Write failing platform UI tests**
 
 Assert the page renders backend actions, official progress, sign URL, audit details, auto sync, and confirmation dialogs, while removing the normal manual status form:
 
@@ -652,25 +652,25 @@ expect(actionsSource).not.toContain("微信状态回填");
 expect(syncSource).toContain("document.visibilityState");
 ```
 
-- [ ] **Step 2: Run the UI test and verify RED**
+- [x] **Step 2: Run the UI test and verify RED**
 
 Run `cd apps/admin && bun test components/platform-wechat-pay/platform-wechat-pay-applyments-page-layout.test.ts`.
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement backend-action-driven controls**
+- [x] **Step 3: Implement backend-action-driven controls**
 
 Render only `available_actions[]`. Put one primary action in the right rail, secondary sync/open/copy actions below it, and hide repair controls unless returned by the API. Confirm official submission and activation with shadcn `AlertDialog`.
 
-- [ ] **Step 4: Implement official status evidence**
+- [x] **Step 4: Implement official status evidence**
 
 Show the six-step progress line, last sync time, request ID, WeChat application ID, `sub_mchid`, signing link, and field-level `audit_detail[]`. Use `ExternalLink` and `Copy` Lucide icons with tooltips. Do not create a QR dependency.
 
-- [ ] **Step 5: Implement visible-page auto sync**
+- [x] **Step 5: Implement visible-page auto sync**
 
 While status is `applying`, `reviewing`, `account_verifying`, `signing`, or `opening`, call the sync endpoint every 30 seconds only when `document.visibilityState === "visible"`. Stop on unmount or terminal state and surface errors without replacing the current data.
 
-- [ ] **Step 6: Verify responsive rendering and commit**
+- [x] **Step 6: Verify responsive rendering and commit**
 
 Run Admin tests, check, build, and Playwright desktop/mobile screenshots. Expected: no console errors, failed API requests, overlaps, or inaccessible actions.
 
@@ -694,7 +694,7 @@ git commit -m "feat(admin): add official applyment control center"
 - Modify: `apps/api/package.json`
 - Modify: `docs/decoration-finance/README.md`
 
-- [ ] **Step 1: Add a read-only preflight script and tests**
+- [x] **Step 1: Add a read-only preflight script and tests**
 
 The script accepts `--applyment-id`, loads the application and central profile, and reports only blocker codes:
 
@@ -710,7 +710,7 @@ The script accepts `--applyment-id`, loads the application and central profile, 
 
 It must never print names, phone numbers, ID numbers, bank accounts, ciphertext, keys, certificate content, object signed URLs, or raw WeChat request bodies.
 
-- [ ] **Step 2: Run focused and full static verification**
+- [x] **Step 2: Run focused and full static verification**
 
 Run:
 
@@ -728,7 +728,7 @@ git diff --check
 
 Expected: all commands PASS.
 
-- [ ] **Step 3: Run a mock WeChat state-chain smoke**
+- [x] **Step 3: Run a mock WeChat state-chain smoke**
 
 Start the API with a local mock gateway fixture and exercise:
 
@@ -745,7 +745,7 @@ approved
 
 Verify one stable business code, one application ID, reused media IDs, exact status history, safe API projections, cleared sensitive payload after activation, and an active tenant config linked to the central service-provider profile.
 
-- [ ] **Step 4: Perform the completion security audit**
+- [x] **Step 4: Perform the completion security audit**
 
 Search source and captured logs:
 
@@ -756,7 +756,7 @@ rg -n "sensitive_payload_ciphertext|identity_number|bank_account_number|private_
 
 Expected: no Admin response type contains ciphertext or original high-risk fields, and the implementation record contains field names only.
 
-- [ ] **Step 5: Document evidence and commit**
+- [x] **Step 5: Document evidence and commit**
 
 Record migration version, test commands, mock IDs, status chain, screenshots, known operational prerequisites, and explicit confirmation that no real WeChat application was created.
 
