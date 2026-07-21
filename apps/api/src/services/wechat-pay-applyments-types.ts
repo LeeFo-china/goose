@@ -117,6 +117,27 @@ export type WechatPayApplymentServiceDependencies = {
   nowFactory?: () => string;
   submissionService?: WechatPayApplymentSubmissionPort;
   statusService?: WechatPayApplymentStatusPort;
+  preflightService?: WechatPayApplymentPreflightPort;
+};
+
+export type WechatPayApplymentPreflightBlocker = {
+  code: string;
+  field?: string;
+  category?: string;
+};
+
+export type WechatPayApplymentPreflightReport = {
+  ready: boolean;
+  blockers: WechatPayApplymentPreflightBlocker[];
+};
+
+export type WechatPayApplymentSubmissionReadiness =
+  WechatPayApplymentPreflightReport & {
+    review_ready: boolean;
+  };
+
+export type WechatPayApplymentPreflightPort = {
+  run: (applymentId: string) => Promise<WechatPayApplymentPreflightReport>;
 };
 
 export type WechatPayApplymentAvailableAction = {
@@ -130,6 +151,7 @@ export type ApplymentDetailResult = {
   events: WechatPayApplymentEventRecord[];
   can_submit: boolean;
   available_actions: WechatPayApplymentAvailableAction[];
+  submission_readiness?: WechatPayApplymentSubmissionReadiness;
 };
 
 export type WechatPayApplymentSubmissionPort = {

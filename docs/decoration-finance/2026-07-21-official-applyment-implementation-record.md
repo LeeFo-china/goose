@@ -48,6 +48,31 @@ bun run wechat-pay:applyment-preflight -- --applyment-id=<UUID>
 
 输出字段仅允许 `ready`、`blockers[].code`、`blockers[].field` 和 `blockers[].category`。不会输出姓名、手机号、身份证号、银行卡号、密文、私钥、APIv3 key、证书正文、对象 key、签名 URL 或微信原始请求体。
 
+preflight 核心逻辑位于 service，CLI 只负责参数解析与安全 JSON 输出。平台详情接口在 `submitted`、`approved` 和 `wechat_editing` 状态返回：
+
+```json
+{
+  "submission_readiness": {
+    "ready": false,
+    "review_ready": false,
+    "blockers": [
+      {
+        "code": "APPLYMENT_REQUIRED_FIELD_MISSING",
+        "field": "service_phone"
+      }
+    ]
+  }
+}
+```
+
+- `review_ready` 只判断租户申请资料、附件和敏感资料是否可审核；平台中央支付配置及申请生命周期状态不阻止资料审核。
+- `ready` 表示当前申请可直接提交微信，必须同时满足资料、状态和平台服务商配置要求。
+- `review_ready=false` 时，详情动作不返回 `approve`，直接调用审核接口也返回 `409 WECHAT_PAY_APPLYMENT_REVIEW_NOT_READY`。
+- `ready=false` 时，详情动作不返回 `submit_to_wechat`，直接调用正式提交接口也返回 `409 WECHAT_PAY_APPLYMENT_PREFLIGHT_BLOCKED`。
+- 正式提交接口先校验 `platform.wechat_pay.applyment.submit`，无权限时不会运行 preflight 或调用微信。
+- 平台普通驳回仅允许用于 `submitted`、`approved` 两个尚未提交微信的状态；申请进入微信审核、账户验证或签约阶段后，直接调用驳回接口返回 `409 WECHAT_PAY_APPLYMENT_STATUS_INVALID`，官方状态只能通过微信查询同步，异常修复继续使用独立权限和原因必填入口。
+- 申请进入微信审核、开通或激活阶段后不再返回 `submission_readiness`，避免已完成申请因敏感资料按安全策略清除而显示为“不完整”。
+
 ## 3. 模拟微信状态链
 
 测试文件：`apps/api/src/scripts/wechat-pay-official-applyment-mock-e2e.test.ts`
@@ -88,11 +113,33 @@ approved
 
 本地隔离服务：API `http://127.0.0.1:3100`，Admin `http://127.0.0.1:3110`。
 
-- 桌面端进件详情：`/tmp/gooes-applyment-after-desktop.png`
-- 移动端进件详情：`/tmp/gooes-applyment-after-mobile.png`
-- 移动端审核区：`/tmp/gooes-applyment-review-mobile.png`
+- 租户申请页桌面端：`/tmp/gooes-applyment-after-desktop.png`
+- 租户申请页移动端：`/tmp/gooes-applyment-after-mobile.png`
+- 租户申请页移动端审核区：`/tmp/gooes-applyment-review-mobile.png`
+- 平台申请列表桌面端：`/tmp/gooes-platform-applyments-desktop-list.png`
+- 平台申请详情桌面端顶部：`/tmp/gooes-platform-applyments-desktop-detail-top-v2.png`
+- 平台申请详情桌面端底部：`/tmp/gooes-platform-applyments-desktop-detail-bottom-v2.png`
+- 平台申请列表移动端：`/tmp/gooes-platform-applyments-mobile-list-v3.png`
+- 平台申请详情移动端：`/tmp/gooes-platform-applyments-mobile-detail-v3.png`
+- 平台 readiness 桌面端：`/tmp/gooes-platform-readiness-desktop-viewport.png`
+- 平台 readiness 桌面操作栏：`/tmp/gooes-platform-readiness-desktop-action-rail.png`
+- 平台 readiness 移动操作栏：`/tmp/gooes-platform-readiness-mobile-action-rail.png`
 
-已核对租户资料、官方状态、审计时间线和后端 `available_actions`；Admin 不本地推导进件动作。页面验收未执行提交微信、同步微信状态或激活配置。
+平台列表筛选已统一使用 shadcn `Select`、`Input` 和 `Button`，支持状态、关键词和重置。平台详情按“平台审核、微信审核、账户验证、商户签约、开通完成、激活收款”展示六阶段进度，安全审核投影按主体证照、法人和超级管理员、经营结算及平台关联分组展示。操作栏使用后端 `submission_readiness` 展示中文待处理项；平台配置阻塞时提供 `/settings?group=payment` 入口。桌面端操作栏随详情工作区滚动保持可见；移动端按“进度、当前操作、审核资料”排序。
+
+已核对租户资料、官方状态、附件、审计时间线和后端 `available_actions`；Admin 不本地推导进件动作。页面验收覆盖 1440×1000 和 390×844，无页面级或详情工作区横向溢出、console error 或 4xx/5xx 响应。真实旧申请 `8026f87b-e6de-4bb1-80c6-6aa7066f1759` 的只读详情返回 `review_ready=false`，隐藏生命周期状态后展示 10 个安全待处理项；页面没有“审核通过”按钮，仅保留“驳回租户修改”和“前往支付配置”。验收只执行登录与 GET 请求，未执行审核、驳回、提交微信、同步微信状态、受控修复或激活配置。
+
+2026-07-21 再次通过 CLI 对同一申请执行只读 preflight，结果仍为 `ready=false`。安全阻塞项为：主体类型、法人证件类型及有效期、超级管理员类型、客服电话、结算规则、所属行业、敏感申请资料和平台服务商支付配置缺失；另有当前 `submitted` 生命周期状态提示。该命令未下载 COS 素材、未调用微信、未修改数据库。当前运营动作必须先由平台驳回，租户使用新版表单重新填写并提交；中央 `tenant_service_provider` 配置保存且验证通过后再运行 preflight。
+
+隔离 Admin 必须使用项目实际读取的环境变量启动：
+
+```bash
+GOOES_API_BASE_URL=http://127.0.0.1:3100 \
+NEXT_PUBLIC_GOOES_API_BASE_URL=http://127.0.0.1:3100 \
+pnpm --dir apps/admin exec next dev -p 3110
+```
+
+`API_BASE_URL` / `NEXT_PUBLIC_API_BASE_URL` 不会被 `apps/admin/lib/backend.ts` 读取，不能用于隔离联调。
 
 ## 5. 安全与运行前置
 
@@ -115,11 +162,13 @@ approved
 ```bash
 cd apps/api
 bun test src/services/wechat-pay-applyment-*.test.ts \
+  src/services/wechat-pay-applyments.test.ts \
+  src/services/wechat-pay-applyments-platform-readiness.test.ts \
   src/services/wechat-pay-official-applyment-migration-contract.test.ts \
   src/controllers/platform-wechat-pay-applyments/routes.test.ts \
   src/scripts/wechat-pay-applyment-preflight.test.ts \
   src/scripts/wechat-pay-official-applyment-mock-e2e.test.ts
-# 75 pass, 0 fail
+# 92 pass, 0 fail
 
 cd ../..
 bun run api:check
@@ -127,6 +176,16 @@ pnpm --dir apps/admin check
 pnpm --dir apps/admin build
 git diff --check
 supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"
+```
+
+平台 Admin 收口聚焦测试：
+
+```bash
+cd apps/admin
+bun test \
+  components/platform-wechat-pay/platform-wechat-pay-applyments-page-layout.test.ts \
+  components/platform-wechat-pay/platform-wechat-pay-applyment-contract.test.ts
+# 11 pass, 0 fail
 ```
 
 API typecheck/build/file-size、Admin typecheck/file-size/production build 和 `git diff --check` 均通过；migration Local/Remote 均包含 `20260721130000` 与 `20260721170000`，无未应用 migration。

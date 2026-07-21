@@ -7,9 +7,17 @@ describe("platform wechat pay official applyment contract", () => {
     const progress = getOfficialApplymentProgress("submitted");
 
     expect(progress.value).toBe(17);
+    expect(progress.stages.map((stage) => stage.label)).toEqual([
+      "平台审核",
+      "微信审核",
+      "账户验证",
+      "商户签约",
+      "开通完成",
+      "激活收款",
+    ]);
     expect(progress.stages.map((stage) => stage.state)).toEqual([
-      "done",
       "current",
+      "pending",
       "pending",
       "pending",
       "pending",
@@ -24,15 +32,28 @@ describe("platform wechat pay official applyment contract", () => {
       "APPLYMENT_STATE_REJECTED",
     );
 
-    expect(platformRejected.stages[1]).toEqual({
+    expect(platformRejected.stages[0]).toEqual({
       label: "平台审核",
       state: "issue",
     });
-    expect(wechatRejected.stages[2]).toEqual({
+    expect(wechatRejected.stages[1]).toEqual({
       label: "微信审核",
       state: "issue",
     });
-    expect(wechatRejected.stages[3]?.state).toBe("pending");
+    expect(wechatRejected.stages[2]?.state).toBe("pending");
+  });
+
+  test("keeps a canceled WeChat application at the review stage", () => {
+    const closed = getOfficialApplymentProgress(
+      "closed",
+      "APPLYMENT_STATE_CANCELED",
+    );
+
+    expect(closed.stages[1]).toEqual({
+      label: "微信审核",
+      state: "issue",
+    });
+    expect(closed.stages[2]?.state).toBe("pending");
   });
 
   test("marks all stages complete only after tenant payment activation", () => {

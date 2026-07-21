@@ -456,6 +456,7 @@ describe("official WeChat Pay applyment mock E2E", () => {
       submissionService,
       statusService,
       accessPolicy,
+      { run: async () => ({ ready: true, blockers: [] }) },
     );
     const auth = platformAuth();
     const projections = [await actions.submitToWechat(auth, applymentId)];

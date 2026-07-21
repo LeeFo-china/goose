@@ -129,11 +129,24 @@ export type WechatPayApplymentAvailableAction = {
   url?: string;
 };
 
+export type WechatPayApplymentPreflightBlocker = {
+  code: string;
+  field?: string;
+  category?: string;
+};
+
+export type WechatPayApplymentSubmissionReadiness = {
+  ready: boolean;
+  review_ready: boolean;
+  blockers: WechatPayApplymentPreflightBlocker[];
+};
+
 export type WechatPayApplymentDetailData = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEvent[];
   can_submit: boolean;
   available_actions: WechatPayApplymentAvailableAction[];
+  submission_readiness?: WechatPayApplymentSubmissionReadiness | null;
 };
 
 export type WechatPayApplymentDetailResult = WechatPayApplymentDetailData & {
@@ -146,6 +159,7 @@ export function emptyWechatPayApplyment(): WechatPayApplymentDetailResult {
     events: [],
     can_submit: false,
     available_actions: [],
+    submission_readiness: null,
     error: null,
   };
 }

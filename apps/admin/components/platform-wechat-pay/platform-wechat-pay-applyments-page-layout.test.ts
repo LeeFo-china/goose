@@ -29,10 +29,33 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(pageSource).toContain("PlatformListPageShell");
     expect(pageSource).toContain("fetchPlatformWechatPayApplyments");
     expect(pageSource).toContain("PlatformWechatPayApplymentsTable");
+    expect(pageSource).toContain("PlatformWechatPayApplymentFilters");
     expect(pageSource).toContain("pageSize");
     expect(pageSource).toContain("wechat_editing");
     expect(pageSource).toContain("opening");
+    expect(pageSource).toContain("grid grid-cols-2 gap-3 md:grid-cols-4");
     expect(pageSource).not.toContain("回填服务商人工进件");
+  });
+
+  test("uses shadcn controls for platform applyment filters", () => {
+    const filtersUrl = new URL(
+      "./platform-wechat-pay-applyment-filters.tsx",
+      import.meta.url,
+    );
+
+    expect(existsSync(filtersUrl)).toBe(true);
+    if (!existsSync(filtersUrl)) return;
+    const filtersSource = readFileSync(filtersUrl, "utf8");
+
+    expect(filtersSource).toContain('@/components/ui/button');
+    expect(filtersSource).toContain('@/components/ui/field');
+    expect(filtersSource).toContain('@/components/ui/input');
+    expect(filtersSource).toContain('@/components/ui/select');
+    expect(filtersSource).toContain("全部状态");
+    expect(filtersSource).toContain("重置");
+    expect(filtersSource).not.toContain("<select");
+    expect(filtersSource).not.toContain("<input");
+    expect(filtersSource).not.toContain("<button");
   });
 
   test("adds platform detail page with official progress and backend actions", () => {
@@ -52,14 +75,19 @@ describe("Platform wechat pay applyments page layout", () => {
       "./platform-wechat-pay-applyment-submit-dialog.tsx",
       import.meta.url,
     );
+    const readinessUrl = new URL(
+      "./platform-wechat-pay-applyment-readiness.tsx",
+      import.meta.url,
+    );
 
     expect(existsSync(pageUrl)).toBe(true);
     expect(existsSync(progressUrl)).toBe(true);
     expect(existsSync(syncUrl)).toBe(true);
     expect(existsSync(submitDialogUrl)).toBe(true);
+    expect(existsSync(readinessUrl)).toBe(true);
     if (
       !existsSync(progressUrl) || !existsSync(syncUrl) ||
-      !existsSync(submitDialogUrl)
+      !existsSync(submitDialogUrl) || !existsSync(readinessUrl)
     ) return;
     const pageSource = readFileSync(pageUrl, "utf8");
     const requestSource = readSource("./platform-wechat-pay-applyment-requests.ts");
@@ -67,9 +95,16 @@ describe("Platform wechat pay applyments page layout", () => {
     const progressSource = readFileSync(progressUrl, "utf8");
     const syncSource = readFileSync(syncUrl, "utf8");
     const submitDialogSource = readFileSync(submitDialogUrl, "utf8");
+    const readinessSource = readFileSync(readinessUrl, "utf8");
 
     expect(pageSource).toContain("finance-wechat-pay-applyment-shared");
     expect(pageSource).toContain("PlatformWechatPayApplymentProgress");
+    expect(pageSource).toContain("PlatformWechatPayApplymentReadiness");
+    expect(pageSource).toContain("submission_readiness");
+    expect(pageSource).toContain('data-testid="platform-applyment-workspace"');
+    expect(pageSource).toContain('data-testid="platform-applyment-action-rail"');
+    expect(pageSource).toContain("order-first");
+    expect(pageSource).toContain("xl:sticky");
     expect(pageSource).toContain("available_actions");
     expect(pageSource).toContain("申请附件");
     expect(pageSource).toContain("WechatPayApplymentAttachmentList");
@@ -77,6 +112,13 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(pageSource).toContain("银行账号");
     expect(pageSource).toContain("开户银行全称");
     expect(pageSource).toContain("联行号");
+    expect(pageSource).toContain("主体类型");
+    expect(pageSource).toContain("营业执照有效期");
+    expect(pageSource).toContain("法人证件有效期");
+    expect(pageSource).toContain("超级管理员类型");
+    expect(pageSource).toContain("客服电话");
+    expect(pageSource).toContain("结算规则");
+    expect(pageSource).toContain("所属行业");
     expect(pageSource).not.toContain("finance-wechat-pay-applyment-requests");
     expect(requestSource).toContain("/platform/finance/wechat-pay/applyments?");
     expect(requestSource).toContain("/platform/finance/wechat-pay/applyments/");
@@ -101,9 +143,16 @@ describe("Platform wechat pay applyments page layout", () => {
     expect(progressSource).toContain("sub_mchid");
     expect(progressSource).toContain("aria-current");
     expect(progressSource).toContain('"step"');
+    expect(progressSource).toContain("grid grid-cols-2 gap-4 border-t");
     expect(syncSource).toContain('document.visibilityState === "visible"');
     expect(syncSource).toContain("30_000");
     expect(submitDialogSource).toContain("AlertDialog");
+    expect(readinessSource).toContain("review_ready");
+    expect(readinessSource).toContain("APPLYMENT_REQUIRED_FIELD_MISSING");
+    expect(readinessSource).toContain("PLATFORM_PAYMENT_CONFIG_MISSING");
+    expect(readinessSource).toContain("/settings?group=payment");
+    expect(readinessSource).toContain("Alert");
+    expect(readinessSource).toContain("Button");
   });
 
   test("keeps platform applyment client table away from server-only request module", () => {

@@ -34,6 +34,7 @@ import {
   type ApplymentSensitivePayload,
 } from "@/services/wechat-pay-applyment-sensitive-payload";
 import { assertApplymentSubmitReady } from "@/services/wechat-pay-applyment-readiness";
+import { runWechatPayApplymentPreflight } from "@/services/wechat-pay-applyment-preflight";
 import { wechatPayApplymentStatusService } from "@/services/wechat-pay-applyment-status";
 import { WechatPayApplymentPlatformActions } from "@/services/wechat-pay-applyments-platform";
 import { wechatPayApplymentSubmissionService } from "@/services/wechat-pay-applyment-submission";
@@ -81,6 +82,9 @@ export class WechatPayApplymentService {
       dependencies.submissionService ?? wechatPayApplymentSubmissionService,
       dependencies.statusService ?? wechatPayApplymentStatusService,
       this.accessPolicyService,
+      dependencies.preflightService ?? {
+        run: runWechatPayApplymentPreflight,
+      },
     );
   }
 

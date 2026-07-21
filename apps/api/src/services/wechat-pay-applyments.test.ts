@@ -183,7 +183,6 @@ const updateWechatPayConfig = mock(async () => ({
 } as WechatPayConfigRecord));
 const applicationNoFactory = mock(() => "WPA202607010001");
 const nowFactory = mock(() => "2026-07-01T12:00:00.000Z");
-
 const accessPolicy = {
   assertTenantContext: mock((authContext: AuthContext) => {
     if (!authContext.tenantId) {
@@ -261,6 +260,9 @@ async function createService() {
     accessPolicyService: accessPolicy,
     applicationNoFactory,
     nowFactory,
+    preflightService: {
+      run: async () => ({ ready: true, blockers: [] }),
+    },
   });
 }
 

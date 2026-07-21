@@ -55,6 +55,7 @@ export function emptyPlatformWechatPayApplymentDetail():
     events: [],
     can_submit: false,
     available_actions: [],
+    submission_readiness: null,
     error: null,
   };
 }

@@ -13,6 +13,10 @@ import type {
 import type { AuthContext } from "@/services/authorization";
 import { sanitizeApplymentRecord } from "@/services/wechat-pay-applyment-draft";
 import {
+  loadWechatPayApplymentSubmissionReadiness,
+  shouldLoadWechatPayApplymentSubmissionReadiness,
+} from "@/services/wechat-pay-applyment-platform-readiness";
+import {
   getWechatPayApplymentAvailableActions,
   WECHAT_PAY_APPLYMENT_ACTIVATABLE_STATUSES,
   WECHAT_PAY_APPLYMENT_REPAIRABLE_STATUSES,
@@ -25,8 +29,12 @@ import type {
   WechatPayApplymentStatusPort,
   WechatPayConfigRepositoryPort,
   WechatPayApplymentSubmissionPort,
+  WechatPayApplymentPreflightPort,
 } from "@/services/wechat-pay-applyments-types";
-import { PLATFORM_REPAIR_PERMISSION } from "@/services/wechat-pay-applyments-types";
+import {
+  PLATFORM_REPAIR_PERMISSION,
+  PLATFORM_SUBMIT_PERMISSION,
+} from "@/services/wechat-pay-applyments-types";
 import {
   evaluatePlatformPaymentProfileReadiness,
   PLATFORM_WECHAT_PAY_PROFILE_DEFINITION_BY_CODE,
@@ -42,9 +50,24 @@ export class WechatPayApplymentPlatformActions {
     private readonly submissionService: WechatPayApplymentSubmissionPort,
     private readonly statusService: WechatPayApplymentStatusPort,
     private readonly accessPolicyService: Pick<AccessPolicyPort, "hasPermission">,
+    private readonly preflightService: WechatPayApplymentPreflightPort,
   ) {}
 
   async submitToWechat(authContext: AuthContext, id: string) {
+    this.assertPlatformPermission(authContext, PLATFORM_SUBMIT_PERMISSION);
+    await this.getRequiredApplyment({ id });
+    const readiness = await loadWechatPayApplymentSubmissionReadiness(
+      this.preflightService,
+      id,
+    );
+    if (!readiness.ready) {
+      throw Errors.business(
+        409,
+        "微信支付正式进件前置检查未通过",
+        "WECHAT_PAY_APPLYMENT_PREFLIGHT_BLOCKED",
+        { blocker_codes: readiness.blockers.map((blocker) => blocker.code) },
+      );
+    }
     return this.submissionService.submitToWechat(authContext, id);
   }
 
@@ -74,6 +97,18 @@ export class WechatPayApplymentPlatformActions {
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(current, ["submitted"], "当前申请不是待审核状态");
+    const readiness = await loadWechatPayApplymentSubmissionReadiness(
+      this.preflightService,
+      id,
+    );
+    if (!readiness.review_ready) {
+      throw Errors.business(
+        409,
+        "微信支付开通申请资料尚未满足审核条件",
+        "WECHAT_PAY_APPLYMENT_REVIEW_NOT_READY",
+        { blocker_codes: readiness.blockers.map((blocker) => blocker.code) },
+      );
+    }
     const updated = await this.repository.updateApplyment({
       id,
       expectedStatus: current.status,
@@ -106,7 +141,7 @@ export class WechatPayApplymentPlatformActions {
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(
       current,
-      ["submitted", "approved", "applying", "reviewing", "account_verifying", "signing"],
+      ["submitted", "approved"],
       "当前申请不能驳回",
     );
     const updated = await this.repository.updateApplyment({
@@ -174,7 +209,7 @@ export class WechatPayApplymentPlatformActions {
     id: string,
     input: RepairWechatPayApplymentStateInput,
   ): Promise<ApplymentDetailResult> {
-    this.assertRepairPermission(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_REPAIR_PERMISSION);
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(
@@ -275,6 +310,25 @@ export class WechatPayApplymentPlatformActions {
     authContext: AuthContext,
     applyment: WechatPayApplymentRecord,
   ): Promise<ApplymentDetailResult> {
+    const shouldLoadReadiness =
+      shouldLoadWechatPayApplymentSubmissionReadiness(
+        applyment.status,
+      );
+    const submissionReadiness = shouldLoadReadiness
+      ? await loadWechatPayApplymentSubmissionReadiness(
+        this.preflightService,
+        applyment.id,
+      )
+      : undefined;
+    const availableActions = getWechatPayApplymentAvailableActions({
+      authContext,
+      applyment,
+      accessPolicyService: this.accessPolicyService,
+    }).filter((action) => {
+      if (action.key === "approve") return submissionReadiness?.review_ready;
+      if (action.key === "submit_to_wechat") return submissionReadiness?.ready;
+      return true;
+    });
     return {
       applyment: sanitizeApplymentRecord(applyment),
       events: await this.repository.findEvents({
@@ -282,11 +336,10 @@ export class WechatPayApplymentPlatformActions {
         applymentId: applyment.id,
       }),
       can_submit: false,
-      available_actions: getWechatPayApplymentAvailableActions({
-        authContext,
-        applyment,
-        accessPolicyService: this.accessPolicyService,
-      }),
+      available_actions: availableActions,
+      ...(submissionReadiness
+        ? { submission_readiness: submissionReadiness }
+        : {}),
     };
   }
 
@@ -306,12 +359,15 @@ export class WechatPayApplymentPlatformActions {
     if (!authContext.isPlatformAdmin) throw Errors.forbidden();
   }
 
-  private assertRepairPermission(authContext: AuthContext) {
+  private assertPlatformPermission(
+    authContext: AuthContext,
+    permissionCode: string,
+  ) {
     if (
       !authContext.isPlatformAdmin ||
       !this.accessPolicyService.hasPermission(
         authContext,
-        PLATFORM_REPAIR_PERMISSION,
+        permissionCode,
       )
     ) throw Errors.forbidden();
   }

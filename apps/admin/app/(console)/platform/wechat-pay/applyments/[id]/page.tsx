@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, ExternalLink, FileCheck2, Paperclip } from "lucide-react";
@@ -12,6 +13,7 @@ import {
 } from "@/components/finance/finance-wechat-pay-applyment-shared";
 import { PlatformWechatPayApplymentActions } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-actions";
 import { PlatformWechatPayApplymentProgress } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-progress";
+import { PlatformWechatPayApplymentReadiness } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-readiness";
 import { fetchPlatformWechatPayApplymentDetail } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-requests";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ export default async function PlatformWechatPayApplymentDetailPage({
       events: [],
       can_submit: false,
       available_actions: [],
+      submission_readiness: null,
       error: "当前账号不是平台超管，无法访问支付进件申请",
     };
   const applyment = data.applyment;
@@ -73,91 +76,221 @@ export default async function PlatformWechatPayApplymentDetailPage({
 
       {data.error ? <StatusAlert>{data.error}</StatusAlert> : null}
       {!applyment ? null : (
-        <div className="grid min-h-0 flex-1 gap-4 overflow-auto xl:grid-cols-[minmax(0,1fr)_28rem]">
-          <div className="flex min-w-0 flex-col gap-4">
-            <PlatformWechatPayApplymentProgress applyment={applyment} />
+        <div
+          data-testid="platform-applyment-workspace"
+          className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto"
+        >
+          <PlatformWechatPayApplymentProgress applyment={applyment} />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
+            <div className="flex min-w-0 flex-col gap-4">
+              <Card className="shadow-none">
+                <CardHeader>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle>{applyment.merchant_short_name}</CardTitle>
+                    <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                    <Badge variant="outline">{applyment.application_no}</Badge>
+                  </div>
+                  <CardDescription>
+                    {applyment.tenant?.name || applyment.tenant_id}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-5">
+                  <InfoSection title="主体与证照">
+                    <InfoItem
+                      label="主体类型"
+                      value={formatSubjectType(applyment.subject_type)}
+                    />
+                    <InfoItem label="主体名称" value={applyment.license_name} />
+                    <InfoItem
+                      label="统一社会信用代码"
+                      value={applyment.license_code}
+                    />
+                    <InfoItem
+                      label="营业执照注册地址"
+                      value={applyment.license_address}
+                    />
+                    <InfoItem
+                      label="营业执照有效期"
+                      value={formatPeriod(
+                        applyment.license_period_begin,
+                        applyment.license_period_end,
+                      )}
+                    />
+                  </InfoSection>
 
-            <Card className="shadow-none">
-              <CardHeader>
-                <div className="flex flex-wrap items-center gap-2">
-                  <CardTitle>{applyment.merchant_short_name}</CardTitle>
-                  <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
-                  <Badge variant="outline">{applyment.application_no}</Badge>
-                </div>
-                <CardDescription>
-                  {applyment.tenant?.name || applyment.tenant_id}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <InfoItem label="主体名称" value={applyment.license_name} />
-                <InfoItem label="统一社会信用代码" value={applyment.license_code} />
-                <InfoItem label="法人" value={applyment.legal_representative_name} />
-                <InfoItem label="超级管理员" value={`${applyment.super_admin_name || "-"} / ${applyment.super_admin_phone_masked || "-"}`} />
-                <InfoItem label="账户类型" value={formatSettlementAccountType(applyment.settlement_account_type)} />
-                <InfoItem label="结算账户开户名" value={applyment.settlement_account_name} />
-                <InfoItem label="开户银行" value={applyment.settlement_bank_name} />
-                <InfoItem label="银行账号" value={applyment.settlement_account_number_masked} />
-                <InfoItem label="开户银行全称" value={applyment.settlement_bank_full_name} />
-                <InfoItem label="联行号" value={applyment.settlement_bank_branch_id} />
-                <InfoItem label="结算账户摘要" value={applyment.settlement_account_summary} />
-                <InfoItem label="子商户 AppID" value={applyment.sub_appid} />
-                <InfoItem label="提交时间" value={formatWechatPayApplymentTime(applyment.submitted_at)} />
-                <InfoItem label="激活时间" value={formatWechatPayApplymentTime(applyment.activated_at)} />
-                <InfoItem label="经营场景" value={applyment.business_scene_description} className="md:col-span-2" />
-                <InfoItem label="联系地址" value={applyment.contact_address} className="md:col-span-2" />
-              </CardContent>
-            </Card>
+                  <InfoSection title="法人和超级管理员">
+                    <InfoItem
+                      label="法人"
+                      value={applyment.legal_representative_name}
+                    />
+                    <InfoItem
+                      label="法人证件类型"
+                      value={formatIdentityType(applyment.identity_doc_type)}
+                    />
+                    <InfoItem
+                      label="法人证件地址摘要"
+                      value={applyment.identity_address_masked}
+                    />
+                    <InfoItem
+                      label="法人证件有效期"
+                      value={formatPeriod(
+                        applyment.identity_period_begin,
+                        applyment.identity_period_end,
+                      )}
+                    />
+                    <InfoItem
+                      label="超级管理员类型"
+                      value={formatContactType(applyment.contact_type)}
+                    />
+                    <InfoItem
+                      label="超级管理员"
+                      value={`${applyment.super_admin_name || "-"} / ${applyment.super_admin_phone_masked || "-"}`}
+                    />
+                    <InfoItem
+                      label="超级管理员邮箱"
+                      value={applyment.super_admin_email}
+                    />
+                    {applyment.contact_type === "SUPER" ? (
+                      <>
+                        <InfoItem
+                          label="经办人证件类型"
+                          value={formatIdentityType(
+                            applyment.contact_identity_doc_type,
+                          )}
+                        />
+                        <InfoItem
+                          label="经办人证件有效期"
+                          value={formatPeriod(
+                            applyment.contact_identity_period_begin,
+                            applyment.contact_identity_period_end,
+                          )}
+                        />
+                      </>
+                    ) : null}
+                  </InfoSection>
 
-            <Card className="shadow-none">
-              <CardHeader>
-                <CardTitle>申请附件</CardTitle>
-                <CardDescription>
-                  租户提交的营业执照、法人证件和经营资料。
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <WechatPayApplymentAttachmentList attachments={applyment.attachments || []} />
-              </CardContent>
-            </Card>
+                  <InfoSection title="经营与结算">
+                    <InfoItem label="客服电话" value={applyment.service_phone} />
+                    <InfoItem label="联系地址" value={applyment.contact_address} />
+                    <InfoItem
+                      label="经营场景"
+                      value={applyment.business_scene_description}
+                    />
+                    <InfoItem
+                      label="账户类型"
+                      value={formatSettlementAccountType(
+                        applyment.settlement_account_type,
+                      )}
+                    />
+                    <InfoItem
+                      label="结算账户开户名"
+                      value={applyment.settlement_account_name}
+                    />
+                    <InfoItem
+                      label="银行账号"
+                      value={applyment.settlement_account_number_masked}
+                    />
+                    <InfoItem label="开户银行" value={applyment.settlement_bank_name} />
+                    <InfoItem
+                      label="开户银行全称"
+                      value={applyment.settlement_bank_full_name}
+                    />
+                    <InfoItem
+                      label="联行号"
+                      value={applyment.settlement_bank_branch_id}
+                    />
+                    <InfoItem
+                      label="结算账户摘要"
+                      value={applyment.settlement_account_summary}
+                    />
+                    <InfoItem label="结算规则" value={applyment.settlement_id} />
+                    <InfoItem
+                      label="所属行业"
+                      value={applyment.qualification_type}
+                    />
+                  </InfoSection>
 
-            <Card className="shadow-none">
-              <CardHeader>
-                <CardTitle>处理记录</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {data.events.length > 0 ? data.events.map((event) => (
-                  <div key={event.id} className="rounded-md border p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{event.event_type}</Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {formatWechatPayApplymentTime(event.created_at)}
-                      </span>
+                  <InfoSection title="平台关联">
+                    <InfoItem
+                      label="小程序接入"
+                      value={
+                        applyment.appid_binding_message ||
+                        "平台统一小程序 AppID"
+                      }
+                    />
+                    <InfoItem
+                      label="提交时间"
+                      value={formatWechatPayApplymentTime(applyment.submitted_at)}
+                    />
+                    <InfoItem
+                      label="激活时间"
+                      value={formatWechatPayApplymentTime(applyment.activated_at)}
+                    />
+                    <InfoItem label="申请备注" value={applyment.remark} />
+                  </InfoSection>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-none">
+                <CardHeader>
+                  <CardTitle>申请附件</CardTitle>
+                  <CardDescription>
+                    租户提交的营业执照、法人证件和经营资料。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <WechatPayApplymentAttachmentList
+                    attachments={applyment.attachments || []}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-none">
+                <CardHeader>
+                  <CardTitle>处理记录</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {data.events.length > 0 ? data.events.map((event) => (
+                    <div key={event.id} className="rounded-md border p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{event.event_type}</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatWechatPayApplymentTime(event.created_at)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm">{event.message || "-"}</p>
                     </div>
-                    <p className="mt-2 text-sm">{event.message || "-"}</p>
-                  </div>
-                )) : (
-                  <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                    暂无处理记录
-                  </div>
-                )}
+                  )) : (
+                    <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                      暂无处理记录
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card
+              data-testid="platform-applyment-action-rail"
+              className="order-first h-fit shadow-none xl:sticky xl:top-0 xl:order-none"
+            >
+              <CardHeader>
+                <CardTitle>平台操作</CardTitle>
+                <CardDescription>
+                  仅显示当前账号与申请状态允许执行的后端动作。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-5">
+                <PlatformWechatPayApplymentReadiness
+                  status={applyment.status}
+                  readiness={data.submission_readiness}
+                />
+                <PlatformWechatPayApplymentActions
+                  applyment={applyment}
+                  availableActions={data.available_actions}
+                />
               </CardContent>
             </Card>
           </div>
-
-          <Card className="h-fit shadow-none">
-            <CardHeader>
-              <CardTitle>平台操作</CardTitle>
-              <CardDescription>
-                仅显示当前账号与申请状态允许执行的后端动作。
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <PlatformWechatPayApplymentActions
-                applyment={applyment}
-                availableActions={data.available_actions}
-              />
-            </CardContent>
-          </Card>
         </div>
       )}
     </div>
@@ -229,6 +362,43 @@ function InfoItem({
       <div className="mt-1 break-words text-sm">{value || "-"}</div>
     </div>
   );
+}
+
+function InfoSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border-t pt-4 first:border-t-0 first:pt-0">
+      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+      <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+function formatSubjectType(value?: string | null) {
+  if (value === "SUBJECT_TYPE_ENTERPRISE") return "企业";
+  if (value === "SUBJECT_TYPE_INDIVIDUAL") return "个体工商户";
+  return value || "-";
+}
+
+function formatIdentityType(value?: string | null) {
+  if (value === "IDENTIFICATION_TYPE_IDCARD") return "中国大陆居民身份证";
+  return value || "-";
+}
+
+function formatContactType(value?: string | null) {
+  if (value === "LEGAL") return "法人或经营者本人";
+  if (value === "SUPER") return "经办人";
+  return value || "-";
+}
+
+function formatPeriod(begin?: string | null, end?: string | null) {
+  if (!begin && !end) return "-";
+  return `${begin || "-"} 至 ${end || "-"}`;
 }
 
 function formatSettlementAccountType(value?: string | null) {

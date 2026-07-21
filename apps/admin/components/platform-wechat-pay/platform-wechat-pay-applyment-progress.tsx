@@ -15,30 +15,30 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 const OFFICIAL_STAGES = [
-  "资料提交",
   "平台审核",
   "微信审核",
-  "账户核验",
-  "签约开通",
+  "账户验证",
+  "商户签约",
+  "开通完成",
   "激活收款",
 ] as const;
 
 const STATUS_STAGE_INDEX: Record<string, number> = {
   draft: 0,
-  submitted: 1,
-  approved: 2,
-  applying: 2,
-  reviewing: 2,
-  wechat_editing: 2,
-  rejected: 2,
-  account_verifying: 3,
-  signing: 4,
+  submitted: 0,
+  approved: 1,
+  applying: 1,
+  reviewing: 1,
+  wechat_editing: 1,
+  rejected: 1,
+  account_verifying: 2,
+  signing: 3,
   opening: 4,
   opened: 5,
   active: 5,
   bound: 5,
   suspended: 5,
-  closed: 5,
+  closed: 1,
 };
 
 const ISSUE_STATUSES = new Set([
@@ -56,7 +56,7 @@ export function getOfficialApplymentProgress(
 ) {
   const platformRejected = status === "rejected" &&
     wechatRawState !== "APPLYMENT_STATE_REJECTED";
-  const currentIndex = platformRejected ? 1 : STATUS_STAGE_INDEX[status] ?? 0;
+  const currentIndex = platformRejected ? 0 : STATUS_STAGE_INDEX[status] ?? 0;
   const complete = status === "active";
   const stages = OFFICIAL_STAGES.map((label, index) => {
     let state: StageState = "pending";
@@ -69,7 +69,10 @@ export function getOfficialApplymentProgress(
   return {
     stages,
     value: Math.round(
-      ((currentIndex + (complete ? 1 : 0)) / OFFICIAL_STAGES.length) * 100,
+      ((complete
+        ? OFFICIAL_STAGES.length
+        : Math.min(OFFICIAL_STAGES.length - 1, currentIndex + 1)) /
+        OFFICIAL_STAGES.length) * 100,
     ),
   };
 }
@@ -132,13 +135,13 @@ export function PlatformWechatPayApplymentProgress({
           ))}
         </ol>
 
-        <div className="grid gap-4 border-t pt-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 border-t pt-4 xl:grid-cols-3">
           <Evidence label="微信业务编号" value={applyment.applyment_business_code} />
           <Evidence label="微信申请单号" value={applyment.applyment_id} />
           <Evidence label="子商户号" value={applyment.sub_mchid} />
           <Evidence label="最后请求 ID" value={applyment.last_wechat_request_id} mono />
           <Evidence label="最后同步时间" value={formatWechatPayApplymentTime(applyment.last_wechat_synced_at)} />
-          <Evidence label="签约链接" value={applyment.sign_url} className="sm:col-span-2 xl:col-span-1" />
+          <Evidence label="签约链接" value={applyment.sign_url} className="col-span-2 xl:col-span-1" />
         </div>
 
         {applyment.applyment_state_message ? (

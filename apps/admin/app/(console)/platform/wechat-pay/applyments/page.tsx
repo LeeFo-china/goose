@@ -1,32 +1,16 @@
 import { redirect } from "next/navigation";
 import { FileCheck2 } from "lucide-react";
+import { getWechatPayApplymentStatusMeta } from "@/components/finance/finance-wechat-pay-applyment-shared";
 import {
   fetchPlatformWechatPayApplyments,
 } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-requests";
+import { PlatformWechatPayApplymentFilters } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-filters";
 import { PlatformWechatPayApplymentsTable } from "@/components/platform-wechat-pay/platform-wechat-pay-applyments-table";
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
-
-const STATUS_OPTIONS = [
-  { value: "", label: "全部状态" },
-  { value: "submitted", label: "待审核" },
-  { value: "approved", label: "审核通过" },
-  { value: "applying", label: "进件中" },
-  { value: "wechat_editing", label: "待修正重提" },
-  { value: "reviewing", label: "微信审核中" },
-  { value: "account_verifying", label: "账户验证" },
-  { value: "signing", label: "待签约" },
-  { value: "opening", label: "开通中" },
-  { value: "opened", label: "已开通" },
-  { value: "bound", label: "已绑定" },
-  { value: "active", label: "已启用" },
-  { value: "rejected", label: "已驳回" },
-  { value: "suspended", label: "已暂停" },
-  { value: "closed", label: "已关闭" },
-];
 
 type SearchParams = Promise<{
   page?: string;
@@ -97,7 +81,7 @@ export default async function PlatformWechatPayApplymentsPage({
         }
         error={data.error}
         summary={
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>申请总数</CardDescription>
@@ -130,13 +114,22 @@ export default async function PlatformWechatPayApplymentsPage({
               <CardTitle>申请列表</CardTitle>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 当前筛选：
-                {status ? <Badge variant="outline">{status}</Badge> : <Badge variant="outline">全部状态</Badge>}
+                {status ? (
+                  <Badge variant="outline">
+                    {getWechatPayApplymentStatusMeta(status).label}
+                  </Badge>
+                ) : <Badge variant="outline">全部状态</Badge>}
               </div>
             </div>
             <Badge variant="outline">共 {data.pagination.total} 条</Badge>
           </div>
         }
-        filters={<PlatformWechatPayApplymentFilters status={status} keyword={keyword} />}
+        filters={
+          <PlatformWechatPayApplymentFilters
+            status={status}
+            keyword={keyword}
+          />
+        }
         pagination={data.pagination}
         currentCount={data.list.length}
         tableViewportTestId="platform-wechat-pay-applyments-table-viewport"
@@ -145,41 +138,5 @@ export default async function PlatformWechatPayApplymentsPage({
         <PlatformWechatPayApplymentsTable rows={data.list} />
       </PlatformListPageShell>
     </div>
-  );
-}
-
-function PlatformWechatPayApplymentFilters({
-  status,
-  keyword,
-}: {
-  status: string;
-  keyword: string;
-}) {
-  return (
-    <form
-      action="/platform/wechat-pay/applyments"
-      className="grid gap-3 md:grid-cols-[180px_1fr_72px]"
-    >
-      <select
-        name="status"
-        defaultValue={status}
-        className="h-10 rounded-md border bg-background px-3 text-sm"
-      >
-        {STATUS_OPTIONS.map((option) => (
-          <option key={option.value || "all"} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <input
-        name="keyword"
-        defaultValue={keyword}
-        placeholder="搜索申请编号、租户、进件编号、子商户号"
-        className="h-10 rounded-md border bg-background px-3 text-sm"
-      />
-      <button className="h-10 rounded-md bg-primary px-3 text-sm text-primary-foreground">
-        搜索
-      </button>
-    </form>
   );
 }

@@ -200,6 +200,9 @@ export function getWechatPayApplymentAvailableActions(input: {
   if (input.applyment.status === "submitted") {
     actions.push(action("approve", "审核通过"), action("reject", "驳回"));
   }
+  if (input.applyment.status === "approved") {
+    actions.push(action("reject", "驳回"));
+  }
   if (
     ["approved", "wechat_editing"].includes(input.applyment.status) &&
     hasPermission(input, PLATFORM_SUBMIT_PERMISSION)
