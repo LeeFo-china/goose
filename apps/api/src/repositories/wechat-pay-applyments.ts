@@ -4,6 +4,8 @@ import { SupabaseDB } from "@/utils/supabase/index";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
 
 type WechatPayApplymentTableRow = Tables<"tenant_wechat_pay_applyments">;
+type WechatPayApplymentMediaTableRow =
+  Tables<"tenant_wechat_pay_applyment_media">;
 
 export type WechatPayApplymentRecord =
   Omit<WechatPayApplymentTableRow, "sensitive_payload_ciphertext"> & {
@@ -29,6 +31,12 @@ export type WechatPayApplymentEventRecord =
   Tables<"tenant_wechat_pay_applyment_events">;
 export type WechatPayApplymentEventInsert =
   Inserts<"tenant_wechat_pay_applyment_events">;
+export type WechatPayApplymentMediaRecord = Pick<
+  WechatPayApplymentMediaTableRow,
+  "id" | "applyment_id" | "object_key" | "sha256" | "media_id" | "request_id"
+>;
+export type WechatPayApplymentMediaInsert =
+  Inserts<"tenant_wechat_pay_applyment_media">;
 
 export type WechatPayApplymentListResult = {
   list: WechatPayApplymentRecord[];
@@ -114,6 +122,15 @@ const APPLYMENT_SELECT = [
   "tenant:tenants!tenant_wechat_pay_applyments_tenant_id_fkey(id, name, slug)",
 ].join(", ");
 
+const APPLYMENT_MEDIA_SELECT = [
+  "id",
+  "applyment_id",
+  "object_key",
+  "sha256",
+  "media_id",
+  "request_id",
+].join(", ");
+
 class WechatPayApplymentRepository {
   async findLatestByTenant(
     tenantId: string,
@@ -179,6 +196,43 @@ class WechatPayApplymentRepository {
       throw Errors.dbError("查询微信支付进件敏感资料失败", error);
     }
     return (data as WechatPayApplymentSensitiveRecord | null) ?? null;
+  }
+
+  async findMediaByDigest(input: {
+    tenantId: string;
+    applymentId: string;
+    objectKey: string;
+    sha256: string;
+  }): Promise<WechatPayApplymentMediaRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenant_wechat_pay_applyment_media")
+      .select(APPLYMENT_MEDIA_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("applyment_id", input.applymentId)
+      .eq("object_key", input.objectKey)
+      .eq("sha256", input.sha256)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询微信支付进件媒体缓存失败", error);
+    }
+    return (data as WechatPayApplymentMediaRecord | null) ?? null;
+  }
+
+  async upsertMedia(
+    input: WechatPayApplymentMediaInsert,
+  ): Promise<WechatPayApplymentMediaRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenant_wechat_pay_applyment_media")
+      .upsert(input, { onConflict: "applyment_id,object_key,sha256" })
+      .select(APPLYMENT_MEDIA_SELECT)
+      .single();
+
+    if (error) {
+      throw Errors.dbError("保存微信支付进件媒体缓存失败", error);
+    }
+    return data as unknown as WechatPayApplymentMediaRecord;
   }
 
   async createApplyment(

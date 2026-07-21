@@ -50,6 +50,10 @@ const DEFAULT_FILE_ACCESS_POLICY: PlatformFileAccessPolicy = {
       access_mode: "signed",
       signed_url_ttl_seconds: 600,
     },
+    wechat_pay_applyment: {
+      access_mode: "signed",
+      signed_url_ttl_seconds: 600,
+    },
     employee_avatar: {
       access_mode: "signed",
       signed_url_ttl_seconds: 21600,

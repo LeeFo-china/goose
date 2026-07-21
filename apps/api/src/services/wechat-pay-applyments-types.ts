@@ -7,6 +7,8 @@ import type {
   WechatPayApplymentEventRecord,
   WechatPayApplymentInsert,
   WechatPayApplymentListResult,
+  WechatPayApplymentMediaInsert,
+  WechatPayApplymentMediaRecord,
   WechatPayApplymentRecord,
   WechatPayApplymentSensitiveRecord,
   WechatPayApplymentUpdate,
@@ -43,6 +45,18 @@ export type WechatPayApplymentRepositoryPort = {
   listApplyments: (input: {
     query: PlatformWechatPayApplymentListQuery;
   }) => Promise<WechatPayApplymentListResult>;
+};
+
+export type WechatPayApplymentMediaRepositoryPort = {
+  findMediaByDigest: (input: {
+    tenantId: string;
+    applymentId: string;
+    objectKey: string;
+    sha256: string;
+  }) => Promise<WechatPayApplymentMediaRecord | null>;
+  upsertMedia: (
+    input: WechatPayApplymentMediaInsert,
+  ) => Promise<WechatPayApplymentMediaRecord>;
 };
 
 export type WechatPayConfigRepositoryPort = {
