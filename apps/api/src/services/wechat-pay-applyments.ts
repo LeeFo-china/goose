@@ -14,10 +14,10 @@ import type {
   CreateWechatPayApplymentInput,
   MarkWechatPayApplymentApplyingInput,
   PlatformWechatPayApplymentListQuery,
+  RepairWechatPayApplymentStateInput,
   RejectWechatPayApplymentInput,
   SubmitWechatPayApplymentInput,
   UpdateWechatPayApplymentInput,
-  UpdateWechatPayApplymentWechatStatusInput,
 } from "@/schema/wechat-pay-applyments";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
@@ -34,6 +34,7 @@ import {
   type ApplymentSensitivePayload,
 } from "@/services/wechat-pay-applyment-sensitive-payload";
 import { assertApplymentSubmitReady } from "@/services/wechat-pay-applyment-readiness";
+import { wechatPayApplymentStatusService } from "@/services/wechat-pay-applyment-status";
 import { WechatPayApplymentPlatformActions } from "@/services/wechat-pay-applyments-platform";
 import { wechatPayApplymentSubmissionService } from "@/services/wechat-pay-applyment-submission";
 import type {
@@ -78,6 +79,8 @@ export class WechatPayApplymentService {
         platformPaymentConfigRepository,
       this.nowFactory,
       dependencies.submissionService ?? wechatPayApplymentSubmissionService,
+      dependencies.statusService ?? wechatPayApplymentStatusService,
+      this.accessPolicyService,
     );
   }
 
@@ -282,12 +285,19 @@ export class WechatPayApplymentService {
     return this.platformActions.submitToWechat(authContext, id);
   }
 
-  async updateWechatStatus(
+  async syncWechatStatus(
     authContext: AuthContext,
     id: string,
-    input: UpdateWechatPayApplymentWechatStatusInput,
   ): Promise<ApplymentDetailResult> {
-    return this.platformActions.updateWechatStatus(authContext, id, input);
+    return this.platformActions.syncWechatStatus(authContext, id);
+  }
+
+  async repairWechatState(
+    authContext: AuthContext,
+    id: string,
+    input: RepairWechatPayApplymentStateInput,
+  ): Promise<ApplymentDetailResult> {
+    return this.platformActions.repairWechatState(authContext, id, input);
   }
 
   async activateConfig(
@@ -312,7 +322,9 @@ export class WechatPayApplymentService {
         : [],
       can_submit: Boolean(applyment) &&
         this.canTenantSubmit(authContext) &&
-        ["draft", "rejected"].includes(applyment?.status ?? ""),
+        ["draft", "rejected", "wechat_editing"].includes(
+          applyment?.status ?? "",
+        ),
       available_actions: [],
     };
   }
@@ -419,7 +431,7 @@ export class WechatPayApplymentService {
   }
 
   private assertEditable(applyment: WechatPayApplymentRecord) {
-    if (!["draft", "rejected"].includes(applyment.status)) {
+    if (!["draft", "rejected", "wechat_editing"].includes(applyment.status)) {
       throw Errors.business(
         409,
         "当前申请状态不能由租户修改",

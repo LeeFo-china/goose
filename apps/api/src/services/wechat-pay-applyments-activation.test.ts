@@ -63,14 +63,14 @@ const activatableApplyment: WechatPayApplymentRecord = {
   subject_type: "SUBJECT_TYPE_ENTERPRISE",
   submission_attempt_count: 0,
   submission_claimed_at: null,
-  wechat_applyment_state_raw: null,
+  wechat_applyment_state_raw: "APPLYMENT_STATE_FINISHED",
   remark: null,
   applyment_business_code: "APPLY-20260701-001",
   applyment_id: "2000002124775691",
   applyment_state: "opened",
   applyment_state_message: "已开通",
   sub_mchid: "sub-merchant-mchid",
-  sub_appid: "caller-sub-appid-must-not-copy",
+  sub_appid: null,
   appid_binding_state: "bound",
   appid_binding_message: "平台小程序已绑定",
   payment_config_id: null,
@@ -316,7 +316,30 @@ describe("WechatPayApplymentService activation", () => {
         status: "active",
         payment_config_id: paymentConfigId,
         activated_at: "2026-07-01T12:00:00.000Z",
+        sensitive_payload_ciphertext: null,
+        sensitive_payload_version: null,
+        sensitive_payload_updated_at: null,
+        has_sensitive_payload: false,
       }),
     });
+  });
+
+  test.each([
+    ["missing raw finished state", { wechat_applyment_state_raw: null }],
+    ["wrong raw state", { wechat_applyment_state_raw: "APPLYMENT_STATE_AUDITING" }],
+    ["missing sub mchid", { sub_mchid: null }],
+    ["tenant sub appid mode", { sub_appid: "wx-tenant-app" }],
+  ])("rejects activation with %s", async (_, patch) => {
+    findById.mockImplementationOnce(async () => ({
+      ...activatableApplyment,
+      ...patch,
+    }));
+    const service = await createService();
+
+    await expect(service.activateConfig(platformAdminAuth(), applymentId, {}))
+      .rejects.toMatchObject({
+        code: "WECHAT_PAY_APPLYMENT_NOT_ACTIVATABLE",
+      });
+    expect(upsertWechatPayConfig).not.toHaveBeenCalled();
   });
 });

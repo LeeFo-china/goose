@@ -7,18 +7,22 @@ import type {
   ApproveWechatPayApplymentInput,
   MarkWechatPayApplymentApplyingInput,
   PlatformWechatPayApplymentListQuery,
+  RepairWechatPayApplymentStateInput,
   RejectWechatPayApplymentInput,
-  UpdateWechatPayApplymentWechatStatusInput,
 } from "@/schema/wechat-pay-applyments";
 import type { AuthContext } from "@/services/authorization";
 import { sanitizeApplymentRecord } from "@/services/wechat-pay-applyment-draft";
+import { getWechatPayApplymentAvailableActions } from "@/services/wechat-pay-applyment-status";
 import type {
+  AccessPolicyPort,
   ApplymentDetailResult,
   PlatformPaymentConfigRepositoryPort,
   WechatPayApplymentRepositoryPort,
+  WechatPayApplymentStatusPort,
   WechatPayConfigRepositoryPort,
   WechatPayApplymentSubmissionPort,
 } from "@/services/wechat-pay-applyments-types";
+import { PLATFORM_REPAIR_PERMISSION } from "@/services/wechat-pay-applyments-types";
 import {
   evaluatePlatformPaymentProfileReadiness,
   PLATFORM_WECHAT_PAY_PROFILE_DEFINITION_BY_CODE,
@@ -32,6 +36,8 @@ export class WechatPayApplymentPlatformActions {
       PlatformPaymentConfigRepositoryPort,
     private readonly nowFactory: () => string,
     private readonly submissionService: WechatPayApplymentSubmissionPort,
+    private readonly statusService: WechatPayApplymentStatusPort,
+    private readonly accessPolicyService: Pick<AccessPolicyPort, "hasPermission">,
   ) {}
 
   async submitToWechat(authContext: AuthContext, id: string) {
@@ -52,7 +58,7 @@ export class WechatPayApplymentPlatformActions {
   ): Promise<ApplymentDetailResult> {
     this.assertPlatformAdmin(authContext);
     const applyment = await this.getRequiredApplyment({ id });
-    return this.toPlatformDetail(applyment);
+    return this.toPlatformDetail(authContext, applyment);
   }
 
   async approve(
@@ -81,7 +87,7 @@ export class WechatPayApplymentPlatformActions {
       message: input.message ?? "平台审核通过微信支付开通申请",
       operatorEmployeeId: employeeId,
     });
-    return this.toPlatformDetail(updated);
+    return this.toPlatformDetail(authContext, updated);
   }
 
   async reject(
@@ -116,7 +122,7 @@ export class WechatPayApplymentPlatformActions {
       message: input.reason,
       operatorEmployeeId: employeeId,
     });
-    return this.toPlatformDetail(updated);
+    return this.toPlatformDetail(authContext, updated);
   }
 
   async markApplying(
@@ -146,15 +152,19 @@ export class WechatPayApplymentPlatformActions {
       message: input.message ?? "平台已开始人工进件",
       operatorEmployeeId: employeeId,
     });
-    return this.toPlatformDetail(updated);
+    return this.toPlatformDetail(authContext, updated);
   }
 
-  async updateWechatStatus(
+  async syncWechatStatus(authContext: AuthContext, id: string) {
+    return this.statusService.syncWechatStatus(authContext, id);
+  }
+
+  async repairWechatState(
     authContext: AuthContext,
     id: string,
-    input: UpdateWechatPayApplymentWechatStatusInput,
+    input: RepairWechatPayApplymentStateInput,
   ): Promise<ApplymentDetailResult> {
-    this.assertPlatformAdmin(authContext);
+    this.assertRepairPermission(authContext);
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(
@@ -204,14 +214,18 @@ export class WechatPayApplymentPlatformActions {
     });
     await this.recordEvent({
       applyment: updated,
-      eventType: "wechat_status_updated",
+      eventType: "wechat_state_repaired",
       fromStatus: current.status,
       toStatus: nextStatus,
-      message: input.applyment_state_message ?? "平台回填微信支付进件状态",
+      message: input.reason,
       operatorEmployeeId: employeeId,
-      metadata: input,
+      metadata: {
+        reason: input.reason,
+        before: repairStateSnapshot(current),
+        after: repairStateSnapshot(updated),
+      },
     });
-    return this.toPlatformDetail(updated);
+    return this.toPlatformDetail(authContext, updated);
   }
 
   async activateConfig(
@@ -260,6 +274,10 @@ export class WechatPayApplymentPlatformActions {
         status: "active",
         payment_config_id: config.id,
         activated_at: now,
+        sensitive_payload_ciphertext: null,
+        sensitive_payload_version: null,
+        sensitive_payload_updated_at: null,
+        has_sensitive_payload: false,
         updated_by_employee_id: employeeId,
       },
     });
@@ -272,7 +290,7 @@ export class WechatPayApplymentPlatformActions {
       operatorEmployeeId: employeeId,
       metadata: { payment_config_id: config.id },
     });
-    return this.toPlatformDetail(updated);
+    return this.toPlatformDetail(authContext, updated);
   }
 
   private async getReadyServiceProviderProfile() {
@@ -299,6 +317,7 @@ export class WechatPayApplymentPlatformActions {
   }
 
   private async toPlatformDetail(
+    authContext: AuthContext,
     applyment: WechatPayApplymentRecord,
   ): Promise<ApplymentDetailResult> {
     return {
@@ -308,7 +327,11 @@ export class WechatPayApplymentPlatformActions {
         applymentId: applyment.id,
       }),
       can_submit: false,
-      available_actions: [],
+      available_actions: getWechatPayApplymentAvailableActions({
+        authContext,
+        applyment,
+        accessPolicyService: this.accessPolicyService,
+      }),
     };
   }
 
@@ -326,6 +349,16 @@ export class WechatPayApplymentPlatformActions {
 
   private assertPlatformAdmin(authContext: AuthContext) {
     if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+  }
+
+  private assertRepairPermission(authContext: AuthContext) {
+    if (
+      !authContext.isPlatformAdmin ||
+      !this.accessPolicyService.hasPermission(
+        authContext,
+        PLATFORM_REPAIR_PERMISSION,
+      )
+    ) throw Errors.forbidden();
   }
 
   private requireEmployee(authContext: AuthContext) {
@@ -353,8 +386,10 @@ export class WechatPayApplymentPlatformActions {
     sub_mchid: string;
   } {
     if (
+      applyment.wechat_applyment_state_raw === "APPLYMENT_STATE_FINISHED" &&
       applyment.applyment_state === "opened" &&
       applyment.sub_mchid &&
+      !applyment.sub_appid &&
       applyment.appid_binding_state === "bound"
     ) {
       return;
@@ -365,8 +400,10 @@ export class WechatPayApplymentPlatformActions {
       "WECHAT_PAY_APPLYMENT_NOT_ACTIVATABLE",
       {
         applyment_state: applyment.applyment_state,
+        wechat_applyment_state_raw: applyment.wechat_applyment_state_raw,
         appid_binding_state: applyment.appid_binding_state,
         has_sub_mchid: Boolean(applyment.sub_mchid),
+        uses_platform_appid: !applyment.sub_appid,
       },
     );
   }
@@ -415,7 +452,7 @@ export class WechatPayApplymentPlatformActions {
 
 function resolveMainStatus(
   currentStatus: string,
-  input: UpdateWechatPayApplymentWechatStatusInput,
+  input: RepairWechatPayApplymentStateInput,
 ) {
   const applymentState = input.applyment_state;
   if (applymentState === "closed") return "closed";
@@ -433,4 +470,18 @@ function resolveMainStatus(
   }
   if (applymentState === "rejected") return "rejected";
   return currentStatus === "approved" ? "applying" : currentStatus;
+}
+
+function repairStateSnapshot(applyment: WechatPayApplymentRecord) {
+  return {
+    status: applyment.status,
+    applyment_business_code: applyment.applyment_business_code,
+    applyment_id: applyment.applyment_id,
+    applyment_state: applyment.applyment_state,
+    applyment_state_message: applyment.applyment_state_message,
+    sub_mchid: applyment.sub_mchid,
+    sub_appid: applyment.sub_appid,
+    appid_binding_state: applyment.appid_binding_state,
+    appid_binding_message: applyment.appid_binding_message,
+  };
 }

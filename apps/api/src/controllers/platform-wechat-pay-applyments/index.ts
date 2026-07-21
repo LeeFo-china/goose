@@ -5,13 +5,14 @@ import {
   ApproveWechatPayApplymentSchema,
   MarkWechatPayApplymentApplyingSchema,
   PlatformWechatPayApplymentListQuerySchema,
+  RepairWechatPayApplymentStateSchema,
   RejectWechatPayApplymentSchema,
   SubmitWechatPayApplymentToWechatSchema,
-  UpdateWechatPayApplymentWechatStatusSchema,
+  SyncWechatPayApplymentStatusSchema,
   WechatPayApplymentIdParamSchema,
 } from "@/schema/wechat-pay-applyments";
 import { wechatPayApplymentService } from "@/services/wechat-pay-applyments";
-import { Get, Post, Put } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -132,8 +133,8 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
-  @Put("/platform/finance/wechat-pay/applyments/:id/wechat-status")
-  async updateApplymentWechatStatus(
+  @Post("/platform/finance/wechat-pay/applyments/:id/sync-wechat-status")
+  async syncApplymentWechatStatus(
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
@@ -142,12 +143,34 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
       request.params,
     );
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
-    const bodyResult = UpdateWechatPayApplymentWechatStatusSchema.safeParse(
+    const bodyResult = SyncWechatPayApplymentStatusSchema.safeParse(
       request.body || {},
     );
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
-    const data = await wechatPayApplymentService.updateWechatStatus(
+    const data = await wechatPayApplymentService.syncWechatStatus(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/finance/wechat-pay/applyments/:id/repair-wechat-state")
+  async repairApplymentWechatState(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
+      request.params,
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = RepairWechatPayApplymentStateSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await wechatPayApplymentService.repairWechatState(
       authContext,
       paramsResult.data.id,
       bodyResult.data,

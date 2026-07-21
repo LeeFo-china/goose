@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { SubmitWechatPayApplymentToWechatSchema } from "@/schema/wechat-pay-applyments";
+import {
+  RepairWechatPayApplymentStateSchema,
+  SubmitWechatPayApplymentToWechatSchema,
+} from "@/schema/wechat-pay-applyments";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -22,6 +25,18 @@ describe("PlatformWechatPayApplymentsController routes", () => {
       method: "POST",
       path: "/platform/finance/wechat-pay/applyments/:id/submit-to-wechat",
     });
+    expect(routes).toContainEqual({
+      method: "POST",
+      path: "/platform/finance/wechat-pay/applyments/:id/sync-wechat-status",
+    });
+    expect(routes).toContainEqual({
+      method: "POST",
+      path: "/platform/finance/wechat-pay/applyments/:id/repair-wechat-state",
+    });
+    expect(routes).not.toContainEqual({
+      method: "PUT",
+      path: "/platform/finance/wechat-pay/applyments/:id/wechat-status",
+    });
   });
 
   test("accepts only an empty submission body", () => {
@@ -30,6 +45,16 @@ describe("PlatformWechatPayApplymentsController routes", () => {
     );
     expect(SubmitWechatPayApplymentToWechatSchema.safeParse({
       merchant_id: "caller-controlled",
+    }).success).toBe(false);
+  });
+
+  test("requires a reason for controlled state repair", () => {
+    expect(RepairWechatPayApplymentStateSchema.safeParse({
+      reason: "微信运营工单确认需要修复",
+      applyment_state: "reviewing",
+    }).success).toBe(true);
+    expect(RepairWechatPayApplymentStateSchema.safeParse({
+      applyment_state: "reviewing",
     }).success).toBe(false);
   });
 });

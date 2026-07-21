@@ -3,10 +3,10 @@ import {
   ActivateWechatPayApplymentConfigSchema,
   CreateWechatPayApplymentSchema,
   PlatformWechatPayApplymentListQuerySchema,
+  RepairWechatPayApplymentStateSchema,
   RejectWechatPayApplymentSchema,
   SubmitWechatPayApplymentSchema,
   UpdateWechatPayApplymentSchema,
-  UpdateWechatPayApplymentWechatStatusSchema,
 } from "./wechat-pay-applyments";
 
 const baseApplymentInput = {
@@ -189,7 +189,7 @@ describe("wechat pay applyment schemas", () => {
     const rejectResult = RejectWechatPayApplymentSchema.safeParse({
       reason: "结算账户摘要缺失",
     });
-    const wechatStatusResult = UpdateWechatPayApplymentWechatStatusSchema.safeParse({
+    const wechatStatusResult = RepairWechatPayApplymentStateSchema.safeParse({
       applyment_business_code: "APPLY-20260701-001",
       applyment_id: "2000002124775691",
       applyment_state: "opened",
@@ -197,6 +197,7 @@ describe("wechat pay applyment schemas", () => {
       sub_appid: "wx0000000000000000",
       appid_binding_state: "bound",
       appid_binding_message: "平台小程序已绑定",
+      reason: "微信运营工单确认需要修复",
     });
     const activateResult = ActivateWechatPayApplymentConfigSchema.safeParse({});
 
@@ -214,8 +215,9 @@ describe("wechat pay applyment schemas", () => {
   });
 
   test("rejects unsupported applyment states and invalid pagination", () => {
-    const stateResult = UpdateWechatPayApplymentWechatStatusSchema.safeParse({
+    const stateResult = RepairWechatPayApplymentStateSchema.safeParse({
       applyment_state: "almost_opened",
+      reason: "微信运营工单确认需要修复",
     });
     const listResult = PlatformWechatPayApplymentListQuerySchema.safeParse({
       pageSize: "101",

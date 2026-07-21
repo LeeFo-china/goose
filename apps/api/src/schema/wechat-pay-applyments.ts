@@ -258,7 +258,7 @@ export const MarkWechatPayApplymentApplyingSchema = z.object({
   message: optionalText(500, "处理说明不能超过 500 个字符"),
 }).strict();
 
-export const UpdateWechatPayApplymentWechatStatusSchema = z.object({
+const WechatPayApplymentWechatStatusFields = {
   applyment_business_code: optionalText(100, "进件业务编号不能超过 100 个字符"),
   applyment_id: optionalText(100, "微信申请单号不能超过 100 个字符"),
   applyment_state: WechatPayApplymentWechatStateSchema.optional(),
@@ -267,12 +267,19 @@ export const UpdateWechatPayApplymentWechatStatusSchema = z.object({
   sub_appid: optionalText(64, "子商户 AppID 不能超过 64 个字符"),
   appid_binding_state: WechatPayApplymentAppIdBindingStateSchema.optional(),
   appid_binding_message: optionalText(500, "AppID 绑定说明不能超过 500 个字符"),
-}).strict().refine((value) => Object.keys(value).length > 0, {
-  message: "至少需要提交一个进件状态字段",
-});
+};
+
+export const RepairWechatPayApplymentStateSchema = z.object({
+  ...WechatPayApplymentWechatStatusFields,
+  reason: requiredText(500, "请输入状态修复原因", "状态修复原因不能超过 500 个字符"),
+}).strict().refine(
+  (value) => Object.keys(value).some((key) => key !== "reason"),
+  { message: "至少需要提交一个进件状态字段" },
+);
 
 export const ActivateWechatPayApplymentConfigSchema = z.object({}).strict();
 export const SubmitWechatPayApplymentToWechatSchema = z.object({}).strict();
+export const SyncWechatPayApplymentStatusSchema = z.object({}).strict();
 
 export const PlatformWechatPayApplymentListQuerySchema =
   PaginationQuerySchema.extend({
@@ -297,8 +304,8 @@ export type RejectWechatPayApplymentInput =
   z.infer<typeof RejectWechatPayApplymentSchema>;
 export type MarkWechatPayApplymentApplyingInput =
   z.infer<typeof MarkWechatPayApplymentApplyingSchema>;
-export type UpdateWechatPayApplymentWechatStatusInput =
-  z.infer<typeof UpdateWechatPayApplymentWechatStatusSchema>;
+export type RepairWechatPayApplymentStateInput =
+  z.infer<typeof RepairWechatPayApplymentStateSchema>;
 export type ActivateWechatPayApplymentConfigInput =
   z.infer<typeof ActivateWechatPayApplymentConfigSchema>;
 export type PlatformWechatPayApplymentListQuery =

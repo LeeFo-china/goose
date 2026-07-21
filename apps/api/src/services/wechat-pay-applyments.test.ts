@@ -233,8 +233,8 @@ const tenantReadAuth = () =>
 const tenantSubmitAuth = () =>
   authContextWithPermissions([{ code: "wechat_pay.applyment.submit", scope: "all" }]);
 
-const platformAdminAuth = () =>
-  authContextWithPermissions([], {
+const platformAdminAuth = (permissions: AuthContext["permissions"] = []) =>
+  authContextWithPermissions(permissions, {
     tenantId: null,
     isPlatformAdmin: true,
     roleCodes: ["platform_admin"],
@@ -414,7 +414,7 @@ describe("WechatPayApplymentService", () => {
     });
   });
 
-  test("platform closes active applyment through wechat status callback", async () => {
+  test("platform repairs an active applyment with dedicated permission", async () => {
     findById.mockImplementationOnce(async () => ({
       ...submittedApplyment,
       status: "active",
@@ -425,11 +425,15 @@ describe("WechatPayApplymentService", () => {
       payment_config_id: paymentConfigId,
     }));
     const service = await createService();
-    const platformAuth = platformAdminAuth();
+    const platformAuth = platformAdminAuth([{
+      code: "platform.wechat_pay.applyment.repair",
+      scope: "all",
+    }]);
 
-    await service.updateWechatStatus(platformAuth, applymentId, {
+    await service.repairWechatState(platformAuth, applymentId, {
       applyment_state: "closed",
       applyment_state_message: "测试申请关闭，允许租户重新提交真实资料",
+      reason: "微信运营工单确认关闭测试申请",
     });
 
     expect(updateApplyment).toHaveBeenCalledWith({
@@ -450,9 +454,21 @@ describe("WechatPayApplymentService", () => {
       }),
     });
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event_type: "wechat_status_updated",
+      event_type: "wechat_state_repaired",
       from_status: "active",
       to_status: "closed",
+      message: "微信运营工单确认关闭测试申请",
     }));
+  });
+
+  test("platform rejects state repair without the dedicated permission", async () => {
+    const service = await createService();
+
+    await expect(service.repairWechatState(platformAdminAuth(), applymentId, {
+      applyment_state: "closed",
+      reason: "微信运营工单确认关闭测试申请",
+    })).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(updateApplyment).not.toHaveBeenCalled();
   });
 });

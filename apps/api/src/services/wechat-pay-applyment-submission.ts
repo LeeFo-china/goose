@@ -27,9 +27,7 @@ import {
   hasText,
   isKnownWechatApplymentSubmitRejection,
   isUncertainApplymentSubmitError,
-  isWechatApplymentNotFound,
   loadApplymentRuntimeProfile,
-  mapWechatApplymentState,
   optionalApplymentMedia,
   parseApplymentAttachments,
   queryWechatApplymentIfExists,
@@ -40,6 +38,10 @@ import {
   type ApplymentRuntimeProfile,
   type ApplymentSecretBundleServicePort,
 } from "@/services/wechat-pay-applyment-submission-support";
+import {
+  buildWechatApplymentOfficialStatePatch,
+  getWechatPayApplymentAvailableActions,
+} from "@/services/wechat-pay-applyment-status";
 import { decryptApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
 import type {
   AccessPolicyPort,
@@ -215,7 +217,7 @@ export class WechatPayApplymentSubmissionService
           request_id: officialResult.requestId ?? fallbackRequestId,
         },
       });
-      return this.toDetail(updated);
+      return this.toDetail(authContext, updated);
     } catch (error) {
       if (claimed && !officialStatePersisted) {
         await this.persistFailure({ applyment: claimed, employeeId, error });
@@ -332,37 +334,16 @@ export class WechatPayApplymentSubmissionService
     result: WechatPayApplymentQueryResult;
     fallbackRequestId: string | null;
   }) {
-    const mapped = mapWechatApplymentState(input.result.applymentState);
     const now = this.nowFactory();
     return this.repository.updateApplyment({
       id: input.applyment.id,
-      patch: {
-        status: mapped.status,
-        applyment_business_code: input.result.businessCode,
-        applyment_id: input.result.applymentId,
-        applyment_state: mapped.applymentState,
-        applyment_state_message: input.result.applymentStateMessage,
-        wechat_applyment_state_raw: input.result.applymentState,
-        sign_url: input.result.signUrl,
-        audit_detail: input.result.auditDetail.map((detail) => ({
-          field: detail.field,
-          field_name: detail.fieldName,
-          reject_reason: detail.rejectReason,
-        })),
-        last_wechat_request_id: input.result.requestId ??
-          input.fallbackRequestId,
-        last_wechat_synced_at: now,
-        sub_mchid: input.result.subMchid,
-        submission_claimed_at: null,
-        opened_at: mapped.status === "opened"
-          ? input.applyment.opened_at ?? now
-          : input.applyment.opened_at,
-        rejected_at: mapped.status === "rejected" ? now : null,
-        rejected_reason: mapped.status === "rejected"
-          ? input.result.applymentStateMessage
-          : null,
-        updated_by_employee_id: input.employeeId,
-      },
+      patch: buildWechatApplymentOfficialStatePatch({
+        current: input.applyment,
+        result: input.result,
+        employeeId: input.employeeId,
+        now,
+        fallbackRequestId: input.fallbackRequestId,
+      }),
     });
   }
 
@@ -395,6 +376,7 @@ export class WechatPayApplymentSubmissionService
   }
 
   private async toDetail(
+    authContext: AuthContext,
     applyment: WechatPayApplymentRecord,
   ): Promise<ApplymentDetailResult> {
     return {
@@ -404,7 +386,11 @@ export class WechatPayApplymentSubmissionService
         applymentId: applyment.id,
       }),
       can_submit: false,
-      available_actions: [],
+      available_actions: getWechatPayApplymentAvailableActions({
+        authContext,
+        applyment,
+        accessPolicyService: this.accessPolicyService,
+      }),
     };
   }
 

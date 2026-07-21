@@ -250,45 +250,6 @@ export function optionalApplymentMedia(
   return media.get(category)?.[0] ?? null;
 }
 
-export function mapWechatApplymentState(
-  state: WechatPayApplymentQueryResult["applymentState"],
-): { status: string; applymentState: string } {
-  return {
-    APPLYMENT_STATE_EDITTING: {
-      status: "wechat_editing",
-      applymentState: "submitted",
-    },
-    APPLYMENT_STATE_AUDITING: {
-      status: "reviewing",
-      applymentState: "reviewing",
-    },
-    APPLYMENT_STATE_REJECTED: {
-      status: "rejected",
-      applymentState: "rejected",
-    },
-    APPLYMENT_STATE_TO_BE_CONFIRMED: {
-      status: "account_verifying",
-      applymentState: "account_verifying",
-    },
-    APPLYMENT_STATE_TO_BE_SIGNED: {
-      status: "signing",
-      applymentState: "signing",
-    },
-    APPLYMENT_STATE_SIGNING: {
-      status: "opening",
-      applymentState: "signing",
-    },
-    APPLYMENT_STATE_FINISHED: {
-      status: "opened",
-      applymentState: "opened",
-    },
-    APPLYMENT_STATE_CANCELED: {
-      status: "closed",
-      applymentState: "closed",
-    },
-  }[state];
-}
-
 export function isUncertainApplymentSubmitError(error: unknown) {
   return error instanceof AppError && [
     "WECHAT_PAY_APPLYMENT_TIMEOUT",

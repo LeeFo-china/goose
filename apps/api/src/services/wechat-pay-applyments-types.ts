@@ -60,6 +60,11 @@ export type WechatPayApplymentSubmissionRepositoryPort = Pick<
   }) => Promise<WechatPayApplymentRecord>;
 };
 
+export type WechatPayApplymentStatusRepositoryPort = Pick<
+  WechatPayApplymentRepositoryPort,
+  "findById" | "updateApplyment" | "insertEvent" | "findEvents"
+>;
+
 export type WechatPayApplymentMediaRepositoryPort = {
   findMediaByDigest: (input: {
     tenantId: string;
@@ -103,11 +108,13 @@ export type WechatPayApplymentServiceDependencies = {
   encryptionRootSecretFactory?: () => string | null | undefined;
   nowFactory?: () => string;
   submissionService?: WechatPayApplymentSubmissionPort;
+  statusService?: WechatPayApplymentStatusPort;
 };
 
 export type WechatPayApplymentAvailableAction = {
   key: string;
   label: string;
+  url?: string;
 };
 
 export type ApplymentDetailResult = {
@@ -124,7 +131,17 @@ export type WechatPayApplymentSubmissionPort = {
   ) => Promise<ApplymentDetailResult>;
 };
 
+export type WechatPayApplymentStatusPort = {
+  syncWechatStatus: (
+    authContext: AuthContext,
+    applymentId: string,
+  ) => Promise<ApplymentDetailResult>;
+};
+
 export const TENANT_READ_PERMISSION = "wechat_pay.applyment.read";
 export const TENANT_SUBMIT_PERMISSION = "wechat_pay.applyment.submit";
 export const PLATFORM_SUBMIT_PERMISSION =
   "platform.wechat_pay.applyment.submit";
+export const PLATFORM_SYNC_PERMISSION = "platform.wechat_pay.applyment.sync";
+export const PLATFORM_REPAIR_PERMISSION =
+  "platform.wechat_pay.applyment.repair";
