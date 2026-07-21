@@ -19,3 +19,4 @@ export * from './site-content';
 export * from './tenant';
 export * from './location';
 export * from './workflow';
+export * from './wechat-pay-settlement-rule';
