@@ -23,6 +23,10 @@ await writeFile(
   withAssetVersion(readFileSync(resolve(root, "index.html"), "utf8")),
 );
 await cp(resolve(root, "config.js"), resolve(dist, "config.js"));
+await cp(
+  resolve(root, "jLSkeG7x43.txt"),
+  resolve(dist, "jLSkeG7x43.txt"),
+);
 await cp(resolve(root, "src/styles.css"), resolve(dist, "assets/styles.css"));
 await cp(resolve(root, "src/main.js"), resolve(dist, "assets/main.js"));
 
