@@ -28,6 +28,10 @@ export class DouyinThirdPartyEventsController {
       "/douyin-thirdparty/events/message",
       this.handleCallback,
     );
+    fastify.post(
+      "/douyin-thirdparty/events/message/:authorizerAppId/callback",
+      this.handleCallback,
+    );
   }
 
   handleCallback = async (

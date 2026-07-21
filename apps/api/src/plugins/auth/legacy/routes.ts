@@ -199,13 +199,12 @@ export function isDouyinMiniappRoute(url: string) {
 }
 
 function isDouyinThirdPartyCallbackRoute(method: string, url: string) {
-  return (
-    method === "POST"
+  return method === "POST"
     && (
       url === "/douyin-thirdparty/events/authorization"
       || url === "/douyin-thirdparty/events/message"
-    )
-  );
+      || /^\/douyin-thirdparty\/events\/message\/[^/]{1,128}\/callback$/.test(url)
+    );
 }
 
 function isPublicSiteContentRoute(method: string, url: string) {

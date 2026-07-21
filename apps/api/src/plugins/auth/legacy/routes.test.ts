@@ -187,6 +187,25 @@ describe("auth public route allowlist", () => {
     expect(shouldBypassAuth("POST", "/douyin-thirdparty/events/unknown")).toBe(false);
   });
 
+  test("bypasses bearer auth only for one app-scoped Douyin message callback segment", () => {
+    const route = "/douyin-thirdparty/events/message/tt-authorizer-1/callback";
+
+    expect(shouldBypassAuth("POST", route)).toBe(true);
+    expect(isPublicRoute("POST", route)).toBe(false);
+    expect(shouldBypassAuth("GET", route)).toBe(false);
+    expect(shouldBypassAuth("HEAD", route)).toBe(false);
+
+    for (const invalidRoute of [
+      "/douyin-thirdparty/events/message//callback",
+      "/douyin-thirdparty/events/message/tt-authorizer-1",
+      "/douyin-thirdparty/events/message/tt-authorizer-1/callback/extra",
+      "/douyin-thirdparty/events/message/one/two/callback",
+      `/douyin-thirdparty/events/message/${"a".repeat(129)}/callback`,
+    ]) {
+      expect(shouldBypassAuth("POST", invalidRoute)).toBe(false);
+    }
+  });
+
   test("bypasses partner auth public routes even when a token is present", () => {
     expect(isPartnerAuthRoute("POST", "/partner/auth/login")).toBe(true);
     expect(isPartnerAuthRoute("POST", "/partner/auth/send-code")).toBe(true);

@@ -74,12 +74,13 @@ describe("DouyinThirdPartyEventsController", () => {
     );
   });
 
-  test("registers only the two third-party callback POST routes", async () => {
+  test("registers the fixed and app-scoped third-party callback POST routes", async () => {
     const routes = await createRoutes({ handleCallback: mock(async () => undefined) });
 
     expect(routes.map(({ path }) => path)).toEqual([
       "/douyin-thirdparty/events/authorization",
       "/douyin-thirdparty/events/message",
+      "/douyin-thirdparty/events/message/:authorizerAppId/callback",
     ]);
   });
 
@@ -97,9 +98,10 @@ describe("DouyinThirdPartyEventsController", () => {
         body: "success",
       });
     }
-    expect(handleCallback).toHaveBeenCalledTimes(2);
+    expect(handleCallback).toHaveBeenCalledTimes(3);
     expect(handleCallback).toHaveBeenNthCalledWith(1, VALID_WRAPPER, expect.any(Object));
     expect(handleCallback).toHaveBeenNthCalledWith(2, VALID_WRAPPER, expect.any(Object));
+    expect(handleCallback).toHaveBeenNthCalledWith(3, VALID_WRAPPER, expect.any(Object));
   });
 
   test("passes the request logger to callback processing without a console fallback", async () => {
@@ -137,6 +139,28 @@ describe("DouyinThirdPartyEventsController", () => {
     expect(validResponse.statusCode).toBe(200);
     expect(validResponse.headers["content-type"]).toStartWith("text/plain");
     expect(validResponse.body).toBe("success");
+
+    const appScopedResponse = await validApp.inject({
+      method: "POST",
+      url: "/douyin-thirdparty/events/message/tt-authorizer-1/callback",
+      payload: VALID_WRAPPER,
+    });
+    expect(appScopedResponse.statusCode).toBe(200);
+    expect(appScopedResponse.headers["content-type"]).toStartWith("text/plain");
+    expect(appScopedResponse.body).toBe("success");
+
+    const extraSegmentResponse = await validApp.inject({
+      method: "POST",
+      url: "/douyin-thirdparty/events/message/tt-authorizer-1/callback/extra",
+      payload: VALID_WRAPPER,
+    });
+    expect(extraSegmentResponse.statusCode).toBe(404);
+
+    const wrongMethodResponse = await validApp.inject({
+      method: "GET",
+      url: "/douyin-thirdparty/events/message/tt-authorizer-1/callback",
+    });
+    expect(wrongMethodResponse.statusCode).toBe(404);
 
     const malformedResponse = await validApp.inject({
       method: "POST",
