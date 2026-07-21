@@ -88,6 +88,29 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(attachmentSource).toContain("选传");
   });
 
+  test("uses one linked settlement rule select instead of technical text inputs", () => {
+    const stepsSource = readSource("./finance-wechat-pay-applyment-steps.tsx");
+    const ruleFieldUrl = new URL(
+      "./finance-wechat-pay-settlement-rule-field.tsx",
+      import.meta.url,
+    );
+
+    expect(existsSync(ruleFieldUrl)).toBe(true);
+    expect(stepsSource).toContain("FinanceWechatPaySettlementRuleField");
+    expect(stepsSource).not.toContain('<TextField label="结算规则 ID"');
+    expect(stepsSource).not.toContain('<TextField label="所属行业"');
+    if (!existsSync(ruleFieldUrl)) return;
+
+    const ruleFieldSource = readFileSync(ruleFieldUrl, "utf8");
+    expect(ruleFieldSource).toContain("getWechatPaySettlementRulesForSubject");
+    expect(ruleFieldSource).toContain("@/components/ui/select");
+    expect(ruleFieldSource).toContain('name="settlement_id"');
+    expect(ruleFieldSource).toContain('name="qualification_type"');
+    expect(ruleFieldSource).toContain("经营行业与结算规则");
+    expect(ruleFieldSource).toContain("rateLabel");
+    expect(ruleFieldSource).toContain("settlementCycleLabel");
+  });
+
   test("tenant applyment submit persists current form and attachments before submit", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
 

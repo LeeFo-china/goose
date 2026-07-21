@@ -12,6 +12,7 @@ import {
   TextareaField,
   TextField,
 } from "./finance-wechat-pay-applyment-form-fields";
+import { FinanceWechatPaySettlementRuleField } from "./finance-wechat-pay-settlement-rule-field";
 
 export const APPLYMENT_STEP_KEYS = [
   "subject",
@@ -392,8 +393,12 @@ function SettlementFields({ applyment, subjectType, disabled }: StepsProps) {
       <TextField label="银行账号" name="settlement_account_number" placeholder={applyment?.settlement_account_number_masked || "请输入银行账号"} description="新填写内容会加密存储，保存后只记录掩码。" requirement="required" required={!hasBankAccount} pattern="\d{8,32}" maxLength={32} inputMode="numeric" disabled={disabled} stored={hasBankAccount} />
       <TextField label="开户银行全称（含支行）" name="settlement_bank_full_name" defaultValue={applyment?.settlement_bank_full_name || ""} maxLength={128} disabled={disabled} />
       <TextField label="开户银行联行号" name="settlement_bank_branch_id" defaultValue={applyment?.settlement_bank_branch_id || ""} maxLength={128} disabled={disabled} />
-      <TextField label="结算规则 ID" name="settlement_id" defaultValue={applyment?.settlement_id || ""} requirement="required" required maxLength={32} disabled={disabled} />
-      <TextField label="所属行业" name="qualification_type" defaultValue={applyment?.qualification_type || ""} requirement="required" required maxLength={200} disabled={disabled} />
+      <FinanceWechatPaySettlementRuleField
+        subjectType={subjectType}
+        settlementId={applyment?.settlement_id}
+        qualificationType={applyment?.qualification_type}
+        disabled={disabled}
+      />
       <TextareaField label="经营场景说明" name="business_scene_description" defaultValue={applyment?.business_scene_description || ""} requirement="required" required disabled={disabled} />
       <TextareaField label="经营联系地址" name="contact_address" defaultValue={applyment?.contact_address || ""} requirement="required" required disabled={disabled} />
       <TextareaField label="备注" name="remark" defaultValue={applyment?.remark || ""} disabled={disabled} />
