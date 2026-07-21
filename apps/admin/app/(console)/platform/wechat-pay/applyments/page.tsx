@@ -15,13 +15,17 @@ const STATUS_OPTIONS = [
   { value: "submitted", label: "待审核" },
   { value: "approved", label: "审核通过" },
   { value: "applying", label: "进件中" },
+  { value: "wechat_editing", label: "待修正重提" },
   { value: "reviewing", label: "微信审核中" },
   { value: "account_verifying", label: "账户验证" },
   { value: "signing", label: "待签约" },
+  { value: "opening", label: "开通中" },
   { value: "opened", label: "已开通" },
   { value: "bound", label: "已绑定" },
   { value: "active", label: "已启用" },
   { value: "rejected", label: "已驳回" },
+  { value: "suspended", label: "已暂停" },
+  { value: "closed", label: "已关闭" },
 ];
 
 type SearchParams = Promise<{
@@ -45,7 +49,15 @@ function summarize(list: Awaited<ReturnType<typeof fetchPlatformWechatPayApplyme
   return {
     submitted: list.filter((item) => item.status === "submitted").length,
     processing: list.filter((item) =>
-      ["approved", "applying", "reviewing", "account_verifying", "signing"].includes(item.status)
+      [
+        "approved",
+        "applying",
+        "wechat_editing",
+        "reviewing",
+        "account_verifying",
+        "signing",
+        "opening",
+      ].includes(item.status)
     ).length,
     active: list.filter((item) => item.status === "active").length,
   };
@@ -77,7 +89,7 @@ export default async function PlatformWechatPayApplymentsPage({
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <PlatformListPageShell
         title="支付进件"
-        description="审核租户微信支付开通资料，回填服务商人工进件和 AppID 绑定状态。"
+        description="审核租户开通资料，提交微信正式进件并跟踪官方状态。"
         leading={
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
             <FileCheck2 aria-hidden="true" className="size-4" />

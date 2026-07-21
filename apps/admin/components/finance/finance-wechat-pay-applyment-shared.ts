@@ -123,15 +123,17 @@ export type WechatPayApplymentEvent = {
   created_at: string;
 };
 
+export type WechatPayApplymentAvailableAction = {
+  key: string;
+  label: string;
+  url?: string;
+};
+
 export type WechatPayApplymentDetailData = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEvent[];
   can_submit: boolean;
-  available_actions: Array<{
-    key: string;
-    label: string;
-    url?: string;
-  }>;
+  available_actions: WechatPayApplymentAvailableAction[];
 };
 
 export type WechatPayApplymentDetailResult = WechatPayApplymentDetailData & {
@@ -154,7 +156,7 @@ export function getWechatPayApplymentStatusMeta(status?: string | null) {
   if (status === "opened") return { label: "已开通", variant: "success" as const };
   if (status === "submitted") return { label: "待平台审核", variant: "warning" as const };
   if (status === "approved") return { label: "审核通过", variant: "default" as const };
-  if (status === "applying") return { label: "人工进件中", variant: "default" as const };
+  if (status === "applying") return { label: "正式进件中", variant: "default" as const };
   if (status === "wechat_editing") return { label: "待修正重提", variant: "warning" as const };
   if (status === "reviewing") return { label: "微信审核中", variant: "default" as const };
   if (status === "account_verifying") return { label: "账户验证", variant: "warning" as const };

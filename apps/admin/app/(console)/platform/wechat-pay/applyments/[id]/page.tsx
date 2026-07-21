@@ -11,6 +11,7 @@ import {
   type WechatPayApplymentAttachment,
 } from "@/components/finance/finance-wechat-pay-applyment-shared";
 import { PlatformWechatPayApplymentActions } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-actions";
+import { PlatformWechatPayApplymentProgress } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-progress";
 import { fetchPlatformWechatPayApplymentDetail } from "@/components/platform-wechat-pay/platform-wechat-pay-applyment-requests";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ export default async function PlatformWechatPayApplymentDetailPage({
       applyment: null,
       events: [],
       can_submit: false,
+      available_actions: [],
       error: "当前账号不是平台超管，无法访问支付进件申请",
     };
   const applyment = data.applyment;
@@ -57,7 +59,7 @@ export default async function PlatformWechatPayApplymentDetailPage({
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-normal">支付进件详情</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              审核租户资料、回填微信进件状态，并在满足条件后激活支付配置。
+              审核租户资料、提交微信正式进件、同步官方状态并激活收款。
             </p>
           </div>
         </div>
@@ -73,6 +75,8 @@ export default async function PlatformWechatPayApplymentDetailPage({
       {!applyment ? null : (
         <div className="grid min-h-0 flex-1 gap-4 overflow-auto xl:grid-cols-[minmax(0,1fr)_28rem]">
           <div className="flex min-w-0 flex-col gap-4">
+            <PlatformWechatPayApplymentProgress applyment={applyment} />
+
             <Card className="shadow-none">
               <CardHeader>
                 <div className="flex flex-wrap items-center gap-2">
@@ -96,9 +100,6 @@ export default async function PlatformWechatPayApplymentDetailPage({
                 <InfoItem label="开户银行全称" value={applyment.settlement_bank_full_name} />
                 <InfoItem label="联行号" value={applyment.settlement_bank_branch_id} />
                 <InfoItem label="结算账户摘要" value={applyment.settlement_account_summary} />
-                <InfoItem label="进件业务编号" value={applyment.applyment_business_code} />
-                <InfoItem label="微信申请单号" value={applyment.applyment_id} />
-                <InfoItem label="子商户号" value={applyment.sub_mchid} />
                 <InfoItem label="子商户 AppID" value={applyment.sub_appid} />
                 <InfoItem label="提交时间" value={formatWechatPayApplymentTime(applyment.submitted_at)} />
                 <InfoItem label="激活时间" value={formatWechatPayApplymentTime(applyment.activated_at)} />
@@ -147,11 +148,14 @@ export default async function PlatformWechatPayApplymentDetailPage({
             <CardHeader>
               <CardTitle>平台操作</CardTitle>
               <CardDescription>
-                进件 API 未接入前，由平台运营按线下结果回填状态。
+                仅显示当前账号与申请状态允许执行的后端动作。
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <PlatformWechatPayApplymentActions applyment={applyment} />
+              <PlatformWechatPayApplymentActions
+                applyment={applyment}
+                availableActions={data.available_actions}
+              />
             </CardContent>
           </Card>
         </div>
