@@ -2,6 +2,8 @@ export const WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORIES = [
   "license_copy",
   "legal_representative_id_card_front",
   "legal_representative_id_card_back",
+  "contact_id_card_front",
+  "contact_id_card_back",
   "settlement_account_proof",
   "business_scene_material",
 ] as const;
@@ -22,6 +24,8 @@ export const WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORY_LABELS: Record<
   license_copy: "营业执照照片",
   legal_representative_id_card_front: "法人身份证人像面",
   legal_representative_id_card_back: "法人身份证国徽面",
+  contact_id_card_front: "经办人身份证人像面",
+  contact_id_card_back: "经办人身份证国徽面",
   settlement_account_proof: "结算账户证明",
   business_scene_material: "经营场景材料",
 };
@@ -39,13 +43,26 @@ export type WechatPayApplymentRecord = {
   tenant_id: string;
   application_no: string;
   status: string;
+  subject_type: string | null;
   merchant_short_name: string;
   license_name: string | null;
   license_code: string | null;
+  license_address: string | null;
+  license_period_begin: string | null;
+  license_period_end: string | null;
   legal_representative_name: string | null;
+  identity_doc_type: string | null;
+  identity_address_masked: string | null;
+  identity_period_begin: string | null;
+  identity_period_end: string | null;
+  contact_type: string | null;
   super_admin_name: string | null;
   super_admin_phone_masked: string | null;
   super_admin_email: string | null;
+  contact_identity_doc_type: string | null;
+  contact_identity_period_begin: string | null;
+  contact_identity_period_end: string | null;
+  service_phone: string | null;
   settlement_account_type: string | null;
   settlement_account_name: string | null;
   settlement_account_number_masked: string | null;
@@ -53,6 +70,8 @@ export type WechatPayApplymentRecord = {
   settlement_bank_full_name: string | null;
   settlement_bank_branch_id: string | null;
   settlement_account_summary: string | null;
+  settlement_id: string | null;
+  qualification_type: string | null;
   business_scene_description: string | null;
   contact_address: string | null;
   attachments: WechatPayApplymentAttachment[];
@@ -61,11 +80,23 @@ export type WechatPayApplymentRecord = {
   applyment_id: string | null;
   applyment_state: string;
   applyment_state_message: string | null;
+  wechat_applyment_state_raw: string | null;
+  sign_url: string | null;
+  audit_detail: Array<{
+    field?: string | null;
+    field_name?: string | null;
+    reject_reason?: string | null;
+  }>;
+  last_wechat_request_id: string | null;
+  last_wechat_synced_at: string | null;
   sub_mchid: string | null;
   sub_appid: string | null;
   appid_binding_state: string;
   appid_binding_message: string | null;
   payment_config_id: string | null;
+  has_sensitive_payload: boolean;
+  sensitive_payload_version: number | null;
+  sensitive_payload_updated_at: string | null;
   submitted_at: string | null;
   approved_at: string | null;
   opened_at: string | null;
@@ -96,6 +127,11 @@ export type WechatPayApplymentDetailData = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEvent[];
   can_submit: boolean;
+  available_actions: Array<{
+    key: string;
+    label: string;
+    url?: string;
+  }>;
 };
 
 export type WechatPayApplymentDetailResult = WechatPayApplymentDetailData & {
@@ -107,6 +143,7 @@ export function emptyWechatPayApplyment(): WechatPayApplymentDetailResult {
     applyment: null,
     events: [],
     can_submit: false,
+    available_actions: [],
     error: null,
   };
 }
@@ -118,9 +155,11 @@ export function getWechatPayApplymentStatusMeta(status?: string | null) {
   if (status === "submitted") return { label: "待平台审核", variant: "warning" as const };
   if (status === "approved") return { label: "审核通过", variant: "default" as const };
   if (status === "applying") return { label: "人工进件中", variant: "default" as const };
+  if (status === "wechat_editing") return { label: "待修正重提", variant: "warning" as const };
   if (status === "reviewing") return { label: "微信审核中", variant: "default" as const };
   if (status === "account_verifying") return { label: "账户验证", variant: "warning" as const };
   if (status === "signing") return { label: "待签约", variant: "warning" as const };
+  if (status === "opening") return { label: "开通权限中", variant: "default" as const };
   if (status === "rejected") return { label: "已驳回", variant: "danger" as const };
   if (status === "suspended") return { label: "已暂停", variant: "secondary" as const };
   if (status === "closed") return { label: "已关闭", variant: "secondary" as const };

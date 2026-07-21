@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
   FieldDescription,
@@ -30,6 +31,11 @@ export function TextField({
   required,
   type = "text",
   disabled,
+  pattern,
+  maxLength,
+  inputMode,
+  autoComplete,
+  stored,
 }: {
   label: string;
   name: string;
@@ -40,6 +46,11 @@ export function TextField({
   required?: boolean;
   type?: string;
   disabled?: boolean;
+  pattern?: string;
+  maxLength?: number;
+  inputMode?: "text" | "numeric" | "tel" | "email";
+  autoComplete?: string;
+  stored?: boolean;
 }) {
   return (
     <Field data-disabled={disabled || undefined}>
@@ -47,6 +58,7 @@ export function TextField({
         htmlFor={`wechat-pay-applyment-${name}`}
         label={label}
         requirement={requirement}
+        stored={stored}
       />
       <Input
         id={`wechat-pay-applyment-${name}`}
@@ -56,6 +68,11 @@ export function TextField({
         placeholder={placeholder}
         required={required}
         disabled={disabled}
+        pattern={pattern}
+        maxLength={maxLength}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        aria-required={required || undefined}
       />
       {description ? <FieldDescription>{description}</FieldDescription> : null}
     </Field>
@@ -70,6 +87,7 @@ export function SelectField({
   requirement = "optional",
   description,
   disabled,
+  onValueChange,
 }: {
   label: string;
   name: string;
@@ -78,6 +96,7 @@ export function SelectField({
   requirement?: FieldRequirement;
   description?: string;
   disabled?: boolean;
+  onValueChange?: (value: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue);
   const fieldId = `wechat-pay-applyment-${name}`;
@@ -94,7 +113,14 @@ export function SelectField({
         requirement={requirement}
       />
       <input type="hidden" name={name} value={value} />
-      <Select value={value} onValueChange={setValue} disabled={disabled}>
+      <Select
+        value={value}
+        onValueChange={(nextValue) => {
+          setValue(nextValue);
+          onValueChange?.(nextValue);
+        }}
+        disabled={disabled}
+      >
         <SelectTrigger id={fieldId} aria-required={requirement === "required"}>
           <SelectValue />
         </SelectTrigger>
@@ -109,6 +135,61 @@ export function SelectField({
         </SelectContent>
       </Select>
       {description ? <FieldDescription>{description}</FieldDescription> : null}
+    </Field>
+  );
+}
+
+export function PeriodEndField({
+  label,
+  name,
+  defaultValue,
+  requirement = "required",
+  disabled,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string | null;
+  requirement?: FieldRequirement;
+  disabled?: boolean;
+}) {
+  const [longTerm, setLongTerm] = useState(defaultValue === "长期");
+  const [dateValue, setDateValue] = useState(
+    defaultValue && defaultValue !== "长期" ? defaultValue : "",
+  );
+  const fieldId = `wechat-pay-applyment-${name}`;
+
+  useEffect(() => {
+    setLongTerm(defaultValue === "长期");
+    setDateValue(defaultValue && defaultValue !== "长期" ? defaultValue : "");
+  }, [defaultValue]);
+
+  return (
+    <Field data-disabled={disabled || undefined}>
+      <FieldLabelWithRequirement
+        htmlFor={fieldId}
+        label={label}
+        requirement={requirement}
+      />
+      <input type="hidden" name={name} value={longTerm ? "长期" : dateValue} />
+      <Input
+        id={fieldId}
+        type="date"
+        value={dateValue}
+        onChange={(event) => setDateValue(event.target.value)}
+        required={requirement === "required" && !longTerm}
+        disabled={disabled || longTerm}
+      />
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={`${fieldId}-long-term`}
+          checked={longTerm}
+          disabled={disabled}
+          onCheckedChange={(checked) => setLongTerm(checked === true)}
+        />
+        <FieldLabel htmlFor={`${fieldId}-long-term`} className="font-normal">
+          长期有效
+        </FieldLabel>
+      </div>
     </Field>
   );
 }
@@ -154,15 +235,18 @@ function FieldLabelWithRequirement({
   htmlFor,
   label,
   requirement,
+  stored,
 }: {
   htmlFor: string;
   label: string;
   requirement: FieldRequirement;
+  stored?: boolean;
 }) {
   return (
     <FieldLabel htmlFor={htmlFor} className="flex items-center gap-2">
       <span>{label}</span>
       <RequirementBadge requirement={requirement} />
+      {stored ? <Badge variant="success">已安全保存</Badge> : null}
     </FieldLabel>
   );
 }

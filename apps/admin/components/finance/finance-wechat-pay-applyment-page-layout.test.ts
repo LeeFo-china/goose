@@ -43,7 +43,10 @@ describe("Finance wechat pay applyment page layout", () => {
     const requestSource = readSource("./finance-wechat-pay-applyment-requests.ts");
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const fieldSource = readSource("./finance-wechat-pay-applyment-form-fields.tsx");
+    const stepsSource = readSource("./finance-wechat-pay-applyment-steps.tsx");
+    const schemaSource = readSource("./finance-wechat-pay-applyment-schema.ts");
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
+    const formContractSource = `${panelSource}\n${stepsSource}\n${schemaSource}`;
 
     expect(requestSource).toContain("/finance/wechat-pay/applyment/current");
     expect(panelSource).toContain("/finance/wechat-pay/applyments");
@@ -54,24 +57,23 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(attachmentSource).toContain("license_copy");
     expect(attachmentSource).toContain("legal_representative_id_card_front");
     expect(panelSource).toContain("attachments");
-    expect(panelSource).toContain("merchant_short_name");
-    expect(panelSource).toContain("super_admin_phone");
-    expect(panelSource).toContain("settlement_account_type");
-    expect(panelSource).toContain("settlement_account_number");
-    expect(panelSource).toContain("settlement_bank_full_name");
-    expect(panelSource).toContain("settlement_bank_branch_id");
+    expect(formContractSource).toContain("merchant_short_name");
+    expect(formContractSource).toContain("super_admin_phone");
+    expect(formContractSource).toContain("settlement_account_type");
+    expect(formContractSource).toContain("settlement_account_number");
+    expect(formContractSource).toContain("settlement_bank_full_name");
+    expect(formContractSource).toContain("settlement_bank_branch_id");
     expect(fieldSource).toContain("@/components/ui/select");
     expect(fieldSource).toContain("SelectGroup");
-    expect(panelSource).toContain('requirement="required"');
-    expect(panelSource).toContain('requirement="optional"');
-    expect(panelSource).toContain("标记为必填的字段会影响保存和提交");
-    expect(panelSource).not.toContain("settlement_account_summary: requiredText");
-    expect(panelSource).not.toContain("api_v3_key");
+    expect(stepsSource).toContain('requirement="required"');
+    expect(stepsSource).toContain('requirement="optional"');
+    expect(formContractSource).not.toContain("settlement_account_summary: requiredText");
+    expect(formContractSource).not.toContain("api_v3_key");
   });
 
   test("tenant applyment form marks required optional and attachment requirements", () => {
-    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const fieldSource = readSource("./finance-wechat-pay-applyment-form-fields.tsx");
+    const stepsSource = readSource("./finance-wechat-pay-applyment-steps.tsx");
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
 
     expect(fieldSource).toContain("RequirementBadge");
@@ -79,9 +81,9 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(fieldSource).toContain("选填");
     expect(fieldSource).toContain("required={required}");
     expect(fieldSource).toContain("aria-required");
-    expect(panelSource).toContain("用于微信支付开户联系");
-    expect(panelSource).toContain("保存后只记录掩码");
-    expect(panelSource).toContain("填写银行基础名称");
+    expect(stepsSource).toContain("用于微信支付开户联系");
+    expect(stepsSource).toContain("保存后只记录掩码");
+    expect(stepsSource).toContain("填写银行基础名称");
     expect(attachmentSource).toContain("必传");
     expect(attachmentSource).toContain("选传");
   });
@@ -114,5 +116,56 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(sharedSource).not.toContain("@/lib/auth");
     expect(sharedSource).not.toContain("next/headers");
     expect(requestSource).toContain("./finance-wechat-pay-applyment-shared");
+  });
+
+  test("uses a four-step shadcn form for the complete official applyment contract", () => {
+    const stepsUrl = new URL(
+      "./finance-wechat-pay-applyment-steps.tsx",
+      import.meta.url,
+    );
+    const reviewUrl = new URL(
+      "./finance-wechat-pay-applyment-review.tsx",
+      import.meta.url,
+    );
+    const schemaUrl = new URL(
+      "./finance-wechat-pay-applyment-schema.ts",
+      import.meta.url,
+    );
+
+    expect(existsSync(stepsUrl)).toBe(true);
+    expect(existsSync(reviewUrl)).toBe(true);
+    expect(existsSync(schemaUrl)).toBe(true);
+    if (!existsSync(stepsUrl) || !existsSync(reviewUrl) || !existsSync(schemaUrl)) {
+      return;
+    }
+
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const stepsSource = readFileSync(stepsUrl, "utf8");
+    const reviewSource = readFileSync(reviewUrl, "utf8");
+    const schemaSource = readFileSync(schemaUrl, "utf8");
+    const attachmentSource = readSource(
+      "./finance-wechat-pay-applyment-attachments.tsx",
+    );
+
+    expect(panelSource).toContain("FinanceWechatPayApplymentSteps");
+    expect(panelSource).toContain("FinanceWechatPayApplymentReview");
+    expect(panelSource).toContain("AlertDialog");
+    expect(panelSource).toContain("Progress");
+    expect(stepsSource).toContain("SUBJECT_TYPE_ENTERPRISE");
+    expect(stepsSource).toContain("SUBJECT_TYPE_INDIVIDUAL");
+    expect(schemaSource).toContain("IDENTIFICATION_TYPE_IDCARD");
+    expect(stepsSource).toContain('contactType === "SUPER"');
+    expect(stepsSource).toContain("已安全保存");
+    expect(reviewSource).toContain("确认资料真实有效");
+    expect(schemaSource).toContain("contact_identity_number");
+    expect(schemaSource).toContain("settlement_account_number");
+    expect(schemaSource).toContain("delete payload.contact_identity_number");
+    expect(attachmentSource).toContain("image/bmp");
+    expect(attachmentSource).toContain("2 * 1024 * 1024");
+    expect(attachmentSource).toContain("contact_id_card_front");
+    expect(attachmentSource).toContain("contact_id_card_back");
+    expect(attachmentSource).toContain("MAX_BUSINESS_SCENE_MATERIALS = 5");
+    expect(attachmentSource).not.toContain("image/webp");
+    expect(panelSource).not.toMatch(/<select\b/);
   });
 });
