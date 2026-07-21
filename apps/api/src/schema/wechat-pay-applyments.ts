@@ -272,6 +272,7 @@ export const UpdateWechatPayApplymentWechatStatusSchema = z.object({
 });
 
 export const ActivateWechatPayApplymentConfigSchema = z.object({}).strict();
+export const SubmitWechatPayApplymentToWechatSchema = z.object({}).strict();
 
 export const PlatformWechatPayApplymentListQuerySchema =
   PaginationQuerySchema.extend({

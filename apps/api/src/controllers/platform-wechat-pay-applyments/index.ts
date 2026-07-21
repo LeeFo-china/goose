@@ -6,6 +6,7 @@ import {
   MarkWechatPayApplymentApplyingSchema,
   PlatformWechatPayApplymentListQuerySchema,
   RejectWechatPayApplymentSchema,
+  SubmitWechatPayApplymentToWechatSchema,
   UpdateWechatPayApplymentWechatStatusSchema,
   WechatPayApplymentIdParamSchema,
 } from "@/schema/wechat-pay-applyments";
@@ -105,6 +106,28 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
       authContext,
       paramsResult.data.id,
       bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/finance/wechat-pay/applyments/:id/submit-to-wechat")
+  async submitApplymentToWechat(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
+      request.params,
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = SubmitWechatPayApplymentToWechatSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await wechatPayApplymentService.submitToWechat(
+      authContext,
+      paramsResult.data.id,
     );
     return ResponseHandler.success(data);
   }

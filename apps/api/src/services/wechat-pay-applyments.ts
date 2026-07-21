@@ -35,6 +35,7 @@ import {
 } from "@/services/wechat-pay-applyment-sensitive-payload";
 import { assertApplymentSubmitReady } from "@/services/wechat-pay-applyment-readiness";
 import { WechatPayApplymentPlatformActions } from "@/services/wechat-pay-applyments-platform";
+import { wechatPayApplymentSubmissionService } from "@/services/wechat-pay-applyment-submission";
 import type {
   AccessPolicyPort,
   ApplymentDetailResult,
@@ -76,6 +77,7 @@ export class WechatPayApplymentService {
       dependencies.platformPaymentConfigRepository ??
         platformPaymentConfigRepository,
       this.nowFactory,
+      dependencies.submissionService ?? wechatPayApplymentSubmissionService,
     );
   }
 
@@ -273,6 +275,13 @@ export class WechatPayApplymentService {
     return this.platformActions.markApplying(authContext, id, input);
   }
 
+  async submitToWechat(
+    authContext: AuthContext,
+    id: string,
+  ): Promise<ApplymentDetailResult> {
+    return this.platformActions.submitToWechat(authContext, id);
+  }
+
   async updateWechatStatus(
     authContext: AuthContext,
     id: string,
@@ -304,6 +313,7 @@ export class WechatPayApplymentService {
       can_submit: Boolean(applyment) &&
         this.canTenantSubmit(authContext) &&
         ["draft", "rejected"].includes(applyment?.status ?? ""),
+      available_actions: [],
     };
   }
 

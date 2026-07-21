@@ -53,6 +53,7 @@ const APPLYMENT_SAFE_COLUMNS = [
   "tenant_id",
   "application_no",
   "status",
+  "subject_type",
   "merchant_short_name",
   "license_name",
   "license_code",
@@ -132,6 +133,34 @@ const APPLYMENT_MEDIA_SELECT = [
 ].join(", ");
 
 class WechatPayApplymentRepository {
+  async claimSubmission(input: {
+    applymentId: string;
+    employeeId: string;
+  }): Promise<WechatPayApplymentRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "claim_wechat_pay_applyment_submission",
+      {
+        p_applyment_id: input.applymentId,
+        p_employee_id: input.employeeId,
+      },
+    );
+
+    if (error) throwClaimError(error);
+    if (!data?.[0]) {
+      throw Errors.dbError("认领微信支付正式进件任务失败");
+    }
+
+    const claimed = await this.findById({ id: input.applymentId });
+    if (!claimed) {
+      throw Errors.business(
+        404,
+        "微信支付开通申请不存在",
+        "WECHAT_PAY_APPLYMENT_NOT_FOUND",
+      );
+    }
+    return claimed;
+  }
+
   async findLatestByTenant(
     tenantId: string,
   ): Promise<WechatPayApplymentRecord | null> {
@@ -356,6 +385,39 @@ class WechatPayApplymentRepository {
       },
     };
   }
+}
+
+function throwClaimError(error: { message?: string | null }): never {
+  const message = error.message ?? "";
+  if (message.includes("WECHAT_PAY_APPLYMENT_NOT_FOUND")) {
+    throw Errors.business(
+      404,
+      "微信支付开通申请不存在",
+      "WECHAT_PAY_APPLYMENT_NOT_FOUND",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_SUBMISSION_IN_PROGRESS")) {
+    throw Errors.business(
+      409,
+      "微信支付正式进件正在提交，请稍后重试",
+      "WECHAT_PAY_APPLYMENT_SUBMISSION_IN_PROGRESS",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_SUBMISSION_STATE_INVALID")) {
+    throw Errors.business(
+      409,
+      "当前申请状态不能提交微信支付正式进件",
+      "WECHAT_PAY_APPLYMENT_SUBMISSION_STATE_INVALID",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_SUBMISSION_CLAIM_INVALID")) {
+    throw Errors.business(
+      400,
+      "微信支付正式进件认领参数无效",
+      "WECHAT_PAY_APPLYMENT_SUBMISSION_CLAIM_INVALID",
+    );
+  }
+  throw Errors.dbError("认领微信支付正式进件任务失败", error);
 }
 
 export const wechatPayApplymentRepository = new WechatPayApplymentRepository();

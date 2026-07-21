@@ -47,6 +47,19 @@ export type WechatPayApplymentRepositoryPort = {
   }) => Promise<WechatPayApplymentListResult>;
 };
 
+export type WechatPayApplymentSubmissionRepositoryPort = Pick<
+  WechatPayApplymentRepositoryPort,
+  | "findSensitivePayloadById"
+  | "updateApplyment"
+  | "insertEvent"
+  | "findEvents"
+> & {
+  claimSubmission: (input: {
+    applymentId: string;
+    employeeId: string;
+  }) => Promise<WechatPayApplymentRecord>;
+};
+
 export type WechatPayApplymentMediaRepositoryPort = {
   findMediaByDigest: (input: {
     tenantId: string;
@@ -89,13 +102,29 @@ export type WechatPayApplymentServiceDependencies = {
   applymentIdFactory?: () => string;
   encryptionRootSecretFactory?: () => string | null | undefined;
   nowFactory?: () => string;
+  submissionService?: WechatPayApplymentSubmissionPort;
+};
+
+export type WechatPayApplymentAvailableAction = {
+  key: string;
+  label: string;
 };
 
 export type ApplymentDetailResult = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEventRecord[];
   can_submit: boolean;
+  available_actions: WechatPayApplymentAvailableAction[];
+};
+
+export type WechatPayApplymentSubmissionPort = {
+  submitToWechat: (
+    authContext: AuthContext,
+    applymentId: string,
+  ) => Promise<ApplymentDetailResult>;
 };
 
 export const TENANT_READ_PERMISSION = "wechat_pay.applyment.read";
 export const TENANT_SUBMIT_PERMISSION = "wechat_pay.applyment.submit";
+export const PLATFORM_SUBMIT_PERMISSION =
+  "platform.wechat_pay.applyment.submit";

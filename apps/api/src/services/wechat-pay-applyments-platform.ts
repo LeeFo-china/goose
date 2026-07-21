@@ -17,6 +17,7 @@ import type {
   PlatformPaymentConfigRepositoryPort,
   WechatPayApplymentRepositoryPort,
   WechatPayConfigRepositoryPort,
+  WechatPayApplymentSubmissionPort,
 } from "@/services/wechat-pay-applyments-types";
 import {
   evaluatePlatformPaymentProfileReadiness,
@@ -30,7 +31,12 @@ export class WechatPayApplymentPlatformActions {
     private readonly platformPaymentConfigRepository:
       PlatformPaymentConfigRepositoryPort,
     private readonly nowFactory: () => string,
+    private readonly submissionService: WechatPayApplymentSubmissionPort,
   ) {}
+
+  async submitToWechat(authContext: AuthContext, id: string) {
+    return this.submissionService.submitToWechat(authContext, id);
+  }
 
   async listForPlatform(
     authContext: AuthContext,
@@ -302,6 +308,7 @@ export class WechatPayApplymentPlatformActions {
         applymentId: applyment.id,
       }),
       can_submit: false,
+      available_actions: [],
     };
   }
 
