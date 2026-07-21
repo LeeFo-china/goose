@@ -226,4 +226,14 @@ describe("douyin miniapp config", () => {
 
     captureAppError(() => loadDouyinMiniappConfig(env));
   });
+
+  test.each([
+    ["plus sign", Buffer.alloc(32, 0xf8).toString("base64").slice(0, -1)],
+    ["slash", Buffer.alloc(32, 0xfc).toString("base64").slice(0, -1)],
+  ])("rejects a canonical message AES key containing a %s", (_name, key) => {
+    const env = validEnv();
+    env.DOUYIN_COMPONENT_MESSAGE_AES_KEY = key;
+
+    captureAppError(() => loadDouyinMiniappConfig(env));
+  });
 });

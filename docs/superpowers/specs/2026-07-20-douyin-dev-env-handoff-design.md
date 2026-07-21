@@ -81,7 +81,7 @@ bash scripts/ops/configure-douyin-dev-env.sh
 | `DOUYIN_COMPONENT_APP_ID` | 用户隐藏输入 | 原值必须等于首尾空白去除后的值且非空，最多 128 字符；只接受无需 `.env` 转义的保守 ASCII 字符集 |
 | `DOUYIN_COMPONENT_APP_SECRET` | 用户隐藏输入两次 | 两次完全一致；原值必须等于首尾空白去除后的值且非空，最多 512 字符；字符集规则同 AppID |
 | `DOUYIN_COMPONENT_MESSAGE_TOKEN` | 本机生成 | OpenSSL 生成 16 个随机字节并编码为 32 位小写十六进制 |
-| `DOUYIN_COMPONENT_MESSAGE_AES_KEY` | 本机生成 | OpenSSL 生成 32 个随机字节，编码为标准 Base64 并去掉唯一末尾 `=`，结果必须是规范 43 字符且解码为 32 字节 |
+| `DOUYIN_COMPONENT_MESSAGE_AES_KEY` | 本机生成 | OpenSSL 生成 32 个随机字节，编码为标准 Base64 并去掉唯一末尾 `=`；若结果含 `+` 或 `/` 则丢弃并重新生成，最终值必须匹配 `[A-Za-z0-9]{43}`，补回 `=` 后仍须规范解码为 32 字节 |
 | `DOUYIN_TEMPLATE_APP_ID` | 用户隐藏输入 | 规则同 Component AppID |
 | `DOUYIN_TEMPLATE_APP_SECRET` | 用户隐藏输入两次 | 规则同 Component AppSecret |
 | `DOUYIN_CREDENTIAL_KEYS_JSON` | 本机生成 | 只包含一个自有属性 `v1` 的 JSON object；属性值是 32 个随机字节的规范标准 Base64，保留末尾 `=` |
@@ -90,7 +90,7 @@ bash scripts/ops/configure-douyin-dev-env.sh
 
 用户输入的保守 ASCII 字符集固定为 `[A-Za-z0-9._~+/=-]`；CR、LF、NUL、空白、引号、反斜杠、`#`、`$` 和反引号均拒绝。这样原值可以作为 Docker Compose `env_file` 的未加引号值保存，不发生 Shell 或 Compose 插值。若控制台实际值不满足该字符集，工具必须在生成远端临时文件前停止，不尝试转义或改写，也不得要求用户在聊天中提供该值。
 
-抖音第三方小程序官方文档说明“消息验证 TOKEN”用于验签、“消息加密解密 KEY”用于解密，但公开页面没有给出第三方小程序 Token 的长度。32 位十六进制 Token 是本项目的保守工程选择：字符集无需 `.env` 转义、随机性充足，并满足当前 API 的 1–512 字符契约；不得把抖音小游戏文档中的字段限制表述为第三方小程序官方限制。后续 A04 保存控制台配置时仍须以届时控制台的实际字段校验为准；若控制台拒绝该格式，应停止 A04，并对新的 A01 变更另行取得授权。
+抖音第三方小程序官方文档说明“消息验证 TOKEN”用于验签、“消息加密解密 KEY”用于解密，但公开页面没有给出第三方小程序 Token 的长度。32 位十六进制 Token 是本项目的保守工程选择：字符集无需 `.env` 转义、随机性充足，并满足当前 API 的 1–512 字符契约；不得把抖音小游戏文档中的字段限制表述为第三方小程序官方限制。2026-07-21 的第三方应用控制台实际校验明确要求消息加密解密 KEY 为 43 位且只能包含大小写字母和数字，因此生成器与运行时配置校验都必须拒绝 `+`、`/`。后续控制台字段变化仍以动作时实际校验为准。
 
 TypeScript 核心把九项值组成隔离对象后调用 `apps/api/src/services/douyin-miniapp/config.ts` 导出的 `loadDouyinMiniappConfig`。它不得读取或合并调用进程的其他环境变量，也不得在成功输出或错误详情中返回任何配置值。
 

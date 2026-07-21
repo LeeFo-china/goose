@@ -996,6 +996,18 @@ describe("douyin development environment payload", () => {
       code: "DOUYIN_DEV_ENV_CONFIG_INVALID",
     },
     {
+      name: "canonical message AES key containing a plus sign",
+      key: "DOUYIN_COMPONENT_MESSAGE_AES_KEY",
+      value: Buffer.alloc(32, 0xf8).toString("base64").replace(/=+$/, ""),
+      code: "DOUYIN_DEV_ENV_CONFIG_INVALID",
+    },
+    {
+      name: "canonical message AES key containing a slash",
+      key: "DOUYIN_COMPONENT_MESSAGE_AES_KEY",
+      value: Buffer.alloc(32, 0xfc).toString("base64").replace(/=+$/, ""),
+      code: "DOUYIN_DEV_ENV_CONFIG_INVALID",
+    },
+    {
       name: "malformed credential JSON",
       key: "DOUYIN_CREDENTIAL_KEYS_JSON",
       value: "{not-json",
@@ -1305,6 +1317,45 @@ printf '%s\\n' 'path-openssl-bun-wrappers=true'
       ].join("\n"),
     );
     expectNoEntrySecrets(result);
+  });
+
+  test("retries message AES key generation until OpenSSL returns 43 alphanumeric characters", () => {
+    const harness = createEntryPathHarness();
+    const generatedValuePath = join(harness.root, "generated-message-aes-key");
+    const opensslCountPath = join(harness.root, "message-aes-openssl-count");
+    const invalidKey = Buffer.alloc(32, 0xff)
+      .toString("base64")
+      .replace(/=+$/, "");
+    const result = runEntryPathProgram(
+      harness,
+      `
+openssl() {
+  local count=0
+  if [[ -f "$AES_OPENSSL_COUNT_PATH" ]]; then
+    IFS= read -r count < "$AES_OPENSSL_COUNT_PATH"
+  fi
+  count=$((count + 1))
+  printf '%s\n' "$count" > "$AES_OPENSSL_COUNT_PATH"
+  if [[ "$count" -eq 1 ]]; then
+    printf '%s\n' '${invalidKey}='
+    return 0
+  fi
+  printf '%s\n' '${MESSAGE_AES_KEY}='
+}
+generated_value="$(generate_message_aes_key)"
+printf '%s\n' "$generated_value" > "$GENERATED_VALUE_PATH"
+`,
+      {
+        AES_OPENSSL_COUNT_PATH: opensslCountPath,
+        GENERATED_VALUE_PATH: generatedValuePath,
+      },
+    );
+
+    expect(result).toEqual({ exitCode: 0, stdout: "", stderr: "" });
+    expect(readFileSync(generatedValuePath, "utf8")).toBe(
+      `${MESSAGE_AES_KEY}\n`,
+    );
+    expect(readFileSync(opensslCountPath, "utf8")).toBe("2\n");
   });
 
   test("uses PATH SSH and SCP wrappers with the exact fixed create, copy, and cleanup contract", () => {

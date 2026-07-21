@@ -86,10 +86,18 @@ generate_message_token() {
 }
 
 generate_message_aes_key() {
+  local attempt
   local value
 
-  value="$(openssl rand -base64 32)" || return 1
-  printf '%s' "${value%=}"
+  for attempt in {1..128}; do
+    value="$(openssl rand -base64 32)" || return 1
+    value="${value%=}"
+    if [[ "$value" =~ ^[A-Za-z0-9]{43}$ ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  done
+  return 1
 }
 
 generate_credential_key() {

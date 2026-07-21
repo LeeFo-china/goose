@@ -26,7 +26,7 @@
 | `DOUYIN_COMPONENT_APP_ID` | 抖音第三方小程序应用 AppID | 与开放平台服务商主体一致 |
 | `DOUYIN_COMPONENT_APP_SECRET` | 第三方应用密钥 | 仅服务端 |
 | `DOUYIN_COMPONENT_MESSAGE_TOKEN` | 消息校验 Token | 与开放平台控制台一致 |
-| `DOUYIN_COMPONENT_MESSAGE_AES_KEY` | 消息加密 AES Key | 43 位、解码后 32 字节 |
+| `DOUYIN_COMPONENT_MESSAGE_AES_KEY` | 消息加密 AES Key | 43 位大小写字母或数字；补 `=` 后规范 Base64 解码为 32 字节 |
 | `DOUYIN_TEMPLATE_APP_ID` | 模板开发小程序 AppID | 与模板开发安装一致 |
 | `DOUYIN_TEMPLATE_APP_SECRET` | 模板开发小程序密钥 | 仅服务端 |
 | `DOUYIN_CREDENTIAL_KEYS_JSON` | 授权凭证信封密钥环 | JSON object；每个值是 32 字节标准 Base64 |
@@ -67,7 +67,7 @@ bun run api:check
 | 授权事件 | `<API_ORIGIN>/douyin-thirdparty/events/authorization` | `POST`，HTTP 200，纯文本 `success` |
 | 消息与 Ticket 事件 | `<API_ORIGIN>/douyin-thirdparty/events/message` | `POST`，HTTP 200，纯文本 `success` |
 
-控制台的消息 Token、EncodingAESKey 必须分别与 `DOUYIN_COMPONENT_MESSAGE_TOKEN`、`DOUYIN_COMPONENT_MESSAGE_AES_KEY` 一致。上线前用控制台校验功能确认公网证书、DNS、WAF 和请求体透传正常。不要把回调 URL 配到普通小程序会话接口。
+控制台的消息 Token、EncodingAESKey 必须分别与 `DOUYIN_COMPONENT_MESSAGE_TOKEN`、`DOUYIN_COMPONENT_MESSAGE_AES_KEY` 一致。EncodingAESKey 即使是规范的 43 位无填充 Base64，只要含 `+` 或 `/` 也不满足当前控制台字符集要求，必须重新生成，禁止手工替换字符。上线前用控制台校验功能确认公网证书、DNS、WAF 和请求体透传正常。不要把回调 URL 配到普通小程序会话接口。
 
 空环境的首个合法 `PUSH Ticket` 在完成回调时间窗口、签名、AES 解密和 Component AppID 校验后，
 先由 `claim_douyin_authorization_event` 幂等建立 active 组件并申领事件，再由
