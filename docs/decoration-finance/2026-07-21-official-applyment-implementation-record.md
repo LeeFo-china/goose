@@ -187,6 +187,8 @@ pnpm --dir apps/admin exec next dev -p 3110
 
 后续涉及会立即阻断已有业务的 migration，发布门禁必须使用“兼容 API/Admin 先部署，配置完成并验证，再启用强约束”的顺序；若无法拆分，应安排同一维护窗口原子发布并准备前向回滚 migration。
 
+2026-07-22 对 `main@68ad6efe` 与正式进件分支执行无引用写入的 `git merge-tree --write-tree`，合并树生成成功且没有冲突。`main` 独有提交只增加 WebView 域名校验文件及对应 H5 发布校验；正式进件分支没有修改部署工作流，自动合并后的工作流同时保留 API/Admin 部署、Admin 构建回滚和 WebView 校验文件发布步骤。该检查没有修改 `main`、功能分支或远端引用。现有部署工作流不会自动执行 Supabase migration，因此上线前仍须只读确认 Local/Remote migration 对齐；本次所需 migration 已远端存在，不得在部署脚本中临时重复执行 DDL。
+
 ## 7. 验证与剩余边界
 
 已执行并通过：
