@@ -777,7 +777,7 @@ git commit -m "test(finance): verify official applyment workflow"
 
 - Modify: `docs/decoration-finance/2026-07-21-official-applyment-implementation-record.md`
 
-- [ ] **Step 1: Run real-application preflight without external writes**
+- [x] **Step 1: Run real-application preflight without external writes**
 
 Run:
 

@@ -131,7 +131,7 @@ approved
 
 已核对租户资料、官方状态、附件、审计时间线和后端 `available_actions`；Admin 不本地推导进件动作。页面验收覆盖 1440×1000 和 390×844，无页面级或详情工作区横向溢出、console error 或 4xx/5xx 响应。真实旧申请 `8026f87b-e6de-4bb1-80c6-6aa7066f1759` 的只读详情返回 `review_ready=false`，隐藏生命周期状态后展示 10 个安全待处理项；页面没有“审核通过”按钮，仅保留“驳回租户修改”和“前往支付配置”。验收只执行登录与 GET 请求，未执行审核、驳回、提交微信、同步微信状态、受控修复或激活配置。
 
-2026-07-21 再次通过 CLI 对同一申请执行只读 preflight，结果仍为 `ready=false`。安全阻塞项为：主体类型、法人证件类型及有效期、超级管理员类型、客服电话、结算规则、所属行业、敏感申请资料和平台服务商支付配置缺失；另有当前 `submitted` 生命周期状态提示。该命令未下载 COS 素材、未调用微信、未修改数据库。当前运营动作必须先由平台驳回，租户使用新版表单重新填写并提交；中央 `tenant_service_provider` 配置保存且验证通过后再运行 preflight。
+2026-07-22 再次通过 CLI 对同一申请执行 Task 10 只读 preflight，结果仍为 `ready=false`。安全阻塞项为：主体类型、法人证件类型及有效期、超级管理员类型、客服电话、结算规则、所属行业、敏感申请资料和平台服务商支付配置缺失；另有当前生命周期状态不可提交的提示。随后只读查询中央支付配置，只发现 `platform_direct_recharge`，未发现正式进件要求的 `tenant_service_provider`。查询结果只记录配置是否存在及就绪状态，不输出商户号、AppID、证书、密钥引用或密钥正文。上述操作未下载 COS 素材、未调用微信、未修改数据库。当前运营动作必须先由平台驳回，租户使用新版表单重新填写并提交；中央 `tenant_service_provider` 配置保存且验证通过后再运行 preflight。
 
 隔离 Admin 必须使用项目实际读取的环境变量启动：
 
@@ -228,4 +228,4 @@ API typecheck/build/file-size、Admin typecheck/file-size/production build 和 `
 
 全量 `bun test` 的已知基线为 2095 pass、68 fail、2 errors，失败来自仓库既有 Bun 全局 `mock.module` 跨测试污染；本功能以隔离 focused suite、API typecheck/build 和 Admin check/build 作为验收门禁。该问题不影响本次 mock E2E 结果，但应作为独立测试基础设施任务处理。
 
-下一步属于 Task 10，必须再次取得明确授权后才可执行：对指定申请运行只读 preflight、提交真实微信进件、同步官方状态，并在完成后执行真实小额支付 smoke。本记录没有执行 Task 10。
+Task 10 的只读 preflight 已完成。剩余步骤必须再次取得明确授权后才可执行：保存并验证中央服务商配置、提交真实微信进件、同步官方状态，并在完成后执行真实小额支付 smoke。本记录没有创建微信进件申请或支付订单。
