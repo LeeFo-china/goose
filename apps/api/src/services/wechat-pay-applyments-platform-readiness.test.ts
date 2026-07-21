@@ -158,7 +158,11 @@ function platformAuth(permissions: AuthContext["permissions"] = []): AuthContext
     avatar: null,
     roleCodes: ["platform_admin"],
     roles: [],
-    permissions,
+    permissions: [
+      { code: "platform.wechat_pay.applyment.read", scope: "all" },
+      { code: "platform.wechat_pay.applyment.review", scope: "all" },
+      ...permissions,
+    ],
   };
 }
 
@@ -192,6 +196,28 @@ describe("WechatPayApplymentPlatformActions readiness", () => {
     submitOfficialApplyment.mockClear();
     runPreflight.mockClear();
     runPreflight.mockImplementation(async () => ({ ready: true, blockers: [] }));
+  });
+
+  test("requires each declared platform permission before repository access", async () => {
+    const actions = await createActions();
+    const auth = { ...platformAuth(), permissions: [] };
+    const operations = [
+      () => actions.listForPlatform(auth, { page: 1, pageSize: 20 }),
+      () => actions.getPlatformDetail(auth, applymentId),
+      () => actions.approve(auth, applymentId, {}),
+      () => actions.reject(auth, applymentId, { reason: "资料不完整" }),
+      () => actions.markApplying(auth, applymentId, {}),
+      () => actions.activateConfig(auth, applymentId),
+    ];
+
+    for (const operation of operations) {
+      await expect(operation()).rejects.toMatchObject({
+        statusCode: 403,
+        code: "FORBIDDEN",
+      });
+    }
+    expect(findById).not.toHaveBeenCalled();
+    expect(updateApplyment).not.toHaveBeenCalled();
   });
 
   test("hides approval when application preflight is incomplete", async () => {

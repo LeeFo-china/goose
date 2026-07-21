@@ -390,7 +390,10 @@ describe("WechatPayApplymentService", () => {
   });
   test("platform approves rejects and lists with pagination", async () => {
     const service = await createService();
-    const platformAuth = platformAdminAuth();
+    const platformAuth = platformAdminAuth([
+      { code: "platform.wechat_pay.applyment.read", scope: "all" },
+      { code: "platform.wechat_pay.applyment.review", scope: "all" },
+    ]);
 
     const list = await service.listForPlatform(platformAuth, {
       page: 1,

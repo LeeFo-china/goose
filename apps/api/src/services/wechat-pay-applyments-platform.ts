@@ -32,6 +32,10 @@ import type {
   WechatPayApplymentPreflightPort,
 } from "@/services/wechat-pay-applyments-types";
 import {
+  PLATFORM_ACTIVATE_PERMISSION,
+  PLATFORM_MANAGE_PERMISSION,
+  PLATFORM_READ_PERMISSION,
+  PLATFORM_REVIEW_PERMISSION,
   PLATFORM_REPAIR_PERMISSION,
   PLATFORM_SUBMIT_PERMISSION,
 } from "@/services/wechat-pay-applyments-types";
@@ -75,7 +79,7 @@ export class WechatPayApplymentPlatformActions {
     authContext: AuthContext,
     query: PlatformWechatPayApplymentListQuery,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_READ_PERMISSION);
     return this.repository.listApplyments({ query });
   }
 
@@ -83,7 +87,7 @@ export class WechatPayApplymentPlatformActions {
     authContext: AuthContext,
     id: string,
   ): Promise<ApplymentDetailResult> {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_READ_PERMISSION);
     const applyment = await this.getRequiredApplyment({ id });
     return this.toPlatformDetail(authContext, applyment);
   }
@@ -93,7 +97,7 @@ export class WechatPayApplymentPlatformActions {
     id: string,
     input: ApproveWechatPayApplymentInput,
   ): Promise<ApplymentDetailResult> {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_REVIEW_PERMISSION);
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(current, ["submitted"], "当前申请不是待审核状态");
@@ -136,7 +140,7 @@ export class WechatPayApplymentPlatformActions {
     id: string,
     input: RejectWechatPayApplymentInput,
   ): Promise<ApplymentDetailResult> {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_REVIEW_PERMISSION);
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(
@@ -173,7 +177,7 @@ export class WechatPayApplymentPlatformActions {
     id: string,
     input: MarkWechatPayApplymentApplyingInput,
   ): Promise<ApplymentDetailResult> {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_MANAGE_PERMISSION);
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(current, ["approved"], "当前申请未审核通过");
@@ -269,7 +273,7 @@ export class WechatPayApplymentPlatformActions {
     authContext: AuthContext,
     id: string,
   ): Promise<ApplymentDetailResult> {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_ACTIVATE_PERMISSION);
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id });
     this.assertActivatable(current);
@@ -353,10 +357,6 @@ export class WechatPayApplymentPlatformActions {
       );
     }
     return applyment;
-  }
-
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) throw Errors.forbidden();
   }
 
   private assertPlatformPermission(

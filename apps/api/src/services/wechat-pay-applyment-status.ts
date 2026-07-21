@@ -30,7 +30,10 @@ import type {
   WechatPayApplymentStatusRepositoryPort,
 } from "@/services/wechat-pay-applyments-types";
 import {
+  PLATFORM_ACTIVATE_PERMISSION,
+  PLATFORM_MANAGE_PERMISSION,
   PLATFORM_REPAIR_PERMISSION,
+  PLATFORM_REVIEW_PERMISSION,
   PLATFORM_SUBMIT_PERMISSION,
   PLATFORM_SYNC_PERMISSION,
 } from "@/services/wechat-pay-applyments-types";
@@ -197,10 +200,16 @@ export function getWechatPayApplymentAvailableActions(input: {
 }): WechatPayApplymentAvailableAction[] {
   if (!input.authContext.isPlatformAdmin) return [];
   const actions: WechatPayApplymentAvailableAction[] = [];
-  if (input.applyment.status === "submitted") {
+  if (
+    input.applyment.status === "submitted" &&
+    hasPermission(input, PLATFORM_REVIEW_PERMISSION)
+  ) {
     actions.push(action("approve", "审核通过"), action("reject", "驳回"));
   }
-  if (input.applyment.status === "approved") {
+  if (
+    input.applyment.status === "approved" &&
+    hasPermission(input, PLATFORM_REVIEW_PERMISSION)
+  ) {
     actions.push(action("reject", "驳回"));
   }
   if (
@@ -216,7 +225,8 @@ export function getWechatPayApplymentAvailableActions(input: {
     SIGN_URL_ACTION_STATES.has(
       input.applyment.wechat_applyment_state_raw ?? "",
     ) &&
-    hasText(input.applyment.sign_url)
+    hasText(input.applyment.sign_url) &&
+    hasPermission(input, PLATFORM_MANAGE_PERMISSION)
   ) {
     actions.push({
       ...action("open_sign_url", "打开签约链接"),
@@ -227,7 +237,8 @@ export function getWechatPayApplymentAvailableActions(input: {
     input.applyment.wechat_applyment_state_raw === "APPLYMENT_STATE_FINISHED" &&
     hasText(input.applyment.sub_mchid) &&
     !input.applyment.sub_appid &&
-    WECHAT_PAY_APPLYMENT_ACTIVATABLE_STATUSES.has(input.applyment.status)
+    WECHAT_PAY_APPLYMENT_ACTIVATABLE_STATUSES.has(input.applyment.status) &&
+    hasPermission(input, PLATFORM_ACTIVATE_PERMISSION)
   ) actions.push(action("activate_payment_config", "激活租户收款"));
   if (
     WECHAT_PAY_APPLYMENT_REPAIRABLE_STATUSES.has(input.applyment.status) &&

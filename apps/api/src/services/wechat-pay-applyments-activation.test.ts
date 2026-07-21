@@ -210,7 +210,10 @@ function platformAdminAuth(): AuthContext {
     avatar: null,
     roleCodes: ["platform_admin"],
     roles: [],
-    permissions: [],
+    permissions: [{
+      code: "platform.wechat_pay.config.activate",
+      scope: "all",
+    }],
   };
 }
 
@@ -253,7 +256,14 @@ async function createService() {
     },
     accessPolicyService: {
       assertTenantContext: mock(() => tenantId),
-      hasPermission: mock(() => false),
+      hasPermission: mock((
+        authContext: AuthContext,
+        permissionCode: string,
+      ) =>
+        authContext.permissions.some((permission) =>
+          permission.code === permissionCode
+        )
+      ),
     },
     nowFactory: () => "2026-07-01T12:00:00.000Z",
   });

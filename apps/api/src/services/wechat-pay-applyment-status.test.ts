@@ -128,8 +128,12 @@ const queryByBusinessCode = mock(
   async (): Promise<WechatPayApplymentQueryResult> => queryResult(),
 );
 
-function platformAuth(permission = "platform.wechat_pay.applyment.sync"):
-  AuthContext {
+function platformAuth(
+  ...permissions: string[]
+): AuthContext {
+  const permissionCodes = permissions.length > 0
+    ? permissions.filter(Boolean)
+    : ["platform.wechat_pay.applyment.sync"];
   return {
     authUserId: "auth-1",
     employeeId,
@@ -149,7 +153,7 @@ function platformAuth(permission = "platform.wechat_pay.applyment.sync"):
     avatar: null,
     roleCodes: ["platform_admin"],
     roles: [],
-    permissions: permission ? [{ code: permission, scope: "all" }] : [],
+    permissions: permissionCodes.map((code) => ({ code, scope: "all" })),
   };
 }
 
@@ -238,6 +242,46 @@ describe("mapWechatApplymentState", () => {
       applyment: applyment({ status: "submitted" }),
       accessPolicyService,
     }).map((action) => action.key)).not.toContain("repair_wechat_state");
+  });
+
+  test("exposes review and activation actions only to their dedicated permissions", async () => {
+    const { getWechatPayApplymentAvailableActions } = await import(
+      "./wechat-pay-applyment-status"
+    );
+    const accessPolicyService = {
+      hasPermission: (authContext: AuthContext, permission: string) =>
+        authContext.permissions.some((item) => item.code === permission),
+    };
+
+    expect(getWechatPayApplymentAvailableActions({
+      authContext: platformAuth(""),
+      applyment: applyment({ status: "submitted" }),
+      accessPolicyService,
+    }).map((action) => action.key)).toEqual([]);
+    expect(getWechatPayApplymentAvailableActions({
+      authContext: platformAuth("platform.wechat_pay.applyment.review"),
+      applyment: applyment({ status: "submitted" }),
+      accessPolicyService,
+    }).map((action) => action.key)).toEqual(["approve", "reject"]);
+
+    const openedApplyment = applyment({
+      status: "opened",
+      applyment_state: "opened",
+      wechat_applyment_state_raw: "APPLYMENT_STATE_FINISHED",
+      sub_mchid: "1900000109",
+      sub_appid: null,
+      appid_binding_state: "bound",
+    });
+    expect(getWechatPayApplymentAvailableActions({
+      authContext: platformAuth(""),
+      applyment: openedApplyment,
+      accessPolicyService,
+    }).map((action) => action.key)).not.toContain("activate_payment_config");
+    expect(getWechatPayApplymentAvailableActions({
+      authContext: platformAuth("platform.wechat_pay.config.activate"),
+      applyment: openedApplyment,
+      accessPolicyService,
+    }).map((action) => action.key)).toContain("activate_payment_config");
   });
 
   test.each(["active", "suspended", "closed"])(
@@ -333,7 +377,10 @@ describe("WechatPayApplymentStatusService", () => {
       }],
     }));
     const service = await createService();
-    const result = await service.syncWechatStatus(platformAuth(), applymentId);
+    const result = await service.syncWechatStatus(platformAuth(
+      "platform.wechat_pay.applyment.sync",
+      "platform.wechat_pay.applyment.manage",
+    ), applymentId);
 
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,

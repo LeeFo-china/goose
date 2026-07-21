@@ -170,8 +170,15 @@ export type WechatPayApplymentStatusPort = {
 
 export const TENANT_READ_PERMISSION = "wechat_pay.applyment.read";
 export const TENANT_SUBMIT_PERMISSION = "wechat_pay.applyment.submit";
+export const PLATFORM_READ_PERMISSION = "platform.wechat_pay.applyment.read";
+export const PLATFORM_REVIEW_PERMISSION =
+  "platform.wechat_pay.applyment.review";
+export const PLATFORM_MANAGE_PERMISSION =
+  "platform.wechat_pay.applyment.manage";
 export const PLATFORM_SUBMIT_PERMISSION =
   "platform.wechat_pay.applyment.submit";
 export const PLATFORM_SYNC_PERMISSION = "platform.wechat_pay.applyment.sync";
 export const PLATFORM_REPAIR_PERMISSION =
   "platform.wechat_pay.applyment.repair";
+export const PLATFORM_ACTIVATE_PERMISSION =
+  "platform.wechat_pay.config.activate";

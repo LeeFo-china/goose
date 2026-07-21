@@ -188,8 +188,12 @@ function platformAuth(): AuthContext {
     avatar: null,
     roleCodes: ["platform_admin"],
     roles: [],
-    permissions: [{ code: "platform.wechat_pay.applyment.submit", scope: "all" },
-      { code: "platform.wechat_pay.applyment.sync", scope: "all" }],
+    permissions: [
+      { code: "platform.wechat_pay.applyment.submit", scope: "all" },
+      { code: "platform.wechat_pay.applyment.sync", scope: "all" },
+      { code: "platform.wechat_pay.applyment.manage", scope: "all" },
+      { code: "platform.wechat_pay.config.activate", scope: "all" },
+    ],
   };
 }
 
