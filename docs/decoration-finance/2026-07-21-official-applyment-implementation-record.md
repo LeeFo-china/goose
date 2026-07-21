@@ -124,10 +124,14 @@ approved
 - 平台 readiness 桌面端：`/tmp/gooes-platform-readiness-desktop-viewport.png`
 - 平台 readiness 桌面操作栏：`/tmp/gooes-platform-readiness-desktop-action-rail.png`
 - 平台 readiness 移动操作栏：`/tmp/gooes-platform-readiness-mobile-action-rail.png`
+- 平台服务商配置未建档桌面端：`/tmp/gooes-platform-payment-settings-service-provider-selected.png`
+- 平台服务商配置未建档移动端：`/tmp/gooes-platform-payment-settings-service-provider-mobile.png`
 
 平台列表筛选已统一使用 shadcn `Select`、`Input` 和 `Button`，支持状态、关键词和重置。平台详情按“平台审核、微信审核、账户验证、商户签约、开通完成、激活收款”展示六阶段进度，安全审核投影按主体证照、法人和超级管理员、经营结算及平台关联分组展示。操作栏使用后端 `submission_readiness` 展示中文待处理项；平台配置阻塞时提供 `/settings?group=payment` 入口。桌面端操作栏随详情工作区滚动保持可见；移动端按“进度、当前操作、审核资料”排序。
 
 支付配置页的证书和公钥上传已收敛为 shadcn 按钮触发，展示中文未选择状态和当前文件名；底层文件字段保持不可见且可参与 `FormData`，表单重置后同步清空文件名。已修复 shadcn `Input` 的 `w-full` 与视觉隐藏样式冲突导致的页面横向溢出，桌面和窄屏文档宽度均不再超过视口。
+
+远端没有 `tenant_service_provider` 记录时，支付配置页仍正常显示“服务商商户 / 未建档”状态，并提供服务商商户号、服务商应用编号、默认子商户信息、回调地址、商户接口私钥、APIv3 密钥、微信支付公钥编号和公钥文件的完整新建表单。平台超管只读打开桌面端和 390px 窄屏页面均无 console error、4xx/5xx 或横向溢出；“保存商户资料”可见，“验证支付配置”在建档前按 readiness 正确禁用。本轮没有选择文件、保存配置或调用验证接口。
 
 已核对租户资料、官方状态、附件、审计时间线和后端 `available_actions`；Admin 不本地推导进件动作。页面验收覆盖 1440×1000 和 390×844，无页面级或详情工作区横向溢出、console error 或 4xx/5xx 响应。真实旧申请 `8026f87b-e6de-4bb1-80c6-6aa7066f1759` 的只读详情返回 `review_ready=false`，隐藏生命周期状态后展示 10 个安全待处理项；页面没有“审核通过”按钮，仅保留“驳回租户修改”和“前往支付配置”。验收只执行登录与 GET 请求，未执行审核、驳回、提交微信、同步微信状态、受控修复或激活配置。
 
