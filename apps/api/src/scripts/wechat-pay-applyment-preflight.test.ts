@@ -87,8 +87,8 @@ function applyment(
     settlement_bank_branch_id: "104515080123",
     settlement_account_number_masked: "62**********1234",
     settlement_account_summary: "中国银行 尾号 1234",
-    settlement_id: "719",
-    qualification_type: "生活服务/家装服务",
+    settlement_id: "716",
+    qualification_type: "零售批发/生活娱乐/网上商城/其他",
     business_scene_description: "装修项目收款",
     contact_address: "河南省信阳市固始县",
     attachments: [
@@ -170,6 +170,30 @@ describe("wechat pay applyment preflight", () => {
     expect(findById).toHaveBeenCalledTimes(1);
     expect(findSensitivePayloadById).toHaveBeenCalledTimes(1);
     expect(loadRuntimeProfile).toHaveBeenCalledTimes(1);
+  });
+
+  test("blocks a settlement rule that does not match the subject and industry", async () => {
+    const { runWechatPayApplymentPreflight } = await loadSubject();
+    const report = await runWechatPayApplymentPreflight(applymentId, {
+      repository: {
+        findById: async () => applyment({
+          settlement_id: "719",
+          qualification_type: "生活服务/家装服务",
+        }),
+        findSensitivePayloadById: async () => sensitiveRecord(),
+      },
+      loadRuntimeProfile: async () => ({ ready: true }),
+      encryptionRootSecretFactory: () => rootSecret,
+      nowFactory: () => now,
+    });
+
+    expect(report).toEqual({
+      ready: false,
+      blockers: [{
+        code: "APPLYMENT_SETTLEMENT_RULE_INVALID",
+        field: "settlement_id",
+      }],
+    });
   });
 
   test("returns only safe blocker codes and attachment categories", async () => {

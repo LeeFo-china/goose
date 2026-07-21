@@ -1,3 +1,7 @@
+import {
+  findWechatPaySettlementRule,
+  type WechatPayApplymentSubjectType,
+} from "@gooes/domain";
 import { AppError } from "@/errors/app-error";
 import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
@@ -76,6 +80,7 @@ export async function runWechatPayApplymentPreflight(
 
   collectSubmissionStatusBlockers(applyment, now, blockers.add);
   collectRequiredFieldBlockers(applyment, blockers.add);
+  collectSettlementRuleBlocker(applyment, blockers.add);
   collectAttachmentBlockers(applyment, blockers.add);
   await collectSensitivePayloadBlockers({
     applyment,
@@ -140,6 +145,39 @@ function collectRequiredFieldBlockers(
       ...(SAFE_FIELD_PATTERN.test(missing) ? { field: missing } : {}),
     });
   }
+}
+
+function collectSettlementRuleBlocker(
+  applyment: WechatPayApplymentRecord,
+  add: (blocker: WechatPayApplymentPreflightBlocker) => void,
+) {
+  if (
+    !applyment.subject_type ||
+    !applyment.settlement_id ||
+    !applyment.qualification_type
+  ) {
+    return;
+  }
+  if (
+    !isSupportedSubjectType(applyment.subject_type) ||
+    !findWechatPaySettlementRule(
+      applyment.subject_type,
+      applyment.settlement_id,
+      applyment.qualification_type,
+    )
+  ) {
+    add({
+      code: "APPLYMENT_SETTLEMENT_RULE_INVALID",
+      field: "settlement_id",
+    });
+  }
+}
+
+function isSupportedSubjectType(
+  value: string,
+): value is WechatPayApplymentSubjectType {
+  return value === "SUBJECT_TYPE_ENTERPRISE" ||
+    value === "SUBJECT_TYPE_INDIVIDUAL";
 }
 
 function collectAttachmentBlockers(
