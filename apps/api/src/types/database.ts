@@ -7404,6 +7404,69 @@ export type Database = {
           },
         ]
       }
+      tenant_wechat_pay_applyment_media: {
+        Row: {
+          applyment_id: string
+          category: string
+          created_at: string
+          id: string
+          media_id: string
+          mime_type: string
+          object_key: string
+          request_id: string | null
+          sha256: string
+          size_bytes: number
+          tenant_id: string
+          updated_at: string
+          uploaded_at: string
+        }
+        Insert: {
+          applyment_id: string
+          category: string
+          created_at?: string
+          id?: string
+          media_id: string
+          mime_type: string
+          object_key: string
+          request_id?: string | null
+          sha256: string
+          size_bytes: number
+          tenant_id: string
+          updated_at?: string
+          uploaded_at?: string
+        }
+        Update: {
+          applyment_id?: string
+          category?: string
+          created_at?: string
+          id?: string
+          media_id?: string
+          mime_type?: string
+          object_key?: string
+          request_id?: string | null
+          sha256?: string
+          size_bytes?: number
+          tenant_id?: string
+          updated_at?: string
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_media_applyment_id_fkey"
+            columns: ["applyment_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_wechat_pay_applyments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_media_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_wechat_pay_applyments: {
         Row: {
           activated_at: string | null
@@ -7416,21 +7479,41 @@ export type Database = {
           applyment_state_message: string | null
           approved_at: string | null
           attachments: Json
+          audit_detail: Json
           business_scene_description: string | null
           contact_address: string | null
+          contact_identity_doc_type: string | null
+          contact_identity_period_begin: string | null
+          contact_identity_period_end: string | null
+          contact_type: string | null
           created_at: string
           created_by_employee_id: string | null
+          has_sensitive_payload: boolean
           id: string
+          identity_address_masked: string | null
+          identity_doc_type: string | null
+          identity_period_begin: string | null
+          identity_period_end: string | null
+          last_wechat_request_id: string | null
+          last_wechat_synced_at: string | null
           legal_representative_name: string | null
+          license_address: string | null
           license_code: string | null
           license_name: string | null
+          license_period_begin: string | null
+          license_period_end: string | null
           merchant_short_name: string
           opened_at: string | null
           payment_config_id: string | null
+          qualification_type: string | null
           rejected_at: string | null
           rejected_reason: string | null
           remark: string | null
           reviewed_by_employee_id: string | null
+          sensitive_payload_ciphertext: string | null
+          sensitive_payload_updated_at: string | null
+          sensitive_payload_version: number | null
+          service_phone: string | null
           settlement_account_number_masked: string | null
           settlement_account_name: string | null
           settlement_account_summary: string | null
@@ -7438,9 +7521,14 @@ export type Database = {
           settlement_bank_branch_id: string | null
           settlement_bank_full_name: string | null
           settlement_bank_name: string | null
+          settlement_id: string | null
+          sign_url: string | null
           status: string
           sub_appid: string | null
           sub_mchid: string | null
+          subject_type: string | null
+          submission_attempt_count: number
+          submission_claimed_at: string | null
           submitted_at: string | null
           super_admin_email: string | null
           super_admin_name: string | null
@@ -7448,6 +7536,7 @@ export type Database = {
           tenant_id: string
           updated_at: string
           updated_by_employee_id: string | null
+          wechat_applyment_state_raw: string | null
         }
         Insert: {
           activated_at?: string | null
@@ -7460,21 +7549,41 @@ export type Database = {
           applyment_state_message?: string | null
           approved_at?: string | null
           attachments?: Json
+          audit_detail?: Json
           business_scene_description?: string | null
           contact_address?: string | null
+          contact_identity_doc_type?: string | null
+          contact_identity_period_begin?: string | null
+          contact_identity_period_end?: string | null
+          contact_type?: string | null
           created_at?: string
           created_by_employee_id?: string | null
+          has_sensitive_payload?: boolean
           id?: string
+          identity_address_masked?: string | null
+          identity_doc_type?: string | null
+          identity_period_begin?: string | null
+          identity_period_end?: string | null
+          last_wechat_request_id?: string | null
+          last_wechat_synced_at?: string | null
           legal_representative_name?: string | null
+          license_address?: string | null
           license_code?: string | null
           license_name?: string | null
+          license_period_begin?: string | null
+          license_period_end?: string | null
           merchant_short_name: string
           opened_at?: string | null
           payment_config_id?: string | null
+          qualification_type?: string | null
           rejected_at?: string | null
           rejected_reason?: string | null
           remark?: string | null
           reviewed_by_employee_id?: string | null
+          sensitive_payload_ciphertext?: string | null
+          sensitive_payload_updated_at?: string | null
+          sensitive_payload_version?: number | null
+          service_phone?: string | null
           settlement_account_number_masked?: string | null
           settlement_account_name?: string | null
           settlement_account_summary?: string | null
@@ -7482,9 +7591,14 @@ export type Database = {
           settlement_bank_branch_id?: string | null
           settlement_bank_full_name?: string | null
           settlement_bank_name?: string | null
+          settlement_id?: string | null
+          sign_url?: string | null
           status?: string
           sub_appid?: string | null
           sub_mchid?: string | null
+          subject_type?: string | null
+          submission_attempt_count?: number
+          submission_claimed_at?: string | null
           submitted_at?: string | null
           super_admin_email?: string | null
           super_admin_name?: string | null
@@ -7492,6 +7606,7 @@ export type Database = {
           tenant_id: string
           updated_at?: string
           updated_by_employee_id?: string | null
+          wechat_applyment_state_raw?: string | null
         }
         Update: {
           activated_at?: string | null
@@ -7504,21 +7619,41 @@ export type Database = {
           applyment_state_message?: string | null
           approved_at?: string | null
           attachments?: Json
+          audit_detail?: Json
           business_scene_description?: string | null
           contact_address?: string | null
+          contact_identity_doc_type?: string | null
+          contact_identity_period_begin?: string | null
+          contact_identity_period_end?: string | null
+          contact_type?: string | null
           created_at?: string
           created_by_employee_id?: string | null
+          has_sensitive_payload?: boolean
           id?: string
+          identity_address_masked?: string | null
+          identity_doc_type?: string | null
+          identity_period_begin?: string | null
+          identity_period_end?: string | null
+          last_wechat_request_id?: string | null
+          last_wechat_synced_at?: string | null
           legal_representative_name?: string | null
+          license_address?: string | null
           license_code?: string | null
           license_name?: string | null
+          license_period_begin?: string | null
+          license_period_end?: string | null
           merchant_short_name?: string
           opened_at?: string | null
           payment_config_id?: string | null
+          qualification_type?: string | null
           rejected_at?: string | null
           rejected_reason?: string | null
           remark?: string | null
           reviewed_by_employee_id?: string | null
+          sensitive_payload_ciphertext?: string | null
+          sensitive_payload_updated_at?: string | null
+          sensitive_payload_version?: number | null
+          service_phone?: string | null
           settlement_account_number_masked?: string | null
           settlement_account_name?: string | null
           settlement_account_summary?: string | null
@@ -7526,9 +7661,14 @@ export type Database = {
           settlement_bank_branch_id?: string | null
           settlement_bank_full_name?: string | null
           settlement_bank_name?: string | null
+          settlement_id?: string | null
+          sign_url?: string | null
           status?: string
           sub_appid?: string | null
           sub_mchid?: string | null
+          subject_type?: string | null
+          submission_attempt_count?: number
+          submission_claimed_at?: string | null
           submitted_at?: string | null
           super_admin_email?: string | null
           super_admin_name?: string | null
@@ -7536,6 +7676,7 @@ export type Database = {
           tenant_id?: string
           updated_at?: string
           updated_by_employee_id?: string | null
+          wechat_applyment_state_raw?: string | null
         }
         Relationships: [
           {
@@ -9926,6 +10067,85 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "tenant_onboarding_notification_deliveries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_wechat_pay_applyment_submission: {
+        Args: { p_applyment_id: string; p_employee_id: string }
+        Returns: {
+          activated_at: string | null
+          appid_binding_message: string | null
+          appid_binding_state: string
+          application_no: string
+          applyment_business_code: string | null
+          applyment_id: string | null
+          applyment_state: string
+          applyment_state_message: string | null
+          approved_at: string | null
+          attachments: Json
+          audit_detail: Json
+          business_scene_description: string | null
+          contact_address: string | null
+          contact_identity_doc_type: string | null
+          contact_identity_period_begin: string | null
+          contact_identity_period_end: string | null
+          contact_type: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          has_sensitive_payload: boolean
+          id: string
+          identity_address_masked: string | null
+          identity_doc_type: string | null
+          identity_period_begin: string | null
+          identity_period_end: string | null
+          last_wechat_request_id: string | null
+          last_wechat_synced_at: string | null
+          legal_representative_name: string | null
+          license_address: string | null
+          license_code: string | null
+          license_name: string | null
+          license_period_begin: string | null
+          license_period_end: string | null
+          merchant_short_name: string
+          opened_at: string | null
+          payment_config_id: string | null
+          qualification_type: string | null
+          rejected_at: string | null
+          rejected_reason: string | null
+          remark: string | null
+          reviewed_by_employee_id: string | null
+          sensitive_payload_ciphertext: string | null
+          sensitive_payload_updated_at: string | null
+          sensitive_payload_version: number | null
+          service_phone: string | null
+          settlement_account_number_masked: string | null
+          settlement_account_name: string | null
+          settlement_account_summary: string | null
+          settlement_account_type: string | null
+          settlement_bank_branch_id: string | null
+          settlement_bank_full_name: string | null
+          settlement_bank_name: string | null
+          settlement_id: string | null
+          sign_url: string | null
+          status: string
+          sub_appid: string | null
+          sub_mchid: string | null
+          subject_type: string | null
+          submission_attempt_count: number
+          submission_claimed_at: string | null
+          submitted_at: string | null
+          super_admin_email: string | null
+          super_admin_name: string | null
+          super_admin_phone_masked: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          wechat_applyment_state_raw: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_wechat_pay_applyments"
           isOneToOne: false
           isSetofReturn: true
         }

@@ -95,6 +95,9 @@ describe("domain permissions", () => {
     expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.read");
     expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.review");
     expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.manage");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.submit");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.sync");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.applyment.repair");
     expect(PERMISSION_CODE_VALUES).toContain("platform.wechat_pay.config.activate");
     expect(PermissionCodeConfig["wechat_pay.config.read"]).toEqual({
       label: "查看微信支付配置",
@@ -115,6 +118,10 @@ describe("domain permissions", () => {
     expect(PermissionCodeConfig["wechat_pay.applyment.submit"]).toEqual({
       label: "提交微信支付开通申请",
       module: "wechat_pay",
+    });
+    expect(PermissionCodeConfig["platform.wechat_pay.applyment.submit"]).toEqual({
+      label: "平台提交微信支付正式进件",
+      module: "platform_wechat_pay",
     });
     expect(PermissionCodeConfig["platform.wechat_pay.config.activate"]).toEqual({
       label: "激活租户微信支付配置",

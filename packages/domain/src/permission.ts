@@ -91,6 +91,9 @@ export const PERMISSION_CODE_VALUES = [
   'platform.wechat_pay.applyment.read',
   'platform.wechat_pay.applyment.review',
   'platform.wechat_pay.applyment.manage',
+  'platform.wechat_pay.applyment.submit',
+  'platform.wechat_pay.applyment.sync',
+  'platform.wechat_pay.applyment.repair',
   'platform.wechat_pay.config.activate',
   'platform.payment.config.read',
   'platform.payment.config.manage',
@@ -351,6 +354,18 @@ export const PermissionCodeConfig: Record<
   },
   'platform.wechat_pay.applyment.manage': {
     label: '平台管理微信支付进件进度',
+    module: 'platform_wechat_pay',
+  },
+  'platform.wechat_pay.applyment.submit': {
+    label: '平台提交微信支付正式进件',
+    module: 'platform_wechat_pay',
+  },
+  'platform.wechat_pay.applyment.sync': {
+    label: '平台同步微信支付进件状态',
+    module: 'platform_wechat_pay',
+  },
+  'platform.wechat_pay.applyment.repair': {
+    label: '平台修复微信支付进件状态',
     module: 'platform_wechat_pay',
   },
   'platform.wechat_pay.config.activate': {
