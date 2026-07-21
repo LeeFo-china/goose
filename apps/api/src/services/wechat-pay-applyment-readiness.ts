@@ -11,7 +11,22 @@ const BASE_ATTACHMENT_CATEGORIES = [
 export function assertApplymentSubmitReady(
   applyment: WechatPayApplymentRecord,
 ): void {
-  const missing = [
+  const missing = getApplymentSubmitReadinessMissingFields(applyment);
+
+  if (missing.length > 0) {
+    throw Errors.business(
+      400,
+      "微信支付开通申请资料不完整",
+      "WECHAT_PAY_APPLYMENT_REQUIRED_FIELDS_MISSING",
+      { missing },
+    );
+  }
+}
+
+export function getApplymentSubmitReadinessMissingFields(
+  applyment: WechatPayApplymentRecord,
+): string[] {
+  const requiredFields: Array<readonly [string, unknown]> = [
     ["subject_type", applyment.subject_type],
     ["merchant_short_name", applyment.merchant_short_name],
     ["license_name", applyment.license_name],
@@ -37,7 +52,8 @@ export function assertApplymentSubmitReady(
     ["qualification_type", applyment.qualification_type],
     ["business_scene_description", applyment.business_scene_description],
     ["contact_address", applyment.contact_address],
-  ]
+  ];
+  const missing = requiredFields
     .filter(([, value]) => !String(value ?? "").trim())
     .map(([field]) => field);
 
@@ -71,14 +87,7 @@ export function assertApplymentSubmitReady(
     if (!categories.has(category)) missing.push(`attachments.${category}`);
   }
 
-  if (missing.length > 0) {
-    throw Errors.business(
-      400,
-      "微信支付开通申请资料不完整",
-      "WECHAT_PAY_APPLYMENT_REQUIRED_FIELDS_MISSING",
-      { missing },
-    );
-  }
+  return missing;
 }
 
 function collectAttachmentCategories(attachments: unknown): Set<string> {
