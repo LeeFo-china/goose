@@ -35,7 +35,15 @@ export type WechatPayApplymentRepositoryPort = {
   updateApplyment: (input: {
     id: string;
     tenantId?: string;
+    expectedStatus?: string;
+    expectedUpdatedAt?: string;
     patch: WechatPayApplymentUpdate;
+  }) => Promise<WechatPayApplymentRecord>;
+  activateConfigAtomically: (input: {
+    applymentId: string;
+    expectedUpdatedAt: string;
+    employeeId: string;
+    platformPaymentConfigId: string;
   }) => Promise<WechatPayApplymentRecord>;
   insertEvent: (input: WechatPayApplymentEventInsert) => Promise<WechatPayApplymentEventRecord>;
   findEvents: (input: {

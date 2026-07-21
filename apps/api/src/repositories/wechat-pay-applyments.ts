@@ -1,4 +1,8 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  throwApplymentActivationError,
+  throwApplymentClaimError,
+} from "@/repositories/wechat-pay-applyment-rpc-errors";
 import type { Inserts, Tables, Updates } from "@/types/db";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
@@ -145,7 +149,7 @@ class WechatPayApplymentRepository {
       },
     );
 
-    if (error) throwClaimError(error);
+    if (error) throwApplymentClaimError(error);
     if (!data?.[0]) {
       throw Errors.dbError("认领微信支付正式进件任务失败");
     }
@@ -283,6 +287,8 @@ class WechatPayApplymentRepository {
   async updateApplyment(input: {
     id: string;
     tenantId?: string;
+    expectedStatus?: string;
+    expectedUpdatedAt?: string;
     patch: WechatPayApplymentUpdate;
   }): Promise<WechatPayApplymentRecord> {
     let request = SupabaseDB.getAdminClient()
@@ -293,16 +299,61 @@ class WechatPayApplymentRepository {
     if (input.tenantId) {
       request = request.eq("tenant_id", input.tenantId);
     }
+    if (input.expectedStatus) {
+      request = request.eq("status", input.expectedStatus);
+    }
+    if (input.expectedUpdatedAt) {
+      request = request.eq("updated_at", input.expectedUpdatedAt);
+    }
 
     const { data, error } = await request
       .select(APPLYMENT_SELECT)
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw Errors.dbError("更新微信支付开通申请失败", error);
     }
+    if (!data) {
+      throw Errors.business(
+        409,
+        "微信支付开通申请状态已变化，请刷新后重试",
+        "WECHAT_PAY_APPLYMENT_STATE_CHANGED",
+        {
+          applyment_id: input.id,
+          expected_status: input.expectedStatus ?? null,
+        },
+      );
+    }
 
     return data as unknown as WechatPayApplymentRecord;
+  }
+
+  async activateConfigAtomically(input: {
+    applymentId: string;
+    expectedUpdatedAt: string;
+    employeeId: string;
+    platformPaymentConfigId: string;
+  }): Promise<WechatPayApplymentRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "activate_wechat_pay_applyment_config",
+      {
+        p_applyment_id: input.applymentId,
+        p_expected_updated_at: input.expectedUpdatedAt,
+        p_employee_id: input.employeeId,
+        p_platform_payment_config_id: input.platformPaymentConfigId,
+      },
+    );
+
+    if (error) throwApplymentActivationError(error);
+    if (!data) {
+      throw Errors.dbError("激活租户微信支付配置失败");
+    }
+
+    const activated = await this.findById({ id: input.applymentId });
+    if (!activated) {
+      throw Errors.dbError("激活后查询微信支付开通申请失败");
+    }
+    return activated;
   }
 
   async insertEvent(
@@ -385,39 +436,6 @@ class WechatPayApplymentRepository {
       },
     };
   }
-}
-
-function throwClaimError(error: { message?: string | null }): never {
-  const message = error.message ?? "";
-  if (message.includes("WECHAT_PAY_APPLYMENT_NOT_FOUND")) {
-    throw Errors.business(
-      404,
-      "微信支付开通申请不存在",
-      "WECHAT_PAY_APPLYMENT_NOT_FOUND",
-    );
-  }
-  if (message.includes("WECHAT_PAY_APPLYMENT_SUBMISSION_IN_PROGRESS")) {
-    throw Errors.business(
-      409,
-      "微信支付正式进件正在提交，请稍后重试",
-      "WECHAT_PAY_APPLYMENT_SUBMISSION_IN_PROGRESS",
-    );
-  }
-  if (message.includes("WECHAT_PAY_APPLYMENT_SUBMISSION_STATE_INVALID")) {
-    throw Errors.business(
-      409,
-      "当前申请状态不能提交微信支付正式进件",
-      "WECHAT_PAY_APPLYMENT_SUBMISSION_STATE_INVALID",
-    );
-  }
-  if (message.includes("WECHAT_PAY_APPLYMENT_SUBMISSION_CLAIM_INVALID")) {
-    throw Errors.business(
-      400,
-      "微信支付正式进件认领参数无效",
-      "WECHAT_PAY_APPLYMENT_SUBMISSION_CLAIM_INVALID",
-    );
-  }
-  throw Errors.dbError("认领微信支付正式进件任务失败", error);
 }
 
 export const wechatPayApplymentRepository = new WechatPayApplymentRepository();

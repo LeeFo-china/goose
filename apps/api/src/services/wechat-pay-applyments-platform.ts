@@ -12,7 +12,11 @@ import type {
 } from "@/schema/wechat-pay-applyments";
 import type { AuthContext } from "@/services/authorization";
 import { sanitizeApplymentRecord } from "@/services/wechat-pay-applyment-draft";
-import { getWechatPayApplymentAvailableActions } from "@/services/wechat-pay-applyment-status";
+import {
+  getWechatPayApplymentAvailableActions,
+  WECHAT_PAY_APPLYMENT_ACTIVATABLE_STATUSES,
+  WECHAT_PAY_APPLYMENT_REPAIRABLE_STATUSES,
+} from "@/services/wechat-pay-applyment-status";
 import type {
   AccessPolicyPort,
   ApplymentDetailResult,
@@ -72,6 +76,8 @@ export class WechatPayApplymentPlatformActions {
     this.assertStatus(current, ["submitted"], "当前申请不是待审核状态");
     const updated = await this.repository.updateApplyment({
       id,
+      expectedStatus: current.status,
+      expectedUpdatedAt: current.updated_at,
       patch: {
         status: "approved",
         approved_at: this.nowFactory(),
@@ -105,6 +111,8 @@ export class WechatPayApplymentPlatformActions {
     );
     const updated = await this.repository.updateApplyment({
       id,
+      expectedStatus: current.status,
+      expectedUpdatedAt: current.updated_at,
       patch: {
         status: "rejected",
         applyment_state: "rejected",
@@ -136,6 +144,8 @@ export class WechatPayApplymentPlatformActions {
     this.assertStatus(current, ["approved"], "当前申请未审核通过");
     const updated = await this.repository.updateApplyment({
       id,
+      expectedStatus: current.status,
+      expectedUpdatedAt: current.updated_at,
       patch: {
         status: "applying",
         applyment_business_code:
@@ -169,23 +179,15 @@ export class WechatPayApplymentPlatformActions {
     const current = await this.getRequiredApplyment({ id });
     this.assertStatus(
       current,
-      [
-        "approved",
-        "applying",
-        "reviewing",
-        "account_verifying",
-        "signing",
-        "opened",
-        "bound",
-        "active",
-        "suspended",
-      ],
+      [...WECHAT_PAY_APPLYMENT_REPAIRABLE_STATUSES],
       "当前申请不能回填微信进件状态",
     );
     const nextStatus = resolveMainStatus(current.status, input);
     const now = this.nowFactory();
     const updated = await this.repository.updateApplyment({
       id,
+      expectedStatus: current.status,
+      expectedUpdatedAt: current.updated_at,
       patch: {
         applyment_business_code: input.applyment_business_code ??
           current.applyment_business_code,
@@ -237,58 +239,11 @@ export class WechatPayApplymentPlatformActions {
     const current = await this.getRequiredApplyment({ id });
     this.assertActivatable(current);
     const platformConfig = await this.getReadyServiceProviderProfile();
-    const now = this.nowFactory();
-    const config = await this.configRepository.upsertWechatPayConfig({
-      tenant_id: current.tenant_id,
-      provider: "wechat_pay",
-      principal_type: "tenant",
-      merchant_mode: "service_provider_sub_merchant",
-      merchant_name: current.merchant_short_name,
-      merchant_id: platformConfig.merchant_id ?? "",
-      sub_merchant_id: current.sub_mchid,
-      app_id: platformConfig.app_id ?? "",
-      sub_app_id: null,
-      applyment_business_code: current.applyment_business_code,
-      applyment_id: current.applyment_id,
-      applyment_state: "opened",
-      applyment_state_message: current.applyment_state_message,
-      appid_binding_state: "bound",
-      appid_binding_message: current.appid_binding_message,
-      opened_at: current.opened_at ?? now,
-      status: "active",
-      enabled_channels: platformConfig.enabled_channels,
-      settlement_account_summary: current.settlement_account_summary,
-      encrypted_config_ref: platformConfig.encrypted_config_ref ?? "",
-      risk_switches: {},
-      serial_no: platformConfig.serial_no ?? "",
-      notify_url: platformConfig.notify_url ?? "",
-      validation_status: platformConfig.validation_status,
-      last_validated_at: platformConfig.last_validated_at,
-      platform_payment_config_id: platformConfig.id,
-      created_by_employee_id: employeeId,
-      updated_by_employee_id: employeeId,
-    });
-    const updated = await this.repository.updateApplyment({
-      id,
-      patch: {
-        status: "active",
-        payment_config_id: config.id,
-        activated_at: now,
-        sensitive_payload_ciphertext: null,
-        sensitive_payload_version: null,
-        sensitive_payload_updated_at: null,
-        has_sensitive_payload: false,
-        updated_by_employee_id: employeeId,
-      },
-    });
-    await this.recordEvent({
-      applyment: updated,
-      eventType: "config_activated",
-      fromStatus: current.status,
-      toStatus: "active",
-      message: "平台激活租户微信支付配置",
-      operatorEmployeeId: employeeId,
-      metadata: { payment_config_id: config.id },
+    const updated = await this.repository.activateConfigAtomically({
+      applymentId: id,
+      expectedUpdatedAt: current.updated_at,
+      employeeId,
+      platformPaymentConfigId: platformConfig.id,
     });
     return this.toPlatformDetail(authContext, updated);
   }
@@ -386,6 +341,7 @@ export class WechatPayApplymentPlatformActions {
     sub_mchid: string;
   } {
     if (
+      WECHAT_PAY_APPLYMENT_ACTIVATABLE_STATUSES.has(applyment.status) &&
       applyment.wechat_applyment_state_raw === "APPLYMENT_STATE_FINISHED" &&
       applyment.applyment_state === "opened" &&
       applyment.sub_mchid &&

@@ -138,6 +138,15 @@ const updateApplyment = mock(async (input: {
   patch: Partial<WechatPayApplymentRecord>;
 }) => ({ ...activatableApplyment, ...input.patch }));
 const insertEvent = mock(async () => eventRecord);
+const activateConfigAtomically = mock(async () => ({
+  ...activatableApplyment,
+  status: "active",
+  payment_config_id: paymentConfigId,
+  activated_at: "2026-07-01T12:00:00.000Z",
+  sensitive_payload_version: null,
+  sensitive_payload_updated_at: null,
+  has_sensitive_payload: false,
+} as WechatPayApplymentRecord));
 const findPlatformProfile = mock(
   async (): Promise<PlatformPaymentConfigRecord | null> => centralProfile,
 );
@@ -227,6 +236,7 @@ async function createService() {
       findSensitivePayloadById,
       createApplyment: mock(async () => activatableApplyment),
       updateApplyment,
+      activateConfigAtomically,
       insertEvent,
       findEvents,
       listApplyments: mock(async () => ({
@@ -255,6 +265,7 @@ describe("WechatPayApplymentService activation", () => {
     findEvents.mockClear();
     updateApplyment.mockClear();
     insertEvent.mockClear();
+    activateConfigAtomically.mockClear();
     findPlatformProfile.mockClear();
     upsertWechatPayConfig.mockClear();
     findById.mockImplementation(async () => activatableApplyment);
@@ -279,52 +290,26 @@ describe("WechatPayApplymentService activation", () => {
     expect(upsertWechatPayConfig).not.toHaveBeenCalled();
   });
 
-  test("activates tenant config from the validated central profile", async () => {
+  test("activates tenant config and applyment with one atomic repository call", async () => {
     const service = await createService();
 
     await service.activateConfig(platformAdminAuth(), applymentId, {});
 
     expect(findPlatformProfile).toHaveBeenCalledWith("tenant_service_provider");
-    expect(upsertWechatPayConfig).toHaveBeenCalledWith(expect.objectContaining({
-      tenant_id: tenantId,
-      provider: "wechat_pay",
-      principal_type: "tenant",
-      merchant_mode: "service_provider_sub_merchant",
-      merchant_name: "晴天装饰",
-      merchant_id: "service-provider-mchid",
-      sub_merchant_id: "sub-merchant-mchid",
-      app_id: "wx-service-provider-app",
-      sub_app_id: null,
-      encrypted_config_ref: centralProfile.encrypted_config_ref,
-      serial_no: "SERVICE-PROVIDER-SERIAL",
-      notify_url: "https://api.goodcms.cn/pay/wechat/callback",
-      validation_status: "valid",
-      last_validated_at: "2026-07-01T11:30:00.000Z",
-      platform_payment_config_id: platformConfigId,
-      settlement_account_summary: "中国银行 尾号 1234",
-      status: "active",
-      enabled_channels: centralProfile.enabled_channels,
-    }));
-    expect(upsertWechatPayConfig.mock.calls[0]?.[0]).not.toMatchObject({
-      sub_merchant_id: centralProfile.sub_merchant_id,
-      sub_app_id: activatableApplyment.sub_appid,
-      merchant_name: centralProfile.merchant_name,
+    expect(activateConfigAtomically).toHaveBeenCalledWith({
+      applymentId,
+      expectedUpdatedAt: activatableApplyment.updated_at,
+      employeeId,
+      platformPaymentConfigId: platformConfigId,
     });
-    expect(updateApplyment).toHaveBeenCalledWith({
-      id: applymentId,
-      patch: expect.objectContaining({
-        status: "active",
-        payment_config_id: paymentConfigId,
-        activated_at: "2026-07-01T12:00:00.000Z",
-        sensitive_payload_ciphertext: null,
-        sensitive_payload_version: null,
-        sensitive_payload_updated_at: null,
-        has_sensitive_payload: false,
-      }),
-    });
+    expect(upsertWechatPayConfig).not.toHaveBeenCalled();
+    expect(updateApplyment).not.toHaveBeenCalled();
+    expect(insertEvent).not.toHaveBeenCalled();
   });
 
   test.each([
+    ["suspended status", { status: "suspended" }],
+    ["closed status", { status: "closed" }],
     ["missing raw finished state", { wechat_applyment_state_raw: null }],
     ["wrong raw state", { wechat_applyment_state_raw: "APPLYMENT_STATE_AUDITING" }],
     ["missing sub mchid", { sub_mchid: null }],
@@ -340,6 +325,7 @@ describe("WechatPayApplymentService activation", () => {
       .rejects.toMatchObject({
         code: "WECHAT_PAY_APPLYMENT_NOT_ACTIVATABLE",
       });
+    expect(activateConfigAtomically).not.toHaveBeenCalled();
     expect(upsertWechatPayConfig).not.toHaveBeenCalled();
   });
 });

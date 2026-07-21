@@ -9946,6 +9946,15 @@ export type Database = {
       }
     }
     Functions: {
+      activate_wechat_pay_applyment_config: {
+        Args: {
+          p_applyment_id: string
+          p_employee_id: string
+          p_expected_updated_at: string
+          p_platform_payment_config_id: string
+        }
+        Returns: string
+      }
       approve_tenant_onboarding_application: {
         Args: {
           p_application_id: string

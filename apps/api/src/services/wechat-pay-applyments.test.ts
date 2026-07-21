@@ -250,6 +250,7 @@ async function createService() {
       findEvents,
       createApplyment,
       updateApplyment,
+      activateConfigAtomically: mock(async () => submittedApplyment),
       insertEvent,
       listApplyments,
     },
@@ -400,6 +401,8 @@ describe("WechatPayApplymentService", () => {
     expect(list.pagination.total).toBe(1);
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,
+      expectedStatus: "submitted",
+      expectedUpdatedAt: "2026-07-01T10:00:00.000Z",
       patch: expect.objectContaining({
         status: "approved",
         reviewed_by_employee_id: employeeId,
@@ -407,6 +410,8 @@ describe("WechatPayApplymentService", () => {
     });
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,
+      expectedStatus: "submitted",
+      expectedUpdatedAt: "2026-07-01T10:00:00.000Z",
       patch: expect.objectContaining({
         status: "rejected",
         rejected_reason: "法人信息不一致",
@@ -438,6 +443,8 @@ describe("WechatPayApplymentService", () => {
 
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,
+      expectedStatus: "active",
+      expectedUpdatedAt: "2026-07-01T10:00:00.000Z",
       patch: expect.objectContaining({
         status: "closed",
         applyment_state: "closed",

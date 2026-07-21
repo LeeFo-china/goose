@@ -102,6 +102,34 @@ const SIGN_URL_ACTION_STATES = new Set<string>([
   "APPLYMENT_STATE_TO_BE_SIGNED",
 ]);
 
+export const WECHAT_PAY_APPLYMENT_REPAIRABLE_STATUSES = new Set([
+  "approved",
+  "applying",
+  "reviewing",
+  "account_verifying",
+  "signing",
+  "opened",
+  "bound",
+  "active",
+  "suspended",
+]);
+
+export const WECHAT_PAY_APPLYMENT_ACTIVATABLE_STATUSES = new Set([
+  "opened",
+  "bound",
+]);
+
+const WECHAT_PAY_APPLYMENT_SYNCABLE_STATUSES = new Set([
+  "applying",
+  "wechat_editing",
+  "reviewing",
+  "account_verifying",
+  "signing",
+  "opening",
+  "opened",
+  "bound",
+]);
+
 export function mapWechatApplymentState(
   input: MapWechatApplymentStateInput,
 ) {
@@ -178,6 +206,7 @@ export function getWechatPayApplymentAvailableActions(input: {
   ) actions.push(action("submit_to_wechat", "提交微信审核"));
   if (
     hasText(input.applyment.applyment_business_code) &&
+    isWechatStatusSyncAllowed(input.applyment) &&
     hasPermission(input, PLATFORM_SYNC_PERMISSION)
   ) actions.push(action("sync_wechat_status", "同步微信状态"));
   if (
@@ -195,9 +224,12 @@ export function getWechatPayApplymentAvailableActions(input: {
     input.applyment.wechat_applyment_state_raw === "APPLYMENT_STATE_FINISHED" &&
     hasText(input.applyment.sub_mchid) &&
     !input.applyment.sub_appid &&
-    input.applyment.status !== "active"
+    WECHAT_PAY_APPLYMENT_ACTIVATABLE_STATUSES.has(input.applyment.status)
   ) actions.push(action("activate_payment_config", "激活租户收款"));
-  if (hasPermission(input, PLATFORM_REPAIR_PERMISSION)) {
+  if (
+    WECHAT_PAY_APPLYMENT_REPAIRABLE_STATUSES.has(input.applyment.status) &&
+    hasPermission(input, PLATFORM_REPAIR_PERMISSION)
+  ) {
     actions.push(action("repair_wechat_state", "修复微信状态"));
   }
   return actions;
@@ -233,6 +265,14 @@ export class WechatPayApplymentStatusService
     this.assertPermission(authContext);
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment(applymentId);
+    if (!isWechatStatusSyncAllowed(current)) {
+      throw Errors.business(
+        409,
+        "当前申请状态不能同步微信进件状态",
+        "WECHAT_PAY_APPLYMENT_SYNC_NOT_ALLOWED",
+        { status: current.status },
+      );
+    }
     if (!hasText(current.applyment_business_code)) {
       throw Errors.business(
         409,
@@ -258,6 +298,8 @@ export class WechatPayApplymentStatusService
     const changed = hasEffectiveStateChanged(current, patch);
     const updated = await this.repository.updateApplyment({
       id: current.id,
+      expectedStatus: current.status,
+      expectedUpdatedAt: current.updated_at,
       patch,
     });
     if (changed) await this.recordStatusEvent(current, updated, result, employeeId);
@@ -372,6 +414,12 @@ function hasPermission(
   permission: string,
 ) {
   return input.accessPolicyService.hasPermission(input.authContext, permission);
+}
+
+function isWechatStatusSyncAllowed(applyment: WechatPayApplymentRecord) {
+  if (WECHAT_PAY_APPLYMENT_SYNCABLE_STATUSES.has(applyment.status)) return true;
+  return applyment.status === "rejected" &&
+    applyment.wechat_applyment_state_raw === "APPLYMENT_STATE_REJECTED";
 }
 
 function hasText(value: unknown): value is string {

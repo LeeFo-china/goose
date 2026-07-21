@@ -233,7 +233,54 @@ describe("mapWechatApplymentState", () => {
       applyment: applyment(),
       accessPolicyService,
     }).map((action) => action.key)).toContain("repair_wechat_state");
+    expect(getWechatPayApplymentAvailableActions({
+      authContext: platformAuth("platform.wechat_pay.applyment.repair"),
+      applyment: applyment({ status: "submitted" }),
+      accessPolicyService,
+    }).map((action) => action.key)).not.toContain("repair_wechat_state");
   });
+
+  test.each(["active", "suspended", "closed"])(
+    "does not expose official sync for terminal status %s",
+    async (status) => {
+      const { getWechatPayApplymentAvailableActions } = await import(
+        "./wechat-pay-applyment-status"
+      );
+      const accessPolicyService = {
+        hasPermission: (authContext: AuthContext, permission: string) =>
+          authContext.permissions.some((item) => item.code === permission),
+      };
+
+      expect(getWechatPayApplymentAvailableActions({
+        authContext: platformAuth(),
+        applyment: applyment({ status }),
+        accessPolicyService,
+      }).map((action) => action.key)).not.toContain("sync_wechat_status");
+    },
+  );
+
+  test.each(["suspended", "closed"])(
+    "does not expose activation for terminal status %s",
+    async (status) => {
+      const { getWechatPayApplymentAvailableActions } = await import(
+        "./wechat-pay-applyment-status"
+      );
+
+      expect(getWechatPayApplymentAvailableActions({
+        authContext: platformAuth(),
+        applyment: applyment({
+          status,
+          wechat_applyment_state_raw: "APPLYMENT_STATE_FINISHED",
+          applyment_state: "opened",
+          sub_mchid: "1900000109",
+          appid_binding_state: "bound",
+        }),
+        accessPolicyService: {
+          hasPermission: () => true,
+        },
+      }).map((action) => action.key)).not.toContain("activate_payment_config");
+    },
+  );
 });
 
 describe("WechatPayApplymentStatusService", () => {
@@ -258,6 +305,22 @@ describe("WechatPayApplymentStatusService", () => {
     expect(queryByBusinessCode).not.toHaveBeenCalled();
   });
 
+  test.each(["active", "suspended", "closed"])(
+    "rejects official sync for terminal status %s before calling WeChat",
+    async (status) => {
+      findById.mockImplementationOnce(async () => applyment({ status }));
+      const service = await createService();
+
+      await expect(service.syncWechatStatus(platformAuth(), applymentId))
+        .rejects.toMatchObject({
+          statusCode: 409,
+          code: "WECHAT_PAY_APPLYMENT_SYNC_NOT_ALLOWED",
+        });
+      expect(queryByBusinessCode).not.toHaveBeenCalled();
+      expect(updateApplyment).not.toHaveBeenCalled();
+    },
+  );
+
   test("persists signed official evidence and records a changed state", async () => {
     queryByBusinessCode.mockImplementationOnce(async () => queryResult({
       applymentState: "APPLYMENT_STATE_TO_BE_SIGNED",
@@ -274,6 +337,8 @@ describe("WechatPayApplymentStatusService", () => {
 
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,
+      expectedStatus: "reviewing",
+      expectedUpdatedAt: now,
       patch: expect.objectContaining({
         status: "signing",
         applyment_state: "signing",
@@ -301,6 +366,8 @@ describe("WechatPayApplymentStatusService", () => {
 
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,
+      expectedStatus: "reviewing",
+      expectedUpdatedAt: now,
       patch: expect.objectContaining({
         last_wechat_request_id: "query-request-id",
         last_wechat_synced_at: now,
