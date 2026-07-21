@@ -1,6 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
+import { FileUp } from "lucide-react";
 import type {
   PlatformPaymentMerchantMode,
   PlatformPaymentProfileCode,
@@ -12,6 +19,7 @@ import {
   FieldDescription,
   FieldLabel,
 } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -126,17 +134,59 @@ export function FileField({
   disabled?: boolean;
   required?: boolean;
 }) {
+  const fieldId = useId();
+  const inputId = `platform-payment-${name}-${fieldId}`;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState("");
+
+  useEffect(() => {
+    const form = inputRef.current?.form;
+    if (!form) return;
+
+    const clearFileName = () => setFileName("");
+    form.addEventListener("reset", clearFileName);
+    return () => form.removeEventListener("reset", clearFileName);
+  }, []);
+
   return (
     <Field>
-      <FieldLabel htmlFor={`platform-payment-${name}`}>{label}</FieldLabel>
+      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
       <Input
-        id={`platform-payment-${name}`}
+        ref={inputRef}
+        id={inputId}
         name={name}
         type="file"
         accept=".pem,.txt"
+        className="sr-only !h-px !w-px"
         disabled={disabled}
         required={required}
+        onChange={(event) =>
+          setFileName(event.currentTarget.files?.[0]?.name || "")
+        }
       />
+      <div className="flex min-w-0 items-center gap-3">
+        <Button
+          asChild
+          variant="outline"
+          className={disabled
+            ? "pointer-events-none opacity-50"
+            : "cursor-pointer"}
+        >
+          <label htmlFor={inputId} aria-disabled={disabled}>
+            <FileUp data-icon="inline-start" />
+            选择文件
+          </label>
+        </Button>
+        <span
+          className="min-w-0 truncate text-sm text-muted-foreground"
+          title={fileName || "未选择文件"}
+        >
+          {fileName || "未选择文件"}
+        </span>
+      </div>
+      <FieldDescription>
+        支持 PEM 或 TXT 文件，保存后不会回显文件内容。
+      </FieldDescription>
     </Field>
   );
 }

@@ -80,6 +80,10 @@ describe("platform payment settings panel", () => {
     expect(panelSource).toContain("SelectGroup");
     expect(panelSource).toContain("Textarea");
     expect(panelSource).toContain('type="file"');
+    expect(panelSource).toContain('className="sr-only !h-px !w-px"');
+    expect(panelSource).toContain("选择文件");
+    expect(panelSource).toContain("未选择文件");
+    expect(panelSource).toContain('addEventListener("reset"');
     expect(panelSource).toContain("platform_direct_recharge");
     expect(panelSource).toContain("tenant_service_provider");
     expect(panelSource).toContain("/platform/payment/wechat-pay/profiles/");
