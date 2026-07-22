@@ -3,6 +3,36 @@ import { describe, expect, test } from "bun:test";
 import { normalizeOcrResponse } from "./normalizers";
 
 describe("OCR provider normalizers", () => {
+  test("keeps ISO date hyphens when splitting a license period", () => {
+    const result = normalizeOcrResponse("business_license", {
+      Name: "示例装饰工程有限公司",
+      Period: "2020-01-01 至 2040-12-31",
+      RequestId: "request-iso-period",
+    });
+
+    expect(result.fields).toContainEqual(
+      expect.objectContaining({ key: "license_period_begin", value: "2020-01-01" }),
+    );
+    expect(result.fields).toContainEqual(
+      expect.objectContaining({ key: "license_period_end", value: "2040-12-31" }),
+    );
+  });
+
+  test("normalizes compact ID-card validity dates", () => {
+    const result = normalizeOcrResponse("id_card_back", {
+      Authority: "示例公安局",
+      ValidDate: "20200101-20401231",
+      AdvancedInfo: "{}",
+    });
+
+    expect(result.fields).toContainEqual(
+      expect.objectContaining({ key: "identity_period_begin", value: "2020-01-01" }),
+    );
+    expect(result.fields).toContainEqual(
+      expect.objectContaining({ key: "identity_period_end", value: "2040-12-31" }),
+    );
+  });
+
   test("normalizes business license fields, period and copy warning", () => {
     const result = normalizeOcrResponse("business_license", {
       Name: "示例装饰工程有限公司",

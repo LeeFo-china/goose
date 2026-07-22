@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,6 +36,7 @@ export function TextField({
   inputMode,
   autoComplete,
   stored,
+  appliedValue,
 }: {
   label: string;
   name: string;
@@ -51,7 +52,16 @@ export function TextField({
   inputMode?: "text" | "numeric" | "tel" | "email";
   autoComplete?: string;
   stored?: boolean;
+  appliedValue?: string;
 }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (appliedValue !== undefined && inputRef.current) {
+      inputRef.current.value = appliedValue;
+    }
+  }, [appliedValue]);
+
   return (
     <Field data-disabled={disabled || undefined}>
       <FieldLabelWithRequirement
@@ -61,6 +71,7 @@ export function TextField({
         stored={stored}
       />
       <Input
+        ref={inputRef}
         id={`wechat-pay-applyment-${name}`}
         name={name}
         type={type}
@@ -145,12 +156,14 @@ export function PeriodEndField({
   defaultValue,
   requirement = "required",
   disabled,
+  appliedValue,
 }: {
   label: string;
   name: string;
   defaultValue?: string | null;
   requirement?: FieldRequirement;
   disabled?: boolean;
+  appliedValue?: string;
 }) {
   const [longTerm, setLongTerm] = useState(defaultValue === "长期");
   const [dateValue, setDateValue] = useState(
@@ -162,6 +175,12 @@ export function PeriodEndField({
     setLongTerm(defaultValue === "长期");
     setDateValue(defaultValue && defaultValue !== "长期" ? defaultValue : "");
   }, [defaultValue]);
+
+  useEffect(() => {
+    if (appliedValue === undefined) return;
+    setLongTerm(appliedValue === "长期");
+    setDateValue(appliedValue === "长期" ? "" : appliedValue);
+  }, [appliedValue]);
 
   return (
     <Field data-disabled={disabled || undefined}>

@@ -77,6 +77,7 @@ export type OcrPlatformFileObjectRecord = Pick<
   | "visibility"
   | "status"
   | "deleted_at"
+  | "created_by_employee_id"
 >;
 
 const OCR_FILE_OBJECT_COLUMNS = [
@@ -95,6 +96,7 @@ const OCR_FILE_OBJECT_COLUMNS = [
   "visibility",
   "status",
   "deleted_at",
+  "created_by_employee_id",
 ].join(",");
 
 class PlatformFileObjectRepository {

@@ -183,7 +183,8 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(schemaSource).toContain("contact_identity_number");
     expect(schemaSource).toContain("settlement_account_number");
     expect(schemaSource).toContain("delete payload.contact_identity_number");
-    expect(attachmentSource).toContain("image/bmp");
+    expect(attachmentSource).not.toContain("image/bmp");
+    expect(attachmentSource).toContain("image/jpeg,image/png");
     expect(attachmentSource).toContain("2 * 1024 * 1024");
     expect(attachmentSource).toContain("contact_id_card_front");
     expect(attachmentSource).toContain("contact_id_card_back");

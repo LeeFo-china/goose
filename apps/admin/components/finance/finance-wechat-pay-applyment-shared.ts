@@ -30,8 +30,21 @@ export const WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORY_LABELS: Record<
   business_scene_material: "经营场景材料",
 };
 
+export const WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES: Partial<Record<
+  WechatPayApplymentAttachmentCategory,
+  OcrDocumentType
+>> = {
+  license_copy: "business_license",
+  legal_representative_id_card_front: "id_card_front",
+  legal_representative_id_card_back: "id_card_back",
+  contact_id_card_front: "id_card_front",
+  contact_id_card_back: "id_card_back",
+  settlement_account_proof: "bank_card",
+};
+
 export type WechatPayApplymentAttachment = {
   category?: WechatPayApplymentAttachmentCategory | string | null;
+  file_object_id?: string | null;
   object_key: string;
   file_name?: string | null;
   content_type?: string | null;
@@ -211,3 +224,4 @@ export function buildWechatPayApplymentAttachmentPreviewUrl(objectKey: string) {
   }
   return `/api/backend/uploads/public-url?path=${encodeURIComponent(objectKey)}`;
 }
+import type { OcrDocumentType } from "@gooes/domain";

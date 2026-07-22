@@ -38,6 +38,7 @@ const file = {
   visibility: "private",
   status: "active",
   deleted_at: null,
+  created_by_employee_id: "employee-1",
 } satisfies OcrPlatformFileObjectRecord;
 
 const applyment = {
@@ -197,6 +198,38 @@ describe("OcrService", () => {
     expect(dependencies.repository.markSucceeded).toHaveBeenCalledWith(
       expect.objectContaining({ resultCiphertext: "encrypted-result" }),
     );
+  });
+
+  test("allows the uploader to recognize an unattached file before an applyment exists", async () => {
+    const { service, dependencies } = await createHarness({
+      fileRecord: { ...file, owner_id: null },
+    });
+
+    await service.recognize(authContext, {
+      ...request,
+      subject_type: undefined,
+      subject_id: undefined,
+    });
+
+    expect(dependencies.applymentRepository.findById).not.toHaveBeenCalled();
+    expect(dependencies.gateway.recognize).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejects another employee's unattached file before provider call", async () => {
+    const { service, dependencies } = await createHarness({
+      fileRecord: {
+        ...file,
+        owner_id: null,
+        created_by_employee_id: "employee-2",
+      },
+    });
+
+    await expect(service.recognize(authContext, {
+      ...request,
+      subject_type: undefined,
+      subject_id: undefined,
+    })).rejects.toMatchObject({ code: "OCR_FILE_ACCESS_DENIED" });
+    expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 
   test("rejects a cross-tenant or missing file before provider call", async () => {

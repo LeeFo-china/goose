@@ -64,6 +64,28 @@ describe("wechat pay applyment schemas", () => {
     expect(result.data.attachments?.[0]?.category).toBe("license_copy");
   });
 
+  test("persists the uploaded file identity with applyment attachments", () => {
+    const fileObjectId = "11111111-1111-4111-8111-111111111111";
+    const result = CreateWechatPayApplymentSchema.safeParse({
+      ...baseApplymentInput,
+      attachments: [{
+        ...baseApplymentInput.attachments[0],
+        file_object_id: fileObjectId,
+      }],
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.attachments?.[0]?.file_object_id).toBe(fileObjectId);
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      ...baseApplymentInput,
+      attachments: [{
+        ...baseApplymentInput.attachments[0],
+        file_object_id: "not-a-uuid",
+      }],
+    }).success).toBe(false);
+  });
+
   test("rejects invalid bank account number for tenant applyment input", () => {
     const result = CreateWechatPayApplymentSchema.safeParse({
       ...baseApplymentInput,

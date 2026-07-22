@@ -1,16 +1,25 @@
 "use client";
 
 import { type ChangeEvent, useState } from "react";
-import { ExternalLink, FileImage, Loader2, Trash2, UploadCloud } from "lucide-react";
+import {
+  ExternalLink,
+  FileImage,
+  Loader2,
+  ScanText,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { uploadDirectToCos, validateUploadFile } from "@/lib/cos-direct-upload";
 import {
   buildWechatPayApplymentAttachmentPreviewUrl,
   formatWechatPayApplymentAttachmentSize,
   getWechatPayApplymentAttachmentCategoryLabel,
+  WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES,
   type WechatPayApplymentAttachment,
   type WechatPayApplymentAttachmentCategory,
 } from "./finance-wechat-pay-applyment-shared";
@@ -18,11 +27,10 @@ import {
 const APPLYMENT_ATTACHMENT_UPLOAD_SCENE = "wechat_pay_applyment";
 const MAX_APPLYMENT_ATTACHMENT_SIZE = 2 * 1024 * 1024;
 const MAX_BUSINESS_SCENE_MATERIALS = 5;
-const APPLYMENT_ATTACHMENT_ACCEPT = "image/jpeg,image/png,image/bmp";
+const APPLYMENT_ATTACHMENT_ACCEPT = "image/jpeg,image/png";
 const APPLYMENT_ATTACHMENT_ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
-  "image/bmp",
 ]);
 
 const BASE_ATTACHMENT_SLOTS: Array<{
@@ -46,17 +54,23 @@ export function WechatPayApplymentAttachmentsField({
   contactType,
   editable,
   disabled,
+  supportedOcrDocumentTypes,
+  recognizingCategory,
+  onRecognize,
   onChange,
 }: {
   attachments: WechatPayApplymentAttachment[];
   contactType: string;
   editable: boolean;
   disabled?: boolean;
+  supportedOcrDocumentTypes: ReadonlySet<string>;
+  recognizingCategory?: string | null;
+  onRecognize: (attachment: WechatPayApplymentAttachment) => void;
   onChange: (attachments: WechatPayApplymentAttachment[]) => void;
 }) {
   const [uploadingCategory, setUploadingCategory] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const busy = disabled || Boolean(uploadingCategory);
+  const busy = disabled || Boolean(uploadingCategory) || Boolean(recognizingCategory);
   const slots = contactType === "SUPER"
     ? [...BASE_ATTACHMENT_SLOTS, ...CONTACT_ATTACHMENT_SLOTS]
     : BASE_ATTACHMENT_SLOTS;
@@ -78,15 +92,19 @@ export function WechatPayApplymentAttachmentsField({
       validateUploadFile(file, {
         allowedTypes: APPLYMENT_ATTACHMENT_ALLOWED_TYPES,
         maxSizeBytes: MAX_APPLYMENT_ATTACHMENT_SIZE,
-        typeMessage: "仅支持 JPEG、PNG、BMP 图片",
+        typeMessage: "仅支持 JPEG、PNG 图片",
         sizeMessage: "单个申请附件不能超过 2MB",
       });
       const uploaded = await uploadDirectToCos(file, {
         scene: APPLYMENT_ATTACHMENT_UPLOAD_SCENE,
         uploadErrorLabel: getWechatPayApplymentAttachmentCategoryLabel(category),
       });
+      if (!uploaded.fileId) {
+        throw new Error("附件上传成功但未返回文件 ID，请重新上传后再识别");
+      }
       const nextAttachment: WechatPayApplymentAttachment = {
         category,
+        file_object_id: uploaded.fileId,
         object_key: uploaded.storagePath,
         file_name: file.name,
         content_type: file.type || null,
@@ -120,7 +138,7 @@ export function WechatPayApplymentAttachmentsField({
         <div>
           <h2 className="text-sm font-semibold">申请附件</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            单张不超过 2MB，仅支持 JPEG、PNG、BMP。
+            单张不超过 2MB，仅支持 JPEG、PNG。
           </p>
         </div>
         <Badge variant="outline">私有存储</Badge>
@@ -141,9 +159,17 @@ export function WechatPayApplymentAttachmentsField({
               editable={editable}
               busy={busy}
               uploading={uploadingCategory === slot.category}
+              recognizing={recognizingCategory === slot.category}
+              ocrSupported={Boolean(
+                WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[slot.category] &&
+                supportedOcrDocumentTypes.has(
+                  WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[slot.category] ?? "",
+                )
+              )}
               onOpen={openAttachmentPicker}
               onUpload={uploadAttachment}
               onRemove={removeAttachment}
+              onRecognize={onRecognize}
             />
           );
         })}
@@ -209,9 +235,12 @@ function AttachmentSlot({
   editable,
   busy,
   uploading,
+  recognizing,
+  ocrSupported,
   onOpen,
   onUpload,
   onRemove,
+  onRecognize,
 }: {
   category: WechatPayApplymentAttachmentCategory;
   required: boolean;
@@ -220,9 +249,12 @@ function AttachmentSlot({
   editable: boolean;
   busy: boolean;
   uploading: boolean;
+  recognizing: boolean;
+  ocrSupported: boolean;
   onOpen: (inputId: string) => void;
   onUpload: (category: WechatPayApplymentAttachmentCategory, event: ChangeEvent<HTMLInputElement>) => void;
   onRemove: (attachment: WechatPayApplymentAttachment) => void;
+  onRecognize: (attachment: WechatPayApplymentAttachment) => void;
 }) {
   const inputId = `wechat-pay-applyment-attachment-${category}`;
   return (
@@ -245,7 +277,28 @@ function AttachmentSlot({
         <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">未上传</div>
       )}
       {editable ? (
-        <UploadButton category={category} inputId={inputId} disabled={busy} uploading={uploading} label={attachment ? "替换附件" : "上传附件"} onOpen={onOpen} onUpload={onUpload} />
+        <div className="flex flex-wrap items-center gap-2">
+          <UploadButton category={category} inputId={inputId} disabled={busy} uploading={uploading} label={attachment ? "替换附件" : "上传附件"} onOpen={onOpen} onUpload={onUpload} />
+          {attachment?.file_object_id && ocrSupported ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => onRecognize(attachment)}
+            >
+              {recognizing
+                ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                : <ScanText data-icon="inline-start" />}
+              识别并回填
+            </Button>
+          ) : null}
+          {attachment && !attachment.file_object_id && ocrSupported ? (
+            <span className="text-xs text-warning-foreground">
+              旧附件缺少文件 ID，请重新上传后识别
+            </span>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -281,7 +334,7 @@ function UploadButton({ category, inputId, disabled, uploading, label, onOpen, o
 }) {
   return (
     <div>
-      <input id={inputId} className="sr-only" type="file" accept={APPLYMENT_ATTACHMENT_ACCEPT} disabled={disabled} onChange={(event) => onUpload(category, event)} />
+      <Input id={inputId} className="sr-only !h-px !w-px" type="file" accept={APPLYMENT_ATTACHMENT_ACCEPT} disabled={disabled} onChange={(event) => onUpload(category, event)} />
       <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onOpen(inputId)}>
         {uploading ? <Loader2 aria-hidden="true" className="animate-spin" data-icon="inline-start" /> : <UploadCloud aria-hidden="true" data-icon="inline-start" />}
         {label}

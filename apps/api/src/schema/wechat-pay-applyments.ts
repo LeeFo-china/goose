@@ -119,6 +119,7 @@ const optionalPeriodEndText = (message: string) => z.preprocess((value) => {
 
 const AttachmentSchema = z.object({
   category: WechatPayApplymentAttachmentCategorySchema.optional(),
+  file_object_id: z.uuid("附件文件 ID 格式无效").optional(),
   object_key: requiredText(300, "附件对象 key 不能为空", "附件对象 key 不能超过 300 个字符"),
   file_name: optionalText(120, "附件文件名不能超过 120 个字符"),
   content_type: optionalText(120, "附件类型不能超过 120 个字符"),

@@ -156,13 +156,33 @@ function compactFields(fields: Array<OcrFieldSuggestion | null>) {
 
 function splitPeriod(value: string | null): [string | null, string | null] {
   if (!value) return [null, null];
-  const parts = value.split(/(?:至|[-~—])/).map((item) => item.trim()).filter(Boolean);
-  if (parts.length < 2) return [normalizeDate(value), null];
-  return [normalizeDate(parts[0] ?? ""), normalizeDate(parts.slice(1).join("-"))];
+  const normalized = value.trim();
+  const semanticRange = normalized.match(/^(.+?)\s*(?:至|~|—)\s*(.+)$/);
+  if (semanticRange) {
+    return [
+      normalizeDate(semanticRange[1] ?? ""),
+      normalizeDate(semanticRange[2] ?? ""),
+    ];
+  }
+  const dateToken = String.raw`\d{4}(?:-\d{1,2}-\d{1,2}|[./]\d{1,2}[./]\d{1,2}|年\d{1,2}月\d{1,2}日?|\d{4})`;
+  const hyphenRange = normalized.match(
+    new RegExp(`^(${dateToken})\\s*-\\s*(长期|${dateToken})$`),
+  );
+  if (hyphenRange) {
+    return [
+      normalizeDate(hyphenRange[1] ?? ""),
+      normalizeDate(hyphenRange[2] ?? ""),
+    ];
+  }
+  return [normalizeDate(normalized), null];
 }
 
 function normalizeDate(value: string) {
   if (value.includes("长期")) return "长期";
+  const compactMatch = value.trim().match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compactMatch) {
+    return `${compactMatch[1]}-${compactMatch[2]}-${compactMatch[3]}`;
+  }
   const match = value.match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
   if (!match) return value.trim() || null;
   return `${match[1]}-${match[2]?.padStart(2, "0")}-${match[3]?.padStart(2, "0")}`;

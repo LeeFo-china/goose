@@ -1,0 +1,228 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import type { OcrFieldSuggestion, OcrWarning } from "@gooes/domain";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FieldLabel } from "@/components/ui/field";
+
+type ReviewState = "empty" | "consistent" | "conflict";
+
+export type OcrFieldReviewRow = {
+  field: OcrFieldSuggestion;
+  currentValue: string;
+  selected: boolean;
+  state: ReviewState;
+};
+
+const APPLYMENT_FIELD_KEYS = new Set([
+  "license_name",
+  "license_code",
+  "license_address",
+  "license_period_begin",
+  "license_period_end",
+  "legal_representative_name",
+  "identity_name",
+  "identity_number",
+  "identity_address",
+  "identity_period_begin",
+  "identity_period_end",
+  "super_admin_name",
+  "contact_identity_number",
+  "contact_identity_address",
+  "contact_identity_period_begin",
+  "contact_identity_period_end",
+  "settlement_account_number",
+  "settlement_bank_name",
+]);
+
+const CONTACT_FRONT_FIELD_MAP: Record<string, [string, string]> = {
+  identity_name: ["super_admin_name", "超级管理员姓名"],
+  identity_number: ["contact_identity_number", "经办人身份证号码"],
+  identity_address: ["contact_identity_address", "经办人身份证地址"],
+};
+const CONTACT_BACK_FIELD_MAP: Record<string, [string, string]> = {
+  identity_period_begin: ["contact_identity_period_begin", "经办人证件有效期开始"],
+  identity_period_end: ["contact_identity_period_end", "经办人证件有效期结束"],
+};
+
+export function mapApplymentOcrFields(
+  category: string,
+  fields: readonly OcrFieldSuggestion[],
+) {
+  const fieldMap = category === "contact_id_card_front"
+    ? CONTACT_FRONT_FIELD_MAP
+    : category === "contact_id_card_back"
+    ? CONTACT_BACK_FIELD_MAP
+    : null;
+  return fields.flatMap((field) => {
+    const mapped = fieldMap?.[field.key];
+    const nextField = mapped
+      ? { ...field, key: mapped[0], label: mapped[1] }
+      : field;
+    return APPLYMENT_FIELD_KEYS.has(nextField.key) ? [nextField] : [];
+  });
+}
+
+export function buildOcrFieldReviewRows(
+  fields: readonly OcrFieldSuggestion[],
+  currentValues: Record<string, string>,
+): OcrFieldReviewRow[] {
+  return fields.map((field) => {
+    const currentValue = currentValues[field.key]?.trim() ?? "";
+    const recognizedValue = String(field.value ?? "").trim();
+    const state = !currentValue
+      ? "empty"
+      : normalizeComparable(field.key, currentValue) ===
+          normalizeComparable(field.key, recognizedValue)
+      ? "consistent"
+      : "conflict";
+    return {
+      field,
+      currentValue,
+      selected: state === "empty",
+      state,
+    };
+  });
+}
+
+function normalizeComparable(key: string, value: string) {
+  if (key.includes("identity_number")) {
+    return value.replace(/\s/g, "").toUpperCase();
+  }
+  if (key === "settlement_account_number") return value.replace(/\D/g, "");
+  return value.trim().replace(/\s+/g, " ");
+}
+
+export function OcrFieldReviewDialog({
+  open,
+  fields,
+  warnings,
+  currentValues,
+  onOpenChange,
+  onApply,
+}: {
+  open: boolean;
+  fields: readonly OcrFieldSuggestion[];
+  warnings: readonly OcrWarning[];
+  currentValues: Record<string, string>;
+  onOpenChange: (open: boolean) => void;
+  onApply: (values: Record<string, string>) => void;
+}) {
+  const initialRows = useMemo(
+    () => buildOcrFieldReviewRows(fields, currentValues),
+    [currentValues, fields],
+  );
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedKeys(new Set(
+      initialRows.filter((row) => row.selected).map((row) => row.field.key),
+    ));
+  }, [initialRows, open]);
+
+  function applySelected() {
+    const values = Object.fromEntries(
+      initialRows
+        .filter((row) => selectedKeys.has(row.field.key))
+        .map((row) => [row.field.key, String(row.field.value ?? "")]),
+    );
+    onApply(values);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>核对识别结果</DialogTitle>
+          <DialogDescription>
+            识别内容仅作为填写建议。请逐项核对原件，勾选后只更新当前表单，不会自动保存或提交申请。
+          </DialogDescription>
+        </DialogHeader>
+
+        {warnings.length > 0 ? (
+          <Alert>
+            <AlertTriangle />
+            <AlertTitle>需要人工复核</AlertTitle>
+            <AlertDescription>
+              {warnings.map((warning) => (
+                <div key={warning.code}>{warning.message}（{warning.code}）</div>
+              ))}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="overflow-hidden rounded-md border">
+          {initialRows.map((row) => {
+            const checked = selectedKeys.has(row.field.key);
+            return (
+              <div
+                key={row.field.key}
+                className="grid gap-3 border-b p-4 last:border-b-0 md:grid-cols-[28px_150px_minmax(0,1fr)_minmax(0,1fr)]"
+              >
+                <Checkbox
+                  id={`ocr-review-${row.field.key}`}
+                  checked={checked}
+                  onCheckedChange={(value) => {
+                    setSelectedKeys((current) => {
+                      const next = new Set(current);
+                      if (value === true) next.add(row.field.key);
+                      else next.delete(row.field.key);
+                      return next;
+                    });
+                  }}
+                />
+                <FieldLabel htmlFor={`ocr-review-${row.field.key}`}>
+                  {row.field.label}
+                </FieldLabel>
+                <div className="min-w-0">
+                  <div className="text-xs text-muted-foreground">当前表单</div>
+                  <div className="mt-1 break-all text-sm">
+                    {row.currentValue || "未填写"}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    识别建议
+                    {row.state === "consistent" ? (
+                      <Badge variant="success"><CheckCircle2 />一致</Badge>
+                    ) : row.state === "conflict" ? (
+                      <Badge variant="warning">有差异</Badge>
+                    ) : (
+                      <Badge variant="secondary">待补充</Badge>
+                    )}
+                  </div>
+                  <div className="mt-1 break-all text-sm font-medium">
+                    {String(row.field.value ?? "-")}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            取消
+          </Button>
+          <Button type="button" disabled={selectedKeys.size === 0} onClick={applySelected}>
+            应用所选字段
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

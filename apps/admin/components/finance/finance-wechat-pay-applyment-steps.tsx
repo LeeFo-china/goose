@@ -52,6 +52,7 @@ type StepsProps = {
   disabled: boolean;
   attachmentsContent: ReactNode;
   reviewContent: ReactNode;
+  ocrFieldValues: Record<string, string>;
   onStepChange: (step: ApplymentStepKey) => void;
   onSubjectTypeChange: (value: string) => void;
   onContactTypeChange: (value: string) => void;
@@ -128,6 +129,7 @@ function SubjectFields({
   subjectType,
   disabled,
   onSubjectTypeChange,
+  ocrFieldValues,
 }: StepsProps) {
   return (
     <FieldGroup className="grid gap-4 md:grid-cols-2">
@@ -157,6 +159,7 @@ function SubjectFields({
         required
         maxLength={100}
         disabled={disabled}
+        appliedValue={ocrFieldValues.license_name}
       />
       <TextField
         label="统一社会信用代码"
@@ -166,6 +169,7 @@ function SubjectFields({
         required
         maxLength={64}
         disabled={disabled}
+        appliedValue={ocrFieldValues.license_code}
       />
       <TextField
         label="营业执照注册地址"
@@ -174,6 +178,7 @@ function SubjectFields({
         requirement="optional"
         maxLength={128}
         disabled={disabled}
+        appliedValue={ocrFieldValues.license_address}
       />
       <TextField
         label="营业执照有效期开始"
@@ -181,6 +186,7 @@ function SubjectFields({
         type="date"
         defaultValue={applyment?.license_period_begin || ""}
         disabled={disabled}
+        appliedValue={ocrFieldValues.license_period_begin}
       />
       <PeriodEndField
         label="营业执照有效期结束"
@@ -188,6 +194,7 @@ function SubjectFields({
         defaultValue={applyment?.license_period_end}
         requirement="optional"
         disabled={disabled}
+        appliedValue={ocrFieldValues.license_period_end}
       />
     </FieldGroup>
   );
@@ -199,6 +206,7 @@ function ContactFields({
   subjectType,
   disabled,
   onContactTypeChange,
+  ocrFieldValues,
 }: StepsProps) {
   const hasSensitivePayload = Boolean(applyment?.has_sensitive_payload);
   const sensitivePlaceholder = hasSensitivePayload
@@ -216,6 +224,7 @@ function ContactFields({
         required
         maxLength={50}
         disabled={disabled}
+        appliedValue={ocrFieldValues.legal_representative_name}
       />
       <TextField
         label="证件类型"
@@ -233,6 +242,7 @@ function ContactFields({
         maxLength={100}
         disabled={disabled}
         stored={hasSensitivePayload}
+        appliedValue={ocrFieldValues.identity_name}
       />
       <TextField
         label="身份证号码"
@@ -244,6 +254,7 @@ function ContactFields({
         maxLength={18}
         disabled={disabled}
         stored={hasSensitivePayload}
+        appliedValue={ocrFieldValues.identity_number}
       />
       <TextField
         label="身份证居住地址"
@@ -254,6 +265,7 @@ function ContactFields({
         maxLength={128}
         disabled={disabled}
         stored={hasSensitivePayload}
+        appliedValue={ocrFieldValues.identity_address}
       />
       <TextField
         label="身份证有效期开始"
@@ -263,12 +275,14 @@ function ContactFields({
         requirement="required"
         required
         disabled={disabled}
+        appliedValue={ocrFieldValues.identity_period_begin}
       />
       <PeriodEndField
         label="身份证有效期结束"
         name="identity_period_end"
         defaultValue={applyment?.identity_period_end}
         disabled={disabled}
+        appliedValue={ocrFieldValues.identity_period_end}
       />
       <SelectField
         label="超级管理员身份"
@@ -287,6 +301,7 @@ function ContactFields({
         required
         maxLength={50}
         disabled={disabled}
+        appliedValue={ocrFieldValues.super_admin_name}
       />
       <TextField
         label="超级管理员手机号"
@@ -319,6 +334,7 @@ function ContactFields({
           disabled={disabled}
           hasSensitivePayload={hasSensitivePayload}
           placeholder={sensitivePlaceholder}
+          ocrFieldValues={ocrFieldValues}
         />
       ) : null}
     </FieldGroup>
@@ -330,11 +346,13 @@ function AgentIdentityFields({
   disabled,
   hasSensitivePayload,
   placeholder,
+  ocrFieldValues,
 }: {
   applyment: WechatPayApplymentRecord | null;
   disabled: boolean;
   hasSensitivePayload: boolean;
   placeholder: string;
+  ocrFieldValues: Record<string, string>;
 }) {
   return (
     <>
@@ -348,6 +366,7 @@ function AgentIdentityFields({
         maxLength={18}
         disabled={disabled}
         stored={hasSensitivePayload}
+        appliedValue={ocrFieldValues.contact_identity_number}
       />
       <TextField
         label="经办人身份证地址"
@@ -358,6 +377,7 @@ function AgentIdentityFields({
         maxLength={128}
         disabled={disabled}
         stored={hasSensitivePayload}
+        appliedValue={ocrFieldValues.contact_identity_address}
       />
       <TextField
         label="经办人证件有效期开始"
@@ -367,18 +387,25 @@ function AgentIdentityFields({
         requirement="required"
         required
         disabled={disabled}
+        appliedValue={ocrFieldValues.contact_identity_period_begin}
       />
       <PeriodEndField
         label="经办人证件有效期结束"
         name="contact_identity_period_end"
         defaultValue={applyment?.contact_identity_period_end}
         disabled={disabled}
+        appliedValue={ocrFieldValues.contact_identity_period_end}
       />
     </>
   );
 }
 
-function SettlementFields({ applyment, subjectType, disabled }: StepsProps) {
+function SettlementFields({
+  applyment,
+  subjectType,
+  disabled,
+  ocrFieldValues,
+}: StepsProps) {
   const hasBankAccount = Boolean(applyment?.settlement_account_number_masked);
   const accountType = subjectType === "SUBJECT_TYPE_ENTERPRISE"
     ? "BANK_ACCOUNT_TYPE_CORPORATE"
@@ -389,8 +416,8 @@ function SettlementFields({ applyment, subjectType, disabled }: StepsProps) {
       <TextField label="客服电话" name="service_phone" defaultValue={applyment?.service_phone || ""} requirement="required" required maxLength={20} inputMode="tel" disabled={disabled} />
       <SelectField label="结算账户类型" name="settlement_account_type" defaultValue={accountType} options={SETTLEMENT_ACCOUNT_TYPE_OPTIONS} requirement="required" disabled={disabled || subjectType === "SUBJECT_TYPE_ENTERPRISE"} description={subjectType === "SUBJECT_TYPE_ENTERPRISE" ? "企业主体固定使用对公银行账户。" : undefined} />
       <TextField label="结算账户开户名" name="settlement_account_name" defaultValue={applyment?.settlement_account_name || ""} requirement="required" required maxLength={100} disabled={disabled} />
-      <TextField label="开户银行" name="settlement_bank_name" defaultValue={applyment?.settlement_bank_name || ""} description="填写银行基础名称，如中国工商银行。" requirement="required" required maxLength={100} disabled={disabled} />
-      <TextField label="银行账号" name="settlement_account_number" placeholder={applyment?.settlement_account_number_masked || "请输入银行账号"} description="新填写内容会加密存储，保存后只记录掩码。" requirement="required" required={!hasBankAccount} pattern="\d{8,32}" maxLength={32} inputMode="numeric" disabled={disabled} stored={hasBankAccount} />
+      <TextField label="开户银行" name="settlement_bank_name" defaultValue={applyment?.settlement_bank_name || ""} description="填写银行基础名称，如中国工商银行。" requirement="required" required maxLength={100} disabled={disabled} appliedValue={ocrFieldValues.settlement_bank_name} />
+      <TextField label="银行账号" name="settlement_account_number" placeholder={applyment?.settlement_account_number_masked || "请输入银行账号"} description="新填写内容会加密存储，保存后只记录掩码。" requirement="required" required={!hasBankAccount} pattern="\d{8,32}" maxLength={32} inputMode="numeric" disabled={disabled} stored={hasBankAccount} appliedValue={ocrFieldValues.settlement_account_number} />
       <TextField label="开户银行全称（含支行）" name="settlement_bank_full_name" defaultValue={applyment?.settlement_bank_full_name || ""} maxLength={128} disabled={disabled} />
       <TextField label="开户银行联行号" name="settlement_bank_branch_id" defaultValue={applyment?.settlement_bank_branch_id || ""} maxLength={128} disabled={disabled} />
       <FinanceWechatPaySettlementRuleField

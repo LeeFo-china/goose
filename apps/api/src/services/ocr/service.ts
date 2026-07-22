@@ -132,6 +132,8 @@ export class OcrService {
 
   async recognize(authContext: AuthContext, input: RecognizeInput) {
     const tenantId = this.requireTenantEmployee(authContext);
+    const employeeId = authContext.employeeId;
+    if (!employeeId) throw Errors.forbidden();
     this.assertPermission(authContext, "ocr.recognize");
     this.assertPermission(authContext, "wechat_pay.applyment.submit");
     const capability = getOcrCapability(input.scene, input.document_type);
@@ -147,7 +149,13 @@ export class OcrService {
       throw Errors.business(404, "OCR文件不存在", ErrorCodes.OCR_FILE_NOT_FOUND);
     }
     this.validateFile(file, input.scene, capability.supported_mime_types, capability.max_size_bytes);
-    await this.validateSubjectAndAttachment(tenantId, input, file, capability.attachment_categories);
+    await this.validateSubjectAndAttachment(
+      tenantId,
+      employeeId,
+      input,
+      file,
+      capability.attachment_categories,
+    );
 
     const idempotent = await this.repository.findByTenantAndIdempotencyKey(
       tenantId,
@@ -301,10 +309,17 @@ export class OcrService {
 
   private async validateSubjectAndAttachment(
     tenantId: string,
+    employeeId: string,
     input: RecognizeInput,
     file: OcrPlatformFileObjectRecord,
     categories: readonly string[],
   ) {
+    if (!input.subject_type && !input.subject_id) {
+      if (file.owner_id || file.created_by_employee_id !== employeeId) {
+        throw Errors.business(403, "无权识别当前文件", ErrorCodes.OCR_FILE_ACCESS_DENIED);
+      }
+      return;
+    }
     if (input.subject_type !== "wechat_pay_applyment" || !input.subject_id) {
       throw Errors.business(400, "微信支付申请业务对象缺失", ErrorCodes.OCR_FILE_ACCESS_DENIED);
     }
@@ -318,15 +333,22 @@ export class OcrService {
     if (file.owner_id && file.owner_id !== applyment.id) {
       throw Errors.business(403, "文件不属于当前微信支付申请", ErrorCodes.OCR_FILE_ACCESS_DENIED);
     }
-    const matched = Array.isArray(applyment.attachments) && applyment.attachments.some((value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-      const attachment = value as Record<string, unknown>;
-      return attachment.object_key === file.object_key &&
-        typeof attachment.category === "string" &&
-        categories.includes(attachment.category);
-    });
-    if (!matched) {
+    const attached = Array.isArray(applyment.attachments)
+      ? applyment.attachments.find((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          return false;
+        }
+        const attachment = value as Record<string, unknown>;
+        return attachment.object_key === file.object_key;
+      })
+      : undefined;
+    if (attached) {
+      const category = (attached as Record<string, unknown>).category;
+      if (typeof category === "string" && categories.includes(category)) return;
       throw Errors.business(403, "附件类型与识别类型不匹配", ErrorCodes.OCR_FILE_ACCESS_DENIED);
+    }
+    if (file.created_by_employee_id !== employeeId) {
+      throw Errors.business(403, "文件不属于当前操作人", ErrorCodes.OCR_FILE_ACCESS_DENIED);
     }
   }
 
