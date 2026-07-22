@@ -65,15 +65,15 @@
 
 通过 service-role REST 只读查询确认：
 
-| 项目                                    | 结果         |
-| --------------------------------------- | ------------ |
-| OCR 平台配置                            | 11 项 active |
-| 敏感 OCR 配置                           | 3 项         |
-| `ocr.recognize`                         | active       |
-| `platform.ocr.recognition.read`         | active       |
-| `TENCENT_OCR_ENABLED`                   | `false`      |
-| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`      |
-| `ocr_recognitions` 记录数               | 0            |
+| 项目                                    | 结果                |
+| --------------------------------------- | ------------------- |
+| OCR 平台配置                            | 11 项 active        |
+| 敏感 OCR 配置                           | 3 项                |
+| `ocr.recognize`                         | active              |
+| `platform.ocr.recognition.read`         | active              |
+| `TENCENT_OCR_ENABLED`                   | `false`             |
+| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`             |
+| `ocr_recognitions` 记录数               | 1（合成图失败审计） |
 
 迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 7 个显式索引、租户幂等
 唯一索引、活跃结果去重索引、结果过期索引、平台文档类型筛选排序索引，以及无客户端 policy
@@ -164,6 +164,34 @@
 该证据解除“凭证完全未配置”和“开发 API 结果密钥未注入”门禁，但同时确认 CAM 最小权限
 尚未达标；它不等同于有效证照识别成功，也不证明字段差异回填、加密身份证或生产清理调度
 可用。
+
+### 6.2 开发环境上传、幂等与租户隔离负向 Smoke
+
+2026-07-22 使用明确标注“测试样本、仅用于 OCR 联调、非真实证照”的合成 PNG 执行。图片不含
+真实主体、证件号码、银行卡号或个人信息；未提交微信支付进件。识别操作租户为
+`5f9404fd-23a7-4686-a606-b2627a65611d`，跨租户文件归属
+`3eebca47-961f-4899-b976-a3d3208d326b`。
+
+| 检查                                    | 结果                                                                                                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| COS direct-init / PUT / direct-complete | 通过；`file_id=c7e32f3c-2958-417d-addf-55722d3256a2`                                                                                                 |
+| 首次 `POST /ocr/recognitions`           | HTTP 502 `OCR_PROVIDER_FAILED`；腾讯返回 `FailedOperation.NoBizLicense`，符合非真实证照预期                                                          |
+| 失败审计                                | 新增 `recognition_id=cef862f9-ab7f-482e-8d37-3d949f2618cc`，状态 `failed`，provider RequestId `8108d51e-38f3-4979-856d-aae6b6b7c8c5`，未保存识别字段 |
+| 原请求与原幂等键重放                    | HTTP 200；返回同一 recognition，`idempotent=true`、`cached=false`，未再次调用 provider                                                               |
+| 同幂等键更换文档类型                    | HTTP 409 `OCR_IDEMPOTENCY_CONFLICT`                                                                                                                  |
+| 默认日额度负向探针                      | 临时设置日额度为 1 后返回 HTTP 429 `OCR_DAILY_LIMIT_EXCEEDED`；审计总数不变，未调用 provider                                                         |
+| 跨租户文件 ID 识别                      | HTTP 404 `OCR_FILE_NOT_FOUND`；审计总数不变，未调用 provider                                                                                         |
+| 本租户读取失败记录                      | HTTP 200，状态 `failed`                                                                                                                              |
+| 其他租户读取该 recognition              | HTTP 404 `OCR_RECOGNITION_NOT_FOUND`                                                                                                                 |
+| 平台分页失败审计                        | HTTP 200、`total=1`；响应未包含结果密文、object key、signed/image URL、识别字段值或合成图文字                                                        |
+| 测试结束状态                            | `TENCENT_OCR_ENABLED=false`；能力数 0；新识别返回 503 `OCR_DISABLED`；审计总数由 0 变为 1，只有上述合成图失败记录                                    |
+
+开关修改均在脚本 `try/finally` 内执行。跨租户文件探针使用另一租户已有文件 ID，但后端在
+tenant-scoped 文件查询处即返回 404，因此没有读取文件内容、生成 signed URL 或进入腾讯 OCR。
+日额度探针把 `TENCENT_OCR_DEFAULT_TENANT_DAILY_LIMIT` 从 100 临时调整为 1，验证 429 后恢复为
+100；该请求没有创建第二条识别记录。
+本节证明上传登记、provider 失败审计、幂等重放、幂等冲突和租户隔离的开发环境运行态契约；
+不证明成功结果加密/解密、成功结果缓存、真实字段识别或 Admin 差异回填。
 
 ## 7. 清理任务证据
 
