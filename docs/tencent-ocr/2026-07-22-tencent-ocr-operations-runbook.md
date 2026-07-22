@@ -4,8 +4,35 @@
 
 - `TENCENT_OCR_ENABLED` 默认保持 `false`。
 - API 容器必须通过 GitHub Environment secret 注入 `OCR_RESULT_ENCRYPTION_KEY`；development 与 production 使用不同随机值，禁止写入平台设置或共享同一密钥。
+- OCR CAM 子用户只能关联 `deploy/tencent-ocr-phase1-cam-policy.json` 中的一期接口权限；禁止关联 `QcloudOCRFullAccess`、`ocr:*` 或其他 OCR Action。
 - 只有在生产环境完成一次 dry-run、一次 apply，并确认小时级调度连续运行后才能开启。
 - 身份证能力还必须完成腾讯云加密公钥和官方 Demo 的真实联调；未通过时保持 `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`。
+
+### 1.1 CAM 最小权限配置
+
+策略文件：`deploy/tencent-ocr-phase1-cam-policy.json`。
+
+该策略只允许以下操作级 Action：
+
+- `name/ocr:BizLicenseOCR`
+- `name/ocr:RecognizeEncryptedIDCardOCR`
+- `name/ocr:BankCardOCR`
+
+OCR 这些接口按腾讯云 CAM 能力表使用操作级授权，因此 `resource` 必须为 `*`；这不代表允许
+所有 OCR 接口。平台运维需创建独立 CAM 子用户，移除该子用户已有的 OCR 全读写或通配符
+策略，只关联上述自定义策略，再生成一对新的 SecretId/SecretKey。禁止复用 COS、支付或主账号
+密钥。
+
+替换开发环境凭据后，先保持 `TENCENT_OCR_ENABLED=false`，使用无真实数据的空白图做权限探针：
+
+1. `BizLicenseOCR` 和 `BankCardOCR` 应进入图片校验或识别阶段，不应返回无权限。
+2. `GeneralBasicOCR` 必须返回 CAM 无权限错误，不能返回图片解码/识别错误或正常结果。
+3. 取得身份证加密公钥后，`RecognizeEncryptedIDCardOCR` 才执行正式联调。
+
+腾讯云依据：[CAM 自定义策略生成器](https://cloud.tencent.com/document/product/598/37739)
+要求声明授权效果、服务、操作和资源；[OCR CAM 能力表](https://cloud.tencent.com/document/product/598/60621)
+标记上述接口为操作级授权、资源为 `*`。策略替换和负向探针结果必须回填 Phase 1 smoke
+记录。
 
 ## 2. 结果清理命令
 

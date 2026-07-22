@@ -11,8 +11,9 @@
 
 1. 尚未取得并验证腾讯云身份证加密识别公钥及真实加密接口样本。
 2. 尚未准备明确授权的有效营业执照、模糊营业执照、身份证正反面和银行卡测试图片。
-3. `OCR_RESULT_ENCRYPTION_KEY` 已按 development/production 环境分别配置，但生产 API 尚未发布密钥注入契约。
-4. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
+3. 当前 OCR 凭据可调用一期范围外的 `GeneralBasicOCR`，CAM 最小权限门禁未通过；必须换成只关联一期策略的新子用户凭据。
+4. `OCR_RESULT_ENCRYPTION_KEY` 已按 development/production 环境分别配置，但生产 API 尚未发布密钥注入契约。
+5. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
 
 ## 2. 版本范围
 
@@ -150,6 +151,7 @@
 - 本地受控环境已存在独立的 `TENCENT_OCR_SECRET_ID/SECRET_KEY`；只核验变量存在性和长度，未输出密钥值。
 - 两项密钥已通过平台设置接口写入开发环境加密配置；总开关和身份证加密开关继续保持 `false`。
 - 官方 Node SDK 使用 1×1 空白 PNG 分别调用 `BizLicenseOCR` 和 `BankCardOCR`，两次均取得腾讯 RequestId，并返回 `FailedOperation.OcrFailed`；没有鉴权或无权限错误，证明凭证和两个 Action 可达。
+- 同一凭据使用空白 PNG 探测一期范围外的 `GeneralBasicOCR`，取得腾讯 RequestId 并返回 `FailedOperation.ImageDecodeFailed`，而非 CAM 无权限错误。这直接证明当前凭据权限过宽，不能作为一期生产凭据。仓库已增加 `deploy/tencent-ocr-phase1-cam-policy.json` 和自动契约测试，要求替换为只允许三个一期 Action 的独立 CAM 子用户凭据。
 - 使用 ImageMagick 生成带“仅用于 OCR 联调、非真实证照”标识的合成营业执照 PNG。腾讯返回 `FailedOperation.NoBizLicense`，符合该图片不是真实证照的预期；该图片不包含真实主体或个人信息。
 - development 与 production GitHub Environment 已分别创建独立的 `OCR_RESULT_ENCRYPTION_KEY`，值未写入仓库、数据库、日志或文档。
 - 提交 `7caa0fc5` 为开发/生产 API Compose 增加必填密钥，并由对应 Environment secret 注入发布 workflow；缺少密钥时发布在容器重建前失败关闭。
@@ -159,7 +161,9 @@
 - 部署契约随后合入 `main@cb09ab3b`。主线 Build run `29901320353` 和 Auto Deploy Dev run `29901617304` 均成功，API、workers、Web 发布及 Web gate 全部通过。
 - 主线自动部署后再次只读复核：开发 API 健康检查 HTTP 200；OCR SecretId/SecretKey 均显示已配置；`TENCENT_OCR_ENABLED=false`、`TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`、租户能力数 0、平台识别审计总数 0。未执行识别、上传、回填或 workflow 推进。
 
-该证据解除“凭证完全未配置”和“开发 API 结果密钥未注入”门禁，但不等同于有效证照识别成功，也不证明字段差异回填、加密身份证或生产清理调度可用。
+该证据解除“凭证完全未配置”和“开发 API 结果密钥未注入”门禁，但同时确认 CAM 最小权限
+尚未达标；它不等同于有效证照识别成功，也不证明字段差异回填、加密身份证或生产清理调度
+可用。
 
 ## 7. 清理任务证据
 
@@ -184,7 +188,7 @@ workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub A
 
 准备条件满足后，按顺序执行并在本文件追加脱敏证据：
 
-1. 在腾讯 CAM 控制台复核当前 OCR 凭证仅允许 `BizLicenseOCR`、`RecognizeEncryptedIDCardOCR`、`BankCardOCR`；现有合成图探针已经证明营业执照与银行卡 Action 可达，但不能替代策略审计。
+1. 在腾讯 CAM 控制台为独立子用户应用 `deploy/tencent-ocr-phase1-cam-policy.json`，移除 OCR 全权限/通配符策略并更换开发环境凭据；复测三个目标 Action 可达且 `GeneralBasicOCR` 明确被拒绝。现有凭据已证实权限过宽，不能仅做截图复核后继续使用。
 2. 补充腾讯身份证加密公钥；OCR 密钥和 API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 已配置，
    后者不得写入数据库、文档或截图。
 3. 部署包含清理脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply

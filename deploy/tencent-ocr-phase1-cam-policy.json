@@ -1,0 +1,14 @@
+{
+  "version": "2.0",
+  "statement": [
+    {
+      "effect": "allow",
+      "action": [
+        "name/ocr:BankCardOCR",
+        "name/ocr:BizLicenseOCR",
+        "name/ocr:RecognizeEncryptedIDCardOCR"
+      ],
+      "resource": ["*"]
+    }
+  ]
+}
