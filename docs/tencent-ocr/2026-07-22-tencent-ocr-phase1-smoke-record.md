@@ -77,7 +77,7 @@
 | `platform.ocr.recognition.read`         | active                      |
 | `TENCENT_OCR_ENABLED`                   | `false`                     |
 | `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`                     |
-| `ocr_recognitions` 记录数               | 6（3 条成功、3 条失败审计） |
+| `ocr_recognitions` 记录数               | 7（3 条成功、3 条失败、1 条过期清理审计） |
 
 迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 7 个显式索引、租户幂等
 唯一索引、活跃结果去重索引、结果过期索引、平台文档类型筛选排序索引，以及无客户端 policy
@@ -314,12 +314,26 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 
 ## 7. 清理任务证据
 
-2026-07-22 已对目标数据库执行：
+2026-07-22 已先对目标数据库执行空候选命令验证：
 
 - dry-run：成功，候选 0，更新 0。
 - apply：成功，候选 0，更新 0。
 
-这些结果证明命令和目标数据库连接可用，不证明过期记录实际清理，也不替代生产小时级调度器证据。读取过期结果返回 410、apply 清空 `result_ciphertext` 的行为已有自动化测试。
+随后使用已验证官方样例对应的测试文件元数据创建一条明确标记、零计费、不含识别字段的临时
+成功记录，执行真实过期清理：
+
+| 检查 | 脱敏结果 |
+| --- | --- |
+| 夹具 | `recognition_id=332d424d-c02b-45f8-a8b9-5dd5abacdea3`；`billable_units=0`；密文为固定非敏感测试字符串 |
+| 执行前 | dry-run `candidate_count=0` |
+| 创建过期夹具后 | dry-run `candidate_count=1`，满足唯一候选保护条件 |
+| apply | `candidate_count=1`、`expired_count=1` |
+| 数据状态 | `status=expired`、`result_ciphertext IS NULL` |
+| 执行后 | dry-run `candidate_count=0` |
+| 租户读取 | HTTP 410 `OCR_RECOGNITION_EXPIRED` |
+
+开发环境真实过期清理和 410 读取边界已通过，脱敏过期审计记录按设计保留，当前总审计数为 7。
+该结果仍不替代生产 API 镜像、小时级调度器和连续运行证据。
 
 生产调度定义已增加到 `.github/workflows/ocr-result-cleanup.yml`：每小时第 17 分钟执行、
 10 分钟超时、固定 concurrency 防止并行、复用健康的生产 API 容器。apply 在一个任务内按
