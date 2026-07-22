@@ -1,7 +1,7 @@
 # 腾讯云 OCR 平台化接入 PRD
 
 日期：2026-07-22
-状态：方案已确认，待按 Phase 1 计划实施
+状态：Phase 1 代码已合入 main，真实腾讯云 Smoke 与生产发布门禁待完成
 范围：gooes API、gooes Admin、orange 小程序对接契约
 
 ## 1. 结论
