@@ -35,6 +35,7 @@
 - `1167a903 ci(ocr): 注入结果加密密钥`
 - `cb09ab3b docs(ocr): 记录开发环境连通性验收`
 - `e6e1e5c3 fix(ocr): 修复成功结果加密边界`
+- `43f780b2 fix(ocr): 拒绝回填不完整证照日期`
 
 ## 3. 静态门禁
 
@@ -74,7 +75,7 @@
 | `platform.ocr.recognition.read`         | active                      |
 | `TENCENT_OCR_ENABLED`                   | `false`                     |
 | `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`                     |
-| `ocr_recognitions` 记录数               | 5（2 条成功、3 条失败审计） |
+| `ocr_recognitions` 记录数               | 6（3 条成功、3 条失败审计） |
 
 迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 7 个显式索引、租户幂等
 唯一索引、活跃结果去重索引、结果过期索引、平台文档类型筛选排序索引，以及无客户端 policy
@@ -143,7 +144,9 @@
 - 经办人身份证字段映射到经办人/超级管理员字段，不覆盖法人字段。
 - “应用所选字段”只更新当前表单；没有 create、update、submit 或 workflow 调用。
 
-未完成：真实上传、识别、差异弹窗、选择回填和继续手工编辑的浏览器截图。原因是总开关关闭且缺少明确授权的有效样本。
+发布后已使用腾讯官方营业执照演示图片完成真实上传、识别、差异弹窗和选择回填浏览器验证，
+证据见 6.4 节。验证只更新浏览器内存中的表单状态，未保存草稿、未提交正式微信进件，也未触发
+workflow。
 
 ### 6.1 开发环境密钥与合成图连通性验证
 
@@ -235,8 +238,39 @@ provider 元数据被误判为非法业务字段。该次失败审计为
 | 审计与关闭状态       | 三个新场景使审计总数从 2 增至 5；每个 provider 首次调用只增加一条记录。全部脚本 `finally` 后 `TENCENT_OCR_ENABLED=false`，租户能力数为 0                                                                                              |
 
 本节解除营业执照、银行卡、成功结果加密/解密、成功缓存和模糊样例安全回退的运行态门禁。
-仍未完成加密身份证正反面和 Admin 差异弹窗/选择回填/继续手工编辑的浏览器验收；CAM 凭据
-也仍需收敛到仓库策略后才能作为生产凭据。
+仍未完成加密身份证正反面验收；CAM 凭据也仍需收敛到仓库策略后才能作为生产凭据。Admin
+差异弹窗和选择回填已在后续日期规范修复发布后完成，见 6.4 节。
+
+### 6.4 不完整证照日期防护与 Admin 字段复核
+
+腾讯官方营业执照演示图片的营业期限开始值可能只包含年月。原 normalizer 会把该原始值标记为
+已标准化，Admin 的 HTML 日期控件随后拒绝显示，形成“识别成功但日期无法可靠回填”的契约
+缺口。提交 `43f780b2` 改为只接受完整且有效的日期；不完整日期不进入稳定字段，也不推测日期，
+同时返回 `DOCUMENT_DATE_INCOMPLETE` warning。聚焦 OCR 与进件回归 76 项通过，API typecheck、
+build 和文件大小检查通过。
+
+开发镜像 build run `29908198534` 和 Auto Deploy Dev run `29908494301` 均成功，精确发布
+commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官方营业执照演示图片的重新
+编码副本执行全链路复测，临时文件 SHA-256 为
+`01eca8a84722f47dc451bfd4e6a9b053a6c90637099c0fa61770a8c4e7e6c841`，未加入 Git。
+
+| 检查 | 脱敏结果 |
+| --- | --- |
+| API 成功识别 | `file_id=958792b3-1c51-463d-81ea-6b641b9b1d3e`；`recognition_id=0a9919e9-12ab-4448-abf4-7d70b12d5641`；RequestId `58482581-bc6a-443a-af09-1dc63ddfdde1`；HTTP 200、`succeeded` |
+| 日期防护 | 返回 5 个稳定字段 key，未包含 `license_period_begin`；warning 为 `DOCUMENT_DATE_INCOMPLETE`、`DOCUMENT_COPY_SUSPECTED`；没有补造日期 |
+| 安全存储 | 成功结果有密文，`billable_units=1`；文档不记录识别字段值、COS URL、object key 或 signed URL |
+| 审计变化 | 首次 provider 调用使审计总数从 5 增至 6；测试结束后 `TENCENT_OCR_ENABLED=false`、租户能力数 0 |
+| Admin 字段复核 | 复核弹窗显示上述 5 个字段且默认选中；两个 warning 均可见；点击“应用所选字段”后 5 个建议值均进入当前表单 |
+| 写操作边界 | Admin UI 复测命中成功缓存，审计保持 6；没有保存草稿、提交进件或调用 workflow |
+
+![Admin OCR 字段复核脱敏截图](assets/2026-07-22-admin-field-review-masked.png)
+
+截图已遮盖当前值和识别建议值，只保留字段标签、warning 和交互状态。浏览器复测没有 API
+4xx/5xx；COS 直传首次请求存在开发域名 CORS console error，但现有
+`/api/uploads/cos/direct-proxy` 回退成功，因此上传和识别链路可用。使用项目已安装的
+`cos-nodejs-sdk-v5` 只读检查确认，存储桶允许生产 Admin 和小程序来源，但未允许
+`https://admin-dev.goodcms.cn`。本轮没有修改远端 COS；如需消除回退和 console error，须经
+基础设施变更确认后为开发域名增加精确 CORS origin，不能放宽为通配来源。
 
 ## 7. 清理任务证据
 
@@ -269,7 +303,7 @@ workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub A
 4. 已完成：保持身份证开关关闭，执行腾讯官方营业执照正常样例和模糊派生样例；总开关已恢复关闭。
 5. 完成腾讯身份证加密接口验证后再开启身份证开关，执行正反面样本。
 6. 已完成：腾讯官方银行卡样例、跨租户、幂等、缓存和额度负向场景均已执行；总开关已恢复关闭。
-7. 在租户 Admin 验证上传、识别、逐字段确认、手工修改和保存草稿；禁止提交正式微信进件。
+7. 部分完成：租户 Admin 上传、识别、逐字段确认和选择回填已通过；没有保存草稿或提交正式微信进件。若发布门禁要求持久化验证，使用专用测试进件完成手工修改和保存草稿后立即清理，禁止提交正式微信进件。
 8. 回填 recognition ID、脱敏 tenant ID、document type、status、duration、RequestId、warning code、HTTP 状态及脱敏截图；禁止记录图片、signed URL 和字段明文。
 
 ## 9. 发布判定
