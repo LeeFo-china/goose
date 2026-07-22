@@ -180,6 +180,23 @@ describe("WechatPayProfileValidationGateway", () => {
     });
   });
 
+  test("accepts a signed NOT_ENOUGH response as public-key mode when platform certificates expired", async () => {
+    const gateway = await createGateway(
+      mock(async () =>
+        createSignedResponse(
+          { code: "NOT_ENOUGH", message: "raw wechat message" },
+          { status: 403, requestId: "expired-certificate-request-id" },
+        )) as unknown as typeof fetch,
+    );
+
+    await expect(gateway.probe(probeInput())).resolves.toEqual({
+      ok: true,
+      probe_mode: "wechat_pay_public_key",
+      api_v3_key_probe: "format_only",
+      request_id: "expired-certificate-request-id",
+    });
+  });
+
   test("rejects a wrong 32-byte APIv3 key when decrypting certificates", async () => {
     const gateway = await createGateway(
       mock(async () =>

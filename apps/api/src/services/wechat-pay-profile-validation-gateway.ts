@@ -87,9 +87,10 @@ export class WechatPayProfileValidationGateway {
         nowSeconds: this.nowSecondsFactory(),
       });
 
+      const responseCode = stringField(verified.payload, "code");
       if (
-        response.status === 404 &&
-        stringField(verified.payload, "code") === "RESOURCE_NOT_EXISTS"
+        (response.status === 404 && responseCode === "RESOURCE_NOT_EXISTS") ||
+        (response.status === 403 && responseCode === "NOT_ENOUGH")
       ) {
         return {
           ok: true,
