@@ -416,9 +416,11 @@ KMS 密钥，也不能用其他腾讯云产品公钥替代。提交 `6f72e839` �
 artifact。定时事件还要求仓库变量
 `OCR_CLEANUP_SCHEDULE_ENABLED=true`，避免 workflow 先于生产 API 镜像发布而产生误报。该
 workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub Actions run `29670449440`
-（commit `d47f04ed`），早于 OCR 代码合入；GitHub 仓库也尚未配置定时开关。截至
-2026-07-22，清理工作流运行记录为空；在生产 API 发布包含清理脚本的版本前，
-不应手工触发已知会被脚本存在性门禁拒绝的任务，也不能把源码契约当作生产连续运行证据。
+（commit `d47f04ed`），早于 OCR 代码合入。生产 Environment 已存在
+`OCR_RESULT_ENCRYPTION_KEY` secret，但尚未配置 `OCR_CLEANUP_SCHEDULE_ENABLED` 变量。清理
+workflow 已有两次定时事件记录：run `29908754780` 和 `29918045961` 均为 `skipped`，符合变量
+关闭门禁，不能作为清理执行证据。在生产 API 发布包含清理脚本的版本前，不应手工触发已知会
+被脚本存在性门禁拒绝的任务，也不能把源码契约或 skipped run 当作生产连续运行证据。
 
 ## 8. 真实腾讯云 Smoke 待办
 
