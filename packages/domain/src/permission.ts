@@ -60,6 +60,7 @@ export const PERMISSION_CODE_VALUES = [
   'expense_request.approve_manager',
   'expense_request.approve_finance',
   'expense_request.pay',
+  'ocr.recognize',
   'finance.view',
   'finance.payment.create',
   'finance.payment.confirm',
@@ -100,6 +101,7 @@ export const PERMISSION_CODE_VALUES = [
   'platform.billing.recharge_product.manage',
   'platform.billing.recharge_refund.read',
   'platform.billing.recharge_refund.review',
+  'platform.ocr.recognition.read',
   'platform.tenant_onboarding.review',
   'platform.service_provider.publish',
   'platform.partner.read',
@@ -292,6 +294,10 @@ export const PermissionCodeConfig: Record<
     label: '登记费用打款',
     module: 'expense_request',
   },
+  'ocr.recognize': {
+    label: '使用证照识别',
+    module: 'ocr',
+  },
   'finance.view': { label: '查看财务模块', module: 'finance' },
   'finance.payment.create': { label: '登记项目收款', module: 'finance' },
   'finance.payment.confirm': { label: '确认项目收款', module: 'finance' },
@@ -391,6 +397,10 @@ export const PermissionCodeConfig: Record<
   'platform.billing.recharge_refund.review': {
     label: '审核积分充值退款申请',
     module: 'platform_billing',
+  },
+  'platform.ocr.recognition.read': {
+    label: '查看平台OCR记录',
+    module: 'platform_ocr',
   },
   'platform.tenant_onboarding.review': {
     label: '审核装企入驻',

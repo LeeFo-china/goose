@@ -211,4 +211,17 @@ describe("domain permissions", () => {
       expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
     }
   });
+
+  test("exposes tenant OCR and platform OCR audit permissions", () => {
+    expect(PERMISSION_CODE_VALUES).toContain("ocr.recognize");
+    expect(PERMISSION_CODE_VALUES).toContain("platform.ocr.recognition.read");
+    expect(PermissionCodeConfig["ocr.recognize"]).toEqual({
+      label: "使用证照识别",
+      module: "ocr",
+    });
+    expect(PermissionCodeConfig["platform.ocr.recognition.read"]).toEqual({
+      label: "查看平台OCR记录",
+      module: "platform_ocr",
+    });
+  });
 });

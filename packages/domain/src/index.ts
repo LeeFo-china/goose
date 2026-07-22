@@ -7,6 +7,7 @@ export * from './department-post-rule';
 export * from './employee';
 export * from './expense';
 export * from './marketing-page';
+export * from './ocr';
 export * from './payment';
 export * from './permission';
 export * from './post';
