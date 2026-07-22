@@ -1,5 +1,6 @@
 import {
   createDecipheriv,
+  generateKeyPairSync,
 } from "node:crypto";
 
 import { describe, expect, mock, test } from "bun:test";
@@ -15,7 +16,9 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const gatewayModulePromise = import("./tencent-gateway");
 
-const TEST_PUBLIC_KEY = "test-tencent-ocr-public-key";
+const TEST_PUBLIC_KEY = generateKeyPairSync("rsa", {
+  modulusLength: 1024,
+}).publicKey.export({ type: "pkcs1", format: "pem" }).toString();
 
 function createSettings(overrides: Record<string, string | boolean | number> = {}) {
   const values: Record<string, string | boolean | number> = {
@@ -138,10 +141,10 @@ describe("TencentOcrGateway", () => {
     });
   });
 
-  test("never falls back when encrypted ID capability is unavailable", async () => {
+  test("never falls back when encrypted ID capability or public key is unavailable", async () => {
     const { TencentOcrGateway } = await gatewayModulePromise;
     const gateway = new TencentOcrGateway({
-      settings: createSettings({ TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM: "" }),
+      settings: createSettings({ TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM: "not-a-public-key" }),
       clientFactory: () => ({
         BizLicenseOCR: mock(async () => ({})),
         BankCardOCR: mock(async () => ({})),

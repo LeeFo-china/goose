@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import type { OcrPlatformFileObjectRecord } from "@/repositories/platform-file-objects";
 import type { AuthContext } from "@/services/authorization";
 import type { OcrServiceDependencies } from "./service";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -157,6 +156,7 @@ async function createHarness(input: {
     },
     gateway,
     settings: {
+      getSecretString: mock(async (_key: string, fallback = "") => fallback),
       getNumber: mock(async (key: string, fallback: number) =>
         key === "TENCENT_OCR_DEFAULT_TENANT_DAILY_LIMIT" ? 100 : fallback),
       getBoolean: mock(async (key: string, fallback: boolean) => {

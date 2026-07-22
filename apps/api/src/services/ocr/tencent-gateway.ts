@@ -21,6 +21,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { systemSettingsService } from "@/services/system-settings";
 import type { OcrProviderAction } from "./capabilities";
+import { isTencentOcrEncryptionPublicKeyPem } from "./tencent-encryption-key";
 
 const TencentOcrClient = ocr.v20181119.Client;
 
@@ -166,7 +167,7 @@ export class TencentOcrGateway {
   ) {
     if (
       !config.encryptedIdEnabled ||
-      !config.encryptionPublicKeyPem.trim() ||
+      !isTencentOcrEncryptionPublicKeyPem(config.encryptionPublicKeyPem) ||
       config.encryptionAlgorithm !== "AES-256-CBC"
     ) {
       throw Errors.business(

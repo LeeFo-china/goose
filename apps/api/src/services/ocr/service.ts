@@ -31,9 +31,8 @@ import {
   hasOcrResultEncryptionKey,
   type OcrNormalizedResult,
 } from "./crypto";
-import {
-  normalizeOcrResponse,
-} from "./normalizers";
+import { filterConfiguredOcrCapabilities } from "./configured-capabilities";
+import { normalizeOcrResponse } from "./normalizers";
 import {
   assertOcrIdempotencyMatches,
   assertOcrRecognitionReadAccess,
@@ -83,7 +82,7 @@ export type OcrServiceDependencies = {
   };
   accessPolicy?: Pick<typeof accessPolicyService, "assertTenantContext" | "hasPermission">;
   gateway?: { recognize(input: TencentOcrGatewayInput): Promise<unknown> };
-  settings?: Pick<typeof systemSettingsService, "getBoolean" | "getNumber">;
+  settings?: Pick<typeof systemSettingsService, "getBoolean" | "getNumber" | "getSecretString">;
   signedUrlResolver?: typeof resolveOcrStoredFileUrl;
   normalize?: typeof normalizeOcrResponse;
   encrypt?: typeof encryptOcrResult;
@@ -139,9 +138,12 @@ export class OcrService {
       "TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED",
       false,
     );
-    return encryptedIdEnabled ? capabilities : capabilities.filter(
-      (item) => item.document_type !== "id_card_front" &&
-        item.document_type !== "id_card_back",
+    return filterConfiguredOcrCapabilities(
+      capabilities,
+      encryptedIdEnabled,
+      encryptedIdEnabled
+        ? await this.settings.getSecretString("TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM")
+        : "",
     );
   }
 
