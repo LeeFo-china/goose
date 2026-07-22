@@ -261,3 +261,24 @@ Task 10 的只读 preflight 已完成；中央双 Profile 的保存和在线验�
 发布后只读 UI smoke 覆盖 `1440x1000` 和 `390x844`：两套 Profile 均展示“校验通过 / 已就绪”，无 HTTP 4xx/5xx、console error 或页面级横向溢出。截图保存在 `/tmp/gooes-payment-final-desktop.png` 和 `/tmp/gooes-payment-final-mobile.png`，不包含私钥、APIv3 密钥或公钥正文。
 
 本次没有创建充值或支付订单，没有调用真实进件提交、微信状态同步、租户支付激活或扣款接口。公钥模式探针可以验证商户 API 私钥签名和微信支付公钥验签，但 APIv3 密钥证据仅为 `format_only`；服务商 APIv3 密钥的真实回调解密能力仍须在下一次单独授权的进件/支付 smoke 中验证。
+
+## 9. 开发环境支付路由恢复与只读复核
+
+2026-07-22 后续只读复核发现 `/platform/payment/wechat-pay/profiles` 返回 200，但 `/platform/payment/wechat-pay/readiness` 返回 `404 ROUTE_NOT_FOUND`。根因不是双 Profile 配置丢失，而是后续 `feature/douyin-decoration-miniapp` 自动发布运行 `29886285677` 使用了不包含支付 readiness 路由的旧分支 API 镜像，覆盖了开发环境支付 API。
+
+恢复过程严格经过发布门禁：
+
+1. 首次从 `main@e95f11a9` 发起受控开发发布，运行 `29897854471` 在部署前被 migration 历史校验安全拦截；开发库已存在 OCR migrations `20260722130000`、`20260722150000` 和 `20260722170000`，当时 `main` 尚未包含对应文件，因此没有部署任何服务。
+2. OCR migrations 和安全修复合并至 `main` 后，首次镜像构建运行 `29898608928` 又因 `pnpm-lock.yaml` 未同步腾讯 OCR SDK 依赖而失败，错误为 `ERR_PNPM_OUTDATED_LOCKFILE`。修复提交 `26ef665f` 同步了冻结锁文件；未绕过 `--frozen-lockfile` 门禁。
+3. `main@26ef665f` 的镜像构建运行 `29898758231` 成功，API、Admin、Web 和关联 worker 镜像均完成构建与推送。
+4. 自动开发部署运行 `29899205976` 成功，migration 历史、API/Admin 健康检查、关联 worker、Web gate 和最终部署摘要均通过。
+
+服务商微信支付公钥文件已在本地确认是可解析的 RSA 2048 位公钥，SHA-256 指纹为 `686128074dbea14a15c9a57806288bff0f3aa98fb1bf3eb8f6689f18afa06ce9`。文档不保存公钥正文、商户私钥、APIv3 密钥或登录令牌。
+
+部署完成后使用开发环境平台管理员执行只读 API smoke：
+
+- `POST /admin/auth/login`：200。
+- `GET /platform/payment/wechat-pay/profiles`：200，两套 Profile 均为 `configured=true`、`status=active`、`validation_status=valid`，且密钥引用和密钥版本均存在。
+- `GET /platform/payment/wechat-pay/readiness`：200，总体 `ready=true`；`platform_direct_recharge` 与 `tenant_service_provider` 均为 `ready=true`，blocker 数量为 0。
+
+本次恢复只发生在开发环境，没有发布生产环境；没有创建订单、提交微信进件、同步进件状态、激活租户支付配置或执行扣款。
