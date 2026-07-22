@@ -24,18 +24,29 @@ bun run --cwd apps/api ocr:results:cleanup --apply
 
 ## 3. 生产调度
 
-目标运行位置：生产 Docker 主机的系统级调度器，使用当前发布版本的 API 镜像/代码和同一套只读配置来源。
+调度定义：`.github/workflows/ocr-result-cleanup.yml`。任务运行在现有生产发布 runner，通过
+`docker exec gooes-api` 使用当前已部署 API 镜像的代码和容器环境，不在 GitHub 中复制
+数据库或 OCR 密钥。
 
 调度要求：
 
-- 周期：每小时一次，在整点后 10 分钟执行。
-- 命令：`bun run --cwd apps/api ocr:results:cleanup --apply`。
+- 周期：每小时一次，在整点后 17 分钟执行。
+- 定时模式：固定执行
+  `docker exec gooes-api bun src/scripts/ocr-result-cleanup.ts --apply`。
+- 手工模式：`workflow_dispatch` 默认 `dry-run`，需要明确选择 `apply` 才写数据库。
 - 超时：10 分钟。
-- 防重入：同一时刻只允许一个实例；上一轮未结束时跳过下一轮。
-- 运行用户：现有 Gooes 服务运行用户，不使用 root。
+- 防重入：GitHub Actions concurrency 固定为
+  `ocr-result-cleanup-production`，不取消正在执行的任务，不允许并行清理。
+- 运行边界：只允许 `gooes-prod-vm-0-3`，并要求 `gooes-api` 为
+  `running/healthy` 且已包含清理脚本。
 - 日志：只记录计数、最早过期时间和模式，不记录图片、signed URL、识别字段或密钥。
+- 证据：每次把脱敏 summary 写入 Job Summary，并保存 30 天 artifact。
+- 积压告警：`batch_limit_reached=true` 时 workflow 失败并输出 GitHub error。
 
-当前状态：调度器尚未在生产主机安装，因此 OCR 总开关不得开启。部署负责人完成安装后，必须把调度器名称、主机、首次 dry-run/apply 时间与脱敏输出回填到 Phase 1 smoke 记录。
+当前状态：调度定义已进入功能分支，但尚未合并到默认分支，也没有生产 workflow run
+证据，因此 OCR 总开关不得开启。合并并部署包含清理脚本的 API 镜像后，部署负责人必须先
+手工执行一次 dry-run 和一次 apply，再观察至少一个小时级定时 run，并把 run ID 与脱敏
+artifact 回填到 Phase 1 smoke 记录。
 
 2026-07-22 已使用当前目标数据库执行命令级验证：dry-run 与 apply 均成功，候选数和更新数均为 0。该证据只证明脚本和数据库连接可用，不替代生产小时级调度器的安装与连续运行证据。
 
@@ -53,7 +64,7 @@ bun run --cwd apps/api ocr:results:cleanup --apply
 2. dry-run 输出 `mode=dry-run`，并确认没有数据库更新。
 3. 使用受控过期测试记录运行 apply，确认 `status=expired` 且 `result_ciphertext IS NULL`。
 4. 再次 dry-run，确认已处理记录不再进入候选集。
-5. 确认调度器防重入和 10 分钟超时生效。
+5. 确认 workflow concurrency、10 分钟超时和 500 条积压失败告警生效。
 6. 回填 smoke 记录后，才允许在平台设置中启用 OCR。
 
 ## 6. 回滚

@@ -13,7 +13,7 @@
 2. 尚未配置 `OCR_RESULT_ENCRYPTION_KEY`。
 3. 尚未取得并验证腾讯云身份证加密识别公钥及真实加密接口样本。
 4. 尚未准备合成或明确授权的营业执照、身份证正反面和银行卡测试图片。
-5. 生产小时级密文清理调度器尚未安装并提供连续运行证据。
+5. 小时级清理 workflow 已实现，但尚未合并、生产执行并提供连续运行证据。
 
 ## 2. 版本范围
 
@@ -39,6 +39,7 @@
 | Domain OCR 契约 | 通过 | 2 tests passed |
 | API OCR、controller、repository、清理、进件 schema 和敏感存储聚焦回归 | 通过 | 66 tests passed |
 | Admin OCR 配置/审计、进件回填和支付进件回归 | 通过 | 34 tests passed |
+| 生产清理调度契约 | 通过 | 3 tests passed，YAML syntax ok |
 | API typecheck/build/file-size | 通过 | Bun build 成功，文件大小检查通过 |
 | Admin typecheck/file-size | 通过 | Next typegen、TypeScript 和文件大小检查通过 |
 | `git diff --check` | 通过 | 无空白错误 |
@@ -112,13 +113,19 @@
 
 这些结果证明命令和目标数据库连接可用，不证明过期记录实际清理，也不替代生产小时级调度器证据。读取过期结果返回 410、apply 清空 `result_ciphertext` 的行为已有自动化测试。
 
+生产调度定义已增加到 `.github/workflows/ocr-result-cleanup.yml`：每小时第 17 分钟执行、
+10 分钟超时、固定 concurrency 防止并行、复用健康的生产 API 容器、达到 500 条批次上限
+时失败告警，并保存 30 天脱敏 artifact。该 workflow 尚未在默认分支运行，因此不能把源码
+契约当作生产连续运行证据。
+
 ## 8. 真实腾讯云 Smoke 待办
 
 准备条件满足后，按顺序执行并在本文件追加脱敏证据：
 
 1. 创建仅允许 `BizLicenseOCR`、`RecognizeEncryptedIDCardOCR`、`BankCardOCR` 的 OCR 专用 CAM 凭证。
 2. 在平台 Admin 配置密钥、区域、endpoint、结果加密密钥和身份证加密公钥；不得写入文档或截图。
-3. 安装生产每小时清理调度，验证防重入、10 分钟超时和连续运行。
+3. 合并清理 workflow，部署包含脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
+   和至少一次小时级定时 run，回填 run ID 与脱敏 artifact。
 4. 先开启总开关并保持身份证开关关闭，执行授权营业执照正常/模糊样本。
 5. 完成腾讯身份证加密接口验证后再开启身份证开关，执行正反面样本。
 6. 执行测试银行卡样本、跨租户、幂等、缓存和额度负向场景。

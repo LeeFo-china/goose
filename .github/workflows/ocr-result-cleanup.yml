@@ -1,0 +1,106 @@
+name: OCR Result Cleanup
+run-name: OCR result cleanup ${{ github.event_name == 'schedule' && 'apply' || inputs.mode }}
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Cleanup mode"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - apply
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ocr-result-cleanup-production
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Clean expired OCR result ciphertext
+    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
+    environment: production
+    timeout-minutes: 10
+    env:
+      REQUESTED_MODE: ${{ inputs.mode || 'dry-run' }}
+
+    steps:
+      - name: Guard production API container
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          state="$(docker inspect -f '{{.State.Status}}' gooes-api)"
+          health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api)"
+          test "${state}" = "running"
+          test "${health}" = "healthy"
+          docker exec gooes-api test -f src/scripts/ocr-result-cleanup.ts
+
+      - name: Run bounded cleanup
+        id: cleanup
+        run: |
+          set -euo pipefail
+          mode="${REQUESTED_MODE}"
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            mode=apply
+          fi
+          case "${mode}" in
+            dry-run) cleanup_args=() ;;
+            apply) cleanup_args=(--apply) ;;
+            *) echo "::error::Unsupported cleanup mode"; exit 1 ;;
+          esac
+
+          output="$(docker exec gooes-api bun src/scripts/ocr-result-cleanup.ts "${cleanup_args[@]}")"
+          summary="$(printf '%s\n' "${output}" | tail -n 1)"
+          printf '%s\n' "${summary}"
+          jq -e 'type == "object"' <<< "${summary}" >/dev/null
+          test "$(jq -r '.mode' <<< "${summary}")" = "${mode}"
+          printf '%s\n' "${summary}" > "${RUNNER_TEMP}/ocr-result-cleanup-summary.json"
+
+          if ! jq -e '.batch_limit_reached == false' <<< "${summary}" >/dev/null; then
+            echo "::error::OCR cleanup reached the 500-row batch limit"
+            exit 1
+          fi
+
+      - name: Publish redacted cleanup summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          summary_path="${RUNNER_TEMP}/ocr-result-cleanup-summary.json"
+          {
+            echo "## OCR result cleanup"
+            if [ ! -s "${summary_path}" ]; then
+              echo
+              echo "Cleanup did not produce a summary. Review the failed step logs."
+              exit 0
+            fi
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            jq -r '
+              [
+                ["generated_at", .generated_at],
+                ["mode", .mode],
+                ["candidate_count", (.candidate_count | tostring)],
+                ["expired_count", (.expired_count | tostring)],
+                ["batch_limit_reached", (.batch_limit_reached | tostring)]
+              ]
+              | .[]
+              | "| \(.[0]) | \(.[1]) |"
+            ' "${summary_path}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Preserve redacted cleanup evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ocr-result-cleanup-${{ github.run_id }}
+          path: ${{ runner.temp }}/ocr-result-cleanup-summary.json
+          if-no-files-found: ignore
+          retention-days: 30
