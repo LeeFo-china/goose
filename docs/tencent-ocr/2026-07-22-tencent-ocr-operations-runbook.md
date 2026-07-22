@@ -53,8 +53,9 @@ OCR 这些接口按腾讯云 CAM 能力表使用操作级授权，因此 `resour
 身份，但 `ListAttachedUserAllPolicies` 返回 `AuthFailure.UnauthorizedOperation`。该凭据不能用于
 创建或审计替代子账号，也不应临时追加 CAM 管理权限。替代账号必须由主账号或独立 CAM 管理员
 创建，生成的新 SecretKey 只允许在受控密钥存储中交接一次；不得写入仓库、工单或 smoke
-记录。当前凭据的权限探针还表明 `GeneralBasicOCR` 可达，因此在替换并取得 `ready=true` 之前，
-不得把它视为一期最小权限凭据。
+记录。初次权限探针表明 `GeneralBasicOCR` 可达；操作者随后把当前账号改为自定义策略，最新探针
+已确认三个目标 Action 可达、`GeneralBasicOCR` 返回权限拒绝且 `ready=true`。该结果解除运行态
+行为门禁，但不能替代 CAM 管理员对直接、用户组、继承策略和权限边界的控制面回读。
 
 腾讯云依据：[CAM 自定义策略生成器](https://cloud.tencent.com/document/product/598/37739)
 要求声明授权效果、服务、操作和资源；[OCR CAM 能力表](https://cloud.tencent.com/document/product/598/60621)

@@ -10,7 +10,7 @@
 | 最低代码基线     | `cc7d0079 fix(ocr): 加固CAM运行态预检`                                        |
 | CAM 策略文件     | `deploy/tencent-ocr-phase1-cam-policy.json`                                   |
 | 策略文件 SHA-256 | `0f7f5bc3647ed0ebeaee53ef3bc2b4d2770ec93ecf271447307b3e854da1328e`            |
-| 当前 CAM 探针    | 三个一期 Action 可达；范围外 `GeneralBasicOCR` 也可达，`ready=false`          |
+| 当前 CAM 探针    | 三个一期 Action 可达；范围外 `GeneralBasicOCR` 已拒绝，`ready=true`           |
 | 生产结果密钥     | production Environment 已存在 `OCR_RESULT_ENCRYPTION_KEY`，不得读取或回填原文 |
 | 清理定时开关     | 仓库变量 `OCR_CLEANUP_SCHEDULE_ENABLED` 尚未配置                              |
 | 最新生产发布     | run `29670449440`，commit `d47f04ed`，早于 OCR 代码                           |
@@ -33,6 +33,9 @@
 
 当前 OCR 子账号没有 `ListAttachedUserAllPolicies` 权限，不能自助完成策略审计或创建替代账号。
 禁止临时给该运行账号追加 CAM 管理权限。必须由主账号或独立 CAM 管理员执行第 3 节。
+
+2026-07-22 操作者确认已把当前账号改为自定义策略，运行态探针已返回 `ready=true`。第 3.1 节的
+策略绑定回读和脱敏证据仍需由主账号或独立 CAM 管理员完成；不要用行为探针替代控制面审计。
 
 ## 3. CAM 最小权限替换
 

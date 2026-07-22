@@ -9,7 +9,8 @@
 
 未解除的发布门禁：
 
-1. 当前 OCR 凭据可调用一期范围外的 `GeneralBasicOCR`，CAM 最小权限门禁未通过；必须换成只关联一期策略的新子用户凭据。
+1. CAM 自定义策略的运行态最小权限探针已通过，但仍需安全负责人从控制台回读直接、用户组、
+   继承策略和权限边界，确认没有额外 OCR 授权。
 2. `OCR_RESULT_ENCRYPTION_KEY` 已按 development/production 环境分别配置，但生产 API 尚未发布密钥注入契约。
 3. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
 
@@ -327,6 +328,22 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 必须重新运行该命令，且只有三个目标 Action 通过、`GeneralBasicOCR` 返回权限拒绝时才能解除
 门禁。
 
+随后操作者确认已把当前 CAM 权限改为自定义策略，并于 2026-07-22 再次使用平台系统设置中的
+生效凭据执行。命令退出 0，脱敏结果如下：
+
+| Action                        | 期望 | 实际                                | RequestId                              | 判定                         |
+| ----------------------------- | ---- | ----------------------------------- | -------------------------------------- | ---------------------------- |
+| `BizLicenseOCR`               | 允许 | `FailedOperation.ImageDecodeFailed` | `e0245206-c640-4de5-944d-9febee75c323` | 通过，已到达业务校验         |
+| `BankCardOCR`                 | 允许 | `FailedOperation.ImageDecodeFailed` | `f1dcc494-e1b2-4aea-9ae4-65981b3a4e47` | 通过，已到达业务校验         |
+| `RecognizeEncryptedIDCardOCR` | 允许 | `FailedOperation.ImageDecodeFailed` | `51bc6069-1daa-4ef7-914e-99ab40314e67` | 通过，加密请求已到达图片校验 |
+| `GeneralBasicOCR`             | 拒绝 | `AuthFailure.UnauthorizedOperation` | `0ef012ff-b106-4546-88d9-0a5cdba12f12` | 通过，范围外 Action 已拒绝   |
+
+最新结论：`credential_source=platform_settings`、`official_endpoint=true`、
+`encrypted_id_probe_payload_valid=true`、`runtime_probe_ready=true`、`ready=true`。这证明当前
+运行凭据满足三个目标 Action 允许、范围外 Action 拒绝的行为门禁。输出仍按设计保留
+`policy_binding_verified=false` 和 `production_ready=false`；安全负责人仍需从 CAM 控制台回读
+直接、用户组、继承策略和权限边界，行为探针不能单独证明不存在其他额外 OCR Action。
+
 同日使用腾讯云官方 CAM Node SDK `4.1.265` 进行了只读权限审计。`GetUserAppId` 成功，确认当前
 SecretId 属于 CAM 子账号，RequestId 为 `e359d784-abb2-4750-9f5d-b19cb633da70`；继续调用
 `ListAttachedUserAllPolicies` 时返回 `AuthFailure.UnauthorizedOperation`，RequestId 为
@@ -438,7 +455,9 @@ workflow 已有两次定时事件记录：run `29908754780` 和 `29918045961` �
 
 准备条件满足后，按顺序执行并在本文件追加脱敏证据：
 
-1. 在腾讯 CAM 控制台为独立子用户应用 `deploy/tencent-ocr-phase1-cam-policy.json`，移除 OCR 全权限/通配符策略并更换开发环境凭据；执行 `cd apps/api && bun run ocr:cam:readiness`，要求 `ready=true`。现有凭据的最新运行结果仍为 `ready=false`，不能仅做截图复核后继续使用。
+1. 部分完成：操作者已把当前 CAM 权限改为自定义策略，`bun run ocr:cam:readiness` 最新返回
+   `ready=true`；仍需安全负责人回读 CAM 控制台中的直接、用户组、继承策略和权限边界，并提供
+   脱敏证据后，才能把策略绑定审计标记完成。
 2. 已完成：取得 1024 位 PKCS#1 RSA 加密公钥，完成格式校验、平台安全保存、无真实证件受控
    请求、本人授权身份证正反面成功响应解密和租户 API 密文存储/读取。Node.js Demo 不再作为
    硬门禁；API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 不得写入数据库、文档或截图。
