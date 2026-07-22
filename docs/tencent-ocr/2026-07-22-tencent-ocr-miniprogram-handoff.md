@@ -30,12 +30,12 @@ OCR 是录入辅助能力，不是 workflow 动作：
 
 ## 2. 后端发布阶段
 
-| 后端阶段 | 小程序影响 |
-| --- | --- |
-| Phase 1：OCR 基础设施 + Admin 微信支付进件 | orange 只读核对 API；通用 service 可以开发，但费用入口不应提前上线 |
-| Phase 2：费用票据 capability 发布 | orange 对接员工报销票据识别和字段回填 |
-| Phase 3：门头/商户资料 capability 发布 | orange 对接商户资料、门头和经营场景采集 |
-| 访客证照专项发布 | 再评估 `tenant_onboarding_license` 的 visitor session 权限，不复用员工 token 假设 |
+| 后端阶段                                   | 小程序影响                                                                        |
+| ------------------------------------------ | --------------------------------------------------------------------------------- |
+| Phase 1：OCR 基础设施 + Admin 微信支付进件 | orange 只读核对 API；通用 service 可以开发，但费用入口不应提前上线                |
+| Phase 2：费用票据 capability 发布          | orange 对接员工报销票据识别和字段回填                                             |
+| Phase 3：门头/商户资料 capability 发布     | orange 对接商户资料、门头和经营场景采集                                           |
+| 访客证照专项发布                           | 再评估 `tenant_onboarding_license` 的 visitor session 权限，不复用员工 token 假设 |
 
 客户端必须以 `/ocr/capabilities` 返回为准。后端未返回某项能力时，不展示对应识别按钮，也不使用本地 fallback Action。
 
@@ -43,17 +43,17 @@ OCR 是录入辅助能力，不是 workflow 动作：
 
 已读取以下现有文件，没有修改 orange：
 
-| 现有能力 | 文件 |
-| --- | --- |
-| 费用申请 API 和 COS 上传 | `src/services/expense_request.ts` |
-| direct COS 上传工具 | `src/utils/image_upload.ts` |
-| direct upload 类型 | `src/utils/image_upload_helpers.ts` |
-| 费用 API 类型 | `src/types/api/expense_request.d.ts` |
-| 费用明细输入 UI | `src/packageEmployees/pages/expenseDetail/components/ExpenseItemsSection.tsx` |
-| 费用图片处理 | `src/packageEmployees/pages/expenseDetail/hooks/useExpenseDetailImages.ts` |
-| 费用保存和动作 | `src/packageEmployees/pages/expenseDetail/hooks/useExpenseDetailActions.ts` |
-| 费用本地模型 | `src/packageEmployees/pages/expenseDetail/model.ts` |
-| 访客租户入驻执照上传 | `src/packageVisitor/pages/tenant-onboarding/hooks/useTenantOnboardingLicenseUpload.ts` |
+| 现有能力                 | 文件                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------- |
+| 费用申请 API 和 COS 上传 | `src/services/expense_request.ts`                                                      |
+| direct COS 上传工具      | `src/utils/image_upload.ts`                                                            |
+| direct upload 类型       | `src/utils/image_upload_helpers.ts`                                                    |
+| 费用 API 类型            | `src/types/api/expense_request.d.ts`                                                   |
+| 费用明细输入 UI          | `src/packageEmployees/pages/expenseDetail/components/ExpenseItemsSection.tsx`          |
+| 费用图片处理             | `src/packageEmployees/pages/expenseDetail/hooks/useExpenseDetailImages.ts`             |
+| 费用保存和动作           | `src/packageEmployees/pages/expenseDetail/hooks/useExpenseDetailActions.ts`            |
+| 费用本地模型             | `src/packageEmployees/pages/expenseDetail/model.ts`                                    |
+| 访客租户入驻执照上传     | `src/packageVisitor/pages/tenant-onboarding/hooks/useTenantOnboardingLicenseUpload.ts` |
 
 当前差距：
 
@@ -132,12 +132,7 @@ GET /ocr/capabilities?scene=expense_request
     "supported_mime_types": ["image/jpeg", "image/png"],
     "max_size_bytes": 2097152,
     "mode": "sync",
-    "output_fields": [
-      "amount",
-      "occurred_at",
-      "invoice_no",
-      "vendor_name"
-    ]
+    "output_fields": ["amount", "occurred_at", "invoice_no", "vendor_name"]
   }
 ]
 ```
@@ -285,9 +280,9 @@ export type OcrRecognition = {
 Service 方法：
 
 ```ts
-OcrService.getCapabilities(scene)
-OcrService.recognize(payload)
-OcrService.getRecognition(id)
+OcrService.getCapabilities(scene);
+OcrService.recognize(payload);
+OcrService.getRecognition(id);
 ```
 
 不要在小程序中定义腾讯云 Action 名、SecretId、SecretKey、endpoint 或签名逻辑。
@@ -337,14 +332,14 @@ OcrService.getRecognition(id)
 
 orange 当前没有已确认的租户微信支付进件页面。后续新增页面时复用同一 `OcrService`，附件类别映射：
 
-| 附件类别 | `document_type` |
-| --- | --- |
-| `license_copy` | `business_license` |
-| `legal_representative_id_card_front` | `id_card_front` |
-| `legal_representative_id_card_back` | `id_card_back` |
-| `contact_id_card_front` | `id_card_front` |
-| `contact_id_card_back` | `id_card_back` |
-| `settlement_account_proof` | `bank_card` |
+| 附件类别                             | `document_type`    |
+| ------------------------------------ | ------------------ |
+| `license_copy`                       | `business_license` |
+| `legal_representative_id_card_front` | `id_card_front`    |
+| `legal_representative_id_card_back`  | `id_card_back`     |
+| `contact_id_card_front`              | `id_card_front`    |
+| `contact_id_card_back`               | `id_card_back`     |
+| `settlement_account_proof`           | `bank_card`        |
 
 进件页面不能：
 
@@ -368,20 +363,21 @@ visitor `tenant_onboarding_license` 暂不接员工 OCR API。后端需要先提
 
 ## 13. 错误处理
 
-| code | 小程序处理 |
-| --- | --- |
-| `OCR_DISABLED` | 隐藏入口或提示“证照识别暂不可用”，保留手工填写 |
-| `OCR_CAPABILITY_UNAVAILABLE` | 刷新 capabilities，不本地 fallback |
-| `OCR_FILE_NOT_FOUND` | 提示重新上传；跨租户文件也按 404 返回，不判断远端文件是否存在 |
-| `OCR_FILE_ACCESS_DENIED` | 重新登录；不要改传 object key 绕过 |
-| `OCR_FILE_FORMAT_UNSUPPORTED` | 提示选择 JPEG/PNG |
-| `OCR_FILE_TOO_LARGE` | 压缩或重新选择 |
-| `OCR_DAILY_LIMIT_EXCEEDED` | 提示今日额度已用完，保留手工填写 |
-| `OCR_RECOGNITION_EXPIRED` | 清空识别建议，允许重新识别 |
-| `OCR_RECOGNITION_IN_PROGRESS` | 继续读取已有 recognition，不创建新请求 |
-| `OCR_PROVIDER_RATE_LIMITED` | 短暂提示稍后重试，不循环重放 |
-| `OCR_PROVIDER_FAILED` | 展示安全提示并保留原图/表单 |
-| `OCR_RESULT_INVALID` | 提示无法识别，改为手工填写 |
+| code                          | 小程序处理                                                    |
+| ----------------------------- | ------------------------------------------------------------- |
+| `OCR_DISABLED`                | 隐藏入口或提示“证照识别暂不可用”，保留手工填写                |
+| `OCR_CAPABILITY_UNAVAILABLE`  | 刷新 capabilities，不本地 fallback                            |
+| `OCR_FILE_NOT_FOUND`          | 提示重新上传；跨租户文件也按 404 返回，不判断远端文件是否存在 |
+| `OCR_FILE_ACCESS_DENIED`      | 重新登录；不要改传 object key 绕过                            |
+| `OCR_FILE_FORMAT_UNSUPPORTED` | 提示选择 JPEG/PNG                                             |
+| `OCR_FILE_TOO_LARGE`          | 压缩或重新选择                                                |
+| `OCR_DAILY_LIMIT_EXCEEDED`    | 提示今日额度已用完，保留手工填写                              |
+| `OCR_IDEMPOTENCY_CONFLICT`    | 当前请求已变化时生成新的 UUID；禁止继续复用冲突 key           |
+| `OCR_RECOGNITION_EXPIRED`     | 清空识别建议，允许重新识别                                    |
+| `OCR_RECOGNITION_IN_PROGRESS` | 继续读取已有 recognition，不创建新请求                        |
+| `OCR_PROVIDER_RATE_LIMITED`   | 短暂提示稍后重试，不循环重放                                  |
+| `OCR_PROVIDER_FAILED`         | 展示安全提示并保留原图/表单                                   |
+| `OCR_RESULT_INVALID`          | 提示无法识别，改为手工填写                                    |
 
 错误上报允许记录：
 
@@ -420,6 +416,7 @@ OCR 不进入以下数据源：
 
 - 点击一次生成一个 idempotency UUID。
 - 同一网络重试复用该 UUID。
+- 文件、场景、文档类型或业务对象变化后必须生成新的 UUID；冲突时后端返回 409。
 - 页面 pending 时禁用同一附件识别按钮。
 - 409 `OCR_RECOGNITION_IN_PROGRESS` 时读取后端已有 recognition。
 - `cached=true` 仍按成功结果展示，不提示用户再次支付或再次上传。

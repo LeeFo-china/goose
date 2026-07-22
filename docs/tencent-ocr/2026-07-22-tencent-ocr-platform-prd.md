@@ -52,16 +52,16 @@
 
 Phase 1 使用 `Version=2018-11-19`、endpoint `ocr.tencentcloudapi.com`，具体能力如下：
 
-| 内部文档类型 | 腾讯云 Action | 主要用途 | Phase |
-| --- | --- | --- | --- |
-| `business_license` | [`BizLicenseOCR`](https://cloud.tencent.com/document/api/866/36215) | 营业执照字段提取 | P0 |
-| `id_card_front` / `id_card_back` | [`RecognizeEncryptedIDCardOCR`](https://cloud.tencent.com/document/product/866/103433) | 身份证敏感信息加密识别 | P0 |
-| `bank_card` | [`BankCardOCR`](https://cloud.tencent.com/document/product/866/36216) | 卡号、银行、卡类型提取 | P0 |
-| `general_invoice` | [`RecognizeGeneralInvoice`](https://cloud.tencent.com/document/product/866/90802) | 员工报销票据提取 | P1 |
-| `vat_invoice_verify` | [`VatInvoiceVerifyNew`](https://cloud.tencent.com/document/product/866/73674) | 增值税发票真实性核验 | P1，可选付费能力 |
-| `store_name` | [`RecognizeStoreName`](https://cloud.tencent.com/document/product/866/110000) | 门头店名识别 | P2 |
-| `store_classification` | [`ClassifyStoreName`](https://cloud.tencent.com/document/product/866/110001) | 门店场景分类建议 | P2 |
-| `document_classification` | [`ClassifyDetectOCR`](https://cloud.tencent.com/document/api/866/46770) | 通用卡证预分类 | P3 |
+| 内部文档类型                     | 腾讯云 Action                                                                          | 主要用途               | Phase            |
+| -------------------------------- | -------------------------------------------------------------------------------------- | ---------------------- | ---------------- |
+| `business_license`               | [`BizLicenseOCR`](https://cloud.tencent.com/document/api/866/36215)                    | 营业执照字段提取       | P0               |
+| `id_card_front` / `id_card_back` | [`RecognizeEncryptedIDCardOCR`](https://cloud.tencent.com/document/product/866/103433) | 身份证敏感信息加密识别 | P0               |
+| `bank_card`                      | [`BankCardOCR`](https://cloud.tencent.com/document/product/866/36216)                  | 卡号、银行、卡类型提取 | P0               |
+| `general_invoice`                | [`RecognizeGeneralInvoice`](https://cloud.tencent.com/document/product/866/90802)      | 员工报销票据提取       | P1               |
+| `vat_invoice_verify`             | [`VatInvoiceVerifyNew`](https://cloud.tencent.com/document/product/866/73674)          | 增值税发票真实性核验   | P1，可选付费能力 |
+| `store_name`                     | [`RecognizeStoreName`](https://cloud.tencent.com/document/product/866/110000)          | 门头店名识别           | P2               |
+| `store_classification`           | [`ClassifyStoreName`](https://cloud.tencent.com/document/product/866/110001)           | 门店场景分类建议       | P2               |
+| `document_classification`        | [`ClassifyDetectOCR`](https://cloud.tencent.com/document/api/866/46770)                | 通用卡证预分类         | P3               |
 
 接口限制必须由后端 capability 契约统一收口，不由各客户端自行维护：
 
@@ -108,13 +108,13 @@ Phase 1 使用 `Version=2018-11-19`、endpoint `ocr.tencentcloudapi.com`，具�
 
 ## 6. 用户与权限
 
-| 角色 | 能力 |
-| --- | --- |
-| 平台技术管理员 | 配置 OCR 密钥、区域、endpoint、全局开关、平台默认日配额和超时。 |
-| 平台运营 | 分页查看识别记录、失败原因、用量和腾讯云 RequestId。 |
-| 租户微信支付进件操作人 | 对当前租户进件附件发起识别、确认并回填字段。 |
-| 费用申请人 | 对本人可编辑的费用申请票据发起识别并回填费用明细。 |
-| 商户资料采集员工 | 对有权限的商户资料图片发起门头或证照识别。 |
+| 角色                   | 能力                                                            |
+| ---------------------- | --------------------------------------------------------------- |
+| 平台技术管理员         | 配置 OCR 密钥、区域、endpoint、全局开关、平台默认日配额和超时。 |
+| 平台运营               | 分页查看识别记录、失败原因、用量和腾讯云 RequestId。            |
+| 租户微信支付进件操作人 | 对当前租户进件附件发起识别、确认并回填字段。                    |
+| 费用申请人             | 对本人可编辑的费用申请票据发起识别并回填费用明细。              |
+| 商户资料采集员工       | 对有权限的商户资料图片发起门头或证照识别。                      |
 
 权限采用双重校验：
 
@@ -127,15 +127,15 @@ Phase 1 使用 `Version=2018-11-19`、endpoint `ocr.tencentcloudapi.com`，具�
 
 ### 7.1 微信支付进件
 
-| 附件类别 | OCR 文档类型 | 可建议回填字段 | 不能自动处理的字段 |
-| --- | --- | --- | --- |
-| `license_copy` | `business_license` | `license_name`、`license_code`、`license_address`、`license_period_begin`、`license_period_end`、`legal_representative_name` | `merchant_short_name`、`qualification_type`、`settlement_id` |
-| `legal_representative_id_card_front` | `id_card_front` | `identity_name`、`identity_number`、`identity_address` | 法人身份一致性结论 |
-| `legal_representative_id_card_back` | `id_card_back` | `identity_period_begin`、`identity_period_end` | 证件真实性结论 |
-| `contact_id_card_front` | `id_card_front` | `super_admin_name`、`contact_identity_number`、`contact_identity_address` | 联系人是否有授权 |
-| `contact_id_card_back` | `id_card_back` | `contact_identity_period_begin`、`contact_identity_period_end` | 联系人是否有授权 |
-| `settlement_account_proof` | `bank_card` | `settlement_account_number`、`settlement_bank_name` | `settlement_account_name`、账户归属、联行号 |
-| `business_scene_material` | `store_name` | 店名和场景文本建议 | 行业资质、结算规则 |
+| 附件类别                             | OCR 文档类型       | 可建议回填字段                                                                                                               | 不能自动处理的字段                                           |
+| ------------------------------------ | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `license_copy`                       | `business_license` | `license_name`、`license_code`、`license_address`、`license_period_begin`、`license_period_end`、`legal_representative_name` | `merchant_short_name`、`qualification_type`、`settlement_id` |
+| `legal_representative_id_card_front` | `id_card_front`    | `identity_name`、`identity_number`、`identity_address`                                                                       | 法人身份一致性结论                                           |
+| `legal_representative_id_card_back`  | `id_card_back`     | `identity_period_begin`、`identity_period_end`                                                                               | 证件真实性结论                                               |
+| `contact_id_card_front`              | `id_card_front`    | `super_admin_name`、`contact_identity_number`、`contact_identity_address`                                                    | 联系人是否有授权                                             |
+| `contact_id_card_back`               | `id_card_back`     | `contact_identity_period_begin`、`contact_identity_period_end`                                                               | 联系人是否有授权                                             |
+| `settlement_account_proof`           | `bank_card`        | `settlement_account_number`、`settlement_bank_name`                                                                          | `settlement_account_name`、账户归属、联行号                  |
+| `business_scene_material`            | `store_name`       | 店名和场景文本建议                                                                                                           | 行业资质、结算规则                                           |
 
 字段标准化规则：
 
@@ -147,13 +147,13 @@ Phase 1 使用 `Version=2018-11-19`、endpoint `ocr.tencentcloudapi.com`，具�
 
 ### 7.2 员工费用申请
 
-| OCR 字段 | 费用明细字段 |
-| --- | --- |
-| 含税金额或价税合计 | `amount` |
-| 开票日期或票据日期 | `occurred_at` |
-| 发票号码 | `invoice_no` |
-| 销售方名称 | `vendor_name` |
-| 原图对象 key | `evidence_images[]` |
+| OCR 字段           | 费用明细字段        |
+| ------------------ | ------------------- |
+| 含税金额或价税合计 | `amount`            |
+| 开票日期或票据日期 | `occurred_at`       |
+| 发票号码           | `invoice_no`        |
+| 销售方名称         | `vendor_name`       |
+| 原图对象 key       | `evidence_images[]` |
 
 通用票据可能一次识别出多张票据。客户端必须先展示拆分结果，由用户选择创建一条或多条费用明细，不能直接写入申请。
 
@@ -489,6 +489,7 @@ Phase 1 不新增绕过现有进件 schema、敏感字段加密和状态机的�
 - `OCR_FILE_FORMAT_UNSUPPORTED`
 - `OCR_FILE_TOO_LARGE`
 - `OCR_DAILY_LIMIT_EXCEEDED`
+- `OCR_IDEMPOTENCY_CONFLICT`
 - `OCR_RECOGNITION_NOT_FOUND`
 - `OCR_RECOGNITION_EXPIRED`
 - `OCR_RECOGNITION_IN_PROGRESS`
@@ -508,6 +509,7 @@ Phase 1 不新增绕过现有进件 schema、敏感字段加密和状态机的�
   `404 OCR_FILE_NOT_FOUND`，不泄露该文件在其他租户是否存在。
 - 非支持 scene、MIME、文档类型和过大文件在调用腾讯云前被拒绝。
 - 同一 idempotency key 不重复调用 provider。
+- 同一 idempotency key 只能绑定原文件、场景、文档类型和业务对象，换请求复用时返回 409。
 - 同一有效文件和文档类型的重复请求命中缓存。
 - 识别结果到期后立即返回 410，密文由每小时清理任务在一个调度窗口内清除。
 - 平台列表正确分页，`pageSize` 最大 100。
@@ -531,27 +533,27 @@ Phase 1 不新增绕过现有进件 schema、敏感字段加密和状态机的�
 
 ## 18. 实施阶段
 
-| 阶段 | 范围 | 交付结果 |
-| --- | --- | --- |
-| Phase 0 | SDK、Bun、CAM、加密身份证技术验证 | 确认可实现并形成固定依赖版本 |
+| 阶段    | 范围                                                 | 交付结果                         |
+| ------- | ---------------------------------------------------- | -------------------------------- |
+| Phase 0 | SDK、Bun、CAM、加密身份证技术验证                    | 确认可实现并形成固定依赖版本     |
 | Phase 1 | OCR 基础设施、平台配置、识别记录、微信支付进件 Admin | 营业执照/身份证/银行卡可识别回填 |
-| Phase 2 | orange 通用 OCR service、员工费用票据 | 费用明细可人工确认回填 |
-| Phase 3 | 门头、商户资料、访客授权评审 | 商户资料采集效率提升 |
-| Phase 4 | 多页票据、发票核验、运营告警 | 异步批量和风控增强 |
+| Phase 2 | orange 通用 OCR service、员工费用票据                | 费用明细可人工确认回填           |
+| Phase 3 | 门头、商户资料、访客授权评审                         | 商户资料采集效率提升             |
+| Phase 4 | 多页票据、发票核验、运营告警                         | 异步批量和风控增强               |
 
 Phase 1 执行步骤见 [实施计划](./2026-07-22-tencent-ocr-phase1-implementation-plan.md)。
 
 ## 19. 风险与控制
 
-| 风险 | 控制措施 |
-| --- | --- |
-| OCR 误识别关键证件号 | 人工确认、现有 Zod 校验、差异展示，不自动提交 |
-| 敏感数据泄露 | 后端调用、密文存储、短期保留、日志脱敏、租户隔离 |
-| 重复调用产生费用 | idempotency、checksum 去重、客户端 pending、配额 |
-| 腾讯云限流或不可用 | Action 级并发、有限重试、手工录入 fallback |
-| 前后端支持格式不一致 | capabilities 作为单一来源，Phase 1 只开放 JPEG/PNG |
-| OCR 与 workflow 混淆 | OCR 只改表单草稿，不产生业务状态动作 |
-| 识别结果被当作真实性结论 | UI 明确“识别建议”，核验能力单独设计和收费 |
+| 风险                     | 控制措施                                           |
+| ------------------------ | -------------------------------------------------- |
+| OCR 误识别关键证件号     | 人工确认、现有 Zod 校验、差异展示，不自动提交      |
+| 敏感数据泄露             | 后端调用、密文存储、短期保留、日志脱敏、租户隔离   |
+| 重复调用产生费用         | idempotency、checksum 去重、客户端 pending、配额   |
+| 腾讯云限流或不可用       | Action 级并发、有限重试、手工录入 fallback         |
+| 前后端支持格式不一致     | capabilities 作为单一来源，Phase 1 只开放 JPEG/PNG |
+| OCR 与 workflow 混淆     | OCR 只改表单草稿，不产生业务状态动作               |
+| 识别结果被当作真实性结论 | UI 明确“识别建议”，核验能力单独设计和收费          |
 
 ## 20. 参考资料
 

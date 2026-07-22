@@ -40,8 +40,8 @@
 | 检查                                                                  | 结果 | 证据                                        |
 | --------------------------------------------------------------------- | ---- | ------------------------------------------- |
 | Domain OCR 契约与权限                                                 | 通过 | 11 tests passed                             |
-| API OCR、controller、repository、清理、进件 schema 和敏感存储聚焦回归 | 通过 | 67 tests passed                             |
-| Admin OCR 配置/审计、进件回填和支付进件聚焦回归                       | 通过 | 21 tests passed                             |
+| API OCR、controller、repository、清理、进件 schema 和敏感存储聚焦回归 | 通过 | 95 tests passed                             |
+| Admin OCR 配置/审计、进件回填和支付进件聚焦回归                       | 通过 | 35 tests passed                             |
 | 生产清理调度契约                                                      | 通过 | 3 tests passed，YAML syntax ok              |
 | API typecheck/build/file-size                                         | 通过 | Bun build 成功，文件大小检查通过            |
 | Admin typecheck/file-size                                             | 通过 | Next typegen、TypeScript 和文件大小检查通过 |
@@ -57,6 +57,8 @@
 - `20260722130000` Remote：存在。
 - `20260722150000` Local：存在。
 - `20260722150000` Remote：存在。
+- `20260722170000` Local：存在。
+- `20260722170000` Remote：存在。
 - Local/Remote：对齐。
 
 通过 service-role REST 只读查询确认：
@@ -71,31 +73,39 @@
 | `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`      |
 | `ocr_recognitions` 记录数               | 0            |
 
-迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 6 个显式索引、租户幂等唯一索引、活跃结果去重索引、结果过期索引和无客户端 policy 的 service-role 访问边界。
+迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 7 个显式索引、租户幂等
+唯一索引、活跃结果去重索引、结果过期索引、平台文档类型筛选排序索引，以及无客户端 policy
+的 service-role 访问边界。
 
 `20260722150000` 是前向安全修正：仅当 OCR 总开关仍为 `false` 时，把全局身份证加密识别
 能力收敛为 `false`。远端只读复核确认两个开关当前均为 `false`。
 
+`20260722170000` 为平台分页审计的 `document_type + created_at DESC` 增加前向索引，避免按
+文档类型筛选时随记录增长退化为全表扫描。
+
 ## 5. 自动化场景证据
 
-| 场景                               | 结果 | 证据类型                   |
-| ---------------------------------- | ---- | -------------------------- |
-| 营业执照字段和有效期标准化         | 通过 | normalizer test            |
-| 模糊/复印件告警映射                | 通过 | normalizer test            |
-| 身份证正反面加密请求及响应解密     | 通过 | gateway test               |
-| 禁止身份证明文接口降级             | 通过 | gateway test               |
-| 银行卡字段和清晰度告警             | 通过 | normalizer/gateway test    |
-| 跨租户或无权文件拒绝               | 通过 | service test               |
-| 未绑定文件仅允许上传员工识别       | 通过 | service test               |
-| 幂等键重放不重复调用 provider      | 通过 | service test               |
-| 同文件同文档类型命中缓存           | 通过 | service test               |
-| 唯一键竞争只读取胜出记录           | 通过 | service test               |
-| 每日额度超限在 provider 前拒绝     | 通过 | service test               |
-| 结果加密不含身份证号/地址明文      | 通过 | crypto test                |
-| 过期结果拒绝解密并返回 410         | 通过 | service test               |
-| 进件敏感值继续走原加密保存         | 通过 | sensitive integration test |
-| OCR 关闭时能力列表为空             | 通过 | service/controller test    |
-| 身份证加密开关关闭时隐藏身份证能力 | 通过 | service test               |
+| 场景                                             | 结果 | 证据类型                   |
+| ------------------------------------------------ | ---- | -------------------------- |
+| 营业执照字段和有效期标准化                       | 通过 | normalizer test            |
+| 模糊/复印件告警映射                              | 通过 | normalizer test            |
+| 身份证正反面加密请求及响应解密                   | 通过 | gateway test               |
+| 禁止身份证明文接口降级                           | 通过 | gateway test               |
+| 银行卡字段和清晰度告警                           | 通过 | normalizer/gateway test    |
+| 跨租户或无权文件拒绝                             | 通过 | service test               |
+| 未绑定文件仅允许上传员工识别                     | 通过 | service test               |
+| 未绑定结果仅允许原员工读取，业务结果复核进件权限 | 通过 | service test               |
+| 幂等键重放不重复调用 provider                    | 通过 | service test               |
+| 幂等键换请求复用返回 409                         | 通过 | service test               |
+| 同文件同文档类型命中缓存                         | 通过 | service test               |
+| 唯一键竞争只读取胜出记录                         | 通过 | service test               |
+| 每日额度超限在 provider 前拒绝                   | 通过 | service test               |
+| 结果加密不含身份证号/地址明文                    | 通过 | crypto test                |
+| 过期结果拒绝解密并返回 410                       | 通过 | service test               |
+| 进件敏感值继续走原加密保存                       | 通过 | sensitive integration test |
+| OCR 关闭时能力列表为空                           | 通过 | service/controller test    |
+| 结果加密密钥缺失时隐藏能力且不调用 provider      | 通过 | service test               |
+| 身份证加密开关关闭时隐藏身份证能力               | 通过 | service test               |
 
 ## 6. Admin 交互证据
 
@@ -137,8 +147,9 @@
 这些结果证明命令和目标数据库连接可用，不证明过期记录实际清理，也不替代生产小时级调度器证据。读取过期结果返回 410、apply 清空 `result_ciphertext` 的行为已有自动化测试。
 
 生产调度定义已增加到 `.github/workflows/ocr-result-cleanup.yml`：每小时第 17 分钟执行、
-10 分钟超时、固定 concurrency 防止并行、复用健康的生产 API 容器、达到 500 条批次上限
-时失败告警，并保存 30 天脱敏 artifact。定时事件还要求仓库变量
+10 分钟超时、固定 concurrency 防止并行、复用健康的生产 API 容器。apply 在一个任务内按
+500 条一批连续处理，最多执行 20 批；超过 10,000 条仍有积压时失败告警，并保存 30 天脱敏
+artifact。定时事件还要求仓库变量
 `OCR_CLEANUP_SCHEDULE_ENABLED=true`，避免 workflow 先于生产 API 镜像发布而产生误报。该
 workflow 尚未在默认分支运行，因此不能把源码契约当作生产连续运行证据。
 
