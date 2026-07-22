@@ -89,6 +89,7 @@ import PartnerOnboardingApplicationsController from "@/controllers/partner-onboa
 import TenantServiceProviderController from "@/controllers/tenant-service-provider";
 import TenantLocationController from "@/controllers/tenant-location";
 import VisitorLocalServiceProvidersController from "@/controllers/visitor-local-service-providers";
+import OcrController from "@/controllers/ocr";
 
 const fullCrudRoutes = {
   list: true,
@@ -176,6 +177,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TenantServiceProviderController.registerExtraRoutes(app);
   TenantLocationController.registerExtraRoutes(app);
   VisitorLocalServiceProvidersController.registerExtraRoutes(app);
+  OcrController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);

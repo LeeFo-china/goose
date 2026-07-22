@@ -314,4 +314,23 @@ describe("OcrService", () => {
       .rejects.toMatchObject({ statusCode: 410, code: "OCR_RECOGNITION_EXPIRED" });
     expect(dependencies.decrypt).not.toHaveBeenCalled();
   });
+
+  test("platform config test discards fields and does not persist a record", async () => {
+    const { service, dependencies } = await createHarness();
+    const platformContext = { ...authContext, tenantId: null, isPlatformAdmin: true };
+
+    const result = await service.testPlatformConfig(platformContext, {
+      imageBase64: "c3ludGhldGlj",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      warning_codes: [],
+      provider_request_id: "provider-request-1",
+      duration_ms: 0,
+    });
+    expect(JSON.stringify(result)).not.toContain("示例公司");
+    expect(dependencies.repository.createProcessing).not.toHaveBeenCalled();
+    expect(dependencies.repository.markSucceeded).not.toHaveBeenCalled();
+  });
 });

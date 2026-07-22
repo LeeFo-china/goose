@@ -253,6 +253,25 @@ export class OcrService {
     return this.repository.listPlatform(input);
   }
 
+  async testPlatformConfig(
+    authContext: AuthContext,
+    input: { imageBase64: string },
+  ) {
+    if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+    const startedAt = this.clockMsFactory();
+    const response = await this.gateway.recognize({
+      providerAction: "BizLicenseOCR",
+      imageBase64: input.imageBase64,
+    });
+    const normalized = this.normalize("business_license", response);
+    return {
+      ok: true,
+      warning_codes: normalized.warnings.map((warning) => warning.code),
+      provider_request_id: normalized.providerRequestId,
+      duration_ms: elapsed(this.clockMsFactory(), startedAt),
+    };
+  }
+
   private requireTenantEmployee(authContext: AuthContext) {
     const tenantId = this.accessPolicy.assertTenantContext(authContext);
     if (!authContext.employeeId) throw Errors.forbidden();
