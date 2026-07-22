@@ -3,6 +3,7 @@
 ## 1. 当前发布门禁
 
 - `TENCENT_OCR_ENABLED` 默认保持 `false`。
+- API 容器必须通过 GitHub Environment secret 注入 `OCR_RESULT_ENCRYPTION_KEY`；development 与 production 使用不同随机值，禁止写入平台设置或共享同一密钥。
 - 只有在生产环境完成一次 dry-run、一次 apply，并确认小时级调度连续运行后才能开启。
 - 身份证能力还必须完成腾讯云加密公钥和官方 Demo 的真实联调；未通过时保持 `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`。
 
@@ -30,6 +31,10 @@ bun run --cwd apps/api ocr:results:cleanup --apply
 调度定义：`.github/workflows/ocr-result-cleanup.yml`。任务运行在现有生产发布 runner，通过
 `docker exec gooes-api` 使用当前已部署 API 镜像的代码和容器环境，不在 GitHub 中复制
 数据库或 OCR 密钥。
+
+API Compose 使用 `${OCR_RESULT_ENCRYPTION_KEY:?set OCR_RESULT_ENCRYPTION_KEY}` 失败关闭，开发
+和生产发布 workflow 分别从各自 GitHub Environment 的同名 secret 注入。发布成功可以证明
+变量已进入 Compose 重建过程，但不能替代识别结果加密/解密的真实成功样本。
 
 调度要求：
 
