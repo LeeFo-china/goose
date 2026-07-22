@@ -54,8 +54,9 @@ OCR 这些接口按腾讯云 CAM 能力表使用操作级授权，因此 `resour
    `Public-Key: (1024 bit)`；不要把命令完整输出提交到仓库。
 4. 通过平台设置保存 `TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM`，继续保持
    `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`。
-5. 后端会拒绝外层 Base64、SPKI/PKCS#8、非 RSA、非 1024 位或畸形公钥；无效时能力接口不会
-   返回身份证正反面识别能力，gateway 也会再次失败关闭。
+5. 后端保存设置时会直接拒绝外层 Base64、SPKI/PKCS#8、非 RSA、非 1024 位或畸形公钥；
+   无效值不会写入数据库。运行时能力接口也不会返回身份证正反面识别能力，gateway 会再次
+   失败关闭。
 6. 使用明确授权的身份证正反面测试样本完成加密请求、加密响应解密、字段复核和过期清理后，
    才允许开启身份证能力。
 
