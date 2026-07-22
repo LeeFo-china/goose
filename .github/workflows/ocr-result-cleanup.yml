@@ -3,11 +3,11 @@ run-name: OCR result cleanup ${{ github.event_name == 'schedule' && 'apply' || i
 
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       mode:
-        description: "Cleanup mode"
+        description: 'Cleanup mode'
         required: true
         default: dry-run
         type: choice
