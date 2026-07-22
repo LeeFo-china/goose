@@ -286,6 +286,7 @@ jobs:
           GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
           GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
           GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
+          OCR_RESULT_ENCRYPTION_KEY: ${{ secrets.OCR_RESULT_ENCRYPTION_KEY }}
         run: |
           set -euo pipefail
           source scripts/prepare-site-content-deployment-secrets.sh "${DEPLOY_SERVICES}"
