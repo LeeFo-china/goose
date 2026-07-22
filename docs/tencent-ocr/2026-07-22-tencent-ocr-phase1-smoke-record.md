@@ -29,20 +29,23 @@
 - `8920b8bd feat(admin): 增加OCR配置与调用记录`
 - `414ee922 feat(finance): 支持进件证照识别回填`
 - `f582a550 fix(ocr): 按配置收敛可用能力`
+- `899ac39a ci(ocr): 调度过期识别结果清理`
+- `10a7501f fix(ci): 延后启用OCR清理调度`
+- `a0f52aea fix(ocr): 默认关闭身份证加密识别`
 
 ## 3. 静态门禁
 
 执行日期：2026-07-22（Asia/Shanghai）
 
-| 检查 | 结果 | 证据 |
-| --- | --- | --- |
-| Domain OCR 契约 | 通过 | 2 tests passed |
-| API OCR、controller、repository、清理、进件 schema 和敏感存储聚焦回归 | 通过 | 66 tests passed |
-| Admin OCR 配置/审计、进件回填和支付进件回归 | 通过 | 34 tests passed |
-| 生产清理调度契约 | 通过 | 3 tests passed，YAML syntax ok |
-| API typecheck/build/file-size | 通过 | Bun build 成功，文件大小检查通过 |
-| Admin typecheck/file-size | 通过 | Next typegen、TypeScript 和文件大小检查通过 |
-| `git diff --check` | 通过 | 无空白错误 |
+| 检查                                                                  | 结果 | 证据                                        |
+| --------------------------------------------------------------------- | ---- | ------------------------------------------- |
+| Domain OCR 契约与权限                                                 | 通过 | 11 tests passed                             |
+| API OCR、controller、repository、清理、进件 schema 和敏感存储聚焦回归 | 通过 | 67 tests passed                             |
+| Admin OCR 配置/审计、进件回填和支付进件聚焦回归                       | 通过 | 21 tests passed                             |
+| 生产清理调度契约                                                      | 通过 | 3 tests passed，YAML syntax ok              |
+| API typecheck/build/file-size                                         | 通过 | Bun build 成功，文件大小检查通过            |
+| Admin typecheck/file-size                                             | 通过 | Next typegen、TypeScript 和文件大小检查通过 |
+| `git diff --check`                                                    | 通过 | 无空白错误                                  |
 
 说明：API Bun 测试必须从 `apps/api` 目录运行，才能加载该包 `tsconfig` 中的 `@/` 别名；从仓库根目录直接传 API 文件路径会产生模块解析错误，不属于业务测试失败。
 
@@ -58,15 +61,15 @@
 
 通过 service-role REST 只读查询确认：
 
-| 项目 | 结果 |
-| --- | --- |
-| OCR 平台配置 | 11 项 active |
-| 敏感 OCR 配置 | 3 项 |
-| `ocr.recognize` | active |
-| `platform.ocr.recognition.read` | active |
-| `TENCENT_OCR_ENABLED` | `false` |
-| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false` |
-| `ocr_recognitions` 记录数 | 0 |
+| 项目                                    | 结果         |
+| --------------------------------------- | ------------ |
+| OCR 平台配置                            | 11 项 active |
+| 敏感 OCR 配置                           | 3 项         |
+| `ocr.recognize`                         | active       |
+| `platform.ocr.recognition.read`         | active       |
+| `TENCENT_OCR_ENABLED`                   | `false`      |
+| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`      |
+| `ocr_recognitions` 记录数               | 0            |
 
 迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 6 个显式索引、租户幂等唯一索引、活跃结果去重索引、结果过期索引和无客户端 policy 的 service-role 访问边界。
 
@@ -75,26 +78,40 @@
 
 ## 5. 自动化场景证据
 
-| 场景 | 结果 | 证据类型 |
-| --- | --- | --- |
-| 营业执照字段和有效期标准化 | 通过 | normalizer test |
-| 模糊/复印件告警映射 | 通过 | normalizer test |
-| 身份证正反面加密请求及响应解密 | 通过 | gateway test |
-| 禁止身份证明文接口降级 | 通过 | gateway test |
-| 银行卡字段和清晰度告警 | 通过 | normalizer/gateway test |
-| 跨租户或无权文件拒绝 | 通过 | service test |
-| 未绑定文件仅允许上传员工识别 | 通过 | service test |
-| 幂等键重放不重复调用 provider | 通过 | service test |
-| 同文件同文档类型命中缓存 | 通过 | service test |
-| 唯一键竞争只读取胜出记录 | 通过 | service test |
-| 每日额度超限在 provider 前拒绝 | 通过 | service test |
-| 结果加密不含身份证号/地址明文 | 通过 | crypto test |
-| 过期结果拒绝解密并返回 410 | 通过 | service test |
-| 进件敏感值继续走原加密保存 | 通过 | sensitive integration test |
-| OCR 关闭时能力列表为空 | 通过 | service/controller test |
-| 身份证加密开关关闭时隐藏身份证能力 | 通过 | service test |
+| 场景                               | 结果 | 证据类型                   |
+| ---------------------------------- | ---- | -------------------------- |
+| 营业执照字段和有效期标准化         | 通过 | normalizer test            |
+| 模糊/复印件告警映射                | 通过 | normalizer test            |
+| 身份证正反面加密请求及响应解密     | 通过 | gateway test               |
+| 禁止身份证明文接口降级             | 通过 | gateway test               |
+| 银行卡字段和清晰度告警             | 通过 | normalizer/gateway test    |
+| 跨租户或无权文件拒绝               | 通过 | service test               |
+| 未绑定文件仅允许上传员工识别       | 通过 | service test               |
+| 幂等键重放不重复调用 provider      | 通过 | service test               |
+| 同文件同文档类型命中缓存           | 通过 | service test               |
+| 唯一键竞争只读取胜出记录           | 通过 | service test               |
+| 每日额度超限在 provider 前拒绝     | 通过 | service test               |
+| 结果加密不含身份证号/地址明文      | 通过 | crypto test                |
+| 过期结果拒绝解密并返回 410         | 通过 | service test               |
+| 进件敏感值继续走原加密保存         | 通过 | sensitive integration test |
+| OCR 关闭时能力列表为空             | 通过 | service/controller test    |
+| 身份证加密开关关闭时隐藏身份证能力 | 通过 | service test               |
 
 ## 6. Admin 交互证据
+
+2026-07-22 在隔离 worktree 启动临时 API `127.0.0.1:3300` 和 Admin
+`127.0.0.1:3310`，完成发布前只读 smoke。测试结束后关闭两个临时服务，不影响 main
+工作区服务。
+
+| 页面/接口                                          | 结果                                                                                               |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `/settings?group=ocr`                              | 配置分组、总开关、身份证加密开关和配置测试入口可见；总开关和身份证开关均为关闭                     |
+| `/platform/ocr`                                    | 分页审计页和空状态正常，未展示识别字段或文件地址                                                   |
+| `/finance/wechat-pay/applyment`                    | 原手工填写表单可用；总开关关闭时不展示 OCR 操作，不阻断进件资料维护                                |
+| `GET /ocr/capabilities?scene=wechat_pay_applyment` | HTTP 200；`data` 为长度 0 的数组；未包含 secret、token、证件号、银行卡号、signed URL 或 object key |
+
+最终三页面浏览器复测未发现 console error 或接口 4xx/5xx。全过程未调用识别接口、未上传
+证件、未创建识别记录、未保存或提交微信支付进件，也未推进 workflow。
 
 自动化源码契约和类型检查确认：
 
