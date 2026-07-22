@@ -50,4 +50,21 @@ describe("system setting definitions localization", () => {
     expect(cryptoSource).toContain("配置值必须选择是或否");
     expect(cryptoSource).not.toContain("配置值必须是 true 或 false");
   });
+
+  test("defines platform-only OCR settings with secret credentials", () => {
+    const byKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, item]));
+
+    expect(byKey.get("TENCENT_OCR_SECRET_ID")).toMatchObject({
+      groupCode: "ocr",
+      isSecret: true,
+    });
+    expect(byKey.get("TENCENT_OCR_SECRET_KEY")).toMatchObject({
+      groupCode: "ocr",
+      isSecret: true,
+    });
+    expect(byKey.get("TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM")).toMatchObject({
+      groupCode: "ocr",
+      isSecret: true,
+    });
+  });
 });
