@@ -3133,6 +3133,118 @@ export type Database = {
           },
         ]
       }
+      ocr_recognitions: {
+        Row: {
+          actor_employee_id: string | null
+          billable_units: number
+          created_at: string
+          dedupe_key: string
+          document_type: string
+          duration_ms: number | null
+          expires_at: string
+          file_checksum: string | null
+          file_object_id: string
+          id: string
+          idempotency_key: string
+          processed_at: string | null
+          provider: string
+          provider_action: string
+          provider_error_code: string | null
+          provider_error_message_safe: string | null
+          provider_request_id: string | null
+          quality: Json
+          result_ciphertext: string | null
+          result_summary: Json
+          scene: string
+          status: string
+          subject_id: string | null
+          subject_type: string | null
+          tenant_id: string
+          updated_at: string
+          warnings: Json
+        }
+        Insert: {
+          actor_employee_id?: string | null
+          billable_units?: number
+          created_at?: string
+          dedupe_key: string
+          document_type: string
+          duration_ms?: number | null
+          expires_at?: string
+          file_checksum?: string | null
+          file_object_id: string
+          id?: string
+          idempotency_key: string
+          processed_at?: string | null
+          provider?: string
+          provider_action: string
+          provider_error_code?: string | null
+          provider_error_message_safe?: string | null
+          provider_request_id?: string | null
+          quality?: Json
+          result_ciphertext?: string | null
+          result_summary?: Json
+          scene: string
+          status?: string
+          subject_id?: string | null
+          subject_type?: string | null
+          tenant_id: string
+          updated_at?: string
+          warnings?: Json
+        }
+        Update: {
+          actor_employee_id?: string | null
+          billable_units?: number
+          created_at?: string
+          dedupe_key?: string
+          document_type?: string
+          duration_ms?: number | null
+          expires_at?: string
+          file_checksum?: string | null
+          file_object_id?: string
+          id?: string
+          idempotency_key?: string
+          processed_at?: string | null
+          provider?: string
+          provider_action?: string
+          provider_error_code?: string | null
+          provider_error_message_safe?: string | null
+          provider_request_id?: string | null
+          quality?: Json
+          result_ciphertext?: string | null
+          result_summary?: Json
+          scene?: string
+          status?: string
+          subject_id?: string | null
+          subject_type?: string | null
+          tenant_id?: string
+          updated_at?: string
+          warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_recognitions_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_recognitions_file_object_id_fkey"
+            columns: ["file_object_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_recognitions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number | null

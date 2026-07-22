@@ -95,6 +95,8 @@ Modify backend files:
   - Adds stable OCR errors.
 - `apps/api/src/routes/index.ts`
   - Registers OCR routes.
+- `apps/api/src/types/database.ts`
+  - Adds the generated `ocr_recognitions` table contract after migration apply.
 - `apps/api/src/repositories/platform-file-objects.ts`
   - Adds a tenant-scoped `findActiveById` projection.
 - `apps/api/src/services/system-settings/legacy/definitions-integrations.ts`
@@ -293,6 +295,7 @@ git commit -m "feat(ocr): 定义平台识别契约"
 **Files:**
 
 - Create: `supabase/migrations/20260722130000_create_ocr_recognitions.sql`
+- Modify: `apps/api/src/types/database.ts`
 
 - [ ] **Step 1: Create the table and constraints**
 
@@ -384,10 +387,14 @@ supabase migration list
 
 Expected after apply: Local/Remote align for `20260722130000`. Rollback is a forward migration that disables OCR, deletes the seeded settings/permissions, and drops `ocr_recognitions` only after confirming no retained audit is required.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Synchronize the generated database type**
+
+Regenerate `apps/api/src/types/database.ts` from the migrated target database. If the installed Supabase CLI requires unavailable Docker for `--db-url`, add only the exact `ocr_recognitions` table contract derived from the applied migration and prove it with API typecheck; do not use `any` or regenerate from a different project.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add supabase/migrations/20260722130000_create_ocr_recognitions.sql
+git add supabase/migrations/20260722130000_create_ocr_recognitions.sql apps/api/src/types/database.ts
 git commit -m "feat(db): 建立OCR识别记录"
 ```
 
