@@ -6,7 +6,7 @@
 - API 容器必须通过 GitHub Environment secret 注入 `OCR_RESULT_ENCRYPTION_KEY`；development 与 production 使用不同随机值，禁止写入平台设置或共享同一密钥。
 - OCR CAM 子用户只能关联 `deploy/tencent-ocr-phase1-cam-policy.json` 中的一期接口权限；禁止关联 `QcloudOCRFullAccess`、`ocr:*` 或其他 OCR Action。
 - 只有在生产环境完成一次 dry-run、一次 apply，并确认小时级调度连续运行后才能开启。
-- 身份证能力还必须完成腾讯云加密公钥和官方 Demo 的真实联调；未通过时保持 `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`。
+- 身份证能力还必须完成腾讯云加密公钥校验、加密协议联调和授权样本正反面识别；未通过时保持 `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`。官方 Demo 可用于交叉核验，但不是发布硬门禁。
 
 ### 1.1 CAM 最小权限配置
 
@@ -36,14 +36,17 @@ OCR 这些接口按腾讯云 CAM 能力表使用操作级授权，因此 `resour
 
 ### 1.2 身份证加密公钥申请与校验
 
-腾讯云[敏感数据加密指引](https://cloud.tencent.com/document/product/866/106048)明确说明：
-`RecognizeEncryptedIDCardOCR` 使用的加密公钥和官方 Demo 需要联系腾讯 OCR 售后支持获取，
-不能自行生成 KMS/RSA 密钥替代，也不能复用微信支付、COS 或其他产品的公钥。
+腾讯云[敏感数据加密指引](https://cloud.tencent.com/document/product/866/106048)提供两种实现方式：
+官方 Demo 支持 Java、Go、Node.js 和 Python，需要联系腾讯 OCR 售后支持获取；不使用官方
+SDK 时，文档也完整公开了 AES-256-CBC、RSA PKCS#1 v1.5 和请求/响应字段协议。因此官方
+Node.js Demo 是可选的交叉核验材料，不是实现前置条件。`RecognizeEncryptedIDCardOCR` 使用的
+1024 位 RSA PKCS#1 加密公钥仍必须由腾讯 OCR 提供，不能自行生成 KMS/RSA 密钥替代，也不能
+复用微信支付、COS 或其他产品的公钥。
 
 向腾讯 OCR 售后提交申请时，应明确提供：腾讯云账号标识、产品“文字识别 OCR”、接口
 `RecognizeEncryptedIDCardOCR`、算法 `AES-256-CBC`，并申请对应的 1024 位 RSA PKCS#1
-加密公钥和 Node.js Demo。不要在工单、聊天记录或仓库中发送 OCR SecretKey、业务证件图片或
-识别结果。
+加密公钥；如售后可以提供 Node.js Demo，可同时申请用于交叉核验。不要在工单、聊天记录或
+仓库中发送 OCR SecretKey、业务证件图片或识别结果。
 
 取得材料后按以下顺序处理：
 
@@ -57,7 +60,9 @@ OCR 这些接口按腾讯云 CAM 能力表使用操作级授权，因此 `resour
 5. 后端保存设置时会直接拒绝外层 Base64、SPKI/PKCS#8、非 RSA、非 1024 位或畸形公钥；
    无效值不会写入数据库。运行时能力接口也不会返回身份证正反面识别能力，gateway 会再次
    失败关闭。
-6. 使用明确授权的身份证正反面测试样本完成加密请求、加密响应解密、字段复核和过期清理后，
+6. 先使用无真实证件信息的空白图片执行受控探针；腾讯返回图片解析/识别错误和 RequestId、
+   且没有返回密钥或密文错误时，只能证明请求加密链路被接受。
+7. 使用明确授权的身份证正反面测试样本完成加密请求、加密响应解密、字段复核和过期清理后，
    才允许开启身份证能力。
 
 ## 2. 结果清理命令

@@ -4,16 +4,15 @@
 
 - 代码实现、自动化测试、API/Admin 构建、数据库 migration 和远端只读审计通过。
 - 远端 `TENCENT_OCR_ENABLED=false`，当前不会向租户 Admin 或小程序暴露识别能力。
-- 已使用腾讯云官方演示营业执照和银行卡图片取得成功识别结果，并使用官方营业执照图片的模糊派生样本验证安全失败路径；样例及识别字段值未写入仓库或验收记录，也未提交微信支付进件。
+- 已使用腾讯云官方演示营业执照和银行卡图片取得成功识别结果，并使用官方营业执照图片的模糊派生样本验证安全失败路径；经本人明确授权的身份证正反面样本也已完成加密识别。样例及识别字段值未写入仓库或验收记录，也未提交微信支付进件。
 - 一期当前状态为“代码就绪，发布门禁未解除”，不能标记为生产可用。
 
 未解除的发布门禁：
 
-1. 尚未取得并验证腾讯云身份证加密识别公钥及真实加密接口样本。
-2. 腾讯官方演示营业执照、模糊派生样本和银行卡样本已验证；身份证正反面仍缺少腾讯加密接口公钥和明确授权样本。
-3. 当前 OCR 凭据可调用一期范围外的 `GeneralBasicOCR`，CAM 最小权限门禁未通过；必须换成只关联一期策略的新子用户凭据。
-4. `OCR_RESULT_ENCRYPTION_KEY` 已按 development/production 环境分别配置，但生产 API 尚未发布密钥注入契约。
-5. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
+1. 腾讯云身份证加密公钥已完成格式校验、受控请求和授权正反面样本验证，但尚未保存到平台设置，也未启用身份证能力。
+2. 当前 OCR 凭据可调用一期范围外的 `GeneralBasicOCR`，CAM 最小权限门禁未通过；必须换成只关联一期策略的新子用户凭据。
+3. `OCR_RESULT_ENCRYPTION_KEY` 已按 development/production 环境分别配置，但生产 API 尚未发布密钥注入契约。
+4. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
 
 ## 2. 版本范围
 
@@ -73,14 +72,14 @@
 
 通过 service-role REST 只读查询确认：
 
-| 项目                                    | 结果                        |
-| --------------------------------------- | --------------------------- |
-| OCR 平台配置                            | 11 项 active                |
-| 敏感 OCR 配置                           | 3 项                        |
-| `ocr.recognize`                         | active                      |
-| `platform.ocr.recognition.read`         | active                      |
-| `TENCENT_OCR_ENABLED`                   | `false`                     |
-| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`                     |
+| 项目                                    | 结果                                      |
+| --------------------------------------- | ----------------------------------------- |
+| OCR 平台配置                            | 11 项 active                              |
+| 敏感 OCR 配置                           | 3 项                                      |
+| `ocr.recognize`                         | active                                    |
+| `platform.ocr.recognition.read`         | active                                    |
+| `TENCENT_OCR_ENABLED`                   | `false`                                   |
+| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`                                   |
 | `ocr_recognitions` 记录数               | 7（3 条成功、3 条失败、1 条过期清理审计） |
 
 迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 7 个显式索引、租户幂等
@@ -265,14 +264,14 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 编码副本执行全链路复测，临时文件 SHA-256 为
 `01eca8a84722f47dc451bfd4e6a9b053a6c90637099c0fa61770a8c4e7e6c841`，未加入 Git。
 
-| 检查 | 脱敏结果 |
-| --- | --- |
-| API 成功识别 | `file_id=958792b3-1c51-463d-81ea-6b641b9b1d3e`；`recognition_id=0a9919e9-12ab-4448-abf4-7d70b12d5641`；RequestId `58482581-bc6a-443a-af09-1dc63ddfdde1`；HTTP 200、`succeeded` |
-| 日期防护 | 返回 5 个稳定字段 key，未包含 `license_period_begin`；warning 为 `DOCUMENT_DATE_INCOMPLETE`、`DOCUMENT_COPY_SUSPECTED`；没有补造日期 |
-| 安全存储 | 成功结果有密文，`billable_units=1`；文档不记录识别字段值、COS URL、object key 或 signed URL |
-| 审计变化 | 首次 provider 调用使审计总数从 5 增至 6；测试结束后 `TENCENT_OCR_ENABLED=false`、租户能力数 0 |
-| Admin 字段复核 | 复核弹窗显示上述 5 个字段且默认选中；两个 warning 均可见；点击“应用所选字段”后 5 个建议值均进入当前表单 |
-| 写操作边界 | Admin UI 复测命中成功缓存，审计保持 6；没有保存草稿、提交进件或调用 workflow |
+| 检查           | 脱敏结果                                                                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| API 成功识别   | `file_id=958792b3-1c51-463d-81ea-6b641b9b1d3e`；`recognition_id=0a9919e9-12ab-4448-abf4-7d70b12d5641`；RequestId `58482581-bc6a-443a-af09-1dc63ddfdde1`；HTTP 200、`succeeded` |
+| 日期防护       | 返回 5 个稳定字段 key，未包含 `license_period_begin`；warning 为 `DOCUMENT_DATE_INCOMPLETE`、`DOCUMENT_COPY_SUSPECTED`；没有补造日期                                           |
+| 安全存储       | 成功结果有密文，`billable_units=1`；文档不记录识别字段值、COS URL、object key 或 signed URL                                                                                    |
+| 审计变化       | 首次 provider 调用使审计总数从 5 增至 6；测试结束后 `TENCENT_OCR_ENABLED=false`、租户能力数 0                                                                                  |
+| Admin 字段复核 | 复核弹窗显示上述 5 个字段且默认选中；两个 warning 均可见；点击“应用所选字段”后 5 个建议值均进入当前表单                                                                        |
+| 写操作边界     | Admin UI 复测命中成功缓存，审计保持 6；没有保存草稿、提交进件或调用 workflow                                                                                                   |
 
 ![Admin OCR 字段复核脱敏截图](assets/2026-07-22-admin-field-review-masked.png)
 
@@ -293,12 +292,12 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 
 2026-07-22 使用 `apps/api/.env` 当前凭据执行，命令按设计退出 1，脱敏结果如下：
 
-| Action | 期望 | 实际 | RequestId | 判定 |
-| --- | --- | --- | --- | --- |
-| `BizLicenseOCR` | 允许 | `FailedOperation.ImageDecodeFailed` | `076acf92-7afc-4596-85d0-964a5b098501` | 通过，已到达业务校验 |
-| `BankCardOCR` | 允许 | `FailedOperation.ImageDecodeFailed` | `1e263ac1-74e8-4abd-8dab-76bb93cb421a` | 通过，已到达业务校验 |
-| `RecognizeEncryptedIDCardOCR` | 允许 | `FailedOperation.UnKnowError` | `d39bb033-4e77-4297-bb3c-ef1b3c4fa0f4` | 通过，已到达业务校验 |
-| `GeneralBasicOCR` | 拒绝 | `FailedOperation.ImageDecodeFailed` | `80da927c-a341-4672-9e18-1edbc0cd833a` | 失败，范围外 Action 仍可调用 |
+| Action                        | 期望 | 实际                                | RequestId                              | 判定                         |
+| ----------------------------- | ---- | ----------------------------------- | -------------------------------------- | ---------------------------- |
+| `BizLicenseOCR`               | 允许 | `FailedOperation.ImageDecodeFailed` | `076acf92-7afc-4596-85d0-964a5b098501` | 通过，已到达业务校验         |
+| `BankCardOCR`                 | 允许 | `FailedOperation.ImageDecodeFailed` | `1e263ac1-74e8-4abd-8dab-76bb93cb421a` | 通过，已到达业务校验         |
+| `RecognizeEncryptedIDCardOCR` | 允许 | `FailedOperation.UnKnowError`       | `d39bb033-4e77-4297-bb3c-ef1b3c4fa0f4` | 通过，已到达业务校验         |
+| `GeneralBasicOCR`             | 拒绝 | `FailedOperation.ImageDecodeFailed` | `80da927c-a341-4672-9e18-1edbc0cd833a` | 失败，范围外 Action 仍可调用 |
 
 结论：`ready=false`。当前凭据可继续用于隔离开发环境排查，但不能作为一期生产凭据。平台安全
 管理员创建只绑定 `deploy/tencent-ocr-phase1-cam-policy.json` 的独立 CAM 子用户并替换密钥后，
@@ -307,9 +306,9 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 
 ### 6.6 身份证加密公钥格式门禁
 
-腾讯云官方敏感数据加密指引确认，加密公钥及官方 Demo 需联系腾讯 OCR 售后获取；该公钥不是
-项目自行生成的 KMS 密钥，也不能用其他腾讯云产品公钥替代。提交 `6f72e839` 增加公钥格式
-校验和双层失败关闭：
+腾讯云官方敏感数据加密指引确认，加密公钥需由腾讯 OCR 提供；官方 Demo 可以联系售后获取，
+但文档同时提供完整的无 SDK 实现协议，因此 Demo 不是发布硬门禁。该公钥不是项目自行生成的
+KMS 密钥，也不能用其他腾讯云产品公钥替代。提交 `6f72e839` 增加公钥格式校验和双层失败关闭：
 
 - 只接受 1024 位 PKCS#1 RSA public key PEM；外层 Base64、SPKI/PKCS#8、错误位数和畸形值
   均拒绝。
@@ -320,8 +319,38 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
   空值仍可用于清除未配置公钥。
 
 公钥格式、配置能力过滤、gateway 防御和设置保存共 34 项聚焦测试通过，API typecheck、build 和文件
-大小检查通过。该提交只完成代码门禁，不代表已经取得腾讯公钥或完成真实身份证识别；身份证
-能力继续保持关闭。
+大小检查通过。该提交只完成代码门禁，不代表完成真实身份证识别；身份证能力继续保持关闭。
+
+### 6.7 身份证加密协议受控探针
+
+2026-07-22 对腾讯 OCR 提供的 Base64 包裹公钥做了只读、内存内验证，未把公钥写入仓库、
+数据库或日志：
+
+- 外层 Base64 解码成功，内容为 1024 位 PKCS#1 RSA public key PEM。
+- 公钥 DER 的 SHA-256 指纹为
+  `63350c29ad1c5d2736f041dbed79428a47666f2e7d3055472d7908af12cc1c30`，后续保存或轮换时用该
+  指纹核对材料，文档不记录公钥正文。
+- 仓库实现逐项符合官方方式二：每次请求随机生成 32 字节 AES key 和 16 字节 IV，使用
+  AES-256-CBC/PKCS#7 加密 `EncryptedBody`，使用 RSA PKCS#1 v1.5 加密 AES key，并使用同一
+  AES key/IV 解密响应。
+- 加密公钥、gateway 和 SDK 兼容性聚焦测试 8 项通过。
+- 在不修改平台设置和开关的情况下，以内存注入公钥、1x1 空白 PNG 调用
+  `RecognizeEncryptedIDCardOCR`。腾讯返回 `FailedOperation.ImageDecodeFailed` 和 RequestId
+  `085f7df7-1b1c-46b0-b4cc-b924c7bb9180`，没有返回鉴权、密钥格式、算法或密文解密错误。
+
+该结果证明腾讯服务端已接受并解密请求体，Node.js Demo 不再是第 2 项的阻塞条件。
+
+随后使用本人明确授权的身份证正反面照片执行真实加密识别，图片只从本地读取并放入本次请求
+内存，没有复制到仓库、上传 COS 或写入数据库；终端和本文档均未输出识别字段明文：
+
+| 卡面  | 结果 | 脱敏字段检查                       | warning 数 | 腾讯 RequestId                         |
+| ----- | ---- | ---------------------------------- | ---------- | -------------------------------------- |
+| FRONT | 成功 | 姓名、证件号、地址、出生日期均存在 | 0          | `e1b3c9cd-d1d4-4797-96aa-7dab8f7de1d0` |
+| BACK  | 成功 | 签发机关、有效期均存在             | 0          | `d097eb4f-efa2-45b7-9385-9b1f863f8bf5` |
+
+真实样本证明请求加密、腾讯侧解密识别、加密响应返回和 Node.js 响应解密链路均通过。身份证
+接口协议和样本门禁已经解除；平台设置保存、租户 API 结果加密存储和过期清理仍需在保持能力
+开关关闭的前提下完成端到端验证。
 
 ## 7. 清理任务证据
 
@@ -333,15 +362,15 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 随后使用已验证官方样例对应的测试文件元数据创建一条明确标记、零计费、不含识别字段的临时
 成功记录，执行真实过期清理：
 
-| 检查 | 脱敏结果 |
-| --- | --- |
-| 夹具 | `recognition_id=332d424d-c02b-45f8-a8b9-5dd5abacdea3`；`billable_units=0`；密文为固定非敏感测试字符串 |
-| 执行前 | dry-run `candidate_count=0` |
-| 创建过期夹具后 | dry-run `candidate_count=1`，满足唯一候选保护条件 |
-| apply | `candidate_count=1`、`expired_count=1` |
-| 数据状态 | `status=expired`、`result_ciphertext IS NULL` |
-| 执行后 | dry-run `candidate_count=0` |
-| 租户读取 | HTTP 410 `OCR_RECOGNITION_EXPIRED` |
+| 检查           | 脱敏结果                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| 夹具           | `recognition_id=332d424d-c02b-45f8-a8b9-5dd5abacdea3`；`billable_units=0`；密文为固定非敏感测试字符串 |
+| 执行前         | dry-run `candidate_count=0`                                                                           |
+| 创建过期夹具后 | dry-run `candidate_count=1`，满足唯一候选保护条件                                                     |
+| apply          | `candidate_count=1`、`expired_count=1`                                                                |
+| 数据状态       | `status=expired`、`result_ciphertext IS NULL`                                                         |
+| 执行后         | dry-run `candidate_count=0`                                                                           |
+| 租户读取       | HTTP 410 `OCR_RECOGNITION_EXPIRED`                                                                    |
 
 开发环境真实过期清理和 410 读取边界已通过，脱敏过期审计记录按设计保留，当前总审计数为 7。
 该结果仍不替代生产 API 镜像、小时级调度器和连续运行证据。
@@ -361,13 +390,14 @@ workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub A
 准备条件满足后，按顺序执行并在本文件追加脱敏证据：
 
 1. 在腾讯 CAM 控制台为独立子用户应用 `deploy/tencent-ocr-phase1-cam-policy.json`，移除 OCR 全权限/通配符策略并更换开发环境凭据；执行 `cd apps/api && bun run ocr:cam:readiness`，要求 `ready=true`。现有凭据的最新运行结果仍为 `ready=false`，不能仅做截图复核后继续使用。
-2. 按运维手册 1.2 节联系腾讯 OCR 售后取得 1024 位 PKCS#1 RSA 加密公钥和 Node.js Demo，
-   完成格式校验后配置；OCR 密钥和 API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 已配置，后者
-   不得写入数据库、文档或截图。
+2. 已取得 1024 位 PKCS#1 RSA 加密公钥，并完成格式校验、无真实证件受控请求和本人授权的
+   身份证正反面成功响应解密；尚未保存到平台设置。Node.js Demo 不再作为硬门禁；OCR 密钥和
+   API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 已配置，后者不得写入数据库、文档或截图。
 3. 部署包含清理脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
    和至少一次小时级定时 run，回填 run ID 与脱敏 artifact。
 4. 已完成：保持身份证开关关闭，执行腾讯官方营业执照正常样例和模糊派生样例；总开关已恢复关闭。
-5. 完成腾讯身份证加密接口验证后再开启身份证开关，执行正反面样本。
+5. 已完成腾讯身份证加密接口正反面样本直连验证；保存公钥后，仍需通过租户 API 验证结果加密
+   存储、读取和过期清理，验证期间不得提前打开全局身份证能力。
 6. 已完成：腾讯官方银行卡样例、跨租户、幂等、缓存和额度负向场景均已执行；总开关已恢复关闭。
 7. 部分完成：租户 Admin 上传、识别、逐字段确认和选择回填已通过；没有保存草稿或提交正式微信进件。若发布门禁要求持久化验证，使用专用测试进件完成手工修改和保存草稿后立即清理，禁止提交正式微信进件。
 8. 回填 recognition ID、脱敏 tenant ID、document type、status、duration、RequestId、warning code、HTTP 状态及脱敏截图；禁止记录图片、signed URL 和字段明文。

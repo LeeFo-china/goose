@@ -48,15 +48,15 @@ Excluded:
 The task checkboxes below are the original execution recipe. As of 2026-07-22, the authoritative
 delivery status is:
 
-| Task | Status | Evidence |
-| --- | --- | --- |
-| Task 0-9 | Complete | Implementation, migrations, focused tests, Admin smoke and commits are recorded in the Phase 1 smoke record. |
-| Task 10 Step 1-2 | Complete | Static gates and Local/Remote migration alignment passed. |
-| Task 10 Step 3 | Partially complete | OCR credentials and per-environment result keys are configured. `bun run ocr:cam:readiness` now provides a redacted runtime gate, and the latest run proves the current CAM credential is still over-privileged because `GeneralBasicOCR` is reachable. A replacement credential must apply `deploy/tencent-ocr-phase1-cam-policy.json` and return `ready=true`. Encrypted-ID public-key format is now validated and fails closed, but the Tencent-issued key is still missing; production has not deployed the key-injection contract. |
-| Task 10 Step 4-5 | In progress | Tencent official demo business-license and bank-card samples passed end-to-end recognition, encrypted storage/readback, idempotent replay and successful-result cache checks. A blurred derivative was rejected safely. Admin upload, field review, warning display and selected-field fill passed without saving or submitting an applyment. Encrypted ID front/back remains required. |
-| Task 10 Step 6 | In progress | Static, migration, deployment, negative-boundary, official demo document, masked Admin UI, and a real development expired-record cleanup with 410 readback are recorded in the smoke record. Encrypted ID, least-privilege CAM and production cleanup scheduler evidence remain absent. |
-| Task 10 Step 7 | Pending | Cannot declare Phase 1 production-ready before encrypted-ID, least-privilege CAM and production cleanup evidence. Development COS CORS also needs an approved exact-origin update if direct upload without proxy fallback is a release requirement. |
-| Task 10 Step 8 | Complete for current evidence | The smoke record is versioned; it must be amended after each real smoke gate. |
+| Task             | Status                        | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Task 0-9         | Complete                      | Implementation, migrations, focused tests, Admin smoke and commits are recorded in the Phase 1 smoke record.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Task 10 Step 1-2 | Complete                      | Static gates and Local/Remote migration alignment passed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Task 10 Step 3   | Partially complete            | OCR credentials and per-environment result keys are configured. `bun run ocr:cam:readiness` now provides a redacted runtime gate, and the latest run proves the current CAM credential is still over-privileged because `GeneralBasicOCR` is reachable. A replacement credential must apply `deploy/tencent-ocr-phase1-cam-policy.json` and return `ready=true`. The Tencent-issued encrypted-ID public key is validated and accepted by the provider, but is not yet saved to platform settings; production has not deployed the key-injection contract. |
+| Task 10 Step 4-5 | In progress                   | Tencent official demo business-license and bank-card samples passed end-to-end recognition, encrypted storage/readback, idempotent replay and successful-result cache checks. A blurred derivative was rejected safely. Authorized encrypted ID front/back samples passed provider request encryption and response decryption without persisting field values. Admin upload, field review, warning display and selected-field fill passed without saving or submitting an applyment. The encrypted-ID tenant API persistence path remains required.       |
+| Task 10 Step 6   | In progress                   | Static, migration, deployment, negative-boundary, official demo document, authorized encrypted-ID provider smoke, masked Admin UI, and a real development expired-record cleanup with 410 readback are recorded in the smoke record. Encrypted-ID tenant API persistence, least-privilege CAM and production cleanup scheduler evidence remain absent.                                                                                                                                                                                                    |
+| Task 10 Step 7   | Pending                       | Cannot declare Phase 1 production-ready before encrypted-ID tenant API persistence, least-privilege CAM and production cleanup evidence. Development COS CORS also needs an approved exact-origin update if direct upload without proxy fallback is a release requirement.                                                                                                                                                                                                                                                                                |
+| Task 10 Step 8   | Complete for current evidence | The smoke record is versioned; it must be amended after each real smoke gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Do not start Phase 2 expense or storefront features until Task 10 Step 3-7 are complete, unless a
 separate risk decision explicitly accepts shipping Phase 2 behind disabled capabilities.
@@ -188,15 +188,15 @@ Expected: `apps/api/package.json` contains the exact version and `bun.lock` chan
 Create `apps/api/src/services/ocr/tencent-sdk-compatibility.test.ts`:
 
 ```ts
-import { describe, expect, test } from "bun:test";
-import { ocr } from "tencentcloud-sdk-nodejs-ocr";
+import { describe, expect, test } from 'bun:test';
+import { ocr } from 'tencentcloud-sdk-nodejs-ocr';
 
-describe("Tencent OCR SDK compatibility", () => {
-  test("exports the 2018-11-19 client actions used by phase 1", () => {
+describe('Tencent OCR SDK compatibility', () => {
+  test('exports the 2018-11-19 client actions used by phase 1', () => {
     const prototype = ocr.v20181119.Client.prototype;
-    expect(typeof prototype.BizLicenseOCR).toBe("function");
-    expect(typeof prototype.RecognizeEncryptedIDCardOCR).toBe("function");
-    expect(typeof prototype.BankCardOCR).toBe("function");
+    expect(typeof prototype.BizLicenseOCR).toBe('function');
+    expect(typeof prototype.RecognizeEncryptedIDCardOCR).toBe('function');
+    expect(typeof prototype.BankCardOCR).toBe('function');
   });
 });
 ```
@@ -236,29 +236,29 @@ Cover these exact values:
 
 ```ts
 export const OCR_SCENE_VALUES = [
-  "wechat_pay_applyment",
-  "expense_request",
-  "merchant_material",
+  'wechat_pay_applyment',
+  'expense_request',
+  'merchant_material',
 ] as const;
 
 export const OCR_DOCUMENT_TYPE_VALUES = [
-  "business_license",
-  "id_card_front",
-  "id_card_back",
-  "bank_card",
-  "general_invoice",
-  "vat_invoice_verify",
-  "store_name",
-  "store_classification",
-  "document_classification",
+  'business_license',
+  'id_card_front',
+  'id_card_back',
+  'bank_card',
+  'general_invoice',
+  'vat_invoice_verify',
+  'store_name',
+  'store_classification',
+  'document_classification',
 ] as const;
 
 export const OCR_RECOGNITION_STATUS_VALUES = [
-  "pending",
-  "processing",
-  "succeeded",
-  "failed",
-  "expired",
+  'pending',
+  'processing',
+  'succeeded',
+  'failed',
+  'expired',
 ] as const;
 ```
 
@@ -282,8 +282,8 @@ The response contract must not expose a provider raw response type.
 Add:
 
 ```ts
-'ocr.recognize'
-'platform.ocr.recognition.read'
+'ocr.recognize';
+'platform.ocr.recognition.read';
 ```
 
 with labels `使用证照识别` and `查看平台OCR记录`, modules `ocr` and `platform_ocr`.
@@ -532,7 +532,7 @@ Add the PRD keys under `groupCode: "ocr"`; SecretId, SecretKey and the encryptio
 Use the inspected SDK export:
 
 ```ts
-import { ocr } from "tencentcloud-sdk-nodejs-ocr";
+import { ocr } from 'tencentcloud-sdk-nodejs-ocr';
 
 const TencentOcrClient = ocr.v20181119.Client;
 ```
@@ -543,9 +543,9 @@ Provider calls:
 
 - `BizLicenseOCR`: signed COS `ImageUrl`, `EnableCopyWarn: true`, `EnablePeriodComplete: true`.
 - `BankCardOCR`: signed COS `ImageUrl`, copy/reshoot/border/quality checks enabled, no cut-image output.
-- `RecognizeEncryptedIDCardOCR`: follow Tencent's [sensitive-data encryption guide](https://cloud.tencent.com/document/product/1253/115227). Generate a fresh 32-byte AES key and 16-byte IV for every request; serialize the Tencent request body as JSON, apply PKCS#7 padding, encrypt it with AES-256-CBC, and Base64 the result as `EncryptedBody`. Encrypt the AES key with the Tencent OCR 1024-bit RSA public key using PKCS#1 v1.5 and Base64 it as `Encryption.CiphertextBlob`; set `Encryption.Algorithm="AES-256-CBC"`, `Encryption.EncryptList=["EncryptedBody"]`, `Encryption.TagList=[]`, and `Encryption.Iv` to the Base64 IV. Decrypt the response `EncryptedBody` with the same AES key and IV. Enable copy, border, reshoot, PS, invalid-date, quality and reflection warnings in the encrypted inner request.
+- `RecognizeEncryptedIDCardOCR`: follow Tencent's [sensitive-data encryption guide](https://cloud.tencent.com/document/product/866/106048). Generate a fresh 32-byte AES key and 16-byte IV for every request; serialize the Tencent request body as JSON, apply PKCS#7 padding, encrypt it with AES-256-CBC, and Base64 the result as `EncryptedBody`. Encrypt the AES key with the Tencent OCR 1024-bit RSA public key using PKCS#1 v1.5 and Base64 it as `Encryption.CiphertextBlob`; set `Encryption.Algorithm="AES-256-CBC"`, `Encryption.EncryptList=["EncryptedBody"]`, `Encryption.TagList=[]`, and `Encryption.Iv` to the Base64 IV. Decrypt the response `EncryptedBody` with the same AES key and IV. Enable copy, border, reshoot, PS, invalid-date, quality and reflection warnings in the encrypted inner request.
 
-The encrypted ID implementation is a release gate. Obtain and verify the current Tencent OCR encryption public key and official Node.js Demo through Tencent OCR support before enabling the capability. If the Phase 0 test cannot produce and decrypt a valid request with that material, keep ID capabilities disabled; do not silently fall back to plaintext `IDCardOCR`.
+The encrypted ID implementation is a release gate. Obtain and verify the current Tencent OCR encryption public key through Tencent OCR support before enabling the capability. Tencent's manual AES-256-CBC/RSA PKCS#1 protocol is sufficient for the Node.js implementation; an official Node.js Demo is optional cross-check material, not a hard dependency. If the Phase 0 test cannot produce a valid encrypted request and decrypt a successful encrypted response with an authorized sample, keep ID capabilities disabled; do not silently fall back to plaintext `IDCardOCR`.
 
 - [ ] **Step 4: Normalize provider errors**
 

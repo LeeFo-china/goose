@@ -71,7 +71,7 @@ Phase 1 使用 `Version=2018-11-19`、endpoint `ocr.tencentcloudapi.com`，具�
 - 门头识别和分类单接口 QPS 较低，首期必须设置独立并发限制。
 - 腾讯云返回的复印件、翻拍、模糊、反光等告警只能辅助人工判断，不能单独作为审核结论。
 
-安全加密版身份证还要求按腾讯云[敏感数据加密指引](https://cloud.tencent.com/document/product/1253/115227)处理请求和响应：每次请求生成 32 字节 AES 密钥和 16 字节 IV，使用 AES-256-CBC/PKCS#7 加密请求体，使用腾讯 OCR 提供的 1024 位 RSA PKCS#1 公钥加密 AES 密钥，并用同一 AES 密钥和 IV 解密响应 `EncryptedBody`。腾讯 OCR 加密公钥或官方 Node.js Demo 需要在实施前向腾讯 OCR 支持渠道获取并核验。
+安全加密版身份证还要求按腾讯云[敏感数据加密指引](https://cloud.tencent.com/document/product/866/106048)处理请求和响应：每次请求生成 32 字节 AES 密钥和 16 字节 IV，使用 AES-256-CBC/PKCS#7 加密请求体，使用腾讯 OCR 提供的 1024 位 RSA PKCS#1 公钥加密 AES 密钥，并用同一 AES 密钥和 IV 解密响应 `EncryptedBody`。腾讯 OCR 加密公钥需要在实施前向腾讯 OCR 支持渠道获取并核验；官方 Node.js Demo 仅作为可选的交叉核验材料，文档公开的无 SDK 协议足以完成实现。
 
 ## 4. 产品目标
 
