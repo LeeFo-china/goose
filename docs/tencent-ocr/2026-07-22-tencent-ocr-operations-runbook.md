@@ -142,14 +142,18 @@ API Compose 使用 `${OCR_RESULT_ENCRYPTION_KEY:?set OCR_RESULT_ENCRYPTION_KEY}`
 - 积压告警：连续执行 20 个批次后仍有积压时，`batch_limit_reached=true`，workflow 失败并
   输出 GitHub error。
 
-当前状态：调度定义已合入默认分支，但生产 API 最新发布版本早于 OCR 代码合入，GitHub 仓库
-尚未配置 `OCR_CLEANUP_SCHEDULE_ENABLED`，也没有生产 workflow run 证据，因此 OCR 总开关
-不得开启。部署包含清理脚本的 API 镜像后，部署负责人必须先
-手工执行一次 dry-run 和一次 apply，再设置 `OCR_CLEANUP_SCHEDULE_ENABLED=true`，观察至少
-一个小时级定时 run，并把 run ID 与脱敏 artifact 回填到 Phase 1 smoke 记录。
+当前状态：生产 API 已发布 Tag `v2026.07.22.1`，容器 revision
+`d8e962b2049ed0f7d99189187e5475a84e02526d`，并包含清理脚本。生产 migration history 已通过
+受控 workflow 从 326 个版本对齐到 350 个版本，latest 为 `20260722190000`。手工 dry-run
+run `29943553896` 和 apply run `29943674913` 均成功；仓库变量
+`OCR_CLEANUP_SCHEDULE_ENABLED=true` 已配置。首个小时级 schedule run `29946282199` 已成功，
+artifact `ocr-result-cleanup-29946282199` 记录候选 0、过期 0、1 批且无积压。生产清理调度门禁
+已解除；CAM 控制面策略绑定回读完成前，OCR 总开关仍不得开启。
 
-在生产 API 尚未包含 `apps/api/src/scripts/ocr-result-cleanup.ts` 时，不要为了制造运行记录手工
-触发 workflow；脚本存在性门禁会拒绝任务，这类失败不能作为清理能力验证证据。
+首次 dry-run 曾因生产库缺少 `ocr_recognitions` 返回 `PGRST205`。此类错误必须先比较 repository
+migration 与生产 history，再使用 migration plan/apply workflow 修复；禁止手工建表或修改
+history。首次修复使用 plan `29943238994`、apply `29943424252`，应用前备份保存在
+`/opt/supabase/docker/backups/prod-migrate-29943424252-20260723014201.sql`。
 
 2026-07-22 已使用开发目标数据库完成命令级验证和真实过期夹具验证：先确认候选为 0，再创建
 一条零计费、无识别字段的过期成功记录；dry-run 命中 1 条，apply 过期 1 条并清空密文，随后

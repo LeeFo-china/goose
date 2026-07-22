@@ -7,14 +7,15 @@
 
 | 项目             | 当前证据                                                                      |
 | ---------------- | ----------------------------------------------------------------------------- |
-| 最低代码基线     | `cc7d0079 fix(ocr): 加固CAM运行态预检`                                        |
+| 生产发布基线     | Tag `v2026.07.22.1`，commit `d8e962b2049ed0f7d99189187e5475a84e02526d`        |
 | CAM 策略文件     | `deploy/tencent-ocr-phase1-cam-policy.json`                                   |
 | 策略文件 SHA-256 | `0f7f5bc3647ed0ebeaee53ef3bc2b4d2770ec93ecf271447307b3e854da1328e`            |
 | 当前 CAM 探针    | 三个一期 Action 可达；范围外 `GeneralBasicOCR` 已拒绝，`ready=true`           |
 | 生产结果密钥     | production Environment 已存在 `OCR_RESULT_ENCRYPTION_KEY`，不得读取或回填原文 |
-| 清理定时开关     | 仓库变量 `OCR_CLEANUP_SCHEDULE_ENABLED` 尚未配置                              |
-| 最新生产发布     | run `29670449440`，commit `d47f04ed`，早于 OCR 代码                           |
-| 最新清理调度     | run `29928158966`，schedule/skipped；这是关闭门禁的预期结果，不是执行证据     |
+| 清理定时开关     | 仓库变量 `OCR_CLEANUP_SCHEDULE_ENABLED=true`                                  |
+| 最新生产发布     | build `29935616717`；deploy `29942795668`；容器 revision 与发布 commit 一致   |
+| 手工清理验证     | dry-run `29943553896`；apply `29943674913`；两次均成功且无候选                |
+| 定时清理验证     | schedule run `29946282199` 成功；artifact ID `8540272875`                     |
 
 执行期间始终保持：
 
@@ -101,8 +102,8 @@ bun run ocr:cam:readiness
 
 ### 4.1 发布前确认
 
-1. 远端 `main` 必须包含 `cc7d0079` 及其前置 OCR 提交；从该精确 commit 创建符合
-   `vYYYY.MM.DD.N` 格式的审核发布 Tag。
+1. 远端 `main` 必须包含已审核 OCR 提交；从该精确 commit 创建符合
+   `vYYYY.MM.DD.N` 格式的审核发布 Tag。首次发布已使用 `v2026.07.22.1`。
 2. 在同一 Tag 上手工运行 `.github/workflows/release-production.yml`：先选择
    `operation=build`、`service=api`、`confirm_text=确认构建生产候选`；成功后记录 build run ID
    和完整 40 位 commit SHA。
@@ -129,6 +130,18 @@ bun run ocr:cam:readiness
 如果生产容器缺少脚本、数据库连接失败、apply 超时、批次上限触发或日志出现敏感信息：立即把
 `OCR_CLEANUP_SCHEDULE_ENABLED` 恢复为 `false`，保持 OCR 总开关关闭，并按安全事件处理日志泄露。
 已经清除的过期密文不做恢复。
+
+2026-07-23 首次生产执行记录：
+
+- build run `29935616717` 和 deploy run `29942795668` 成功；deployment receipt artifact ID
+  `8538925921`。
+- 生产数据库起初缺少 24 个 repository migration，清理 dry-run 因 `PGRST205` 失败。通过
+  migration plan `29943238994` 与 apply `29943424252` 受控应用后，history 从 326 对齐到
+  350，latest 为 `20260722190000`。
+- cleanup dry-run `29943553896` 与 apply `29943674913` 均成功，候选和过期数均为 0，
+  `batch_limit_reached=false`。
+- 定时变量已开启；首个 schedule run `29946282199` 成功，artifact
+  `ocr-result-cleanup-29946282199` 显示候选 0、过期 0、1 批且无积压，第 4.2 节已完成。
 
 ## 5. 最终解除门禁
 

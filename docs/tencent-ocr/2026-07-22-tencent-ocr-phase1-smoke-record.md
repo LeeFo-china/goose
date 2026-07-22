@@ -11,8 +11,9 @@
 
 1. CAM 自定义策略的运行态最小权限探针已通过，但仍需安全负责人从控制台回读直接、用户组、
    继承策略和权限边界，确认没有额外 OCR 授权。
-2. `OCR_RESULT_ENCRYPTION_KEY` 已按 development/production 环境分别配置，但生产 API 尚未发布密钥注入契约。
-3. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
+
+`OCR_RESULT_ENCRYPTION_KEY` 的生产注入、生产 API 发布、清理 dry-run/apply 和首个小时级
+`schedule` run 均已通过，不再是发布阻塞项。
 
 身份证加密公钥已通过平台设置保存，且租户 API 正反面识别、结果密文存储、授权读取、幂等和
 缓存链路均已通过。验收结束后总开关和身份证开关均恢复为 `false`，不对租户暴露能力。
@@ -437,19 +438,58 @@ KMS 密钥，也不能用其他腾讯云产品公钥替代。提交 `6f72e839` �
 | 租户读取       | HTTP 410 `OCR_RECOGNITION_EXPIRED`                                                                    |
 
 开发环境真实过期清理和 410 读取边界已通过，脱敏过期审计记录按设计保留，当前总审计数为 9。
-该结果仍不替代生产 API 镜像、小时级调度器和连续运行证据。
 
 生产调度定义已增加到 `.github/workflows/ocr-result-cleanup.yml`：每小时第 17 分钟执行、
 10 分钟超时、固定 concurrency 防止并行、复用健康的生产 API 容器。apply 在一个任务内按
 500 条一批连续处理，最多执行 20 批；超过 10,000 条仍有积压时失败告警，并保存 30 天脱敏
 artifact。定时事件还要求仓库变量
-`OCR_CLEANUP_SCHEDULE_ENABLED=true`，避免 workflow 先于生产 API 镜像发布而产生误报。该
-workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub Actions run `29670449440`
-（commit `d47f04ed`），早于 OCR 代码合入。生产 Environment 已存在
-`OCR_RESULT_ENCRYPTION_KEY` secret，但尚未配置 `OCR_CLEANUP_SCHEDULE_ENABLED` 变量。清理
-workflow 已有两次定时事件记录：run `29908754780` 和 `29918045961` 均为 `skipped`，符合变量
-关闭门禁，不能作为清理执行证据。在生产 API 发布包含清理脚本的版本前，不应手工触发已知会
-被脚本存在性门禁拒绝的任务，也不能把源码契约或 skipped run 当作生产连续运行证据。
+`OCR_CLEANUP_SCHEDULE_ENABLED=true`，避免 workflow 先于生产 API 镜像发布而产生误报。
+
+### 7.1 生产发布、Migration 与首次清理
+
+2026-07-23 使用审核 Tag `v2026.07.22.1` 发布生产 API：
+
+| 证据          | 结果                                                                                                                        |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Source commit | `d8e962b2049ed0f7d99189187e5475a84e02526d`                                                                                  |
+| Build         | run `29935616717` 成功；候选、构建计划和 API image manifest artifact 均已生成                                               |
+| Deploy        | run `29942795668` 成功；deployment receipt artifact ID `8538925921`                                                         |
+| 运行镜像      | `useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:cdbcc17f53e352d8de82ef10156a1a248a7f2dfda1419fdf68fbf83419447530` |
+| 容器状态      | `gooes-api` 为 `running/healthy`，运行 revision 与 source commit 完全一致                                                   |
+| 结果密钥      | 容器内变量存在；只核验存在性，未输出值                                                                                      |
+
+生产 runner 到 GitHub/镜像仓库的跨境链路在发布期间出现 checkout timeout 和镜像拉取 TLS
+handshake timeout。运维侧建立了受控 SSH SOCKS 出口并使用精确 commit 的一次性本地 Git
+cache 完成 checkout；临时 Git URL rewrite 已确认移除。失败的部署尝试均发生在 API 容器重建
+之前，没有改变运行服务。最终 deploy workflow 仍完整验证候选 artifact、镜像 manifest、
+容器健康和公共端点，没有绕过生产发布门禁。
+
+首次 production cleanup dry-run 暴露生产数据库缺少 `ocr_recognitions`：PostgREST 返回
+`PGRST205`。根因是生产 migration history 比仓库少 24 个版本，而不是清理脚本或 OCR payload
+问题。随后严格通过 migration workflow 处理：
+
+- plan run `29943238994` 确认 before count 326、pending 24，未写数据库。
+- apply run `29943424252` 成功；24 个 migration 从 `20260717110000` 到
+  `20260722190000` 全部应用，after count 350，latest 为 `20260722190000`。
+- 应用前备份：`/opt/supabase/docker/backups/prod-migrate-29943424252-20260723014201.sql`，
+  5,179,945 bytes。
+- 应用后确认 `ocr_recognitions` 可查询，PostgREST schema cache 已刷新，Local/Remote history
+  对齐。没有手工执行 DDL/DML 修库。
+
+生产清理证据：
+
+| 模式    | Run / artifact                                       | 脱敏结果                                                                                                              |
+| ------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| dry-run | run `29943553896` / `ocr-result-cleanup-29943553896` | `candidate_count=0`、`expired_count=0`、`batch_count=1`、`batch_limit_reached=false`                                  |
+| apply   | run `29943674913` / `ocr-result-cleanup-29943674913` | `candidate_count=0`、`expired_count=0`、`batch_count=1`、`batch_limit_reached=false`、`ciphertext_clear_enabled=true` |
+
+仓库变量 `OCR_CLEANUP_SCHEDULE_ENABLED=true` 已配置。首个真实小时级定时事件 run
+`29946282199` 于 `2026-07-22T18:21:08Z` 创建并成功完成，source commit 为
+`d8e962b2049ed0f7d99189187e5475a84e02526d`。artifact ID `8540272875`，名称
+`ocr-result-cleanup-29946282199`；脱敏结果为 `mode=apply`、`candidate_count=0`、
+`expired_count=0`、`batch_count=1`、`batch_limit_reached=false`、
+`ciphertext_clear_enabled=true`、`redacted_audit_preserved=true`。该证据来自 `schedule`，不是
+workflow dispatch 或 skipped run。两个 OCR 功能开关继续保持关闭。
 
 ## 8. 真实腾讯云 Smoke 待办
 
@@ -461,8 +501,8 @@ workflow 已有两次定时事件记录：run `29908754780` 和 `29918045961` �
 2. 已完成：取得 1024 位 PKCS#1 RSA 加密公钥，完成格式校验、平台安全保存、无真实证件受控
    请求、本人授权身份证正反面成功响应解密和租户 API 密文存储/读取。Node.js Demo 不再作为
    硬门禁；API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 不得写入数据库、文档或截图。
-3. 部署包含清理脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
-   和至少一次小时级定时 run，回填 run ID 与脱敏 artifact。
+3. 已完成：生产 API、migration、手工 dry-run、手工 apply 和首个小时级 `schedule` run 均已
+   通过，run ID 与脱敏 artifact 已回填。
 4. 已完成：保持身份证开关关闭，执行腾讯官方营业执照正常样例和模糊派生样例；总开关已恢复关闭。
 5. 已完成：腾讯身份证加密接口正反面直连、租户 API 识别、结果加密存储、授权读取、幂等和
    缓存均已通过；过期清理和 410 读取边界已由独立夹具验证。验收结束后两个开关均恢复关闭。
@@ -474,4 +514,6 @@ workflow 已有两次定时事件记录：run `29908754780` 和 `29918045961` �
 
 当前判定：`NO-GO`。
 
-解除条件：第 8 节真实腾讯云 Smoke 全部通过，生产小时级清理调度连续运行证据完成，并由平台技术负责人和安全负责人共同确认。解除前保持 `TENCENT_OCR_ENABLED=false`，原微信支付进件手工填写与保存链路不受影响。
+解除条件：CAM 管理员完成直接、用户组、继承策略和权限边界的控制面回读，并由平台技术负责人
+和安全负责人共同确认。解除前保持 `TENCENT_OCR_ENABLED=false`，原微信支付进件手工填写与保存
+链路不受影响。
