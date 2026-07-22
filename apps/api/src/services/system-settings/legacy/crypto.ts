@@ -15,6 +15,9 @@ import {
   TENANT_SMS_TENCENT_MODE,
   TENANT_SMS_PLATFORM_MODE,
 } from './definitions';
+import { isTencentOcrEncryptionPublicKeyPem } from '@/services/ocr/tencent-encryption-key';
+
+const TENCENT_OCR_ENCRYPTION_PUBLIC_KEY = 'TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM';
 
 export function normalizeStoredValue(value: string | null | undefined) {
   const normalized = value?.trim();
@@ -115,6 +118,15 @@ export function resolveEffectiveValue(record: SystemSettingRecord): {
 
 export function validateSettingValue(record: SystemSettingRecord, value: string | null) {
   if (!value) return null;
+
+  if (
+    record.key === TENCENT_OCR_ENCRYPTION_PUBLIC_KEY &&
+    !isTencentOcrEncryptionPublicKeyPem(value)
+  ) {
+    throw Errors.badRequest(
+      '身份证识别加密公钥必须是腾讯OCR提供的1024位PKCS#1 RSA公钥PEM',
+    );
+  }
 
   if (record.key === TENANT_SMS_CHANNEL_MODE_KEY) {
     return normalizeTenantSmsChannelMode(value);
