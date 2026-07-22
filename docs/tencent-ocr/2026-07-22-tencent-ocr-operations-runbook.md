@@ -1,5 +1,8 @@
 # 腾讯云 OCR 一期运维手册
 
+CAM 凭据替换、生产发布和清理调度的逐项操作及证据格式见
+[`2026-07-22-tencent-ocr-release-operator-handoff.md`](./2026-07-22-tencent-ocr-release-operator-handoff.md)。
+
 ## 1. 当前发布门禁
 
 - `TENCENT_OCR_ENABLED` 默认保持 `false`。
