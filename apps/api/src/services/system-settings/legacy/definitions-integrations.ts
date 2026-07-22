@@ -94,7 +94,7 @@ export const DEFINITIONS_INTEGRATIONS: SettingDefinition[] = [  {
     key: "TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM",
     groupCode: "ocr",
     name: "身份证识别加密公钥",
-    description: "腾讯OCR售后提供的1024位PKCS#1 RSA公钥PEM；如收到Base64包裹内容，须先解码再保存。",
+    description: "腾讯OCR售后提供的1024位PKCS#1 RSA公钥；支持上传原始PKCS#1 PEM，或粘贴该PEM的外层Base64编码，保存时自动规范化。",
     valueType: "string",
     envNames: ["TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM"],
     isSecret: true,

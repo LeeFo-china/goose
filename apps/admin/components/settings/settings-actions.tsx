@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, RotateCcw, Save, TestTube2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { TencentOcrEncryptionPublicKeyEditor } from "@/components/platform-ocr/platform-ocr-encryption-public-key-editor";
 import { FileAccessPolicyEditor } from "@/components/settings/settings-file-access-policy-editor";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import {
@@ -147,6 +148,10 @@ function formatDisplayValue(setting: SystemSetting, value: string | null) {
 export function SettingEditor({ setting }: { setting: SystemSetting }) {
   if (setting.key === "PLATFORM_FILE_ACCESS_POLICY") {
     return <FileAccessPolicyEditor setting={setting} />;
+  }
+
+  if (setting.key === "TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM") {
+    return <TencentOcrEncryptionPublicKeyEditor setting={setting} />;
   }
 
   return <GenericSettingEditor setting={setting} />;

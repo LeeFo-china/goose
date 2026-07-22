@@ -14,11 +14,14 @@ describe("platform OCR admin", () => {
     expect(source.indexOf('"ocr"')).toBeLessThan(source.indexOf('"ai"'));
   });
 
-  test("settings reuse masked secret editors and render the OCR tester", () => {
+  test("settings use a dedicated OCR public key editor and render the OCR tester", () => {
     const tabs = readSource("../settings/settings-tabs.tsx");
     const actions = readSource("../settings/settings-actions.tsx");
 
-    expect(actions).toContain('type="password"');
+    expect(actions).toContain("TencentOcrEncryptionPublicKeyEditor");
+    expect(actions).toContain(
+      'setting.key === "TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM"',
+    );
     expect(tabs).toContain("PlatformOcrConfigTester");
     expect(tabs).toContain('activeGroup.code === "ocr"');
   });
@@ -35,6 +38,25 @@ describe("platform OCR admin", () => {
     expect(source).toContain("/platform/ocr/config-test");
     expect(source).toContain("FormData");
     expect(source).not.toContain("<input");
+  });
+
+  test("public key editor supports safe upload, paste, save, and confirmed clearing", () => {
+    const source = readSource("./platform-ocr-encryption-public-key-editor.tsx");
+
+    expect(source).toContain('accept=".pem,.txt,text/plain,application/x-pem-file"');
+    expect(source).toContain("<Textarea");
+    expect(source).toContain("selectedFileName");
+    expect(source).toContain("createLatestPublicKeyFileReader");
+    expect(source).toContain("fileReading");
+    expect(source).toContain("resetNativeFileInput();");
+    expect(source).toContain("已安全配置");
+    expect(source).toContain("updateSetting(setting.key, normalized.pem)");
+    expect(source).toContain('setValue("")');
+    expect(source).toContain("AlertDialog");
+    expect(source).toContain("清除配置");
+    expect(source).toContain("updateSetting(setting.key, null)");
+    expect(source).not.toContain("setting.stored_value");
+    expect(source).not.toContain("setting.effective_value");
   });
 
   test("audit page uses server pagination and safe list fields only", () => {
