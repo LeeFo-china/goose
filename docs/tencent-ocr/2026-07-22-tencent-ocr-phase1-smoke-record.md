@@ -36,6 +36,7 @@
 - `cb09ab3b docs(ocr): 记录开发环境连通性验收`
 - `e6e1e5c3 fix(ocr): 修复成功结果加密边界`
 - `43f780b2 fix(ocr): 拒绝回填不完整证照日期`
+- `3c681447 feat(ocr): 增加CAM最小权限预检`
 
 ## 3. 静态门禁
 
@@ -272,6 +273,28 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 `https://admin-dev.goodcms.cn`。本轮没有修改远端 COS；如需消除回退和 console error，须经
 基础设施变更确认后为开发域名增加精确 CORS origin，不能放宽为通配来源。
 
+### 6.5 CAM 最小权限运行态预检
+
+提交 `3c681447` 增加 `bun run ocr:cam:readiness`。命令使用仓库锁定版本的腾讯云 OCR SDK，
+以嵌入的 1×1 空白 PNG 顺序探测三个一期 Action 和一个明确排除的 `GeneralBasicOCR`。它不读取
+业务文件、不保存识别结果，只输出 Action、期望、判定、provider code 和 RequestId；凭据、
+请求体及 provider message 均不输出。四个判定场景单测通过，API typecheck、build 和文件大小
+检查通过。
+
+2026-07-22 使用 `apps/api/.env` 当前凭据执行，命令按设计退出 1，脱敏结果如下：
+
+| Action | 期望 | 实际 | RequestId | 判定 |
+| --- | --- | --- | --- | --- |
+| `BizLicenseOCR` | 允许 | `FailedOperation.ImageDecodeFailed` | `076acf92-7afc-4596-85d0-964a5b098501` | 通过，已到达业务校验 |
+| `BankCardOCR` | 允许 | `FailedOperation.ImageDecodeFailed` | `1e263ac1-74e8-4abd-8dab-76bb93cb421a` | 通过，已到达业务校验 |
+| `RecognizeEncryptedIDCardOCR` | 允许 | `FailedOperation.UnKnowError` | `d39bb033-4e77-4297-bb3c-ef1b3c4fa0f4` | 通过，已到达业务校验 |
+| `GeneralBasicOCR` | 拒绝 | `FailedOperation.ImageDecodeFailed` | `80da927c-a341-4672-9e18-1edbc0cd833a` | 失败，范围外 Action 仍可调用 |
+
+结论：`ready=false`。当前凭据可继续用于隔离开发环境排查，但不能作为一期生产凭据。平台安全
+管理员创建只绑定 `deploy/tencent-ocr-phase1-cam-policy.json` 的独立 CAM 子用户并替换密钥后，
+必须重新运行该命令，且只有三个目标 Action 通过、`GeneralBasicOCR` 返回权限拒绝时才能解除
+门禁。
+
 ## 7. 清理任务证据
 
 2026-07-22 已对目标数据库执行：
@@ -295,7 +318,7 @@ workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub A
 
 准备条件满足后，按顺序执行并在本文件追加脱敏证据：
 
-1. 在腾讯 CAM 控制台为独立子用户应用 `deploy/tencent-ocr-phase1-cam-policy.json`，移除 OCR 全权限/通配符策略并更换开发环境凭据；复测三个目标 Action 可达且 `GeneralBasicOCR` 明确被拒绝。现有凭据已证实权限过宽，不能仅做截图复核后继续使用。
+1. 在腾讯 CAM 控制台为独立子用户应用 `deploy/tencent-ocr-phase1-cam-policy.json`，移除 OCR 全权限/通配符策略并更换开发环境凭据；执行 `cd apps/api && bun run ocr:cam:readiness`，要求 `ready=true`。现有凭据的最新运行结果仍为 `ready=false`，不能仅做截图复核后继续使用。
 2. 补充腾讯身份证加密公钥；OCR 密钥和 API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 已配置，
    后者不得写入数据库、文档或截图。
 3. 部署包含清理脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
