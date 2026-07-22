@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { OcrFieldSuggestion } from "@gooes/domain";
 import {
   buildOcrFieldReviewRows,
+  formatOcrReviewValue,
   mapApplymentOcrFields,
 } from "./ocr-field-review-dialog";
 
@@ -58,6 +59,24 @@ describe("OCR field review dialog", () => {
     ]);
   });
 
+  test("masks sensitive suggestions until the user explicitly reveals them", () => {
+    const identity = {
+      ...field("identity_number", "41000019900101001X"),
+      sensitive: true,
+    };
+    const address = {
+      ...field("identity_address", "河南省信阳市固始县示例路1号"),
+      sensitive: true,
+    };
+
+    expect(formatOcrReviewValue(identity, identity.value, false))
+      .toBe("410••••001X");
+    expect(formatOcrReviewValue(address, address.value, false))
+      .toBe("河南••••");
+    expect(formatOcrReviewValue(identity, identity.value, true))
+      .toBe(String(identity.value));
+  });
+
   test("uses shadcn review controls and never saves or submits applyment", () => {
     const source = readFileSync(new URL(
       "./ocr-field-review-dialog.tsx",
@@ -69,6 +88,8 @@ describe("OCR field review dialog", () => {
     expect(source).toContain("应用所选字段");
     expect(source).toContain("currentValues");
     expect(source).toContain("warnings");
+    expect(source).toContain("Eye");
+    expect(source).toContain("显示敏感字段");
     expect(source).not.toContain("/finance/wechat-pay/applyments");
     expect(source).not.toContain("workflow-tasks");
     expect(source).not.toContain("requestBackendJson");

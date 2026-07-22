@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { OcrFieldSuggestion, OcrWarning } from "@gooes/domain";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,22 @@ export function buildOcrFieldReviewRows(
   });
 }
 
+export function formatOcrReviewValue(
+  field: OcrFieldSuggestion,
+  value: OcrFieldSuggestion["value"],
+  revealed: boolean,
+) {
+  const text = String(value ?? "").trim();
+  if (!field.sensitive || revealed || !text) return text;
+  if (
+    field.key.includes("identity_number") ||
+    field.key === "settlement_account_number"
+  ) {
+    return `${text.slice(0, 3)}••••${text.slice(-4)}`;
+  }
+  return `${text.slice(0, 2)}••••`;
+}
+
 function normalizeComparable(key: string, value: string) {
   if (key.includes("identity_number")) {
     return value.replace(/\s/g, "").toUpperCase();
@@ -125,12 +141,16 @@ export function OcrFieldReviewDialog({
     [currentValues, fields],
   );
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [revealedSensitiveKeys, setRevealedSensitiveKeys] = useState<Set<string>>(
+    new Set(),
+  );
 
   useEffect(() => {
     if (!open) return;
     setSelectedKeys(new Set(
       initialRows.filter((row) => row.selected).map((row) => row.field.key),
     ));
+    setRevealedSensitiveKeys(new Set());
   }, [initialRows, open]);
 
   function applySelected() {
@@ -168,6 +188,7 @@ export function OcrFieldReviewDialog({
         <div className="overflow-hidden rounded-md border">
           {initialRows.map((row) => {
             const checked = selectedKeys.has(row.field.key);
+            const revealed = revealedSensitiveKeys.has(row.field.key);
             return (
               <div
                 key={row.field.key}
@@ -185,13 +206,38 @@ export function OcrFieldReviewDialog({
                     });
                   }}
                 />
-                <FieldLabel htmlFor={`ocr-review-${row.field.key}`}>
-                  {row.field.label}
-                </FieldLabel>
+                <div className="flex min-w-0 flex-col items-start gap-2">
+                  <FieldLabel htmlFor={`ocr-review-${row.field.key}`}>
+                    {row.field.label}
+                  </FieldLabel>
+                  {row.field.sensitive ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={revealed ? "隐藏敏感字段" : "显示敏感字段"}
+                      onClick={() => {
+                        setRevealedSensitiveKeys((current) => {
+                          const next = new Set(current);
+                          if (revealed) next.delete(row.field.key);
+                          else next.add(row.field.key);
+                          return next;
+                        });
+                      }}
+                    >
+                      {revealed
+                        ? <EyeOff data-icon="inline-start" />
+                        : <Eye data-icon="inline-start" />}
+                      {revealed ? "隐藏" : "显示"}
+                    </Button>
+                  ) : null}
+                </div>
                 <div className="min-w-0">
                   <div className="text-xs text-muted-foreground">当前表单</div>
                   <div className="mt-1 break-all text-sm">
-                    {row.currentValue || "未填写"}
+                    {row.currentValue
+                      ? formatOcrReviewValue(row.field, row.currentValue, revealed)
+                      : "未填写"}
                   </div>
                 </div>
                 <div className="min-w-0">
@@ -206,7 +252,7 @@ export function OcrFieldReviewDialog({
                     )}
                   </div>
                   <div className="mt-1 break-all text-sm font-medium">
-                    {String(row.field.value ?? "-")}
+                    {formatOcrReviewValue(row.field, row.field.value, revealed) || "-"}
                   </div>
                 </div>
               </div>
