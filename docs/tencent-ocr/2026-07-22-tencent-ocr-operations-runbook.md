@@ -29,6 +29,13 @@ OCR 这些接口按腾讯云 CAM 能力表使用操作级授权，因此 `resour
 2. `GeneralBasicOCR` 必须返回 CAM 无权限错误，不能返回图片解码/识别错误或正常结果。
 3. 取得身份证加密公钥后，`RecognizeEncryptedIDCardOCR` 才执行正式联调。
 
+2026-07-22 只读审计确认，现有 OCR SecretId 属于 CAM 子账号：`GetUserAppId` 可读取当前账号
+身份，但 `ListAttachedUserAllPolicies` 返回 `AuthFailure.UnauthorizedOperation`。该凭据不能用于
+创建或审计替代子账号，也不应临时追加 CAM 管理权限。替代账号必须由主账号或独立 CAM 管理员
+创建，生成的新 SecretKey 只允许在受控密钥存储中交接一次；不得写入仓库、工单或 smoke
+记录。当前凭据的权限探针还表明 `GeneralBasicOCR` 可达，因此在替换并取得 `ready=true` 之前，
+不得把它视为一期最小权限凭据。
+
 腾讯云依据：[CAM 自定义策略生成器](https://cloud.tencent.com/document/product/598/37739)
 要求声明授权效果、服务、操作和资源；[OCR CAM 能力表](https://cloud.tencent.com/document/product/598/60621)
 标记上述接口为操作级授权、资源为 `*`。策略替换和负向探针结果必须回填 Phase 1 smoke

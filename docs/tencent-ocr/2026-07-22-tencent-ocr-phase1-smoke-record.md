@@ -305,15 +305,22 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 
 | Action                        | 期望 | 实际                                | RequestId                              | 判定                         |
 | ----------------------------- | ---- | ----------------------------------- | -------------------------------------- | ---------------------------- |
-| `BizLicenseOCR`               | 允许 | `FailedOperation.ImageDecodeFailed` | `076acf92-7afc-4596-85d0-964a5b098501` | 通过，已到达业务校验         |
-| `BankCardOCR`                 | 允许 | `FailedOperation.ImageDecodeFailed` | `1e263ac1-74e8-4abd-8dab-76bb93cb421a` | 通过，已到达业务校验         |
-| `RecognizeEncryptedIDCardOCR` | 允许 | `FailedOperation.UnKnowError`       | `d39bb033-4e77-4297-bb3c-ef1b3c4fa0f4` | 通过，已到达业务校验         |
-| `GeneralBasicOCR`             | 拒绝 | `FailedOperation.ImageDecodeFailed` | `80da927c-a341-4672-9e18-1edbc0cd833a` | 失败，范围外 Action 仍可调用 |
+| `BizLicenseOCR`               | 允许 | `FailedOperation.ImageDecodeFailed` | `0b7b69a8-c1f2-45b8-a420-d7978fdd31d9` | 通过，已到达业务校验         |
+| `BankCardOCR`                 | 允许 | `FailedOperation.ImageDecodeFailed` | `2cdff4da-4de3-4560-849e-6566879ecaed` | 通过，已到达业务校验         |
+| `RecognizeEncryptedIDCardOCR` | 允许 | `FailedOperation.UnKnowError`       | `a43a9ff0-f5b3-4186-b2f2-d38d9dc1ce4b` | 通过，已到达业务校验         |
+| `GeneralBasicOCR`             | 拒绝 | `FailedOperation.ImageDecodeFailed` | `0629fb19-a3df-4fde-9c4f-786d51344b72` | 失败，范围外 Action 仍可调用 |
 
 结论：`ready=false`。当前凭据可继续用于隔离开发环境排查，但不能作为一期生产凭据。平台安全
 管理员创建只绑定 `deploy/tencent-ocr-phase1-cam-policy.json` 的独立 CAM 子用户并替换密钥后，
 必须重新运行该命令，且只有三个目标 Action 通过、`GeneralBasicOCR` 返回权限拒绝时才能解除
 门禁。
+
+同日使用腾讯云官方 CAM Node SDK `4.1.265` 进行了只读权限审计。`GetUserAppId` 成功，确认当前
+SecretId 属于 CAM 子账号，RequestId 为 `e359d784-abb2-4750-9f5d-b19cb633da70`；继续调用
+`ListAttachedUserAllPolicies` 时返回 `AuthFailure.UnauthorizedOperation`，RequestId 为
+`35777361-7d4e-4b5a-b5fe-c0e519a83aa3`。审计没有输出完整 UIN、AppId、SecretId 或 SecretKey，
+也没有执行 `AddUser`、`CreatePolicy`、`AttachUserPolicy` 等写操作。该结果说明现有 OCR
+凭据不能自助完成 CAM 收敛，必须由主账号或独立 CAM 管理员创建替代子账号。
 
 ### 6.6 身份证加密公钥格式门禁
 
