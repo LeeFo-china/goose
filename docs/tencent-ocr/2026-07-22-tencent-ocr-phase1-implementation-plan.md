@@ -52,9 +52,9 @@ delivery status is:
 | --- | --- | --- |
 | Task 0-9 | Complete | Implementation, migrations, focused tests, Admin smoke and commits are recorded in the Phase 1 smoke record. |
 | Task 10 Step 1-2 | Complete | Static gates and Local/Remote migration alignment passed. |
-| Task 10 Step 3 | Blocked by environment | OCR-only CAM credential and `OCR_RESULT_ENCRYPTION_KEY` are not configured. |
-| Task 10 Step 4-5 | Pending | Requires authorized test documents and enabled development OCR configuration. |
-| Task 10 Step 6 | In progress | Static, migration, read-only and cleanup command evidence is recorded; real provider evidence is absent. |
+| Task 10 Step 3 | Partially complete | OCR credentials and per-environment result keys are configured; encrypted-ID public key is still missing and production has not deployed the key-injection contract. |
+| Task 10 Step 4-5 | In progress | Synthetic connectivity probes passed; authorized valid/blurred documents and Admin field-review evidence are still required. |
+| Task 10 Step 6 | In progress | Static, migration, deployment, synthetic provider and cleanup command evidence is recorded; authorized document evidence is absent. |
 | Task 10 Step 7 | Pending | Cannot declare Phase 1 production-ready before real provider and production cleanup evidence. |
 | Task 10 Step 8 | Complete for current evidence | The smoke record is versioned; it must be amended after each real smoke gate. |
 

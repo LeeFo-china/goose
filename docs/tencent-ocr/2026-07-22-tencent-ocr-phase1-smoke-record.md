@@ -9,11 +9,10 @@
 
 未解除的发布门禁：
 
-1. 尚未配置 OCR 专用最小权限 CAM 凭证。
-2. 尚未配置 `OCR_RESULT_ENCRYPTION_KEY`。
-3. 尚未取得并验证腾讯云身份证加密识别公钥及真实加密接口样本。
-4. 尚未准备合成或明确授权的营业执照、身份证正反面和银行卡测试图片。
-5. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
+1. 尚未取得并验证腾讯云身份证加密识别公钥及真实加密接口样本。
+2. 尚未准备明确授权的有效营业执照、模糊营业执照、身份证正反面和银行卡测试图片。
+3. `OCR_RESULT_ENCRYPTION_KEY` 已按 development/production 环境分别配置，但生产 API 尚未发布密钥注入契约。
+4. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
 
 ## 2. 版本范围
 
@@ -140,7 +139,23 @@
 - 经办人身份证字段映射到经办人/超级管理员字段，不覆盖法人字段。
 - “应用所选字段”只更新当前表单；没有 create、update、submit 或 workflow 调用。
 
-未完成：真实上传、识别、差异弹窗、选择回填和继续手工编辑的浏览器截图。原因是总开关关闭且缺少专用凭证和授权样本。
+未完成：真实上传、识别、差异弹窗、选择回填和继续手工编辑的浏览器截图。原因是总开关关闭且缺少明确授权的有效样本。
+
+### 6.1 开发环境密钥与合成图连通性验证
+
+2026-07-22 后续门禁推进结果：
+
+- 本地受控环境已存在独立的 `TENCENT_OCR_SECRET_ID/SECRET_KEY`；只核验变量存在性和长度，未输出密钥值。
+- 两项密钥已通过平台设置接口写入开发环境加密配置；总开关和身份证加密开关继续保持 `false`。
+- 官方 Node SDK 使用 1×1 空白 PNG 分别调用 `BizLicenseOCR` 和 `BankCardOCR`，两次均取得腾讯 RequestId，并返回 `FailedOperation.OcrFailed`；没有鉴权或无权限错误，证明凭证和两个 Action 可达。
+- 使用 ImageMagick 生成带“仅用于 OCR 联调、非真实证照”标识的合成营业执照 PNG。腾讯返回 `FailedOperation.NoBizLicense`，符合该图片不是真实证照的预期；该图片不包含真实主体或个人信息。
+- development 与 production GitHub Environment 已分别创建独立的 `OCR_RESULT_ENCRYPTION_KEY`，值未写入仓库、数据库、日志或文档。
+- 提交 `7caa0fc5` 为开发/生产 API Compose 增加必填密钥，并由对应 Environment secret 注入发布 workflow；缺少密钥时发布在容器重建前失败关闭。
+- 开发 API 通过受控 `Release Dev` run `29900583442` 发布成功，commit 为 `7caa0fc5`；构建、migration 历史校验、Compose 重建和健康检查均通过。
+- 发布后仅在脚本 `try/finally` 范围内临时开启总开关，调用 `/platform/ocr/config-test` 识别上述合成图；接口返回 HTTP 502 `OCR_PROVIDER_FAILED` 且包含 provider RequestId，证明开发 API 已使用平台加密配置访问腾讯 OCR。测试接口不保存图片或识别字段。
+- `finally` 关闭后只读复核：`TENCENT_OCR_ENABLED=false`、租户能力数 0、平台识别审计总数 0。
+
+该证据解除“凭证完全未配置”和“开发 API 结果密钥未注入”门禁，但不等同于有效证照识别成功，也不证明字段差异回填、加密身份证或生产清理调度可用。
 
 ## 7. 清理任务证据
 
@@ -165,9 +180,9 @@ workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub A
 
 准备条件满足后，按顺序执行并在本文件追加脱敏证据：
 
-1. 创建仅允许 `BizLicenseOCR`、`RecognizeEncryptedIDCardOCR`、`BankCardOCR` 的 OCR 专用 CAM 凭证。
-2. 在平台 Admin 配置腾讯云密钥、区域、endpoint 和身份证加密公钥；通过 API 部署环境单独
-   配置 `OCR_RESULT_ENCRYPTION_KEY`，不得写入数据库、文档或截图。
+1. 在腾讯 CAM 控制台复核当前 OCR 凭证仅允许 `BizLicenseOCR`、`RecognizeEncryptedIDCardOCR`、`BankCardOCR`；现有合成图探针已经证明营业执照与银行卡 Action 可达，但不能替代策略审计。
+2. 补充腾讯身份证加密公钥；OCR 密钥和 API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 已配置，
+   后者不得写入数据库、文档或截图。
 3. 部署包含清理脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
    和至少一次小时级定时 run，回填 run ID 与脱敏 artifact。
 4. 先开启总开关并保持身份证开关关闭，执行授权营业执照正常/模糊样本。
