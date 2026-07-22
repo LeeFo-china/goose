@@ -9,6 +9,7 @@ import {
   TencentLbsConfigTester,
 } from "@/components/settings/settings-actions";
 import { PlatformPaymentSettingsPanel } from "@/components/settings/platform-payment-settings-panel";
+import { PlatformOcrConfigTester } from "@/components/platform-ocr/platform-ocr-config-tester";
 import type { PlatformWechatPayProfileListResult } from "@/components/settings/platform-payment-settings-types";
 import type { SettingsGroup } from "@/components/settings/settings-group-types";
 import { Badge, badgeVariants } from "@/components/ui/badge";
@@ -174,6 +175,9 @@ export function SettingsTabs({
                     ) : null}
                     {activeGroup.code === "tencent_lbs" ? (
                       <TencentLbsConfigTester />
+                    ) : null}
+                    {isPlatformMode && activeGroup.code === "ocr" ? (
+                      <PlatformOcrConfigTester />
                     ) : null}
                     {activeGroup.settings.map((setting) => (
                       <SettingEditor key={setting.key} setting={setting} />
