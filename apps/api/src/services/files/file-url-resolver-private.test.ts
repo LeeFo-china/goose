@@ -41,4 +41,24 @@ describe("private stored file URL resolver", () => {
     await expect(resolveSignedStoredFileUrl("legacy/license.jpg"))
       .rejects.toMatchObject({ code: "TENANT_ONBOARDING_DOCUMENT_FORBIDDEN" });
   });
+
+  test("signs only a verified Tencent COS file record for OCR", async () => {
+    const module = await import("./file-url-resolver");
+    module.setPlatformCosAccessConfigCache({
+      secretId: "secret-id",
+      secretKey: "secret-key",
+      bucket: "private-bucket-1250000000",
+      region: "ap-guangzhou",
+      publicBaseUrl: "https://cdn.example.com",
+    });
+
+    await expect(module.resolveOcrStoredFileUrl({
+      provider: "tencent_cos",
+      object_key: "tenants/tenant-1/wechat-pay-applyment/unassigned/license.jpg",
+    })).resolves.toContain("license.jpg");
+    await expect(module.resolveOcrStoredFileUrl({
+      provider: "supabase_storage",
+      object_key: "legacy/license.jpg",
+    })).rejects.toMatchObject({ code: "OCR_FILE_ACCESS_DENIED" });
+  });
 });

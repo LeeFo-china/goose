@@ -411,6 +411,20 @@ export async function resolveSignedStoredFileUrl(
   return signedUrl;
 }
 
+export async function resolveOcrStoredFileUrl(file: {
+  provider: "tencent_cos" | "supabase_storage";
+  object_key: string;
+}) {
+  if (file.provider !== "tencent_cos" || !file.object_key.trim()) {
+    throw Errors.business(
+      403,
+      "OCR文件不可访问",
+      ErrorCodes.OCR_FILE_ACCESS_DENIED,
+    );
+  }
+  return resolveSignedStoredFileUrl(file.object_key, { ttlSeconds: 120 });
+}
+
 function getPublicCosUrl(objectKey: string) {
   const publicBaseUrl = getPlatformCosPublicBaseUrl();
   if (!publicBaseUrl) {
