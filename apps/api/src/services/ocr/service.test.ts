@@ -47,7 +47,7 @@ const applyment = {
   }],
 };
 
-const normalized = {
+const normalizedResult = {
   fields: [{
     key: "license_name",
     label: "营业执照主体名称",
@@ -58,8 +58,8 @@ const normalized = {
   }],
   warnings: [],
   quality: {},
-  providerRequestId: "provider-request-1",
 };
+const normalized = { ...normalizedResult, providerRequestId: "provider-request-1" };
 
 function buildRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -169,7 +169,8 @@ async function createHarness(input: {
     },
     signedUrlResolver: mock(async () => "https://signed/license.jpg"),
     normalize: mock(() => normalized),
-    encrypt: mock(() => "encrypted-result"),
+    encrypt: mock((_input: Parameters<NonNullable<OcrServiceDependencies["encrypt"]>>[0]) =>
+      "encrypted-result"),
     decrypt: mock(() => ({
       fields: normalized.fields,
       warnings: normalized.warnings,
@@ -259,6 +260,7 @@ describe("OcrService", () => {
     expect(result).toMatchObject({ idempotent: false, cached: false });
     expect(dependencies.repository.createProcessing).toHaveBeenCalledTimes(1);
     expect(dependencies.gateway.recognize).toHaveBeenCalledTimes(1);
+    expect(dependencies.encrypt.mock.calls[0]?.[0]?.result).toEqual(normalizedResult);
     expect(dependencies.repository.markSucceeded).toHaveBeenCalledWith(
       expect.objectContaining({ resultCiphertext: "encrypted-result" }),
     );

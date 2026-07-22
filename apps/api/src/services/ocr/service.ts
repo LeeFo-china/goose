@@ -33,7 +33,6 @@ import {
 } from "./crypto";
 import {
   normalizeOcrResponse,
-  type NormalizedOcrProviderResult,
 } from "./normalizers";
 import {
   assertOcrIdempotencyMatches,
@@ -245,19 +244,20 @@ export class OcrService {
         }),
       );
       const normalized = this.normalize(input.document_type, providerResponse);
+      const { providerRequestId, ...normalizedResult } = normalized;
       const resultCiphertext = this.encrypt({
         context: { tenantId, recognitionId: recognition.id },
-        result: normalized,
+        result: normalizedResult,
         rootSecret: resultEncryptionKey,
       });
       const succeeded = await this.repository.markSucceeded({
         id: recognition.id,
         tenantId,
         resultCiphertext,
-        resultSummary: buildResultSummary(normalized),
-        warnings: normalized.warnings,
-        quality: normalized.quality,
-        providerRequestId: normalized.providerRequestId,
+        resultSummary: buildResultSummary(normalizedResult),
+        warnings: normalizedResult.warnings,
+        quality: normalizedResult.quality,
+        providerRequestId,
         billableUnits: 1,
         durationMs: elapsed(this.clockMsFactory(), startedAt),
         processedAt: this.nowFactory().toISOString(),
@@ -457,7 +457,7 @@ export class OcrService {
   }
 }
 
-function buildResultSummary(result: NormalizedOcrProviderResult) {
+function buildResultSummary(result: OcrNormalizedResult) {
   return {
     field_keys: result.fields.map((field) => field.key),
     sensitive_field_count: result.fields.filter((field) => field.sensitive).length,
