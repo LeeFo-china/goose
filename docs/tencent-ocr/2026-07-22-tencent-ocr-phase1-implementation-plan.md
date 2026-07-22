@@ -840,7 +840,8 @@ git commit -m "feat(finance): 支持进件证照识别回填"
 - [ ] **Step 1: Run the full static gate**
 
 ```bash
-bun test packages/domain/src/ocr.test.ts apps/api/src/services/ocr apps/api/src/controllers/ocr apps/api/src/schema/wechat-pay-applyments.test.ts
+(cd packages/domain && bun test src/ocr.test.ts)
+(cd apps/api && bun test src/services/ocr src/controllers/ocr src/schema/wechat-pay-applyments.test.ts)
 bun run --cwd apps/api check
 pnpm --dir apps/admin check
 git diff --check
