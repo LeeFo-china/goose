@@ -4,7 +4,7 @@
 
 - 代码实现、自动化测试、API/Admin 构建、数据库 migration 和远端只读审计通过。
 - 远端 `TENCENT_OCR_ENABLED=false`，当前不会向租户 Admin 或小程序暴露识别能力。
-- 本轮未执行真实腾讯云 OCR 调用，未上传真实证件，未提交微信支付进件。
+- 已使用不含真实主体和个人信息的合成图调用腾讯云 OCR；未上传真实证件、未取得有效证照识别成功结果，也未提交微信支付进件。
 - 一期当前状态为“代码就绪，发布门禁未解除”，不能标记为生产可用。
 
 未解除的发布门禁：
@@ -16,7 +16,7 @@
 
 ## 2. 版本范围
 
-分支：`feature/tencent-ocr-phase1`
+实现分支：`feature/tencent-ocr-phase1`；发布基线已合入 `main`。
 
 核心提交：
 
@@ -31,6 +31,8 @@
 - `899ac39a ci(ocr): 调度过期识别结果清理`
 - `10a7501f fix(ci): 延后启用OCR清理调度`
 - `a0f52aea fix(ocr): 默认关闭身份证加密识别`
+- `1167a903 ci(ocr): 注入结果加密密钥`
+- `cb09ab3b docs(ocr): 记录开发环境连通性验收`
 
 ## 3. 静态门禁
 
@@ -154,6 +156,8 @@
 - 开发 API 通过受控 `Release Dev` run `29900583442` 发布成功，commit 为 `7caa0fc5`；构建、migration 历史校验、Compose 重建和健康检查均通过。
 - 发布后仅在脚本 `try/finally` 范围内临时开启总开关，调用 `/platform/ocr/config-test` 识别上述合成图；接口返回 HTTP 502 `OCR_PROVIDER_FAILED` 且包含 provider RequestId，证明开发 API 已使用平台加密配置访问腾讯 OCR。测试接口不保存图片或识别字段。
 - `finally` 关闭后只读复核：`TENCENT_OCR_ENABLED=false`、租户能力数 0、平台识别审计总数 0。
+- 部署契约随后合入 `main@cb09ab3b`。主线 Build run `29901320353` 和 Auto Deploy Dev run `29901617304` 均成功，API、workers、Web 发布及 Web gate 全部通过。
+- 主线自动部署后再次只读复核：开发 API 健康检查 HTTP 200；OCR SecretId/SecretKey 均显示已配置；`TENCENT_OCR_ENABLED=false`、`TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`、租户能力数 0、平台识别审计总数 0。未执行识别、上传、回填或 workflow 推进。
 
 该证据解除“凭证完全未配置”和“开发 API 结果密钥未注入”门禁，但不等同于有效证照识别成功，也不证明字段差异回填、加密身份证或生产清理调度可用。
 
