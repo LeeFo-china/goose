@@ -132,7 +132,7 @@ dry-run 恢复为 0，租户读取返回 410。脱敏过期审计按设计保留
 ## 5. 首次启用检查
 
 1. `supabase migration list` 确认 `20260722130000`、`20260722150000` 和
-   `20260722170000` Local/Remote 对齐。
+   `20260722170000`、`20260722180000` Local/Remote 对齐。
 2. dry-run 输出 `mode=dry-run`，并确认没有数据库更新。
 3. 使用受控过期测试记录运行 apply，确认 `status=expired` 且 `result_ciphertext IS NULL`。
 4. 再次 dry-run，确认已处理记录不再进入候选集。

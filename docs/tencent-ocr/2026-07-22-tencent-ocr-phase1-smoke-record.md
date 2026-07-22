@@ -38,6 +38,7 @@
 - `43f780b2 fix(ocr): 拒绝回填不完整证照日期`
 - `3c681447 feat(ocr): 增加CAM最小权限预检`
 - `6f72e839 security(ocr): 校验身份证加密公钥`
+- `6ea9315e fix(db): 明确OCR加密公钥配置格式`
 
 ## 3. 静态门禁
 
@@ -65,6 +66,8 @@
 - `20260722150000` Remote：存在。
 - `20260722170000` Local：存在。
 - `20260722170000` Remote：存在。
+- `20260722180000` Local：存在。
+- `20260722180000` Remote：存在。
 - Local/Remote：对齐。
 
 通过 service-role REST 只读查询确认：
@@ -88,6 +91,11 @@
 
 `20260722170000` 为平台分页审计的 `document_type + created_at DESC` 增加前向索引，避免按
 文档类型筛选时随记录增长退化为全表扫描。
+
+`20260722180000` 只更新平台级 `TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM` 的说明，明确 1024 位
+PKCS#1 RSA PEM 和 Base64 解码要求，不修改 `value_text`。执行前 dry-run 只包含该 migration；
+应用后全量 349 条 migration 的 Local/Remote 不一致数为 0。远端只读复核确认说明已更新、
+`is_secret=true`、`is_configured=false`，因此未写入或覆盖任何公钥值。
 
 ## 5. 自动化场景证据
 
