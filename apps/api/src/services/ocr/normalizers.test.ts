@@ -57,6 +57,21 @@ describe("OCR provider normalizers", () => {
     expect(result.providerRequestId).toBe("request-license");
   });
 
+  test("omits an incomplete business-license period instead of marking it normalized", () => {
+    const result = normalizeOcrResponse("business_license", {
+      Name: "示例装饰工程有限公司",
+      Period: "2020年01月",
+      RequestId: "request-partial-license-period",
+    });
+
+    expect(result.fields).not.toContainEqual(
+      expect.objectContaining({ key: "license_period_begin" }),
+    );
+    expect(result.warnings).toContainEqual(expect.objectContaining({
+      code: "DOCUMENT_DATE_INCOMPLETE",
+    }));
+  });
+
   test("normalizes encrypted ID card front sensitive fields", () => {
     const result = normalizeOcrResponse("id_card_front", {
       Name: "李四",

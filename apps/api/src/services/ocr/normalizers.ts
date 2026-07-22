@@ -51,7 +51,8 @@ export function normalizeOcrResponse(
 }
 
 function normalizeBusinessLicense(record: ProviderRecord) {
-  const [periodBegin, periodEnd] = splitPeriod(text(record.Period));
+  const rawPeriod = text(record.Period);
+  const [periodBegin, periodEnd] = splitPeriod(rawPeriod);
   const fields = compactFields([
     field("license_name", text(record.Name)),
     field("license_code", text(record.RegNum)),
@@ -63,6 +64,12 @@ function normalizeBusinessLicense(record: ProviderRecord) {
   assertHasFields(fields);
   const warningCodes = numberList(record.RecognizeWarnCode);
   const warnings = warningCodes.map((code) => providerWarning(code, "license"));
+  if (rawPeriod && !periodBegin) {
+    warnings.unshift(warning(
+      "DOCUMENT_DATE_INCOMPLETE",
+      "营业期限开始日期不完整，请人工核对并补充",
+    ));
+  }
   if (record.IsDuplication === 1 && !warningCodes.includes(-9102)) {
     warnings.push(warning("DOCUMENT_COPY_SUSPECTED", "证照可能为副本，请人工核对"));
   }
@@ -157,6 +164,7 @@ function compactFields(fields: Array<OcrFieldSuggestion | null>) {
 function splitPeriod(value: string | null): [string | null, string | null] {
   if (!value) return [null, null];
   const normalized = value.trim();
+  if (normalized === "长期") return [null, "长期"];
   const semanticRange = normalized.match(/^(.+?)\s*(?:至|~|—)\s*(.+)$/);
   if (semanticRange) {
     return [
@@ -178,13 +186,14 @@ function splitPeriod(value: string | null): [string | null, string | null] {
 }
 
 function normalizeDate(value: string) {
-  if (value.includes("长期")) return "长期";
-  const compactMatch = value.trim().match(/^(\d{4})(\d{2})(\d{2})$/);
+  const normalized = value.trim();
+  if (normalized === "长期") return "长期";
+  const compactMatch = normalized.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (compactMatch) {
     return `${compactMatch[1]}-${compactMatch[2]}-${compactMatch[3]}`;
   }
-  const match = value.match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
-  if (!match) return value.trim() || null;
+  const match = normalized.match(/^(\d{4})\D+(\d{1,2})\D+(\d{1,2})\D*$/);
+  if (!match) return null;
   return `${match[1]}-${match[2]?.padStart(2, "0")}-${match[3]?.padStart(2, "0")}`;
 }
 
