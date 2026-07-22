@@ -51,15 +51,17 @@ Node.js Demo 是可选的交叉核验材料，不是实现前置条件。`Recogn
 取得材料后按以下顺序处理：
 
 1. 将售后交付原件保存到受控密钥存储，不加入 Git。
-2. 如果交付内容是 Base64 包裹的 PEM，先做一次 Base64 解码；平台配置值必须以
-   `-----BEGIN RSA PUBLIC KEY-----` 开始、以 `-----END RSA PUBLIC KEY-----` 结束。
+2. 平台超管进入“系统配置 → 腾讯云 OCR → OCR 加密公钥”。可以上传原始 `.pem`/`.txt`
+   文件，也可以粘贴以 `-----BEGIN RSA PUBLIC KEY-----` 开始的 PKCS#1 PEM；如果售后交付
+   的是完整 PEM 的外层 Base64，也可以直接粘贴，Admin 会在提交前解码和规范化。
 3. 使用 `openssl rsa -pubin -RSAPublicKey_in -in <public-key.pem> -noout -text` 只读确认
    `Public-Key: (1024 bit)`；不要把命令完整输出提交到仓库。
-4. 通过平台设置保存 `TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM`，继续保持
-   `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`。
-5. 后端保存设置时会直接拒绝外层 Base64、SPKI/PKCS#8、非 RSA、非 1024 位或畸形公钥；
-   无效值不会写入数据库。运行时能力接口也不会返回身份证正反面识别能力，gateway 会再次
-   失败关闭。
+4. 保存后页面只显示“已安全配置”，不回显公钥原文；继续保持
+   `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`。清除配置必须经过独立确认弹窗，不能用空值
+   保存代替。
+5. Admin 只负责把外层 Base64 规范化成 PEM；后端仍会拒绝 SPKI/PKCS#8、非 RSA、非 1024 位
+   或畸形公钥，无效值不会写入数据库。运行时能力接口也不会返回身份证正反面识别能力，
+   gateway 会再次失败关闭。
 6. 先使用无真实证件信息的空白图片执行受控探针；腾讯返回图片解析/识别错误和 RequestId、
    且没有返回密钥或密文错误时，只能证明请求加密链路被接受。
 7. 使用明确授权的身份证正反面测试样本完成加密请求、加密响应解密、字段复核和过期清理后，
