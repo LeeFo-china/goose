@@ -301,16 +301,28 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 请求体及 provider message 均不输出。四个判定场景单测通过，API typecheck、build 和文件大小
 检查通过。
 
-2026-07-22 使用 `apps/api/.env` 当前凭据执行，命令按设计退出 1，脱敏结果如下：
+后续门禁加固把默认凭据来源改为平台系统设置数据库 active 记录，缺失时不回退环境变量；只有
+显式 `--source=environment` 才读取环境变量。同时在 client 创建前固定校验腾讯官方 endpoint，
+并把限流和未知错误等非图片/参数校验错误排除出正向证据。输出新增 `credential_source`、
+`official_endpoint`、`runtime_probe_ready`、`encrypted_id_probe_payload_valid`、
+`policy_binding_verified` 和 `production_ready`，避免把单一负向 Action 探针误当成完整 CAM
+策略审计。身份证预检改为使用平台配置公钥生成符合生产协议的 AES-256-CBC + RSA PKCS#1
+加密空白图请求，不读取真实证件，并校验探针的 AES/RSA 密文、IV 和加密字段结构。11 项聚焦
+测试、API typecheck、build 和文件大小检查通过。
 
-| Action                        | 期望 | 实际                                | RequestId                              | 判定                         |
-| ----------------------------- | ---- | ----------------------------------- | -------------------------------------- | ---------------------------- |
-| `BizLicenseOCR`               | 允许 | `FailedOperation.ImageDecodeFailed` | `0b7b69a8-c1f2-45b8-a420-d7978fdd31d9` | 通过，已到达业务校验         |
-| `BankCardOCR`                 | 允许 | `FailedOperation.ImageDecodeFailed` | `2cdff4da-4de3-4560-849e-6566879ecaed` | 通过，已到达业务校验         |
-| `RecognizeEncryptedIDCardOCR` | 允许 | `FailedOperation.UnKnowError`       | `a43a9ff0-f5b3-4186-b2f2-d38d9dc1ce4b` | 通过，已到达业务校验         |
-| `GeneralBasicOCR`             | 拒绝 | `FailedOperation.ImageDecodeFailed` | `0629fb19-a3df-4fde-9c4f-786d51344b72` | 失败，范围外 Action 仍可调用 |
+2026-07-22 使用平台系统设置中的当前生效凭据执行，命令按设计退出 1，脱敏结果如下：
 
-结论：`ready=false`。当前凭据可继续用于隔离开发环境排查，但不能作为一期生产凭据。平台安全
+| Action                        | 期望 | 实际                                | RequestId                              | 判定                             |
+| ----------------------------- | ---- | ----------------------------------- | -------------------------------------- | -------------------------------- |
+| `BizLicenseOCR`               | 允许 | `FailedOperation.ImageDecodeFailed` | `cc0deaad-ef69-4b62-8360-d85141642baf` | 通过，已到达业务校验             |
+| `BankCardOCR`                 | 允许 | `FailedOperation.ImageDecodeFailed` | `2a483bd1-4cd2-4f6f-bc65-52ba199dddbe` | 通过，已到达业务校验             |
+| `RecognizeEncryptedIDCardOCR` | 允许 | `FailedOperation.ImageDecodeFailed` | `b2355c3f-f9d1-4c7b-a98f-f67e94dcfd43` | 通过，加密请求已到达图片校验     |
+| `GeneralBasicOCR`             | 拒绝 | `FailedOperation.ImageDecodeFailed` | `950742cf-22ed-42b3-883a-30287dee5527` | 失败，范围外 Action 仍然可以调用 |
+
+结论：本次默认来源为 `platform_settings`，`official_endpoint=true`、
+`encrypted_id_probe_payload_valid=true`，三个一期 Action 均通过行为探针；但
+`runtime_probe_ready=false`、`ready=false`、`policy_binding_verified=false`、
+`production_ready=false`。当前凭据可继续用于隔离开发环境排查，但不能作为一期生产凭据。平台安全
 管理员创建只绑定 `deploy/tencent-ocr-phase1-cam-policy.json` 的独立 CAM 子用户并替换密钥后，
 必须重新运行该命令，且只有三个目标 Action 通过、`GeneralBasicOCR` 返回权限拒绝时才能解除
 门禁。

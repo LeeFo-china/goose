@@ -29,6 +29,23 @@ OCR 这些接口按腾讯云 CAM 能力表使用操作级授权，因此 `resour
 2. `GeneralBasicOCR` 必须返回 CAM 无权限错误，不能返回图片解码/识别错误或正常结果。
 3. 取得身份证加密公钥后，`RecognizeEncryptedIDCardOCR` 才执行正式联调。
 
+`bun run ocr:cam:readiness` 默认只读取平台系统设置数据库中的 active SecretId、SecretKey、
+身份证加密公钥、Region、Endpoint 和超时记录，任一必要记录缺失时失败关闭，不回退 `.env`。
+只有在新子账号密钥尚未写入平台、需要先行验证时，才允许显式执行
+`bun run ocr:cam:readiness --source=environment`；验证完成后仍必须把新密钥安全写入平台设置，
+再以默认来源复测。预检在 SDK client 创建前强制 endpoint 为
+`ocr.tencentcloudapi.com`，禁止把 OCR 密钥发送到代理或自定义域名。
+
+身份证探针使用平台配置的 1024 位 PKCS#1 公钥，按生产协议随机生成 AES-256-CBC key 和 IV，
+再用 RSA PKCS#1 v1.5 加密 AES key；加密请求体只包含嵌入的 1×1 空白 PNG 和
+`CardSide=FRONT`，不读取或上传真实身份证。只有腾讯返回明确的图片解析/识别错误或参数校验
+错误时，才视为身份证 Action 已进入业务校验；`FailedOperation.UnKnowError`、限流和传输错误
+均不作为权限正向证据。
+
+输出中的 `ready` / `runtime_probe_ready` 只表示行为探针结果；`policy_binding_verified=false` 和
+`production_ready=false` 明确表示该命令不能证明子账号只绑定目标策略。最终门禁还必须由 CAM
+管理员回读用户组、直接/继承策略、权限边界和密钥状态，并确认只有仓库一期策略。
+
 2026-07-22 只读审计确认，现有 OCR SecretId 属于 CAM 子账号：`GetUserAppId` 可读取当前账号
 身份，但 `ListAttachedUserAllPolicies` 返回 `AuthFailure.UnauthorizedOperation`。该凭据不能用于
 创建或审计替代子账号，也不应临时追加 CAM 管理权限。替代账号必须由主账号或独立 CAM 管理员
