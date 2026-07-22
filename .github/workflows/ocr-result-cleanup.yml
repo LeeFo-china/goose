@@ -65,7 +65,7 @@ jobs:
           printf '%s\n' "${summary}" > "${RUNNER_TEMP}/ocr-result-cleanup-summary.json"
 
           if ! jq -e '.batch_limit_reached == false' <<< "${summary}" >/dev/null; then
-            echo "::error::OCR cleanup reached the 500-row batch limit"
+            echo "::error::OCR cleanup backlog remains after bounded batches"
             exit 1
           fi
 
@@ -90,6 +90,8 @@ jobs:
                 ["mode", .mode],
                 ["candidate_count", (.candidate_count | tostring)],
                 ["expired_count", (.expired_count | tostring)],
+                ["batch_count", (.batch_count | tostring)],
+                ["max_apply_batches", (.max_apply_batches | tostring)],
                 ["batch_limit_reached", (.batch_limit_reached | tostring)]
               ]
               | .[]
@@ -99,7 +101,7 @@ jobs:
 
       - name: Preserve redacted cleanup evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ocr-result-cleanup-${{ github.run_id }}
           path: ${{ runner.temp }}/ocr-result-cleanup-summary.json

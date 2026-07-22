@@ -30,6 +30,7 @@ describe("OCR result cleanup", () => {
     });
     expect(result).toMatchObject({
       mode: "dry-run",
+      rule: "status IN (processing,succeeded) AND expires_at<=now",
       candidate_count: 2,
       expired_count: 0,
       oldest_expires_at: "2026-07-20T00:00:00.000Z",
@@ -37,11 +38,50 @@ describe("OCR result cleanup", () => {
     });
   });
 
-  test("applies cleanup only with the explicit flag", async () => {
+  test("drains multiple bounded batches during one explicit apply run", async () => {
+    const { runOcrResultCleanup } = await cleanupModulePromise;
+    let callCount = 0;
+    const expireResultsBefore = mock(async () => {
+      callCount += 1;
+      return callCount === 1
+        ? {
+          candidateCount: 500,
+          expiredCount: 500,
+          oldestExpiresAt: "2026-07-01T00:00:00.000Z",
+        }
+        : {
+          candidateCount: 4,
+          expiredCount: 4,
+          oldestExpiresAt: "2026-07-02T00:00:00.000Z",
+        };
+    });
+
+    const result = await runOcrResultCleanup({
+      argv: ["--apply"],
+      now: new Date("2026-07-22T10:00:00.000Z"),
+      repository: { expireResultsBefore },
+      write: mock(() => undefined),
+    });
+
+    expect(expireResultsBefore).toHaveBeenCalledTimes(2);
+    expect(expireResultsBefore).toHaveBeenCalledWith(expect.objectContaining({
+      apply: true,
+      limit: 500,
+    }));
+    expect(result).toMatchObject({
+      mode: "apply",
+      candidate_count: 504,
+      expired_count: 504,
+      batch_count: 2,
+      batch_limit_reached: false,
+    });
+  });
+
+  test("caps one apply run and reports an unresolved backlog", async () => {
     const { runOcrResultCleanup } = await cleanupModulePromise;
     const expireResultsBefore = mock(async () => ({
       candidateCount: 500,
-      expiredCount: 498,
+      expiredCount: 500,
       oldestExpiresAt: "2026-07-01T00:00:00.000Z",
     }));
 
@@ -52,15 +92,47 @@ describe("OCR result cleanup", () => {
       write: mock(() => undefined),
     });
 
-    expect(expireResultsBefore).toHaveBeenCalledWith(expect.objectContaining({
-      apply: true,
-      limit: 500,
-    }));
+    expect(expireResultsBefore).toHaveBeenCalledTimes(21);
     expect(result).toMatchObject({
-      mode: "apply",
-      candidate_count: 500,
-      expired_count: 498,
+      candidate_count: 10_000,
+      expired_count: 10_000,
+      batch_count: 20,
       batch_limit_reached: true,
+    });
+  });
+
+  test("does not report backlog when the twentieth apply batch drains it", async () => {
+    const { runOcrResultCleanup } = await cleanupModulePromise;
+    let callCount = 0;
+    const expireResultsBefore = mock(async (input: { apply: boolean }) => {
+      callCount += 1;
+      if (input.apply) {
+        return {
+          candidateCount: 500,
+          expiredCount: 500,
+          oldestExpiresAt: "2026-07-01T00:00:00.000Z",
+        };
+      }
+      return {
+        candidateCount: 0,
+        expiredCount: 0,
+        oldestExpiresAt: null,
+      };
+    });
+
+    const result = await runOcrResultCleanup({
+      argv: ["--apply"],
+      now: new Date("2026-07-22T10:00:00.000Z"),
+      repository: { expireResultsBefore },
+      write: mock(() => undefined),
+    });
+
+    expect(expireResultsBefore).toHaveBeenCalledTimes(21);
+    expect(result).toMatchObject({
+      candidate_count: 10_000,
+      expired_count: 10_000,
+      batch_count: 20,
+      batch_limit_reached: false,
     });
   });
 });
