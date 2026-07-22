@@ -11,6 +11,9 @@ describe("OCR result cleanup scheduler contract", () => {
     const workflow = await Bun.file(WORKFLOW).text();
 
     expect(workflow).toContain('cron: "17 * * * *"');
+    expect(workflow).toContain(
+      "github.event_name == 'workflow_dispatch' || vars.OCR_CLEANUP_SCHEDULE_ENABLED == 'true'",
+    );
     expect(workflow).toContain("group: ocr-result-cleanup-production");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain("environment: production");

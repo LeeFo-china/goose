@@ -34,6 +34,8 @@ bun run --cwd apps/api ocr:results:cleanup --apply
 - 定时模式：固定执行
   `docker exec gooes-api bun src/scripts/ocr-result-cleanup.ts --apply`。
 - 手工模式：`workflow_dispatch` 默认 `dry-run`，需要明确选择 `apply` 才写数据库。
+- 启用门禁：定时事件仅在仓库变量
+  `OCR_CLEANUP_SCHEDULE_ENABLED=true` 时运行；手工任务不受该变量影响。
 - 超时：10 分钟。
 - 防重入：GitHub Actions concurrency 固定为
   `ocr-result-cleanup-production`，不取消正在执行的任务，不允许并行清理。
@@ -45,8 +47,8 @@ bun run --cwd apps/api ocr:results:cleanup --apply
 
 当前状态：调度定义已进入功能分支，但尚未合并到默认分支，也没有生产 workflow run
 证据，因此 OCR 总开关不得开启。合并并部署包含清理脚本的 API 镜像后，部署负责人必须先
-手工执行一次 dry-run 和一次 apply，再观察至少一个小时级定时 run，并把 run ID 与脱敏
-artifact 回填到 Phase 1 smoke 记录。
+手工执行一次 dry-run 和一次 apply，再设置 `OCR_CLEANUP_SCHEDULE_ENABLED=true`，观察至少
+一个小时级定时 run，并把 run ID 与脱敏 artifact 回填到 Phase 1 smoke 记录。
 
 2026-07-22 已使用当前目标数据库执行命令级验证：dry-run 与 apply 均成功，候选数和更新数均为 0。该证据只证明脚本和数据库连接可用，不替代生产小时级调度器的安装与连续运行证据。
 

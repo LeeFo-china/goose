@@ -115,8 +115,9 @@
 
 生产调度定义已增加到 `.github/workflows/ocr-result-cleanup.yml`：每小时第 17 分钟执行、
 10 分钟超时、固定 concurrency 防止并行、复用健康的生产 API 容器、达到 500 条批次上限
-时失败告警，并保存 30 天脱敏 artifact。该 workflow 尚未在默认分支运行，因此不能把源码
-契约当作生产连续运行证据。
+时失败告警，并保存 30 天脱敏 artifact。定时事件还要求仓库变量
+`OCR_CLEANUP_SCHEDULE_ENABLED=true`，避免 workflow 先于生产 API 镜像发布而产生误报。该
+workflow 尚未在默认分支运行，因此不能把源码契约当作生产连续运行证据。
 
 ## 8. 真实腾讯云 Smoke 待办
 

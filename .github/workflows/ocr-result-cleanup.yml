@@ -25,6 +25,7 @@ concurrency:
 jobs:
   cleanup:
     name: Clean expired OCR result ciphertext
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.OCR_CLEANUP_SCHEDULE_ENABLED == 'true' }}
     runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
     environment: production
     timeout-minutes: 10
