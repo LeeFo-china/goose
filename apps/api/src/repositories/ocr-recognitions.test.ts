@@ -140,6 +140,30 @@ describe('OcrRecognitionRepository', () => {
     expect(traces[0]?.calls).toContainEqual({ method: 'range', args: [20, 29] });
   });
 
+  test('expires a stale active dedupe record before a new request', async () => {
+    const { repository, traces } = await createRepository([{
+      data: [{ id: 'recognition-1' }],
+      error: null,
+    }]);
+
+    await repository.expireStaleByDedupeKey({
+      tenantId: 'tenant-1',
+      dedupeKey: 'dedupe-1',
+      before: '2026-07-22T00:00:00.000Z',
+    });
+
+    expect(traces[0]?.calls).toEqual(expect.arrayContaining([
+      { method: 'eq', args: ['tenant_id', 'tenant-1'] },
+      { method: 'eq', args: ['dedupe_key', 'dedupe-1'] },
+      { method: 'in', args: ['status', ['processing', 'succeeded']] },
+      { method: 'lte', args: ['expires_at', '2026-07-22T00:00:00.000Z'] },
+    ]));
+    expect(traces[0]?.calls).toContainEqual({
+      method: 'update',
+      args: [{ status: 'expired', result_ciphertext: null }],
+    });
+  });
+
   test('expires a bounded candidate set and clears ciphertext', async () => {
     const { repository, traces } = await createRepository([
       {
@@ -164,7 +188,7 @@ describe('OcrRecognitionRepository', () => {
     expect(result.expiredCount).toBe(2);
     expect(result.oldestExpiresAt).toBe("2026-07-20T00:00:00.000Z");
     expect(traces[0]?.calls).toEqual(expect.arrayContaining([
-      { method: 'eq', args: ['status', 'succeeded'] },
+      { method: 'in', args: ['status', ['processing', 'succeeded']] },
       { method: 'lte', args: ['expires_at', '2026-07-22T00:00:00.000Z'] },
       { method: 'limit', args: [500] },
     ]));

@@ -193,7 +193,7 @@ test("findActiveById scopes the minimum OCR projection to one tenant", async () 
   })).resolves.toMatchObject({ id: "file-1" });
 
   expect(trace.selects).toEqual([
-    "id,tenant_id,owner_type,owner_id,scene,provider,bucket,region,object_key,mime_type,size_bytes,checksum,visibility,status,deleted_at",
+    "id,tenant_id,owner_type,owner_id,scene,provider,bucket,region,object_key,mime_type,size_bytes,checksum,visibility,status,deleted_at,created_by_employee_id",
   ]);
   expect(trace.equals).toEqual(expect.arrayContaining([
     ["id", "file-1"],

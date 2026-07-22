@@ -176,6 +176,23 @@ export class OcrRecognitionRepository {
     return (data as OcrRecognitionRow | null) ?? null;
   }
 
+  async expireStaleByDedupeKey(input: {
+    tenantId: string;
+    dedupeKey: string;
+    before: string;
+  }) {
+    const { error } = await this.getAdminClient()
+      .from("ocr_recognitions")
+      .update({ status: "expired", result_ciphertext: null })
+      .eq("tenant_id", input.tenantId)
+      .eq("dedupe_key", input.dedupeKey)
+      .in("status", ["processing", "succeeded"])
+      .lte("expires_at", input.before)
+      .select("id");
+
+    if (error) throw Errors.dbError("释放OCR过期去重记录失败", error);
+  }
+
   async markSucceeded(input: MarkOcrRecognitionSucceededInput) {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
@@ -287,7 +304,7 @@ export class OcrRecognitionRepository {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .select("id,expires_at")
-      .eq("status", "succeeded")
+      .in("status", ["processing", "succeeded"])
       .lte("expires_at", input.before)
       .order("expires_at", { ascending: true })
       .limit(limit);
@@ -311,7 +328,7 @@ export class OcrRecognitionRepository {
         result_ciphertext: null,
       })
       .in("id", ids)
-      .eq("status", "succeeded")
+      .in("status", ["processing", "succeeded"])
       .lte("expires_at", input.before)
       .select("id");
 

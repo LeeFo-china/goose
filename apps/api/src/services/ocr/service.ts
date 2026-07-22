@@ -1,11 +1,8 @@
-import { createHash } from "node:crypto";
-
 import type {
   OcrDocumentType,
   OcrRecognitionStatus,
   OcrScene,
 } from "@gooes/domain";
-
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import {
@@ -28,8 +25,10 @@ import {
   listPublicOcrCapabilities,
 } from "./capabilities";
 import {
+  assertOcrResultEncryptionKey,
   decryptOcrResult,
   encryptOcrResult,
+  hasOcrResultEncryptionKey,
   type OcrNormalizedResult,
 } from "./crypto";
 import {
@@ -37,10 +36,15 @@ import {
   type NormalizedOcrProviderResult,
 } from "./normalizers";
 import {
+  assertOcrIdempotencyMatches,
+  assertOcrRecognitionReadAccess,
+  buildOcrDedupeKey,
+  validateOcrFile,
+} from "./request-guards";
+import {
   tencentOcrGateway,
   type TencentOcrGatewayInput,
 } from "./tencent-gateway";
-
 type OcrRecognitionRecord =
   Database["public"]["Tables"]["ocr_recognitions"]["Row"];
 
@@ -48,6 +52,7 @@ type RecognitionRepositoryPort = Pick<
   typeof ocrRecognitionRepository,
   | "findByTenantAndIdempotencyKey"
   | "findActiveByDedupeKey"
+  | "expireStaleByDedupeKey"
   | "countTenantSince"
   | "createProcessing"
   | "markSucceeded"
@@ -105,7 +110,6 @@ export class OcrService {
   private readonly encryptionKeyFactory: () => string | null | undefined;
   private readonly nowFactory: () => Date;
   private readonly clockMsFactory: () => number;
-
   constructor(dependencies: OcrServiceDependencies = {}) {
     this.repository = dependencies.repository ?? ocrRecognitionRepository;
     this.fileRepository = dependencies.fileRepository ?? platformFileObjectRepository;
@@ -130,6 +134,7 @@ export class OcrService {
     if (!await this.settings.getBoolean("TENCENT_OCR_ENABLED", false)) {
       return [];
     }
+    if (!hasOcrResultEncryptionKey(this.encryptionKeyFactory())) return [];
     const capabilities = listPublicOcrCapabilities(scene);
     const encryptedIdEnabled = await this.settings.getBoolean(
       "TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED",
@@ -147,10 +152,16 @@ export class OcrService {
     if (!employeeId) throw Errors.forbidden();
     this.assertPermission(authContext, "ocr.recognize");
     this.assertPermission(authContext, "wechat_pay.applyment.submit");
+    if (!await this.settings.getBoolean("TENCENT_OCR_ENABLED", false)) {
+      throw Errors.business(503, "腾讯云OCR尚未启用", ErrorCodes.OCR_DISABLED);
+    }
     const capability = getOcrCapability(input.scene, input.document_type);
     if (!capability) {
       throw Errors.business(400, "当前场景不支持该识别类型", ErrorCodes.OCR_CAPABILITY_UNAVAILABLE);
     }
+    const resultEncryptionKey = this.encryptionKeyFactory();
+    assertOcrResultEncryptionKey(resultEncryptionKey);
+    const now = this.nowFactory();
 
     const file = await this.fileRepository.findActiveById({
       id: input.file_object_id,
@@ -159,7 +170,7 @@ export class OcrService {
     if (!file) {
       throw Errors.business(404, "OCR文件不存在", ErrorCodes.OCR_FILE_NOT_FOUND);
     }
-    this.validateFile(file, input.scene, capability.supported_mime_types, capability.max_size_bytes);
+    validateOcrFile(file, input.scene, capability.supported_mime_types, capability.max_size_bytes);
     await this.validateSubjectAndAttachment(
       tenantId,
       employeeId,
@@ -172,13 +183,21 @@ export class OcrService {
       tenantId,
       input.idempotency_key,
     );
-    if (idempotent) return this.response(idempotent, true, false);
+    if (idempotent) {
+      assertOcrIdempotencyMatches(idempotent, input);
+      return this.response(idempotent, true, false);
+    }
 
-    const dedupeKey = buildDedupeKey({
+    const dedupeKey = buildOcrDedupeKey({
       tenantId,
       fileIdentity: file.checksum || file.object_key,
       documentType: input.document_type,
       providerAction: capability.providerAction,
+    });
+    await this.repository.expireStaleByDedupeKey({
+      tenantId,
+      dedupeKey,
+      before: now.toISOString(),
     });
     const cached = await this.repository.findActiveByDedupeKey(tenantId, dedupeKey);
     if (cached) return this.response(cached, false, true);
@@ -187,7 +206,6 @@ export class OcrService {
       "TENCENT_OCR_DEFAULT_TENANT_DAILY_LIMIT",
       100,
     ));
-    const now = this.nowFactory();
     if (await this.repository.countTenantSince(tenantId, startOfUtcDay(now)) >= dailyLimit) {
       throw Errors.business(429, "今日OCR识别额度已用完", ErrorCodes.OCR_DAILY_LIMIT_EXCEEDED);
     }
@@ -204,6 +222,9 @@ export class OcrService {
     });
     const recognition = creation.record;
     if (creation.reuseReason) {
+      if (creation.reuseReason === "idempotent") {
+        assertOcrIdempotencyMatches(recognition, input);
+      }
       return this.response(
         recognition,
         creation.reuseReason === "idempotent",
@@ -227,7 +248,7 @@ export class OcrService {
       const resultCiphertext = this.encrypt({
         context: { tenantId, recognitionId: recognition.id },
         result: normalized,
-        rootSecret: this.encryptionKeyFactory(),
+        rootSecret: resultEncryptionKey,
       });
       const succeeded = await this.repository.markSucceeded({
         id: recognition.id,
@@ -256,11 +277,20 @@ export class OcrService {
 
   async getTenantRecognition(authContext: AuthContext, id: string) {
     const tenantId = this.requireTenantEmployee(authContext);
+    const employeeId = authContext.employeeId;
+    if (!employeeId) throw Errors.forbidden();
     this.assertPermission(authContext, "ocr.recognize");
+    this.assertPermission(authContext, "wechat_pay.applyment.submit");
     const recognition = await this.repository.findByIdForTenant(id, tenantId);
     if (!recognition) {
       throw Errors.business(404, "OCR识别记录不存在", ErrorCodes.OCR_RECOGNITION_NOT_FOUND);
     }
+    await assertOcrRecognitionReadAccess({
+      recognition,
+      tenantId,
+      employeeId,
+      findApplyment: (input) => this.applymentRepository.findById(input),
+    });
     return this.toTenantRecognition(recognition);
   }
 
@@ -299,23 +329,6 @@ export class OcrService {
 
   private assertPermission(authContext: AuthContext, permission: string) {
     if (!this.accessPolicy.hasPermission(authContext, permission)) throw Errors.forbidden();
-  }
-
-  private validateFile(
-    file: OcrPlatformFileObjectRecord,
-    scene: OcrScene,
-    mimeTypes: readonly string[],
-    maxSize: number,
-  ) {
-    if (file.scene !== scene) {
-      throw Errors.business(400, "文件业务场景不匹配", ErrorCodes.OCR_FILE_ACCESS_DENIED);
-    }
-    if (!mimeTypes.includes(file.mime_type)) {
-      throw Errors.business(400, "OCR文件格式不支持", ErrorCodes.OCR_FILE_FORMAT_UNSUPPORTED);
-    }
-    if (file.size_bytes > maxSize) {
-      throw Errors.business(400, "OCR文件过大", ErrorCodes.OCR_FILE_TOO_LARGE);
-    }
   }
 
   private async validateSubjectAndAttachment(
@@ -442,20 +455,6 @@ export class OcrService {
       quality: result.quality,
     };
   }
-}
-
-function buildDedupeKey(input: {
-  tenantId: string;
-  fileIdentity: string;
-  documentType: OcrDocumentType;
-  providerAction: string;
-}) {
-  return createHash("sha256").update([
-    input.tenantId,
-    input.fileIdentity,
-    input.documentType,
-    input.providerAction,
-  ].join(":"), "utf8").digest("hex");
 }
 
 function buildResultSummary(result: NormalizedOcrProviderResult) {

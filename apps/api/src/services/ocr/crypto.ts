@@ -50,6 +50,24 @@ export type OcrNormalizedResult = {
   quality: Record<string, unknown>;
 };
 
+export function hasOcrResultEncryptionKey(
+  rootSecret: string | null | undefined,
+): rootSecret is string {
+  return Boolean(rootSecret?.trim());
+}
+
+export function assertOcrResultEncryptionKey(
+  rootSecret: string | null | undefined,
+): asserts rootSecret is string {
+  if (!hasOcrResultEncryptionKey(rootSecret)) {
+    throw Errors.business(
+      503,
+      '缺少OCR识别结果加密密钥',
+      ErrorCodes.OCR_RESULT_ENCRYPTION_KEY_MISSING,
+    );
+  }
+}
+
 export function encryptOcrResult(input: {
   context: OcrResultCryptoContext;
   result: OcrNormalizedResult;
@@ -114,13 +132,7 @@ export function decryptOcrResult(input: {
 }
 
 function deriveKey(rootSecret: string | null | undefined): Buffer {
-  if (!rootSecret?.trim()) {
-    throw Errors.business(
-      503,
-      '缺少OCR识别结果加密密钥',
-      ErrorCodes.OCR_RESULT_ENCRYPTION_KEY_MISSING,
-    );
-  }
+  assertOcrResultEncryptionKey(rootSecret);
   return Buffer.from(
     hkdfSync(
       'sha256',
