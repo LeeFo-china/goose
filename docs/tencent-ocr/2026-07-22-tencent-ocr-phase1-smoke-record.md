@@ -37,6 +37,7 @@
 - `e6e1e5c3 fix(ocr): 修复成功结果加密边界`
 - `43f780b2 fix(ocr): 拒绝回填不完整证照日期`
 - `3c681447 feat(ocr): 增加CAM最小权限预检`
+- `6f72e839 security(ocr): 校验身份证加密公钥`
 
 ## 3. 静态门禁
 
@@ -295,6 +296,22 @@ commit 为 `43f780b206181801f347222f3d50238da88eb39d`。发布后使用腾讯官
 必须重新运行该命令，且只有三个目标 Action 通过、`GeneralBasicOCR` 返回权限拒绝时才能解除
 门禁。
 
+### 6.6 身份证加密公钥格式门禁
+
+腾讯云官方敏感数据加密指引确认，加密公钥及官方 Demo 需联系腾讯 OCR 售后获取；该公钥不是
+项目自行生成的 KMS 密钥，也不能用其他腾讯云产品公钥替代。提交 `6f72e839` 增加公钥格式
+校验和双层失败关闭：
+
+- 只接受 1024 位 PKCS#1 RSA public key PEM；外层 Base64、SPKI/PKCS#8、错误位数和畸形值
+  均拒绝。
+- 能力开关开启但公钥无效或缺失时，`/ocr/capabilities` 不返回身份证正反面能力。
+- gateway 在调用 `RecognizeEncryptedIDCardOCR` 前再次校验，不降级到明文身份证接口。
+- 平台配置说明明确提示 Base64 包裹内容必须先解码。
+
+公钥格式、配置能力过滤和 gateway 防御共 32 项聚焦测试通过，API typecheck、build 和文件
+大小检查通过。该提交只完成代码门禁，不代表已经取得腾讯公钥或完成真实身份证识别；身份证
+能力继续保持关闭。
+
 ## 7. 清理任务证据
 
 2026-07-22 已对目标数据库执行：
@@ -319,8 +336,9 @@ workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub A
 准备条件满足后，按顺序执行并在本文件追加脱敏证据：
 
 1. 在腾讯 CAM 控制台为独立子用户应用 `deploy/tencent-ocr-phase1-cam-policy.json`，移除 OCR 全权限/通配符策略并更换开发环境凭据；执行 `cd apps/api && bun run ocr:cam:readiness`，要求 `ready=true`。现有凭据的最新运行结果仍为 `ready=false`，不能仅做截图复核后继续使用。
-2. 补充腾讯身份证加密公钥；OCR 密钥和 API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 已配置，
-   后者不得写入数据库、文档或截图。
+2. 按运维手册 1.2 节联系腾讯 OCR 售后取得 1024 位 PKCS#1 RSA 加密公钥和 Node.js Demo，
+   完成格式校验后配置；OCR 密钥和 API 部署环境的 `OCR_RESULT_ENCRYPTION_KEY` 已配置，后者
+   不得写入数据库、文档或截图。
 3. 部署包含清理脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
    和至少一次小时级定时 run，回填 run ID 与脱敏 artifact。
 4. 已完成：保持身份证开关关闭，执行腾讯官方营业执照正常样例和模糊派生样例；总开关已恢复关闭。

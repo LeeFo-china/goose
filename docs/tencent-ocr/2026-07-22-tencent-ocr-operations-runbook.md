@@ -34,6 +34,31 @@ OCR 这些接口按腾讯云 CAM 能力表使用操作级授权，因此 `resour
 标记上述接口为操作级授权、资源为 `*`。策略替换和负向探针结果必须回填 Phase 1 smoke
 记录。
 
+### 1.2 身份证加密公钥申请与校验
+
+腾讯云[敏感数据加密指引](https://cloud.tencent.com/document/product/866/106048)明确说明：
+`RecognizeEncryptedIDCardOCR` 使用的加密公钥和官方 Demo 需要联系腾讯 OCR 售后支持获取，
+不能自行生成 KMS/RSA 密钥替代，也不能复用微信支付、COS 或其他产品的公钥。
+
+向腾讯 OCR 售后提交申请时，应明确提供：腾讯云账号标识、产品“文字识别 OCR”、接口
+`RecognizeEncryptedIDCardOCR`、算法 `AES-256-CBC`，并申请对应的 1024 位 RSA PKCS#1
+加密公钥和 Node.js Demo。不要在工单、聊天记录或仓库中发送 OCR SecretKey、业务证件图片或
+识别结果。
+
+取得材料后按以下顺序处理：
+
+1. 将售后交付原件保存到受控密钥存储，不加入 Git。
+2. 如果交付内容是 Base64 包裹的 PEM，先做一次 Base64 解码；平台配置值必须以
+   `-----BEGIN RSA PUBLIC KEY-----` 开始、以 `-----END RSA PUBLIC KEY-----` 结束。
+3. 使用 `openssl rsa -pubin -RSAPublicKey_in -in <public-key.pem> -noout -text` 只读确认
+   `Public-Key: (1024 bit)`；不要把命令完整输出提交到仓库。
+4. 通过平台设置保存 `TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM`，继续保持
+   `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false`。
+5. 后端会拒绝外层 Base64、SPKI/PKCS#8、非 RSA、非 1024 位或畸形公钥；无效时能力接口不会
+   返回身份证正反面识别能力，gateway 也会再次失败关闭。
+6. 使用明确授权的身份证正反面测试样本完成加密请求、加密响应解密、字段复核和过期清理后，
+   才允许开启身份证能力。
+
 ## 2. 结果清理命令
 
 在 API 发布目录执行：
