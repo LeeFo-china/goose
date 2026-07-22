@@ -188,7 +188,7 @@ Run:
 ```bash
 bun test apps/api/src/services/ocr/tencent-sdk-compatibility.test.ts
 pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit
-bun --cwd apps/api run build
+bun run --cwd apps/api build
 ```
 
 Expected: test PASS, typecheck/build exit 0. If the ESM import fails, stop and adapt to the inspected package export; do not add a handwritten TC3 signer.
@@ -670,7 +670,7 @@ Tests assert route registration, Zod failures, tenant context, platform-only lis
 
 ```bash
 bun test apps/api/src/controllers/ocr/index.test.ts
-bun --cwd apps/api run check
+bun run --cwd apps/api check
 ```
 
 - [ ] **Step 6: Commit**
@@ -699,13 +699,13 @@ Dry-run reports candidate count/oldest expiry without updates. Apply mode requir
 
 - [ ] **Step 3: Configure the production retention schedule**
 
-Document the actual production scheduler, owner and alert destination in the operations runbook. Run `bun --cwd apps/api run ocr:results:cleanup --apply` every hour with overlapping executions disabled and a 10-minute timeout. Reading an expired record must return 410 even before cleanup runs. Keep OCR disabled until the scheduler has one successful production dry-run and one successful apply run. Alert when a run fails or still reports 500 remaining candidates so capacity can be reviewed without silently extending retention.
+Document the actual production scheduler, owner and alert destination in the operations runbook. Run `bun run --cwd apps/api ocr:results:cleanup --apply` every hour with overlapping executions disabled and a 10-minute timeout. Reading an expired record must return 410 even before cleanup runs. Keep OCR disabled until the scheduler has one successful production dry-run and one successful apply run. Alert when a run fails or still reports 500 remaining candidates so capacity can be reviewed without silently extending retention.
 
 - [ ] **Step 4: Verify**
 
 ```bash
 bun test apps/api/src/scripts/ocr-result-cleanup.test.ts
-bun --cwd apps/api run ocr:results:cleanup
+bun run --cwd apps/api ocr:results:cleanup
 ```
 
 Expected: test PASS; default script performs dry-run only. The runbook identifies the real scheduler and contains no credentials.
@@ -814,7 +814,7 @@ After applying suggestions, the existing `buildWechatPayApplymentPayload` and ex
 bun test apps/api/src/schema/wechat-pay-applyments.test.ts apps/api/src/services/wechat-pay-applyments-sensitive-integration.test.ts
 bun test apps/admin/components/ocr/ocr-field-review-dialog.test.tsx apps/admin/components/finance/finance-wechat-pay-applyment-schema.test.ts
 pnpm --dir apps/admin check
-bun --cwd apps/api run check
+bun run --cwd apps/api check
 ```
 
 - [ ] **Step 7: Commit**
@@ -834,7 +834,7 @@ git commit -m "feat(finance): 支持进件证照识别回填"
 
 ```bash
 bun test packages/domain/src/ocr.test.ts apps/api/src/services/ocr apps/api/src/controllers/ocr apps/api/src/schema/wechat-pay-applyments.test.ts
-bun --cwd apps/api run check
+bun run --cwd apps/api check
 pnpm --dir apps/admin check
 git diff --check
 ```
