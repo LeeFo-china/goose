@@ -88,7 +88,7 @@ export const DEFINITIONS_INTEGRATIONS: SettingDefinition[] = [  {
     description: "仅在加密材料验证完成后开放身份证识别能力。",
     valueType: "boolean",
     envNames: ["TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED"],
-    defaultValue: "true",
+    defaultValue: "false",
   },
   {
     key: "TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM",

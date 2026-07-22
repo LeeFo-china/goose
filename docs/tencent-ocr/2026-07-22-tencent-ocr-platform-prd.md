@@ -504,7 +504,8 @@ Phase 1 不新增绕过现有进件 schema、敏感字段加密和状态机的�
 
 - SDK 的真实导出和类型已经按安装版本核对，并通过 Bun typecheck/build。
 - 不向客户端或日志暴露腾讯云密钥、OCR 原始响应、signed URL 或敏感明文。
-- 跨租户 `file_object_id` 请求返回 403。
+- 跨租户 `file_object_id` 按租户范围查询后返回
+  `404 OCR_FILE_NOT_FOUND`，不泄露该文件在其他租户是否存在。
 - 非支持 scene、MIME、文档类型和过大文件在调用腾讯云前被拒绝。
 - 同一 idempotency key 不重复调用 provider。
 - 同一有效文件和文档类型的重复请求命中缓存。

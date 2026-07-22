@@ -66,5 +66,9 @@ describe("system setting definitions localization", () => {
       groupCode: "ocr",
       isSecret: true,
     });
+    expect(byKey.get("TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED")).toMatchObject({
+      groupCode: "ocr",
+      defaultValue: "false",
+    });
   });
 });

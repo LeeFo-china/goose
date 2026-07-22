@@ -52,6 +52,8 @@
 
 - `20260722130000` Local：存在。
 - `20260722130000` Remote：存在。
+- `20260722150000` Local：存在。
+- `20260722150000` Remote：存在。
 - Local/Remote：对齐。
 
 通过 service-role REST 只读查询确认：
@@ -63,9 +65,13 @@
 | `ocr.recognize` | active |
 | `platform.ocr.recognition.read` | active |
 | `TENCENT_OCR_ENABLED` | `false` |
+| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false` |
 | `ocr_recognitions` 记录数 | 0 |
 
 迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 6 个显式索引、租户幂等唯一索引、活跃结果去重索引、结果过期索引和无客户端 policy 的 service-role 访问边界。
+
+`20260722150000` 是前向安全修正：仅当 OCR 总开关仍为 `false` 时，把全局身份证加密识别
+能力收敛为 `false`。远端只读复核确认两个开关当前均为 `false`。
 
 ## 5. 自动化场景证据
 
@@ -124,7 +130,8 @@ workflow 尚未在默认分支运行，因此不能把源码契约当作生产�
 准备条件满足后，按顺序执行并在本文件追加脱敏证据：
 
 1. 创建仅允许 `BizLicenseOCR`、`RecognizeEncryptedIDCardOCR`、`BankCardOCR` 的 OCR 专用 CAM 凭证。
-2. 在平台 Admin 配置密钥、区域、endpoint、结果加密密钥和身份证加密公钥；不得写入文档或截图。
+2. 在平台 Admin 配置腾讯云密钥、区域、endpoint 和身份证加密公钥；通过 API 部署环境单独
+   配置 `OCR_RESULT_ENCRYPTION_KEY`，不得写入数据库、文档或截图。
 3. 合并清理 workflow，部署包含脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
    和至少一次小时级定时 run，回填 run ID 与脱敏 artifact。
 4. 先开启总开关并保持身份证开关关闭，执行授权营业执照正常/模糊样本。

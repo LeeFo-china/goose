@@ -46,8 +46,9 @@ describe("TencentOcrGateway", () => {
       BankCardOCR: mock(async () => ({ CardNo: "6222", RequestId: "bank-id" })),
       RecognizeEncryptedIDCardOCR: mock(async () => ({ RequestId: "id-id" })),
     };
+    const gatewaySettings = createSettings();
     const gateway = new TencentOcrGateway({
-      settings: createSettings(),
+      settings: gatewaySettings,
       clientFactory: () => client,
     });
 
@@ -68,6 +69,10 @@ describe("TencentOcrGateway", () => {
       EnableBorderCheck: true,
       EnableQualityValue: true,
     });
+    expect(gatewaySettings.getBoolean).toHaveBeenCalledWith(
+      "TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED",
+      false,
+    );
   });
 
   test("encrypts ID request and decrypts the encrypted response", async () => {

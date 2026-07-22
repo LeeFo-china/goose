@@ -360,7 +360,7 @@ TENCENT_OCR_ENDPOINT=ocr.tencentcloudapi.com
 TENCENT_OCR_REQUEST_TIMEOUT_MS=10000
 TENCENT_OCR_DEFAULT_TENANT_DAILY_LIMIT=100
 TENCENT_OCR_RESULT_TTL_HOURS=24
-TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=true
+TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED=false
 TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM=null (secret)
 TENCENT_OCR_ENCRYPTION_ALGORITHM=AES-256-CBC
 ```
@@ -857,7 +857,9 @@ Expected: Local/Remote align for `20260722130000`.
 
 - [ ] **Step 3: Configure a least-privilege test credential**
 
-Use platform Admin `/settings?group=ocr`. Save an OCR-only CAM credential and enable only business-license capability first. Do not place secrets in `.env` examples, docs, screenshots or smoke logs.
+Use platform Admin `/settings?group=ocr` to save an OCR-only CAM credential and enable only the
+business-license capability first. Configure `OCR_RESULT_ENCRYPTION_KEY` only as an API deployment
+secret; it must not enter system settings, docs, screenshots or smoke logs.
 
 - [ ] **Step 4: Execute controlled smoke samples**
 

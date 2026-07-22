@@ -119,32 +119,33 @@ GET /ocr/capabilities?scene=expense_request
 
 响应：
 
+以下示例是客户端请求层解包顶层 `data` 后的业务值；原始 HTTP 成功响应仍使用项目统一的
+`{ "data": ..., "message": "success" }` 包装。
+
 ```json
-{
-  "scene": "expense_request",
-  "capabilities": [
-    {
-      "document_type": "general_invoice",
-      "label": "识别票据",
-      "attachment_categories": ["expense_evidence"],
-      "supported_mime_types": ["image/jpeg", "image/png"],
-      "max_size_bytes": 2097152,
-      "mode": "sync",
-      "output_fields": [
-        "amount",
-        "occurred_at",
-        "invoice_no",
-        "vendor_name"
-      ]
-    }
-  ]
-}
+[
+  {
+    "scene": "expense_request",
+    "document_type": "general_invoice",
+    "label": "识别票据",
+    "attachment_categories": ["expense_evidence"],
+    "supported_mime_types": ["image/jpeg", "image/png"],
+    "max_size_bytes": 2097152,
+    "mode": "sync",
+    "output_fields": [
+      "amount",
+      "occurred_at",
+      "invoice_no",
+      "vendor_name"
+    ]
+  }
+]
 ```
 
 规则：
 
 - 能力列表总量由后端保证不超过 50，不分页。
-- `capabilities=[]` 表示当前场景未开放，不是客户端错误。
+- 解包后的业务值为 `[]` 表示当前场景未开放，不是客户端错误。
 - 按页面进入时查询一次即可；不要长期跨版本缓存。
 - 按 `document_type`、MIME、大小和 `mode` 渲染，不维护本地腾讯 Action/QPS 表。
 
@@ -371,7 +372,7 @@ visitor `tenant_onboarding_license` 暂不接员工 OCR API。后端需要先提
 | --- | --- |
 | `OCR_DISABLED` | 隐藏入口或提示“证照识别暂不可用”，保留手工填写 |
 | `OCR_CAPABILITY_UNAVAILABLE` | 刷新 capabilities，不本地 fallback |
-| `OCR_FILE_NOT_FOUND` | 提示重新上传 |
+| `OCR_FILE_NOT_FOUND` | 提示重新上传；跨租户文件也按 404 返回，不判断远端文件是否存在 |
 | `OCR_FILE_ACCESS_DENIED` | 重新登录；不要改传 object key 绕过 |
 | `OCR_FILE_FORMAT_UNSUPPORTED` | 提示选择 JPEG/PNG |
 | `OCR_FILE_TOO_LARGE` | 压缩或重新选择 |
@@ -445,7 +446,7 @@ OCR 不进入以下数据源：
 - [ ] 相同 idempotency key 重放返回同一 recognition。
 - [ ] 相同文件再次识别返回 `cached=true`。
 - [ ] 模糊图显示告警，仍允许手工填写。
-- [ ] 越权 file ID 返回 403。
+- [ ] 越权 file ID 返回 `404 OCR_FILE_NOT_FOUND`，不泄露其他租户文件存在性。
 
 回填证据：
 

@@ -127,7 +127,7 @@ export class TencentOcrGateway {
       this.settings.getString("TENCENT_OCR_REGION", "ap-guangzhou"),
       this.settings.getString("TENCENT_OCR_ENDPOINT", "ocr.tencentcloudapi.com"),
       this.settings.getNumber("TENCENT_OCR_REQUEST_TIMEOUT_MS", 10_000),
-      this.settings.getBoolean("TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED", true),
+      this.settings.getBoolean("TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED", false),
       this.settings.getSecretString("TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM"),
       this.settings.getString("TENCENT_OCR_ENCRYPTION_ALGORITHM", "AES-256-CBC"),
     ]);
