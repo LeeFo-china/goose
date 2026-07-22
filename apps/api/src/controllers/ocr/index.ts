@@ -26,7 +26,7 @@ class OcrController extends TenantBaseController {
 
     // Server-owned auxiliary catalog is guaranteed to contain at most 50 entries.
     return ResponseHandler.success(
-      ocrService.listCapabilities(authContext, parsed.data.scene),
+      await ocrService.listCapabilities(authContext, parsed.data.scene),
     );
   }
 

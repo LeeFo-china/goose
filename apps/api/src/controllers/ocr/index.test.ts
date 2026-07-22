@@ -6,7 +6,7 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const listCapabilities = mock(() => [{ document_type: "business_license" }]);
+const listCapabilities = mock(async () => [{ document_type: "business_license" }]);
 const recognize = mock(async () => ({ recognition: { id: "recognition-1" } }));
 const getTenantRecognition = mock(async () => ({ id: "recognition-1" }));
 const listPlatformRecognitions = mock(async () => ({

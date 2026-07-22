@@ -79,7 +79,7 @@ export type OcrServiceDependencies = {
   };
   accessPolicy?: Pick<typeof accessPolicyService, "assertTenantContext" | "hasPermission">;
   gateway?: { recognize(input: TencentOcrGatewayInput): Promise<unknown> };
-  settings?: Pick<typeof systemSettingsService, "getNumber">;
+  settings?: Pick<typeof systemSettingsService, "getBoolean" | "getNumber">;
   signedUrlResolver?: typeof resolveOcrStoredFileUrl;
   normalize?: typeof normalizeOcrResponse;
   encrypt?: typeof encryptOcrResult;
@@ -124,10 +124,21 @@ export class OcrService {
     this.clockMsFactory = dependencies.clockMsFactory ?? Date.now;
   }
 
-  listCapabilities(authContext: AuthContext, scene?: OcrScene) {
+  async listCapabilities(authContext: AuthContext, scene?: OcrScene) {
     this.requireTenantEmployee(authContext);
     this.assertPermission(authContext, "ocr.recognize");
-    return listPublicOcrCapabilities(scene);
+    if (!await this.settings.getBoolean("TENCENT_OCR_ENABLED", false)) {
+      return [];
+    }
+    const capabilities = listPublicOcrCapabilities(scene);
+    const encryptedIdEnabled = await this.settings.getBoolean(
+      "TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED",
+      false,
+    );
+    return encryptedIdEnabled ? capabilities : capabilities.filter(
+      (item) => item.document_type !== "id_card_front" &&
+        item.document_type !== "id_card_back",
+    );
   }
 
   async recognize(authContext: AuthContext, input: RecognizeInput) {

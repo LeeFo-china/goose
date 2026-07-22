@@ -106,6 +106,8 @@ async function createHarness(input: {
   gatewayError?: unknown;
   applymentRecord?: typeof applyment | null;
   createError?: unknown;
+  ocrEnabled?: boolean;
+  encryptedIdEnabled?: boolean;
 } = {}) {
   const { OcrService } = await serviceModulePromise;
   const processing = buildRecord();
@@ -158,6 +160,13 @@ async function createHarness(input: {
     settings: {
       getNumber: mock(async (key: string, fallback: number) =>
         key === "TENCENT_OCR_DEFAULT_TENANT_DAILY_LIMIT" ? 100 : fallback),
+      getBoolean: mock(async (key: string, fallback: boolean) => {
+        if (key === "TENCENT_OCR_ENABLED") return input.ocrEnabled ?? true;
+        if (key === "TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED") {
+          return input.encryptedIdEnabled ?? true;
+        }
+        return fallback;
+      }),
     },
     signedUrlResolver: mock(async () => "https://signed/license.jpg"),
     normalize: mock(() => normalized),
@@ -187,6 +196,27 @@ const request = {
 };
 
 describe("OcrService", () => {
+  test("hides capabilities while OCR is disabled", async () => {
+    const { service } = await createHarness({ ocrEnabled: false });
+
+    expect(await service.listCapabilities(
+      authContext,
+      "wechat_pay_applyment",
+    )).toEqual([]);
+  });
+
+  test("hides ID-card capabilities while encrypted recognition is disabled", async () => {
+    const { service } = await createHarness({ encryptedIdEnabled: false });
+
+    expect((await service.listCapabilities(
+      authContext,
+      "wechat_pay_applyment",
+    )).map((item) => item.document_type)).toEqual([
+      "business_license",
+      "bank_card",
+    ]);
+  });
+
   test("stores encrypted success after validating an applyment file", async () => {
     const { service, dependencies } = await createHarness();
 
