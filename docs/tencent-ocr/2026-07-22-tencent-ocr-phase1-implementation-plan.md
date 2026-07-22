@@ -53,8 +53,8 @@ delivery status is:
 | Task 0-9 | Complete | Implementation, migrations, focused tests, Admin smoke and commits are recorded in the Phase 1 smoke record. |
 | Task 10 Step 1-2 | Complete | Static gates and Local/Remote migration alignment passed. |
 | Task 10 Step 3 | Partially complete | OCR credentials and per-environment result keys are configured, but a Phase 1-out-of-scope Action probe proves the current CAM credential is over-privileged; the replacement credential still needs to apply `deploy/tencent-ocr-phase1-cam-policy.json`. The encrypted-ID public key is also missing and production has not deployed the key-injection contract. |
-| Task 10 Step 4-5 | In progress | Synthetic upload/provider-failure, idempotency conflict, daily-limit rejection and live cross-tenant denial passed; authorized valid/blurred documents, successful-result cache runtime evidence and Admin field-review evidence are still required. |
-| Task 10 Step 6 | In progress | Static, migration, deployment, synthetic provider and cleanup command evidence is recorded; authorized document evidence is absent. |
+| Task 10 Step 4-5 | In progress | Tencent official demo business-license and bank-card samples passed end-to-end recognition, encrypted storage/readback, idempotent replay and successful-result cache checks. A blurred derivative of the official license sample was rejected safely and recorded without result plaintext. Encrypted ID front/back and Admin field-review evidence are still required. |
+| Task 10 Step 6 | In progress | Static, migration, deployment, negative-boundary, official demo document and cleanup command evidence is recorded in the smoke record. Encrypted ID and Admin UI evidence remain absent. |
 | Task 10 Step 7 | Pending | Cannot declare Phase 1 production-ready before real provider and production cleanup evidence. |
 | Task 10 Step 8 | Complete for current evidence | The smoke record is versioned; it must be amended after each real smoke gate. |
 

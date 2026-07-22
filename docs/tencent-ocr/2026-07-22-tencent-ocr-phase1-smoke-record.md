@@ -4,13 +4,13 @@
 
 - 代码实现、自动化测试、API/Admin 构建、数据库 migration 和远端只读审计通过。
 - 远端 `TENCENT_OCR_ENABLED=false`，当前不会向租户 Admin 或小程序暴露识别能力。
-- 已使用不含真实主体和个人信息的合成图调用腾讯云 OCR；未上传真实证件、未取得有效证照识别成功结果，也未提交微信支付进件。
+- 已使用腾讯云官方演示营业执照和银行卡图片取得成功识别结果，并使用官方营业执照图片的模糊派生样本验证安全失败路径；样例及识别字段值未写入仓库或验收记录，也未提交微信支付进件。
 - 一期当前状态为“代码就绪，发布门禁未解除”，不能标记为生产可用。
 
 未解除的发布门禁：
 
 1. 尚未取得并验证腾讯云身份证加密识别公钥及真实加密接口样本。
-2. 尚未准备明确授权的有效营业执照、模糊营业执照、身份证正反面和银行卡测试图片。
+2. 腾讯官方演示营业执照、模糊派生样本和银行卡样本已验证；身份证正反面仍缺少腾讯加密接口公钥和明确授权样本。
 3. 当前 OCR 凭据可调用一期范围外的 `GeneralBasicOCR`，CAM 最小权限门禁未通过；必须换成只关联一期策略的新子用户凭据。
 4. `OCR_RESULT_ENCRYPTION_KEY` 已按 development/production 环境分别配置，但生产 API 尚未发布密钥注入契约。
 5. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
@@ -34,6 +34,7 @@
 - `a0f52aea fix(ocr): 默认关闭身份证加密识别`
 - `1167a903 ci(ocr): 注入结果加密密钥`
 - `cb09ab3b docs(ocr): 记录开发环境连通性验收`
+- `e6e1e5c3 fix(ocr): 修复成功结果加密边界`
 
 ## 3. 静态门禁
 
@@ -65,15 +66,15 @@
 
 通过 service-role REST 只读查询确认：
 
-| 项目                                    | 结果                |
-| --------------------------------------- | ------------------- |
-| OCR 平台配置                            | 11 项 active        |
-| 敏感 OCR 配置                           | 3 项                |
-| `ocr.recognize`                         | active              |
-| `platform.ocr.recognition.read`         | active              |
-| `TENCENT_OCR_ENABLED`                   | `false`             |
-| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`             |
-| `ocr_recognitions` 记录数               | 1（合成图失败审计） |
+| 项目                                    | 结果                        |
+| --------------------------------------- | --------------------------- |
+| OCR 平台配置                            | 11 项 active                |
+| 敏感 OCR 配置                           | 3 项                        |
+| `ocr.recognize`                         | active                      |
+| `platform.ocr.recognition.read`         | active                      |
+| `TENCENT_OCR_ENABLED`                   | `false`                     |
+| `TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED` | `false`                     |
+| `ocr_recognitions` 记录数               | 5（2 条成功、3 条失败审计） |
 
 迁移源码同时定义并已随 migration 应用：强制 RLS、主键索引和 7 个显式索引、租户幂等
 唯一索引、活跃结果去重索引、结果过期索引、平台文档类型筛选排序索引，以及无客户端 policy
@@ -193,6 +194,50 @@ tenant-scoped 文件查询处即返回 404，因此没有读取文件内容、�
 本节证明上传登记、provider 失败审计、幂等重放、幂等冲突和租户隔离的开发环境运行态契约；
 不证明成功结果加密/解密、成功结果缓存、真实字段识别或 Admin 差异回填。
 
+### 6.3 官方演示样例成功链路与模糊样例回退
+
+2026-07-22 使用腾讯云官方 API 文档提供的演示图片继续执行开发环境 smoke：
+
+- 营业执照来源：<https://cloud.tencent.com/document/api/866/36215>；本地临时下载文件
+  SHA-256 为 `d6af048cb3d31e3ccd21a3acbfd86188a40a61126c6d53c61b36f7c2f3f3a05b`。
+- 银行卡来源：<https://cloud.tencent.com/document/api/866/36216>；本地临时下载文件
+  SHA-256 为 `18e7b76c8010b389fc92ab3f4952d870c7e8f95dffb8a672226e111a0de61317`。
+- 模糊营业执照由上述官方营业执照临时文件执行 ImageMagick 高斯模糊 `0x8` 生成，
+  SHA-256 为 `864896f32383a76d2c9050d430883037bd0a55cf573e8b262369c8fc20b35cd2`。
+- 三张图片均只保存在 `/tmp`，未加入 Git；以下只记录字段 key、计数和安全审计元数据，
+  不记录 COS URL、object key 或任何识别字段值。
+
+首次通过完整 API 链路调用官方营业执照样例时，腾讯 provider 已返回成功，但后端返回
+`OCR_RESULT_INVALID`。根因是 `normalizeOcrResponse` 的返回对象同时包含业务结果和
+`providerRequestId`，服务把整个对象传入严格的 `OcrNormalizedResultSchema` 加密校验，导致
+provider 元数据被误判为非法业务字段。该次失败审计为
+`bd2ffd57-987a-4d6e-ac4e-99d165e3956b`，未保存结果密文或字段值。
+
+提交 `e6e1e5c3` 将 `providerRequestId` 从加密输入中分离，并新增单测锁定加密边界。聚焦 OCR
+及进件安全回归共 75 项通过，API typecheck、build 和文件大小检查通过。开发镜像 build run
+`29906279526` 与 API deploy run `29906490565` 均成功，精确发布 commit 为 `e6e1e5c3`。
+自动发布和完整 Release Dev 工作流当时处于手工关闭状态，因此使用活动的
+`Build Docker Images` 与 `Deploy Dev` 工作流完成不可变镜像发布；一次直接复用 push build
+证据的 deploy run `29906094190` 被证据校验按设计拒绝，没有更新运行服务。
+
+| 场景                 | 脱敏结果                                                                                                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 官方营业执照成功识别 | `file_id=d37a120e-376f-4196-bdfc-c7d15a836dca`；`recognition_id=cf8cbf8b-b3c5-4057-974a-83449061f2d4`；RequestId `7b9675c2-d97e-492b-b9d6-9a5b2e217098`；HTTP 200、`succeeded`                                                        |
+| 营业执照稳定字段     | 6 个 key：`license_name`、`license_code`、`license_address`、`license_period_begin`、`license_period_end`、`legal_representative_name`；warning 为 `DOCUMENT_COPY_SUSPECTED`                                                          |
+| 成功结果加密和读取   | 数据库密文长度 1410；`result_summary` 仅含 `field_keys`、`sensitive_field_count`、`warning_codes`；API 解密读取字段数仍为 6；密文和摘要均不含识别字段明文                                                                             |
+| 幂等重放             | 原幂等键返回同一 recognition，`idempotent=true`、`cached=false`；未新增审计                                                                                                                                                           |
+| 成功缓存             | 同文件、同类型、新幂等键返回同一 recognition，`idempotent=false`、`cached=true`；未新增审计                                                                                                                                           |
+| 官方银行卡成功识别   | `file_id=af124df9-347f-4e70-844a-a24d2706fc8d`；`recognition_id=ad1285fe-470e-4856-8a47-154d127bac80`；RequestId `176a89f0-987f-4fe4-ad36-a7743018d4c3`；HTTP 200、`succeeded`                                                        |
+| 银行卡稳定字段       | 3 个 key：`settlement_account_number`、`settlement_bank_name`、`settlement_card_type`；无 warning                                                                                                                                     |
+| 银行卡加密存储       | 数据库密文长度 669；安全摘要结构正确，密文和摘要不含识别字段明文；`billable_units=1`                                                                                                                                                  |
+| 模糊营业执照回退     | `file_id=28037bca-07d3-47bd-be3c-1f91fa5e415d`；`recognition_id=8fd32180-0f86-4b68-878f-8fcb84540048`；RequestId `a06bf949-562c-4dfb-adbd-9bf15aa067d9`；HTTP 502 `OCR_PROVIDER_FAILED`，provider code `FailedOperation.NoBizLicense` |
+| 模糊样例安全存储     | 状态 `failed`，字段数 0、无密文、`billable_units=0`；客户端应保留原表单并提示重拍或手工录入，不得自动回填                                                                                                                             |
+| 审计与关闭状态       | 三个新场景使审计总数从 2 增至 5；每个 provider 首次调用只增加一条记录。全部脚本 `finally` 后 `TENCENT_OCR_ENABLED=false`，租户能力数为 0                                                                                              |
+
+本节解除营业执照、银行卡、成功结果加密/解密、成功缓存和模糊样例安全回退的运行态门禁。
+仍未完成加密身份证正反面和 Admin 差异弹窗/选择回填/继续手工编辑的浏览器验收；CAM 凭据
+也仍需收敛到仓库策略后才能作为生产凭据。
+
 ## 7. 清理任务证据
 
 2026-07-22 已对目标数据库执行：
@@ -221,9 +266,9 @@ workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub A
    后者不得写入数据库、文档或截图。
 3. 部署包含清理脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
    和至少一次小时级定时 run，回填 run ID 与脱敏 artifact。
-4. 先开启总开关并保持身份证开关关闭，执行授权营业执照正常/模糊样本。
+4. 已完成：保持身份证开关关闭，执行腾讯官方营业执照正常样例和模糊派生样例；总开关已恢复关闭。
 5. 完成腾讯身份证加密接口验证后再开启身份证开关，执行正反面样本。
-6. 执行测试银行卡样本、跨租户、幂等、缓存和额度负向场景。
+6. 已完成：腾讯官方银行卡样例、跨租户、幂等、缓存和额度负向场景均已执行；总开关已恢复关闭。
 7. 在租户 Admin 验证上传、识别、逐字段确认、手工修改和保存草稿；禁止提交正式微信进件。
 8. 回填 recognition ID、脱敏 tenant ID、document type、status、duration、RequestId、warning code、HTTP 状态及脱敏截图；禁止记录图片、signed URL 和字段明文。
 
