@@ -234,4 +234,30 @@ API typecheck/build/file-size、Admin typecheck/file-size/production build 和 `
 
 全量 `bun test` 的已知基线为 2095 pass、68 fail、2 errors，失败来自仓库既有 Bun 全局 `mock.module` 跨测试污染；本功能以隔离 focused suite、API typecheck/build 和 Admin check/build 作为验收门禁。该问题不影响本次 mock E2E 结果，但应作为独立测试基础设施任务处理。
 
-Task 10 的只读 preflight 已完成。剩余步骤必须再次取得明确授权后才可执行：保存并验证中央服务商配置、提交真实微信进件、同步官方状态，并在完成后执行真实小额支付 smoke。本记录没有创建微信进件申请或支付订单。
+Task 10 的只读 preflight 已完成；中央双 Profile 的保存和在线验证结果见下节。剩余外部业务步骤必须再次取得明确授权后才可执行：提交真实微信进件、同步官方状态，并在完成后执行真实小额支付 smoke。本记录没有创建微信进件申请或支付订单。
+
+## 8. 开发环境发布与双 Profile 在线验证
+
+2026-07-22 在明确授权“部署、保存并在线验证两套配置，但不创建订单、不提交进件、不扣款”后完成以下操作：
+
+1. `feature/phase9-payment-readiness` 合并 `main` 后，以 `c98cf91f` 快进本地 `main` 并推送远端。
+2. 首次 push 的自动变更解析因提交区间包含未纳入 Docker 自动部署的遗留 `apps/h5` 运行时文件而按设计失败关闭，错误为 `unsupported automatic service: h5`。支付 API/Admin 构建本身没有失败。本次改走仓库已有的受控 `Release Dev` 通道，仅发布 `api,admin`；运行 `29883005356` 成功，包含镜像构建、开发库 migration 历史核验、API/Admin 部署和健康检查。
+3. 通过开发环境平台 Admin `/settings?group=payment` 保存平台直连和服务商两套商户资料，并分别上传各自的商户接口私钥、APIv3 密钥、微信支付公钥 ID 和公钥文件。默认子商户号和默认子商户 AppID 保持为空，租户开通后的 `sub_mchid`/`sub_appid` 继续记录在租户支付配置，不污染中央服务商 Profile。
+4. 平台直连 Profile 首次在线验证通过，探针结果为 `wechat_pay_public_key / format_only`。
+5. 服务商 Profile 首次探针收到微信签名响应 `403 NOT_ENOUGH`。微信支付合作伙伴官方文档明确说明：下载平台证书接口返回该错误，表示平台证书已经过期，应改用微信支付公钥。系统当时已经使用所配置的微信支付公钥成功验签，根因是校验器只识别了 `404 RESOURCE_NOT_EXISTS` 公钥模式，遗漏官方定义的 `403 NOT_ENOUGH` 公钥模式分支，并非服务商商户私钥、公钥或请求 payload 混用。
+6. 修复提交为 `81146e24`：只有在 `/v3/certificates` 响应已通过微信支付公钥验签，且状态码/错误码严格匹配 `403/NOT_ENOUGH` 时，才将探针判定为公钥模式成功；其他 4xx、错误签名和未知响应仍失败关闭。官方依据：<https://pay.weixin.qq.com/doc/v3/partner/4012073263.md>。
+7. 修复后 focused suite 为 `61 pass / 0 fail`，`bun run api:check` 通过。自动构建运行 `29883549739` 和自动开发部署运行 `29883972976` 均成功。
+8. 只重新执行服务商 Profile 在线验证后通过，结果同样为 `wechat_pay_public_key / format_only`。
+
+最终只读状态：
+
+| Profile | 建档 | 状态 | 校验 | 密钥引用 | 密钥版本 | Readiness |
+| --- | --- | --- | --- | --- | --- | --- |
+| `platform_direct_recharge` | 是 | `active` | `valid` | 存在 | 存在 | `ready=true`，无 blocker |
+| `tenant_service_provider` | 是 | `active` | `valid` | 存在 | 存在 | `ready=true`，无 blocker |
+
+开发服务器容器内对历史申请 `8026f87b-e6de-4bb1-80c6-6aa7066f1759` 再次执行只读 preflight，已不再出现 `PLATFORM_PAYMENT_CONFIG_MISSING` 或运行时配置错误。该旧申请仍因 `rejected` 生命周期、旧版必填字段和敏感资料缺失而 `ready=false`，不能直接提交，符合当前流程约束。主工作区 `.env.local` 的配置加密密钥与开发容器不一致，因此本地 CLI 无法解密由服务器保存的密钥 bundle；本轮改用持有正确运行时密钥的开发容器执行只读 preflight，没有复制、输出或落盘服务器密钥。后续本地预检应通过受控密钥管理对齐环境，或继续在目标环境容器内执行。
+
+发布后只读 UI smoke 覆盖 `1440x1000` 和 `390x844`：两套 Profile 均展示“校验通过 / 已就绪”，无 HTTP 4xx/5xx、console error 或页面级横向溢出。截图保存在 `/tmp/gooes-payment-final-desktop.png` 和 `/tmp/gooes-payment-final-mobile.png`，不包含私钥、APIv3 密钥或公钥正文。
+
+本次没有创建充值或支付订单，没有调用真实进件提交、微信状态同步、租户支付激活或扣款接口。公钥模式探针可以验证商户 API 私钥签名和微信支付公钥验签，但 APIv3 密钥证据仅为 `format_only`；服务商 APIv3 密钥的真实回调解密能力仍须在下一次单独授权的进件/支付 smoke 中验证。
