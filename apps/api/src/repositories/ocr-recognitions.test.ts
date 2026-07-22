@@ -162,6 +162,7 @@ describe('OcrRecognitionRepository', () => {
     });
 
     expect(result.expiredCount).toBe(2);
+    expect(result.oldestExpiresAt).toBe("2026-07-20T00:00:00.000Z");
     expect(traces[0]?.calls).toEqual(expect.arrayContaining([
       { method: 'eq', args: ['status', 'succeeded'] },
       { method: 'lte', args: ['expires_at', '2026-07-22T00:00:00.000Z'] },

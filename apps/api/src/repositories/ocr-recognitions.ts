@@ -294,8 +294,13 @@ export class OcrRecognitionRepository {
 
     if (error) throw Errors.dbError("查询OCR过期结果失败", error);
     const candidates = data ?? [];
+    const oldestExpiresAt = candidates[0]?.expires_at ?? null;
     if (!input.apply || candidates.length === 0) {
-      return { candidateCount: candidates.length, expiredCount: 0 };
+      return {
+        candidateCount: candidates.length,
+        expiredCount: 0,
+        oldestExpiresAt,
+      };
     }
 
     const ids = candidates.map((item) => item.id);
@@ -314,6 +319,7 @@ export class OcrRecognitionRepository {
     return {
       candidateCount: candidates.length,
       expiredCount: expired?.length ?? 0,
+      oldestExpiresAt,
     };
   }
 }
