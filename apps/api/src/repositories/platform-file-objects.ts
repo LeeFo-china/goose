@@ -60,6 +60,43 @@ export type CreatePlatformFileObjectInput = {
   created_by_employee_id?: string | null;
 };
 
+export type OcrPlatformFileObjectRecord = Pick<
+  PlatformFileObjectRecord,
+  | "id"
+  | "tenant_id"
+  | "owner_type"
+  | "owner_id"
+  | "scene"
+  | "provider"
+  | "bucket"
+  | "region"
+  | "object_key"
+  | "mime_type"
+  | "size_bytes"
+  | "checksum"
+  | "visibility"
+  | "status"
+  | "deleted_at"
+>;
+
+const OCR_FILE_OBJECT_COLUMNS = [
+  "id",
+  "tenant_id",
+  "owner_type",
+  "owner_id",
+  "scene",
+  "provider",
+  "bucket",
+  "region",
+  "object_key",
+  "mime_type",
+  "size_bytes",
+  "checksum",
+  "visibility",
+  "status",
+  "deleted_at",
+].join(",");
+
 class PlatformFileObjectRepository {
   private toInsertPayload(input: CreatePlatformFileObjectInput) {
     return {
@@ -176,6 +213,23 @@ class PlatformFileObjectRepository {
     }
 
     return (data as PlatformFileObjectRecord | null) ?? null;
+  }
+
+  async findActiveById(input: { id: string; tenantId: string }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("platform_file_objects")
+      .select(OCR_FILE_OBJECT_COLUMNS)
+      .eq("id", input.id)
+      .eq("tenant_id", input.tenantId)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询OCR文件对象失败", error);
+    }
+
+    return (data as OcrPlatformFileObjectRecord | null) ?? null;
   }
 
   private async findPrivateVisitorConflict(input: {

@@ -19,6 +19,7 @@ describe('OCR error codes', () => {
       ErrorCodes.OCR_PROVIDER_RATE_LIMITED,
       ErrorCodes.OCR_PROVIDER_FAILED,
       ErrorCodes.OCR_RESULT_INVALID,
+      ErrorCodes.OCR_RESULT_ENCRYPTION_KEY_MISSING,
     ]).toEqual([
       'OCR_CONFIG_MISSING',
       'OCR_DISABLED',
@@ -34,6 +35,7 @@ describe('OCR error codes', () => {
       'OCR_PROVIDER_RATE_LIMITED',
       'OCR_PROVIDER_FAILED',
       'OCR_RESULT_INVALID',
+      'OCR_RESULT_ENCRYPTION_KEY_MISSING',
     ]);
   });
 });

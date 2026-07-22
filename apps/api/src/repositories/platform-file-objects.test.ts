@@ -7,19 +7,25 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 type QueryTrace = {
   equals: Array<[string, unknown]>;
   nullChecks: Array<[string, unknown]>;
+  selects: string[];
 };
 
 async function loadRepositoryWithExisting(
   existing: Record<string, unknown>,
   trace?: QueryTrace,
   honorStatusFilter = false,
+  directLookup = false,
 ) {
   let maybeSingleCalls = 0;
   let statusFilterMatches = true;
   const builder: Record<string, unknown> = {};
-  for (const method of ["from", "insert", "select", "order", "limit"]) {
+  for (const method of ["from", "insert", "order", "limit"]) {
     builder[method] = mock(() => builder);
   }
+  builder.select = mock((columns: string) => {
+    trace?.selects.push(columns);
+    return builder;
+  });
   builder.eq = mock((field: string, value: unknown) => {
     trace?.equals.push([field, value]);
     if (field === "status" && existing.status !== value) {
@@ -32,6 +38,7 @@ async function loadRepositoryWithExisting(
     return builder;
   });
   builder.maybeSingle = mock(async () => {
+    if (directLookup) return { data: existing, error: null };
     maybeSingleCalls += 1;
     if (maybeSingleCalls === 1) return { data: null, error: { code: "23505" } };
     if (honorStatusFilter && !statusFilterMatches) {
@@ -138,7 +145,7 @@ test("duplicate private objects accept exact authoritative metadata", async () =
 test.each(["failed", "migrating", "deleted"])(
   "private conflict lookup exposes a %s row to invariant validation",
   async (status) => {
-    const trace: QueryTrace = { equals: [], nullChecks: [] };
+    const trace: QueryTrace = { equals: [], nullChecks: [], selects: [] };
     const repository = await loadRepositoryWithExisting(
       { ...matchingExisting, status },
       trace,
@@ -158,7 +165,7 @@ test.each(["failed", "migrating", "deleted"])(
 );
 
 test("public conflict recovery keeps the active-only legacy lookup", async () => {
-  const trace: QueryTrace = { equals: [], nullChecks: [] };
+  const trace: QueryTrace = { equals: [], nullChecks: [], selects: [] };
   const repository = await loadRepositoryWithExisting(matchingExisting, trace, true);
 
   await expect(repository.createOrFindByObjectKey({
@@ -169,4 +176,29 @@ test("public conflict recovery keeps the active-only legacy lookup", async () =>
     visibility: "public",
   })).resolves.toMatchObject({ id: "file-1" });
   expect(trace.equals).toContainEqual(["status", "active"]);
+});
+
+test("findActiveById scopes the minimum OCR projection to one tenant", async () => {
+  const trace: QueryTrace = { equals: [], nullChecks: [], selects: [] };
+  const repository = await loadRepositoryWithExisting(
+    matchingExisting,
+    trace,
+    false,
+    true,
+  );
+
+  await expect(repository.findActiveById({
+    id: "file-1",
+    tenantId: "tenant-1",
+  })).resolves.toMatchObject({ id: "file-1" });
+
+  expect(trace.selects).toEqual([
+    "id,tenant_id,owner_type,owner_id,scene,provider,bucket,region,object_key,mime_type,size_bytes,checksum,visibility,status,deleted_at",
+  ]);
+  expect(trace.equals).toEqual(expect.arrayContaining([
+    ["id", "file-1"],
+    ["tenant_id", "tenant-1"],
+    ["status", "active"],
+  ]));
+  expect(trace.nullChecks).toContainEqual(["deleted_at", null]);
 });
