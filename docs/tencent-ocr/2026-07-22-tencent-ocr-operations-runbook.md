@@ -49,10 +49,14 @@ bun run --cwd apps/api ocr:results:cleanup --apply
 - 积压告警：连续执行 20 个批次后仍有积压时，`batch_limit_reached=true`，workflow 失败并
   输出 GitHub error。
 
-当前状态：调度定义已进入功能分支，但尚未合并到默认分支，也没有生产 workflow run
-证据，因此 OCR 总开关不得开启。合并并部署包含清理脚本的 API 镜像后，部署负责人必须先
+当前状态：调度定义已合入默认分支，但生产 API 最新发布版本早于 OCR 代码合入，GitHub 仓库
+尚未配置 `OCR_CLEANUP_SCHEDULE_ENABLED`，也没有生产 workflow run 证据，因此 OCR 总开关
+不得开启。部署包含清理脚本的 API 镜像后，部署负责人必须先
 手工执行一次 dry-run 和一次 apply，再设置 `OCR_CLEANUP_SCHEDULE_ENABLED=true`，观察至少
 一个小时级定时 run，并把 run ID 与脱敏 artifact 回填到 Phase 1 smoke 记录。
+
+在生产 API 尚未包含 `apps/api/src/scripts/ocr-result-cleanup.ts` 时，不要为了制造运行记录手工
+触发 workflow；脚本存在性门禁会拒绝任务，这类失败不能作为清理能力验证证据。
 
 2026-07-22 已使用当前目标数据库执行命令级验证：dry-run 与 apply 均成功，候选数和更新数均为 0。该证据只证明脚本和数据库连接可用，不替代生产小时级调度器的安装与连续运行证据。
 

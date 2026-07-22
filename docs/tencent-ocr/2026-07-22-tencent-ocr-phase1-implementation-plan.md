@@ -43,6 +43,24 @@ Excluded:
 - Automatic applyment save/submit or workflow actions.
 - Any modification to `/Users/leefo/Public/work/orange`.
 
+## Execution Status
+
+The task checkboxes below are the original execution recipe. As of 2026-07-22, the authoritative
+delivery status is:
+
+| Task | Status | Evidence |
+| --- | --- | --- |
+| Task 0-9 | Complete | Implementation, migrations, focused tests, Admin smoke and commits are recorded in the Phase 1 smoke record. |
+| Task 10 Step 1-2 | Complete | Static gates and Local/Remote migration alignment passed. |
+| Task 10 Step 3 | Blocked by environment | OCR-only CAM credential and `OCR_RESULT_ENCRYPTION_KEY` are not configured. |
+| Task 10 Step 4-5 | Pending | Requires authorized test documents and enabled development OCR configuration. |
+| Task 10 Step 6 | In progress | Static, migration, read-only and cleanup command evidence is recorded; real provider evidence is absent. |
+| Task 10 Step 7 | Pending | Cannot declare Phase 1 production-ready before real provider and production cleanup evidence. |
+| Task 10 Step 8 | Complete for current evidence | The smoke record is versioned; it must be amended after each real smoke gate. |
+
+Do not start Phase 2 expense or storefront features until Task 10 Step 3-7 are complete, unless a
+separate risk decision explicitly accepts shipping Phase 2 behind disabled capabilities.
+
 ## File Structure
 
 Create backend files:

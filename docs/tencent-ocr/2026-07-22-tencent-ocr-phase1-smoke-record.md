@@ -13,7 +13,7 @@
 2. 尚未配置 `OCR_RESULT_ENCRYPTION_KEY`。
 3. 尚未取得并验证腾讯云身份证加密识别公钥及真实加密接口样本。
 4. 尚未准备合成或明确授权的营业执照、身份证正反面和银行卡测试图片。
-5. 小时级清理 workflow 已实现，但尚未合并、生产执行并提供连续运行证据。
+5. 小时级清理 workflow 已合入 main，但生产 API 尚未发布对应版本，仓库定时开关尚未配置，也没有生产运行证据。
 
 ## 2. 版本范围
 
@@ -120,6 +120,11 @@
 | `/finance/wechat-pay/applyment`                    | 原手工填写表单可用；总开关关闭时不展示 OCR 操作，不阻断进件资料维护                                |
 | `GET /ocr/capabilities?scene=wechat_pay_applyment` | HTTP 200；`data` 为长度 0 的数组；未包含 secret、token、证件号、银行卡号、signed URL 或 object key |
 
+开发环境发布后只读复核：
+
+- `18800000001 / 风清扬` 具备 `ocr.recognize`，能力接口返回 HTTP 200、能力数 0，符合总开关关闭的预期。
+- `18800005001 / 小龙女` 不具备 `ocr.recognize`，能力接口返回 HTTP 403 `FORBIDDEN`；这是权限边界，不是 OCR 服务故障。
+
 最终三页面浏览器复测未发现 console error 或接口 4xx/5xx。全过程未调用识别接口、未上传
 证件、未创建识别记录、未保存或提交微信支付进件，也未推进 workflow。
 
@@ -151,7 +156,10 @@
 500 条一批连续处理，最多执行 20 批；超过 10,000 条仍有积压时失败告警，并保存 30 天脱敏
 artifact。定时事件还要求仓库变量
 `OCR_CLEANUP_SCHEDULE_ENABLED=true`，避免 workflow 先于生产 API 镜像发布而产生误报。该
-workflow 尚未在默认分支运行，因此不能把源码契约当作生产连续运行证据。
+workflow 已合入默认分支，但生产 API 最新成功发布仍是 GitHub Actions run `29670449440`
+（commit `d47f04ed`），早于 OCR 代码合入；GitHub 仓库也尚未配置定时开关。截至
+2026-07-22，清理工作流运行记录为空；在生产 API 发布包含清理脚本的版本前，
+不应手工触发已知会被脚本存在性门禁拒绝的任务，也不能把源码契约当作生产连续运行证据。
 
 ## 8. 真实腾讯云 Smoke 待办
 
@@ -160,7 +168,7 @@ workflow 尚未在默认分支运行，因此不能把源码契约当作生产�
 1. 创建仅允许 `BizLicenseOCR`、`RecognizeEncryptedIDCardOCR`、`BankCardOCR` 的 OCR 专用 CAM 凭证。
 2. 在平台 Admin 配置腾讯云密钥、区域、endpoint 和身份证加密公钥；通过 API 部署环境单独
    配置 `OCR_RESULT_ENCRYPTION_KEY`，不得写入数据库、文档或截图。
-3. 合并清理 workflow，部署包含脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
+3. 部署包含清理脚本的 API 镜像，执行一次手工 dry-run、一次手工 apply
    和至少一次小时级定时 run，回填 run ID 与脱敏 artifact。
 4. 先开启总开关并保持身份证开关关闭，执行授权营业执照正常/模糊样本。
 5. 完成腾讯身份证加密接口验证后再开启身份证开关，执行正反面样本。
