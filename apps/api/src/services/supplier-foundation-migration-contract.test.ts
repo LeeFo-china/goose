@@ -397,4 +397,94 @@ describe("supplier foundation migration contract", () => {
       expect(seedSql).toContain(`${field} = EXCLUDED.${field}`);
     }
   });
+
+  test("locks tenant-supplier relationship table definitions", () => {
+    const relationshipSql = migrationSql.tenantSupplierRelationships;
+    const createdTables = [
+      ...relationshipSql.matchAll(/^CREATE TABLE public\.([a-z0-9_]+) \(/gm),
+    ].map((match) => match[1]);
+    expect(createdTables).toEqual([
+      "tenant_supplier_settings",
+      "tenant_suppliers",
+      "supplier_contracts",
+    ]);
+    const tableContracts = {
+      tenant_supplier_settings: [
+        /tenant_id uuid PRIMARY KEY\s+REFERENCES public\.tenants\(id\) ON DELETE CASCADE/,
+        /module_enabled boolean NOT NULL DEFAULT false/,
+        /require_active_contract_for_new_order boolean NOT NULL DEFAULT false/,
+        /enabled_by_employee_id uuid NULL\s+REFERENCES public\.employees\(id\) ON DELETE SET NULL/,
+        /enabled_at timestamptz NULL/,
+        /CONSTRAINT tenant_supplier_settings_enabled_metadata_check\s+CHECK \(\s*NOT module_enabled\s+OR \(\s*enabled_by_employee_id IS NOT NULL\s+AND enabled_at IS NOT NULL\s*\)\s*\)/,
+      ],
+      tenant_suppliers: [
+        /id uuid PRIMARY KEY DEFAULT gen_random_uuid\(\)/,
+        /tenant_id uuid NOT NULL\s+REFERENCES public\.tenants\(id\) ON DELETE RESTRICT/,
+        /supplier_id uuid NOT NULL\s+REFERENCES public\.suppliers\(id\) ON DELETE RESTRICT/,
+        /relationship_status text NOT NULL DEFAULT 'evaluating'[\s\S]*relationship_status IN \('evaluating', 'active', 'suspended', 'terminated', 'blacklisted'\)/,
+        /settlement_term_days integer NOT NULL DEFAULT 0[\s\S]*CHECK \(settlement_term_days BETWEEN 0 AND 3650\)/,
+        /credit_limit_minor bigint NOT NULL DEFAULT 0[\s\S]*CHECK \(credit_limit_minor >= 0\)/,
+        /invoice_required_before_payment boolean NOT NULL DEFAULT false[\s\S]*default_currency char\(3\) NOT NULL DEFAULT 'CNY'[\s\S]*default_tax_inclusive boolean NOT NULL DEFAULT true[\s\S]*CHECK \(default_currency::text ~ '\^\[A-Z\]\{3\}\$'\)/,
+        /tenant_owner_employee_id uuid NULL\s+REFERENCES public\.employees\(id\) ON DELETE SET NULL[\s\S]*started_at date NULL[\s\S]*ended_at date NULL[\s\S]*CHECK \(\s*started_at IS NULL\s+OR ended_at IS NULL\s+OR ended_at >= started_at\s*\)/,
+        /remark text NULL[\s\S]*CONSTRAINT tenant_suppliers_remark_not_blank_check\s+CHECK \(remark IS NULL OR btrim\(remark\) <> ''\)/,
+        /created_by_employee_id uuid NOT NULL\s+REFERENCES public\.employees\(id\) ON DELETE RESTRICT[\s\S]*updated_by_employee_id uuid NOT NULL\s+REFERENCES public\.employees\(id\) ON DELETE RESTRICT/,
+        /CONSTRAINT tenant_suppliers_tenant_supplier_key\s+UNIQUE \(tenant_id, supplier_id\)/,
+        /CONSTRAINT tenant_suppliers_id_tenant_key\s+UNIQUE \(id, tenant_id\)/,
+      ],
+      supplier_contracts: [
+        /id uuid PRIMARY KEY DEFAULT gen_random_uuid\(\)/,
+        /tenant_id uuid NOT NULL\s+REFERENCES public\.tenants\(id\) ON DELETE RESTRICT/,
+        /tenant_supplier_id uuid NOT NULL\s+REFERENCES public\.tenant_suppliers\(id\) ON DELETE RESTRICT/,
+        /contract_no text NOT NULL[\s\S]*name text NOT NULL[\s\S]*CONSTRAINT supplier_contracts_contract_no_not_blank_check\s+CHECK \(btrim\(contract_no\) <> ''\)[\s\S]*CONSTRAINT supplier_contracts_name_not_blank_check\s+CHECK \(btrim\(name\) <> ''\)/,
+        /lifecycle_status text NOT NULL DEFAULT 'draft'[\s\S]*lifecycle_status IN \('draft', 'active', 'terminated'\)/,
+        /valid_from date NOT NULL[\s\S]*valid_until date NOT NULL[\s\S]*CONSTRAINT supplier_contracts_date_order_check\s+CHECK \(valid_until >= valid_from\)/,
+        /settlement_term_days integer NOT NULL DEFAULT 0[\s\S]*invoice_required_before_payment boolean NOT NULL DEFAULT false[\s\S]*CHECK \(settlement_term_days BETWEEN 0 AND 3650\)/,
+        /document_file_id uuid NOT NULL REFERENCES public\.platform_file_objects\(id\) ON DELETE RESTRICT/,
+        /created_by_employee_id uuid NOT NULL\s+REFERENCES public\.employees\(id\) ON DELETE RESTRICT[\s\S]*updated_by_employee_id uuid NOT NULL\s+REFERENCES public\.employees\(id\) ON DELETE RESTRICT/,
+        /CONSTRAINT supplier_contracts_tenant_contract_no_key\s+UNIQUE \(tenant_id, contract_no\)/,
+        /CONSTRAINT supplier_contracts_tenant_supplier_tenant_fkey\s+FOREIGN KEY \(tenant_supplier_id, tenant_id\)\s+REFERENCES public\.tenant_suppliers\(id, tenant_id\)\s+ON DELETE RESTRICT/,
+      ],
+    } as const;
+    for (const [table, contracts] of Object.entries(tableContracts)) {
+      const tableSql = extractCreateTableStatement(relationshipSql, table);
+      for (const contract of contracts) expect(tableSql).toMatch(contract);
+      expect(tableSql).toMatch(new RegExp("version integer NOT NULL DEFAULT 1[\\s\\S]*created_at timestamptz NOT NULL DEFAULT now\\(\\)[\\s\\S]*updated_at timestamptz NOT NULL DEFAULT now\\(\\)[\\s\\S]*CONSTRAINT " + table + "_version_check\\s+CHECK \\(version > 0\\)"));
+    }
+    expect(extractCreateTableStatement(relationshipSql, "tenant_suppliers")).not.toMatch(/(?:started_at|ended_at) timestamptz/);
+    expect(extractCreateTableStatement(relationshipSql, "supplier_contracts")).not.toMatch(/valid_(?:from|until) date NULL/);
+  });
+
+  test("locks relationship indexes, tenant guard, timestamps, and private access", () => {
+    const relationshipSql = migrationSql.tenantSupplierRelationships;
+    for (const contract of [
+      /CREATE INDEX tenant_suppliers_tenant_status_updated_idx\s+ON public\.tenant_suppliers\(\s*tenant_id,\s*relationship_status,\s*updated_at DESC,\s*id DESC\s*\);/,
+      /CREATE INDEX tenant_suppliers_supplier_status_idx\s+ON public\.tenant_suppliers\(\s*supplier_id,\s*relationship_status,\s*tenant_id\s*\);/,
+      /CREATE INDEX supplier_contracts_active_lookup_idx\s+ON public\.supplier_contracts\(\s*tenant_id,\s*tenant_supplier_id,\s*lifecycle_status,\s*valid_until DESC\s*\);/,
+      /CREATE FUNCTION public\.set_supplier_contract_tenant_id\(\)\s+RETURNS trigger\s+LANGUAGE plpgsql\s+SET search_path = pg_catalog, public\s+AS \$\$/,
+      /SELECT relationship\.tenant_id\s+INTO parent_tenant_id\s+FROM public\.tenant_suppliers AS relationship\s+WHERE relationship\.id = NEW\.tenant_supplier_id;/,
+      /IF NOT FOUND THEN\s+RAISE EXCEPTION '租户供应商合作关系不存在';/,
+      /IF NEW\.tenant_id IS NULL THEN\s+NEW\.tenant_id := parent_tenant_id;\s+ELSIF NEW\.tenant_id <> parent_tenant_id THEN\s+RAISE EXCEPTION '供应商合同租户与合作关系租户不一致';/,
+      /CREATE TRIGGER tr_supplier_contracts_set_tenant_id\s+BEFORE INSERT OR UPDATE ON public\.supplier_contracts\s+FOR EACH ROW\s+EXECUTE FUNCTION public\.set_supplier_contract_tenant_id\(\);/,
+      /REVOKE ALL ON FUNCTION public\.set_supplier_contract_tenant_id\(\)\s+FROM PUBLIC, anon, authenticated, service_role;/,
+    ]) expect(relationshipSql).toMatch(contract);
+
+    const tables = ["tenant_supplier_settings", "tenant_suppliers", "supplier_contracts"] as const;
+    for (const table of tables) {
+      expect(relationshipSql).toMatch(new RegExp("CREATE TRIGGER tr_" + table + "_updated_at\\s+BEFORE UPDATE ON public\\." + table + "\\s+FOR EACH ROW\\s+EXECUTE FUNCTION public\\.update_updated_at_column\\(\\);"));
+      for (const clause of ["ENABLE ROW LEVEL SECURITY", "FORCE ROW LEVEL SECURITY"]) {
+        expect(relationshipSql).toContain("ALTER TABLE public." + table + " " + clause + ";");
+      }
+      expect(relationshipSql).toContain("REVOKE ALL ON TABLE public." + table + " FROM PUBLIC, anon, authenticated;");
+      expect(relationshipSql).toContain("REVOKE ALL ON TABLE public." + table + " FROM service_role;");
+      expect(relationshipSql).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public." + table + " TO service_role;");
+    }
+    expect([...relationshipSql.matchAll(/^GRANT ([A-Z, ]+) ON TABLE public\.([a-z0-9_]+) TO service_role;$/gm)].map((match) => [match[1], match[2]])).toEqual(
+      tables.map((table) => ["SELECT, INSERT, UPDATE, DELETE", table]),
+    );
+    expect(relationshipSql).not.toMatch(/^\s*GRANT\b[^;]*\bTO (?:PUBLIC|anon|authenticated)\s*;/im);
+    expect(relationshipSql).not.toMatch(/^\s*CREATE POLICY\b/im);
+    expect(relationshipSql).toMatch(/^-- Rollback:/);
+    expect(relationshipSql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
+  });
+
 });
