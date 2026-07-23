@@ -6,7 +6,10 @@ if (process.env.FORCE_COLOR && process.env.NO_COLOR) {
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "wechat-pay-applyment-review.spec.ts",
+  testMatch: [
+    "wechat-pay-applyment-readiness.spec.ts",
+    "wechat-pay-applyment-review.spec.ts",
+  ],
   timeout: 45_000,
   fullyParallel: false,
   workers: 1,

@@ -97,7 +97,15 @@ let applyment = structuredClone(initialApplyment);
 let startedSaves = [];
 let committedSaves = [];
 let nextSaveDelayMs = 0;
-let readinessBlockers = [];
+const defaultReadinessBlockers = [
+  { code: "APPLYMENT_STATUS_NOT_SUBMITTABLE" },
+];
+const nonReviewBlockerCodes = new Set([
+  "APPLYMENT_STATUS_NOT_SUBMITTABLE",
+  "APPLYMENT_SUBMISSION_LEASE_INVALID",
+  "APPLYMENT_SUBMISSION_IN_PROGRESS",
+]);
+let readinessBlockers = structuredClone(defaultReadinessBlockers);
 
 const capabilities = [
   ["business_license", ["license_copy"]],
@@ -138,15 +146,23 @@ function readBody(request) {
 
 function applymentDetail() {
   const ready = readinessBlockers.length === 0;
+  const reviewReady = !readinessBlockers.some((blocker) =>
+    !nonReviewBlockerCodes.has(blocker.code) &&
+    !blocker.code.startsWith("PLATFORM_PAYMENT_") &&
+    !blocker.code.startsWith("WECHAT_PAY_")
+  );
+  const canEdit = ["draft", "rejected", "wechat_editing"].includes(
+    applyment.status,
+  );
   return {
     applyment,
     events: [],
-    can_edit: true,
-    can_submit: ready,
+    can_edit: canEdit,
+    can_submit: canEdit && reviewReady,
     available_actions: [],
     submission_readiness: {
       ready,
-      review_ready: ready,
+      review_ready: reviewReady,
       blockers: readinessBlockers,
     },
   };
@@ -168,7 +184,7 @@ const server = createServer(async (request, response) => {
     startedSaves = [];
     committedSaves = [];
     nextSaveDelayMs = 0;
-    readinessBlockers = [];
+    readinessBlockers = structuredClone(defaultReadinessBlockers);
     sendJson(response, 200, { success: true });
     return;
   }

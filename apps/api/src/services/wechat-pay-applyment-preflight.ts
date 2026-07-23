@@ -19,6 +19,7 @@ import { loadApplymentRuntimeProfile } from "@/services/wechat-pay-applyment-sub
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
 import type {
   WechatPayApplymentPreflightBlocker,
+  WechatPayApplymentPreflightPort,
   WechatPayApplymentPreflightReport,
   WechatPayApplymentOcrRecognitionRepositoryPort,
 } from "@/services/wechat-pay-applyments-types";
@@ -63,13 +64,23 @@ type PreflightDependencies = {
   nowFactory?: () => string;
 };
 
+export function createWechatPayApplymentPreflightService(
+  dependencies: PreflightDependencies = {},
+): WechatPayApplymentPreflightPort {
+  return {
+    run: (applymentId) =>
+      runWechatPayApplymentPreflight(applymentId, dependencies),
+    runForApplyment: (applyment) =>
+      runWechatPayApplymentPreflightForApplyment(applyment, dependencies),
+  };
+}
+
 export async function runWechatPayApplymentPreflight(
   applymentId: string,
   dependencies: PreflightDependencies = {},
 ): Promise<WechatPayApplymentPreflightReport> {
   const blockers = createBlockerCollector();
   const repository = dependencies.repository ?? wechatPayApplymentRepository;
-  const now = dependencies.nowFactory?.() ?? new Date().toISOString();
   let applyment: WechatPayApplymentRecord | null;
 
   try {
@@ -83,6 +94,16 @@ export async function runWechatPayApplymentPreflight(
     return blockers.report();
   }
 
+  return runWechatPayApplymentPreflightForApplyment(applyment, dependencies);
+}
+
+export async function runWechatPayApplymentPreflightForApplyment(
+  applyment: WechatPayApplymentRecord,
+  dependencies: PreflightDependencies = {},
+): Promise<WechatPayApplymentPreflightReport> {
+  const blockers = createBlockerCollector();
+  const repository = dependencies.repository ?? wechatPayApplymentRepository;
+  const now = dependencies.nowFactory?.() ?? new Date().toISOString();
   collectSubmissionStatusBlockers(applyment, now, blockers.add);
   collectRequiredFieldBlockers(applyment, blockers.add);
   collectAttachmentBlockers(applyment, blockers.add);

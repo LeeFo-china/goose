@@ -31,7 +31,6 @@ import {
   buildSensitivePayloadUpdate,
   buildTenantApplymentSafePatch,
   hasSensitiveDraftValues,
-  sanitizeApplymentRecord,
   throwDraftSessionStale,
 } from "@/services/wechat-pay-applyment-draft";
 import {
@@ -42,7 +41,8 @@ import {
   loadCompleteApplymentSensitivePayload,
 } from "@/services/wechat-pay-applyment-content-validation";
 import { assertApplymentSubmitReady } from "@/services/wechat-pay-applyment-readiness";
-import { runWechatPayApplymentPreflight } from "@/services/wechat-pay-applyment-preflight";
+import { createWechatPayApplymentPreflightService } from "@/services/wechat-pay-applyment-preflight";
+import { buildTenantApplymentDetail } from "@/services/wechat-pay-applyment-tenant-detail";
 import { wechatPayApplymentStatusService } from "@/services/wechat-pay-applyment-status";
 import { WechatPayApplymentPlatformActions } from "@/services/wechat-pay-applyments-platform";
 import { wechatPayApplymentSubmissionService } from "@/services/wechat-pay-applyment-submission";
@@ -70,6 +70,8 @@ export class WechatPayApplymentService {
     NonNullable<WechatPayApplymentServiceDependencies["ocrRecognitionRepository"]>;
   private readonly nowFactory: () => string;
   private readonly platformActions: WechatPayApplymentPlatformActions;
+  private readonly preflightService:
+    NonNullable<WechatPayApplymentServiceDependencies["preflightService"]>;
 
   constructor(dependencies: WechatPayApplymentServiceDependencies = {}) {
     this.repository = dependencies.repository ?? wechatPayApplymentRepository;
@@ -86,6 +88,13 @@ export class WechatPayApplymentService {
     this.ocrRecognitionRepository = dependencies.ocrRecognitionRepository ??
       ocrRecognitionRepository;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date().toISOString());
+    this.preflightService = dependencies.preflightService ??
+      createWechatPayApplymentPreflightService({
+        repository: this.repository,
+        ocrRecognitionRepository: this.ocrRecognitionRepository,
+        encryptionRootSecretFactory: this.encryptionRootSecretFactory,
+        nowFactory: this.nowFactory,
+      });
     this.platformActions = new WechatPayApplymentPlatformActions(
       this.repository,
       this.configRepository,
@@ -95,9 +104,7 @@ export class WechatPayApplymentService {
       dependencies.submissionService ?? wechatPayApplymentSubmissionService,
       dependencies.statusService ?? wechatPayApplymentStatusService,
       this.accessPolicyService,
-      dependencies.preflightService ?? {
-        run: runWechatPayApplymentPreflight,
-      },
+      this.preflightService,
     );
   }
   async getCurrent(authContext: AuthContext): Promise<ApplymentDetailResult> {
@@ -386,18 +393,12 @@ export class WechatPayApplymentService {
         applyment?.status,
         this.canTenantSubmit(authContext),
       );
-    return {
-      applyment: applyment ? sanitizeApplymentRecord(applyment) : null,
-      events: applyment
-        ? await this.repository.findEvents({
-          tenantId: applyment.tenant_id,
-          applymentId: applyment.id,
-        })
-        : [],
-      can_edit: canEdit,
-      can_submit: Boolean(applyment) && canEdit,
-      available_actions: [],
-    };
+    return buildTenantApplymentDetail({
+      applyment,
+      canEdit,
+      repository: this.repository,
+      preflightService: this.preflightService,
+    });
   }
 
   private assertTenantRead(authContext: AuthContext) {

@@ -207,6 +207,7 @@ async function createService() {
     applymentIdFactory: () => applymentId,
     encryptionRootSecretFactory: () => rootSecret,
     nowFactory: () => now,
+    preflightService: { run: async () => ({ ready: true, blockers: [] }) },
   });
 }
 
@@ -253,11 +254,10 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     findLatestByTenant.mockImplementation(async () => null);
     findById.mockImplementation(async () => applyment);
   });
-
   test("creates a draft with safe projections and encrypted sensitive data", async () => {
     const service = await createService();
-    await service.createDraft(authContext, createInput);
-
+    const result = await service.createDraft(authContext, createInput);
+    expect(result.submission_readiness).toBeDefined();
     const insert = createApplyment.mock.calls[0]?.[0];
     expect(insert).toEqual(expect.objectContaining({
       id: applymentId,

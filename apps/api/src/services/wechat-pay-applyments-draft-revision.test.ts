@@ -98,6 +98,7 @@ async function createHarness(current: WechatPayApplymentRecord) {
       assertTenantContext: () => tenantId,
       hasPermission: () => true,
     },
+    preflightService: { run: async () => ({ ready: true, blockers: [] }) },
   });
   return {
     service,
@@ -123,6 +124,7 @@ describe("WechatPayApplymentService draft revision", () => {
       draft_revision: 4,
       merchant_short_name: "revision-4",
     });
+    expect(result.submission_readiness).toBeDefined();
     expect(harness.updateTenantDraftAtomically).not.toHaveBeenCalled();
     expect(harness.findSensitivePayloadById).not.toHaveBeenCalled();
     expect(harness.insertEvent).not.toHaveBeenCalled();
@@ -273,6 +275,7 @@ describe("WechatPayApplymentService draft revision", () => {
       draft_epoch: 9,
       draft_revision: 0,
     });
+    expect(result.submission_readiness).toBeDefined();
     expect(harness.insertEvent).not.toHaveBeenCalled();
   });
 });

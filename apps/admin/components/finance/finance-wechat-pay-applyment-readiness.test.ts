@@ -144,7 +144,7 @@ describe("presentApplymentBlocker", () => {
 });
 
 describe("presentApplymentBlockers", () => {
-  test("keeps every blocker visible with deterministic unique keys", async () => {
+  test("merges duplicate user actions with deterministic keys", async () => {
     const { presentApplymentBlockers } = await import(
       "./finance-wechat-pay-applyment-readiness"
     );
@@ -153,23 +153,31 @@ describe("presentApplymentBlockers", () => {
         code: "APPLYMENT_REQUIRED_FIELD_MISSING",
         field: "merchant_short_name",
       },
+      {
+        code: "APPLYMENT_REQUIRED_FIELD_MISSING",
+        field: "super_admin_name",
+      },
+      {
+        code: "APPLYMENT_REQUIRED_FIELD_MISSING",
+        field: "sensitive.contact_name",
+      },
       { code: "APPLYMENT_FUTURE_BLOCKER" },
       { code: "APPLYMENT_FUTURE_BLOCKER" },
     ];
 
     expect(presentApplymentBlockers(blockers)).toEqual([
       {
-        key: "APPLYMENT_REQUIRED_FIELD_MISSING:merchant_short_name",
+        key: "supplement:请填写商户简称",
         label: "请填写商户简称",
         targetStage: "supplement",
       },
       {
-        key: "APPLYMENT_FUTURE_BLOCKER:unknown",
-        label: "申请资料尚未满足提交条件",
-        targetStage: "submit",
+        key: "recognition:请核对超级管理员姓名",
+        label: "请核对超级管理员姓名",
+        targetStage: "recognition",
       },
       {
-        key: "APPLYMENT_FUTURE_BLOCKER:unknown:2",
+        key: "submit:申请资料尚未满足提交条件",
         label: "申请资料尚未满足提交条件",
         targetStage: "submit",
       },

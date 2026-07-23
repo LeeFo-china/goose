@@ -333,6 +333,7 @@ describe("WechatPayApplymentService", () => {
     expect(result.events).toHaveLength(1);
     expect(result.can_submit).toBe(false);
     expect(result.can_edit).toBe(false);
+    expect(result.submission_readiness?.review_ready).toBe(true);
   });
   test("hides closed tenant applyment from current draft entry", async () => {
     findLatestByTenant.mockImplementationOnce(async () => ({
@@ -461,7 +462,6 @@ describe("WechatPayApplymentService", () => {
       applyment_state_message: "测试申请关闭，允许租户重新提交真实资料",
       reason: "微信运营工单确认关闭测试申请",
     });
-
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,
       expectedStatus: "active",

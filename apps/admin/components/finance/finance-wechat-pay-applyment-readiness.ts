@@ -2,6 +2,7 @@ import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-mode
 import {
   getWechatPayApplymentAttachmentCategoryLabel,
   type WechatPayApplymentAttachmentCategory,
+  type WechatPayApplymentKnownPreflightBlockerCode,
   type WechatPayApplymentPreflightBlocker,
   WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORIES,
 } from "./finance-wechat-pay-applyment-shared";
@@ -161,14 +162,97 @@ const ATTACHMENT_CATEGORIES = new Set<string>(
   WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORIES,
 );
 
-function presentMissingAttachment(
-  category?: string,
-): WechatPayApplymentPresentedBlocker {
-  const label = getWechatPayApplymentAttachmentCategoryLabel(
+const FIXED_CODE_PRESENTATIONS = {
+  APPLYMENT_STATUS_NOT_SUBMITTABLE: {
+    label: "当前申请状态暂不能向微信提交",
+    targetStage: "submit",
+  },
+  APPLYMENT_SUBMISSION_LEASE_INVALID: {
+    label: "申请提交状态异常，请刷新后重试",
+    targetStage: "submit",
+  },
+  APPLYMENT_SUBMISSION_IN_PROGRESS: {
+    label: "申请正在提交，请稍候刷新",
+    targetStage: "submit",
+  },
+  APPLYMENT_MEDIA_METADATA_INVALID: {
+    label: "申请附件信息不完整，请重新上传",
+    targetStage: "materials",
+  },
+  APPLYMENT_MEDIA_CATEGORY_INVALID: {
+    label: "申请附件类型无法识别，请重新上传",
+    targetStage: "materials",
+  },
+  APPLYMENT_ENTERPRISE_ACCOUNT_TYPE_INVALID: {
+    label: "企业主体须选择对公结算账户",
+    targetStage: "supplement",
+  },
+  APPLYMENT_SETTLEMENT_RULE_INVALID: {
+    label: "经营行业与结算规则不匹配，请重新选择",
+    targetStage: "supplement",
+  },
+  APPLYMENT_SENSITIVE_PAYLOAD_MISSING: {
+    label: "请完整核对法人、联系人和结算账户信息",
+    targetStage: "recognition",
+  },
+  APPLYMENT_SENSITIVE_PAYLOAD_VERSION_MISMATCH: {
+    label: "法人、联系人或结算账户信息已变化，请重新核对",
+    targetStage: "recognition",
+  },
+  APPLYMENT_SENSITIVE_PAYLOAD_UNREADABLE: {
+    label: "法人、联系人或结算账户信息无法读取，请重新填写",
+    targetStage: "recognition",
+  },
+  APPLYMENT_NOT_FOUND: {
+    label: "申请资料不存在或已失效，请刷新后重试",
+    targetStage: "submit",
+  },
+  PREFLIGHT_DATA_ACCESS_FAILED: {
+    label: "暂时无法核验申请资料，请稍后重试",
+    targetStage: "submit",
+  },
+  PREFLIGHT_INTERNAL_ERROR: {
+    label: "暂时无法核验申请资料，请稍后重试",
+    targetStage: "submit",
+  },
+} as const satisfies Partial<
+  Record<
+    WechatPayApplymentKnownPreflightBlockerCode,
+    WechatPayApplymentPresentedBlocker
+  >
+>;
+
+const PLATFORM_BLOCKER_CODES = new Set<string>([
+  "PLATFORM_PAYMENT_CONFIG_MISSING",
+  "PLATFORM_PAYMENT_CONFIG_INACTIVE",
+  "PLATFORM_PAYMENT_CONFIG_NOT_VALIDATED",
+  "PLATFORM_PAYMENT_MERCHANT_MODE_MISMATCH",
+  "PLATFORM_PAYMENT_MERCHANT_ID_MISSING",
+  "PLATFORM_PAYMENT_APP_ID_MISSING",
+  "PLATFORM_PAYMENT_SECRET_REF_MISSING",
+  "PLATFORM_PAYMENT_SECRET_BUNDLE_REVISION_MISSING",
+  "PLATFORM_PAYMENT_SERIAL_NO_MISSING",
+  "PLATFORM_PAYMENT_CALLBACK_URL_MISSING",
+  "PLATFORM_PAYMENT_CALLBACK_URL_INVALID",
+  "PLATFORM_PAYMENT_REQUIRED_CHANNELS_MISSING",
+  "PLATFORM_PAYMENT_PROFILE_NOT_READY",
+  "WECHAT_PAY_APPLYMENT_PROFILE_INCOMPLETE",
+  "WECHAT_PAY_SECRET_REF_REQUIRED",
+  "WECHAT_PAY_SECRET_BUNDLE_INVALID",
+]);
+
+function getAttachmentLabel(category?: string): string {
+  return getWechatPayApplymentAttachmentCategoryLabel(
     category && ATTACHMENT_CATEGORIES.has(category)
       ? category as WechatPayApplymentAttachmentCategory
       : undefined,
   ).replace(/照片$/, "");
+}
+
+function presentMissingAttachment(
+  category?: string,
+): WechatPayApplymentPresentedBlocker {
+  const label = getAttachmentLabel(category);
   return { label: `缺少${label}`, targetStage: "materials" };
 }
 
@@ -183,29 +267,73 @@ export function presentApplymentBlocker(
       ? REQUIRED_FIELD_PRESENTATIONS[blocker.field] ?? DEFAULT_BLOCKER
       : DEFAULT_BLOCKER;
   }
-  if (blocker.code === "APPLYMENT_SENSITIVE_PAYLOAD_MISSING") {
+  const attachmentLabel = getAttachmentLabel(blocker.category);
+  if (blocker.code === "APPLYMENT_MEDIA_CATEGORY_DUPLICATE") {
     return {
-      label: "请完整核对法人、联系人和结算账户信息",
+      label: `${attachmentLabel}请仅保留一份`,
+      targetStage: "materials",
+    };
+  }
+  if (blocker.code === "APPLYMENT_OBJECT_KEY_INVALID") {
+    return {
+      label: `${attachmentLabel}归属异常，请重新上传`,
+      targetStage: "materials",
+    };
+  }
+  if (blocker.code === "APPLYMENT_MEDIA_TYPE_UNSUPPORTED") {
+    return {
+      label: `${attachmentLabel}格式不支持，请上传 JPG、PNG 或 BMP`,
+      targetStage: "materials",
+    };
+  }
+  if (blocker.code === "APPLYMENT_MEDIA_SIZE_INVALID") {
+    return {
+      label: `${attachmentLabel}文件大小无效，请重新上传`,
+      targetStage: "materials",
+    };
+  }
+  if (blocker.code === "APPLYMENT_MEDIA_TOO_LARGE") {
+    return {
+      label: `${attachmentLabel}超过 2 MB，请压缩后重新上传`,
+      targetStage: "materials",
+    };
+  }
+  if (blocker.code === "APPLYMENT_ATTACHMENT_OCR_REVIEW_REQUIRED") {
+    return {
+      label: `请核对${attachmentLabel}识别结果`,
       targetStage: "recognition",
     };
   }
+  if (blocker.code === "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH") {
+    return {
+      label: `${attachmentLabel}识别记录与当前申请不一致，请重新识别`,
+      targetStage: "recognition",
+    };
+  }
+  if (PLATFORM_BLOCKER_CODES.has(blocker.code)) {
+    return {
+      label: "平台微信支付配置尚未就绪，请联系平台管理员",
+      targetStage: "submit",
+    };
+  }
+  const fixed = FIXED_CODE_PRESENTATIONS[
+    blocker.code as keyof typeof FIXED_CODE_PRESENTATIONS
+  ];
+  if (fixed) return fixed;
   return DEFAULT_BLOCKER;
 }
 
 export function presentApplymentBlockers(
   blockers: readonly WechatPayApplymentPreflightBlocker[],
 ): WechatPayApplymentReadinessItem[] {
-  const keyCounts = new Map<string, number>();
-  return blockers.map((blocker) => {
-    const baseKey = [
-      blocker.code,
-      blocker.field ?? blocker.category ?? "unknown",
-    ].join(":");
-    const occurrence = (keyCounts.get(baseKey) ?? 0) + 1;
-    keyCounts.set(baseKey, occurrence);
-    return {
-      key: occurrence === 1 ? baseKey : `${baseKey}:${occurrence}`,
-      ...presentApplymentBlocker(blocker),
-    };
-  });
+  const seen = new Set<string>();
+  const result: WechatPayApplymentReadinessItem[] = [];
+  for (const blocker of blockers) {
+    const presented = presentApplymentBlocker(blocker);
+    const key = `${presented.targetStage}:${presented.label}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ key, ...presented });
+  }
+  return result;
 }

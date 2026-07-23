@@ -157,6 +157,25 @@ async function loadSubject() {
 }
 
 describe("wechat pay applyment preflight", () => {
+  test("builds a preflight port that reuses an already loaded applyment", async () => {
+    const findById = mock(async () => applyment());
+    const findSensitivePayloadById = mock(async () => sensitiveRecord());
+    const { createWechatPayApplymentPreflightService } = await loadSubject();
+    const preflight = createWechatPayApplymentPreflightService({
+      repository: { findById, findSensitivePayloadById },
+      loadRuntimeProfile: async () => ({ ready: true }),
+      encryptionRootSecretFactory: () => rootSecret,
+      nowFactory: () => now,
+    });
+
+    expect(await preflight.runForApplyment?.(applyment())).toEqual({
+      ready: true,
+      blockers: [],
+    });
+    expect(findById).not.toHaveBeenCalled();
+    expect(findSensitivePayloadById).toHaveBeenCalledTimes(1);
+  });
+
   test("reports ready without external media or WeChat writes", async () => {
     const findById = mock(async () => applyment());
     const findSensitivePayloadById = mock(async () => sensitiveRecord());
