@@ -79,17 +79,18 @@ export function useWechatPayApplymentStageNavigation(input: {
     const currentReachableStage = getCurrentReachableStage();
     if (!isApplymentStageReachable(stage, currentReachableStage)) {
       revealBlockedStage(stage, currentReachableStage);
-      return;
+      return false;
     }
     setStageError("");
     setActiveStage(stage);
+    return true;
   }
 
   function handleNextStage() {
     const activeIndex = APPLYMENT_STAGE_KEYS.indexOf(displayedStage);
     const nextStage = APPLYMENT_STAGE_KEYS[activeIndex + 1];
-    if (!nextStage) return;
-    if (!canLeaveCurrentStage(displayedStage)) return;
+    if (!nextStage) return false;
+    if (!canLeaveCurrentStage(displayedStage)) return false;
     setStageError("");
     setActiveStage(nextStage);
     setUnlockedStage((current) =>
@@ -99,6 +100,7 @@ export function useWechatPayApplymentStageNavigation(input: {
         : current
     );
     setFormRevision((revision) => revision + 1);
+    return true;
   }
 
   function getCurrentReachableStage() {

@@ -19,7 +19,7 @@ function formData(values: Record<string, string>) {
 }
 
 describe("buildWechatPayApplymentPayload", () => {
-  test("builds an attachment-only checkpoint without blank form fields", () => {
+  test("builds a shell draft without blank strings", () => {
     const payload = buildWechatPayApplymentPartialDraftPayload(
       new FormData(),
       {
@@ -27,9 +27,38 @@ describe("buildWechatPayApplymentPayload", () => {
       },
     );
 
-    expect(payload).toEqual({ attachments: [contactAttachment] });
-    expect(payload).not.toHaveProperty("merchant_short_name");
+    expect(payload).toMatchObject({
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      contact_type: "LEGAL",
+      merchant_short_name: null,
+      attachments: [],
+    });
+    expect(Object.values(payload)).not.toContain("");
     expect(payload).not.toHaveProperty("identity_doc_type");
+  });
+
+  test("uses null for blank safe fields and omits blank sensitive replacements", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+      contact_type: "SUPER",
+      merchant_short_name: " ",
+      service_phone: "",
+      identity_number: "",
+      settlement_account_number: "",
+    }), {
+      attachments: [],
+    });
+
+    expect(payload).toMatchObject({
+      subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+      contact_type: "SUPER",
+      merchant_short_name: null,
+      service_phone: null,
+      attachments: [],
+    });
+    expect(payload).not.toHaveProperty("identity_number");
+    expect(payload).not.toHaveProperty("settlement_account_number");
+    expect(Object.values(payload)).not.toContain("");
   });
 
   test("keeps OCR values and confirmed metadata atomic in one checkpoint", () => {
@@ -50,8 +79,64 @@ describe("buildWechatPayApplymentPayload", () => {
 
     expect(payload).toEqual({
       license_name: "识别后的主体名称",
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      contact_type: "LEGAL",
       attachments: [confirmedAttachment],
+      business_scene_description: null,
+      contact_address: null,
+      identity_period_begin: null,
+      identity_period_end: null,
+      legal_representative_name: null,
+      license_address: null,
+      license_code: null,
+      license_period_begin: null,
+      license_period_end: null,
+      merchant_short_name: null,
+      qualification_type: null,
+      remark: null,
+      service_phone: null,
+      settlement_account_name: null,
+      settlement_account_type: null,
+      settlement_bank_branch_id: null,
+      settlement_bank_full_name: null,
+      settlement_bank_name: null,
+      settlement_id: null,
+      super_admin_email: null,
+      super_admin_name: null,
     });
+    expect(payload.attachments).toEqual([
+      expect.objectContaining({
+        ocr_recognition_id: "33333333-3333-4333-8333-333333333333",
+        ocr_review_status: "confirmed",
+      }),
+    ]);
+    expect(payload.attachments).toEqual([
+      expect.not.objectContaining({
+        fields: expect.anything(),
+        warnings: expect.anything(),
+      }),
+    ]);
+  });
+
+  test("clears agent-only fields and attachments in a partial LEGAL draft", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      contact_type: "SUPER",
+      contact_identity_number: "41000019900101001X",
+      contact_identity_address: "河南省信阳市",
+      contact_identity_period_begin: "2020-01-01",
+      contact_identity_period_end: "长期",
+    }), {
+      attachments: [contactAttachment],
+      contactType: "LEGAL",
+    });
+
+    expect(payload.contact_type).toBe("LEGAL");
+    expect(payload).not.toHaveProperty("contact_identity_number");
+    expect(payload).not.toHaveProperty("contact_identity_address");
+    expect(payload).not.toHaveProperty("contact_identity_period_begin");
+    expect(payload).not.toHaveProperty("contact_identity_period_end");
+    expect(payload.attachments).toEqual([]);
   });
 
   test("omits blank sensitive replacements for an encrypted draft", () => {

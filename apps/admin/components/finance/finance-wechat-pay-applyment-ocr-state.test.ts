@@ -332,10 +332,13 @@ describe("wechat pay applyment OCR state mutation", () => {
       reportOperationError: () => undefined,
     });
 
-    expect(payloads).toEqual([{
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
       license_name: "识别后的主体名称",
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      contact_type: "LEGAL",
       attachments: [fixture.confirmedAttachment],
-    }]);
+    });
   });
 
   test("rolls back attachments material state and field source on failure", async () => {

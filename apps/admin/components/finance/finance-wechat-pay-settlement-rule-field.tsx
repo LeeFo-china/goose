@@ -24,7 +24,10 @@ type Props = {
   settlementId?: string | null;
   qualificationType?: string | null;
   disabled?: boolean;
-  onValueChange?: () => void;
+  onValueChange?: (overrides: {
+    settlement_id: string;
+    qualification_type: string;
+  }) => void;
 };
 
 export function FinanceWechatPaySettlementRuleField({
@@ -72,7 +75,13 @@ export function FinanceWechatPaySettlementRuleField({
         value={selectedRule?.id ?? ""}
         onValueChange={(value) => {
           setSelectedRuleId(value);
-          onValueChange?.();
+          const nextRule = rules.find((rule) => rule.id === value);
+          if (nextRule) {
+            onValueChange?.({
+              settlement_id: nextRule.id,
+              qualification_type: nextRule.qualificationType,
+            });
+          }
         }}
         disabled={disabled}
       >

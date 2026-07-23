@@ -49,7 +49,7 @@ export function FinanceWechatPayApplymentSupplementFields({
   disabled: boolean;
   navigationDisabled: boolean;
   onReturnToMaterials: () => void;
-  onDataChange: () => void;
+  onDataChange: (overrides: Record<string, string>) => void;
 }) {
   const accountType = subjectType === "SUBJECT_TYPE_ENTERPRISE"
     ? "BANK_ACCOUNT_TYPE_CORPORATE"
@@ -141,7 +141,9 @@ export function FinanceWechatPayApplymentSupplementFields({
           options={SETTLEMENT_ACCOUNT_TYPE_OPTIONS}
           requirement="required"
           disabled={disabled || subjectType === "SUBJECT_TYPE_ENTERPRISE"}
-          onValueChange={onDataChange}
+          onValueChange={(value) => {
+            onDataChange({ settlement_account_type: value });
+          }}
           description={subjectType === "SUBJECT_TYPE_ENTERPRISE"
             ? "企业主体固定使用对公银行账户。"
             : undefined}
@@ -174,7 +176,7 @@ export function FinanceWechatPayApplymentSupplementFields({
           settlementId={applyment?.settlement_id}
           qualificationType={applyment?.qualification_type}
           disabled={disabled}
-          onValueChange={onDataChange}
+          onValueChange={(overrides) => onDataChange(overrides)}
         />
         <TextareaField
           label="经营场景说明"

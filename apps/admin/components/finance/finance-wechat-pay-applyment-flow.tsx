@@ -5,7 +5,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Loader2,
   Save,
   SendHorizontal,
 } from "lucide-react";
@@ -24,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 import {
@@ -218,6 +218,7 @@ export function FinanceWechatPayApplymentActions({
   activeStage,
   updatedAtLabel,
   pending,
+  saving,
   materialsPending,
   hasApplyment,
   editable,
@@ -228,6 +229,7 @@ export function FinanceWechatPayApplymentActions({
   activeStage: ApplymentStageKey;
   updatedAtLabel: string;
   pending: boolean;
+  saving: boolean;
   materialsPending: boolean;
   hasApplyment: boolean;
   editable: boolean;
@@ -247,8 +249,8 @@ export function FinanceWechatPayApplymentActions({
           variant="outline"
           disabled={busy || !editable}
         >
-          {pending
-            ? <Loader2 className="animate-spin" data-icon="inline-start" />
+          {saving
+            ? <Spinner data-icon="inline-start" aria-label="保存中" />
             : <Save data-icon="inline-start" />}
           保存申请
         </Button>

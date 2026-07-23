@@ -40,6 +40,9 @@ const SENSITIVE_REPLACEMENT_FIELDS = [
   "contact_identity_address",
 ] as const;
 
+const DEFAULT_SUBJECT_TYPE = "SUBJECT_TYPE_ENTERPRISE";
+const DEFAULT_CONTACT_TYPE = "LEGAL";
+
 const CONTACT_ATTACHMENT_CATEGORIES = new Set([
   "contact_id_card_front",
   "contact_id_card_back",
@@ -54,7 +57,7 @@ export function buildWechatPayApplymentPartialDraftPayload(
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
   for (const field of [...REQUIRED_TEXT_FIELDS, ...OPTIONAL_TEXT_FIELDS]) {
-    setNonBlankText(payload, form, field);
+    payload[field] = nullableText(form, field);
   }
   for (const field of SENSITIVE_REPLACEMENT_FIELDS) {
     setNonBlankText(payload, form, field, normalizeIdentityNumber);
@@ -66,8 +69,11 @@ export function buildWechatPayApplymentPartialDraftPayload(
     setNonBlankText(payload, form, field);
   }
 
-  const contactType = options.contactType || text(form, "contact_type");
-  if (contactType) payload.contact_type = contactType;
+  payload.subject_type = text(form, "subject_type") || DEFAULT_SUBJECT_TYPE;
+  const contactType = options.contactType ||
+    text(form, "contact_type") ||
+    DEFAULT_CONTACT_TYPE;
+  payload.contact_type = contactType;
   if (contactType === "SUPER" && hasContactIdentityValue(payload)) {
     payload.contact_identity_doc_type = "IDENTIFICATION_TYPE_IDCARD";
   }
@@ -133,6 +139,10 @@ function text(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
 }
 
+function nullableText(form: FormData, key: string) {
+  return text(form, key) || null;
+}
+
 function normalizeIdentityNumber(field: string, value: string) {
   return field.endsWith("identity_number") || field === "identity_number"
     ? value.toUpperCase()
@@ -156,7 +166,7 @@ function hasLegalIdentityValue(payload: Record<string, unknown>) {
     "identity_address",
     "identity_period_begin",
     "identity_period_end",
-  ].some((field) => field in payload);
+  ].some((field) => hasTextValue(payload[field]));
 }
 
 function hasContactIdentityValue(payload: Record<string, unknown>) {
@@ -165,7 +175,11 @@ function hasContactIdentityValue(payload: Record<string, unknown>) {
     "contact_identity_address",
     "contact_identity_period_begin",
     "contact_identity_period_end",
-  ].some((field) => field in payload);
+  ].some((field) => hasTextValue(payload[field]));
+}
+
+function hasTextValue(value: unknown) {
+  return typeof value === "string" && value.length > 0;
 }
 
 function removeContactIdentityValues(payload: Record<string, unknown>) {
