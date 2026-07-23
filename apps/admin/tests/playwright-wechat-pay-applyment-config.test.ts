@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
-const root = new URL("./", import.meta.url);
+const root = new URL("../", import.meta.url);
 
 function read(relativePath: string) {
   return readFileSync(new URL(relativePath, root), "utf8");
@@ -37,7 +37,7 @@ describe("wechat pay applyment Playwright assembly", () => {
     expect(source).toContain('GOOES_API_BASE_URL: "http://127.0.0.1:3998"');
     expect(source).toContain('PLAYWRIGHT_DEV_SERVER_PORT: "3021"');
     expect(source).toContain(
-      'PLAYWRIGHT_NEXT_DIST_DIR: ".next-e2e-wechat-pay-applyment"',
+      'PLAYWRIGHT_NEXT_DIST_DIR: ".next-e2e/wechat-pay-applyment"',
     );
     expect(source.match(/reuseExistingServer: false/g)).toHaveLength(2);
     expect(source.match(/gracefulShutdown:/g)).toHaveLength(2);
@@ -73,5 +73,9 @@ describe("wechat pay applyment Playwright assembly", () => {
     expect(source).toContain('url.pathname === "/health"');
     expect(source).toContain('process.on("SIGTERM"');
     expect(source).toContain("server.close");
+  });
+
+  test("lives under the Admin workspace test target", () => {
+    expect(new URL(import.meta.url).pathname).toContain("/apps/admin/tests/");
   });
 });

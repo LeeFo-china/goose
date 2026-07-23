@@ -39,7 +39,7 @@ export default defineConfig({
       env: {
         GOOES_API_BASE_URL: "http://127.0.0.1:3998",
         PLAYWRIGHT_DEV_SERVER_PORT: "3021",
-        PLAYWRIGHT_NEXT_DIST_DIR: ".next-e2e-wechat-pay-applyment",
+        PLAYWRIGHT_NEXT_DIST_DIR: ".next-e2e/wechat-pay-applyment",
       },
       reuseExistingServer: false,
       timeout: 120_000,
