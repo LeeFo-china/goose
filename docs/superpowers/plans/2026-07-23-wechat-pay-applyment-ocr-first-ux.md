@@ -138,19 +138,15 @@ Expected: FAIL，`merchant_short_name` 不能赋值为 `null`。
 ALTER TABLE public.tenant_wechat_pay_applyments
   ALTER COLUMN merchant_short_name DROP NOT NULL;
 
-ALTER TABLE public.tenant_wechat_pay_applyments
-  DROP CONSTRAINT IF EXISTS tenant_wechat_pay_applyments_merchant_short_name_not_blank;
-
-ALTER TABLE public.tenant_wechat_pay_applyments
-  ADD CONSTRAINT tenant_wechat_pay_applyments_merchant_short_name_not_blank
-  CHECK (
-    merchant_short_name IS NULL OR
-    btrim(merchant_short_name) <> ''
-  );
-
 COMMENT ON COLUMN public.tenant_wechat_pay_applyments.merchant_short_name
 IS '商户简称；草稿阶段可为空，正式提交前由 readiness 强制要求';
 ```
+
+复用既有
+`tenant_wechat_pay_applyments_merchant_short_name_not_blank` 约束：
+`merchant_short_name` 为 `NULL` 时，`btrim(merchant_short_name) <> ''`
+结果为 `UNKNOWN`，因此允许 `NULL`；空白字符串的结果仍为 `FALSE`，
+继续被拒绝。不要删除并重建该约束，避免全表重验和额外 DDL 锁。
 
 回滚 SQL 记录在 migration 注释中：
 
@@ -161,6 +157,9 @@ WHERE merchant_short_name IS NULL;
 
 ALTER TABLE public.tenant_wechat_pay_applyments
   ALTER COLUMN merchant_short_name SET NOT NULL;
+
+COMMENT ON COLUMN public.tenant_wechat_pay_applyments.merchant_short_name
+IS NULL;
 ```
 
 - [ ] **Step 4: 在本地数据库应用并重新生成类型**
