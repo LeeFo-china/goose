@@ -123,6 +123,7 @@ function getActualChangedFields(
     })
     .map(([field]) => field);
   for (const [field, nextValue] of Object.entries(input.serverPatch ?? {})) {
+    if (field === "attachments") continue;
     if (
       nextValue !== undefined &&
       !INTERNAL_SERVER_PATCH_FIELDS.has(field) &&

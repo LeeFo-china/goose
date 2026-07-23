@@ -2715,7 +2715,7 @@ GOOES_API_BASE_URL=http://127.0.0.1:3100 NEXT_PUBLIC_GOOES_API_BASE_URL=http://1
 
 真实 OCR smoke 仅使用经授权的非生产测试资料；证件图片不得复制到仓库、截图或日志。
 
-- [ ] **Step 5: 输出对接文档**
+- [ ] **Step 6: 输出对接文档**
 
 文档必须记录：
 
@@ -2733,7 +2733,7 @@ GOOES_API_BASE_URL=http://127.0.0.1:3100 NEXT_PUBLIC_GOOES_API_BASE_URL=http://1
 > 状态：已实现，待发布验证
 ```
 
-- [ ] **Step 6: 最终检查**
+- [ ] **Step 7: 最终检查**
 
 Run:
 
@@ -2744,7 +2744,7 @@ git status --short
 
 确认没有密钥、token、身份证号码、银行卡号、签名 URL 或证照文件进入 diff。
 
-- [ ] **Step 7: 提交**
+- [ ] **Step 8: 提交**
 
 ```bash
 git add docs/tencent-ocr/2026-07-23-wechat-pay-applyment-ocr-first-handoff.md docs/superpowers/specs/2026-07-23-wechat-pay-applyment-ocr-first-ux-design.md

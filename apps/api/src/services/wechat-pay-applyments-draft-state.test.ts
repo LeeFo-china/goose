@@ -15,6 +15,17 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const employeeId = "22222222-2222-4222-8222-222222222222";
 const applymentId = "33333333-3333-4333-8333-333333333333";
+const updatedAt = "2026-07-23T13:30:00.000Z";
+const reviewedAttachment = {
+  category: "license_copy" as const,
+  file_object_id: "77777777-7777-4777-8777-777777777777",
+  object_key: `tenants/${tenantId}/wechat-pay/${applymentId}/license.jpg`,
+  file_name: "license.jpg",
+  content_type: "image/jpeg",
+  size: 1024,
+  ocr_recognition_id: "66666666-6666-4666-8666-666666666666",
+  ocr_review_status: "confirmed" as const,
+};
 
 const authContext = {
   employeeId,
@@ -37,6 +48,7 @@ function draft(
     sensitive_payload_version: null,
     rejected_at: null,
     rejected_reason: null,
+    updated_at: updatedAt,
     ...overrides,
   } as unknown as WechatPayApplymentRecord;
 }
@@ -134,16 +146,61 @@ test("audits wechat editing state reset when autosave data is unchanged", async 
   });
 });
 
-test("returns current detail without a repository update for a draft no-op", async () => {
+test("treats a new empty attachments array as a draft no-op", async () => {
   const harness = await createHarness(draft());
 
   const result = await harness.service.updateDraft(authContext, applymentId, {
     remark: "未变备注",
+    attachments: [],
     draft_update_source: "autosave",
   });
 
   expect(result.applyment?.id).toBe(applymentId);
+  expect(result.applyment?.updated_at).toBe(updatedAt);
   expect(harness.updateApplyment).not.toHaveBeenCalled();
   expect(harness.insertEvent).not.toHaveBeenCalled();
   expect(harness.findEvents).toHaveBeenCalledWith({ tenantId, applymentId });
+});
+
+test("treats a deep-copied reviewed attachments array as a draft no-op", async () => {
+  const harness = await createHarness(draft({
+    attachments: [reviewedAttachment],
+  }));
+
+  const result = await harness.service.updateDraft(authContext, applymentId, {
+    remark: "未变备注",
+    attachments: [{ ...reviewedAttachment }],
+    draft_update_source: "autosave",
+  });
+
+  expect(result.applyment?.updated_at).toBe(updatedAt);
+  expect(harness.updateApplyment).not.toHaveBeenCalled();
+  expect(harness.insertEvent).not.toHaveBeenCalled();
+});
+
+test("audits an actual attachment review metadata change", async () => {
+  const harness = await createHarness(draft({
+    attachments: [{
+      ...reviewedAttachment,
+      ocr_recognition_id: null,
+      ocr_review_status: "uploaded",
+    }],
+  }));
+
+  await harness.service.updateDraft(authContext, applymentId, {
+    attachments: [{
+      ...reviewedAttachment,
+      ocr_recognition_id: null,
+      ocr_review_status: "manual",
+    }],
+    draft_update_source: "autosave",
+  });
+
+  expect(harness.updateApplyment).toHaveBeenCalledTimes(1);
+  expect(harness.insertEvent.mock.calls[0]?.[0]?.metadata).toEqual({
+    changed_fields: ["attachments"],
+    change_source: "manual_entry",
+    has_sensitive_replacement: false,
+    forced_audit: true,
+  });
 });
