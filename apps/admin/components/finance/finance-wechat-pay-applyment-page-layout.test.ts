@@ -175,6 +175,9 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(panelSource).toContain("证照识别暂不可用");
     expect(attachmentSource).toContain("onUploaded");
     expect(attachmentSource).toContain("onRetryRecognition");
+    expect(attachmentSource).toContain("onRetrySave");
+    expect(attachmentSource).toContain("attachmentSaveErrors");
+    expect(attachmentSource).toContain("AttachmentCheckpointStatus");
     expect(attachmentSource).toContain("materialStates");
     expect(attachmentSource).toContain("AttachmentPreviewCard");
     expect(previewSource).toContain("AttachmentPreviewDialog");
@@ -186,10 +189,12 @@ describe("Finance wechat pay applyment page layout", () => {
     );
     expect(materialsHookSource).not.toContain("uploaded.nextAttachments");
     expect(materialsHookSource).toContain("getMaterialRetryAction");
-    expect(materialsHookSource).toContain("runAttachmentCheckpoint");
+    expect(materialsHookSource).toContain("checkpointApplymentAttachment");
     expect(materialsHookSource).toContain("recognizeApplymentAttachment");
     expect(materialsHookSource).toContain("createMaterialOperationGeneration");
     expect(materialsHookSource).toContain("generationRef.current.advance()");
+    expect(panelSource).toContain("runGenerationGuardedSave");
+    expect(panelSource).toContain("context.isCurrent");
     expect(attachmentSource).not.toContain("识别并回填");
     expect(attachmentSource).not.toContain("onRecognize");
     expect(ocrRequestSource).toContain("fetchApplymentOcrRecognition");

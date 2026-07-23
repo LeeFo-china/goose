@@ -369,7 +369,7 @@ export class WechatPayApplymentService {
         })
         : [],
       can_edit: canEdit,
-      can_submit: canEdit,
+      can_submit: Boolean(applyment) && canEdit,
       available_actions: [],
     };
   }

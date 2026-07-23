@@ -16,6 +16,7 @@ const VISITOR_HASH = createHash("sha256").update(VISITOR_ID).digest("hex");
 const OBJECT_KEY = `private/tenant-onboarding-license/visitors/${VISITOR_HASH}/`
   + "2026/07/14/license.jpg";
 const MAX_SIZE = 5 * 1024 * 1024;
+const APPLYMENT_MAX_SIZE = 2 * 1024 * 1024;
 
 const createOrFindByObjectKey = mock(async (input: Record<string, unknown>) => ({
   id: "file-1",
@@ -75,6 +76,21 @@ function privateInput(overrides: Record<string, unknown> = {}) {
     });
   }
   return input;
+}
+
+function privateApplymentInput(overrides: Record<string, unknown> = {}) {
+  return {
+    scene: "wechat_pay_applyment",
+    objectKey: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
+    filename: "license.jpg",
+    mimetype: "image/jpeg",
+    sizeBytes: 100,
+    visibility: "private",
+    tenantId: "tenant-1",
+    employeeId: "employee-1",
+    verifyHead: true,
+    ...overrides,
+  };
 }
 
 function storageContext(headResult: unknown = {
@@ -204,17 +220,10 @@ describe("private direct upload completion", () => {
   test("keeps authenticated applyment files private without permanent URLs", async () => {
     const { registerExistingCosObject } = await import("./direct-upload");
     const { context, headObject } = storageContext();
-    const response = await registerExistingCosObject.call(context, {
-      scene: "wechat_pay_applyment",
-      objectKey: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
-      filename: "license.jpg",
-      mimetype: "image/jpeg",
-      sizeBytes: 100,
-      visibility: "private",
-      tenantId: "tenant-1",
-      employeeId: "employee-1",
-      verifyHead: true,
-    } as never);
+    const response = await registerExistingCosObject.call(
+      context,
+      privateApplymentInput() as never,
+    );
 
     expect(headObject).toHaveBeenCalledTimes(1);
     expect(createOrFindByObjectKey).toHaveBeenCalledWith(
@@ -227,6 +236,26 @@ describe("private direct upload completion", () => {
     expect(response).toEqual({ file_id: "file-1", status: "active" });
     expect(response).not.toHaveProperty("url");
     expect(response).not.toHaveProperty("public_url");
+  });
+
+  test.each([
+    ["missing length", { "content-type": "image/jpeg" }],
+    ["zero length", { "content-length": "0", "content-type": "image/jpeg" }],
+    [
+      "oversize",
+      {
+        "content-length": String(APPLYMENT_MAX_SIZE + 1),
+        "content-type": "image/jpeg",
+      },
+    ],
+    ["size mismatch", { "content-length": "101", "content-type": "image/jpeg" }],
+    ["non-image", { "content-length": "100", "content-type": "application/pdf" }],
+    ["MIME mismatch", { "content-length": "100", "content-type": "image/png" }],
+  ])("rejects invalid applyment HEAD metadata: %s", async (_name, headers) => {
+    await expectPrivateUploadRejected(
+      privateApplymentInput(),
+      { headers, ETag: '"head-etag"' },
+    );
   });
 
   test("forces HEAD even when the environment toggle is false", async () => {

@@ -341,7 +341,9 @@ describe("WechatPayApplymentService", () => {
     expect(result.can_submit).toBe(false);
     expect(result.can_edit).toBe(false);
     findLatestByTenant.mockImplementation(async () => null);
-    expect((await service.getCurrent(tenantSubmitAuth())).can_edit).toBe(true);
+    const empty = await service.getCurrent(tenantSubmitAuth());
+    expect(empty.can_edit).toBe(true);
+    expect(empty.can_submit).toBe(false);
   });
   test("rejects submit when required applyment attachments are missing", async () => {
     findById.mockImplementationOnce(async () => ({

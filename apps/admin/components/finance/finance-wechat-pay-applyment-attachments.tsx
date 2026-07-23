@@ -18,6 +18,9 @@ import {
   validateUploadFile,
 } from "@/lib/cos-direct-upload";
 import {
+  type AttachmentCheckpointErrorMap,
+} from "./finance-wechat-pay-applyment-checkpoint";
+import {
   type ApplymentMaterialState,
   type ApplymentMaterialStateMap,
   getMaterialRetryAction,
@@ -33,6 +36,9 @@ import {
 import {
   AttachmentPreviewCard,
 } from "./finance-wechat-pay-applyment-attachment-preview";
+import {
+  AttachmentCheckpointStatus,
+} from "./finance-wechat-pay-applyment-attachment-checkpoint-status";
 
 const APPLYMENT_ATTACHMENT_UPLOAD_SCENE = "wechat_pay_applyment";
 const MAX_APPLYMENT_ATTACHMENT_SIZE = 2 * 1024 * 1024;
@@ -83,8 +89,10 @@ export function WechatPayApplymentAttachmentsField({
   editable,
   disabled,
   materialStates,
+  attachmentSaveErrors,
   supportedOcrDocumentTypes,
   onUploaded,
+  onRetrySave,
   onRetryRecognition,
   onChange,
 }: {
@@ -93,8 +101,12 @@ export function WechatPayApplymentAttachmentsField({
   editable: boolean;
   disabled?: boolean;
   materialStates: ApplymentMaterialStateMap;
+  attachmentSaveErrors: AttachmentCheckpointErrorMap;
   supportedOcrDocumentTypes: ReadonlySet<string>;
   onUploaded: (input: AttachmentUploadedInput) => void | Promise<void>;
+  onRetrySave: (
+    attachment: WechatPayApplymentAttachment,
+  ) => void | Promise<void>;
   onRetryRecognition: (
     attachment: WechatPayApplymentAttachment,
   ) => void | Promise<void>;
@@ -227,6 +239,9 @@ export function WechatPayApplymentAttachmentsField({
               description={slot.description}
               attachment={attachment}
               materialState={materialState}
+              saveError={attachment
+                ? attachmentSaveErrors[attachment.object_key]
+                : undefined}
               editable={editable}
               busy={Boolean(busy)}
               uploading={uploadingCategory === slot.category}
@@ -237,6 +252,7 @@ export function WechatPayApplymentAttachmentsField({
               onOpen={openAttachmentPicker}
               onUpload={uploadAttachment}
               onRemove={removeAttachment}
+              onRetrySave={onRetrySave}
               onRetryRecognition={onRetryRecognition}
               onManualEntry={useManualEntry}
             />
@@ -263,13 +279,20 @@ export function WechatPayApplymentAttachmentsField({
         {businessMaterials.length > 0 ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {businessMaterials.map((attachment) => (
-              <AttachmentPreviewCard
-                key={attachment.object_key}
-                attachment={attachment}
-                editable={editable}
-                busy={Boolean(busy)}
-                onRemove={removeAttachment}
-              />
+              <div key={attachment.object_key} className="min-w-0">
+                <AttachmentPreviewCard
+                  attachment={attachment}
+                  editable={editable}
+                  busy={Boolean(busy)}
+                  onRemove={removeAttachment}
+                />
+                <AttachmentCheckpointStatus
+                  error={attachmentSaveErrors[attachment.object_key]}
+                  editable={editable}
+                  busy={Boolean(busy)}
+                  onRetry={() => onRetrySave(attachment)}
+                />
+              </div>
             ))}
           </div>
         ) : (
@@ -305,6 +328,7 @@ function AttachmentSlot({
   description,
   attachment,
   materialState,
+  saveError,
   editable,
   busy,
   uploading,
@@ -312,6 +336,7 @@ function AttachmentSlot({
   onOpen,
   onUpload,
   onRemove,
+  onRetrySave,
   onRetryRecognition,
   onManualEntry,
 }: {
@@ -320,6 +345,7 @@ function AttachmentSlot({
   description: string;
   attachment?: WechatPayApplymentAttachment;
   materialState?: ApplymentMaterialState;
+  saveError?: string;
   editable: boolean;
   busy: boolean;
   uploading: boolean;
@@ -330,6 +356,7 @@ function AttachmentSlot({
     event: ChangeEvent<HTMLInputElement>,
   ) => void;
   onRemove: (attachment: WechatPayApplymentAttachment) => void;
+  onRetrySave: (attachment: WechatPayApplymentAttachment) => void;
   onRetryRecognition: (attachment: WechatPayApplymentAttachment) => void;
   onManualEntry: (attachment: WechatPayApplymentAttachment) => void;
 }) {
@@ -373,6 +400,14 @@ function AttachmentSlot({
       {currentState?.error ? (
         <p className="text-xs text-destructive">{currentState.error}</p>
       ) : null}
+      <AttachmentCheckpointStatus
+        error={saveError}
+        editable={editable}
+        busy={busy}
+        onRetry={() => {
+          if (attachment) onRetrySave(attachment);
+        }}
+      />
       {editable ? (
         <div className="flex flex-wrap items-center gap-2">
           <UploadButton

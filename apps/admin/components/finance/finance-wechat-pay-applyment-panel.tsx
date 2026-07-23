@@ -30,6 +30,10 @@ import { Progress } from "@/components/ui/progress";
 import { requestBackendJson } from "@/lib/backend-client";
 import { WechatPayApplymentAttachmentsField } from "./finance-wechat-pay-applyment-attachments";
 import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
+import {
+  runGenerationGuardedSave,
+  type ApplymentSaveGenerationContext,
+} from "./finance-wechat-pay-applyment-save-generation";
 import { buildWechatPayApplymentPayload } from "./finance-wechat-pay-applyment-schema";
 import {
   APPLYMENT_STEP_KEYS,
@@ -79,6 +83,7 @@ export function FinanceWechatPayApplymentPanel({
     attachments,
     attachmentsRef,
     materialStates,
+    attachmentSaveErrors,
     supportedOcrDocumentTypes,
   } = materials;
   const stepIndex = APPLYMENT_STEP_KEYS.indexOf(activeStep);
@@ -149,24 +154,32 @@ export function FinanceWechatPayApplymentPanel({
     });
   }
 
-  async function saveApplymentDraft(payload: Record<string, unknown>) {
+  async function saveApplymentDraft(
+    payload: Record<string, unknown>,
+    isCurrent = () => true,
+  ) {
     const currentApplyment = applymentRef.current;
     const path = currentApplyment
       ? `/finance/wechat-pay/applyments/${currentApplyment.id}`
       : "/finance/wechat-pay/applyments";
-    const detail = await requestBackendJson<WechatPayApplymentDetailData>(path, {
-      method: currentApplyment ? "PUT" : "POST",
-      body: JSON.stringify(payload),
-      fallbackMessage: "微信支付开通申请保存失败",
+    const outcome = await runGenerationGuardedSave({
+      request: () => requestBackendJson<WechatPayApplymentDetailData>(path, {
+        method: currentApplyment ? "PUT" : "POST",
+        body: JSON.stringify(payload),
+        fallbackMessage: "微信支付开通申请保存失败",
+      }),
+      isCurrent,
+      commit: (detail) => {
+        if (detail.applyment) applymentRef.current = detail.applyment;
+      },
     });
-    if (detail.applyment) applymentRef.current = detail.applyment;
-    return detail;
+    return outcome.result;
   }
 
   async function persistMaterialAttachments(input: {
     attachments: WechatPayApplymentAttachment[];
     draftUpdateSource: "attachment_change" | "ocr_review" | "manual_entry";
-  }) {
+  }, context: ApplymentSaveGenerationContext) {
     if (!editable) throw new Error("当前账号无权修改微信支付开通申请");
     const formElement = formRef.current;
     if (!formElement) throw new Error("申请表单尚未就绪，请稍后重试");
@@ -175,7 +188,7 @@ export function FinanceWechatPayApplymentPanel({
       attachments: input.attachments,
     });
     payload.draft_update_source = input.draftUpdateSource;
-    const detail = await saveApplymentDraft(payload);
+    const detail = await saveApplymentDraft(payload, context.isCurrent);
     return { applymentId: detail.applyment?.id };
   }
 
@@ -274,8 +287,10 @@ export function FinanceWechatPayApplymentPanel({
                 editable={editable}
                 disabled={pending || materials.pending}
                 materialStates={materialStates}
+                attachmentSaveErrors={attachmentSaveErrors}
                 supportedOcrDocumentTypes={supportedOcrDocumentTypes}
                 onUploaded={materials.onUploaded}
+                onRetrySave={materials.onRetrySave}
                 onRetryRecognition={materials.onRetryRecognition}
                 onChange={async (nextAttachments) => {
                   setReviewConfirmed(false);

@@ -2,18 +2,17 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchApplymentOcrCapabilities } from "@/components/ocr/ocr-requests";
 import {
-  ATTACHMENT_CHECKPOINT_ERROR,
+  checkpointApplymentAttachment,
   createMaterialOperationGeneration,
   hasMaterialErrors,
-  replaceCurrentMaterialError,
+  retainAttachmentCheckpointErrors,
   retainUnpersistedAttachmentKeys,
-  runAttachmentCheckpoint,
+  type AttachmentCheckpointErrorMap,
 } from "./finance-wechat-pay-applyment-checkpoint";
 import {
   buildInitialMaterialStates,
   getMaterialRetryAction,
   getOcrMaterialCategory,
-  getOcrMaterialDocumentType,
   isCurrentMaterialAttachment,
   rebaseUploadedApplymentAttachment,
   reconcileMaterialStates,
@@ -35,16 +34,8 @@ import {
   RECOGNITION_PERSIST_ERROR,
 } from "./finance-wechat-pay-applyment-recognition";
 import type { AttachmentUploadedInput } from "./finance-wechat-pay-applyment-attachments";
+import type { UseWechatPayApplymentMaterialsInput } from "./finance-wechat-pay-applyment-materials-contract";
 import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";
-type UseWechatPayApplymentMaterialsInput = {
-  initialAttachments: WechatPayApplymentAttachment[];
-  initialApplymentId?: string | null;
-  resetKey: string;
-  editable: boolean;
-  persistAttachments: (input: PersistAttachmentsInput) => Promise<{
-    applymentId?: string | null;
-  }>;
-};
 type CapabilityStatus = "loading" | "available" | "unavailable";
 
 export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMaterialsInput) {
@@ -57,13 +48,18 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
   const [supportedOcrDocumentTypes, setSupportedOcrDocumentTypes] =
     useState<ReadonlySet<string>>(new Set());
   const supportedOcrDocumentTypesRef = useRef<ReadonlySet<string>>(new Set());
-  const [capabilityStatus, setCapabilityStatus] =
-    useState<CapabilityStatus>("loading");
+  const [capabilityStatus, setCapabilityStatus] = useState<CapabilityStatus>(
+    "loading",
+  );
   const capabilityStatusRef = useRef<CapabilityStatus>("loading");
   const [recognitionConsent, setRecognitionConsentState] = useState(false);
   const recognitionConsentRef = useRef(false);
   const applymentIdRef = useRef(input.initialApplymentId ?? null);
   const unpersistedObjectKeysRef = useRef<Set<string>>(new Set());
+  const [attachmentSaveErrors, setAttachmentSaveErrors] = useState<
+    AttachmentCheckpointErrorMap
+  >({});
+  const attachmentSaveErrorsRef = useRef(attachmentSaveErrors);
   const persistAttachmentsRef = useRef(input.persistAttachments);
   const operationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const generationRef = useRef(createMaterialOperationGeneration());
@@ -89,8 +85,10 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     materialStatesRef.current = initialStates;
     applymentIdRef.current = input.initialApplymentId ?? null;
     unpersistedObjectKeysRef.current.clear();
+    attachmentSaveErrorsRef.current = {};
     setAttachments(initialAttachments);
     setMaterialStates(initialStates);
+    setAttachmentSaveErrors({});
 
     void restoreApplymentMaterialStates({
       attachments: initialAttachments,
@@ -163,11 +161,17 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       materialStatesRef.current,
     ),
   ) {
+    const nextSaveErrors = retainAttachmentCheckpointErrors(
+      attachmentSaveErrorsRef.current,
+      nextAttachments,
+    );
     attachmentsRef.current = nextAttachments;
     materialStatesRef.current = nextStates;
+    attachmentSaveErrorsRef.current = nextSaveErrors;
     if (!mountedRef.current) return;
     setAttachments(nextAttachments);
     setMaterialStates(nextStates);
+    setAttachmentSaveErrors(nextSaveErrors);
   }
   function updateStateIfCurrent(
     attachment: WechatPayApplymentAttachment,
@@ -191,6 +195,10 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
   function commitMaterialStates(nextStates: ApplymentMaterialStateMap) {
     materialStatesRef.current = nextStates;
     if (mountedRef.current) setMaterialStates(nextStates);
+  }
+  function commitAttachmentSaveErrors(nextErrors: AttachmentCheckpointErrorMap) {
+    attachmentSaveErrorsRef.current = nextErrors;
+    if (mountedRef.current) setAttachmentSaveErrors(nextErrors);
   }
   function enqueue(
     operation: () => Promise<void>,
@@ -219,7 +227,10 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     generation = generationRef.current.current(),
   ) {
     if (!generationRef.current.isCurrent(generation)) return;
-    const result = await persistAttachmentsRef.current(input);
+    const context = {
+      isCurrent: () => generationRef.current.isCurrent(generation),
+    };
+    const result = await persistAttachmentsRef.current(input, context);
     if (
       generationRef.current.isCurrent(generation) &&
       result.applymentId
@@ -278,7 +289,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       reportError: (message) => {
         if (
           generationRef.current.isCurrent(generation) &&
-          (message || !hasMaterialErrors(materialStatesRef.current))
+          (message || !hasOutstandingErrors())
         ) setError(message);
       },
     });
@@ -287,57 +298,29 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     attachment: WechatPayApplymentAttachment,
     generation: number,
   ) {
-    const outcome = await runAttachmentCheckpoint({
+    return checkpointApplymentAttachment({
+      attachment,
       generation,
       isCurrent: generationRef.current.isCurrent,
       persist: () => persist({
         attachments: attachmentsRef.current,
         draftUpdateSource: "attachment_change",
       }, generation),
-      onFailed: () => {
-        const nextStates = replaceCurrentMaterialError({
-          materialStates: materialStatesRef.current,
-          attachment,
-          error: ATTACHMENT_CHECKPOINT_ERROR,
-        });
-        if (nextStates !== materialStatesRef.current) {
-          commitMaterialStates(nextStates);
-          setError(ATTACHMENT_CHECKPOINT_ERROR);
-        }
-      },
-      onPersisted: async () => {
-        unpersistedObjectKeysRef.current.delete(attachment.object_key);
-        const category = getOcrMaterialCategory(attachment);
-        if (
-          category &&
-          materialStatesRef.current[category]?.error ===
-            ATTACHMENT_CHECKPOINT_ERROR
-        ) {
-          commitMaterialStates(replaceCurrentMaterialError({
-            materialStates: materialStatesRef.current,
-            attachment,
-            error: null,
-          }));
-        }
-        if (!hasMaterialErrors(materialStatesRef.current)) setError("");
-        if (capabilityStatusRef.current === "loading") return;
-        const documentType = getOcrMaterialDocumentType(attachment);
-        if (
-          !documentType ||
-          !supportedOcrDocumentTypesRef.current.has(documentType)
-        ) {
-          await markUnsupportedMaterialsManual(
-            supportedOcrDocumentTypesRef.current,
-            generation,
-          );
-          return;
-        }
-        if (recognitionConsentRef.current) {
-          await recognizeAttachment(attachment, generation);
-        }
-      },
+      getErrors: () => attachmentSaveErrorsRef.current,
+      commitErrors: commitAttachmentSaveErrors,
+      removeUnpersisted: (objectKey) =>
+        unpersistedObjectKeysRef.current.delete(objectKey),
+      hasOutstandingErrors,
+      reportError: setError,
+      capabilityLoading: capabilityStatusRef.current === "loading",
+      supportedDocumentTypes: supportedOcrDocumentTypesRef.current,
+      recognitionConsent: recognitionConsentRef.current,
+      markUnsupportedManual: () => markUnsupportedMaterialsManual(
+        supportedOcrDocumentTypesRef.current,
+        generation,
+      ),
+      recognize: () => recognizeAttachment(attachment, generation),
     });
-    return outcome;
   }
   async function onUploaded(uploaded: AttachmentUploadedInput) {
     if (!input.editable) return;
@@ -352,7 +335,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     );
     unpersistedObjectKeysRef.current.add(uploaded.attachment.object_key);
     syncAttachments(rebasedAttachments);
-    if (!hasMaterialErrors(materialStatesRef.current)) setError("");
+    if (!hasOutstandingErrors()) setError("");
     return enqueue(
       async () => {
         await checkpointAttachment(uploaded.attachment, generation);
@@ -383,7 +366,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       clearError: () => {
         if (
           generationRef.current.isCurrent(generation) &&
-          !hasMaterialErrors(materialStatesRef.current)
+          !hasOutstandingErrors()
         ) setError("");
       },
       reportError: (message) => {
@@ -400,7 +383,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
   async function onRetryRecognition(attachment: WechatPayApplymentAttachment) {
     if (!input.editable) return;
     const generation = generationRef.current.current();
-    if (!hasMaterialErrors(materialStatesRef.current)) setError("");
+    if (!hasOutstandingErrors()) setError("");
     return enqueue(async () => {
       const category = getOcrMaterialCategory(attachment);
       const state = category ? materialStatesRef.current[category] : undefined;
@@ -434,7 +417,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
             currentState.recognitionId === retryState.recognitionId
           ) {
             updateStateIfCurrent(attachment, { ...currentState, error: null });
-            if (!hasMaterialErrors(materialStatesRef.current)) setError("");
+            if (!hasOutstandingErrors()) setError("");
           }
         } catch {
           if (!generationRef.current.isCurrent(generation)) return;
@@ -455,6 +438,14 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       await recognizeAttachment(attachment, generation);
     }, generation)
       .catch(reportOperationError);
+  }
+
+  async function onRetrySave(attachment: WechatPayApplymentAttachment) {
+    if (!input.editable) return;
+    const generation = generationRef.current.current();
+    return enqueue(async () => {
+      await checkpointAttachment(attachment, generation);
+    }, generation).catch(reportOperationError);
   }
 
   function setRecognitionConsent(checked: boolean) {
@@ -486,6 +477,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     attachments,
     attachmentsRef,
     materialStates,
+    attachmentSaveErrors,
     supportedOcrDocumentTypes,
     recognitionConsent,
     setRecognitionConsent,
@@ -493,7 +485,13 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     pending,
     error,
     onUploaded,
+    onRetrySave,
     onRetryRecognition,
     onChange,
   };
+
+  function hasOutstandingErrors() {
+    return hasMaterialErrors(materialStatesRef.current) ||
+      Object.keys(attachmentSaveErrorsRef.current).length > 0;
+  }
 }

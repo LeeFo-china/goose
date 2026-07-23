@@ -1,10 +1,105 @@
 import {
   getOcrMaterialCategory,
+  getOcrMaterialDocumentType,
   type ApplymentMaterialStateMap,
 } from "./finance-wechat-pay-applyment-flow-model";
 import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";
 
 export const ATTACHMENT_CHECKPOINT_ERROR = "附件保存失败";
+export type AttachmentCheckpointErrorMap = Readonly<Record<string, string>>;
+
+export function setAttachmentCheckpointError(
+  errors: AttachmentCheckpointErrorMap,
+  objectKey: string,
+  error: string,
+): AttachmentCheckpointErrorMap {
+  return { ...errors, [objectKey]: error };
+}
+
+export function clearAttachmentCheckpointError(
+  errors: AttachmentCheckpointErrorMap,
+  objectKey: string,
+): AttachmentCheckpointErrorMap {
+  if (!(objectKey in errors)) return errors;
+  const nextErrors = { ...errors };
+  delete nextErrors[objectKey];
+  return nextErrors;
+}
+
+export function retainAttachmentCheckpointErrors(
+  errors: AttachmentCheckpointErrorMap,
+  attachments: readonly WechatPayApplymentAttachment[],
+): AttachmentCheckpointErrorMap {
+  const currentKeys = new Set(
+    attachments.map((attachment) => attachment.object_key),
+  );
+  return Object.fromEntries(
+    Object.entries(errors).filter(([objectKey]) => currentKeys.has(objectKey)),
+  );
+}
+
+export async function continueAfterAttachmentCheckpoint(input: {
+  attachment: WechatPayApplymentAttachment;
+  supportedDocumentTypes: ReadonlySet<string>;
+  recognitionConsent: boolean;
+  markUnsupportedManual: () => Promise<void>;
+  recognize: () => Promise<void>;
+}) {
+  const documentType = getOcrMaterialDocumentType(input.attachment);
+  if (!documentType) return;
+  if (!input.supportedDocumentTypes.has(documentType)) {
+    await input.markUnsupportedManual();
+    return;
+  }
+  if (input.recognitionConsent) await input.recognize();
+}
+
+export async function checkpointApplymentAttachment(input: {
+  attachment: WechatPayApplymentAttachment;
+  generation: number;
+  isCurrent: (generation: number) => boolean;
+  persist: () => Promise<void>;
+  getErrors: () => AttachmentCheckpointErrorMap;
+  commitErrors: (errors: AttachmentCheckpointErrorMap) => void;
+  removeUnpersisted: (objectKey: string) => void;
+  hasOutstandingErrors: () => boolean;
+  reportError: (message: string) => void;
+  capabilityLoading: boolean;
+  supportedDocumentTypes: ReadonlySet<string>;
+  recognitionConsent: boolean;
+  markUnsupportedManual: () => Promise<void>;
+  recognize: () => Promise<void>;
+}) {
+  return runAttachmentCheckpoint({
+    generation: input.generation,
+    isCurrent: input.isCurrent,
+    persist: input.persist,
+    onFailed: () => {
+      input.commitErrors(setAttachmentCheckpointError(
+        input.getErrors(),
+        input.attachment.object_key,
+        ATTACHMENT_CHECKPOINT_ERROR,
+      ));
+      input.reportError(ATTACHMENT_CHECKPOINT_ERROR);
+    },
+    onPersisted: async () => {
+      input.removeUnpersisted(input.attachment.object_key);
+      input.commitErrors(clearAttachmentCheckpointError(
+        input.getErrors(),
+        input.attachment.object_key,
+      ));
+      if (!input.hasOutstandingErrors()) input.reportError("");
+      if (input.capabilityLoading) return;
+      await continueAfterAttachmentCheckpoint({
+        attachment: input.attachment,
+        supportedDocumentTypes: input.supportedDocumentTypes,
+        recognitionConsent: input.recognitionConsent,
+        markUnsupportedManual: input.markUnsupportedManual,
+        recognize: input.recognize,
+      });
+    },
+  });
+}
 
 export function retainUnpersistedAttachmentKeys(
   unpersistedObjectKeys: Set<string>,

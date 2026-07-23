@@ -1302,10 +1302,12 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
   draft/rejected/wechat_editing 时为 true。Admin 上传、OCR 授权、保存、重试和提交写控件
   必须以该服务端 capability 为准；进件 direct upload init/complete 在 upload service
   层对该 scene 强制 submit 权限，不能让只读账号产生 file object。
-  尚无 applyment 记录时按“可创建新 draft”处理，但仍必须拥有 submit 权限。
+  尚无 applyment 记录时按“可创建新 draft”处理，但仍必须拥有 submit 权限；此时
+  `can_edit` 可为 true，`can_submit` 必须为 false。
 - 上传附件 checkpoint 失败时保留未持久化 object key，并将对应 tile 标记为
   “附件保存失败”；“重试保存”只提交当前 attachments。保存成功后才清 key/error，并在
-  已授权且 capability 支持时最多启动一次 OCR。替换或删除附件同步清理旧 key/error。
+  已授权且 capability 支持时最多启动一次 OCR。经营场景等非 OCR 附件使用相同错误与
+  persistence-only 重试路径，但保存成功后不得触发 OCR。替换或删除附件同步清理旧 key/error。
 - capability 不可用触发的 automatic manual 与显式 manual 共用持久化失败语义：
   本地保持 manual，失败显示“手动填写状态保存失败”，重试只保存且不触发 OCR。
 - 私有预览 302 必须返回 `Cache-Control: private, no-store, max-age=0`、
@@ -1314,7 +1316,11 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
   Dialog 提供重试和关闭。
 - materials 异步任务捕获 reset generation；reset/unmount 后旧恢复、capability、checkpoint
   或 recognition 结果不得写回，也不得在新草稿上启动 persist/OCR。识别和持久化编排拆到
-  单一职责 coordinator，materials hook 保持低于 500 行。
+  单一职责 coordinator，materials hook 保持低于 500 行；save callback 的 applymentRef
+  更新也必须在同一个 generation guard 内，旧草稿请求完成后不得提交自身副作用。
+- `wechat_pay_applyment` 私有上传 complete 必须从对象存储 HEAD 取得权威 size/MIME：
+  size 必须大于 0 且不超过场景上限，MIME 必须为允许图片，并与 init 声明完全一致；
+  HEAD 缺失时不得回退客户端声明。复用 onboarding 私有上传的服务层验证模式。
 
 - [ ] **Step 1: 写资料工作区结构失败测试**
 

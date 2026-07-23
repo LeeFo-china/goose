@@ -10,6 +10,19 @@ import {
 } from "./private-upload-intent";
 
 const PRIVATE_LICENSE_SCENE = "tenant_onboarding_license";
+const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
+const WECHAT_PAY_APPLYMENT_MAX_SIZE_BYTES = 2 * 1024 * 1024;
+const WECHAT_PAY_APPLYMENT_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+]);
+
+type PrivateHeadPolicy = {
+  maxSizeBytes: number;
+  mimeTypes: ReadonlySet<string>;
+  sizeError: string;
+  typeError: string;
+};
 
 export async function createDirectUpload(this: any, input: DirectUploadInput) {
   const provider = await this.getStorageProvider();
@@ -107,6 +120,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
   const isPrivateObject = input.visibility === "private";
   const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE
     && isPrivateObject;
+  const privateHeadPolicy = getPrivateHeadPolicy(input);
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
   }
@@ -122,7 +136,8 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     headers?: Record<string, string | number | undefined>;
     ETag?: string | null;
   } | null = null;
-  const verifyHeadObject = isPrivateLicense || Boolean(input.verifyHead);
+  const verifyHeadObject = Boolean(privateHeadPolicy) ||
+    Boolean(input.verifyHead);
   if (verifyHeadObject) {
     try {
       headObject = await cos.headObject({
@@ -158,8 +173,13 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
 
   const headers = (headObject?.headers || {}) as Record<string, string | number | undefined>;
   const fallbackSize = input.sizeBytes ?? 0;
-  const privateMetadata = isPrivateLicense
-    ? requirePrivateLicenseHeadMetadata({ input, headObject, headers })
+  const privateMetadata = privateHeadPolicy
+    ? requirePrivateHeadMetadata({
+      input,
+      headObject,
+      headers,
+      policy: privateHeadPolicy,
+    })
     : null;
   const contentLength = privateMetadata?.contentLength
     ?? Number(getHeader(headers, "content-length") ?? fallbackSize);
@@ -241,13 +261,37 @@ function assertPrivateLicenseIntent(input: {
   if (!verified) throw privateUploadError("私有上传凭证无效或已过期");
 }
 
-function requirePrivateLicenseHeadMetadata(input: {
+function getPrivateHeadPolicy(
+  input: RegisterExistingCosObjectInput,
+): PrivateHeadPolicy | null {
+  if (input.visibility !== "private") return null;
+  if (input.scene === PRIVATE_LICENSE_SCENE) {
+    return {
+      maxSizeBytes: TENANT_ONBOARDING_LICENSE_MAX_SIZE_BYTES,
+      mimeTypes: TENANT_ONBOARDING_LICENSE_MIME_TYPES,
+      sizeError: "营业执照文件大小校验失败",
+      typeError: "营业执照文件类型校验失败",
+    };
+  }
+  if (input.scene === PRIVATE_APPLYMENT_SCENE) {
+    return {
+      maxSizeBytes: WECHAT_PAY_APPLYMENT_MAX_SIZE_BYTES,
+      mimeTypes: WECHAT_PAY_APPLYMENT_MIME_TYPES,
+      sizeError: "微信支付进件附件大小校验失败",
+      typeError: "微信支付进件附件类型校验失败",
+    };
+  }
+  return null;
+}
+
+function requirePrivateHeadMetadata(input: {
   input: RegisterExistingCosObjectInput;
   headObject: {
     headers?: Record<string, string | number | undefined>;
     ETag?: string | null;
   } | null;
   headers: Record<string, string | number | undefined>;
+  policy: PrivateHeadPolicy;
 }) {
   const contentLength = parseContentLength(getHeader(input.headers, "content-length"));
   const contentType = normalizePrivateUploadMimeType(
@@ -257,13 +301,13 @@ function requirePrivateLicenseHeadMetadata(input: {
   const declaredSize = input.input.sizeBytes ?? 0;
   if (
     contentLength === null || contentLength <= 0 ||
-    contentLength > TENANT_ONBOARDING_LICENSE_MAX_SIZE_BYTES ||
+    contentLength > input.policy.maxSizeBytes ||
     contentLength !== declaredSize
-  ) throw privateUploadError("营业执照文件大小校验失败");
+  ) throw privateUploadError(input.policy.sizeError);
   if (
-    !TENANT_ONBOARDING_LICENSE_MIME_TYPES.has(contentType) ||
+    !input.policy.mimeTypes.has(contentType) ||
     contentType !== declaredContentType
-  ) throw privateUploadError("营业执照文件类型校验失败");
+  ) throw privateUploadError(input.policy.typeError);
 
   const headEtag = normalizeEtag(input.headObject?.ETag)
     ?? normalizeEtag(String(getHeader(input.headers, "etag") ?? ""));

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   ATTACHMENT_CHECKPOINT_ERROR,
+  checkpointApplymentAttachment,
   createMaterialOperationGeneration,
+  retainAttachmentCheckpointErrors,
   retainUnpersistedAttachmentKeys,
   runAttachmentCheckpoint,
 } from "./finance-wechat-pay-applyment-checkpoint";
@@ -119,5 +121,86 @@ describe("wechat pay applyment attachment checkpoint", () => {
 
     retainUnpersistedAttachmentKeys(unpersisted, []);
     expect(unpersisted.size).toBe(0);
+  });
+
+  test("shows and clears a non-OCR checkpoint error without recognition", async () => {
+    const attachment = {
+      category: "business_scene_material" as const,
+      object_key: "tenant/store.jpg",
+    };
+    let errors = {};
+    let persistCalls = 0;
+    let recognitionCalls = 0;
+    let manualCalls = 0;
+    let reportedError = "";
+    let shouldFail = true;
+    const unpersisted = new Set([attachment.object_key]);
+    const generation = createMaterialOperationGeneration();
+
+    const checkpoint = () => checkpointApplymentAttachment({
+      attachment,
+      generation: generation.current(),
+      isCurrent: generation.isCurrent,
+      persist: async () => {
+        persistCalls += 1;
+        if (shouldFail) throw new Error("save unavailable");
+      },
+      getErrors: () => errors,
+      commitErrors: (nextErrors) => {
+        errors = nextErrors;
+      },
+      removeUnpersisted: (objectKey) => unpersisted.delete(objectKey),
+      hasOutstandingErrors: () => Object.keys(errors).length > 0,
+      reportError: (message) => {
+        reportedError = message;
+      },
+      capabilityLoading: false,
+      supportedDocumentTypes: new Set(["business_license"]),
+      recognitionConsent: true,
+      markUnsupportedManual: async () => {
+        manualCalls += 1;
+      },
+      recognize: async () => {
+        recognitionCalls += 1;
+      },
+    });
+
+    const failed = await checkpoint();
+    expect(failed.type).toBe("persist_failed");
+    expect(errors).toEqual({
+      [attachment.object_key]: ATTACHMENT_CHECKPOINT_ERROR,
+    });
+    expect(reportedError).toBe(ATTACHMENT_CHECKPOINT_ERROR);
+    expect(unpersisted.has(attachment.object_key)).toBe(true);
+
+    shouldFail = false;
+    const retried = await checkpoint();
+    expect(retried.type).toBe("persisted");
+    expect(persistCalls).toBe(2);
+    expect(errors).toEqual({});
+    expect(reportedError).toBe("");
+    expect(unpersisted.has(attachment.object_key)).toBe(false);
+    expect(recognitionCalls).toBe(0);
+    expect(manualCalls).toBe(0);
+  });
+
+  test("removes checkpoint errors for replaced or deleted attachments", () => {
+    const errors = {
+      "tenant/old.jpg": ATTACHMENT_CHECKPOINT_ERROR,
+      "tenant/kept.jpg": ATTACHMENT_CHECKPOINT_ERROR,
+    };
+    expect(retainAttachmentCheckpointErrors(errors, [
+      {
+        category: "license_copy",
+        object_key: "tenant/new.jpg",
+      },
+      {
+        category: "business_scene_material",
+        object_key: "tenant/kept.jpg",
+      },
+    ])).toEqual({
+      "tenant/kept.jpg": ATTACHMENT_CHECKPOINT_ERROR,
+    });
+    expect(retainAttachmentCheckpointErrors(errors, [])).toEqual({});
   });
 });
