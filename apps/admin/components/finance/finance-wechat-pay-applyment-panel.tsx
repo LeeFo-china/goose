@@ -348,6 +348,7 @@ export function FinanceWechatPayApplymentPanel({
                 attachments={attachments}
                 materialStates={materialStates}
                 contactType={contactType}
+                subjectType={subjectType}
                 values={ocrReview.currentValues}
                 comparisonValues={ocrReview.comparisonValues}
                 fieldSources={ocrReview.fieldSources}

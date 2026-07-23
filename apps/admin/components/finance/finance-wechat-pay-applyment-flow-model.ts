@@ -242,11 +242,14 @@ export function reconcileMaterialStates(
       nextStates[category] = initialState;
       continue;
     }
-    nextStates[category] = initialState.status === "manual" &&
-        currentState.status !== "manual"
+    const metadataStatus = initialState.status === "confirmed" ||
+        initialState.status === "manual"
+      ? initialState.status
+      : null;
+    nextStates[category] = metadataStatus
       ? {
         ...currentState,
-        status: "manual",
+        status: metadataStatus,
         recognitionId: initialState.recognitionId ??
           currentState.recognitionId,
         error: null,

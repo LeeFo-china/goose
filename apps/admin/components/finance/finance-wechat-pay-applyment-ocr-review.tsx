@@ -231,6 +231,7 @@ export function FinanceWechatPayApplymentOcrReview({
   attachments,
   materialStates,
   contactType,
+  subjectType,
   values,
   comparisonValues,
   fieldSources,
@@ -242,6 +243,7 @@ export function FinanceWechatPayApplymentOcrReview({
   attachments: readonly WechatPayApplymentAttachment[];
   materialStates: ApplymentMaterialStateMap;
   contactType: string;
+  subjectType: string;
   values: Readonly<Record<string, string>>;
   comparisonValues: Readonly<Record<string, string>>;
   fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
@@ -340,6 +342,7 @@ export function FinanceWechatPayApplymentOcrReview({
           <FinanceWechatPayApplymentRecognizedFields
             selectedCategory={selectedCategory}
             contactType={contactType}
+            subjectType={subjectType}
             values={values}
             fieldSources={fieldSources}
             disabled={disabled}

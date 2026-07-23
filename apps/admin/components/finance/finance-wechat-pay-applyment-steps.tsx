@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
@@ -151,7 +151,7 @@ function SubjectFields({
         maxLength={64}
         disabled={disabled}
       />
-      <TextField
+      <OcrMirrorTextField
         label="营业执照主体名称"
         name="license_name"
         defaultValue={applyment?.license_name || ""}
@@ -161,7 +161,7 @@ function SubjectFields({
         disabled={disabled}
         appliedValue={ocrFieldValues.license_name}
       />
-      <TextField
+      <OcrMirrorTextField
         label="统一社会信用代码"
         name="license_code"
         defaultValue={applyment?.license_code || ""}
@@ -171,7 +171,7 @@ function SubjectFields({
         disabled={disabled}
         appliedValue={ocrFieldValues.license_code}
       />
-      <TextField
+      <OcrMirrorTextField
         label="营业执照注册地址"
         name="license_address"
         defaultValue={applyment?.license_address || ""}
@@ -180,7 +180,7 @@ function SubjectFields({
         disabled={disabled}
         appliedValue={ocrFieldValues.license_address}
       />
-      <TextField
+      <OcrMirrorTextField
         label="营业执照有效期开始"
         name="license_period_begin"
         type="date"
@@ -188,7 +188,7 @@ function SubjectFields({
         disabled={disabled}
         appliedValue={ocrFieldValues.license_period_begin}
       />
-      <PeriodEndField
+      <OcrMirrorPeriodEndField
         label="营业执照有效期结束"
         name="license_period_end"
         defaultValue={applyment?.license_period_end}
@@ -216,7 +216,7 @@ function ContactFields({
 
   return (
     <FieldGroup className="grid gap-4 md:grid-cols-2">
-      <TextField
+      <OcrMirrorTextField
         label="法人姓名"
         name="legal_representative_name"
         defaultValue={applyment?.legal_representative_name || ""}
@@ -233,7 +233,7 @@ function ContactFields({
         requirement="required"
         disabled
       />
-      <TextField
+      <OcrMirrorTextField
         label="身份证姓名"
         name="identity_name"
         placeholder={sensitivePlaceholder}
@@ -244,7 +244,7 @@ function ContactFields({
         stored={hasSensitivePayload}
         appliedValue={ocrFieldValues.identity_name}
       />
-      <TextField
+      <OcrMirrorTextField
         label="身份证号码"
         name="identity_number"
         placeholder={sensitivePlaceholder}
@@ -256,7 +256,7 @@ function ContactFields({
         stored={hasSensitivePayload}
         appliedValue={ocrFieldValues.identity_number}
       />
-      <TextField
+      <OcrMirrorTextField
         label="身份证居住地址"
         name="identity_address"
         placeholder={applyment?.identity_address_masked || sensitivePlaceholder}
@@ -267,7 +267,7 @@ function ContactFields({
         stored={hasSensitivePayload}
         appliedValue={ocrFieldValues.identity_address}
       />
-      <TextField
+      <OcrMirrorTextField
         label="身份证有效期开始"
         name="identity_period_begin"
         type="date"
@@ -277,7 +277,7 @@ function ContactFields({
         disabled={disabled}
         appliedValue={ocrFieldValues.identity_period_begin}
       />
-      <PeriodEndField
+      <OcrMirrorPeriodEndField
         label="身份证有效期结束"
         name="identity_period_end"
         defaultValue={applyment?.identity_period_end}
@@ -293,7 +293,7 @@ function ContactFields({
         disabled={disabled}
         onValueChange={onContactTypeChange}
       />
-      <TextField
+      <OcrMirrorTextField
         label="超级管理员姓名"
         name="super_admin_name"
         defaultValue={applyment?.super_admin_name || ""}
@@ -356,7 +356,7 @@ function AgentIdentityFields({
 }) {
   return (
     <>
-      <TextField
+      <OcrMirrorTextField
         label="经办人身份证号码"
         name="contact_identity_number"
         placeholder={placeholder}
@@ -368,7 +368,7 @@ function AgentIdentityFields({
         stored={hasSensitivePayload}
         appliedValue={ocrFieldValues.contact_identity_number}
       />
-      <TextField
+      <OcrMirrorTextField
         label="经办人身份证地址"
         name="contact_identity_address"
         placeholder={placeholder}
@@ -379,7 +379,7 @@ function AgentIdentityFields({
         stored={hasSensitivePayload}
         appliedValue={ocrFieldValues.contact_identity_address}
       />
-      <TextField
+      <OcrMirrorTextField
         label="经办人证件有效期开始"
         name="contact_identity_period_begin"
         type="date"
@@ -389,7 +389,7 @@ function AgentIdentityFields({
         disabled={disabled}
         appliedValue={ocrFieldValues.contact_identity_period_begin}
       />
-      <PeriodEndField
+      <OcrMirrorPeriodEndField
         label="经办人证件有效期结束"
         name="contact_identity_period_end"
         defaultValue={applyment?.contact_identity_period_end}
@@ -416,8 +416,8 @@ function SettlementFields({
       <TextField label="客服电话" name="service_phone" defaultValue={applyment?.service_phone || ""} requirement="required" required maxLength={20} inputMode="tel" disabled={disabled} />
       <SelectField label="结算账户类型" name="settlement_account_type" defaultValue={accountType} options={SETTLEMENT_ACCOUNT_TYPE_OPTIONS} requirement="required" disabled={disabled || subjectType === "SUBJECT_TYPE_ENTERPRISE"} description={subjectType === "SUBJECT_TYPE_ENTERPRISE" ? "企业主体固定使用对公银行账户。" : undefined} />
       <TextField label="结算账户开户名" name="settlement_account_name" defaultValue={applyment?.settlement_account_name || ""} requirement="required" required maxLength={100} disabled={disabled} />
-      <TextField label="开户银行" name="settlement_bank_name" defaultValue={applyment?.settlement_bank_name || ""} description="填写银行基础名称，如中国工商银行。" requirement="required" required maxLength={100} disabled={disabled} appliedValue={ocrFieldValues.settlement_bank_name} />
-      <TextField label="银行账号" name="settlement_account_number" placeholder={applyment?.settlement_account_number_masked || "请输入银行账号"} description="新填写内容会加密存储，保存后只记录掩码。" requirement="required" required={!hasBankAccount} pattern="\d{8,32}" maxLength={32} inputMode="numeric" disabled={disabled} stored={hasBankAccount} appliedValue={ocrFieldValues.settlement_account_number} />
+      <OcrMirrorTextField label="开户银行" name="settlement_bank_name" defaultValue={applyment?.settlement_bank_name || ""} description="填写银行基础名称，如中国工商银行。" requirement="required" required maxLength={100} disabled={disabled} appliedValue={ocrFieldValues.settlement_bank_name} />
+      <OcrMirrorTextField label="银行账号" name="settlement_account_number" placeholder={applyment?.settlement_account_number_masked || "请输入银行账号"} description="新填写内容会加密存储，保存后只记录掩码。" requirement="required" required={!hasBankAccount} pattern="\d{8,32}" maxLength={32} inputMode="numeric" disabled={disabled} stored={hasBankAccount} appliedValue={ocrFieldValues.settlement_account_number} />
       <TextField label="开户银行全称（含支行）" name="settlement_bank_full_name" defaultValue={applyment?.settlement_bank_full_name || ""} maxLength={128} disabled={disabled} />
       <TextField label="开户银行联行号" name="settlement_bank_branch_id" defaultValue={applyment?.settlement_bank_branch_id || ""} maxLength={128} disabled={disabled} />
       <FinanceWechatPaySettlementRuleField
@@ -444,4 +444,21 @@ function StepContent({ value, children }: { value: string; children: ReactNode }
       {children}
     </TabsContent>
   );
+}
+
+function OcrMirrorTextField(props: ComponentProps<typeof TextField>) {
+  return (
+    <TextField
+      {...props}
+      disabled
+      registerInForm={false}
+      required={false}
+    />
+  );
+}
+
+function OcrMirrorPeriodEndField(
+  props: ComponentProps<typeof PeriodEndField>,
+) {
+  return <PeriodEndField {...props} disabled registerInForm={false} />;
 }

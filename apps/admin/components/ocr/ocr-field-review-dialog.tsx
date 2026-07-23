@@ -166,6 +166,17 @@ function normalizeComparable(key: string, value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+export function groupOcrFieldReviewRows(
+  rows: readonly OcrFieldReviewRow[],
+) {
+  return {
+    persistent: rows.filter((row) =>
+      row.state === "conflict" || row.state === "empty"
+    ),
+    collapsible: rows.filter((row) => row.state === "consistent"),
+  };
+}
+
 export function OcrFieldReviewRows({
   rows,
   applyLabel = "应用所选字段",
@@ -181,8 +192,7 @@ export function OcrFieldReviewRows({
   const [revealedSensitiveKeys, setRevealedSensitiveKeys] = useState<Set<string>>(
     new Set(),
   );
-  const conflictRows = rows.filter((row) => row.state === "conflict");
-  const suggestionRows = rows.filter((row) => row.state !== "conflict");
+  const groupedRows = groupOcrFieldReviewRows(rows);
 
   useEffect(() => {
     setSelectedKeys(new Set(
@@ -200,27 +210,27 @@ export function OcrFieldReviewRows({
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {conflictRows.length > 0 ? (
+      {groupedRows.persistent.length > 0 ? (
         <ReviewRowGroup
-          title="需要选择的差异"
-          rows={conflictRows}
+          title="需要核对的差异和缺失"
+          rows={groupedRows.persistent}
           selectedKeys={selectedKeys}
           revealedSensitiveKeys={revealedSensitiveKeys}
           onSelectedKeysChange={setSelectedKeys}
           onRevealedSensitiveKeysChange={setRevealedSensitiveKeys}
         />
       ) : null}
-      {suggestionRows.length > 0 ? (
-        <Collapsible defaultOpen={conflictRows.length === 0}>
+      {groupedRows.collapsible.length > 0 ? (
+        <Collapsible defaultOpen={groupedRows.persistent.length === 0}>
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" className="w-full justify-between">
-              其他识别建议（{suggestionRows.length}）
+              其他识别建议（{groupedRows.collapsible.length}）
               <ChevronDown data-icon="inline-end" />
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
             <ReviewRowGroup
-              rows={suggestionRows}
+              rows={groupedRows.collapsible}
               selectedKeys={selectedKeys}
               revealedSensitiveKeys={revealedSensitiveKeys}
               onSelectedKeysChange={setSelectedKeys}

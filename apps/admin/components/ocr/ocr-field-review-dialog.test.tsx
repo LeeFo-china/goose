@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import type { OcrFieldSuggestion } from "@gooes/domain";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildOcrFieldReviewRows,
   formatOcrReviewValue,
   getUnreviewedOcrConflictKeys,
+  groupOcrFieldReviewRows,
   mapApplymentOcrFields,
+  OcrFieldReviewRows,
 } from "./ocr-field-review-dialog";
 
 function field(key: string, value: string): OcrFieldSuggestion {
@@ -77,6 +80,34 @@ describe("OCR field review dialog", () => {
       [{ ...reviewedRows[0], selected: true }],
       { license_name: "刚刚人工修改的名称" },
     )).toEqual([]);
+  });
+
+  test("keeps conflicts and missing fields visible while folding normal rows", () => {
+    const rows = buildOcrFieldReviewRows([
+      { ...field("license_name", "识别名称"), label: "冲突字段" },
+      { ...field("license_code", "91410000"), label: "缺失字段" },
+      { ...field("license_address", "河南省信阳市"), label: "正常字段" },
+    ], {
+      license_name: "人工名称",
+      license_code: "",
+      license_address: "河南省信阳市",
+    });
+    const groups = groupOcrFieldReviewRows(rows);
+
+    expect(groups.persistent.map((row) => row.field.key)).toEqual([
+      "license_name",
+      "license_code",
+    ]);
+    expect(groups.collapsible.map((row) => row.field.key)).toEqual([
+      "license_address",
+    ]);
+
+    const markup = renderToStaticMarkup(
+      <OcrFieldReviewRows rows={rows} onApply={() => undefined} />,
+    );
+    expect(markup).toContain("冲突字段");
+    expect(markup).toContain("缺失字段");
+    expect(markup).toContain("其他识别建议（1）");
   });
 
   test("maps contact identity suggestions to contact applyment fields", () => {

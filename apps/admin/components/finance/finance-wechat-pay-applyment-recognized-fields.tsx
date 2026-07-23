@@ -26,7 +26,6 @@ const SENSITIVE_OCR_FIELD_KEYS = [
   "identity_address",
   "contact_identity_number",
   "contact_identity_address",
-  "settlement_account_number",
 ] as const;
 
 export function getStoredOcrValues(
@@ -61,6 +60,9 @@ export function getStoredFieldSources(
   if (applyment?.has_sensitive_payload) {
     for (const key of SENSITIVE_OCR_FIELD_KEYS) sources[key] = "stored";
   }
+  if (applyment?.settlement_account_number_masked) {
+    sources.settlement_account_number = "stored";
+  }
   return sources;
 }
 
@@ -69,9 +71,16 @@ export function getOcrComparisonValues(
   values: Readonly<Record<string, string>>,
 ) {
   const comparisons = { ...values };
-  if (!applyment?.has_sensitive_payload) return comparisons;
-  for (const key of SENSITIVE_OCR_FIELD_KEYS) {
-    if (!comparisons[key]) comparisons[key] = "已安全保存";
+  if (applyment?.has_sensitive_payload) {
+    for (const key of SENSITIVE_OCR_FIELD_KEYS) {
+      if (!comparisons[key]) comparisons[key] = "已安全保存";
+    }
+  }
+  if (
+    applyment?.settlement_account_number_masked &&
+    !comparisons.settlement_account_number
+  ) {
+    comparisons.settlement_account_number = "已安全保存";
   }
   return comparisons;
 }
@@ -84,6 +93,12 @@ type RecognizedFieldDefinition = {
   sensitive?: boolean;
   required?: boolean;
 };
+
+const SUPER_ADMIN_NAME_FIELD = {
+  key: "super_admin_name",
+  label: "超级管理员姓名",
+  required: true,
+} as const satisfies RecognizedFieldDefinition;
 
 const RECOGNIZED_FIELDS: Record<
   (typeof APPLYMENT_OCR_REVIEW_CATEGORIES)[number],
@@ -127,7 +142,7 @@ const RECOGNIZED_FIELDS: Record<
     },
   ],
   contact_id_card_front: [
-    { key: "super_admin_name", label: "超级管理员姓名", required: true },
+    SUPER_ADMIN_NAME_FIELD,
     {
       key: "contact_identity_number",
       label: "经办人身份证号码",
@@ -166,9 +181,26 @@ const RECOGNIZED_FIELDS: Record<
   ],
 };
 
+function getRecognizedFields(
+  category: (typeof APPLYMENT_OCR_REVIEW_CATEGORIES)[number],
+  contactType: string,
+) {
+  if (contactType !== "SUPER" && category.startsWith("contact_id_card_")) {
+    return [];
+  }
+  if (
+    contactType === "LEGAL" &&
+    category === "legal_representative_id_card_front"
+  ) {
+    return [...RECOGNIZED_FIELDS[category], SUPER_ADMIN_NAME_FIELD];
+  }
+  return RECOGNIZED_FIELDS[category];
+}
+
 export function FinanceWechatPayApplymentRecognizedFields({
   selectedCategory,
   contactType,
+  subjectType,
   values,
   fieldSources,
   disabled,
@@ -176,6 +208,7 @@ export function FinanceWechatPayApplymentRecognizedFields({
 }: {
   selectedCategory: WechatPayApplymentAttachmentCategory;
   contactType: string;
+  subjectType: string;
   values: Readonly<Record<string, string>>;
   fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
   disabled?: boolean;
@@ -190,15 +223,18 @@ export function FinanceWechatPayApplymentRecognizedFields({
           aria-label="识别字段核对"
         >
           <FieldGroup className="grid gap-4 md:grid-cols-2">
-            {RECOGNIZED_FIELDS[category]
-              .filter(() =>
-                contactType === "SUPER" ||
-                !category.startsWith("contact_id_card_")
-              )
+            {getRecognizedFields(category, contactType)
               .map((field) => (
                 <RecognizedField
                   key={field.key}
                   field={field}
+                  required={Boolean(
+                    field.required &&
+                    (
+                      field.key !== "identity_address" ||
+                      subjectType === "SUBJECT_TYPE_ENTERPRISE"
+                    ),
+                  )}
                   value={values[field.key] ?? ""}
                   source={fieldSources[field.key]}
                   disabled={disabled}
@@ -214,12 +250,14 @@ export function FinanceWechatPayApplymentRecognizedFields({
 
 function RecognizedField({
   field,
+  required,
   value,
   source,
   disabled,
   onValueChange,
 }: {
   field: RecognizedFieldDefinition;
+  required: boolean;
   value: string;
   source?: ApplymentFieldSource;
   disabled?: boolean;
@@ -230,10 +268,9 @@ function RecognizedField({
     name: field.key,
     defaultValue: value,
     appliedValue: value,
-    requirement: field.required ? "required" as const : "optional" as const,
+    requirement: required ? "required" as const : "optional" as const,
     disabled,
     source,
-    registerInForm: false,
     idPrefix: "wechat-pay-ocr-review",
     onValueChange,
   };
@@ -241,6 +278,7 @@ function RecognizedField({
   return (
     <TextField
       {...shared}
+      required={required && source !== "stored"}
       type={field.type}
       placeholder={
         field.sensitive && source === "stored"
