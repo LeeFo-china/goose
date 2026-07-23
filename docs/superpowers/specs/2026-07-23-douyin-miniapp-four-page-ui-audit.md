@@ -78,7 +78,7 @@ Reading this as：面向有装修需求业主的多租户抖音原生小程序�
 
 - 位置：`components/lead-form/index.ttml:2-35`、`pages/lead/index.ttml:11`
 - 分类：Accessibility
-- 证据：可见标签使用普通 `view`，七个 `input/textarea` 没有 `aria-label`；提交错误统一显示在表单之后。
+- 证据：可见标签使用普通 `view`，七个直接 `input/textarea` 及短信组件内的 `input` 均没有 `aria-label`；提交错误统一显示在表单之后。
 - 影响：读屏用户难以确认当前字段；普通用户提交失败后也需要自己寻找出错字段。
 - 官方边界：抖音 `label` 文档说明当前可直接绑定的控件主要是 button、checkbox、radio、switch，输入框需要通过可访问属性补足名称。
 - 建议：为每个输入控件添加明确 `aria-label`，建立字段错误映射，在字段下方显示错误并保留页面级错误摘要。
@@ -106,7 +106,7 @@ Reading this as：面向有装修需求业主的多租户抖音原生小程序�
 
 - 位置：`pages/lead/index.ttml:5-13`、`components/lead-form/index.ttml`
 - 分类：Responsive / Product UX
-- 证据：首屏连续展示页面说明、七组字段、隐私同意、安全说明和电话入口，主提交按钮位于两屏之后。
+- 证据：首屏连续展示页面说明、八项字段、隐私同意、安全说明和电话入口，主提交按钮位于两屏之后。
 - 影响：用户在完成必要的姓名、手机号、验证码之前，就要理解大量可选信息；核心动作显得遥远。
 - 建议：保留字段名和提交契约，将三项必填信息置于第一组，将房屋信息和需求归为明确的“补充装修信息”区域。设计确认前不改变字段顺序或默认展开策略。
 - 建议命令：`$impeccable distill`
