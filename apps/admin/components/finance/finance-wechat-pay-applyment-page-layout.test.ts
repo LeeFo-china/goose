@@ -211,6 +211,53 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(ocrRequestSource).toContain("/ocr/recognitions/${encodeURIComponent(id)}");
   });
 
+  test("reviews OCR results in an inline responsive workspace", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const reviewUrl = new URL(
+      "./finance-wechat-pay-applyment-ocr-review.tsx",
+      import.meta.url,
+    );
+    const recognizedFieldsUrl = new URL(
+      "./finance-wechat-pay-applyment-recognized-fields.tsx",
+      import.meta.url,
+    );
+
+    expect(existsSync(reviewUrl)).toBe(true);
+    expect(existsSync(recognizedFieldsUrl)).toBe(true);
+    expect(panelSource).toContain("FinanceWechatPayApplymentOcrReview");
+    expect(panelSource).not.toContain("OcrFieldReviewDialog");
+    expect(panelSource).not.toContain("setOcrDialogOpen");
+    if (!existsSync(reviewUrl) || !existsSync(recognizedFieldsUrl)) return;
+
+    const reviewSource = readFileSync(reviewUrl, "utf8");
+    const recognizedFieldsSource = readFileSync(recognizedFieldsUrl, "utf8");
+    expect(reviewSource).toContain(
+      "lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]",
+    );
+    expect(reviewSource).toContain("OcrFieldReviewRows");
+    expect(reviewSource).toContain("改为手动填写");
+    expect(reviewSource).toContain("onUseManualEntry");
+    expect(recognizedFieldsSource).toContain(
+      "hidden={selectedCategory !== category}",
+    );
+    expect(recognizedFieldsSource).toContain("onManualChange");
+  });
+
+  test("persists selected OCR values and confirmed metadata atomically", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const reviewSource = readSource(
+      "./finance-wechat-pay-applyment-ocr-review.tsx",
+    );
+    const persistenceContract = `${panelSource}\n${reviewSource}`;
+
+    expect(persistenceContract).toContain("applyRecognitionRows");
+    expect(persistenceContract).toContain("row.selected");
+    expect(persistenceContract).toContain("ocr_review_status: \"confirmed\"");
+    expect(persistenceContract).toContain("relatedMutation");
+    expect(panelSource).toContain('draft_update_source = "ocr_confirm"');
+    expect(panelSource).toContain('draftUpdateSource: "manual_entry"');
+  });
+
   test("does not report a global save success for partial material checkpoints", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const checkpointStart = panelSource.indexOf(

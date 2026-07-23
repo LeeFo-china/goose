@@ -4,6 +4,7 @@ import type { OcrFieldSuggestion } from "@gooes/domain";
 import {
   buildOcrFieldReviewRows,
   formatOcrReviewValue,
+  getUnreviewedOcrConflictKeys,
   mapApplymentOcrFields,
 } from "./ocr-field-review-dialog";
 
@@ -41,12 +42,49 @@ describe("OCR field review dialog", () => {
     ]);
   });
 
+  test("never selects a manual conflict for silent replacement", () => {
+    const rows = buildOcrFieldReviewRows([
+      field("license_name", "新识别名称"),
+    ], {
+      license_name: "人工修正名称",
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        selected: false,
+        state: "conflict",
+      }),
+    ]);
+  });
+
+  test("detects a form edit made after the review rows were built", () => {
+    const rows = buildOcrFieldReviewRows([
+      field("license_name", "新识别名称"),
+    ], {
+      license_name: "",
+    });
+
+    expect(getUnreviewedOcrConflictKeys(rows, {
+      license_name: "刚刚人工修改的名称",
+    })).toEqual(["license_name"]);
+
+    const reviewedRows = buildOcrFieldReviewRows([
+      field("license_name", "新识别名称"),
+    ], {
+      license_name: "刚刚人工修改的名称",
+    });
+    expect(getUnreviewedOcrConflictKeys(
+      [{ ...reviewedRows[0], selected: true }],
+      { license_name: "刚刚人工修改的名称" },
+    )).toEqual([]);
+  });
+
   test("maps contact identity suggestions to contact applyment fields", () => {
     expect(mapApplymentOcrFields("contact_id_card_front", [
       field("identity_name", "李四"),
       field("identity_number", "41000019900101001x"),
       field("identity_address", "河南省信阳市"),
-    ])).toEqual([
+    ], "SUPER")).toEqual([
       expect.objectContaining({ key: "super_admin_name", value: "李四" }),
       expect.objectContaining({
         key: "contact_identity_number",
@@ -56,6 +94,17 @@ describe("OCR field review dialog", () => {
         key: "contact_identity_address",
         value: "河南省信阳市",
       }),
+    ]);
+  });
+
+  test("copies legal identity name to the legal super administrator", () => {
+    expect(mapApplymentOcrFields(
+      "legal_representative_id_card_front",
+      [field("identity_name", "张三")],
+      "LEGAL",
+    )).toEqual([
+      expect.objectContaining({ key: "identity_name", value: "张三" }),
+      expect.objectContaining({ key: "super_admin_name", value: "张三" }),
     ]);
   });
 
