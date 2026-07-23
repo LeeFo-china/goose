@@ -1,7 +1,7 @@
 @import "../../styles/tokens.ttss";
 
-.consent-row { box-sizing: border-box; display: flex; width: 100%; min-height: 88rpx; align-items: flex-start; gap: 18rpx; margin: 0; padding: 12rpx 0; background: transparent; color: #191817; text-align: left; line-height: normal; }
-.consent-check { box-sizing: border-box; display: flex; width: 40rpx; min-width: 40rpx; height: 40rpx; min-height: 40rpx; margin-top: 3rpx; align-items: center; justify-content: center; border: 2rpx solid #9b948e; border-radius: 8rpx; background: #fff; color: #fff; font-size: 26rpx; line-height: 36rpx; }
-.consent-row[disabled] { opacity: .55; }
+.consent-row { box-sizing: border-box; display: flex; width: 100%; min-height: 88rpx; align-items: flex-start; gap: 6rpx; margin: 0; padding: 12rpx 0; color: #191817; text-align: left; line-height: normal; }
+.consent-toggle { box-sizing: border-box; display: flex; width: 64rpx; min-width: 64rpx; height: 64rpx; min-height: 64rpx; align-items: center; justify-content: center; margin: -9rpx 0 0; padding: 12rpx; border: 0; background: transparent; line-height: normal; }
+.consent-check { box-sizing: border-box; display: flex; width: 40rpx; min-width: 40rpx; height: 40rpx; min-height: 40rpx; align-items: center; justify-content: center; border: 2rpx solid #9b948e; border-radius: 8rpx; background: #fff; color: #fff; font-size: 26rpx; line-height: 36rpx; }
 .consent-copy { min-width: 0; flex: 1; color: #625f5b; font-size: 23rpx; line-height: 1.7; }
 .policy-link { text-decoration: underline; }

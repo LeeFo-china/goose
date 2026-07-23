@@ -84,7 +84,12 @@ test("lead form labels every input and keeps optional details collapsed", async 
   }
   expect(formTemplate).toContain("补充装修信息（选填）");
   expect(formTemplate).toContain('tt:if="{{optionalDetailsExpanded}}"');
+  expect(consentTemplate).toContain('<view class="consent-row"');
+  expect(consentTemplate).toContain('class="consent-toggle ui-pressable"');
   expect(consentTemplate).toContain('catchtap="onOpenPolicy"');
+  expect(consentTemplate).not.toMatch(
+    /<button[^>]*class="consent-row[\s\S]*class="policy-link"/,
+  );
   expect(consentStyle).toMatch(/min-height:\s*88rpx/);
 });
 
