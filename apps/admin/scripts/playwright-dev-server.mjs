@@ -18,7 +18,9 @@ for (const file of filesToRestore) {
 
 function restoreSnapshots() {
   for (const [path, content] of snapshots) {
-    writeFileSync(path, content);
+    if (!existsSync(path) || readFileSync(path, "utf8") !== content) {
+      writeFileSync(path, content);
+    }
   }
 }
 
@@ -26,7 +28,11 @@ const restoreTimer = setInterval(restoreSnapshots, 1_000);
 
 rmSync(nextDistPath, { recursive: true, force: true });
 
+let cleanedUp = false;
+
 function cleanup() {
+  if (cleanedUp) return;
+  cleanedUp = true;
   clearInterval(restoreTimer);
   restoreSnapshots();
   rmSync(nextDistPath, { recursive: true, force: true });
@@ -51,7 +57,6 @@ function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   child.kill(signal);
-  cleanup();
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
