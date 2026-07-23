@@ -62,3 +62,28 @@ test("sites uses a compact public-boundary notice without an alert stripe", asyn
   expect(template).toContain('primary-color="{{primaryColor}}"');
   expect(style).not.toContain("border-left");
 });
+
+test("lead form labels every input and keeps optional details collapsed", async () => {
+  const [formTemplate, smsTemplate, consentTemplate, consentStyle] = await Promise.all([
+    readSource("components/lead-form/index.ttml"),
+    readSource("components/sms-code-input/index.ttml"),
+    readSource("components/privacy-consent/index.ttml"),
+    readSource("components/privacy-consent/index.ttss"),
+  ]);
+  for (const label of [
+    "称呼",
+    "联系电话",
+    "短信验证码",
+    "小区名称",
+    "房屋面积",
+    "预算范围",
+    "计划开工时间",
+    "装修需求",
+  ]) {
+    expect(`${formTemplate}\n${smsTemplate}`).toContain(`aria-label="${label}"`);
+  }
+  expect(formTemplate).toContain("补充装修信息（选填）");
+  expect(formTemplate).toContain('tt:if="{{optionalDetailsExpanded}}"');
+  expect(consentTemplate).toContain('catchtap="onOpenPolicy"');
+  expect(consentStyle).toMatch(/min-height:\s*88rpx/);
+});

@@ -1,13 +1,18 @@
-.lead-form { padding: 34rpx; border-radius: 24rpx; background: #fff; box-shadow: 0 4rpx 18rpx rgba(37,33,30,.07); }
-.field-group { margin-top: 30rpx; }
+@import "../../styles/tokens.ttss";
+
+.lead-form { padding: 30rpx; }
+.field-group { margin-top: 28rpx; }
 .field-group:first-child { margin-top: 0; }
-.field-row { display: flex; gap: 18rpx; }
-.field-half { min-width: 0; flex: 1; }
-.field-label { margin-bottom: 14rpx; color: #514b47; font-size: 25rpx; font-weight: 600; }
-.required { color: #a84324; }
-.field-input, .field-textarea { box-sizing: border-box; width: 100%; border: 1rpx solid #d8d1cb; border-radius: 14rpx; background: #fff; color: #25211e; font-size: 27rpx; }
-.field-input { height: 92rpx; padding: 0 24rpx; }
-.field-textarea { min-height: 184rpx; padding: 22rpx 24rpx; line-height: 1.6; }
-.consent-block { margin-top: 34rpx; }
-.submit-button { box-sizing: border-box; width: 100%; min-height: 96rpx; margin-top: 34rpx; border-radius: 14rpx; color: #fff; font-size: 29rpx; font-weight: 600; line-height: 96rpx; }
+.field-label { margin-bottom: 12rpx; color: #625f5b; font-size: 24rpx; font-weight: 650; }
+.field-input, .field-textarea { width: 100%; font-size: 27rpx; }
+.field-input { height: 92rpx; padding: 0 22rpx; }
+.field-textarea { min-height: 184rpx; padding: 20rpx 22rpx; line-height: 1.6; }
+.optional-toggle { box-sizing: border-box; display: flex; width: 100%; min-height: 104rpx; align-items: center; justify-content: space-between; gap: 20rpx; margin: 30rpx 0 0; padding: 20rpx; border-radius: 12rpx; background: #eceae6; color: #191817; text-align: left; line-height: normal; }
+.optional-copy { min-width: 0; flex: 1; }
+.optional-title { font-size: 26rpx; font-weight: 650; line-height: 1.4; }
+.optional-description { margin-top: 6rpx; color: #625f5b; font-size: 22rpx; line-height: 1.5; }
+.optional-state { flex: none; font-size: 24rpx; }
+.optional-fields { padding-top: 2rpx; }
+.consent-block { margin-top: 30rpx; }
+.submit-button { box-sizing: border-box; width: 100%; min-height: 96rpx; margin-top: 28rpx; border-radius: 12rpx; font-size: 29rpx; font-weight: 650; line-height: 96rpx; }
 .submit-button[disabled] { opacity: .6; }

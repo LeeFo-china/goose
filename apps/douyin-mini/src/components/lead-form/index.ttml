@@ -1,38 +1,51 @@
-<form class="lead-form" bindsubmit="onSubmit">
-  <view class="field-group">
-    <view class="field-label">怎么称呼你 <text class="required">*</text></view>
-    <input class="field-input" data-field="name" maxlength="40" value="{{value.name}}" placeholder="例如：李先生" disabled="{{submitting}}" bindinput="onInput" />
+<form class="lead-form ui-card" bindsubmit="onSubmit">
+  <view class="required-fields">
+    <view class="field-group">
+      <view class="field-label">怎么称呼你 <text class="required" style="color: {{primaryColor}}">*</text></view>
+      <input class="field-input ui-control {{fieldErrors.name ? 'ui-control--error' : ''}}" aria-label="称呼" data-field="name" maxlength="40" value="{{value.name}}" placeholder="例如：李先生" focus="{{focusedField === 'name'}}" disabled="{{submitting}}" bindinput="onInput" />
+      <view tt:if="{{fieldErrors.name}}" class="ui-field-error" role="alert">{{fieldErrors.name}}</view>
+    </view>
+    <view class="field-group">
+      <view class="field-label">联系电话 <text class="required" style="color: {{primaryColor}}">*</text></view>
+      <input class="field-input ui-control {{fieldErrors.phone ? 'ui-control--error' : ''}}" aria-label="联系电话" data-field="phone" type="number" maxlength="11" value="{{value.phone}}" placeholder="请输入手机号" focus="{{focusedField === 'phone'}}" disabled="{{submitting}}" bindinput="onInput" />
+      <view tt:if="{{fieldErrors.phone}}" class="ui-field-error" role="alert">{{fieldErrors.phone}}</view>
+    </view>
+    <view class="field-group">
+      <view class="field-label">短信验证码 <text class="required" style="color: {{primaryColor}}">*</text></view>
+      <sms-code-input value="{{value.sms_code}}" phone-ready="{{phoneReady && !submitting}}" sending="{{smsSending || submitting}}" cooldown="{{smsCooldown}}" focused="{{focusedField === 'sms_code'}}" error="{{fieldErrors.sms_code || ''}}" primary-color="{{primaryColor}}" bindchange="onSmsCodeChange" bindsend="onSendSms" />
+      <view tt:if="{{fieldErrors.sms_code}}" class="ui-field-error" role="alert">{{fieldErrors.sms_code}}</view>
+    </view>
   </view>
-  <view class="field-group">
-    <view class="field-label">联系电话 <text class="required">*</text></view>
-    <input class="field-input" data-field="phone" type="number" maxlength="11" value="{{value.phone}}" placeholder="请输入手机号" disabled="{{submitting}}" bindinput="onInput" />
-  </view>
-  <view class="field-group">
-    <view class="field-label">短信验证码 <text class="required">*</text></view>
-    <sms-code-input value="{{value.sms_code}}" phone-ready="{{phoneReady && !submitting}}" sending="{{smsSending || submitting}}" cooldown="{{smsCooldown}}" bindchange="onSmsCodeChange" bindsend="onSendSms" />
-  </view>
-  <view class="field-group">
-    <view class="field-label">小区名称</view>
-    <input class="field-input" data-field="community" maxlength="80" value="{{value.community}}" placeholder="例如：示例花园" disabled="{{submitting}}" bindinput="onInput" />
-  </view>
-  <view class="field-row">
-    <view class="field-group field-half">
+
+  <button class="optional-toggle ui-pressable" hover-class="ui-pressable--pressed" aria-label="{{optionalDetailsExpanded ? '收起补充装修信息' : '展开补充装修信息'}}" disabled="{{submitting}}" bindtap="onToggleOptionalDetails">
+    <view class="optional-copy"><view class="optional-title">补充装修信息（选填）</view><view class="optional-description">填写小区、面积和计划，有助于装修公司提前了解需求。</view></view>
+    <view class="optional-state" style="color: {{primaryColor}}">{{optionalDetailsExpanded ? '收起' : '展开'}}</view>
+  </button>
+
+  <view tt:if="{{optionalDetailsExpanded}}" class="optional-fields">
+    <view class="field-group">
+      <view class="field-label">小区名称</view>
+      <input class="field-input ui-control" aria-label="小区名称" data-field="community" maxlength="80" value="{{value.community}}" placeholder="例如：示例花园" disabled="{{submitting}}" bindinput="onInput" />
+    </view>
+    <view class="field-group">
       <view class="field-label">房屋面积</view>
-      <input class="field-input" data-field="area" type="digit" maxlength="8" value="{{value.area}}" placeholder="㎡" disabled="{{submitting}}" bindinput="onInput" />
+      <input class="field-input ui-control {{fieldErrors.area ? 'ui-control--error' : ''}}" aria-label="房屋面积" data-field="area" type="digit" maxlength="8" value="{{value.area}}" placeholder="请输入面积（㎡）" focus="{{focusedField === 'area'}}" disabled="{{submitting}}" bindinput="onInput" />
+      <view tt:if="{{fieldErrors.area}}" class="ui-field-error" role="alert">{{fieldErrors.area}}</view>
     </view>
-    <view class="field-group field-half">
+    <view class="field-group">
       <view class="field-label">预算范围</view>
-      <input class="field-input" data-field="budget" maxlength="40" value="{{value.budget}}" placeholder="例如：20-30万" disabled="{{submitting}}" bindinput="onInput" />
+      <input class="field-input ui-control" aria-label="预算范围" data-field="budget" maxlength="40" value="{{value.budget}}" placeholder="例如：20-30万" disabled="{{submitting}}" bindinput="onInput" />
+    </view>
+    <view class="field-group">
+      <view class="field-label">计划开工时间</view>
+      <input class="field-input ui-control" aria-label="计划开工时间" data-field="start_time" maxlength="40" value="{{value.start_time}}" placeholder="例如：三个月内" disabled="{{submitting}}" bindinput="onInput" />
+    </view>
+    <view class="field-group">
+      <view class="field-label">装修需求</view>
+      <textarea class="field-textarea ui-control" aria-label="装修需求" data-field="demand" maxlength="1000" value="{{value.demand}}" placeholder="可填写户型、风格、收纳等重点需求" disabled="{{submitting}}" bindinput="onInput" />
     </view>
   </view>
-  <view class="field-group">
-    <view class="field-label">计划开工时间</view>
-    <input class="field-input" data-field="start_time" maxlength="40" value="{{value.start_time}}" placeholder="例如：三个月内" disabled="{{submitting}}" bindinput="onInput" />
-  </view>
-  <view class="field-group">
-    <view class="field-label">装修需求</view>
-    <textarea class="field-textarea" data-field="demand" maxlength="1000" value="{{value.demand}}" placeholder="可填写户型、风格、收纳等重点需求" disabled="{{submitting}}" bindinput="onInput" />
-  </view>
-  <view class="consent-block"><privacy-consent checked="{{consented}}" company-name="{{companyName}}" disabled="{{submitting}}" bindchange="onConsentChange" bindopenpolicy="onOpenPolicy" /></view>
-  <button class="submit-button" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交装修需求'}}</button>
+
+  <view class="consent-block"><privacy-consent checked="{{consented}}" company-name="{{companyName}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" error="{{fieldErrors.consent || ''}}" disabled="{{submitting}}" bindchange="onConsentChange" bindopenpolicy="onOpenPolicy" /></view>
+  <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交装修需求'}}</button>
 </form>

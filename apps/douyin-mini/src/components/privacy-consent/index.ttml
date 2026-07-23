@@ -1,4 +1,7 @@
-<view class="consent-row">
-  <button class="consent-check {{checked ? 'consent-check--active' : ''}}" aria-label="{{checked ? '取消同意' : '同意隐私政策'}}" disabled="{{disabled}}" bindtap="onToggle">{{checked ? '✓' : ''}}</button>
-  <view class="consent-copy">我已阅读并同意由 {{companyName}} 按照<text class="policy-link" bindtap="onOpenPolicy">《隐私政策与用户协议》</text>处理本次咨询信息。</view>
+<view>
+  <button class="consent-row ui-pressable" hover-class="ui-pressable--pressed" aria-label="{{checked ? '取消同意隐私政策' : '同意隐私政策'}}" disabled="{{disabled}}" bindtap="onToggle">
+    <view class="consent-check" style="{{checked ? 'border-color: ' + primaryColor + '; background-color: ' + primaryColor + '; color: ' + primaryTextColor : ''}}">{{checked ? '✓' : ''}}</view>
+    <view class="consent-copy">我已阅读并同意由 {{companyName}} 按照<text class="policy-link" style="color: {{primaryColor}}" catchtap="onOpenPolicy">《隐私政策与用户协议》</text>处理本次咨询信息。</view>
+  </button>
+  <view tt:if="{{error}}" class="ui-field-error" role="alert">{{error}}</view>
 </view>

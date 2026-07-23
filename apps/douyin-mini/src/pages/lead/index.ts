@@ -10,19 +10,15 @@ import {
   succeedIdempotentSubmission,
   updateIdempotencyDraft,
 } from "../../utils/idempotency";
-
-type LeadField = keyof LeadFormValue;
-type LeadFormValue = {
-  name: string;
-  phone: string;
-  sms_code: string;
-  community: string;
-  area: string;
-  budget: string;
-  start_time: string;
-  demand: string;
-  consented_at: string;
-};
+import {
+  clearLeadFieldError,
+  resolveOptionalDetailsExpanded,
+  toggleOptionalDetails,
+  validateLeadForm,
+  type LeadField,
+  type LeadFieldErrors,
+  type LeadFormValue,
+} from "./form-model";
 
 const INITIAL_FORM: LeadFormValue = {
   name: "",
@@ -51,8 +47,8 @@ Page({
     disabled: false,
     companyName: "装修服务提供方",
     servicePhone: "",
-    primaryColor: "#C45A32",
-    primaryTextColor: "#000000",
+    primaryColor: "#191817",
+    primaryTextColor: "#FFFFFF",
     privacyPolicyVersion: "",
     form: { ...INITIAL_FORM },
     consented: false,
@@ -61,6 +57,9 @@ Page({
     smsCooldown: 0,
     submitting: false,
     formError: "",
+    fieldErrors: {} as LeadFieldErrors,
+    focusedField: "",
+    optionalDetailsExpanded: false,
   },
   onLoad() { void this.load(); },
   onUnload() { this.stopCooldown(); },
@@ -97,6 +96,8 @@ Page({
     );
     this.setData({
       form,
+      fieldErrors: clearLeadFieldError(this.data.fieldErrors, field),
+      focusedField: "",
       phoneReady: /^1[3-9][0-9]{9}$/.test(form.phone),
       formError: "",
     });
@@ -112,7 +113,13 @@ Page({
       this.idempotency,
       toIdempotencyDraft(form, this.data.privacyPolicyVersion),
     );
-    this.setData({ consented, form, formError: "" });
+    this.setData({
+      consented,
+      form,
+      fieldErrors: clearLeadFieldError(this.data.fieldErrors, "consent"),
+      focusedField: "",
+      formError: "",
+    });
   },
   onOpenPolicy() {
     if (this.data.submitting) return;
@@ -123,7 +130,12 @@ Page({
     if (this.data.submitting || this.smsInFlight || this.data.smsCooldown > 0) return;
     const phone = this.data.form.phone.trim();
     if (!/^1[3-9][0-9]{9}$/.test(phone)) {
-      this.setData({ formError: "请先填写正确的手机号" });
+      const phoneError = "请先填写正确的手机号";
+      this.setData({
+        fieldErrors: { ...this.data.fieldErrors, phone: phoneError },
+        focusedField: "phone",
+        formError: phoneError,
+      });
       return;
     }
     this.smsInFlight = true;
@@ -140,10 +152,26 @@ Page({
       this.setData({ smsSending: false });
     }
   },
+  onToggleOptionalDetails() {
+    if (this.data.submitting) return;
+    this.setData({
+      optionalDetailsExpanded: toggleOptionalDetails(this.data.optionalDetailsExpanded),
+    });
+  },
   async onSubmit() {
-    const errorMessage = validateForm(this.data.form, this.data.consented);
-    if (errorMessage) {
-      this.setData({ formError: errorMessage });
+    const validation = validateLeadForm(this.data.form, this.data.consented);
+    if (validation.summary) {
+      this.setData({
+        fieldErrors: validation.fieldErrors,
+        focusedField: validation.firstField === "consent"
+          ? ""
+          : validation.firstField || "",
+        optionalDetailsExpanded: resolveOptionalDetailsExpanded(
+          this.data.optionalDetailsExpanded,
+          validation.firstField,
+        ),
+        formError: validation.summary,
+      });
       return;
     }
     const decision = beginIdempotentSubmission(this.idempotency);
@@ -152,7 +180,12 @@ Page({
       if (decision.state.status === "succeeded") this.openSuccessPage();
       return;
     }
-    this.setData({ submitting: true, formError: "" });
+    this.setData({
+      submitting: true,
+      formError: "",
+      fieldErrors: {},
+      focusedField: "",
+    });
     try {
       const app = getApp<DouyinAppContext>();
       const form = this.data.form;
@@ -200,6 +233,11 @@ Page({
         form,
         consented: false,
         privacyPolicyVersion: bootstrap.privacy_policy_version,
+        fieldErrors: {
+          ...this.data.fieldErrors,
+          consent: "隐私政策已更新，请重新阅读并确认后提交",
+        },
+        focusedField: "",
         formError: "隐私政策已更新，请重新阅读并确认后提交",
       });
     } catch {
@@ -245,18 +283,6 @@ function sanitizeField(field: LeadField, value: string): string {
     name: 40, community: 80, budget: 40, start_time: 40, demand: 1_000,
   };
   return value.slice(0, limits[field] ?? value.length);
-}
-
-function validateForm(form: LeadFormValue, consented: boolean): string | null {
-  if (!form.name.trim()) return "请填写称呼";
-  if (!/^1[3-9][0-9]{9}$/.test(form.phone.trim())) return "请填写正确的手机号";
-  if (!/^[0-9]{6}$/.test(form.sms_code.trim())) return "请填写6位短信验证码";
-  if (form.area.trim()) {
-    const area = Number(form.area);
-    if (!Number.isFinite(area) || area <= 0 || area > 100_000) return "请填写正确的房屋面积";
-  }
-  if (!consented || !form.consented_at) return "请先阅读并同意隐私政策";
-  return null;
 }
 
 function optionalText<Key extends "community" | "budget" | "start_time" | "demand">(

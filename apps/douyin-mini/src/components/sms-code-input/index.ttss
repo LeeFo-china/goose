@@ -1,4 +1,6 @@
-.sms-row { display: flex; gap: 16rpx; }
-.sms-input { box-sizing: border-box; min-width: 0; height: 92rpx; flex: 1; padding: 0 24rpx; border: 1rpx solid #d8d1cb; border-radius: 14rpx; background: #fff; color: #25211e; font-size: 27rpx; }
-.sms-button { box-sizing: border-box; width: 236rpx; height: 92rpx; margin: 0; padding: 0 12rpx; border: 1rpx solid #b84e2d; border-radius: 14rpx; background: #fff7f3; color: #983d22; font-size: 25rpx; line-height: 90rpx; }
-.sms-button[disabled] { border-color: #ddd6d0; background: #f0edeb; color: #958d87; opacity: 1; }
+@import "../../styles/tokens.ttss";
+
+.sms-row { display: flex; gap: 14rpx; }
+.sms-input { min-width: 0; height: 92rpx; flex: 1; padding: 0 22rpx; font-size: 27rpx; }
+.sms-button { box-sizing: border-box; width: 226rpx; height: 92rpx; margin: 0; padding: 0 10rpx; border: 1rpx solid #191817; border-radius: 12rpx; background: #fff; color: #191817; font-size: 24rpx; line-height: 90rpx; }
+.sms-button[disabled] { border-color: #dddad5; background: #eceae6; color: #706c67; opacity: 1; }
