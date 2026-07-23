@@ -3,7 +3,7 @@ import { ApiRequestError } from "../api/request";
 export function loginOnce(): Promise<{ code: string }> {
   return new Promise((resolve, reject) => {
     tt.login({
-      force: false,
+      force: true,
       success: ({ code }) => {
         if (!code) {
           reject(sessionExchangeFailed());
