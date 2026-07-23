@@ -11,7 +11,7 @@ describe("wechat pay database types", () => {
     const notificationRow = {} as Tables<"wechat_payment_notifications">;
     const applymentInsert: Inserts<"tenant_wechat_pay_applyments"> = {
       application_no: "WPA202607010001",
-      merchant_short_name: "晴天装饰",
+      merchant_short_name: null,
       tenant_id: "00000000-0000-4000-8000-000000000002",
     };
     const orderInsert: Inserts<"wechat_payment_orders"> = {

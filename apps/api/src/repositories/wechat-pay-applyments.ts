@@ -12,7 +12,11 @@ type WechatPayApplymentMediaTableRow =
   Tables<"tenant_wechat_pay_applyment_media">;
 
 export type WechatPayApplymentRecord =
-  Omit<WechatPayApplymentTableRow, "sensitive_payload_ciphertext"> & {
+  Omit<
+    WechatPayApplymentTableRow,
+    "merchant_short_name" | "sensitive_payload_ciphertext"
+  > & {
+    merchant_short_name: string | null;
     tenant?: {
       id: string;
       name: string | null;

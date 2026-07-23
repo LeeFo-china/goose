@@ -57,7 +57,7 @@ export type WechatPayApplymentRecord = {
   application_no: string;
   status: string;
   subject_type: string | null;
-  merchant_short_name: string;
+  merchant_short_name: string | null;
   license_name: string | null;
   license_code: string | null;
   license_address: string | null;

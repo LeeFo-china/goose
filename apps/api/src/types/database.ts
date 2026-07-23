@@ -7614,7 +7614,7 @@ export type Database = {
           license_name: string | null
           license_period_begin: string | null
           license_period_end: string | null
-          merchant_short_name: string
+          merchant_short_name: string | null
           opened_at: string | null
           payment_config_id: string | null
           qualification_type: string | null
@@ -7684,7 +7684,7 @@ export type Database = {
           license_name?: string | null
           license_period_begin?: string | null
           license_period_end?: string | null
-          merchant_short_name: string
+          merchant_short_name?: string | null
           opened_at?: string | null
           payment_config_id?: string | null
           qualification_type?: string | null
@@ -7754,7 +7754,7 @@ export type Database = {
           license_name?: string | null
           license_period_begin?: string | null
           license_period_end?: string | null
-          merchant_short_name?: string
+          merchant_short_name?: string | null
           opened_at?: string | null
           payment_config_id?: string | null
           qualification_type?: string | null
@@ -10228,7 +10228,7 @@ export type Database = {
           license_name: string | null
           license_period_begin: string | null
           license_period_end: string | null
-          merchant_short_name: string
+          merchant_short_name: string | null
           opened_at: string | null
           payment_config_id: string | null
           qualification_type: string | null

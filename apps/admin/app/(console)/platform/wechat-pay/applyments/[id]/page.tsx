@@ -57,6 +57,10 @@ export default async function PlatformWechatPayApplymentDetailPage({
   const applyment = data.applyment;
   const statusMeta = getWechatPayApplymentStatusMeta(applyment?.status);
   const settlementRule = resolveSettlementRule(applyment);
+  const merchantDisplayName =
+    applyment?.merchant_short_name?.trim() ||
+    applyment?.tenant?.name?.trim() ||
+    "未填写商户简称";
 
   return (
     <div className="flex min-h-0 flex-col gap-5 overflow-visible lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden">
@@ -92,7 +96,7 @@ export default async function PlatformWechatPayApplymentDetailPage({
               <Card className="shadow-none">
                 <CardHeader>
                   <div className="flex flex-wrap items-center gap-2">
-                    <CardTitle>{applyment.merchant_short_name}</CardTitle>
+                    <CardTitle>{merchantDisplayName}</CardTitle>
                     <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
                     <Badge variant="outline">{applyment.application_no}</Badge>
                   </div>
