@@ -19,3 +19,15 @@ test("global shell imports semantic styles and contains no terracotta tab accent
   expect(shellSource).not.toContain("#a84324");
   expect(appConfig).toContain('"selectedColor": "#191817"');
 });
+
+test("case and site cards lazy load media and expose native press feedback", async () => {
+  const [caseTemplate, siteTemplate] = await Promise.all([
+    readSource("components/case-card/index.ttml"),
+    readSource("components/site-card/index.ttml"),
+  ]);
+  for (const template of [caseTemplate, siteTemplate]) {
+    expect(template).toContain('lazy-load="true"');
+    expect(template).toContain('hover-class="ui-pressable--pressed"');
+    expect(template).toContain("primaryColor");
+  }
+});

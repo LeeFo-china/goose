@@ -1,15 +1,17 @@
-.case { box-sizing: border-box; display: block; width: 100%; overflow: hidden; padding: 0; border: 0; border-radius: 24rpx; background: #fff; box-shadow: 0 4rpx 16rpx rgba(37,33,30,.07); color: #25211e; text-align: left; }
-.case-image { display: block; width: 100%; height: 300rpx; background: #e8e4df; }
-.case-image--empty { display: flex; align-items: center; justify-content: center; color: #706862; font-size: 24rpx; }
+@import "../../styles/tokens.ttss";
+
+.case { display: block; width: 100%; padding: 0; text-align: left; }
+.case-image { display: block; width: 100%; height: 300rpx; background: #eceae6; }
+.case-image--empty { display: flex; align-items: center; justify-content: center; color: #706c67; font-size: 24rpx; }
 .case-body { padding: 28rpx; }
-.case-title { overflow: hidden; font-size: 30rpx; font-weight: 600; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
-.case-meta { margin-top: 10rpx; color: #665f5a; font-size: 24rpx; line-height: 1.5; }
+.case-title { max-height: 84rpx; overflow: hidden; font-size: 30rpx; font-weight: 650; line-height: 1.4; }
+.case-meta { margin-top: 10rpx; color: #625f5b; font-size: 24rpx; line-height: 1.5; }
 .case-footer { display: flex; min-height: 48rpx; margin-top: 22rpx; align-items: center; justify-content: space-between; gap: 16rpx; }
-.case-location { overflow: hidden; color: #514b47; font-size: 24rpx; text-overflow: ellipsis; white-space: nowrap; }
-.case-budget { flex: none; padding: 6rpx 12rpx; border-radius: 8rpx; background: #f4e7e0; color: #8d3d22; font-size: 22rpx; }
+.case-location { overflow: hidden; color: #625f5b; font-size: 24rpx; text-overflow: ellipsis; white-space: nowrap; }
+.case-budget { flex: none; padding: 6rpx 12rpx; border: 1rpx solid; border-radius: 999rpx; background: #f5f5f3; font-size: 22rpx; }
 .case--loading, .case--state { display: flex; min-height: 472rpx; align-items: center; justify-content: center; }
-.case-skeleton { width: calc(100% - 48rpx); height: 424rpx; border-radius: 18rpx; background: #ece9e5; animation: case-pulse 1.4s ease-in-out infinite; }
-.case--state { flex-direction: column; color: #665f5a; font-size: 26rpx; }
-.state-action { min-width: 144rpx; min-height: 88rpx; margin-top: 20rpx; border-radius: 12rpx; background: #25211e; color: #fff; font-size: 26rpx; line-height: 88rpx; }
+.case-skeleton { width: calc(100% - 48rpx); height: 424rpx; border-radius: 16rpx; background: #eceae6; animation: case-pulse 1.4s ease-in-out infinite; }
+.case--state { flex-direction: column; color: #625f5b; font-size: 26rpx; }
+.state-action { min-width: 144rpx; min-height: 88rpx; margin-top: 20rpx; border-radius: 12rpx; background: #191817; color: #fff; font-size: 26rpx; line-height: 88rpx; }
 @keyframes case-pulse { 50% { opacity: .55; } }
 @media (prefers-reduced-motion: reduce) { .case-skeleton { animation: none; opacity: .65; } }

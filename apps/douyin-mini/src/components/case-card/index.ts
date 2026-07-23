@@ -5,6 +5,8 @@ Component({
     fallbackImageUrl: { type: String, value: "" },
     loading: { type: Boolean, value: false },
     error: { type: Boolean, value: false },
+    primaryColor: { type: String, value: "#191817" },
+    primaryTextColor: { type: String, value: "#FFFFFF" },
   },
   observers: {
     "item, fallbackImageUrl"() { this.setData({ imageFailed: false }); },
