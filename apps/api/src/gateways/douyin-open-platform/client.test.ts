@@ -152,7 +152,12 @@ describe("DouyinOpenPlatformClient requests", () => {
       err_no: 0,
       err_tips: "success",
       log_id: "log-template",
-      data: { session_key: "session-key", openid: "openid-value" },
+      data: {
+        session_key: "session-key",
+        openid: "openid-value",
+        anonymous_openid: "",
+        unionid: "unionid-value",
+      },
     }));
     const client = new DouyinOpenPlatformClient({ fetch });
 
@@ -160,7 +165,12 @@ describe("DouyinOpenPlatformClient requests", () => {
       appId: "template-appid",
       appSecret: "component-secret",
       code: "login-code",
-    })).resolves.toMatchObject({ sessionKey: "session-key", openId: "openid-value" });
+    })).resolves.toEqual({
+      sessionKey: "session-key",
+      openId: "openid-value",
+      anonymousOpenId: undefined,
+      unionId: "unionid-value",
+    });
     expect(fetch.mock.calls[0]?.[0]).toBe(
       "https://developer.toutiao.com/api/apps/v2/jscode2session",
     );
