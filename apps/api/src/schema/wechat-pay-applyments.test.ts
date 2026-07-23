@@ -101,6 +101,7 @@ describe("wechat pay applyment schemas", () => {
       contact_type: "LEGAL",
       attachments: [],
       draft_update_source: "autosave",
+      draft_revision: 1,
     }).success).toBe(true);
     expect(CreateWechatPayApplymentSchema.safeParse({
       identity_number: "bad-id",
@@ -113,7 +114,31 @@ describe("wechat pay applyment schemas", () => {
     }).success).toBe(true);
     expect(CreateWechatPayApplymentSchema.safeParse({
       draft_update_source: "autosave",
+      draft_revision: 1,
     }).success).toBe(false);
+  });
+
+  test("requires a positive revision for revision-aware draft saves", () => {
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "最新草稿",
+      draft_update_source: "autosave",
+    }).success).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "最新草稿",
+      draft_update_source: "autosave",
+      draft_revision: 0,
+    }).success).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "最新草稿",
+      draft_update_source: "manual_save",
+      draft_revision: 7,
+    }).success).toBe(true);
+  });
+
+  test("keeps legacy calls compatible only when they do not claim autosave semantics", () => {
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "旧版人工更新",
+    }).success).toBe(true);
   });
 
   test("accepts attachment-only and atomic OCR confirmation checkpoints", () => {
@@ -131,11 +156,13 @@ describe("wechat pay applyment schemas", () => {
         object_key: "tenant/license.jpg",
       }],
       draft_update_source: "attachment_change",
+      draft_revision: 2,
     }).success).toBe(true);
     const confirmation = UpdateWechatPayApplymentSchema.safeParse({
       license_name: "识别后的主体名称",
       attachments: [confirmedAttachment],
       draft_update_source: "ocr_confirm",
+      draft_revision: 3,
     });
     expect(confirmation.success).toBe(true);
     if (!confirmation.success) return;

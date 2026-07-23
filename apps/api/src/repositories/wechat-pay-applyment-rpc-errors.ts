@@ -2,6 +2,32 @@ import { Errors } from "@/errors/error-factory";
 
 type RpcError = { message?: string | null };
 
+export function throwTenantApplymentDraftUpdateError(error: RpcError): never {
+  const message = error.message ?? "";
+  if (message.includes("WECHAT_PAY_APPLYMENT_NOT_FOUND")) {
+    throw Errors.business(
+      404,
+      "微信支付开通申请不存在",
+      "WECHAT_PAY_APPLYMENT_NOT_FOUND",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_NOT_EDITABLE")) {
+    throw Errors.business(
+      409,
+      "当前申请状态不能由租户修改",
+      "WECHAT_PAY_APPLYMENT_NOT_EDITABLE",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_DRAFT_UPDATE_INVALID")) {
+    throw Errors.business(
+      400,
+      "微信支付开通申请草稿版本参数无效",
+      "WECHAT_PAY_APPLYMENT_DRAFT_UPDATE_INVALID",
+    );
+  }
+  throw Errors.dbError("更新微信支付开通申请草稿失败", error);
+}
+
 export function throwApplymentClaimError(error: RpcError): never {
   const message = error.message ?? "";
   if (message.includes("WECHAT_PAY_APPLYMENT_NOT_FOUND")) {

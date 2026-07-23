@@ -20,6 +20,41 @@ type ApplymentDetail<Draft> = {
   can_submit?: boolean;
 };
 
+export class ApplymentDraftRevisionAllocator {
+  private revision: number;
+
+  constructor(serverRevision = 0) {
+    this.revision = normalizeDraftRevision(serverRevision);
+  }
+
+  allocate(
+    payload: ApplymentDraftSavePayload,
+  ): ApplymentDraftSavePayload {
+    this.revision += 1;
+    return {
+      ...payload,
+      draft_revision: this.revision,
+    };
+  }
+
+  preserve(
+    payload: ApplymentDraftSavePayload,
+  ): ApplymentDraftSavePayload {
+    return payload;
+  }
+
+  absorb(serverRevision: number | null | undefined): void {
+    this.revision = Math.max(
+      this.revision,
+      normalizeDraftRevision(serverRevision),
+    );
+  }
+
+  reset(serverRevision = 0): void {
+    this.revision = normalizeDraftRevision(serverRevision);
+  }
+}
+
 export class ApplymentDraftAutosaveCoordinator {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private scheduledPayload: ApplymentDraftSavePayload | null = null;
@@ -251,4 +286,11 @@ function getErrorCode(error: unknown): string {
 
 function assertCurrent(isCurrent: () => boolean): void {
   if (!isCurrent()) throw new ApplymentDraftSaveCancelledError();
+}
+
+function normalizeDraftRevision(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    return 0;
+  }
+  return value;
 }

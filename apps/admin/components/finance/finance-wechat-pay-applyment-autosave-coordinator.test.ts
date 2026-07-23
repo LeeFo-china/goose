@@ -179,13 +179,14 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
       path: string;
       method?: string;
       keepalive?: boolean;
+      revision?: number;
     }> = [];
     let current: Draft | null = null;
     const getCurrent = (): Draft | null => current;
 
     const result = await saveApplymentDraftWithCreateRecovery<Draft>({
       getCurrent,
-      payload: { merchant_short_name: "实时草稿" },
+      payload: { merchant_short_name: "实时草稿", draft_revision: 5 },
       isCurrent: () => true,
       commitCurrent: (draft) => {
         current = draft;
@@ -195,6 +196,9 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
           path,
           method: init?.method,
           keepalive: init?.keepalive,
+          revision: init?.body
+            ? Number(JSON.parse(init.body).draft_revision)
+            : undefined,
         });
         if (
           path === "/finance/wechat-pay/applyments" &&
@@ -220,16 +224,19 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
         path: "/finance/wechat-pay/applyments",
         method: "POST",
         keepalive: true,
+        revision: 5,
       },
       {
         path: "/finance/wechat-pay/applyment/current",
         method: undefined,
         keepalive: true,
+        revision: undefined,
       },
       {
         path: "/finance/wechat-pay/applyments/draft-1",
         method: "PUT",
         keepalive: true,
+        revision: 5,
       },
     ]);
     expect(getCurrent()).toEqual({

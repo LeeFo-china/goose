@@ -46,6 +46,7 @@ function applyment(
     tenant_id: tenantId,
     application_no: "WPA202607210001",
     status: "applying",
+    draft_revision: 0,
     subject_type: "SUBJECT_TYPE_ENTERPRISE",
     merchant_short_name: "晴天装饰",
     license_name: "固始晴天装饰工程有限公司",

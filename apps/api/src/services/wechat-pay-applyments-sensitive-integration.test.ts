@@ -58,6 +58,7 @@ const applyment: WechatPayApplymentRecord = {
   contact_type: "LEGAL",
   created_at: now,
   created_by_employee_id: employeeId,
+  draft_revision: 0,
   has_sensitive_payload: true,
   id: applymentId,
   identity_address_masked: "河南省信阳市***1号",
@@ -141,10 +142,16 @@ const createApplyment = mock(async (input: WechatPayApplymentInsert) => ({
   ...input,
 }) as unknown as WechatPayApplymentRecord);
 const updateApplyment = mock(async (input: {
-  id: string;
-  tenantId?: string;
+  revision: number;
   patch: WechatPayApplymentUpdate;
-}) => ({ ...applyment, ...input.patch }) as unknown as WechatPayApplymentRecord);
+}) => ({
+  outcome: "applied" as const,
+  applyment: {
+    ...applyment,
+    ...input.patch,
+    draft_revision: input.revision,
+  } as unknown as WechatPayApplymentRecord,
+}));
 const insertEvent = mock(
   async (_input: WechatPayApplymentEventInsert) => event,
 );
@@ -180,7 +187,8 @@ async function createService() {
       findById,
       findSensitivePayloadById,
       createApplyment,
-      updateApplyment,
+      updateApplyment: async () => applyment,
+      updateTenantDraftAtomically: updateApplyment,
       submitTenantApplymentAtomically: mock(async () => applyment),
       activateConfigAtomically: mock(async () => applyment),
       insertEvent,
@@ -257,6 +265,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     const insert = createApplyment.mock.calls[0]?.[0];
     expect(insert).toEqual(expect.objectContaining({
       id: applymentId,
+      draft_revision: 1,
       super_admin_phone_masked: "138****0000",
       settlement_account_number_masked: "62**********1234",
       has_sensitive_payload: true,

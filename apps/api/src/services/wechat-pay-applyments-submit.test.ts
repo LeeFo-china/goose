@@ -140,6 +140,10 @@ async function createService() {
       findSensitivePayloadById,
       createApplyment: async () => applyment(),
       updateApplyment,
+      updateTenantDraftAtomically: async () => ({
+        outcome: "applied",
+        applyment: applyment(),
+      }),
       submitTenantApplymentAtomically: submitAtomically,
       activateConfigAtomically: async () => applyment(),
       insertEvent,

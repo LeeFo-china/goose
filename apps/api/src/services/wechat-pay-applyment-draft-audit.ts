@@ -29,6 +29,11 @@ const INTERNAL_SERVER_PATCH_FIELDS = new Set<string>(
   ] satisfies readonly (keyof WechatPayApplymentUpdate)[],
 );
 
+const INTERNAL_DRAFT_INPUT_FIELDS = new Set([
+  "draft_revision",
+  "draft_update_source",
+]);
+
 const ATTACHMENT_COMPARE_FIELDS = [
   "category",
   "file_object_id",
@@ -55,7 +60,7 @@ export function buildDraftChangeAudit(
 ) {
   const changedFields = (
     actualChangedFields ??
-      Object.keys(input).filter((field) => field !== "draft_update_source")
+      Object.keys(input).filter((field) => !INTERNAL_DRAFT_INPUT_FIELDS.has(field))
   ).toSorted();
   const changeSource = "draft_update_source" in input
     ? input.draft_update_source
@@ -116,7 +121,9 @@ function getActualChangedFields(
   const sensitiveFields = new Set(getSensitiveReplacementFields(input.input));
   const changedFields = Object.entries(input.input)
     .filter(([field, value]) => {
-      if (field === "draft_update_source" || value === undefined) return false;
+      if (INTERNAL_DRAFT_INPUT_FIELDS.has(field) || value === undefined) {
+        return false;
+      }
       if (field === "attachments") return attachmentChanges.length > 0;
       if (sensitiveFields.has(field)) return true;
       return value !== currentProjection[field];

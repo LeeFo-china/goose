@@ -6,6 +6,7 @@ import type { OcrRecognitionOwnershipRecord } from "@/repositories/ocr-recogniti
 import type {
   WechatPayApplymentEventInsert,
   WechatPayApplymentEventRecord,
+  WechatPayApplymentDraftUpdateResult,
   WechatPayApplymentInsert,
   WechatPayApplymentListResult,
   WechatPayApplymentMediaInsert,
@@ -40,6 +41,13 @@ export type WechatPayApplymentRepositoryPort = {
     expectedUpdatedAt?: string;
     patch: WechatPayApplymentUpdate;
   }) => Promise<WechatPayApplymentRecord>;
+  updateTenantDraftAtomically: (input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+    revision: number;
+    patch: WechatPayApplymentUpdate;
+  }) => Promise<WechatPayApplymentDraftUpdateResult>;
   submitTenantApplymentAtomically: (input: {
     applymentId: string;
     tenantId: string;

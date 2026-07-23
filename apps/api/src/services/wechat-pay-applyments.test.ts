@@ -33,6 +33,7 @@ const submittedApplyment: WechatPayApplymentRecord = {
   tenant_id: tenantId,
   application_no: "WPA202607010001",
   status: "submitted",
+  draft_revision: 0,
   merchant_short_name: "晴天装饰",
   license_name: "固始晴天装饰工程有限公司",
   license_code: "91411525MA00000000",
@@ -278,6 +279,9 @@ async function createService() {
       findEvents,
       createApplyment,
       updateApplyment,
+      updateTenantDraftAtomically: async () => (
+        { outcome: "applied", applyment: submittedApplyment }
+      ),
       submitTenantApplymentAtomically,
       activateConfigAtomically: mock(async () => submittedApplyment),
       insertEvent,
@@ -366,7 +370,6 @@ describe("WechatPayApplymentService", () => {
       },
     });
   });
-
   test("rejects submit when bank account number has not been captured", async () => {
     findById.mockImplementationOnce(async () => ({
       ...submittedApplyment, status: "draft", settlement_account_number_masked: null,
@@ -416,7 +419,6 @@ describe("WechatPayApplymentService", () => {
     });
     await service.approve(platformAuth, applymentId, { message: "资料合规" });
     await service.reject(platformAuth, applymentId, { reason: "法人信息不一致" });
-
     expect(list.pagination.total).toBe(1);
     expect(updateApplyment).toHaveBeenCalledWith({
       id: applymentId,
@@ -437,7 +439,6 @@ describe("WechatPayApplymentService", () => {
       }),
     });
   });
-
   test("platform repairs an active applyment with dedicated permission", async () => {
     findById.mockImplementationOnce(async () => ({
       ...submittedApplyment,

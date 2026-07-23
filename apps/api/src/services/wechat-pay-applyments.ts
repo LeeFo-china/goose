@@ -160,6 +160,7 @@ export class WechatPayApplymentService {
     const created = await this.repository.createApplyment({
       ...buildTenantApplymentSafePatch(input),
       ...sensitivePatch,
+      draft_revision: input.draft_revision ?? 1,
       id: applymentId,
       tenant_id: tenantId,
       application_no: this.applicationNoFactory(),
@@ -193,6 +194,11 @@ export class WechatPayApplymentService {
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id, tenantId });
     this.assertEditable(current);
+    const currentRevision = current.draft_revision ?? 0;
+    const revision = this.resolveDraftRevision(input, currentRevision);
+    if (revision <= currentRevision) {
+      return this.toDetail(authContext, current);
+    }
 
     const now = this.nowFactory();
     const sensitivePatch = await buildSensitivePayloadUpdate({
@@ -220,27 +226,26 @@ export class WechatPayApplymentService {
       input,
       serverPatch: patch,
     });
-    if (audit.metadata.changed_fields.length === 0) {
-      return this.toDetail(authContext, current);
-    }
-    const updated = await this.repository.updateApplyment({
-      id,
+    const result = await this.repository.updateTenantDraftAtomically({
+      applymentId: id,
       tenantId,
+      employeeId,
+      revision,
       patch,
     });
-    if (audit.should_audit) {
+    if (result.outcome === "applied" && audit.should_audit) {
       await this.recordEvent({
-        applyment: updated,
+        applyment: result.applyment,
         eventType: "updated",
         fromStatus: current.status,
-        toStatus: updated.status,
+        toStatus: result.applyment.status,
         message: "租户更新微信支付开通申请资料",
         operatorEmployeeId: employeeId,
         metadata: audit.metadata,
       });
     }
 
-    return this.toDetail(authContext, updated);
+    return this.toDetail(authContext, result.applyment);
   }
 
   async submit(
@@ -399,6 +404,20 @@ export class WechatPayApplymentService {
       throw Errors.forbidden();
     }
     return authContext.employeeId;
+  }
+
+  private resolveDraftRevision(
+    input: UpdateWechatPayApplymentInput,
+    currentRevision: number,
+  ) {
+    if (input.draft_revision !== undefined) return input.draft_revision;
+    if (currentRevision === 0) return 1;
+    throw Errors.business(
+      409,
+      "草稿已启用版本保护，请刷新后重试",
+      "WECHAT_PAY_APPLYMENT_DRAFT_REVISION_REQUIRED",
+      { current_revision: currentRevision },
+    );
   }
 
   private async getRequiredApplyment(input: {

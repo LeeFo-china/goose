@@ -22,6 +22,7 @@ const activatableApplyment: WechatPayApplymentRecord = {
   tenant_id: tenantId,
   application_no: "WPA202607010001",
   status: "bound",
+  draft_revision: 0,
   merchant_short_name: "晴天装饰",
   license_name: "固始晴天装饰工程有限公司",
   license_code: "91411525MA00000000",
@@ -239,6 +240,10 @@ async function createService() {
       findSensitivePayloadById,
       createApplyment: mock(async () => activatableApplyment),
       updateApplyment,
+      updateTenantDraftAtomically: async () => ({
+        outcome: "applied",
+        applyment: activatableApplyment,
+      }),
       submitTenantApplymentAtomically: mock(async () => activatableApplyment),
       activateConfigAtomically,
       insertEvent,

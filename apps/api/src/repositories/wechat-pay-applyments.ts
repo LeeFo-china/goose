@@ -4,14 +4,17 @@ import {
   throwApplymentClaimError,
   throwTenantApplymentSubmitError,
 } from "@/repositories/wechat-pay-applyment-rpc-errors";
+import {
+  type WechatPayApplymentDraftUpdateInput,
+  type WechatPayApplymentDraftUpdateResult,
+  updateTenantApplymentDraftAtomically,
+} from "@/repositories/wechat-pay-applyment-draft-repository";
 import type { Inserts, Tables, Updates } from "@/types/db";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
-
 type WechatPayApplymentTableRow = Tables<"tenant_wechat_pay_applyments">;
 type WechatPayApplymentMediaTableRow =
   Tables<"tenant_wechat_pay_applyment_media">;
-
 export type WechatPayApplymentRecord =
   Omit<
     WechatPayApplymentTableRow,
@@ -46,7 +49,6 @@ export type WechatPayApplymentMediaRecord = Pick<
 >;
 export type WechatPayApplymentMediaInsert =
   Inserts<"tenant_wechat_pay_applyment_media">;
-
 export type WechatPayApplymentListResult = {
   list: WechatPayApplymentRecord[];
   pagination: {
@@ -56,7 +58,7 @@ export type WechatPayApplymentListResult = {
     totalPages: number;
   };
 };
-
+export type { WechatPayApplymentDraftUpdateResult };
 const APPLYMENT_SAFE_COLUMNS = [
   "id",
   "tenant_id",
@@ -125,6 +127,7 @@ const APPLYMENT_SAFE_COLUMNS = [
   "reviewed_by_employee_id",
   "created_at",
   "updated_at",
+  "draft_revision",
 ].join(", ");
 
 const APPLYMENT_SELECT = [
@@ -334,6 +337,15 @@ export class WechatPayApplymentRepository {
     }
 
     return data as unknown as WechatPayApplymentRecord;
+  }
+
+  async updateTenantDraftAtomically(
+    input: WechatPayApplymentDraftUpdateInput,
+  ): Promise<WechatPayApplymentDraftUpdateResult> {
+    return updateTenantApplymentDraftAtomically({
+      ...input,
+      findById: (target) => this.findById(target),
+    });
   }
 
   async submitTenantApplymentAtomically(input: {

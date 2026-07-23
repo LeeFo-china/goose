@@ -203,6 +203,73 @@ test("在途保存离页后仍提交到服务端", async ({ page, request }) => 
   }).toBe("在途离页提交值");
 });
 
+test("乱序提交仅允许最高 revision 改写服务端草稿", async ({
+  request,
+}) => {
+  const delayResponse = await request.post(
+    `${MOCK_BACKEND_URL}/__test/delay-next-save`,
+    { data: { milliseconds: 1_200 } },
+  );
+  expect(delayResponse.ok()).toBe(true);
+
+  const oldSave = request.put(
+    `${MOCK_BACKEND_URL}/finance/wechat-pay/applyments/33333333-3333-4333-8333-333333333333`,
+    {
+      data: {
+        merchant_short_name: "旧 revision 后提交",
+        draft_update_source: "autosave",
+        draft_revision: 11,
+      },
+    },
+  );
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.started.some((event) => event.draft_revision === 11);
+  }).toBe(true);
+
+  const newSave = await request.put(
+    `${MOCK_BACKEND_URL}/finance/wechat-pay/applyments/33333333-3333-4333-8333-333333333333`,
+    {
+      data: {
+        merchant_short_name: "最新 revision 先提交",
+        draft_update_source: "manual_save",
+        draft_revision: 12,
+      },
+    },
+  );
+  expect(newSave.ok()).toBe(true);
+  expect((await oldSave).ok()).toBe(true);
+
+  const events = await getMockSaveEvents(request);
+  expect(events.started.map((event) => event.draft_revision)).toEqual([
+    11,
+    12,
+  ]);
+  expect(events.committed.map((event) => ({
+    revision: event.draft_revision,
+    outcome: event.outcome,
+  }))).toEqual([
+    { revision: 12, outcome: "applied" },
+    { revision: 11, outcome: "stale" },
+  ]);
+
+  const currentResponse = await request.get(
+    `${MOCK_BACKEND_URL}/finance/wechat-pay/applyment/current`,
+  );
+  const current = await currentResponse.json() as {
+    data: {
+      applyment: {
+        draft_revision: number;
+        merchant_short_name: string;
+      };
+    };
+  };
+  expect(current.data.applyment).toMatchObject({
+    draft_revision: 12,
+    merchant_short_name: "最新 revision 先提交",
+  });
+});
+
 test("BFCache pagehide 恢复后仍可继续自动保存", async ({ page, request }) => {
   await loginAsTenantAdmin(page);
   await page.goto("/finance/wechat-pay/applyment", {

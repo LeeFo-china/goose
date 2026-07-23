@@ -24,7 +24,6 @@ import type {
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const employeeId = "22222222-2222-4222-8222-222222222222";
 const applymentId = "33333333-3333-4333-8333-333333333333";
@@ -35,13 +34,11 @@ const wechatApplymentId = "2000002124775691";
 const subMchid = "1900000109";
 const rootSecret = "mock-e2e-root-secret";
 const baseTime = Date.parse("2026-07-21T10:00:00.000Z");
-
 const keys = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
   publicKeyEncoding: { format: "pem", type: "spki" },
 });
-
 const sensitivePayload = {
   identity_name: "张三",
   identity_number: "41000019900101001X",
@@ -54,17 +51,16 @@ const sensitivePayload = {
   bank_account_name: "固始晴天装饰工程有限公司",
   bank_account_number: "6212345678901234",
 };
-
 const attachmentCategories = ["license_copy",
   "legal_representative_id_card_front", "legal_representative_id_card_back",
   "business_scene_material"] as const;
-
 function createApplyment(): WechatPayApplymentRecord {
   return {
     id: applymentId,
     tenant_id: tenantId,
     application_no: "WPA202607210001",
     status: "approved",
+    draft_revision: 0,
     subject_type: "SUBJECT_TYPE_ENTERPRISE",
     merchant_short_name: "晴天装饰",
     license_name: "固始晴天装饰工程有限公司",
@@ -268,6 +264,10 @@ describe("official WeChat Pay applyment mock E2E", () => {
         } as WechatPayApplymentRecord;
         return current;
       },
+      updateTenantDraftAtomically: async () => ({
+        outcome: "applied",
+        applyment: current,
+      }),
       submitTenantApplymentAtomically: async () => current,
       activateConfigAtomically: async (input) => {
         if (input.expectedUpdatedAt !== current.updated_at) {

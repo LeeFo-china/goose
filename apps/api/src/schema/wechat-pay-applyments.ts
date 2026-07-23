@@ -310,6 +310,7 @@ const DraftTenantApplymentFields = {
     "ocr_confirm",
     "manual_entry",
   ] as const, { message: "无效的草稿更新来源" }).optional(),
+  draft_revision: z.number().int().positive("草稿版本必须为正整数").optional(),
 } satisfies Record<string, z.ZodTypeAny>;
 
 type SettlementRuleFields = {
@@ -398,6 +399,13 @@ export const CreateWechatPayApplymentSchema = z
   .object(DraftTenantApplymentFields)
   .strict()
   .superRefine((input, context) => {
+    if (input.draft_update_source && input.draft_revision === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["draft_revision"],
+        message: "自动保存草稿必须携带版本",
+      });
+    }
     addSettlementRuleIssues(
       getSettlementRuleIssues({
         subject_type: input.subject_type ?? undefined,
@@ -408,7 +416,9 @@ export const CreateWechatPayApplymentSchema = z
     );
   })
   .refine((value) =>
-    Object.keys(value).some((key) => key !== "draft_update_source"), {
+    Object.keys(value).some((key) =>
+      key !== "draft_update_source" && key !== "draft_revision"
+    ), {
     message: "至少需要提交一个草稿字段",
   });
 

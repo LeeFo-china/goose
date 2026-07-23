@@ -41,6 +41,7 @@ function draft(
     tenant_id: tenantId,
     status: "draft",
     applyment_state: "draft",
+    draft_revision: 0,
     remark: "未变备注",
     attachments: [],
     contact_type: "LEGAL",
@@ -54,9 +55,17 @@ function draft(
 }
 
 async function createHarness(current: WechatPayApplymentRecord) {
-  const updateApplyment = mock(async (input: {
+  const updateTenantDraftAtomically = mock(async (input: {
+    revision: number;
     patch: WechatPayApplymentUpdate;
-  }) => ({ ...current, ...input.patch }) as WechatPayApplymentRecord);
+  }) => ({
+    outcome: "applied" as const,
+    applyment: {
+      ...current,
+      ...input.patch,
+      draft_revision: input.revision,
+    } as WechatPayApplymentRecord,
+  }));
   const insertEvent = mock(async (_input: WechatPayApplymentEventInsert) => ({
     id: "44444444-4444-4444-8444-444444444444",
   }) as never);
@@ -68,7 +77,8 @@ async function createHarness(current: WechatPayApplymentRecord) {
       findById: async () => current,
       findSensitivePayloadById: async () => null,
       createApplyment: async () => current,
-      updateApplyment,
+      updateApplyment: async () => current,
+      updateTenantDraftAtomically,
       submitTenantApplymentAtomically: async () => current,
       activateConfigAtomically: async () => current,
       insertEvent,
@@ -87,7 +97,12 @@ async function createHarness(current: WechatPayApplymentRecord) {
       hasPermission: () => true,
     },
   });
-  return { service, updateApplyment, insertEvent, findEvents };
+  return {
+    service,
+    updateApplyment: updateTenantDraftAtomically,
+    insertEvent,
+    findEvents,
+  };
 }
 
 test("audits rejected state reset even when autosave data is unchanged", async () => {
@@ -146,7 +161,7 @@ test("audits wechat editing state reset when autosave data is unchanged", async 
   });
 });
 
-test("treats a new empty attachments array as a draft no-op", async () => {
+test("reserves the revision for a new empty attachments business no-op", async () => {
   const harness = await createHarness(draft());
 
   const result = await harness.service.updateDraft(authContext, applymentId, {
@@ -157,12 +172,13 @@ test("treats a new empty attachments array as a draft no-op", async () => {
 
   expect(result.applyment?.id).toBe(applymentId);
   expect(result.applyment?.updated_at).toBe(updatedAt);
-  expect(harness.updateApplyment).not.toHaveBeenCalled();
+  expect(harness.updateApplyment).toHaveBeenCalledTimes(1);
+  expect(result.applyment?.draft_revision).toBe(1);
   expect(harness.insertEvent).not.toHaveBeenCalled();
   expect(harness.findEvents).toHaveBeenCalledWith({ tenantId, applymentId });
 });
 
-test("treats a deep-copied reviewed attachments array as a draft no-op", async () => {
+test("reserves the revision for a copied reviewed attachments business no-op", async () => {
   const harness = await createHarness(draft({
     attachments: [reviewedAttachment],
   }));
@@ -174,7 +190,8 @@ test("treats a deep-copied reviewed attachments array as a draft no-op", async (
   });
 
   expect(result.applyment?.updated_at).toBe(updatedAt);
-  expect(harness.updateApplyment).not.toHaveBeenCalled();
+  expect(harness.updateApplyment).toHaveBeenCalledTimes(1);
+  expect(result.applyment?.draft_revision).toBe(1);
   expect(harness.insertEvent).not.toHaveBeenCalled();
 });
 

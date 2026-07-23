@@ -88,6 +88,7 @@ const initialApplyment = {
   has_sensitive_payload: true,
   rejected_reason: null,
   sub_mchid: null,
+  draft_revision: 10,
   created_at: now,
   updated_at: now,
 };
@@ -213,13 +214,29 @@ const server = createServer(async (request, response) => {
     if (delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    const { draft_update_source: _draftUpdateSource, ...draftFields } = payload;
-    applyment = {
-      ...applyment,
-      ...draftFields,
-      updated_at: new Date().toISOString(),
-    };
-    committedSaves.push(structuredClone(payload));
+    const incomingRevision = Number(payload.draft_revision);
+    const outcome = Number.isSafeInteger(incomingRevision) &&
+        incomingRevision > applyment.draft_revision
+      ? "applied"
+      : "stale";
+    if (outcome === "applied") {
+      const {
+        draft_update_source: _draftUpdateSource,
+        draft_revision: _draftRevision,
+        ...draftFields
+      } = payload;
+      applyment = {
+        ...applyment,
+        ...draftFields,
+        draft_revision: incomingRevision,
+        updated_at: new Date().toISOString(),
+      };
+    }
+    committedSaves.push(structuredClone({
+      ...payload,
+      outcome,
+      server_draft_revision: applyment.draft_revision,
+    }));
     sendJson(response, 200, {
       success: true,
       data: applymentDetail(),

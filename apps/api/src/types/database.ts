@@ -7600,6 +7600,7 @@ export type Database = {
           contact_type: string | null
           created_at: string
           created_by_employee_id: string | null
+          draft_revision: number
           has_sensitive_payload: boolean
           id: string
           identity_address_masked: string | null
@@ -7670,6 +7671,7 @@ export type Database = {
           contact_type?: string | null
           created_at?: string
           created_by_employee_id?: string | null
+          draft_revision?: number
           has_sensitive_payload?: boolean
           id?: string
           identity_address_masked?: string | null
@@ -7740,6 +7742,7 @@ export type Database = {
           contact_type?: string | null
           created_at?: string
           created_by_employee_id?: string | null
+          draft_revision?: number
           has_sensitive_payload?: boolean
           id?: string
           identity_address_masked?: string | null
@@ -10074,6 +10077,16 @@ export type Database = {
           p_expected_updated_at: string
           p_idempotency_key: string
           p_remark: string | null
+          p_tenant_id: string
+        }
+        Returns: string
+      }
+      update_tenant_wechat_pay_applyment_draft: {
+        Args: {
+          p_applyment_id: string
+          p_employee_id: string
+          p_patch: Json
+          p_revision: number
           p_tenant_id: string
         }
         Returns: string

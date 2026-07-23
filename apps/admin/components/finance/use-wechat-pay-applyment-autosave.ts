@@ -13,6 +13,7 @@ import {
 } from "./finance-wechat-pay-applyment-autosave";
 import {
   ApplymentDraftAutosaveCoordinator,
+  ApplymentDraftRevisionAllocator,
   saveApplymentDraftWithCreateRecovery,
 } from "./finance-wechat-pay-applyment-autosave-coordinator";
 import {
@@ -27,6 +28,7 @@ type AutosaveRuntime = {
   id: symbol;
   queue: ApplymentDraftSaveQueue;
   coordinator: ApplymentDraftAutosaveCoordinator;
+  revisions: ApplymentDraftRevisionAllocator;
   currentApplyment: WechatPayApplymentRecord | null;
 };
 
@@ -75,6 +77,7 @@ export function useWechatPayApplymentAutosave(input: {
             commitCurrent: (applyment) => {
               if (!context.isCurrent()) return;
               activeRuntime.currentApplyment = applyment;
+              activeRuntime.revisions.absorb(applyment.draft_revision);
               if (isAttached()) currentApplymentRef.current = applyment;
             },
             shouldCommitDetail: () =>
@@ -119,6 +122,9 @@ export function useWechatPayApplymentAutosave(input: {
       id: runtimeId,
       queue,
       coordinator: new ApplymentDraftAutosaveCoordinator(queue, 800),
+      revisions: new ApplymentDraftRevisionAllocator(
+        currentApplymentRef.current?.draft_revision,
+      ),
       currentApplyment: currentApplymentRef.current,
     };
     runtimeRef.current = runtime;
@@ -130,6 +136,7 @@ export function useWechatPayApplymentAutosave(input: {
   useEffect(() => {
     const runtime = ensureAutosaveRuntime();
     runtime.coordinator.reset();
+    runtime.revisions.reset(input.detail.applyment?.draft_revision);
     runtime.currentApplyment = input.detail.applyment;
     currentDetailRef.current = input.detail;
     currentApplymentRef.current = input.detail.applyment;
@@ -179,16 +186,20 @@ export function useWechatPayApplymentAutosave(input: {
 
   function scheduleDraftSave(payload: ApplymentDraftSavePayload): void {
     markDraftSaveScheduled();
-    ensureAutosaveRuntime().coordinator.schedule({
+    const runtime = ensureAutosaveRuntime();
+    runtime.coordinator.schedule(runtime.revisions.allocate({
       ...payload,
       draft_update_source: "autosave",
-    });
+    }));
   }
 
   function enqueueMaterialCheckpoint(
     payload: ApplymentDraftSavePayload,
   ): Promise<void> {
-    return ensureAutosaveRuntime().coordinator.checkpoint(payload);
+    const runtime = ensureAutosaveRuntime();
+    return runtime.coordinator.checkpoint(
+      runtime.revisions.allocate(payload),
+    );
   }
 
   function flushDraftSaves(): Promise<void> {
