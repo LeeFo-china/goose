@@ -5,7 +5,14 @@ import type {
   WechatPayApplymentSensitiveRecord,
 } from "@/repositories/wechat-pay-applyments";
 import { encryptApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
-import { createWechatPayApplymentTenantReviewReadinessService } from "@/services/wechat-pay-applyment-review-readiness";
+import {
+  initialApplyment as mockInitialApplyment,
+  mockOcrRecognitions,
+} from "../../../admin/e2e/wechat-pay-applyment-mock-fixture.mjs";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const applymentId = "33333333-3333-4333-8333-333333333333";
@@ -65,14 +72,16 @@ function completeDraft(
   } as WechatPayApplymentRecord;
 }
 
-function sensitiveRecord(): WechatPayApplymentSensitiveRecord {
+function sensitiveRecord(
+  context = { tenantId, applymentId },
+): WechatPayApplymentSensitiveRecord {
   return {
-    id: applymentId,
-    tenant_id: tenantId,
+    id: context.applymentId,
+    tenant_id: context.tenantId,
     has_sensitive_payload: true,
     sensitive_payload_version: 1,
     sensitive_payload_ciphertext: encryptApplymentSensitivePayload({
-      context: { tenantId, applymentId, version: 1 },
+      context: { ...context, version: 1 },
       payload: {
         identity_name: "张三",
         identity_number: "41000019900101001X",
@@ -90,7 +99,10 @@ function sensitiveRecord(): WechatPayApplymentSensitiveRecord {
   };
 }
 
-function createHarness() {
+async function createHarness() {
+  const { createWechatPayApplymentTenantReviewReadinessService } = await import(
+    "@/services/wechat-pay-applyment-review-readiness"
+  );
   const findSensitivePayloadById = mock(async () => sensitiveRecord());
   const findByIdsForTenant = mock(async () => []);
   return {
@@ -106,7 +118,7 @@ function createHarness() {
 
 describe("tenant WeChat Pay applyment review readiness", () => {
   test("returns no formal lifecycle or platform blockers for a complete draft", async () => {
-    const harness = createHarness();
+    const harness = await createHarness();
     const report = await harness.service.runForApplyment(completeDraft());
 
     expect(report).toEqual({
@@ -119,7 +131,7 @@ describe("tenant WeChat Pay applyment review readiness", () => {
   });
 
   test("returns only tenant-actionable blockers for an incomplete draft", async () => {
-    const report = await createHarness().service.runForApplyment(
+    const report = await (await createHarness()).service.runForApplyment(
       completeDraft({ service_phone: null }),
     );
 
@@ -142,5 +154,30 @@ describe("tenant WeChat Pay applyment review readiness", () => {
     expect(source).not.toContain("wechatPaySecretBundleService");
     expect(source).not.toContain("loadApplymentRuntimeProfile");
     expect(source).not.toContain("submission_claimed_at");
+  });
+
+  test("accepts the default Admin E2E fixture through real tenant readiness", async () => {
+    const { createWechatPayApplymentTenantReviewReadinessService } =
+      await import("@/services/wechat-pay-applyment-review-readiness");
+    const applyment =
+      mockInitialApplyment as unknown as WechatPayApplymentRecord;
+    const service = createWechatPayApplymentTenantReviewReadinessService({
+      repository: {
+        findSensitivePayloadById: async () => sensitiveRecord({
+          tenantId: applyment.tenant_id,
+          applymentId: applyment.id,
+        }),
+      },
+      ocrRecognitionRepository: {
+        findByIdsForTenant: async () => mockOcrRecognitions,
+      },
+      encryptionRootSecretFactory: () => rootSecret,
+    });
+
+    expect(await service.runForApplyment(applyment)).toEqual({
+      ready: true,
+      review_ready: true,
+      blockers: [],
+    });
   });
 });

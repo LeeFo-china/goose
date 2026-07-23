@@ -1,10 +1,14 @@
 import { createServer } from "node:http";
+import {
+  getMockAttachmentReadinessBlockers,
+  initialApplyment,
+  mockTenantId,
+} from "./wechat-pay-applyment-mock-fixture.mjs";
 
 const port = Number.parseInt(
   process.env.WECHAT_PAY_APPLYMENT_MOCK_BACKEND_PORT || "3998",
   10,
 );
-const now = "2026-07-23T10:30:00+08:00";
 const session = {
   user_id: "mock-admin-user",
   login_channel: "admin_web",
@@ -20,7 +24,7 @@ const session = {
     avatar: null,
   },
   tenant: {
-    id: "22222222-2222-4222-8222-222222222222",
+    id: mockTenantId,
     name: "复核测试商户",
     slug: "applyment-review-test",
     status: "active",
@@ -31,74 +35,11 @@ const session = {
   expires_at: "2026-12-31T23:59:59+08:00",
 };
 
-const attachmentCategories = [
-  "license_copy",
-  "legal_representative_id_card_front",
-  "legal_representative_id_card_back",
-  "settlement_account_proof",
-];
-const attachments = attachmentCategories.map((category, index) => ({
-  category,
-  file_object_id: `00000000-0000-4000-8000-00000000000${index}`,
-  object_key: `tenants/mock/${category}.png`,
-  file_name: `${category}.png`,
-  content_type: "image/png",
-  size: 68,
-  ocr_recognition_id: null,
-  ocr_review_status: "confirmed",
-}));
-const initialApplyment = {
-  id: "33333333-3333-4333-8333-333333333333",
-  tenant_id: session.tenant.id,
-  application_no: "WPA202607230001",
-  status: "draft",
-  subject_type: "SUBJECT_TYPE_ENTERPRISE",
-  merchant_short_name: "复核测试简称",
-  license_name: "复核测试商户有限公司",
-  license_code: "91410000TEST000001",
-  license_address: "测试注册地址",
-  license_period_begin: "2020-01-01",
-  license_period_end: "长期",
-  legal_representative_name: "测试法人",
-  identity_doc_type: "IDENTIFICATION_TYPE_IDCARD",
-  identity_address_masked: "测试省测试市••••",
-  identity_period_begin: "2020-01-01",
-  identity_period_end: "长期",
-  contact_type: "LEGAL",
-  super_admin_name: "测试法人",
-  super_admin_phone_masked: "138****1234",
-  super_admin_email: "admin@example.com",
-  contact_identity_doc_type: null,
-  contact_identity_period_begin: null,
-  contact_identity_period_end: null,
-  service_phone: "4008001234",
-  settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
-  settlement_account_name: "复核测试商户有限公司",
-  settlement_account_number_masked: "6222••••1234",
-  settlement_bank_name: "测试银行",
-  settlement_bank_full_name: "测试银行营业部",
-  settlement_bank_branch_id: "123456789012",
-  settlement_account_summary: "测试银行营业部 6222••••1234",
-  settlement_id: "716",
-  qualification_type: "零售批发",
-  business_scene_description: "线下家装服务",
-  contact_address: "测试市测试区一号",
-  attachments,
-  remark: "待提交复核",
-  has_sensitive_payload: true,
-  rejected_reason: null,
-  sub_mchid: null,
-  draft_epoch: 1,
-  draft_revision: 10,
-  created_at: now,
-  updated_at: now,
-};
 let applyment = structuredClone(initialApplyment);
 let startedSaves = [];
 let committedSaves = [];
 let nextSaveDelayMs = 0;
-const defaultReadinessBlockers = [];
-let readinessBlockers = structuredClone(defaultReadinessBlockers);
+let injectedReadinessBlockers = [];
 
 const capabilities = [
   ["business_license", ["license_copy"]],
@@ -138,7 +79,11 @@ function readBody(request) {
 }
 
 function applymentDetail() {
-  const ready = readinessBlockers.length === 0;
+  const blockers = deduplicateBlockers([
+    ...getMockAttachmentReadinessBlockers(applyment),
+    ...injectedReadinessBlockers,
+  ]);
+  const ready = blockers.length === 0;
   const canEdit = ["draft", "rejected", "wechat_editing"].includes(
     applyment.status,
   );
@@ -151,7 +96,7 @@ function applymentDetail() {
     submission_readiness: {
       ready,
       review_ready: ready,
-      blockers: readinessBlockers,
+      blockers,
     },
   };
 }
@@ -172,7 +117,7 @@ const server = createServer(async (request, response) => {
     startedSaves = [];
     committedSaves = [];
     nextSaveDelayMs = 0;
-    readinessBlockers = structuredClone(defaultReadinessBlockers);
+    injectedReadinessBlockers = [];
     sendJson(response, 200, { success: true });
     return;
   }
@@ -181,7 +126,7 @@ const server = createServer(async (request, response) => {
     url.pathname === "/__test/readiness"
   ) {
     const body = JSON.parse(await readBody(request) || "{}");
-    readinessBlockers = Array.isArray(body.blockers)
+    injectedReadinessBlockers = Array.isArray(body.blockers)
       ? structuredClone(body.blockers)
       : [];
     sendJson(response, 200, { success: true });
@@ -327,6 +272,16 @@ const server = createServer(async (request, response) => {
     message: `Mock route not found: ${request.method} ${url.pathname}`,
   });
 });
+
+function deduplicateBlockers(blockers) {
+  const seen = new Set();
+  return blockers.filter((blocker) => {
+    const key = JSON.stringify(blocker);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 server.listen(port, "127.0.0.1", () => {
   console.log(
