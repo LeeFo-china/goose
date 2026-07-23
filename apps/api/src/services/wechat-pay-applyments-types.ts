@@ -22,6 +22,7 @@ import type {
 } from "@/repositories/wechat-pay-configs";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
 import type { AuthContext } from "@/services/authorization";
+import type { Json } from "@/types/database";
 
 export type WechatPayApplymentRepositoryPort = {
   findLatestByTenant: (tenantId: string) => Promise<WechatPayApplymentRecord | null>;
@@ -48,6 +49,7 @@ export type WechatPayApplymentRepositoryPort = {
     epoch: number;
     revision: number;
     patch: WechatPayApplymentUpdate;
+    auditMetadata: Json | null;
   }) => Promise<WechatPayApplymentDraftUpdateResult>;
   claimTenantDraftSession: (input: {
     applymentId: string;

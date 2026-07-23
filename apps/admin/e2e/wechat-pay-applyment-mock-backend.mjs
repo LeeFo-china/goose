@@ -233,12 +233,13 @@ const server = createServer(async (request, response) => {
     }
     const incomingEpoch = Number(payload.draft_epoch);
     const incomingRevision = Number(payload.draft_revision);
-    const outcome = Number.isSafeInteger(incomingEpoch) &&
-        incomingEpoch === applyment.draft_epoch &&
-        Number.isSafeInteger(incomingRevision) &&
-        incomingRevision > applyment.draft_revision
-      ? "applied"
-      : "stale";
+    const outcome = !Number.isSafeInteger(incomingEpoch) ||
+        incomingEpoch !== applyment.draft_epoch
+      ? "stale_epoch"
+      : !Number.isSafeInteger(incomingRevision) ||
+          incomingRevision <= applyment.draft_revision
+      ? "same_or_older_revision"
+      : "applied";
     if (outcome === "applied") {
       const {
         draft_update_source: _draftUpdateSource,
@@ -259,6 +260,14 @@ const server = createServer(async (request, response) => {
       server_draft_epoch: applyment.draft_epoch,
       server_draft_revision: applyment.draft_revision,
     }));
+    if (outcome === "stale_epoch") {
+      sendJson(response, 409, {
+        success: false,
+        code: "WECHAT_PAY_APPLYMENT_DRAFT_SESSION_STALE",
+        message: "其他页面已接管当前草稿，请刷新页面后继续",
+      });
+      return;
+    }
     sendJson(response, 200, {
       success: true,
       data: applymentDetail(),

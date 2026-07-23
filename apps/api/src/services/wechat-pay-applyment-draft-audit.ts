@@ -63,15 +63,16 @@ export function buildDraftChangeAudit(
     actualChangedFields ??
       Object.keys(input).filter((field) => !INTERNAL_DRAFT_INPUT_FIELDS.has(field))
   ).toSorted();
-  const changeSource = "draft_update_source" in input
+  const changeSource = "draft_update_source" in input &&
+      typeof input.draft_update_source === "string"
     ? input.draft_update_source
-    : undefined;
+    : "manual_save";
   const sensitiveReplacementFields = new Set(
     getSensitiveReplacementFields(input),
   );
   return {
     changed_fields: changedFields,
-    change_source: changeSource ?? "manual_save",
+    change_source: changeSource,
     has_sensitive_replacement: changedFields.some((field) =>
       sensitiveReplacementFields.has(field)
     ),

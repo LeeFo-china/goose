@@ -7,6 +7,7 @@ import type {
 } from "@/repositories/wechat-pay-applyments";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { AuthContext } from "@/services/authorization";
+import type { Json } from "@/types/database";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -59,6 +60,7 @@ async function createHarness(current: WechatPayApplymentRecord) {
   const updateTenantDraftAtomically = mock(async (input: {
     revision: number;
     patch: WechatPayApplymentUpdate;
+    auditMetadata: Json | null;
   }) => ({
     outcome: "applied" as const,
     applyment: {
@@ -131,7 +133,8 @@ test("audits rejected state reset even when autosave data is unchanged", async (
       rejected_reason: null,
     }),
   );
-  const metadata = harness.insertEvent.mock.calls[0]?.[0]?.metadata;
+  const metadata =
+    harness.updateApplyment.mock.calls[0]?.[0]?.auditMetadata;
   expect(metadata).toEqual({
     changed_fields: [
       "applyment_state",
@@ -144,6 +147,7 @@ test("audits rejected state reset even when autosave data is unchanged", async (
     forced_audit: true,
   });
   expect(JSON.stringify(metadata)).not.toContain(rejectedReason);
+  expect(harness.insertEvent).not.toHaveBeenCalled();
 });
 
 test("audits wechat editing state reset when autosave data is unchanged", async () => {
@@ -159,12 +163,13 @@ test("audits wechat editing state reset when autosave data is unchanged", async 
     draft_revision: 1,
   });
 
-  expect(harness.insertEvent.mock.calls[0]?.[0]?.metadata).toEqual({
+  expect(harness.updateApplyment.mock.calls[0]?.[0]?.auditMetadata).toEqual({
     changed_fields: ["applyment_state", "status"],
     change_source: "manual_entry",
     has_sensitive_replacement: false,
     forced_audit: true,
   });
+  expect(harness.insertEvent).not.toHaveBeenCalled();
 });
 
 test("reserves the revision for a new empty attachments business no-op", async () => {
@@ -183,6 +188,7 @@ test("reserves the revision for a new empty attachments business no-op", async (
   expect(harness.updateApplyment).toHaveBeenCalledTimes(1);
   expect(result.applyment?.draft_revision).toBe(1);
   expect(harness.insertEvent).not.toHaveBeenCalled();
+  expect(harness.updateApplyment.mock.calls[0]?.[0]?.auditMetadata).toBeNull();
   expect(harness.findEvents).toHaveBeenCalledWith({ tenantId, applymentId });
 });
 
@@ -203,6 +209,7 @@ test("reserves the revision for a copied reviewed attachments business no-op", a
   expect(harness.updateApplyment).toHaveBeenCalledTimes(1);
   expect(result.applyment?.draft_revision).toBe(1);
   expect(harness.insertEvent).not.toHaveBeenCalled();
+  expect(harness.updateApplyment.mock.calls[0]?.[0]?.auditMetadata).toBeNull();
 });
 
 test("audits an actual attachment review metadata change", async () => {
@@ -226,10 +233,11 @@ test("audits an actual attachment review metadata change", async () => {
   });
 
   expect(harness.updateApplyment).toHaveBeenCalledTimes(1);
-  expect(harness.insertEvent.mock.calls[0]?.[0]?.metadata).toEqual({
+  expect(harness.updateApplyment.mock.calls[0]?.[0]?.auditMetadata).toEqual({
     changed_fields: ["attachments"],
     change_source: "manual_entry",
     has_sensitive_replacement: false,
     forced_audit: true,
   });
+  expect(harness.insertEvent).not.toHaveBeenCalled();
 });

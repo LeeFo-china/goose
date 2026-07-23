@@ -32,6 +32,7 @@ import {
   buildTenantApplymentSafePatch,
   hasSensitiveDraftValues,
   sanitizeApplymentRecord,
+  throwDraftSessionStale,
 } from "@/services/wechat-pay-applyment-draft";
 import {
   encryptApplymentSensitivePayload,
@@ -203,7 +204,10 @@ export class WechatPayApplymentService {
     }
     const currentEpoch = current.draft_epoch ?? 0;
     const currentRevision = current.draft_revision ?? 0;
-    if (epoch !== currentEpoch || revision <= currentRevision) {
+    if (epoch !== currentEpoch) {
+      throwDraftSessionStale(id, currentEpoch, epoch);
+    }
+    if (revision <= currentRevision) {
       return this.toDetail(authContext, current);
     }
 
@@ -240,17 +244,10 @@ export class WechatPayApplymentService {
       epoch,
       revision,
       patch,
+      auditMetadata: audit.should_audit ? audit.metadata : null,
     });
-    if (result.outcome === "applied" && audit.should_audit) {
-      await this.recordEvent({
-        applyment: result.applyment,
-        eventType: "updated",
-        fromStatus: current.status,
-        toStatus: result.applyment.status,
-        message: "租户更新微信支付开通申请资料",
-        operatorEmployeeId: employeeId,
-        metadata: audit.metadata,
-      });
+    if (result.outcome === "stale_epoch") {
+      throwDraftSessionStale(id, result.applyment.draft_epoch ?? 0, epoch);
     }
 
     return this.toDetail(authContext, result.applyment);

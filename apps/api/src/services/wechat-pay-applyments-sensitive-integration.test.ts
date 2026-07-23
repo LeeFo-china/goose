@@ -138,6 +138,7 @@ const createApplyment = mock(async (input: WechatPayApplymentInsert) => ({
 const updateApplyment = mock(async (input: {
   revision: number;
   patch: WechatPayApplymentUpdate;
+  auditMetadata: unknown;
 }) => ({
   outcome: "applied" as const,
   applyment: {
@@ -240,7 +241,6 @@ const createInput = {
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
 };
-
 describe("WechatPayApplymentService sensitive persistence", () => {
   beforeEach(() => {
     findLatestByTenant.mockClear();
@@ -291,7 +291,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       rootSecret,
     })).toEqual(sensitivePayload);
   });
-
   test("creates a shell draft without encrypted sensitive data", async () => {
     const service = await createService();
     await service.createDraft(authContext, {
@@ -338,15 +337,16 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       ciphertext: patch?.sensitive_payload_ciphertext ?? "",
       rootSecret,
     })).toEqual({ identity_name: "张三" });
-    const updateEvent = insertEvent.mock.calls[0]?.[0];
-    expect(updateEvent?.metadata).toEqual({
+    const auditMetadata = updateApplyment.mock.calls[0]?.[0]?.auditMetadata;
+    expect(auditMetadata).toEqual({
       changed_fields: ["attachments", "identity_name"],
       change_source: "ocr_confirm",
       has_sensitive_replacement: true,
       forced_audit: true,
     });
-    expect(JSON.stringify(updateEvent?.metadata)).not.toContain("张三");
-    expect(JSON.stringify(updateEvent?.metadata)).not.toContain(recognitionId);
+    expect(JSON.stringify(auditMetadata)).not.toContain("张三");
+    expect(JSON.stringify(auditMetadata)).not.toContain(recognitionId);
+    expect(insertEvent).not.toHaveBeenCalled();
   });
 
   test("does not create empty ciphertext for contact type only", async () => {

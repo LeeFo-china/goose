@@ -18,6 +18,23 @@ type TenantApplymentInput =
   | CreateWechatPayApplymentInput
   | UpdateWechatPayApplymentInput;
 
+export function throwDraftSessionStale(
+  applymentId: string,
+  currentEpoch: number,
+  receivedEpoch: number,
+): never {
+  throw Errors.business(
+    409,
+    "其他页面已接管当前草稿，请刷新页面后继续",
+    "WECHAT_PAY_APPLYMENT_DRAFT_SESSION_STALE",
+    {
+      applyment_id: applymentId,
+      current_epoch: currentEpoch,
+      received_epoch: receivedEpoch,
+    },
+  );
+}
+
 const SENSITIVE_DRAFT_FIELD_MAPPINGS = [
   { source: "identity_name", target: "identity_name" },
   { source: "identity_number", target: "identity_number" },

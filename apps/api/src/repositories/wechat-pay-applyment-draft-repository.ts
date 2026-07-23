@@ -17,10 +17,11 @@ export type WechatPayApplymentDraftUpdateInput = {
   epoch: number;
   revision: number;
   patch: WechatPayApplymentUpdate;
+  auditMetadata: Json | null;
 };
 
 export type WechatPayApplymentDraftUpdateResult = {
-  outcome: "applied" | "stale";
+  outcome: "applied" | "same_or_older_revision" | "stale_epoch";
   applyment: WechatPayApplymentRecord;
 };
 
@@ -76,11 +77,16 @@ export async function updateTenantApplymentDraftAtomically(
       p_epoch: input.epoch,
       p_revision: input.revision,
       p_patch: input.patch as Json,
+      p_audit_metadata: input.auditMetadata,
     },
   );
 
   if (error) throwTenantApplymentDraftUpdateError(error);
-  if (data !== "applied" && data !== "stale") {
+  if (
+    data !== "applied" &&
+    data !== "same_or_older_revision" &&
+    data !== "stale_epoch"
+  ) {
     throw Errors.dbError("更新微信支付开通申请草稿失败");
   }
   const applyment = await input.findById({

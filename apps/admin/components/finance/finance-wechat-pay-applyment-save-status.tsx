@@ -21,10 +21,12 @@ import {
 export function FinanceWechatPayApplymentSaveStatus({
   state,
   error,
+  canRetry,
   onRetry,
 }: {
   state: ApplymentDraftSaveState;
   error: string;
+  canRetry: boolean;
   onRetry: () => void;
 }) {
   if (state === "idle") return null;
@@ -56,15 +58,19 @@ export function FinanceWechatPayApplymentSaveStatus({
       <AlertTitle>保存失败</AlertTitle>
       <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
         <span>{error || "本地填写内容仍保留，请重试保存。"}</span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={onRetry}
-        >
-          <RotateCcw data-icon="inline-start" />
-          重试保存
-        </Button>
+        {canRetry
+          ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onRetry}
+            >
+              <RotateCcw data-icon="inline-start" />
+              重试保存
+            </Button>
+          )
+          : null}
       </AlertDescription>
     </Alert>
   );
@@ -78,6 +84,7 @@ export function FinanceWechatPayApplymentPanelStatus({
   stageError,
   materialsError,
   editable,
+  canRetrySave,
   onRetry,
 }: {
   applyment: WechatPayApplymentRecord | null;
@@ -87,6 +94,7 @@ export function FinanceWechatPayApplymentPanelStatus({
   stageError: string;
   materialsError: string;
   editable: boolean;
+  canRetrySave: boolean;
   onRetry: () => void;
 }) {
   const statusMeta = getWechatPayApplymentStatusMeta(applyment?.status);
@@ -95,6 +103,7 @@ export function FinanceWechatPayApplymentPanelStatus({
       <FinanceWechatPayApplymentSaveStatus
         state={saveState}
         error={saveError}
+        canRetry={canRetrySave}
         onRetry={onRetry}
       />
       {error ? <StatusAlert>{error}</StatusAlert> : null}

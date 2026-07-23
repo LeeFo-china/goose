@@ -6,6 +6,8 @@ import {
 
 const DEFAULT_AUTOSAVE_DELAY_MS = 800;
 const MAX_KEEPALIVE_BODY_BYTES = 60 * 1024;
+const DRAFT_SESSION_STALE_CODE =
+  "WECHAT_PAY_APPLYMENT_DRAFT_SESSION_STALE";
 
 type RequestInit = {
   method?: "POST" | "PUT";
@@ -53,6 +55,24 @@ export class ApplymentDraftRevisionAllocator {
   reset(serverRevision = 0): void {
     this.revision = normalizeDraftRevision(serverRevision);
   }
+}
+
+export function classifyApplymentDraftSaveError(error: unknown): {
+  isSessionStale: boolean;
+  message: string;
+} {
+  if (getErrorCode(error) === DRAFT_SESSION_STALE_CODE) {
+    return {
+      isSessionStale: true,
+      message: "其他页面已接管当前草稿，请刷新页面后继续。",
+    };
+  }
+  return {
+    isSessionStale: false,
+    message: error instanceof Error
+      ? error.message
+      : "微信支付开通申请保存失败",
+  };
 }
 
 export class ApplymentDraftAutosaveCoordinator {

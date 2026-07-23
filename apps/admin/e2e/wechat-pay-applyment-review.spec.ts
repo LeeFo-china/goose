@@ -182,6 +182,9 @@ test("在途保存离页后仍提交到服务端", async ({ page, request }) => 
     waitUntil: "networkidle",
   });
   await stageButton(page, "补充信息").click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "已自动保存" }),
+  ).toBeVisible();
 
   const delayResponse = await request.post(
     `${MOCK_BACKEND_URL}/__test/delay-next-save`,
@@ -252,7 +255,7 @@ test("乱序提交仅允许最高 revision 改写服务端草稿", async ({
     outcome: event.outcome,
   }))).toEqual([
     { revision: 12, outcome: "applied" },
-    { revision: 11, outcome: "stale" },
+    { revision: 11, outcome: "same_or_older_revision" },
   ]);
 
   const currentResponse = await request.get(
@@ -335,9 +338,21 @@ test("旧页面高 revision 晚到不能覆盖新页面 epoch", async ({
   }).toMatchObject({
     draft_epoch: 2,
     draft_revision: 99,
-    outcome: "stale",
+    outcome: "stale_epoch",
     server_draft_epoch: 3,
   });
+  await expect(page.getByText("保存失败", { exact: true })).toBeVisible();
+  await expect(page.getByText("其他页面已接管当前草稿")).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "已自动保存" }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("商户简称")).toHaveValue("旧页面高 revision");
+
+  await stageButton(page, "确认提交").click();
+  await page.getByRole("checkbox", { name: "确认资料真实有效" }).click();
+  await expect(
+    page.getByRole("button", { name: "提交平台审核" }),
+  ).toBeDisabled();
 
   const currentResponse = await request.get(
     `${MOCK_BACKEND_URL}/finance/wechat-pay/applyment/current`,

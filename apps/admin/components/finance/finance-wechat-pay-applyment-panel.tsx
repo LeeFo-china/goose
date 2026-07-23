@@ -378,6 +378,7 @@ export function FinanceWechatPayApplymentPanel({
           stageError={navigation.stageError}
           materialsError={materials.error}
           editable={editable}
+          canRetrySave={autosave.canRetrySave}
           onRetry={() => {
             void autosave.retryLastSave().catch(() => undefined);
           }}

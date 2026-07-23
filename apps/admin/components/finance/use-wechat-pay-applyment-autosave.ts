@@ -13,6 +13,7 @@ import {
 } from "./finance-wechat-pay-applyment-autosave";
 import {
   ApplymentDraftAutosaveCoordinator,
+  classifyApplymentDraftSaveError,
   saveApplymentDraftWithCreateRecovery,
 } from "./finance-wechat-pay-applyment-autosave-coordinator";
 import {
@@ -47,6 +48,7 @@ export function useWechatPayApplymentAutosave(input: {
   const [saveState, setSaveState] =
     useState<ApplymentDraftSaveState>("idle");
   const [saveError, setSaveError] = useState("");
+  const [isSessionStale, setIsSessionStale] = useState(false);
   const lastFailedPayloadRef = useRef<ApplymentDraftSavePayload | null>(null);
   const runtimeRef = useRef<AutosaveRuntime | null>(null);
   const mountedRef = useRef(false);
@@ -110,6 +112,7 @@ export function useWechatPayApplymentAutosave(input: {
             !activeRuntime.coordinator.isLatestPayload(payload)
           ) return;
           lastFailedPayloadRef.current = null;
+          setIsSessionStale(false);
           setSaveState("saved");
         } catch (error) {
           if (
@@ -118,11 +121,11 @@ export function useWechatPayApplymentAutosave(input: {
             activeRuntime.coordinator.isLatestPayload(payload) &&
             !isApplymentDraftSaveCancelledError(error)
           ) {
+            const failure = classifyApplymentDraftSaveError(error);
             lastFailedPayloadRef.current = attemptedPayload;
-            setSaveError(
-              error instanceof Error
-                ? error.message
-                : "微信支付开通申请保存失败",
+            setSaveError(failure.message);
+            setIsSessionStale((stale) =>
+              stale || failure.isSessionStale
             );
             setSaveState("failed");
           }
@@ -167,6 +170,7 @@ export function useWechatPayApplymentAutosave(input: {
     lastFailedPayloadRef.current = null;
     setSaveState("idle");
     setSaveError("");
+    setIsSessionStale(false);
   }, [input.detail, input.resetKey]);
 
   useEffect(() => {
@@ -239,7 +243,8 @@ export function useWechatPayApplymentAutosave(input: {
     currentApplyment: currentDetail.applyment,
     currentApplymentRef,
     canEdit: currentDetail.can_edit,
-    canSubmit: currentDetail.can_submit,
+    canSubmit: currentDetail.can_submit && !isSessionStale,
+    canRetrySave: !isSessionStale,
     saveState,
     saveError,
     scheduleDraftSave,

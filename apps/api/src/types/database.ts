@@ -10095,6 +10095,7 @@ export type Database = {
       update_tenant_wechat_pay_applyment_draft: {
         Args: {
           p_applyment_id: string
+          p_audit_metadata: Json | null
           p_employee_id: string
           p_epoch: number
           p_patch: Json

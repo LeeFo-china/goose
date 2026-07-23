@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 
 import { ApplymentDraftSaveQueue } from "./finance-wechat-pay-applyment-autosave";
 import {
   ApplymentDraftAutosaveCoordinator,
+  classifyApplymentDraftSaveError,
   saveApplymentDraftWithCreateRecovery,
 } from "./finance-wechat-pay-applyment-autosave-coordinator";
 
@@ -10,6 +11,40 @@ const delay = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 describe("wechat pay applyment stale autosave responses", () => {
+  test("classifies a stale draft epoch as a taken-over session", () => {
+    const error = Object.assign(new Error("草稿会话已失效"), {
+      code: "WECHAT_PAY_APPLYMENT_DRAFT_SESSION_STALE",
+    });
+
+    expect(classifyApplymentDraftSaveError(error)).toEqual({
+      isSessionStale: true,
+      message: "其他页面已接管当前草稿，请刷新页面后继续。",
+    });
+  });
+
+  test("does not commit current draft or detail after a stale epoch response", async () => {
+    const commitCurrent = mock();
+    const commitDetail = mock();
+    const staleError = Object.assign(new Error("草稿会话已失效"), {
+      code: "WECHAT_PAY_APPLYMENT_DRAFT_SESSION_STALE",
+    });
+
+    await expect(
+      saveApplymentDraftWithCreateRecovery({
+        getCurrent: () => ({ id: "draft-1" }),
+        payload: { draft_epoch: 2, draft_revision: 99 },
+        isCurrent: () => true,
+        commitCurrent,
+        commitDetail,
+        request: async () => {
+          throw staleError;
+        },
+      }),
+    ).rejects.toBe(staleError);
+    expect(commitCurrent).not.toHaveBeenCalled();
+    expect(commitDetail).not.toHaveBeenCalled();
+  });
+
   test("absorbs a stale create id without publishing stale controlled fields", async () => {
     type Draft = {
       id: string;

@@ -42,6 +42,10 @@ const migrationPath = join(
   import.meta.dir,
   "../../../../supabase/migrations/20260724130000_add_wechat_pay_applyment_draft_epoch.sql",
 );
+const atomicAuditMigrationPath = join(
+  import.meta.dir,
+  "../../../../supabase/migrations/20260724150000_atomic_wechat_pay_applyment_draft_audit.sql",
+);
 
 describe("fenced monotonic WeChat Pay applyment draft revision", () => {
   beforeEach(() => {
@@ -82,6 +86,23 @@ describe("fenced monotonic WeChat Pay applyment draft revision", () => {
     expect(sql).toContain("TO service_role");
   });
 
+  test("distinguishes stale sessions from idempotent revisions and audits inside the draft transaction", () => {
+    const sql = readFileSync(atomicAuditMigrationPath, "utf8");
+
+    expect(sql).toMatch(
+      /IF p_epoch <> v_applyment\.draft_epoch THEN[\s\S]+RETURN 'stale_epoch'/,
+    );
+    expect(sql).toMatch(
+      /IF p_revision <= v_applyment\.draft_revision THEN[\s\S]+RETURN 'same_or_older_revision'/,
+    );
+    expect(sql).toMatch(
+      /UPDATE public\.tenant_wechat_pay_applyments[\s\S]+sensitive_payload_ciphertext = v_patch\.sensitive_payload_ciphertext[\s\S]+INSERT INTO public\.tenant_wechat_pay_applyment_events/,
+    );
+    expect(sql).toContain("IF p_audit_metadata IS NOT NULL THEN");
+    expect(sql).toContain("'updated'");
+    expect(sql).not.toMatch(/EXCEPTION\s+WHEN/i);
+  });
+
   test("keeps the exact claimed epoch when hydration sees a newer session", async () => {
     rpc.mockImplementationOnce(async () => ({
       data: 5,
@@ -119,7 +140,7 @@ describe("fenced monotonic WeChat Pay applyment draft revision", () => {
     });
   });
 
-  test("calls the draft CAS RPC and returns its applied/stale outcome with current detail", async () => {
+  test("calls the draft CAS RPC with audit metadata and returns its applied outcome", async () => {
     const { WechatPayApplymentRepository } = await import(
       "./wechat-pay-applyments"
     );
@@ -136,6 +157,10 @@ describe("fenced monotonic WeChat Pay applyment draft revision", () => {
       epoch: 4,
       revision: 8,
       patch,
+      auditMetadata: {
+        changed_fields: ["merchant_short_name"],
+        change_source: "manual_entry",
+      },
     });
 
     expect(rpc).toHaveBeenCalledWith(
@@ -147,6 +172,10 @@ describe("fenced monotonic WeChat Pay applyment draft revision", () => {
         p_epoch: 4,
         p_revision: 8,
         p_patch: patch,
+        p_audit_metadata: {
+          changed_fields: ["merchant_short_name"],
+          change_source: "manual_entry",
+        },
       },
     );
     expect(result).toMatchObject({
@@ -158,9 +187,9 @@ describe("fenced monotonic WeChat Pay applyment draft revision", () => {
     });
   });
 
-  test("hydrates and returns the highest row for an idempotent or stale retry", async () => {
+  test("hydrates and returns the highest row for an idempotent same-epoch retry", async () => {
     rpc.mockImplementationOnce(async () => ({
-      data: "stale",
+      data: "same_or_older_revision",
       error: null,
     }));
     const { WechatPayApplymentRepository } = await import(
@@ -175,10 +204,58 @@ describe("fenced monotonic WeChat Pay applyment draft revision", () => {
         epoch: 3,
         revision: 7,
         patch: { merchant_short_name: "stale-7" },
+        auditMetadata: null,
       });
 
-    expect(result.outcome).toBe("stale");
+    expect(result.outcome).toBe("same_or_older_revision");
     expect(result.applyment.draft_revision).toBe(8);
     expect(maybeSingle).toHaveBeenCalledTimes(1);
+  });
+
+  test("returns stale_epoch without treating it as an idempotent revision", async () => {
+    rpc.mockImplementationOnce(async () => ({
+      data: "stale_epoch",
+      error: null,
+    }));
+    const { WechatPayApplymentRepository } = await import(
+      "./wechat-pay-applyments"
+    );
+
+    const result = await new WechatPayApplymentRepository()
+      .updateTenantDraftAtomically({
+        applymentId,
+        tenantId,
+        employeeId,
+        epoch: 3,
+        revision: 99,
+        patch: { merchant_short_name: "old-page" },
+        auditMetadata: null,
+      });
+
+    expect(result.outcome).toBe("stale_epoch");
+    expect(result.applyment.draft_epoch).toBe(4);
+  });
+
+  test("does not hydrate a draft when the transactional audit insert fails", async () => {
+    rpc.mockImplementationOnce(async () => ({
+      data: null,
+      error: { message: "tenant_wechat_pay_applyment_events insert failed" },
+    }));
+    const { WechatPayApplymentRepository } = await import(
+      "./wechat-pay-applyments"
+    );
+
+    await expect(
+      new WechatPayApplymentRepository().updateTenantDraftAtomically({
+        applymentId,
+        tenantId,
+        employeeId,
+        epoch: 4,
+        revision: 9,
+        patch: { merchant_short_name: "must-roll-back" },
+        auditMetadata: { changed_fields: ["merchant_short_name"] },
+      }),
+    ).rejects.toMatchObject({ code: "DB_ERROR" });
+    expect(maybeSingle).not.toHaveBeenCalled();
   });
 });

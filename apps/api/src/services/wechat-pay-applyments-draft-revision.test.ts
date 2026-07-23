@@ -49,10 +49,11 @@ async function createHarness(current: WechatPayApplymentRecord) {
     revision: number;
     patch: WechatPayApplymentUpdate;
   }) => ({
-    outcome: input.epoch === current.draft_epoch &&
-        input.revision > current.draft_revision
-      ? "applied"
-      : "stale",
+    outcome: input.epoch !== current.draft_epoch
+      ? "stale_epoch"
+      : input.revision <= current.draft_revision
+      ? "same_or_older_revision"
+      : "applied",
     applyment: input.epoch === current.draft_epoch &&
         input.revision > current.draft_revision
       ? {
@@ -140,21 +141,43 @@ describe("WechatPayApplymentService draft revision", () => {
     expect(harness.updateTenantDraftAtomically).toHaveBeenCalledWith(
       expect.objectContaining({
         epoch: 3,
-        revision: 5,
-        patch: expect.objectContaining({
-          merchant_short_name: "revision-4",
+      revision: 5,
+      patch: expect.objectContaining({
+        merchant_short_name: "revision-4",
+      }),
+      auditMetadata: null,
+    }),
+  );
+  expect(result.applyment?.draft_revision).toBe(5);
+  expect(harness.insertEvent).not.toHaveBeenCalled();
+});
+
+  test("passes updated audit metadata into the atomic draft RPC without a second event write", async () => {
+    const harness = await createHarness(draft());
+
+    await harness.service.updateDraft(authContext, applymentId, {
+      merchant_short_name: "revision-5",
+      draft_update_source: "manual_save",
+      draft_epoch: 3,
+      draft_revision: 5,
+    });
+
+    expect(harness.updateTenantDraftAtomically).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auditMetadata: expect.objectContaining({
+          change_source: "manual_entry",
+          changed_fields: ["merchant_short_name"],
         }),
       }),
     );
-    expect(result.applyment?.draft_revision).toBe(5);
     expect(harness.insertEvent).not.toHaveBeenCalled();
   });
 
-  test("does not audit when the database rejects a delayed higher-built patch as stale", async () => {
+  test("does not audit when the database rejects a delayed higher-built patch as same or older revision", async () => {
     const current = draft();
     const harness = await createHarness(current);
     harness.updateTenantDraftAtomically.mockImplementationOnce(async () => ({
-      outcome: "stale",
+      outcome: "same_or_older_revision",
       applyment: draft({
         draft_revision: 6,
         merchant_short_name: "revision-6",
@@ -193,21 +216,45 @@ describe("WechatPayApplymentService draft revision", () => {
       merchant_short_name: "new-page",
     }));
 
-    const result = await harness.service.updateDraft(authContext, applymentId, {
-      merchant_short_name: "old-page-revision-99",
-      identity_number: "41000019900101001X",
-      draft_update_source: "autosave",
-      draft_epoch: 7,
-      draft_revision: 99,
-    });
-
-    expect(result.applyment).toMatchObject({
-      draft_epoch: 8,
-      draft_revision: 1,
-      merchant_short_name: "new-page",
+    await expect(
+      harness.service.updateDraft(authContext, applymentId, {
+        merchant_short_name: "old-page-revision-99",
+        identity_number: "41000019900101001X",
+        draft_update_source: "autosave",
+        draft_epoch: 7,
+        draft_revision: 99,
+      }),
+    ).rejects.toMatchObject({
+      code: "WECHAT_PAY_APPLYMENT_DRAFT_SESSION_STALE",
+      statusCode: 409,
     });
     expect(harness.updateTenantDraftAtomically).not.toHaveBeenCalled();
     expect(harness.findSensitivePayloadById).not.toHaveBeenCalled();
+    expect(harness.insertEvent).not.toHaveBeenCalled();
+  });
+
+  test("rejects a stale epoch detected by the locked RPC without auditing", async () => {
+    const harness = await createHarness(draft());
+    harness.updateTenantDraftAtomically.mockImplementationOnce(async () => ({
+      outcome: "stale_epoch",
+      applyment: draft({
+        draft_epoch: 4,
+        draft_revision: 0,
+        merchant_short_name: "other-page",
+      }),
+    }));
+
+    await expect(
+      harness.service.updateDraft(authContext, applymentId, {
+        merchant_short_name: "racing-page",
+        draft_update_source: "manual_save",
+        draft_epoch: 3,
+        draft_revision: 5,
+      }),
+    ).rejects.toMatchObject({
+      code: "WECHAT_PAY_APPLYMENT_DRAFT_SESSION_STALE",
+      statusCode: 409,
+    });
     expect(harness.insertEvent).not.toHaveBeenCalled();
   });
 
