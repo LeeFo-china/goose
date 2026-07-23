@@ -43,3 +43,11 @@ test("home keeps one lead intent and uses direct Chinese section headings", asyn
   expect(template).toContain("本地服务与公司介绍");
   expect(template).toContain('primary-color="{{primaryColor}}"');
 });
+
+test("cases exposes a compact header and one-step filter reset", async () => {
+  const template = await readSource("pages/cases/index.ttml");
+  expect(template).not.toContain("page-kicker");
+  expect(template).toContain('bindtap="onClearFilters"');
+  expect(template).toContain('bindaction="onClearFilters"');
+  expect(template).toContain('primary-color="{{primaryColor}}"');
+});

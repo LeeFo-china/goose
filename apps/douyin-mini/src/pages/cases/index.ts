@@ -1,6 +1,7 @@
 import type { DouyinAppContext } from "../../app";
 import { fetchCases } from "../../api/cases";
 import { isApiRequestErrorCode } from "../../api/request";
+import { resolveThemeColor } from "../../components/theme";
 import type { PublicProject } from "../../models";
 import { navigateToEntityDetail } from "../../platform/navigation";
 import {
@@ -9,6 +10,11 @@ import {
   rejectPaginationRequest,
   resolvePaginationRequest,
 } from "../../utils/pagination";
+import {
+  clearCaseFilters,
+  hasActiveCaseFilters,
+  toggleCaseFilter,
+} from "./filter-state";
 
 Page({
   pagination: createPaginationState<PublicProject>(20),
@@ -23,6 +29,10 @@ Page({
     selectedLayout: "",
     disabled: false,
     featureReady: false,
+    primaryColor: "#191817",
+    primaryTextColor: "#FFFFFF",
+    activeFilterStyle: "border-color: #191817; background-color: #191817; color: #FFFFFF;",
+    hasActiveFilters: false,
   },
   onLoad() { void this.initialize(); },
   onReachBottom() {
@@ -39,11 +49,22 @@ Page({
     try {
       const bootstrap = await getApp<DouyinAppContext>().startup;
       if (!bootstrap) return;
+      const theme = resolveThemeColor(bootstrap.theme.primary_color);
+      const themeData = {
+        primaryColor: theme.primaryColor,
+        primaryTextColor: theme.primaryTextColor,
+        activeFilterStyle: `border-color: ${theme.primaryColor}; background-color: ${theme.primaryColor}; color: ${theme.primaryTextColor};`,
+      };
       if (!bootstrap.features.cases) {
-        this.setData({ firstLoading: false, disabled: true, featureReady: true });
+        this.setData({
+          firstLoading: false,
+          disabled: true,
+          featureReady: true,
+          ...themeData,
+        });
         return;
       }
-      this.setData({ featureReady: true });
+      this.setData({ featureReady: true, ...themeData });
       await this.load("loadMore");
     } catch {
       this.setData({ firstLoading: false, firstError: true });
@@ -100,13 +121,28 @@ Page({
   onRetry() { void this.load("retry"); },
   onLoadMore() { void this.load("loadMore"); },
   onSelectStyle(event: { currentTarget: { dataset: { value?: string } } }) {
-    const value = event.currentTarget.dataset.value || "";
-    this.setData({ selectedStyle: this.data.selectedStyle === value ? "" : value });
-    void this.load("refresh");
+    this.applyFilters(toggleCaseFilter(
+      this.data,
+      "style",
+      event.currentTarget.dataset.value || "",
+    ));
   },
   onSelectLayout(event: { currentTarget: { dataset: { value?: string } } }) {
-    const value = event.currentTarget.dataset.value || "";
-    this.setData({ selectedLayout: this.data.selectedLayout === value ? "" : value });
+    this.applyFilters(toggleCaseFilter(
+      this.data,
+      "layout",
+      event.currentTarget.dataset.value || "",
+    ));
+  },
+  onClearFilters() {
+    if (!hasActiveCaseFilters(this.data)) return;
+    this.applyFilters(clearCaseFilters());
+  },
+  applyFilters(filters: { selectedStyle: string; selectedLayout: string }) {
+    this.setData({
+      ...filters,
+      hasActiveFilters: hasActiveCaseFilters(filters),
+    });
     void this.load("refresh");
   },
   onCaseSelect(event: { detail: { id?: string } }) {

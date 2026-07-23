@@ -1,13 +1,17 @@
 <page-skeleton tt:if="{{firstLoading}}" />
 <error-state tt:elif="{{firstError}}" bindretry="onRetry" />
 <view tt:else class="page-content cases-page">
-  <view class="page-kicker">公开案例</view><view class="page-title">找到适合你家的装修灵感</view>
-  <view tt:if="{{styleOptions.length || layoutOptions.length}}" class="filters">
-    <view tt:if="{{styleOptions.length}}" class="filter-row"><view class="filter-label">风格</view><scroll-view scroll-x class="filter-scroll"><view class="filter-options"><button tt:for="{{styleOptions}}" tt:key="*this" class="filter-chip {{selectedStyle === item ? 'filter-chip--active' : ''}}" data-value="{{item}}" bindtap="onSelectStyle">{{item}}</button></view></scroll-view></view>
-    <view tt:if="{{layoutOptions.length}}" class="filter-row"><view class="filter-label">户型</view><scroll-view scroll-x class="filter-scroll"><view class="filter-options"><button tt:for="{{layoutOptions}}" tt:key="*this" class="filter-chip {{selectedLayout === item ? 'filter-chip--active' : ''}}" data-value="{{item}}" bindtap="onSelectLayout">{{item}}</button></view></scroll-view></view>
+  <view class="page-header">
+    <view class="ui-page-title">装修案例</view>
+    <view class="ui-page-description">按风格和户型浏览装修公司已公开的真实案例。</view>
   </view>
-  <view tt:if="{{items.length}}" class="case-list"><view tt:for="{{items}}" tt:key="id"><case-card item="{{item}}" bindselect="onCaseSelect" /></view></view>
+  <view tt:if="{{styleOptions.length || layoutOptions.length}}" class="filters">
+    <view class="filter-heading"><view class="filter-heading-title">筛选案例</view><button tt:if="{{hasActiveFilters}}" class="filter-clear ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onClearFilters">清除筛选</button></view>
+    <view tt:if="{{styleOptions.length}}" class="filter-row"><view class="filter-label">风格</view><scroll-view scroll-x class="filter-scroll"><view class="filter-options"><button tt:for="{{styleOptions}}" tt:key="*this" class="filter-chip ui-pressable" hover-class="ui-pressable--pressed" style="{{selectedStyle === item ? activeFilterStyle : ''}}" data-value="{{item}}" bindtap="onSelectStyle">{{item}}</button></view></scroll-view></view>
+    <view tt:if="{{layoutOptions.length}}" class="filter-row"><view class="filter-label">户型</view><scroll-view scroll-x class="filter-scroll"><view class="filter-options"><button tt:for="{{layoutOptions}}" tt:key="*this" class="filter-chip ui-pressable" hover-class="ui-pressable--pressed" style="{{selectedLayout === item ? activeFilterStyle : ''}}" data-value="{{item}}" bindtap="onSelectLayout">{{item}}</button></view></scroll-view></view>
+  </view>
+  <view tt:if="{{items.length}}" class="case-list"><view tt:for="{{items}}" tt:key="id"><case-card item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onCaseSelect" /></view></view>
   <empty-state tt:elif="{{disabled}}" title="案例模块暂未开放" description="装修公司当前未开放公开案例展示。" />
-  <empty-state tt:else title="暂无匹配案例" description="可以取消筛选，或稍后查看装修公司新发布的案例。" />
+  <empty-state tt:else title="暂无匹配案例" description="{{hasActiveFilters ? '当前筛选下暂无案例，可以清除筛选后继续浏览。' : '装修公司尚未发布公开案例，可以稍后再来查看。'}}" action-label="{{hasActiveFilters ? '清除筛选' : ''}}" bindaction="onClearFilters" />
   <pagination-loader tt:if="{{items.length}}" status="{{paginationStatus}}" bindloadmore="onLoadMore" bindretry="onRetry" />
 </view>
