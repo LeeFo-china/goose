@@ -34,7 +34,7 @@ export function FinanceWechatPayApplymentSaveStatus({
         role="status"
         className="flex items-center gap-2 text-sm text-muted-foreground"
       >
-        <Spinner aria-label="保存中" />
+        <Spinner aria-hidden="true" />
         保存中
       </div>
     );

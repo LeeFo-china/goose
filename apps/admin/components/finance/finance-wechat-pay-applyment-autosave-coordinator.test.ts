@@ -136,6 +136,40 @@ describe("ApplymentDraftAutosaveCoordinator", () => {
     expect(attempts).toEqual([1, 2, 3]);
     expect(coordinator.lastPayload).toBe(editedPayload);
   });
+
+  test("detach sends the latest scheduled payload before disposing", async () => {
+    const saved: Array<{ version: number; detaching: boolean }> = [];
+    let coordinator: ApplymentDraftAutosaveCoordinator;
+    const queue = new ApplymentDraftSaveQueue(async (payload) => {
+      saved.push({
+        version: Number(payload.version),
+        detaching: Boolean(Reflect.get(coordinator, "isDetaching")),
+      });
+    });
+    coordinator = new ApplymentDraftAutosaveCoordinator(queue, 800);
+
+    coordinator.schedule({ version: 1 });
+    coordinator.schedule({ version: 2 });
+    const detach = Reflect.get(coordinator, "detach");
+    if (typeof detach === "function") await detach.call(coordinator);
+
+    expect(saved).toEqual([{ version: 2, detaching: true }]);
+  });
+
+  test("StrictMode detach does not revive a scheduled payload from an old generation", async () => {
+    const saved: string[] = [];
+    const queue = new ApplymentDraftSaveQueue(async (payload) => {
+      saved.push(String(payload.id));
+    });
+    const coordinator = new ApplymentDraftAutosaveCoordinator(queue, 800);
+
+    coordinator.schedule({ id: "strict-mode-old" });
+    coordinator.reset();
+    const detach = Reflect.get(coordinator, "detach");
+    if (typeof detach === "function") await detach.call(coordinator);
+
+    expect(saved).toEqual([]);
+  });
 });
 
 describe("saveApplymentDraftWithCreateRecovery", () => {
@@ -243,6 +277,24 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
     }
 
     expect(submitted).toEqual(["created-draft"]);
+  });
+
+  test("marks detached draft requests as keepalive", async () => {
+    let requestKeepalive = false;
+
+    await saveApplymentDraftWithCreateRecovery({
+      getCurrent: () => ({ id: "draft-1" }),
+      payload: { merchant_short_name: "离开前最新值" },
+      isCurrent: () => true,
+      keepalive: () => true,
+      commitCurrent: () => undefined,
+      request: async (_path, init) => {
+        requestKeepalive = init?.keepalive === true;
+        return { applyment: { id: "draft-1" } };
+      },
+    });
+
+    expect(requestKeepalive).toBe(true);
   });
 });
 

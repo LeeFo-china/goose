@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import {
+  ApplymentDraftSaveCancelledError,
   ApplymentDraftSaveQueue,
   isApplymentDraftSaveCancelledError,
   type ApplymentDraftSavePayload,
@@ -20,8 +21,10 @@ import type {
 } from "./finance-wechat-pay-applyment-shared";
 
 type AutosaveRuntime = {
+  id: symbol;
   queue: ApplymentDraftSaveQueue;
   coordinator: ApplymentDraftAutosaveCoordinator;
+  currentApplyment: WechatPayApplymentRecord | null;
 };
 
 export function useWechatPayApplymentAutosave(input: {
@@ -39,12 +42,22 @@ export function useWechatPayApplymentAutosave(input: {
   const [saveError, setSaveError] = useState("");
   const lastFailedPayloadRef = useRef<ApplymentDraftSavePayload | null>(null);
   const runtimeRef = useRef<AutosaveRuntime | null>(null);
+  const mountedRef = useRef(false);
 
   function ensureAutosaveRuntime(): AutosaveRuntime {
     if (runtimeRef.current) return runtimeRef.current;
+    const runtimeId = Symbol("wechat-pay-applyment-autosave");
+    let runtime: AutosaveRuntime | null = null;
     const queue = new ApplymentDraftSaveQueue(
       async (payload, context) => {
-        if (context.isCurrent()) {
+        const activeRuntime = runtime;
+        if (!activeRuntime) {
+          throw new ApplymentDraftSaveCancelledError();
+        }
+        const isAttached = () =>
+          mountedRef.current &&
+          runtimeRef.current?.id === activeRuntime.id;
+        if (context.isCurrent() && isAttached()) {
           setSaveState("saving");
           setSaveError("");
         }
@@ -53,15 +66,20 @@ export function useWechatPayApplymentAutosave(input: {
             WechatPayApplymentRecord,
             WechatPayApplymentDetailData
           >({
-            getCurrent: () => currentApplymentRef.current,
+            getCurrent: () => activeRuntime.currentApplyment,
             payload,
             isCurrent: context.isCurrent,
+            keepalive: () => activeRuntime.coordinator.isDetaching,
             commitCurrent: (applyment) => {
               if (!context.isCurrent()) return;
-              currentApplymentRef.current = applyment;
+              activeRuntime.currentApplyment = applyment;
+              if (isAttached()) currentApplymentRef.current = applyment;
             },
+            shouldCommitDetail: () =>
+              isAttached() &&
+              activeRuntime.coordinator.isLatestPayload(payload),
             commitDetail: (detail) => {
-              if (!context.isCurrent()) return;
+              if (!context.isCurrent() || !isAttached()) return;
               currentDetailRef.current = detail;
               currentApplymentRef.current = detail.applyment;
               setCurrentDetail(detail);
@@ -69,18 +87,18 @@ export function useWechatPayApplymentAutosave(input: {
             request: (path, init) =>
               requestBackendJson<WechatPayApplymentDetailData>(path, init),
           });
-          const coordinator = runtimeRef.current?.coordinator;
           if (
             !context.isCurrent() ||
-            !coordinator?.isLatestPayload(payload)
+            !isAttached() ||
+            !activeRuntime.coordinator.isLatestPayload(payload)
           ) return;
           lastFailedPayloadRef.current = null;
           setSaveState("saved");
         } catch (error) {
-          const coordinator = runtimeRef.current?.coordinator;
           if (
             context.isCurrent() &&
-            coordinator?.isLatestPayload(payload) &&
+            isAttached() &&
+            activeRuntime.coordinator.isLatestPayload(payload) &&
             !isApplymentDraftSaveCancelledError(error)
           ) {
             lastFailedPayloadRef.current = payload;
@@ -95,9 +113,11 @@ export function useWechatPayApplymentAutosave(input: {
         }
       },
     );
-    const runtime = {
+    runtime = {
+      id: runtimeId,
       queue,
       coordinator: new ApplymentDraftAutosaveCoordinator(queue, 800),
+      currentApplyment: currentApplymentRef.current,
     };
     runtimeRef.current = runtime;
     return runtime;
@@ -106,7 +126,9 @@ export function useWechatPayApplymentAutosave(input: {
   ensureAutosaveRuntime();
 
   useEffect(() => {
-    ensureAutosaveRuntime().coordinator.reset();
+    const runtime = ensureAutosaveRuntime();
+    runtime.coordinator.reset();
+    runtime.currentApplyment = input.detail.applyment;
     currentDetailRef.current = input.detail;
     currentApplymentRef.current = input.detail.applyment;
     setCurrentDetail(input.detail);
@@ -116,15 +138,29 @@ export function useWechatPayApplymentAutosave(input: {
   }, [input.detail, input.resetKey]);
 
   useEffect(() => {
-    ensureAutosaveRuntime();
+    mountedRef.current = true;
+    const runtime = ensureAutosaveRuntime();
+    const detachRuntime = () => {
+      mountedRef.current = false;
+      if (runtimeRef.current?.id === runtime.id) {
+        runtimeRef.current = null;
+      }
+      void runtime.coordinator.detach().catch(() => undefined);
+    };
+    window.addEventListener("pagehide", detachRuntime);
     return () => {
-      const runtime = runtimeRef.current;
-      runtimeRef.current = null;
-      runtime?.coordinator.dispose();
+      window.removeEventListener("pagehide", detachRuntime);
+      detachRuntime();
     };
   }, []);
 
+  function markDraftSaveScheduled(): void {
+    if (!mountedRef.current) return;
+    setSaveState((state) => state === "failed" ? state : "saving");
+  }
+
   function scheduleDraftSave(payload: ApplymentDraftSavePayload): void {
+    markDraftSaveScheduled();
     ensureAutosaveRuntime().coordinator.schedule({
       ...payload,
       draft_update_source: "autosave",

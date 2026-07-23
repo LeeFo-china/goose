@@ -10,6 +10,7 @@ type RequestInit = {
   method?: "POST" | "PUT";
   body?: string;
   fallbackMessage?: string;
+  keepalive?: boolean;
 };
 
 type ApplymentDetail<Draft> = {
@@ -23,6 +24,8 @@ export class ApplymentDraftAutosaveCoordinator {
   private scheduledPayload: ApplymentDraftSavePayload | null = null;
   private latestPayload: ApplymentDraftSavePayload | null = null;
   private disposed = false;
+  private detaching = false;
+  private detachPromise: Promise<void> | null = null;
 
   constructor(
     private readonly queue: ApplymentDraftSaveQueue,
@@ -33,12 +36,16 @@ export class ApplymentDraftAutosaveCoordinator {
     return this.latestPayload;
   }
 
+  get isDetaching(): boolean {
+    return this.detaching;
+  }
+
   isLatestPayload(payload: ApplymentDraftSavePayload): boolean {
     return this.latestPayload === payload;
   }
 
   schedule(payload: ApplymentDraftSavePayload): void {
-    if (this.disposed) return;
+    if (this.disposed || this.detaching) return;
     this.latestPayload = payload;
     this.scheduledPayload = payload;
     this.clearTimer();
@@ -50,7 +57,7 @@ export class ApplymentDraftAutosaveCoordinator {
   }
 
   checkpoint(payload: ApplymentDraftSavePayload): Promise<void> {
-    if (this.disposed) {
+    if (this.disposed || this.detaching) {
       return Promise.reject(new ApplymentDraftSaveCancelledError());
     }
     this.clearTimer();
@@ -60,7 +67,7 @@ export class ApplymentDraftAutosaveCoordinator {
   }
 
   retry(failedPayload: ApplymentDraftSavePayload): Promise<void> {
-    if (this.disposed) {
+    if (this.disposed || this.detaching) {
       return Promise.reject(new ApplymentDraftSaveCancelledError());
     }
     return this.queue.enqueue(this.takeLatestForRetry(failedPayload));
@@ -78,6 +85,14 @@ export class ApplymentDraftAutosaveCoordinator {
     this.scheduledPayload = null;
     this.latestPayload = null;
     this.queue.reset();
+  }
+
+  detach(): Promise<void> {
+    if (this.detachPromise) return this.detachPromise;
+    if (this.disposed) return Promise.resolve();
+    this.detaching = true;
+    this.detachPromise = this.flush().finally(() => this.dispose());
+    return this.detachPromise;
   }
 
   dispose(): void {
@@ -120,7 +135,9 @@ export async function saveApplymentDraftWithCreateRecovery<
   getCurrent: () => Draft | null;
   payload: ApplymentDraftSavePayload;
   isCurrent: () => boolean;
+  keepalive?: () => boolean;
   commitCurrent: (draft: Draft) => void;
+  shouldCommitDetail?: () => boolean;
   commitDetail?: (detail: Detail) => void;
   request: (
     path: string,
@@ -138,17 +155,19 @@ export async function saveApplymentDraftWithCreateRecovery<
     }
     const existing = await input.request(
       "/finance/wechat-pay/applyment/current",
+      { keepalive: input.keepalive?.() },
     );
     if (!existing.applyment) throw error;
     assertCurrent(input.isCurrent);
     input.commitCurrent(existing.applyment);
-    input.commitDetail?.(existing);
     detail = await requestDraftSave(input, existing.applyment);
   }
 
   assertCurrent(input.isCurrent);
   if (detail.applyment) input.commitCurrent(detail.applyment);
-  input.commitDetail?.(detail);
+  if (input.shouldCommitDetail?.() !== false) {
+    input.commitDetail?.(detail);
+  }
   return detail;
 }
 
@@ -199,6 +218,7 @@ function requestDraftSave<
 >(
   input: {
     payload: ApplymentDraftSavePayload;
+    keepalive?: () => boolean;
     request: (
       path: string,
       init?: RequestInit,
@@ -214,6 +234,7 @@ function requestDraftSave<
       method: current ? "PUT" : "POST",
       body: JSON.stringify(input.payload),
       fallbackMessage: "微信支付开通申请保存失败",
+      keepalive: input.keepalive?.(),
     },
   );
 }

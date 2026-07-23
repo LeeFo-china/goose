@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+const MOCK_BACKEND_URL = "http://127.0.0.1:3998";
+
 async function loginAsTenantAdmin(page: Page) {
   const response = await page.request.post("/api/auth/login", {
     data: { phone: "18800000001", code: "" },
@@ -11,6 +13,11 @@ async function loginAsTenantAdmin(page: Page) {
 function stageButton(page: Page, label: string) {
   return page.getByRole("button", { name: new RegExp(`\\d+\\.\\s*${label}`) });
 }
+
+test.beforeEach(async ({ request }) => {
+  const response = await request.post(`${MOCK_BACKEND_URL}/__test/reset`);
+  expect(response.ok()).toBe(true);
+});
 
 test("复核使用实时值、修改后失效，并只定位首个隐藏无效控件", async ({
   page,
@@ -81,4 +88,84 @@ test("复核使用实时值、修改后失效，并只定位首个隐藏无效�
   );
   await expect(categorySelect).toContainText("营业执照照片");
   await expect(page.getByLabel("营业执照主体名称")).toBeFocused();
+});
+
+test("自动保存隔离陈旧响应并在离开页面时发送最新值", async ({
+  page,
+  request,
+}) => {
+  await loginAsTenantAdmin(page);
+  await page.goto("/finance/wechat-pay/applyment", {
+    waitUntil: "networkidle",
+  });
+
+  await stageButton(page, "补充信息").click();
+  const merchantShortName = page.getByLabel("商户简称");
+  await merchantShortName.fill("状态采集值");
+  await expect(
+    page.getByRole("status").filter({ hasText: "保存中" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "已自动保存" }),
+  ).toBeVisible();
+
+  const delayResponse = await request.post(
+    `${MOCK_BACKEND_URL}/__test/delay-next-save`,
+    { data: { milliseconds: 1_200 } },
+  );
+  expect(delayResponse.ok()).toBe(true);
+
+  await stageButton(page, "上传资料").click();
+  const subjectType = page.getByRole("combobox", { name: "主体类型" });
+  const staleRequest = page.waitForRequest((pendingRequest) =>
+    pendingRequest.method() === "PUT" &&
+    pendingRequest.url().includes("/finance/wechat-pay/applyments/") &&
+    pendingRequest.postData()?.includes("SUBJECT_TYPE_INDIVIDUAL") === true
+  );
+  const staleResponse = page.waitForResponse((pendingResponse) =>
+    pendingResponse.request().method() === "PUT" &&
+    pendingResponse.url().includes("/finance/wechat-pay/applyments/") &&
+    pendingResponse.request().postData()?.includes(
+        "SUBJECT_TYPE_INDIVIDUAL",
+      ) === true
+  );
+  await subjectType.click();
+  await page.getByRole("option", { name: "个体工商户" }).click();
+  await staleRequest;
+
+  await stageButton(page, "补充信息").click();
+  const accountType = page.getByRole("combobox", { name: "结算账户类型" });
+  await accountType.click();
+  await page.getByRole("option", { name: "经营者个人银行卡" }).click();
+  await staleResponse;
+  await expect(accountType).toContainText("经营者个人银行卡");
+
+  await merchantShortName.fill("陈旧响应后的最新值");
+  await expect(
+    page.getByRole("status").filter({ hasText: "已自动保存" }),
+  ).toBeVisible();
+  await expect.poll(async () => {
+    const response = await request.get(`${MOCK_BACKEND_URL}/__test/saves`);
+    const body = await response.json() as {
+      saves: Array<Record<string, unknown>>;
+    };
+    return body.saves.at(-1);
+  }).toMatchObject({
+    merchant_short_name: "陈旧响应后的最新值",
+    settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+  });
+
+  await merchantShortName.fill("离开前最新值");
+  await expect(
+    page.getByRole("status").filter({ hasText: "保存中" }),
+  ).toBeVisible();
+  await page.goto("about:blank");
+
+  await expect.poll(async () => {
+    const response = await request.get(`${MOCK_BACKEND_URL}/__test/saves`);
+    const body = await response.json() as {
+      saves: Array<Record<string, unknown>>;
+    };
+    return body.saves.at(-1)?.merchant_short_name;
+  }).toBe("离开前最新值");
 });

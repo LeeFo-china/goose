@@ -125,4 +125,24 @@ describe("Finance wechat pay applyment save layout", () => {
     expect(schemaSource).toContain("CONTACT_IDENTITY_PERIOD_FIELDS");
     expect(schemaSource).toContain("normalized || null");
   });
+
+  test("isolates stale detail publication and flushes safely on detach", () => {
+    const coordinatorSource = readSource(
+      "./finance-wechat-pay-applyment-autosave-coordinator.ts",
+    );
+    const hookSource = readSource("./use-wechat-pay-applyment-autosave.ts");
+    const statusSource = readSource(
+      "./finance-wechat-pay-applyment-save-status.tsx",
+    );
+
+    expect(coordinatorSource).toContain("shouldCommitDetail");
+    expect(coordinatorSource).toContain("keepalive");
+    expect(coordinatorSource).toContain("detach()");
+    expect(hookSource).toContain("mountedRef");
+    expect(hookSource).toContain("markDraftSaveScheduled");
+    expect(hookSource).toContain("coordinator.detach()");
+    expect(hookSource).toContain("pagehide");
+    expect(hookSource).not.toContain("runtime?.coordinator.dispose()");
+    expect(statusSource).toContain('<Spinner aria-hidden="true" />');
+  });
 });

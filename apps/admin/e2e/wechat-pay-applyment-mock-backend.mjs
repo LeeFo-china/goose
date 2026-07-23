@@ -47,7 +47,7 @@ const attachments = attachmentCategories.map((category, index) => ({
   ocr_recognition_id: null,
   ocr_review_status: "confirmed",
 }));
-const applyment = {
+const initialApplyment = {
   id: "33333333-3333-4333-8333-333333333333",
   tenant_id: session.tenant.id,
   application_no: "WPA202607230001",
@@ -91,6 +91,9 @@ const applyment = {
   created_at: now,
   updated_at: now,
 };
+let applyment = structuredClone(initialApplyment);
+let saves = [];
+let nextSaveDelayMs = 0;
 
 const capabilities = [
   ["business_license", ["license_copy"]],
@@ -129,6 +132,21 @@ function readBody(request) {
   });
 }
 
+function applymentDetail() {
+  return {
+    applyment,
+    events: [],
+    can_edit: true,
+    can_submit: true,
+    available_actions: [],
+    submission_readiness: {
+      ready: true,
+      review_ready: true,
+      blockers: [],
+    },
+  };
+}
+
 const server = createServer(async (request, response) => {
   const url = new URL(
     request.url || "/",
@@ -137,6 +155,27 @@ const server = createServer(async (request, response) => {
 
   if (request.method === "GET" && url.pathname === "/health") {
     sendJson(response, 200, { success: true });
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/__test/reset") {
+    await readBody(request);
+    applyment = structuredClone(initialApplyment);
+    saves = [];
+    nextSaveDelayMs = 0;
+    sendJson(response, 200, { success: true });
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    url.pathname === "/__test/delay-next-save"
+  ) {
+    const body = JSON.parse(await readBody(request) || "{}");
+    nextSaveDelayMs = Number(body.milliseconds) || 0;
+    sendJson(response, 200, { success: true });
+    return;
+  }
+  if (request.method === "GET" && url.pathname === "/__test/saves") {
+    sendJson(response, 200, { saves });
     return;
   }
   if (request.method === "POST" && url.pathname === "/admin/auth/login") {
@@ -154,18 +193,30 @@ const server = createServer(async (request, response) => {
   ) {
     sendJson(response, 200, {
       success: true,
-      data: {
-        applyment,
-        events: [],
-        can_edit: true,
-        can_submit: true,
-        available_actions: [],
-        submission_readiness: {
-          ready: true,
-          review_ready: true,
-          blockers: [],
-        },
-      },
+      data: applymentDetail(),
+    });
+    return;
+  }
+  if (
+    request.method === "PUT" &&
+    url.pathname === `/finance/wechat-pay/applyments/${applyment.id}`
+  ) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    saves.push(structuredClone(payload));
+    const delayMs = nextSaveDelayMs;
+    nextSaveDelayMs = 0;
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    const { draft_update_source: _draftUpdateSource, ...draftFields } = payload;
+    applyment = {
+      ...applyment,
+      ...draftFields,
+      updated_at: new Date().toISOString(),
+    };
+    sendJson(response, 200, {
+      success: true,
+      data: applymentDetail(),
     });
     return;
   }
