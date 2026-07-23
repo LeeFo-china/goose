@@ -175,7 +175,11 @@ describe("ApplymentDraftAutosaveCoordinator", () => {
 describe("saveApplymentDraftWithCreateRecovery", () => {
   test("recovers a lost create response through current then update", async () => {
     type Draft = { id: string; updated_at: string };
-    const calls: Array<{ path: string; method?: string }> = [];
+    const calls: Array<{
+      path: string;
+      method?: string;
+      keepalive?: boolean;
+    }> = [];
     let current: Draft | null = null;
     const getCurrent = (): Draft | null => current;
 
@@ -187,7 +191,11 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
         current = draft;
       },
       request: async (path, init) => {
-        calls.push({ path, method: init?.method });
+        calls.push({
+          path,
+          method: init?.method,
+          keepalive: init?.keepalive,
+        });
         if (
           path === "/finance/wechat-pay/applyments" &&
           init?.method === "POST"
@@ -208,11 +216,20 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
     });
 
     expect(calls).toEqual([
-      { path: "/finance/wechat-pay/applyments", method: "POST" },
-      { path: "/finance/wechat-pay/applyment/current", method: undefined },
+      {
+        path: "/finance/wechat-pay/applyments",
+        method: "POST",
+        keepalive: true,
+      },
+      {
+        path: "/finance/wechat-pay/applyment/current",
+        method: undefined,
+        keepalive: true,
+      },
       {
         path: "/finance/wechat-pay/applyments/draft-1",
         method: "PUT",
+        keepalive: true,
       },
     ]);
     expect(getCurrent()).toEqual({
@@ -279,14 +296,13 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
     expect(submitted).toEqual(["created-draft"]);
   });
 
-  test("marks detached draft requests as keepalive", async () => {
+  test("marks every draft request as keepalive when it starts", async () => {
     let requestKeepalive = false;
 
     await saveApplymentDraftWithCreateRecovery({
       getCurrent: () => ({ id: "draft-1" }),
       payload: { merchant_short_name: "离开前最新值" },
       isCurrent: () => true,
-      keepalive: () => true,
       commitCurrent: () => undefined,
       request: async (_path, init) => {
         requestKeepalive = init?.keepalive === true;
@@ -295,6 +311,72 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
     });
 
     expect(requestKeepalive).toBe(true);
+  });
+
+  test("rejects keepalive metadata above the autosave body limit", async () => {
+    let requested = false;
+
+    await expect(saveApplymentDraftWithCreateRecovery({
+      getCurrent: () => ({ id: "draft-1" }),
+      payload: { remark: "x".repeat(70 * 1024) },
+      isCurrent: () => true,
+      commitCurrent: () => undefined,
+      request: async () => {
+        requested = true;
+        return { applyment: { id: "draft-1" } };
+      },
+    })).rejects.toThrow("离页保存上限");
+
+    expect(requested).toBe(false);
+  });
+
+  test("lets an active keepalive save commit before detach disposes it", async () => {
+    type Draft = { id: string; merchant_short_name: string };
+    let markStarted: (() => void) | undefined;
+    let releaseCommit: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const commitGate = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    const serverCommitted: string[] = [];
+    const queue = new ApplymentDraftSaveQueue(async (payload, context) => {
+      await saveApplymentDraftWithCreateRecovery<Draft>({
+        getCurrent: () => ({
+          id: "draft-1",
+          merchant_short_name: "before",
+        }),
+        payload,
+        isCurrent: context.isCurrent,
+        commitCurrent: () => undefined,
+        request: async (_path, init) => {
+          expect(init?.keepalive).toBe(true);
+          markStarted?.();
+          await commitGate;
+          serverCommitted.push(String(payload.merchant_short_name));
+          return {
+            applyment: {
+              id: "draft-1",
+              merchant_short_name: String(payload.merchant_short_name),
+            },
+          };
+        },
+      });
+    });
+    const coordinator = new ApplymentDraftAutosaveCoordinator(queue, 800);
+
+    const save = coordinator.checkpoint({
+      merchant_short_name: "active-before-leave",
+    });
+    await started;
+    const detach = coordinator.detach();
+
+    expect(serverCommitted).toEqual([]);
+    releaseCommit?.();
+    await Promise.all([save, detach]);
+
+    expect(serverCommitted).toEqual(["active-before-leave"]);
   });
 });
 

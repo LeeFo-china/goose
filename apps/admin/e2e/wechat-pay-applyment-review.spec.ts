@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 
 const MOCK_BACKEND_URL = "http://127.0.0.1:3998";
 
@@ -12,6 +12,18 @@ async function loginAsTenantAdmin(page: Page) {
 
 function stageButton(page: Page, label: string) {
   return page.getByRole("button", { name: new RegExp(`\\d+\\.\\s*${label}`) });
+}
+
+type MockSaveEvents = {
+  started: Array<Record<string, unknown>>;
+  committed: Array<Record<string, unknown>>;
+};
+
+async function getMockSaveEvents(
+  request: APIRequestContext,
+): Promise<MockSaveEvents> {
+  const response = await request.get(`${MOCK_BACKEND_URL}/__test/saves`);
+  return await response.json() as MockSaveEvents;
 }
 
 test.beforeEach(async ({ request }) => {
@@ -145,11 +157,8 @@ test("自动保存隔离陈旧响应并在离开页面时发送最新值", async
     page.getByRole("status").filter({ hasText: "已自动保存" }),
   ).toBeVisible();
   await expect.poll(async () => {
-    const response = await request.get(`${MOCK_BACKEND_URL}/__test/saves`);
-    const body = await response.json() as {
-      saves: Array<Record<string, unknown>>;
-    };
-    return body.saves.at(-1);
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1);
   }).toMatchObject({
     merchant_short_name: "陈旧响应后的最新值",
     settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
@@ -162,10 +171,84 @@ test("自动保存隔离陈旧响应并在离开页面时发送最新值", async
   await page.goto("about:blank");
 
   await expect.poll(async () => {
-    const response = await request.get(`${MOCK_BACKEND_URL}/__test/saves`);
-    const body = await response.json() as {
-      saves: Array<Record<string, unknown>>;
-    };
-    return body.saves.at(-1)?.merchant_short_name;
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1)?.merchant_short_name;
   }).toBe("离开前最新值");
+});
+
+test("在途保存离页后仍提交到服务端", async ({ page, request }) => {
+  await loginAsTenantAdmin(page);
+  await page.goto("/finance/wechat-pay/applyment", {
+    waitUntil: "networkidle",
+  });
+  await stageButton(page, "补充信息").click();
+
+  const delayResponse = await request.post(
+    `${MOCK_BACKEND_URL}/__test/delay-next-save`,
+    { data: { milliseconds: 1_200 } },
+  );
+  expect(delayResponse.ok()).toBe(true);
+
+  await page.getByLabel("商户简称").fill("在途离页提交值");
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.started.at(-1)?.merchant_short_name;
+  }).toBe("在途离页提交值");
+
+  await page.goto("about:blank");
+
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1)?.merchant_short_name;
+  }).toBe("在途离页提交值");
+});
+
+test("BFCache pagehide 恢复后仍可继续自动保存", async ({ page, request }) => {
+  await loginAsTenantAdmin(page);
+  await page.goto("/finance/wechat-pay/applyment", {
+    waitUntil: "networkidle",
+  });
+  await stageButton(page, "补充信息").click();
+  const merchantShortName = page.getByLabel("商户简称");
+
+  await merchantShortName.fill("BFCache 前最新值");
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new PageTransitionEvent("pagehide", { persisted: true }),
+    );
+  });
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1)?.merchant_short_name;
+  }).toBe("BFCache 前最新值");
+
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+  });
+  await merchantShortName.fill("BFCache 恢复后最新值");
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new PageTransitionEvent("pagehide", { persisted: true }),
+    );
+  });
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1)?.merchant_short_name;
+  }).toBe("BFCache 恢复后最新值");
+
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+  });
+  await merchantShortName.fill("BFCache 二次恢复值");
+  await expect(
+    page.getByRole("status").filter({ hasText: "已自动保存" }),
+  ).toBeVisible();
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1)?.merchant_short_name;
+  }).toBe("BFCache 二次恢复值");
 });

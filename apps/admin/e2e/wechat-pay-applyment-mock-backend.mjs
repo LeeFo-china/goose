@@ -92,7 +92,8 @@ const initialApplyment = {
   updated_at: now,
 };
 let applyment = structuredClone(initialApplyment);
-let saves = [];
+let startedSaves = [];
+let committedSaves = [];
 let nextSaveDelayMs = 0;
 
 const capabilities = [
@@ -160,7 +161,8 @@ const server = createServer(async (request, response) => {
   if (request.method === "POST" && url.pathname === "/__test/reset") {
     await readBody(request);
     applyment = structuredClone(initialApplyment);
-    saves = [];
+    startedSaves = [];
+    committedSaves = [];
     nextSaveDelayMs = 0;
     sendJson(response, 200, { success: true });
     return;
@@ -175,7 +177,10 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (request.method === "GET" && url.pathname === "/__test/saves") {
-    sendJson(response, 200, { saves });
+    sendJson(response, 200, {
+      started: startedSaves,
+      committed: committedSaves,
+    });
     return;
   }
   if (request.method === "POST" && url.pathname === "/admin/auth/login") {
@@ -202,7 +207,7 @@ const server = createServer(async (request, response) => {
     url.pathname === `/finance/wechat-pay/applyments/${applyment.id}`
   ) {
     const payload = JSON.parse(await readBody(request) || "{}");
-    saves.push(structuredClone(payload));
+    startedSaves.push(structuredClone(payload));
     const delayMs = nextSaveDelayMs;
     nextSaveDelayMs = 0;
     if (delayMs > 0) {
@@ -214,6 +219,7 @@ const server = createServer(async (request, response) => {
       ...draftFields,
       updated_at: new Date().toISOString(),
     };
+    committedSaves.push(structuredClone(payload));
     sendJson(response, 200, {
       success: true,
       data: applymentDetail(),

@@ -5,6 +5,7 @@ import {
 } from "./finance-wechat-pay-applyment-autosave";
 
 const DEFAULT_AUTOSAVE_DELAY_MS = 800;
+const MAX_KEEPALIVE_BODY_BYTES = 60 * 1024;
 
 type RequestInit = {
   method?: "POST" | "PUT";
@@ -135,7 +136,6 @@ export async function saveApplymentDraftWithCreateRecovery<
   getCurrent: () => Draft | null;
   payload: ApplymentDraftSavePayload;
   isCurrent: () => boolean;
-  keepalive?: () => boolean;
   commitCurrent: (draft: Draft) => void;
   shouldCommitDetail?: () => boolean;
   commitDetail?: (detail: Detail) => void;
@@ -155,7 +155,7 @@ export async function saveApplymentDraftWithCreateRecovery<
     }
     const existing = await input.request(
       "/finance/wechat-pay/applyment/current",
-      { keepalive: input.keepalive?.() },
+      { keepalive: true },
     );
     if (!existing.applyment) throw error;
     assertCurrent(input.isCurrent);
@@ -218,7 +218,6 @@ function requestDraftSave<
 >(
   input: {
     payload: ApplymentDraftSavePayload;
-    keepalive?: () => boolean;
     request: (
       path: string,
       init?: RequestInit,
@@ -226,15 +225,20 @@ function requestDraftSave<
   },
   current: Draft | null,
 ): Promise<Detail> {
+  const body = JSON.stringify(input.payload);
+  if (new TextEncoder().encode(body).byteLength > MAX_KEEPALIVE_BODY_BYTES) {
+    throw new Error("微信支付申请草稿超过离页保存上限");
+  }
+
   return input.request(
     current
       ? `/finance/wechat-pay/applyments/${current.id}`
       : "/finance/wechat-pay/applyments",
     {
       method: current ? "PUT" : "POST",
-      body: JSON.stringify(input.payload),
+      body,
       fallbackMessage: "微信支付开通申请保存失败",
-      keepalive: input.keepalive?.(),
+      keepalive: true,
     },
   );
 }

@@ -131,6 +131,9 @@ describe("Finance wechat pay applyment save layout", () => {
       "./finance-wechat-pay-applyment-autosave-coordinator.ts",
     );
     const hookSource = readSource("./use-wechat-pay-applyment-autosave.ts");
+    const lifecycleSource = readSource(
+      "./finance-wechat-pay-applyment-lifecycle.ts",
+    );
     const statusSource = readSource(
       "./finance-wechat-pay-applyment-save-status.tsx",
     );
@@ -142,6 +145,8 @@ describe("Finance wechat pay applyment save layout", () => {
     expect(hookSource).toContain("markDraftSaveScheduled");
     expect(hookSource).toContain("coordinator.detach()");
     expect(hookSource).toContain("pagehide");
+    expect(hookSource).toContain("pageshow");
+    expect(lifecycleSource).toContain("event.persisted");
     expect(hookSource).not.toContain("runtime?.coordinator.dispose()");
     expect(statusSource).toContain('<Spinner aria-hidden="true" />');
   });

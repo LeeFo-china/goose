@@ -15,6 +15,9 @@ import {
   ApplymentDraftAutosaveCoordinator,
   saveApplymentDraftWithCreateRecovery,
 } from "./finance-wechat-pay-applyment-autosave-coordinator";
+import {
+  createApplymentAutosavePageLifecycle,
+} from "./finance-wechat-pay-applyment-lifecycle";
 import type {
   WechatPayApplymentDetailData,
   WechatPayApplymentRecord,
@@ -69,7 +72,6 @@ export function useWechatPayApplymentAutosave(input: {
             getCurrent: () => activeRuntime.currentApplyment,
             payload,
             isCurrent: context.isCurrent,
-            keepalive: () => activeRuntime.coordinator.isDetaching,
             commitCurrent: (applyment) => {
               if (!context.isCurrent()) return;
               activeRuntime.currentApplyment = applyment;
@@ -138,19 +140,35 @@ export function useWechatPayApplymentAutosave(input: {
   }, [input.detail, input.resetKey]);
 
   useEffect(() => {
-    mountedRef.current = true;
     const runtime = ensureAutosaveRuntime();
-    const detachRuntime = () => {
-      mountedRef.current = false;
-      if (runtimeRef.current?.id === runtime.id) {
-        runtimeRef.current = null;
-      }
-      void runtime.coordinator.detach().catch(() => undefined);
+    const lifecycle = createApplymentAutosavePageLifecycle({
+      mountedRef,
+      flush: () => runtime.coordinator.flush(),
+      detach: async () => {
+        if (runtimeRef.current?.id === runtime.id) {
+          runtimeRef.current = null;
+        }
+        await runtime.coordinator.detach();
+      },
+      restore: () => {
+        if (!runtimeRef.current && !runtime.coordinator.isDetaching) {
+          runtimeRef.current = runtime;
+        }
+      },
+    });
+    lifecycle.mount();
+    const handlePageHide = (event: PageTransitionEvent) => {
+      void lifecycle.pageHide(event).catch(() => undefined);
     };
-    window.addEventListener("pagehide", detachRuntime);
+    const handlePageShow = (event: PageTransitionEvent) => {
+      lifecycle.pageShow(event);
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
     return () => {
-      window.removeEventListener("pagehide", detachRuntime);
-      detachRuntime();
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
+      void lifecycle.unmount().catch(() => undefined);
     };
   }, []);
 
