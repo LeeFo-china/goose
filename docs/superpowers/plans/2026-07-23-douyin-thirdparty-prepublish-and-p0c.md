@@ -72,7 +72,7 @@
 - Read: `apps/douyin-mini/src/`
 - Modify after success: `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md`
 
-- [ ] **Step 1：验证工作树和上传根**
+- [x] **Step 1：验证工作树和上传根**
 
 Run:
 
@@ -88,7 +88,7 @@ test ! -e apps/douyin-mini/src/ext.json
 
 Expected: 全部退出 `0`。`__MACOSX/`、`goose/` 和私有项目配置不位于 `src/`，不会进入上传包。
 
-- [ ] **Step 2：验证项目配置**
+- [x] **Step 2：验证项目配置**
 
 Run:
 
@@ -114,7 +114,7 @@ Expected:
 {"appidTail":"1b01","miniprogramRoot":"src/","urlCheck":true}
 ```
 
-- [ ] **Step 3：运行上传前门禁**
+- [x] **Step 3：运行上传前门禁**
 
 Run:
 
@@ -127,7 +127,7 @@ git diff --check
 
 Expected: 小程序检查、API typecheck/build/file-size 和 diff 检查全部通过。
 
-- [ ] **Step 4：确认上传工具路径**
+- [x] **Step 4：确认上传工具路径**
 
 Run:
 
@@ -139,6 +139,12 @@ defaults read \
 ```
 
 Expected: 当前没有 `tma`，IDE 版本为 `4.5.4`。因此本轮使用已安装、已登录的 IDE 手工上传；不安装 CLI，不生成 CLI Token。
+
+执行记录（2026-07-23）：四步均通过。`douyin-mini:check` 为 87 pass、0 fail、
+277 expect，并通过 TypeScript 检查；`api:check` 的 typecheck、build 和 file-size
+门禁全部通过。源码树保持
+`6fa6d6eaf96cf9821d197d5a3cba440dfb4d6cf8`，IDE 为 `4.5.4`，本机无
+`tma` 命令。本轮没有安装依赖、读取登录态或修改上传源码。
 
 ## Task 2：A08 向 Template AppID 上传 `0.1.0`
 
