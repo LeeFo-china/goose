@@ -13,13 +13,13 @@
   ],
   "window": {
     "navigationBarTitleText": "装修服务",
-    "navigationBarBackgroundColor": "#F7F6F4",
+    "navigationBarBackgroundColor": "#F5F5F3",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#F7F6F4"
+    "backgroundColor": "#F5F5F3"
   },
   "tabBar": {
-    "color": "#6F6964",
-    "selectedColor": "#A84324",
+    "color": "#625F5B",
+    "selectedColor": "#191817",
     "backgroundColor": "#FFFFFF",
     "borderStyle": "black",
     "list": [
