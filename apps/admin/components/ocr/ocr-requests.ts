@@ -1,4 +1,4 @@
-import type { OcrDocumentType } from "@gooes/domain";
+import type { OcrDocumentType, OcrRecognitionView } from "@gooes/domain";
 import { requestBackendJson } from "@/lib/backend-client";
 import type {
   OcrCapabilitiesResult,
@@ -33,4 +33,11 @@ export function createApplymentOcrRecognition(input: {
     }),
     fallbackMessage: "证照识别失败",
   });
+}
+
+export function fetchApplymentOcrRecognition(id: string) {
+  return requestBackendJson<OcrRecognitionView>(
+    `/ocr/recognitions/${encodeURIComponent(id)}`,
+    { fallbackMessage: "OCR 识别结果恢复失败" },
+  );
 }

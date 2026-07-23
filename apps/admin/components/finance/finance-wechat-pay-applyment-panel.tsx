@@ -3,27 +3,14 @@
 import {
   type FormEvent,
   useEffect,
-  useMemo,
   useRef,
   useState,
   useTransition,
 } from "react";
-import type {
-  OcrDocumentType,
-  OcrFieldSuggestion,
-  OcrWarning,
-} from "@gooes/domain";
 import { useRouter } from "next/navigation";
-import { Loader2, Save, SendHorizontal } from "lucide-react";
+import { CircleAlert, Loader2, Save, SendHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import {
-  mapApplymentOcrFields,
-  OcrFieldReviewDialog,
-} from "@/components/ocr/ocr-field-review-dialog";
-import {
-  createApplymentOcrRecognition,
-  fetchApplymentOcrCapabilities,
-} from "@/components/ocr/ocr-requests";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +24,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { requestBackendJson } from "@/lib/backend-client";
 import { WechatPayApplymentAttachmentsField } from "./finance-wechat-pay-applyment-attachments";
@@ -51,11 +40,13 @@ import {
   formatWechatPayApplymentTime,
   getWechatPayApplymentStatusMeta,
   type WechatPayApplymentAttachment,
-  type WechatPayApplymentAttachmentCategory,
   type WechatPayApplymentDetailData,
   type WechatPayApplymentDetailResult,
-  WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES,
+  type WechatPayApplymentRecord,
 } from "./finance-wechat-pay-applyment-shared";
+import {
+  useWechatPayApplymentMaterials,
+} from "./use-wechat-pay-applyment-materials";
 
 export function FinanceWechatPayApplymentPanel({
   data,
@@ -65,6 +56,7 @@ export function FinanceWechatPayApplymentPanel({
   const router = useRouter();
   const applyment = data.applyment;
   const formRef = useRef<HTMLFormElement>(null);
+  const applymentRef = useRef<WechatPayApplymentRecord | null>(applyment);
   const [activeStep, setActiveStep] = useState<ApplymentStepKey>("subject");
   const [subjectType, setSubjectType] = useState(
     applyment?.subject_type || "SUBJECT_TYPE_ENTERPRISE",
@@ -73,68 +65,33 @@ export function FinanceWechatPayApplymentPanel({
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [error, setError] = useState(data.error || "");
   const [saved, setSaved] = useState(false);
-  const [attachments, setAttachments] = useState<WechatPayApplymentAttachment[]>(
-    applyment?.attachments || [],
-  );
-  const [ocrDocumentTypes, setOcrDocumentTypes] = useState<OcrDocumentType[]>(
-    [],
-  );
-  const [recognizingCategory, setRecognizingCategory] = useState<string | null>(
-    null,
-  );
-  const [ocrError, setOcrError] = useState("");
-  const [ocrFields, setOcrFields] = useState<OcrFieldSuggestion[]>([]);
-  const [ocrWarnings, setOcrWarnings] = useState<OcrWarning[]>([]);
-  const [ocrCurrentValues, setOcrCurrentValues] = useState<
-    Record<string, string>
-  >({});
-  const [ocrAppliedValues, setOcrAppliedValues] = useState<
-    Record<string, string>
-  >({});
-  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
-  const [ocrAttachmentCategory, setOcrAttachmentCategory] = useState<
-    string | null
-  >(null);
   const [pending, startTransition] = useTransition();
-  const supportedOcrDocumentTypes = useMemo(
-    () => new Set<string>(ocrDocumentTypes),
-    [ocrDocumentTypes],
-  );
   const statusMeta = getWechatPayApplymentStatusMeta(applyment?.status);
   const editable = !applyment || ["draft", "rejected", "wechat_editing"].includes(
     applyment.status,
   );
+  const materials = useWechatPayApplymentMaterials({
+    initialAttachments: applyment?.attachments || [],
+    initialApplymentId: applyment?.id,
+    resetKey: `${applyment?.id ?? "new"}:${applyment?.updated_at ?? ""}`,
+    editable,
+    persistAttachments: persistMaterialAttachments,
+  });
+  const {
+    attachments,
+    attachmentsRef,
+    materialStates,
+    supportedOcrDocumentTypes,
+  } = materials;
   const stepIndex = APPLYMENT_STEP_KEYS.indexOf(activeStep);
   const progress = ((stepIndex + 1) / APPLYMENT_STEP_KEYS.length) * 100;
 
   useEffect(() => {
-    setAttachments(applyment?.attachments || []);
+    applymentRef.current = applyment;
     setSubjectType(applyment?.subject_type || "SUBJECT_TYPE_ENTERPRISE");
     setContactType(applyment?.contact_type || "LEGAL");
     setReviewConfirmed(false);
-    setOcrAppliedValues({});
   }, [applyment?.id, applyment?.updated_at]);
-
-  useEffect(() => {
-    if (!editable) return;
-    let active = true;
-    fetchApplymentOcrCapabilities()
-      .then((capabilities) => {
-        if (active) {
-          setOcrDocumentTypes(capabilities.map((item) => item.document_type));
-        }
-      })
-      .catch((capabilityError) => {
-        if (active) {
-          setOcrError(capabilityError instanceof Error
-            ? capabilityError.message
-            : "OCR 可用能力加载失败");
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [editable]);
 
   function submitSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -157,7 +114,8 @@ export function FinanceWechatPayApplymentPanel({
   }
 
   function submitApplyment() {
-    if (!applyment || !data.can_submit) return;
+    const currentApplyment = applymentRef.current;
+    if (!currentApplyment || !data.can_submit) return;
     const formElement = formRef.current;
     if (!formElement || !validateVisibleStep(formElement, setActiveStep)) return;
     const payload = buildCurrentApplymentPayload(formElement);
@@ -166,7 +124,7 @@ export function FinanceWechatPayApplymentPanel({
     startTransition(async () => {
       try {
         const savedDetail = await saveApplymentDraft(payload);
-        const targetApplyment = savedDetail.applyment || applyment;
+        const targetApplyment = savedDetail.applyment || currentApplyment;
         await requestBackendJson<WechatPayApplymentDetailData>(
           `/finance/wechat-pay/applyments/${targetApplyment.id}/submit`,
           {
@@ -189,89 +147,49 @@ export function FinanceWechatPayApplymentPanel({
   function buildCurrentApplymentPayload(formElement: HTMLFormElement) {
     return buildWechatPayApplymentPayload(new FormData(formElement), {
       hasSensitivePayload: Boolean(applyment?.has_sensitive_payload),
-      attachments,
+      attachments: attachmentsRef.current,
     });
   }
 
-  function saveApplymentDraft(payload: Record<string, unknown>) {
-    const path = applyment
-      ? `/finance/wechat-pay/applyments/${applyment.id}`
+  async function saveApplymentDraft(payload: Record<string, unknown>) {
+    const currentApplyment = applymentRef.current;
+    const path = currentApplyment
+      ? `/finance/wechat-pay/applyments/${currentApplyment.id}`
       : "/finance/wechat-pay/applyments";
-    return requestBackendJson<WechatPayApplymentDetailData>(path, {
-      method: applyment ? "PUT" : "POST",
+    const detail = await requestBackendJson<WechatPayApplymentDetailData>(path, {
+      method: currentApplyment ? "PUT" : "POST",
       body: JSON.stringify(payload),
       fallbackMessage: "微信支付开通申请保存失败",
     });
+    if (detail.applyment) applymentRef.current = detail.applyment;
+    return detail;
+  }
+
+  async function persistMaterialAttachments(input: {
+    attachments: WechatPayApplymentAttachment[];
+    draftUpdateSource: "attachment_change" | "ocr_review" | "manual_entry";
+  }) {
+    const formElement = formRef.current;
+    if (!formElement) throw new Error("申请表单尚未就绪，请稍后重试");
+    const payload = buildWechatPayApplymentPayload(new FormData(formElement), {
+      hasSensitivePayload: Boolean(applyment?.has_sensitive_payload),
+      attachments: input.attachments,
+    });
+    payload.draft_update_source = input.draftUpdateSource;
+    const detail = await saveApplymentDraft(payload);
+    setSaved(true);
+    return { applymentId: detail.applyment?.id };
   }
 
   function changeContactType(value: string) {
     setContactType(value);
     setReviewConfirmed(false);
     if (value === "LEGAL") {
-      setAttachments((current) => current.filter((attachment) =>
+      void materials.onChange(attachmentsRef.current.filter((attachment) =>
         attachment.category !== "contact_id_card_front" &&
         attachment.category !== "contact_id_card_back"
-      ));
+      )).catch(() => undefined);
     }
-  }
-
-  async function recognizeAttachment(attachment: WechatPayApplymentAttachment) {
-    const category = attachment.category as
-      WechatPayApplymentAttachmentCategory | undefined;
-    const documentType = category
-      ? WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[category]
-      : undefined;
-    if (!attachment.file_object_id) {
-      setOcrError("旧附件缺少文件 ID，请重新上传后再识别");
-      return;
-    }
-    if (
-      !category ||
-      !documentType ||
-      !supportedOcrDocumentTypes.has(documentType)
-    ) {
-      setOcrError("当前附件暂不支持证照识别");
-      return;
-    }
-
-    setOcrError("");
-    setRecognizingCategory(category);
-    try {
-      const result = await createApplymentOcrRecognition({
-        documentType,
-        fileObjectId: attachment.file_object_id,
-        applymentId: applyment?.id,
-      });
-      const fields = mapApplymentOcrFields(
-        category,
-        result.recognition.fields,
-      );
-      if (fields.length === 0) {
-        setOcrError("识别成功，但没有可回填到当前申请的字段");
-        return;
-      }
-      setOcrFields(fields);
-      setOcrWarnings([...result.recognition.warnings]);
-      setOcrCurrentValues(readCurrentOcrValues(
-        formRef.current,
-        fields,
-        Boolean(applyment?.has_sensitive_payload),
-      ));
-      setOcrAttachmentCategory(category);
-      setOcrDialogOpen(true);
-    } catch (recognitionError) {
-      setOcrError(recognitionError instanceof Error
-        ? recognitionError.message
-        : "证照识别失败");
-    } finally {
-      setRecognizingCategory(null);
-    }
-  }
-
-  function applyOcrValues(values: Record<string, string>) {
-    setOcrAppliedValues((current) => ({ ...current, ...values }));
-    setReviewConfirmed(false);
-    setActiveStep(getOcrTargetStep(ocrAttachmentCategory));
   }
 
   return (
@@ -284,15 +202,7 @@ export function FinanceWechatPayApplymentPanel({
       >
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {saved ? <StatusAlert tone="success">开通申请已保存。</StatusAlert> : null}
-        {ocrError ? <StatusAlert>{ocrError}</StatusAlert> : null}
-        <OcrFieldReviewDialog
-          open={ocrDialogOpen}
-          fields={ocrFields}
-          warnings={ocrWarnings}
-          currentValues={ocrCurrentValues}
-          onOpenChange={setOcrDialogOpen}
-          onApply={applyOcrValues}
-        />
+        {materials.error ? <StatusAlert>{materials.error}</StatusAlert> : null}
         {!editable ? (
           <StatusAlert tone="warning">当前申请已提交或进入平台处理阶段，租户侧只读。</StatusAlert>
         ) : null}
@@ -323,8 +233,8 @@ export function FinanceWechatPayApplymentPanel({
           subjectType={subjectType}
           contactType={contactType}
           editable={editable}
-          disabled={pending || !editable}
-          ocrFieldValues={ocrAppliedValues}
+          disabled={pending || materials.pending || !editable}
+          ocrFieldValues={{}}
           onStepChange={setActiveStep}
           onSubjectTypeChange={(value) => {
             setSubjectType(value);
@@ -332,19 +242,47 @@ export function FinanceWechatPayApplymentPanel({
           }}
           onContactTypeChange={changeContactType}
           attachmentsContent={(
-            <WechatPayApplymentAttachmentsField
-              attachments={attachments}
-              contactType={contactType}
-              editable={editable}
-              disabled={pending}
-              supportedOcrDocumentTypes={supportedOcrDocumentTypes}
-              recognizingCategory={recognizingCategory}
-              onRecognize={recognizeAttachment}
-              onChange={(nextAttachments) => {
-                setAttachments(nextAttachments);
-                setReviewConfirmed(false);
-              }}
-            />
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <Checkbox
+                  id="wechat-pay-applyment-ocr-consent"
+                  checked={materials.recognitionConsent}
+                  disabled={pending || !editable}
+                  onCheckedChange={(checked) => {
+                    materials.setRecognitionConsent(checked === true);
+                  }}
+                />
+                <FieldLabel
+                  htmlFor="wechat-pay-applyment-ocr-consent"
+                  className="leading-5"
+                >
+                  同意使用已上传证照进行信息识别和申请资料回填
+                </FieldLabel>
+              </div>
+              {materials.capabilitiesUnavailable ? (
+                <Alert>
+                  <CircleAlert />
+                  <AlertTitle>证照识别暂不可用</AlertTitle>
+                  <AlertDescription>
+                    已上传资料仍会保存，请在下一步手动填写。
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              <WechatPayApplymentAttachmentsField
+                attachments={attachments}
+                contactType={contactType}
+                editable={editable}
+                disabled={pending || materials.pending}
+                materialStates={materialStates}
+                supportedOcrDocumentTypes={supportedOcrDocumentTypes}
+                onUploaded={materials.onUploaded}
+                onRetryRecognition={materials.onRetryRecognition}
+                onChange={async (nextAttachments) => {
+                  setReviewConfirmed(false);
+                  await materials.onChange(nextAttachments);
+                }}
+              />
+            </div>
           )}
           reviewContent={(
             <FinanceWechatPayApplymentReview
@@ -352,7 +290,7 @@ export function FinanceWechatPayApplymentPanel({
               attachments={attachments}
               contactType={contactType}
               confirmed={reviewConfirmed}
-              disabled={pending || !editable}
+              disabled={pending || materials.pending || !editable}
               onConfirmedChange={setReviewConfirmed}
             />
           )}
@@ -363,7 +301,11 @@ export function FinanceWechatPayApplymentPanel({
             最近更新：{formatWechatPayApplymentTime(applyment?.updated_at)}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="outline" disabled={pending || !editable}>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={pending || materials.pending || !editable}
+            >
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Save data-icon="inline-start" />}
               保存申请
             </Button>
@@ -372,7 +314,7 @@ export function FinanceWechatPayApplymentPanel({
                 <Button
                   type="button"
                   disabled={
-                    pending || !applyment || !data.can_submit ||
+                    pending || materials.pending || !applyment || !data.can_submit ||
                     !reviewConfirmed || activeStep !== "review"
                   }
                 >
@@ -421,38 +363,6 @@ export function FinanceWechatPayApplymentPanel({
       </aside>
     </div>
   );
-}
-
-const STORED_SENSITIVE_OCR_FIELDS = new Set([
-  "identity_name",
-  "identity_number",
-  "identity_address",
-  "contact_identity_number",
-  "contact_identity_address",
-  "settlement_account_number",
-]);
-
-function readCurrentOcrValues(
-  form: HTMLFormElement | null,
-  fields: readonly OcrFieldSuggestion[],
-  hasSensitivePayload: boolean,
-) {
-  const formData = form ? new FormData(form) : new FormData();
-  return Object.fromEntries(fields.map((field) => {
-    const value = String(formData.get(field.key) ?? "").trim();
-    const displayValue = !value &&
-        hasSensitivePayload &&
-        STORED_SENSITIVE_OCR_FIELDS.has(field.key)
-      ? "已安全保存"
-      : value;
-    return [field.key, displayValue];
-  }));
-}
-
-function getOcrTargetStep(category: string | null): ApplymentStepKey {
-  if (category === "license_copy") return "subject";
-  if (category === "settlement_account_proof") return "settlement";
-  return "contact";
 }
 
 function validateVisibleStep(

@@ -143,6 +143,124 @@ export function updateAttachmentOcrReviewMetadata(
   );
 }
 
+export function replaceApplymentAttachment(
+  attachments: readonly WechatPayApplymentAttachment[],
+  attachment: WechatPayApplymentAttachment,
+): WechatPayApplymentAttachment[] {
+  if (attachment.category === "business_scene_material") {
+    return [...attachments, attachment];
+  }
+  return [
+    ...attachments.filter((item) => item.category !== attachment.category),
+    attachment,
+  ];
+}
+
+export function isCurrentMaterialAttachment(
+  attachments: readonly WechatPayApplymentAttachment[],
+  attachment: WechatPayApplymentAttachment,
+): boolean {
+  if (!isOcrSupportedCategory(attachment.category)) return false;
+  return buildCurrentOcrAttachments(attachments).get(attachment.category)
+    ?.object_key === attachment.object_key;
+}
+
+export function getOcrMaterialCategory(
+  attachment: WechatPayApplymentAttachment,
+): WechatPayApplymentAttachmentCategory | null {
+  return isOcrSupportedCategory(attachment.category)
+    ? attachment.category
+    : null;
+}
+
+export function getOcrMaterialDocumentType(
+  attachment: WechatPayApplymentAttachment,
+) {
+  const category = getOcrMaterialCategory(attachment);
+  return category
+    ? WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[category]
+    : undefined;
+}
+
+export function buildFailedMaterialState(
+  attachment: WechatPayApplymentAttachment,
+  error: string,
+): ApplymentMaterialState {
+  return {
+    status: "failed",
+    attachmentObjectKey: attachment.object_key,
+    recognitionId: attachment.ocr_recognition_id ?? null,
+    fields: [],
+    warnings: [],
+    error,
+  };
+}
+
+export function reconcileMaterialStates(
+  attachments: readonly WechatPayApplymentAttachment[],
+  materialStates: ApplymentMaterialStateMap,
+): ApplymentMaterialStateMap {
+  const initialStates = buildInitialMaterialStates(attachments);
+  const nextStates: Partial<
+    Record<WechatPayApplymentAttachmentCategory, ApplymentMaterialState>
+  > = {};
+  for (const [category, initialState] of Object.entries(initialStates) as Array<
+    [WechatPayApplymentAttachmentCategory, ApplymentMaterialState]
+  >) {
+    const currentState = materialStates[category];
+    nextStates[category] = currentState?.attachmentObjectKey ===
+        initialState.attachmentObjectKey
+      ? currentState
+      : initialState;
+  }
+  return nextStates;
+}
+
+export function buildRecoveredMaterialState(
+  attachment: WechatPayApplymentAttachment,
+  recognition: {
+    id: string;
+    warnings: readonly OcrWarning[];
+  },
+  fields: readonly OcrFieldSuggestion[],
+): ApplymentMaterialState {
+  return {
+    status: "review_required",
+    attachmentObjectKey: attachment.object_key,
+    recognitionId: recognition.id,
+    fields,
+    warnings: recognition.warnings,
+    error: null,
+  };
+}
+
+export function getPendingRecognitionAttachments(input: {
+  attachments: readonly WechatPayApplymentAttachment[];
+  materialStates: ApplymentMaterialStateMap;
+  supportedDocumentTypes: ReadonlySet<string>;
+  excludedObjectKeys?: ReadonlySet<string>;
+}): WechatPayApplymentAttachment[] {
+  return input.attachments.filter((attachment) => {
+    if (
+      !isOcrSupportedCategory(attachment.category) ||
+      !attachment.file_object_id ||
+      input.excludedObjectKeys?.has(attachment.object_key)
+    ) {
+      return false;
+    }
+    const documentType = WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[
+      attachment.category
+    ];
+    const state = input.materialStates[attachment.category];
+    return Boolean(
+      documentType &&
+      input.supportedDocumentTypes.has(documentType) &&
+      state?.attachmentObjectKey === attachment.object_key &&
+      state.status === "uploaded",
+    );
+  });
+}
+
 export function getApplymentProgress(stage: ApplymentStageKey): number {
   return (
     ((APPLYMENT_STAGE_KEYS.indexOf(stage) + 1) /

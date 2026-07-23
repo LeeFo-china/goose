@@ -129,6 +129,42 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(attachmentSource).not.toContain("<label");
   });
 
+  test("wires the materials-first upload preview auto OCR and recovery contract", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const attachmentSource = readSource(
+      "./finance-wechat-pay-applyment-attachments.tsx",
+    );
+    const previewSource = readSource(
+      "./finance-wechat-pay-applyment-attachment-preview.tsx",
+    );
+    const materialsHookSource = readSource(
+      "./use-wechat-pay-applyment-materials.ts",
+    );
+    const ocrRequestSource = readSource("../ocr/ocr-requests.ts");
+
+    expect(panelSource).toContain("useWechatPayApplymentMaterials");
+    expect(materialsHookSource).toContain("buildInitialMaterialStates");
+    expect(materialsHookSource).toContain("attachmentsRef");
+    expect(materialsHookSource).toContain("fetchApplymentOcrRecognition");
+    expect(materialsHookSource).toContain('draftUpdateSource: "attachment_change"');
+    expect(materialsHookSource).toContain('draftUpdateSource: "ocr_review"');
+    expect(materialsHookSource).toContain('draftUpdateSource: "manual_entry"');
+    expect(panelSource).toContain("@/components/ui/checkbox");
+    expect(panelSource).toContain("同意使用已上传证照进行信息识别和申请资料回填");
+    expect(panelSource).toContain("证照识别暂不可用");
+    expect(attachmentSource).toContain("onUploaded");
+    expect(attachmentSource).toContain("onRetryRecognition");
+    expect(attachmentSource).toContain("materialStates");
+    expect(attachmentSource).toContain("AttachmentPreviewCard");
+    expect(previewSource).toContain("AttachmentPreviewDialog");
+    expect(previewSource).toContain("aspect-[4/3]");
+    expect(previewSource).toContain("object-contain");
+    expect(attachmentSource).not.toContain("识别并回填");
+    expect(attachmentSource).not.toContain("onRecognize");
+    expect(ocrRequestSource).toContain("fetchApplymentOcrRecognition");
+    expect(ocrRequestSource).toContain("/ocr/recognitions/${encodeURIComponent(id)}");
+  });
+
   test("keeps tenant applyment client panel away from server-only request module", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const sharedSource = readSource("./finance-wechat-pay-applyment-shared.ts");
