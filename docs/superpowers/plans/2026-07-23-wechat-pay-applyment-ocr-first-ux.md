@@ -848,6 +848,13 @@ git commit -m "refactor(payment): 拆分进件草稿与提交校验"
 - Create: `apps/admin/components/finance/finance-wechat-pay-applyment-flow-model.ts`
 - Create: `apps/admin/components/finance/finance-wechat-pay-applyment-flow-model.test.ts`
 
+附件数组按 category 建立 last-write-wins 的当前 OCR 附件投影，初始化、资料阶段
+和识别阶段必须复用同一投影。只有 `attachmentObjectKey` 与当前附件
+`object_key` 一致的 state 才有效；删除附件、`SUPER -> LEGAL` 移除经办人附件、
+替换附件或重复 category 时，旧 state 不得继续阻塞或放行。阶段恢复按 canonical
+顺序逐级合并 local guard 与 backend blocker，不得先跑完全部 local guard 再统一
+查 blocker。
+
 - [ ] **Step 1: 写 flow model 失败测试**
 
 ```ts
@@ -988,8 +995,34 @@ describe("wechat pay applyment flow model", () => {
       blockerStages: ["supplement"],
     })).toBe("supplement");
   });
+
+  test("prioritizes a materials blocker over unresolved recognition", () => {
+    const unresolvedAttachments = [{
+      category: "license_copy",
+      object_key: "tenant/license.jpg",
+      ocr_review_status: "review_required" as const,
+    }, {
+      category: "legal_representative_id_card_front",
+      object_key: "tenant/id-front.jpg",
+      ocr_review_status: "confirmed" as const,
+    }, {
+      category: "legal_representative_id_card_back",
+      object_key: "tenant/id-back.jpg",
+      ocr_review_status: "confirmed" as const,
+    }];
+    expect(getInitialApplymentStage({
+      contactType: "LEGAL",
+      attachments: unresolvedAttachments,
+      materialStates: buildInitialMaterialStates(unresolvedAttachments),
+      blockerStages: ["materials"],
+    })).toBe("materials");
+  });
 });
 ```
+
+测试还必须覆盖孤立 state、附件替换前后 object key、重复 category 的
+last-write-wins 行为，以及 readonly state/map 和 metadata 两个必填 key 的
+TypeScript 编译契约。
 
 - [ ] **Step 2: 运行测试确认失败**
 
@@ -1011,6 +1044,7 @@ import type {
 import type {
   WechatPayApplymentAttachment,
   WechatPayApplymentAttachmentCategory,
+  WechatPayApplymentAttachmentOcrReviewStatus,
 } from "./finance-wechat-pay-applyment-shared";
 import {
   WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES,
@@ -1036,23 +1070,57 @@ export type ApplymentMaterialStatus =
   | "failed";
 
 export type ApplymentMaterialState = {
-  status: ApplymentMaterialStatus;
-  attachmentObjectKey: string | null;
-  recognitionId: string | null;
-  fields: readonly OcrFieldSuggestion[];
-  warnings: readonly OcrWarning[];
-  error: string | null;
+  readonly status: ApplymentMaterialStatus;
+  readonly attachmentObjectKey: string | null;
+  readonly recognitionId: string | null;
+  readonly fields: readonly OcrFieldSuggestion[];
+  readonly warnings: readonly OcrWarning[];
+  readonly error: string | null;
 };
 
-export type ApplymentMaterialStateMap = Partial<
-  Record<WechatPayApplymentAttachmentCategory, ApplymentMaterialState>
+export type ApplymentMaterialStateMap = Readonly<
+  Partial<
+    Record<WechatPayApplymentAttachmentCategory, ApplymentMaterialState>
+  >
 >;
+
+export type ApplymentAttachmentOcrReviewMetadata = {
+  readonly ocr_recognition_id: string | null;
+  readonly ocr_review_status:
+    | WechatPayApplymentAttachmentOcrReviewStatus
+    | null;
+};
 
 const BASE_REQUIRED = [
   "license_copy",
   "legal_representative_id_card_front",
   "legal_representative_id_card_back",
 ] as const;
+
+const OCR_SUPPORTED_CATEGORIES: ReadonlySet<unknown> = new Set(
+  Object.keys(WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES),
+);
+
+function isOcrSupportedCategory(
+  category: WechatPayApplymentAttachment["category"],
+): category is WechatPayApplymentAttachmentCategory {
+  return typeof category === "string" &&
+    OCR_SUPPORTED_CATEGORIES.has(category);
+}
+
+function buildCurrentOcrAttachments(
+  attachments: readonly WechatPayApplymentAttachment[],
+) {
+  const current = new Map<
+    WechatPayApplymentAttachmentCategory,
+    WechatPayApplymentAttachment
+  >();
+  for (const attachment of attachments) {
+    if (!isOcrSupportedCategory(attachment.category)) continue;
+    current.set(attachment.category, attachment);
+  }
+  return current;
+}
 
 function restoreMaterialStatus(
   status: WechatPayApplymentAttachment["ocr_review_status"],
@@ -1084,17 +1152,11 @@ export function buildInitialMaterialState(
 export function buildInitialMaterialStates(
   attachments: readonly WechatPayApplymentAttachment[],
 ): ApplymentMaterialStateMap {
-  const states: ApplymentMaterialStateMap = {};
-  for (const attachment of attachments) {
-    const category = attachment.category;
-    if (
-      typeof category !== "string" ||
-      !(category in WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES)
-    ) {
-      continue;
-    }
-    const typedCategory = category as WechatPayApplymentAttachmentCategory;
-    states[typedCategory] = buildInitialMaterialState(attachment);
+  const states: Partial<
+    Record<WechatPayApplymentAttachmentCategory, ApplymentMaterialState>
+  > = {};
+  for (const [category, attachment] of buildCurrentOcrAttachments(attachments)) {
+    states[category] = buildInitialMaterialState(attachment);
   }
   return states;
 }
@@ -1102,10 +1164,7 @@ export function buildInitialMaterialStates(
 export function updateAttachmentOcrReviewMetadata(
   attachments: readonly WechatPayApplymentAttachment[],
   objectKey: string,
-  metadata: Pick<
-    WechatPayApplymentAttachment,
-    "ocr_recognition_id" | "ocr_review_status"
-  >,
+  metadata: ApplymentAttachmentOcrReviewMetadata,
 ): WechatPayApplymentAttachment[] {
   return attachments.map((attachment) =>
     attachment.object_key === objectKey
@@ -1133,14 +1192,17 @@ export function canLeaveMaterialsStage(input: {
   attachments: readonly WechatPayApplymentAttachment[];
   materialStates: ApplymentMaterialStateMap;
 }) {
-  const categories = new Set(input.attachments.map((item) => item.category));
+  const currentAttachments = buildCurrentOcrAttachments(input.attachments);
   const missing = getRequiredApplymentAttachments(input.contactType)
-    .some((category) => !categories.has(category));
+    .some((category) => !currentAttachments.has(category));
   if (missing) {
     return { allowed: false, reason: "请先上传全部必传资料" } as const;
   }
-  const busy = Object.values(input.materialStates)
-    .some((item) => item?.status === "recognizing");
+  const busy = Array.from(currentAttachments).some(([category, attachment]) => {
+    const state = input.materialStates[category];
+    return state?.attachmentObjectKey === attachment.object_key &&
+      state.status === "recognizing";
+  });
   return busy
     ? { allowed: false, reason: "证照正在识别，请稍候" } as const
     : { allowed: true, reason: null } as const;
@@ -1150,15 +1212,12 @@ export function canLeaveRecognitionStage(input: {
   attachments: readonly WechatPayApplymentAttachment[];
   materialStates: ApplymentMaterialStateMap;
 }) {
-  const unresolved = input.attachments.some((attachment) => {
-    const category = attachment.category as
-      | WechatPayApplymentAttachmentCategory
-      | undefined;
-    if (!category || !WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[category]) {
-      return false;
-    }
-    const status = input.materialStates[category]?.status;
-    return status !== "confirmed" && status !== "manual";
+  const unresolved = Array.from(
+    buildCurrentOcrAttachments(input.attachments),
+  ).some(([category, attachment]) => {
+    const state = input.materialStates[category];
+    if (state?.attachmentObjectKey !== attachment.object_key) return true;
+    return state.status !== "confirmed" && state.status !== "manual";
   });
   return unresolved
     ? {
@@ -1174,11 +1233,20 @@ export function getInitialApplymentStage(input: {
   materialStates: ApplymentMaterialStateMap;
   blockerStages: readonly ApplymentStageKey[];
 }): ApplymentStageKey {
-  if (!canLeaveMaterialsStage(input).allowed) return "materials";
-  if (!canLeaveRecognitionStage(input).allowed) return "recognition";
-  return APPLYMENT_STAGE_KEYS.find((stage) =>
-    stage !== "submit" && input.blockerStages.includes(stage)
-  ) ?? "submit";
+  const blockerStages = new Set(input.blockerStages);
+  if (
+    !canLeaveMaterialsStage(input).allowed ||
+    blockerStages.has("materials")
+  ) {
+    return "materials";
+  }
+  if (
+    !canLeaveRecognitionStage(input).allowed ||
+    blockerStages.has("recognition")
+  ) {
+    return "recognition";
+  }
+  return blockerStages.has("supplement") ? "supplement" : "submit";
 }
 ```
 
