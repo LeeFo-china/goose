@@ -408,6 +408,7 @@ describe("wechat pay applyment material helpers", () => {
       currentAttachments,
       currentStates,
       nextAttachments: [manualLicense],
+      getCurrentAttachments: () => currentAttachments,
       commitLocal: (attachments, states) => {
         currentAttachments = attachments;
         currentStates = states;
@@ -418,7 +419,7 @@ describe("wechat pay applyment material helpers", () => {
       },
       enqueue: (operation) => operation(),
       isActive: () => true,
-      rollback: () => undefined,
+      captureRollback: () => () => undefined,
       persist: async (input) => {
         persistedSource = input.draftUpdateSource;
         throw new Error("save unavailable");

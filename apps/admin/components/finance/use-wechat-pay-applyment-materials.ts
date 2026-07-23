@@ -3,12 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { fetchApplymentOcrCapabilities } from "@/components/ocr/ocr-requests";
 import {
   checkpointApplymentAttachment,
-  createAttachmentChangeCheckpointSnapshot,
+  createAttachmentChangeCheckpointRuntime,
   createMaterialOperationGeneration,
   hasMaterialErrors,
   retainAttachmentCheckpointErrors,
   retainUnpersistedAttachmentKeys,
-  restoreAttachmentChangeCheckpointSnapshot,
   type AttachmentCheckpointErrorMap,
 } from "./finance-wechat-pay-applyment-checkpoint";
 import {
@@ -25,6 +24,7 @@ import { setupMountedRefLifecycle } from "./finance-wechat-pay-applyment-lifecyc
 import {
   changeApplymentAttachments,
   persistUnsupportedApplymentMaterialsAsManual,
+  type ApplymentAttachmentChangeOptions,
   type PersistAttachmentsInput,
 } from "./finance-wechat-pay-applyment-manual-entry";
 import {
@@ -350,24 +350,28 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       generation,
     );
   }
-  async function onChange(nextAttachments: WechatPayApplymentAttachment[]) {
+  async function onChange(
+    nextAttachments: WechatPayApplymentAttachment[],
+    options?: ApplymentAttachmentChangeOptions,
+  ) {
     if (!input.editable) return;
     const generation = generationRef.current.current();
-    const checkpointSnapshot = createAttachmentChangeCheckpointSnapshot({
-      attachments: attachmentsRef.current,
-      materialStates: materialStatesRef.current,
-      checkpointErrors: attachmentSaveErrorsRef.current,
+    const checkpointRuntime = createAttachmentChangeCheckpointRuntime({
+      getAttachments: () => attachmentsRef.current,
+      getMaterialStates: () => materialStatesRef.current,
+      getCheckpointErrors: () => attachmentSaveErrorsRef.current,
       unpersistedObjectKeys: unpersistedObjectKeysRef.current,
+      commitLocal: syncAttachments,
+      commitCheckpointErrors: commitAttachmentSaveErrors,
     });
-    retainUnpersistedAttachmentKeys(
-      unpersistedObjectKeysRef.current,
-      nextAttachments,
-    );
     return changeApplymentAttachments({
       currentAttachments: attachmentsRef.current,
       currentStates: materialStatesRef.current,
       nextAttachments,
-      commitLocal: syncAttachments,
+      intent: options?.intent,
+      relatedMutation: options?.relatedMutation,
+      getCurrentAttachments: () => attachmentsRef.current,
+      commitLocal: checkpointRuntime.commitLocal,
       getCurrentStates: () => materialStatesRef.current,
       commitStates: (states) => {
         if (generationRef.current.isCurrent(generation)) {
@@ -376,12 +380,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       },
       enqueue: (operation) => enqueue(operation, generation),
       isActive: () => generationRef.current.isCurrent(generation),
-      rollback: () => restoreAttachmentChangeCheckpointSnapshot({
-        snapshot: checkpointSnapshot,
-        unpersistedObjectKeys: unpersistedObjectKeysRef.current,
-        commitLocal: syncAttachments,
-        commitCheckpointErrors: commitAttachmentSaveErrors,
-      }),
+      captureRollback: checkpointRuntime.captureRollback,
       persist: (persistInput) => persist(persistInput, generation),
       clearError: () => {
         if (

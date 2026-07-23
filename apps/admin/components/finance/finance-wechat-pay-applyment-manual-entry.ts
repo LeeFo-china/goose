@@ -18,9 +18,74 @@ export type DraftUpdateSource =
 export type PersistAttachmentsInput = {
   attachments: WechatPayApplymentAttachment[];
   draftUpdateSource: DraftUpdateSource;
+  contactType?: string;
 };
 
 export const MANUAL_ENTRY_PERSIST_ERROR = "手动填写状态保存失败";
+
+export type ApplymentAttachmentMutationIntent = {
+  removeObjectKeys: readonly string[];
+  upsertAttachments: readonly WechatPayApplymentAttachment[];
+};
+
+export type ApplymentAttachmentRelatedMutation = {
+  commitOptimistic: () => void;
+  rollback: () => void;
+  contactType?: string;
+};
+
+export type ApplymentAttachmentChangeOptions = {
+  intent?: ApplymentAttachmentMutationIntent;
+  relatedMutation?: ApplymentAttachmentRelatedMutation;
+};
+
+export function createApplymentAttachmentMutationIntent(
+  currentAttachments: readonly WechatPayApplymentAttachment[],
+  nextAttachments: readonly WechatPayApplymentAttachment[],
+): ApplymentAttachmentMutationIntent {
+  const nextObjectKeys = new Set(
+    nextAttachments.map((attachment) => attachment.object_key),
+  );
+  return {
+    removeObjectKeys: currentAttachments
+      .filter((attachment) => !nextObjectKeys.has(attachment.object_key))
+      .map((attachment) => attachment.object_key),
+    upsertAttachments: nextAttachments
+      .filter((attachment) => {
+        const current = currentAttachments.find(
+          (item) => item.object_key === attachment.object_key,
+        );
+        return !current || !areApplymentAttachmentsEqual(current, attachment);
+      }),
+  };
+}
+
+export function applyApplymentAttachmentMutationIntent(
+  currentAttachments: readonly WechatPayApplymentAttachment[],
+  intent: ApplymentAttachmentMutationIntent,
+) {
+  const removed = new Set(intent.removeObjectKeys);
+  const upserts = new Map(
+    intent.upsertAttachments.map((attachment) => [
+      attachment.object_key,
+      attachment,
+    ]),
+  );
+  const nextAttachments = currentAttachments
+    .filter((attachment) => !removed.has(attachment.object_key))
+    .map((attachment) =>
+      upserts.get(attachment.object_key) ?? attachment
+    );
+  const currentKeys = new Set(
+    currentAttachments.map((attachment) => attachment.object_key),
+  );
+  for (const attachment of intent.upsertAttachments) {
+    if (!currentKeys.has(attachment.object_key)) {
+      nextAttachments.push(attachment);
+    }
+  }
+  return nextAttachments;
+}
 
 export function markManualEntryPersistenceError(
   materialStates: ApplymentMaterialStateMap,
@@ -120,6 +185,9 @@ export function changeApplymentAttachments(input: {
   currentAttachments: readonly WechatPayApplymentAttachment[];
   currentStates: ApplymentMaterialStateMap;
   nextAttachments: WechatPayApplymentAttachment[];
+  intent?: ApplymentAttachmentMutationIntent;
+  relatedMutation?: ApplymentAttachmentRelatedMutation;
+  getCurrentAttachments: () => readonly WechatPayApplymentAttachment[];
   commitLocal: (
     attachments: WechatPayApplymentAttachment[],
     states: ApplymentMaterialStateMap,
@@ -128,37 +196,61 @@ export function changeApplymentAttachments(input: {
   commitStates: (states: ApplymentMaterialStateMap) => void;
   enqueue: (operation: () => Promise<void>) => Promise<void>;
   isActive: () => boolean;
-  rollback: () => void;
+  captureRollback: () => () => void;
   persist: (input: PersistAttachmentsInput) => Promise<void>;
   clearError: () => void;
   reportError: (error: string) => void;
   reportOperationError: (error: unknown) => void;
 }) {
-  const manualCategories = input.nextAttachments.flatMap((attachment) => {
-    const previous = input.currentAttachments.find(
-      (item) => item.object_key === attachment.object_key,
-    );
-    const category = getOcrMaterialCategory(attachment);
-    return previous?.ocr_review_status !== "manual" &&
-        attachment.ocr_review_status === "manual" && category
-      ? [category]
-      : [];
-  });
-  input.commitLocal(
+  const intent = input.intent ?? createApplymentAttachmentMutationIntent(
+    input.currentAttachments,
     input.nextAttachments,
-    reconcileMaterialStates(input.nextAttachments, input.currentStates),
   );
-  input.clearError();
-
   return input.enqueue(async () => {
+    if (!input.isActive()) return;
+    const currentAttachments = input.getCurrentAttachments();
+    const currentStates = input.getCurrentStates();
+    const nextAttachments = applyApplymentAttachmentMutationIntent(
+      currentAttachments,
+      intent,
+    );
+    const manualCategories = nextAttachments.flatMap((attachment) => {
+      const previous = currentAttachments.find(
+        (item) => item.object_key === attachment.object_key,
+      );
+      const category = getOcrMaterialCategory(attachment);
+      return previous?.ocr_review_status !== "manual" &&
+          attachment.ocr_review_status === "manual" && category
+        ? [category]
+        : [];
+    });
+    const rollback = input.captureRollback();
+    input.relatedMutation?.commitOptimistic();
+    input.commitLocal(
+      nextAttachments,
+      reconcileMaterialStates(nextAttachments, currentStates),
+    );
+    input.clearError();
     const persistInput: PersistAttachmentsInput = {
-      attachments: input.nextAttachments,
+      attachments: nextAttachments,
       draftUpdateSource: manualCategories.length > 0
         ? "manual_entry"
         : "attachment_change",
+      ...(input.relatedMutation?.contactType
+        ? { contactType: input.relatedMutation.contactType }
+        : {}),
     };
     if (manualCategories.length === 0) {
-      await input.persist(persistInput);
+      try {
+        await input.persist(persistInput);
+      } catch (error) {
+        if (input.isActive()) {
+          rollback();
+          input.relatedMutation?.rollback();
+          input.reportOperationError(error);
+        }
+        throw error;
+      }
       return;
     }
     const outcome = await runManualEntryPersistence(
@@ -172,11 +264,19 @@ export function changeApplymentAttachments(input: {
     ));
     input.reportError(MANUAL_ENTRY_PERSIST_ERROR);
     throw outcome.error;
-  }).catch((error) => {
-    if (manualCategories.length === 0 && input.isActive()) {
-      input.rollback();
-      input.reportOperationError(error);
-    }
-    throw error;
   });
+}
+
+function areApplymentAttachmentsEqual(
+  left: WechatPayApplymentAttachment,
+  right: WechatPayApplymentAttachment,
+) {
+  return left.category === right.category &&
+    left.file_object_id === right.file_object_id &&
+    left.object_key === right.object_key &&
+    left.file_name === right.file_name &&
+    left.content_type === right.content_type &&
+    left.size === right.size &&
+    left.ocr_recognition_id === right.ocr_recognition_id &&
+    left.ocr_review_status === right.ocr_review_status;
 }

@@ -20,18 +20,23 @@ describe("COS direct upload proxy", () => {
   test("returns the object created by its own init when complete is private", async () => {
     const proxyObject =
       "tenants/tenant-id/wechat-pay-applyment/proxy-license.jpg";
+    const proxyInit = {
+      object_key: proxyObject,
+      storage_path: proxyObject,
+      upload_url: "https://cos.example.com/proxy-license.jpg",
+      method: "PUT" as const,
+      headers: {
+        "content-type": "image/jpeg",
+        "content-length": "4",
+      },
+      upload_intent: "proxy-intent",
+    };
     globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/uploads/cos/direct-init")) {
         return jsonResponse({
           success: true,
-          data: {
-            object_key: proxyObject,
-            storage_path: proxyObject,
-            upload_url: "https://cos.example.com/proxy-license.jpg",
-            headers: { "content-type": "image/jpeg" },
-            upload_intent: "proxy-intent",
-          },
+          data: proxyInit,
         });
       }
       if (url === "https://cos.example.com/proxy-license.jpg") {
@@ -73,11 +78,83 @@ describe("COS direct upload proxy", () => {
     };
 
     expect(payload.data).toEqual({
-      file_id: "file-B",
-      status: "active",
-      object_key: proxyObject,
-      storage_path: proxyObject,
+      init: proxyInit,
+      completed: {
+        file_id: "file-B",
+        status: "active",
+        object_key: proxyObject,
+        storage_path: proxyObject,
+      },
     });
+  });
+
+  test.each([
+    ["init", 1],
+    ["COS", 2],
+    ["complete", 3],
+  ])("returns stable JSON when %s fetch has a network error", async (
+    _stage,
+    rejectAt,
+  ) => {
+    let fetchCalls = 0;
+    globalThis.fetch = mock(async () => {
+      fetchCalls += 1;
+      if (fetchCalls === rejectAt) throw new TypeError("network secret");
+      if (fetchCalls === 1) {
+        return jsonResponse({
+          success: true,
+          data: {
+            object_key: "tenants/tenant-id/wechat-pay-applyment/proxy.jpg",
+            upload_url: "https://cos.example.com/proxy.jpg",
+          },
+        });
+      }
+      if (fetchCalls === 2) return new Response(null, { status: 200 });
+      return jsonResponse({
+        success: true,
+        data: { file_id: "file-B", status: "active" },
+      });
+    }) as unknown as typeof fetch;
+
+    const { POST } = await import("./route");
+    const response = await POST(buildProxyRequest());
+    const payload = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(502);
+    expect(payload).toMatchObject({
+      success: false,
+      message: "上传服务暂不可用，请稍后重试",
+    });
+    expect(JSON.stringify(payload)).not.toContain("network secret");
+  });
+
+  test("does not expose the COS response body", async () => {
+    let fetchCalls = 0;
+    globalThis.fetch = mock(async () => {
+      fetchCalls += 1;
+      if (fetchCalls === 1) {
+        return jsonResponse({
+          success: true,
+          data: {
+            object_key: "tenants/tenant-id/wechat-pay-applyment/proxy.jpg",
+            upload_url: "https://cos.example.com/proxy.jpg",
+          },
+        });
+      }
+      return new Response(
+        "secret certificate tenants/tenant-id/private-license.jpg",
+        { status: 403 },
+      );
+    }) as unknown as typeof fetch;
+
+    const { POST } = await import("./route");
+    const response = await POST(buildProxyRequest());
+    const payload = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(502);
+    expect(payload.message).toBe("上传文件到存储服务失败，请稍后重试");
+    expect(JSON.stringify(payload)).not.toContain("private-license");
+    expect(JSON.stringify(payload)).not.toContain("certificate");
   });
 });
 
@@ -86,4 +163,22 @@ function jsonResponse(data: unknown, status = 200) {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function buildProxyRequest() {
+  const formData = new FormData();
+  formData.set(
+    "file",
+    new File(["test"], "license.jpg", { type: "image/jpeg" }),
+  );
+  formData.set("payload", JSON.stringify({
+    scene: "wechat_pay_applyment",
+    filename: "license.jpg",
+    mimetype: "image/jpeg",
+    size_bytes: 4,
+  }));
+  return new Request(
+    "https://admin.example.com/api/uploads/cos/direct-proxy",
+    { method: "POST", body: formData },
+  );
 }

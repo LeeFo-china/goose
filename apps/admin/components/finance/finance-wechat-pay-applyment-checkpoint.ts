@@ -48,6 +48,45 @@ export function restoreAttachmentChangeCheckpointSnapshot(input: {
   input.commitCheckpointErrors({ ...input.snapshot.checkpointErrors });
 }
 
+export function createAttachmentChangeCheckpointRuntime(input: {
+  getAttachments: () => readonly WechatPayApplymentAttachment[];
+  getMaterialStates: () => ApplymentMaterialStateMap;
+  getCheckpointErrors: () => AttachmentCheckpointErrorMap;
+  unpersistedObjectKeys: Set<string>;
+  commitLocal: (
+    attachments: WechatPayApplymentAttachment[],
+    states: ApplymentMaterialStateMap,
+  ) => void;
+  commitCheckpointErrors: (errors: AttachmentCheckpointErrorMap) => void;
+}) {
+  return {
+    commitLocal(
+      attachments: WechatPayApplymentAttachment[],
+      states: ApplymentMaterialStateMap,
+    ) {
+      retainUnpersistedAttachmentKeys(
+        input.unpersistedObjectKeys,
+        attachments,
+      );
+      input.commitLocal(attachments, states);
+    },
+    captureRollback() {
+      const snapshot = createAttachmentChangeCheckpointSnapshot({
+        attachments: input.getAttachments(),
+        materialStates: input.getMaterialStates(),
+        checkpointErrors: input.getCheckpointErrors(),
+        unpersistedObjectKeys: input.unpersistedObjectKeys,
+      });
+      return () => restoreAttachmentChangeCheckpointSnapshot({
+        snapshot,
+        unpersistedObjectKeys: input.unpersistedObjectKeys,
+        commitLocal: input.commitLocal,
+        commitCheckpointErrors: input.commitCheckpointErrors,
+      });
+    },
+  };
+}
+
 export function setAttachmentCheckpointError(
   errors: AttachmentCheckpointErrorMap,
   objectKey: string,

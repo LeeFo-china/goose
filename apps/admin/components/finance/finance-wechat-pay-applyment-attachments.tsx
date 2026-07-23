@@ -33,6 +33,10 @@ import {
   AttachmentCheckpointStatus,
 } from "./finance-wechat-pay-applyment-attachment-checkpoint-status";
 import {
+  createApplymentAttachmentMutationIntent,
+  type ApplymentAttachmentChangeOptions,
+} from "./finance-wechat-pay-applyment-manual-entry";
+import {
   ApplymentAttachmentUploadButton,
 } from "./finance-wechat-pay-applyment-upload-button";
 
@@ -107,6 +111,7 @@ export function WechatPayApplymentAttachmentsField({
   ) => void | Promise<void>;
   onChange: (
     nextAttachments: WechatPayApplymentAttachment[],
+    options?: ApplymentAttachmentChangeOptions,
   ) => void | Promise<void>;
 }) {
   const [uploadingCategory, setUploadingCategory] = useState<string | null>(null);
@@ -170,9 +175,15 @@ export function WechatPayApplymentAttachmentsField({
   async function removeAttachment(attachment: WechatPayApplymentAttachment) {
     setError("");
     try {
-      await onChange(
-        attachments.filter((item) => item.object_key !== attachment.object_key),
+      const nextAttachments = attachments.filter(
+        (item) => item.object_key !== attachment.object_key,
       );
+      await onChange(nextAttachments, {
+        intent: createApplymentAttachmentMutationIntent(
+          attachments,
+          nextAttachments,
+        ),
+      });
     } catch (changeError) {
       setError(changeError instanceof Error
         ? changeError.message
@@ -183,14 +194,20 @@ export function WechatPayApplymentAttachmentsField({
   async function useManualEntry(attachment: WechatPayApplymentAttachment) {
     setError("");
     try {
-      await onChange(updateAttachmentOcrReviewMetadata(
+      const nextAttachments = updateAttachmentOcrReviewMetadata(
         attachments,
         attachment.object_key,
         {
           ocr_recognition_id: attachment.ocr_recognition_id ?? null,
           ocr_review_status: "manual",
         },
-      ));
+      );
+      await onChange(nextAttachments, {
+        intent: createApplymentAttachmentMutationIntent(
+          attachments,
+          nextAttachments,
+        ),
+      });
     } catch (changeError) {
       setError(changeError instanceof Error
         ? changeError.message

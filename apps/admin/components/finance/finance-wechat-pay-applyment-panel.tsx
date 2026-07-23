@@ -182,6 +182,7 @@ export function FinanceWechatPayApplymentPanel({
   async function persistMaterialAttachments(input: {
     attachments: WechatPayApplymentAttachment[];
     draftUpdateSource: "attachment_change" | "ocr_review" | "manual_entry";
+    contactType?: string;
   }, context: ApplymentSaveGenerationContext) {
     if (!editable) throw new Error("当前账号无权修改微信支付开通申请");
     const formElement = formRef.current;
@@ -190,6 +191,7 @@ export function FinanceWechatPayApplymentPanel({
       hasSensitivePayload: Boolean(applyment?.has_sensitive_payload),
       attachments: input.attachments,
     });
+    if (input.contactType) payload.contact_type = input.contactType;
     payload.draft_update_source = input.draftUpdateSource;
     const detail = await saveApplymentDraft(payload, context.isCurrent);
     return { applymentId: detail.applyment?.id };
@@ -202,8 +204,8 @@ export function FinanceWechatPayApplymentPanel({
       nextType: value,
       attachments: attachmentsRef.current,
       commitType: setContactType,
-      changeAttachments: async (nextAttachments) => {
-        await materials.onChange(nextAttachments);
+      changeAttachments: async (nextAttachments, options) => {
+        await materials.onChange(nextAttachments, options);
       },
       reportError: setError,
     }).catch(() => undefined);
