@@ -239,6 +239,7 @@ async function createService() {
       findSensitivePayloadById,
       createApplyment: mock(async () => activatableApplyment),
       updateApplyment,
+      submitTenantApplymentAtomically: mock(async () => activatableApplyment),
       activateConfigAtomically,
       insertEvent,
       findEvents,

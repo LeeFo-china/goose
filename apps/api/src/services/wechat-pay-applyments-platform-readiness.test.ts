@@ -124,6 +124,7 @@ const repository: WechatPayApplymentRepositoryPort = {
   findSensitivePayloadById: async () => null,
   createApplyment: async () => unreachable(),
   updateApplyment,
+  submitTenantApplymentAtomically: async () => unreachable(),
   activateConfigAtomically: async () => unreachable(),
   insertEvent: async () => eventRecord,
   findEvents: async () => [],

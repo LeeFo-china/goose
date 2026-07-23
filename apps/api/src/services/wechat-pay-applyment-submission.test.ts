@@ -2,11 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
-import type {
-  WechatPayApplymentEventRecord,
-  WechatPayApplymentRecord,
-  WechatPayApplymentUpdate,
-} from "@/repositories/wechat-pay-applyments";
+import type { WechatPayApplymentEventRecord, WechatPayApplymentRecord, WechatPayApplymentUpdate } from "@/repositories/wechat-pay-applyments";
 import type { AuthContext } from "@/services/authorization";
 import type {
   SubmitWechatPayApplymentGatewayInput,
@@ -38,6 +34,9 @@ const attachments = [
   category,
   object_key: `tenants/${tenantId}/wechat-pay-applyment/${applymentId}/${category}.jpg`,
   file_name: `${category}.jpg`,
+  ocr_review_status: category === "business_scene_material"
+    ? undefined
+    : "manual",
 }));
 function applyment(
   overrides: Partial<WechatPayApplymentRecord> = {},
@@ -74,8 +73,8 @@ function applyment(
     settlement_bank_branch_id: "104515080123",
     settlement_account_number_masked: "62**********1234",
     settlement_account_summary: "中国银行 尾号 1234",
-    settlement_id: "719",
-    qualification_type: "生活服务/家装服务",
+    settlement_id: "716",
+    qualification_type: "零售批发/生活娱乐/网上商城/其他",
     business_scene_description: "装修项目收款",
     contact_address: "河南省信阳市固始县",
     attachments,

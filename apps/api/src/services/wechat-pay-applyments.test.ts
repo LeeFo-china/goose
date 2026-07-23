@@ -8,6 +8,7 @@ import type {
   WechatPayApplymentUpdate,
 } from "@/repositories/wechat-pay-applyments";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
+import { encryptApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -25,6 +26,7 @@ const requiredAttachments = [
   file_name: fileName,
   content_type: "image/jpeg",
   size,
+  ocr_review_status: "manual",
 }));
 const submittedApplyment: WechatPayApplymentRecord = {
   id: applymentId,
@@ -63,11 +65,11 @@ const submittedApplyment: WechatPayApplymentRecord = {
   license_address: "河南省信阳市固始县示例大道1号",
   license_period_begin: "2020-01-01",
   license_period_end: "长期",
-  qualification_type: "生活服务/家装服务",
+  qualification_type: "零售批发/生活娱乐/网上商城/其他",
   sensitive_payload_updated_at: "2026-07-01T09:00:00.000Z",
   sensitive_payload_version: 1,
   service_phone: "0376-1234567",
-  settlement_id: "719",
+  settlement_id: "716",
   sign_url: null,
   subject_type: "SUBJECT_TYPE_ENTERPRISE",
   submission_attempt_count: 0,
@@ -110,7 +112,37 @@ const eventRecord: WechatPayApplymentEventRecord = {
 };
 const findLatestByTenant = mock(async (): Promise<WechatPayApplymentRecord | null> => submittedApplyment);
 const findById = mock(async (): Promise<WechatPayApplymentRecord | null> => submittedApplyment);
-const findSensitivePayloadById = mock(async () => null);
+const sensitiveCiphertext = encryptApplymentSensitivePayload({
+  context: { tenantId, applymentId, version: 1 },
+  payload: {
+    identity_name: "张三",
+    identity_number: "41000019900101001X",
+    identity_address: "河南省信阳市固始县示例路1号",
+    contact_name: "李四",
+    contact_phone: "13800000000",
+    contact_email: "admin@example.com",
+    contact_identity_number: null,
+    contact_identity_address: null,
+    bank_account_name: "固始晴天装饰工程有限公司",
+    bank_account_number: "6212345678901234",
+  },
+  rootSecret: "test-applyment-root-secret",
+});
+const findSensitivePayloadById = mock(async () => ({
+  id: applymentId,
+  tenant_id: tenantId,
+  has_sensitive_payload: true,
+  sensitive_payload_ciphertext: sensitiveCiphertext,
+  sensitive_payload_version: 1,
+}));
+const findOcrRecognitionsByIds = mock(async () => [] as Array<{
+  id: string;
+  tenant_id: string;
+  file_object_id: string;
+  subject_type: string | null;
+  subject_id: string | null;
+  status: string;
+}>);
 const findEvents = mock(async () => [eventRecord]);
 const createApplyment = mock(async (input: WechatPayApplymentInsert) => ({
   ...submittedApplyment,
@@ -130,6 +162,7 @@ const updateApplyment = mock(async (input: {
 const insertEvent = mock(
   async (_input: WechatPayApplymentEventInsert) => eventRecord,
 );
+const submitTenantApplymentAtomically = mock(async () => submittedApplyment);
 const listApplyments = mock(async () => ({
   list: [submittedApplyment],
   pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
@@ -241,6 +274,7 @@ async function createService() {
       findEvents,
       createApplyment,
       updateApplyment,
+      submitTenantApplymentAtomically,
       activateConfigAtomically: mock(async () => submittedApplyment),
       insertEvent,
       listApplyments,
@@ -252,6 +286,9 @@ async function createService() {
     accessPolicyService: accessPolicy,
     applicationNoFactory,
     encryptionRootSecretFactory: () => "test-applyment-root-secret",
+    ocrRecognitionRepository: {
+      findByIdsForTenant: findOcrRecognitionsByIds,
+    },
     nowFactory,
     preflightService: {
       run: async () => ({ ready: true, blockers: [] }),
@@ -263,9 +300,11 @@ describe("WechatPayApplymentService", () => {
     findLatestByTenant.mockClear();
     findById.mockClear();
     findSensitivePayloadById.mockClear();
+    findOcrRecognitionsByIds.mockClear();
     findEvents.mockClear();
     createApplyment.mockClear();
     updateApplyment.mockClear();
+    submitTenantApplymentAtomically.mockClear();
     insertEvent.mockClear();
     listApplyments.mockClear();
     upsertWechatPayConfig.mockClear();
@@ -283,56 +322,6 @@ describe("WechatPayApplymentService", () => {
     expect(result.applyment?.application_no).toBe("WPA202607010001");
     expect(result.events).toHaveLength(1);
     expect(result.can_submit).toBe(false);
-  });
-  test("submits rejected or draft applyment and records audit event", async () => {
-    findById.mockImplementationOnce(async () => ({
-      ...submittedApplyment,
-      status: "rejected",
-      rejected_reason: "缺少结算账户摘要",
-    }));
-    const service = await createService();
-    await service.submit(tenantSubmitAuth(), applymentId, {
-      idempotency_key: applymentId,
-      remark: "已补充资料",
-    });
-    expect(updateApplyment).toHaveBeenCalledWith({
-      id: applymentId,
-      tenantId,
-      patch: expect.objectContaining({
-        status: "submitted",
-        applyment_state: "submitted",
-        submitted_at: "2026-07-01T12:00:00.000Z",
-        rejected_reason: null,
-      }),
-    });
-    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event_type: "submitted",
-      from_status: "rejected",
-      to_status: "submitted",
-      metadata: { idempotency_key: applymentId },
-    }));
-  });
-  test("rejects a tenant submit idempotency key for another applyment", async () => {
-    const service = await createService();
-    await expect(service.submit(tenantSubmitAuth(), applymentId, {
-      idempotency_key: "99999999-9999-4999-8999-999999999999",
-    })).rejects.toMatchObject({
-      statusCode: 409,
-      code: "WECHAT_PAY_APPLYMENT_IDEMPOTENCY_MISMATCH",
-    });
-    expect(findById).not.toHaveBeenCalled();
-    expect(updateApplyment).not.toHaveBeenCalled();
-    expect(insertEvent).not.toHaveBeenCalled();
-  });
-  test("returns the submitted detail on retry without duplicate writes", async () => {
-    const service = await createService();
-    const result = await service.submit(tenantSubmitAuth(), applymentId, {
-      idempotency_key: applymentId,
-    });
-    expect(result.applyment?.status).toBe("submitted");
-    expect(updateApplyment).not.toHaveBeenCalled();
-    expect(insertEvent).not.toHaveBeenCalled();
-    expect(findEvents).toHaveBeenCalledWith({ tenantId, applymentId });
   });
   test("hides closed tenant applyment from current draft entry", async () => {
     findLatestByTenant.mockImplementationOnce(async () => ({

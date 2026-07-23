@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ocrRecognitionRepository } from "@/repositories/ocr-recognitions";
 import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
   wechatPayApplymentRepository,
@@ -9,6 +10,10 @@ import {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { sanitizeApplymentRecord } from "@/services/wechat-pay-applyment-draft";
+import {
+  assertApplymentSubmissionContentValid,
+  loadCompleteApplymentSensitivePayload,
+} from "@/services/wechat-pay-applyment-content-validation";
 import {
   wechatPayApplymentGateway,
   type WechatPayApplymentGatewayPort,
@@ -42,14 +47,12 @@ import {
   buildWechatApplymentOfficialStatePatch,
   getWechatPayApplymentAvailableActions,
 } from "@/services/wechat-pay-applyment-status";
-import {
-  decryptApplymentSensitivePayload,
-  requireCompleteApplymentSensitivePayload,
-} from "@/services/wechat-pay-applyment-sensitive-payload";
+import type { ApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
 import type {
   AccessPolicyPort,
   ApplymentDetailResult,
   PlatformPaymentConfigRepositoryPort,
+  WechatPayApplymentOcrRecognitionRepositoryPort,
   WechatPayApplymentMediaRepositoryPort,
   WechatPayApplymentSubmissionPort,
   WechatPayApplymentSubmissionRepositoryPort,
@@ -78,6 +81,7 @@ type SubmissionDependencies = {
     applicationNo: string;
   }) => string;
   nowFactory?: () => string;
+  ocrRecognitionRepository?: WechatPayApplymentOcrRecognitionRepositoryPort;
 };
 
 export class WechatPayApplymentSubmissionService
@@ -93,6 +97,8 @@ export class WechatPayApplymentSubmissionService
     () => string | null | undefined;
   private readonly businessCodeFactory: SubmissionDependencies["businessCodeFactory"];
   private readonly nowFactory: () => string;
+  private readonly ocrRecognitionRepository:
+    WechatPayApplymentOcrRecognitionRepositoryPort;
 
   constructor(dependencies: SubmissionDependencies = {}) {
     this.repository = dependencies.repository ?? wechatPayApplymentRepository;
@@ -116,6 +122,8 @@ export class WechatPayApplymentSubmissionService
     this.businessCodeFactory = dependencies.businessCodeFactory ??
       ((input) => `${input.merchantId}_${input.applicationNo}`);
     this.nowFactory = dependencies.nowFactory ?? (() => new Date().toISOString());
+    this.ocrRecognitionRepository = dependencies.ocrRecognitionRepository ??
+      ocrRecognitionRepository;
   }
 
   async submitToWechat(
@@ -137,6 +145,15 @@ export class WechatPayApplymentSubmissionService
         secretBundleService: this.secretBundleService,
       });
       assertApplymentSubmitReady(claimed);
+      const sensitive = await loadCompleteApplymentSensitivePayload({
+        applyment: claimed,
+        repository: this.repository,
+        rootSecret: this.encryptionRootSecretFactory(),
+      });
+      await assertApplymentSubmissionContentValid({
+        applyment: claimed,
+        ocrRecognitionRepository: this.ocrRecognitionRepository,
+      });
       let current = claimed;
       const hadBusinessCode = hasText(current.applyment_business_code);
       const businessCode = current.applyment_business_code ??
@@ -181,6 +198,7 @@ export class WechatPayApplymentSubmissionService
           applyment: current,
           businessCode,
           runtimeProfile,
+          sensitive,
         });
         const submitted = await submitWechatApplymentWithRecovery({
           gateway: this.gateway,
@@ -233,34 +251,8 @@ export class WechatPayApplymentSubmissionService
     applyment: WechatPayApplymentRecord;
     businessCode: string;
     runtimeProfile: ApplymentRuntimeProfile;
+    sensitive: ApplymentSensitivePayload;
   }) {
-    const sensitiveRecord = await this.repository.findSensitivePayloadById({
-      id: input.applyment.id,
-      tenantId: input.applyment.tenant_id,
-    });
-    if (
-      !sensitiveRecord?.sensitive_payload_ciphertext ||
-      !sensitiveRecord.sensitive_payload_version
-    ) {
-      throw Errors.business(
-        500,
-        "微信支付进件敏感资料缺失",
-        "WECHAT_PAY_APPLYMENT_SENSITIVE_PAYLOAD_MISSING",
-      );
-    }
-    const sensitiveDraft = decryptApplymentSensitivePayload({
-      context: {
-        tenantId: input.applyment.tenant_id,
-        applymentId: input.applyment.id,
-        version: sensitiveRecord.sensitive_payload_version,
-      },
-      ciphertext: sensitiveRecord.sensitive_payload_ciphertext,
-      rootSecret: this.encryptionRootSecretFactory(),
-    });
-    const sensitive = requireCompleteApplymentSensitivePayload(
-      sensitiveDraft,
-      input.applyment.contact_type,
-    );
     const media = await this.resolveMediaIds(
       input.applyment,
       input.runtimeProfile.gatewayProfile,
@@ -270,7 +262,7 @@ export class WechatPayApplymentSubmissionService
       serviceProviderAppId: input.runtimeProfile.appId,
       publicKeyPem: input.runtimeProfile.gatewayProfile.wechatPayPublicKeyPem,
       source: toApplymentRequestSource(input.applyment),
-      sensitive,
+      sensitive: input.sensitive,
       media,
     });
   }

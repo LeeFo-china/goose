@@ -74,3 +74,43 @@ export function throwApplymentActivationError(error: RpcError): never {
   }
   throw Errors.dbError("激活租户微信支付配置失败", error);
 }
+
+export function throwTenantApplymentSubmitError(error: RpcError): never {
+  const message = error.message ?? "";
+  if (message.includes("WECHAT_PAY_APPLYMENT_NOT_FOUND")) {
+    throw Errors.business(
+      404,
+      "微信支付开通申请不存在",
+      "WECHAT_PAY_APPLYMENT_NOT_FOUND",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_IDEMPOTENCY_MISMATCH")) {
+    throw Errors.business(
+      409,
+      "提交幂等键与申请不匹配",
+      "WECHAT_PAY_APPLYMENT_IDEMPOTENCY_MISMATCH",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_NOT_EDITABLE")) {
+    throw Errors.business(
+      409,
+      "当前申请状态不能由租户提交",
+      "WECHAT_PAY_APPLYMENT_NOT_EDITABLE",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_STATE_CHANGED")) {
+    throw Errors.business(
+      409,
+      "微信支付开通申请状态已变化，请刷新后重试",
+      "WECHAT_PAY_APPLYMENT_STATE_CHANGED",
+    );
+  }
+  if (message.includes("WECHAT_PAY_APPLYMENT_TENANT_SUBMIT_INVALID")) {
+    throw Errors.business(
+      400,
+      "微信支付开通申请提交参数无效",
+      "WECHAT_PAY_APPLYMENT_TENANT_SUBMIT_INVALID",
+    );
+  }
+  throw Errors.dbError("提交微信支付开通申请失败", error);
+}

@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
-
 import { Errors } from "@/errors/error-factory";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type {
@@ -22,7 +21,6 @@ import type {
   WechatPayApplymentRepositoryPort,
   WechatPayConfigRepositoryPort,
 } from "@/services/wechat-pay-applyments-types";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -94,8 +92,8 @@ function createApplyment(): WechatPayApplymentRecord {
     settlement_bank_branch_id: "104515080123",
     settlement_account_number_masked: "62**********1234",
     settlement_account_summary: "中国银行 尾号 1234",
-    settlement_id: "719",
-    qualification_type: "生活服务/家装服务",
+    settlement_id: "716",
+    qualification_type: "零售批发/生活娱乐/网上商城/其他",
     business_scene_description: "装修项目收款",
     contact_address: "河南省信阳市固始县",
     attachments: attachmentCategories.map((category) => ({
@@ -103,6 +101,7 @@ function createApplyment(): WechatPayApplymentRecord {
       object_key:
         `tenants/${tenantId}/wechat-pay-applyment/${applymentId}/${category}.jpg`,
       file_name: `${category}.jpg`,
+      ocr_review_status: "manual",
       content_type: "image/jpeg",
       size: 1024,
     })),
@@ -269,6 +268,7 @@ describe("official WeChat Pay applyment mock E2E", () => {
         } as WechatPayApplymentRecord;
         return current;
       },
+      submitTenantApplymentAtomically: async () => current,
       activateConfigAtomically: async (input) => {
         if (input.expectedUpdatedAt !== current.updated_at) {
           throw Errors.business(409, "mock CAS revision mismatch", "MOCK_CAS_FAILED");

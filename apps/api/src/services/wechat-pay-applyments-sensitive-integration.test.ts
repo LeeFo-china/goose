@@ -181,6 +181,7 @@ async function createService() {
       findSensitivePayloadById,
       createApplyment,
       updateApplyment,
+      submitTenantApplymentAtomically: mock(async () => applyment),
       activateConfigAtomically: mock(async () => applyment),
       insertEvent,
       findEvents,
@@ -320,7 +321,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
         ocr_recognition_id: recognitionId,
         ocr_review_status: "confirmed",
       }],
-      draft_update_source: "ocr_confirm",
+      draft_update_source: "autosave",
     });
 
     const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
@@ -336,6 +337,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       changed_fields: ["attachments", "identity_name"],
       change_source: "ocr_confirm",
       has_sensitive_replacement: true,
+      forced_audit: true,
     });
     expect(JSON.stringify(updateEvent?.metadata)).not.toContain("张三");
     expect(JSON.stringify(updateEvent?.metadata)).not.toContain(recognitionId);
@@ -397,7 +399,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     expect(insertEvent).not.toHaveBeenCalled();
   });
 
-  test("initializes a legacy draft ciphertext on a real sensitive replacement", async () => {
+  test("fails closed when a flagged sensitive payload is missing ciphertext", async () => {
     findSensitivePayloadById.mockImplementationOnce(async () => ({
       id: applymentId,
       tenant_id: tenantId,
@@ -407,17 +409,12 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     }));
     const service = await createService();
 
-    await service.updateDraft(authContext, applymentId, {
+    await expect(service.updateDraft(authContext, applymentId, {
       identity_name: "张三",
+    })).rejects.toMatchObject({
+      code: "WECHAT_PAY_APPLYMENT_SENSITIVE_PAYLOAD_CORRUPTED",
     });
-
-    const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
-    expect(patch?.sensitive_payload_version).toBe(1);
-    expect(decryptApplymentSensitivePayload({
-      context: { tenantId, applymentId, version: 1 },
-      ciphertext: patch?.sensitive_payload_ciphertext ?? "",
-      rootSecret,
-    })).toEqual({ identity_name: "张三" });
+    expect(updateApplyment).not.toHaveBeenCalled();
   });
 
   test("clears agent-only sensitive fields when switching to LEGAL", async () => {

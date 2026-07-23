@@ -1,8 +1,5 @@
-import {
-  findWechatPaySettlementRule,
-  type WechatPayApplymentSubjectType,
-} from "@gooes/domain";
 import { AppError } from "@/errors/app-error";
+import { ocrRecognitionRepository } from "@/repositories/ocr-recognitions";
 import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
   wechatPayApplymentRepository,
@@ -12,7 +9,10 @@ import {
 import { WechatPayApplymentAttachmentCategorySchema } from "@/schema/wechat-pay-applyments";
 import { getApplymentSubmitReadinessMissingFields } from "@/services/wechat-pay-applyment-readiness";
 import {
-  decryptApplymentSensitivePayload,
+  getApplymentSubmissionContentBlockers,
+  loadApplymentSensitiveDraftPayload,
+} from "@/services/wechat-pay-applyment-content-validation";
+import {
   getMissingApplymentSensitiveFields,
 } from "@/services/wechat-pay-applyment-sensitive-payload";
 import { loadApplymentRuntimeProfile } from "@/services/wechat-pay-applyment-submission-support";
@@ -20,6 +20,7 @@ import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundl
 import type {
   WechatPayApplymentPreflightBlocker,
   WechatPayApplymentPreflightReport,
+  WechatPayApplymentOcrRecognitionRepositoryPort,
 } from "@/services/wechat-pay-applyments-types";
 
 export type {
@@ -57,6 +58,7 @@ type PreflightRepository = {
 type PreflightDependencies = {
   repository?: PreflightRepository;
   loadRuntimeProfile?: () => Promise<unknown>;
+  ocrRecognitionRepository?: WechatPayApplymentOcrRecognitionRepositoryPort;
   encryptionRootSecretFactory?: () => string | null | undefined;
   nowFactory?: () => string;
 };
@@ -83,8 +85,13 @@ export async function runWechatPayApplymentPreflight(
 
   collectSubmissionStatusBlockers(applyment, now, blockers.add);
   collectRequiredFieldBlockers(applyment, blockers.add);
-  collectSettlementRuleBlocker(applyment, blockers.add);
   collectAttachmentBlockers(applyment, blockers.add);
+  await collectSubmissionContentBlockers({
+    applyment,
+    ocrRecognitionRepository: dependencies.ocrRecognitionRepository ??
+      ocrRecognitionRepository,
+    add: blockers.add,
+  });
   await collectSensitivePayloadBlockers({
     applyment,
     repository,
@@ -150,39 +157,6 @@ function collectRequiredFieldBlockers(
   }
 }
 
-function collectSettlementRuleBlocker(
-  applyment: WechatPayApplymentRecord,
-  add: (blocker: WechatPayApplymentPreflightBlocker) => void,
-) {
-  if (
-    !applyment.subject_type ||
-    !applyment.settlement_id ||
-    !applyment.qualification_type
-  ) {
-    return;
-  }
-  if (
-    !isSupportedSubjectType(applyment.subject_type) ||
-    !findWechatPaySettlementRule(
-      applyment.subject_type,
-      applyment.settlement_id,
-      applyment.qualification_type,
-    )
-  ) {
-    add({
-      code: "APPLYMENT_SETTLEMENT_RULE_INVALID",
-      field: "settlement_id",
-    });
-  }
-}
-
-function isSupportedSubjectType(
-  value: string,
-): value is WechatPayApplymentSubjectType {
-  return value === "SUBJECT_TYPE_ENTERPRISE" ||
-    value === "SUBJECT_TYPE_INDIVIDUAL";
-}
-
 function collectAttachmentBlockers(
   applyment: WechatPayApplymentRecord,
   add: (blocker: WechatPayApplymentPreflightBlocker) => void,
@@ -222,6 +196,20 @@ function collectAttachmentBlockers(
   }
 }
 
+async function collectSubmissionContentBlockers(input: {
+  applyment: WechatPayApplymentRecord;
+  ocrRecognitionRepository: WechatPayApplymentOcrRecognitionRepositoryPort;
+  add: (blocker: WechatPayApplymentPreflightBlocker) => void;
+}) {
+  try {
+    for (const blocker of await getApplymentSubmissionContentBlockers(input)) {
+      input.add(blocker);
+    }
+  } catch {
+    input.add({ code: "PREFLIGHT_DATA_ACCESS_FAILED" });
+  }
+}
+
 async function collectSensitivePayloadBlockers(input: {
   applyment: WechatPayApplymentRecord;
   repository: PreflightRepository;
@@ -258,13 +246,11 @@ async function collectSensitivePayloadBlockers(input: {
     return;
   }
   try {
-    const payload = decryptApplymentSensitivePayload({
-      context: {
-        tenantId: input.applyment.tenant_id,
-        applymentId: input.applyment.id,
-        version: sensitive.sensitive_payload_version,
+    const payload = await loadApplymentSensitiveDraftPayload({
+      applyment: input.applyment,
+      repository: {
+        findSensitivePayloadById: async () => sensitive,
       },
-      ciphertext: sensitive.sensitive_payload_ciphertext,
       rootSecret: input.rootSecret,
     });
     for (

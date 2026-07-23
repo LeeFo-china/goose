@@ -1,5 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import { randomUUID } from "node:crypto";
+import { ocrRecognitionRepository } from "@/repositories/ocr-recognitions";
 import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
   wechatPayApplymentRepository,
@@ -23,18 +24,20 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
   buildCreateSensitivePayload,
+  buildDraftAuditDecision,
   buildDraftChangeAudit,
+  buildSensitivePayloadUpdate,
   buildTenantApplymentSafePatch,
   hasSensitiveDraftValues,
-  hasSensitiveReplacement,
-  mergeSensitivePayload,
   sanitizeApplymentRecord,
 } from "@/services/wechat-pay-applyment-draft";
 import {
-  decryptApplymentSensitivePayload,
   encryptApplymentSensitivePayload,
-  type ApplymentSensitiveDraftPayload,
 } from "@/services/wechat-pay-applyment-sensitive-payload";
+import {
+  assertApplymentSubmissionContentValid,
+  loadCompleteApplymentSensitivePayload,
+} from "@/services/wechat-pay-applyment-content-validation";
 import { assertApplymentSubmitReady } from "@/services/wechat-pay-applyment-readiness";
 import { runWechatPayApplymentPreflight } from "@/services/wechat-pay-applyment-preflight";
 import { wechatPayApplymentStatusService } from "@/services/wechat-pay-applyment-status";
@@ -59,6 +62,8 @@ export class WechatPayApplymentService {
   private readonly applicationNoFactory: () => string;
   private readonly applymentIdFactory: () => string;
   private readonly encryptionRootSecretFactory: () => string | null | undefined;
+  private readonly ocrRecognitionRepository:
+    NonNullable<WechatPayApplymentServiceDependencies["ocrRecognitionRepository"]>;
   private readonly nowFactory: () => string;
   private readonly platformActions: WechatPayApplymentPlatformActions;
 
@@ -74,6 +79,8 @@ export class WechatPayApplymentService {
     this.encryptionRootSecretFactory =
       dependencies.encryptionRootSecretFactory ??
       (() => process.env.APP_CONFIG_ENCRYPTION_KEY);
+    this.ocrRecognitionRepository = dependencies.ocrRecognitionRepository ??
+      ocrRecognitionRepository;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date().toISOString());
     this.platformActions = new WechatPayApplymentPlatformActions(
       this.repository,
@@ -184,11 +191,18 @@ export class WechatPayApplymentService {
     const current = await this.getRequiredApplyment({ id, tenantId });
     this.assertEditable(current);
 
-    const sensitivePatch = await this.buildSensitivePayloadUpdate({
+    const sensitivePatch = await buildSensitivePayloadUpdate({
       current,
       input,
       tenantId,
+      loadSensitivePayload: () => this.repository.findSensitivePayloadById({
+        id: current.id,
+        tenantId,
+      }),
+      rootSecret: this.encryptionRootSecretFactory(),
+      now: this.nowFactory(),
     });
+    const audit = buildDraftAuditDecision({ current, input });
     const updated = await this.repository.updateApplyment({
       id,
       tenantId,
@@ -202,7 +216,7 @@ export class WechatPayApplymentService {
         updated_by_employee_id: employeeId,
       },
     });
-    if (input.draft_update_source !== "autosave") {
+    if (audit.should_audit) {
       await this.recordEvent({
         applyment: updated,
         eventType: "updated",
@@ -210,7 +224,7 @@ export class WechatPayApplymentService {
         toStatus: updated.status,
         message: "租户更新微信支付开通申请资料",
         operatorEmployeeId: employeeId,
-        metadata: buildDraftChangeAudit(input),
+        metadata: audit.metadata,
       });
     }
 
@@ -235,28 +249,22 @@ export class WechatPayApplymentService {
     }
     this.assertEditable(current);
     assertApplymentSubmitReady(current);
-    const now = this.nowFactory();
-    const updated = await this.repository.updateApplyment({
-      id,
-      tenantId,
-      patch: {
-        status: "submitted",
-        applyment_state: "submitted",
-        submitted_at: now,
-        rejected_at: null,
-        rejected_reason: null,
-        remark: input.remark ?? current.remark,
-        updated_by_employee_id: employeeId,
-      },
+    await loadCompleteApplymentSensitivePayload({
+      applyment: current,
+      repository: this.repository,
+      rootSecret: this.encryptionRootSecretFactory(),
     });
-    await this.recordEvent({
-      applyment: updated,
-      eventType: "submitted",
-      fromStatus: current.status,
-      toStatus: "submitted",
-      message: "租户提交微信支付开通申请",
-      operatorEmployeeId: employeeId,
-      metadata: { idempotency_key: input.idempotency_key },
+    await assertApplymentSubmissionContentValid({
+      applyment: current,
+      ocrRecognitionRepository: this.ocrRecognitionRepository,
+    });
+    const updated = await this.repository.submitTenantApplymentAtomically({
+      applymentId: id,
+      tenantId,
+      employeeId,
+      idempotencyKey: input.idempotency_key,
+      expectedUpdatedAt: current.updated_at,
+      remark: input.remark ?? null,
     });
 
     return this.toDetail(authContext, updated);
@@ -348,58 +356,6 @@ export class WechatPayApplymentService {
           applyment?.status ?? "",
         ),
       available_actions: [],
-    };
-  }
-
-  private async buildSensitivePayloadUpdate(input: {
-    current: WechatPayApplymentRecord;
-    input: UpdateWechatPayApplymentInput;
-    tenantId: string;
-  }): Promise<WechatPayApplymentUpdate> {
-    const hasReplacement = hasSensitiveReplacement(input.input);
-    const shouldClearAgentFields = input.current.has_sensitive_payload &&
-      input.input.contact_type === "LEGAL";
-    if (!hasReplacement && !shouldClearAgentFields) return {};
-
-    const stored = input.current.has_sensitive_payload
-      ? await this.repository.findSensitivePayloadById({
-        id: input.current.id,
-        tenantId: input.tenantId,
-      })
-      : null;
-    const version = stored?.sensitive_payload_version ?? 1;
-    let currentPayload: ApplymentSensitiveDraftPayload = {};
-    if (stored?.sensitive_payload_ciphertext && stored.sensitive_payload_version) {
-      currentPayload = decryptApplymentSensitivePayload({
-        context: {
-          tenantId: input.tenantId,
-          applymentId: input.current.id,
-          version: stored.sensitive_payload_version,
-        },
-        ciphertext: stored.sensitive_payload_ciphertext,
-        rootSecret: this.encryptionRootSecretFactory(),
-      });
-    } else if (!hasReplacement) {
-      return {};
-    }
-    const nextPayload = mergeSensitivePayload({
-      current: currentPayload,
-      patch: input.input,
-      contactType: input.input.contact_type ?? input.current.contact_type,
-    });
-    return {
-      has_sensitive_payload: true,
-      sensitive_payload_ciphertext: encryptApplymentSensitivePayload({
-        context: {
-          tenantId: input.tenantId,
-          applymentId: input.current.id,
-          version,
-        },
-        payload: nextPayload,
-        rootSecret: this.encryptionRootSecretFactory(),
-      }),
-      sensitive_payload_version: version,
-      sensitive_payload_updated_at: this.nowFactory(),
     };
   }
 

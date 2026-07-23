@@ -10067,6 +10067,17 @@ export type Database = {
         }
         Returns: string
       }
+      submit_tenant_wechat_pay_applyment: {
+        Args: {
+          p_applyment_id: string
+          p_employee_id: string
+          p_expected_updated_at: string
+          p_idempotency_key: string
+          p_remark: string | null
+          p_tenant_id: string
+        }
+        Returns: string
+      }
       approve_tenant_onboarding_application: {
         Args: {
           p_application_id: string

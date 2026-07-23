@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   throwApplymentActivationError,
   throwApplymentClaimError,
+  throwTenantApplymentSubmitError,
 } from "@/repositories/wechat-pay-applyment-rpc-errors";
 import type { Inserts, Tables, Updates } from "@/types/db";
 import { SupabaseDB } from "@/utils/supabase/index";
@@ -143,7 +144,7 @@ const APPLYMENT_MEDIA_SELECT = [
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-class WechatPayApplymentRepository {
+export class WechatPayApplymentRepository {
   async claimSubmission(input: {
     applymentId: string;
     employeeId: string;
@@ -333,6 +334,40 @@ class WechatPayApplymentRepository {
     }
 
     return data as unknown as WechatPayApplymentRecord;
+  }
+
+  async submitTenantApplymentAtomically(input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+    idempotencyKey: string;
+    expectedUpdatedAt: string;
+    remark: string | null;
+  }): Promise<WechatPayApplymentRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "submit_tenant_wechat_pay_applyment",
+      {
+        p_applyment_id: input.applymentId,
+        p_tenant_id: input.tenantId,
+        p_employee_id: input.employeeId,
+        p_idempotency_key: input.idempotencyKey,
+        p_expected_updated_at: input.expectedUpdatedAt,
+        p_remark: input.remark,
+      },
+    );
+
+    if (error) throwTenantApplymentSubmitError(error);
+    if (data !== "submitted" && data !== "idempotent") {
+      throw Errors.dbError("提交微信支付开通申请失败");
+    }
+    const submitted = await this.findById({
+      id: input.applymentId,
+      tenantId: input.tenantId,
+    });
+    if (!submitted) {
+      throw Errors.dbError("提交后查询微信支付开通申请失败");
+    }
+    return submitted;
   }
 
   async activateConfigAtomically(input: {

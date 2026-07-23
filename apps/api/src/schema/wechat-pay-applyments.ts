@@ -139,7 +139,34 @@ const AttachmentSchema = z.object({
   ocr_review_status: ApplymentAttachmentOcrReviewStatusSchema
     .nullable()
     .optional(),
-}).strict();
+}).strict().superRefine((attachment, context) => {
+  const hasRecognitionId = Boolean(attachment.ocr_recognition_id);
+  if (
+    (attachment.ocr_review_status === "confirmed" ||
+      attachment.ocr_review_status === "review_required") &&
+    !hasRecognitionId
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["ocr_recognition_id"],
+      message: "当前 OCR 核对状态必须关联识别记录",
+    });
+  }
+  if (attachment.ocr_review_status === "confirmed" && !attachment.file_object_id) {
+    context.addIssue({
+      code: "custom",
+      path: ["file_object_id"],
+      message: "已确认 OCR 附件必须关联文件 ID",
+    });
+  }
+  if (hasRecognitionId && !attachment.ocr_review_status) {
+    context.addIssue({
+      code: "custom",
+      path: ["ocr_review_status"],
+      message: "关联 OCR 识别记录时必须提供核对状态",
+    });
+  }
+});
 
 const TenantApplymentFields = {
   subject_type: WechatPayApplymentSubjectTypeSchema,

@@ -2,6 +2,7 @@ import type {
   PlatformPaymentConfigRecord,
   PlatformPaymentProfileCode,
 } from "@/repositories/platform-payment-configs";
+import type { OcrRecognitionOwnershipRecord } from "@/repositories/ocr-recognitions";
 import type {
   WechatPayApplymentEventInsert,
   WechatPayApplymentEventRecord,
@@ -38,6 +39,14 @@ export type WechatPayApplymentRepositoryPort = {
     expectedStatus?: string;
     expectedUpdatedAt?: string;
     patch: WechatPayApplymentUpdate;
+  }) => Promise<WechatPayApplymentRecord>;
+  submitTenantApplymentAtomically: (input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+    idempotencyKey: string;
+    expectedUpdatedAt: string;
+    remark: string | null;
   }) => Promise<WechatPayApplymentRecord>;
   activateConfigAtomically: (input: {
     applymentId: string;
@@ -114,10 +123,19 @@ export type WechatPayApplymentServiceDependencies = {
   applicationNoFactory?: () => string;
   applymentIdFactory?: () => string;
   encryptionRootSecretFactory?: () => string | null | undefined;
+  ocrRecognitionRepository?: WechatPayApplymentOcrRecognitionRepositoryPort;
   nowFactory?: () => string;
   submissionService?: WechatPayApplymentSubmissionPort;
   statusService?: WechatPayApplymentStatusPort;
   preflightService?: WechatPayApplymentPreflightPort;
+};
+
+export type WechatPayApplymentOcrRecognitionRepositoryPort = {
+  findByIdsForTenant: (input: {
+    ids: string[];
+    tenantId: string;
+    limit: number;
+  }) => Promise<OcrRecognitionOwnershipRecord[]>;
 };
 
 export type WechatPayApplymentPreflightBlocker = {

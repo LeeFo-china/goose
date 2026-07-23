@@ -1,12 +1,18 @@
+import { Errors } from "@/errors/error-factory";
 import type {
   WechatPayApplymentRecord,
+  WechatPayApplymentSensitiveRecord,
   WechatPayApplymentUpdate,
 } from "@/repositories/wechat-pay-applyments";
 import type {
   CreateWechatPayApplymentInput,
   UpdateWechatPayApplymentInput,
 } from "@/schema/wechat-pay-applyments";
-import type { ApplymentSensitiveDraftPayload } from "@/services/wechat-pay-applyment-sensitive-payload";
+import {
+  decryptApplymentSensitivePayload,
+  encryptApplymentSensitivePayload,
+  type ApplymentSensitiveDraftPayload,
+} from "@/services/wechat-pay-applyment-sensitive-payload";
 
 type TenantApplymentInput =
   | CreateWechatPayApplymentInput
@@ -170,6 +176,96 @@ export function buildDraftChangeAudit(input: object) {
   };
 }
 
+export function buildDraftAuditDecision(input: {
+  current: WechatPayApplymentRecord;
+  input: UpdateWechatPayApplymentInput;
+}) {
+  const metadata = buildDraftChangeAudit(input.input);
+  const forcedAudit = hasForcedAuditChange(input);
+  const changeSource = forcedAudit
+    ? deriveForcedAuditSource(input)
+    : metadata.change_source;
+  return {
+    should_audit: metadata.change_source !== "autosave" || forcedAudit,
+    metadata: {
+      ...metadata,
+      change_source: changeSource,
+      ...(forcedAudit ? { forced_audit: true } : {}),
+    },
+  };
+}
+
+export async function buildSensitivePayloadUpdate(input: {
+  current: WechatPayApplymentRecord;
+  input: UpdateWechatPayApplymentInput;
+  tenantId: string;
+  loadSensitivePayload: () => Promise<
+    WechatPayApplymentSensitiveRecord | null
+  >;
+  rootSecret: string | null | undefined;
+  now: string;
+}): Promise<WechatPayApplymentUpdate> {
+  const hasReplacement = hasSensitiveReplacement(input.input);
+  const shouldClearAgentFields = input.current.has_sensitive_payload &&
+    input.input.contact_type === "LEGAL";
+  if (!hasReplacement && !shouldClearAgentFields) return {};
+
+  let currentPayload: ApplymentSensitiveDraftPayload = {};
+  let version = 1;
+  if (input.current.has_sensitive_payload) {
+    const stored = await input.loadSensitivePayload();
+    if (
+      !stored?.has_sensitive_payload ||
+      !stored.sensitive_payload_ciphertext ||
+      !stored.sensitive_payload_version ||
+      (
+        input.current.sensitive_payload_version !== null &&
+        stored.sensitive_payload_version !==
+          input.current.sensitive_payload_version
+      )
+    ) {
+      throw Errors.business(
+        500,
+        "微信支付进件敏感资料存储状态异常",
+        "WECHAT_PAY_APPLYMENT_SENSITIVE_PAYLOAD_CORRUPTED",
+      );
+    }
+    version = stored.sensitive_payload_version;
+    currentPayload = decryptApplymentSensitivePayload({
+      context: {
+        tenantId: input.tenantId,
+        applymentId: input.current.id,
+        version,
+      },
+      ciphertext: stored.sensitive_payload_ciphertext,
+      rootSecret: input.rootSecret,
+    });
+  }
+  const nextPayload = mergeSensitivePayload({
+    current: currentPayload,
+    patch: input.input,
+    contactType: input.input.contact_type ?? input.current.contact_type,
+  });
+  if (
+    !input.current.has_sensitive_payload &&
+    !hasSensitiveDraftValues(nextPayload)
+  ) return {};
+  return {
+    has_sensitive_payload: true,
+    sensitive_payload_ciphertext: encryptApplymentSensitivePayload({
+      context: {
+        tenantId: input.tenantId,
+        applymentId: input.current.id,
+        version,
+      },
+      payload: nextPayload,
+      rootSecret: input.rootSecret,
+    }),
+    sensitive_payload_version: version,
+    sensitive_payload_updated_at: input.now,
+  };
+}
+
 export function mergeSensitivePayload(input: {
   current: ApplymentSensitiveDraftPayload;
   patch: UpdateWechatPayApplymentInput;
@@ -230,6 +326,54 @@ export function hasSensitiveReplacement(
     input.settlement_account_name,
     input.settlement_account_number,
   ].some((value) => value !== undefined);
+}
+
+function hasForcedAuditChange(input: {
+  current: WechatPayApplymentRecord;
+  input: UpdateWechatPayApplymentInput;
+}) {
+  if (hasSensitiveReplacement(input.input)) return true;
+  if (hasAttachmentChange(input)) return true;
+  for (const field of [
+    "contact_type",
+    "subject_type",
+    "settlement_account_type",
+    "settlement_bank_name",
+    "settlement_bank_full_name",
+    "settlement_bank_branch_id",
+    "settlement_id",
+    "qualification_type",
+  ] as const) {
+    if (
+      input.input[field] !== undefined &&
+      input.input[field] !== input.current[field]
+    ) return true;
+  }
+  return false;
+}
+
+function deriveForcedAuditSource(input: {
+  current: WechatPayApplymentRecord;
+  input: UpdateWechatPayApplymentInput;
+}) {
+  if (hasAttachmentChange(input)) {
+    const statuses = input.input.attachments?.map((attachment) =>
+      attachment.ocr_review_status
+    ) ?? [];
+    if (statuses.includes("confirmed")) return "ocr_confirm";
+    if (statuses.includes("review_required")) return "ocr_review";
+    return "attachment_change";
+  }
+  return "manual_entry";
+}
+
+function hasAttachmentChange(input: {
+  current: WechatPayApplymentRecord;
+  input: UpdateWechatPayApplymentInput;
+}) {
+  return input.input.attachments !== undefined &&
+    JSON.stringify(input.input.attachments) !==
+      JSON.stringify(input.current.attachments);
 }
 
 export function sanitizeApplymentRecord(

@@ -10,6 +10,15 @@ import { SupabaseDB } from "@/utils/supabase";
 
 type OcrRecognitionRow =
   Database["public"]["Tables"]["ocr_recognitions"]["Row"];
+export type OcrRecognitionOwnershipRecord = Pick<
+  OcrRecognitionRow,
+  | "id"
+  | "tenant_id"
+  | "file_object_id"
+  | "subject_type"
+  | "subject_id"
+  | "status"
+>;
 
 type AdminClient = ReturnType<typeof SupabaseDB.getAdminClient>;
 
@@ -252,6 +261,25 @@ export class OcrRecognitionRepository {
 
     if (error) throw Errors.dbError("查询OCR识别记录失败", error);
     return (data as OcrRecognitionRow | null) ?? null;
+  }
+
+  async findByIdsForTenant(input: {
+    ids: string[];
+    tenantId: string;
+    limit: number;
+  }): Promise<OcrRecognitionOwnershipRecord[]> {
+    const limit = Math.min(Math.max(input.limit, 1), 20);
+    const ids = [...new Set(input.ids)].slice(0, limit);
+    if (ids.length === 0) return [];
+    const { data, error } = await this.getAdminClient()
+      .from("ocr_recognitions")
+      .select("id,tenant_id,file_object_id,subject_type,subject_id,status")
+      .eq("tenant_id", input.tenantId)
+      .in("id", ids)
+      .limit(limit);
+
+    if (error) throw Errors.dbError("查询OCR识别记录归属失败", error);
+    return (data ?? []) as OcrRecognitionOwnershipRecord[];
   }
 
   async countTenantSince(tenantId: string, since: string) {

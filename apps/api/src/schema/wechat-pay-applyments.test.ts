@@ -119,6 +119,7 @@ describe("wechat pay applyment schemas", () => {
   test("allows only safe OCR review metadata on attachments", () => {
     const attachment = {
       category: "license_copy",
+      file_object_id: "22222222-2222-4222-8222-222222222222",
       object_key: "tenant/license.jpg",
       ocr_recognition_id: "11111111-1111-4111-8111-111111111111",
       ocr_review_status: "confirmed",
@@ -144,6 +145,29 @@ describe("wechat pay applyment schemas", () => {
         ocr_fields: { identity_number: "41000019900101001X" },
       }],
     }).success).toBe(false);
+  });
+
+  test("requires recognition identity for OCR-backed review states", () => {
+    const attachment = {
+      category: "license_copy",
+      file_object_id: "22222222-2222-4222-8222-222222222222",
+      object_key: "tenant/license.jpg",
+    };
+    for (const ocrReviewStatus of ["confirmed", "review_required"] as const) {
+      expect(UpdateWechatPayApplymentSchema.safeParse({
+        attachments: [{
+          ...attachment,
+          ocr_review_status: ocrReviewStatus,
+        }],
+      }).success).toBe(false);
+    }
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      attachments: [{
+        category: "license_copy",
+        object_key: "tenant/license.jpg",
+        ocr_review_status: "manual",
+      }],
+    }).success).toBe(true);
   });
 
   test("rejects a settlement rule that does not belong to the subject", () => {

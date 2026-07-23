@@ -35,6 +35,9 @@ type TestAttachment = {
   file_name: string;
   content_type: string;
   size: number;
+  file_object_id?: string;
+  ocr_recognition_id?: string;
+  ocr_review_status?: string;
 };
 
 function attachment(
@@ -48,6 +51,7 @@ function attachment(
     file_name: `${category}.jpg`,
     content_type: "image/jpeg",
     size: 1024,
+    ocr_review_status: "manual",
     ...overrides,
   };
 }
@@ -229,6 +233,42 @@ describe("wechat pay applyment preflight", () => {
         code: "APPLYMENT_SETTLEMENT_RULE_INVALID",
         field: "settlement_id",
       }],
+    });
+  });
+
+  test("blocks enterprise personal accounts and unreviewed OCR attachments", async () => {
+    const { runWechatPayApplymentPreflight } = await loadSubject();
+    const report = await runWechatPayApplymentPreflight(applymentId, {
+      repository: {
+        findById: async () => applyment({
+          settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+          attachments: [
+            attachment("license_copy", {
+              ocr_review_status: "review_required",
+            }),
+            attachment("legal_representative_id_card_front"),
+            attachment("legal_representative_id_card_back"),
+          ],
+        }),
+        findSensitivePayloadById: async () => sensitiveRecord(),
+      },
+      loadRuntimeProfile: async () => ({ ready: true }),
+      encryptionRootSecretFactory: () => rootSecret,
+      nowFactory: () => now,
+    });
+
+    expect(report).toEqual({
+      ready: false,
+      blockers: expect.arrayContaining([
+        {
+          code: "APPLYMENT_ENTERPRISE_ACCOUNT_TYPE_INVALID",
+          field: "settlement_account_type",
+        },
+        {
+          code: "APPLYMENT_ATTACHMENT_OCR_REVIEW_REQUIRED",
+          category: "license_copy",
+        },
+      ]),
     });
   });
 

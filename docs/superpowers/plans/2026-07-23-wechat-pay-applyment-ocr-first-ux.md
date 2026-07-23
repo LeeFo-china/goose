@@ -16,6 +16,8 @@
 
 - `supabase/migrations/20260723130000_allow_partial_wechat_pay_applyment_drafts.sql`
   - 允许草稿阶段的商户简称为空，同时保留非空值校验。
+- `supabase/migrations/20260723133000_add_atomic_wechat_pay_applyment_submit.sql`
+  - 原子完成租户提交状态转换与 submitted 审计事件，支持同申请 ID 幂等重试。
 - `apps/admin/components/finance/finance-wechat-pay-applyment-flow-model.ts`
   - 定义四阶段、资料处理状态、附件状态恢复、必传资料和阶段推进纯函数。
 - `apps/admin/components/finance/finance-wechat-pay-applyment-flow-model.test.ts`
@@ -220,8 +222,13 @@ git commit -m "feat(payment): 支持不完整进件草稿"
 - Modify: `apps/api/src/services/wechat-pay-applyment-sensitive-payload.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyment-sensitive-payload.test.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyment-draft.ts`
+- Create: `apps/api/src/services/wechat-pay-applyment-content-validation.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyments.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyments-types.ts`
+- Modify: `apps/api/src/repositories/wechat-pay-applyments.ts`
+- Modify: `apps/api/src/repositories/ocr-recognitions.ts`
+- Modify: `apps/api/src/types/database.ts`
+- Create: `supabase/migrations/20260723133000_add_atomic_wechat_pay_applyment_submit.sql`
 - Modify: `apps/api/src/services/wechat-pay-applyment-submission.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyment-submission.test.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyments-sensitive-integration.test.ts`
@@ -818,10 +825,15 @@ if (!editable && current.submitted_at) {
 this.assertEditable(current);
 ```
 
-首次提交事件 metadata 记录 `{ idempotency_key: input.idempotency_key }`，不得记录
-表单字段值。`wechat-pay-applyments.test.ts` 增加“首次响应丢失后使用同一 key 重试，
-直接返回已提交申请且不重复 update/insert event”的测试。这里的提交只改变平台审核状态，
-不调用微信进件；正式微信进件继续使用既有独立幂等机制。
+租户提交前必须解密敏感草稿并完成完整性、结算组合、企业对公账户和附件 OCR
+核对/归属校验。首次提交通过
+`submit_tenant_wechat_pay_applyment` RPC 在同一事务内完成状态转换和事件写入；
+RPC 对申请行加锁并用 `expected_updated_at` 防止内容校验后的并发草稿覆盖，事件 metadata 只记录
+`{ idempotency_key: input.idempotency_key }`。已提交或进入后续状态且
+`submitted_at` 非空时，同 key 重试返回幂等结果，不重复事件；editable 状态仍可重新提交。
+`wechat-pay-applyments.test.ts` 和 repository migration contract test 覆盖并发重试只产生
+一次状态转换、一次事件。这里的提交只改变平台审核状态，不调用微信进件；正式微信进件
+继续使用既有独立幂等机制。
 
 - [ ] **Step 11: 运行 API 定向测试**
 
@@ -2665,8 +2677,10 @@ supabase migration list
 supabase db push --dry-run
 ```
 
-确认只包含 `20260723130000_allow_partial_wechat_pay_applyment_drafts.sql`
-后再执行：
+确认只包含以下两项后再执行：
+
+- `20260723130000_allow_partial_wechat_pay_applyment_drafts.sql`
+- `20260723133000_add_atomic_wechat_pay_applyment_submit.sql`
 
 ```bash
 supabase db push
