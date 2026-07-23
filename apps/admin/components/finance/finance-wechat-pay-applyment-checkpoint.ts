@@ -41,23 +41,30 @@ export function retainAttachmentCheckpointErrors(
 export async function continueAfterAttachmentCheckpoint(input: {
   attachment: WechatPayApplymentAttachment;
   supportedDocumentTypes: ReadonlySet<string>;
-  recognitionConsent: boolean;
+  isActive: () => boolean;
+  hasRecognitionConsent: () => boolean;
   markUnsupportedManual: () => Promise<void>;
   recognize: () => Promise<void>;
 }) {
+  if (!input.isActive()) return;
   const documentType = getOcrMaterialDocumentType(input.attachment);
   if (!documentType) return;
   if (!input.supportedDocumentTypes.has(documentType)) {
     await input.markUnsupportedManual();
     return;
   }
-  if (input.recognitionConsent) await input.recognize();
+  if (input.isActive() && input.hasRecognitionConsent()) {
+    await input.recognize();
+  }
 }
 
 export async function checkpointApplymentAttachment(input: {
   attachment: WechatPayApplymentAttachment;
   generation: number;
   isCurrent: (generation: number) => boolean;
+  isCurrentAttachment: (
+    attachment: WechatPayApplymentAttachment,
+  ) => boolean;
   persist: () => Promise<void>;
   getErrors: () => AttachmentCheckpointErrorMap;
   commitErrors: (errors: AttachmentCheckpointErrorMap) => void;
@@ -66,7 +73,7 @@ export async function checkpointApplymentAttachment(input: {
   reportError: (message: string) => void;
   capabilityLoading: boolean;
   supportedDocumentTypes: ReadonlySet<string>;
-  recognitionConsent: boolean;
+  hasRecognitionConsent: () => boolean;
   markUnsupportedManual: () => Promise<void>;
   recognize: () => Promise<void>;
 }) {
@@ -93,7 +100,10 @@ export async function checkpointApplymentAttachment(input: {
       await continueAfterAttachmentCheckpoint({
         attachment: input.attachment,
         supportedDocumentTypes: input.supportedDocumentTypes,
-        recognitionConsent: input.recognitionConsent,
+        isActive: () =>
+          input.isCurrent(input.generation) &&
+          input.isCurrentAttachment(input.attachment),
+        hasRecognitionConsent: input.hasRecognitionConsent,
         markUnsupportedManual: input.markUnsupportedManual,
         recognize: input.recognize,
       });

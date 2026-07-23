@@ -35,6 +35,7 @@ import {
 } from "./finance-wechat-pay-applyment-recognition";
 import type { AttachmentUploadedInput } from "./finance-wechat-pay-applyment-attachments";
 import type { UseWechatPayApplymentMaterialsInput } from "./finance-wechat-pay-applyment-materials-contract";
+import { reportGenerationGuardedError } from "./finance-wechat-pay-applyment-save-generation";
 import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";
 type CapabilityStatus = "loading" | "available" | "unavailable";
 
@@ -128,7 +129,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
           () => processUploadedMaterials(supported, generation),
           generation,
         )
-          .catch(reportOperationError);
+          .catch(reportOperationError(generation));
       })
       .catch((capabilityError) => {
         if (
@@ -148,7 +149,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
           () => processUploadedMaterials(supported, generation),
           generation,
         )
-          .catch(reportOperationError);
+          .catch(reportOperationError(generation));
       });
     return () => {
       active = false;
@@ -302,6 +303,8 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       attachment,
       generation,
       isCurrent: generationRef.current.isCurrent,
+      isCurrentAttachment: (candidate) =>
+        isCurrentMaterialAttachment(attachmentsRef.current, candidate),
       persist: () => persist({
         attachments: attachmentsRef.current,
         draftUpdateSource: "attachment_change",
@@ -314,7 +317,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       reportError: setError,
       capabilityLoading: capabilityStatusRef.current === "loading",
       supportedDocumentTypes: supportedOcrDocumentTypesRef.current,
-      recognitionConsent: recognitionConsentRef.current,
+      hasRecognitionConsent: () => recognitionConsentRef.current,
       markUnsupportedManual: () => markUnsupportedMaterialsManual(
         supportedOcrDocumentTypesRef.current,
         generation,
@@ -373,13 +376,10 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
         if (generationRef.current.isCurrent(generation)) setError(message);
       },
       reportOperationError: (operationError) => {
-        if (generationRef.current.isCurrent(generation)) {
-          reportOperationError(operationError);
-        }
+        reportOperationError(generation)(operationError);
       },
     });
   }
-
   async function onRetryRecognition(attachment: WechatPayApplymentAttachment) {
     if (!input.editable) return;
     const generation = generationRef.current.current();
@@ -437,17 +437,15 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       }
       await recognizeAttachment(attachment, generation);
     }, generation)
-      .catch(reportOperationError);
+      .catch(reportOperationError(generation));
   }
-
   async function onRetrySave(attachment: WechatPayApplymentAttachment) {
     if (!input.editable) return;
     const generation = generationRef.current.current();
     return enqueue(async () => {
       await checkpointAttachment(attachment, generation);
-    }, generation).catch(reportOperationError);
+    }, generation).catch(reportOperationError(generation));
   }
-
   function setRecognitionConsent(checked: boolean) {
     if (!input.editable) return;
     recognitionConsentRef.current = checked;
@@ -460,19 +458,23 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
           generation,
         ),
         generation,
-      ).catch(reportOperationError);
+      ).catch(reportOperationError(generation));
     }
   }
-
-  function reportOperationError(operationError: unknown) {
-    if (mountedRef.current) {
-      setError(getApplymentMaterialErrorMessage(
-        operationError,
-        "申请附件处理失败",
-      ));
-    }
+  function reportOperationError(generation: number) {
+    return (operationError: unknown) => {
+      reportGenerationGuardedError({
+        generation,
+        isCurrent: (candidate) =>
+          mountedRef.current && generationRef.current.isCurrent(candidate),
+        error: operationError,
+        report: (currentError) => setError(getApplymentMaterialErrorMessage(
+          currentError,
+          "申请附件处理失败",
+        )),
+      });
+    };
   }
-
   return {
     attachments,
     attachmentsRef,

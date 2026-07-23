@@ -1317,7 +1317,11 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
 - materials 异步任务捕获 reset generation；reset/unmount 后旧恢复、capability、checkpoint
   或 recognition 结果不得写回，也不得在新草稿上启动 persist/OCR。识别和持久化编排拆到
   单一职责 coordinator，materials hook 保持低于 500 行；save callback 的 applymentRef
-  更新也必须在同一个 generation guard 内，旧草稿请求完成后不得提交自身副作用。
+  更新及 save/recognition/manual/checkpoint reject 的错误报告也必须在同一个 generation
+  guard 内，旧草稿请求完成或失败后不得提交状态、checkpoint error 或全局错误副作用。
+- checkpoint 等待附件保存期间允许用户撤销 OCR 授权；保存完成后必须从 ref 实时读取
+  consent，并再次核对 generation 与当前 category/object key，满足全部条件后才能启动 OCR，
+  不得使用保存开始时捕获的布尔快照。
 - `wechat_pay_applyment` 私有上传 complete 必须从对象存储 HEAD 取得权威 size/MIME：
   size 必须大于 0 且不超过场景上限，MIME 必须为允许图片，并与 init 声明完全一致；
   HEAD 缺失时不得回退客户端声明。复用 onboarding 私有上传的服务层验证模式。

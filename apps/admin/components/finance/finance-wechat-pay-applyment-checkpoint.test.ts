@@ -141,6 +141,7 @@ describe("wechat pay applyment attachment checkpoint", () => {
       attachment,
       generation: generation.current(),
       isCurrent: generation.isCurrent,
+      isCurrentAttachment: () => true,
       persist: async () => {
         persistCalls += 1;
         if (shouldFail) throw new Error("save unavailable");
@@ -156,7 +157,7 @@ describe("wechat pay applyment attachment checkpoint", () => {
       },
       capabilityLoading: false,
       supportedDocumentTypes: new Set(["business_license"]),
-      recognitionConsent: true,
+      hasRecognitionConsent: () => true,
       markUnsupportedManual: async () => {
         manualCalls += 1;
       },
@@ -202,5 +203,45 @@ describe("wechat pay applyment attachment checkpoint", () => {
       "tenant/kept.jpg": ATTACHMENT_CHECKPOINT_ERROR,
     });
     expect(retainAttachmentCheckpointErrors(errors, [])).toEqual({});
+  });
+
+  test("rechecks consent after a pending save before starting recognition", async () => {
+    const attachment = {
+      category: "license_copy" as const,
+      file_object_id: "file-1",
+      object_key: "tenant/license.jpg",
+    };
+    let releasePersist: () => void = () => undefined;
+    const pendingPersist = new Promise<void>((resolve) => {
+      releasePersist = resolve;
+    });
+    let consent = true;
+    let recognitionCalls = 0;
+    const generation = createMaterialOperationGeneration();
+
+    const checkpoint = checkpointApplymentAttachment({
+      attachment,
+      generation: generation.current(),
+      isCurrent: generation.isCurrent,
+      isCurrentAttachment: () => true,
+      persist: () => pendingPersist,
+      getErrors: () => ({}),
+      commitErrors: () => undefined,
+      removeUnpersisted: () => undefined,
+      hasOutstandingErrors: () => false,
+      reportError: () => undefined,
+      capabilityLoading: false,
+      supportedDocumentTypes: new Set(["business_license"]),
+      hasRecognitionConsent: () => consent,
+      markUnsupportedManual: async () => undefined,
+      recognize: async () => {
+        recognitionCalls += 1;
+      },
+    });
+
+    consent = false;
+    releasePersist();
+    expect((await checkpoint).type).toBe("persisted");
+    expect(recognitionCalls).toBe(0);
   });
 });

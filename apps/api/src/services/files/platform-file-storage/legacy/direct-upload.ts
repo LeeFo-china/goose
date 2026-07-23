@@ -22,6 +22,7 @@ type PrivateHeadPolicy = {
   mimeTypes: ReadonlySet<string>;
   sizeError: string;
   typeError: string;
+  checksumError: string;
 };
 
 export async function createDirectUpload(this: any, input: DirectUploadInput) {
@@ -271,6 +272,7 @@ function getPrivateHeadPolicy(
       mimeTypes: TENANT_ONBOARDING_LICENSE_MIME_TYPES,
       sizeError: "营业执照文件大小校验失败",
       typeError: "营业执照文件类型校验失败",
+      checksumError: "营业执照文件校验值不一致",
     };
   }
   if (input.scene === PRIVATE_APPLYMENT_SCENE) {
@@ -279,6 +281,7 @@ function getPrivateHeadPolicy(
       mimeTypes: WECHAT_PAY_APPLYMENT_MIME_TYPES,
       sizeError: "微信支付进件附件大小校验失败",
       typeError: "微信支付进件附件类型校验失败",
+      checksumError: "进件附件文件校验值不一致",
     };
   }
   return null;
@@ -313,7 +316,7 @@ function requirePrivateHeadMetadata(input: {
     ?? normalizeEtag(String(getHeader(input.headers, "etag") ?? ""));
   const clientEtag = normalizeEtag(input.input.etag);
   if (!headEtag || (clientEtag && clientEtag !== headEtag)) {
-    throw privateUploadError("营业执照文件校验值不一致");
+    throw privateUploadError(input.policy.checksumError);
   }
   return { contentLength, contentType, etag: headEtag };
 }

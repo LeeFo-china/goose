@@ -258,6 +258,18 @@ describe("private direct upload completion", () => {
     );
   });
 
+  test("uses an applyment-specific error for an ETag mismatch", async () => {
+    const { registerExistingCosObject } = await import("./direct-upload");
+    const { context } = storageContext();
+    await expect(registerExistingCosObject.call(
+      context,
+      privateApplymentInput({ etag: '"client-etag"' }) as never,
+    )).rejects.toMatchObject({
+      message: "进件附件文件校验值不一致",
+    });
+    expect(createOrFindByObjectKey).not.toHaveBeenCalled();
+  });
+
   test("forces HEAD even when the environment toggle is false", async () => {
     const { completeDirectUpload } = await import("./direct-upload");
     const registerExistingCosObject = mock(async () => ({ file_id: "file-1" }));
