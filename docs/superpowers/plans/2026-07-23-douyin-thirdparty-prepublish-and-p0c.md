@@ -298,15 +298,16 @@ Expected: 至少有一个普通小程序 AppID，且尾号不为 `1b01`。记录
 
 Expected: 两个 URL 逐字符一致，Token/AES 只确认“已设置”，不显示、不复制、不轮换。
 
-- [ ] **Step 3：核对授权域名落点**
+- [ ] **Step 3：固定本轮测试授权模式**
 
-若当前 Gooes 尚没有授权完成页，只把授权域名登记为阻断项，不使用任意第三方页面或临时域名。后续实现的固定开发落点为：
+本轮全网发布前测试使用服务商控制台提供的官方授权入口，不传
+`redirect_uri`。官方“直接获取授权链接”接口将 `redirect_uri` 标记为可选，
+未传时授权完成后不跳转；可信 `AUTHORIZED` 通知仍推送到现有授权事件接收 URL。
 
-```text
-https://admin-dev.goodcms.cn/platform/douyin-miniapps/authorization/callback
-```
-
-Expected: 控制台授权域名必须是 `admin-dev.goodcms.cn`；若当前值不同，先停止并进入租户侧授权完成页实现，不生成授权链接。
+Expected: 当前授权域名只读记录但不作为测试授权阻断项，不修改授权域名，不使用
+临时页面或第三方域名。固定开发授权完成页
+`https://admin-dev.goodcms.cn/platform/douyin-miniapps/authorization/callback`
+留到后续租户侧“小程序中心”设计与实现阶段。
 
 - [ ] **Step 4：核对第三方应用发布状态**
 
@@ -591,23 +592,20 @@ log_id
 
 不得打印或返回 token 原值。只允许一次外部刷新；结果不确定时停止，不盲目重试。
 
-- [ ] **Step 3：验证正式授权链接生成**
+- [ ] **Step 3：验证不带跳转的授权链接生成**
 
-使用已配置的固定开发回调页：
-
-```text
-https://admin-dev.goodcms.cn/platform/douyin-miniapps/authorization/callback
-```
-
-生成一个授权链接，只验证：
+P0-C 先生成一个不传 `redirect_uri` 的 `link_type=1` 授权链接，只验证：
 
 - 返回成功；
-- `redirect_uri` 域名为 `admin-dev.goodcms.cn`；
 - 目标 Component 尾号为 `cd67`；
 - 未返回 `40058`；
 - 链接不发送给任何真实装修公司。
 
 证据文档不得保存完整授权 URL 或其中的临时参数。
+
+后续租户侧“小程序中心”实现并部署固定授权完成页后，再单独验证带
+`redirect_uri` 的授权链接和 `admin-dev.goodcms.cn` 授权域名；该生产化门禁
+不阻塞本轮全网发布前测试授权。
 
 - [ ] **Step 4：更新 P0-R 结论**
 
