@@ -1,5 +1,7 @@
-.empty-state { box-sizing: border-box; display: flex; min-height: 360rpx; flex-direction: column; align-items: center; justify-content: center; padding: 48rpx 32rpx; color: #25211e; text-align: center; }
-.empty-mark { width: 72rpx; height: 54rpx; border: 3rpx solid #b9afa8; border-top: 0; border-radius: 0 0 12rpx 12rpx; }
-.empty-title { margin-top: 28rpx; font-size: 30rpx; font-weight: 600; line-height: 1.4; }
-.empty-description { max-width: 540rpx; margin-top: 12rpx; color: #665f5a; font-size: 25rpx; line-height: 1.65; }
-.empty-action { min-width: 176rpx; min-height: 88rpx; margin-top: 28rpx; border-radius: 12rpx; background: #25211e; color: #fff; font-size: 27rpx; line-height: 88rpx; }
+@import "../../styles/tokens.ttss";
+
+.empty-state { box-sizing: border-box; display: flex; min-height: 360rpx; flex-direction: column; align-items: center; justify-content: center; padding: 48rpx 32rpx; color: #191817; text-align: center; }
+.empty-mark { width: 72rpx; height: 54rpx; border: 3rpx solid #9b948e; border-top: 0; border-radius: 0 0 12rpx 12rpx; }
+.empty-title { margin-top: 28rpx; font-size: 30rpx; font-weight: 650; line-height: 1.4; }
+.empty-description { max-width: 540rpx; margin-top: 12rpx; color: #625f5b; font-size: 25rpx; line-height: 1.65; }
+.empty-action { min-width: 176rpx; min-height: 88rpx; margin-top: 28rpx; border-radius: 12rpx; background: #191817; color: #fff; font-size: 27rpx; line-height: 88rpx; }

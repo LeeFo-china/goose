@@ -88,8 +88,8 @@ describe("Douyin native navigation and visual view models", () => {
       expect(theme.contrastRatio).toBeGreaterThanOrEqual(4.5);
     }
     expect(resolveThemeColor("red; display:none")).toMatchObject({
-      primaryColor: "#C45A32",
-      primaryTextColor: "#000000",
+      primaryColor: "#191817",
+      primaryTextColor: "#FFFFFF",
     });
   });
 });

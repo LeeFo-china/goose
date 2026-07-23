@@ -87,3 +87,65 @@ test("lead form labels every input and keeps optional details collapsed", async 
   expect(consentTemplate).toContain('catchtap="onOpenPolicy"');
   expect(consentStyle).toMatch(/min-height:\s*88rpx/);
 });
+
+test("shared state actions use semantic styles and native press feedback", async () => {
+  const files = await Promise.all([
+    readSource("components/empty-state/index.ttml"),
+    readSource("components/error-state/index.ttml"),
+    readSource("components/pagination-loader/index.ttml"),
+    readSource("components/empty-state/index.ttss"),
+    readSource("components/error-state/index.ttss"),
+    readSource("components/pagination-loader/index.ttss"),
+  ]);
+  expect(files.slice(0, 3).join("\n").match(/hover-class="ui-pressable--pressed"/g))
+    .toHaveLength(4);
+  for (const style of files.slice(3)) {
+    expect(style).toContain('@import "../../styles/tokens.ttss";');
+  }
+});
+
+test("four-page target contains no fixed terracotta brand palette", async () => {
+  const targetFiles = [
+    "pages/home/index.ts",
+    "pages/home/index.ttml",
+    "pages/home/index.ttss",
+    "pages/cases/index.ts",
+    "pages/cases/index.ttml",
+    "pages/cases/index.ttss",
+    "pages/sites/index.ts",
+    "pages/sites/index.ttml",
+    "pages/sites/index.ttss",
+    "pages/lead/index.ts",
+    "pages/lead/index.ttml",
+    "pages/lead/index.ttss",
+    "components/tenant-brand/index.ttss",
+    "components/hero-banner/index.ts",
+    "components/hero-banner/index.ttss",
+    "components/case-card/index.ttss",
+    "components/site-card/index.ttss",
+    "components/lead-form/index.ts",
+    "components/lead-form/index.ttss",
+    "components/sms-code-input/index.ttss",
+    "components/privacy-consent/index.ttss",
+    "components/empty-state/index.ttss",
+    "components/error-state/index.ttss",
+    "components/pagination-loader/index.ttss",
+  ];
+  const source = (await Promise.all(targetFiles.map(readSource))).join("\n").toLowerCase();
+  for (const bannedColor of [
+    "#c45a32",
+    "#a84324",
+    "#9a4124",
+    "#8b371f",
+    "#91391f",
+    "#983d22",
+    "#b84e2d",
+    "#8d3d22",
+    "#7f351f",
+    "#f4e7e0",
+    "#f5e7e1",
+    "#fff7f3",
+  ]) {
+    expect(source).not.toContain(bannedColor);
+  }
+});

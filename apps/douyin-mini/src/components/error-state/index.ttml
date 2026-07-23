@@ -2,5 +2,5 @@
   <view class="error-mark">!</view>
   <view class="error-title">{{title}}</view>
   <view class="error-description">{{description}}</view>
-  <button class="error-action" loading="{{retrying}}" disabled="{{retrying}}" bindtap="onRetry">{{retrying ? '正在重试' : retryLabel}}</button>
+  <button class="error-action ui-pressable" hover-class="ui-pressable--pressed" loading="{{retrying}}" disabled="{{retrying}}" bindtap="onRetry">{{retrying ? '正在重试' : retryLabel}}</button>
 </view>

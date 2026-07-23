@@ -2,5 +2,5 @@
   <view class="empty-mark" aria-hidden="true"></view>
   <view class="empty-title">{{title}}</view>
   <view class="empty-description">{{description}}</view>
-  <button tt:if="{{actionLabel}}" class="empty-action" bindtap="onAction">{{actionLabel}}</button>
+  <button tt:if="{{actionLabel}}" class="empty-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onAction">{{actionLabel}}</button>
 </view>
