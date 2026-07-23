@@ -13,9 +13,11 @@ import {
 } from "./finance-wechat-pay-applyment-autosave";
 import {
   ApplymentDraftAutosaveCoordinator,
-  ApplymentDraftRevisionAllocator,
   saveApplymentDraftWithCreateRecovery,
 } from "./finance-wechat-pay-applyment-autosave-coordinator";
+import {
+  ApplymentDraftFencingSession,
+} from "./finance-wechat-pay-applyment-draft-session";
 import {
   createApplymentAutosavePageLifecycle,
 } from "./finance-wechat-pay-applyment-lifecycle";
@@ -28,7 +30,7 @@ type AutosaveRuntime = {
   id: symbol;
   queue: ApplymentDraftSaveQueue;
   coordinator: ApplymentDraftAutosaveCoordinator;
-  revisions: ApplymentDraftRevisionAllocator;
+  session: ApplymentDraftFencingSession;
   currentApplyment: WechatPayApplymentRecord | null;
 };
 
@@ -66,18 +68,28 @@ export function useWechatPayApplymentAutosave(input: {
           setSaveState("saving");
           setSaveError("");
         }
+        let attemptedPayload = payload;
         try {
+          const fencedPayload = await activeRuntime.session.allocate(payload);
+          attemptedPayload = fencedPayload;
           await saveApplymentDraftWithCreateRecovery<
             WechatPayApplymentRecord,
             WechatPayApplymentDetailData
           >({
             getCurrent: () => activeRuntime.currentApplyment,
-            payload,
+            payload: fencedPayload,
             isCurrent: context.isCurrent,
+            adoptCreated: (applyment) => {
+              activeRuntime.session.adoptCreated(applyment);
+            },
+            adoptRecovered: (applyment) => {
+              activeRuntime.session.reset(applyment);
+            },
+            prepareRecoveredPayload: () =>
+              activeRuntime.session.allocate(payload),
             commitCurrent: (applyment) => {
               if (!context.isCurrent()) return;
               activeRuntime.currentApplyment = applyment;
-              activeRuntime.revisions.absorb(applyment.draft_revision);
               if (isAttached()) currentApplymentRef.current = applyment;
             },
             shouldCommitDetail: () =>
@@ -106,7 +118,7 @@ export function useWechatPayApplymentAutosave(input: {
             activeRuntime.coordinator.isLatestPayload(payload) &&
             !isApplymentDraftSaveCancelledError(error)
           ) {
-            lastFailedPayloadRef.current = payload;
+            lastFailedPayloadRef.current = attemptedPayload;
             setSaveError(
               error instanceof Error
                 ? error.message
@@ -118,13 +130,24 @@ export function useWechatPayApplymentAutosave(input: {
         }
       },
     );
+    const session = new ApplymentDraftFencingSession(async (applymentId) => {
+      const detail = await requestBackendJson<WechatPayApplymentDetailData>(
+        `/finance/wechat-pay/applyments/${applymentId}/draft-session`,
+        {
+          method: "POST",
+          fallbackMessage: "认领微信支付开通申请草稿会话失败",
+          keepalive: true,
+        },
+      );
+      if (!detail.applyment) throw new ApplymentDraftSaveCancelledError();
+      return detail.applyment;
+    });
+    session.reset(currentApplymentRef.current);
     runtime = {
       id: runtimeId,
       queue,
       coordinator: new ApplymentDraftAutosaveCoordinator(queue, 800),
-      revisions: new ApplymentDraftRevisionAllocator(
-        currentApplymentRef.current?.draft_revision,
-      ),
+      session,
       currentApplyment: currentApplymentRef.current,
     };
     runtimeRef.current = runtime;
@@ -136,7 +159,7 @@ export function useWechatPayApplymentAutosave(input: {
   useEffect(() => {
     const runtime = ensureAutosaveRuntime();
     runtime.coordinator.reset();
-    runtime.revisions.reset(input.detail.applyment?.draft_revision);
+    runtime.session.reset(input.detail.applyment);
     runtime.currentApplyment = input.detail.applyment;
     currentDetailRef.current = input.detail;
     currentApplymentRef.current = input.detail.applyment;
@@ -187,19 +210,17 @@ export function useWechatPayApplymentAutosave(input: {
   function scheduleDraftSave(payload: ApplymentDraftSavePayload): void {
     markDraftSaveScheduled();
     const runtime = ensureAutosaveRuntime();
-    runtime.coordinator.schedule(runtime.revisions.allocate({
+    runtime.coordinator.schedule({
       ...payload,
       draft_update_source: "autosave",
-    }));
+    });
   }
 
   function enqueueMaterialCheckpoint(
     payload: ApplymentDraftSavePayload,
   ): Promise<void> {
     const runtime = ensureAutosaveRuntime();
-    return runtime.coordinator.checkpoint(
-      runtime.revisions.allocate(payload),
-    );
+    return runtime.coordinator.checkpoint(payload);
   }
 
   function flushDraftSaves(): Promise<void> {

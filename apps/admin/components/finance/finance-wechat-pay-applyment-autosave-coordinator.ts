@@ -157,7 +157,6 @@ export class ApplymentDraftAutosaveCoordinator {
   ): ApplymentDraftSavePayload {
     this.clearTimer();
     const payload = this.takeScheduledPayload() ??
-      this.latestPayload ??
       failedPayload;
     this.latestPayload = payload;
     return payload;
@@ -172,6 +171,9 @@ export async function saveApplymentDraftWithCreateRecovery<
   payload: ApplymentDraftSavePayload;
   isCurrent: () => boolean;
   commitCurrent: (draft: Draft) => void;
+  adoptCreated?: (draft: Draft) => void;
+  adoptRecovered?: (draft: Draft) => void;
+  prepareRecoveredPayload?: () => Promise<ApplymentDraftSavePayload>;
   shouldCommitDetail?: () => boolean;
   commitDetail?: (detail: Detail) => void;
   request: (
@@ -181,6 +183,7 @@ export async function saveApplymentDraftWithCreateRecovery<
 }): Promise<Detail> {
   const current = input.getCurrent();
   let detail: Detail;
+  let recovered = false;
 
   try {
     detail = await requestDraftSave(input, current);
@@ -194,12 +197,23 @@ export async function saveApplymentDraftWithCreateRecovery<
     );
     if (!existing.applyment) throw error;
     assertCurrent(input.isCurrent);
+    recovered = true;
+    input.adoptRecovered?.(existing.applyment);
     input.commitCurrent(existing.applyment);
-    detail = await requestDraftSave(input, existing.applyment);
+    const recoveredPayload = await input.prepareRecoveredPayload?.() ??
+      input.payload;
+    assertCurrent(input.isCurrent);
+    detail = await requestDraftSave(
+      { ...input, payload: recoveredPayload },
+      existing.applyment,
+    );
   }
 
   assertCurrent(input.isCurrent);
-  if (detail.applyment) input.commitCurrent(detail.applyment);
+  if (detail.applyment) {
+    if (!current && !recovered) input.adoptCreated?.(detail.applyment);
+    input.commitCurrent(detail.applyment);
+  }
   if (input.shouldCommitDetail?.() !== false) {
     input.commitDetail?.(detail);
   }

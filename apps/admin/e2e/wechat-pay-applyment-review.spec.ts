@@ -218,6 +218,7 @@ test("乱序提交仅允许最高 revision 改写服务端草稿", async ({
       data: {
         merchant_short_name: "旧 revision 后提交",
         draft_update_source: "autosave",
+        draft_epoch: 1,
         draft_revision: 11,
       },
     },
@@ -233,6 +234,7 @@ test("乱序提交仅允许最高 revision 改写服务端草稿", async ({
       data: {
         merchant_short_name: "最新 revision 先提交",
         draft_update_source: "manual_save",
+        draft_epoch: 1,
         draft_revision: 12,
       },
     },
@@ -265,9 +267,95 @@ test("乱序提交仅允许最高 revision 改写服务端草稿", async ({
     };
   };
   expect(current.data.applyment).toMatchObject({
+    draft_epoch: 1,
     draft_revision: 12,
     merchant_short_name: "最新 revision 先提交",
   });
+});
+
+test("旧页面高 revision 晚到不能覆盖新页面 epoch", async ({
+  page,
+  request,
+}) => {
+  await loginAsTenantAdmin(page);
+  await page.goto("/finance/wechat-pay/applyment", {
+    waitUntil: "networkidle",
+  });
+  await stageButton(page, "补充信息").click();
+  const newPage = await page.context().newPage();
+  await newPage.goto("/finance/wechat-pay/applyment", {
+    waitUntil: "networkidle",
+  });
+  await stageButton(newPage, "补充信息").click();
+
+  await page.route("**/finance/wechat-pay/applyments/*", async (route) => {
+    const pending = route.request();
+    if (
+      pending.method() !== "PUT" ||
+      pending.url().endsWith("/draft-session")
+    ) {
+      await route.continue();
+      return;
+    }
+    const payload = pending.postDataJSON() as Record<string, unknown>;
+    await route.continue({
+      postData: JSON.stringify({ ...payload, draft_revision: 99 }),
+      headers: {
+        ...pending.headers(),
+        "content-type": "application/json",
+      },
+    });
+  });
+  const delayResponse = await request.post(
+    `${MOCK_BACKEND_URL}/__test/delay-next-save`,
+    { data: { milliseconds: 2_500 } },
+  );
+  expect(delayResponse.ok()).toBe(true);
+
+  await page.getByLabel("商户简称").fill("旧页面高 revision");
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.started.at(-1);
+  }).toMatchObject({
+    merchant_short_name: "旧页面高 revision",
+    draft_epoch: 2,
+    draft_revision: 99,
+  });
+
+  await newPage.getByLabel("商户简称").fill("新页面 epoch 值");
+  await expect(
+    newPage.getByRole("status").filter({ hasText: "已自动保存" }),
+  ).toBeVisible();
+
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.find((event) =>
+      event.merchant_short_name === "旧页面高 revision"
+    );
+  }).toMatchObject({
+    draft_epoch: 2,
+    draft_revision: 99,
+    outcome: "stale",
+    server_draft_epoch: 3,
+  });
+
+  const currentResponse = await request.get(
+    `${MOCK_BACKEND_URL}/finance/wechat-pay/applyment/current`,
+  );
+  const current = await currentResponse.json() as {
+    data: {
+      applyment: {
+        draft_epoch: number;
+        draft_revision: number;
+        merchant_short_name: string;
+      };
+    };
+  };
+  expect(current.data.applyment).toMatchObject({
+    draft_epoch: 3,
+    merchant_short_name: "新页面 epoch 值",
+  });
+  expect(current.data.applyment.draft_revision).toBeGreaterThan(0);
 });
 
 test("BFCache pagehide 恢复后仍可继续自动保存", async ({ page, request }) => {

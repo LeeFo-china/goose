@@ -7600,6 +7600,7 @@ export type Database = {
           contact_type: string | null
           created_at: string
           created_by_employee_id: string | null
+          draft_epoch: number
           draft_revision: number
           has_sensitive_payload: boolean
           id: string
@@ -7671,6 +7672,7 @@ export type Database = {
           contact_type?: string | null
           created_at?: string
           created_by_employee_id?: string | null
+          draft_epoch?: number
           draft_revision?: number
           has_sensitive_payload?: boolean
           id?: string
@@ -7742,6 +7744,7 @@ export type Database = {
           contact_type?: string | null
           created_at?: string
           created_by_employee_id?: string | null
+          draft_epoch?: number
           draft_revision?: number
           has_sensitive_payload?: boolean
           id?: string
@@ -10070,6 +10073,14 @@ export type Database = {
         }
         Returns: string
       }
+      claim_tenant_wechat_pay_applyment_draft_session: {
+        Args: {
+          p_applyment_id: string
+          p_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: number
+      }
       submit_tenant_wechat_pay_applyment: {
         Args: {
           p_applyment_id: string
@@ -10085,6 +10096,7 @@ export type Database = {
         Args: {
           p_applyment_id: string
           p_employee_id: string
+          p_epoch: number
           p_patch: Json
           p_revision: number
           p_tenant_id: string

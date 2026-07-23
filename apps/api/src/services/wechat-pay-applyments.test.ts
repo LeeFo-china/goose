@@ -33,6 +33,7 @@ const submittedApplyment: WechatPayApplymentRecord = {
   tenant_id: tenantId,
   application_no: "WPA202607010001",
   status: "submitted",
+  draft_epoch: 1,
   draft_revision: 0,
   merchant_short_name: "晴天装饰",
   license_name: "固始晴天装饰工程有限公司",
@@ -282,6 +283,7 @@ async function createService() {
       updateTenantDraftAtomically: async () => (
         { outcome: "applied", applyment: submittedApplyment }
       ),
+      claimTenantDraftSession: async () => submittedApplyment,
       submitTenantApplymentAtomically,
       activateConfigAtomically: mock(async () => submittedApplyment),
       insertEvent,
@@ -486,14 +488,12 @@ describe("WechatPayApplymentService", () => {
       message: "微信运营工单确认关闭测试申请",
     }));
   });
-
   test("platform rejects state repair without the dedicated permission", async () => {
     const service = await createService();
     await expect(service.repairWechatState(platformAdminAuth(), applymentId, {
       applyment_state: "closed",
       reason: "微信运营工单确认关闭测试申请",
     })).rejects.toMatchObject({ statusCode: 403 });
-
     expect(updateApplyment).not.toHaveBeenCalled();
   });
 });

@@ -144,6 +144,7 @@ async function createService() {
         outcome: "applied",
         applyment: applyment(),
       }),
+      claimTenantDraftSession: async () => applyment(),
       submitTenantApplymentAtomically: submitAtomically,
       activateConfigAtomically: async () => applyment(),
       insertEvent,

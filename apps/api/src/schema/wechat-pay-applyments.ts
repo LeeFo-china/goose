@@ -14,10 +14,8 @@ const optionalText = (max: number, message: string) =>
     const normalized = value.trim();
     return normalized || null;
   }, z.string().max(max, message).nullable().optional());
-
 const requiredText = (max: number, emptyMessage: string, maxMessage: string) =>
   z.string().trim().min(1, emptyMessage).max(max, maxMessage);
-
 const optionalQueryValue = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => {
     if (value == null) return undefined;
@@ -25,7 +23,6 @@ const optionalQueryValue = <T extends z.ZodTypeAny>(schema: T) =>
     const normalized = value.trim();
     return normalized || undefined;
   }, schema.optional());
-
 export const WechatPayApplymentStatusSchema = z.enum([
   "draft",
   "submitted",
@@ -43,7 +40,6 @@ export const WechatPayApplymentStatusSchema = z.enum([
   "suspended",
   "closed",
 ] as const, { message: "无效的微信支付开通申请状态" });
-
 export const WechatPayApplymentWechatStateSchema = z.enum([
   "not_started",
   "draft",
@@ -56,7 +52,6 @@ export const WechatPayApplymentWechatStateSchema = z.enum([
   "suspended",
   "closed",
 ] as const, { message: "无效的微信支付进件状态" });
-
 export const WechatPayApplymentAppIdBindingStateSchema = z.enum([
   "not_required",
   "not_bound",
@@ -64,7 +59,6 @@ export const WechatPayApplymentAppIdBindingStateSchema = z.enum([
   "bound",
   "rejected",
 ] as const, { message: "无效的微信支付 AppID 绑定状态" });
-
 export const WechatPayApplymentAttachmentCategorySchema = z.enum([
   "license_copy",
   "legal_representative_id_card_front",
@@ -74,33 +68,27 @@ export const WechatPayApplymentAttachmentCategorySchema = z.enum([
   "settlement_account_proof",
   "business_scene_material",
 ] as const, { message: "无效的微信支付开通申请附件类型" });
-
 export const WechatPayApplymentSettlementAccountTypeSchema = z.enum([
   "BANK_ACCOUNT_TYPE_CORPORATE",
   "BANK_ACCOUNT_TYPE_PERSONAL",
 ] as const, { message: "无效的微信支付结算账户类型" });
-
 export const WechatPayApplymentSubjectTypeSchema = z.enum([
   "SUBJECT_TYPE_ENTERPRISE",
   "SUBJECT_TYPE_INDIVIDUAL",
 ] as const, { message: "首版仅支持企业或个体工商户" });
-
 export const WechatPayApplymentIdentityDocTypeSchema = z.literal(
   "IDENTIFICATION_TYPE_IDCARD",
   { message: "首版仅支持中国大陆居民身份证" },
 );
-
 export const WechatPayApplymentContactTypeSchema = z.enum([
   "LEGAL",
   "SUPER",
 ] as const, { message: "无效的超级管理员类型" });
-
 const dateText = (message: string) => z.iso.date({ message });
 const periodEndText = (message: string) => z.union([
   z.iso.date({ message }),
   z.literal("长期"),
 ]);
-
 const optionalDateText = (message: string) => z.preprocess((value) => {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -108,7 +96,6 @@ const optionalDateText = (message: string) => z.preprocess((value) => {
   const normalized = value.trim();
   return normalized || null;
 }, dateText(message).nullable().optional());
-
 const optionalPeriodEndText = (message: string) => z.preprocess((value) => {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -116,7 +103,6 @@ const optionalPeriodEndText = (message: string) => z.preprocess((value) => {
   const normalized = value.trim();
   return normalized || null;
 }, periodEndText(message).nullable().optional());
-
 const ApplymentAttachmentOcrReviewStatusSchema = z.enum([
   "uploaded",
   "review_required",
@@ -124,7 +110,6 @@ const ApplymentAttachmentOcrReviewStatusSchema = z.enum([
   "manual",
   "failed",
 ] as const, { message: "无效的附件 OCR 核对状态" });
-
 const AttachmentSchema = z.object({
   category: WechatPayApplymentAttachmentCategorySchema.optional(),
   file_object_id: z.uuid("附件文件 ID 格式无效").optional(),
@@ -167,7 +152,6 @@ const AttachmentSchema = z.object({
     });
   }
 });
-
 const TenantApplymentFields = {
   subject_type: WechatPayApplymentSubjectTypeSchema,
   merchant_short_name: requiredText(64, "请输入商户简称", "商户简称不能超过 64 个字符"),
@@ -224,10 +208,8 @@ const TenantApplymentFields = {
   attachments: z.array(AttachmentSchema).max(20, "附件数量不能超过 20").optional(),
   remark: optionalText(500, "备注不能超过 500 个字符"),
 };
-
 const nullableDraft = <T extends z.ZodTypeAny>(schema: T) =>
   z.union([schema, z.null()]).optional();
-
 const DraftTenantApplymentFields = {
   subject_type: nullableDraft(TenantApplymentFields.subject_type),
   merchant_short_name: nullableDraft(
@@ -310,26 +292,23 @@ const DraftTenantApplymentFields = {
     "ocr_confirm",
     "manual_entry",
   ] as const, { message: "无效的草稿更新来源" }).optional(),
+  draft_epoch: z.number().int().positive("草稿会话必须为正整数").optional(),
   draft_revision: z.number().int().positive("草稿版本必须为正整数").optional(),
 } satisfies Record<string, z.ZodTypeAny>;
-
 type SettlementRuleFields = {
   subject_type?: WechatPayApplymentSubjectType;
   settlement_id?: string;
   qualification_type?: string;
 };
-
 type SettlementRuleIssue = {
   field: keyof SettlementRuleFields;
   message: string;
 };
-
 const SETTLEMENT_RULE_FIELD_NAMES = [
   "subject_type",
   "settlement_id",
   "qualification_type",
 ] as const;
-
 function getSettlementRuleIssues(
   input: SettlementRuleFields,
   requireComplete: boolean,
@@ -349,11 +328,9 @@ function getSettlementRuleIssues(
         message: "修改结算规则时必须同时提交主体类型、结算规则和所属行业",
       }));
   }
-
   const { subject_type: subjectType, settlement_id: settlementId } = input;
   const qualificationType = input.qualification_type;
   if (!subjectType || !settlementId) return [];
-
   const ruleForSubject = getWechatPaySettlementRulesForSubject(subjectType)
     .find((rule) => rule.id === settlementId);
   if (!ruleForSubject) {
@@ -377,7 +354,6 @@ function getSettlementRuleIssues(
   }
   return [];
 }
-
 function addSettlementRuleIssues(
   issues: SettlementRuleIssue[],
   addIssue: (issue: {
@@ -394,9 +370,9 @@ function addSettlementRuleIssues(
     });
   }
 }
-
 export const CreateWechatPayApplymentSchema = z
   .object(DraftTenantApplymentFields)
+  .omit({ draft_epoch: true })
   .strict()
   .superRefine((input, context) => {
     if (input.draft_update_source && input.draft_revision === undefined) {
@@ -421,8 +397,34 @@ export const CreateWechatPayApplymentSchema = z
     ), {
     message: "至少需要提交一个草稿字段",
   });
-
-export const UpdateWechatPayApplymentSchema = CreateWechatPayApplymentSchema;
+export const UpdateWechatPayApplymentSchema = z
+  .object(DraftTenantApplymentFields)
+  .strict()
+  .superRefine((input, context) => {
+    if (input.draft_epoch === undefined || input.draft_revision === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: input.draft_epoch === undefined
+          ? ["draft_epoch"]
+          : ["draft_revision"],
+        message: "更新草稿必须携带会话和版本",
+      });
+    }
+    addSettlementRuleIssues(
+      getSettlementRuleIssues({
+        subject_type: input.subject_type ?? undefined,
+        settlement_id: input.settlement_id ?? undefined,
+        qualification_type: input.qualification_type ?? undefined,
+      }, false),
+      (issue) => context.addIssue(issue),
+    );
+  })
+  .refine((value) =>
+    Object.keys(value).some((key) =>
+      !["draft_epoch", "draft_revision", "draft_update_source"].includes(key)
+    ), {
+    message: "至少需要提交一个草稿字段",
+  });
 
 export const SubmitWechatPayApplymentSchema = z.object({
   idempotency_key: z.uuid("提交幂等键格式无效"),

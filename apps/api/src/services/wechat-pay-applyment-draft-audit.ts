@@ -30,6 +30,7 @@ const INTERNAL_SERVER_PATCH_FIELDS = new Set<string>(
 );
 
 const INTERNAL_DRAFT_INPUT_FIELDS = new Set([
+  "draft_epoch",
   "draft_revision",
   "draft_update_source",
 ]);

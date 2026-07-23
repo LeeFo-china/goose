@@ -5,6 +5,7 @@ import {
   throwTenantApplymentSubmitError,
 } from "@/repositories/wechat-pay-applyment-rpc-errors";
 import {
+  claimTenantApplymentDraftSession,
   type WechatPayApplymentDraftUpdateInput,
   type WechatPayApplymentDraftUpdateResult,
   updateTenantApplymentDraftAtomically,
@@ -127,14 +128,13 @@ const APPLYMENT_SAFE_COLUMNS = [
   "reviewed_by_employee_id",
   "created_at",
   "updated_at",
+  "draft_epoch",
   "draft_revision",
 ].join(", ");
-
 const APPLYMENT_SELECT = [
   APPLYMENT_SAFE_COLUMNS,
   "tenant:tenants!tenant_wechat_pay_applyments_tenant_id_fkey(id, name, slug)",
 ].join(", ");
-
 const APPLYMENT_MEDIA_SELECT = [
   "id",
   "applyment_id",
@@ -143,10 +143,8 @@ const APPLYMENT_MEDIA_SELECT = [
   "media_id",
   "request_id",
 ].join(", ");
-
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export class WechatPayApplymentRepository {
   async claimSubmission(input: {
     applymentId: string;
@@ -159,12 +157,10 @@ export class WechatPayApplymentRepository {
         p_employee_id: input.employeeId,
       },
     );
-
     if (error) throwApplymentClaimError(error);
     if (!data?.[0]) {
       throw Errors.dbError("认领微信支付正式进件任务失败");
     }
-
     const claimed = await this.findById({ id: input.applymentId });
     if (!claimed) {
       throw Errors.business(
@@ -175,7 +171,6 @@ export class WechatPayApplymentRepository {
     }
     return claimed;
   }
-
   async findLatestByTenant(
     tenantId: string,
   ): Promise<WechatPayApplymentRecord | null> {
@@ -186,14 +181,11 @@ export class WechatPayApplymentRepository {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-
     if (error) {
       throw Errors.dbError("查询微信支付开通申请失败", error);
     }
-
     return (data as unknown as WechatPayApplymentRecord | null) ?? null;
   }
-
   async findById(input: {
     id: string;
     tenantId?: string;
@@ -206,13 +198,10 @@ export class WechatPayApplymentRepository {
     if (input.tenantId) {
       request = request.eq("tenant_id", input.tenantId);
     }
-
     const { data, error } = await request.maybeSingle();
-
     if (error) {
       throw Errors.dbError("查询微信支付开通申请详情失败", error);
     }
-
     return (data as unknown as WechatPayApplymentRecord | null) ?? null;
   }
 
@@ -343,6 +332,17 @@ export class WechatPayApplymentRepository {
     input: WechatPayApplymentDraftUpdateInput,
   ): Promise<WechatPayApplymentDraftUpdateResult> {
     return updateTenantApplymentDraftAtomically({
+      ...input,
+      findById: (target) => this.findById(target),
+    });
+  }
+
+  async claimTenantDraftSession(input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+  }): Promise<WechatPayApplymentRecord> {
+    return claimTenantApplymentDraftSession({
       ...input,
       findById: (target) => this.findById(target),
     });

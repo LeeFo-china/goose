@@ -29,6 +29,7 @@ function draft(
     tenant_id: tenantId,
     status: "draft",
     applyment_state: "draft",
+    draft_epoch: 3,
     draft_revision: 4,
     merchant_short_name: "revision-4",
     attachments: [],
@@ -44,11 +45,16 @@ function draft(
 
 async function createHarness(current: WechatPayApplymentRecord) {
   const updateTenantDraftAtomically = mock(async (input: {
+    epoch: number;
     revision: number;
     patch: WechatPayApplymentUpdate;
   }) => ({
-    outcome: input.revision > current.draft_revision ? "applied" : "stale",
-    applyment: input.revision > current.draft_revision
+    outcome: input.epoch === current.draft_epoch &&
+        input.revision > current.draft_revision
+      ? "applied"
+      : "stale",
+    applyment: input.epoch === current.draft_epoch &&
+        input.revision > current.draft_revision
       ? {
         ...current,
         ...input.patch,
@@ -68,6 +74,11 @@ async function createHarness(current: WechatPayApplymentRecord) {
       findSensitivePayloadById,
       createApplyment: async () => current,
       updateApplyment: async () => current,
+      claimTenantDraftSession: async () => ({
+        ...current,
+        draft_epoch: current.draft_epoch + 1,
+        draft_revision: 0,
+      }),
       updateTenantDraftAtomically,
       submitTenantApplymentAtomically: async () => current,
       activateConfigAtomically: async () => current,
@@ -103,6 +114,7 @@ describe("WechatPayApplymentService draft revision", () => {
       merchant_short_name: "stale-value",
       identity_number: "41000019900101001X",
       draft_update_source: "autosave",
+      draft_epoch: 3,
       draft_revision: 4,
     });
 
@@ -121,11 +133,13 @@ describe("WechatPayApplymentService draft revision", () => {
     const result = await harness.service.updateDraft(authContext, applymentId, {
       merchant_short_name: "revision-4",
       draft_update_source: "autosave",
+      draft_epoch: 3,
       draft_revision: 5,
     });
 
     expect(harness.updateTenantDraftAtomically).toHaveBeenCalledWith(
       expect.objectContaining({
+        epoch: 3,
         revision: 5,
         patch: expect.objectContaining({
           merchant_short_name: "revision-4",
@@ -150,6 +164,7 @@ describe("WechatPayApplymentService draft revision", () => {
     const result = await harness.service.updateDraft(authContext, applymentId, {
       merchant_short_name: "delayed-revision-5",
       draft_update_source: "autosave",
+      draft_epoch: 3,
       draft_revision: 5,
     });
 
@@ -160,22 +175,57 @@ describe("WechatPayApplymentService draft revision", () => {
     expect(harness.insertEvent).not.toHaveBeenCalled();
   });
 
-  test("allows one legacy baseline update but fails closed after revision mode starts", async () => {
-    const baseline = await createHarness(draft({ draft_revision: 0 }));
-    await baseline.service.updateDraft(authContext, applymentId, {
-      remark: "旧版人工保存",
-    });
-    expect(baseline.updateTenantDraftAtomically).toHaveBeenCalledWith(
-      expect.objectContaining({ revision: 1 }),
-    );
-
-    const revisioned = await createHarness(draft({ draft_revision: 2 }));
-    await expect(revisioned.service.updateDraft(authContext, applymentId, {
+  test("fails closed for legacy update calls without fencing metadata", async () => {
+    const harness = await createHarness(draft({ draft_revision: 0 }));
+    await expect(harness.service.updateDraft(authContext, applymentId, {
       remark: "过期旧版保存",
     })).rejects.toMatchObject({
-      code: "WECHAT_PAY_APPLYMENT_DRAFT_REVISION_REQUIRED",
+      code: "WECHAT_PAY_APPLYMENT_DRAFT_FENCE_REQUIRED",
       statusCode: 409,
     });
-    expect(revisioned.updateTenantDraftAtomically).not.toHaveBeenCalled();
+    expect(harness.updateTenantDraftAtomically).not.toHaveBeenCalled();
+  });
+
+  test("rejects a higher preallocated revision from an older epoch before sensitive reads", async () => {
+    const harness = await createHarness(draft({
+      draft_epoch: 8,
+      draft_revision: 1,
+      merchant_short_name: "new-page",
+    }));
+
+    const result = await harness.service.updateDraft(authContext, applymentId, {
+      merchant_short_name: "old-page-revision-99",
+      identity_number: "41000019900101001X",
+      draft_update_source: "autosave",
+      draft_epoch: 7,
+      draft_revision: 99,
+    });
+
+    expect(result.applyment).toMatchObject({
+      draft_epoch: 8,
+      draft_revision: 1,
+      merchant_short_name: "new-page",
+    });
+    expect(harness.updateTenantDraftAtomically).not.toHaveBeenCalled();
+    expect(harness.findSensitivePayloadById).not.toHaveBeenCalled();
+    expect(harness.insertEvent).not.toHaveBeenCalled();
+  });
+
+  test("claims a higher database epoch and resets the per-session revision", async () => {
+    const harness = await createHarness(draft({
+      draft_epoch: 8,
+      draft_revision: 99,
+    }));
+
+    const result = await harness.service.claimDraftSession(
+      authContext,
+      applymentId,
+    );
+
+    expect(result.applyment).toMatchObject({
+      draft_epoch: 9,
+      draft_revision: 0,
+    });
+    expect(harness.insertEvent).not.toHaveBeenCalled();
   });
 });

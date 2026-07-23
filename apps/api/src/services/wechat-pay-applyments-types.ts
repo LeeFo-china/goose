@@ -45,9 +45,15 @@ export type WechatPayApplymentRepositoryPort = {
     applymentId: string;
     tenantId: string;
     employeeId: string;
+    epoch: number;
     revision: number;
     patch: WechatPayApplymentUpdate;
   }) => Promise<WechatPayApplymentDraftUpdateResult>;
+  claimTenantDraftSession: (input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+  }) => Promise<WechatPayApplymentRecord>;
   submitTenantApplymentAtomically: (input: {
     applymentId: string;
     tenantId: string;

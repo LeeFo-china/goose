@@ -94,6 +94,28 @@ describe("ApplymentDraftAutosaveCoordinator", () => {
     expect(coordinator.lastPayload).toBe(scheduledPayload);
   });
 
+  test("retries the exact failed attempt when no newer payload exists", async () => {
+    const attempts: Array<Record<string, unknown>> = [];
+    const queue = new ApplymentDraftSaveQueue(async (payload) => {
+      attempts.push(payload);
+      if (attempts.length === 1) throw new Error("save failed");
+    });
+    const coordinator = new ApplymentDraftAutosaveCoordinator(queue, 20);
+    const rawPayload = { version: 1 };
+    const fencedAttempt = {
+      version: 1,
+      draft_epoch: 4,
+      draft_revision: 7,
+    };
+
+    await expect(coordinator.checkpoint(rawPayload)).rejects.toThrow(
+      "save failed",
+    );
+    await coordinator.retry(fencedAttempt);
+
+    expect(attempts).toEqual([rawPayload, fencedAttempt]);
+  });
+
   test("keeps an edit scheduled while the latest retry is running", async () => {
     const attempts: number[] = [];
     let startRetry: (() => void) | undefined;

@@ -46,6 +46,7 @@ function applyment(
     tenant_id: tenantId,
     application_no: "WPA202607210001",
     status: "applying",
+    draft_epoch: 1,
     draft_revision: 0,
     subject_type: "SUBJECT_TYPE_ENTERPRISE",
     merchant_short_name: "晴天装饰",
@@ -469,7 +470,6 @@ describe("WechatPayApplymentSubmissionService", () => {
     expect(submit).toHaveBeenCalledTimes(2);
     expect(queryByBusinessCode).toHaveBeenCalledTimes(2);
   });
-
   test("stores only sanitized error metadata", async () => {
     submit.mockRejectedValueOnce(Errors.business(
       502,

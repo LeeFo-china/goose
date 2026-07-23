@@ -60,6 +60,7 @@ function createApplyment(): WechatPayApplymentRecord {
     tenant_id: tenantId,
     application_no: "WPA202607210001",
     status: "approved",
+    draft_epoch: 1,
     draft_revision: 0,
     subject_type: "SUBJECT_TYPE_ENTERPRISE",
     merchant_short_name: "晴天装饰",
@@ -134,7 +135,6 @@ function createApplyment(): WechatPayApplymentRecord {
     updated_at: "2026-07-21T09:00:00.000Z",
   } as WechatPayApplymentRecord;
 }
-
 function platformProfile(): PlatformPaymentConfigRecord {
   return {
     id: platformConfigId,
@@ -162,7 +162,6 @@ function platformProfile(): PlatformPaymentConfigRecord {
     updated_at: "2026-07-21T09:00:00.000Z",
   } as PlatformPaymentConfigRecord;
 }
-
 function platformAuth(): AuthContext {
   return {
     authUserId: "auth-platform",
@@ -268,6 +267,7 @@ describe("official WeChat Pay applyment mock E2E", () => {
         outcome: "applied",
         applyment: current,
       }),
+      claimTenantDraftSession: async () => current,
       submitTenantApplymentAtomically: async () => current,
       activateConfigAtomically: async (input) => {
         if (input.expectedUpdatedAt !== current.updated_at) {

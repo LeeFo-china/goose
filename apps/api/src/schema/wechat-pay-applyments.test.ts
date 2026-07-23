@@ -111,6 +111,9 @@ describe("wechat pay applyment schemas", () => {
     }).success).toBe(true);
     expect(UpdateWechatPayApplymentSchema.safeParse({
       merchant_short_name: null,
+      draft_update_source: "autosave",
+      draft_epoch: 2,
+      draft_revision: 2,
     }).success).toBe(true);
     expect(CreateWechatPayApplymentSchema.safeParse({
       draft_update_source: "autosave",
@@ -131,14 +134,31 @@ describe("wechat pay applyment schemas", () => {
     expect(UpdateWechatPayApplymentSchema.safeParse({
       remark: "最新草稿",
       draft_update_source: "manual_save",
+      draft_epoch: 3,
       draft_revision: 7,
     }).success).toBe(true);
   });
 
-  test("keeps legacy calls compatible only when they do not claim autosave semantics", () => {
+  test("fails closed for update clients without an epoch and revision", () => {
     expect(UpdateWechatPayApplymentSchema.safeParse({
       remark: "旧版人工更新",
+    }).success).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "只有版本、没有会话 fencing",
+      draft_update_source: "autosave",
+      draft_revision: 99,
+    }).success).toBe(false);
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      remark: "新草稿由数据库签发初始 epoch",
+      draft_update_source: "autosave",
+      draft_revision: 1,
     }).success).toBe(true);
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      remark: "创建时不接受客户端伪造 epoch",
+      draft_update_source: "autosave",
+      draft_epoch: 99,
+      draft_revision: 1,
+    }).success).toBe(false);
   });
 
   test("accepts attachment-only and atomic OCR confirmation checkpoints", () => {
@@ -156,12 +176,14 @@ describe("wechat pay applyment schemas", () => {
         object_key: "tenant/license.jpg",
       }],
       draft_update_source: "attachment_change",
+      draft_epoch: 4,
       draft_revision: 2,
     }).success).toBe(true);
     const confirmation = UpdateWechatPayApplymentSchema.safeParse({
       license_name: "识别后的主体名称",
       attachments: [confirmedAttachment],
       draft_update_source: "ocr_confirm",
+      draft_epoch: 4,
       draft_revision: 3,
     });
     expect(confirmation.success).toBe(true);
@@ -182,6 +204,8 @@ describe("wechat pay applyment schemas", () => {
     };
     expect(UpdateWechatPayApplymentSchema.safeParse({
       attachments: [attachment],
+      draft_epoch: 2,
+      draft_revision: 4,
     }).success).toBe(true);
     expect(UpdateWechatPayApplymentSchema.safeParse({
       attachments: [{
@@ -223,6 +247,8 @@ describe("wechat pay applyment schemas", () => {
         object_key: "tenant/license.jpg",
         ocr_review_status: "manual",
       }],
+      draft_epoch: 2,
+      draft_revision: 5,
     }).success).toBe(true);
   });
 
@@ -261,7 +287,11 @@ describe("wechat pay applyment schemas", () => {
 
   test("validates only the settlement rule combinations present in a draft", () => {
     expect(
-      UpdateWechatPayApplymentSchema.safeParse({ settlement_id: "716" })
+      UpdateWechatPayApplymentSchema.safeParse({
+        settlement_id: "716",
+        draft_epoch: 2,
+        draft_revision: 6,
+      })
         .success,
     ).toBe(true);
     expect(
@@ -269,6 +299,8 @@ describe("wechat pay applyment schemas", () => {
         subject_type: "SUBJECT_TYPE_ENTERPRISE",
         settlement_id: "716",
         qualification_type: "零售批发/生活娱乐/网上商城/其他",
+        draft_epoch: 2,
+        draft_revision: 7,
       }).success,
     ).toBe(true);
     expect(
@@ -276,6 +308,8 @@ describe("wechat pay applyment schemas", () => {
         subject_type: "SUBJECT_TYPE_INDIVIDUAL",
         settlement_id: null,
         qualification_type: null,
+        draft_epoch: 2,
+        draft_revision: 8,
       }).success,
     ).toBe(true);
     expect(
@@ -283,6 +317,8 @@ describe("wechat pay applyment schemas", () => {
         subject_type: "SUBJECT_TYPE_INDIVIDUAL",
         settlement_id: "719",
         qualification_type: "零售批发/生活娱乐/其他",
+        draft_epoch: 2,
+        draft_revision: 9,
       }).success,
     ).toBe(true);
   });

@@ -41,6 +41,7 @@ function draft(
     tenant_id: tenantId,
     status: "draft",
     applyment_state: "draft",
+    draft_epoch: 1,
     draft_revision: 0,
     remark: "未变备注",
     attachments: [],
@@ -79,6 +80,7 @@ async function createHarness(current: WechatPayApplymentRecord) {
       createApplyment: async () => current,
       updateApplyment: async () => current,
       updateTenantDraftAtomically,
+      claimTenantDraftSession: async () => current,
       submitTenantApplymentAtomically: async () => current,
       activateConfigAtomically: async () => current,
       insertEvent,
@@ -117,6 +119,8 @@ test("audits rejected state reset even when autosave data is unchanged", async (
   await harness.service.updateDraft(authContext, applymentId, {
     remark: "未变备注",
     draft_update_source: "autosave",
+    draft_epoch: 1,
+    draft_revision: 1,
   });
 
   expect(harness.updateApplyment.mock.calls[0]?.[0]?.patch).toEqual(
@@ -151,6 +155,8 @@ test("audits wechat editing state reset when autosave data is unchanged", async 
   await harness.service.updateDraft(authContext, applymentId, {
     remark: "未变备注",
     draft_update_source: "autosave",
+    draft_epoch: 1,
+    draft_revision: 1,
   });
 
   expect(harness.insertEvent.mock.calls[0]?.[0]?.metadata).toEqual({
@@ -168,6 +174,8 @@ test("reserves the revision for a new empty attachments business no-op", async (
     remark: "未变备注",
     attachments: [],
     draft_update_source: "autosave",
+    draft_epoch: 1,
+    draft_revision: 1,
   });
 
   expect(result.applyment?.id).toBe(applymentId);
@@ -187,6 +195,8 @@ test("reserves the revision for a copied reviewed attachments business no-op", a
     remark: "未变备注",
     attachments: [{ ...reviewedAttachment }],
     draft_update_source: "autosave",
+    draft_epoch: 1,
+    draft_revision: 1,
   });
 
   expect(result.applyment?.updated_at).toBe(updatedAt);
@@ -211,6 +221,8 @@ test("audits an actual attachment review metadata change", async () => {
       ocr_review_status: "manual",
     }],
     draft_update_source: "autosave",
+    draft_epoch: 1,
+    draft_revision: 1,
   });
 
   expect(harness.updateApplyment).toHaveBeenCalledTimes(1);

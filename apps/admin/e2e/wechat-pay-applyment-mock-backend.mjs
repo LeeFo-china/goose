@@ -88,6 +88,7 @@ const initialApplyment = {
   has_sensitive_payload: true,
   rejected_reason: null,
   sub_mchid: null,
+  draft_epoch: 1,
   draft_revision: 10,
   created_at: now,
   updated_at: now,
@@ -204,6 +205,22 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (
+    request.method === "POST" &&
+    url.pathname ===
+      `/finance/wechat-pay/applyments/${applyment.id}/draft-session`
+  ) {
+    applyment = {
+      ...applyment,
+      draft_epoch: applyment.draft_epoch + 1,
+      draft_revision: 0,
+    };
+    sendJson(response, 200, {
+      success: true,
+      data: applymentDetail(),
+    });
+    return;
+  }
+  if (
     request.method === "PUT" &&
     url.pathname === `/finance/wechat-pay/applyments/${applyment.id}`
   ) {
@@ -214,14 +231,18 @@ const server = createServer(async (request, response) => {
     if (delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
+    const incomingEpoch = Number(payload.draft_epoch);
     const incomingRevision = Number(payload.draft_revision);
-    const outcome = Number.isSafeInteger(incomingRevision) &&
+    const outcome = Number.isSafeInteger(incomingEpoch) &&
+        incomingEpoch === applyment.draft_epoch &&
+        Number.isSafeInteger(incomingRevision) &&
         incomingRevision > applyment.draft_revision
       ? "applied"
       : "stale";
     if (outcome === "applied") {
       const {
         draft_update_source: _draftUpdateSource,
+        draft_epoch: _draftEpoch,
         draft_revision: _draftRevision,
         ...draftFields
       } = payload;
@@ -235,6 +256,7 @@ const server = createServer(async (request, response) => {
     committedSaves.push(structuredClone({
       ...payload,
       outcome,
+      server_draft_epoch: applyment.draft_epoch,
       server_draft_revision: applyment.draft_revision,
     }));
     sendJson(response, 200, {

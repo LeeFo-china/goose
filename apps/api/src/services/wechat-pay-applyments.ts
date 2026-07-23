@@ -99,7 +99,6 @@ export class WechatPayApplymentService {
       },
     );
   }
-
   async getCurrent(authContext: AuthContext): Promise<ApplymentDetailResult> {
     const tenantId = this.accessPolicyService.assertTenantContext(authContext);
     this.assertTenantRead(authContext);
@@ -109,7 +108,6 @@ export class WechatPayApplymentService {
     }
     return this.toDetail(authContext, applyment);
   }
-
   async getTenantDetail(
     authContext: AuthContext,
     id: string,
@@ -194,9 +192,18 @@ export class WechatPayApplymentService {
     const employeeId = this.requireEmployee(authContext);
     const current = await this.getRequiredApplyment({ id, tenantId });
     this.assertEditable(current);
+    const epoch = input.draft_epoch;
+    const revision = input.draft_revision;
+    if (epoch === undefined || revision === undefined) {
+      throw Errors.business(
+        409,
+        "草稿已启用会话保护，请刷新后重试",
+        "WECHAT_PAY_APPLYMENT_DRAFT_FENCE_REQUIRED",
+      );
+    }
+    const currentEpoch = current.draft_epoch ?? 0;
     const currentRevision = current.draft_revision ?? 0;
-    const revision = this.resolveDraftRevision(input, currentRevision);
-    if (revision <= currentRevision) {
+    if (epoch !== currentEpoch || revision <= currentRevision) {
       return this.toDetail(authContext, current);
     }
 
@@ -230,6 +237,7 @@ export class WechatPayApplymentService {
       applymentId: id,
       tenantId,
       employeeId,
+      epoch,
       revision,
       patch,
     });
@@ -246,6 +254,22 @@ export class WechatPayApplymentService {
     }
 
     return this.toDetail(authContext, result.applyment);
+  }
+  async claimDraftSession(
+    authContext: AuthContext,
+    id: string,
+  ): Promise<ApplymentDetailResult> {
+    const tenantId = this.accessPolicyService.assertTenantContext(authContext);
+    this.assertTenantSubmit(authContext);
+    const employeeId = this.requireEmployee(authContext);
+    const current = await this.getRequiredApplyment({ id, tenantId });
+    this.assertEditable(current);
+    const claimed = await this.repository.claimTenantDraftSession({
+      applymentId: id,
+      tenantId,
+      employeeId,
+    });
+    return this.toDetail(authContext, claimed);
   }
 
   async submit(
@@ -404,20 +428,6 @@ export class WechatPayApplymentService {
       throw Errors.forbidden();
     }
     return authContext.employeeId;
-  }
-
-  private resolveDraftRevision(
-    input: UpdateWechatPayApplymentInput,
-    currentRevision: number,
-  ) {
-    if (input.draft_revision !== undefined) return input.draft_revision;
-    if (currentRevision === 0) return 1;
-    throw Errors.business(
-      409,
-      "草稿已启用版本保护，请刷新后重试",
-      "WECHAT_PAY_APPLYMENT_DRAFT_REVISION_REQUIRED",
-      { current_revision: currentRevision },
-    );
   }
 
   private async getRequiredApplyment(input: {

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-
 import type {
   WechatPayApplymentEventInsert,
   WechatPayApplymentEventRecord,
@@ -14,17 +13,14 @@ import {
   decryptApplymentSensitivePayload,
   encryptApplymentSensitivePayload,
 } from "@/services/wechat-pay-applyment-sensitive-payload";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const employeeId = "22222222-2222-4222-8222-222222222222";
 const applymentId = "33333333-3333-4333-8333-333333333333";
 const rootSecret = "test-applyment-root-secret";
 const now = "2026-07-01T12:00:00.000Z";
-
 const sensitivePayload = {
   identity_name: "张三",
   identity_number: "41000019900101001X",
@@ -37,7 +33,6 @@ const sensitivePayload = {
   bank_account_name: "固始晴天装饰工程有限公司",
   bank_account_number: "6212345678901234",
 };
-
 const applyment: WechatPayApplymentRecord = {
   activated_at: null,
   appid_binding_message: null,
@@ -58,6 +53,7 @@ const applyment: WechatPayApplymentRecord = {
   contact_type: "LEGAL",
   created_at: now,
   created_by_employee_id: employeeId,
+  draft_epoch: 1,
   draft_revision: 0,
   has_sensitive_payload: true,
   id: applymentId,
@@ -108,7 +104,6 @@ const applyment: WechatPayApplymentRecord = {
   updated_by_employee_id: employeeId,
   wechat_applyment_state_raw: null,
 };
-
 const event: WechatPayApplymentEventRecord = {
   id: "44444444-4444-4444-8444-444444444444",
   tenant_id: tenantId,
@@ -121,7 +116,6 @@ const event: WechatPayApplymentEventRecord = {
   metadata: {},
   created_at: now,
 };
-
 const findLatestByTenant = mock(async () => null as WechatPayApplymentRecord | null);
 const findById = mock(async () => applyment as WechatPayApplymentRecord | null);
 const findSensitivePayloadById = mock(
@@ -178,6 +172,7 @@ const authContext: AuthContext = {
   roles: [],
   permissions: [{ code: "wechat_pay.applyment.submit", scope: "all" }],
 };
+const draftFence = { draft_epoch: 1, draft_revision: 1 } as const;
 
 async function createService() {
   const { WechatPayApplymentService } = await import("./wechat-pay-applyments");
@@ -189,6 +184,7 @@ async function createService() {
       createApplyment,
       updateApplyment: async () => applyment,
       updateTenantDraftAtomically: updateApplyment,
+      claimTenantDraftSession: async () => applyment,
       submitTenantApplymentAtomically: mock(async () => applyment),
       activateConfigAtomically: mock(async () => applyment),
       insertEvent,
@@ -323,6 +319,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     const recognitionId = "66666666-6666-4666-8666-666666666666";
     const service = await createService();
     await service.updateDraft(authContext, applymentId, {
+      ...draftFence,
       identity_name: "张三",
       attachments: [{
         category: "legal_representative_id_card_front",
@@ -361,6 +358,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     }));
     const service = await createService();
     await service.updateDraft(authContext, applymentId, {
+      ...draftFence,
       contact_type: "LEGAL",
     });
 
@@ -372,6 +370,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
   test("merges a partial sensitive replacement", async () => {
     const service = await createService();
     await service.updateDraft(authContext, applymentId, {
+      ...draftFence,
       super_admin_phone: "13900000000",
     });
 
@@ -398,6 +397,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     const service = await createService();
 
     await service.updateDraft(authContext, applymentId, {
+      ...draftFence,
       remark: "自动保存的内部备注",
       draft_update_source: "autosave",
     });
@@ -419,6 +419,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     const service = await createService();
 
     await expect(service.updateDraft(authContext, applymentId, {
+      ...draftFence,
       identity_name: "张三",
     })).rejects.toMatchObject({
       code: "WECHAT_PAY_APPLYMENT_SENSITIVE_PAYLOAD_CORRUPTED",
@@ -449,6 +450,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     const service = await createService();
 
     await service.updateDraft(authContext, applymentId, {
+      ...draftFence,
       contact_type: "LEGAL",
     });
 
@@ -467,6 +469,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
   test("clears nullable masked projections and account summary", async () => {
     const service = await createService();
     await service.updateDraft(authContext, applymentId, {
+      ...draftFence,
       identity_address: null,
       super_admin_phone: null,
       settlement_account_number: null,

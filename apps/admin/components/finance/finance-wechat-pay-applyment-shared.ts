@@ -127,6 +127,7 @@ export type WechatPayApplymentRecord = {
   rejected_reason: string | null;
   created_at: string;
   updated_at: string;
+  draft_epoch: number;
   draft_revision: number;
   tenant?: {
     id: string;
