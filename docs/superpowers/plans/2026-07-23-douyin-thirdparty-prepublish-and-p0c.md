@@ -155,7 +155,7 @@ Expected: 当前没有 `tma`，IDE 版本为 `4.5.4`。因此本轮使用已安�
 - Read: `apps/douyin-mini/`
 - Modify after success: `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md`
 
-- [ ] **Step 1：在 IDE 核对目标**
+- [x] **Step 1：在 IDE 核对目标**
 
 在抖音开发者工具打开：
 
@@ -188,7 +188,7 @@ Expected: IDE 显示上传成功。模板小程序不生成上传二维码属于
 “A08 已上传”。本记录证明用户确认已完成 IDE 动作；A08 仍需下一步服务商控制台
 权威回读 `0.1.0` 后才升级为 PASS。
 
-- [ ] **Step 3：回读上传记录**
+- [x] **Step 3：回读上传记录**
 
 在服务商平台进入：
 
@@ -202,7 +202,7 @@ Expected: IDE 显示上传成功。模板小程序不生成上传二维码属于
 
 Expected: 最新记录显示版本 `0.1.0`、上述版本说明、当前上传人和本次时间。保存一张不含完整 AppID 和登录身份敏感信息的截图。
 
-- [ ] **Step 4：记录 A08**
+- [x] **Step 4：记录 A08**
 
 在 `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md` 的 A08 行记录：
 
@@ -221,7 +221,7 @@ source tree 6fa6d6eaf96cf9821d197d5a3cba440dfb4d6cf8 / 北京时间 / 截图文�
 
 - Modify after success: `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md`
 
-- [ ] **Step 1：添加精确上传版本**
+- [x] **Step 1：添加精确上传版本**
 
 在服务商平台进入：
 
@@ -237,7 +237,7 @@ source tree 6fa6d6eaf96cf9821d197d5a3cba440dfb4d6cf8 / 北京时间 / 截图文�
 
 Expected: 操作对象明确显示 `0.1.0`；不得选择其他版本，不重复上传。
 
-- [ ] **Step 2：验证数字模板 ID**
+- [x] **Step 2：验证数字模板 ID**
 
 进入：
 
@@ -250,9 +250,14 @@ Expected: 操作对象明确显示 `0.1.0`；不得选择其他版本，不重�
 
 Expected: 新记录的版本为 `0.1.0`，模板 ID 为 1–19 位正整数，状态可用于为授权小程序提交代码。
 
-- [ ] **Step 3：记录 A09**
+- [x] **Step 3：记录 A09**
 
 在 A09 行记录数字 `template_id`、版本 `0.1.0`、北京时间和脱敏截图文件名。模板 ID 不是秘密，但不得同时暴露完整 Component/Template AppID。
+
+执行记录（2026-07-24 00:09 +0800）：用户从服务商控制台回读并确认
+`0.1.0`、说明“首个装修行业模板：租户品牌、案例、工地与免费咨询联调版本”
+以及数字 `template_id=77538`。A08/A09 均升级为 PASS；没有第二次上传、
+测试商户代码提交、提审或发布。
 
 ## Task 4：识别普通测试小程序并完成控制面门禁
 

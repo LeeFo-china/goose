@@ -199,3 +199,54 @@ GitHub deployment 和抖音官方文档为准，没有用旧 RAG 内容覆盖当
 - 服务器文件写入、部署、重启；
 - IDE 上传、提审、发布或生产操作；
 - Orange 仓库写入。
+
+## 9. 2026-07-24 A08/A09 与测试 Authorizer 前置更新
+
+### 9.1 模板代码状态
+
+- A08：PASS。用户确认已在抖音开发者工具向 Template AppID 尾号 `1b01`
+  上传版本 `0.1.0`。
+- A09：PASS。用户随后从 Component 尾号 `cd67` 的模板库权威回读版本
+  `0.1.0`、说明“首个装修行业模板：租户品牌、案例、工地与免费咨询联调版本”
+  和数字 `template_id=77538`；版本与 A08 精确输入一致。
+- 上传前门禁：`douyin-mini:check` 为 87/87、277 expect，TypeScript 通过；
+  `api:check` 的 typecheck、build、file-size 通过；上传源码树为
+  `6fa6d6eaf96cf9821d197d5a3cba440dfb4d6cf8`。
+
+### 9.2 开发库只读状态
+
+2026-07-24 00:09 +0800 使用项目已确认指向开发环境的 Supabase 配置，仅通过
+分页只读查询取得安全投影：
+
+| 对象 | 只读结果 | 判定 |
+| --- | --- | --- |
+| Component | 共 1 条，尾号 `cd67`，`active` | PASS |
+| Ticket | 最近 20 分钟内更新 | PASS |
+| Component Token 缓存 | 已过期 | 留待 P0-C 受控刷新，不影响当前测试对象识别 |
+| 安装 | 共 1 条 | 未出现普通 Authorizer |
+| 模板开发安装 | UUID `69191217-c65d-4014-ab51-c4f9856a590d`，尾号 `1b01`，`template_development / active`，已绑定租户 | PASS |
+| 商户安装 | 0 条 | 等待授权普通测试小程序 |
+
+查询没有选择或输出完整 AppID、Ticket、access/refresh token、凭证密文、
+deployment key、用户身份或手机号，也没有数据库写入。
+
+### 9.3 当前唯一前置缺口
+
+在 Component `cd67` 的：
+
+```text
+代开发流程指引 → 授权测试小程序 → 开发配置
+```
+
+必须识别或添加一枚不同于 Template `1b01` 的普通小程序 AppID，并记录应用名称和
+AppID 尾号。若当前列表为空，须由主体账号确认已有普通小程序；不能把模板小程序
+或 IDE 测试号直接假定为测试 Authorizer，也不能由 Codex 擅自创建新小程序。
+
+普通测试小程序确定后，下一步顺序固定为：
+
+1. 加入授权测试小程序列表；
+2. 完成一次官方测试授权；
+3. 由可信 `AUTHORIZED` 回调建立唯一
+   `merchant / authorized_unbound` 安装；
+4. 绑定 `5H 验收租户 A`；
+5. 使用 `template_id=77538` 通过现有 release API 提交测试代码并生成 test-qr。
