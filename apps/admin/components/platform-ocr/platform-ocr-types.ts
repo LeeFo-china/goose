@@ -2,6 +2,7 @@ import type {
   OcrDocumentType,
   OcrRecognitionStatus,
   OcrScene,
+  OcrTenantPolicyDocumentType,
 } from "@gooes/domain";
 import type { PlatformListPagination } from "@/components/platform/platform-list-shell";
 
@@ -31,6 +32,37 @@ export type PlatformOcrRecognitionListData = {
   list: PlatformOcrRecognition[];
   pagination: PlatformListPagination;
 };
+
+export type PlatformOcrTenantPolicy = {
+  tenant_id: string;
+  tenant_name: string;
+  tenant_slug: string;
+  tenant_status: string;
+  configured: boolean;
+  enabled: boolean;
+  allowed_document_types: OcrTenantPolicyDocumentType[];
+  daily_limit: number | null;
+  remark: string | null;
+  enabled_at: string | null;
+  updated_by_employee_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type PlatformOcrTenantPolicyListData = {
+  list: PlatformOcrTenantPolicy[];
+  pagination: PlatformListPagination;
+};
+
+export const platformOcrRolloutDocumentOptions = [
+  { value: "business_license", label: "营业执照" },
+  { value: "id_card_front", label: "身份证人像面" },
+  { value: "id_card_back", label: "身份证国徽面" },
+  { value: "bank_card", label: "银行卡" },
+] as const satisfies ReadonlyArray<{
+  value: OcrTenantPolicyDocumentType;
+  label: string;
+}>;
 
 export const platformOcrStatusOptions = [
   { value: "pending", label: "待处理" },

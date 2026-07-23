@@ -66,13 +66,47 @@ describe("platform OCR admin", () => {
     expect(page).toContain('query.set("page"');
     expect(page).toContain('query.set("pageSize"');
     expect(page).toContain("/platform/ocr/recognitions?");
-    expect(page).toContain("pagination={pagination}");
+    expect(page).toContain("pagination={result.pagination}");
     expect(page).not.toContain(".filter(");
     expect(table).not.toContain("result_summary");
     expect(table).not.toContain("result_ciphertext");
     expect(table).not.toContain("image_url");
     expect(table).not.toContain("signed_url");
     expect(table).not.toContain("file_object_id");
+  });
+
+  test("platform page exposes a server-paginated tenant rollout view", () => {
+    const page = readSource("../../app/(console)/platform/ocr/page.tsx");
+    const filters = readSource("./platform-ocr-tenant-policy-filters.tsx");
+
+    expect(page).toContain('view?: string');
+    expect(page).toContain('view === "tenants"');
+    expect(page).toContain("/platform/ocr/tenant-policies?");
+    expect(page).toContain("PlatformOcrTenantPolicyTable");
+    expect(page).toContain("平台总开关关闭时，所有租户灰度策略均不生效");
+    expect(page).not.toContain("list.filter(");
+    expect(filters).toContain('query.set("view", "tenants")');
+    expect(filters).toContain('query.set("pageSize"');
+    expect(filters).toContain("keyword");
+    expect(filters).toContain("enabled");
+  });
+
+  test("tenant rollout editor composes existing shadcn controls", () => {
+    const table = readSource("./platform-ocr-tenant-policy-table.tsx");
+    const dialog = readSource("./platform-ocr-tenant-policy-dialog.tsx");
+
+    expect(table).toContain("PlatformOcrTenantPolicyDialog");
+    expect(table).toContain("DataTable");
+    expect(dialog).toContain('from "@/components/ui/dialog"');
+    expect(dialog).toContain('from "@/components/ui/field"');
+    expect(dialog).toContain('from "@/components/ui/switch"');
+    expect(dialog).toContain('from "@/components/ui/checkbox"');
+    expect(dialog).toContain('from "@/components/ui/input"');
+    expect(dialog).toContain('from "@/components/ui/textarea"');
+    expect(dialog).toContain("/api/backend/platform/ocr/tenant-policies/");
+    expect(dialog).toContain('method: "PUT"');
+    expect(dialog).not.toContain("<select");
+    expect(dialog).not.toContain("<input");
   });
 
   test("platform navigation exposes the OCR audit page", () => {
