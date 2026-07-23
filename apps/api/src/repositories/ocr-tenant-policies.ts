@@ -38,11 +38,16 @@ export type OcrTenantPolicyRecord = {
   updated_at: string;
 };
 
-export type PlatformOcrTenantPolicyRecord = OcrTenantPolicyRecord & {
+export type PlatformOcrTenantPolicyRecord = Omit<
+  OcrTenantPolicyRecord,
+  "created_at" | "updated_at"
+> & {
   tenant_name: string;
   tenant_slug: string;
   tenant_status: string;
   configured: boolean;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type OcrTenantPolicyPlatformListInput = {
