@@ -39,10 +39,20 @@ import {
   buildOcrDedupeKey,
   validateOcrFile,
 } from "./request-guards";
+import { allowsOcrDocument, loadOcrRuntimePolicy } from "./runtime-policy";
+import {
+  buildResultSummary,
+  clamp,
+  elapsed,
+  isUniqueConflict,
+  safeProviderFailure,
+  startOfUtcDay,
+} from "./service-helpers";
 import {
   tencentOcrGateway,
   type TencentOcrGatewayInput,
 } from "./tencent-gateway";
+import { ocrTenantPolicyService } from "./tenant-policy";
 type OcrRecognitionRecord =
   Database["public"]["Tables"]["ocr_recognitions"]["Row"];
 
@@ -81,6 +91,7 @@ export type OcrServiceDependencies = {
     findById(input: { id: string; tenantId?: string }): Promise<ApplymentRecord | null>;
   };
   accessPolicy?: Pick<typeof accessPolicyService, "assertTenantContext" | "hasPermission">;
+  tenantPolicy?: Pick<typeof ocrTenantPolicyService, "getRuntimePolicy">;
   gateway?: { recognize(input: TencentOcrGatewayInput): Promise<unknown> };
   settings?: Pick<typeof systemSettingsService, "getBoolean" | "getNumber" | "getSecretString">;
   signedUrlResolver?: typeof resolveOcrStoredFileUrl;
@@ -98,6 +109,7 @@ export class OcrService {
   private readonly fileRepository: Pick<typeof platformFileObjectRepository, "findActiveById">;
   private readonly applymentRepository: NonNullable<OcrServiceDependencies["applymentRepository"]>;
   private readonly accessPolicy: NonNullable<OcrServiceDependencies["accessPolicy"]>;
+  private readonly tenantPolicy: NonNullable<OcrServiceDependencies["tenantPolicy"]>;
   private readonly gateway: NonNullable<OcrServiceDependencies["gateway"]>;
   private readonly settings: NonNullable<OcrServiceDependencies["settings"]>;
   private readonly signedUrlResolver: typeof resolveOcrStoredFileUrl;
@@ -113,6 +125,7 @@ export class OcrService {
     this.fileRepository = dependencies.fileRepository ?? platformFileObjectRepository;
     this.applymentRepository = dependencies.applymentRepository ?? wechatPayApplymentRepository;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
+    this.tenantPolicy = dependencies.tenantPolicy ?? ocrTenantPolicyService;
     this.gateway = dependencies.gateway ?? tencentOcrGateway;
     this.settings = dependencies.settings ?? systemSettingsService;
     this.signedUrlResolver = dependencies.signedUrlResolver ?? resolveOcrStoredFileUrl;
@@ -127,23 +140,32 @@ export class OcrService {
   }
 
   async listCapabilities(authContext: AuthContext, scene?: OcrScene) {
-    this.requireTenantEmployee(authContext);
+    const tenantId = this.requireTenantEmployee(authContext);
     this.assertPermission(authContext, "ocr.recognize");
     if (!await this.settings.getBoolean("TENCENT_OCR_ENABLED", false)) {
       return [];
     }
+    const tenantPolicy = await loadOcrRuntimePolicy({
+      settings: this.settings,
+      tenantPolicy: this.tenantPolicy,
+      tenantId,
+    });
+    if (!tenantPolicy.enabled) return [];
     if (!hasOcrResultEncryptionKey(this.encryptionKeyFactory())) return [];
     const capabilities = listPublicOcrCapabilities(scene);
     const encryptedIdEnabled = await this.settings.getBoolean(
       "TENCENT_OCR_ID_CARD_ENCRYPTED_ENABLED",
       false,
     );
-    return filterConfiguredOcrCapabilities(
+    const configured = filterConfiguredOcrCapabilities(
       capabilities,
       encryptedIdEnabled,
       encryptedIdEnabled
         ? await this.settings.getSecretString("TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM")
         : "",
+    );
+    return configured.filter((capability) =>
+      allowsOcrDocument(tenantPolicy, capability.document_type)
     );
   }
 
@@ -156,8 +178,20 @@ export class OcrService {
     if (!await this.settings.getBoolean("TENCENT_OCR_ENABLED", false)) {
       throw Errors.business(503, "腾讯云OCR尚未启用", ErrorCodes.OCR_DISABLED);
     }
+    const tenantPolicy = await loadOcrRuntimePolicy({
+      settings: this.settings,
+      tenantPolicy: this.tenantPolicy,
+      tenantId,
+    });
+    if (!tenantPolicy.enabled) {
+      throw Errors.business(
+        503,
+        "当前租户尚未启用证照识别",
+        ErrorCodes.OCR_TENANT_NOT_ENABLED,
+      );
+    }
     const capability = getOcrCapability(input.scene, input.document_type);
-    if (!capability) {
+    if (!capability || !allowsOcrDocument(tenantPolicy, input.document_type)) {
       throw Errors.business(400, "当前场景不支持该识别类型", ErrorCodes.OCR_CAPABILITY_UNAVAILABLE);
     }
     const resultEncryptionKey = this.encryptionKeyFactory();
@@ -203,11 +237,8 @@ export class OcrService {
     const cached = await this.repository.findActiveByDedupeKey(tenantId, dedupeKey);
     if (cached) return this.response(cached, false, true);
 
-    const dailyLimit = Math.max(1, await this.settings.getNumber(
-      "TENCENT_OCR_DEFAULT_TENANT_DAILY_LIMIT",
-      100,
-    ));
-    if (await this.repository.countTenantSince(tenantId, startOfUtcDay(now)) >= dailyLimit) {
+    if (await this.repository.countTenantSince(tenantId, startOfUtcDay(now)) >=
+      tenantPolicy.dailyLimit) {
       throw Errors.business(429, "今日OCR识别额度已用完", ErrorCodes.OCR_DAILY_LIMIT_EXCEEDED);
     }
     const ttlHours = clamp(await this.settings.getNumber("TENCENT_OCR_RESULT_TTL_HOURS", 24), 1, 168);
@@ -457,43 +488,6 @@ export class OcrService {
       quality: result.quality,
     };
   }
-}
-
-function buildResultSummary(result: OcrNormalizedResult) {
-  return {
-    field_keys: result.fields.map((field) => field.key),
-    sensitive_field_count: result.fields.filter((field) => field.sensitive).length,
-    warning_codes: result.warnings.map((warning) => warning.code),
-  };
-}
-
-function safeProviderFailure(error: unknown) {
-  const details = error && typeof error === "object" && "details" in error &&
-      error.details && typeof error.details === "object"
-    ? error.details as Record<string, unknown>
-    : {};
-  return {
-    providerRequestId: typeof details.requestId === "string" ? details.requestId : null,
-    providerErrorCode: typeof details.providerCode === "string" ? details.providerCode : null,
-    providerErrorMessageSafe: "腾讯云OCR调用失败",
-  };
-}
-
-function isUniqueConflict(error: unknown) {
-  if (!error || typeof error !== "object" || !("details" in error)) return false;
-  return JSON.stringify(error.details).includes("23505");
-}
-
-function startOfUtcDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString();
-}
-
-function elapsed(now: number, startedAt: number) {
-  return Math.max(0, Math.floor(now - startedAt));
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, Math.floor(value)));
 }
 
 export const ocrService = new OcrService();

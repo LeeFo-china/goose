@@ -5,6 +5,7 @@ import {
   OCR_RECOGNITION_STATUS_VALUES,
   OCR_SCENE_VALUES,
   OCR_SENSITIVE_FIELD_KEYS,
+  OCR_TENANT_POLICY_DOCUMENT_TYPE_VALUES,
 } from './ocr';
 
 describe('OCR domain contracts', () => {
@@ -44,5 +45,14 @@ describe('OCR domain contracts', () => {
         'settlement_account_number',
       ]),
     );
+  });
+
+  test('limits tenant rollout policies to phase 1 document types', () => {
+    expect(OCR_TENANT_POLICY_DOCUMENT_TYPE_VALUES).toEqual([
+      'business_license',
+      'id_card_front',
+      'id_card_back',
+      'bank_card',
+    ]);
   });
 });

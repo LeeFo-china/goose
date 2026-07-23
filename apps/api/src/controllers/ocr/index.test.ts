@@ -19,6 +19,14 @@ const testPlatformConfig = mock(async () => ({
   provider_request_id: "request-1",
   duration_ms: 15,
 }));
+const listPlatformTenantPolicies = mock(async () => ({
+  list: [],
+  pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+}));
+const updatePlatformTenantPolicy = mock(async () => ({
+  tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  enabled: true,
+}));
 
 mock.module("@/services/ocr", () => ({
   ocrService: {
@@ -27,6 +35,10 @@ mock.module("@/services/ocr", () => ({
     getTenantRecognition,
     listPlatformRecognitions,
     testPlatformConfig,
+  },
+  ocrTenantPolicyService: {
+    listPlatform: listPlatformTenantPolicies,
+    updatePlatform: updatePlatformTenantPolicy,
   },
 }));
 
@@ -78,6 +90,8 @@ describe("OcrController", () => {
       getTenantRecognition,
       listPlatformRecognitions,
       testPlatformConfig,
+      listPlatformTenantPolicies,
+      updatePlatformTenantPolicy,
     ]) method.mockClear();
   });
 
@@ -87,6 +101,7 @@ describe("OcrController", () => {
     controller.registerExtraRoutes({
       get: (path: string) => routes.push({ method: "GET", path }),
       post: (path: string) => routes.push({ method: "POST", path }),
+      put: (path: string) => routes.push({ method: "PUT", path }),
     } as never);
 
     expect(routes).toEqual([
@@ -94,6 +109,8 @@ describe("OcrController", () => {
       { method: "POST", path: "/ocr/recognitions" },
       { method: "GET", path: "/ocr/recognitions/:id" },
       { method: "GET", path: "/platform/ocr/recognitions" },
+      { method: "GET", path: "/platform/ocr/tenant-policies" },
+      { method: "PUT", path: "/platform/ocr/tenant-policies/:tenantId" },
       { method: "POST", path: "/platform/ocr/config-test" },
     ]);
   });
@@ -158,6 +175,76 @@ describe("OcrController", () => {
       query: { page: "1", pageSize: "20" },
     } as never, {} as never)).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(listPlatformRecognitions).not.toHaveBeenCalled();
+  });
+
+  test("lists platform tenant policies with parsed server pagination", async () => {
+    const controller = await getController(platformAuth);
+
+    await controller.listPlatformTenantPolicies({
+      query: {
+        page: "2",
+        pageSize: "10",
+        keyword: "晴天",
+        enabled: "true",
+      },
+    } as never, {} as never);
+
+    expect(listPlatformTenantPolicies).toHaveBeenCalledWith(platformAuth, {
+      page: 2,
+      pageSize: 10,
+      keyword: "晴天",
+      enabled: true,
+    });
+  });
+
+  test("updates one platform tenant policy with strict validated input", async () => {
+    const controller = await getController(platformAuth);
+    const tenantId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const body = {
+      enabled: true,
+      allowed_document_types: ["business_license", "bank_card"],
+      daily_limit: 20,
+      remark: "首批灰度",
+    };
+
+    await controller.updatePlatformTenantPolicy({
+      params: { tenantId },
+      body,
+    } as never, {} as never);
+
+    expect(updatePlatformTenantPolicy).toHaveBeenCalledWith(
+      platformAuth,
+      tenantId,
+      body,
+    );
+  });
+
+  test("rejects invalid policy pagination, params, and enabled allowlists", async () => {
+    const controller = await getController(platformAuth);
+
+    await expect(controller.listPlatformTenantPolicies({
+      query: { page: "1", pageSize: "101" },
+    } as never, {} as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(controller.updatePlatformTenantPolicy({
+      params: { tenantId: "bad-id" },
+      body: {
+        enabled: true,
+        allowed_document_types: [],
+        daily_limit: 20,
+        remark: null,
+      },
+    } as never, {} as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(listPlatformTenantPolicies).not.toHaveBeenCalled();
+    expect(updatePlatformTenantPolicy).not.toHaveBeenCalled();
+  });
+
+  test("blocks tenant employees from the rollout control plane", async () => {
+    const controller = await getController(tenantAuth);
+
+    await expect(controller.listPlatformTenantPolicies({
+      query: {},
+    } as never, {} as never)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(listPlatformTenantPolicies).not.toHaveBeenCalled();
   });
 
   test("accepts only a bounded JPEG or PNG platform sample", async () => {

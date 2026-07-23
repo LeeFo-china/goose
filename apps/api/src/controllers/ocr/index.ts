@@ -7,9 +7,12 @@ import {
   OcrRecognitionParamsSchema,
   PlatformOcrConfigTestSchema,
   PlatformOcrRecognitionListQuerySchema,
+  PlatformOcrTenantPolicyListQuerySchema,
+  PlatformOcrTenantPolicyParamsSchema,
+  UpdatePlatformOcrTenantPolicySchema,
 } from "@/schema/ocr";
-import { ocrService } from "@/services/ocr";
-import { Get, Post } from "@/utils/decorators/route";
+import { ocrService, ocrTenantPolicyService } from "@/services/ocr";
+import { Get, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -67,6 +70,35 @@ class OcrController extends TenantBaseController {
         documentType: parsed.data.document_type,
         tenantId: parsed.data.tenant_id,
       },
+    ));
+  }
+
+  @Get("/platform/ocr/tenant-policies")
+  async listPlatformTenantPolicies(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformContext(request);
+    const parsed = PlatformOcrTenantPolicyListQuerySchema.safeParse(
+      request.query ?? {},
+    );
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+
+    return ResponseHandler.success(await ocrTenantPolicyService.listPlatform(
+      authContext,
+      parsed.data,
+    ));
+  }
+
+  @Put("/platform/ocr/tenant-policies/:tenantId")
+  async updatePlatformTenantPolicy(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformContext(request);
+    const params = PlatformOcrTenantPolicyParamsSchema.safeParse(request.params);
+    if (!params.success) throw Errors.fromZod(params.error);
+    const body = UpdatePlatformOcrTenantPolicySchema.safeParse(request.body ?? {});
+    if (!body.success) throw Errors.fromZod(body.error);
+
+    return ResponseHandler.success(await ocrTenantPolicyService.updatePlatform(
+      authContext,
+      params.data.tenantId,
+      body.data,
     ));
   }
 

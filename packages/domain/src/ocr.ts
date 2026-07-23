@@ -20,6 +20,28 @@ export const OCR_DOCUMENT_TYPE_VALUES = [
 
 export type OcrDocumentType = (typeof OCR_DOCUMENT_TYPE_VALUES)[number];
 
+export const OCR_TENANT_POLICY_DOCUMENT_TYPE_VALUES = [
+  'business_license',
+  'id_card_front',
+  'id_card_back',
+  'bank_card',
+] as const satisfies readonly OcrDocumentType[];
+
+export type OcrTenantPolicyDocumentType =
+  (typeof OCR_TENANT_POLICY_DOCUMENT_TYPE_VALUES)[number];
+
+export interface OcrTenantPolicy {
+  readonly tenant_id: string;
+  readonly enabled: boolean;
+  readonly allowed_document_types: readonly OcrTenantPolicyDocumentType[];
+  readonly daily_limit: number | null;
+  readonly remark: string | null;
+  readonly enabled_at: string | null;
+  readonly updated_by_employee_id: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
 export const OCR_RECOGNITION_STATUS_VALUES = [
   'pending',
   'processing',
