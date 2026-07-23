@@ -9,7 +9,12 @@ import { getDouyinAuthorizationEventsService } from "@/services/douyin-miniapp/a
 interface DouyinAuthorizationEventHandler {
   handleCallback(
     wrapper: DouyinCallbackWrapper,
-    log: { info(metadata: { eventName: string }, message: string): void },
+    log: {
+      info(
+        metadata: { eventName: string; diagnosticCode?: string },
+        message: string,
+      ): void;
+    },
   ): Promise<void>;
 }
 

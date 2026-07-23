@@ -161,7 +161,6 @@ function decodeCiphertext(value: string): Buffer {
 function removeStrictCallbackPadding(padded: Buffer): Buffer {
   const paddingLength = padded[padded.length - 1] ?? 0;
   if (
-    padded.length % CALLBACK_PADDING_BLOCK_BYTES !== 0 ||
     paddingLength < 1 ||
     paddingLength > CALLBACK_PADDING_BLOCK_BYTES ||
     paddingLength > padded.length

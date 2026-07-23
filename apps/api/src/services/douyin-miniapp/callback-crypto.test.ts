@@ -20,7 +20,6 @@ type EncryptFixtureOptions = {
   componentAppIdBytes?: Buffer;
   declaredMessageLength?: number;
   invalidPadding?: boolean;
-  paddingBlockBytes?: number;
 };
 
 function sign(encrypted: string): string {
@@ -41,10 +40,7 @@ function encryptFixture(options: EncryptFixtureOptions = {}) {
     messageBytes,
     componentAppIdBytes,
   ]);
-  const paddingBlockBytes = options.paddingBlockBytes ?? 32;
-  const paddingLength = paddingBlockBytes -
-    (plaintext.length % paddingBlockBytes || paddingBlockBytes) ||
-    paddingBlockBytes;
+  const paddingLength = 32 - (plaintext.length % 32 || 32) || 32;
   const padding = Buffer.alloc(paddingLength, paddingLength);
   if (options.invalidPadding) {
     padding[0] = paddingLength === 1 ? 2 : paddingLength - 1;
@@ -62,6 +58,37 @@ function encryptFixture(options: EncryptFixtureOptions = {}) {
     encodingAesKey: ENCODING_AES_KEY,
     message,
     signature: sign(encrypted),
+  };
+}
+
+function encryptOfficialJavaPhpFixture() {
+  const message = { InfoType: "component_ticket", ComponentVerifyTicket: "ticket-value" };
+  const messageBytes = Buffer.from(JSON.stringify(message), "utf8");
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(messageBytes.length);
+  const plaintext = Buffer.concat([
+    Buffer.alloc(32, 0x31),
+    length,
+    messageBytes,
+    Buffer.from(COMPONENT_APP_ID, "utf8"),
+  ]);
+  const paddingLength = 32 - (plaintext.length % 32 || 32) || 32;
+  const padding = Buffer.alloc(paddingLength, paddingLength);
+  const cipher = createCipheriv(
+    "aes-256-cbc",
+    AES_KEY,
+    AES_KEY.subarray(0, 16),
+  );
+  cipher.setAutoPadding(false);
+  const encrypted = Buffer.concat([
+    cipher.update(Buffer.concat([plaintext, padding])),
+    cipher.final(),
+  ]).toString("base64");
+
+  return {
+    encrypted,
+    encodingAesKey: ENCODING_AES_KEY,
+    message,
   };
 }
 
@@ -88,6 +115,16 @@ describe("douyin callback crypto", () => {
       encrypted: fixture.encrypted,
       signature: fixture.signature,
     })).toBe(true);
+    expect(decryptDouyinCallback({
+      encrypted: fixture.encrypted,
+      encodingAesKey: fixture.encodingAesKey,
+      expectedComponentAppId: COMPONENT_APP_ID,
+    })).toEqual(fixture.message);
+  });
+
+  test("decrypts the full-ciphertext form used by the official Java and PHP demos", () => {
+    const fixture = encryptOfficialJavaPhpFixture();
+
     expect(decryptDouyinCallback({
       encrypted: fixture.encrypted,
       encodingAesKey: fixture.encodingAesKey,
@@ -125,19 +162,6 @@ describe("douyin callback crypto", () => {
 
   test("rejects invalid PKCS#7 padding bytes", () => {
     const fixture = encryptFixture({ invalidPadding: true });
-
-    expectAppError(
-      () => decryptDouyinCallback({
-        encrypted: fixture.encrypted,
-        encodingAesKey: fixture.encodingAesKey,
-        expectedComponentAppId: COMPONENT_APP_ID,
-      }),
-      "DOUYIN_CALLBACK_PADDING_INVALID",
-    );
-  });
-
-  test("rejects padding aligned to 16 bytes instead of the official 32-byte block", () => {
-    const fixture = encryptFixture({ paddingBlockBytes: 16 });
 
     expectAppError(
       () => decryptDouyinCallback({

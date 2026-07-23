@@ -25,6 +25,11 @@ import {
 import { assertAuthorizerAppId, hasLeaseHeadroom } from "./access-token-support";
 import { DouyinMiniappAccessTokenService } from "./access-tokens";
 import { decryptDouyinCallback, verifyDouyinCallbackSignature } from "./callback-crypto";
+import {
+  diagnoseRejectedDouyinCallbackSignature,
+  DOUYIN_SIGNATURE_DIAGNOSTIC_MODE,
+  type DouyinCallbackDiagnosticLogger,
+} from "./callback-signature-diagnostics";
 import { loadDouyinMiniappConfig } from "./config";
 import {
   sealDouyinCredential,
@@ -48,9 +53,7 @@ type AuthorizationGateway = Pick<
   DouyinOpenPlatformGateway,
   "retrieveAuthorizationCode" | "exchangeAuthorizationCode"
 >;
-type EventLogger = {
-  info(metadata: { readonly eventName: string }, message: string): void;
-};
+type EventLogger = DouyinCallbackDiagnosticLogger;
 
 export type DouyinAuthorizationEventsServiceOptions = {
   readonly componentAppId: string;
@@ -63,6 +66,7 @@ export type DouyinAuthorizationEventsServiceOptions = {
   readonly accessTokens: ComponentAccessTokens;
   readonly openPlatform: AuthorizationGateway;
   readonly log: EventLogger;
+  readonly diagnoseSignatureMismatch?: boolean;
   readonly now?: () => number;
   readonly sleep?: (milliseconds: number) => Promise<void>;
 };
@@ -87,7 +91,7 @@ export class DouyinAuthorizationEventsService {
   ): Promise<void> {
     try {
       this.assertFreshTimestamp(wrapper.TimeStamp);
-      this.assertSignature(wrapper);
+      this.assertSignature(wrapper, log);
       const message = this.decryptAndParse(wrapper);
       this.assertMessageComponent(message);
       if (!isTicketPush(message)) await this.assertRegisteredComponent();
@@ -114,7 +118,10 @@ export class DouyinAuthorizationEventsService {
     }
   }
 
-  private assertSignature(wrapper: DouyinCallbackWrapper): void {
+  private assertSignature(
+    wrapper: DouyinCallbackWrapper,
+    log: EventLogger,
+  ): void {
     const valid = verifyDouyinCallbackSignature({
       token: this.options.componentMessageToken,
       timestamp: wrapper.TimeStamp,
@@ -123,6 +130,13 @@ export class DouyinAuthorizationEventsService {
       signature: wrapper.MsgSignature,
     });
     if (!valid) {
+      diagnoseRejectedDouyinCallbackSignature({
+        enabled: this.options.diagnoseSignatureMismatch === true,
+        wrapper,
+        componentMessageAesKey: this.options.componentMessageAesKey,
+        componentAppId: this.options.componentAppId,
+        log,
+      });
       throw Errors.business(
         403,
         "抖音回调签名无效",
@@ -437,6 +451,9 @@ export function getDouyinAuthorizationEventsService(): DouyinAuthorizationEvents
     accessTokens,
     openPlatform,
     log: { info: () => undefined },
+    diagnoseSignatureMismatch:
+      process.env.DOUYIN_CALLBACK_SIGNATURE_DIAGNOSTICS ===
+        DOUYIN_SIGNATURE_DIAGNOSTIC_MODE,
   });
   return defaultService;
 }
