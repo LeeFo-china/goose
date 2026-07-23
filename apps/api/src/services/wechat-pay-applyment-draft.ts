@@ -1,4 +1,3 @@
-import { Errors } from "@/errors/error-factory";
 import type {
   WechatPayApplymentRecord,
   WechatPayApplymentUpdate,
@@ -7,7 +6,7 @@ import type {
   CreateWechatPayApplymentInput,
   UpdateWechatPayApplymentInput,
 } from "@/schema/wechat-pay-applyments";
-import type { ApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
+import type { ApplymentSensitiveDraftPayload } from "@/services/wechat-pay-applyment-sensitive-payload";
 
 type TenantApplymentInput =
   | CreateWechatPayApplymentInput
@@ -32,7 +31,9 @@ export function buildTenantApplymentSafePatch(
   assignIfDefined(patch, "identity_doc_type", input.identity_doc_type);
   assignIfDefined(patch, "identity_period_begin", input.identity_period_begin);
   assignIfDefined(patch, "identity_period_end", input.identity_period_end);
-  if (input.identity_address !== undefined) {
+  if (input.identity_address === null) {
+    patch.identity_address_masked = null;
+  } else if (typeof input.identity_address === "string") {
     patch.identity_address_masked = maskAddress(input.identity_address);
   }
   assignIfDefined(patch, "contact_type", input.contact_type);
@@ -80,11 +81,14 @@ export function buildTenantApplymentSafePatch(
     "settlement_bank_branch_id",
     input.settlement_bank_branch_id,
   );
-  if (input.settlement_account_number !== undefined) {
-    const accountNumber = input.settlement_account_number.trim();
+  if (input.settlement_account_number === null) {
+    patch.settlement_account_number_masked = null;
+    patch.settlement_account_summary = null;
+  } else if (typeof input.settlement_account_number === "string") {
+    const accountNumber = input.settlement_account_number;
     patch.settlement_account_number_masked = maskBankAccountNumber(accountNumber);
     patch.settlement_account_summary = buildSettlementAccountSummary(
-      input.settlement_bank_name,
+      input.settlement_bank_name ?? null,
       accountNumber,
     );
   } else {
@@ -104,7 +108,9 @@ export function buildTenantApplymentSafePatch(
   assignIfDefined(patch, "contact_address", input.contact_address);
   assignIfDefined(patch, "attachments", input.attachments);
   assignIfDefined(patch, "remark", input.remark);
-  if (input.super_admin_phone !== undefined) {
+  if (input.super_admin_phone === null) {
+    patch.super_admin_phone_masked = null;
+  } else if (typeof input.super_admin_phone === "string") {
     patch.super_admin_phone_masked = maskPhone(input.super_admin_phone);
   }
   return patch;
@@ -112,7 +118,7 @@ export function buildTenantApplymentSafePatch(
 
 export function buildCreateSensitivePayload(
   input: CreateWechatPayApplymentInput,
-): ApplymentSensitivePayload {
+): ApplymentSensitiveDraftPayload {
   return {
     identity_name: input.identity_name,
     identity_number: input.identity_number,
@@ -131,12 +137,45 @@ export function buildCreateSensitivePayload(
   };
 }
 
+export function hasSensitiveDraftValues(
+  payload: ApplymentSensitiveDraftPayload,
+): boolean {
+  return Object.values(payload).some((value) =>
+    value !== null && value !== undefined && String(value).trim() !== ""
+  );
+}
+
+export function buildDraftChangeAudit(input: object) {
+  const sensitiveFields = new Set([
+    "identity_name",
+    "identity_number",
+    "identity_address",
+    "super_admin_phone",
+    "contact_identity_number",
+    "contact_identity_address",
+    "settlement_account_number",
+  ]);
+  const changedFields = Object.keys(input)
+    .filter((field) => field !== "draft_update_source")
+    .sort();
+  const changeSource = "draft_update_source" in input
+    ? input.draft_update_source
+    : undefined;
+  return {
+    changed_fields: changedFields,
+    change_source: changeSource ?? "manual_save",
+    has_sensitive_replacement: changedFields.some((field) =>
+      sensitiveFields.has(field)
+    ),
+  };
+}
+
 export function mergeSensitivePayload(input: {
-  current: Partial<ApplymentSensitivePayload>;
+  current: ApplymentSensitiveDraftPayload;
   patch: UpdateWechatPayApplymentInput;
   contactType: string | null;
-}): ApplymentSensitivePayload {
-  const next: Partial<ApplymentSensitivePayload> = { ...input.current };
+}): ApplymentSensitiveDraftPayload {
+  const next: ApplymentSensitiveDraftPayload = { ...input.current };
   assignSensitive(next, "identity_name", input.patch.identity_name);
   assignSensitive(next, "identity_number", input.patch.identity_number);
   assignSensitive(next, "identity_address", input.patch.identity_address);
@@ -163,40 +202,17 @@ export function mergeSensitivePayload(input: {
     "bank_account_number",
     input.patch.settlement_account_number,
   );
-  if (input.contactType === "LEGAL") {
+  if (
+    input.contactType === "LEGAL" &&
+    (
+      next.contact_identity_number !== undefined ||
+      next.contact_identity_address !== undefined
+    )
+  ) {
     next.contact_identity_number = null;
     next.contact_identity_address = null;
   }
-
-  const required = [
-    "identity_name",
-    "identity_number",
-    "contact_name",
-    "contact_phone",
-    "contact_email",
-    "bank_account_name",
-    "bank_account_number",
-  ] as const;
-  const missing: string[] = required.filter(
-    (key) => !String(next[key] ?? "").trim(),
-  );
-  if (input.contactType === "SUPER") {
-    for (const key of [
-      "contact_identity_number",
-      "contact_identity_address",
-    ] as const) {
-      if (!String(next[key] ?? "").trim()) missing.push(key);
-    }
-  }
-  if (missing.length > 0) {
-    throw Errors.business(
-      400,
-      "微信支付进件敏感资料不完整",
-      "WECHAT_PAY_APPLYMENT_SENSITIVE_FIELDS_MISSING",
-      { missing },
-    );
-  }
-  return next as ApplymentSensitivePayload;
+  return next;
 }
 
 export function hasSensitiveReplacement(
@@ -213,7 +229,6 @@ export function hasSensitiveReplacement(
     input.contact_identity_address,
     input.settlement_account_name,
     input.settlement_account_number,
-    input.contact_type,
   ].some((value) => value !== undefined);
 }
 
@@ -235,10 +250,10 @@ function assignIfDefined<K extends keyof WechatPayApplymentUpdate>(
   if (value !== undefined) target[key] = value;
 }
 
-function assignSensitive<K extends keyof ApplymentSensitivePayload>(
-  target: Partial<ApplymentSensitivePayload>,
+function assignSensitive<K extends keyof ApplymentSensitiveDraftPayload>(
+  target: ApplymentSensitiveDraftPayload,
   key: K,
-  value: ApplymentSensitivePayload[K] | undefined,
+  value: ApplymentSensitiveDraftPayload[K] | undefined,
 ) {
   if (value !== undefined) target[key] = value;
 }

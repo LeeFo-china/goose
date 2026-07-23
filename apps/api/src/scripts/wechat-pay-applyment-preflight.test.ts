@@ -172,6 +172,42 @@ describe("wechat pay applyment preflight", () => {
     expect(loadRuntimeProfile).toHaveBeenCalledTimes(1);
   });
 
+  test("reports each missing field from a partial sensitive draft", async () => {
+    const partialCiphertext = encryptApplymentSensitivePayload({
+      context: { tenantId, applymentId, version: 1 },
+      payload: { identity_name: "张三" },
+      rootSecret,
+    });
+    const { runWechatPayApplymentPreflight } = await loadSubject();
+
+    const report = await runWechatPayApplymentPreflight(applymentId, {
+      repository: {
+        findById: async () => applyment(),
+        findSensitivePayloadById: async () => sensitiveRecord({
+          sensitive_payload_ciphertext: partialCiphertext,
+        }),
+      },
+      loadRuntimeProfile: async () => ({ ready: true }),
+      encryptionRootSecretFactory: () => rootSecret,
+      nowFactory: () => now,
+    });
+
+    expect(report).toEqual({
+      ready: false,
+      blockers: [
+        "identity_number",
+        "contact_name",
+        "contact_phone",
+        "contact_email",
+        "bank_account_name",
+        "bank_account_number",
+      ].map((field) => ({
+        code: "APPLYMENT_REQUIRED_FIELD_MISSING",
+        field: `sensitive.${field}`,
+      })),
+    });
+  });
+
   test("blocks a settlement rule that does not match the subject and industry", async () => {
     const { runWechatPayApplymentPreflight } = await loadSubject();
     const report = await runWechatPayApplymentPreflight(applymentId, {

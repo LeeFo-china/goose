@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 import type {
+  WechatPayApplymentEventInsert,
   WechatPayApplymentEventRecord,
   WechatPayApplymentInsert,
   WechatPayApplymentRecord,
+  WechatPayApplymentSensitiveRecord,
   WechatPayApplymentUpdate,
 } from "@/repositories/wechat-pay-applyments";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
@@ -121,7 +123,8 @@ const event: WechatPayApplymentEventRecord = {
 
 const findLatestByTenant = mock(async () => null as WechatPayApplymentRecord | null);
 const findById = mock(async () => applyment as WechatPayApplymentRecord | null);
-const findSensitivePayloadById = mock(async () => ({
+const findSensitivePayloadById = mock(
+  async (): Promise<WechatPayApplymentSensitiveRecord> => ({
   id: applymentId,
   tenant_id: tenantId,
   has_sensitive_payload: true,
@@ -131,7 +134,8 @@ const findSensitivePayloadById = mock(async () => ({
     rootSecret,
   }),
   sensitive_payload_version: 1,
-}));
+  }),
+);
 const createApplyment = mock(async (input: WechatPayApplymentInsert) => ({
   ...applyment,
   ...input,
@@ -141,7 +145,9 @@ const updateApplyment = mock(async (input: {
   tenantId?: string;
   patch: WechatPayApplymentUpdate;
 }) => ({ ...applyment, ...input.patch }) as unknown as WechatPayApplymentRecord);
-const insertEvent = mock(async () => event);
+const insertEvent = mock(
+  async (_input: WechatPayApplymentEventInsert) => event,
+);
 const findEvents = mock(async () => [event]);
 
 const authContext: AuthContext = {
@@ -258,11 +264,98 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     }));
     expect(JSON.stringify(insert)).not.toContain("13800000000");
     expect(JSON.stringify(insert)).not.toContain("6212345678901234");
+    const createdEvent = insertEvent.mock.calls[0]?.[0];
+    expect(createdEvent?.metadata).toEqual({
+      changed_fields: Object.keys(createInput).sort(),
+      change_source: "manual_save",
+      has_sensitive_replacement: true,
+    });
+    expect(JSON.stringify(createdEvent?.metadata)).not.toContain(
+      createInput.identity_number,
+    );
+    expect(JSON.stringify(createdEvent?.metadata)).not.toContain(
+      createInput.super_admin_phone,
+    );
+    expect(JSON.stringify(createdEvent?.metadata)).not.toContain(
+      createInput.settlement_account_number,
+    );
     expect(decryptApplymentSensitivePayload({
       context: { tenantId, applymentId, version: 1 },
       ciphertext: insert?.sensitive_payload_ciphertext ?? "",
       rootSecret,
     })).toEqual(sensitivePayload);
+  });
+
+  test("creates a shell draft without encrypted sensitive data", async () => {
+    const service = await createService();
+    await service.createDraft(authContext, {
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      contact_type: "LEGAL",
+      attachments: [],
+    });
+
+    expect(createApplyment).toHaveBeenCalledWith(expect.objectContaining({
+      merchant_short_name: null,
+      has_sensitive_payload: false,
+      sensitive_payload_ciphertext: null,
+      sensitive_payload_version: null,
+      sensitive_payload_updated_at: null,
+    }));
+  });
+
+  test("stores sensitive fields incrementally", async () => {
+    findById.mockImplementationOnce(async () => ({
+      ...applyment,
+      has_sensitive_payload: false,
+      sensitive_payload_updated_at: null,
+      sensitive_payload_version: null,
+    }));
+    const recognitionId = "66666666-6666-4666-8666-666666666666";
+    const service = await createService();
+    await service.updateDraft(authContext, applymentId, {
+      identity_name: "张三",
+      attachments: [{
+        category: "legal_representative_id_card_front",
+        object_key: "tenants/tenant-1/id-front.jpg",
+        ocr_recognition_id: recognitionId,
+        ocr_review_status: "confirmed",
+      }],
+      draft_update_source: "ocr_confirm",
+    });
+
+    const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
+    expect(patch?.has_sensitive_payload).toBe(true);
+    expect(patch?.sensitive_payload_version).toBe(1);
+    expect(decryptApplymentSensitivePayload({
+      context: { tenantId, applymentId, version: 1 },
+      ciphertext: patch?.sensitive_payload_ciphertext ?? "",
+      rootSecret,
+    })).toEqual({ identity_name: "张三" });
+    const updateEvent = insertEvent.mock.calls[0]?.[0];
+    expect(updateEvent?.metadata).toEqual({
+      changed_fields: ["attachments", "identity_name"],
+      change_source: "ocr_confirm",
+      has_sensitive_replacement: true,
+    });
+    expect(JSON.stringify(updateEvent?.metadata)).not.toContain("张三");
+    expect(JSON.stringify(updateEvent?.metadata)).not.toContain(recognitionId);
+  });
+
+  test("does not create empty ciphertext for contact type only", async () => {
+    findById.mockImplementationOnce(async () => ({
+      ...applyment,
+      has_sensitive_payload: false,
+      sensitive_payload_updated_at: null,
+      sensitive_payload_version: null,
+    }));
+    const service = await createService();
+    await service.updateDraft(authContext, applymentId, {
+      contact_type: "LEGAL",
+    });
+
+    const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
+    expect(patch).not.toHaveProperty("sensitive_payload_ciphertext");
+    expect(patch).not.toHaveProperty("has_sensitive_payload");
   });
 
   test("merges a partial sensitive replacement", async () => {
@@ -284,26 +377,103 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     })).toEqual({ ...sensitivePayload, contact_phone: "13900000000" });
   });
 
-  test("requires replacements for a legacy draft without ciphertext", async () => {
+  test("does not initialize a legacy draft without a sensitive replacement", async () => {
     findById.mockImplementationOnce(async () => ({
       ...applyment,
       has_sensitive_payload: false,
+      sensitive_payload_updated_at: null,
       sensitive_payload_version: null,
     }));
     const service = await createService();
 
-    await expect(service.updateDraft(authContext, applymentId, {
+    await service.updateDraft(authContext, applymentId, {
       merchant_short_name: "更新后的简称",
-    })).rejects.toMatchObject({
-      code: "WECHAT_PAY_APPLYMENT_SENSITIVE_FIELDS_MISSING",
-      details: {
-        missing: expect.arrayContaining([
-          "identity_number",
-          "contact_phone",
-          "bank_account_number",
-        ]),
-      },
+      draft_update_source: "autosave",
     });
+
+    const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
+    expect(patch).not.toHaveProperty("sensitive_payload_ciphertext");
+    expect(patch).not.toHaveProperty("has_sensitive_payload");
+    expect(insertEvent).not.toHaveBeenCalled();
+  });
+
+  test("initializes a legacy draft ciphertext on a real sensitive replacement", async () => {
+    findSensitivePayloadById.mockImplementationOnce(async () => ({
+      id: applymentId,
+      tenant_id: tenantId,
+      has_sensitive_payload: true,
+      sensitive_payload_ciphertext: null,
+      sensitive_payload_version: null,
+    }));
+    const service = await createService();
+
+    await service.updateDraft(authContext, applymentId, {
+      identity_name: "张三",
+    });
+
+    const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
+    expect(patch?.sensitive_payload_version).toBe(1);
+    expect(decryptApplymentSensitivePayload({
+      context: { tenantId, applymentId, version: 1 },
+      ciphertext: patch?.sensitive_payload_ciphertext ?? "",
+      rootSecret,
+    })).toEqual({ identity_name: "张三" });
+  });
+
+  test("clears agent-only sensitive fields when switching to LEGAL", async () => {
+    findById.mockImplementationOnce(async () => ({
+      ...applyment,
+      contact_type: "SUPER",
+    }));
+    findSensitivePayloadById.mockImplementationOnce(async () => ({
+      id: applymentId,
+      tenant_id: tenantId,
+      has_sensitive_payload: true,
+      sensitive_payload_ciphertext: encryptApplymentSensitivePayload({
+        context: { tenantId, applymentId, version: 1 },
+        payload: {
+          ...sensitivePayload,
+          contact_identity_number: "41000019920202002X",
+          contact_identity_address: "河南省信阳市固始县经办人路2号",
+        },
+        rootSecret,
+      }),
+      sensitive_payload_version: 1,
+    }));
+    const service = await createService();
+
+    await service.updateDraft(authContext, applymentId, {
+      contact_type: "LEGAL",
+    });
+
+    const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
+    expect(decryptApplymentSensitivePayload({
+      context: { tenantId, applymentId, version: 1 },
+      ciphertext: patch?.sensitive_payload_ciphertext ?? "",
+      rootSecret,
+    })).toEqual({
+      ...sensitivePayload,
+      contact_identity_number: null,
+      contact_identity_address: null,
+    });
+  });
+
+  test("clears nullable masked projections and account summary", async () => {
+    const service = await createService();
+    await service.updateDraft(authContext, applymentId, {
+      identity_address: null,
+      super_admin_phone: null,
+      settlement_account_number: null,
+    });
+
+    expect(updateApplyment.mock.calls[0]?.[0]?.patch).toEqual(
+      expect.objectContaining({
+        identity_address_masked: null,
+        super_admin_phone_masked: null,
+        settlement_account_number_masked: null,
+        settlement_account_summary: null,
+      }),
+    );
   });
 
   test("strips ciphertext from detail responses", async () => {

@@ -117,6 +117,14 @@ const optionalPeriodEndText = (message: string) => z.preprocess((value) => {
   return normalized || null;
 }, periodEndText(message).nullable().optional());
 
+const ApplymentAttachmentOcrReviewStatusSchema = z.enum([
+  "uploaded",
+  "review_required",
+  "confirmed",
+  "manual",
+  "failed",
+] as const, { message: "无效的附件 OCR 核对状态" });
+
 const AttachmentSchema = z.object({
   category: WechatPayApplymentAttachmentCategorySchema.optional(),
   file_object_id: z.uuid("附件文件 ID 格式无效").optional(),
@@ -124,6 +132,13 @@ const AttachmentSchema = z.object({
   file_name: optionalText(120, "附件文件名不能超过 120 个字符"),
   content_type: optionalText(120, "附件类型不能超过 120 个字符"),
   size: z.coerce.number().int().min(0, "附件大小不能为负数").optional(),
+  ocr_recognition_id: z
+    .uuid("OCR 识别记录 ID 格式无效")
+    .nullable()
+    .optional(),
+  ocr_review_status: ApplymentAttachmentOcrReviewStatusSchema
+    .nullable()
+    .optional(),
 }).strict();
 
 const TenantApplymentFields = {
@@ -183,6 +198,93 @@ const TenantApplymentFields = {
   remark: optionalText(500, "备注不能超过 500 个字符"),
 };
 
+const nullableDraft = <T extends z.ZodTypeAny>(schema: T) =>
+  z.union([schema, z.null()]).optional();
+
+const DraftTenantApplymentFields = {
+  subject_type: nullableDraft(TenantApplymentFields.subject_type),
+  merchant_short_name: nullableDraft(
+    TenantApplymentFields.merchant_short_name,
+  ),
+  license_name: nullableDraft(TenantApplymentFields.license_name),
+  license_code: nullableDraft(TenantApplymentFields.license_code),
+  license_address: nullableDraft(TenantApplymentFields.license_address),
+  license_period_begin: nullableDraft(
+    TenantApplymentFields.license_period_begin,
+  ),
+  license_period_end: nullableDraft(
+    TenantApplymentFields.license_period_end,
+  ),
+  legal_representative_name: nullableDraft(
+    TenantApplymentFields.legal_representative_name,
+  ),
+  identity_doc_type: nullableDraft(TenantApplymentFields.identity_doc_type),
+  identity_name: nullableDraft(TenantApplymentFields.identity_name),
+  identity_number: nullableDraft(TenantApplymentFields.identity_number),
+  identity_address: nullableDraft(TenantApplymentFields.identity_address),
+  identity_period_begin: nullableDraft(
+    TenantApplymentFields.identity_period_begin,
+  ),
+  identity_period_end: nullableDraft(
+    TenantApplymentFields.identity_period_end,
+  ),
+  contact_type: nullableDraft(TenantApplymentFields.contact_type),
+  super_admin_name: nullableDraft(TenantApplymentFields.super_admin_name),
+  super_admin_phone: nullableDraft(TenantApplymentFields.super_admin_phone),
+  super_admin_email: nullableDraft(TenantApplymentFields.super_admin_email),
+  contact_identity_doc_type: nullableDraft(
+    TenantApplymentFields.contact_identity_doc_type,
+  ),
+  contact_identity_number: nullableDraft(
+    TenantApplymentFields.contact_identity_number,
+  ),
+  contact_identity_address: nullableDraft(
+    TenantApplymentFields.contact_identity_address,
+  ),
+  contact_identity_period_begin: nullableDraft(
+    TenantApplymentFields.contact_identity_period_begin,
+  ),
+  contact_identity_period_end: nullableDraft(
+    TenantApplymentFields.contact_identity_period_end,
+  ),
+  service_phone: nullableDraft(TenantApplymentFields.service_phone),
+  settlement_account_type: nullableDraft(
+    TenantApplymentFields.settlement_account_type,
+  ),
+  settlement_account_name: nullableDraft(
+    TenantApplymentFields.settlement_account_name,
+  ),
+  settlement_bank_name: nullableDraft(TenantApplymentFields.settlement_bank_name),
+  settlement_bank_full_name: nullableDraft(
+    TenantApplymentFields.settlement_bank_full_name,
+  ),
+  settlement_bank_branch_id: nullableDraft(
+    TenantApplymentFields.settlement_bank_branch_id,
+  ),
+  settlement_account_number: nullableDraft(
+    TenantApplymentFields.settlement_account_number,
+  ),
+  settlement_account_summary: nullableDraft(
+    TenantApplymentFields.settlement_account_summary,
+  ),
+  settlement_id: nullableDraft(TenantApplymentFields.settlement_id),
+  qualification_type: nullableDraft(TenantApplymentFields.qualification_type),
+  business_scene_description: nullableDraft(
+    TenantApplymentFields.business_scene_description,
+  ),
+  contact_address: nullableDraft(TenantApplymentFields.contact_address),
+  attachments: TenantApplymentFields.attachments,
+  remark: nullableDraft(TenantApplymentFields.remark),
+  draft_update_source: z.enum([
+    "autosave",
+    "manual_save",
+    "attachment_change",
+    "ocr_review",
+    "ocr_confirm",
+    "manual_entry",
+  ] as const, { message: "无效的草稿更新来源" }).optional(),
+} satisfies Record<string, z.ZodTypeAny>;
+
 type SettlementRuleFields = {
   subject_type?: WechatPayApplymentSubjectType;
   settlement_id?: string;
@@ -207,8 +309,11 @@ function getSettlementRuleIssues(
   const providedFields = SETTLEMENT_RULE_FIELD_NAMES.filter(
     (field) => input[field] !== undefined,
   );
-  if (!requireComplete && providedFields.length === 0) return [];
-  if (providedFields.length !== SETTLEMENT_RULE_FIELD_NAMES.length) {
+  if (providedFields.length === 0) return [];
+  if (
+    requireComplete &&
+    providedFields.length !== SETTLEMENT_RULE_FIELD_NAMES.length
+  ) {
     return SETTLEMENT_RULE_FIELD_NAMES
       .filter((field) => input[field] === undefined)
       .map((field) => ({
@@ -219,7 +324,7 @@ function getSettlementRuleIssues(
 
   const { subject_type: subjectType, settlement_id: settlementId } = input;
   const qualificationType = input.qualification_type;
-  if (!subjectType || !settlementId || !qualificationType) return [];
+  if (!subjectType || !settlementId) return [];
 
   const ruleForSubject = getWechatPaySettlementRulesForSubject(subjectType)
     .find((rule) => rule.id === settlementId);
@@ -229,6 +334,7 @@ function getSettlementRuleIssues(
       message: "请选择当前主体可用的结算规则",
     }];
   }
+  if (!qualificationType) return [];
   if (
     !findWechatPaySettlementRule(
       subjectType,
@@ -261,82 +367,28 @@ function addSettlementRuleIssues(
   }
 }
 
-export const CreateWechatPayApplymentSchema = z.object(TenantApplymentFields)
+export const CreateWechatPayApplymentSchema = z
+  .object(DraftTenantApplymentFields)
   .strict()
   .superRefine((input, context) => {
     addSettlementRuleIssues(
-      getSettlementRuleIssues(input, true),
-      (issue) => context.addIssue(issue),
-    );
-    if (
-      input.subject_type === "SUBJECT_TYPE_ENTERPRISE" &&
-      !input.identity_address
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["identity_address"],
-        message: "企业主体必须填写法人身份证居住地址",
-      });
-    }
-    if (
-      input.subject_type === "SUBJECT_TYPE_ENTERPRISE" &&
-      input.settlement_account_type !== "BANK_ACCOUNT_TYPE_CORPORATE"
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["settlement_account_type"],
-        message: "企业主体只能使用对公银行账户",
-      });
-    }
-    if (input.contact_type === "SUPER") {
-      const requiredAgentFields = [
-        ["contact_identity_doc_type", input.contact_identity_doc_type],
-        ["contact_identity_number", input.contact_identity_number],
-        ["contact_identity_address", input.contact_identity_address],
-        ["contact_identity_period_begin", input.contact_identity_period_begin],
-        ["contact_identity_period_end", input.contact_identity_period_end],
-      ] as const;
-      for (const [field, value] of requiredAgentFields) {
-        if (!value) {
-          context.addIssue({
-            code: "custom",
-            path: [field],
-            message: "经办人超级管理员必须完整填写身份证资料",
-          });
-        }
-      }
-      const categories = new Set(
-        (input.attachments ?? []).map((attachment) => attachment.category),
-      );
-      for (const category of [
-        "contact_id_card_front",
-        "contact_id_card_back",
-      ] as const) {
-        if (!categories.has(category)) {
-          context.addIssue({
-            code: "custom",
-            path: ["attachments"],
-            message: `经办人必须上传${category === "contact_id_card_front" ? "身份证人像面" : "身份证国徽面"}`,
-          });
-        }
-      }
-    }
-  });
-
-export const UpdateWechatPayApplymentSchema = z.object(
-  TenantApplymentFields,
-).partial().strict()
-  .superRefine((input, context) => {
-    addSettlementRuleIssues(
-      getSettlementRuleIssues(input, false),
+      getSettlementRuleIssues({
+        subject_type: input.subject_type ?? undefined,
+        settlement_id: input.settlement_id ?? undefined,
+        qualification_type: input.qualification_type ?? undefined,
+      }, false),
       (issue) => context.addIssue(issue),
     );
   })
-  .refine((value) => Object.keys(value).length > 0, {
-    message: "至少需要提交一个更新字段",
+  .refine((value) =>
+    Object.keys(value).some((key) => key !== "draft_update_source"), {
+    message: "至少需要提交一个草稿字段",
   });
 
+export const UpdateWechatPayApplymentSchema = CreateWechatPayApplymentSchema;
+
 export const SubmitWechatPayApplymentSchema = z.object({
+  idempotency_key: z.uuid("提交幂等键格式无效"),
   remark: optionalText(500, "备注不能超过 500 个字符"),
 }).strict();
 

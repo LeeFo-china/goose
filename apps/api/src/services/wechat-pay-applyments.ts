@@ -23,7 +23,9 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
   buildCreateSensitivePayload,
+  buildDraftChangeAudit,
   buildTenantApplymentSafePatch,
+  hasSensitiveDraftValues,
   hasSensitiveReplacement,
   mergeSensitivePayload,
   sanitizeApplymentRecord,
@@ -31,7 +33,7 @@ import {
 import {
   decryptApplymentSensitivePayload,
   encryptApplymentSensitivePayload,
-  type ApplymentSensitivePayload,
+  type ApplymentSensitiveDraftPayload,
 } from "@/services/wechat-pay-applyment-sensitive-payload";
 import { assertApplymentSubmitReady } from "@/services/wechat-pay-applyment-readiness";
 import { runWechatPayApplymentPreflight } from "@/services/wechat-pay-applyment-preflight";
@@ -107,7 +109,6 @@ export class WechatPayApplymentService {
     const applyment = await this.getRequiredApplyment({ id, tenantId });
     return this.toDetail(authContext, applyment);
   }
-
   async createDraft(
     authContext: AuthContext,
     input: CreateWechatPayApplymentInput,
@@ -126,30 +127,36 @@ export class WechatPayApplymentService {
     }
 
     const applymentId = this.applymentIdFactory();
-    const sensitivePayloadVersion = 1;
     const now = this.nowFactory();
-    const sensitivePayloadCiphertext = encryptApplymentSensitivePayload({
-      context: {
-        tenantId,
-        applymentId,
-        version: sensitivePayloadVersion,
-      },
-      payload: buildCreateSensitivePayload(input),
-      rootSecret: this.encryptionRootSecretFactory(),
-    });
+    const sensitivePayload = buildCreateSensitivePayload(input);
+    const hasSensitivePayload = hasSensitiveDraftValues(sensitivePayload);
+    const sensitivePatch: WechatPayApplymentUpdate = hasSensitivePayload
+      ? {
+        has_sensitive_payload: true,
+        sensitive_payload_ciphertext: encryptApplymentSensitivePayload({
+          context: { tenantId, applymentId, version: 1 },
+          payload: sensitivePayload,
+          rootSecret: this.encryptionRootSecretFactory(),
+        }),
+        sensitive_payload_version: 1,
+        sensitive_payload_updated_at: now,
+      }
+      : {
+        has_sensitive_payload: false,
+        sensitive_payload_ciphertext: null,
+        sensitive_payload_version: null,
+        sensitive_payload_updated_at: null,
+      };
     const created = await this.repository.createApplyment({
       ...buildTenantApplymentSafePatch(input),
+      ...sensitivePatch,
       id: applymentId,
       tenant_id: tenantId,
       application_no: this.applicationNoFactory(),
-      merchant_short_name: input.merchant_short_name,
+      merchant_short_name: input.merchant_short_name ?? null,
       status: "draft",
       applyment_state: "draft",
       appid_binding_state: "not_bound",
-      has_sensitive_payload: true,
-      sensitive_payload_ciphertext: sensitivePayloadCiphertext,
-      sensitive_payload_version: sensitivePayloadVersion,
-      sensitive_payload_updated_at: now,
       created_by_employee_id: employeeId,
       updated_by_employee_id: employeeId,
     });
@@ -160,6 +167,7 @@ export class WechatPayApplymentService {
       toStatus: "draft",
       message: "租户创建微信支付开通申请草稿",
       operatorEmployeeId: employeeId,
+      metadata: buildDraftChangeAudit(input),
     });
 
     return this.toDetail(authContext, created);
@@ -194,14 +202,17 @@ export class WechatPayApplymentService {
         updated_by_employee_id: employeeId,
       },
     });
-    await this.recordEvent({
-      applyment: updated,
-      eventType: "updated",
-      fromStatus: current.status,
-      toStatus: updated.status,
-      message: "租户更新微信支付开通申请资料",
-      operatorEmployeeId: employeeId,
-    });
+    if (input.draft_update_source !== "autosave") {
+      await this.recordEvent({
+        applyment: updated,
+        eventType: "updated",
+        fromStatus: current.status,
+        toStatus: updated.status,
+        message: "租户更新微信支付开通申请资料",
+        operatorEmployeeId: employeeId,
+        metadata: buildDraftChangeAudit(input),
+      });
+    }
 
     return this.toDetail(authContext, updated);
   }
@@ -214,11 +225,17 @@ export class WechatPayApplymentService {
     const tenantId = this.accessPolicyService.assertTenantContext(authContext);
     this.assertTenantSubmit(authContext);
     const employeeId = this.requireEmployee(authContext);
+    if (input.idempotency_key !== id) {
+      throw Errors.business(409, "提交幂等键与申请不匹配", "WECHAT_PAY_APPLYMENT_IDEMPOTENCY_MISMATCH");
+    }
     const current = await this.getRequiredApplyment({ id, tenantId });
+    const editable = ["draft", "rejected", "wechat_editing"].includes(current.status);
+    if (!editable && current.submitted_at) {
+      return this.toDetail(authContext, current);
+    }
     this.assertEditable(current);
     assertApplymentSubmitReady(current);
     const now = this.nowFactory();
-
     const updated = await this.repository.updateApplyment({
       id,
       tenantId,
@@ -239,6 +256,7 @@ export class WechatPayApplymentService {
       toStatus: "submitted",
       message: "租户提交微信支付开通申请",
       operatorEmployeeId: employeeId,
+      metadata: { idempotency_key: input.idempotency_key },
     });
 
     return this.toDetail(authContext, updated);
@@ -338,12 +356,10 @@ export class WechatPayApplymentService {
     input: UpdateWechatPayApplymentInput;
     tenantId: string;
   }): Promise<WechatPayApplymentUpdate> {
-    if (
-      input.current.has_sensitive_payload &&
-      !hasSensitiveReplacement(input.input)
-    ) {
-      return {};
-    }
+    const hasReplacement = hasSensitiveReplacement(input.input);
+    const shouldClearAgentFields = input.current.has_sensitive_payload &&
+      input.input.contact_type === "LEGAL";
+    if (!hasReplacement && !shouldClearAgentFields) return {};
 
     const stored = input.current.has_sensitive_payload
       ? await this.repository.findSensitivePayloadById({
@@ -352,15 +368,8 @@ export class WechatPayApplymentService {
       })
       : null;
     const version = stored?.sensitive_payload_version ?? 1;
-    let currentPayload: Partial<ApplymentSensitivePayload> = {};
-    if (input.current.has_sensitive_payload) {
-      if (!stored?.sensitive_payload_ciphertext || !stored.sensitive_payload_version) {
-        throw Errors.business(
-          500,
-          "微信支付进件敏感资料缺失",
-          "WECHAT_PAY_APPLYMENT_SENSITIVE_PAYLOAD_MISSING",
-        );
-      }
+    let currentPayload: ApplymentSensitiveDraftPayload = {};
+    if (stored?.sensitive_payload_ciphertext && stored.sensitive_payload_version) {
       currentPayload = decryptApplymentSensitivePayload({
         context: {
           tenantId: input.tenantId,
@@ -370,6 +379,8 @@ export class WechatPayApplymentService {
         ciphertext: stored.sensitive_payload_ciphertext,
         rootSecret: this.encryptionRootSecretFactory(),
       });
+    } else if (!hasReplacement) {
+      return {};
     }
     const nextPayload = mergeSensitivePayload({
       current: currentPayload,

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
-
 import { Errors } from "@/errors/error-factory";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type {
@@ -14,11 +13,9 @@ import type {
   WechatPayApplymentQueryResult,
 } from "./wechat-pay-applyment-gateway";
 import { encryptApplymentSensitivePayload } from "./wechat-pay-applyment-sensitive-payload";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const employeeId = "22222222-2222-4222-8222-222222222222";
 const applymentId = "33333333-3333-4333-8333-333333333333";
@@ -27,13 +24,11 @@ const rootSecret = "applyment-submission-test-root-secret";
 const now = "2026-07-21T10:00:00.000Z";
 const businessCode = "1561816121_WPA202607210001";
 const wechatApplymentId = "2000002124775691";
-
 const keys = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
   publicKeyEncoding: { format: "pem", type: "spki" },
 });
-
 const attachments = [
   "license_copy",
   "legal_representative_id_card_front",
@@ -44,7 +39,6 @@ const attachments = [
   object_key: `tenants/${tenantId}/wechat-pay-applyment/${applymentId}/${category}.jpg`,
   file_name: `${category}.jpg`,
 }));
-
 function applyment(
   overrides: Partial<WechatPayApplymentRecord> = {},
 ): WechatPayApplymentRecord {
@@ -120,7 +114,6 @@ function applyment(
     ...overrides,
   };
 }
-
 const sensitive = {
   identity_name: "张三",
   identity_number: "41000019900101001X",
@@ -138,7 +131,6 @@ const ciphertext = encryptApplymentSensitivePayload({
   payload: sensitive,
   rootSecret,
 });
-
 const profile: PlatformPaymentConfigRecord = {
   id: platformConfigId,
   provider: "wechat_pay",
@@ -164,7 +156,6 @@ const profile: PlatformPaymentConfigRecord = {
   created_at: now,
   updated_at: now,
 };
-
 const claimSubmission = mock(async () => applyment());
 const findSensitivePayloadById = mock(async () => ({
   id: applymentId,
@@ -218,7 +209,6 @@ const queryByBusinessCode = mock(
   requestId: null,
   }),
 );
-
 function platformAuth(withPermission = true): AuthContext {
   return {
     authUserId: "auth-1",
@@ -244,7 +234,6 @@ function platformAuth(withPermission = true): AuthContext {
       : [],
   };
 }
-
 async function createService() {
   const { WechatPayApplymentSubmissionService } = await import(
     "./wechat-pay-applyment-submission"
@@ -272,7 +261,6 @@ async function createService() {
     nowFactory: () => now,
   });
 }
-
 describe("WechatPayApplymentSubmissionService", () => {
   beforeEach(() => {
     for (const fn of [
@@ -304,14 +292,12 @@ describe("WechatPayApplymentSubmissionService", () => {
       requestId: null,
     }));
   });
-
   test("requires the dedicated platform submission permission", async () => {
     const service = await createService();
     await expect(service.submitToWechat(platformAuth(false), applymentId))
       .rejects.toMatchObject({ statusCode: 403 });
     expect(claimSubmission).not.toHaveBeenCalled();
   });
-
   test("propagates claim contention without touching WeChat", async () => {
     claimSubmission.mockRejectedValueOnce(Errors.business(
       409,
@@ -325,7 +311,6 @@ describe("WechatPayApplymentSubmissionService", () => {
       });
     expect(submit).not.toHaveBeenCalled();
   });
-
   test("rejects an unready central profile before media or submit", async () => {
     findProfile.mockImplementationOnce(async () => ({
       ...profile,
@@ -340,11 +325,37 @@ describe("WechatPayApplymentSubmissionService", () => {
       patch: expect.objectContaining({ submission_claimed_at: null }),
     }));
   });
-
+  test("rejects a partial sensitive draft before media or WeChat submit", async () => {
+    findSensitivePayloadById.mockImplementationOnce(async () => ({
+      id: applymentId,
+      tenant_id: tenantId,
+      has_sensitive_payload: true,
+      sensitive_payload_ciphertext: encryptApplymentSensitivePayload({
+        context: { tenantId, applymentId, version: 1 },
+        payload: { identity_name: "张三" },
+        rootSecret,
+      }),
+      sensitive_payload_version: 1,
+    }));
+    const service = await createService();
+    await expect(service.submitToWechat(platformAuth(), applymentId))
+      .rejects.toMatchObject({
+        statusCode: 400,
+        code: "WECHAT_PAY_APPLYMENT_SENSITIVE_FIELDS_MISSING",
+        details: {
+          missing: expect.arrayContaining([
+            "identity_number",
+            "contact_phone",
+            "bank_account_number",
+          ]),
+        },
+      });
+    expect(resolveMedia).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
   test("uploads all media, submits a complete encrypted request, and persists auditing", async () => {
     const service = await createService();
     const result = await service.submitToWechat(platformAuth(), applymentId);
-
     expect(resolveMedia).toHaveBeenCalledTimes(4);
     expect(submit).toHaveBeenCalledTimes(1);
     const submittedRequest = submit.mock.calls[0]?.[0]?.request;
@@ -378,7 +389,6 @@ describe("WechatPayApplymentSubmissionService", () => {
       last_wechat_request_id: "submit-request-id",
     });
   });
-
   test("queries an existing business code and never resubmits when found", async () => {
     claimSubmission.mockImplementationOnce(async () => applyment({
       applyment_business_code: businessCode,
@@ -390,7 +400,6 @@ describe("WechatPayApplymentSubmissionService", () => {
     expect(resolveMedia).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
   });
-
   test("resubmits updated data with the same business code after rejection", async () => {
     claimSubmission.mockImplementationOnce(async () => applyment({
       applyment_business_code: businessCode,
@@ -408,16 +417,13 @@ describe("WechatPayApplymentSubmissionService", () => {
         requestId: "rejected-query-id",
       }));
     const service = await createService();
-
     const result = await service.submitToWechat(platformAuth(), applymentId);
-
     expect(queryByBusinessCode).toHaveBeenCalledTimes(2);
     expect(resolveMedia).toHaveBeenCalledTimes(4);
     expect(submit).toHaveBeenCalledTimes(1);
     expect(submit.mock.calls[0]?.[0].request.business_code).toBe(businessCode);
     expect(result.applyment?.status).toBe("reviewing");
   });
-
   test("recovers a timed-out submit by querying the stable business code", async () => {
     submit.mockRejectedValueOnce(Errors.business(
       504,
@@ -431,7 +437,6 @@ describe("WechatPayApplymentSubmissionService", () => {
     expect(queryByBusinessCode).toHaveBeenCalledTimes(1);
     expect(result.applyment?.status).toBe("reviewing");
   });
-
   test("never resubmits after WeChat acknowledged the first submission", async () => {
     queryByBusinessCode.mockRejectedValueOnce(Errors.business(
       504,
@@ -440,13 +445,11 @@ describe("WechatPayApplymentSubmissionService", () => {
       { operation: "query" },
     ));
     const service = await createService();
-
     await expect(service.submitToWechat(platformAuth(), applymentId)).rejects
       .toMatchObject({ code: "WECHAT_PAY_APPLYMENT_TIMEOUT" });
     expect(submit).toHaveBeenCalledTimes(1);
     expect(queryByBusinessCode).toHaveBeenCalledTimes(1);
   });
-
   test("retries once only after query explicitly says applyment does not exist", async () => {
     submit.mockRejectedValueOnce(Errors.business(
       504,

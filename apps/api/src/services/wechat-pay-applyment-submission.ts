@@ -42,7 +42,10 @@ import {
   buildWechatApplymentOfficialStatePatch,
   getWechatPayApplymentAvailableActions,
 } from "@/services/wechat-pay-applyment-status";
-import { decryptApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
+import {
+  decryptApplymentSensitivePayload,
+  requireCompleteApplymentSensitivePayload,
+} from "@/services/wechat-pay-applyment-sensitive-payload";
 import type {
   AccessPolicyPort,
   ApplymentDetailResult,
@@ -245,7 +248,7 @@ export class WechatPayApplymentSubmissionService
         "WECHAT_PAY_APPLYMENT_SENSITIVE_PAYLOAD_MISSING",
       );
     }
-    const sensitive = decryptApplymentSensitivePayload({
+    const sensitiveDraft = decryptApplymentSensitivePayload({
       context: {
         tenantId: input.applyment.tenant_id,
         applymentId: input.applyment.id,
@@ -254,6 +257,10 @@ export class WechatPayApplymentSubmissionService
       ciphertext: sensitiveRecord.sensitive_payload_ciphertext,
       rootSecret: this.encryptionRootSecretFactory(),
     });
+    const sensitive = requireCompleteApplymentSensitivePayload(
+      sensitiveDraft,
+      input.applyment.contact_type,
+    );
     const media = await this.resolveMediaIds(
       input.applyment,
       input.runtimeProfile.gatewayProfile,

@@ -42,6 +42,13 @@ export const WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES: Partial<Record<
   settlement_account_proof: "bank_card",
 };
 
+export type WechatPayApplymentAttachmentOcrReviewStatus =
+  | "uploaded"
+  | "review_required"
+  | "confirmed"
+  | "manual"
+  | "failed";
+
 export type WechatPayApplymentAttachment = {
   category?: WechatPayApplymentAttachmentCategory | string | null;
   file_object_id?: string | null;
@@ -49,6 +56,8 @@ export type WechatPayApplymentAttachment = {
   file_name?: string | null;
   content_type?: string | null;
   size?: number | null;
+  ocr_recognition_id?: string | null;
+  ocr_review_status?: WechatPayApplymentAttachmentOcrReviewStatus | null;
 };
 
 export type WechatPayApplymentRecord = {

@@ -11,7 +11,10 @@ import {
 } from "@/repositories/wechat-pay-applyments";
 import { WechatPayApplymentAttachmentCategorySchema } from "@/schema/wechat-pay-applyments";
 import { getApplymentSubmitReadinessMissingFields } from "@/services/wechat-pay-applyment-readiness";
-import { decryptApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
+import {
+  decryptApplymentSensitivePayload,
+  getMissingApplymentSensitiveFields,
+} from "@/services/wechat-pay-applyment-sensitive-payload";
 import { loadApplymentRuntimeProfile } from "@/services/wechat-pay-applyment-submission-support";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
 import type {
@@ -255,7 +258,7 @@ async function collectSensitivePayloadBlockers(input: {
     return;
   }
   try {
-    decryptApplymentSensitivePayload({
+    const payload = decryptApplymentSensitivePayload({
       context: {
         tenantId: input.applyment.tenant_id,
         applymentId: input.applyment.id,
@@ -264,6 +267,17 @@ async function collectSensitivePayloadBlockers(input: {
       ciphertext: sensitive.sensitive_payload_ciphertext,
       rootSecret: input.rootSecret,
     });
+    for (
+      const field of getMissingApplymentSensitiveFields(
+        payload,
+        input.applyment.contact_type,
+      )
+    ) {
+      input.add({
+        code: "APPLYMENT_REQUIRED_FIELD_MISSING",
+        field: `sensitive.${field}`,
+      });
+    }
   } catch {
     input.add({ code: "APPLYMENT_SENSITIVE_PAYLOAD_UNREADABLE" });
   }
