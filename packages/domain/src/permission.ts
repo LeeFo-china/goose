@@ -102,6 +102,7 @@ export const PERMISSION_CODE_VALUES = [
   'platform.billing.recharge_refund.read',
   'platform.billing.recharge_refund.review',
   'platform.ocr.recognition.read',
+  'platform.ocr.tenant_policy.manage',
   'platform.tenant_onboarding.review',
   'platform.service_provider.publish',
   'platform.partner.read',
@@ -400,6 +401,10 @@ export const PermissionCodeConfig: Record<
   },
   'platform.ocr.recognition.read': {
     label: '查看平台OCR记录',
+    module: 'platform_ocr',
+  },
+  'platform.ocr.tenant_policy.manage': {
+    label: '管理OCR租户灰度',
     module: 'platform_ocr',
   },
   'platform.tenant_onboarding.review': {
