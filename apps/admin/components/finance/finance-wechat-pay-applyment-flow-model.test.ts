@@ -382,7 +382,7 @@ describe("wechat pay applyment flow model", () => {
       contactType: "LEGAL",
       attachments: [],
       materialStates: {},
-      blockerStages: [],
+      blockerStages: ["supplement"],
     })).toBe("materials");
 
     const failedAttachments = [

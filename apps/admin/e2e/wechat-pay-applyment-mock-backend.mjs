@@ -97,6 +97,7 @@ let applyment = structuredClone(initialApplyment);
 let startedSaves = [];
 let committedSaves = [];
 let nextSaveDelayMs = 0;
+let readinessBlockers = [];
 
 const capabilities = [
   ["business_license", ["license_copy"]],
@@ -136,16 +137,17 @@ function readBody(request) {
 }
 
 function applymentDetail() {
+  const ready = readinessBlockers.length === 0;
   return {
     applyment,
     events: [],
     can_edit: true,
-    can_submit: true,
+    can_submit: ready,
     available_actions: [],
     submission_readiness: {
-      ready: true,
-      review_ready: true,
-      blockers: [],
+      ready,
+      review_ready: ready,
+      blockers: readinessBlockers,
     },
   };
 }
@@ -166,6 +168,18 @@ const server = createServer(async (request, response) => {
     startedSaves = [];
     committedSaves = [];
     nextSaveDelayMs = 0;
+    readinessBlockers = [];
+    sendJson(response, 200, { success: true });
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    url.pathname === "/__test/readiness"
+  ) {
+    const body = JSON.parse(await readBody(request) || "{}");
+    readinessBlockers = Array.isArray(body.blockers)
+      ? structuredClone(body.blockers)
+      : [];
     sendJson(response, 200, { success: true });
     return;
   }

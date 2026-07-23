@@ -5,6 +5,7 @@ import {
   type ApplymentMaterialState,
 } from "./finance-wechat-pay-applyment-flow-model";
 import {
+  getApplymentBlockerStages,
   getReachableStage,
   isApplymentStageReachable,
 } from "./finance-wechat-pay-applyment-stage-reachability";
@@ -48,6 +49,29 @@ const legalAttachments = [
 ] as const;
 
 describe("wechat pay applyment stage reachability", () => {
+  test("derives canonical stages from every readiness blocker class", () => {
+    expect(getApplymentBlockerStages([
+      {
+        code: "APPLYMENT_REQUIRED_ATTACHMENT_MISSING",
+        category: "license_copy",
+      },
+      {
+        code: "APPLYMENT_REQUIRED_FIELD_MISSING",
+        field: "sensitive.identity_number",
+      },
+      {
+        code: "APPLYMENT_REQUIRED_FIELD_MISSING",
+        field: "merchant_short_name",
+      },
+      { code: "APPLYMENT_FUTURE_BLOCKER" },
+    ])).toEqual([
+      "materials",
+      "recognition",
+      "supplement",
+      "submit",
+    ]);
+  });
+
   test("relocks submit when a required attachment is deleted", () => {
     const completeStates = buildInitialMaterialStates(legalAttachments);
     const currentStage = (

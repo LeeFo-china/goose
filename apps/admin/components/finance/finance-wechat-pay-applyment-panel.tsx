@@ -41,7 +41,7 @@ import {
   type WechatPayApplymentDetailData,
   type WechatPayApplymentDetailResult,
 } from "./finance-wechat-pay-applyment-shared";
-import { getInitialApplymentStage } from "./finance-wechat-pay-applyment-stage-reachability";
+import { getApplymentBlockerStages, getInitialApplymentStage } from "./finance-wechat-pay-applyment-stage-reachability";
 import { FinanceWechatPayApplymentWorkflow } from "./finance-wechat-pay-applyment-workflow";
 import { useWechatPayApplymentAutosave } from "./use-wechat-pay-applyment-autosave";
 import { useWechatPayApplymentMaterials } from "./use-wechat-pay-applyment-materials";
@@ -87,7 +87,7 @@ export function FinanceWechatPayApplymentPanel({
     contactType,
     attachments: initialAttachments,
     materialStates: buildInitialMaterialStates(initialAttachments),
-    blockerStages: [],
+    blockerStages: getApplymentBlockerStages(data.submission_readiness?.blockers ?? []),
   });
   const [error, setError] = useState(data.error || "");
   const [pending, startTransition] = useTransition();
@@ -390,6 +390,7 @@ export function FinanceWechatPayApplymentPanel({
           ocrReviewCategory={ocrReviewCategory}
           reviewConfirmed={reviewConfirmed}
           reviewSnapshot={reviewSnapshot}
+          submissionReadiness={autosave.currentDetail.submission_readiness}
           pending={pending}
           editable={editable}
           canSubmit={canSubmit}

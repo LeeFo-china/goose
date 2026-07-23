@@ -1,13 +1,22 @@
 "use client";
 
-import { PencilLine } from "lucide-react";
+import { ChevronRight, CircleAlert, PencilLine } from "lucide-react";
 
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Separator } from "@/components/ui/separator";
 
+import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
+import type {
+  WechatPayApplymentReadinessItem,
+} from "./finance-wechat-pay-applyment-readiness";
 import {
   type WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
@@ -37,8 +46,10 @@ export function FinanceWechatPayApplymentReview({
   confirmed,
   disabled,
   navigationDisabled,
+  readinessBlockers,
   onConfirmedChange,
   onNavigate,
+  onStageChange,
 }: {
   review: WechatPayApplymentReviewSnapshot;
   attachments: WechatPayApplymentAttachment[];
@@ -46,8 +57,10 @@ export function FinanceWechatPayApplymentReview({
   confirmed: boolean;
   disabled: boolean;
   navigationDisabled: boolean;
+  readinessBlockers: readonly WechatPayApplymentReadinessItem[];
   onConfirmedChange: (checked: boolean) => void;
   onNavigate: (target: WechatPayApplymentReviewTarget) => void;
+  onStageChange: (stage: ApplymentStageKey) => void;
 }) {
   const requiredCategories = contactType === "SUPER"
     ? [
@@ -80,6 +93,34 @@ export function FinanceWechatPayApplymentReview({
       </div>
 
       <Separator />
+
+      {readinessBlockers.length > 0
+        ? (
+          <Alert className="border-warning/50 bg-warning/5">
+            <CircleAlert />
+            <AlertTitle>
+              还有 {readinessBlockers.length} 项需要处理
+            </AlertTitle>
+            <AlertDescription className="grid gap-1">
+              {readinessBlockers.map((blocker) => (
+                <Button
+                  key={blocker.key}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto w-full justify-between whitespace-normal px-2 py-2 text-left font-normal"
+                  disabled={navigationDisabled}
+                  data-readiness-blocker=""
+                  onClick={() => onStageChange(blocker.targetStage)}
+                >
+                  <span className="min-w-0 break-words">{blocker.label}</span>
+                  <ChevronRight aria-hidden="true" />
+                </Button>
+              ))}
+            </AlertDescription>
+          </Alert>
+        )
+        : null}
 
       <div className="divide-y rounded-md border">
         {REVIEW_SECTIONS.map((section) => (

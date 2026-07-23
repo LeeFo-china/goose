@@ -31,6 +31,59 @@ test.beforeEach(async ({ request }) => {
   expect(response.ok()).toBe(true);
 });
 
+test("集中展示 readiness 阻塞项并定位到首个未完成阶段", async ({
+  page,
+  request,
+}) => {
+  const readinessResponse = await request.post(
+    `${MOCK_BACKEND_URL}/__test/readiness`,
+    {
+      data: {
+        blockers: [
+          {
+            code: "APPLYMENT_REQUIRED_ATTACHMENT_MISSING",
+            category: "legal_representative_id_card_back",
+          },
+          { code: "APPLYMENT_FUTURE_BLOCKER" },
+        ],
+      },
+    },
+  );
+  expect(readinessResponse.ok()).toBe(true);
+
+  await loginAsTenantAdmin(page);
+  await page.goto("/finance/wechat-pay/applyment", {
+    waitUntil: "networkidle",
+  });
+  await expect(stageButton(page, "上传资料")).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+
+  const nextButton = page.getByRole("button", { name: "下一步" });
+  await nextButton.click();
+  await nextButton.click();
+  await nextButton.click();
+
+  await expect(stageButton(page, "确认提交")).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+  const alert = page.getByRole("alert").filter({
+    hasText: "还有 2 项需要处理",
+  });
+  await expect(alert).toContainText("缺少法人身份证国徽面");
+  await expect(alert).toContainText("申请资料尚未满足提交条件");
+
+  await alert.getByRole("button", {
+    name: "缺少法人身份证国徽面",
+  }).click();
+  await expect(stageButton(page, "上传资料")).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+});
+
 test("复核使用实时值、修改后失效，并只定位首个隐藏无效控件", async ({
   page,
 }) => {

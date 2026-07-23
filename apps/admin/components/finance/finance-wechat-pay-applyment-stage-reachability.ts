@@ -5,7 +5,11 @@ import {
   type ApplymentMaterialStateMap,
   type ApplymentStageKey,
 } from "./finance-wechat-pay-applyment-flow-model";
-import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";
+import { presentApplymentBlockers } from "./finance-wechat-pay-applyment-readiness";
+import type {
+  WechatPayApplymentAttachment,
+  WechatPayApplymentPreflightBlocker,
+} from "./finance-wechat-pay-applyment-shared";
 
 type ReachabilityInput = {
   contactType: string;
@@ -19,6 +23,14 @@ export function isApplymentStageReachable(
 ): boolean {
   return APPLYMENT_STAGE_KEYS.indexOf(stage) <=
     APPLYMENT_STAGE_KEYS.indexOf(reachableStage);
+}
+
+export function getApplymentBlockerStages(
+  blockers: readonly WechatPayApplymentPreflightBlocker[],
+): ApplymentStageKey[] {
+  return presentApplymentBlockers(blockers).map(
+    (blocker) => blocker.targetStage,
+  );
 }
 
 export function getReachableStage(

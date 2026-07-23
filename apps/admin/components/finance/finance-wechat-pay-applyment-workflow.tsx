@@ -10,6 +10,7 @@ import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-mode
 import { FinanceWechatPayApplymentMaterialsStage } from "./finance-wechat-pay-applyment-materials-stage";
 import { FinanceWechatPayApplymentOcrReview } from "./finance-wechat-pay-applyment-ocr-review";
 import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
+import { presentApplymentBlockers } from "./finance-wechat-pay-applyment-readiness";
 import type {
   WechatPayApplymentReviewSnapshot,
   WechatPayApplymentReviewTarget,
@@ -18,6 +19,7 @@ import {
   formatWechatPayApplymentTime,
   type WechatPayApplymentAttachmentCategory,
   type WechatPayApplymentRecord,
+  type WechatPayApplymentSubmissionReadiness,
 } from "./finance-wechat-pay-applyment-shared";
 import { FinanceWechatPayApplymentSupplementFields } from "./finance-wechat-pay-applyment-supplement-fields";
 import type { useWechatPayApplymentMaterials } from "./use-wechat-pay-applyment-materials";
@@ -41,6 +43,7 @@ export function FinanceWechatPayApplymentWorkflow({
   ocrReviewCategory,
   reviewConfirmed,
   reviewSnapshot,
+  submissionReadiness,
   pending,
   editable,
   canSubmit,
@@ -67,6 +70,7 @@ export function FinanceWechatPayApplymentWorkflow({
   ocrReviewCategory: WechatPayApplymentAttachmentCategory;
   reviewConfirmed: boolean;
   reviewSnapshot: WechatPayApplymentReviewSnapshot;
+  submissionReadiness?: WechatPayApplymentSubmissionReadiness | null;
   pending: boolean;
   editable: boolean;
   canSubmit: boolean;
@@ -94,6 +98,9 @@ export function FinanceWechatPayApplymentWorkflow({
 }) {
   const disabled = pending || materials.pending || !editable;
   const navigationDisabled = pending || materials.pending;
+  const readinessBlockers = presentApplymentBlockers(
+    submissionReadiness?.blockers ?? [],
+  );
   return (
     <>
       <FinanceWechatPayApplymentFlow
@@ -152,8 +159,10 @@ export function FinanceWechatPayApplymentWorkflow({
             confirmed={reviewConfirmed}
             disabled={disabled}
             navigationDisabled={navigationDisabled}
+            readinessBlockers={readinessBlockers}
             onConfirmedChange={onReviewConfirmedChange}
             onNavigate={onReviewNavigation}
+            onStageChange={onStageChange}
           />
         )}
       />
