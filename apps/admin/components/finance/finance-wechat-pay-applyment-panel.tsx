@@ -32,6 +32,9 @@ import { WechatPayApplymentAttachmentsField } from "./finance-wechat-pay-applyme
 import {
   changeApplymentContactTypeWithRollback,
 } from "./finance-wechat-pay-applyment-contact-type";
+import type {
+  ApplymentAttachmentChangeOptions,
+} from "./finance-wechat-pay-applyment-manual-entry";
 import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
 import {
   runGenerationGuardedSave,
@@ -197,6 +200,14 @@ export function FinanceWechatPayApplymentPanel({
     return { applymentId: detail.applyment?.id };
   }
 
+  async function handleAttachmentsChange(
+    nextAttachments: WechatPayApplymentAttachment[],
+    options?: ApplymentAttachmentChangeOptions,
+  ) {
+    setReviewConfirmed(false);
+    await materials.onChange(nextAttachments, options);
+  }
+
   function changeContactType(value: string) {
     setReviewConfirmed(false);
     void changeApplymentContactTypeWithRollback({
@@ -300,10 +311,7 @@ export function FinanceWechatPayApplymentPanel({
                 onUploaded={materials.onUploaded}
                 onRetrySave={materials.onRetrySave}
                 onRetryRecognition={materials.onRetryRecognition}
-                onChange={async (nextAttachments) => {
-                  setReviewConfirmed(false);
-                  await materials.onChange(nextAttachments);
-                }}
+                onChange={handleAttachmentsChange}
               />
             </div>
           )}

@@ -228,6 +228,34 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(panelSource).toContain("if (!currentApplyment || !editable");
   });
 
+  test("forwards explicit attachment mutation intents through the real panel wiring", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const attachmentSource = readSource(
+      "./finance-wechat-pay-applyment-attachments.tsx",
+    );
+    const handlerStart = panelSource.indexOf(
+      "async function handleAttachmentsChange",
+    );
+    const handlerEnd = panelSource.indexOf(
+      "\n  function changeContactType",
+      handlerStart,
+    );
+    const handlerSource = panelSource.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    expect(handlerSource).toContain(
+      "options?: ApplymentAttachmentChangeOptions",
+    );
+    expect(handlerSource).toContain(
+      "materials.onChange(nextAttachments, options)",
+    );
+    expect(panelSource).toContain("onChange={handleAttachmentsChange}");
+    expect(attachmentSource).toContain(
+      "intent: createApplymentAttachmentMutationIntent(",
+    );
+  });
+
   test("keeps tenant applyment client panel away from server-only request module", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const sharedSource = readSource("./finance-wechat-pay-applyment-shared.ts");
