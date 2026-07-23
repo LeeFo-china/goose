@@ -13,25 +13,24 @@ const applyment = {
 const events = [] as WechatPayApplymentEventRecord[];
 
 describe("buildTenantApplymentDetail", () => {
-  test("uses the loaded applyment and keeps lifecycle readiness separate", async () => {
-    const run = mock(async () => ({ ready: true, blockers: [] }));
+  test("uses only tenant review readiness for the loaded applyment", async () => {
     const runForApplyment = mock(async () => ({
-      ready: false,
-      blockers: [{ code: "APPLYMENT_STATUS_NOT_SUBMITTABLE" }],
+      ready: true,
+      review_ready: true,
+      blockers: [],
     }));
     const result = await buildTenantApplymentDetail({
       applyment,
       canEdit: true,
       repository: { findEvents: async () => events },
-      preflightService: { run, runForApplyment },
+      tenantReadinessService: { runForApplyment },
     });
 
-    expect(run).not.toHaveBeenCalled();
     expect(runForApplyment).toHaveBeenCalledWith(applyment);
     expect(result.submission_readiness).toEqual({
-      ready: false,
+      ready: true,
       review_ready: true,
-      blockers: [{ code: "APPLYMENT_STATUS_NOT_SUBMITTABLE" }],
+      blockers: [],
     });
     expect(result.can_submit).toBe(true);
   });
@@ -41,9 +40,10 @@ describe("buildTenantApplymentDetail", () => {
       applyment,
       canEdit: true,
       repository: { findEvents: async () => events },
-      preflightService: {
-        run: async () => ({
+      tenantReadinessService: {
+        runForApplyment: async () => ({
           ready: false,
+          review_ready: false,
           blockers: [{
             code: "APPLYMENT_REQUIRED_FIELD_MISSING",
             field: "service_phone",
@@ -62,8 +62,12 @@ describe("buildTenantApplymentDetail", () => {
       applyment,
       canEdit: false,
       repository: { findEvents: async () => events },
-      preflightService: {
-        run: async () => ({ ready: true, blockers: [] }),
+      tenantReadinessService: {
+        runForApplyment: async () => ({
+          ready: true,
+          review_ready: true,
+          blockers: [],
+        }),
       },
     });
 

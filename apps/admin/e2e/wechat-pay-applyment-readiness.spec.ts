@@ -39,9 +39,9 @@ test("集中展示 readiness 阻塞项并定位到首个未完成阶段", async 
   expect(defaultDetail.data).toMatchObject({
     can_submit: true,
     submission_readiness: {
-      ready: false,
+      ready: true,
       review_ready: true,
-      blockers: [{ code: "APPLYMENT_STATUS_NOT_SUBMITTABLE" }],
+      blockers: [],
     },
   });
 

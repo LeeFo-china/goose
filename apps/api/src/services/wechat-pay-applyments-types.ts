@@ -2,6 +2,9 @@ import type {
   PlatformPaymentConfigRecord,
   PlatformPaymentProfileCode,
 } from "@/repositories/platform-payment-configs";
+import type {
+  WechatPayApplymentBlockerCode,
+} from "@gooes/domain";
 import type { OcrRecognitionOwnershipRecord } from "@/repositories/ocr-recognitions";
 import type {
   WechatPayApplymentEventInsert,
@@ -144,6 +147,7 @@ export type WechatPayApplymentServiceDependencies = {
   submissionService?: WechatPayApplymentSubmissionPort;
   statusService?: WechatPayApplymentStatusPort;
   preflightService?: WechatPayApplymentPreflightPort;
+  tenantReadinessService?: WechatPayApplymentTenantReviewReadinessPort;
 };
 
 export type WechatPayApplymentOcrRecognitionRepositoryPort = {
@@ -154,48 +158,8 @@ export type WechatPayApplymentOcrRecognitionRepositoryPort = {
   }) => Promise<OcrRecognitionOwnershipRecord[]>;
 };
 
-export type WechatPayApplymentKnownPreflightBlockerCode =
-  | "APPLYMENT_STATUS_NOT_SUBMITTABLE"
-  | "APPLYMENT_SUBMISSION_LEASE_INVALID"
-  | "APPLYMENT_SUBMISSION_IN_PROGRESS"
-  | "APPLYMENT_SENSITIVE_PAYLOAD_MISSING"
-  | "APPLYMENT_REQUIRED_ATTACHMENT_MISSING"
-  | "APPLYMENT_REQUIRED_FIELD_MISSING"
-  | "APPLYMENT_MEDIA_METADATA_INVALID"
-  | "APPLYMENT_MEDIA_CATEGORY_INVALID"
-  | "APPLYMENT_MEDIA_CATEGORY_DUPLICATE"
-  | "APPLYMENT_OBJECT_KEY_INVALID"
-  | "APPLYMENT_MEDIA_TYPE_UNSUPPORTED"
-  | "APPLYMENT_MEDIA_SIZE_INVALID"
-  | "APPLYMENT_MEDIA_TOO_LARGE"
-  | "APPLYMENT_SENSITIVE_PAYLOAD_VERSION_MISMATCH"
-  | "APPLYMENT_SENSITIVE_PAYLOAD_UNREADABLE"
-  | "APPLYMENT_ENTERPRISE_ACCOUNT_TYPE_INVALID"
-  | "APPLYMENT_SETTLEMENT_RULE_INVALID"
-  | "APPLYMENT_ATTACHMENT_OCR_REVIEW_REQUIRED"
-  | "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH"
-  | "APPLYMENT_NOT_FOUND"
-  | "PREFLIGHT_DATA_ACCESS_FAILED"
-  | "PREFLIGHT_INTERNAL_ERROR"
-  | "PLATFORM_PAYMENT_CONFIG_MISSING"
-  | "PLATFORM_PAYMENT_CONFIG_INACTIVE"
-  | "PLATFORM_PAYMENT_CONFIG_NOT_VALIDATED"
-  | "PLATFORM_PAYMENT_MERCHANT_MODE_MISMATCH"
-  | "PLATFORM_PAYMENT_MERCHANT_ID_MISSING"
-  | "PLATFORM_PAYMENT_APP_ID_MISSING"
-  | "PLATFORM_PAYMENT_SECRET_REF_MISSING"
-  | "PLATFORM_PAYMENT_SECRET_BUNDLE_REVISION_MISSING"
-  | "PLATFORM_PAYMENT_SERIAL_NO_MISSING"
-  | "PLATFORM_PAYMENT_CALLBACK_URL_MISSING"
-  | "PLATFORM_PAYMENT_CALLBACK_URL_INVALID"
-  | "PLATFORM_PAYMENT_REQUIRED_CHANNELS_MISSING"
-  | "PLATFORM_PAYMENT_PROFILE_NOT_READY"
-  | "WECHAT_PAY_APPLYMENT_PROFILE_INCOMPLETE"
-  | "WECHAT_PAY_SECRET_REF_REQUIRED"
-  | "WECHAT_PAY_SECRET_BUNDLE_INVALID";
-
 export type WechatPayApplymentPreflightBlocker = {
-  code: WechatPayApplymentKnownPreflightBlockerCode | (string & {});
+  code: WechatPayApplymentBlockerCode;
   field?: string;
   category?: string;
 };
@@ -215,6 +179,12 @@ export type WechatPayApplymentPreflightPort = {
   runForApplyment?: (
     applyment: WechatPayApplymentRecord,
   ) => Promise<WechatPayApplymentPreflightReport>;
+};
+
+export type WechatPayApplymentTenantReviewReadinessPort = {
+  runForApplyment: (
+    applyment: WechatPayApplymentRecord,
+  ) => Promise<WechatPayApplymentSubmissionReadiness>;
 };
 
 export type WechatPayApplymentAvailableAction = {

@@ -207,10 +207,10 @@ async function createService() {
     applymentIdFactory: () => applymentId,
     encryptionRootSecretFactory: () => rootSecret,
     nowFactory: () => now,
-    preflightService: { run: async () => ({ ready: true, blockers: [] }) },
+    preflightService: { run: () => Promise.reject(new Error("formal preflight must not run for tenant detail")) },
+    tenantReadinessService: { runForApplyment: async () => ({ ready: true, review_ready: true, blockers: [] }) },
   });
 }
-
 const createInput = {
   subject_type: "SUBJECT_TYPE_ENTERPRISE" as const,
   merchant_short_name: "晴天装饰",
@@ -257,7 +257,8 @@ describe("WechatPayApplymentService sensitive persistence", () => {
   test("creates a draft with safe projections and encrypted sensitive data", async () => {
     const service = await createService();
     const result = await service.createDraft(authContext, createInput);
-    expect(result.submission_readiness).toBeDefined();
+    expect(result.submission_readiness).toEqual({ ready: true, review_ready: true, blockers: [] });
+    expect(result.can_submit).toBe(true);
     const insert = createApplyment.mock.calls[0]?.[0];
     expect(insert).toEqual(expect.objectContaining({
       id: applymentId,
@@ -407,7 +408,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     expect(patch).not.toHaveProperty("has_sensitive_payload");
     expect(insertEvent).not.toHaveBeenCalled();
   });
-
   test("fails closed when a flagged sensitive payload is missing ciphertext", async () => {
     findSensitivePayloadById.mockImplementationOnce(async () => ({
       id: applymentId,

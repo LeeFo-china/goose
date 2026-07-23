@@ -300,9 +300,8 @@ async function createService() {
       findByIdsForTenant: findOcrRecognitionsByIds,
     },
     nowFactory,
-    preflightService: {
-      run: async () => ({ ready: true, blockers: [] }),
-    },
+    preflightService: { run: async () => ({ ready: true, blockers: [] }) },
+    tenantReadinessService: { runForApplyment: async () => ({ ready: true, review_ready: true, blockers: [] }) },
   });
 }
 describe("WechatPayApplymentService", () => {

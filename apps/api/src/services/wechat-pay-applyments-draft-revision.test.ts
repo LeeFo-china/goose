@@ -67,6 +67,14 @@ async function createHarness(current: WechatPayApplymentRecord) {
     id: "44444444-4444-4444-8444-444444444444",
   }) as never);
   const findSensitivePayloadById = mock(async () => null);
+  const runFormalPreflight = mock(async () => {
+    throw new Error("formal preflight must not run for tenant detail");
+  });
+  const runTenantReadiness = mock(async () => ({
+    ready: true,
+    review_ready: true,
+    blockers: [],
+  }));
   const { WechatPayApplymentService } = await import("./wechat-pay-applyments");
   const service = new WechatPayApplymentService({
     repository: {
@@ -98,13 +106,16 @@ async function createHarness(current: WechatPayApplymentRecord) {
       assertTenantContext: () => tenantId,
       hasPermission: () => true,
     },
-    preflightService: { run: async () => ({ ready: true, blockers: [] }) },
+    preflightService: { run: runFormalPreflight },
+    tenantReadinessService: { runForApplyment: runTenantReadiness },
   });
   return {
     service,
     updateTenantDraftAtomically,
     insertEvent,
     findSensitivePayloadById,
+    runFormalPreflight,
+    runTenantReadiness,
   };
 }
 
@@ -125,6 +136,10 @@ describe("WechatPayApplymentService draft revision", () => {
       merchant_short_name: "revision-4",
     });
     expect(result.submission_readiness).toBeDefined();
+    expect(harness.runFormalPreflight).not.toHaveBeenCalled();
+    expect(harness.runTenantReadiness).toHaveBeenCalledWith(
+      expect.objectContaining({ draft_revision: 4 }),
+    );
     expect(harness.updateTenantDraftAtomically).not.toHaveBeenCalled();
     expect(harness.findSensitivePayloadById).not.toHaveBeenCalled();
     expect(harness.insertEvent).not.toHaveBeenCalled();

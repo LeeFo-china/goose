@@ -1,8 +1,11 @@
+import {
+  isWechatPayApplymentKnownBlockerCode,
+  type WechatPayApplymentKnownBlockerCode,
+} from "@gooes/domain";
 import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
 import {
   getWechatPayApplymentAttachmentCategoryLabel,
   type WechatPayApplymentAttachmentCategory,
-  type WechatPayApplymentKnownPreflightBlockerCode,
   type WechatPayApplymentPreflightBlocker,
   WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORIES,
 } from "./finance-wechat-pay-applyment-shared";
@@ -162,85 +165,6 @@ const ATTACHMENT_CATEGORIES = new Set<string>(
   WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORIES,
 );
 
-const FIXED_CODE_PRESENTATIONS = {
-  APPLYMENT_STATUS_NOT_SUBMITTABLE: {
-    label: "当前申请状态暂不能向微信提交",
-    targetStage: "submit",
-  },
-  APPLYMENT_SUBMISSION_LEASE_INVALID: {
-    label: "申请提交状态异常，请刷新后重试",
-    targetStage: "submit",
-  },
-  APPLYMENT_SUBMISSION_IN_PROGRESS: {
-    label: "申请正在提交，请稍候刷新",
-    targetStage: "submit",
-  },
-  APPLYMENT_MEDIA_METADATA_INVALID: {
-    label: "申请附件信息不完整，请重新上传",
-    targetStage: "materials",
-  },
-  APPLYMENT_MEDIA_CATEGORY_INVALID: {
-    label: "申请附件类型无法识别，请重新上传",
-    targetStage: "materials",
-  },
-  APPLYMENT_ENTERPRISE_ACCOUNT_TYPE_INVALID: {
-    label: "企业主体须选择对公结算账户",
-    targetStage: "supplement",
-  },
-  APPLYMENT_SETTLEMENT_RULE_INVALID: {
-    label: "经营行业与结算规则不匹配，请重新选择",
-    targetStage: "supplement",
-  },
-  APPLYMENT_SENSITIVE_PAYLOAD_MISSING: {
-    label: "请完整核对法人、联系人和结算账户信息",
-    targetStage: "recognition",
-  },
-  APPLYMENT_SENSITIVE_PAYLOAD_VERSION_MISMATCH: {
-    label: "法人、联系人或结算账户信息已变化，请重新核对",
-    targetStage: "recognition",
-  },
-  APPLYMENT_SENSITIVE_PAYLOAD_UNREADABLE: {
-    label: "法人、联系人或结算账户信息无法读取，请重新填写",
-    targetStage: "recognition",
-  },
-  APPLYMENT_NOT_FOUND: {
-    label: "申请资料不存在或已失效，请刷新后重试",
-    targetStage: "submit",
-  },
-  PREFLIGHT_DATA_ACCESS_FAILED: {
-    label: "暂时无法核验申请资料，请稍后重试",
-    targetStage: "submit",
-  },
-  PREFLIGHT_INTERNAL_ERROR: {
-    label: "暂时无法核验申请资料，请稍后重试",
-    targetStage: "submit",
-  },
-} as const satisfies Partial<
-  Record<
-    WechatPayApplymentKnownPreflightBlockerCode,
-    WechatPayApplymentPresentedBlocker
-  >
->;
-
-const PLATFORM_BLOCKER_CODES = new Set<string>([
-  "PLATFORM_PAYMENT_CONFIG_MISSING",
-  "PLATFORM_PAYMENT_CONFIG_INACTIVE",
-  "PLATFORM_PAYMENT_CONFIG_NOT_VALIDATED",
-  "PLATFORM_PAYMENT_MERCHANT_MODE_MISMATCH",
-  "PLATFORM_PAYMENT_MERCHANT_ID_MISSING",
-  "PLATFORM_PAYMENT_APP_ID_MISSING",
-  "PLATFORM_PAYMENT_SECRET_REF_MISSING",
-  "PLATFORM_PAYMENT_SECRET_BUNDLE_REVISION_MISSING",
-  "PLATFORM_PAYMENT_SERIAL_NO_MISSING",
-  "PLATFORM_PAYMENT_CALLBACK_URL_MISSING",
-  "PLATFORM_PAYMENT_CALLBACK_URL_INVALID",
-  "PLATFORM_PAYMENT_REQUIRED_CHANNELS_MISSING",
-  "PLATFORM_PAYMENT_PROFILE_NOT_READY",
-  "WECHAT_PAY_APPLYMENT_PROFILE_INCOMPLETE",
-  "WECHAT_PAY_SECRET_REF_REQUIRED",
-  "WECHAT_PAY_SECRET_BUNDLE_INVALID",
-]);
-
 function getAttachmentLabel(category?: string): string {
   return getWechatPayApplymentAttachmentCategoryLabel(
     category && ATTACHMENT_CATEGORIES.has(category)
@@ -256,71 +180,132 @@ function presentMissingAttachment(
   return { label: `缺少${label}`, targetStage: "materials" };
 }
 
+type BlockerPresenter = (
+  blocker: WechatPayApplymentPreflightBlocker,
+) => WechatPayApplymentPresentedBlocker;
+
+function fixedPresenter(
+  presentation: WechatPayApplymentPresentedBlocker,
+): BlockerPresenter {
+  return () => presentation;
+}
+
+const platformPresenter = fixedPresenter({
+  label: "平台微信支付配置尚未就绪，请联系平台管理员",
+  targetStage: "submit",
+});
+
+const BLOCKER_PRESENTERS = {
+  APPLYMENT_SENSITIVE_PAYLOAD_MISSING: fixedPresenter({
+    label: "请完整核对法人、联系人和结算账户信息",
+    targetStage: "recognition",
+  }),
+  APPLYMENT_REQUIRED_ATTACHMENT_MISSING: (blocker) =>
+    presentMissingAttachment(blocker.category),
+  APPLYMENT_REQUIRED_FIELD_MISSING: (blocker) =>
+    blocker.field
+      ? REQUIRED_FIELD_PRESENTATIONS[blocker.field] ?? DEFAULT_BLOCKER
+      : DEFAULT_BLOCKER,
+  APPLYMENT_MEDIA_METADATA_INVALID: fixedPresenter({
+    label: "申请附件信息不完整，请重新上传",
+    targetStage: "materials",
+  }),
+  APPLYMENT_MEDIA_CATEGORY_INVALID: fixedPresenter({
+    label: "申请附件类型无法识别，请重新上传",
+    targetStage: "materials",
+  }),
+  APPLYMENT_MEDIA_CATEGORY_DUPLICATE: (blocker) => ({
+    label: `${getAttachmentLabel(blocker.category)}请仅保留一份`,
+    targetStage: "materials",
+  }),
+  APPLYMENT_OBJECT_KEY_INVALID: (blocker) => ({
+    label: `${getAttachmentLabel(blocker.category)}归属异常，请重新上传`,
+    targetStage: "materials",
+  }),
+  APPLYMENT_MEDIA_TYPE_UNSUPPORTED: (blocker) => ({
+    label: `${getAttachmentLabel(blocker.category)}格式不支持，请上传 JPG、PNG 或 BMP`,
+    targetStage: "materials",
+  }),
+  APPLYMENT_MEDIA_SIZE_INVALID: (blocker) => ({
+    label: `${getAttachmentLabel(blocker.category)}文件大小无效，请重新上传`,
+    targetStage: "materials",
+  }),
+  APPLYMENT_MEDIA_TOO_LARGE: (blocker) => ({
+    label: `${getAttachmentLabel(blocker.category)}超过 2 MB，请压缩后重新上传`,
+    targetStage: "materials",
+  }),
+  APPLYMENT_SENSITIVE_PAYLOAD_VERSION_MISMATCH: fixedPresenter({
+    label: "法人、联系人或结算账户信息已变化，请重新核对",
+    targetStage: "recognition",
+  }),
+  APPLYMENT_SENSITIVE_PAYLOAD_UNREADABLE: fixedPresenter({
+    label: "法人、联系人或结算账户信息无法读取，请重新填写",
+    targetStage: "recognition",
+  }),
+  APPLYMENT_ENTERPRISE_ACCOUNT_TYPE_INVALID: fixedPresenter({
+    label: "企业主体须选择对公结算账户",
+    targetStage: "supplement",
+  }),
+  APPLYMENT_SETTLEMENT_RULE_INVALID: fixedPresenter({
+    label: "经营行业与结算规则不匹配，请重新选择",
+    targetStage: "supplement",
+  }),
+  APPLYMENT_ATTACHMENT_OCR_REVIEW_REQUIRED: (blocker) => ({
+    label: `请核对${getAttachmentLabel(blocker.category)}识别结果`,
+    targetStage: "recognition",
+  }),
+  APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH: (blocker) => ({
+    label: `${getAttachmentLabel(blocker.category)}识别记录与当前申请不一致，请重新识别`,
+    targetStage: "recognition",
+  }),
+  PREFLIGHT_DATA_ACCESS_FAILED: fixedPresenter({
+    label: "暂时无法核验申请资料，请稍后重试",
+    targetStage: "submit",
+  }),
+  APPLYMENT_STATUS_NOT_SUBMITTABLE: fixedPresenter({
+    label: "当前申请状态暂不能向微信提交",
+    targetStage: "submit",
+  }),
+  APPLYMENT_SUBMISSION_LEASE_INVALID: fixedPresenter({
+    label: "申请提交状态异常，请刷新后重试",
+    targetStage: "submit",
+  }),
+  APPLYMENT_SUBMISSION_IN_PROGRESS: fixedPresenter({
+    label: "申请正在提交，请稍候刷新",
+    targetStage: "submit",
+  }),
+  APPLYMENT_NOT_FOUND: fixedPresenter({
+    label: "申请资料不存在或已失效，请刷新后重试",
+    targetStage: "submit",
+  }),
+  PREFLIGHT_INTERNAL_ERROR: fixedPresenter({
+    label: "暂时无法核验申请资料，请稍后重试",
+    targetStage: "submit",
+  }),
+  PLATFORM_PAYMENT_CONFIG_MISSING: platformPresenter,
+  PLATFORM_PAYMENT_CONFIG_INACTIVE: platformPresenter,
+  PLATFORM_PAYMENT_CONFIG_NOT_VALIDATED: platformPresenter,
+  PLATFORM_PAYMENT_MERCHANT_MODE_MISMATCH: platformPresenter,
+  PLATFORM_PAYMENT_MERCHANT_ID_MISSING: platformPresenter,
+  PLATFORM_PAYMENT_APP_ID_MISSING: platformPresenter,
+  PLATFORM_PAYMENT_SECRET_REF_MISSING: platformPresenter,
+  PLATFORM_PAYMENT_SECRET_BUNDLE_REVISION_MISSING: platformPresenter,
+  PLATFORM_PAYMENT_SERIAL_NO_MISSING: platformPresenter,
+  PLATFORM_PAYMENT_CALLBACK_URL_MISSING: platformPresenter,
+  PLATFORM_PAYMENT_CALLBACK_URL_INVALID: platformPresenter,
+  PLATFORM_PAYMENT_REQUIRED_CHANNELS_MISSING: platformPresenter,
+  PLATFORM_PAYMENT_PROFILE_NOT_READY: platformPresenter,
+  WECHAT_PAY_APPLYMENT_PROFILE_INCOMPLETE: platformPresenter,
+  WECHAT_PAY_SECRET_REF_REQUIRED: platformPresenter,
+  WECHAT_PAY_SECRET_BUNDLE_INVALID: platformPresenter,
+} satisfies Record<WechatPayApplymentKnownBlockerCode, BlockerPresenter>;
+
 export function presentApplymentBlocker(
   blocker: WechatPayApplymentPreflightBlocker,
 ): WechatPayApplymentPresentedBlocker {
-  if (blocker.code === "APPLYMENT_REQUIRED_ATTACHMENT_MISSING") {
-    return presentMissingAttachment(blocker.category);
-  }
-  if (blocker.code === "APPLYMENT_REQUIRED_FIELD_MISSING") {
-    return blocker.field
-      ? REQUIRED_FIELD_PRESENTATIONS[blocker.field] ?? DEFAULT_BLOCKER
-      : DEFAULT_BLOCKER;
-  }
-  const attachmentLabel = getAttachmentLabel(blocker.category);
-  if (blocker.code === "APPLYMENT_MEDIA_CATEGORY_DUPLICATE") {
-    return {
-      label: `${attachmentLabel}请仅保留一份`,
-      targetStage: "materials",
-    };
-  }
-  if (blocker.code === "APPLYMENT_OBJECT_KEY_INVALID") {
-    return {
-      label: `${attachmentLabel}归属异常，请重新上传`,
-      targetStage: "materials",
-    };
-  }
-  if (blocker.code === "APPLYMENT_MEDIA_TYPE_UNSUPPORTED") {
-    return {
-      label: `${attachmentLabel}格式不支持，请上传 JPG、PNG 或 BMP`,
-      targetStage: "materials",
-    };
-  }
-  if (blocker.code === "APPLYMENT_MEDIA_SIZE_INVALID") {
-    return {
-      label: `${attachmentLabel}文件大小无效，请重新上传`,
-      targetStage: "materials",
-    };
-  }
-  if (blocker.code === "APPLYMENT_MEDIA_TOO_LARGE") {
-    return {
-      label: `${attachmentLabel}超过 2 MB，请压缩后重新上传`,
-      targetStage: "materials",
-    };
-  }
-  if (blocker.code === "APPLYMENT_ATTACHMENT_OCR_REVIEW_REQUIRED") {
-    return {
-      label: `请核对${attachmentLabel}识别结果`,
-      targetStage: "recognition",
-    };
-  }
-  if (blocker.code === "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH") {
-    return {
-      label: `${attachmentLabel}识别记录与当前申请不一致，请重新识别`,
-      targetStage: "recognition",
-    };
-  }
-  if (PLATFORM_BLOCKER_CODES.has(blocker.code)) {
-    return {
-      label: "平台微信支付配置尚未就绪，请联系平台管理员",
-      targetStage: "submit",
-    };
-  }
-  const fixed = FIXED_CODE_PRESENTATIONS[
-    blocker.code as keyof typeof FIXED_CODE_PRESENTATIONS
-  ];
-  if (fixed) return fixed;
-  return DEFAULT_BLOCKER;
+  return isWechatPayApplymentKnownBlockerCode(blocker.code)
+    ? BLOCKER_PRESENTERS[blocker.code](blocker)
+    : DEFAULT_BLOCKER;
 }
 
 export function presentApplymentBlockers(

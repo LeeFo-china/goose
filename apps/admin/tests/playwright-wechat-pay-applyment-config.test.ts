@@ -9,9 +9,9 @@ function read(relativePath: string) {
 
 describe("wechat pay applyment Playwright assembly", () => {
   test("keeps the mock-only spec out of the default E2E suite", () => {
-    expect(read("playwright.config.ts")).toContain(
-      'testIgnore: "**/wechat-pay-applyment-review.spec.ts"',
-    );
+    const source = read("playwright.config.ts");
+    expect(source).toContain('"**/wechat-pay-applyment-readiness.spec.ts"');
+    expect(source).toContain('"**/wechat-pay-applyment-review.spec.ts"');
   });
 
   test("provides a dedicated config with isolated frontend and mock servers", () => {
@@ -23,9 +23,8 @@ describe("wechat pay applyment Playwright assembly", () => {
     if (!existsSync(configUrl)) return;
 
     const source = read("playwright.wechat-pay-applyment.config.ts");
-    expect(source).toContain(
-      'testMatch: "wechat-pay-applyment-review.spec.ts"',
-    );
+    expect(source).toContain('"wechat-pay-applyment-readiness.spec.ts"');
+    expect(source).toContain('"wechat-pay-applyment-review.spec.ts"');
     expect(source).toContain(
       'command: "node e2e/wechat-pay-applyment-mock-backend.mjs"',
     );

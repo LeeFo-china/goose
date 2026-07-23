@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { WECHAT_PAY_APPLYMENT_KNOWN_BLOCKER_CODES } from "@gooes/domain";
 import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
 import type { WechatPayApplymentPreflightBlocker } from "./finance-wechat-pay-applyment-shared";
 import { presentApplymentBlocker } from "./finance-wechat-pay-applyment-readiness";
@@ -11,6 +12,21 @@ type Case = readonly [
 
 const category = "legal_representative_id_card_back";
 const cases: readonly Case[] = [
+  [
+    { code: "APPLYMENT_SENSITIVE_PAYLOAD_MISSING" },
+    "请完整核对法人、联系人和结算账户信息",
+    "recognition",
+  ],
+  [
+    { code: "APPLYMENT_REQUIRED_ATTACHMENT_MISSING", category },
+    "缺少法人身份证国徽面",
+    "materials",
+  ],
+  [
+    { code: "APPLYMENT_REQUIRED_FIELD_MISSING", field: "service_phone" },
+    "请填写客服电话",
+    "supplement",
+  ],
   [
     { code: "APPLYMENT_STATUS_NOT_SUBMITTABLE" },
     "当前申请状态暂不能向微信提交",
@@ -108,26 +124,23 @@ const cases: readonly Case[] = [
   ],
 ];
 
-const platformCodes = [
-  "PLATFORM_PAYMENT_CONFIG_MISSING",
-  "PLATFORM_PAYMENT_CONFIG_INACTIVE",
-  "PLATFORM_PAYMENT_CONFIG_NOT_VALIDATED",
-  "PLATFORM_PAYMENT_MERCHANT_MODE_MISMATCH",
-  "PLATFORM_PAYMENT_MERCHANT_ID_MISSING",
-  "PLATFORM_PAYMENT_APP_ID_MISSING",
-  "PLATFORM_PAYMENT_SECRET_REF_MISSING",
-  "PLATFORM_PAYMENT_SECRET_BUNDLE_REVISION_MISSING",
-  "PLATFORM_PAYMENT_SERIAL_NO_MISSING",
-  "PLATFORM_PAYMENT_CALLBACK_URL_MISSING",
-  "PLATFORM_PAYMENT_CALLBACK_URL_INVALID",
-  "PLATFORM_PAYMENT_REQUIRED_CHANNELS_MISSING",
-  "PLATFORM_PAYMENT_PROFILE_NOT_READY",
-  "WECHAT_PAY_APPLYMENT_PROFILE_INCOMPLETE",
-  "WECHAT_PAY_SECRET_REF_REQUIRED",
-  "WECHAT_PAY_SECRET_BUNDLE_INVALID",
-] as const;
+const platformCodes = WECHAT_PAY_APPLYMENT_KNOWN_BLOCKER_CODES.filter(
+  (code) =>
+    code.startsWith("PLATFORM_PAYMENT_") ||
+    code.startsWith("WECHAT_PAY_"),
+);
 
 describe("presentApplymentBlocker actual backend codes", () => {
+  test("covers every code from the shared blocker contract", () => {
+    const coveredCodes = new Set([
+      ...cases.map(([blocker]) => blocker.code),
+      ...platformCodes,
+    ]);
+    expect(coveredCodes).toEqual(
+      new Set(WECHAT_PAY_APPLYMENT_KNOWN_BLOCKER_CODES),
+    );
+  });
+
   for (const [blocker, label, targetStage] of cases) {
     test(`maps ${blocker.code}`, () => {
       expect(presentApplymentBlocker(blocker)).toEqual({ label, targetStage });

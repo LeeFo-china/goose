@@ -1,17 +1,16 @@
 import type { WechatPayApplymentRecord } from "@/repositories/wechat-pay-applyments";
 import { sanitizeApplymentRecord } from "@/services/wechat-pay-applyment-draft";
-import { loadWechatPayApplymentSubmissionReadiness } from "@/services/wechat-pay-applyment-platform-readiness";
 import type {
   ApplymentDetailResult,
-  WechatPayApplymentPreflightPort,
   WechatPayApplymentRepositoryPort,
+  WechatPayApplymentTenantReviewReadinessPort,
 } from "@/services/wechat-pay-applyments-types";
 
 type TenantApplymentDetailInput = {
   applyment: WechatPayApplymentRecord | null;
   canEdit: boolean;
   repository: Pick<WechatPayApplymentRepositoryPort, "findEvents">;
-  preflightService: WechatPayApplymentPreflightPort;
+  tenantReadinessService: WechatPayApplymentTenantReviewReadinessPort;
 };
 
 export async function buildTenantApplymentDetail(
@@ -33,10 +32,7 @@ export async function buildTenantApplymentDetail(
       tenantId: applyment.tenant_id,
       applymentId: applyment.id,
     }),
-    loadWechatPayApplymentSubmissionReadiness(
-      input.preflightService,
-      applyment,
-    ),
+    input.tenantReadinessService.runForApplyment(applyment),
   ]);
   return {
     applyment: sanitizeApplymentRecord(applyment),

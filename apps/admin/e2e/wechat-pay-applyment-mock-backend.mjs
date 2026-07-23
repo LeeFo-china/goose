@@ -78,7 +78,7 @@ const initialApplyment = {
   settlement_bank_name: "测试银行",
   settlement_bank_full_name: "测试银行营业部",
   settlement_bank_branch_id: "123456789012",
-  settlement_account_summary: null,
+  settlement_account_summary: "测试银行营业部 6222••••1234",
   settlement_id: "716",
   qualification_type: "零售批发",
   business_scene_description: "线下家装服务",
@@ -97,14 +97,7 @@ let applyment = structuredClone(initialApplyment);
 let startedSaves = [];
 let committedSaves = [];
 let nextSaveDelayMs = 0;
-const defaultReadinessBlockers = [
-  { code: "APPLYMENT_STATUS_NOT_SUBMITTABLE" },
-];
-const nonReviewBlockerCodes = new Set([
-  "APPLYMENT_STATUS_NOT_SUBMITTABLE",
-  "APPLYMENT_SUBMISSION_LEASE_INVALID",
-  "APPLYMENT_SUBMISSION_IN_PROGRESS",
-]);
+const defaultReadinessBlockers = [];
 let readinessBlockers = structuredClone(defaultReadinessBlockers);
 
 const capabilities = [
@@ -146,11 +139,6 @@ function readBody(request) {
 
 function applymentDetail() {
   const ready = readinessBlockers.length === 0;
-  const reviewReady = !readinessBlockers.some((blocker) =>
-    !nonReviewBlockerCodes.has(blocker.code) &&
-    !blocker.code.startsWith("PLATFORM_PAYMENT_") &&
-    !blocker.code.startsWith("WECHAT_PAY_")
-  );
   const canEdit = ["draft", "rejected", "wechat_editing"].includes(
     applyment.status,
   );
@@ -158,11 +146,11 @@ function applymentDetail() {
     applyment,
     events: [],
     can_edit: canEdit,
-    can_submit: canEdit && reviewReady,
+    can_submit: canEdit && ready,
     available_actions: [],
     submission_readiness: {
       ready,
-      review_ready: reviewReady,
+      review_ready: ready,
       blockers: readinessBlockers,
     },
   };
