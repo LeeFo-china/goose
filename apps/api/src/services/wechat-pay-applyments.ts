@@ -193,6 +193,7 @@ export class WechatPayApplymentService {
     const current = await this.getRequiredApplyment({ id, tenantId });
     this.assertEditable(current);
 
+    const now = this.nowFactory();
     const sensitivePatch = await buildSensitivePayloadUpdate({
       current,
       input,
@@ -202,21 +203,29 @@ export class WechatPayApplymentService {
         tenantId,
       }),
       rootSecret: this.encryptionRootSecretFactory(),
-      now: this.nowFactory(),
+      now,
     });
-    const audit = buildDraftAuditDecision({ current, input });
+    const patch: WechatPayApplymentUpdate = {
+      ...buildTenantApplymentSafePatch(input),
+      ...sensitivePatch,
+      status: "draft",
+      applyment_state: "draft",
+      rejected_reason: null,
+      rejected_at: null,
+      updated_by_employee_id: employeeId,
+    };
+    const audit = buildDraftAuditDecision({
+      current,
+      input,
+      serverPatch: patch,
+    });
+    if (audit.metadata.changed_fields.length === 0) {
+      return this.toDetail(authContext, current);
+    }
     const updated = await this.repository.updateApplyment({
       id,
       tenantId,
-      patch: {
-        ...buildTenantApplymentSafePatch(input),
-        ...sensitivePatch,
-        status: "draft",
-        applyment_state: "draft",
-        rejected_reason: null,
-        rejected_at: null,
-        updated_by_employee_id: employeeId,
-      },
+      patch,
     });
     if (audit.should_audit) {
       await this.recordEvent({

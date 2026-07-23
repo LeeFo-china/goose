@@ -744,7 +744,9 @@ const sensitiveReplacementFields = getSensitiveReplacementFields(input);
 applyment event 不复制 OCR 原始结果。
 
 `updateDraft` 必须先比较 current 安全投影与 patch，并对 attachments 做按对象字段的
-结构化比较。仅 `remark`、`business_scene_description` 这类不影响主体、联系人、
+结构化比较。服务端先构造完整 patch，`status`、`applyment_state`、`rejected_at`、
+`rejected_reason` 等状态重置也必须参与差异和审计；draft 无任何实际变化时直接返回当前
+detail，不执行 repository update。仅 `remark`、`business_scene_description` 这类不影响主体、联系人、
 证照或结算的低风险叙述字段允许 autosave 抑制事件；其余实际变化和全部敏感替换始终
 审计，不能信任客户端 `draft_update_source` 关闭事件。附件来源只从实际变化的附件
 派生：非 confirmed 转 confirmed 为 `ocr_confirm`，转 manual 为 `manual_entry`，
@@ -815,9 +817,10 @@ this.assertEditable(current);
 RPC 对申请行加锁并用 `expected_updated_at` 防止内容校验后的并发草稿覆盖，事件 metadata 只记录
 `{ idempotency_key: input.idempotency_key }`。已提交或进入后续状态且
 `submitted_at` 非空时，同 key 重试返回幂等结果，不重复事件；editable 状态仍可重新提交。
-`wechat-pay-applyments.test.ts` 和 repository migration contract test 覆盖并发重试只产生
-一次状态转换、一次事件。这里的提交只改变平台审核状态，不调用微信进件；正式微信进件
-继续使用既有独立幂等机制。
+`wechat-pay-applyments.test.ts` 和 repository migration contract test 只覆盖 service
+编排和 SQL 静态契约，不能作为真实数据库并发证明。migration 应用后的双连接并发与
+事务回滚验证列入 Task 9 发布门禁。这里的提交只改变平台审核状态，不调用微信进件；
+正式微信进件继续使用既有独立幂等机制。
 
 - [ ] **Step 11: 运行 API 定向测试**
 
@@ -2673,7 +2676,21 @@ supabase migration list
 
 Expected: Local/Remote 对齐。不得直接在远端执行 ALTER TABLE。
 
-- [ ] **Step 4: 启动隔离服务做浏览器 smoke**
+- [ ] **Step 4: 用真实数据库验证原子提交并发与回滚**
+
+仅在上述 migration 已应用到受控测试数据库后执行，必须使用两个独立数据库连接同时
+调用 `submit_tenant_wechat_pay_applyment`，不能用 repository mock 代替。验证：
+
+1. 两个相同幂等 key 的并发调用只发生一次 `draft/rejected/wechat_editing -> submitted`
+   状态转换。
+2. `tenant_wechat_pay_applyment_events` 只产生一条 `submitted` 事件。
+3. 在受控事务中令事件插入失败时，RPC 整体失败且 applyment 状态、`submitted_at` 均回滚。
+4. 清理测试数据后再次核对 applyment 和 event 计数，保存连接级执行日志作为发布证据。
+
+当前 Docker 不可用时只保留此门禁，不运行远端 migration，也不得以现有 mock 并发测试
+宣称真实数据库验证通过。
+
+- [ ] **Step 5: 启动隔离服务做浏览器 smoke**
 
 在实施 worktree 使用不同端口，不影响 main 工作区服务：
 

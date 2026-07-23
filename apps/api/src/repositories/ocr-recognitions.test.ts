@@ -134,6 +134,9 @@ describe('OcrRecognitionRepository', () => {
       },
       { method: 'limit', args: [20] },
     ]));
+    const select = traces[0]?.calls.find((call) => call.method === 'select');
+    expect(select?.args[0]).toContain('scene');
+    expect(select?.args[0]).toContain('document_type');
   });
 
   test('uses exact server pagination and excludes ciphertext from platform list', async () => {

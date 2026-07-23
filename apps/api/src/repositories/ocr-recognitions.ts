@@ -14,6 +14,8 @@ export type OcrRecognitionOwnershipRecord = Pick<
   OcrRecognitionRow,
   | "id"
   | "tenant_id"
+  | "scene"
+  | "document_type"
   | "file_object_id"
   | "subject_type"
   | "subject_id"
@@ -273,7 +275,9 @@ export class OcrRecognitionRepository {
     if (ids.length === 0) return [];
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
-      .select("id,tenant_id,file_object_id,subject_type,subject_id,status")
+      .select(
+        "id,tenant_id,scene,document_type,file_object_id,subject_type,subject_id,status",
+      )
       .eq("tenant_id", input.tenantId)
       .in("id", ids)
       .limit(limit);

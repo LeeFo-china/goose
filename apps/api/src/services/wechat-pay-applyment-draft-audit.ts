@@ -1,5 +1,6 @@
 import type {
   WechatPayApplymentRecord,
+  WechatPayApplymentUpdate,
 } from "@/repositories/wechat-pay-applyments";
 import type {
   UpdateWechatPayApplymentInput,
@@ -14,6 +15,19 @@ const LOW_RISK_AUTOSAVE_FIELDS = new Set([
   "business_scene_description",
   "remark",
 ]);
+
+const INTERNAL_SERVER_PATCH_FIELDS = new Set<string>(
+  [
+    "has_sensitive_payload",
+    "identity_address_masked",
+    "sensitive_payload_ciphertext",
+    "sensitive_payload_updated_at",
+    "sensitive_payload_version",
+    "settlement_account_number_masked",
+    "super_admin_phone_masked",
+    "updated_by_employee_id",
+  ] satisfies readonly (keyof WechatPayApplymentUpdate)[],
+);
 
 const ATTACHMENT_COMPARE_FIELDS = [
   "category",
@@ -61,6 +75,7 @@ export function buildDraftChangeAudit(
 export function buildDraftAuditDecision(input: {
   current: WechatPayApplymentRecord;
   input: UpdateWechatPayApplymentInput;
+  serverPatch?: WechatPayApplymentUpdate;
 }) {
   const attachmentChanges = getAttachmentChanges(
     input.current.attachments,
@@ -93,20 +108,30 @@ function getActualChangedFields(
   input: {
     current: WechatPayApplymentRecord;
     input: UpdateWechatPayApplymentInput;
+    serverPatch?: WechatPayApplymentUpdate;
   },
   attachmentChanges: readonly AttachmentChange[],
 ) {
   const currentProjection = input.current as unknown as Record<string, unknown>;
   const sensitiveFields = new Set(getSensitiveReplacementFields(input.input));
-  return Object.entries(input.input)
+  const changedFields = Object.entries(input.input)
     .filter(([field, value]) => {
       if (field === "draft_update_source" || value === undefined) return false;
       if (field === "attachments") return attachmentChanges.length > 0;
       if (sensitiveFields.has(field)) return true;
       return value !== currentProjection[field];
     })
-    .map(([field]) => field)
-    .sort();
+    .map(([field]) => field);
+  for (const [field, nextValue] of Object.entries(input.serverPatch ?? {})) {
+    if (
+      nextValue !== undefined &&
+      !INTERNAL_SERVER_PATCH_FIELDS.has(field) &&
+      nextValue !== currentProjection[field]
+    ) {
+      changedFields.push(field);
+    }
+  }
+  return [...new Set(changedFields)].sort();
 }
 
 function deriveAttachmentChangeSource(

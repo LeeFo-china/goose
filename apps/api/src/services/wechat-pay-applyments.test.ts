@@ -142,6 +142,8 @@ const findOcrRecognitionsByIds = mock(async () => [] as Array<{
   subject_type: string | null;
   subject_id: string | null;
   status: string;
+  scene: string;
+  document_type: string;
 }>);
 const findEvents = mock(async () => [eventRecord]);
 const createApplyment = mock(async (input: WechatPayApplymentInsert) => ({

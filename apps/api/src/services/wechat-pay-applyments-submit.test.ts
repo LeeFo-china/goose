@@ -100,6 +100,8 @@ const findOcrRecognitionsByIds = mock(async () => [] as Array<{
   subject_type: string | null;
   subject_id: string | null;
   status: string;
+  scene: string;
+  document_type: string;
 }>);
 const submitAtomically = mock(async () =>
   applyment({ status: "submitted", submitted_at: updatedAt })
@@ -314,6 +316,8 @@ describe("WechatPayApplymentService tenant submit", () => {
       subject_type: "wechat_pay_applyment",
       subject_id: applymentId,
       status: "succeeded",
+      scene: "wechat_pay_applyment",
+      document_type: "business_license",
     }]);
     await expect(service.submit(authContext, applymentId, {
       idempotency_key: applymentId,
@@ -326,5 +330,74 @@ describe("WechatPayApplymentService tenant submit", () => {
       },
     });
     expect(submitAtomically).not.toHaveBeenCalled();
+  });
+
+  test("matches confirmed recognition scene and document type to the attachment", async () => {
+    const recognitionId = "66666666-6666-4666-8666-666666666666";
+    const fileObjectId = "77777777-7777-4777-8777-777777777777";
+    const confirmedLicense = applyment({
+      attachments: requiredAttachments.map((item, index) =>
+        index === 0
+          ? {
+            ...item,
+            file_object_id: fileObjectId,
+            ocr_recognition_id: recognitionId,
+            ocr_review_status: "confirmed",
+          }
+          : item
+      ),
+    });
+    const recognition = {
+      id: recognitionId,
+      tenant_id: tenantId,
+      file_object_id: fileObjectId,
+      subject_type: "wechat_pay_applyment",
+      subject_id: applymentId,
+      status: "succeeded",
+      scene: "wechat_pay_applyment",
+      document_type: "business_license",
+    };
+    const service = await createService();
+
+    findById.mockImplementationOnce(async () => confirmedLicense);
+    findOcrRecognitionsByIds.mockImplementationOnce(async () => [{
+      ...recognition,
+      document_type: "bank_card",
+    }]);
+    await expect(service.submit(authContext, applymentId, {
+      idempotency_key: applymentId,
+    })).rejects.toMatchObject({
+      details: {
+        blockers: expect.arrayContaining([{
+          code: "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH",
+          category: "license_copy",
+        }]),
+      },
+    });
+
+    findById.mockImplementationOnce(async () => confirmedLicense);
+    findOcrRecognitionsByIds.mockImplementationOnce(async () => [recognition]);
+    await expect(service.submit(authContext, applymentId, {
+      idempotency_key: applymentId,
+    })).resolves.toMatchObject({
+      applyment: { status: "submitted" },
+    });
+
+    findById.mockImplementationOnce(async () => confirmedLicense);
+    findOcrRecognitionsByIds.mockImplementationOnce(async () => [{
+      ...recognition,
+      scene: "merchant_material",
+    }]);
+    await expect(service.submit(authContext, applymentId, {
+      idempotency_key: applymentId,
+    })).rejects.toMatchObject({
+      details: {
+        blockers: expect.arrayContaining([{
+          code: "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH",
+          category: "license_copy",
+        }]),
+      },
+    });
+    expect(submitAtomically).toHaveBeenCalledTimes(1);
   });
 });

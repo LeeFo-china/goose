@@ -1,4 +1,7 @@
-import { findWechatPaySettlementRule } from "@gooes/domain";
+import {
+  findWechatPaySettlementRule,
+  type OcrDocumentType,
+} from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
 import type { OcrRecognitionOwnershipRecord } from "@/repositories/ocr-recognitions";
@@ -13,17 +16,15 @@ import {
   type ApplymentSensitiveDraftPayload,
   type ApplymentSensitivePayload,
 } from "@/services/wechat-pay-applyment-sensitive-payload";
+import {
+  getWechatPayApplymentOcrDocumentType,
+} from "@/services/ocr/capabilities";
 import type {
   WechatPayApplymentOcrRecognitionRepositoryPort,
   WechatPayApplymentPreflightBlocker,
 } from "@/services/wechat-pay-applyments-types";
 
 const MAX_APPLYMENT_ATTACHMENTS = 20;
-const BASE_REQUIRED_OCR_CATEGORIES = [
-  "license_copy",
-  "legal_representative_id_card_front",
-  "legal_representative_id_card_back",
-] as const;
 
 export type ApplymentSensitivePayloadRepositoryPort = {
   findSensitivePayloadById: (input: {
@@ -142,14 +143,9 @@ async function collectOcrReviewBlockers(
   },
   blockers: WechatPayApplymentPreflightBlocker[],
 ) {
-  const requiredCategories = new Set<string>([
-    ...BASE_REQUIRED_OCR_CATEGORIES,
-    ...(input.applyment.contact_type === "SUPER"
-      ? ["contact_id_card_front", "contact_id_card_back"]
-      : []),
-  ]);
   const confirmed: Array<{
     category: string;
+    documentType: OcrDocumentType;
     fileObjectId: string;
     recognitionId: string;
   }> = [];
@@ -159,7 +155,11 @@ async function collectOcrReviewBlockers(
       const category = WechatPayApplymentAttachmentCategorySchema.safeParse(
         attachment?.category,
       );
-      if (!attachment || !category.success || !requiredCategories.has(category.data)) {
+      if (!attachment || !category.success) {
+        continue;
+      }
+      const documentType = getWechatPayApplymentOcrDocumentType(category.data);
+      if (!documentType) {
         continue;
       }
       const status = attachment.ocr_review_status;
@@ -183,6 +183,7 @@ async function collectOcrReviewBlockers(
       }
       confirmed.push({
         category: category.data,
+        documentType,
         fileObjectId: attachment.file_object_id,
         recognitionId: attachment.ocr_recognition_id,
       });
@@ -205,6 +206,7 @@ async function collectOcrReviewBlockers(
       recognition,
       input.applyment,
       attachment.fileObjectId,
+      attachment.documentType,
     )) {
       blockers.push({
         code: "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH",
@@ -218,8 +220,11 @@ function matchesApplymentAttachment(
   recognition: OcrRecognitionOwnershipRecord | undefined,
   applyment: WechatPayApplymentRecord,
   fileObjectId: string,
+  documentType: OcrDocumentType,
 ) {
   return recognition?.tenant_id === applyment.tenant_id &&
+    recognition.scene === "wechat_pay_applyment" &&
+    recognition.document_type === documentType &&
     recognition.file_object_id === fileObjectId &&
     recognition.subject_type === "wechat_pay_applyment" &&
     recognition.subject_id === applyment.id &&
