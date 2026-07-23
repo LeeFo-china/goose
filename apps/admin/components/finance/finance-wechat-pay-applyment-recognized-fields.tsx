@@ -221,6 +221,7 @@ export function FinanceWechatPayApplymentRecognizedFields({
           key={category}
           hidden={selectedCategory !== category}
           aria-label="识别字段核对"
+          data-ocr-category={category}
         >
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             {getRecognizedFields(category, contactType)

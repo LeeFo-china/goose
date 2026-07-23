@@ -110,6 +110,15 @@ describe("OCR field review dialog", () => {
     expect(markup).toContain("其他识别建议（1）");
   });
 
+  test("renders the shadcn empty state when recognition has no suggestions", () => {
+    const markup = renderToStaticMarkup(
+      <OcrFieldReviewRows rows={[]} onApply={() => undefined} />,
+    );
+
+    expect(markup).toContain('data-slot="empty"');
+    expect(markup).toContain("暂无可应用的识别建议");
+  });
+
   test("maps contact identity suggestions to contact applyment fields", () => {
     expect(mapApplymentOcrFields("contact_id_card_front", [
       field("identity_name", "李四"),

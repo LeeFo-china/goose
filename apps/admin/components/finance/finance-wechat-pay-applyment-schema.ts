@@ -45,6 +45,44 @@ const CONTACT_ATTACHMENT_CATEGORIES = new Set([
   "contact_id_card_back",
 ]);
 
+export function buildWechatPayApplymentPartialDraftPayload(
+  form: FormData,
+  options: {
+    attachments: WechatPayApplymentAttachment[];
+    contactType?: string;
+  },
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const field of [...REQUIRED_TEXT_FIELDS, ...OPTIONAL_TEXT_FIELDS]) {
+    setNonBlankText(payload, form, field);
+  }
+  for (const field of SENSITIVE_REPLACEMENT_FIELDS) {
+    setNonBlankText(payload, form, field, normalizeIdentityNumber);
+  }
+  for (const field of [
+    "contact_identity_period_begin",
+    "contact_identity_period_end",
+  ] as const) {
+    setNonBlankText(payload, form, field);
+  }
+
+  const contactType = options.contactType || text(form, "contact_type");
+  if (contactType) payload.contact_type = contactType;
+  if (contactType === "SUPER" && hasContactIdentityValue(payload)) {
+    payload.contact_identity_doc_type = "IDENTIFICATION_TYPE_IDCARD";
+  }
+  if (hasLegalIdentityValue(payload)) {
+    payload.identity_doc_type = "IDENTIFICATION_TYPE_IDCARD";
+  }
+  if (contactType === "LEGAL") removeContactIdentityValues(payload);
+
+  payload.attachments = options.attachments.filter((attachment) =>
+    contactType !== "LEGAL" ||
+    !CONTACT_ATTACHMENT_CATEGORIES.has(attachment.category ?? "")
+  );
+  return payload;
+}
+
 export function buildWechatPayApplymentPayload(
   form: FormData,
   options: {
@@ -99,4 +137,45 @@ function normalizeIdentityNumber(field: string, value: string) {
   return field.endsWith("identity_number") || field === "identity_number"
     ? value.toUpperCase()
     : value;
+}
+
+function setNonBlankText(
+  payload: Record<string, unknown>,
+  form: FormData,
+  field: string,
+  normalize: (field: string, value: string) => string = (_, value) => value,
+) {
+  const value = text(form, field);
+  if (value) payload[field] = normalize(field, value);
+}
+
+function hasLegalIdentityValue(payload: Record<string, unknown>) {
+  return [
+    "identity_name",
+    "identity_number",
+    "identity_address",
+    "identity_period_begin",
+    "identity_period_end",
+  ].some((field) => field in payload);
+}
+
+function hasContactIdentityValue(payload: Record<string, unknown>) {
+  return [
+    "contact_identity_number",
+    "contact_identity_address",
+    "contact_identity_period_begin",
+    "contact_identity_period_end",
+  ].some((field) => field in payload);
+}
+
+function removeContactIdentityValues(payload: Record<string, unknown>) {
+  for (const field of [
+    "contact_identity_number",
+    "contact_identity_address",
+    "contact_identity_doc_type",
+    "contact_identity_period_begin",
+    "contact_identity_period_end",
+  ]) {
+    delete payload[field];
+  }
 }

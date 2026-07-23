@@ -3,18 +3,30 @@ import {
   runAttachmentCheckpoint,
 } from "./finance-wechat-pay-applyment-checkpoint";
 
-export function createOcrReviewMutationGeneration(initialResetKey: string) {
-  let resetKey = initialResetKey;
+export function createOcrReviewMutationGeneration() {
   const runtime = createMaterialOperationGeneration();
+  let activeGeneration: number | null = null;
   return {
-    current: runtime.current,
-    isCurrent: runtime.isCurrent,
-    sync(nextResetKey: string) {
-      if (nextResetKey === resetKey) return runtime.current();
-      resetKey = nextResetKey;
-      return runtime.advance();
+    current: () => activeGeneration ?? runtime.current(),
+    isCurrent: (generation: number) =>
+      activeGeneration === generation && runtime.isCurrent(generation),
+    activate() {
+      activeGeneration = runtime.advance();
+      return activeGeneration;
+    },
+    invalidate(generation: number) {
+      if (activeGeneration !== generation) return;
+      runtime.advance();
+      activeGeneration = null;
     },
   };
+}
+
+export function setupOcrReviewMutationGeneration(
+  runtime: ReturnType<typeof createOcrReviewMutationGeneration>,
+) {
+  const generation = runtime.activate();
+  return () => runtime.invalidate(generation);
 }
 
 export function runGenerationGuardedOcrReviewMutation(input: {

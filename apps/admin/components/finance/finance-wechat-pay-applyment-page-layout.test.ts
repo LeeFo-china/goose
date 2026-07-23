@@ -248,7 +248,11 @@ describe("Finance wechat pay applyment page layout", () => {
     const reviewSource = readSource(
       "./finance-wechat-pay-applyment-ocr-review.tsx",
     );
-    const persistenceContract = `${panelSource}\n${reviewSource}`;
+    const reviewHookSource = readSource(
+      "./finance-wechat-pay-applyment-ocr-review-hook.ts",
+    );
+    const persistenceContract =
+      `${panelSource}\n${reviewSource}\n${reviewHookSource}`;
 
     expect(persistenceContract).toContain("applyRecognitionRows");
     expect(persistenceContract).toContain("row.selected");

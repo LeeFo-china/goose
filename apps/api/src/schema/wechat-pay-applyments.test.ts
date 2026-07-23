@@ -116,6 +116,35 @@ describe("wechat pay applyment schemas", () => {
     }).success).toBe(false);
   });
 
+  test("accepts attachment-only and atomic OCR confirmation checkpoints", () => {
+    const confirmedAttachment = {
+      category: "license_copy",
+      object_key: "tenant/license.jpg",
+      file_object_id: "22222222-2222-4222-8222-222222222222",
+      ocr_recognition_id: "11111111-1111-4111-8111-111111111111",
+      ocr_review_status: "confirmed",
+    };
+
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      attachments: [{
+        category: "license_copy",
+        object_key: "tenant/license.jpg",
+      }],
+      draft_update_source: "attachment_change",
+    }).success).toBe(true);
+    const confirmation = UpdateWechatPayApplymentSchema.safeParse({
+      license_name: "识别后的主体名称",
+      attachments: [confirmedAttachment],
+      draft_update_source: "ocr_confirm",
+    });
+    expect(confirmation.success).toBe(true);
+    if (!confirmation.success) return;
+    expect(confirmation.data).toMatchObject({
+      license_name: "识别后的主体名称",
+      attachments: [confirmedAttachment],
+    });
+  });
+
   test("allows only safe OCR review metadata on attachments", () => {
     const attachment = {
       category: "license_copy",

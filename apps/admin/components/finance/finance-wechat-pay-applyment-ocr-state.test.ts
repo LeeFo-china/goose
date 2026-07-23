@@ -13,7 +13,11 @@ import {
 import {
   createOcrReviewMutationGeneration,
   runGenerationGuardedOcrReviewMutation,
+  setupOcrReviewMutationGeneration,
 } from "./finance-wechat-pay-applyment-ocr-mutation";
+import {
+  buildWechatPayApplymentPartialDraftPayload,
+} from "./finance-wechat-pay-applyment-schema";
 import type {
   WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
@@ -118,7 +122,8 @@ function createReviewFixture() {
 
 describe("wechat pay applyment OCR state mutation", () => {
   test("does not report an old draft confirmation rejection", async () => {
-    const runtime = createOcrReviewMutationGeneration("draft-old");
+    const runtime = createOcrReviewMutationGeneration();
+    const cleanup = setupOcrReviewMutationGeneration(runtime);
     const request = deferredRejection();
     const errors: string[] = [];
     const generation = runtime.current();
@@ -130,7 +135,8 @@ describe("wechat pay applyment OCR state mutation", () => {
       onError: (message) => errors.push(message),
     });
 
-    runtime.sync("draft-new");
+    cleanup();
+    setupOcrReviewMutationGeneration(runtime);
     request.reject(new Error("old confirm failed"));
 
     await expect(outcome).resolves.toEqual({ type: "stale" });
@@ -138,7 +144,8 @@ describe("wechat pay applyment OCR state mutation", () => {
   });
 
   test("does not report an old draft manual rejection", async () => {
-    const runtime = createOcrReviewMutationGeneration("draft-old");
+    const runtime = createOcrReviewMutationGeneration();
+    const cleanup = setupOcrReviewMutationGeneration(runtime);
     const request = deferredRejection();
     const errors: string[] = [];
     const generation = runtime.current();
@@ -150,11 +157,55 @@ describe("wechat pay applyment OCR state mutation", () => {
       onError: (message) => errors.push(message),
     });
 
-    runtime.sync("draft-new");
+    cleanup();
+    setupOcrReviewMutationGeneration(runtime);
     request.reject(new Error("old manual failed"));
 
     await expect(outcome).resolves.toEqual({ type: "stale" });
     expect(errors).toEqual([]);
+  });
+
+  test("does not report a rejection after the OCR review unmounts", async () => {
+    const runtime = createOcrReviewMutationGeneration();
+    const cleanup = setupOcrReviewMutationGeneration(runtime);
+    const request = deferredRejection();
+    const errors: string[] = [];
+    const outcome = runGenerationGuardedOcrReviewMutation({
+      generation: runtime.current(),
+      isCurrentGeneration: runtime.isCurrent,
+      mutate: () => request.promise,
+      fallbackMessage: "识别结果保存失败",
+      onError: (message) => errors.push(message),
+    });
+
+    cleanup();
+    request.reject(new Error("unmounted confirm failed"));
+
+    await expect(outcome).resolves.toEqual({ type: "stale" });
+    expect(errors).toEqual([]);
+  });
+
+  test("allows submission after StrictMode setup cleanup setup replay", async () => {
+    const runtime = createOcrReviewMutationGeneration();
+    const firstCleanup = setupOcrReviewMutationGeneration(runtime);
+    firstCleanup();
+    const secondCleanup = setupOcrReviewMutationGeneration(runtime);
+    firstCleanup();
+    let persisted = 0;
+
+    const outcome = await runGenerationGuardedOcrReviewMutation({
+      generation: runtime.current(),
+      isCurrentGeneration: runtime.isCurrent,
+      mutate: async () => {
+        persisted += 1;
+      },
+      fallbackMessage: "识别结果保存失败",
+      onError: () => undefined,
+    });
+
+    expect(outcome).toEqual({ type: "persisted" });
+    expect(persisted).toBe(1);
+    secondCleanup();
   });
 
   test("preserves a manual persistence error through unrelated reconciliation", () => {
@@ -241,6 +292,50 @@ describe("wechat pay applyment OCR state mutation", () => {
       ...fixture.originalState,
       status: "confirmed",
     });
+  });
+
+  test("persists OCR values and confirmed metadata in the same mutation", async () => {
+    const fixture = createReviewFixture();
+    const form = new FormData();
+    let payloads: Record<string, unknown>[] = [];
+
+    await changeApplymentAttachments({
+      currentAttachments: fixture.attachments,
+      currentStates: fixture.states,
+      nextAttachments: [fixture.confirmedAttachment],
+      intent: createApplymentAttachmentMutationIntent(
+        fixture.attachments,
+        [fixture.confirmedAttachment],
+      ),
+      relatedMutation: {
+        commitOptimistic: () => {
+          form.set("license_name", "识别后的主体名称");
+        },
+        rollback: () => {
+          form.delete("license_name");
+        },
+      },
+      getCurrentAttachments: () => fixture.attachments,
+      commitLocal: () => undefined,
+      getCurrentStates: () => fixture.states,
+      commitStates: () => undefined,
+      enqueue: (operation) => operation(),
+      isActive: () => true,
+      captureRollback: () => () => undefined,
+      persist: async ({ attachments }) => {
+        payloads = [
+          buildWechatPayApplymentPartialDraftPayload(form, { attachments }),
+        ];
+      },
+      clearError: () => undefined,
+      reportError: () => undefined,
+      reportOperationError: () => undefined,
+    });
+
+    expect(payloads).toEqual([{
+      license_name: "识别后的主体名称",
+      attachments: [fixture.confirmedAttachment],
+    }]);
   });
 
   test("rolls back attachments material state and field source on failure", async () => {

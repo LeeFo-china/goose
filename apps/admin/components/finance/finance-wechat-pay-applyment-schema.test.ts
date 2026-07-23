@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";
-import { buildWechatPayApplymentPayload } from "./finance-wechat-pay-applyment-schema";
+import {
+  buildWechatPayApplymentPartialDraftPayload,
+  buildWechatPayApplymentPayload,
+} from "./finance-wechat-pay-applyment-schema";
 
 const contactAttachment: WechatPayApplymentAttachment = {
   category: "contact_id_card_front",
@@ -16,6 +19,41 @@ function formData(values: Record<string, string>) {
 }
 
 describe("buildWechatPayApplymentPayload", () => {
+  test("builds an attachment-only checkpoint without blank form fields", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(
+      new FormData(),
+      {
+        attachments: [contactAttachment],
+      },
+    );
+
+    expect(payload).toEqual({ attachments: [contactAttachment] });
+    expect(payload).not.toHaveProperty("merchant_short_name");
+    expect(payload).not.toHaveProperty("identity_doc_type");
+  });
+
+  test("keeps OCR values and confirmed metadata atomic in one checkpoint", () => {
+    const confirmedAttachment: WechatPayApplymentAttachment = {
+      category: "license_copy",
+      object_key: "tenants/tenant-1/license.jpg",
+      file_object_id: "22222222-2222-4222-8222-222222222222",
+      ocr_recognition_id: "33333333-3333-4333-8333-333333333333",
+      ocr_review_status: "confirmed",
+    };
+
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      license_name: "识别后的主体名称",
+      identity_number: "",
+    }), {
+      attachments: [confirmedAttachment],
+    });
+
+    expect(payload).toEqual({
+      license_name: "识别后的主体名称",
+      attachments: [confirmedAttachment],
+    });
+  });
+
   test("omits blank sensitive replacements for an encrypted draft", () => {
     const payload = buildWechatPayApplymentPayload(formData({
       subject_type: "SUBJECT_TYPE_ENTERPRISE",

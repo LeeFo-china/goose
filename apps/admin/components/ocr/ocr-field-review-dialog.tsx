@@ -26,6 +26,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FieldLabel } from "@/components/ui/field";
+import {
+  Empty,
+  EmptyDescription,
+} from "@/components/ui/empty";
 
 type ReviewState = "empty" | "consistent" | "conflict";
 
@@ -240,9 +244,11 @@ export function OcrFieldReviewRows({
         </Collapsible>
       ) : null}
       {rows.length === 0 ? (
-        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          暂无可应用的识别建议，请直接核对并填写右侧字段。
-        </div>
+        <Empty className="border py-6 md:p-6">
+          <EmptyDescription>
+            暂无可应用的识别建议，请直接核对并填写右侧字段。
+          </EmptyDescription>
+        </Empty>
       ) : null}
       <div className="flex justify-end">
         <Button

@@ -92,6 +92,13 @@ function buildCurrentOcrAttachments(
   return currentAttachments;
 }
 
+export function getCurrentApplymentAttachment(
+  attachments: readonly WechatPayApplymentAttachment[],
+  category: WechatPayApplymentAttachmentCategory,
+) {
+  return buildCurrentOcrAttachments(attachments).get(category);
+}
+
 function restoreMaterialStatus(
   status: WechatPayApplymentAttachment["ocr_review_status"],
 ): ApplymentMaterialStatus {
@@ -141,6 +148,23 @@ export function updateAttachmentOcrReviewMetadata(
       ? { ...attachment, ...metadata }
       : attachment
   );
+}
+
+export function updateCurrentApplymentAttachmentOcrReviewMetadata(
+  attachments: readonly WechatPayApplymentAttachment[],
+  category: WechatPayApplymentAttachmentCategory,
+  metadata: ApplymentAttachmentOcrReviewMetadata,
+) {
+  const attachment = getCurrentApplymentAttachment(attachments, category);
+  if (!attachment) return null;
+  return {
+    attachment,
+    attachments: updateAttachmentOcrReviewMetadata(
+      attachments,
+      attachment.object_key,
+      metadata,
+    ),
+  };
 }
 
 export function replaceApplymentAttachment(

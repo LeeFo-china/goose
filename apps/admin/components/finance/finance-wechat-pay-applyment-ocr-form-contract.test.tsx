@@ -6,6 +6,9 @@ import {
   getOcrComparisonValues,
   getStoredFieldSources,
 } from "./finance-wechat-pay-applyment-recognized-fields";
+import {
+  FinanceWechatPayApplymentOcrReview,
+} from "./finance-wechat-pay-applyment-ocr-review";
 import type {
   WechatPayApplymentRecord,
 } from "./finance-wechat-pay-applyment-shared";
@@ -78,6 +81,48 @@ function renderLegacySteps(contactType: "LEGAL" | "SUPER") {
 }
 
 describe("wechat pay applyment OCR form registration", () => {
+  test("previews the last attachment for a duplicated category", () => {
+    const markup = renderToStaticMarkup(
+      <FinanceWechatPayApplymentOcrReview
+        attachments={[
+          {
+            category: "license_copy",
+            object_key: "tenant/old-license.jpg",
+            file_name: "old-license.jpg",
+          },
+          {
+            category: "license_copy",
+            object_key: "tenant/current-license.jpg",
+            file_name: "current-license.jpg",
+          },
+        ]}
+        materialStates={{
+          license_copy: {
+            status: "uploaded",
+            attachmentObjectKey: "tenant/current-license.jpg",
+            recognitionId: null,
+            fields: [],
+            warnings: [],
+            error: null,
+          },
+        }}
+        selectedCategory="license_copy"
+        contactType="LEGAL"
+        subjectType="SUBJECT_TYPE_ENTERPRISE"
+        values={{}}
+        comparisonValues={{}}
+        fieldSources={{}}
+        onSelectedCategoryChange={() => undefined}
+        onManualChange={() => undefined}
+        onApply={() => undefined}
+        onUseManualEntry={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("current-license.jpg");
+    expect(markup).not.toContain("old-license.jpg");
+  });
+
   test("keeps identity address optional for an individual subject", () => {
     const markup = renderRecognizedFields(
       "LEGAL",
@@ -133,6 +178,7 @@ describe("wechat pay applyment OCR form registration", () => {
       expect(serialized.getAll(name)).toEqual([`${name}-value`]);
     }
     expect(recognizedMarkup.match(/aria-label="识别字段核对"/g)).toHaveLength(6);
+    expect(recognizedMarkup.match(/data-ocr-category=/g)).toHaveLength(6);
   });
 
   test("registers LEGAL super administrator name with native validation", () => {

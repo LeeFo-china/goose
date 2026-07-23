@@ -41,7 +41,10 @@ import {
   runGenerationGuardedSave,
   type ApplymentSaveGenerationContext,
 } from "./finance-wechat-pay-applyment-save-generation";
-import { buildWechatPayApplymentPayload } from "./finance-wechat-pay-applyment-schema";
+import {
+  buildWechatPayApplymentPartialDraftPayload,
+  buildWechatPayApplymentPayload,
+} from "./finance-wechat-pay-applyment-schema";
 import {
   APPLYMENT_STEP_KEYS,
   FinanceWechatPayApplymentSteps,
@@ -59,6 +62,10 @@ import {
 import {
   useWechatPayApplymentMaterials,
 } from "./use-wechat-pay-applyment-materials";
+import {
+  activateInvalidApplymentElement,
+  validateApplymentForm,
+} from "./finance-wechat-pay-applyment-validation";
 
 export function FinanceWechatPayApplymentPanel({
   data,
@@ -70,6 +77,8 @@ export function FinanceWechatPayApplymentPanel({
   const formRef = useRef<HTMLFormElement>(null);
   const applymentRef = useRef<WechatPayApplymentRecord | null>(applyment);
   const [activeStep, setActiveStep] = useState<ApplymentStepKey>("subject");
+  const [ocrReviewCategory, setOcrReviewCategory] =
+    useState<WechatPayApplymentAttachmentCategory>("license_copy");
   const [subjectType, setSubjectType] = useState(
     applyment?.subject_type || "SUBJECT_TYPE_ENTERPRISE",
   );
@@ -137,7 +146,14 @@ export function FinanceWechatPayApplymentPanel({
     const currentApplyment = applymentRef.current;
     if (!currentApplyment || !editable || !data.can_submit) return;
     const formElement = formRef.current;
-    if (!formElement || !validateVisibleStep(formElement, setActiveStep)) return;
+    if (
+      !formElement ||
+      !validateApplymentForm(
+        formElement,
+        setActiveStep,
+        setOcrReviewCategory,
+      )
+    ) return;
     const payload = buildCurrentApplymentPayload(formElement);
     setError("");
     setSaved(false);
@@ -204,11 +220,13 @@ export function FinanceWechatPayApplymentPanel({
     if (!editable) throw new Error("当前账号无权修改微信支付开通申请");
     const formElement = formRef.current;
     if (!formElement) throw new Error("申请表单尚未就绪，请稍后重试");
-    const payload = buildCurrentApplymentPayload(
-      formElement,
-      input.attachments,
+    const payload = buildWechatPayApplymentPartialDraftPayload(
+      new FormData(formElement),
+      {
+        attachments: input.attachments,
+        contactType: input.contactType,
+      },
     );
-    if (input.contactType) payload.contact_type = input.contactType;
     payload.draft_update_source = input.draftUpdateSource;
     if (input.attachments.some((attachment) => {
       const previous = applymentRef.current?.attachments.find(
@@ -259,6 +277,13 @@ export function FinanceWechatPayApplymentPanel({
         ref={formRef}
         className="flex min-w-0 flex-col gap-4"
         noValidate
+        onInvalidCapture={(event) => {
+          activateInvalidApplymentElement(
+            event.target as HTMLElement,
+            setActiveStep,
+            setOcrReviewCategory,
+          );
+        }}
         onSubmit={submitSave}
       >
         {error ? <StatusAlert>{error}</StatusAlert> : null}
@@ -347,6 +372,7 @@ export function FinanceWechatPayApplymentPanel({
               <FinanceWechatPayApplymentOcrReview
                 attachments={attachments}
                 materialStates={materialStates}
+                selectedCategory={ocrReviewCategory}
                 contactType={contactType}
                 subjectType={subjectType}
                 values={ocrReview.currentValues}
@@ -354,6 +380,7 @@ export function FinanceWechatPayApplymentPanel({
                 fieldSources={ocrReview.fieldSources}
                 disabled={pending || materials.pending || !editable}
                 onManualChange={ocrReview.onManualChange}
+                onSelectedCategoryChange={setOcrReviewCategory}
                 onApply={applyRecognitionRows}
                 onUseManualEntry={ocrReview.useManualEntry}
               />
@@ -439,20 +466,4 @@ export function FinanceWechatPayApplymentPanel({
       </aside>
     </div>
   );
-}
-
-function validateVisibleStep(
-  form: HTMLFormElement,
-  setActiveStep: (step: ApplymentStepKey) => void,
-) {
-  const invalid = form.querySelector<HTMLElement>(":invalid");
-  if (!invalid) return true;
-  const panel = invalid.closest<HTMLElement>("[data-applyment-step]");
-  const step = panel?.dataset.applymentStep as ApplymentStepKey | undefined;
-  if (step) setActiveStep(step);
-  requestAnimationFrame(() => {
-    invalid.focus();
-    form.reportValidity();
-  });
-  return false;
 }
