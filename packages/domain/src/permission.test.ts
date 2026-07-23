@@ -229,4 +229,48 @@ describe("domain permissions", () => {
       module: "platform_ocr",
     });
   });
+
+  test("exposes supplier permissions", () => {
+    const expectedPermissions = {
+      "platform.supplier.view": {
+        label: "查看平台供应商",
+        module: "platform_supplier",
+      },
+      "platform.supplier.review": {
+        label: "审核供应商准入",
+        module: "platform_supplier",
+      },
+      "platform.supplier.manage": {
+        label: "管理平台供应商",
+        module: "platform_supplier",
+      },
+      "platform.supplier.blacklist": {
+        label: "管理供应商黑名单",
+        module: "platform_supplier",
+      },
+      "platform.catalog.manage": {
+        label: "管理供应标准目录",
+        module: "platform_supplier_catalog",
+      },
+      "supplier.view": {
+        label: "查看合作供应商",
+        module: "supplier",
+      },
+      "supplier.manage": {
+        label: "管理合作供应商",
+        module: "supplier",
+      },
+      "supplier.contract.manage": {
+        label: "管理供应商合同",
+        module: "supplier",
+      },
+    } as const;
+
+    for (const code of Object.keys(expectedPermissions) as Array<
+      keyof typeof expectedPermissions
+    >) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
+    }
+  });
 });

@@ -117,8 +117,16 @@ export const PERMISSION_CODE_VALUES = [
   'platform.site_content.read',
   'platform.site_content.manage',
   'platform.site_content.publish',
+  'platform.supplier.view',
+  'platform.supplier.review',
+  'platform.supplier.manage',
+  'platform.supplier.blacklist',
+  'platform.catalog.manage',
   'service_provider.profile.read',
   'service_provider.profile.manage',
+  'supplier.view',
+  'supplier.manage',
+  'supplier.contract.manage',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -463,6 +471,26 @@ export const PermissionCodeConfig: Record<
     label: '发布官网内容',
     module: 'platform_site_content',
   },
+  'platform.supplier.view': {
+    label: '查看平台供应商',
+    module: 'platform_supplier',
+  },
+  'platform.supplier.review': {
+    label: '审核供应商准入',
+    module: 'platform_supplier',
+  },
+  'platform.supplier.manage': {
+    label: '管理平台供应商',
+    module: 'platform_supplier',
+  },
+  'platform.supplier.blacklist': {
+    label: '管理供应商黑名单',
+    module: 'platform_supplier',
+  },
+  'platform.catalog.manage': {
+    label: '管理供应标准目录',
+    module: 'platform_supplier_catalog',
+  },
   'service_provider.profile.read': {
     label: '查看服务商资料',
     module: 'service_provider',
@@ -470,6 +498,18 @@ export const PermissionCodeConfig: Record<
   'service_provider.profile.manage': {
     label: '管理服务商资料',
     module: 'service_provider',
+  },
+  'supplier.view': {
+    label: '查看合作供应商',
+    module: 'supplier',
+  },
+  'supplier.manage': {
+    label: '管理合作供应商',
+    module: 'supplier',
+  },
+  'supplier.contract.manage': {
+    label: '管理供应商合同',
+    module: 'supplier',
   },
   'project_referral.read': {
     label: '查看介绍费',
