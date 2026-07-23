@@ -3,3 +3,6 @@ export {
   type PlatformUploadScene,
 } from "./platform-file-storage/legacy-service";
 export { buildTenantOnboardingLicenseVisitorPrefix } from "./platform-file-storage/legacy/paths";
+export {
+  getWechatPayApplymentUploadPolicy,
+} from "./platform-file-storage/legacy/direct-upload-scene-policy";

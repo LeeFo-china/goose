@@ -11,7 +11,6 @@ import {
 } from "./finance-wechat-pay-applyment-checkpoint";
 import {
   buildInitialMaterialStates,
-  getMaterialRetryAction,
   getOcrMaterialCategory,
   isCurrentMaterialAttachment,
   rebaseUploadedApplymentAttachment,
@@ -23,15 +22,16 @@ import { restoreApplymentMaterialStates } from "./finance-wechat-pay-applyment-m
 import { setupMountedRefLifecycle } from "./finance-wechat-pay-applyment-lifecycle";
 import {
   changeApplymentAttachments,
-  MANUAL_ENTRY_PERSIST_ERROR,
   persistUnsupportedApplymentMaterialsAsManual,
   type PersistAttachmentsInput,
 } from "./finance-wechat-pay-applyment-manual-entry";
 import {
+  createApplymentAttachmentRetryCoordinator,
+} from "./finance-wechat-pay-applyment-material-retry";
+import {
   getApplymentMaterialErrorMessage,
   processApplymentUploadedMaterials,
   recognizeApplymentAttachment,
-  RECOGNITION_PERSIST_ERROR,
 } from "./finance-wechat-pay-applyment-recognition";
 import type { AttachmentUploadedInput } from "./finance-wechat-pay-applyment-attachments";
 import type { UseWechatPayApplymentMaterialsInput } from "./finance-wechat-pay-applyment-materials-contract";
@@ -63,6 +63,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
   const attachmentSaveErrorsRef = useRef(attachmentSaveErrors);
   const persistAttachmentsRef = useRef(input.persistAttachments);
   const operationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const retryInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
   const generationRef = useRef(createMaterialOperationGeneration());
   const pendingOperationCountRef = useRef(0);
   const [pending, setPending] = useState(false);
@@ -86,6 +87,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     materialStatesRef.current = initialStates;
     applymentIdRef.current = input.initialApplymentId ?? null;
     unpersistedObjectKeysRef.current.clear();
+    retryInFlightRef.current.clear();
     attachmentSaveErrorsRef.current = {};
     setAttachments(initialAttachments);
     setMaterialStates(initialStates);
@@ -365,6 +367,7 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
         }
       },
       enqueue: (operation) => enqueue(operation, generation),
+      isActive: () => generationRef.current.isCurrent(generation),
       persist: (persistInput) => persist(persistInput, generation),
       clearError: () => {
         if (
@@ -384,67 +387,35 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     if (!input.editable) return;
     const generation = generationRef.current.current();
     if (!hasOutstandingErrors()) setError("");
-    return enqueue(async () => {
-      const category = getOcrMaterialCategory(attachment);
-      const state = category ? materialStatesRef.current[category] : undefined;
-      const retryState = getMaterialRetryAction(state) === "persist"
-        ? state
-        : null;
-      if (
-        category &&
-        retryState &&
-        isCurrentMaterialAttachment(attachmentsRef.current, attachment)
-      ) {
-        if (retryState.status === "uploaded") {
-          await checkpointAttachment(attachment, generation);
-          return;
-        }
-        const retryingManualEntry = retryState.status === "manual";
-        const persistError = retryingManualEntry
-          ? MANUAL_ENTRY_PERSIST_ERROR
-          : RECOGNITION_PERSIST_ERROR;
-        try {
-          await persist({
-            attachments: attachmentsRef.current,
-            draftUpdateSource: retryingManualEntry
-              ? "manual_entry"
-              : "ocr_review",
-          }, generation);
-          if (!generationRef.current.isCurrent(generation)) return;
-          const currentState = materialStatesRef.current[category];
-          if (
-            currentState &&
-            currentState.recognitionId === retryState.recognitionId
-          ) {
-            updateStateIfCurrent(attachment, { ...currentState, error: null });
-            if (!hasOutstandingErrors()) setError("");
-          }
-        } catch {
-          if (!generationRef.current.isCurrent(generation)) return;
-          const currentState = materialStatesRef.current[category];
-          if (
-            currentState &&
-            currentState.recognitionId === retryState.recognitionId
-          ) {
-            updateStateIfCurrent(attachment, {
-              ...currentState,
-              error: persistError,
-            });
-          }
-          setError(persistError);
-        }
-        return;
-      }
-      await recognizeAttachment(attachment, generation);
-    }, generation)
+    return createRetryCoordinator(generation)
+      .retryRecognition(attachment)
       .catch(reportOperationError(generation));
   }
   async function onRetrySave(attachment: WechatPayApplymentAttachment) {
     if (!input.editable) return;
     const generation = generationRef.current.current();
-    return enqueue(async () => {
-      await checkpointAttachment(attachment, generation);
-    }, generation).catch(reportOperationError(generation));
+    return createRetryCoordinator(generation)
+      .retrySave(attachment)
+      .catch(reportOperationError(generation));
+  }
+  function createRetryCoordinator(generation: number) {
+    return createApplymentAttachmentRetryCoordinator({
+      inFlight: retryInFlightRef.current,
+      getAttachments: () => attachmentsRef.current,
+      getMaterialStates: () => materialStatesRef.current,
+      getCheckpointErrors: () => attachmentSaveErrorsRef.current,
+      enqueue: (operation) => enqueue(operation, generation),
+      checkpoint: (attachment) => checkpointAttachment(attachment, generation),
+      persist: (persistInput) => persist(persistInput, generation),
+      isActive: () => generationRef.current.isCurrent(generation),
+      commitState: (attachment, state) => {
+        updateStateIfCurrent(attachment, state);
+      },
+      hasOutstandingErrors,
+      clearError: () => setError(""),
+      reportError: setError,
+      recognize: (attachment) => recognizeAttachment(attachment, generation),
+    });
   }
   function setRecognitionConsent(checked: boolean) {
     if (!input.editable) return;

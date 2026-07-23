@@ -127,6 +127,7 @@ export function changeApplymentAttachments(input: {
   getCurrentStates: () => ApplymentMaterialStateMap;
   commitStates: (states: ApplymentMaterialStateMap) => void;
   enqueue: (operation: () => Promise<void>) => Promise<void>;
+  isActive: () => boolean;
   persist: (input: PersistAttachmentsInput) => Promise<void>;
   clearError: () => void;
   reportError: (error: string) => void;
@@ -171,7 +172,13 @@ export function changeApplymentAttachments(input: {
     input.reportError(MANUAL_ENTRY_PERSIST_ERROR);
     throw outcome.error;
   }).catch((error) => {
-    if (manualCategories.length === 0) input.reportOperationError(error);
+    if (manualCategories.length === 0 && input.isActive()) {
+      input.commitLocal(
+        [...input.currentAttachments],
+        input.currentStates,
+      );
+      input.reportOperationError(error);
+    }
     throw error;
   });
 }

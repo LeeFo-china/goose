@@ -29,6 +29,9 @@ import { FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { requestBackendJson } from "@/lib/backend-client";
 import { WechatPayApplymentAttachmentsField } from "./finance-wechat-pay-applyment-attachments";
+import {
+  changeApplymentContactTypeWithRollback,
+} from "./finance-wechat-pay-applyment-contact-type";
 import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
 import {
   runGenerationGuardedSave,
@@ -193,14 +196,17 @@ export function FinanceWechatPayApplymentPanel({
   }
 
   function changeContactType(value: string) {
-    setContactType(value);
     setReviewConfirmed(false);
-    if (value === "LEGAL") {
-      void materials.onChange(attachmentsRef.current.filter((attachment) =>
-        attachment.category !== "contact_id_card_front" &&
-        attachment.category !== "contact_id_card_back"
-      )).catch(() => undefined);
-    }
+    void changeApplymentContactTypeWithRollback({
+      currentType: contactType,
+      nextType: value,
+      attachments: attachmentsRef.current,
+      commitType: setContactType,
+      changeAttachments: async (nextAttachments) => {
+        await materials.onChange(nextAttachments);
+      },
+      reportError: setError,
+    }).catch(() => undefined);
   }
 
   return (

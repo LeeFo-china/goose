@@ -1,180 +1,26 @@
 import { createHash } from "node:crypto";
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { FastifyRequest } from "fastify";
-import type { AuthContext } from "@/services/authorization";
-
-process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
-process.env.SUPABASE_PUBLISH ??= "test-publish-key";
-process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const projectId = "2d710a84-1045-4750-8dfd-51a0f463a4db";
-const tenantId = "tenant-1";
-const employeeId = "employee-1";
-const authUserId = "auth-1";
-const visitorId = "visitor-1";
-const otherVisitorId = "visitor-2";
-
-const createDirectUpload = mock(async () => ({
-  provider: "tencent_cos",
-  bucket: "bucket",
-  region: "ap-guangzhou",
-  object_key: `tenants/${tenantId}/project-payment/projects/${projectId}/2026/06/16/file.jpg`,
-  storage_path: `tenants/${tenantId}/project-payment/projects/${projectId}/2026/06/16/file.jpg`,
-  upload_url: "https://example.com/upload",
-  method: "PUT",
-  headers: {
-    "content-type": "image/jpeg",
-  },
-  expires_in: 600,
-  expires_at: "2026-06-16T10:10:00.000Z",
-}));
-
-type CompleteUploadResult = {
-  provider: string;
-  bucket: string;
-  region: string;
-  object_key: string;
-  storage_path: string;
-  url: string;
-} | {
-  file_id: string;
-  status: string;
-};
-
-const completeDirectUpload = mock(async (): Promise<CompleteUploadResult> => ({
-  provider: "tencent_cos",
-  bucket: "bucket",
-  region: "ap-guangzhou",
-  object_key: `tenants/${tenantId}/project-payment/projects/${projectId}/2026/06/16/file.jpg`,
-  storage_path: `tenants/${tenantId}/project-payment/projects/${projectId}/2026/06/16/file.jpg`,
-  url: "https://example.com/file.jpg",
-}));
-
-const getRequiredAuthContext = mock(async (): Promise<AuthContext> => ({
-  authUserId,
+import {
+  applymentUploadBody,
+  assertDirectUploadAccess,
+  buildRequest,
+  buildVisitorRequest,
+  canAccessProject,
+  completeDirectUpload,
+  createDirectUpload,
+  denyApplymentUpload,
   employeeId,
-  tenantId,
-  tenantName: null,
-  tenantSlug: null,
-  tenantStatus: "active",
-  isPlatformAdmin: false,
-  employeeName: "财务",
-  employeeStatus: "active",
-  departmentId: null,
-  tenantDepartmentId: null,
-  departmentCode: "FINANCE",
-  departmentName: "财务部",
-  postId: null,
-  postName: null,
-  avatar: null,
-  roleCodes: [],
-  roles: [],
-  permissions: [{ code: "finance.payment.confirm", scope: "all" }],
-}));
-
-const canAccessProject = mock(async () => true);
-const logUploadTiming = mock(() => undefined);
-const resolveStoredFileUrl = mock(() => "https://example.com/resolved.jpg");
-const assertDirectUploadAccess = mock(() => undefined);
-
-mock.module("@/services/files/platform-file-storage", () => ({
-  platformFileStorageService: {
-    createDirectUpload,
-    completeDirectUpload,
-  },
-  buildTenantOnboardingLicenseVisitorPrefix: (value: string) => {
-    const hash = createHash("sha256").update(value.trim()).digest("hex");
-    return `private/tenant-onboarding-license/visitors/${hash}/`;
-  },
-}));
-
-mock.module("@/services/authorization", () => ({
-  authorizationService: {
-    getRequiredAuthContext,
-  },
-}));
-
-mock.module("@/services/access-policy", () => ({
-  accessPolicyService: {
-    canAccessProject,
-    canWriteProjectLog: mock(async () => false),
-    getScope: mock((
-      authContext: { permissions?: Array<{ code: string; scope: string }> },
-      permissionCode: string,
-    ) =>
-      authContext.permissions?.find((permission) =>
-        permission.code === permissionCode
-      )?.scope ?? null
-    ),
-  },
-}));
-
-mock.module("@/services/uploads", () => ({
-  uploadService: {
-    findDefaultActiveCustomerMembership: mock(async () => null),
-    findLegacyCustomerBinding: mock(async () => null),
-    assertDirectUploadAccess,
-  },
-}));
-
-mock.module("@/utils/upload-timing-logger", () => ({
-  logUploadTiming,
-}));
-
-mock.module("@/services/files/file-url-resolver", () => ({
+  getRequiredAuthContext,
+  otherVisitorId,
+  projectId,
+  resetUploadControllerMocks,
   resolveStoredFileUrl,
-  resolveStoredFileUrlList: mock((value: unknown) => value),
-  refreshPlatformCosPublicBaseUrlCache: mock(async () => undefined),
-  setPlatformCosAccessConfigCache: mock(() => undefined),
-  setPlatformCosPublicBaseUrlCache: mock(() => undefined),
-}));
+  tenantId,
+  visitorId,
+} from "./index.test-harness";
 
-beforeEach(() => {
-  createDirectUpload.mockClear();
-  completeDirectUpload.mockClear();
-  getRequiredAuthContext.mockClear();
-  canAccessProject.mockClear();
-  canAccessProject.mockImplementation(async () => true);
-  logUploadTiming.mockClear();
-  resolveStoredFileUrl.mockClear();
-  assertDirectUploadAccess.mockClear();
-});
-
-const buildRequest = (body: Record<string, unknown>): FastifyRequest =>
-  ({
-    body,
-    user: {
-      sub: authUserId,
-      tenant_id: tenantId,
-      employee_id: employeeId,
-    },
-    id: "req-test",
-  }) as FastifyRequest;
-
-const applymentUploadBody = {
-  scene: "wechat_pay_applyment", filename: "license.jpg",
-  mimetype: "image/jpeg", size_bytes: 120000,
-};
-const denyApplymentUpload = () => {
-  assertDirectUploadAccess.mockImplementationOnce(() => {
-    throw Object.assign(new Error("forbidden"), {
-      statusCode: 403, code: "FORBIDDEN",
-    });
-  });
-};
-const buildVisitorRequest = (
-  body: Record<string, unknown>,
-  currentVisitorId = visitorId,
-): FastifyRequest =>
-  ({
-    body,
-    query: {},
-    user: {
-      token_type: "visitor_session",
-      visitor_id: currentVisitorId,
-    },
-    id: "req-visitor-test",
-  }) as FastifyRequest;
+beforeEach(resetUploadControllerMocks);
 describe("UploadController project payment direct upload", () => {
   test("rejects read-only applyment upload init before creating an upload", async () => {
     denyApplymentUpload();
@@ -192,6 +38,7 @@ describe("UploadController project payment direct upload", () => {
       buildRequest({
         ...applymentUploadBody,
         object_key: `tenants/${tenantId}/wechat-pay-applyment/license.jpg`,
+        upload_intent: "intent",
       }),
       {} as never,
     )).rejects.toMatchObject({ statusCode: 403 });
@@ -218,6 +65,55 @@ describe("UploadController project payment direct upload", () => {
         visibility: "private",
       }),
     );
+  });
+  test("rejects applyment init when JWT tenant differs from live auth context", async () => {
+    getRequiredAuthContext.mockImplementationOnce(async () => ({
+      ...(await getRequiredAuthContext()),
+      tenantId: "tenant-current",
+    }));
+    const { default: controller } = await import("./index");
+
+    await expect(controller.initDirectCosUpload(
+      buildRequest(applymentUploadBody),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403 });
+    expect(createDirectUpload).not.toHaveBeenCalled();
+  });
+  test("rejects applyment complete when JWT tenant differs from live auth context", async () => {
+    getRequiredAuthContext.mockImplementationOnce(async () => ({
+      ...(await getRequiredAuthContext()),
+      tenantId: "tenant-current",
+    }));
+    const { default: controller } = await import("./index");
+
+    await expect(controller.completeDirectCosUpload(
+      buildRequest({
+        ...applymentUploadBody,
+        object_key: `tenants/${tenantId}/wechat-pay-applyment/license.jpg`,
+        upload_intent: "intent",
+      }),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403 });
+    expect(completeDirectUpload).not.toHaveBeenCalled();
+  });
+  test.each([
+    ["oversize", "image/jpeg", 2 * 1024 * 1024 + 1],
+    ["unsupported MIME", "image/webp", 100],
+  ])("rejects applyment init outside scene policy: %s", async (
+    _name,
+    mimetype,
+    sizeBytes,
+  ) => {
+    const { default: controller } = await import("./index");
+    await expect(controller.initDirectCosUpload(
+      buildRequest({
+        ...applymentUploadBody,
+        mimetype,
+        size_bytes: sizeBytes,
+      }),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 400 });
+    expect(createDirectUpload).not.toHaveBeenCalled();
   });
   test("allows finance project payment direct upload init", async () => {
     const { default: controller } = await import("./index");

@@ -1,17 +1,10 @@
 "use client";
 
 import { type ChangeEvent, useState } from "react";
-import {
-  FileImage,
-  FilePenLine,
-  Loader2,
-  RefreshCw,
-  UploadCloud,
-} from "lucide-react";
+import { FileImage, FilePenLine, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   uploadDirectToCos,
@@ -39,11 +32,13 @@ import {
 import {
   AttachmentCheckpointStatus,
 } from "./finance-wechat-pay-applyment-attachment-checkpoint-status";
+import {
+  ApplymentAttachmentUploadButton,
+} from "./finance-wechat-pay-applyment-upload-button";
 
 const APPLYMENT_ATTACHMENT_UPLOAD_SCENE = "wechat_pay_applyment";
 const MAX_APPLYMENT_ATTACHMENT_SIZE = 2 * 1024 * 1024;
 const MAX_BUSINESS_SCENE_MATERIALS = 5;
-const APPLYMENT_ATTACHMENT_ACCEPT = "image/jpeg,image/png";
 const APPLYMENT_ATTACHMENT_ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -303,7 +298,7 @@ export function WechatPayApplymentAttachmentsField({
 
         {editable ? (
           <div className="mt-3">
-            <UploadButton
+            <ApplymentAttachmentUploadButton
               category="business_scene_material"
               inputId="wechat-pay-applyment-attachment-business-scene"
               disabled={Boolean(
@@ -410,7 +405,7 @@ function AttachmentSlot({
       />
       {editable ? (
         <div className="flex flex-wrap items-center gap-2">
-          <UploadButton
+          <ApplymentAttachmentUploadButton
             category={category}
             inputId={inputId}
             disabled={busy}
@@ -447,52 +442,6 @@ function AttachmentSlot({
           ) : null}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function UploadButton({
-  category,
-  inputId,
-  disabled,
-  uploading,
-  label,
-  onOpen,
-  onUpload,
-}: {
-  category: WechatPayApplymentAttachmentCategory;
-  inputId: string;
-  disabled: boolean;
-  uploading: boolean;
-  label: string;
-  onOpen: (inputId: string) => void;
-  onUpload: (
-    category: WechatPayApplymentAttachmentCategory,
-    event: ChangeEvent<HTMLInputElement>,
-  ) => void;
-}) {
-  return (
-    <div>
-      <Input
-        id={inputId}
-        className="sr-only !size-px"
-        type="file"
-        accept={APPLYMENT_ATTACHMENT_ACCEPT}
-        disabled={disabled}
-        onChange={(event) => onUpload(category, event)}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={disabled}
-        onClick={() => onOpen(inputId)}
-      >
-        {uploading
-          ? <Loader2 aria-hidden="true" className="animate-spin" data-icon="inline-start" />
-          : <UploadCloud aria-hidden="true" data-icon="inline-start" />}
-        {label}
-      </Button>
     </div>
   );
 }

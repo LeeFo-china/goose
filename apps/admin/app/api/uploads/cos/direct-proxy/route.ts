@@ -11,6 +11,7 @@ type DirectUploadInitResult = {
   upload_url: string;
   method?: "PUT";
   headers?: Record<string, string>;
+  upload_intent?: string;
 };
 
 function jsonError(message: string, status: number, code: string) {
@@ -103,6 +104,7 @@ export async function POST(request: Request) {
     ...payload,
     object_key: initPayload.data.object_key,
     etag: uploadResponse.headers.get("etag") || undefined,
+    upload_intent: initPayload.data.upload_intent,
   };
   const { response: completeResponse, payload: completePayload } =
     await requestUploadBackend(

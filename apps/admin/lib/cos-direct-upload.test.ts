@@ -76,4 +76,49 @@ describe("uploadDirectToCos", () => {
       "/api/uploads/cos/direct-proxy",
     ]);
   });
+
+  test("forwards the upload intent when completing a direct upload", async () => {
+    const file = new File(["test"], "license.jpg", { type: "image/jpeg" });
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/backend/uploads/cos/direct-init") {
+        return jsonResponse({
+          success: true,
+          data: {
+            object_key: "tenants/tenant-id/wechat-pay-applyment/license.jpg",
+            upload_url: "https://cos.example.com/license.jpg",
+            method: "PUT",
+            headers: {
+              "content-type": "image/jpeg",
+              "content-length": String(file.size),
+            },
+            upload_intent: "bound-intent",
+          },
+        });
+      }
+      if (url === "https://cos.example.com/license.jpg") {
+        return new Response(null, {
+          status: 200,
+          headers: { etag: '"etag-1"' },
+        });
+      }
+      if (url === "/api/backend/uploads/cos/direct-complete") {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        expect(body.upload_intent).toBe("bound-intent");
+        return jsonResponse({
+          success: true,
+          data: {
+            file_id: "file-1",
+            object_key: "tenants/tenant-id/wechat-pay-applyment/license.jpg",
+          },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch;
+
+    const uploaded = await uploadDirectToCos(file, {
+      scene: "wechat_pay_applyment",
+    });
+    expect(uploaded.fileId).toBe("file-1");
+  });
 });

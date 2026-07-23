@@ -10,6 +10,7 @@ export type DirectUploadInitResult = {
   upload_url: string;
   method?: "PUT";
   headers?: Record<string, string>;
+  upload_intent?: string;
 };
 
 export type DirectUploadCompleteResult = {
@@ -120,6 +121,7 @@ export async function uploadDirectToCos(
         ...commonPayload,
         object_key: init.object_key,
         etag: uploadResponse.headers.get("etag") || undefined,
+        upload_intent: init.upload_intent,
       }),
       fallbackMessage: input.completeFallbackMessage || "登记文件直传结果失败",
     },

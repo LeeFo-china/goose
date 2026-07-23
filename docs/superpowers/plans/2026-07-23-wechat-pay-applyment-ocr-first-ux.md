@@ -1325,6 +1325,20 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
 - `wechat_pay_applyment` 私有上传 complete 必须从对象存储 HEAD 取得权威 size/MIME：
   size 必须大于 0 且不超过场景上限，MIME 必须为允许图片，并与 init 声明完全一致；
   HEAD 缺失时不得回退客户端声明。复用 onboarding 私有上传的服务层验证模式。
+- `wechat_pay_applyment` init/complete 必须使用实时 AuthContext 的 tenant/employee，并在
+  JWT 同时携带旧 claim 时校验两者完全一致；不一致直接拒绝，但不得改变其他 upload scene
+  的既有身份解析语义。两端共用 storage service 导出的单一 scene policy（2MB、JPEG/PNG），
+  init 签入 Content-Length、Content-Type 和禁止覆盖头，并用短时 intent 绑定 scene、
+  tenant、object key、size 与 MIME；complete 先验证 intent，再以 HEAD 权威复核。
+- retry/retrySave 加入队列时不能固化旧 state/action；真正执行前按 object key 重取当前附件、
+  material state、checkpoint error 和 retry action。相同 object key 的 in-flight 操作共享
+  一个 Promise，连续双击最多创建一次 OCR，已经进入 review_required 的附件不得再次 OCR。
+- 删除附件以及 SUPER→LEGAL 自动移除经办人证件采用 optimistic update 时，checkpoint
+  保存失败必须回滚至操作前的附件和联系人类型，并显示可见错误，不允许本地静默消失。
+- 隐藏 file input 由可见 shadcn Button 触发时必须设置 `tabIndex={-1}` 和
+  `aria-hidden="true"`，避免成为无标签焦点；上传按钮、重试 coordinator、联系人切换
+  helper 和请求文件校验按职责拆分，使 materials hook、附件组件和 controller 明显低于
+  500 行。
 
 - [ ] **Step 1: 写资料工作区结构失败测试**
 

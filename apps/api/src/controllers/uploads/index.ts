@@ -19,9 +19,8 @@ import {
   parseStoredObjectKey,
 } from "./stored-object-policy";
 import { assertApplymentUploadSceneAccess } from "./applyment-upload-access";
+import { assertDirectUploadFileDeclaration } from "./direct-upload-file-policy";
 
-const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
-const H5_MARKETING_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
 const IMAGE_MIME_TYPES = [
   "image/jpeg",
   "image/png",
@@ -29,7 +28,6 @@ const IMAGE_MIME_TYPES = [
   "image/heic",
   "image/heif",
 ] as const;
-const ALLOWED_MIME_TYPES = new Set<string>(IMAGE_MIME_TYPES);
 const DIRECT_UPLOAD_SCENES = [
   "project_log",
   "project_log_comment",
@@ -80,7 +78,13 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
   etag: z.string().trim().max(200, "ETag 过长").optional(),
   upload_intent: z.string().trim().min(1).max(4096, "上传凭证过长").optional(),
 }).superRefine((value, context) => {
-  if (value.scene === "tenant_onboarding_license" && !value.upload_intent) {
+  if (
+    (
+      value.scene === "tenant_onboarding_license" ||
+      value.scene === "wechat_pay_applyment"
+    ) &&
+    !value.upload_intent
+  ) {
     context.addIssue({
       code: "custom",
       path: ["upload_intent"],
@@ -162,9 +166,13 @@ class UploadController extends BaseController {
     }
 
     const scene = result.data.scene;
-    this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
-    const actorContext = await this.resolveUploadActorContext(user);
-    await assertApplymentUploadSceneAccess(user, scene);
+    assertDirectUploadFileDeclaration({
+      scene,
+      mimetype: result.data.mimetype,
+      sizeBytes: result.data.size_bytes,
+    });
+    const actorContext = await assertApplymentUploadSceneAccess(user, scene)
+      ?? await this.resolveUploadActorContext(user);
     await this.assertDirectUploadProjectAccess(
       user,
       scene,
@@ -211,9 +219,13 @@ class UploadController extends BaseController {
     }
 
     const scene = result.data.scene;
-    this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
-    const actorContext = await this.resolveUploadActorContext(user);
-    await assertApplymentUploadSceneAccess(user, scene);
+    assertDirectUploadFileDeclaration({
+      scene,
+      mimetype: result.data.mimetype,
+      sizeBytes: result.data.size_bytes,
+    });
+    const actorContext = await assertApplymentUploadSceneAccess(user, scene)
+      ?? await this.resolveUploadActorContext(user);
     await this.assertDirectUploadProjectAccess(
       user,
       scene,
@@ -256,19 +268,6 @@ class UploadController extends BaseController {
     });
 
     return ResponseHandler.success(uploaded);
-  }
-
-  private assertAllowedFile(mimetype: string, sizeBytes: number, scene: UploadScene) {
-    if (!ALLOWED_MIME_TYPES.has(mimetype)) {
-      throw Errors.badRequest("仅支持 jpg、png、webp、heic、heif 图片");
-    }
-
-    const maxUploadFileSize = this.getMaxUploadFileSize(scene);
-    if (sizeBytes > maxUploadFileSize) {
-      throw Errors.badRequest(
-        `单张图片不能超过 ${Math.floor(maxUploadFileSize / 1024 / 1024)}MB`,
-      );
-    }
   }
 
   private assertDirectObjectKeyBelongsToActor(
@@ -475,18 +474,6 @@ class UploadController extends BaseController {
 
   private async findLegacyCustomerBinding(authUserId: string) {
     return uploadService.findLegacyCustomerBinding(authUserId);
-  }
-
-  private getMaxUploadFileSize(scene: UploadScene) {
-    return [
-      "h5_marketing_page",
-      "picture_library",
-      "picture_comment",
-      "wechat_pay_applyment",
-      "tenant_onboarding_license",
-    ].includes(scene)
-      ? H5_MARKETING_MAX_UPLOAD_FILE_SIZE
-      : DEFAULT_MAX_UPLOAD_FILE_SIZE;
   }
 
   private hasUploadIdentity(user: JwtPayload | undefined): user is JwtPayload {

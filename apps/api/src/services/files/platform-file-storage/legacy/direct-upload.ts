@@ -8,14 +8,16 @@ import {
   TENANT_ONBOARDING_LICENSE_MIME_TYPES,
   verifyPrivateUploadIntent,
 } from "./private-upload-intent";
+import {
+  createApplymentUploadIntent,
+  verifyApplymentUploadIntent,
+} from "./applyment-upload-intent";
+import {
+  getWechatPayApplymentUploadPolicy,
+} from "./direct-upload-scene-policy";
 
 const PRIVATE_LICENSE_SCENE = "tenant_onboarding_license";
 const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
-const WECHAT_PAY_APPLYMENT_MAX_SIZE_BYTES = 2 * 1024 * 1024;
-const WECHAT_PAY_APPLYMENT_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-]);
 
 type PrivateHeadPolicy = {
   maxSizeBytes: number;
@@ -43,13 +45,23 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
   const visitorId = input.visitorId?.trim() || null;
   const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE
     && input.visibility === "private";
+  const applymentPolicy = input.visibility === "private"
+    ? getWechatPayApplymentUploadPolicy(input.scene)
+    : null;
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
   }
+  if (applymentPolicy) assertApplymentUploadDeclaration(input, applymentPolicy);
   const expiresAtSeconds = Math.floor(Date.now() / 1000) + config.signedUrlTtl;
   // COS only enforces this overwrite guard when bucket versioning is disabled.
   // Task 13 must verify the target bucket setting before release.
-  const signedHeaders = isPrivateLicense
+  const signedHeaders = applymentPolicy
+    ? {
+      "Content-Length": input.sizeBytes,
+      "Content-Type": input.mimetype,
+      "x-cos-forbid-overwrite": true,
+    }
+    : isPrivateLicense
     ? {
       "Content-Length": input.sizeBytes,
       "x-cos-forbid-overwrite": true,
@@ -67,7 +79,17 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     Protocol: "https:",
     ...(signedHeaders ? { Headers: signedHeaders } : {}),
   });
-  const uploadIntent = isPrivateLicense && visitorId
+  const uploadIntent = applymentPolicy
+    ? createApplymentUploadIntent({
+      secretKey: config.secretKey,
+      scene: input.scene,
+      tenantId: input.tenantId!,
+      objectKey,
+      mimeType: input.mimetype,
+      sizeBytes: input.sizeBytes,
+      expiresAtSeconds,
+    })
+    : isPrivateLicense && visitorId
     ? createPrivateUploadIntent({
       secretKey: config.secretKey,
       objectKey,
@@ -88,7 +110,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     method: "PUT" as const,
     headers: {
       "content-type": input.mimetype,
-      ...(isPrivateLicense
+      ...(isPrivateLicense || applymentPolicy
         ? {
           "content-length": String(input.sizeBytes),
           "x-cos-forbid-overwrite": true,
@@ -121,6 +143,8 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
   const isPrivateObject = input.visibility === "private";
   const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE
     && isPrivateObject;
+  const isPrivateApplyment = input.scene === PRIVATE_APPLYMENT_SCENE
+    && isPrivateObject;
   const privateHeadPolicy = getPrivateHeadPolicy(input);
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
@@ -129,6 +153,12 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     assertPrivateLicenseIntent({
       input,
       visitorId,
+      secretKey: config.secretKey,
+    });
+  }
+  if (isPrivateApplyment) {
+    assertPrivateApplymentIntent({
+      input,
       secretKey: config.secretKey,
     });
   }
@@ -276,15 +306,56 @@ function getPrivateHeadPolicy(
     };
   }
   if (input.scene === PRIVATE_APPLYMENT_SCENE) {
+    const policy = getWechatPayApplymentUploadPolicy(input.scene)!;
     return {
-      maxSizeBytes: WECHAT_PAY_APPLYMENT_MAX_SIZE_BYTES,
-      mimeTypes: WECHAT_PAY_APPLYMENT_MIME_TYPES,
-      sizeError: "微信支付进件附件大小校验失败",
-      typeError: "微信支付进件附件类型校验失败",
-      checksumError: "进件附件文件校验值不一致",
+      maxSizeBytes: policy.maxSizeBytes,
+      mimeTypes: policy.mimeTypes,
+      sizeError: policy.sizeError,
+      typeError: policy.typeError,
+      checksumError: policy.checksumError,
     };
   }
   return null;
+}
+
+function assertApplymentUploadDeclaration(
+  input: Pick<DirectUploadInput, "tenantId" | "mimetype" | "sizeBytes">,
+  policy: NonNullable<ReturnType<typeof getWechatPayApplymentUploadPolicy>>,
+) {
+  const mimeType = normalizePrivateUploadMimeType(input.mimetype);
+  if (
+    !input.tenantId ||
+    !Number.isInteger(input.sizeBytes) ||
+    input.sizeBytes <= 0 ||
+    input.sizeBytes > policy.maxSizeBytes
+  ) throw privateUploadError(policy.sizeError);
+  if (!policy.mimeTypes.has(mimeType)) {
+    throw privateUploadError(policy.typeError);
+  }
+}
+
+function assertPrivateApplymentIntent(input: {
+  input: RegisterExistingCosObjectInput;
+  secretKey: string;
+}) {
+  const policy = getWechatPayApplymentUploadPolicy(input.input.scene)!;
+  assertApplymentUploadDeclaration({
+    tenantId: input.input.tenantId,
+    mimetype: input.input.mimetype ?? "",
+    sizeBytes: input.input.sizeBytes ?? 0,
+  }, policy);
+  if (!verifyApplymentUploadIntent({
+    token: input.input.uploadIntent?.trim() || "",
+    secretKey: input.secretKey,
+    scene: input.input.scene,
+    tenantId: input.input.tenantId!,
+    objectKey: input.input.objectKey,
+    mimeType: input.input.mimetype ?? "",
+    sizeBytes: input.input.sizeBytes ?? 0,
+    nowSeconds: Math.floor(Date.now() / 1000),
+  })) {
+    throw privateUploadError("进件附件上传凭证无效或已过期");
+  }
 }
 
 function requirePrivateHeadMetadata(input: {

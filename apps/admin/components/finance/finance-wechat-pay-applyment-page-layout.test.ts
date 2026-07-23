@@ -122,11 +122,18 @@ describe("Finance wechat pay applyment page layout", () => {
 
   test("tenant applyment attachment uploader uses shadcn button for the visible upload action", () => {
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
+    const uploadButtonSource = readSource(
+      "./finance-wechat-pay-applyment-upload-button.tsx",
+    );
+    const uploadContract = `${attachmentSource}\n${uploadButtonSource}`;
 
-    expect(attachmentSource).toContain("<Button");
+    expect(attachmentSource).toContain("ApplymentAttachmentUploadButton");
+    expect(uploadButtonSource).toContain("<Button");
     expect(attachmentSource).toContain("openAttachmentPicker");
-    expect(attachmentSource).not.toContain("inline-flex h-9 cursor-pointer");
-    expect(attachmentSource).not.toContain("<label");
+    expect(uploadButtonSource).toContain("tabIndex={-1}");
+    expect(uploadButtonSource).toContain('aria-hidden="true"');
+    expect(uploadContract).not.toContain("inline-flex h-9 cursor-pointer");
+    expect(uploadContract).not.toContain("<label");
   });
 
   test("wires the materials-first upload preview auto OCR and recovery contract", () => {
@@ -152,6 +159,9 @@ describe("Finance wechat pay applyment page layout", () => {
     );
     const manualEntrySource = readSource(
       "./finance-wechat-pay-applyment-manual-entry.ts",
+    );
+    const retrySource = readSource(
+      "./finance-wechat-pay-applyment-material-retry.ts",
     );
     const ocrRequestSource = readSource("../ocr/ocr-requests.ts");
 
@@ -188,7 +198,7 @@ describe("Finance wechat pay applyment page layout", () => {
       "rebaseUploadedApplymentAttachment",
     );
     expect(materialsHookSource).not.toContain("uploaded.nextAttachments");
-    expect(materialsHookSource).toContain("getMaterialRetryAction");
+    expect(retrySource).toContain("getMaterialRetryAction");
     expect(materialsHookSource).toContain("checkpointApplymentAttachment");
     expect(materialsHookSource).toContain("recognizeApplymentAttachment");
     expect(materialsHookSource).toContain("createMaterialOperationGeneration");
@@ -258,6 +268,9 @@ describe("Finance wechat pay applyment page layout", () => {
     const attachmentSource = readSource(
       "./finance-wechat-pay-applyment-attachments.tsx",
     );
+    const uploadButtonSource = readSource(
+      "./finance-wechat-pay-applyment-upload-button.tsx",
+    );
 
     expect(panelSource).toContain("FinanceWechatPayApplymentSteps");
     expect(panelSource).toContain("FinanceWechatPayApplymentReview");
@@ -273,7 +286,7 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(schemaSource).toContain("settlement_account_number");
     expect(schemaSource).toContain("delete payload.contact_identity_number");
     expect(attachmentSource).not.toContain("image/bmp");
-    expect(attachmentSource).toContain("image/jpeg,image/png");
+    expect(uploadButtonSource).toContain("image/jpeg,image/png");
     expect(attachmentSource).toContain("2 * 1024 * 1024");
     expect(attachmentSource).toContain("contact_id_card_front");
     expect(attachmentSource).toContain("contact_id_card_back");
