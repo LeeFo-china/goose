@@ -7,6 +7,46 @@ import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applymen
 
 export const ATTACHMENT_CHECKPOINT_ERROR = "附件保存失败";
 export type AttachmentCheckpointErrorMap = Readonly<Record<string, string>>;
+export type AttachmentChangeCheckpointSnapshot = {
+  attachments: WechatPayApplymentAttachment[];
+  materialStates: ApplymentMaterialStateMap;
+  checkpointErrors: AttachmentCheckpointErrorMap;
+  unpersistedObjectKeys: Set<string>;
+};
+
+export function createAttachmentChangeCheckpointSnapshot(input: {
+  attachments: readonly WechatPayApplymentAttachment[];
+  materialStates: ApplymentMaterialStateMap;
+  checkpointErrors: AttachmentCheckpointErrorMap;
+  unpersistedObjectKeys: ReadonlySet<string>;
+}): AttachmentChangeCheckpointSnapshot {
+  return {
+    attachments: input.attachments.map((attachment) => ({ ...attachment })),
+    materialStates: { ...input.materialStates },
+    checkpointErrors: { ...input.checkpointErrors },
+    unpersistedObjectKeys: new Set(input.unpersistedObjectKeys),
+  };
+}
+
+export function restoreAttachmentChangeCheckpointSnapshot(input: {
+  snapshot: AttachmentChangeCheckpointSnapshot;
+  unpersistedObjectKeys: Set<string>;
+  commitLocal: (
+    attachments: WechatPayApplymentAttachment[],
+    states: ApplymentMaterialStateMap,
+  ) => void;
+  commitCheckpointErrors: (errors: AttachmentCheckpointErrorMap) => void;
+}) {
+  input.commitLocal(
+    input.snapshot.attachments.map((attachment) => ({ ...attachment })),
+    { ...input.snapshot.materialStates },
+  );
+  input.unpersistedObjectKeys.clear();
+  for (const objectKey of input.snapshot.unpersistedObjectKeys) {
+    input.unpersistedObjectKeys.add(objectKey);
+  }
+  input.commitCheckpointErrors({ ...input.snapshot.checkpointErrors });
+}
 
 export function setAttachmentCheckpointError(
   errors: AttachmentCheckpointErrorMap,

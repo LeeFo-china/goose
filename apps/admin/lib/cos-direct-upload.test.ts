@@ -18,6 +18,10 @@ describe("uploadDirectToCos", () => {
   test("falls back to same-origin proxy when browser direct upload is blocked", async () => {
     const calls: string[] = [];
     const file = new File(["test"], "license.jpg", { type: "image/jpeg" });
+    const firstObject =
+      "tenants/tenant-id/wechat-pay-applyment/first-license.jpg";
+    const proxyObject =
+      "tenants/tenant-id/wechat-pay-applyment/proxy-license.jpg";
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -27,8 +31,8 @@ describe("uploadDirectToCos", () => {
         return jsonResponse({
           success: true,
           data: {
-            object_key: "tenants/tenant-id/wechat-pay-applyment/license.jpg",
-            storage_path: "tenants/tenant-id/wechat-pay-applyment/license.jpg",
+            object_key: firstObject,
+            storage_path: firstObject,
             upload_url: "https://bucket.cos.accelerate.myqcloud.com/license.jpg",
             method: "PUT",
             headers: { "content-type": "image/jpeg" },
@@ -53,9 +57,9 @@ describe("uploadDirectToCos", () => {
           success: true,
           data: {
             file_id: "file-1",
-            object_key: "tenants/tenant-id/wechat-pay-applyment/license.jpg",
-            storage_path: "tenants/tenant-id/wechat-pay-applyment/license.jpg",
-            public_url: "https://assets.example.com/license.jpg",
+            status: "active",
+            object_key: proxyObject,
+            storage_path: proxyObject,
           },
         });
       }
@@ -68,13 +72,45 @@ describe("uploadDirectToCos", () => {
       uploadErrorLabel: "营业执照照片",
     });
 
-    expect(uploaded.storagePath).toBe("tenants/tenant-id/wechat-pay-applyment/license.jpg");
+    expect(uploaded.storagePath).toBe(proxyObject);
+    expect(uploaded.objectKey).toBe(proxyObject);
+    expect(uploaded.init.object_key).toBe(proxyObject);
     expect(uploaded.fileId).toBe("file-1");
     expect(calls).toEqual([
       "/api/backend/uploads/cos/direct-init",
       "https://bucket.cos.accelerate.myqcloud.com/license.jpg",
       "/api/uploads/cos/direct-proxy",
     ]);
+  });
+
+  test("does not fall back to the first init object when proxy omits its object", async () => {
+    const file = new File(["test"], "license.jpg", { type: "image/jpeg" });
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/backend/uploads/cos/direct-init") {
+        return jsonResponse({
+          success: true,
+          data: {
+            object_key: "tenants/tenant-id/wechat-pay-applyment/first.jpg",
+            upload_url: "https://cos.example.com/first.jpg",
+          },
+        });
+      }
+      if (url === "https://cos.example.com/first.jpg") {
+        throw new TypeError("Failed to fetch");
+      }
+      if (url === "/api/uploads/cos/direct-proxy") {
+        return jsonResponse({
+          success: true,
+          data: { file_id: "file-B", status: "active" },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch;
+
+    await expect(uploadDirectToCos(file, {
+      scene: "wechat_pay_applyment",
+    })).rejects.toThrow("文件上传成功但未返回地址");
   });
 
   test("forwards the upload intent when completing a direct upload", async () => {

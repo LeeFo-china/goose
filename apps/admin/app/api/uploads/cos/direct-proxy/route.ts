@@ -8,6 +8,7 @@ const MAX_PROXY_UPLOAD_SIZE = 5 * 1024 * 1024;
 
 type DirectUploadInitResult = {
   object_key: string;
+  storage_path?: string;
   upload_url: string;
   method?: "PUT";
   headers?: Record<string, string>;
@@ -107,12 +108,27 @@ export async function POST(request: Request) {
     upload_intent: initPayload.data.upload_intent,
   };
   const { response: completeResponse, payload: completePayload } =
-    await requestUploadBackend(
+    await requestUploadBackend<Record<string, unknown>>(
       "/uploads/cos/direct-complete",
       token,
       completeBody,
     );
 
+  if (
+    completeResponse.ok &&
+    completePayload.success !== false &&
+    completePayload.data
+  ) {
+    return NextResponse.json({
+      ...completePayload,
+      data: {
+        ...completePayload.data,
+        object_key: initPayload.data.object_key,
+        storage_path: initPayload.data.storage_path ??
+          initPayload.data.object_key,
+      },
+    }, { status: completeResponse.status });
+  }
   return NextResponse.json(completePayload, { status: completeResponse.status });
 }
 

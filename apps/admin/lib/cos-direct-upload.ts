@@ -102,7 +102,11 @@ export async function uploadDirectToCos(
       commonPayload,
       input.completeFallbackMessage || "登记文件直传结果失败",
     );
-    return buildDirectUploadResult(completed, init, input.missingStorageMessage);
+    return buildProxyDirectUploadResult(
+      completed,
+      init,
+      input.missingStorageMessage,
+    );
   }
   if (!uploadResponse.ok) {
     const detail = await uploadResponse.text().catch(() => "");
@@ -128,6 +132,22 @@ export async function uploadDirectToCos(
   );
 
   return buildDirectUploadResult(completed, init, input.missingStorageMessage);
+}
+
+function buildProxyDirectUploadResult(
+  completed: DirectUploadCompleteResult,
+  firstInit: DirectUploadInitResult,
+  missingStorageMessage?: string,
+) {
+  if (!completed.object_key || !completed.storage_path) {
+    throw new Error(missingStorageMessage || "文件上传成功但未返回地址");
+  }
+  const proxyInit = {
+    ...firstInit,
+    object_key: completed.object_key,
+    storage_path: completed.storage_path,
+  };
+  return buildDirectUploadResult(completed, proxyInit, missingStorageMessage);
 }
 
 function buildDirectUploadResult(

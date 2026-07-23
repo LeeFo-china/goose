@@ -128,6 +128,7 @@ export function changeApplymentAttachments(input: {
   commitStates: (states: ApplymentMaterialStateMap) => void;
   enqueue: (operation: () => Promise<void>) => Promise<void>;
   isActive: () => boolean;
+  rollback: () => void;
   persist: (input: PersistAttachmentsInput) => Promise<void>;
   clearError: () => void;
   reportError: (error: string) => void;
@@ -173,10 +174,7 @@ export function changeApplymentAttachments(input: {
     throw outcome.error;
   }).catch((error) => {
     if (manualCategories.length === 0 && input.isActive()) {
-      input.commitLocal(
-        [...input.currentAttachments],
-        input.currentStates,
-      );
+      input.rollback();
       input.reportOperationError(error);
     }
     throw error;

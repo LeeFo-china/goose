@@ -418,6 +418,7 @@ describe("wechat pay applyment material helpers", () => {
       },
       enqueue: (operation) => operation(),
       isActive: () => true,
+      rollback: () => undefined,
       persist: async (input) => {
         persistedSource = input.draftUpdateSource;
         throw new Error("save unavailable");

@@ -3,10 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { fetchApplymentOcrCapabilities } from "@/components/ocr/ocr-requests";
 import {
   checkpointApplymentAttachment,
+  createAttachmentChangeCheckpointSnapshot,
   createMaterialOperationGeneration,
   hasMaterialErrors,
   retainAttachmentCheckpointErrors,
   retainUnpersistedAttachmentKeys,
+  restoreAttachmentChangeCheckpointSnapshot,
   type AttachmentCheckpointErrorMap,
 } from "./finance-wechat-pay-applyment-checkpoint";
 import {
@@ -351,6 +353,12 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
   async function onChange(nextAttachments: WechatPayApplymentAttachment[]) {
     if (!input.editable) return;
     const generation = generationRef.current.current();
+    const checkpointSnapshot = createAttachmentChangeCheckpointSnapshot({
+      attachments: attachmentsRef.current,
+      materialStates: materialStatesRef.current,
+      checkpointErrors: attachmentSaveErrorsRef.current,
+      unpersistedObjectKeys: unpersistedObjectKeysRef.current,
+    });
     retainUnpersistedAttachmentKeys(
       unpersistedObjectKeysRef.current,
       nextAttachments,
@@ -368,6 +376,12 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       },
       enqueue: (operation) => enqueue(operation, generation),
       isActive: () => generationRef.current.isCurrent(generation),
+      rollback: () => restoreAttachmentChangeCheckpointSnapshot({
+        snapshot: checkpointSnapshot,
+        unpersistedObjectKeys: unpersistedObjectKeysRef.current,
+        commitLocal: syncAttachments,
+        commitCheckpointErrors: commitAttachmentSaveErrors,
+      }),
       persist: (persistInput) => persist(persistInput, generation),
       clearError: () => {
         if (

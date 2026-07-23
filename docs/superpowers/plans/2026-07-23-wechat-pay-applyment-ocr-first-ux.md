@@ -1339,6 +1339,12 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
   `aria-hidden="true"`，避免成为无标签焦点；上传按钮、重试 coordinator、联系人切换
   helper 和请求文件校验按职责拆分，使 materials hook、附件组件和 controller 明显低于
   500 行。
+- 浏览器直传失败改走同源 proxy 时，proxy 会重新 init 新对象；成功响应必须将其实际
+  object key/storage path 与 private complete 返回的 file id/status 合并，client 只能采用
+  proxy 返回的新对象，缺少该对象契约时直接失败，禁止回退首次失败 init 的旧对象。
+- 删除附件或联系人切换触发自动删除前，必须同时快照 attachments、material states、
+  unpersisted object keys 和 checkpoint errors；保存失败恢复完整快照，使原附件继续显示
+  “仅重试保存”，且恢复本身不得绕过 checkpoint 启动 OCR。
 
 - [ ] **Step 1: 写资料工作区结构失败测试**
 
