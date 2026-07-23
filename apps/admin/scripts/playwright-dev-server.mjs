@@ -4,6 +4,10 @@ import { join } from "node:path";
 
 const filesToRestore = ["next-env.d.ts", "tsconfig.json"];
 const snapshots = new Map();
+const port = process.env.PLAYWRIGHT_DEV_SERVER_PORT || "3011";
+const nextDistDir = process.env.PLAYWRIGHT_NEXT_DIST_DIR || ".next-e2e";
+const nextDistPath = join(process.cwd(), nextDistDir);
+const nextCliPath = join(process.cwd(), "node_modules", "next", "dist", "bin", "next");
 
 for (const file of filesToRestore) {
   const path = join(process.cwd(), file);
@@ -20,16 +24,22 @@ function restoreSnapshots() {
 
 const restoreTimer = setInterval(restoreSnapshots, 1_000);
 
-rmSync(join(process.cwd(), ".next-e2e"), { recursive: true, force: true });
+rmSync(nextDistPath, { recursive: true, force: true });
+
+function cleanup() {
+  clearInterval(restoreTimer);
+  restoreSnapshots();
+  rmSync(nextDistPath, { recursive: true, force: true });
+}
 
 const child = spawn(
-  "pnpm",
-  ["exec", "next", "dev", "-H", "127.0.0.1", "-p", "3011"],
+  process.execPath,
+  [nextCliPath, "dev", "-H", "127.0.0.1", "-p", port],
   {
     cwd: process.cwd(),
     env: {
       ...process.env,
-      NEXT_DIST_DIR: ".next-e2e",
+      NEXT_DIST_DIR: nextDistDir,
     },
     stdio: "inherit",
   },
@@ -40,21 +50,15 @@ let shuttingDown = false;
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
-  clearInterval(restoreTimer);
   child.kill(signal);
-  restoreSnapshots();
+  cleanup();
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("exit", restoreSnapshots);
+process.on("exit", cleanup);
 
 child.on("exit", (code, signal) => {
-  clearInterval(restoreTimer);
-  restoreSnapshots();
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
-  }
-  process.exit(code ?? 0);
+  cleanup();
+  process.exit(code ?? (signal ? 0 : 1));
 });

@@ -129,12 +129,16 @@ function readBody(request) {
   });
 }
 
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   const url = new URL(
     request.url || "/",
     `http://${request.headers.host || `127.0.0.1:${port}`}`,
   );
 
+  if (request.method === "GET" && url.pathname === "/health") {
+    sendJson(response, 200, { success: true });
+    return;
+  }
   if (request.method === "POST" && url.pathname === "/admin/auth/login") {
     await readBody(request);
     sendJson(response, 200, { success: true, data: session });
@@ -199,8 +203,22 @@ createServer(async (request, response) => {
     success: false,
     message: `Mock route not found: ${request.method} ${url.pathname}`,
   });
-}).listen(port, "127.0.0.1", () => {
+});
+
+server.listen(port, "127.0.0.1", () => {
   console.log(
     `[wechat-pay-applyment-mock] listening on http://127.0.0.1:${port}`,
   );
 });
+
+let shuttingDown = false;
+
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 2_000).unref();
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

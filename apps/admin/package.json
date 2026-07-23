@@ -11,6 +11,7 @@
     "typecheck": "next typegen && tsc -p tsconfig.typecheck.json --noEmit",
     "check": "pnpm run check:file-size && pnpm run typecheck",
     "test:e2e": "env -u NO_COLOR playwright test",
+    "test:e2e:wechat-pay-applyment": "env -u NO_COLOR playwright test --config=playwright.wechat-pay-applyment.config.ts",
     "test:e2e:headed": "env -u NO_COLOR playwright test --headed",
     "test:e2e:ui": "env -u NO_COLOR playwright test --ui",
     "verify:standalone-css": "node scripts/verify-standalone-css.mjs",
