@@ -1,9 +1,15 @@
 <page-skeleton tt:if="{{firstLoading}}" />
 <error-state tt:elif="{{firstError}}" title="工地暂时无法加载" bindretry="onRetry" />
 <view tt:else class="page-content sites-page">
-  <view class="page-kicker">公开施工</view><view class="page-title">看看装修如何一步步落地</view>
-  <view class="privacy-note">仅展示装修公司确认公开的社区级位置与施工进度，不展示业主姓名、电话或门牌号。</view>
-  <view tt:if="{{items.length}}" class="site-list"><view tt:for="{{items}}" tt:key="id"><site-card item="{{item}}" bindselect="onSiteSelect" /></view></view>
+  <view class="page-header">
+    <view class="ui-page-title">在建工地</view>
+    <view class="ui-page-description">查看装修公司已确认公开的施工阶段和最近进展。</view>
+  </view>
+  <view class="privacy-note ui-hint-surface">
+    <view class="privacy-label">公开范围</view>
+    <view class="privacy-copy">仅展示社区级位置与施工进度，不展示业主姓名、电话或门牌号。</view>
+  </view>
+  <view tt:if="{{items.length}}" class="site-list"><view tt:for="{{items}}" tt:key="id"><site-card item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onSiteSelect" /></view></view>
   <empty-state tt:elif="{{disabled}}" title="工地模块暂未开放" description="装修公司当前未开放在建工地展示。" />
   <empty-state tt:else title="暂无公开工地" description="在建项目将由装修公司确认公开后展示。" />
   <pagination-loader tt:if="{{items.length}}" status="{{paginationStatus}}" bindloadmore="onLoadMore" bindretry="onRetry" />

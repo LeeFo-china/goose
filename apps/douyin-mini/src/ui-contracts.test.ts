@@ -51,3 +51,14 @@ test("cases exposes a compact header and one-step filter reset", async () => {
   expect(template).toContain('bindaction="onClearFilters"');
   expect(template).toContain('primary-color="{{primaryColor}}"');
 });
+
+test("sites uses a compact public-boundary notice without an alert stripe", async () => {
+  const [template, style] = await Promise.all([
+    readSource("pages/sites/index.ttml"),
+    readSource("pages/sites/index.ttss"),
+  ]);
+  expect(template).not.toContain("page-kicker");
+  expect(template).toContain("公开范围");
+  expect(template).toContain('primary-color="{{primaryColor}}"');
+  expect(style).not.toContain("border-left");
+});

@@ -1,6 +1,7 @@
 import type { DouyinAppContext } from "../../app";
 import { isApiRequestErrorCode } from "../../api/request";
 import { fetchSites } from "../../api/sites";
+import { resolveThemeColor } from "../../components/theme";
 import type { PublicProject } from "../../models";
 import { navigateToEntityDetail } from "../../platform/navigation";
 import {
@@ -20,6 +21,8 @@ Page({
     paginationStatus: "idle",
     disabled: false,
     featureReady: false,
+    primaryColor: "#191817",
+    primaryTextColor: "#FFFFFF",
   },
   onLoad() { void this.initialize(); },
   onReachBottom() {
@@ -36,11 +39,21 @@ Page({
     try {
       const bootstrap = await getApp<DouyinAppContext>().startup;
       if (!bootstrap) return;
+      const theme = resolveThemeColor(bootstrap.theme.primary_color);
+      const themeData = {
+        primaryColor: theme.primaryColor,
+        primaryTextColor: theme.primaryTextColor,
+      };
       if (!bootstrap.features.sites) {
-        this.setData({ firstLoading: false, disabled: true, featureReady: true });
+        this.setData({
+          firstLoading: false,
+          disabled: true,
+          featureReady: true,
+          ...themeData,
+        });
         return;
       }
-      this.setData({ featureReady: true });
+      this.setData({ featureReady: true, ...themeData });
       await this.load("loadMore");
     } catch {
       this.setData({ firstLoading: false, firstError: true });
