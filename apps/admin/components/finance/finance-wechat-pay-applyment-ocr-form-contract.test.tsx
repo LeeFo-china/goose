@@ -84,6 +84,7 @@ function renderFlow(contactType: "LEGAL" | "SUPER") {
           disabled={false}
           navigationDisabled={false}
           onReturnToMaterials={() => undefined}
+          onDataChange={() => undefined}
         />
       )}
       submitContent={null}

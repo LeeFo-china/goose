@@ -8,14 +8,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Separator } from "@/components/ui/separator";
 
-import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
 import {
-  formatWechatPayApplymentTime,
-  getWechatPayApplymentAttachmentCategoryLabel,
   type WechatPayApplymentAttachment,
-  type WechatPayApplymentEvent,
-  type WechatPayApplymentRecord,
 } from "./finance-wechat-pay-applyment-shared";
+import {
+  getWechatPayApplymentReviewTargets,
+  type WechatPayApplymentReviewSnapshot,
+  type WechatPayApplymentReviewTarget,
+} from "./finance-wechat-pay-applyment-review-model";
 
 const BASE_REQUIRED_ATTACHMENTS = [
   "license_copy",
@@ -24,36 +24,30 @@ const BASE_REQUIRED_ATTACHMENTS = [
 ];
 
 const REVIEW_SECTIONS = [
-  { key: "subject", label: "主体和营业执照", target: "recognition" },
-  { key: "contact", label: "法人和超级管理员", target: "recognition" },
-  { key: "settlement", label: "经营及结算", target: "supplement" },
-  { key: "attachments", label: "申请附件", target: "materials" },
-] as const satisfies readonly {
-  key: string;
-  label: string;
-  target: ApplymentStageKey;
-}[];
+  { key: "subject", label: "主体和营业执照" },
+  { key: "contact", label: "法人和超级管理员" },
+  { key: "settlement", label: "经营及结算" },
+  { key: "attachments", label: "申请附件" },
+] as const;
 
 export function FinanceWechatPayApplymentReview({
-  applyment,
+  review,
   attachments,
-  subjectType,
   contactType,
   confirmed,
   disabled,
   navigationDisabled,
   onConfirmedChange,
-  onStageChange,
+  onNavigate,
 }: {
-  applyment: WechatPayApplymentRecord | null;
+  review: WechatPayApplymentReviewSnapshot;
   attachments: WechatPayApplymentAttachment[];
-  subjectType: string;
   contactType: string;
   confirmed: boolean;
   disabled: boolean;
   navigationDisabled: boolean;
   onConfirmedChange: (checked: boolean) => void;
-  onStageChange: (stage: ApplymentStageKey) => void;
+  onNavigate: (target: WechatPayApplymentReviewTarget) => void;
 }) {
   const requiredCategories = contactType === "SUPER"
     ? [
@@ -69,12 +63,7 @@ export function FinanceWechatPayApplymentReview({
     uploadedCategories.has(category)
   ).length;
   const attachmentsReady = readyAttachmentCount === requiredCategories.length;
-  const summaries = buildReviewSummaries({
-    applyment,
-    attachments,
-    subjectType,
-    contactType,
-  });
+  const targets = getWechatPayApplymentReviewTargets(contactType);
 
   return (
     <section className="flex flex-col gap-4">
@@ -101,7 +90,7 @@ export function FinanceWechatPayApplymentReview({
             <div className="min-w-0">
               <h3 className="text-sm font-medium">{section.label}</h3>
               <p className="mt-1 break-words text-xs text-muted-foreground">
-                {summaries[section.key]}
+                {review[section.key]}
               </p>
             </div>
             <Button
@@ -109,7 +98,7 @@ export function FinanceWechatPayApplymentReview({
               variant="ghost"
               size="sm"
               disabled={navigationDisabled}
-              onClick={() => onStageChange(section.target)}
+              onClick={() => onNavigate(targets[section.key])}
             >
               <PencilLine data-icon="inline-start" />
               返回修改
@@ -141,66 +130,4 @@ export function FinanceWechatPayApplymentReview({
       </Field>
     </section>
   );
-}
-
-export function FinanceWechatPayApplymentEvents({
-  events,
-}: {
-  events: WechatPayApplymentEvent[];
-}) {
-  return (
-    <aside className="h-fit min-w-0">
-      <h2 className="text-sm font-semibold">处理记录</h2>
-      <div className="mt-3 flex flex-col gap-3">
-        {events.length > 0
-          ? events.map((event) => (
-              <div key={event.id} className="rounded-md border p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{event.event_type}</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {formatWechatPayApplymentTime(event.created_at)}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm">{event.message || "-"}</p>
-              </div>
-            ))
-          : (
-              <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                暂无处理记录
-              </div>
-            )}
-      </div>
-    </aside>
-  );
-}
-
-function buildReviewSummaries(input: {
-  applyment: WechatPayApplymentRecord | null;
-  attachments: WechatPayApplymentAttachment[];
-  subjectType: string;
-  contactType: string;
-}): Record<(typeof REVIEW_SECTIONS)[number]["key"], string> {
-  const attachmentLabels = input.attachments.map((attachment) =>
-    getWechatPayApplymentAttachmentCategoryLabel(attachment.category)
-  );
-  return {
-    subject: [
-      input.subjectType === "SUBJECT_TYPE_ENTERPRISE" ? "企业" : "个体工商户",
-      input.applyment?.license_name || "营业执照信息待保存",
-      input.applyment?.license_code || "信用代码待保存",
-    ].join(" · "),
-    contact: [
-      input.applyment?.legal_representative_name || "法人信息待保存",
-      input.contactType === "LEGAL" ? "法人本人" : "经办人",
-      input.applyment?.super_admin_name || "管理员信息待保存",
-    ].join(" · "),
-    settlement: [
-      input.applyment?.merchant_short_name || "商户简称待保存",
-      input.applyment?.settlement_account_name || "结算账户待保存",
-      input.applyment?.settlement_bank_name || "开户银行待保存",
-    ].join(" · "),
-    attachments: attachmentLabels.length > 0
-      ? attachmentLabels.join("、")
-      : "暂未上传申请附件",
-  };
 }

@@ -1,6 +1,13 @@
 "use client";
 
-import { type FormEvent, useEffect, useRef, useState, useTransition } from "react";
+import {
+  type FormEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { CircleAlert } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -18,7 +25,6 @@ import {
 } from "./finance-wechat-pay-applyment-flow";
 import {
   buildInitialMaterialStates,
-  type ApplymentStageKey,
 } from "./finance-wechat-pay-applyment-flow-model";
 import { getInitialApplymentStage } from "./finance-wechat-pay-applyment-stage-reachability";
 import type { ApplymentAttachmentChangeOptions } from "./finance-wechat-pay-applyment-manual-entry";
@@ -26,18 +32,19 @@ import {
   FinanceWechatPayApplymentOcrReview,
   useWechatPayApplymentOcrReview,
 } from "./finance-wechat-pay-applyment-ocr-review";
+import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
+import { FinanceWechatPayApplymentEvents } from "./finance-wechat-pay-applyment-events";
+import { isApplymentDataBearingControl } from "./finance-wechat-pay-applyment-form-change";
 import {
-  FinanceWechatPayApplymentEvents,
-  FinanceWechatPayApplymentReview,
-} from "./finance-wechat-pay-applyment-review";
+  buildWechatPayApplymentStoredReview,
+  buildWechatPayApplymentSubmissionData,
+  type WechatPayApplymentReviewTarget,
+} from "./finance-wechat-pay-applyment-review-model";
 import {
   runGenerationGuardedSave,
   type ApplymentSaveGenerationContext,
 } from "./finance-wechat-pay-applyment-save-generation";
-import {
-  buildWechatPayApplymentPartialDraftPayload,
-  buildWechatPayApplymentPayload,
-} from "./finance-wechat-pay-applyment-schema";
+import { buildWechatPayApplymentPartialDraftPayload } from "./finance-wechat-pay-applyment-schema";
 import {
   formatWechatPayApplymentTime,
   getWechatPayApplymentStatusMeta,
@@ -50,10 +57,7 @@ import {
 import { FinanceWechatPayApplymentSupplementFields } from "./finance-wechat-pay-applyment-supplement-fields";
 import { useWechatPayApplymentStageNavigation } from "./use-wechat-pay-applyment-stage-navigation";
 import { useWechatPayApplymentMaterials } from "./use-wechat-pay-applyment-materials";
-import {
-  activateInvalidApplymentElement,
-  validateAllStages,
-} from "./finance-wechat-pay-applyment-validation";
+import { validateAllStages } from "./finance-wechat-pay-applyment-validation";
 
 export function FinanceWechatPayApplymentPanel({
   data,
@@ -71,7 +75,20 @@ export function FinanceWechatPayApplymentPanel({
   );
   const [contactType, setContactType] = useState(applyment?.contact_type || "LEGAL");
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
-  const initialStage = resolveInitialStage(applyment, contactType);
+  const [reviewRevision, setReviewRevision] = useState(0);
+  const [reviewSnapshot, setReviewSnapshot] = useState(() =>
+    buildWechatPayApplymentStoredReview(
+      applyment,
+      applyment?.attachments || [],
+    )
+  );
+  const initialAttachments = applyment?.attachments || [];
+  const initialStage = getInitialApplymentStage({
+    contactType,
+    attachments: initialAttachments,
+    materialStates: buildInitialMaterialStates(initialAttachments),
+    blockerStages: [],
+  });
   const [error, setError] = useState(data.error || "");
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -114,9 +131,24 @@ export function FinanceWechatPayApplymentPanel({
     attachmentsRef,
     materialStates,
     onAttachmentsChange: handleAttachmentsChange,
-    onReviewInvalidated: () => setReviewConfirmed(false),
+    onReviewInvalidated: invalidateReview,
     onError: setError,
   });
+  useLayoutEffect(() => {
+    const formElement = formRef.current;
+    if (!formElement) return;
+    setReviewSnapshot(
+      buildCurrentSubmission(formElement, attachments).review,
+    );
+  }, [
+    applyment?.id,
+    applyment?.updated_at,
+    attachments,
+    contactType,
+    ocrReview.currentValues,
+    reviewRevision,
+    subjectType,
+  ]);
   useEffect(() => {
     const nextContactType = applyment?.contact_type || "LEGAL";
     applymentRef.current = applyment;
@@ -128,7 +160,7 @@ export function FinanceWechatPayApplymentPanel({
   function submitSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editable) return;
-    saveDraft(buildCurrentApplymentPayload(event.currentTarget));
+    saveDraft(buildCurrentSubmission(event.currentTarget).payload);
   }
 
   function saveDraft(payload: Record<string, unknown>) {
@@ -157,7 +189,7 @@ export function FinanceWechatPayApplymentPanel({
         setOcrReviewCategory,
       )
     ) return;
-    const payload = buildCurrentApplymentPayload(formElement);
+    const payload = buildCurrentSubmission(formElement).payload;
     setError("");
     setSaved(false);
     startTransition(async () => {
@@ -183,11 +215,12 @@ export function FinanceWechatPayApplymentPanel({
     });
   }
 
-  function buildCurrentApplymentPayload(
+  function buildCurrentSubmission(
     formElement: HTMLFormElement,
     attachmentsOverride = attachmentsRef.current,
   ) {
-    return buildWechatPayApplymentPayload(new FormData(formElement), {
+    return buildWechatPayApplymentSubmissionData(new FormData(formElement), {
+      applyment,
       hasSensitivePayload: Boolean(applyment?.has_sensitive_payload),
       attachments: attachmentsOverride,
     });
@@ -248,7 +281,7 @@ export function FinanceWechatPayApplymentPanel({
     nextAttachments: WechatPayApplymentAttachment[],
     options?: ApplymentAttachmentChangeOptions,
   ) {
-    setReviewConfirmed(false);
+    invalidateReview();
     await materials.onChange(nextAttachments, options);
   }
 
@@ -261,7 +294,7 @@ export function FinanceWechatPayApplymentPanel({
   }
 
   function changeContactType(value: string) {
-    setReviewConfirmed(false);
+    invalidateReview();
     void changeApplymentContactTypeWithRollback({
       currentType: contactType,
       nextType: value,
@@ -274,20 +307,32 @@ export function FinanceWechatPayApplymentPanel({
     }).catch(() => undefined);
   }
 
+  function invalidateReview() {
+    setReviewConfirmed(false);
+    setReviewRevision((revision) => revision + 1);
+  }
+
+  function handleApplymentFormChange(event: FormEvent<HTMLFormElement>) {
+    handleFormChange(event);
+    if (isApplymentDataBearingControl(
+      event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+    )) {
+      invalidateReview();
+    }
+  }
+
+  function handleReviewNavigation(target: WechatPayApplymentReviewTarget) {
+    if (target.ocrCategory) setOcrReviewCategory(target.ocrCategory);
+    requestStageChange(target.stage);
+  }
+
   return (
     <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
       <form
         ref={formRef}
         className="flex min-w-0 flex-col gap-4"
         noValidate
-        onChangeCapture={handleFormChange}
-        onInvalidCapture={(event) => {
-          activateInvalidApplymentElement(
-            event.target as HTMLElement,
-            activateStage,
-            setOcrReviewCategory,
-          );
-        }}
+        onChangeCapture={handleApplymentFormChange}
         onSubmit={submitSave}
       >
         {error ? <StatusAlert>{error}</StatusAlert> : null}
@@ -323,7 +368,7 @@ export function FinanceWechatPayApplymentPanel({
           onNextStage={handleNextStage}
           onSubjectTypeChange={(value) => {
             setSubjectType(value);
-            setReviewConfirmed(false);
+            invalidateReview();
           }}
           onContactTypeChange={changeContactType}
           materialsContent={(
@@ -393,19 +438,19 @@ export function FinanceWechatPayApplymentPanel({
               disabled={pending || materials.pending || !editable}
               navigationDisabled={pending || materials.pending}
               onReturnToMaterials={() => requestStageChange("materials")}
+              onDataChange={invalidateReview}
             />
           )}
           submitContent={(
             <FinanceWechatPayApplymentReview
-              applyment={applyment}
+              review={reviewSnapshot}
               attachments={attachments}
-              subjectType={subjectType}
               contactType={contactType}
               confirmed={reviewConfirmed}
               disabled={pending || materials.pending || !editable}
               navigationDisabled={pending || materials.pending}
               onConfirmedChange={setReviewConfirmed}
-              onStageChange={requestStageChange}
+              onNavigate={handleReviewNavigation}
             />
           )}
         />
@@ -426,17 +471,4 @@ export function FinanceWechatPayApplymentPanel({
       <FinanceWechatPayApplymentEvents events={data.events} />
     </div>
   );
-}
-
-function resolveInitialStage(
-  applyment: WechatPayApplymentRecord | null,
-  contactType: string,
-): ApplymentStageKey {
-  const attachments = applyment?.attachments || [];
-  return getInitialApplymentStage({
-    contactType,
-    attachments,
-    materialStates: buildInitialMaterialStates(attachments),
-    blockerStages: [],
-  });
 }

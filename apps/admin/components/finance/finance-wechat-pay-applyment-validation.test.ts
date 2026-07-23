@@ -83,10 +83,10 @@ describe("wechat pay applyment invalid control activation", () => {
     expect(isStageValid(form, "supplement")).toBe(true);
   });
 
-  test("all-stage validation reveals the hidden OCR category", () => {
+  test("all-stage validation reports only the first hidden invalid control", () => {
     const events: string[] = [];
     let scheduled: (() => void) | undefined;
-    const invalid = {
+    const firstInvalid = {
       closest: (selector: string) => {
         if (selector === "[data-applyment-stage]") {
           return { dataset: { applymentStage: "recognition" } };
@@ -100,13 +100,24 @@ describe("wechat pay applyment invalid control activation", () => {
         }
         return null;
       },
-      focus: () => events.push("focus"),
-    } as unknown as HTMLElement;
-    const form = {
-      querySelector: () => invalid,
+      focus: () => events.push("focus:first"),
       reportValidity: () => {
-        events.push("report");
+        events.push("report:first");
         return false;
+      },
+    } as unknown as HTMLInputElement;
+    const secondInvalid = {
+      focus: () => events.push("focus:second"),
+      reportValidity: () => {
+        events.push("report:second");
+        return false;
+      },
+    } as unknown as HTMLInputElement;
+    const form = {
+      querySelector: () => firstInvalid,
+      querySelectorAll: () => [firstInvalid, secondInvalid],
+      reportValidity: () => {
+        throw new Error("form.reportValidity must not run");
       },
     } as unknown as HTMLFormElement;
 
@@ -126,8 +137,8 @@ describe("wechat pay applyment invalid control activation", () => {
     expect(events).toEqual([
       "stage:recognition",
       "category:legal_representative_id_card_front",
-      "focus",
-      "report",
+      "focus:first",
+      "report:first",
     ]);
   });
 });

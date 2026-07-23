@@ -24,6 +24,7 @@ type Props = {
   settlementId?: string | null;
   qualificationType?: string | null;
   disabled?: boolean;
+  onValueChange?: () => void;
 };
 
 export function FinanceWechatPaySettlementRuleField({
@@ -31,6 +32,7 @@ export function FinanceWechatPaySettlementRuleField({
   settlementId,
   qualificationType,
   disabled,
+  onValueChange,
 }: Props) {
   const normalizedSubjectType = normalizeSubjectType(subjectType);
   const rules = getWechatPaySettlementRulesForSubject(normalizedSubjectType);
@@ -68,7 +70,10 @@ export function FinanceWechatPaySettlementRuleField({
       />
       <Select
         value={selectedRule?.id ?? ""}
-        onValueChange={setSelectedRuleId}
+        onValueChange={(value) => {
+          setSelectedRuleId(value);
+          onValueChange?.();
+        }}
         disabled={disabled}
       >
         <SelectTrigger id={FIELD_ID} aria-required="true">

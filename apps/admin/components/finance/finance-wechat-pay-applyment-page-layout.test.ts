@@ -283,10 +283,15 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(navigationSource).toContain("getReachableStage");
     expect(navigationSource).toContain("isApplymentStageReachable");
     expect(panelSource).toContain("onStageChange={requestStageChange}");
-    expect(panelSource).toContain("onChangeCapture={handleFormChange}");
+    expect(panelSource).toContain(
+      "onChangeCapture={handleApplymentFormChange}",
+    );
+    expect(panelSource).toContain("isApplymentDataBearingControl");
     expect(panelSource).not.toContain("onStageChange={changeStage}");
     expect(navigationSource).toContain("validateStage");
     expect(panelSource).toContain("validateAllStages");
+    expect(panelSource).not.toContain("onInvalidCapture");
+    expect(panelSource).not.toContain("activateInvalidApplymentElement");
     expect(flowSource).toContain("props.reachableStage");
     expect(flowSource).toContain("isApplymentStageReachable");
   });
@@ -298,6 +303,12 @@ describe("Finance wechat pay applyment page layout", () => {
     );
     const reviewSource = readSource(
       "./finance-wechat-pay-applyment-review.tsx",
+    );
+    const reviewModelSource = readSource(
+      "./finance-wechat-pay-applyment-review-model.ts",
+    );
+    const panelSource = readSource(
+      "./finance-wechat-pay-applyment-panel.tsx",
     );
     const oldStepsUrl = new URL(
       "./finance-wechat-pay-applyment-steps.tsx",
@@ -314,10 +325,17 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(reviewSource).toContain("法人和超级管理员");
     expect(reviewSource).toContain("经营及结算");
     expect(reviewSource).toContain("申请附件");
-    expect(reviewSource).toContain('target: "recognition"');
-    expect(reviewSource).toContain('target: "supplement"');
-    expect(reviewSource).toContain('target: "materials"');
-    expect(reviewSource).toContain("onStageChange(section.target)");
+    expect(reviewModelSource).toContain(
+      'stage: "recognition", ocrCategory: "license_copy"',
+    );
+    expect(reviewModelSource).toContain(
+      '"legal_representative_id_card_front"',
+    );
+    expect(reviewModelSource).toContain('"contact_id_card_front"');
+    expect(reviewModelSource).toContain('stage: "supplement"');
+    expect(reviewModelSource).toContain('stage: "materials"');
+    expect(reviewSource).toContain("onNavigate(targets[section.key])");
+    expect(panelSource).toContain("handleReviewNavigation");
     expect(existsSync(oldStepsUrl)).toBe(false);
   });
 

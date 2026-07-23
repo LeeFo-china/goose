@@ -46,24 +46,6 @@ export function activateInvalidApplymentControl(input: {
   }
 }
 
-export function activateInvalidApplymentElement(
-  control: HTMLElement,
-  activateStage: (stage: ApplymentStageKey) => void,
-  activateOcrCategory: (
-    category: WechatPayApplymentAttachmentCategory,
-  ) => void,
-) {
-  activateInvalidApplymentControl({
-    control: {
-      stage: getApplymentStage(control),
-      ocrCategory: control.closest<HTMLElement>("[data-ocr-category]")
-        ?.dataset.ocrCategory,
-    },
-    activateStage,
-    activateOcrCategory,
-  });
-}
-
 export function validateStage(
   form: HTMLFormElement,
   stage: ApplymentStageKey,
@@ -78,7 +60,6 @@ export function validateStage(
   const invalid = getInvalidStageControl(form, stage);
   return invalid
     ? revealInvalidElement({
-        form,
         invalid,
         activateStage,
         activateOcrCategory,
@@ -104,10 +85,9 @@ export function validateAllStages(
     requestAnimationFrame(callback);
   },
 ) {
-  const invalid = form.querySelector<HTMLElement>(":invalid");
+  const invalid = findFirstInvalidApplymentControl(form);
   if (!invalid) return true;
   return revealInvalidElement({
-    form,
     invalid,
     activateStage,
     activateOcrCategory,
@@ -116,7 +96,6 @@ export function validateAllStages(
 }
 
 function revealInvalidElement(input: {
-  form: HTMLFormElement;
   invalid: HTMLElement;
   activateStage: (stage: ApplymentStageKey) => void;
   activateOcrCategory: (
@@ -133,7 +112,9 @@ function revealInvalidElement(input: {
     activateStage: input.activateStage,
     activateOcrCategory: input.activateOcrCategory,
     reportValidity: () => {
-      input.form.reportValidity();
+      if ("reportValidity" in input.invalid) {
+        (input.invalid as HTMLInputElement).reportValidity();
+      }
     },
     schedule: input.schedule,
   });
@@ -148,9 +129,16 @@ function getInvalidStageControl(
   form: HTMLFormElement,
   stage: ApplymentStageKey,
 ) {
-  return form.querySelector<HTMLElement>(
+  const stageElement = form.querySelector<HTMLElement>(
     `[data-applyment-stage="${stage}"]`,
-  )?.querySelector<HTMLElement>(":invalid");
+  );
+  return stageElement
+    ? findFirstInvalidApplymentControl(stageElement)
+    : null;
+}
+
+function findFirstInvalidApplymentControl(scope: ParentNode) {
+  return scope.querySelector<HTMLElement>(":invalid");
 }
 
 function getOcrReviewCategory(control: HTMLElement) {
