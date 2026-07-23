@@ -1,4 +1,5 @@
 import type { DouyinAppContext } from "../../app";
+import { resolveThemeColor } from "../../components/theme";
 import { buildTrustMetrics, type TrustMetric } from "../../components/trust-metrics/view-model";
 import type { PublicProject } from "../../models";
 import {
@@ -25,7 +26,8 @@ Page({
     bannerTitle: "装修先规划，开工更放心",
     bannerSubtitle: "查看真实案例与在建工地，再预约专人沟通",
     bannerImageUrl: "",
-    primaryColor: "#C45A32",
+    primaryColor: "#191817",
+    primaryTextColor: "#FFFFFF",
     metrics: [] as TrustMetric[],
     featuredCases: [] as PublicProject[],
     activeSites: [] as PublicProject[],
@@ -44,6 +46,7 @@ Page({
       const city = bootstrap.company.address_region.city
         || bootstrap.company.service_regions[0]?.city
         || "";
+      const theme = resolveThemeColor(bootstrap.theme.primary_color);
       this.setData({
         loading: false,
         brandName: bootstrap.company.name,
@@ -53,10 +56,11 @@ Page({
         bannerTitle: banner?.title || "装修先规划，开工更放心",
         bannerSubtitle: banner?.subtitle || "查看真实案例与在建工地，再预约专人沟通",
         bannerImageUrl: banner?.image_url || "",
-        primaryColor: bootstrap.theme.primary_color,
+        primaryColor: theme.primaryColor,
+        primaryTextColor: theme.primaryTextColor,
         metrics: buildTrustMetrics(bootstrap.content.trust_metrics),
-        featuredCases: bootstrap.content.featured_cases,
-        activeSites: bootstrap.content.active_sites.map(toPublicSitePresentation),
+        featuredCases: bootstrap.content.featured_cases.slice(0, 1),
+        activeSites: bootstrap.content.active_sites.map(toPublicSitePresentation).slice(0, 1),
         casesEnabled: bootstrap.features.cases,
         sitesEnabled: bootstrap.features.sites,
         serviceRegions: formatRegions(bootstrap.company.service_regions),

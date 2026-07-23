@@ -1,48 +1,47 @@
 <page-skeleton tt:if="{{loading}}" />
 <error-state tt:elif="{{error}}" bindretry="load" />
 <view tt:else class="page-content home-page">
-  <tenant-brand name="{{brandName}}" city="{{city}}" logo-url="{{logoUrl}}" />
+  <tenant-brand name="{{brandName}}" city="{{city}}" logo-url="{{logoUrl}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" />
   <view class="home-block home-hero">
     <hero-banner title="{{bannerTitle}}" subtitle="{{bannerSubtitle}}" image-url="{{bannerImageUrl}}" primary-color="{{primaryColor}}" bindaction="onLead" />
   </view>
   <view class="home-block"><trust-metrics items="{{metrics}}" /></view>
 
   <view tt:if="{{casesEnabled}}" class="home-section">
-    <view class="section-heading"><view><view class="section-kicker">灵感参考</view><view class="section-title">精选装修案例</view></view><button class="section-link" bindtap="onViewCases">查看全部</button></view>
+    <view class="section-heading"><view class="ui-section-title">精选装修案例</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewCases">查看全部</button></view>
     <view tt:if="{{featuredCases.length}}" class="card-list">
-      <view tt:for="{{featuredCases}}" tt:key="id"><case-card item="{{item}}" bindselect="onCaseSelect" /></view>
+      <view tt:for="{{featuredCases}}" tt:key="id"><case-card item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onCaseSelect" /></view>
     </view>
     <empty-state tt:else title="案例正在整理" description="装修公司尚未发布公开案例。" />
   </view>
 
   <view tt:if="{{sitesEnabled}}" class="home-section">
-    <view class="section-heading"><view><view class="section-kicker">透明施工</view><view class="section-title">在建工地</view></view><button class="section-link" bindtap="onViewSites">查看全部</button></view>
+    <view class="section-heading"><view class="ui-section-title">在建工地</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewSites">查看全部</button></view>
     <view tt:if="{{activeSites.length}}" class="site-list">
-      <view tt:for="{{activeSites}}" tt:key="id"><site-card item="{{item}}" bindselect="onSiteSelect" /></view>
+      <view tt:for="{{activeSites}}" tt:key="id"><site-card item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onSiteSelect" /></view>
     </view>
     <empty-state tt:else title="暂无公开工地" description="在建项目将由装修公司确认公开后展示。" />
   </view>
 
   <view class="home-section">
-    <view class="section-kicker">服务路径</view><view class="section-title">装修服务流程</view>
+    <view class="ui-section-title">装修服务流程</view>
     <view class="process-list">
-      <view tt:for="{{serviceProcess}}" tt:key="id" class="process-item"><view class="process-index">{{item.index}}</view><view><view class="process-title">{{item.title}}</view><view class="process-description">{{item.description}}</view></view></view>
+      <view tt:for="{{serviceProcess}}" tt:key="id" class="process-item">
+        <view class="process-index" style="color: {{primaryColor}}">{{item.index}}</view>
+        <view><view class="process-title">{{item.title}}</view><view class="process-description">{{item.description}}</view></view>
+      </view>
     </view>
     <view class="process-note">具体服务内容、价格与工期以你和装修公司最终确认的信息为准。</view>
   </view>
 
-  <view class="home-section">
-    <view class="section-kicker">本地服务</view><view class="section-title">服务区域</view>
+  <view class="home-section trust-panel ui-card">
+    <view class="ui-section-title">本地服务与公司介绍</view>
     <view tt:if="{{serviceRegions.length}}" class="region-list"><view tt:for="{{serviceRegions}}" tt:key="*this" class="region-tag">{{item}}</view></view>
     <view tt:else class="section-empty">服务区域正在完善，可提交需求后进一步确认。</view>
-  </view>
-
-  <view class="home-section company-summary">
-    <view class="section-kicker">关于我们</view><view class="section-title">{{brandName}}</view>
+    <view class="company-name">{{brandName}}</view>
     <view class="company-copy">{{summary || '公司公开介绍正在完善。'}}</view>
-    <button class="text-action" bindtap="onViewCompany">查看公司介绍</button>
+    <button class="text-action ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewCompany">查看公司介绍</button>
   </view>
 
-  <view><lead-cta primary-color="{{primaryColor}}" bindaction="onLead" /></view>
-  <button class="privacy-link" bindtap="onViewPrivacy">隐私政策与用户协议</button>
+  <button class="privacy-link ui-pressable" hover-class="ui-pressable--pressed" bindtap="onViewPrivacy">隐私政策与用户协议</button>
 </view>

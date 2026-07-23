@@ -31,3 +31,15 @@ test("case and site cards lazy load media and expose native press feedback", asy
     expect(template).toContain("primaryColor");
   }
 });
+
+test("home keeps one lead intent and uses direct Chinese section headings", async () => {
+  const [template, config] = await Promise.all([
+    readSource("pages/home/index.ttml"),
+    readSource("pages/home/index.json"),
+  ]);
+  expect(template).not.toContain("section-kicker");
+  expect(template).not.toContain("<lead-cta");
+  expect(config).not.toContain('"lead-cta"');
+  expect(template).toContain("本地服务与公司介绍");
+  expect(template).toContain('primary-color="{{primaryColor}}"');
+});

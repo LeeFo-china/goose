@@ -1,8 +1,9 @@
 .metrics { display: flex; align-items: stretch; border-top: 1rpx solid #e6e1dc; border-bottom: 1rpx solid #e6e1dc; }
 .metric { position: relative; flex: 1; min-width: 0; padding: 28rpx 12rpx; text-align: center; }
 .metric + .metric::before { position: absolute; top: 28rpx; bottom: 28rpx; left: 0; width: 1rpx; background: #e6e1dc; content: ""; }
-.metric-value { overflow: hidden; color: #25211e; font-size: 34rpx; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.metric-label { margin-top: 8rpx; color: #665f5a; font-size: 22rpx; line-height: 1.4; }
-.metrics-state { padding: 32rpx; border-top: 1rpx solid #e6e1dc; border-bottom: 1rpx solid #e6e1dc; color: #665f5a; font-size: 26rpx; text-align: center; }
+.metric-value { overflow: hidden; color: #191817; font-size: 34rpx; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.metric-label { margin-top: 8rpx; color: #625f5b; font-size: 22rpx; line-height: 1.4; }
+.metrics-state { padding: 32rpx; border-top: 1rpx solid #e6e1dc; border-bottom: 1rpx solid #e6e1dc; color: #625f5b; font-size: 26rpx; text-align: center; }
 .metrics--loading { gap: 24rpx; padding: 28rpx 0; }
 .metric-skeleton { height: 68rpx; flex: 1; border-radius: 12rpx; background: #ece9e5; }
+@import "../../styles/tokens.ttss";
