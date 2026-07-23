@@ -1,66 +1,88 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 import { Errors } from "@/errors/error-factory";
 
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
 const FILE_ID = "11111111-1111-4111-8111-111111111111";
-type PreviewFile = {
-  id: string;
-  tenant_id: string;
-  scene: string;
-  provider: "tencent_cos" | "supabase_storage";
-  object_key: string;
-};
-const findActiveById = mock(async (): Promise<PreviewFile | null> => ({
-  id: FILE_ID,
-  tenant_id: "tenant-1",
-  scene: "wechat_pay_applyment",
-  provider: "tencent_cos",
-  object_key: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
-}));
-const findActiveByIdForPlatform = mock(
-  async (): Promise<PreviewFile | null> => ({
+
+async function installSpies() {
+  const { platformFileObjectRepository } = await import(
+    "@/repositories/platform-file-objects"
+  );
+  const { accessPolicyService } = await import("@/services/access-policy");
+  const fileUrlResolver = await import("@/services/files/file-url-resolver");
+  const findActiveById = spyOn(
+    platformFileObjectRepository,
+    "findActiveById",
+  ).mockImplementation(async () => ({
     id: FILE_ID,
     tenant_id: "tenant-1",
     scene: "wechat_pay_applyment",
     provider: "tencent_cos",
     object_key: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
-  }),
-);
-const resolveSignedStoredFileUrl = mock(
-  async () => "https://example.com/signed-preview.jpg",
-);
-const hasPermission = mock((
-  authContext: AuthContext,
-  permissionCode: string,
-) => authContext.permissions.some((item) => item.code === permissionCode));
-const assertTenantContext = mock((authContext: AuthContext) => {
-  if (!authContext.tenantId) throw Errors.forbidden();
-  return authContext.tenantId;
-});
-
-mock.module("@/repositories/platform-file-objects", () => ({
-  platformFileObjectRepository: {
+  }) as never);
+  const findActiveByIdForPlatform = spyOn(
+    platformFileObjectRepository,
+    "findActiveByIdForPlatform",
+  ).mockImplementation(
+    async () => ({
+      id: FILE_ID,
+      tenant_id: "tenant-1",
+      scene: "wechat_pay_applyment",
+      provider: "tencent_cos",
+      object_key: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
+    }) as never,
+  );
+  const resolveSignedStoredFileUrl = spyOn(
+    fileUrlResolver,
+    "resolveSignedStoredFileUrl",
+  ).mockImplementation(
+    async () => "https://example.com/signed-preview.jpg",
+  );
+  const hasPermission = spyOn(
+    accessPolicyService,
+    "hasPermission",
+  ).mockImplementation((
+    authContext: AuthContext,
+    permissionCode: string,
+  ) => authContext.permissions.some((item) => item.code === permissionCode));
+  const assertTenantContext = spyOn(
+    accessPolicyService,
+    "assertTenantContext",
+  ).mockImplementation((authContext: AuthContext) => {
+    if (!authContext.tenantId) throw Errors.forbidden();
+    return authContext.tenantId;
+  });
+  return {
+    assertTenantContext,
     findActiveById,
     findActiveByIdForPlatform,
-  },
-}));
-mock.module("@/services/files/file-url-resolver", () => ({
-  resolveSignedStoredFileUrl,
-  resolveStoredFileUrl: mock((value: string) => value),
-  resolveStoredFileUrlList: mock((value: unknown) => value),
-  refreshPlatformCosPublicBaseUrlCache: mock(async () => undefined),
-  setPlatformCosAccessConfigCache: mock(() => undefined),
-  setPlatformCosPublicBaseUrlCache: mock(() => undefined),
-}));
-mock.module("@/repositories/uploads", () => ({
-  uploadRepository: {
-    findDefaultActiveCustomerMembership: mock(async () => null),
-    findLegacyCustomerBinding: mock(async () => null),
-  },
-}));
-mock.module("@/services/access-policy", () => ({
-  accessPolicyService: { hasPermission, assertTenantContext },
-}));
+    hasPermission,
+    resolveSignedStoredFileUrl,
+  };
+}
+
+let spies: Awaited<ReturnType<typeof installSpies>>;
+
+beforeAll(async () => {
+  spies = await installSpies();
+});
+
+afterAll(() => {
+  mock.restore();
+});
 
 function authContext(input: {
   platform?: boolean;
@@ -92,11 +114,11 @@ function authContext(input: {
 
 describe("UploadService wechat pay applyment previews", () => {
   beforeEach(() => {
-    findActiveById.mockClear();
-    findActiveByIdForPlatform.mockClear();
-    resolveSignedStoredFileUrl.mockClear();
-    hasPermission.mockClear();
-    assertTenantContext.mockClear();
+    spies.findActiveById.mockClear();
+    spies.findActiveByIdForPlatform.mockClear();
+    spies.resolveSignedStoredFileUrl.mockClear();
+    spies.hasPermission.mockClear();
+    spies.assertTenantContext.mockClear();
   });
 
   test("rejects a platform admin without applyment read permission", async () => {
@@ -107,7 +129,7 @@ describe("UploadService wechat pay applyment previews", () => {
       fileObjectId: FILE_ID,
     })).rejects.toMatchObject({ statusCode: 403 });
 
-    expect(findActiveByIdForPlatform).not.toHaveBeenCalled();
+    expect(spies.findActiveByIdForPlatform).not.toHaveBeenCalled();
   });
 
   test("lets a platform admin with applyment read permission preview", async () => {
@@ -124,8 +146,8 @@ describe("UploadService wechat pay applyment previews", () => {
       fileObjectId: FILE_ID,
     });
 
-    expect(findActiveById).not.toHaveBeenCalled();
-    expect(findActiveByIdForPlatform).toHaveBeenCalledWith(FILE_ID);
+    expect(spies.findActiveById).not.toHaveBeenCalled();
+    expect(spies.findActiveByIdForPlatform).toHaveBeenCalledWith(FILE_ID);
   });
 
   test("lets a tenant read-only user preview its file", async () => {
@@ -138,11 +160,11 @@ describe("UploadService wechat pay applyment previews", () => {
       fileObjectId: FILE_ID,
     });
 
-    expect(findActiveById).toHaveBeenCalledWith({
+    expect(spies.findActiveById).toHaveBeenCalledWith({
       id: FILE_ID,
       tenantId: "tenant-1",
     });
-    expect(resolveSignedStoredFileUrl).toHaveBeenCalledWith(
+    expect(spies.resolveSignedStoredFileUrl).toHaveBeenCalledWith(
       "tenants/tenant-1/wechat-pay-applyment/license.jpg",
       { ttlSeconds: 600 },
     );
@@ -159,7 +181,7 @@ describe("UploadService wechat pay applyment previews", () => {
       fileObjectId: FILE_ID,
     });
 
-    expect(findActiveById).toHaveBeenCalledWith({
+    expect(spies.findActiveById).toHaveBeenCalledWith({
       id: FILE_ID,
       tenantId: "tenant-1",
     });
@@ -172,11 +194,11 @@ describe("UploadService wechat pay applyment previews", () => {
       authContext: authContext(),
       fileObjectId: FILE_ID,
     })).rejects.toMatchObject({ statusCode: 403 });
-    expect(findActiveById).not.toHaveBeenCalled();
+    expect(spies.findActiveById).not.toHaveBeenCalled();
   });
 
   test("rejects a file object outside the current tenant", async () => {
-    findActiveById.mockImplementationOnce(async () => null);
+    spies.findActiveById.mockImplementationOnce(async () => null);
     const { uploadService } = await import("./uploads");
 
     await expect(uploadService.resolveWechatPayApplymentPreviewUrl({
@@ -186,20 +208,20 @@ describe("UploadService wechat pay applyment previews", () => {
       }),
       fileObjectId: FILE_ID,
     })).rejects.toMatchObject({ statusCode: 403 });
-    expect(findActiveById).toHaveBeenCalledWith({
+    expect(spies.findActiveById).toHaveBeenCalledWith({
       id: FILE_ID,
       tenantId: "other-tenant",
     });
   });
 
   test("rejects a file object from another upload scene", async () => {
-    findActiveById.mockImplementationOnce(async () => ({
+    spies.findActiveById.mockImplementationOnce(async () => ({
       id: FILE_ID,
       tenant_id: "tenant-1",
       scene: "employee_avatar",
       provider: "tencent_cos",
       object_key: "tenants/tenant-1/employee-avatar/avatar.jpg",
-    }));
+    }) as never);
     const { uploadService } = await import("./uploads");
 
     await expect(uploadService.resolveWechatPayApplymentPreviewUrl({
@@ -208,17 +230,17 @@ describe("UploadService wechat pay applyment previews", () => {
       }),
       fileObjectId: FILE_ID,
     })).rejects.toMatchObject({ statusCode: 403 });
-    expect(resolveSignedStoredFileUrl).not.toHaveBeenCalled();
+    expect(spies.resolveSignedStoredFileUrl).not.toHaveBeenCalled();
   });
 
   test("rejects a non-COS file object", async () => {
-    findActiveById.mockImplementationOnce(async () => ({
+    spies.findActiveById.mockImplementationOnce(async () => ({
       id: FILE_ID,
       tenant_id: "tenant-1",
       scene: "wechat_pay_applyment",
       provider: "supabase_storage",
       object_key: "legacy/license.jpg",
-    }));
+    }) as never);
     const { uploadService } = await import("./uploads");
 
     await expect(uploadService.resolveWechatPayApplymentPreviewUrl({
@@ -227,7 +249,7 @@ describe("UploadService wechat pay applyment previews", () => {
       }),
       fileObjectId: FILE_ID,
     })).rejects.toMatchObject({ statusCode: 403 });
-    expect(resolveSignedStoredFileUrl).not.toHaveBeenCalled();
+    expect(spies.resolveSignedStoredFileUrl).not.toHaveBeenCalled();
   });
 });
 
