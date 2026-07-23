@@ -238,10 +238,20 @@ export function reconcileMaterialStates(
     [WechatPayApplymentAttachmentCategory, ApplymentMaterialState]
   >) {
     const currentState = materialStates[category];
-    nextStates[category] = currentState?.attachmentObjectKey ===
-        initialState.attachmentObjectKey
-      ? currentState
-      : initialState;
+    if (currentState?.attachmentObjectKey !== initialState.attachmentObjectKey) {
+      nextStates[category] = initialState;
+      continue;
+    }
+    nextStates[category] = initialState.status === "manual" &&
+        currentState.status !== "manual"
+      ? {
+        ...currentState,
+        status: "manual",
+        recognitionId: initialState.recognitionId ??
+          currentState.recognitionId,
+        error: null,
+      }
+      : currentState;
   }
   return nextStates;
 }
@@ -267,9 +277,9 @@ export function buildRecoveredMaterialState(
 export function getMaterialRetryAction(
   state: ApplymentMaterialState | undefined,
 ): "persist" | "recognize" {
-  return state?.status === "review_required" &&
-      Boolean(state.recognitionId) &&
-      Boolean(state.error)
+  const canRetryPersistence = state?.status === "manual" ||
+    (state?.status === "review_required" && Boolean(state.recognitionId));
+  return canRetryPersistence && Boolean(state?.error)
     ? "persist"
     : "recognize";
 }

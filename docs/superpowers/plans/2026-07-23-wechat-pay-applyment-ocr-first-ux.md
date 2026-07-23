@@ -1293,6 +1293,9 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
   文件场景和 provider。权限判断位于 service/access-policy 边界。
 - materials hook 的 mounted ref effect 在每次 setup 时显式恢复为 `true`，cleanup 置为
   `false`，保证 React Strict Mode 的 setup→cleanup→setup 重放后仍可提交状态更新。
+- 选择手动填写时，同 object key 的 material state 必须立即切换为 `manual`，保留附件、
+  recognition id、fields 与 warnings，并清除 OCR error；若 `manual_entry` 草稿保存失败，
+  本地 manual 意图不回退为 failed，显示保存错误且重试仅再次持久化。
 
 - [ ] **Step 1: 写资料工作区结构失败测试**
 

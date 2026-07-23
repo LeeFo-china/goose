@@ -20,6 +20,7 @@ import {
 import {
   type ApplymentMaterialState,
   type ApplymentMaterialStateMap,
+  getMaterialRetryAction,
   replaceApplymentAttachment,
   updateAttachmentOcrReviewMetadata,
 } from "./finance-wechat-pay-applyment-flow-model";
@@ -337,9 +338,7 @@ function AttachmentSlot({
       attachment?.object_key
     ? materialState
     : undefined;
-  const needsPersistRetry = currentState?.status === "review_required" &&
-    Boolean(currentState.recognitionId) &&
-    Boolean(currentState.error);
+  const needsPersistRetry = getMaterialRetryAction(currentState) === "persist";
   const statusMeta = MATERIAL_STATUS_META[currentState?.status ??
     (attachment ? "uploaded" : "missing")];
   return (
@@ -386,8 +385,8 @@ function AttachmentSlot({
             onUpload={onUpload}
           />
           {attachment &&
-              (currentState?.status === "failed" || needsPersistRetry) &&
-              ocrSupported ? (
+              (needsPersistRetry ||
+                (currentState?.status === "failed" && ocrSupported)) ? (
             <Button
               type="button"
               variant="outline"

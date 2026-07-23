@@ -17,6 +17,10 @@ import type {
   WechatPayApplymentAttachment,
   WechatPayApplymentAttachmentCategory,
 } from "./finance-wechat-pay-applyment-shared";
+import {
+  changeApplymentAttachments,
+  MANUAL_ENTRY_PERSIST_ERROR,
+} from "./finance-wechat-pay-applyment-manual-entry";
 
 const RECOGNITION_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -300,5 +304,131 @@ describe("wechat pay applyment material helpers", () => {
       [oldLicense, replacement],
       replacement,
     )).toBe(true);
+  });
+
+  test("moves a failed material to manual immediately without a refresh", () => {
+    const manualLicense = {
+      ...attachment("license_copy", "manual"),
+      ocr_recognition_id: RECOGNITION_ID,
+    };
+    const fields = [{
+      key: "license_name",
+      label: "主体名称",
+      value: "示例商户",
+      normalized: true,
+      sensitive: false,
+      confidence: 0.99,
+    }] as const;
+    const warnings = [{
+      code: "LOW_CONTRAST",
+      level: "warning" as const,
+      message: "图片对比度较低",
+    }];
+    const failedState: ApplymentMaterialState = {
+      status: "failed",
+      attachmentObjectKey: manualLicense.object_key,
+      recognitionId: RECOGNITION_ID,
+      fields,
+      warnings,
+      error: "证照识别失败",
+    };
+
+    expect(reconcileMaterialStates(
+      [manualLicense],
+      { license_copy: failedState },
+    )).toEqual({
+      license_copy: {
+        status: "manual",
+        attachmentObjectKey: manualLicense.object_key,
+        recognitionId: RECOGNITION_ID,
+        fields,
+        warnings,
+        error: null,
+      },
+    });
+  });
+
+  test("keeps the local manual state when persistence fails", async () => {
+    const failedLicense = {
+      ...attachment("license_copy", "failed"),
+      ocr_recognition_id: RECOGNITION_ID,
+    };
+    const manualLicense = {
+      ...attachment("license_copy", "manual"),
+      ocr_recognition_id: RECOGNITION_ID,
+    };
+    const fields = [{
+      key: "license_name",
+      label: "主体名称",
+      value: "示例商户",
+      normalized: true,
+      sensitive: false,
+      confidence: 0.99,
+    }] as const;
+    const warnings = [{
+      code: "LOW_CONTRAST",
+      level: "warning" as const,
+      message: "图片对比度较低",
+    }];
+    const manualState: ApplymentMaterialState = {
+      status: "manual",
+      attachmentObjectKey: manualLicense.object_key,
+      recognitionId: RECOGNITION_ID,
+      fields,
+      warnings,
+      error: null,
+    };
+    let currentAttachments: WechatPayApplymentAttachment[] = [failedLicense];
+    let currentStates: ApplymentMaterialStateMap = {
+      license_copy: {
+        ...manualState,
+        status: "failed",
+        error: "证照识别失败",
+      },
+    };
+    let persistedSource = "";
+    let reportedError = "";
+    let operationErrorCalls = 0;
+
+    await expect(changeApplymentAttachments({
+      currentAttachments,
+      currentStates,
+      nextAttachments: [manualLicense],
+      commitLocal: (attachments, states) => {
+        currentAttachments = attachments;
+        currentStates = states;
+      },
+      getCurrentStates: () => currentStates,
+      commitStates: (states) => {
+        currentStates = states;
+      },
+      enqueue: (operation) => operation(),
+      persist: async (input) => {
+        persistedSource = input.draftUpdateSource;
+        throw new Error("save unavailable");
+      },
+      clearError: () => undefined,
+      reportError: (error) => {
+        reportedError = error;
+      },
+      reportOperationError: () => {
+        operationErrorCalls += 1;
+      },
+    })).rejects.toThrow("save unavailable");
+
+    expect(currentStates.license_copy).toEqual({
+      ...manualState,
+      status: "manual",
+      error: MANUAL_ENTRY_PERSIST_ERROR,
+    });
+    expect(getMaterialRetryAction(currentStates.license_copy)).toBe("persist");
+    expect(currentAttachments[0]).toMatchObject({
+      object_key: "tenant/license_copy.jpg",
+      ocr_recognition_id: RECOGNITION_ID,
+      ocr_review_status: "manual",
+    });
+    expect(persistedSource).toBe("manual_entry");
+    expect(reportedError).toBe(MANUAL_ENTRY_PERSIST_ERROR);
+    expect(operationErrorCalls).toBe(0);
   });
 });

@@ -23,16 +23,14 @@ import {
 } from "./finance-wechat-pay-applyment-flow-model";
 import { restoreApplymentMaterialStates } from "./finance-wechat-pay-applyment-material-recovery";
 import { setupMountedRefLifecycle } from "./finance-wechat-pay-applyment-lifecycle";
+import {
+  changeApplymentAttachments, MANUAL_ENTRY_PERSIST_ERROR, type PersistAttachmentsInput,
+} from "./finance-wechat-pay-applyment-manual-entry";
 import type { AttachmentUploadedInput } from "./finance-wechat-pay-applyment-attachments";
 import {
   WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES,
   type WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
-type DraftUpdateSource = "attachment_change" | "ocr_review" | "manual_entry";
-type PersistAttachmentsInput = {
-  attachments: WechatPayApplymentAttachment[];
-  draftUpdateSource: DraftUpdateSource;
-};
 type UseWechatPayApplymentMaterialsInput = {
   initialAttachments: WechatPayApplymentAttachment[];
   initialApplymentId?: string | null;
@@ -134,11 +132,13 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     };
   }, [input.editable, input.resetKey]);
 
-  function syncAttachments(nextAttachments: WechatPayApplymentAttachment[]) {
-    const nextStates = reconcileMaterialStates(
+  function syncAttachments(
+    nextAttachments: WechatPayApplymentAttachment[],
+    nextStates = reconcileMaterialStates(
       nextAttachments,
       materialStatesRef.current,
-    );
+    ),
+  ) {
     attachmentsRef.current = nextAttachments;
     materialStatesRef.current = nextStates;
     if (!mountedRef.current) return;
@@ -394,28 +394,22 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
   }
 
   async function onChange(nextAttachments: WechatPayApplymentAttachment[]) {
-    const changedToManual = nextAttachments.some((attachment) => {
-      const previous = attachmentsRef.current.find(
-        (item) => item.object_key === attachment.object_key,
-      );
-      return previous?.ocr_review_status !== "manual" &&
-        attachment.ocr_review_status === "manual";
+    return changeApplymentAttachments({
+      currentAttachments: attachmentsRef.current,
+      currentStates: materialStatesRef.current,
+      nextAttachments,
+      commitLocal: syncAttachments,
+      getCurrentStates: () => materialStatesRef.current,
+      commitStates: (states) => {
+        materialStatesRef.current = states;
+        if (mountedRef.current) setMaterialStates(states);
+      },
+      enqueue,
+      persist,
+      clearError: () => setError(""),
+      reportError: setError,
+      reportOperationError,
     });
-    syncAttachments(nextAttachments);
-    setError("");
-    return enqueue(() => persist(changedToManual
-      ? {
-        attachments: nextAttachments,
-        draftUpdateSource: "manual_entry",
-      }
-      : {
-        attachments: nextAttachments,
-        draftUpdateSource: "attachment_change",
-      }))
-      .catch((operationError) => {
-        reportOperationError(operationError);
-        throw operationError;
-      });
   }
 
   async function onRetryRecognition(attachment: WechatPayApplymentAttachment) {
@@ -431,10 +425,16 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
         retryState &&
         isCurrentMaterialAttachment(attachmentsRef.current, attachment)
       ) {
+        const retryingManualEntry = retryState.status === "manual";
+        const persistError = retryingManualEntry
+          ? MANUAL_ENTRY_PERSIST_ERROR
+          : RECOGNITION_PERSIST_ERROR;
         try {
           await persist({
             attachments: attachmentsRef.current,
-            draftUpdateSource: "ocr_review",
+            draftUpdateSource: retryingManualEntry
+              ? "manual_entry"
+              : "ocr_review",
           });
           const currentState = materialStatesRef.current[category];
           if (
@@ -451,10 +451,10 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
           ) {
             updateStateIfCurrent(attachment, {
               ...currentState,
-              error: RECOGNITION_PERSIST_ERROR,
+              error: persistError,
             });
           }
-          setError(RECOGNITION_PERSIST_ERROR);
+          setError(persistError);
         }
         return;
       }
