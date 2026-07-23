@@ -458,25 +458,3 @@ export function canLeaveRecognitionStage(input: {
 
   return { allowed: true, reason: null };
 }
-
-export function getInitialApplymentStage(input: {
-  contactType: string;
-  attachments: readonly WechatPayApplymentAttachment[];
-  materialStates: ApplymentMaterialStateMap;
-  blockerStages: readonly ApplymentStageKey[];
-}): ApplymentStageKey {
-  const blockerStages = new Set(input.blockerStages);
-  if (
-    !canLeaveMaterialsStage(input).allowed ||
-    blockerStages.has("materials")
-  ) {
-    return "materials";
-  }
-  if (
-    !canLeaveRecognitionStage(input).allowed ||
-    blockerStages.has("recognition")
-  ) {
-    return "recognition";
-  }
-  return blockerStages.has("supplement") ? "supplement" : "submit";
-}

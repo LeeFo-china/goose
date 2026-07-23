@@ -7,13 +7,13 @@ import {
   canLeaveMaterialsStage,
   canLeaveRecognitionStage,
   getApplymentProgress,
-  getInitialApplymentStage,
   getRequiredApplymentAttachments,
   updateAttachmentOcrReviewMetadata,
   type ApplymentAttachmentOcrReviewMetadata,
   type ApplymentMaterialState,
   type ApplymentMaterialStateMap,
 } from "./finance-wechat-pay-applyment-flow-model";
+import { getInitialApplymentStage } from "./finance-wechat-pay-applyment-stage-reachability";
 import type {
   WechatPayApplymentAttachment,
   WechatPayApplymentAttachmentCategory,

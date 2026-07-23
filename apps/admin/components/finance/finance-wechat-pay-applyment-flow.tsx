@@ -31,6 +31,7 @@ import {
   getApplymentProgress,
   type ApplymentStageKey,
 } from "./finance-wechat-pay-applyment-flow-model";
+import { isApplymentStageReachable } from "./finance-wechat-pay-applyment-stage-reachability";
 import { SelectField } from "./finance-wechat-pay-applyment-form-fields";
 
 const STAGE_LABELS: Record<ApplymentStageKey, string> = {
@@ -52,7 +53,7 @@ const CONTACT_TYPE_OPTIONS = [
 
 type ApplymentFlowProps = {
   activeStage: ApplymentStageKey;
-  highestAvailableStage: ApplymentStageKey;
+  reachableStage: ApplymentStageKey;
   subjectType: string;
   contactType: string;
   disabled: boolean;
@@ -71,8 +72,8 @@ export function FinanceWechatPayApplymentFlow(
   props: ApplymentFlowProps,
 ) {
   const activeIndex = APPLYMENT_STAGE_KEYS.indexOf(props.activeStage);
-  const highestAvailableIndex = APPLYMENT_STAGE_KEYS.indexOf(
-    props.highestAvailableStage,
+  const reachableIndex = APPLYMENT_STAGE_KEYS.indexOf(
+    props.reachableStage,
   );
   const progress = getApplymentProgress(props.activeStage);
 
@@ -81,7 +82,7 @@ export function FinanceWechatPayApplymentFlow(
       <div className="flex flex-col gap-3">
         <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {APPLYMENT_STAGE_KEYS.map((stage, index) => {
-            const isCompleted = index < highestAvailableIndex;
+            const isCompleted = index < reachableIndex;
             const isActive = stage === props.activeStage;
             return (
               <li key={stage}>
@@ -90,7 +91,8 @@ export function FinanceWechatPayApplymentFlow(
                   variant={isActive ? "default" : "outline"}
                   className="h-auto min-h-10 w-full justify-start whitespace-normal"
                   disabled={
-                    props.navigationDisabled || index > highestAvailableIndex
+                    props.navigationDisabled ||
+                    !isApplymentStageReachable(stage, props.reachableStage)
                   }
                   aria-current={isActive ? "step" : undefined}
                   onClick={() => props.onStageChange(stage)}

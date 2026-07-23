@@ -75,10 +75,7 @@ export function validateStage(
     requestAnimationFrame(callback);
   },
 ) {
-  const stagePanel = form.querySelector<HTMLElement>(
-    `[data-applyment-stage="${stage}"]`,
-  );
-  const invalid = stagePanel?.querySelector<HTMLElement>(":invalid");
+  const invalid = getInvalidStageControl(form, stage);
   return invalid
     ? revealInvalidElement({
         form,
@@ -88,6 +85,13 @@ export function validateStage(
         schedule,
       })
     : true;
+}
+
+export function isStageValid(
+  form: HTMLFormElement,
+  stage: ApplymentStageKey,
+): boolean {
+  return !getInvalidStageControl(form, stage);
 }
 
 export function validateAllStages(
@@ -138,6 +142,15 @@ function revealInvalidElement(input: {
 function getApplymentStage(control: HTMLElement) {
   return control.closest<HTMLElement>("[data-applyment-stage]")
     ?.dataset.applymentStage;
+}
+
+function getInvalidStageControl(
+  form: HTMLFormElement,
+  stage: ApplymentStageKey,
+) {
+  return form.querySelector<HTMLElement>(
+    `[data-applyment-stage="${stage}"]`,
+  )?.querySelector<HTMLElement>(":invalid");
 }
 
 function getOcrReviewCategory(control: HTMLElement) {

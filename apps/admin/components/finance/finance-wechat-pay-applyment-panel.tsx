@@ -17,13 +17,10 @@ import {
   FinanceWechatPayApplymentFlow,
 } from "./finance-wechat-pay-applyment-flow";
 import {
-  APPLYMENT_STAGE_KEYS,
   buildInitialMaterialStates,
-  canLeaveMaterialsStage,
-  canLeaveRecognitionStage,
-  getInitialApplymentStage,
   type ApplymentStageKey,
 } from "./finance-wechat-pay-applyment-flow-model";
+import { getInitialApplymentStage } from "./finance-wechat-pay-applyment-stage-reachability";
 import type { ApplymentAttachmentChangeOptions } from "./finance-wechat-pay-applyment-manual-entry";
 import {
   FinanceWechatPayApplymentOcrReview,
@@ -51,11 +48,11 @@ import {
   type WechatPayApplymentRecord,
 } from "./finance-wechat-pay-applyment-shared";
 import { FinanceWechatPayApplymentSupplementFields } from "./finance-wechat-pay-applyment-supplement-fields";
+import { useWechatPayApplymentStageNavigation } from "./use-wechat-pay-applyment-stage-navigation";
 import { useWechatPayApplymentMaterials } from "./use-wechat-pay-applyment-materials";
 import {
   activateInvalidApplymentElement,
   validateAllStages,
-  validateStage,
 } from "./finance-wechat-pay-applyment-validation";
 
 export function FinanceWechatPayApplymentPanel({
@@ -75,11 +72,6 @@ export function FinanceWechatPayApplymentPanel({
   const [contactType, setContactType] = useState(applyment?.contact_type || "LEGAL");
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const initialStage = resolveInitialStage(applyment, contactType);
-  const [activeStage, setActiveStage] =
-    useState<ApplymentStageKey>(initialStage);
-  const [highestAvailableStage, setHighestAvailableStage] =
-    useState<ApplymentStageKey>(initialStage);
-  const [stageError, setStageError] = useState("");
   const [error, setError] = useState(data.error || "");
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -99,6 +91,23 @@ export function FinanceWechatPayApplymentPanel({
     attachmentSaveErrors,
     supportedOcrDocumentTypes,
   } = materials;
+  const {
+    activeStage,
+    reachableStage,
+    stageError,
+    activateStage,
+    handleFormChange,
+    requestStageChange,
+    handleNextStage,
+  } = useWechatPayApplymentStageNavigation({
+    formRef,
+    resetKey: `${applyment?.id ?? "new"}:${applyment?.updated_at ?? ""}`,
+    initialStage,
+    contactType,
+    attachments,
+    materialStates,
+    activateOcrCategory: setOcrReviewCategory,
+  });
   const ocrReview = useWechatPayApplymentOcrReview({
     applyment,
     formRef,
@@ -110,13 +119,9 @@ export function FinanceWechatPayApplymentPanel({
   });
   useEffect(() => {
     const nextContactType = applyment?.contact_type || "LEGAL";
-    const nextStage = resolveInitialStage(applyment, nextContactType);
     applymentRef.current = applyment;
     setSubjectType(applyment?.subject_type || "SUBJECT_TYPE_ENTERPRISE");
     setContactType(nextContactType);
-    setActiveStage(nextStage);
-    setHighestAvailableStage(nextStage);
-    setStageError("");
     setReviewConfirmed(false);
   }, [applyment?.id, applyment?.updated_at]);
 
@@ -148,7 +153,7 @@ export function FinanceWechatPayApplymentPanel({
       !formElement ||
       !validateAllStages(
         formElement,
-        setActiveStage,
+        activateStage,
         setOcrReviewCategory,
       )
     ) return;
@@ -269,65 +274,17 @@ export function FinanceWechatPayApplymentPanel({
     }).catch(() => undefined);
   }
 
-  function changeStage(stage: ApplymentStageKey) {
-    setStageError("");
-    setActiveStage(stage);
-  }
-
-  function advanceStage(stage: ApplymentStageKey) {
-    setStageError("");
-    setActiveStage(stage);
-    setHighestAvailableStage((current) =>
-      APPLYMENT_STAGE_KEYS.indexOf(stage) >
-          APPLYMENT_STAGE_KEYS.indexOf(current)
-        ? stage
-        : current
-    );
-  }
-
-  function handleNextStage() {
-    if (activeStage === "materials") {
-      const result = canLeaveMaterialsStage({
-        contactType,
-        attachments,
-        materialStates,
-      });
-      if (!result.allowed) return setStageError(result.reason);
-      return advanceStage("recognition");
-    }
-    if (activeStage === "recognition") {
-      const result = canLeaveRecognitionStage({
-        attachments,
-        materialStates,
-      });
-      if (!result.allowed) return setStageError(result.reason);
-      return advanceStage("supplement");
-    }
-    if (activeStage === "supplement") {
-      const form = formRef.current;
-      if (
-        !form ||
-        !validateStage(
-          form,
-          "supplement",
-          setActiveStage,
-          setOcrReviewCategory,
-        )
-      ) return;
-      return advanceStage("submit");
-    }
-  }
-
   return (
     <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
       <form
         ref={formRef}
         className="flex min-w-0 flex-col gap-4"
         noValidate
+        onChangeCapture={handleFormChange}
         onInvalidCapture={(event) => {
           activateInvalidApplymentElement(
             event.target as HTMLElement,
-            setActiveStage,
+            activateStage,
             setOcrReviewCategory,
           );
         }}
@@ -357,12 +314,12 @@ export function FinanceWechatPayApplymentPanel({
 
         <FinanceWechatPayApplymentFlow
           activeStage={activeStage}
-          highestAvailableStage={highestAvailableStage}
+          reachableStage={reachableStage}
           subjectType={subjectType}
           contactType={contactType}
           disabled={pending || materials.pending || !editable}
           navigationDisabled={pending || materials.pending}
-          onStageChange={changeStage}
+          onStageChange={requestStageChange}
           onNextStage={handleNextStage}
           onSubjectTypeChange={(value) => {
             setSubjectType(value);
@@ -435,7 +392,7 @@ export function FinanceWechatPayApplymentPanel({
               contactType={contactType}
               disabled={pending || materials.pending || !editable}
               navigationDisabled={pending || materials.pending}
-              onReturnToMaterials={() => changeStage("materials")}
+              onReturnToMaterials={() => requestStageChange("materials")}
             />
           )}
           submitContent={(
@@ -448,7 +405,7 @@ export function FinanceWechatPayApplymentPanel({
               disabled={pending || materials.pending || !editable}
               navigationDisabled={pending || materials.pending}
               onConfirmedChange={setReviewConfirmed}
-              onStageChange={changeStage}
+              onStageChange={requestStageChange}
             />
           )}
         />

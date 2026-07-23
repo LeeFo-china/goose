@@ -262,6 +262,9 @@ describe("Finance wechat pay applyment page layout", () => {
 
     const flowSource = readFileSync(flowUrl, "utf8");
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const navigationSource = readSource(
+      "./use-wechat-pay-applyment-stage-navigation.ts",
+    );
 
     expect(flowSource).toContain("上传资料");
     expect(flowSource).toContain("核对识别");
@@ -274,11 +277,18 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(flowSource).toContain("hidden={props.stage !== props.activeStage}");
     expect(flowSource).not.toContain("@/components/ui/tabs");
     expect(panelSource).toContain("FinanceWechatPayApplymentFlow");
-    expect(panelSource).toContain("canLeaveMaterialsStage");
-    expect(panelSource).toContain("canLeaveRecognitionStage");
+    expect(navigationSource).toContain("canLeaveMaterialsStage");
+    expect(navigationSource).toContain("canLeaveRecognitionStage");
     expect(panelSource).toContain("getInitialApplymentStage");
-    expect(panelSource).toContain("validateStage");
+    expect(navigationSource).toContain("getReachableStage");
+    expect(navigationSource).toContain("isApplymentStageReachable");
+    expect(panelSource).toContain("onStageChange={requestStageChange}");
+    expect(panelSource).toContain("onChangeCapture={handleFormChange}");
+    expect(panelSource).not.toContain("onStageChange={changeStage}");
+    expect(navigationSource).toContain("validateStage");
     expect(panelSource).toContain("validateAllStages");
+    expect(flowSource).toContain("props.reachableStage");
+    expect(flowSource).toContain("isApplymentStageReachable");
   });
 
   test("keeps stage ownership and final review return targets explicit", () => {

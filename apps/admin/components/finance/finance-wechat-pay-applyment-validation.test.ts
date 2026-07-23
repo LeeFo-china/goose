@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  isStageValid,
   revealInvalidApplymentControl,
   validateAllStages,
   validateStage,
@@ -66,6 +67,20 @@ describe("wechat pay applyment invalid control activation", () => {
       '[data-applyment-stage="supplement"]',
       ":invalid",
     ]);
+  });
+
+  test("checks stage validity without activating hidden controls", () => {
+    let invalid: HTMLElement | null = {} as HTMLElement;
+    const stage = {
+      querySelector: () => invalid,
+    };
+    const form = {
+      querySelector: () => stage,
+    } as unknown as HTMLFormElement;
+
+    expect(isStageValid(form, "supplement")).toBe(false);
+    invalid = null;
+    expect(isStageValid(form, "supplement")).toBe(true);
   });
 
   test("all-stage validation reveals the hidden OCR category", () => {

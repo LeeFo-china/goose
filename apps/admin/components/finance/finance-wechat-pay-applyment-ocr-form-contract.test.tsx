@@ -69,7 +69,7 @@ function renderFlow(contactType: "LEGAL" | "SUPER") {
   return renderToStaticMarkup(
     <FinanceWechatPayApplymentFlow
       activeStage="materials"
-      highestAvailableStage="submit"
+      reachableStage="submit"
       subjectType="SUBJECT_TYPE_ENTERPRISE"
       contactType={contactType}
       disabled={false}
@@ -172,7 +172,7 @@ describe("wechat pay applyment OCR form registration", () => {
     const markup = renderToStaticMarkup(
       <FinanceWechatPayApplymentFlow
         activeStage="submit"
-        highestAvailableStage="submit"
+        reachableStage="submit"
         subjectType="SUBJECT_TYPE_ENTERPRISE"
         contactType="LEGAL"
         disabled
@@ -193,5 +193,35 @@ describe("wechat pay applyment OCR form registration", () => {
 
     expect(stageButton).toBeDefined();
     expect(stageButton?.[1]).not.toContain(" disabled=");
+  });
+
+  test("disables stages beyond the current reachable guard cap", () => {
+    const markup = renderToStaticMarkup(
+      <FinanceWechatPayApplymentFlow
+        activeStage="materials"
+        reachableStage="materials"
+        subjectType="SUBJECT_TYPE_ENTERPRISE"
+        contactType="LEGAL"
+        disabled={false}
+        navigationDisabled={false}
+        materialsContent={null}
+        recognitionContent={null}
+        supplementContent={null}
+        submitContent={null}
+        onStageChange={() => undefined}
+        onNextStage={() => undefined}
+        onSubjectTypeChange={() => undefined}
+        onContactTypeChange={() => undefined}
+      />,
+    );
+    const stageButtons = Array.from(
+      markup.matchAll(/<button([^>]*)>(.*?)<\/button>/g),
+    );
+    const attributesFor = (label: string) =>
+      stageButtons.find((match) => match[2].includes(label))?.[1];
+
+    expect(attributesFor("上传资料")).not.toContain(" disabled=");
+    expect(attributesFor("核对识别")).toContain("disabled");
+    expect(attributesFor("确认提交")).toContain("disabled");
   });
 });
