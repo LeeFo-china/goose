@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
   revealInvalidApplymentControl,
+  validateAllStages,
+  validateStage,
 } from "./finance-wechat-pay-applyment-validation";
 
 describe("wechat pay applyment invalid control activation", () => {
@@ -11,11 +13,11 @@ describe("wechat pay applyment invalid control activation", () => {
 
     const valid = revealInvalidApplymentControl({
       control: {
-        step: "attachments",
+        stage: "recognition",
         ocrCategory: "legal_representative_id_card_back",
         focus: () => events.push("focus"),
       },
-      activateStep: (step) => events.push(`step:${step}`),
+      activateStage: (stage) => events.push(`stage:${stage}`),
       activateOcrCategory: (category) => events.push(`category:${category}`),
       reportValidity: () => {
         events.push("report");
@@ -27,13 +29,88 @@ describe("wechat pay applyment invalid control activation", () => {
 
     expect(valid).toBe(false);
     expect(events).toEqual([
-      "step:attachments",
+      "stage:recognition",
       "category:legal_representative_id_card_back",
     ]);
     scheduled?.();
     expect(events).toEqual([
-      "step:attachments",
+      "stage:recognition",
       "category:legal_representative_id_card_back",
+      "focus",
+      "report",
+    ]);
+  });
+
+  test("validates only the requested stage", () => {
+    const selectors: string[] = [];
+    const stage = {
+      querySelector: (selector: string) => {
+        selectors.push(selector);
+        return null;
+      },
+    };
+    const form = {
+      querySelector: (selector: string) => {
+        selectors.push(selector);
+        return stage;
+      },
+    } as unknown as HTMLFormElement;
+
+    expect(validateStage(
+      form,
+      "supplement",
+      () => undefined,
+      () => undefined,
+    )).toBe(true);
+    expect(selectors).toEqual([
+      '[data-applyment-stage="supplement"]',
+      ":invalid",
+    ]);
+  });
+
+  test("all-stage validation reveals the hidden OCR category", () => {
+    const events: string[] = [];
+    let scheduled: (() => void) | undefined;
+    const invalid = {
+      closest: (selector: string) => {
+        if (selector === "[data-applyment-stage]") {
+          return { dataset: { applymentStage: "recognition" } };
+        }
+        if (selector === "[data-ocr-category]") {
+          return {
+            dataset: {
+              ocrCategory: "legal_representative_id_card_front",
+            },
+          };
+        }
+        return null;
+      },
+      focus: () => events.push("focus"),
+    } as unknown as HTMLElement;
+    const form = {
+      querySelector: () => invalid,
+      reportValidity: () => {
+        events.push("report");
+        return false;
+      },
+    } as unknown as HTMLFormElement;
+
+    expect(validateAllStages(
+      form,
+      (stage) => events.push(`stage:${stage}`),
+      (category) => events.push(`category:${category}`),
+      (callback) => {
+        scheduled = callback;
+      },
+    )).toBe(false);
+    expect(events).toEqual([
+      "stage:recognition",
+      "category:legal_representative_id_card_front",
+    ]);
+    scheduled?.();
+    expect(events).toEqual([
+      "stage:recognition",
+      "category:legal_representative_id_card_front",
       "focus",
       "report",
     ]);

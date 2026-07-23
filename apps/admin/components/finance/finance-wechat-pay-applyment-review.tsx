@@ -1,13 +1,20 @@
 "use client";
 
-import { CheckCircle2, CircleAlert, ShieldCheck } from "lucide-react";
+import { PencilLine } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Separator } from "@/components/ui/separator";
-import type {
-  WechatPayApplymentAttachment,
-  WechatPayApplymentRecord,
+
+import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
+import {
+  formatWechatPayApplymentTime,
+  getWechatPayApplymentAttachmentCategoryLabel,
+  type WechatPayApplymentAttachment,
+  type WechatPayApplymentEvent,
+  type WechatPayApplymentRecord,
 } from "./finance-wechat-pay-applyment-shared";
 
 const BASE_REQUIRED_ATTACHMENTS = [
@@ -16,23 +23,44 @@ const BASE_REQUIRED_ATTACHMENTS = [
   "legal_representative_id_card_back",
 ];
 
+const REVIEW_SECTIONS = [
+  { key: "subject", label: "主体和营业执照", target: "recognition" },
+  { key: "contact", label: "法人和超级管理员", target: "recognition" },
+  { key: "settlement", label: "经营及结算", target: "supplement" },
+  { key: "attachments", label: "申请附件", target: "materials" },
+] as const satisfies readonly {
+  key: string;
+  label: string;
+  target: ApplymentStageKey;
+}[];
+
 export function FinanceWechatPayApplymentReview({
   applyment,
   attachments,
+  subjectType,
   contactType,
   confirmed,
   disabled,
+  navigationDisabled,
   onConfirmedChange,
+  onStageChange,
 }: {
   applyment: WechatPayApplymentRecord | null;
   attachments: WechatPayApplymentAttachment[];
+  subjectType: string;
   contactType: string;
   confirmed: boolean;
   disabled: boolean;
+  navigationDisabled: boolean;
   onConfirmedChange: (checked: boolean) => void;
+  onStageChange: (stage: ApplymentStageKey) => void;
 }) {
   const requiredCategories = contactType === "SUPER"
-    ? [...BASE_REQUIRED_ATTACHMENTS, "contact_id_card_front", "contact_id_card_back"]
+    ? [
+        ...BASE_REQUIRED_ATTACHMENTS,
+        "contact_id_card_front",
+        "contact_id_card_back",
+      ]
     : BASE_REQUIRED_ATTACHMENTS;
   const uploadedCategories = new Set(
     attachments.map((attachment) => attachment.category).filter(Boolean),
@@ -41,9 +69,15 @@ export function FinanceWechatPayApplymentReview({
     uploadedCategories.has(category)
   ).length;
   const attachmentsReady = readyAttachmentCount === requiredCategories.length;
+  const summaries = buildReviewSummaries({
+    applyment,
+    attachments,
+    subjectType,
+    contactType,
+  });
 
   return (
-    <section className="flex flex-col gap-4 rounded-md border p-4">
+    <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">提交复核</h2>
@@ -58,27 +92,30 @@ export function FinanceWechatPayApplymentReview({
 
       <Separator />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ReviewItem
-          ready={Boolean(applyment?.has_sensitive_payload)}
-          label="敏感资料"
-          value={applyment?.has_sensitive_payload ? "已加密保存" : "保存后生成加密载荷"}
-        />
-        <ReviewItem
-          ready={attachmentsReady}
-          label="必传附件"
-          value={attachmentsReady ? "已齐全" : "仍有附件未上传"}
-        />
-        <ReviewItem
-          ready={contactType === "LEGAL" || uploadedCategories.has("contact_id_card_front")}
-          label="超级管理员"
-          value={contactType === "LEGAL" ? "法人本人" : "经办人"}
-        />
-        <ReviewItem
-          ready={Boolean(applyment?.settlement_account_number_masked)}
-          label="结算账户"
-          value={applyment?.settlement_account_number_masked || "保存后显示掩码"}
-        />
+      <div className="divide-y rounded-md border">
+        {REVIEW_SECTIONS.map((section) => (
+          <section
+            key={section.key}
+            className="flex flex-wrap items-start justify-between gap-3 p-3"
+          >
+            <div className="min-w-0">
+              <h3 className="text-sm font-medium">{section.label}</h3>
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {summaries[section.key]}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={navigationDisabled}
+              onClick={() => onStageChange(section.target)}
+            >
+              <PencilLine data-icon="inline-start" />
+              返回修改
+            </Button>
+          </section>
+        ))}
       </div>
 
       <Field data-disabled={disabled || undefined}>
@@ -106,28 +143,64 @@ export function FinanceWechatPayApplymentReview({
   );
 }
 
-function ReviewItem({
-  ready,
-  label,
-  value,
+export function FinanceWechatPayApplymentEvents({
+  events,
 }: {
-  ready: boolean;
-  label: string;
-  value: string;
+  events: WechatPayApplymentEvent[];
 }) {
-  const Icon = ready ? CheckCircle2 : CircleAlert;
   return (
-    <div className="flex min-w-0 gap-3 rounded-md border p-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-        <Icon aria-hidden="true" className="size-4" />
-      </span>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          {label}
-          {label === "敏感资料" ? <ShieldCheck aria-hidden="true" className="size-4" /> : null}
-        </div>
-        <p className="mt-1 break-words text-xs text-muted-foreground">{value}</p>
+    <aside className="h-fit min-w-0">
+      <h2 className="text-sm font-semibold">处理记录</h2>
+      <div className="mt-3 flex flex-col gap-3">
+        {events.length > 0
+          ? events.map((event) => (
+              <div key={event.id} className="rounded-md border p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{event.event_type}</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {formatWechatPayApplymentTime(event.created_at)}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm">{event.message || "-"}</p>
+              </div>
+            ))
+          : (
+              <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                暂无处理记录
+              </div>
+            )}
       </div>
-    </div>
+    </aside>
   );
+}
+
+function buildReviewSummaries(input: {
+  applyment: WechatPayApplymentRecord | null;
+  attachments: WechatPayApplymentAttachment[];
+  subjectType: string;
+  contactType: string;
+}): Record<(typeof REVIEW_SECTIONS)[number]["key"], string> {
+  const attachmentLabels = input.attachments.map((attachment) =>
+    getWechatPayApplymentAttachmentCategoryLabel(attachment.category)
+  );
+  return {
+    subject: [
+      input.subjectType === "SUBJECT_TYPE_ENTERPRISE" ? "企业" : "个体工商户",
+      input.applyment?.license_name || "营业执照信息待保存",
+      input.applyment?.license_code || "信用代码待保存",
+    ].join(" · "),
+    contact: [
+      input.applyment?.legal_representative_name || "法人信息待保存",
+      input.contactType === "LEGAL" ? "法人本人" : "经办人",
+      input.applyment?.super_admin_name || "管理员信息待保存",
+    ].join(" · "),
+    settlement: [
+      input.applyment?.merchant_short_name || "商户简称待保存",
+      input.applyment?.settlement_account_name || "结算账户待保存",
+      input.applyment?.settlement_bank_name || "开户银行待保存",
+    ].join(" · "),
+    attachments: attachmentLabels.length > 0
+      ? attachmentLabels.join("、")
+      : "暂未上传申请附件",
+  };
 }

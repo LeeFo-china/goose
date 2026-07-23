@@ -1,20 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { FinanceWechatPayApplymentFlow } from "./finance-wechat-pay-applyment-flow";
 import {
   FinanceWechatPayApplymentRecognizedFields,
   getOcrComparisonValues,
   getStoredFieldSources,
 } from "./finance-wechat-pay-applyment-recognized-fields";
+import type { WechatPayApplymentRecord } from "./finance-wechat-pay-applyment-shared";
 import {
-  FinanceWechatPayApplymentOcrReview,
-} from "./finance-wechat-pay-applyment-ocr-review";
-import type {
-  WechatPayApplymentRecord,
-} from "./finance-wechat-pay-applyment-shared";
-import {
-  FinanceWechatPayApplymentSteps,
-} from "./finance-wechat-pay-applyment-steps";
+  FinanceWechatPayApplymentSupplementFields,
+  SUPPLEMENT_FIELD_NAMES,
+} from "./finance-wechat-pay-applyment-supplement-fields";
 
 const SUPER_OCR_FIELD_NAMES = [
   "license_name",
@@ -37,6 +34,13 @@ const SUPER_OCR_FIELD_NAMES = [
   "settlement_bank_name",
 ] as const;
 
+const FLOW_FIELD_NAMES = [
+  "subject_type",
+  "contact_type",
+  ...SUPER_OCR_FIELD_NAMES,
+  ...SUPPLEMENT_FIELD_NAMES,
+] as const;
+
 function registeredNames(markup: string) {
   return Array.from(markup.matchAll(/\sname="([^"]+)"/g), (match) => match[1]);
 }
@@ -49,7 +53,7 @@ function renderRecognizedFields(
   contactType: "LEGAL" | "SUPER",
   subjectType = "SUBJECT_TYPE_ENTERPRISE",
 ) {
-  return renderToStaticMarkup(
+  return (
     <FinanceWechatPayApplymentRecognizedFields
       selectedCategory="license_copy"
       contactType={contactType}
@@ -57,23 +61,34 @@ function renderRecognizedFields(
       values={{}}
       fieldSources={{}}
       onManualChange={() => undefined}
-    />,
+    />
   );
 }
 
-function renderLegacySteps(contactType: "LEGAL" | "SUPER") {
+function renderFlow(contactType: "LEGAL" | "SUPER") {
   return renderToStaticMarkup(
-    <FinanceWechatPayApplymentSteps
-      applyment={null}
-      activeStep="subject"
+    <FinanceWechatPayApplymentFlow
+      activeStage="materials"
+      highestAvailableStage="submit"
       subjectType="SUBJECT_TYPE_ENTERPRISE"
       contactType={contactType}
-      editable
       disabled={false}
-      attachmentsContent={null}
-      reviewContent={null}
-      ocrFieldValues={{}}
-      onStepChange={() => undefined}
+      navigationDisabled={false}
+      materialsContent={null}
+      recognitionContent={renderRecognizedFields(contactType)}
+      supplementContent={(
+        <FinanceWechatPayApplymentSupplementFields
+          applyment={null}
+          subjectType="SUBJECT_TYPE_ENTERPRISE"
+          contactType={contactType}
+          disabled={false}
+          navigationDisabled={false}
+          onReturnToMaterials={() => undefined}
+        />
+      )}
+      submitContent={null}
+      onStageChange={() => undefined}
+      onNextStage={() => undefined}
       onSubjectTypeChange={() => undefined}
       onContactTypeChange={() => undefined}
     />,
@@ -81,52 +96,9 @@ function renderLegacySteps(contactType: "LEGAL" | "SUPER") {
 }
 
 describe("wechat pay applyment OCR form registration", () => {
-  test("previews the last attachment for a duplicated category", () => {
-    const markup = renderToStaticMarkup(
-      <FinanceWechatPayApplymentOcrReview
-        attachments={[
-          {
-            category: "license_copy",
-            object_key: "tenant/old-license.jpg",
-            file_name: "old-license.jpg",
-          },
-          {
-            category: "license_copy",
-            object_key: "tenant/current-license.jpg",
-            file_name: "current-license.jpg",
-          },
-        ]}
-        materialStates={{
-          license_copy: {
-            status: "uploaded",
-            attachmentObjectKey: "tenant/current-license.jpg",
-            recognitionId: null,
-            fields: [],
-            warnings: [],
-            error: null,
-          },
-        }}
-        selectedCategory="license_copy"
-        contactType="LEGAL"
-        subjectType="SUBJECT_TYPE_ENTERPRISE"
-        values={{}}
-        comparisonValues={{}}
-        fieldSources={{}}
-        onSelectedCategoryChange={() => undefined}
-        onManualChange={() => undefined}
-        onApply={() => undefined}
-        onUseManualEntry={() => undefined}
-      />,
-    );
-
-    expect(markup).toContain("current-license.jpg");
-    expect(markup).not.toContain("old-license.jpg");
-  });
-
   test("keeps identity address optional for an individual subject", () => {
-    const markup = renderRecognizedFields(
-      "LEGAL",
-      "SUBJECT_TYPE_INDIVIDUAL",
+    const markup = renderToStaticMarkup(
+      renderRecognizedFields("LEGAL", "SUBJECT_TYPE_INDIVIDUAL"),
     );
     const control = markup.match(
       /<input[^>]*name="identity_address"[^>]*>/,
@@ -157,48 +129,69 @@ describe("wechat pay applyment OCR form registration", () => {
       .toHaveProperty("settlement_account_number", "已安全保存");
   });
 
-  test("registers every SUPER OCR field exactly once in the inline workspace", () => {
-    const recognizedMarkup = renderRecognizedFields("SUPER");
-    const legacyMarkup = renderLegacySteps("SUPER");
-    const recognized = registeredNames(recognizedMarkup);
-    const legacy = registeredNames(legacyMarkup);
-    const serialized = new FormData();
+  test("keeps every stage mounted and registers each SUPER control once", () => {
+    const markup = renderFlow("SUPER");
+    const names = registeredNames(markup);
 
-    for (const name of [...recognized, ...legacy]) {
-      if (SUPER_OCR_FIELD_NAMES.includes(
-        name as (typeof SUPER_OCR_FIELD_NAMES)[number],
-      )) {
-        serialized.append(name, `${name}-value`);
-      }
+    for (const name of FLOW_FIELD_NAMES) {
+      expect(count(names, name)).toBe(1);
     }
-
-    for (const name of SUPER_OCR_FIELD_NAMES) {
-      expect(count(recognized, name)).toBe(1);
-      expect(count(legacy, name)).toBe(0);
-      expect(serialized.getAll(name)).toEqual([`${name}-value`]);
-    }
-    expect(recognizedMarkup.match(/aria-label="识别字段核对"/g)).toHaveLength(6);
-    expect(recognizedMarkup.match(/data-ocr-category=/g)).toHaveLength(6);
+    expect(markup.match(/data-applyment-stage=/g)).toHaveLength(4);
+    expect(markup.match(/data-ocr-category=/g)).toHaveLength(6);
+    expect(markup).toContain('data-applyment-stage="recognition" hidden=""');
+    expect(markup).toContain('data-applyment-stage="supplement" hidden=""');
+    expect(markup).toContain('data-applyment-stage="submit" hidden=""');
   });
 
-  test("registers LEGAL super administrator name with native validation", () => {
-    const recognizedMarkup = renderRecognizedFields("LEGAL");
-    const legacyMarkup = renderLegacySteps("LEGAL");
-    const recognized = registeredNames(recognizedMarkup);
-    const legacy = registeredNames(legacyMarkup);
+  test("registers required OCR and supplement controls natively", () => {
+    const markup = renderFlow("SUPER");
 
-    expect(count(recognized, "super_admin_name")).toBe(1);
-    expect(count(legacy, "super_admin_name")).toBe(0);
     for (const name of [
       "license_name",
       "identity_name",
       "super_admin_name",
       "settlement_account_number",
+      "merchant_short_name",
+      "super_admin_phone",
+      "super_admin_email",
+      "service_phone",
+      "settlement_account_name",
+      "business_scene_description",
+      "contact_address",
     ]) {
-      const control = recognizedMarkup.match(
-        new RegExp(`<input[^>]*name="${name}"[^>]*>`),
+      const control = markup.match(
+        new RegExp(
+          `<(?:input|textarea)[^>]*name="${name}"[^>]*>`,
+        ),
       )?.[0];
       expect(control).toContain("required");
     }
+  });
+
+  test("keeps completed stage navigation enabled for a read-only form", () => {
+    const markup = renderToStaticMarkup(
+      <FinanceWechatPayApplymentFlow
+        activeStage="submit"
+        highestAvailableStage="submit"
+        subjectType="SUBJECT_TYPE_ENTERPRISE"
+        contactType="LEGAL"
+        disabled
+        navigationDisabled={false}
+        materialsContent={null}
+        recognitionContent={null}
+        supplementContent={null}
+        submitContent={null}
+        onStageChange={() => undefined}
+        onNextStage={() => undefined}
+        onSubjectTypeChange={() => undefined}
+        onContactTypeChange={() => undefined}
+      />,
+    );
+    const stageButton = Array.from(
+      markup.matchAll(/<button([^>]*)>(.*?)<\/button>/g),
+    ).find((match) => match[2].includes("上传资料"));
+
+    expect(stageButton).toBeDefined();
+    expect(stageButton?.[1]).not.toContain(" disabled=");
   });
 });

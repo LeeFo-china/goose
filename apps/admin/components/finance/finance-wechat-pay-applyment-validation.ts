@@ -1,20 +1,22 @@
 import {
   APPLYMENT_OCR_REVIEW_CATEGORIES,
 } from "./finance-wechat-pay-applyment-recognized-fields";
-import type { ApplymentStepKey } from "./finance-wechat-pay-applyment-steps";
+import type {
+  ApplymentStageKey,
+} from "./finance-wechat-pay-applyment-flow-model";
 import type {
   WechatPayApplymentAttachmentCategory,
 } from "./finance-wechat-pay-applyment-shared";
 
 type InvalidControlTarget = {
-  step?: string;
+  stage?: string;
   ocrCategory?: string;
   focus: () => void;
 };
 
 export function revealInvalidApplymentControl(input: {
   control: InvalidControlTarget;
-  activateStep: (step: ApplymentStepKey) => void;
+  activateStage: (stage: ApplymentStageKey) => void;
   activateOcrCategory: (
     category: WechatPayApplymentAttachmentCategory,
   ) => void;
@@ -30,14 +32,14 @@ export function revealInvalidApplymentControl(input: {
 }
 
 export function activateInvalidApplymentControl(input: {
-  control: Pick<InvalidControlTarget, "step" | "ocrCategory">;
-  activateStep: (step: ApplymentStepKey) => void;
+  control: Pick<InvalidControlTarget, "stage" | "ocrCategory">;
+  activateStage: (stage: ApplymentStageKey) => void;
   activateOcrCategory: (
     category: WechatPayApplymentAttachmentCategory,
   ) => void;
 }) {
-  if (isApplymentStep(input.control.step)) {
-    input.activateStep(input.control.step);
+  if (isApplymentStage(input.control.stage)) {
+    input.activateStage(input.control.stage);
   }
   if (isOcrReviewCategory(input.control.ocrCategory)) {
     input.activateOcrCategory(input.control.ocrCategory);
@@ -46,50 +48,96 @@ export function activateInvalidApplymentControl(input: {
 
 export function activateInvalidApplymentElement(
   control: HTMLElement,
-  activateStep: (step: ApplymentStepKey) => void,
+  activateStage: (stage: ApplymentStageKey) => void,
   activateOcrCategory: (
     category: WechatPayApplymentAttachmentCategory,
   ) => void,
 ) {
   activateInvalidApplymentControl({
     control: {
-      step: control.closest<HTMLElement>("[data-applyment-step]")
-        ?.dataset.applymentStep,
+      stage: getApplymentStage(control),
       ocrCategory: control.closest<HTMLElement>("[data-ocr-category]")
         ?.dataset.ocrCategory,
     },
-    activateStep,
+    activateStage,
     activateOcrCategory,
   });
 }
 
-export function validateApplymentForm(
+export function validateStage(
   form: HTMLFormElement,
-  activateStep: (step: ApplymentStepKey) => void,
+  stage: ApplymentStageKey,
+  activateStage: (stage: ApplymentStageKey) => void,
   activateOcrCategory: (
     category: WechatPayApplymentAttachmentCategory,
   ) => void,
+  schedule: (callback: () => void) => void = (callback) => {
+    requestAnimationFrame(callback);
+  },
+) {
+  const stagePanel = form.querySelector<HTMLElement>(
+    `[data-applyment-stage="${stage}"]`,
+  );
+  const invalid = stagePanel?.querySelector<HTMLElement>(":invalid");
+  return invalid
+    ? revealInvalidElement({
+        form,
+        invalid,
+        activateStage,
+        activateOcrCategory,
+        schedule,
+      })
+    : true;
+}
+
+export function validateAllStages(
+  form: HTMLFormElement,
+  activateStage: (stage: ApplymentStageKey) => void,
+  activateOcrCategory: (
+    category: WechatPayApplymentAttachmentCategory,
+  ) => void,
+  schedule: (callback: () => void) => void = (callback) => {
+    requestAnimationFrame(callback);
+  },
 ) {
   const invalid = form.querySelector<HTMLElement>(":invalid");
   if (!invalid) return true;
-  return revealInvalidApplymentControl({
-    control: {
-      step: getApplymentStep(invalid),
-      ocrCategory: getOcrReviewCategory(invalid),
-      focus: () => invalid.focus(),
-    },
-    activateStep,
+  return revealInvalidElement({
+    form,
+    invalid,
+    activateStage,
     activateOcrCategory,
-    reportValidity: () => {
-      form.reportValidity();
-    },
-    schedule: (callback) => requestAnimationFrame(callback),
+    schedule,
   });
 }
 
-function getApplymentStep(control: HTMLElement) {
-  return control.closest<HTMLElement>("[data-applyment-step]")
-    ?.dataset.applymentStep;
+function revealInvalidElement(input: {
+  form: HTMLFormElement;
+  invalid: HTMLElement;
+  activateStage: (stage: ApplymentStageKey) => void;
+  activateOcrCategory: (
+    category: WechatPayApplymentAttachmentCategory,
+  ) => void;
+  schedule: (callback: () => void) => void;
+}) {
+  return revealInvalidApplymentControl({
+    control: {
+      stage: getApplymentStage(input.invalid),
+      ocrCategory: getOcrReviewCategory(input.invalid),
+      focus: () => input.invalid.focus(),
+    },
+    activateStage: input.activateStage,
+    activateOcrCategory: input.activateOcrCategory,
+    reportValidity: () => {
+      input.form.reportValidity();
+    },
+    schedule: input.schedule,
+  });
+}
+
+function getApplymentStage(control: HTMLElement) {
+  return control.closest<HTMLElement>("[data-applyment-stage]")
+    ?.dataset.applymentStage;
 }
 
 function getOcrReviewCategory(control: HTMLElement) {
@@ -97,13 +145,13 @@ function getOcrReviewCategory(control: HTMLElement) {
     ?.dataset.ocrCategory;
 }
 
-function isApplymentStep(value: string | undefined): value is ApplymentStepKey {
-  return value === "subject" ||
-    value === "identity" ||
-    value === "contact" ||
-    value === "settlement" ||
-    value === "attachments" ||
-    value === "review";
+function isApplymentStage(
+  value: string | undefined,
+): value is ApplymentStageKey {
+  return value === "materials" ||
+    value === "recognition" ||
+    value === "supplement" ||
+    value === "submit";
 }
 
 function isOcrReviewCategory(
