@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  getMaterialRetryAction,
   reconcileMaterialStates,
   type ApplymentMaterialState,
   type ApplymentMaterialStateMap,
@@ -9,11 +10,23 @@ import {
   changeApplymentAttachments,
   createApplymentAttachmentMutationIntent,
 } from "./finance-wechat-pay-applyment-manual-entry";
+import {
+  createOcrReviewMutationGeneration,
+  runGenerationGuardedOcrReviewMutation,
+} from "./finance-wechat-pay-applyment-ocr-mutation";
 import type {
   WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
 
 const RECOGNITION_ID = "11111111-1111-4111-8111-111111111111";
+
+function deferredRejection() {
+  let reject: (error: Error) => void = () => undefined;
+  const promise = new Promise<void>((_, rejectPromise) => {
+    reject = rejectPromise;
+  });
+  return { promise, reject };
+}
 
 function createReviewFixture() {
   const originalAttachment: WechatPayApplymentAttachment = {
@@ -104,7 +117,47 @@ function createReviewFixture() {
 }
 
 describe("wechat pay applyment OCR state mutation", () => {
-  test("idempotently synchronizes persisted manual metadata", () => {
+  test("does not report an old draft confirmation rejection", async () => {
+    const runtime = createOcrReviewMutationGeneration("draft-old");
+    const request = deferredRejection();
+    const errors: string[] = [];
+    const generation = runtime.current();
+    const outcome = runGenerationGuardedOcrReviewMutation({
+      generation,
+      isCurrentGeneration: runtime.isCurrent,
+      mutate: () => request.promise,
+      fallbackMessage: "识别结果保存失败",
+      onError: (message) => errors.push(message),
+    });
+
+    runtime.sync("draft-new");
+    request.reject(new Error("old confirm failed"));
+
+    await expect(outcome).resolves.toEqual({ type: "stale" });
+    expect(errors).toEqual([]);
+  });
+
+  test("does not report an old draft manual rejection", async () => {
+    const runtime = createOcrReviewMutationGeneration("draft-old");
+    const request = deferredRejection();
+    const errors: string[] = [];
+    const generation = runtime.current();
+    const outcome = runGenerationGuardedOcrReviewMutation({
+      generation,
+      isCurrentGeneration: runtime.isCurrent,
+      mutate: () => request.promise,
+      fallbackMessage: "手动填写状态保存失败",
+      onError: (message) => errors.push(message),
+    });
+
+    runtime.sync("draft-new");
+    request.reject(new Error("old manual failed"));
+
+    await expect(outcome).resolves.toEqual({ type: "stale" });
+    expect(errors).toEqual([]);
+  });
+
+  test("preserves a manual persistence error through unrelated reconciliation", () => {
     const fixture = createReviewFixture();
     const manualAttachment: WechatPayApplymentAttachment = {
       ...fixture.originalAttachment,
@@ -116,11 +169,61 @@ describe("wechat pay applyment OCR state mutation", () => {
       error: "手动填写状态保存失败",
     };
 
-    expect(reconcileMaterialStates(
-      [manualAttachment],
+    const reconciled = reconcileMaterialStates(
+      [
+        manualAttachment,
+        {
+          category: "legal_representative_id_card_front",
+          object_key: "tenant/identity-front.jpg",
+        },
+      ],
       { license_copy: manualState },
-    ).license_copy).toEqual({
-      ...manualState,
+    );
+
+    expect(reconciled.license_copy).toEqual(manualState);
+    expect(getMaterialRetryAction(reconciled.license_copy)).toBe("persist");
+  });
+
+  test("clears a manual persistence error only after persistence succeeds", async () => {
+    const fixture = createReviewFixture();
+    const manualAttachment: WechatPayApplymentAttachment = {
+      ...fixture.originalAttachment,
+      ocr_review_status: "manual",
+    };
+    let attachments = [manualAttachment];
+    let states: ApplymentMaterialStateMap = {
+      license_copy: {
+        ...fixture.originalState,
+        status: "manual",
+        error: "手动填写状态保存失败",
+      },
+    };
+
+    await changeApplymentAttachments({
+      currentAttachments: attachments,
+      currentStates: states,
+      nextAttachments: attachments,
+      getCurrentAttachments: () => attachments,
+      commitLocal: (nextAttachments, nextStates) => {
+        attachments = nextAttachments;
+        states = nextStates;
+      },
+      getCurrentStates: () => states,
+      commitStates: (nextStates) => {
+        states = nextStates;
+      },
+      enqueue: (operation) => operation(),
+      isActive: () => true,
+      captureRollback: () => () => undefined,
+      persist: async () => undefined,
+      clearError: () => undefined,
+      reportError: () => undefined,
+      reportOperationError: () => undefined,
+    });
+
+    expect(states.license_copy).toEqual({
+      ...fixture.originalState,
+      status: "manual",
       error: null,
     });
   });

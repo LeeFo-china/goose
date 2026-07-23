@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  type RefObject,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, FileImage, PencilLine, RefreshCw } from "lucide-react";
 import {
   buildOcrFieldReviewRows,
@@ -39,6 +34,10 @@ import {
   createApplymentAttachmentMutationIntent,
   type ApplymentAttachmentChangeOptions,
 } from "./finance-wechat-pay-applyment-manual-entry";
+import {
+  createOcrReviewMutationGeneration,
+  runGenerationGuardedOcrReviewMutation,
+} from "./finance-wechat-pay-applyment-ocr-mutation";
 import {
   APPLYMENT_OCR_REVIEW_CATEGORIES,
   FinanceWechatPayApplymentRecognizedFields,
@@ -88,6 +87,14 @@ export function useWechatPayApplymentOcrReview(input: {
   const [fieldSources, setFieldSources] = useState<
     Record<string, ApplymentFieldSource>
   >({});
+  const mutationResetKey =
+    `${input.applyment?.id ?? "new"}:${input.applyment?.updated_at ?? ""}`;
+  const mutationGenerationRef = useRef(
+    createOcrReviewMutationGeneration(mutationResetKey),
+  );
+  useLayoutEffect(() => {
+    mutationGenerationRef.current.sync(mutationResetKey);
+  }, [mutationResetKey]);
 
   useEffect(() => {
     const values = getStoredOcrValues(input.applyment);
@@ -150,11 +157,14 @@ export function useWechatPayApplymentOcrReview(input: {
     const previousApplied = { ...appliedValues };
     const previousCurrent = { ...currentValues };
     const previousSources = { ...fieldSources };
+    const generation = mutationGenerationRef.current.current();
 
     input.onReviewInvalidated();
     input.onError("");
-    try {
-      await input.onAttachmentsChange(nextAttachments, {
+    await runGenerationGuardedOcrReviewMutation({
+      generation,
+      isCurrentGeneration: mutationGenerationRef.current.isCurrent,
+      mutate: () => input.onAttachmentsChange(nextAttachments, {
         intent: createApplymentAttachmentMutationIntent(
           input.attachmentsRef.current,
           nextAttachments,
@@ -178,12 +188,10 @@ export function useWechatPayApplymentOcrReview(input: {
             setFieldSources(previousSources);
           },
         },
-      });
-    } catch (error) {
-      input.onError(error instanceof Error
-        ? error.message
-        : "识别结果保存失败");
-    }
+      }),
+      fallbackMessage: "识别结果保存失败",
+      onError: input.onError,
+    });
   }
 
   async function useManualEntry(
@@ -201,19 +209,20 @@ export function useWechatPayApplymentOcrReview(input: {
         ocr_review_status: "manual",
       },
     );
+    const generation = mutationGenerationRef.current.current();
     input.onError("");
-    try {
-      await input.onAttachmentsChange(nextAttachments, {
+    await runGenerationGuardedOcrReviewMutation({
+      generation,
+      isCurrentGeneration: mutationGenerationRef.current.isCurrent,
+      mutate: () => input.onAttachmentsChange(nextAttachments, {
         intent: createApplymentAttachmentMutationIntent(
           input.attachmentsRef.current,
           nextAttachments,
         ),
-      });
-    } catch (error) {
-      input.onError(error instanceof Error
-        ? error.message
-        : "手动填写状态保存失败");
-    }
+      }),
+      fallbackMessage: "手动填写状态保存失败",
+      onError: input.onError,
+    });
   }
 
   return {

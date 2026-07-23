@@ -1,4 +1,5 @@
 import {
+  clearPersistedOcrReviewErrors,
   getOcrMaterialDocumentType,
   getOcrMaterialCategory,
   reconcileMaterialStates,
@@ -243,6 +244,13 @@ export function changeApplymentAttachments(input: {
     if (manualCategories.length === 0) {
       try {
         await input.persist(persistInput);
+        if (input.isActive()) {
+          input.commitStates(clearPersistedOcrReviewErrors(
+            nextAttachments,
+            input.getCurrentStates(),
+          ));
+          input.clearError();
+        }
       } catch (error) {
         if (input.isActive()) {
           rollback();
@@ -256,7 +264,16 @@ export function changeApplymentAttachments(input: {
     const outcome = await runManualEntryPersistence(
       () => input.persist(persistInput),
     );
-    if (outcome.type === "persisted") return;
+    if (outcome.type === "persisted") {
+      if (input.isActive()) {
+        input.commitStates(clearPersistedOcrReviewErrors(
+          nextAttachments,
+          input.getCurrentStates(),
+        ));
+        input.clearError();
+      }
+      return;
+    }
     input.commitStates(markManualEntryPersistenceError(
       input.getCurrentStates(),
       manualCategories,

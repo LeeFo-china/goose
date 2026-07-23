@@ -252,9 +252,32 @@ export function reconcileMaterialStates(
         status: metadataStatus,
         recognitionId: initialState.recognitionId ??
           currentState.recognitionId,
-        error: null,
+        error: currentState.status === metadataStatus
+          ? currentState.error
+          : null,
       }
       : currentState;
+  }
+  return nextStates;
+}
+
+export function clearPersistedOcrReviewErrors(
+  attachments: readonly WechatPayApplymentAttachment[],
+  materialStates: ApplymentMaterialStateMap,
+): ApplymentMaterialStateMap {
+  const nextStates = { ...materialStates };
+  for (const [category, attachment] of buildCurrentOcrAttachments(attachments)) {
+    const status = attachment.ocr_review_status;
+    const currentState = materialStates[category];
+    if (
+      (status !== "confirmed" && status !== "manual") ||
+      currentState?.attachmentObjectKey !== attachment.object_key ||
+      currentState.status !== status ||
+      !currentState.error
+    ) {
+      continue;
+    }
+    nextStates[category] = { ...currentState, error: null };
   }
   return nextStates;
 }
