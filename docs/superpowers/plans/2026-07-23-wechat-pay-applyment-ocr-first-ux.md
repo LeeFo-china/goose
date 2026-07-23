@@ -731,41 +731,25 @@ if (input.settlement_account_number === null) {
 
 - [ ] **Step 8: 记录不含敏感值的字段变更审计**
 
-`createDraft` 和 `updateDraft` 的 event metadata 只记录字段名，不记录字段值：
+`createDraft` 和 `updateDraft` 的 event metadata 只记录字段名，不记录字段值。
+敏感输入字段必须由密文合并使用的同一 source-to-payload 映射派生，禁止再维护独立的
+审计字段集合：
 
 ```ts
-function buildDraftChangeAudit(input: Record<string, unknown>) {
-  const sensitiveFields = new Set([
-    "identity_name",
-    "identity_number",
-    "identity_address",
-    "super_admin_phone",
-    "contact_identity_number",
-    "contact_identity_address",
-    "settlement_account_number",
-  ]);
-  const changedFields = Object.keys(input)
-    .filter((field) => field !== "draft_update_source")
-    .sort();
-  return {
-    changed_fields: changedFields,
-    change_source: input.draft_update_source ?? "manual_save",
-    has_sensitive_replacement: changedFields.some((field) =>
-      sensitiveFields.has(field)
-    ),
-  };
-}
+const sensitiveReplacementFields = getSensitiveReplacementFields(input);
 ```
 
 在 service test 断言 metadata 包含字段名，但序列化结果不包含完整身份证号、手机号或
 银行账号。OCR recognition 自身继续记录 recognition ID、操作者、租户和文件对象，
 applyment event 不复制 OCR 原始结果。
 
-`updateDraft` 对 `draft_update_source === "autosave"` 只更新草稿和
-`updated_by_employee_id/updated_at`，不插入 applyment event，避免每次键入都污染处理
-时间线；`manual_save`、`attachment_change`、`ocr_review`、`ocr_confirm` 和
-`manual_entry` 继续写审计事件。增加测试断言 autosave 不调用 `insertEvent`，而
-`ocr_confirm` 事件只包含 change source、字段名和状态元数据。
+`updateDraft` 必须先比较 current 安全投影与 patch，并对 attachments 做按对象字段的
+结构化比较。仅 `remark`、`business_scene_description` 这类不影响主体、联系人、
+证照或结算的低风险叙述字段允许 autosave 抑制事件；其余实际变化和全部敏感替换始终
+审计，不能信任客户端 `draft_update_source` 关闭事件。附件来源只从实际变化的附件
+派生：非 confirmed 转 confirmed 为 `ocr_confirm`，转 manual 为 `manual_entry`，
+文件或其他状态变化为 `attachment_change`。metadata 仍只包含排序后的字段名、
+派生来源和非敏感状态。
 
 - [ ] **Step 9: 把完整性校验放到 preflight**
 

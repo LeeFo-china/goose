@@ -18,6 +18,28 @@ type TenantApplymentInput =
   | CreateWechatPayApplymentInput
   | UpdateWechatPayApplymentInput;
 
+const SENSITIVE_DRAFT_FIELD_MAPPINGS = [
+  { source: "identity_name", target: "identity_name" },
+  { source: "identity_number", target: "identity_number" },
+  { source: "identity_address", target: "identity_address" },
+  { source: "super_admin_name", target: "contact_name" },
+  { source: "super_admin_phone", target: "contact_phone" },
+  { source: "super_admin_email", target: "contact_email" },
+  {
+    source: "contact_identity_number",
+    target: "contact_identity_number",
+  },
+  {
+    source: "contact_identity_address",
+    target: "contact_identity_address",
+  },
+  { source: "settlement_account_name", target: "bank_account_name" },
+  { source: "settlement_account_number", target: "bank_account_number" },
+] as const satisfies readonly {
+  source: keyof UpdateWechatPayApplymentInput;
+  target: keyof ApplymentSensitiveDraftPayload;
+}[];
+
 export function buildTenantApplymentSafePatch(
   input: TenantApplymentInput,
 ): WechatPayApplymentUpdate {
@@ -151,50 +173,6 @@ export function hasSensitiveDraftValues(
   );
 }
 
-export function buildDraftChangeAudit(input: object) {
-  const sensitiveFields = new Set([
-    "identity_name",
-    "identity_number",
-    "identity_address",
-    "super_admin_phone",
-    "contact_identity_number",
-    "contact_identity_address",
-    "settlement_account_number",
-  ]);
-  const changedFields = Object.keys(input)
-    .filter((field) => field !== "draft_update_source")
-    .sort();
-  const changeSource = "draft_update_source" in input
-    ? input.draft_update_source
-    : undefined;
-  return {
-    changed_fields: changedFields,
-    change_source: changeSource ?? "manual_save",
-    has_sensitive_replacement: changedFields.some((field) =>
-      sensitiveFields.has(field)
-    ),
-  };
-}
-
-export function buildDraftAuditDecision(input: {
-  current: WechatPayApplymentRecord;
-  input: UpdateWechatPayApplymentInput;
-}) {
-  const metadata = buildDraftChangeAudit(input.input);
-  const forcedAudit = hasForcedAuditChange(input);
-  const changeSource = forcedAudit
-    ? deriveForcedAuditSource(input)
-    : metadata.change_source;
-  return {
-    should_audit: metadata.change_source !== "autosave" || forcedAudit,
-    metadata: {
-      ...metadata,
-      change_source: changeSource,
-      ...(forcedAudit ? { forced_audit: true } : {}),
-    },
-  };
-}
-
 export async function buildSensitivePayloadUpdate(input: {
   current: WechatPayApplymentRecord;
   input: UpdateWechatPayApplymentInput;
@@ -272,32 +250,9 @@ export function mergeSensitivePayload(input: {
   contactType: string | null;
 }): ApplymentSensitiveDraftPayload {
   const next: ApplymentSensitiveDraftPayload = { ...input.current };
-  assignSensitive(next, "identity_name", input.patch.identity_name);
-  assignSensitive(next, "identity_number", input.patch.identity_number);
-  assignSensitive(next, "identity_address", input.patch.identity_address);
-  assignSensitive(next, "contact_name", input.patch.super_admin_name);
-  assignSensitive(next, "contact_phone", input.patch.super_admin_phone);
-  assignSensitive(next, "contact_email", input.patch.super_admin_email);
-  assignSensitive(
-    next,
-    "contact_identity_number",
-    input.patch.contact_identity_number,
-  );
-  assignSensitive(
-    next,
-    "contact_identity_address",
-    input.patch.contact_identity_address,
-  );
-  assignSensitive(
-    next,
-    "bank_account_name",
-    input.patch.settlement_account_name,
-  );
-  assignSensitive(
-    next,
-    "bank_account_number",
-    input.patch.settlement_account_number,
-  );
+  for (const { source, target } of SENSITIVE_DRAFT_FIELD_MAPPINGS) {
+    assignSensitive(next, target, input.patch[source]);
+  }
   if (
     input.contactType === "LEGAL" &&
     (
@@ -314,66 +269,14 @@ export function mergeSensitivePayload(input: {
 export function hasSensitiveReplacement(
   input: UpdateWechatPayApplymentInput,
 ): boolean {
-  return [
-    input.identity_name,
-    input.identity_number,
-    input.identity_address,
-    input.super_admin_name,
-    input.super_admin_phone,
-    input.super_admin_email,
-    input.contact_identity_number,
-    input.contact_identity_address,
-    input.settlement_account_name,
-    input.settlement_account_number,
-  ].some((value) => value !== undefined);
+  return getSensitiveReplacementFields(input).length > 0;
 }
 
-function hasForcedAuditChange(input: {
-  current: WechatPayApplymentRecord;
-  input: UpdateWechatPayApplymentInput;
-}) {
-  if (hasSensitiveReplacement(input.input)) return true;
-  if (hasAttachmentChange(input)) return true;
-  for (const field of [
-    "contact_type",
-    "subject_type",
-    "settlement_account_type",
-    "settlement_bank_name",
-    "settlement_bank_full_name",
-    "settlement_bank_branch_id",
-    "settlement_id",
-    "qualification_type",
-  ] as const) {
-    if (
-      input.input[field] !== undefined &&
-      input.input[field] !== input.current[field]
-    ) return true;
-  }
-  return false;
-}
-
-function deriveForcedAuditSource(input: {
-  current: WechatPayApplymentRecord;
-  input: UpdateWechatPayApplymentInput;
-}) {
-  if (hasAttachmentChange(input)) {
-    const statuses = input.input.attachments?.map((attachment) =>
-      attachment.ocr_review_status
-    ) ?? [];
-    if (statuses.includes("confirmed")) return "ocr_confirm";
-    if (statuses.includes("review_required")) return "ocr_review";
-    return "attachment_change";
-  }
-  return "manual_entry";
-}
-
-function hasAttachmentChange(input: {
-  current: WechatPayApplymentRecord;
-  input: UpdateWechatPayApplymentInput;
-}) {
-  return input.input.attachments !== undefined &&
-    JSON.stringify(input.input.attachments) !==
-      JSON.stringify(input.current.attachments);
+export function getSensitiveReplacementFields(input: object): string[] {
+  const inputRecord = input as Record<string, unknown>;
+  return SENSITIVE_DRAFT_FIELD_MAPPINGS
+    .filter(({ source }) => inputRecord[source] !== undefined)
+    .map(({ source }) => source);
 }
 
 export function sanitizeApplymentRecord(

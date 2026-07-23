@@ -389,7 +389,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     const service = await createService();
 
     await service.updateDraft(authContext, applymentId, {
-      merchant_short_name: "更新后的简称",
+      remark: "自动保存的内部备注",
       draft_update_source: "autosave",
     });
 
