@@ -15,6 +15,7 @@ import {
 import {
   buildWechatPayApplymentAttachmentPreviewUrl,
   formatWechatPayApplymentAttachmentSize,
+  getWechatPayApplymentAttachmentDisplayName,
   type WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
 
@@ -29,11 +30,12 @@ export function AttachmentPreviewCard({
   busy: boolean;
   onRemove: (attachment: WechatPayApplymentAttachment) => void;
 }) {
+  const displayName = getWechatPayApplymentAttachmentDisplayName(attachment);
   return (
     <div className="min-w-0 rounded-md bg-muted/50 p-3">
       <AttachmentPreviewDialog attachment={attachment} />
       <div className="mt-2 truncate text-sm">
-        {attachment.file_name || attachment.object_key}
+        {displayName}
       </div>
       <div className="mt-1 text-xs text-muted-foreground">
         {formatWechatPayApplymentAttachmentSize(attachment.size) || "已上传"}
@@ -61,10 +63,8 @@ export function AttachmentPreviewDialog({
 }: {
   attachment: WechatPayApplymentAttachment;
 }) {
-  const previewUrl = buildWechatPayApplymentAttachmentPreviewUrl(
-    attachment.object_key,
-  );
-  const fileName = attachment.file_name || attachment.object_key;
+  const previewUrl = buildWechatPayApplymentAttachmentPreviewUrl(attachment);
+  const displayName = getWechatPayApplymentAttachmentDisplayName(attachment);
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -72,33 +72,39 @@ export function AttachmentPreviewDialog({
           type="button"
           variant="ghost"
           className="h-auto w-full p-0"
-          aria-label={`预览${fileName}`}
+          aria-label={`预览${displayName}`}
         >
           <span className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-md border bg-background">
             <FileImage aria-hidden="true" className="text-muted-foreground" />
-            <img
-              src={previewUrl}
-              alt={fileName}
-              className="absolute inset-0 size-full object-contain"
-              referrerPolicy="no-referrer"
-            />
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt={displayName}
+                className="absolute inset-0 size-full object-contain"
+                referrerPolicy="no-referrer"
+              />
+            ) : null}
           </span>
         </Button>
       </DialogTrigger>
       <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl">
         <DialogHeader>
-          <DialogTitle className="break-all">{fileName}</DialogTitle>
+          <DialogTitle className="break-all">{displayName}</DialogTitle>
           <DialogDescription>
-            私有附件短时预览，仅用于当前资料核对。
+            已上传。私有附件短时预览，仅用于当前资料核对。
           </DialogDescription>
         </DialogHeader>
         <div className="flex max-h-[70vh] min-h-64 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
-          <img
-            src={previewUrl}
-            alt={fileName}
-            className="max-h-[70vh] w-full object-contain"
-            referrerPolicy="no-referrer"
-          />
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt={displayName}
+              className="max-h-[70vh] w-full object-contain"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">预览暂不可用</p>
+          )}
         </div>
         <DialogFooter>
           <DialogClose asChild>

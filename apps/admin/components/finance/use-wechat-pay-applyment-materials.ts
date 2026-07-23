@@ -5,35 +5,33 @@ import { mapApplymentOcrFields } from "@/components/ocr/ocr-field-review-dialog"
 import {
   createApplymentOcrRecognition,
   fetchApplymentOcrCapabilities,
-  fetchApplymentOcrRecognition,
 } from "@/components/ocr/ocr-requests";
 import {
   buildInitialMaterialStates,
   buildFailedMaterialState,
-  buildRecoveredMaterialState,
+  getMaterialRetryAction,
   getOcrMaterialCategory,
   getOcrMaterialDocumentType,
   getPendingRecognitionAttachments,
   isCurrentMaterialAttachment,
+  rebaseUploadedApplymentAttachment,
   reconcileMaterialStates,
+  runMaterialRecognitionOperation,
   updateAttachmentOcrReviewMetadata,
   type ApplymentMaterialState,
   type ApplymentMaterialStateMap,
 } from "./finance-wechat-pay-applyment-flow-model";
+import { restoreApplymentMaterialStates } from "./finance-wechat-pay-applyment-material-recovery";
+import type { AttachmentUploadedInput } from "./finance-wechat-pay-applyment-attachments";
 import {
   WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES,
   type WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
 
 type DraftUpdateSource = "attachment_change" | "ocr_review" | "manual_entry";
-
 type PersistAttachmentsInput = {
   attachments: WechatPayApplymentAttachment[];
   draftUpdateSource: DraftUpdateSource;
-};
-type UploadedAttachmentInput = {
-  attachment: WechatPayApplymentAttachment;
-  nextAttachments: WechatPayApplymentAttachment[];
 };
 type UseWechatPayApplymentMaterialsInput = {
   initialAttachments: WechatPayApplymentAttachment[];
@@ -45,13 +43,10 @@ type UseWechatPayApplymentMaterialsInput = {
   }>;
 };
 type CapabilityStatus = "loading" | "available" | "unavailable";
+const RECOGNITION_PERSIST_ERROR = "识别结果保存失败";
 
-export function useWechatPayApplymentMaterials(
-  input: UseWechatPayApplymentMaterialsInput,
-) {
-  const [attachments, setAttachments] = useState(
-    () => [...input.initialAttachments],
-  );
+export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMaterialsInput) {
+  const [attachments, setAttachments] = useState(() => [...input.initialAttachments]);
   const attachmentsRef = useRef(attachments);
   const [materialStates, setMaterialStates] = useState<
     ApplymentMaterialStateMap
@@ -92,50 +87,12 @@ export function useWechatPayApplymentMaterials(
     setAttachments(initialAttachments);
     setMaterialStates(initialStates);
 
-    void (async () => {
-      for (const attachment of initialAttachments) {
-        if (
-          !active ||
-          attachment.ocr_review_status !== "review_required" ||
-          !attachment.ocr_recognition_id
-        ) {
-          continue;
-        }
-        const category = getOcrMaterialCategory(attachment);
-        if (!category) continue;
-        try {
-          const recognition = await fetchApplymentOcrRecognition(
-            attachment.ocr_recognition_id,
-          );
-          if (!active) return;
-          if (recognition.status !== "succeeded") {
-            throw new Error(
-              recognition.status === "expired"
-                ? "识别结果已过期，请重试或手动填写"
-                : "识别结果不可用，请重试或手动填写",
-            );
-          }
-          updateStateIfCurrent(
-            attachment,
-            buildRecoveredMaterialState(
-              attachment,
-              recognition,
-              mapApplymentOcrFields(category, recognition.fields),
-            ),
-          );
-        } catch (restoreError) {
-          if (!active) return;
-          updateStateIfCurrent(
-            attachment,
-            buildFailedMaterialState(
-              attachment,
-              errorMessage(restoreError, "OCR 识别结果恢复失败"),
-            ),
-          );
-          setError(errorMessage(restoreError, "OCR 识别结果恢复失败"));
-        }
-      }
-    })();
+    void restoreApplymentMaterialStates({
+      attachments: initialAttachments,
+      isActive: () => active,
+      onState: updateStateIfCurrent,
+      onError: setError,
+    });
 
     return () => {
       active = false;
@@ -296,17 +253,16 @@ export function useWechatPayApplymentMaterials(
     }
   }
 
-  async function recognizeAttachment(
-    attachment: WechatPayApplymentAttachment,
-  ) {
+  async function recognizeAttachment(attachment: WechatPayApplymentAttachment) {
     const category = getOcrMaterialCategory(attachment);
+    const fileObjectId = attachment.file_object_id;
     const documentType = category
       ? WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[category]
       : undefined;
     if (
       !category ||
       !documentType ||
-      !attachment.file_object_id ||
+      !fileObjectId ||
       unpersistedObjectKeysRef.current.has(attachment.object_key) ||
       !supportedOcrDocumentTypesRef.current.has(documentType) ||
       !isCurrentMaterialAttachment(attachmentsRef.current, attachment)
@@ -323,37 +279,45 @@ export function useWechatPayApplymentMaterials(
       warnings: [],
       error: null,
     });
-    try {
-      const result = await createApplymentOcrRecognition({
+    let recognizedAttachments: WechatPayApplymentAttachment[] | null = null;
+    const outcome = await runMaterialRecognitionOperation({
+      recognize: () => createApplymentOcrRecognition({
         documentType: documentType as OcrDocumentType,
-        fileObjectId: attachment.file_object_id,
+        fileObjectId,
         applymentId: applymentIdRef.current,
-      });
-      if (!isCurrentMaterialAttachment(attachmentsRef.current, attachment)) {
-        return;
-      }
-      const nextAttachments = updateAttachmentOcrReviewMetadata(
-        attachmentsRef.current,
-        attachment.object_key,
-        {
-          ocr_recognition_id: result.recognition.id,
-          ocr_review_status: "review_required",
-        },
-      );
-      syncAttachments(nextAttachments);
-      updateStateIfCurrent(attachment, {
-        status: "review_required",
-        attachmentObjectKey: attachment.object_key,
-        recognitionId: result.recognition.id,
-        fields: mapApplymentOcrFields(category, result.recognition.fields),
-        warnings: [...result.recognition.warnings],
-        error: null,
-      });
-      await persist({
-        attachments: nextAttachments,
-        draftUpdateSource: "ocr_review",
-      });
-    } catch (recognitionError) {
+      }),
+      commitRecognition: (result) => {
+        if (!isCurrentMaterialAttachment(attachmentsRef.current, attachment)) {
+          return false;
+        }
+        recognizedAttachments = updateAttachmentOcrReviewMetadata(
+          attachmentsRef.current,
+          attachment.object_key,
+          {
+            ocr_recognition_id: result.recognition.id,
+            ocr_review_status: "review_required",
+          },
+        );
+        syncAttachments(recognizedAttachments);
+        updateStateIfCurrent(attachment, {
+          status: "review_required",
+          attachmentObjectKey: attachment.object_key,
+          recognitionId: result.recognition.id,
+          fields: mapApplymentOcrFields(category, result.recognition.fields),
+          warnings: [...result.recognition.warnings],
+          error: null,
+        });
+        return true;
+      },
+      persistRecognition: async () => {
+        if (!recognizedAttachments) return;
+        await persist({
+          attachments: recognizedAttachments,
+          draftUpdateSource: "ocr_review",
+        });
+      },
+    });
+    if (outcome.type === "recognition_failed") {
       if (!isCurrentMaterialAttachment(attachmentsRef.current, attachment)) {
         return;
       }
@@ -370,24 +334,42 @@ export function useWechatPayApplymentMaterials(
         attachment,
         buildFailedMaterialState(
           attachment,
-          errorMessage(recognitionError, "证照识别失败"),
+          errorMessage(outcome.error, "证照识别失败"),
         ),
       );
-      setError(errorMessage(recognitionError, "证照识别失败"));
+      setError(errorMessage(outcome.error, "证照识别失败"));
       await persist({
         attachments: nextAttachments,
         draftUpdateSource: "ocr_review",
       });
+      return;
+    }
+    if (outcome.type === "persist_failed") {
+      const currentState = materialStatesRef.current[category];
+      if (
+        currentState?.status === "review_required" &&
+        currentState.recognitionId === outcome.recognition.recognition.id
+      ) {
+        updateStateIfCurrent(attachment, {
+          ...currentState,
+          error: RECOGNITION_PERSIST_ERROR,
+        });
+        setError(RECOGNITION_PERSIST_ERROR);
+      }
     }
   }
 
-  async function onUploaded(uploaded: UploadedAttachmentInput) {
+  async function onUploaded(uploaded: AttachmentUploadedInput) {
+    const rebasedAttachments = rebaseUploadedApplymentAttachment(
+      attachmentsRef.current,
+      uploaded.attachment,
+    );
     unpersistedObjectKeysRef.current.add(uploaded.attachment.object_key);
-    syncAttachments(uploaded.nextAttachments);
+    syncAttachments(rebasedAttachments);
     setError("");
     return enqueue(async () => {
       await persist({
-        attachments: uploaded.nextAttachments,
+        attachments: attachmentsRef.current,
         draftUpdateSource: "attachment_change",
       });
       unpersistedObjectKeysRef.current.delete(uploaded.attachment.object_key);
@@ -436,11 +418,48 @@ export function useWechatPayApplymentMaterials(
       });
   }
 
-  async function onRetryRecognition(
-    attachment: WechatPayApplymentAttachment,
-  ) {
+  async function onRetryRecognition(attachment: WechatPayApplymentAttachment) {
     setError("");
-    return enqueue(() => recognizeAttachment(attachment))
+    return enqueue(async () => {
+      const category = getOcrMaterialCategory(attachment);
+      const state = category ? materialStatesRef.current[category] : undefined;
+      const retryState = getMaterialRetryAction(state) === "persist"
+        ? state
+        : null;
+      if (
+        category &&
+        retryState &&
+        isCurrentMaterialAttachment(attachmentsRef.current, attachment)
+      ) {
+        try {
+          await persist({
+            attachments: attachmentsRef.current,
+            draftUpdateSource: "ocr_review",
+          });
+          const currentState = materialStatesRef.current[category];
+          if (
+            currentState &&
+            currentState.recognitionId === retryState.recognitionId
+          ) {
+            updateStateIfCurrent(attachment, { ...currentState, error: null });
+          }
+        } catch {
+          const currentState = materialStatesRef.current[category];
+          if (
+            currentState &&
+            currentState.recognitionId === retryState.recognitionId
+          ) {
+            updateStateIfCurrent(attachment, {
+              ...currentState,
+              error: RECOGNITION_PERSIST_ERROR,
+            });
+          }
+          setError(RECOGNITION_PERSIST_ERROR);
+        }
+        return;
+      }
+      await recognizeAttachment(attachment);
+    })
       .catch(reportOperationError);
   }
 

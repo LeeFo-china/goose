@@ -28,6 +28,7 @@ import ProjectProceduresController from "@/controllers/project-procedures";
 import AiController from "@/controllers/ai";
 import AiConfigController from "@/controllers/ai-config";
 import UploadController from "@/controllers/uploads";
+import UploadPreviewController from "@/controllers/upload-previews";
 import ExternalReferrersController from "@/controllers/external-referrers";
 import ProjectReferralsController from "@/controllers/project-referrals";
 import ExpenseRequestsController from "@/controllers/expense-requests";
@@ -183,6 +184,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   DepartmentPostRulesController.registerExtraRoutes(app);
   AiController.registerExtraRoutes(app);
   UploadController.registerExtraRoutes(app);
+  UploadPreviewController.registerExtraRoutes(app);
   ProjectLogCommentsController.registerExtraRoutes(app);
   ProjectProceduresController.registerExtraRoutes(app);
   EmployeePermissionsController.registerExtraRoutes(app);

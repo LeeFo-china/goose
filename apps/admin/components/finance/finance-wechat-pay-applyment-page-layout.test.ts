@@ -140,12 +140,18 @@ describe("Finance wechat pay applyment page layout", () => {
     const materialsHookSource = readSource(
       "./use-wechat-pay-applyment-materials.ts",
     );
+    const materialRecoverySource = readSource(
+      "./finance-wechat-pay-applyment-material-recovery.ts",
+    );
     const ocrRequestSource = readSource("../ocr/ocr-requests.ts");
 
     expect(panelSource).toContain("useWechatPayApplymentMaterials");
     expect(materialsHookSource).toContain("buildInitialMaterialStates");
     expect(materialsHookSource).toContain("attachmentsRef");
-    expect(materialsHookSource).toContain("fetchApplymentOcrRecognition");
+    expect(materialsHookSource).toContain("restoreApplymentMaterialStates");
+    expect(materialRecoverySource).toContain(
+      "fetchApplymentOcrRecognition",
+    );
     expect(materialsHookSource).toContain('draftUpdateSource: "attachment_change"');
     expect(materialsHookSource).toContain('draftUpdateSource: "ocr_review"');
     expect(materialsHookSource).toContain('draftUpdateSource: "manual_entry"');
@@ -159,6 +165,13 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(previewSource).toContain("AttachmentPreviewDialog");
     expect(previewSource).toContain("aspect-[4/3]");
     expect(previewSource).toContain("object-contain");
+    expect(previewSource).not.toContain("attachment.object_key");
+    expect(materialsHookSource).toContain(
+      "rebaseUploadedApplymentAttachment",
+    );
+    expect(materialsHookSource).not.toContain("uploaded.nextAttachments");
+    expect(materialsHookSource).toContain("getMaterialRetryAction");
+    expect(materialsHookSource).toContain("识别结果保存失败");
     expect(attachmentSource).not.toContain("识别并回填");
     expect(attachmentSource).not.toContain("onRecognize");
     expect(ocrRequestSource).toContain("fetchApplymentOcrRecognition");

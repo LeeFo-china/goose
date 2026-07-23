@@ -234,6 +234,21 @@ class PlatformFileObjectRepository {
     return (data as OcrPlatformFileObjectRecord | null) ?? null;
   }
 
+  async findActiveByIdForPlatform(id: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("platform_file_objects")
+      .select(OCR_FILE_OBJECT_COLUMNS)
+      .eq("id", id)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询文件对象失败", error);
+    }
+    return (data as OcrPlatformFileObjectRecord | null) ?? null;
+  }
+
   private async findPrivateVisitorConflict(input: {
     provider: PlatformFileProvider;
     bucket: string;

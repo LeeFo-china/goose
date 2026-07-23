@@ -1277,6 +1277,17 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
 - Modify: `apps/admin/components/finance/finance-wechat-pay-applyment-panel.tsx`
 - Modify: `apps/admin/components/ocr/ocr-requests.ts`
 
+**异步与安全约束：**
+
+- 上传完成后，父级必须以 `attachmentsRef.current` 为权威，按 category/object key
+  将新附件 rebase 到最新列表；子组件回传的 `nextAttachments` 只用于兼容契约，不能覆盖
+  上传等待期间已经写入的其他附件 OCR metadata。
+- OCR create 成功即进入 `review_required` 并保留 recognition id、fields、warnings；
+  随后的草稿保存失败只记录“识别结果保存失败”，重试时仅保存当前结果，不再次创建 OCR。
+  只有 create 请求或恢复 GET 失败才进入 `failed`。
+- 私有预览只根据 `file_object_id` 构造同源鉴权代理 URL，由后端校验租户、权限和附件场景后
+  临时签名；不得直通外部 URL，也不得用 `object_key`、签名 URL 作为可见文件名 fallback。
+
 - [ ] **Step 1: 写资料工作区结构失败测试**
 
 在 page layout test 增加：

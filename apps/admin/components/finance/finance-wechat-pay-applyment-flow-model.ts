@@ -156,6 +156,36 @@ export function replaceApplymentAttachment(
   ];
 }
 
+export function rebaseUploadedApplymentAttachment(
+  currentAttachments: readonly WechatPayApplymentAttachment[],
+  uploadedAttachment: WechatPayApplymentAttachment,
+): WechatPayApplymentAttachment[] {
+  if (uploadedAttachment.category === "business_scene_material") {
+    const existingIndex = currentAttachments.findIndex(
+      (item) => item.object_key === uploadedAttachment.object_key,
+    );
+    return existingIndex < 0
+      ? [...currentAttachments, uploadedAttachment]
+      : currentAttachments.map((item, index) =>
+        index === existingIndex ? uploadedAttachment : item
+      );
+  }
+
+  let currentCategoryIndex = -1;
+  currentAttachments.forEach((item, index) => {
+    if (item.category === uploadedAttachment.category) {
+      currentCategoryIndex = index;
+    }
+  });
+  if (currentCategoryIndex < 0) {
+    return [...currentAttachments, uploadedAttachment];
+  }
+  return currentAttachments.flatMap((item, index) => {
+    if (item.category !== uploadedAttachment.category) return [item];
+    return index === currentCategoryIndex ? [uploadedAttachment] : [];
+  });
+}
+
 export function isCurrentMaterialAttachment(
   attachments: readonly WechatPayApplymentAttachment[],
   attachment: WechatPayApplymentAttachment,
@@ -232,6 +262,44 @@ export function buildRecoveredMaterialState(
     warnings: recognition.warnings,
     error: null,
   };
+}
+
+export function getMaterialRetryAction(
+  state: ApplymentMaterialState | undefined,
+): "persist" | "recognize" {
+  return state?.status === "review_required" &&
+      Boolean(state.recognitionId) &&
+      Boolean(state.error)
+    ? "persist"
+    : "recognize";
+}
+
+export type MaterialRecognitionOperationOutcome<T> =
+  | { type: "persisted"; recognition: T }
+  | { type: "persist_failed"; recognition: T; error: unknown }
+  | { type: "recognition_failed"; error: unknown }
+  | { type: "stale"; recognition: T };
+
+export async function runMaterialRecognitionOperation<T>(input: {
+  recognize: () => Promise<T>;
+  commitRecognition: (recognition: T) => boolean;
+  persistRecognition: (recognition: T) => Promise<void>;
+}): Promise<MaterialRecognitionOperationOutcome<T>> {
+  let recognition: T;
+  try {
+    recognition = await input.recognize();
+  } catch (error) {
+    return { type: "recognition_failed", error };
+  }
+  if (!input.commitRecognition(recognition)) {
+    return { type: "stale", recognition };
+  }
+  try {
+    await input.persistRecognition(recognition);
+    return { type: "persisted", recognition };
+  } catch (error) {
+    return { type: "persist_failed", recognition, error };
+  }
 }
 
 export function getPendingRecognitionAttachments(input: {

@@ -226,11 +226,33 @@ export function formatWechatPayApplymentAttachmentSize(size?: number | null) {
   return `${(size / 1024 / 1024).toFixed(1)}MB`;
 }
 
-export function buildWechatPayApplymentAttachmentPreviewUrl(objectKey: string) {
-  if (!objectKey) return "";
-  if (/^https?:\/\//i.test(objectKey) || objectKey.startsWith("blob:")) {
-    return objectKey;
+export function buildWechatPayApplymentAttachmentPreviewUrl(
+  attachment: Pick<
+    WechatPayApplymentAttachment,
+    "file_object_id" | "object_key"
+  >,
+) {
+  const fileObjectId = attachment.file_object_id?.trim();
+  if (!fileObjectId) return "";
+  return `/api/backend/uploads/files/${encodeURIComponent(fileObjectId)}/preview`;
+}
+
+export function getWechatPayApplymentAttachmentDisplayName(
+  attachment: Pick<
+    WechatPayApplymentAttachment,
+    "category" | "file_name" | "object_key"
+  >,
+) {
+  const fileName = attachment.file_name?.trim();
+  if (
+    fileName &&
+    fileName !== attachment.object_key &&
+    !/^(?:https?:|blob:|data:)/i.test(fileName)
+  ) {
+    return fileName;
   }
-  return `/api/backend/uploads/public-url?path=${encodeURIComponent(objectKey)}`;
+  return WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORY_LABELS[
+    attachment.category as WechatPayApplymentAttachmentCategory
+  ] || "已上传资料";
 }
 import type { OcrDocumentType } from "@gooes/domain";

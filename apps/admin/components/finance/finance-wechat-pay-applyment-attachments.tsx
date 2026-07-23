@@ -71,7 +71,7 @@ const MATERIAL_STATUS_META: Record<
   failed: { label: "识别失败", variant: "danger" },
 };
 
-type AttachmentUploadedInput = {
+export type AttachmentUploadedInput = {
   attachment: WechatPayApplymentAttachment;
   nextAttachments: WechatPayApplymentAttachment[];
 };
@@ -337,6 +337,9 @@ function AttachmentSlot({
       attachment?.object_key
     ? materialState
     : undefined;
+  const needsPersistRetry = currentState?.status === "review_required" &&
+    Boolean(currentState.recognitionId) &&
+    Boolean(currentState.error);
   const statusMeta = MATERIAL_STATUS_META[currentState?.status ??
     (attachment ? "uploaded" : "missing")];
   return (
@@ -382,7 +385,9 @@ function AttachmentSlot({
             onOpen={onOpen}
             onUpload={onUpload}
           />
-          {attachment && currentState?.status === "failed" && ocrSupported ? (
+          {attachment &&
+              (currentState?.status === "failed" || needsPersistRetry) &&
+              ocrSupported ? (
             <Button
               type="button"
               variant="outline"
@@ -391,7 +396,7 @@ function AttachmentSlot({
               onClick={() => onRetryRecognition(attachment)}
             >
               <RefreshCw data-icon="inline-start" />
-              重试识别
+              {needsPersistRetry ? "重试保存" : "重试识别"}
             </Button>
           ) : null}
           {attachment && currentState?.status === "failed" ? (
