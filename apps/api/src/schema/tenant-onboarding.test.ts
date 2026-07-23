@@ -67,6 +67,15 @@ const stableErrorCodes = [
   "TENANT_ONBOARDING_APPLICATION_NOT_FOUND",
   "TENANT_ONBOARDING_DOCUMENT_FORBIDDEN",
   "TENANT_ONBOARDING_CLIENT_UPGRADE_REQUIRED",
+  "SUPPLIER_NOT_FOUND",
+  "SUPPLIER_STATE_CONFLICT",
+  "SUPPLIER_VERSION_CONFLICT",
+  "SUPPLIER_IDEMPOTENCY_CONFLICT",
+  "SUPPLIER_MODULE_DISABLED",
+  "TENANT_SUPPLIER_NOT_FOUND",
+  "TENANT_SUPPLIER_STATE_CONFLICT",
+  "SUPPLIER_ORDER_NOT_ELIGIBLE",
+  "SUPPLIER_CATALOG_CONFLICT",
 ] as const;
 
 const stableAuditActions = [
@@ -83,6 +92,25 @@ const stableAuditActions = [
   "service_provider_publish",
   "service_provider_return_draft",
   "service_provider_suspend",
+  "platform_supplier_create",
+  "platform_supplier_submit",
+  "platform_supplier_approve",
+  "platform_supplier_reject",
+  "platform_supplier_suspend",
+  "platform_supplier_resume",
+  "platform_supplier_blacklist",
+  "supplier_qualification_verify",
+  "supplier_qualification_reject",
+  "tenant_supplier_module_enable",
+  "tenant_supplier_module_disable",
+  "tenant_supplier_contract_policy_update",
+  "tenant_supplier_create",
+  "tenant_supplier_activate",
+  "tenant_supplier_suspend",
+  "tenant_supplier_terminate",
+  "tenant_supplier_blacklist",
+  "supplier_contract_activate",
+  "supplier_contract_terminate",
 ] as const;
 
 type VersionedMutationCase = {
@@ -94,59 +122,20 @@ type VersionedMutationCase = {
 };
 
 const versionedMutations = [
-  {
-    name: "applicant supplement",
-    schema: SupplementTenantOnboardingApplicationSchema,
-    validInput: { version: 1, company_name: "晴天装饰" },
-  },
+  { name: "applicant supplement", schema: SupplementTenantOnboardingApplicationSchema, validInput: { version: 1, company_name: "晴天装饰" } },
   { name: "withdraw", schema: WithdrawTenantOnboardingApplicationSchema, validInput: { version: 1 } },
   { name: "start review", schema: StartReviewTenantOnboardingApplicationSchema, validInput: { version: 1 } },
-  {
-    name: "request supplement",
-    schema: RequestSupplementTenantOnboardingApplicationSchema,
-    validInput: {
-      version: 1,
-      required_fields: ["business_license_file_id"],
-      remark: "请补充营业执照",
-    },
-  },
-  {
-    name: "request partner assist",
-    schema: RequestTenantOnboardingPartnerAssistSchema,
-    validInput: {
-      version: 1,
-      partner_id: "00000000-0000-4000-8000-000000000701",
-    },
-  },
+  { name: "request supplement", schema: RequestSupplementTenantOnboardingApplicationSchema, validInput: { version: 1, required_fields: ["business_license_file_id"], remark: "请补充营业执照" } },
+  { name: "request partner assist", schema: RequestTenantOnboardingPartnerAssistSchema, validInput: { version: 1, partner_id: "00000000-0000-4000-8000-000000000701" } },
   { name: "partner assist decision", schema: TenantOnboardingPartnerAssistDecisionSchema, validInput: { version: 1, decision: "verified" } },
-  {
-    name: "approve",
-    schema: ApproveTenantOnboardingApplicationSchema,
-    validInput: {
-      version: 1,
-      attribution_mode: "unassigned",
-      review_remark: "主体信息核验通过",
-    },
-  },
+  { name: "approve", schema: ApproveTenantOnboardingApplicationSchema, validInput: { version: 1, attribution_mode: "unassigned", review_remark: "主体信息核验通过" } },
   { name: "reject", schema: RejectTenantOnboardingApplicationSchema, validInput: { version: 1, review_remark: "主体信息不符合要求" } },
   { name: "profile update", schema: UpdateTenantServiceProviderProfileSchema, validInput: { version: 1, public_name: "晴天装饰" } },
   { name: "area update", schema: UpdateTenantServiceProviderAreaSchema, validInput: { version: 1, city: "信阳市" } },
   { name: "submit profile review", schema: SubmitTenantServiceProviderProfileSchema, validInput: { version: 1 } },
-  {
-    name: "publish profile",
-    schema: PublishTenantServiceProviderProfileSchema,
-    validInput: { version: 1, review_remark: "公开信息核验通过" },
-  },
-  {
-    name: "return profile to draft",
-    schema: ReturnTenantServiceProviderProfileToDraftSchema,
-    validInput: { version: 1, review_remark: "请修改公开信息" },
-  },
-  {
-    name: "suspend profile",
-    schema: SuspendTenantServiceProviderProfileSchema,
-    validInput: { version: 1, review_remark: "暂停公开展示" },
-  },
+  { name: "publish profile", schema: PublishTenantServiceProviderProfileSchema, validInput: { version: 1, review_remark: "公开信息核验通过" } },
+  { name: "return profile to draft", schema: ReturnTenantServiceProviderProfileToDraftSchema, validInput: { version: 1, review_remark: "请修改公开信息" } },
+  { name: "suspend profile", schema: SuspendTenantServiceProviderProfileSchema, validInput: { version: 1, review_remark: "暂停公开展示" } },
 ] satisfies readonly VersionedMutationCase[];
 
 describe("tenant onboarding schemas", () => {
