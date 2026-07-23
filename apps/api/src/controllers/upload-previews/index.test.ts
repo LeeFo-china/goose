@@ -41,6 +41,7 @@ mock.module("@/services/access-policy", () => ({
 describe("UploadPreviewController", () => {
   test("resolves a wechat pay attachment preview by file id", async () => {
     const redirect = mock(() => undefined);
+    const header = mock(() => undefined);
     const { default: controller } = await import("./index");
 
     await controller.getWechatPayApplymentPreview(
@@ -48,7 +49,7 @@ describe("UploadPreviewController", () => {
         params: { id: FILE_ID },
         user: { sub: "auth-1" },
       } as FastifyRequest,
-      { redirect } as never,
+      { redirect, header } as never,
     );
 
     expect(resolveWechatPayApplymentPreviewUrl).toHaveBeenCalledWith({
@@ -61,6 +62,12 @@ describe("UploadPreviewController", () => {
     expect(redirect).toHaveBeenCalledWith(
       "https://example.com/signed-preview.jpg",
     );
+    expect(header).toHaveBeenCalledWith(
+      "Cache-Control",
+      "private, no-store, max-age=0",
+    );
+    expect(header).toHaveBeenCalledWith("Pragma", "no-cache");
+    expect(header).toHaveBeenCalledWith("Referrer-Policy", "no-referrer");
   });
 
   test("lets a platform admin preview without a tenant filter", async () => {
@@ -78,7 +85,10 @@ describe("UploadPreviewController", () => {
         params: { id: FILE_ID },
         user: { sub: "platform-auth" },
       } as FastifyRequest,
-      { redirect: mock(() => undefined) } as never,
+      {
+        header: mock(() => undefined),
+        redirect: mock(() => undefined),
+      } as never,
     );
 
     expect(resolveWechatPayApplymentPreviewUrl).toHaveBeenLastCalledWith({

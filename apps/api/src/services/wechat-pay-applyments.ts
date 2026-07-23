@@ -53,6 +53,7 @@ import type {
   WechatPayApplymentServiceDependencies,
 } from "@/services/wechat-pay-applyments-types";
 import {
+  canEditTenantWechatPayApplyment,
   TENANT_READ_PERMISSION,
   TENANT_SUBMIT_PERMISSION,
 } from "@/services/wechat-pay-applyments-types";
@@ -104,7 +105,7 @@ export class WechatPayApplymentService {
     this.assertTenantRead(authContext);
     const applyment = await this.repository.findLatestByTenant(tenantId);
     if (applyment && ["closed", "suspended"].includes(applyment.status)) {
-      return this.toDetail(authContext, null);
+      return this.toDetail(authContext, null, false);
     }
     return this.toDetail(authContext, applyment);
   }
@@ -352,7 +353,13 @@ export class WechatPayApplymentService {
   private async toDetail(
     authContext: AuthContext,
     applyment: WechatPayApplymentRecord | null,
+    canCreateDraft = true,
   ): Promise<ApplymentDetailResult> {
+    const canEdit = (Boolean(applyment) || canCreateDraft) &&
+      canEditTenantWechatPayApplyment(
+        applyment?.status,
+        this.canTenantSubmit(authContext),
+      );
     return {
       applyment: applyment ? sanitizeApplymentRecord(applyment) : null,
       events: applyment
@@ -361,11 +368,8 @@ export class WechatPayApplymentService {
           applymentId: applyment.id,
         })
         : [],
-      can_submit: Boolean(applyment) &&
-        this.canTenantSubmit(authContext) &&
-        ["draft", "rejected", "wechat_editing"].includes(
-          applyment?.status ?? "",
-        ),
+      can_edit: canEdit,
+      can_submit: canEdit,
       available_actions: [],
     };
   }

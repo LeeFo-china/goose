@@ -26,6 +26,9 @@ class UploadPreviewController extends TenantBaseController {
       authContext,
       fileObjectId: parsed.data.id,
     });
+    reply.header("Cache-Control", "private, no-store, max-age=0");
+    reply.header("Pragma", "no-cache");
+    reply.header("Referrer-Policy", "no-referrer");
     return reply.redirect(previewUrl);
   }
 }

@@ -384,6 +384,7 @@ export class WechatPayApplymentSubmissionService
         tenantId: applyment.tenant_id,
         applymentId: applyment.id,
       }),
+      can_edit: false,
       can_submit: false,
       available_actions: getWechatPayApplymentAvailableActions({
         authContext,

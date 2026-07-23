@@ -167,6 +167,7 @@ export type WechatPayApplymentAvailableAction = {
 export type ApplymentDetailResult = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEventRecord[];
+  can_edit: boolean;
   can_submit: boolean;
   available_actions: WechatPayApplymentAvailableAction[];
   submission_readiness?: WechatPayApplymentSubmissionReadiness;
@@ -188,6 +189,20 @@ export type WechatPayApplymentStatusPort = {
 
 export const TENANT_READ_PERMISSION = "wechat_pay.applyment.read";
 export const TENANT_SUBMIT_PERMISSION = "wechat_pay.applyment.submit";
+const TENANT_EDITABLE_APPLYMENT_STATUSES = new Set([
+  "draft",
+  "rejected",
+  "wechat_editing",
+]);
+
+export function canEditTenantWechatPayApplyment(
+  status: string | null | undefined,
+  hasSubmitPermission: boolean,
+) {
+  return hasSubmitPermission &&
+    (!status || TENANT_EDITABLE_APPLYMENT_STATUSES.has(status));
+}
+
 export const PLATFORM_READ_PERMISSION = "platform.wechat_pay.applyment.read";
 export const PLATFORM_REVIEW_PERMISSION =
   "platform.wechat_pay.applyment.review";

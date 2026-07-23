@@ -88,10 +88,10 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
 }
 
 export async function completeDirectUpload(this: any, input: CompleteDirectUploadInput) {
-  const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE;
+  const isPrivateObject = input.visibility === "private";
   return this.registerExistingCosObject({
     ...input,
-    verifyHead: isPrivateLicense || this.shouldVerifyDirectUploadHead(),
+    verifyHead: isPrivateObject || this.shouldVerifyDirectUploadHead(),
     failIfMissing: true,
     metadata: {
       direct_upload: true,
@@ -104,8 +104,9 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
   const cos = this.getCosClient(config);
   this.setCosAccessCache(config);
   const visitorId = input.visitorId?.trim() || null;
+  const isPrivateObject = input.visibility === "private";
   const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE
-    && input.visibility === "private";
+    && isPrivateObject;
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
   }
@@ -143,7 +144,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     }
   }
 
-  const publicUrl = isPrivateLicense
+  const publicUrl = isPrivateObject
     ? null
     : this.buildCosPublicUrl({
       publicBaseUrl: config.publicBaseUrl,
@@ -151,7 +152,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
       region: config.region,
       objectKey: input.objectKey,
     });
-  const accessUrl = isPrivateLicense
+  const accessUrl = isPrivateObject
     ? null
     : resolveStoredFileUrl(input.objectKey) || publicUrl;
 
@@ -195,7 +196,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     created_by_employee_id: input.employeeId ?? null,
   });
 
-  if (isPrivateLicense) {
+  if (isPrivateObject) {
     return { file_id: fileObject.id, status: fileObject.status };
   }
 

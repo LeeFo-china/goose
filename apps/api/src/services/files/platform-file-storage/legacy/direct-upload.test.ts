@@ -201,6 +201,34 @@ describe("private direct upload init", () => {
 });
 
 describe("private direct upload completion", () => {
+  test("keeps authenticated applyment files private without permanent URLs", async () => {
+    const { registerExistingCosObject } = await import("./direct-upload");
+    const { context, headObject } = storageContext();
+    const response = await registerExistingCosObject.call(context, {
+      scene: "wechat_pay_applyment",
+      objectKey: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
+      filename: "license.jpg",
+      mimetype: "image/jpeg",
+      sizeBytes: 100,
+      visibility: "private",
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      verifyHead: true,
+    } as never);
+
+    expect(headObject).toHaveBeenCalledTimes(1);
+    expect(createOrFindByObjectKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner_type: "wechat_pay_applyment",
+        visibility: "private",
+        public_url: null,
+      }),
+    );
+    expect(response).toEqual({ file_id: "file-1", status: "active" });
+    expect(response).not.toHaveProperty("url");
+    expect(response).not.toHaveProperty("public_url");
+  });
+
   test("forces HEAD even when the environment toggle is false", async () => {
     const { completeDirectUpload } = await import("./direct-upload");
     const registerExistingCosObject = mock(async () => ({ file_id: "file-1" }));

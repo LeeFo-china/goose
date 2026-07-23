@@ -18,6 +18,7 @@ import {
   isPublicStoredFileScene,
   parseStoredObjectKey,
 } from "./stored-object-policy";
+import { assertApplymentUploadSceneAccess } from "./applyment-upload-access";
 
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const H5_MARKETING_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
@@ -53,6 +54,7 @@ const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>(["project_log", "pro
 const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>(["h5_marketing_page", "picture_library", "picture_comment"]);
 const PRIVATE_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
   "tenant_onboarding_license",
+  "wechat_pay_applyment",
 ]);
 
 const DirectUploadInitSchema = z.object({
@@ -162,6 +164,7 @@ class UploadController extends BaseController {
     const scene = result.data.scene;
     this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
     const actorContext = await this.resolveUploadActorContext(user);
+    await assertApplymentUploadSceneAccess(user, scene);
     await this.assertDirectUploadProjectAccess(
       user,
       scene,
@@ -186,7 +189,9 @@ class UploadController extends BaseController {
       scene,
       tenant_id: actorContext.tenantId,
       size_bytes: result.data.size_bytes,
-      object_key: directUpload.object_key,
+      ...(scene === "wechat_pay_applyment"
+        ? {}
+        : { object_key: directUpload.object_key }),
     });
 
     return ResponseHandler.success(directUpload);
@@ -208,6 +213,7 @@ class UploadController extends BaseController {
     const scene = result.data.scene;
     this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
     const actorContext = await this.resolveUploadActorContext(user);
+    await assertApplymentUploadSceneAccess(user, scene);
     await this.assertDirectUploadProjectAccess(
       user,
       scene,
@@ -242,7 +248,9 @@ class UploadController extends BaseController {
       scene,
       tenant_id: actorContext.tenantId,
       size_bytes: result.data.size_bytes,
-      object_key: result.data.object_key,
+      ...(scene === "wechat_pay_applyment"
+        ? {}
+        : { object_key: result.data.object_key }),
       provider: "provider" in uploaded ? uploaded.provider : undefined,
       file_id: uploaded.file_id,
     });

@@ -11,6 +11,20 @@ import {
 } from "@/services/wechat-pay-applyments-types";
 
 class UploadService {
+  assertDirectUploadAccess(input: {
+    authContext: AuthContext;
+    scene: string;
+  }) {
+    if (input.scene !== "wechat_pay_applyment") return;
+    accessPolicyService.assertTenantContext(input.authContext);
+    if (!accessPolicyService.hasPermission(
+      input.authContext,
+      TENANT_SUBMIT_PERMISSION,
+    )) {
+      throw Errors.forbidden();
+    }
+  }
+
   findDefaultActiveCustomerMembership(authUserId: string) {
     return uploadRepository.findDefaultActiveCustomerMembership(authUserId);
   }

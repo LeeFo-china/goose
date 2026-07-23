@@ -256,10 +256,12 @@ function authContextWithPermissions(
     ...overrides,
   };
 }
-const tenantReadAuth = () =>
-  authContextWithPermissions([{ code: "wechat_pay.applyment.read", scope: "all" }]);
-const tenantSubmitAuth = () =>
-  authContextWithPermissions([{ code: "wechat_pay.applyment.submit", scope: "all" }]);
+const tenantReadAuth = () => authContextWithPermissions([
+  { code: "wechat_pay.applyment.read", scope: "all" },
+]);
+const tenantSubmitAuth = () => authContextWithPermissions([
+  { code: "wechat_pay.applyment.submit", scope: "all" },
+]);
 const platformAdminAuth = (permissions: AuthContext["permissions"] = []) =>
   authContextWithPermissions(permissions, {
     tenantId: null,
@@ -324,6 +326,7 @@ describe("WechatPayApplymentService", () => {
     expect(result.applyment?.application_no).toBe("WPA202607010001");
     expect(result.events).toHaveLength(1);
     expect(result.can_submit).toBe(false);
+    expect(result.can_edit).toBe(false);
   });
   test("hides closed tenant applyment from current draft entry", async () => {
     findLatestByTenant.mockImplementationOnce(async () => ({
@@ -336,6 +339,9 @@ describe("WechatPayApplymentService", () => {
     expect(result.applyment).toBeNull();
     expect(result.events).toEqual([]);
     expect(result.can_submit).toBe(false);
+    expect(result.can_edit).toBe(false);
+    findLatestByTenant.mockImplementation(async () => null);
+    expect((await service.getCurrent(tenantSubmitAuth())).can_edit).toBe(true);
   });
   test("rejects submit when required applyment attachments are missing", async () => {
     findById.mockImplementationOnce(async () => ({

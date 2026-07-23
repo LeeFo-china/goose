@@ -67,9 +67,7 @@ export function FinanceWechatPayApplymentPanel({
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
   const statusMeta = getWechatPayApplymentStatusMeta(applyment?.status);
-  const editable = !applyment || ["draft", "rejected", "wechat_editing"].includes(
-    applyment.status,
-  );
+  const editable = data.can_edit;
   const materials = useWechatPayApplymentMaterials({
     initialAttachments: applyment?.attachments || [],
     initialApplymentId: applyment?.id,
@@ -115,7 +113,7 @@ export function FinanceWechatPayApplymentPanel({
 
   function submitApplyment() {
     const currentApplyment = applymentRef.current;
-    if (!currentApplyment || !data.can_submit) return;
+    if (!currentApplyment || !editable || !data.can_submit) return;
     const formElement = formRef.current;
     if (!formElement || !validateVisibleStep(formElement, setActiveStep)) return;
     const payload = buildCurrentApplymentPayload(formElement);
@@ -169,6 +167,7 @@ export function FinanceWechatPayApplymentPanel({
     attachments: WechatPayApplymentAttachment[];
     draftUpdateSource: "attachment_change" | "ocr_review" | "manual_entry";
   }) {
+    if (!editable) throw new Error("当前账号无权修改微信支付开通申请");
     const formElement = formRef.current;
     if (!formElement) throw new Error("申请表单尚未就绪，请稍后重试");
     const payload = buildWechatPayApplymentPayload(new FormData(formElement), {
@@ -177,7 +176,6 @@ export function FinanceWechatPayApplymentPanel({
     });
     payload.draft_update_source = input.draftUpdateSource;
     const detail = await saveApplymentDraft(payload);
-    setSaved(true);
     return { applymentId: detail.applyment?.id };
   }
 
@@ -204,7 +202,9 @@ export function FinanceWechatPayApplymentPanel({
         {saved ? <StatusAlert tone="success">开通申请已保存。</StatusAlert> : null}
         {materials.error ? <StatusAlert>{materials.error}</StatusAlert> : null}
         {!editable ? (
-          <StatusAlert tone="warning">当前申请已提交或进入平台处理阶段，租户侧只读。</StatusAlert>
+          <StatusAlert tone="warning">
+            当前账号无编辑权限，或申请已进入只读处理阶段。
+          </StatusAlert>
         ) : null}
         {applyment?.rejected_reason ? (
           <StatusAlert tone="warning" title="驳回原因">
@@ -314,7 +314,8 @@ export function FinanceWechatPayApplymentPanel({
                 <Button
                   type="button"
                   disabled={
-                    pending || materials.pending || !applyment || !data.can_submit ||
+                    pending || materials.pending || !applyment || !editable ||
+                    !data.can_submit ||
                     !reviewConfirmed || activeStep !== "review"
                   }
                 >

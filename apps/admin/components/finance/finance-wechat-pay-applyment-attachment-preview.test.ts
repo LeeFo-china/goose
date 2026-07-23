@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -32,5 +33,21 @@ describe("wechat pay applyment attachment preview", () => {
       category: "future_private_material",
       object_key: "https://cos.example/signed.jpg?secret=1",
     })).toBe("已上传资料");
+  });
+
+  test("provides lazy loading and a stable retryable failure state", () => {
+    const source = readFileSync(
+      new URL(
+        "./finance-wechat-pay-applyment-attachment-preview.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(source).toContain('loading="lazy"');
+    expect(source).toContain("onError");
+    expect(source).toContain("预览加载失败");
+    expect(source).toContain("重试预览");
+    expect(source).not.toContain("attachment.object_key");
   });
 });

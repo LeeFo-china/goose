@@ -108,6 +108,7 @@ const updateApplyment = mock(async () => currentApplyment);
 const submitOfficialApplyment = mock(async () => ({
   applyment: currentApplyment,
   events: [],
+  can_edit: false,
   can_submit: false,
   available_actions: [],
 }));

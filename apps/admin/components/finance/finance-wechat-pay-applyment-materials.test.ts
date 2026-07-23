@@ -20,6 +20,7 @@ import type {
 import {
   changeApplymentAttachments,
   MANUAL_ENTRY_PERSIST_ERROR,
+  persistUnsupportedApplymentMaterialsAsManual,
 } from "./finance-wechat-pay-applyment-manual-entry";
 
 const RECOGNITION_ID = "11111111-1111-4111-8111-111111111111";
@@ -209,6 +210,15 @@ describe("wechat pay applyment material helpers", () => {
     expect(state.recognitionId).toBe(RECOGNITION_ID);
   });
 
+  test("retries an uploaded attachment checkpoint without starting OCR first", () => {
+    const state: ApplymentMaterialState = {
+      ...materialState("license_copy", "uploaded"),
+      error: "附件保存失败",
+    };
+
+    expect(getMaterialRetryAction(state)).toBe("persist");
+  });
+
   test("keeps business scene uploads as an ordered multi-value category", () => {
     const first = {
       category: "business_scene_material" as const,
@@ -272,10 +282,13 @@ describe("wechat pay applyment material helpers", () => {
           confidence: 0.99,
         }],
       },
-      legal_representative_id_card_front: materialState(
-        "legal_representative_id_card_front",
-        "uploaded",
-      ),
+      legal_representative_id_card_front: {
+        ...materialState(
+          "legal_representative_id_card_front",
+          "uploaded",
+        ),
+        error: "附件保存失败",
+      },
     };
     const replacement = {
       ...attachment("legal_representative_id_card_front", "uploaded"),
@@ -304,6 +317,7 @@ describe("wechat pay applyment material helpers", () => {
       [oldLicense, replacement],
       replacement,
     )).toBe(true);
+    expect(reconcileMaterialStates([], states)).toEqual({});
   });
 
   test("moves a failed material to manual immediately without a refresh", () => {
@@ -430,5 +444,51 @@ describe("wechat pay applyment material helpers", () => {
     expect(persistedSource).toBe("manual_entry");
     expect(reportedError).toBe(MANUAL_ENTRY_PERSIST_ERROR);
     expect(operationErrorCalls).toBe(0);
+  });
+
+  test("keeps automatic manual fallback local when its checkpoint fails", async () => {
+    const license = {
+      ...attachment("license_copy", "uploaded"),
+      file_object_id: "22222222-2222-4222-8222-222222222222",
+    };
+    let currentAttachments: WechatPayApplymentAttachment[] = [license];
+    let currentStates = buildInitialMaterialStates(currentAttachments);
+    let persistedSource = "";
+    let reportedError = "";
+
+    await persistUnsupportedApplymentMaterialsAsManual({
+      attachments: currentAttachments,
+      materialStates: currentStates,
+      supportedDocumentTypes: new Set(),
+      excludedObjectKeys: new Set(),
+      isActive: () => true,
+      commitLocal: (attachments, states) => {
+        currentAttachments = attachments;
+        currentStates = states;
+      },
+      commitStates: (states) => {
+        currentStates = states;
+      },
+      persist: async (input) => {
+        persistedSource = input.draftUpdateSource;
+        throw new Error("save unavailable");
+      },
+      reportError: (message) => {
+        reportedError = message;
+      },
+    });
+
+    expect(currentAttachments[0]).toMatchObject({
+      object_key: license.object_key,
+      ocr_review_status: "manual",
+    });
+    expect(currentStates.license_copy).toMatchObject({
+      status: "manual",
+      attachmentObjectKey: license.object_key,
+      error: MANUAL_ENTRY_PERSIST_ERROR,
+    });
+    expect(getMaterialRetryAction(currentStates.license_copy)).toBe("persist");
+    expect(persistedSource).toBe("manual_entry");
+    expect(reportedError).toBe(MANUAL_ENTRY_PERSIST_ERROR);
   });
 });

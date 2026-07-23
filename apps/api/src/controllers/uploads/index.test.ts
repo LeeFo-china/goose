@@ -75,6 +75,7 @@ const getRequiredAuthContext = mock(async (): Promise<AuthContext> => ({
 const canAccessProject = mock(async () => true);
 const logUploadTiming = mock(() => undefined);
 const resolveStoredFileUrl = mock(() => "https://example.com/resolved.jpg");
+const assertDirectUploadAccess = mock(() => undefined);
 
 mock.module("@/services/files/platform-file-storage", () => ({
   platformFileStorageService: {
@@ -112,6 +113,7 @@ mock.module("@/services/uploads", () => ({
   uploadService: {
     findDefaultActiveCustomerMembership: mock(async () => null),
     findLegacyCustomerBinding: mock(async () => null),
+    assertDirectUploadAccess,
   },
 }));
 
@@ -135,6 +137,7 @@ beforeEach(() => {
   canAccessProject.mockImplementation(async () => true);
   logUploadTiming.mockClear();
   resolveStoredFileUrl.mockClear();
+  assertDirectUploadAccess.mockClear();
 });
 
 const buildRequest = (body: Record<string, unknown>): FastifyRequest =>
@@ -148,6 +151,17 @@ const buildRequest = (body: Record<string, unknown>): FastifyRequest =>
     id: "req-test",
   }) as FastifyRequest;
 
+const applymentUploadBody = {
+  scene: "wechat_pay_applyment", filename: "license.jpg",
+  mimetype: "image/jpeg", size_bytes: 120000,
+};
+const denyApplymentUpload = () => {
+  assertDirectUploadAccess.mockImplementationOnce(() => {
+    throw Object.assign(new Error("forbidden"), {
+      statusCode: 403, code: "FORBIDDEN",
+    });
+  });
+};
 const buildVisitorRequest = (
   body: Record<string, unknown>,
   currentVisitorId = visitorId,
@@ -161,32 +175,50 @@ const buildVisitorRequest = (
     },
     id: "req-visitor-test",
   }) as FastifyRequest;
-
 describe("UploadController project payment direct upload", () => {
+  test("rejects read-only applyment upload init before creating an upload", async () => {
+    denyApplymentUpload();
+    const { default: controller } = await import("./index");
+    await expect(controller.initDirectCosUpload(
+      buildRequest(applymentUploadBody),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403 });
+    expect(createDirectUpload).not.toHaveBeenCalled();
+  });
+  test("rejects read-only applyment upload completion before creating a file object", async () => {
+    denyApplymentUpload();
+    const { default: controller } = await import("./index");
+    await expect(controller.completeDirectCosUpload(
+      buildRequest({
+        ...applymentUploadBody,
+        object_key: `tenants/${tenantId}/wechat-pay-applyment/license.jpg`,
+      }),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403 });
+    expect(completeDirectUpload).not.toHaveBeenCalled();
+  });
   test("allows tenant wechat pay applyment material upload without project id", async () => {
     const { default: controller } = await import("./index");
 
     await controller.initDirectCosUpload(
-      buildRequest({
-        scene: "wechat_pay_applyment",
-        filename: "license.jpg",
-        mimetype: "image/jpeg",
-        size_bytes: 120000,
-      }),
+      buildRequest(applymentUploadBody),
       {} as never,
     );
 
     expect(canAccessProject).not.toHaveBeenCalled();
+    expect(assertDirectUploadAccess).toHaveBeenCalledWith(expect.objectContaining({
+      scene: "wechat_pay_applyment",
+    }));
     expect(createDirectUpload).toHaveBeenCalledWith(
       expect.objectContaining({
         scene: "wechat_pay_applyment",
         projectId: undefined,
         tenantId,
         employeeId,
+        visibility: "private",
       }),
     );
   });
-
   test("allows finance project payment direct upload init", async () => {
     const { default: controller } = await import("./index");
 

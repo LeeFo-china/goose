@@ -1,6 +1,7 @@
 "use client";
 
-import { FileImage, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { FileImage, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -76,14 +77,11 @@ export function AttachmentPreviewDialog({
         >
           <span className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-md border bg-background">
             <FileImage aria-hidden="true" className="text-muted-foreground" />
-            {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt={displayName}
-                className="absolute inset-0 size-full object-contain"
-                referrerPolicy="no-referrer"
-              />
-            ) : null}
+            <PreviewImage
+              previewUrl={previewUrl}
+              displayName={displayName}
+              className="absolute inset-0 size-full object-contain"
+            />
           </span>
         </Button>
       </DialogTrigger>
@@ -95,16 +93,12 @@ export function AttachmentPreviewDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex max-h-[70vh] min-h-64 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
-          {previewUrl ? (
-            <img
-              src={previewUrl}
-              alt={displayName}
-              className="max-h-[70vh] w-full object-contain"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">预览暂不可用</p>
-          )}
+          <PreviewImage
+            previewUrl={previewUrl}
+            displayName={displayName}
+            className="max-h-[70vh] w-full object-contain"
+            retryable
+          />
         </div>
         <DialogFooter>
           <DialogClose asChild>
@@ -113,5 +107,55 @@ export function AttachmentPreviewDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PreviewImage({
+  previewUrl,
+  displayName,
+  className,
+  retryable = false,
+}: {
+  previewUrl: string;
+  displayName: string;
+  className: string;
+  retryable?: boolean;
+}) {
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  if (!previewUrl) {
+    return <p className="text-sm text-muted-foreground">预览暂不可用</p>;
+  }
+  if (failed) {
+    return (
+      <div className="relative z-10 flex flex-col items-center gap-2 p-3 text-center">
+        <p className="text-sm text-muted-foreground">预览加载失败</p>
+        {retryable ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setAttempt((value) => value + 1);
+              setFailed(false);
+            }}
+          >
+            <RefreshCw data-icon="inline-start" />
+            重试预览
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <img
+      key={attempt}
+      src={previewUrl}
+      alt={displayName}
+      className={className}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
   );
 }

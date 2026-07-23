@@ -7,6 +7,12 @@ type RouteContext = {
 };
 
 const RETRYABLE_METHODS = new Set(["GET", "HEAD"]);
+const REDIRECT_RESPONSE_HEADERS = [
+  "location",
+  "cache-control",
+  "pragma",
+  "referrer-policy",
+] as const;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,10 +117,10 @@ async function proxyBackend(request: Request, context: RouteContext) {
     );
   }
   if (response.status >= 300 && response.status < 400) {
-    const location = response.headers.get("location");
     const redirectHeaders = new Headers();
-    if (location) {
-      redirectHeaders.set("location", location);
+    for (const name of REDIRECT_RESPONSE_HEADERS) {
+      const value = response.headers.get(name);
+      if (value) redirectHeaders.set(name, value);
     }
 
     return new NextResponse(null, {

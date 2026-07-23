@@ -166,6 +166,7 @@ export type WechatPayApplymentSubmissionReadiness = {
 export type WechatPayApplymentDetailData = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEvent[];
+  can_edit: boolean;
   can_submit: boolean;
   available_actions: WechatPayApplymentAvailableAction[];
   submission_readiness?: WechatPayApplymentSubmissionReadiness | null;
@@ -179,6 +180,7 @@ export function emptyWechatPayApplyment(): WechatPayApplymentDetailResult {
   return {
     applyment: null,
     events: [],
+    can_edit: false,
     can_submit: false,
     available_actions: [],
     submission_readiness: null,

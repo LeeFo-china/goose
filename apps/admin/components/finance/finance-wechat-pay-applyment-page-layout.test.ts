@@ -131,6 +131,7 @@ describe("Finance wechat pay applyment page layout", () => {
 
   test("wires the materials-first upload preview auto OCR and recovery contract", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const sharedSource = readSource("./finance-wechat-pay-applyment-shared.ts");
     const attachmentSource = readSource(
       "./finance-wechat-pay-applyment-attachments.tsx",
     );
@@ -146,9 +147,18 @@ describe("Finance wechat pay applyment page layout", () => {
     const materialLifecycleSource = readSource(
       "./finance-wechat-pay-applyment-lifecycle.ts",
     );
+    const recognitionSource = readSource(
+      "./finance-wechat-pay-applyment-recognition.ts",
+    );
+    const manualEntrySource = readSource(
+      "./finance-wechat-pay-applyment-manual-entry.ts",
+    );
     const ocrRequestSource = readSource("../ocr/ocr-requests.ts");
 
     expect(panelSource).toContain("useWechatPayApplymentMaterials");
+    expect(sharedSource).toContain("can_edit: boolean");
+    expect(panelSource).toContain("const editable = data.can_edit");
+    expect(panelSource).not.toContain("const editable = !applyment");
     expect(materialsHookSource).toContain("buildInitialMaterialStates");
     expect(materialsHookSource).toContain("attachmentsRef");
     expect(materialsHookSource).toContain("restoreApplymentMaterialStates");
@@ -158,8 +168,8 @@ describe("Finance wechat pay applyment page layout", () => {
       "fetchApplymentOcrRecognition",
     );
     expect(materialsHookSource).toContain('draftUpdateSource: "attachment_change"');
-    expect(materialsHookSource).toContain('draftUpdateSource: "ocr_review"');
-    expect(materialsHookSource).toContain('draftUpdateSource: "manual_entry"');
+    expect(recognitionSource).toContain('draftUpdateSource: "ocr_review"');
+    expect(manualEntrySource).toContain('draftUpdateSource: "manual_entry"');
     expect(panelSource).toContain("@/components/ui/checkbox");
     expect(panelSource).toContain("同意使用已上传证照进行信息识别和申请资料回填");
     expect(panelSource).toContain("证照识别暂不可用");
@@ -176,11 +186,31 @@ describe("Finance wechat pay applyment page layout", () => {
     );
     expect(materialsHookSource).not.toContain("uploaded.nextAttachments");
     expect(materialsHookSource).toContain("getMaterialRetryAction");
-    expect(materialsHookSource).toContain("识别结果保存失败");
+    expect(materialsHookSource).toContain("runAttachmentCheckpoint");
+    expect(materialsHookSource).toContain("recognizeApplymentAttachment");
+    expect(materialsHookSource).toContain("createMaterialOperationGeneration");
+    expect(materialsHookSource).toContain("generationRef.current.advance()");
     expect(attachmentSource).not.toContain("识别并回填");
     expect(attachmentSource).not.toContain("onRecognize");
     expect(ocrRequestSource).toContain("fetchApplymentOcrRecognition");
     expect(ocrRequestSource).toContain("/ocr/recognitions/${encodeURIComponent(id)}");
+  });
+
+  test("does not report a global save success for partial material checkpoints", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const checkpointStart = panelSource.indexOf(
+      "async function persistMaterialAttachments",
+    );
+    const checkpointEnd = panelSource.indexOf(
+      "function changeContactType",
+      checkpointStart,
+    );
+    const checkpointSource = panelSource.slice(checkpointStart, checkpointEnd);
+
+    expect(checkpointStart).toBeGreaterThan(-1);
+    expect(checkpointEnd).toBeGreaterThan(checkpointStart);
+    expect(checkpointSource).not.toContain("setSaved(true)");
+    expect(panelSource).toContain("if (!currentApplyment || !editable");
   });
 
   test("keeps tenant applyment client panel away from server-only request module", () => {

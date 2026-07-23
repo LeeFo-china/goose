@@ -230,3 +230,36 @@ describe("UploadService wechat pay applyment previews", () => {
     expect(resolveSignedStoredFileUrl).not.toHaveBeenCalled();
   });
 });
+
+describe("UploadService direct upload access", () => {
+  test("rejects a read-only tenant for wechat pay applyment uploads", async () => {
+    const { uploadService } = await import("./uploads");
+
+    expect(() => uploadService.assertDirectUploadAccess({
+      authContext: authContext({
+        permissions: [{ code: "wechat_pay.applyment.read", scope: "all" }],
+      }),
+      scene: "wechat_pay_applyment",
+    })).toThrow(expect.objectContaining({ statusCode: 403 }));
+  });
+
+  test("allows a submit-capable tenant for wechat pay applyment uploads", async () => {
+    const { uploadService } = await import("./uploads");
+
+    expect(() => uploadService.assertDirectUploadAccess({
+      authContext: authContext({
+        permissions: [{ code: "wechat_pay.applyment.submit", scope: "all" }],
+      }),
+      scene: "wechat_pay_applyment",
+    })).not.toThrow();
+  });
+
+  test("does not change access semantics for other upload scenes", async () => {
+    const { uploadService } = await import("./uploads");
+
+    expect(() => uploadService.assertDirectUploadAccess({
+      authContext: authContext(),
+      scene: "project_payment",
+    })).not.toThrow();
+  });
+});

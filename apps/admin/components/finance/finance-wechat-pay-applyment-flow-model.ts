@@ -277,7 +277,8 @@ export function buildRecoveredMaterialState(
 export function getMaterialRetryAction(
   state: ApplymentMaterialState | undefined,
 ): "persist" | "recognize" {
-  const canRetryPersistence = state?.status === "manual" ||
+  const canRetryPersistence = state?.status === "uploaded" ||
+    state?.status === "manual" ||
     (state?.status === "review_required" && Boolean(state.recognitionId));
   return canRetryPersistence && Boolean(state?.error)
     ? "persist"
