@@ -244,6 +244,20 @@ describe("wechat pay applyment schemas", () => {
         qualification_type: "零售批发/生活娱乐/网上商城/其他",
       }).success,
     ).toBe(true);
+    expect(
+      UpdateWechatPayApplymentSchema.safeParse({
+        subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+        settlement_id: null,
+        qualification_type: null,
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateWechatPayApplymentSchema.safeParse({
+        subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+        settlement_id: "719",
+        qualification_type: "零售批发/生活娱乐/其他",
+      }).success,
+    ).toBe(true);
   });
 
   test("allows draft update without plaintext secret fields", () => {

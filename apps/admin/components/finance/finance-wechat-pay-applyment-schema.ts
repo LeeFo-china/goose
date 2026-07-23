@@ -40,6 +40,11 @@ const SENSITIVE_REPLACEMENT_FIELDS = [
   "contact_identity_address",
 ] as const;
 
+const CONTACT_IDENTITY_PERIOD_FIELDS = [
+  "contact_identity_period_begin",
+  "contact_identity_period_end",
+] as const;
+
 const DEFAULT_SUBJECT_TYPE = "SUBJECT_TYPE_ENTERPRISE";
 const DEFAULT_CONTACT_TYPE = "LEGAL";
 
@@ -53,24 +58,41 @@ export function buildWechatPayApplymentPartialDraftPayload(
   options: {
     attachments: WechatPayApplymentAttachment[];
     contactType?: string;
+    subjectType?: string;
+    overrides?: Record<string, unknown>;
   },
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
+  const overrides = options.overrides ?? {};
   for (const field of [...REQUIRED_TEXT_FIELDS, ...OPTIONAL_TEXT_FIELDS]) {
+    payload[field] = nullableText(form, field);
+  }
+  for (const field of CONTACT_IDENTITY_PERIOD_FIELDS) {
     payload[field] = nullableText(form, field);
   }
   for (const field of SENSITIVE_REPLACEMENT_FIELDS) {
     setNonBlankText(payload, form, field, normalizeIdentityNumber);
   }
-  for (const field of [
-    "contact_identity_period_begin",
-    "contact_identity_period_end",
-  ] as const) {
-    setNonBlankText(payload, form, field);
+  for (const [field, value] of Object.entries(overrides)) {
+    if (field !== "attachments") payload[field] = value;
   }
 
-  payload.subject_type = text(form, "subject_type") || DEFAULT_SUBJECT_TYPE;
+  const formSubjectType = text(form, "subject_type");
+  const subjectTypeOverride = nonBlankOverride(overrides.subject_type);
+  const subjectType = subjectTypeOverride ||
+    options.subjectType ||
+    formSubjectType ||
+    DEFAULT_SUBJECT_TYPE;
+  payload.subject_type = subjectType;
+  if (
+    subjectType !== formSubjectType &&
+    !hasCompleteSettlementRuleOverride(overrides)
+  ) {
+    payload.settlement_id = null;
+    payload.qualification_type = null;
+  }
   const contactType = options.contactType ||
+    nonBlankOverride(overrides.contact_type) ||
     text(form, "contact_type") ||
     DEFAULT_CONTACT_TYPE;
   payload.contact_type = contactType;
@@ -87,6 +109,28 @@ export function buildWechatPayApplymentPartialDraftPayload(
     !CONTACT_ATTACHMENT_CATEGORIES.has(attachment.category ?? "")
   );
   return payload;
+}
+
+export function buildWechatPayApplymentManualFieldOverride(
+  field: string,
+  value: string,
+): Record<string, unknown> {
+  const normalized = value.trim();
+  if (
+    REQUIRED_TEXT_FIELDS.includes(
+      field as (typeof REQUIRED_TEXT_FIELDS)[number],
+    ) ||
+    OPTIONAL_TEXT_FIELDS.includes(
+      field as (typeof OPTIONAL_TEXT_FIELDS)[number],
+    ) ||
+    CONTACT_IDENTITY_PERIOD_FIELDS.includes(
+      field as (typeof CONTACT_IDENTITY_PERIOD_FIELDS)[number],
+    )
+  ) {
+    return { [field]: normalized || null };
+  }
+  if (!normalized) return {};
+  return { [field]: normalizeIdentityNumber(field, normalized) };
 }
 
 export function buildWechatPayApplymentPayload(
@@ -141,6 +185,19 @@ function text(form: FormData, key: string) {
 
 function nullableText(form: FormData, key: string) {
   return text(form, key) || null;
+}
+
+function nonBlankOverride(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function hasCompleteSettlementRuleOverride(
+  overrides: Record<string, unknown>,
+): boolean {
+  return Boolean(
+    nonBlankOverride(overrides.settlement_id) &&
+      nonBlankOverride(overrides.qualification_type),
+  );
 }
 
 function normalizeIdentityNumber(field: string, value: string) {

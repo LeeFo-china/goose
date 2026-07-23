@@ -70,6 +70,72 @@ describe("ApplymentDraftAutosaveCoordinator", () => {
 
     expect(saved).toEqual(["new"]);
   });
+
+  test("retries the latest scheduled payload after an earlier save fails", async () => {
+    const attempts: number[] = [];
+    const failedPayload = { version: 1 };
+    const scheduledPayload = { version: 2 };
+    const queue = new ApplymentDraftSaveQueue(async (payload) => {
+      const version = Number(payload.version);
+      attempts.push(version);
+      if (version === 1) throw new Error("save failed");
+    });
+    const coordinator = new ApplymentDraftAutosaveCoordinator(queue, 20);
+
+    await expect(coordinator.checkpoint(failedPayload)).rejects.toThrow(
+      "save failed",
+    );
+    coordinator.schedule(scheduledPayload);
+    await coordinator.retry(failedPayload);
+    await delay(25);
+    await coordinator.flush();
+
+    expect(attempts).toEqual([1, 2]);
+    expect(coordinator.lastPayload).toBe(scheduledPayload);
+  });
+
+  test("keeps an edit scheduled while the latest retry is running", async () => {
+    const attempts: number[] = [];
+    let startRetry: (() => void) | undefined;
+    let finishRetry: (() => void) | undefined;
+    const retryStarted = new Promise<void>((resolve) => {
+      startRetry = resolve;
+    });
+    const retryGate = new Promise<void>((resolve) => {
+      finishRetry = resolve;
+    });
+    const failedPayload = { version: 1 };
+    const retryPayload = { version: 2 };
+    const editedPayload = { version: 3 };
+    const queue = new ApplymentDraftSaveQueue(async (payload) => {
+      const version = Number(payload.version);
+      attempts.push(version);
+      if (version === 1) throw new Error("save failed");
+      if (version === 2) {
+        startRetry?.();
+        await retryGate;
+      }
+    });
+    const coordinator = new ApplymentDraftAutosaveCoordinator(queue, 5);
+
+    await expect(coordinator.checkpoint(failedPayload)).rejects.toThrow(
+      "save failed",
+    );
+    coordinator.schedule(retryPayload);
+    const retry = coordinator.retry(failedPayload);
+    await retryStarted;
+    coordinator.schedule(editedPayload);
+
+    expect(coordinator.isLatestPayload(retryPayload)).toBe(false);
+    expect(coordinator.isLatestPayload(editedPayload)).toBe(true);
+    finishRetry?.();
+    await retry;
+    await delay(15);
+    await coordinator.flush();
+
+    expect(attempts).toEqual([1, 2, 3]);
+    expect(coordinator.lastPayload).toBe(editedPayload);
+  });
 });
 
 describe("saveApplymentDraftWithCreateRecovery", () => {
@@ -120,6 +186,63 @@ describe("saveApplymentDraftWithCreateRecovery", () => {
       updated_at: "after-update",
     });
     expect(result.applyment?.updated_at).toBe("after-update");
+  });
+
+  test("preserves create capabilities and allows immediate submit", async () => {
+    type Draft = { id: string; updated_at: string };
+    type Detail = {
+      applyment: Draft | null;
+      can_edit: boolean;
+      can_submit: boolean;
+    };
+    let currentDetail: Detail = {
+      applyment: null,
+      can_edit: true,
+      can_submit: false,
+    };
+    const submitted: string[] = [];
+    const queue = new ApplymentDraftSaveQueue(async (payload, context) => {
+      await saveApplymentDraftWithCreateRecovery<Draft, Detail>({
+        getCurrent: () => currentDetail.applyment,
+        payload,
+        isCurrent: context.isCurrent,
+        commitCurrent: (applyment) => {
+          currentDetail = { ...currentDetail, applyment };
+        },
+        commitDetail: (detail) => {
+          currentDetail = detail;
+        },
+        request: async () => ({
+          applyment: { id: "created-draft", updated_at: "after-create" },
+          can_edit: true,
+          can_submit: true,
+        }),
+      });
+    });
+    const coordinator = new ApplymentDraftAutosaveCoordinator(queue, 800);
+
+    await coordinator.checkpoint({ merchant_short_name: "实时创建" });
+
+    expect(currentDetail).toMatchObject({
+      applyment: { id: "created-draft" },
+      can_edit: true,
+      can_submit: true,
+    });
+
+    if (currentDetail.can_submit) {
+      await submitApplymentAfterDraftFlush({
+        validate: () => true,
+        buildPayload: () => ({ merchant_short_name: "提交最新值" }),
+        save: (payload) => coordinator.checkpoint(payload),
+        flush: () => coordinator.flush(),
+        getCurrent: () => currentDetail.applyment,
+        submit: async (id) => {
+          submitted.push(id);
+        },
+      });
+    }
+
+    expect(submitted).toEqual(["created-draft"]);
   });
 });
 

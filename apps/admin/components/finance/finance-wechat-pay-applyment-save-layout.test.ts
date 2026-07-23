@@ -95,6 +95,8 @@ describe("Finance wechat pay applyment save layout", () => {
       "/finance/wechat-pay/applyment/current",
     );
     expect(hookSource).toContain("retryLastSave");
+    expect(hookSource).toContain("coordinator.retry");
+    expect(hookSource).toContain("isLatestPayload(payload)");
     expect(hookSource).toContain("ensureAutosaveRuntime");
     expect(hookSource).toContain("runtimeRef.current = null");
     expect(statusSource).toContain("@/components/ui/alert");
@@ -104,5 +106,23 @@ describe("Finance wechat pay applyment save layout", () => {
     expect(statusSource).toContain("已自动保存");
     expect(statusSource).toContain("保存失败");
     expect(statusSource).toContain("重试保存");
+  });
+
+  test("uses live save capabilities and explicit controlled field overrides", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const hookSource = readSource("./use-wechat-pay-applyment-autosave.ts");
+    const schemaSource = readSource("./finance-wechat-pay-applyment-schema.ts");
+
+    expect(hookSource).toContain("currentDetailRef");
+    expect(hookSource).toContain("commitDetail");
+    expect(panelSource).toContain("const editable = autosave.canEdit");
+    expect(panelSource).toContain("const canSubmit = autosave.canSubmit");
+    expect(panelSource).not.toContain("const editable = data.can_edit");
+    expect(panelSource).not.toContain("canSubmit={data.can_submit}");
+    expect(panelSource).toContain(
+      "buildWechatPayApplymentManualFieldOverride(key, value)",
+    );
+    expect(schemaSource).toContain("CONTACT_IDENTITY_PERIOD_FIELDS");
+    expect(schemaSource).toContain("normalized || null");
   });
 });

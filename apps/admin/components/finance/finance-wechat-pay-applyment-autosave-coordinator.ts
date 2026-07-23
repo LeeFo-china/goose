@@ -14,6 +14,8 @@ type RequestInit = {
 
 type ApplymentDetail<Draft> = {
   applyment: Draft | null;
+  can_edit?: boolean;
+  can_submit?: boolean;
 };
 
 export class ApplymentDraftAutosaveCoordinator {
@@ -29,6 +31,10 @@ export class ApplymentDraftAutosaveCoordinator {
 
   get lastPayload(): ApplymentDraftSavePayload | null {
     return this.latestPayload;
+  }
+
+  isLatestPayload(payload: ApplymentDraftSavePayload): boolean {
+    return this.latestPayload === payload;
   }
 
   schedule(payload: ApplymentDraftSavePayload): void {
@@ -51,6 +57,13 @@ export class ApplymentDraftAutosaveCoordinator {
     this.scheduledPayload = null;
     this.latestPayload = payload;
     return this.queue.enqueue(payload);
+  }
+
+  retry(failedPayload: ApplymentDraftSavePayload): Promise<void> {
+    if (this.disposed) {
+      return Promise.reject(new ApplymentDraftSaveCancelledError());
+    }
+    return this.queue.enqueue(this.takeLatestForRetry(failedPayload));
   }
 
   async flush(): Promise<void> {
@@ -87,22 +100,35 @@ export class ApplymentDraftAutosaveCoordinator {
     this.scheduledPayload = null;
     return payload;
   }
+
+  private takeLatestForRetry(
+    failedPayload: ApplymentDraftSavePayload,
+  ): ApplymentDraftSavePayload {
+    this.clearTimer();
+    const payload = this.takeScheduledPayload() ??
+      this.latestPayload ??
+      failedPayload;
+    this.latestPayload = payload;
+    return payload;
+  }
 }
 
 export async function saveApplymentDraftWithCreateRecovery<
   Draft extends { id: string },
+  Detail extends ApplymentDetail<Draft> = ApplymentDetail<Draft>,
 >(input: {
   getCurrent: () => Draft | null;
   payload: ApplymentDraftSavePayload;
   isCurrent: () => boolean;
   commitCurrent: (draft: Draft) => void;
+  commitDetail?: (detail: Detail) => void;
   request: (
     path: string,
     init?: RequestInit,
-  ) => Promise<ApplymentDetail<Draft>>;
-}): Promise<ApplymentDetail<Draft>> {
+  ) => Promise<Detail>;
+}): Promise<Detail> {
   const current = input.getCurrent();
-  let detail: ApplymentDetail<Draft>;
+  let detail: Detail;
 
   try {
     detail = await requestDraftSave(input, current);
@@ -116,11 +142,13 @@ export async function saveApplymentDraftWithCreateRecovery<
     if (!existing.applyment) throw error;
     assertCurrent(input.isCurrent);
     input.commitCurrent(existing.applyment);
+    input.commitDetail?.(existing);
     detail = await requestDraftSave(input, existing.applyment);
   }
 
   assertCurrent(input.isCurrent);
   if (detail.applyment) input.commitCurrent(detail.applyment);
+  input.commitDetail?.(detail);
   return detail;
 }
 
@@ -165,16 +193,19 @@ async function submitValidatedApplyment(input: {
   return true;
 }
 
-function requestDraftSave<Draft extends { id: string }>(
+function requestDraftSave<
+  Draft extends { id: string },
+  Detail extends ApplymentDetail<Draft>,
+>(
   input: {
     payload: ApplymentDraftSavePayload;
     request: (
       path: string,
       init?: RequestInit,
-    ) => Promise<ApplymentDetail<Draft>>;
+    ) => Promise<Detail>;
   },
   current: Draft | null,
-): Promise<ApplymentDetail<Draft>> {
+): Promise<Detail> {
   return input.request(
     current
       ? `/finance/wechat-pay/applyments/${current.id}`

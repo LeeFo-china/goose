@@ -25,13 +25,15 @@ type AutosaveRuntime = {
 };
 
 export function useWechatPayApplymentAutosave(input: {
-  applyment: WechatPayApplymentRecord | null;
+  detail: WechatPayApplymentDetailData;
   resetKey: string;
 }) {
-  const [currentApplyment, setCurrentApplyment] =
-    useState<WechatPayApplymentRecord | null>(input.applyment);
+  const [currentDetail, setCurrentDetail] =
+    useState<WechatPayApplymentDetailData>(input.detail);
+  const currentDetailRef =
+    useRef<WechatPayApplymentDetailData>(input.detail);
   const currentApplymentRef =
-    useRef<WechatPayApplymentRecord | null>(input.applyment);
+    useRef<WechatPayApplymentRecord | null>(input.detail.applyment);
   const [saveState, setSaveState] =
     useState<ApplymentDraftSaveState>("idle");
   const [saveError, setSaveError] = useState("");
@@ -47,24 +49,38 @@ export function useWechatPayApplymentAutosave(input: {
           setSaveError("");
         }
         try {
-          await saveApplymentDraftWithCreateRecovery<WechatPayApplymentRecord>({
+          await saveApplymentDraftWithCreateRecovery<
+            WechatPayApplymentRecord,
+            WechatPayApplymentDetailData
+          >({
             getCurrent: () => currentApplymentRef.current,
             payload,
             isCurrent: context.isCurrent,
             commitCurrent: (applyment) => {
               if (!context.isCurrent()) return;
               currentApplymentRef.current = applyment;
-              setCurrentApplyment(applyment);
+            },
+            commitDetail: (detail) => {
+              if (!context.isCurrent()) return;
+              currentDetailRef.current = detail;
+              currentApplymentRef.current = detail.applyment;
+              setCurrentDetail(detail);
             },
             request: (path, init) =>
               requestBackendJson<WechatPayApplymentDetailData>(path, init),
           });
-          if (!context.isCurrent()) return;
+          const coordinator = runtimeRef.current?.coordinator;
+          if (
+            !context.isCurrent() ||
+            !coordinator?.isLatestPayload(payload)
+          ) return;
           lastFailedPayloadRef.current = null;
           setSaveState("saved");
         } catch (error) {
+          const coordinator = runtimeRef.current?.coordinator;
           if (
             context.isCurrent() &&
+            coordinator?.isLatestPayload(payload) &&
             !isApplymentDraftSaveCancelledError(error)
           ) {
             lastFailedPayloadRef.current = payload;
@@ -91,12 +107,13 @@ export function useWechatPayApplymentAutosave(input: {
 
   useEffect(() => {
     ensureAutosaveRuntime().coordinator.reset();
-    currentApplymentRef.current = input.applyment;
-    setCurrentApplyment(input.applyment);
+    currentDetailRef.current = input.detail;
+    currentApplymentRef.current = input.detail.applyment;
+    setCurrentDetail(input.detail);
     lastFailedPayloadRef.current = null;
     setSaveState("idle");
     setSaveError("");
-  }, [input.applyment, input.resetKey]);
+  }, [input.detail, input.resetKey]);
 
   useEffect(() => {
     ensureAutosaveRuntime();
@@ -127,12 +144,16 @@ export function useWechatPayApplymentAutosave(input: {
   function retryLastSave(): Promise<void> {
     const payload = lastFailedPayloadRef.current;
     if (!payload) return Promise.resolve();
-    return enqueueMaterialCheckpoint(payload);
+    return ensureAutosaveRuntime().coordinator.retry(payload);
   }
 
   return {
-    currentApplyment,
+    currentDetail,
+    currentDetailRef,
+    currentApplyment: currentDetail.applyment,
     currentApplymentRef,
+    canEdit: currentDetail.can_edit,
+    canSubmit: currentDetail.can_submit,
     saveState,
     saveError,
     scheduleDraftSave,

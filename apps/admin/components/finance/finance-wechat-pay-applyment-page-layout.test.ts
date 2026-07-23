@@ -140,7 +140,7 @@ describe("Finance wechat pay applyment page layout", () => {
 
     expect(panelSource).toContain("useWechatPayApplymentMaterials");
     expect(sharedSource).toContain("can_edit: boolean");
-    expect(panelSource).toContain("const editable = data.can_edit");
+    expect(panelSource).toContain("const editable = autosave.canEdit");
     expect(panelSource).not.toContain("const editable = !applyment");
     expect(materialsHookSource).toContain("buildInitialMaterialStates");
     expect(materialsHookSource).toContain("attachmentsRef");

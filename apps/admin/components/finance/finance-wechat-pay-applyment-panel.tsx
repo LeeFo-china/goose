@@ -31,7 +31,10 @@ import {
 } from "./finance-wechat-pay-applyment-review-model";
 import type { ApplymentSaveGenerationContext } from "./finance-wechat-pay-applyment-save-generation";
 import { FinanceWechatPayApplymentPanelStatus } from "./finance-wechat-pay-applyment-save-status";
-import { buildWechatPayApplymentPartialDraftPayload } from "./finance-wechat-pay-applyment-schema";
+import {
+  buildWechatPayApplymentManualFieldOverride,
+  buildWechatPayApplymentPartialDraftPayload,
+} from "./finance-wechat-pay-applyment-schema";
 import {
   type WechatPayApplymentAttachment,
   type WechatPayApplymentAttachmentCategory,
@@ -56,11 +59,13 @@ export function FinanceWechatPayApplymentPanel({
   const resetKey =
     `${sourceApplyment?.id ?? "new"}:${sourceApplyment?.updated_at ?? ""}`;
   const autosave = useWechatPayApplymentAutosave({
-    applyment: sourceApplyment,
+    detail: data,
     resetKey,
   });
   const applyment = autosave.currentApplyment;
   const currentApplymentRef = autosave.currentApplymentRef;
+  const editable = autosave.canEdit;
+  const canSubmit = autosave.canSubmit;
   const [ocrReviewCategory, setOcrReviewCategory] =
     useState<WechatPayApplymentAttachmentCategory>("license_copy");
   const [subjectType, setSubjectType] = useState(
@@ -86,7 +91,6 @@ export function FinanceWechatPayApplymentPanel({
   });
   const [error, setError] = useState(data.error || "");
   const [pending, startTransition] = useTransition();
-  const editable = data.can_edit;
   const materials = useWechatPayApplymentMaterials({
     initialAttachments,
     initialApplymentId: sourceApplyment?.id,
@@ -169,9 +173,11 @@ export function FinanceWechatPayApplymentPanel({
       {
         attachments: attachmentsOverride,
         contactType: nextContactType,
+        subjectType,
+        overrides,
       },
     );
-    return { ...payload, ...overrides, attachments: payload.attachments };
+    return payload;
   }
 
   function scheduleDraftSave(
@@ -309,7 +315,7 @@ export function FinanceWechatPayApplymentPanel({
   }
 
   function submitApplyment() {
-    if (!editable || !data.can_submit) return;
+    if (!editable || !canSubmit) return;
     setError("");
     const submission = submitApplymentAfterDraftFlush({
       validate: () => {
@@ -385,7 +391,7 @@ export function FinanceWechatPayApplymentPanel({
           reviewSnapshot={reviewSnapshot}
           pending={pending}
           editable={editable}
-          canSubmit={data.can_submit}
+          canSubmit={canSubmit}
           saving={autosave.saveState === "saving"}
           materials={materials}
           navigation={navigation}
@@ -402,7 +408,9 @@ export function FinanceWechatPayApplymentPanel({
           onApplyRecognition={applyRecognitionRows}
           onManualFieldChange={(key, value) => {
             ocrReview.onManualChange(key, value);
-            scheduleDraftSave();
+            scheduleDraftSave(
+              buildWechatPayApplymentManualFieldOverride(key, value),
+            );
           }}
           onOcrCategoryChange={setOcrReviewCategory}
           onSupplementDataChange={handleSupplementDataChange}

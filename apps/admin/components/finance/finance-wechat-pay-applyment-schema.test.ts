@@ -61,6 +61,95 @@ describe("buildWechatPayApplymentPayload", () => {
     expect(Object.values(payload)).not.toContain("");
   });
 
+  test("clears stale settlement rules when the subject changes", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      settlement_id: "716",
+      qualification_type: "零售批发/生活娱乐/网上商城/其他",
+    }), {
+      attachments: [],
+      overrides: {
+        subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+      },
+    });
+
+    expect(payload).toMatchObject({
+      subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+      settlement_id: null,
+      qualification_type: null,
+    });
+  });
+
+  test("clears stale rules when React subject state is ahead of the hidden input", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      settlement_id: "716",
+      qualification_type: "零售批发/生活娱乐/网上商城/其他",
+    }), {
+      attachments: [],
+      subjectType: "SUBJECT_TYPE_INDIVIDUAL",
+    });
+
+    expect(payload).toMatchObject({
+      subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+      settlement_id: null,
+      qualification_type: null,
+    });
+  });
+
+  test("saves a matching rule selected after the subject changes", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+      settlement_id: "719",
+      qualification_type: "零售批发/生活娱乐/其他",
+    }), {
+      attachments: [],
+      overrides: {
+        settlement_id: "719",
+        qualification_type: "零售批发/生活娱乐/其他",
+      },
+    });
+
+    expect(payload).toMatchObject({
+      subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+      settlement_id: "719",
+      qualification_type: "零售批发/生活娱乐/其他",
+    });
+  });
+
+  test("submits null when controlled contact identity periods are cleared", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      contact_type: "SUPER",
+      contact_identity_period_begin: "2020-01-01",
+      contact_identity_period_end: "2030-01-01",
+    }), {
+      attachments: [],
+      overrides: {
+        contact_identity_period_begin: null,
+        contact_identity_period_end: null,
+      },
+    });
+
+    expect(payload).toMatchObject({
+      contact_identity_period_begin: null,
+      contact_identity_period_end: null,
+    });
+  });
+
+  test("uses the immediate long-term override instead of the stale hidden value", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      contact_type: "SUPER",
+      contact_identity_period_end: "2030-01-01",
+    }), {
+      attachments: [],
+      overrides: {
+        contact_identity_period_end: "长期",
+      },
+    });
+
+    expect(payload.contact_identity_period_end).toBe("长期");
+  });
+
   test("keeps OCR values and confirmed metadata atomic in one checkpoint", () => {
     const confirmedAttachment: WechatPayApplymentAttachment = {
       category: "license_copy",
