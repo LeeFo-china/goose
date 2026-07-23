@@ -22,7 +22,6 @@ const getRequiredAuthContext = mock(async (): Promise<PreviewAuthContext> => ({
     scope: "all",
   }],
 }));
-const assertPermission = mock(() => "all");
 
 mock.module("@/services/uploads", () => ({
   uploadService: { resolveWechatPayApplymentPreviewUrl },
@@ -35,7 +34,7 @@ mock.module("@/services/authorization", () => ({
 mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
     assertTenantContext: mock(() => undefined),
-    assertPermission,
+    assertPermission: mock(() => "all"),
   },
 }));
 
@@ -53,15 +52,14 @@ describe("UploadPreviewController", () => {
     );
 
     expect(resolveWechatPayApplymentPreviewUrl).toHaveBeenCalledWith({
+      authContext: expect.objectContaining({
+        authUserId: "auth-1",
+        tenantId: "tenant-1",
+      }),
       fileObjectId: FILE_ID,
-      tenantId: "tenant-1",
     });
     expect(redirect).toHaveBeenCalledWith(
       "https://example.com/signed-preview.jpg",
-    );
-    expect(assertPermission).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: "tenant-1" }),
-      "wechat_pay.applyment.submit",
     );
   });
 
@@ -84,8 +82,11 @@ describe("UploadPreviewController", () => {
     );
 
     expect(resolveWechatPayApplymentPreviewUrl).toHaveBeenLastCalledWith({
+      authContext: expect.objectContaining({
+        authUserId: "platform-auth",
+        isPlatformAdmin: true,
+      }),
       fileObjectId: FILE_ID,
-      tenantId: null,
     });
   });
 });

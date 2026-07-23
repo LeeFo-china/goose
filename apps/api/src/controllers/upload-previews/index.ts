@@ -20,15 +20,11 @@ class UploadPreviewController extends TenantBaseController {
     reply: FastifyReply,
   ) {
     const authContext = await this.getRequiredAuthContext(request);
-    if (!authContext.isPlatformAdmin) {
-      this.assertTenantContext(authContext);
-      this.assertPermission(authContext, "wechat_pay.applyment.submit");
-    }
     const parsed = UploadPreviewParamsSchema.safeParse(request.params);
     if (!parsed.success) throw Errors.fromZod(parsed.error);
     const previewUrl = await uploadService.resolveWechatPayApplymentPreviewUrl({
+      authContext,
       fileObjectId: parsed.data.id,
-      tenantId: authContext.isPlatformAdmin ? null : authContext.tenantId,
     });
     return reply.redirect(previewUrl);
   }

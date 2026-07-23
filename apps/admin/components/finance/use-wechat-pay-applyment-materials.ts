@@ -22,12 +22,12 @@ import {
   type ApplymentMaterialStateMap,
 } from "./finance-wechat-pay-applyment-flow-model";
 import { restoreApplymentMaterialStates } from "./finance-wechat-pay-applyment-material-recovery";
+import { setupMountedRefLifecycle } from "./finance-wechat-pay-applyment-lifecycle";
 import type { AttachmentUploadedInput } from "./finance-wechat-pay-applyment-attachments";
 import {
   WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES,
   type WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
-
 type DraftUpdateSource = "attachment_change" | "ocr_review" | "manual_entry";
 type PersistAttachmentsInput = {
   attachments: WechatPayApplymentAttachment[];
@@ -70,12 +70,12 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
   const mountedRef = useRef(true);
   persistAttachmentsRef.current = input.persistAttachments;
 
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
+  useEffect(() => setupMountedRefLifecycle(
+    mountedRef,
+    () => {
       recognitionConsentRef.current = false;
-    };
-  }, []);
+    },
+  ), []);
   useEffect(() => {
     let active = true;
     const initialAttachments = [...input.initialAttachments];

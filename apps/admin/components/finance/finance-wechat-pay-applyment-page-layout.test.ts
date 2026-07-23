@@ -143,12 +143,17 @@ describe("Finance wechat pay applyment page layout", () => {
     const materialRecoverySource = readSource(
       "./finance-wechat-pay-applyment-material-recovery.ts",
     );
+    const materialLifecycleSource = readSource(
+      "./finance-wechat-pay-applyment-lifecycle.ts",
+    );
     const ocrRequestSource = readSource("../ocr/ocr-requests.ts");
 
     expect(panelSource).toContain("useWechatPayApplymentMaterials");
     expect(materialsHookSource).toContain("buildInitialMaterialStates");
     expect(materialsHookSource).toContain("attachmentsRef");
     expect(materialsHookSource).toContain("restoreApplymentMaterialStates");
+    expect(materialsHookSource).toContain("setupMountedRefLifecycle");
+    expect(materialLifecycleSource).toContain("mountedRef.current = true");
     expect(materialRecoverySource).toContain(
       "fetchApplymentOcrRecognition",
     );

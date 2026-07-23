@@ -1287,6 +1287,12 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
   只有 create 请求或恢复 GET 失败才进入 `failed`。
 - 私有预览只根据 `file_object_id` 构造同源鉴权代理 URL，由后端校验租户、权限和附件场景后
   临时签名；不得直通外部 URL，也不得用 `object_key`、签名 URL 作为可见文件名 fallback。
+- 私有预览权限与进件详情保持一致：平台身份必须有
+  `platform.wechat_pay.applyment.read`，租户身份必须有
+  `wechat_pay.applyment.read` 或 `wechat_pay.applyment.submit`，并继续校验租户归属、
+  文件场景和 provider。权限判断位于 service/access-policy 边界。
+- materials hook 的 mounted ref effect 在每次 setup 时显式恢复为 `true`，cleanup 置为
+  `false`，保证 React Strict Mode 的 setup→cleanup→setup 重放后仍可提交状态更新。
 
 - [ ] **Step 1: 写资料工作区结构失败测试**
 
