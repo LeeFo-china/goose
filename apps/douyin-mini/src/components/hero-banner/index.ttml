@@ -3,7 +3,7 @@
   <view class="hero-title">首页内容暂时无法加载</view>
   <button class="hero-retry ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetry">重新加载</button>
 </view>
-<view tt:else class="hero">
+<view tt:else class="hero {{imageUrl && !imageFailed ? 'hero--with-image' : 'hero--without-image'}}">
   <image tt:if="{{imageUrl && !imageFailed}}" class="hero-image" src="{{imageUrl}}" mode="aspectFill" binderror="onImageError" />
   <view class="hero-overlay"></view>
   <view class="hero-content">

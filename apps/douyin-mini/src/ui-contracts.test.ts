@@ -44,6 +44,18 @@ test("home keeps one lead intent and uses direct Chinese section headings", asyn
   expect(template).toContain('primary-color="{{primaryColor}}"');
 });
 
+test("hero collapses the reserved media column when no image is visible", async () => {
+  const [template, style] = await Promise.all([
+    readSource("components/hero-banner/index.ttml"),
+    readSource("components/hero-banner/index.ttss"),
+  ]);
+  expect(template).toContain(
+    "{{imageUrl && !imageFailed ? 'hero--with-image' : 'hero--without-image'}}",
+  );
+  expect(style).toMatch(/\.hero--without-image \.hero-content\s*\{[^}]*max-width:\s*none/);
+  expect(style).toMatch(/\.hero--without-image \.hero-action\s*\{[^}]*width:\s*100%/);
+});
+
 test("cases exposes a compact header and one-step filter reset", async () => {
   const template = await readSource("pages/cases/index.ttml");
   expect(template).not.toContain("page-kicker");
