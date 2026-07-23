@@ -2,26 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
 const migrationPaths = {
-  masterData: new URL(
-    "../../../../supabase/migrations/20260723140000_create_supplier_master_data.sql",
-    import.meta.url,
-  ),
-  tenantSupplierRelationships: new URL(
-    "../../../../supabase/migrations/20260723141000_create_tenant_supplier_relationships.sql",
-    import.meta.url,
-  ),
-  standardCatalog: new URL(
-    "../../../../supabase/migrations/20260723142000_create_supplier_standard_catalog.sql",
-    import.meta.url,
-  ),
-  foundationCommands: new URL(
-    "../../../../supabase/migrations/20260723143000_create_supplier_foundation_commands.sql",
-    import.meta.url,
-  ),
-  foundationPermissions: new URL(
-    "../../../../supabase/migrations/20260723144000_seed_supplier_foundation_permissions.sql",
-    import.meta.url,
-  ),
+  masterData: new URL("../../../../supabase/migrations/20260723140000_create_supplier_master_data.sql", import.meta.url),
+  tenantSupplierRelationships: new URL("../../../../supabase/migrations/20260723141000_create_tenant_supplier_relationships.sql", import.meta.url),
+  standardCatalog: new URL("../../../../supabase/migrations/20260723142000_create_supplier_standard_catalog.sql", import.meta.url),
+  foundationCommands: new URL("../../../../supabase/migrations/20260723143000_create_supplier_foundation_commands.sql", import.meta.url),
+  foundationPermissions: new URL("../../../../supabase/migrations/20260723144000_seed_supplier_foundation_permissions.sql", import.meta.url),
 } as const;
 
 function readMigration(migrationPath: URL) {
@@ -30,22 +15,14 @@ function readMigration(migrationPath: URL) {
 
 const migrationSql = {
   masterData: readMigration(migrationPaths.masterData),
-  tenantSupplierRelationships: readMigration(
-    migrationPaths.tenantSupplierRelationships,
-  ),
+  tenantSupplierRelationships: readMigration(migrationPaths.tenantSupplierRelationships),
   standardCatalog: readMigration(migrationPaths.standardCatalog),
   foundationCommands: readMigration(migrationPaths.foundationCommands),
   foundationPermissions: readMigration(migrationPaths.foundationPermissions),
 } as const;
 
-function readMasterDataMigration() {
-  return migrationSql.masterData;
-}
-
 function extractCreateTableStatement(sql: string, table: string) {
-  const statementStart = sql.search(
-    new RegExp(`CREATE TABLE public\\.${table}\\s*\\(`, "i"),
-  );
+  const statementStart = sql.search(new RegExp(`CREATE TABLE public\\.${table}\\s*\\(`, "i"));
   if (statementStart < 0) return "";
 
   const bodyStart = sql.indexOf("(", statementStart);
@@ -68,10 +45,7 @@ function extractCreateTableStatement(sql: string, table: string) {
     depth -= 1;
     if (depth === 0) {
       const statementEnd = sql.indexOf(";", index);
-      return sql.slice(
-        statementStart,
-        statementEnd >= 0 ? statementEnd + 1 : index + 1,
-      );
+      return sql.slice(statementStart, statementEnd >= 0 ? statementEnd + 1 : index + 1);
     }
   }
   return "";
@@ -109,6 +83,43 @@ function splitTopLevelSqlClauses(tableStatement: string) {
   return clauses.filter(Boolean);
 }
 
+function extractColumnNames(sql: string, table: string) {
+  return splitTopLevelSqlClauses(extractCreateTableStatement(sql, table))
+    .map((clause) => /^([a-z][a-z0-9_]*)\s/i.exec(clause)?.[1] ?? "")
+    .filter((name) => name && name.toUpperCase() !== "CONSTRAINT");
+}
+
+function expectSqlContracts(sql: string, contracts: readonly RegExp[]) {
+  for (const contract of contracts) expect(sql).toMatch(contract);
+}
+
+function expectPrivateTables(
+  sql: string,
+  tables: readonly string[],
+  revokeServiceRole = false,
+) {
+  for (const table of tables) {
+    for (const clause of ["ENABLE ROW LEVEL SECURITY", "FORCE ROW LEVEL SECURITY"]) {
+      expect(sql).toContain(`ALTER TABLE public.${table} ${clause};`);
+    }
+    expect(sql).toContain(`REVOKE ALL ON TABLE public.${table} FROM PUBLIC, anon, authenticated;`);
+    if (revokeServiceRole) {
+      expect(sql).toContain(`REVOKE ALL ON TABLE public.${table} FROM service_role;`);
+    }
+    expect(sql).toContain(`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.${table} TO service_role;`);
+  }
+  expect([...sql.matchAll(/^GRANT ([A-Z, ]+) ON TABLE public\.([a-z0-9_]+) TO service_role;$/gm)].map((match) => [match[1], match[2]])).toEqual(
+    tables.map((table) => ["SELECT, INSERT, UPDATE, DELETE", table]),
+  );
+  expect(sql).not.toMatch(/^\s*GRANT\b[^;]*\bTO (?:PUBLIC|anon|authenticated)\s*;/im);
+  expect(sql).not.toMatch(/^\s*CREATE POLICY\b/im);
+}
+
+function expectTransactionalMigration(sql: string) {
+  expect(sql).toMatch(/^-- Rollback:/);
+  expect(sql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
+}
+
 function findQualificationTypeNameUniqueness(sql: string) {
   const tableStatement = extractCreateTableStatement(
     sql,
@@ -137,7 +148,7 @@ function findQualificationTypeNameUniqueness(sql: string) {
 
 describe("supplier foundation migration contract", () => {
   test("creates the six supplier master-data tables and required indexes", () => {
-    const sql = readMasterDataMigration();
+    const sql = migrationSql.masterData;
     const createdTables = [
       ...sql.matchAll(/^CREATE TABLE public\.([a-z0-9_]+) \(/gm),
     ].map((match) => match[1]);
@@ -170,173 +181,82 @@ describe("supplier foundation migration contract", () => {
   });
 
   test("locks normalized supplier and active-history lookup indexes", () => {
-    const sql = readMasterDataMigration();
-
-    expect(sql).toMatch(
+    const sql = migrationSql.masterData;
+    expectSqlContracts(sql, [
       /CREATE UNIQUE INDEX suppliers_credit_code_unique_idx\s+ON public\.suppliers\(upper\(btrim\(unified_social_credit_code\)\)\)\s+WHERE unified_social_credit_code IS NOT NULL\s+AND btrim\(unified_social_credit_code\) <> '';/,
-    );
-    expect(sql).toMatch(
       /CREATE INDEX suppliers_platform_queue_idx\s+ON public\.suppliers\(\s*onboarding_status,\s*operational_status,\s*updated_at DESC,\s*id DESC\s*\);/,
-    );
-    expect(sql).toMatch(
       /CREATE INDEX supplier_addresses_supplier_type_status_default_idx\s+ON public\.supplier_addresses\(\s*supplier_id,\s*address_type,\s*status,\s*is_default DESC\s*\);/,
-    );
-    expect(sql).toMatch(
       /CREATE UNIQUE INDEX supplier_addresses_active_default_type_unique_idx\s+ON public\.supplier_addresses\(supplier_id, address_type\)\s+WHERE is_default AND status = 'active';/,
-    );
-    expect(sql).toMatch(
       /CREATE INDEX supplier_contacts_supplier_type_idx\s+ON public\.supplier_contacts\(\s*supplier_id,\s*contact_type,\s*is_primary DESC\s*\);/,
-    );
-    expect(sql).toMatch(
       /CREATE UNIQUE INDEX supplier_contacts_active_primary_type_unique_idx\s+ON public\.supplier_contacts\(supplier_id, contact_type\)\s+WHERE is_primary AND status = 'active';/,
-    );
+    ]);
   });
 
   test("locks qualification-type membership, bounds, and positive versions", () => {
-    const sql = readMasterDataMigration();
-    const qualificationTypeTable = extractCreateTableStatement(
-      sql,
-      "supplier_qualification_types",
-    );
-    const supplierTypes = [
-      "manufacturer",
-      "brand_agent",
-      "distributor",
-      "retailer",
-      "other",
-    ] as const;
-
-    expect(qualificationTypeTable).toMatch(
-      /^\s*code text NOT NULL UNIQUE,\s*$/m,
-    );
+    const sql = migrationSql.masterData;
+    const qualificationTypeTable = extractCreateTableStatement(sql, "supplier_qualification_types");
+    const supplierTypes = ["manufacturer", "brand_agent", "distributor", "retailer", "other"] as const;
+    expect(qualificationTypeTable).toMatch(/^\s*code text NOT NULL UNIQUE,\s*$/m);
     expect(qualificationTypeTable).toContain("name text NOT NULL");
-    expect(qualificationTypeTable).toMatch(
-      /CONSTRAINT supplier_qualification_types_name_not_blank_check\s+CHECK \(btrim\(name\) <> ''\)/,
-    );
+    expect(qualificationTypeTable).toMatch(/CONSTRAINT supplier_qualification_types_name_not_blank_check\s+CHECK \(btrim\(name\) <> ''\)/);
     expect(findQualificationTypeNameUniqueness(sql)).toEqual([]);
-    expect(qualificationTypeTable).toContain(
-      "applicable_supplier_types text[] NOT NULL DEFAULT '{}'::text[]",
-    );
-    expect(qualificationTypeTable).toMatch(
-      /applicable_supplier_types <@ ARRAY\[\s*'manufacturer',\s*'brand_agent',\s*'distributor',\s*'retailer',\s*'other'\s*\]::text\[\]/,
-    );
-    expect(qualificationTypeTable).toContain(
-      "array_position(applicable_supplier_types, NULL) IS NULL",
-    );
+    expect(qualificationTypeTable).toContain("applicable_supplier_types text[] NOT NULL DEFAULT '{}'::text[]");
+    expect(qualificationTypeTable).toMatch(/applicable_supplier_types <@ ARRAY\[\s*'manufacturer',\s*'brand_agent',\s*'distributor',\s*'retailer',\s*'other'\s*\]::text\[\]/);
+    expect(qualificationTypeTable).toContain("array_position(applicable_supplier_types, NULL) IS NULL");
     for (const supplierType of supplierTypes) {
-      expect(qualificationTypeTable).toContain(
-        `cardinality(array_positions(applicable_supplier_types, '${supplierType}')) <= 1`,
-      );
+      expect(qualificationTypeTable).toContain(`cardinality(array_positions(applicable_supplier_types, '${supplierType}')) <= 1`);
     }
-    expect(qualificationTypeTable).toContain(
-      "warning_days integer NOT NULL DEFAULT 30",
-    );
-    expect(qualificationTypeTable).toMatch(
-      /CONSTRAINT supplier_qualification_types_warning_days_check\s+CHECK \(warning_days BETWEEN 0 AND 3650\)/,
-    );
-
-    for (const table of [
-      "supplier_qualification_types",
-      "suppliers",
-      "supplier_qualifications",
-      "supplier_service_regions",
-      "supplier_addresses",
-      "supplier_contacts",
-    ]) {
-      expect(sql).toMatch(
-        new RegExp(
-          `CONSTRAINT ${table}_version_check\\s+CHECK \\(version > 0\\)`,
-        ),
-      );
+    expect(qualificationTypeTable).toContain("warning_days integer NOT NULL DEFAULT 30");
+    expect(qualificationTypeTable).toMatch(/CONSTRAINT supplier_qualification_types_warning_days_check\s+CHECK \(warning_days BETWEEN 0 AND 3650\)/);
+    for (const table of ["supplier_qualification_types", "suppliers", "supplier_qualifications", "supplier_service_regions", "supplier_addresses", "supplier_contacts"]) {
+      expect(sql).toMatch(new RegExp(`CONSTRAINT ${table}_version_check\\s+CHECK \\(version > 0\\)`));
     }
   });
 
   test("rejects every qualification-type name uniqueness form", () => {
     const illegalVariants = [
-      `CREATE TABLE public.supplier_qualification_types (
-        code text NOT NULL UNIQUE,
-        name text NOT NULL UNIQUE
-      );`,
-      `CREATE TABLE public.supplier_qualification_types (
-        code text NOT NULL UNIQUE,
-        name text NOT NULL,
-        CONSTRAINT supplier_qualification_types_code_name_key
-          UNIQUE (code, name)
-      );`,
-      `CREATE TABLE public.supplier_qualification_types (
-        code text NOT NULL UNIQUE,
-        name text NOT NULL,
-        UNIQUE (upper(btrim(name)))
-      );`,
-      `CREATE UNIQUE INDEX supplier_qualification_types_name_key
-        ON public.supplier_qualification_types(name);`,
-      `CREATE UNIQUE INDEX IF NOT EXISTS supplier_qualification_types_name_upper_key
-        ON public.supplier_qualification_types
-        USING btree (upper(btrim(name)));`,
+      "CREATE TABLE public.supplier_qualification_types (code text NOT NULL UNIQUE, name text NOT NULL UNIQUE);",
+      "CREATE TABLE public.supplier_qualification_types (code text NOT NULL UNIQUE, name text NOT NULL, CONSTRAINT supplier_qualification_types_code_name_key UNIQUE (code, name));",
+      "CREATE TABLE public.supplier_qualification_types (code text NOT NULL UNIQUE, name text NOT NULL, UNIQUE (upper(btrim(name))));",
+      "CREATE UNIQUE INDEX supplier_qualification_types_name_key ON public.supplier_qualification_types(name);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS supplier_qualification_types_name_upper_key ON public.supplier_qualification_types USING btree (upper(btrim(name)));",
     ] as const;
-
     for (const illegalVariant of illegalVariants) {
-      expect(findQualificationTypeNameUniqueness(illegalVariant)).not.toEqual(
-        [],
-      );
+      expect(findQualificationTypeNameUniqueness(illegalVariant)).not.toEqual([]);
     }
   });
 
   test("locks validity, duplicate identity, and coordinate boundaries", () => {
-    const sql = readMasterDataMigration();
-
-    expect(sql).toMatch(
+    const sql = migrationSql.masterData;
+    expectSqlContracts(sql, [
       /CONSTRAINT supplier_qualifications_date_order_check\s+CHECK \(\s*valid_from IS NULL\s+OR valid_until IS NULL\s+OR valid_until >= valid_from\s*\)/,
-    );
-    expect(sql).toMatch(
       /CONSTRAINT supplier_service_regions_date_order_check\s+CHECK \(\s*valid_from IS NULL\s+OR valid_until IS NULL\s+OR valid_until >= valid_from\s*\)/,
-    );
-    expect(sql).toMatch(
       /CONSTRAINT supplier_qualifications_supplier_type_document_key\s+UNIQUE \(supplier_id, qualification_type_id, document_file_id\)/,
-    );
-    expect(sql).toMatch(
       /CONSTRAINT supplier_addresses_longitude_check\s+CHECK \(longitude IS NULL OR longitude BETWEEN -180 AND 180\)/,
-    );
-    expect(sql).toMatch(
       /CONSTRAINT supplier_addresses_latitude_check\s+CHECK \(latitude IS NULL OR latitude BETWEEN -90 AND 90\)/,
-    );
+    ]);
   });
 
   test("locks supplier status dimensions and private qualification documents", () => {
-    const sql = readMasterDataMigration();
-
-    expect(sql).toContain(
+    const sql = migrationSql.masterData;
+    for (const contract of [
       "supplier_type IN ('manufacturer', 'brand_agent', 'distributor', 'retailer', 'other')",
-    );
-    expect(sql).toContain(
       "onboarding_status IN ('draft', 'pending_review', 'approved', 'rejected')",
-    );
-    expect(sql).toContain(
       "operational_status IN ('active', 'suspended', 'blacklisted')",
-    );
-    expect(sql).toContain(
       "verification_status IN ('pending', 'verified', 'rejected')",
-    );
-    expect(sql).toContain(
       "region_level IN ('province', 'city', 'district')",
-    );
-    expect(sql).toContain("supplier_qualification_types_status_check");
-    expect(sql).toContain("supplier_service_regions_status_check");
-    expect(sql).toContain("supplier_addresses_status_check");
-    expect(sql).toContain("supplier_contacts_status_check");
-    expect(sql).toContain(
+      "supplier_qualification_types_status_check",
+      "supplier_service_regions_status_check",
+      "supplier_addresses_status_check",
+      "supplier_contacts_status_check",
       "address_type IN ('registered', 'shipping', 'return', 'other')",
-    );
-    expect(sql).toContain(
       "contact_type IN ('primary', 'sales', 'finance', 'logistics', 'after_sales')",
-    );
-    expect(sql).toContain(
       "document_file_id uuid NOT NULL REFERENCES public.platform_file_objects(id) ON DELETE RESTRICT",
-    );
+    ]) expect(sql).toContain(contract);
   });
 
   test("forces service-role-only access", () => {
-    const sql = readMasterDataMigration();
+    const sql = migrationSql.masterData;
     const tables = [
       "supplier_qualification_types",
       "suppliers",
@@ -346,28 +266,12 @@ describe("supplier foundation migration contract", () => {
       "supplier_contacts",
     ] as const;
 
-    for (const table of tables) {
-      expect(sql).toContain(
-        `ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;`,
-      );
-      expect(sql).toContain(
-        `ALTER TABLE public.${table} FORCE ROW LEVEL SECURITY;`,
-      );
-      expect(sql).toContain(
-        `REVOKE ALL ON TABLE public.${table} FROM PUBLIC, anon, authenticated;`,
-      );
-      expect(sql).toContain(
-        `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.${table} TO service_role;`,
-      );
-    }
-
-    expect(sql).not.toMatch(/^\s*CREATE POLICY\b/im);
-    expect(sql).toMatch(/^-- Rollback:/);
-    expect(sql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
+    expectPrivateTables(sql, tables);
+    expectTransactionalMigration(sql);
   });
 
   test("seeds exactly one stable business-license payload", () => {
-    const sql = readMasterDataMigration();
+    const sql = migrationSql.masterData;
     const seedSql =
       sql.match(
         /INSERT INTO public\.supplier_qualification_types \([\s\S]*?sort_order = EXCLUDED\.sort_order;/,
@@ -471,20 +375,118 @@ describe("supplier foundation migration contract", () => {
     const tables = ["tenant_supplier_settings", "tenant_suppliers", "supplier_contracts"] as const;
     for (const table of tables) {
       expect(relationshipSql).toMatch(new RegExp("CREATE TRIGGER tr_" + table + "_updated_at\\s+BEFORE UPDATE ON public\\." + table + "\\s+FOR EACH ROW\\s+EXECUTE FUNCTION public\\.update_updated_at_column\\(\\);"));
-      for (const clause of ["ENABLE ROW LEVEL SECURITY", "FORCE ROW LEVEL SECURITY"]) {
-        expect(relationshipSql).toContain("ALTER TABLE public." + table + " " + clause + ";");
-      }
-      expect(relationshipSql).toContain("REVOKE ALL ON TABLE public." + table + " FROM PUBLIC, anon, authenticated;");
-      expect(relationshipSql).toContain("REVOKE ALL ON TABLE public." + table + " FROM service_role;");
-      expect(relationshipSql).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public." + table + " TO service_role;");
     }
-    expect([...relationshipSql.matchAll(/^GRANT ([A-Z, ]+) ON TABLE public\.([a-z0-9_]+) TO service_role;$/gm)].map((match) => [match[1], match[2]])).toEqual(
-      tables.map((table) => ["SELECT, INSERT, UPDATE, DELETE", table]),
-    );
-    expect(relationshipSql).not.toMatch(/^\s*GRANT\b[^;]*\bTO (?:PUBLIC|anon|authenticated)\s*;/im);
-    expect(relationshipSql).not.toMatch(/^\s*CREATE POLICY\b/im);
-    expect(relationshipSql).toMatch(/^-- Rollback:/);
-    expect(relationshipSql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
+    expectPrivateTables(relationshipSql, tables, true);
+    expectTransactionalMigration(relationshipSql);
+  });
+
+  test("locks standard catalog tables, columns, references, and checks", () => {
+    const sql = migrationSql.standardCatalog;
+    const columns = {
+      catalog_categories: ["id", "parent_id", "code", "name", "level", "status", "sort_order", "version", "created_by_employee_id", "updated_by_employee_id", "created_at", "updated_at"],
+      catalog_brands: ["id", "code", "name", "legal_name", "logo_file_id", "status", "sort_order", "version", "created_by_employee_id", "updated_by_employee_id", "created_at", "updated_at"],
+      catalog_units: ["id", "code", "name", "symbol", "base_unit_id", "conversion_factor", "status", "sort_order", "version", "created_by_employee_id", "updated_by_employee_id", "created_at", "updated_at"],
+    } as const;
+    expect(
+      [...sql.matchAll(/^CREATE TABLE public\.([a-z0-9_]+) \(/gm)].map(
+        (match) => match[1],
+      ),
+    ).toEqual(Object.keys(columns));
+    for (const [table, expectedColumns] of Object.entries(columns)) {
+      const tableSql = extractCreateTableStatement(sql, table);
+      expect(extractColumnNames(sql, table)).toEqual([...expectedColumns]);
+      expectSqlContracts(tableSql, [
+        /id uuid PRIMARY KEY DEFAULT gen_random_uuid\(\)/,
+        /status text NOT NULL DEFAULT 'active'/,
+        /sort_order integer NOT NULL DEFAULT 100/,
+        /version integer NOT NULL DEFAULT 1/,
+        /created_by_employee_id uuid NOT NULL\s+REFERENCES public\.employees\(id\) ON DELETE RESTRICT/,
+        /updated_by_employee_id uuid NOT NULL\s+REFERENCES public\.employees\(id\) ON DELETE RESTRICT/,
+        /created_at timestamptz NOT NULL DEFAULT now\(\)/,
+        /updated_at timestamptz NOT NULL DEFAULT now\(\)/,
+        new RegExp(`CONSTRAINT ${table}_status_check\\s+CHECK \\(status IN \\('active', 'inactive'\\)\\)`),
+        new RegExp(`CONSTRAINT ${table}_version_check\\s+CHECK \\(version > 0\\)`),
+      ]);
+      for (const field of ["code", "name"]) {
+        expect(tableSql).toMatch(
+          new RegExp(`CONSTRAINT ${table}_${field}_trimmed_check\\s+CHECK \\(${field} = btrim\\(${field}\\) AND ${field} <> ''\\)`),
+        );
+      }
+    }
+    expectSqlContracts(extractCreateTableStatement(sql, "catalog_categories"), [
+      /parent_id uuid NULL\s+REFERENCES public\.catalog_categories\(id\) ON DELETE RESTRICT/,
+      /code text NOT NULL UNIQUE/,
+      /name text NOT NULL/,
+      /^\s*level integer NOT NULL,\s*$/m,
+      /CONSTRAINT catalog_categories_level_check\s+CHECK \(level BETWEEN 1 AND 6\)/,
+    ]);
+    expect(extractCreateTableStatement(sql, "catalog_categories")).not.toMatch(/\blevel (?:smallint|integer NOT NULL DEFAULT)\b/);
+    expectSqlContracts(extractCreateTableStatement(sql, "catalog_brands"), [
+      /code text NOT NULL UNIQUE/,
+      /name text NOT NULL/,
+      /legal_name text NULL/,
+      /logo_file_id uuid NULL\s+REFERENCES public\.platform_file_objects\(id\) ON DELETE SET NULL/,
+      /CONSTRAINT catalog_brands_legal_name_trimmed_check\s+CHECK \(\s*legal_name IS NULL\s+OR \(legal_name = btrim\(legal_name\) AND legal_name <> ''\)\s*\)/,
+    ]);
+    expectSqlContracts(extractCreateTableStatement(sql, "catalog_units"), [
+      /code text NOT NULL UNIQUE/,
+      /name text NOT NULL/,
+      /symbol text NOT NULL/,
+      /base_unit_id uuid NULL\s+REFERENCES public\.catalog_units\(id\) ON DELETE RESTRICT/,
+      /conversion_factor numeric\(18, 6\) NOT NULL DEFAULT 1/,
+      /CONSTRAINT catalog_units_symbol_trimmed_check\s+CHECK \(symbol = btrim\(symbol\) AND symbol <> ''\)/,
+      /CONSTRAINT catalog_units_conversion_factor_positive_check\s+CHECK \(conversion_factor > 0\)/,
+      /CONSTRAINT catalog_units_base_conversion_check\s+CHECK \(\s*\(base_unit_id IS NULL AND conversion_factor = 1\)\s+OR base_unit_id IS NOT NULL\s*\)/,
+    ]);
+  });
+
+  test("locks category hierarchy and unit-base trigger invariants", () => {
+    const sql = migrationSql.standardCatalog;
+    const rowFunction = sql.match(/CREATE FUNCTION public\.set_catalog_category_level\(\)[\s\S]*?\$\$;/)?.[0] ?? "";
+    expect(rowFunction).not.toContain("pg_advisory_xact_lock");
+    expectSqlContracts(sql, [
+      /CREATE FUNCTION public\.lock_catalog_category_hierarchy\(\)\s+RETURNS trigger\s+LANGUAGE plpgsql\s+SET search_path = pg_catalog, public\s+AS \$\$[\s\S]*PERFORM pg_catalog\.pg_advisory_xact_lock\(6720240723142000::bigint\);[\s\S]*RETURN NULL;[\s\S]*\$\$;/,
+      /REVOKE ALL ON FUNCTION public\.lock_catalog_category_hierarchy\(\)\s+FROM PUBLIC, anon, authenticated, service_role;/,
+      /CREATE TRIGGER tr_catalog_categories_lock_hierarchy\s+BEFORE INSERT OR UPDATE ON public\.catalog_categories\s+FOR EACH STATEMENT\s+EXECUTE FUNCTION public\.lock_catalog_category_hierarchy\(\);/,
+      /CREATE FUNCTION public\.set_catalog_category_level\(\)\s+RETURNS trigger\s+LANGUAGE plpgsql\s+SET search_path = pg_catalog, public\s+AS \$\$/,
+      /IF TG_OP = 'UPDATE'\s+AND NEW\.parent_id IS DISTINCT FROM OLD\.parent_id THEN[\s\S]*IF EXISTS \([\s\S]*FROM descendants[\s\S]*\) THEN\s+RAISE EXCEPTION '只能移动叶子目录分类';/,
+      /IF NEW\.parent_id IS NULL THEN\s+NEW\.level := 1;/,
+      /IF NEW\.parent_id = NEW\.id THEN\s+RAISE EXCEPTION '目录分类不能将自身设为父分类';/,
+      /WITH RECURSIVE ancestors AS \([\s\S]*FROM public\.catalog_categories AS parent[\s\S]*JOIN ancestors[\s\S]*NOT parent\.id = ANY\(ancestors\.path\)/,
+      /IF EXISTS \([\s\S]*SELECT 1\s+FROM ancestors\s+WHERE ancestors\.id = NEW\.id[\s\S]*\) THEN\s+RAISE EXCEPTION '目录分类层级不能形成环';/,
+      /SELECT parent\.level\s+INTO parent_level\s+FROM public\.catalog_categories AS parent\s+WHERE parent\.id = NEW\.parent_id/,
+      /IF NOT FOUND THEN\s+RAISE EXCEPTION '父目录分类不存在';/,
+      /NEW\.level := parent_level \+ 1;/,
+      /IF NEW\.level > 6 THEN\s+RAISE EXCEPTION '目录分类层级不能超过 6 级';/,
+      /CREATE TRIGGER tr_catalog_categories_set_level\s+BEFORE INSERT OR UPDATE ON public\.catalog_categories\s+FOR EACH ROW\s+EXECUTE FUNCTION public\.set_catalog_category_level\(\);/,
+      /CREATE FUNCTION public\.validate_catalog_unit_base\(\)\s+RETURNS trigger\s+LANGUAGE plpgsql\s+SET search_path = pg_catalog, public\s+AS \$\$/,
+      /IF NEW\.base_unit_id = NEW\.id THEN\s+RAISE EXCEPTION '目录单位不能将自身设为基准单位';/,
+      /SELECT base_unit\.base_unit_id\s+INTO parent_base_unit_id\s+FROM public\.catalog_units AS base_unit\s+WHERE base_unit\.id = NEW\.base_unit_id\s+FOR UPDATE;/,
+      /IF NOT FOUND THEN\s+RAISE EXCEPTION '基准单位不存在';/,
+      /IF parent_base_unit_id IS NOT NULL THEN\s+RAISE EXCEPTION '派生单位只能引用基准单位';/,
+      /IF TG_OP = 'UPDATE'[\s\S]*EXISTS \([\s\S]*FROM public\.catalog_units AS derived_unit\s+WHERE derived_unit\.base_unit_id = OLD\.id[\s\S]*\) THEN\s+RAISE EXCEPTION '已有派生单位引用的基准单位不能改为派生单位';/,
+      /CREATE TRIGGER tr_catalog_units_validate_base\s+BEFORE INSERT OR UPDATE ON public\.catalog_units/,
+      /REVOKE ALL ON FUNCTION public\.set_catalog_category_level\(\)\s+FROM PUBLIC, anon, authenticated, service_role;/,
+      /REVOKE ALL ON FUNCTION public\.validate_catalog_unit_base\(\)\s+FROM PUBLIC, anon, authenticated, service_role;/,
+    ]);
+    expect(sql.indexOf("CREATE TRIGGER tr_catalog_categories_lock_hierarchy")).toBeLessThan(sql.indexOf("CREATE TRIGGER tr_catalog_categories_set_level"));
+  });
+
+  test("locks standard catalog indexes, timestamps, private access, and no seeds", () => {
+    const sql = migrationSql.standardCatalog;
+    expectSqlContracts(sql, [
+      /CREATE INDEX catalog_categories_parent_status_sort_idx\s+ON public\.catalog_categories\(parent_id, status, sort_order, id\);/,
+      /CREATE INDEX catalog_brands_status_name_idx\s+ON public\.catalog_brands\(status, name, id\);/,
+      /CREATE INDEX catalog_units_status_sort_idx\s+ON public\.catalog_units\(status, sort_order, id\);/,
+      /CREATE INDEX catalog_units_base_unit_lookup_idx\s+ON public\.catalog_units\(base_unit_id\)\s+WHERE base_unit_id IS NOT NULL;/,
+    ]);
+    const tables = ["catalog_categories", "catalog_brands", "catalog_units"] as const;
+    for (const table of tables) {
+      expect(sql).toMatch(new RegExp(`CREATE TRIGGER tr_${table}_updated_at\\s+BEFORE UPDATE ON public\\.${table}\\s+FOR EACH ROW\\s+EXECUTE FUNCTION public\\.update_updated_at_column\\(\\);`));
+    }
+    expectPrivateTables(sql, tables, true);
+    expect(sql).not.toMatch(/^\s*INSERT\b/im);
+    expectTransactionalMigration(sql);
   });
 
 });
