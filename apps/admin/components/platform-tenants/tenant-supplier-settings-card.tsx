@@ -14,15 +14,22 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { requestBackendJson } from "@/lib/backend-client";
 
 import {
   formatDate,
   newIdempotencyKey,
   type TenantSupplierSettings,
 } from "../suppliers/supplier-types";
+import {
+  loadPlatformTenantSupplierSettings,
+  type PlatformModuleIntent,
+  updatePlatformTenantSupplierModule,
+} from "../suppliers/supplier-settings-api";
+
+type PendingModuleIntent = PlatformModuleIntent & {
+  idempotencyKey: string;
+};
 
 const defaultSettings = (tenantId: string): TenantSupplierSettings => ({
   tenant_id: tenantId,
@@ -52,15 +59,14 @@ export function TenantSupplierSettingsCard({
   const [disableReason, setDisableReason] = useState("");
   const [reasonError, setReasonError] = useState(false);
   const [pending, setPending] = useState(false);
+  const [pendingIntent, setPendingIntent] =
+    useState<PendingModuleIntent | null>(null);
   const [conflict, setConflict] = useState(false);
   const [error, setError] = useState(initialError ?? null);
 
   async function loadLatest() {
     try {
-      const latest = await requestBackendJson<TenantSupplierSettings | null>(
-        `/platform/tenant-supplier-settings/${tenantId}`,
-        { fallbackMessage: "供应商模块配置刷新失败" },
-      );
+      const latest = await loadPlatformTenantSupplierSettings(tenantId);
       const normalized = latest ?? defaultSettings(tenantId);
       setSettings(normalized);
       setError(null);
@@ -75,46 +81,29 @@ export function TenantSupplierSettingsCard({
   }
 
   async function save(
-    next: {
-      module_enabled: boolean;
-      require_active_contract_for_new_order: boolean;
-    },
-    expectedVersion = settings.version,
+    intent: PendingModuleIntent,
+    current = settings,
   ) {
-    if (!next.module_enabled && settings.module_enabled && !disableReason.trim()) {
-      setReasonError(true);
-      return;
-    }
     setPending(true);
+    setPendingIntent(intent);
     setConflict(false);
     try {
-      const updated = await requestBackendJson<TenantSupplierSettings>(
-        `/platform/tenant-supplier-settings/${tenantId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Idempotency-Key": newIdempotencyKey("tenant-supplier-settings"),
-          },
-          body: JSON.stringify({
-            module_enabled: next.module_enabled,
-            require_active_contract_for_new_order:
-              next.require_active_contract_for_new_order,
-            expected_version: expectedVersion,
-            ...(!next.module_enabled && settings.module_enabled
-              ? { reason: disableReason.trim() }
-              : {}),
-          }),
-          fallbackMessage: "供应商模块配置保存失败",
-        },
-      );
+      const updated = await updatePlatformTenantSupplierModule({
+        tenantId,
+        current,
+        intent,
+        idempotencyKey: intent.idempotencyKey,
+      });
       setSettings(updated);
       setDisableReason("");
       setReasonError(false);
+      setPendingIntent(null);
       setError(null);
-      toast.success(next.module_enabled ? "供应商模块已启用" : "供应商模块已停用");
+      toast.success(intent.moduleEnabled ? "供应商模块已启用" : "供应商模块已停用");
     } catch (requestError) {
       if ((requestError as { status?: number }).status === 409) {
         setConflict(true);
+        await loadLatest();
       } else {
         const message = requestError instanceof Error
           ? requestError.message
@@ -127,21 +116,25 @@ export function TenantSupplierSettingsCard({
     }
   }
 
-  async function retry(
-    next: {
-      module_enabled: boolean;
-      require_active_contract_for_new_order: boolean;
-    },
-  ) {
-    const latest = await loadLatest();
-    if (latest) await save(next, latest.version);
+  function startModuleMutation() {
+    const moduleEnabled = !settings.module_enabled;
+    const reason = disableReason.trim();
+    if (!moduleEnabled && !reason) {
+      setReasonError(true);
+      return;
+    }
+    void save({
+      moduleEnabled,
+      ...(reason ? { reason } : {}),
+      idempotencyKey: newIdempotencyKey("tenant-supplier-settings"),
+    });
   }
 
-  const nextModuleState = {
-    module_enabled: !settings.module_enabled,
-    require_active_contract_for_new_order:
-      settings.require_active_contract_for_new_order,
-  };
+  async function retry() {
+    if (!pendingIntent) return;
+    const latest = await loadLatest();
+    if (latest) await save(pendingIntent, latest);
+  }
 
   return (
     <Card className="shadow-none">
@@ -155,7 +148,7 @@ export function TenantSupplierSettingsCard({
               </Badge>
             </div>
             <CardDescription className="mt-1">
-              控制该租户是否可建立供应商合作关系，并设置新订单合同门槛。
+              控制该租户是否可建立供应商合作关系。合同策略由租户自行维护。
             </CardDescription>
           </div>
           {canManage ? (
@@ -163,7 +156,7 @@ export function TenantSupplierSettingsCard({
               type="button"
               variant={settings.module_enabled ? "destructive" : "default"}
               disabled={pending || Boolean(error)}
-              onClick={() => void save(nextModuleState)}
+              onClick={startModuleMutation}
             >
               {pending
                 ? "正在保存"
@@ -178,7 +171,19 @@ export function TenantSupplierSettingsCard({
         {error ? (
           <Alert variant="destructive">
             <AlertTitle>供应商模块配置异常</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="flex flex-col gap-3">
+              <p>{error}</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="self-start"
+                disabled={pending}
+                onClick={() => void loadLatest()}
+              >
+                重新加载
+              </Button>
+            </AlertDescription>
           </Alert>
         ) : null}
         <div className="grid gap-3 md:grid-cols-2">
@@ -193,32 +198,6 @@ export function TenantSupplierSettingsCard({
           />
         </div>
         <FieldGroup>
-          <Field className="flex-row items-center gap-4">
-            <div className="flex-1">
-              <FieldLabel htmlFor="tenant-supplier-contract-policy">
-                创建新订单前要求生效合同
-              </FieldLabel>
-              <p className="text-xs text-muted-foreground">
-                开启后，无生效合同的合作供应商不能创建新订单。
-              </p>
-            </div>
-            <Switch
-              id="tenant-supplier-contract-policy"
-              checked={settings.require_active_contract_for_new_order}
-              disabled={
-                !canManage ||
-                pending ||
-                Boolean(error) ||
-                !settings.module_enabled
-              }
-              onCheckedChange={(checked) => {
-                void save({
-                  module_enabled: settings.module_enabled,
-                  require_active_contract_for_new_order: checked,
-                });
-              }}
-            />
-          </Field>
           {settings.module_enabled && canManage ? (
             <Field data-invalid={reasonError}>
               <FieldLabel htmlFor="tenant-supplier-disable-reason">
@@ -254,7 +233,7 @@ export function TenantSupplierSettingsCard({
                 <Button type="button" size="sm" variant="outline" onClick={() => void loadLatest()}>
                   刷新最新数据
                 </Button>
-                <Button type="button" size="sm" disabled={pending} onClick={() => void retry(nextModuleState)}>
+                <Button type="button" size="sm" disabled={pending} onClick={() => void retry()}>
                   重试本次操作
                 </Button>
               </div>

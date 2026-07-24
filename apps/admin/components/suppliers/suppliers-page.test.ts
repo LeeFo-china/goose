@@ -103,15 +103,19 @@ describe("平台租户供应商模块开关", () => {
     const card = readSource(
       "../platform-tenants/tenant-supplier-settings-card.tsx",
     );
+    const settingsApi = readSource("./supplier-settings-api.ts");
 
     expect(page).toContain("/platform/tenant-supplier-settings/");
     expect(page).toContain("platform.supplier.manage");
     expect(page).toContain("TenantSupplierSettingsCard");
     expect(card).toContain("module_enabled: false");
     expect(card).toContain("停用原因");
-    expect(card).toContain("reason: disableReason.trim()");
-    expect(card).toContain("expected_version");
-    expect(card).toContain('"Idempotency-Key"');
+    expect(card).toContain("const reason = disableReason.trim()");
+    expect(card).toContain("pendingIntent");
+    expect(card).toContain("重新加载");
+    expect(card).not.toContain("<Switch");
+    expect(settingsApi).toContain("expected_version: current.version");
+    expect(settingsApi).toContain('"Idempotency-Key"');
     expect(card).toContain("模块启用时间");
     expect(card).toContain("新订单合同策略");
   });

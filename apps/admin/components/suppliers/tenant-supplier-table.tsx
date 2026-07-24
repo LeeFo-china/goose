@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 
 import {
   blockingReasonLabel,
+  contractHealthMeta,
   relationshipStatusMeta,
   type Pagination,
   type TenantSupplierRelationship,
@@ -83,13 +84,9 @@ export function TenantSupplierTable({
       id: "contract_health",
       header: "合同健康",
       cell: ({ row }) => {
-        const blocked = row.original.eligibility?.blocking_reasons.includes(
-          "active_contract_required",
-        );
+        const meta = contractHealthMeta[row.original.contract_health];
         return (
-          <Badge variant={blocked ? "warning" : "outline"}>
-            {blocked ? "缺少生效合同" : "进入详情查看"}
-          </Badge>
+          <Badge variant={meta.variant}>{meta.label}</Badge>
         );
       },
     },

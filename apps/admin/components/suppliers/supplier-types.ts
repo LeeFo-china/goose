@@ -67,9 +67,16 @@ export type TenantSupplierRelationship = {
   version: number;
   created_at: string;
   updated_at: string;
+  contract_health: SupplierContractHealth;
   supplier: SupplierDirectoryItem;
   eligibility?: SupplierEligibility;
 };
+
+export type SupplierContractHealth =
+  | "valid"
+  | "expiring"
+  | "expired"
+  | "missing";
 
 export type SupplierContract = {
   id: string;
@@ -120,6 +127,16 @@ export const relationshipStatusMeta: Record<
   blacklisted: { label: "租户黑名单", variant: "danger" },
 };
 
+export const contractHealthMeta: Record<
+  SupplierContractHealth,
+  { label: string; variant: BadgeVariant }
+> = {
+  valid: { label: "有效", variant: "success" },
+  expiring: { label: "即将到期", variant: "warning" },
+  expired: { label: "已过期", variant: "danger" },
+  missing: { label: "缺失", variant: "secondary" },
+};
+
 export const blockingReasonLabel: Record<SupplierOrderBlockingReason, string> = {
   module_disabled: "供应商模块未启用",
   supplier_not_approved: "平台供应商尚未通过准入审核",
@@ -147,4 +164,12 @@ export function formatDate(value?: string | null) {
 
 export function newIdempotencyKey(scope: string) {
   return `${scope}:${crypto.randomUUID()}`;
+}
+
+export function currentSelectedRelationship(
+  relationships: TenantSupplierRelationship[],
+  selectedId: string | null,
+) {
+  if (!selectedId) return null;
+  return relationships.find(({ id }) => id === selectedId) ?? null;
 }

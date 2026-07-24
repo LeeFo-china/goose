@@ -18,8 +18,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { AddSupplierDialog } from "./add-supplier-dialog";
+import { SupplierContractPolicyCard } from "./supplier-contract-policy-card";
+import { loadTenantSupplierSettings } from "./supplier-settings-api";
 import { shouldLoadSupplierResources } from "./supplier-workspace-rules";
 import {
+  currentSelectedRelationship,
   type PageData,
   type TenantSupplierRelationship,
   type TenantSupplierSettings,
@@ -53,7 +56,7 @@ export function SupplierWorkspace({
 }) {
   const [settings, setSettings] = useState<TenantSupplierSettings | null>(null);
   const [relationships, setRelationships] = useState(emptyPage);
-  const [selected, setSelected] = useState<TenantSupplierRelationship | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -90,9 +93,7 @@ export function SupplierWorkspace({
       return;
     }
     let active = true;
-    void requestBackendJson<TenantSupplierSettings>("/supplier-settings", {
-      fallbackMessage: "供应商模块配置加载失败",
-    }).then((data) => {
+    void loadTenantSupplierSettings().then((data) => {
       if (active) setSettings(data);
     }).catch((requestError) => {
       const code = (requestError as { code?: string }).code;
@@ -118,6 +119,15 @@ export function SupplierWorkspace({
     if (!shouldLoadSupplierResources(settings.module_enabled)) return;
     void loadRelationships();
   }, [loadRelationships, settings]);
+
+  const selected = currentSelectedRelationship(
+    relationships.list,
+    selectedId,
+  );
+
+  useEffect(() => {
+    if (selectedId && !selected) setSelectedId(null);
+  }, [selected, selectedId]);
 
   if (!canView) {
     return <StatusAlert>当前账号没有 supplier.view 权限，无法查看合作供应商。</StatusAlert>;
@@ -175,6 +185,11 @@ export function SupplierWorkspace({
           <AddSupplierDialog disabled={listLoading} onCreated={loadRelationships} />
         ) : null}
       </div>
+      <SupplierContractPolicyCard
+        settings={settings}
+        canManage={canManage}
+        onSettingsChange={setSettings}
+      />
       {error ? <StatusAlert>{error}</StatusAlert> : null}
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 border-b bg-muted/20 p-3">
@@ -218,7 +233,7 @@ export function SupplierWorkspace({
               <TenantSupplierTable
                 relationships={relationships.list}
                 pagination={relationships.pagination}
-                onOpen={setSelected}
+                onOpen={(relationship) => setSelectedId(relationship.id)}
               />
             )}
           </div>
@@ -253,7 +268,7 @@ export function SupplierWorkspace({
           relationship={selected}
           open
           onOpenChange={(nextOpen) => {
-            if (!nextOpen) setSelected(null);
+            if (!nextOpen) setSelectedId(null);
           }}
           canManage={canManage}
           canManageContracts={canManageContracts}
