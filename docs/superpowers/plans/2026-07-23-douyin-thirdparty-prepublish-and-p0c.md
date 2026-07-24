@@ -290,6 +290,35 @@ Template `1b01`，普通 merchant/Authorizer 为 0。已命中本步骤停止条
 继续前必须由用户确定新建普通小程序的名称、主体和类目，并由主体负责人本人接受
 平台协议和提交创建申请。
 
+- [ ] **Step 1A：由主体负责人创建普通测试小程序**
+
+官方基础信息审核规则要求名称为 4～20 个中文、数字或英文字，并建议采用
+“品牌/企业关键词 + 行业词”的可辨识组合。结合河南好店主体、模板实际页面和
+首轮仅验证装修资讯、案例/工地展示、在线预约与人工咨询的范围，本轮预填方案为：
+
+```text
+应用类型：小程序（不是小游戏）
+主体：河南好店大数据科技有限公司
+建议名称：好店装修服务
+服务类目：房地产 → 房地产 → 装修/建材
+主营类目：装修/建材
+简介：提供装修案例、在建工地、服务区域展示及免费装修咨询预约服务。
+用途：第三方代开发应用 cd67 的预发布普通测试 Authorizer
+```
+
+“装修/建材”官方适用范围为家居建材装修资讯、在线预约和人工咨询，与当前模板
+精确匹配；企业主体开放类目表对该项未列额外行业资质。不得为了通过审核额外选择
+电商“家居家电”、商品房预售、物业管理或其他模板没有实际功能的类目。
+
+提交前停止并由主体负责人完成三项确认：
+
+1. 控制台显示主体仍为“河南好店大数据科技有限公司”，且主体额度可用；
+2. 确认采用“好店装修服务”；若平台提示重名，记录原始提示后重新确定名称；
+3. 本人阅读并接受平台服务协议后提交创建申请。
+
+Expected: 创建/审核通过后记录应用名称与 AppID 尾号；不得记录完整 AppID，不得把
+Template `1b01` 或 Component `cd67` 误记为新普通小程序。
+
 - [ ] **Step 2：核对开发配置**
 
 同一页面必须权威回读：
@@ -667,5 +696,8 @@ git commit -m "docs(douyin): record third-party prepublish validation"
 - [提交测试小程序代码](https://developer.open-douyin.com/docs/resource/zh-CN/thirdparty/guide/template/step-3-submit-code)
 - [发布第三方小程序应用](https://developer.open-douyin.com/docs/resource/zh-CN/thirdparty/guide/template/publishing)
 - [代开发环节说明](https://developer.open-douyin.com/docs/resource/zh-CN/thirdparty/overview-guide/smallprogram/DevelopingCode)
+- [基础信息审核标准](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/operation/miniapp-creation/basic-info/basic-info-audit-standard)
+- [企业主体开放服务类目](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/operation/service-category/commercial-service-category)
+- [小程序类目介绍](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/operation/service-category/Categories)
 - [小程序命令行工具](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/dev-tools/developer-instrument/development-assistance/ide-cli)
 - [CLI 免密登录](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/dev-tools/developer-instrument/development-assistance/cli-token)
