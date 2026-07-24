@@ -42,7 +42,6 @@ export function FinanceWechatPayApplymentWorkflow({
   contactType,
   ocrReviewCategory,
   reviewConfirmed,
-  reviewSnapshot,
   submissionReadiness,
   pending,
   editable,
@@ -61,7 +60,6 @@ export function FinanceWechatPayApplymentWorkflow({
   onOcrCategoryChange,
   onSupplementDataChange,
   onReviewConfirmedChange,
-  onReviewNavigation,
   onSubmitApplyment,
 }: {
   applyment: WechatPayApplymentRecord | null;
@@ -144,25 +142,18 @@ export function FinanceWechatPayApplymentWorkflow({
           <FinanceWechatPayApplymentSupplementFields
             applyment={applyment}
             subjectType={subjectType}
-            contactType={contactType}
             disabled={disabled}
-            navigationDisabled={navigationDisabled}
-            onReturnToMaterials={() => onStageChange("materials")}
             onDataChange={onSupplementDataChange}
           />
         )}
         submitContent={(
           <FinanceWechatPayApplymentReview
-            review={reviewSnapshot}
             attachments={materials.attachments}
             contactType={contactType}
             confirmed={reviewConfirmed}
             disabled={disabled}
-            navigationDisabled={navigationDisabled}
             readinessBlockers={readinessBlockers}
             onConfirmedChange={onReviewConfirmedChange}
-            onNavigate={onReviewNavigation}
-            onStageChange={onStageChange}
           />
         )}
       />

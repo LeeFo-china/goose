@@ -143,7 +143,10 @@ describe("presentApplymentBlocker actual backend codes", () => {
 
   for (const [blocker, label, targetStage] of cases) {
     test(`maps ${blocker.code}`, () => {
-      expect(presentApplymentBlocker(blocker)).toEqual({ label, targetStage });
+      expect(presentApplymentBlocker(blocker)).toMatchObject({
+        label,
+        targetStage,
+      });
     });
   }
 

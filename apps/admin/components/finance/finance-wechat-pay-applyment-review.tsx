@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 
-import type {
-  WechatPayApplymentReadinessItem,
+import {
+  focusApplymentReadinessTarget,
+  type WechatPayApplymentReadinessItem,
 } from "./finance-wechat-pay-applyment-readiness";
 import {
   type WechatPayApplymentAttachment,
@@ -25,7 +26,7 @@ const BASE_REQUIRED_ATTACHMENTS = [
   "legal_representative_id_card_back",
 ];
 
-type ReviewProps = {
+export type ReviewProps = {
   attachments: WechatPayApplymentAttachment[];
   contactType: string;
   confirmed: boolean;
@@ -34,14 +35,14 @@ type ReviewProps = {
   onConfirmedChange: (checked: boolean) => void;
 };
 
-export function FinanceWechatPayApplymentReview<Props extends ReviewProps>({
+export function FinanceWechatPayApplymentReview({
   attachments,
   contactType,
   confirmed,
   disabled,
   readinessBlockers,
   onConfirmedChange,
-}: Props) {
+}: ReviewProps) {
   const requiredCategories = contactType === "SUPER"
     ? [
         ...BASE_REQUIRED_ATTACHMENTS,
@@ -129,11 +130,7 @@ function ReadinessBlocker({
       size="sm"
       className="h-auto w-full justify-between whitespace-normal px-2 py-2 text-left font-normal"
       data-readiness-blocker=""
-      onClick={() =>
-        document.getElementById(targetId)?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        })}
+      onClick={() => focusApplymentReadinessTarget(targetId)}
     >
       <span className="min-w-0 break-words">{blocker.label}</span>
       <ChevronRight aria-hidden="true" />

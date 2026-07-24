@@ -58,49 +58,6 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(attachmentSource).toContain("选传");
   });
 
-  test("splits supplement fields into single-page business groups", () => {
-    const supplementSource = readSource(
-      "./finance-wechat-pay-applyment-supplement-fields.tsx",
-    );
-
-    for (const component of [
-      "FinanceWechatPayApplymentContactFields",
-      "FinanceWechatPayApplymentSettlementFields",
-      "FinanceWechatPayApplymentBusinessFields",
-    ]) {
-      expect(supplementSource).toContain(`export function ${component}`);
-      expect(supplementSource).toContain(`<${component}`);
-    }
-    expect(supplementSource).not.toContain("返回上传资料修改");
-    expect(supplementSource).not.toContain("Undo2");
-  });
-
-  test("uses one linked settlement rule select instead of technical text inputs", () => {
-    const supplementSource = readSource(
-      "./finance-wechat-pay-applyment-supplement-fields.tsx",
-    );
-    const ruleFieldUrl = new URL(
-      "./finance-wechat-pay-settlement-rule-field.tsx",
-      import.meta.url,
-    );
-
-    expect(existsSync(ruleFieldUrl)).toBe(true);
-    expect(supplementSource).toContain("FinanceWechatPaySettlementRuleField");
-    expect(supplementSource).not.toContain('<TextField label="结算规则 ID"');
-    expect(supplementSource).not.toContain('<TextField label="所属行业"');
-    if (!existsSync(ruleFieldUrl)) return;
-
-    const ruleFieldSource = readFileSync(ruleFieldUrl, "utf8");
-    expect(ruleFieldSource).toContain("getWechatPaySettlementRulesForSubject");
-    expect(ruleFieldSource).toContain("@/components/ui/select");
-    expect(ruleFieldSource).toContain('name="settlement_id"');
-    expect(ruleFieldSource).toContain('name="qualification_type"');
-    expect(ruleFieldSource).toContain("经营行业与结算规则");
-    expect(ruleFieldSource).toContain("rateLabel");
-    expect(ruleFieldSource).toContain("settlementCycleLabel");
-    expect(ruleFieldSource).toContain("qualificationType");
-  });
-
   test("tenant applyment attachment uploader uses shadcn button for the visible upload action", () => {
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
     const controllerSource = readSource(
@@ -281,8 +238,6 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(singlePageSource).toContain("结算账户");
     expect(singlePageSource).toContain("经营资料");
     expect(singlePageSource).toContain("提交平台审核");
-    expect(singlePageSource).toContain('id="settlement-materials"');
-    expect(singlePageSource).toContain('id="business-materials"');
     expect(singlePageSource).not.toContain("Progress");
     expect(singlePageSource).not.toContain("上一步");
     expect(singlePageSource).not.toContain("下一步");

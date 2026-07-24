@@ -44,11 +44,7 @@ type SettlementFieldsProps = CommonFieldsProps & DataChangeProps & {
   subjectType: string;
 };
 
-type SupplementFieldsProps = SettlementFieldsProps & {
-  contactType: string;
-  navigationDisabled: boolean;
-  onReturnToMaterials: () => void;
-};
+type SupplementFieldsProps = SettlementFieldsProps;
 
 export function FinanceWechatPayApplymentContactFields({
   applyment,
@@ -172,7 +168,7 @@ export function FinanceWechatPayApplymentSettlementFields({
 export function FinanceWechatPayApplymentBusinessFields({
   applyment,
   disabled,
-}: CommonFieldsProps & DataChangeProps) {
+}: CommonFieldsProps) {
   return (
     <FieldGroup className="grid gap-4 md:grid-cols-2">
       <TextareaField
@@ -220,7 +216,6 @@ export function FinanceWechatPayApplymentSupplementFields(
       <FinanceWechatPayApplymentBusinessFields
         applyment={props.applyment}
         disabled={props.disabled}
-        onDataChange={props.onDataChange}
       />
     </div>
   );

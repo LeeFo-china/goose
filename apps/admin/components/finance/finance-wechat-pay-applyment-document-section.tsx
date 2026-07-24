@@ -15,6 +15,9 @@ import {
   FinanceWechatPayApplymentInlineOcrReview,
 } from "./finance-wechat-pay-applyment-ocr-review";
 import type {
+  ApplymentTargetId,
+} from "./finance-wechat-pay-applyment-readiness";
+import type {
   WechatPayApplymentAttachmentCategory,
 } from "./finance-wechat-pay-applyment-shared";
 
@@ -27,7 +30,7 @@ export type ApplymentDocumentSectionDefinition = {
 
 export type FinanceWechatPayApplymentDocumentSectionProps =
   ApplymentDocumentSectionDefinition & {
-    id?: string;
+    id?: ApplymentTargetId;
     attachmentController: ApplymentAttachmentController;
     ocrController: ApplymentOcrController;
   };
@@ -74,7 +77,7 @@ export function FinanceWechatPayApplymentDocumentSection({
     : "grid gap-3";
 
   return (
-    <section id={id} className="flex min-w-0 flex-col gap-4">
+    <section id={id} tabIndex={-1} className="flex min-w-0 flex-col gap-4">
       <header>
         <h2 className="text-sm font-semibold">{title}</h2>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>

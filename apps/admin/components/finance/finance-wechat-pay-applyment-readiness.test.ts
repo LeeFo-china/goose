@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { createElement, type ComponentType } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
@@ -218,16 +218,6 @@ describe("presentApplymentBlockers", () => {
 
 describe("FinanceWechatPayApplymentReview readiness", () => {
   test("renders two blocker labels without stage navigation props", () => {
-    const Review = FinanceWechatPayApplymentReview as unknown as ComponentType<
-      {
-        attachments: [];
-        contactType: string;
-        confirmed: boolean;
-        disabled: boolean;
-        readinessBlockers: readonly WechatPayApplymentReadinessItem[];
-        onConfirmedChange: (checked: boolean) => void;
-      }
-    >;
     const readinessBlockers = [
       {
         key: "materials:缺少营业执照",
@@ -241,14 +231,16 @@ describe("FinanceWechatPayApplymentReview readiness", () => {
         targetStage: "supplement",
       },
     ] as const satisfies readonly WechatPayApplymentReadinessItem[];
-    const markup = renderToStaticMarkup(createElement(Review, {
-      attachments: [],
-      contactType: "LEGAL",
-      confirmed: false,
-      disabled: false,
-      readinessBlockers,
-      onConfirmedChange: () => undefined,
-    }));
+    const markup = renderToStaticMarkup(
+      createElement(FinanceWechatPayApplymentReview, {
+        attachments: [],
+        contactType: "LEGAL",
+        confirmed: false,
+        disabled: false,
+        readinessBlockers,
+        onConfirmedChange: () => undefined,
+      }),
+    );
 
     expect(markup).toContain("缺少营业执照");
     expect(markup).toContain("请填写商户简称");
@@ -268,7 +260,7 @@ describe("FinanceWechatPayApplymentReview readiness", () => {
     expect(reviewSource).not.toContain("getWechatPayApplymentReviewTargets");
     expect(reviewSource).not.toContain("navigationDisabled");
     expect(reviewSource).not.toContain("WechatPayApplymentReviewSnapshot");
-    expect(reviewSource).toContain("scrollIntoView");
+    expect(reviewSource).toContain("focusApplymentReadinessTarget");
   });
 
   test("passes refreshed blockers from Workflow into the single-page Review", () => {
