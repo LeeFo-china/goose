@@ -38,7 +38,8 @@ export type PlatformUploadScene =
   | "wechat_pay_applyment"
   | "picture_library"
   | "picture_comment"
-  | "tenant_onboarding_license";
+  | "tenant_onboarding_license"
+  | "supplier_business_license";
 
 export type UploadImageInput = {
   buffer: Buffer;

@@ -13,11 +13,20 @@ import {
   verifyApplymentUploadIntent,
 } from "./applyment-upload-intent";
 import {
+  getSupplierBusinessLicenseUploadPolicy,
   getWechatPayApplymentUploadPolicy,
 } from "./direct-upload-scene-policy";
+import {
+  createSupplierLicenseUploadIntent,
+} from "./supplier-license-upload-intent";
+import {
+  assertPrivateSupplierLicenseIntent,
+  assertSupplierLicenseUploadDeclaration,
+} from "./supplier-license-upload-guard";
 
 const PRIVATE_LICENSE_SCENE = "tenant_onboarding_license";
 const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
+const PRIVATE_SUPPLIER_LICENSE_SCENE = "supplier_business_license";
 
 type PrivateHeadPolicy = {
   maxSizeBytes: number;
@@ -45,17 +54,30 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
   const visitorId = input.visitorId?.trim() || null;
   const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE
     && input.visibility === "private";
+  const isPrivateSupplierLicense =
+    input.scene === PRIVATE_SUPPLIER_LICENSE_SCENE &&
+    input.visibility === "private";
   const applymentPolicy = input.visibility === "private"
     ? getWechatPayApplymentUploadPolicy(input.scene)
+    : null;
+  const supplierLicensePolicy = input.visibility === "private"
+    ? getSupplierBusinessLicenseUploadPolicy(input.scene)
     : null;
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
   }
   if (applymentPolicy) assertApplymentUploadDeclaration(input, applymentPolicy);
+  if (
+    input.scene === PRIVATE_SUPPLIER_LICENSE_SCENE &&
+    (!isPrivateSupplierLicense || !input.employeeId || input.tenantId)
+  ) throw Errors.forbidden();
+  if (supplierLicensePolicy) {
+    assertSupplierLicenseUploadDeclaration(input, supplierLicensePolicy);
+  }
   const expiresAtSeconds = Math.floor(Date.now() / 1000) + config.signedUrlTtl;
   // COS only enforces this overwrite guard when bucket versioning is disabled.
   // Task 13 must verify the target bucket setting before release.
-  const signedHeaders = applymentPolicy
+  const signedHeaders = applymentPolicy || supplierLicensePolicy
     ? {
       "Content-Length": input.sizeBytes,
       "Content-Type": input.mimetype,
@@ -89,6 +111,16 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
       sizeBytes: input.sizeBytes,
       expiresAtSeconds,
     })
+    : supplierLicensePolicy
+    ? createSupplierLicenseUploadIntent({
+      secretKey: config.secretKey,
+      scene: input.scene,
+      employeeId: input.employeeId!,
+      objectKey,
+      mimeType: input.mimetype,
+      sizeBytes: input.sizeBytes,
+      expiresAtSeconds,
+    })
     : isPrivateLicense && visitorId
     ? createPrivateUploadIntent({
       secretKey: config.secretKey,
@@ -110,7 +142,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     method: "PUT" as const,
     headers: {
       "content-type": input.mimetype,
-      ...(isPrivateLicense || applymentPolicy
+      ...(isPrivateLicense || applymentPolicy || supplierLicensePolicy
         ? {
           "content-length": String(input.sizeBytes),
           "x-cos-forbid-overwrite": true,
@@ -145,6 +177,8 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     && isPrivateObject;
   const isPrivateApplyment = input.scene === PRIVATE_APPLYMENT_SCENE
     && isPrivateObject;
+  const isPrivateSupplierLicense =
+    input.scene === PRIVATE_SUPPLIER_LICENSE_SCENE && isPrivateObject;
   const privateHeadPolicy = getPrivateHeadPolicy(input);
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
@@ -158,6 +192,12 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
   }
   if (isPrivateApplyment) {
     assertPrivateApplymentIntent({
+      input,
+      secretKey: config.secretKey,
+    });
+  }
+  if (isPrivateSupplierLicense) {
+    assertPrivateSupplierLicenseIntent({
       input,
       secretKey: config.secretKey,
     });
@@ -222,7 +262,11 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     ?? normalizeEtag(input.etag) ?? normalizeEtag(headObject?.ETag);
   const fileObject = await platformFileObjectRepository.createOrFindByObjectKey({
     tenant_id: input.tenantId ?? null,
-    owner_type: isPrivateLicense ? "visitor" : input.ownerType ?? input.scene,
+    owner_type: isPrivateLicense
+      ? "visitor"
+      : isPrivateSupplierLicense
+      ? "supplier_business_license"
+      : input.ownerType ?? input.scene,
     owner_id: input.ownerId ?? null,
     owner_visitor_id: isPrivateLicense ? visitorId : null,
     scene: input.scene,
@@ -307,6 +351,16 @@ function getPrivateHeadPolicy(
   }
   if (input.scene === PRIVATE_APPLYMENT_SCENE) {
     const policy = getWechatPayApplymentUploadPolicy(input.scene)!;
+    return {
+      maxSizeBytes: policy.maxSizeBytes,
+      mimeTypes: policy.mimeTypes,
+      sizeError: policy.sizeError,
+      typeError: policy.typeError,
+      checksumError: policy.checksumError,
+    };
+  }
+  if (input.scene === PRIVATE_SUPPLIER_LICENSE_SCENE) {
+    const policy = getSupplierBusinessLicenseUploadPolicy(input.scene)!;
     return {
       maxSizeBytes: policy.maxSizeBytes,
       mimeTypes: policy.mimeTypes,

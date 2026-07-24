@@ -1,5 +1,8 @@
 import { Errors } from "@/errors/error-factory";
-import { getWechatPayApplymentUploadPolicy } from "@/services/files/platform-file-storage";
+import {
+  getSupplierBusinessLicenseUploadPolicy,
+  getWechatPayApplymentUploadPolicy,
+} from "@/services/files/platform-file-storage";
 
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const LARGE_IMAGE_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
@@ -22,13 +25,14 @@ export function assertDirectUploadFileDeclaration(input: {
   mimetype: string;
   sizeBytes: number;
 }) {
-  const applymentPolicy = getWechatPayApplymentUploadPolicy(input.scene);
-  const allowedMimeTypes = applymentPolicy?.mimeTypes ?? ALLOWED_MIME_TYPES;
+  const scenePolicy = getWechatPayApplymentUploadPolicy(input.scene) ??
+    getSupplierBusinessLicenseUploadPolicy(input.scene);
+  const allowedMimeTypes = scenePolicy?.mimeTypes ?? ALLOWED_MIME_TYPES;
   if (!allowedMimeTypes.has(input.mimetype)) {
     throw Errors.badRequest("仅支持 jpg、png、webp、heic、heif 图片");
   }
 
-  const maxSizeBytes = applymentPolicy?.maxSizeBytes ??
+  const maxSizeBytes = scenePolicy?.maxSizeBytes ??
     (LARGE_IMAGE_SCENES.has(input.scene)
       ? LARGE_IMAGE_MAX_UPLOAD_FILE_SIZE
       : DEFAULT_MAX_UPLOAD_FILE_SIZE);

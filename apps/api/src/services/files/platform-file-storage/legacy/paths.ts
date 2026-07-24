@@ -37,6 +37,7 @@ export function buildLegacyObjectPath(this: any, input: {
     picture_library: "picture-library",
     picture_comment: "picture-comment",
     tenant_onboarding_license: "tenant-onboarding-license",
+    supplier_business_license: "supplier-business-license",
   };
 
   return `${prefixByScene[input.scene]}/${year}/${month}/${day}/${randomUUID()}${input.extension}`;
@@ -44,20 +45,25 @@ export function buildLegacyObjectPath(this: any, input: {
 
 export function buildCosObjectKey(this: any, input: Pick<
   UploadImageInput,
-  "filename" | "mimetype" | "scene" | "projectId" | "tenantId"
+  "filename" | "mimetype" | "scene" | "projectId" | "tenantId" | "employeeId"
 > & { visitorId?: string | null }) {
   const now = new Date();
   const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   const extension = getFileExtension({
-    filename: input.scene === "tenant_onboarding_license"
+    filename: input.scene === "tenant_onboarding_license" ||
+      input.scene === "supplier_business_license"
       ? undefined
       : input.filename,
     mimetype: input.mimetype,
   });
   if (input.scene === "tenant_onboarding_license") {
     return `${buildTenantOnboardingLicenseVisitorPrefix(input.visitorId)}`
+      + `${year}/${month}/${day}/${randomUUID()}${extension}`;
+  }
+  if (input.scene === "supplier_business_license") {
+    return `${buildSupplierBusinessLicenseEmployeePrefix(input.employeeId)}`
       + `${year}/${month}/${day}/${randomUUID()}${extension}`;
   }
   const tenantPrefix = input.tenantId
@@ -69,6 +75,19 @@ export function buildCosObjectKey(this: any, input: Pick<
     : "unassigned";
 
   return `${tenantPrefix}/${scene}/${projectSegment}/${year}/${month}/${day}/${randomUUID()}${extension}`;
+}
+
+export function buildSupplierBusinessLicenseEmployeePrefix(
+  employeeId: string | null | undefined,
+) {
+  const normalizedEmployeeId = employeeId?.trim();
+  if (!normalizedEmployeeId) {
+    throw Errors.forbidden();
+  }
+  const employeeHash = createHash("sha256")
+    .update(normalizedEmployeeId)
+    .digest("hex");
+  return `private/supplier-business-license/employees/${employeeHash}/`;
 }
 
 export function buildTenantOnboardingLicenseVisitorPrefix(

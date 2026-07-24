@@ -6,8 +6,11 @@ import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
-import { platformFileStorageService } from "@/services/files/platform-file-storage";
-import { buildTenantOnboardingLicenseVisitorPrefix } from "@/services/files/platform-file-storage";
+import {
+  buildSupplierBusinessLicenseEmployeePrefix,
+  buildTenantOnboardingLicenseVisitorPrefix,
+  platformFileStorageService,
+} from "@/services/files/platform-file-storage";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { uploadService } from "@/services/uploads";
 import { customerSelfServiceService } from "@/services/customer-self-service";
@@ -20,6 +23,7 @@ import {
 } from "./stored-object-policy";
 import { assertApplymentUploadSceneAccess } from "./applyment-upload-access";
 import { assertDirectUploadFileDeclaration } from "./direct-upload-file-policy";
+import { assertSupplierLicenseUploadSceneAccess } from "./supplier-license-upload-access";
 
 const IMAGE_MIME_TYPES = [
   "image/jpeg",
@@ -45,6 +49,7 @@ const DIRECT_UPLOAD_SCENES = [
   "picture_library",
   "picture_comment",
   "tenant_onboarding_license",
+  "supplier_business_license",
 ] as const;
 const FINANCE_PAYMENT_CONFIRM_PERMISSION = "finance.payment.confirm";
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
@@ -53,6 +58,7 @@ const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>(["h5_marketing_page", "
 const PRIVATE_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
   "tenant_onboarding_license",
   "wechat_pay_applyment",
+  "supplier_business_license",
 ]);
 
 const DirectUploadInitSchema = z.object({
@@ -66,7 +72,6 @@ const DirectUploadInitSchema = z.object({
   }),
   size_bytes: z.number().int().positive("图片大小无效"),
 });
-
 const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
   object_key: z.string()
     .trim()
@@ -81,7 +86,8 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
   if (
     (
       value.scene === "tenant_onboarding_license" ||
-      value.scene === "wechat_pay_applyment"
+      value.scene === "wechat_pay_applyment" ||
+      value.scene === "supplier_business_license"
     ) &&
     !value.upload_intent
   ) {
@@ -92,7 +98,6 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
     });
   }
 });
-
 const UploadPublicUrlQuerySchema = z.object({
   path: z.string()
     .trim()
@@ -103,9 +108,7 @@ const UploadPublicUrlQuerySchema = z.object({
     .refine((value) => !value.startsWith("/"), "图片路径不合法")
     .refine((value) => !value.includes("\\"), "图片路径不合法"),
 });
-
 type UploadScene = (typeof DIRECT_UPLOAD_SCENES)[number];
-
 type UploadActorContext = {
   tenantId: string | null;
   employeeId: string | null;
@@ -172,6 +175,7 @@ class UploadController extends BaseController {
       sizeBytes: result.data.size_bytes,
     });
     const actorContext = await assertApplymentUploadSceneAccess(user, scene)
+      ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(user);
     await this.assertDirectUploadProjectAccess(
       user,
@@ -197,7 +201,8 @@ class UploadController extends BaseController {
       scene,
       tenant_id: actorContext.tenantId,
       size_bytes: result.data.size_bytes,
-      ...(scene === "wechat_pay_applyment"
+      ...(scene === "wechat_pay_applyment" ||
+        scene === "supplier_business_license"
         ? {}
         : { object_key: directUpload.object_key }),
     });
@@ -225,6 +230,7 @@ class UploadController extends BaseController {
       sizeBytes: result.data.size_bytes,
     });
     const actorContext = await assertApplymentUploadSceneAccess(user, scene)
+      ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(user);
     await this.assertDirectUploadProjectAccess(
       user,
@@ -260,7 +266,8 @@ class UploadController extends BaseController {
       scene,
       tenant_id: actorContext.tenantId,
       size_bytes: result.data.size_bytes,
-      ...(scene === "wechat_pay_applyment"
+      ...(scene === "wechat_pay_applyment" ||
+        scene === "supplier_business_license"
         ? {}
         : { object_key: result.data.object_key }),
       provider: "provider" in uploaded ? uploaded.provider : undefined,
@@ -279,6 +286,8 @@ class UploadController extends BaseController {
     const scenePrefix = scene.replace(/_/g, "-");
     const expectedPrefix = scene === "tenant_onboarding_license"
       ? buildTenantOnboardingLicenseVisitorPrefix(actorContext.visitorId)
+      : scene === "supplier_business_license"
+      ? buildSupplierBusinessLicenseEmployeePrefix(actorContext.employeeId)
       : actorContext.tenantId
       ? `tenants/${actorContext.tenantId}/${scenePrefix}/`
       : `public/${scenePrefix}/`;
@@ -303,6 +312,9 @@ class UploadController extends BaseController {
   ) {
     if (scene === "tenant_onboarding_license" && !actorContext.visitorId) {
       throw Errors.forbidden();
+    }
+    if (scene === "supplier_business_license" && actorContext.isPlatformAdmin) {
+      return;
     }
 
     if (actorContext.visitorId) {
