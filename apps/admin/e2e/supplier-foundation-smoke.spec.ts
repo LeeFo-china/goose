@@ -48,11 +48,19 @@ test.describe("供应商 Phase 0 平台工作台", () => {
     await createButton.click();
     const dialog = page.getByRole("dialog").filter({ hasText: "新增供应商" });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel("供应商编码")).toBeVisible();
+    await expect(dialog.getByText("先上传营业执照识别主体信息")).toBeVisible();
+    await expect(dialog.getByText("营业执照", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "上传并识别" })).toBeVisible();
     await expect(dialog.getByLabel("供应商名称")).toBeVisible();
     await expect(dialog.getByLabel("供应商类型")).toBeVisible();
+    await expect(dialog.getByLabel("统一社会信用代码")).toBeVisible();
+    await expect(
+      dialog.getByRole("heading", { name: "主要联系人" }),
+    ).toBeVisible();
+    await expect(dialog.getByLabel("联系人姓名")).toBeVisible();
+    await expect(dialog.getByLabel("联系方式")).toBeVisible();
     await expect(dialog.getByLabel(/准入状态|运营状态|供应商状态/)).toHaveCount(0);
-    await expect(dialog.getByRole("button", { name: "保存供应商" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "创建供应商" })).toBeVisible();
   });
 
   test("供应标准目录可在类目、品牌和单位之间切换", async ({ page }) => {
