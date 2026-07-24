@@ -209,6 +209,25 @@ describe("wechat pay applyment single-page contracts", () => {
     expect(attachmentSource).toContain("<h3");
   });
 
+  test("keeps document previews compact so recognized fields stay nearby", () => {
+    const attachmentSource = readSource(
+      "./finance-wechat-pay-applyment-attachments.tsx",
+    );
+    const previewSource = readSource(
+      "./finance-wechat-pay-applyment-attachment-preview.tsx",
+    );
+
+    expect(attachmentSource).toContain("h-40");
+    expect(attachmentSource).toContain("sm:h-48");
+    expect(attachmentSource).toContain(
+      'className="shrink-0 whitespace-nowrap"',
+    );
+    expect(attachmentSource).not.toContain('className="flex aspect-[4/3]');
+    expect(previewSource).toContain("h-40");
+    expect(previewSource).toContain("sm:h-48");
+    expect(previewSource).not.toContain("aspect-[4/3]");
+  });
+
   test("keeps the page layout contract below the focused-test size limit", () => {
     const pageLayoutSource = readSource(
       "./finance-wechat-pay-applyment-page-layout.test.ts",

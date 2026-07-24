@@ -147,7 +147,9 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(attachmentSource).toContain("materialStates");
     expect(attachmentSource).toContain("AttachmentPreviewCard");
     expect(previewSource).toContain("AttachmentPreviewDialog");
-    expect(previewSource).toContain("aspect-[4/3]");
+    expect(previewSource).toContain("h-40");
+    expect(previewSource).toContain("sm:h-48");
+    expect(previewSource).not.toContain("aspect-[4/3]");
     expect(previewSource).toContain("object-contain");
     expect(previewSource).not.toContain("attachment.object_key");
     expect(materialsHookSource).toContain(
@@ -232,6 +234,9 @@ describe("Finance wechat pay applyment page layout", () => {
     const workflowSource = readSource(
       "./finance-wechat-pay-applyment-workflow.tsx",
     );
+    const pageSource = readSource(
+      "../../app/(console)/finance/wechat-pay/applyment/page.tsx",
+    );
     expect(singlePageSource).toContain("营业执照");
     expect(singlePageSource).toContain("法人身份证");
     expect(singlePageSource).toContain("联系信息");
@@ -255,6 +260,9 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(panelSource).not.toContain("validateAllStages");
     expect(panelSource).not.toContain("onInvalidCapture");
     expect(panelSource).not.toContain("activateInvalidApplymentElement");
+    expect(pageSource).toContain("h-full");
+    expect(pageSource).toContain("overflow-y-auto");
+    expect(pageSource).not.toContain("lg:h-[calc(100vh-6.5625rem)]");
   });
 
   test("removes the processing event timeline from the tenant applyment panel", () => {

@@ -21,7 +21,7 @@ export default async function FinanceWechatPayApplymentPage() {
   const data = await fetchWechatPayApplymentCurrent();
 
   return (
-    <div className="flex min-h-0 flex-col gap-5 overflow-visible lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]">
       <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
@@ -41,7 +41,7 @@ export default async function FinanceWechatPayApplymentPage() {
 
       <FinanceModuleTabs activeTab="wechat-pay-applyment" />
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="shrink-0">
         <Card className="shadow-none">
           <CardHeader>
             <CardTitle>开通申请</CardTitle>

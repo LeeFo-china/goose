@@ -200,7 +200,12 @@ export function WechatPayApplymentAttachmentSlot({
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
-        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+        <Badge
+          variant={statusMeta.variant}
+          className="shrink-0 whitespace-nowrap"
+        >
+          {statusMeta.label}
+        </Badge>
       </div>
       {attachment ? (
         <AttachmentPreviewCard
@@ -210,7 +215,7 @@ export function WechatPayApplymentAttachmentSlot({
           onRemove={removeAttachment}
         />
       ) : (
-        <div className="flex aspect-[4/3] items-center justify-center rounded-md border border-dashed bg-muted/30 text-muted-foreground">
+        <div className="flex h-40 items-center justify-center rounded-md border border-dashed bg-muted/30 text-muted-foreground sm:h-48">
           <FileImage aria-hidden="true" className="size-8" />
         </div>
       )}
