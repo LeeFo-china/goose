@@ -47,8 +47,6 @@ type SettlementFieldsProps = CommonFieldsProps & DataChangeProps & {
   subjectType: string;
 };
 
-type SupplementFieldsProps = SettlementFieldsProps;
-
 export function FinanceWechatPayApplymentContactFields({
   applyment,
   disabled,
@@ -117,11 +115,13 @@ export function FinanceWechatPayApplymentSettlementFields({
   const subjectDefaults = buildWechatPayApplymentSubjectTypeOverrides(
     subjectType,
   );
-  const accountType =
-    applyment?.subject_type === subjectDefaults.subject_type &&
-      applyment.settlement_account_type
+  const persistedIndividualAccountType =
+    subjectDefaults.subject_type === "SUBJECT_TYPE_INDIVIDUAL" &&
+      applyment?.subject_type === subjectDefaults.subject_type
       ? applyment.settlement_account_type
-      : subjectDefaults.settlement_account_type;
+      : null;
+  const accountType = persistedIndividualAccountType ||
+    subjectDefaults.settlement_account_type;
 
   return (
     <FieldGroup className="grid gap-4 md:grid-cols-2">
@@ -203,28 +203,5 @@ export function FinanceWechatPayApplymentBusinessFields({
         disabled={disabled}
       />
     </FieldGroup>
-  );
-}
-
-export function FinanceWechatPayApplymentSupplementFields(
-  props: SupplementFieldsProps,
-) {
-  return (
-    <div className="flex flex-col gap-4">
-      <FinanceWechatPayApplymentContactFields
-        applyment={props.applyment}
-        disabled={props.disabled}
-      />
-      <FinanceWechatPayApplymentSettlementFields
-        applyment={props.applyment}
-        subjectType={props.subjectType}
-        disabled={props.disabled}
-        onDataChange={props.onDataChange}
-      />
-      <FinanceWechatPayApplymentBusinessFields
-        applyment={props.applyment}
-        disabled={props.disabled}
-      />
-    </div>
   );
 }

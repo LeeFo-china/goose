@@ -102,6 +102,12 @@ function count(values: readonly string[], target: string) {
   return values.filter((value) => value === target).length;
 }
 
+function hiddenValue(markup: string, name: string) {
+  return markup.match(
+    new RegExp(`<input[^>]*name="${name}"[^>]*value="([^"]*)"[^>]*>`),
+  )?.[1];
+}
+
 type SinglePageOptions = {
   applyment?: WechatPayApplymentRecord | null;
   contactType?: "LEGAL" | "SUPER";
@@ -202,6 +208,42 @@ describe("wechat pay applyment OCR form registration", () => {
       }
     });
   }
+
+  test("forces a persisted enterprise personal account to corporate in the form", () => {
+    const markup = renderToStaticMarkup(
+      createElement(FinanceWechatPayApplymentSettlementFields, {
+        applyment: {
+          subject_type: "SUBJECT_TYPE_ENTERPRISE",
+          settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+        } as WechatPayApplymentRecord,
+        subjectType: "SUBJECT_TYPE_ENTERPRISE",
+        disabled: true,
+        onDataChange: () => undefined,
+      }),
+    );
+
+    expect(hiddenValue(markup, "settlement_account_type")).toBe(
+      "BANK_ACCOUNT_TYPE_CORPORATE",
+    );
+  });
+
+  test("preserves a valid persisted individual account type in the form", () => {
+    const markup = renderToStaticMarkup(
+      createElement(FinanceWechatPayApplymentSettlementFields, {
+        applyment: {
+          subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+          settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
+        } as WechatPayApplymentRecord,
+        subjectType: "SUBJECT_TYPE_INDIVIDUAL",
+        disabled: false,
+        onDataChange: () => undefined,
+      }),
+    );
+
+    expect(hiddenValue(markup, "settlement_account_type")).toBe(
+      "BANK_ACCOUNT_TYPE_CORPORATE",
+    );
+  });
 
   for (const status of ["failed", "review_required"] as const) {
     test(`routes the single ${status} manual entry action through the OCR controller`, () => {

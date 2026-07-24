@@ -124,6 +124,7 @@ export function buildWechatPayApplymentPartialDraftPayload(
     payload.settlement_id = null;
     payload.qualification_type = null;
   }
+  normalizeEnterpriseSettlementAccountType(payload, subjectType);
   const contactType = options.contactType ||
     nonBlankOverride(overrides.contact_type) ||
     text(form, "contact_type") ||
@@ -179,6 +180,10 @@ export function buildWechatPayApplymentPayload(
   for (const field of OPTIONAL_TEXT_FIELDS) {
     payload[field] = text(form, field) || null;
   }
+  normalizeEnterpriseSettlementAccountType(
+    payload,
+    text(form, "subject_type"),
+  );
 
   payload.identity_doc_type = "IDENTIFICATION_TYPE_IDCARD";
   for (const field of SENSITIVE_REPLACEMENT_FIELDS) {
@@ -303,6 +308,15 @@ function hasContactIdentityValue(payload: Record<string, unknown>) {
 
 function hasTextValue(value: unknown) {
   return typeof value === "string" && value.length > 0;
+}
+
+function normalizeEnterpriseSettlementAccountType(
+  payload: Record<string, unknown>,
+  subjectType: string,
+) {
+  if (subjectType === "SUBJECT_TYPE_ENTERPRISE") {
+    payload.settlement_account_type = "BANK_ACCOUNT_TYPE_CORPORATE";
+  }
 }
 
 function removeContactIdentityValues(payload: Record<string, unknown>) {

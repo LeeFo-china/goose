@@ -27,6 +27,9 @@ describe("wechat pay applyment single-page contracts", () => {
     const supplementSource = readSource(
       "./finance-wechat-pay-applyment-supplement-fields.tsx",
     );
+    const singlePageSource = readSource(
+      "./finance-wechat-pay-applyment-single-page.tsx",
+    );
     const workflowSource = readSource(
       "./finance-wechat-pay-applyment-workflow.tsx",
     );
@@ -43,15 +46,13 @@ describe("wechat pay applyment single-page contracts", () => {
       "FinanceWechatPayApplymentBusinessFields",
     ]) {
       expect(supplementSource).toContain(`export function ${component}`);
-      expect(supplementSource).toContain(`<${component}`);
+      expect(singlePageSource).toContain(`<${component}`);
     }
     const businessFieldsSource = supplementSource.slice(
       supplementSource.indexOf(
         "export function FinanceWechatPayApplymentBusinessFields",
       ),
-      supplementSource.indexOf(
-        "export function FinanceWechatPayApplymentSupplementFields",
-      ),
+      supplementSource.length,
     );
     expect(businessFieldsSource).not.toContain("onDataChange");
     const commonFieldsPropsSource = supplementSource.slice(
@@ -68,21 +69,10 @@ describe("wechat pay applyment single-page contracts", () => {
       expect(supplementSource).not.toContain(deprecatedProp);
     }
     expect(reviewSource).not.toContain("<Props extends ReviewProps>");
-    const workflowSupplement = getComponentInvocation(
-      workflowSource,
-      "FinanceWechatPayApplymentSupplementFields",
-    );
     const workflowReview = getComponentInvocation(
       workflowSource,
       "FinanceWechatPayApplymentReview",
     );
-    for (const deprecatedProp of [
-      "contactType",
-      "navigationDisabled",
-      "onReturnToMaterials",
-    ]) {
-      expect(workflowSupplement).not.toContain(deprecatedProp);
-    }
     for (const deprecatedProp of [
       "review",
       "onNavigate",

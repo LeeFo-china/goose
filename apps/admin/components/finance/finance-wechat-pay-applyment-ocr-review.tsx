@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { AlertTriangle, PencilLine } from "lucide-react";
 import {
   buildOcrFieldReviewRows,
@@ -11,14 +11,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type {
   ApplymentFieldSource,
 } from "./finance-wechat-pay-applyment-form-fields";
@@ -28,7 +20,6 @@ import {
   type ApplymentMaterialStateMap,
 } from "./finance-wechat-pay-applyment-flow-model";
 import {
-  APPLYMENT_OCR_REVIEW_CATEGORIES,
   FinanceWechatPayApplymentRecognizedFields,
 } from "./finance-wechat-pay-applyment-recognized-fields";
 import {
@@ -85,117 +76,6 @@ export type ApplymentOcrController = Omit<
   ApplymentInlineOcrReviewProps,
   "category" | "showPreview"
 >;
-
-export function FinanceWechatPayApplymentOcrReview({
-  attachments,
-  materialStates,
-  selectedCategory,
-  contactType,
-  subjectType,
-  values,
-  comparisonValues,
-  fieldSources,
-  disabled,
-  onSelectedCategoryChange,
-  onManualChange,
-  onApply,
-  onUseManualEntry,
-}: {
-  attachments: readonly WechatPayApplymentAttachment[];
-  materialStates: ApplymentMaterialStateMap;
-  selectedCategory: WechatPayApplymentAttachmentCategory;
-  contactType: string;
-  subjectType: string;
-  values: Readonly<Record<string, string>>;
-  comparisonValues: Readonly<Record<string, string>>;
-  fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
-  disabled?: boolean;
-  onSelectedCategoryChange: (
-    category: WechatPayApplymentAttachmentCategory,
-  ) => void;
-  onManualChange: (key: string, value: string) => void;
-  onApply: (
-    category: WechatPayApplymentAttachmentCategory,
-    rows: readonly OcrFieldReviewRow[],
-  ) => void | Promise<void>;
-  onUseManualEntry: (
-    category: WechatPayApplymentAttachmentCategory,
-  ) => void | Promise<void>;
-}) {
-  const categories = useMemo(
-    () => APPLYMENT_OCR_REVIEW_CATEGORIES.filter((category) =>
-      contactType === "SUPER" || !category.startsWith("contact_id_card_")
-    ),
-    [contactType],
-  );
-  const preferredCategory = categories.find((category) =>
-    materialStates[category]?.status === "review_required"
-  ) ?? categories.find((category) =>
-    getCurrentApplymentAttachment(attachments, category)
-  ) ?? categories[0];
-
-  useEffect(() => {
-    if (!categories.includes(
-      selectedCategory as (typeof categories)[number],
-    )) {
-      onSelectedCategoryChange(preferredCategory);
-    }
-  }, [
-    categories,
-    onSelectedCategoryChange,
-    preferredCategory,
-    selectedCategory,
-  ]);
-
-  return (
-    <section className="flex min-w-0 flex-col gap-4 rounded-md border p-4">
-      <div>
-        <div>
-          <h2 className="text-sm font-semibold">证照识别核对</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            对照原件确认识别建议，有差异的字段不会自动覆盖。
-          </p>
-        </div>
-      </div>
-
-      <Select
-        value={selectedCategory}
-        onValueChange={(value) =>
-          onSelectedCategoryChange(
-            value as WechatPayApplymentAttachmentCategory,
-          )}
-      >
-        <SelectTrigger aria-label="选择核对资料" className="w-full sm:w-72">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {categories.map((category) => (
-              <SelectItem key={category} value={category}>
-                {getWechatPayApplymentAttachmentCategoryLabel(category)}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-
-      <FinanceWechatPayApplymentInlineOcrReview
-        category={selectedCategory}
-        attachments={attachments}
-        materialStates={materialStates}
-        contactType={contactType}
-        subjectType={subjectType}
-        values={values}
-        comparisonValues={comparisonValues}
-        fieldSources={fieldSources}
-        disabled={disabled}
-        onManualChange={onManualChange}
-        onApply={onApply}
-        onUseManualEntry={onUseManualEntry}
-      />
-    </section>
-  );
-}
 
 export function FinanceWechatPayApplymentInlineOcrReview({
   category,
