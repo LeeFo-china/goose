@@ -63,6 +63,8 @@ Orange 在 Phase 0 **没有代码变更**，无需新增页面、接口调用、
 | --- | --- | --- | --- |
 | GET | `/platform/suppliers` | `platform.supplier.view` | 分页查询平台供应商 |
 | POST | `/platform/suppliers` | `platform.supplier.manage` | 创建平台供应商 |
+| POST | `/platform/suppliers/onboarding` | `platform.supplier.manage` | 基于营业执照 OCR 准入创建供应商 |
+| GET | `/platform/suppliers/identity-check` | `platform.supplier.manage` | 按统一社会信用代码检查既有供应商 |
 | GET | `/platform/suppliers/:id` | `platform.supplier.view` | 供应商详情 |
 | PATCH | `/platform/suppliers/:id` | `platform.supplier.manage` | 修改基本资料 |
 | POST | `/platform/suppliers/:id/submit` | `platform.supplier.manage` | 提交准入审核 |
@@ -117,6 +119,60 @@ Orange 在 Phase 0 **没有代码变更**，无需新增页面、接口调用、
 ```
 
 创建后固定为 `onboarding_status=draft`、`operational_status=active`、`version=1`。普通 PATCH 必须传正整数 `expected_version`，并至少传一个可修改字段：`code`、`name`、`legal_name`、`unified_social_credit_code`、`supplier_type`。准入和运营状态不允许通过 PATCH 直接修改。
+
+OCR 准入创建供应商：
+
+```json
+{
+  "name": "晴天建材",
+  "legal_name": "晴天建材有限公司",
+  "unified_social_credit_code": "91411525MA9G000000",
+  "supplier_type": "manufacturer",
+  "legal_representative_name": "张三",
+  "registered_address_text": "河南省信阳市...",
+  "license_file_id": "营业执照私有文件ID",
+  "ocr_recognition_id": "OCR识别记录ID或null",
+  "license_valid_from": "2020-01-01",
+  "license_valid_until": null,
+  "primary_contact": {
+    "name": "李四",
+    "phone": "13800000000",
+    "email": "contact@example.com"
+  }
+}
+```
+
+该接口必须携带 `Idempotency-Key`。后端在单个数据库命令中创建供应商、待核验营业执照资质、主联系人、文件归属绑定和命令事件；不会直接把供应商置为 `approved`，也不会把资质置为 `verified`。营业执照文件必须是平台私有直传场景 `supplier_business_license`，且未绑定其他供应商。
+
+OCR 识别由平台 OCR 接口创建：
+
+```json
+{
+  "scene": "supplier_onboarding",
+  "document_type": "business_license",
+  "file_object_id": "营业执照私有文件ID",
+  "idempotency_key": "前端生成的识别幂等键"
+}
+```
+
+前端上传时使用 `supplier_business_license` 私有直传场景，识别后把营业执照名称、统一社会信用代码、注册地址、营业期限和法定代表人回填到可编辑表单。用户必须核对后再提交准入表单。
+
+`GET /platform/suppliers/identity-check?unified_social_credit_code=91411525MA9G000000` 返回：
+
+```json
+{
+  "exists": true,
+  "supplier": {
+    "id": "供应商ID",
+    "code": "SUP-001",
+    "name": "晴天建材",
+    "onboarding_status": "draft",
+    "operational_status": "active"
+  }
+}
+```
+
+不存在时 `exists=false` 且 `supplier=null`。统一社会信用代码会在前端和服务端归一化为大写；格式不合法由 schema 返回 `VALIDATION_ERROR`。
 
 生命周期命令体：
 
@@ -399,7 +455,7 @@ Orange 在 Phase 0 **没有代码变更**，无需新增页面、接口调用、
 平台 Admin：
 
 - 供应商列表支持分页及准入/运营/资质健康筛选。
-- 新增弹窗不出现可直接编辑的准入/运营状态。
+- 新增弹窗要求先上传营业执照，OCR 回填主体信息后补充主要联系人；不出现可直接编辑的准入/运营状态。
 - 资质、区域、地址、联系人和事件子列表均分页。
 - 标准类目、品牌、单位三个 tab 可切换。
 - 租户详情可见“供应商模块” rollout 卡片；停用要求原因。
@@ -422,10 +478,12 @@ Orange：
 当前合同以以下本地源码为准：
 
 - `apps/api/src/controllers/platform-suppliers/index.ts`
+- `apps/api/src/controllers/platform-supplier-onboarding/index.ts`
 - `apps/api/src/controllers/platform-supplier-catalog/index.ts`
 - `apps/api/src/controllers/supplier-catalog/index.ts`
 - `apps/api/src/controllers/tenant-suppliers/index.ts`
 - `apps/api/src/schema/platform-suppliers.ts`
+- `apps/api/src/schema/supplier-onboarding.ts`
 - `apps/api/src/schema/tenant-suppliers.ts`
 - `apps/api/src/schema/supplier-catalog.ts`
 - `apps/api/src/services/platform-suppliers.ts`
