@@ -2,7 +2,7 @@
 
 日期：2026-07-24
 对应设计：`docs/superpowers/specs/2026-07-23-wechat-pay-applyment-ocr-first-ux-design.md`
-状态：Task 9 C-F 已验收，待按发布流程上线
+状态：Task 9 Step 3-6 已验收，待按发布流程上线
 
 ## 1. 发布边界
 
@@ -10,8 +10,8 @@
 - OCR 只提供录入建议。识别结果不会静默覆盖人工值，也不会自动提交进件、平台审核或真实微信支付申请。
 - 真实环境 OCR capability 在验收时关闭，因此真实 API/Admin smoke 只验证手工填写降级；未读取、复制、截图或记录任何 OCR 值，也未调用腾讯云 OCR。
 - OCR 成功、重试、恢复、字段冲突、readiness 定位和幂等路径由 mock backend 专用 E2E 覆盖。
-- 未执行平台审核、`submit-to-wechat` 或真实微信进件；五项 migration 已通过一次受控
-  `db push` 应用，未执行 `migration repair` 或重复 push。
+- 未执行平台审核、`submit-to-wechat` 或真实微信进件；五项 migration 已应用并确认
+  Local/Remote 对齐，未执行 `migration repair`。
 
 ## 2. 客户端与 API 契约
 
@@ -70,8 +70,9 @@ POST /finance/wechat-pay/applyments/:id/submit
 20260724150000
 ```
 
-`supabase migration list` 的 Local/Remote 共 `356` 条、差异 `0`。应用后未重复 push，
-也未执行 repair。
+`supabase migration list` 的 Local/Remote 共 `356` 条、差异 `0`，未执行 repair。
+后三项 migration 分别用于草稿 revision、跨页面 epoch fencing，以及草稿更新与审计
+事件原子写入。
 
 使用两个独立 `Bun.SQL` 连接完整重跑事务验证，脱敏结果保存在：
 
@@ -96,7 +97,7 @@ POST /finance/wechat-pay/applyments/:id/submit
 
 ### `test:all` 归因
 
-分支新增的唯一失败来自 `apps/api/src/services/uploads.test.ts` 顶层 `mock.module` 污染 Bun 同进程模块缓存，使后续私有文件 URL resolver suite 命中错误 mock。按 TDD 先用最小双 suite 复现 `11 pass / 3 fail`，再只修改测试隔离：改为针对真实单例的 `spyOn`，在 suite 生命周期安装并 `mock.restore()`。生产代码未改动。
+分支新增的唯一失败来自 `apps/api/src/services/uploads.test.ts` 顶层 `mock.module` 污染 Bun 同进程模块缓存，使后续私有文件 URL resolver suite 命中错误 mock。按 TDD 先用最小双 suite 复现 `11 pass / 3 fail`，再只修改测试隔离：改为针对真实单例的 `spyOn`，并在 suite 结束时逐个 `mockRestore()`，不恢复其他 suite 的 mock。生产代码未改动。
 
 修复后：
 
@@ -106,6 +107,13 @@ POST /finance/wechat-pay/applyments/:id/submit
 - 分支：`77` 个唯一失败签名，`branch-only=0`、`main-only=0`、`shared=77`。
 
 因此全量命令仍为红色，但没有本分支回归。共享基线主要包括 release contract 的历史 migration 数量断言、Web server 数量断言，以及 API/Admin 的既有跨 suite mock/order 问题；未在本任务中掩盖或扩大范围。
+
+新增上传与替换 E2E 首次运行时发现：四阶段只挂载当前阶段控件，附件 checkpoint
+从当前 `FormData` 构造全字段草稿会把未挂载字段写成 `null`。现已改为未挂载字段依次
+回退最新本地待保存快照和服务器当前值，而当前阶段中被用户明确清空的控件仍提交
+`null`。持久化 fallback 只用于普通字段；手机号、银行卡号和身份证号等敏感 replacement
+只能从当前控件或最新本地待保存快照进入 payload，绝不从服务端掩码反推。schema 回归
+测试和“人工输入后立即替换附件并刷新”E2E 同时覆盖该边界。
 
 脱敏日志：
 
@@ -118,12 +126,13 @@ POST /finance/wechat-pay/applyments/:id/submit
 ### 专项与构建
 
 - API 专项：`207 pass / 0 fail`，`627` assertions，`32` files。
-- Admin 专项：`222 pass / 0 fail`，`949` assertions，`30` files。
+- Admin 专项：`227 pass / 0 fail`，`958` assertions，`30` files。
 - Domain 专项：`3 pass / 0 fail`；domain build 成功。
 - `pnpm run api:check`：TypeScript、Bun build、文件大小检查通过。
 - `pnpm --dir apps/admin check`：文件大小、Next type generation、TypeScript 通过。
 - `pnpm --dir apps/admin build`：Next.js production build 通过，`65` 个静态页面生成成功。
-- `pnpm --dir apps/admin test:e2e:wechat-pay-applyment`：`7 pass / 0 fail`，mock backend 在测试结束后关闭。
+- `pnpm --dir apps/admin test:e2e:wechat-pay-applyment`：`9 pass / 0 fail`，其中新增覆盖上传后自动识别、识别失败重试、替换附件人工值保护和刷新恢复；mock backend 强制校验 `direct-init → PUT → direct-complete → recognition` 顺序、scene、UUID 幂等键和已完成上传的 file object，并在测试结束后关闭。
+- 默认 Playwright 配置不收集三项 mock-only applyment spec；常规 E2E 不依赖 `127.0.0.1:3998` mock。
 
 对应日志位于 `/tmp/wechat-pay-applyment-task9-*.log`，未提交。
 

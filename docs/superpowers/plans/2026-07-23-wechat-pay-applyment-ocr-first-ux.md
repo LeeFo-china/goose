@@ -2807,10 +2807,16 @@ supabase migration list
 supabase db push --dry-run
 ```
 
-确认只包含以下两项后再执行：
+确认只包含以下五项后再执行：
 
 - `20260723130000_allow_partial_wechat_pay_applyment_drafts.sql`
 - `20260723133000_add_atomic_wechat_pay_applyment_submit.sql`
+- `20260724110000_add_wechat_pay_applyment_draft_revision.sql`
+- `20260724130000_add_wechat_pay_applyment_draft_epoch.sql`
+- `20260724150000_atomic_wechat_pay_applyment_draft_audit.sql`
+
+后三项分别收口乱序草稿 revision、跨页面 epoch fencing，以及草稿更新与审计事件
+同事务写入；它们属于 Task 7 可靠性审查后追加的发布门禁修正。
 
 ```bash
 supabase db push
