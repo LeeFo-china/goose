@@ -117,6 +117,46 @@ describe("PlatformSuppliersController routes", () => {
     }
   });
 
+  test("passes validated disable reason and initial version to settings service", async () => {
+    const { default: controller } = await import(".");
+    const { platformSuppliersService } = await import(
+      "@/services/platform-suppliers"
+    );
+    const auth = { isPlatformAdmin: true, authUserId: crypto.randomUUID() };
+    const tenantId = crypto.randomUUID();
+    const setTenantSupplierSettings = mock(async () => ({}));
+    const original = platformSuppliersService.setTenantSupplierSettings;
+    Object.defineProperty(controller, "getRequiredPlatformAdminContext", {
+      configurable: true,
+      value: async () => auth,
+    });
+    platformSuppliersService.setTenantSupplierSettings =
+      setTenantSupplierSettings as never;
+    try {
+      await controller.setTenantSupplierSettings({
+        body: {
+          module_enabled: false,
+          require_active_contract_for_new_order: true,
+          expected_version: 0,
+          reason: "  合同政策调整  ",
+        },
+        headers: { "idempotency-key": "settings-disable-1" },
+        params: { tenantId },
+      } as unknown as FastifyRequest);
+      expect(setTenantSupplierSettings).toHaveBeenCalledWith(auth, {
+        tenantId,
+        module_enabled: false,
+        require_active_contract_for_new_order: true,
+        expected_version: 0,
+        reason: "合同政策调整",
+        idempotencyKey: "settings-disable-1",
+      });
+    } finally {
+      platformSuppliersService.setTenantSupplierSettings = original;
+      Reflect.deleteProperty(controller, "getRequiredPlatformAdminContext");
+    }
+  });
+
   test("passes auth, validated payload, and idempotency key to every create service", async () => {
     const { default: controller } = await import(".");
     const { platformSuppliersService } = await import(

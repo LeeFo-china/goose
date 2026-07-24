@@ -50,6 +50,7 @@ async function createHarness() {
       audit,
     } as never),
     repository,
+    audit,
   };
 }
 
@@ -135,6 +136,32 @@ describe("PlatformSuppliersService regression boundaries", () => {
     );
 
     expect(repository.setTenantSupplierSettings).toHaveBeenCalledTimes(1);
+  });
+
+  test("passes the disable reason to the atomic RPC and platform audit", async () => {
+    const { service, repository, audit } = await createHarness();
+
+    await service.setTenantSupplierSettings(
+      auth(["platform.supplier.manage"]),
+      {
+        tenantId: TENANT_ID,
+        module_enabled: false,
+        require_active_contract_for_new_order: false,
+        expected_version: 1,
+        reason: "合作策略调整",
+        idempotencyKey: "module-disable-1",
+      },
+    );
+
+    expect(repository.setTenantSupplierSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "合作策略调整" }),
+    );
+    expect(audit.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "tenant_supplier_module_disable",
+        metadata: expect.objectContaining({ reason: "合作策略调整" }),
+      }),
+    );
   });
 });
 

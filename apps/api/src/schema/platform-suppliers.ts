@@ -33,6 +33,9 @@ const optionalNullableNumber = (schema: z.ZodNumber) =>
 const expectedVersion = requiredNumber(
   z.number().int().positive("版本号必须是正整数"),
 );
+const initializableExpectedVersion = requiredNumber(
+  z.number().int().nonnegative("版本号不能为负数"),
+);
 const keyword = z.string().trim().max(80, "关键词不能超过 80 个字符");
 const requiredText = (
   max: number,
@@ -373,8 +376,17 @@ export const SupplierContactUpdateSchema = z.object({
 export const PlatformTenantSupplierSettingsCommandSchema = z.object({
   module_enabled: z.boolean(),
   require_active_contract_for_new_order: z.boolean(),
-  expected_version: expectedVersion,
-}).strict();
+  expected_version: initializableExpectedVersion,
+  reason: SupplierCommandSchema.shape.reason,
+}).strict().superRefine((input, context) => {
+  if (!input.module_enabled && !input.reason) {
+    context.addIssue({
+      code: "custom",
+      path: ["reason"],
+      message: "停用供应商模块必须填写原因",
+    });
+  }
+});
 
 export const SupplierChildPageQuerySchema =
   SupplierChildListQuerySchema.extend({

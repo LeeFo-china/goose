@@ -1180,7 +1180,8 @@ CREATE FUNCTION public.set_tenant_supplier_module(
   p_expected_version integer,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
-  p_idempotency_key text
+  p_idempotency_key text,
+  p_reason text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1201,10 +1202,17 @@ BEGIN
   THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
   END IF;
+  IF NOT p_module_enabled AND (p_reason IS NULL OR btrim(p_reason) = '') THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  IF p_reason IS NOT NULL AND char_length(btrim(p_reason)) > 500 THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  p_reason := NULLIF(btrim(p_reason), '');
   v_request := jsonb_build_object(
     'tenant_id', p_tenant_id, 'module_enabled', p_module_enabled,
     'require_active_contract_for_new_order', p_require_active_contract_for_new_order,
-    'expected_version', p_expected_version,
+    'expected_version', p_expected_version, 'reason', p_reason,
     'actor_employee_id', p_actor_employee_id
   );
   PERFORM pg_catalog.pg_advisory_xact_lock(
@@ -1262,12 +1270,12 @@ BEGIN
   END IF;
   INSERT INTO public.supplier_command_events (
     tenant_id, resource_type, resource_id, command, from_state, to_state,
-    actor_user_id, actor_employee_id, idempotency_key, result_version
+    reason, actor_user_id, actor_employee_id, idempotency_key, result_version
   )
   VALUES (
     p_tenant_id, 'tenant_supplier', p_tenant_id, 'set_tenant_supplier_module',
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_setting), p_actor_user_id, p_actor_employee_id,
+    to_jsonb(v_setting), p_reason, p_actor_user_id, p_actor_employee_id,
     p_idempotency_key, v_setting.version
   );
   RETURN jsonb_build_object('status', 'updated', 'idempotent', false, 'setting', to_jsonb(v_setting), 'previous_setting', v_before, 'version', v_setting.version);
@@ -2236,8 +2244,8 @@ REVOKE ALL ON FUNCTION public.mutate_platform_supplier(uuid, text, integer, uuid
 GRANT EXECUTE ON FUNCTION public.mutate_platform_supplier(uuid, text, integer, uuid, uuid, text, text) TO service_role;
 REVOKE ALL ON FUNCTION public.review_supplier_qualification(uuid, uuid, text, integer, uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.review_supplier_qualification(uuid, uuid, text, integer, uuid, uuid, text, text) TO service_role;
-REVOKE ALL ON FUNCTION public.set_tenant_supplier_module(uuid, boolean, boolean, integer, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.set_tenant_supplier_module(uuid, boolean, boolean, integer, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.set_tenant_supplier_module(uuid, boolean, boolean, integer, uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.set_tenant_supplier_module(uuid, boolean, boolean, integer, uuid, uuid, text, text) TO service_role;
 REVOKE ALL ON FUNCTION public.create_tenant_supplier(uuid, uuid, uuid, integer, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.create_tenant_supplier(uuid, uuid, uuid, integer, uuid, uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.mutate_tenant_supplier(uuid, uuid, text, integer, uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;

@@ -407,6 +407,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
       p_expected_version: input.expected_version, p_actor_user_id: input.actor_user_id,
       p_actor_employee_id: input.actor_employee_id,
       p_idempotency_key: input.idempotency_key,
+      p_reason: input.reason ?? null,
     }, "更新租户供应商设置失败");
     const envelope = parse(mutationStatus, data, "更新租户供应商设置失败");
     if (envelope.status !== "updated") throw mutationError(envelope);

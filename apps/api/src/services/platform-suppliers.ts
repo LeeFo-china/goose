@@ -65,7 +65,7 @@ type CreateSupplierRequest = { supplierId: string; input: PlatformSupplierCreate
 type SettingsRequest = {
   tenantId: string; module_enabled: boolean;
   require_active_contract_for_new_order: boolean;
-  expected_version: number; idempotencyKey: string;
+  expected_version: number; reason?: string; idempotencyKey: string;
 };
 export class PlatformSuppliersService {
   private readonly repository: PlatformSuppliersRepositoryPort;
@@ -309,6 +309,7 @@ export class PlatformSuppliersService {
         expected_version: input.expected_version, actor_user_id: actor.authUserId,
         actor_employee_id: actor.employeeId,
         idempotency_key: input.idempotencyKey,
+        reason: input.reason,
       }));
     if (result.idempotent) return result.setting;
     const setting = result.setting;
@@ -325,6 +326,7 @@ export class PlatformSuppliersService {
       metadata: {
         from: result.previous_setting ? settingsState(result.previous_setting) : null,
         to: settingsState(setting),
+        reason: input.reason ?? null,
       },
     });
     return setting;

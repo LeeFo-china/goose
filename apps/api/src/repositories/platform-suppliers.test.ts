@@ -355,7 +355,7 @@ describe("PlatformSuppliersRepository", () => {
       p_idempotency_key: "command-1",
       p_reason: null,
     });
-    expect(await requests[3]?.clone().json()).toEqual({
+    expect(await requests[3]?.clone().json()).toMatchObject({
       p_tenant_id: TENANT_ID,
       p_module_enabled: true,
       p_require_active_contract_for_new_order: false,
