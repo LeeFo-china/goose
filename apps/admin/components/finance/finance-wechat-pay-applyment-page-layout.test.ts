@@ -281,6 +281,8 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(singlePageSource).toContain("结算账户");
     expect(singlePageSource).toContain("经营资料");
     expect(singlePageSource).toContain("提交平台审核");
+    expect(singlePageSource).toContain('id="settlement-materials"');
+    expect(singlePageSource).toContain('id="business-materials"');
     expect(singlePageSource).not.toContain("Progress");
     expect(singlePageSource).not.toContain("上一步");
     expect(singlePageSource).not.toContain("下一步");

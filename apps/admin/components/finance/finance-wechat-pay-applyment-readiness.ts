@@ -218,6 +218,12 @@ function getAttachmentTargetId(category?: string): string | undefined {
   if (category?.startsWith("contact_id_card_")) {
     return "contact-id-materials";
   }
+  if (category === "settlement_account_proof") {
+    return "settlement-materials";
+  }
+  if (category === "business_scene_material") {
+    return "business-materials";
+  }
   return undefined;
 }
 

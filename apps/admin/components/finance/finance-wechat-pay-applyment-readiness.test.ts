@@ -145,6 +145,31 @@ describe("presentApplymentBlocker", () => {
       targetStage: "materials",
     });
   });
+
+  test("maps settlement and business attachment blockers to stable sections", async () => {
+    const { presentApplymentBlocker } = await import(
+      "./finance-wechat-pay-applyment-readiness"
+    );
+    const cases = [
+      ["settlement_account_proof", "settlement-materials"],
+      ["business_scene_material", "business-materials"],
+    ] as const;
+
+    for (const [category, targetId] of cases) {
+      expect(presentApplymentBlocker({
+        code: "APPLYMENT_REQUIRED_ATTACHMENT_MISSING",
+        category,
+      })).toMatchObject({ targetId });
+      expect(presentApplymentBlocker({
+        code: "APPLYMENT_ATTACHMENT_OCR_REVIEW_REQUIRED",
+        category,
+      })).toMatchObject({ targetId });
+      expect(presentApplymentBlocker({
+        code: "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH",
+        category,
+      })).toMatchObject({ targetId });
+    }
+  });
 });
 
 describe("presentApplymentBlockers", () => {
