@@ -15,11 +15,24 @@ type MockSaveEvents = {
   committed: Array<Record<string, unknown>>;
 };
 
+type MockSubmissionEvents = {
+  requests: Array<Record<string, unknown>>;
+};
+
 async function getMockSaveEvents(
   request: APIRequestContext,
 ): Promise<MockSaveEvents> {
   const response = await request.get(`${MOCK_BACKEND_URL}/__test/saves`);
   return await response.json() as MockSaveEvents;
+}
+
+async function getMockSubmissionEvents(
+  request: APIRequestContext,
+): Promise<MockSubmissionEvents> {
+  const response = await request.get(
+    `${MOCK_BACKEND_URL}/__test/submissions`,
+  );
+  return await response.json() as MockSubmissionEvents;
 }
 
 test.beforeEach(async ({ request }) => {
@@ -54,7 +67,7 @@ test("单页修改后提交确认失效，并阻止无效资料提交", async ({
 
   const delayResponse = await request.post(
     `${MOCK_BACKEND_URL}/__test/delay-next-save`,
-    { data: { milliseconds: 10_000 } },
+    { data: { milliseconds: 1_000 } },
   );
   expect(delayResponse.ok()).toBe(true);
 
@@ -72,6 +85,52 @@ test("单页修改后提交确认失效，并阻止无效资料提交", async ({
 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(submitButton).toBeEnabled();
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1)?.license_name;
+  }).toBeNull();
+  expect((await getMockSubmissionEvents(request)).requests).toHaveLength(0);
+});
+
+test("有效资料等待草稿 flush 后只提交一次", async ({ page, request }) => {
+  await loginAsTenantAdmin(page);
+  await page.goto("/finance/wechat-pay/applyment", {
+    waitUntil: "networkidle",
+  });
+
+  const delayResponse = await request.post(
+    `${MOCK_BACKEND_URL}/__test/delay-next-save`,
+    { data: { milliseconds: 600 } },
+  );
+  expect(delayResponse.ok()).toBe(true);
+
+  const merchantShortName = page.getByLabel("商户简称");
+  await merchantShortName.fill("提交顺序测试");
+  await expect(
+    page.getByRole("status").filter({ hasText: "保存中" }),
+  ).toBeVisible();
+  await page.getByRole("checkbox", { name: "确认资料真实有效" }).click();
+
+  const submitButton = page.getByRole("button", { name: "提交平台审核" });
+  await expect(submitButton).toBeEnabled();
+  await submitButton.click();
+  await page.getByRole("button", { name: "确认提交", exact: true }).click();
+
+  await expect.poll(async () => {
+    const events = await getMockSubmissionEvents(request);
+    return events.requests.length;
+  }).toBe(1);
+
+  const saveEvents = await getMockSaveEvents(request);
+  const submissionEvents = await getMockSubmissionEvents(request);
+  expect(submissionEvents.requests).toHaveLength(1);
+  expect(submissionEvents.requests[0]).toMatchObject({
+    idempotency_key: "33333333-3333-4333-8333-333333333333",
+    observed_merchant_short_name: "提交顺序测试",
+    observed_draft_revision:
+      saveEvents.committed.at(-1)?.server_draft_revision,
+    committed_save_count: saveEvents.committed.length,
+  });
 });
 
 test("自动保存隔离陈旧响应并在离开页面时发送最新值", async ({

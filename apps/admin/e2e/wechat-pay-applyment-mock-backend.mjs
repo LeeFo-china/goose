@@ -39,6 +39,7 @@ const session = {
 let applyment = structuredClone(initialApplyment);
 let startedSaves = [];
 let committedSaves = [];
+let submissionRequests = [];
 let nextSaveDelayMs = 0;
 let injectedReadinessBlockers = [];
 let uploadSequence = 0;
@@ -125,6 +126,7 @@ const server = createServer(async (request, response) => {
     applyment = structuredClone(initialApplyment);
     startedSaves = [];
     committedSaves = [];
+    submissionRequests = [];
     nextSaveDelayMs = 0;
     injectedReadinessBlockers = [];
     uploadSequence = 0;
@@ -171,6 +173,10 @@ const server = createServer(async (request, response) => {
       started: startedSaves,
       committed: committedSaves,
     });
+    return;
+  }
+  if (request.method === "GET" && url.pathname === "/__test/submissions") {
+    sendJson(response, 200, { requests: submissionRequests });
     return;
   }
   if (request.method === "POST" && url.pathname === "/admin/auth/login") {
@@ -256,6 +262,39 @@ const server = createServer(async (request, response) => {
       });
       return;
     }
+    sendJson(response, 200, {
+      success: true,
+      data: applymentDetail(),
+    });
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    url.pathname === `/finance/wechat-pay/applyments/${applyment.id}/submit`
+  ) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    const detail = applymentDetail();
+    if (!detail.submission_readiness.ready) {
+      sendJson(response, 409, {
+        success: false,
+        code: "WECHAT_PAY_APPLYMENT_NOT_READY",
+        message: "Mock applyment is not ready",
+      });
+      return;
+    }
+    submissionRequests.push(structuredClone({
+      ...payload,
+      observed_merchant_short_name: applyment.merchant_short_name,
+      observed_draft_epoch: applyment.draft_epoch,
+      observed_draft_revision: applyment.draft_revision,
+      committed_save_count: committedSaves.length,
+    }));
+    applyment = {
+      ...applyment,
+      status: "submitted",
+      submitted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
     sendJson(response, 200, {
       success: true,
       data: applymentDetail(),
