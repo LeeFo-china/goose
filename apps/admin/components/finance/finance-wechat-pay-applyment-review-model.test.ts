@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";
 import {
   buildWechatPayApplymentSubmissionData,
-  getWechatPayApplymentReviewTargets,
 } from "./finance-wechat-pay-applyment-review-model";
 
 const attachments: WechatPayApplymentAttachment[] = [{
@@ -98,21 +97,5 @@ describe("wechat pay applyment review model", () => {
     expect(before.review.settlement).toContain("修改前");
     expect(after.review.settlement).toContain("修改后");
     expect(after.payload.merchant_short_name).toBe("修改后");
-  });
-
-  test("returns to the exact stage and OCR category for each review section", () => {
-    expect(getWechatPayApplymentReviewTargets("LEGAL")).toEqual({
-      subject: { stage: "recognition", ocrCategory: "license_copy" },
-      contact: {
-        stage: "recognition",
-        ocrCategory: "legal_representative_id_card_front",
-      },
-      settlement: { stage: "supplement" },
-      attachments: { stage: "materials" },
-    });
-    expect(getWechatPayApplymentReviewTargets("SUPER").contact).toEqual({
-      stage: "recognition",
-      ocrCategory: "contact_id_card_front",
-    });
   });
 });

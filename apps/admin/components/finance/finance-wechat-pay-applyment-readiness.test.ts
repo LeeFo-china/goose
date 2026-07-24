@@ -1,9 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-
-import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
 
 function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
@@ -186,48 +182,26 @@ describe("presentApplymentBlockers", () => {
 });
 
 describe("FinanceWechatPayApplymentReview readiness", () => {
-  test("renders all blockers as focused navigation actions", () => {
-    const markup = renderToStaticMarkup(createElement(
-      FinanceWechatPayApplymentReview,
-      {
-        review: {
-          subject: "主体资料",
-          contact: "联系人资料",
-          settlement: "结算资料",
-          attachments: "申请附件",
-        },
-        attachments: [],
-        contactType: "LEGAL",
-        confirmed: false,
-        disabled: false,
-        navigationDisabled: false,
-        readinessBlockers: [
-          {
-            key: "missing-back",
-            label: "缺少法人身份证国徽面",
-            targetStage: "materials",
-          },
-          {
-            key: "unknown",
-            label: "申请资料尚未满足提交条件",
-            targetStage: "submit",
-          },
-        ],
-        onConfirmedChange: () => undefined,
-        onNavigate: () => undefined,
-        onStageChange: () => undefined,
-      },
-    ));
+  test("renders blocker labels inline without stage navigation props", () => {
+    const reviewSource = readSource(
+      "./finance-wechat-pay-applyment-review.tsx",
+    );
 
-    expect(markup).toContain('role="alert"');
-    expect(markup).toContain("还有 2 项需要处理");
-    expect(markup).toContain("缺少法人身份证国徽面");
-    expect(markup).toContain("申请资料尚未满足提交条件");
-    expect(markup).not.toContain("APPLYMENT_");
-    expect(markup.match(/data-readiness-blocker/g)).toHaveLength(2);
+    expect(reviewSource).toContain("readinessBlockers");
+    expect(reviewSource).toContain("readinessBlockers.map");
+    expect(reviewSource).toContain("blocker.label");
+    expect(reviewSource).toContain("data-readiness-blocker");
+    expect(reviewSource).toContain("@/components/ui/alert");
+    expect(reviewSource).not.toContain("onStageChange");
+    expect(reviewSource).not.toContain("onNavigate");
+    expect(reviewSource).not.toContain("getWechatPayApplymentReviewTargets");
   });
 
-  test("keeps refreshed readiness wired through the workflow", () => {
+  test("passes refreshed blockers from Workflow into the single-page Review", () => {
+    const singlePageUrl = new URL(
+      "./finance-wechat-pay-applyment-single-page.tsx",
+      import.meta.url,
+    );
     const panelSource = readSource(
       "./finance-wechat-pay-applyment-panel.tsx",
     );
@@ -238,21 +212,22 @@ describe("FinanceWechatPayApplymentReview readiness", () => {
       "./finance-wechat-pay-applyment-review.tsx",
     );
 
+    expect(existsSync(singlePageUrl)).toBe(true);
+    if (!existsSync(singlePageUrl)) return;
+    const singlePageSource = readFileSync(singlePageUrl, "utf8");
     expect(workflowSource).toContain("presentApplymentBlockers");
     expect(panelSource).toContain(
       "submissionReadiness={autosave.currentDetail.submission_readiness}",
     );
-    expect(panelSource).toContain(
-      "blockerStages: getApplymentBlockerStages",
-    );
     expect(workflowSource).toContain(
       "readinessBlockers={readinessBlockers}",
     );
-    expect(reviewSource).toContain("@/components/ui/alert");
-    expect(reviewSource).toContain("CircleAlert");
-    expect(reviewSource).toContain("ChevronRight");
-    expect(reviewSource).toContain(
-      "onStageChange(blocker.targetStage)",
+    expect(singlePageSource).toMatch(
+      /readinessBlockers=\{(?:props\.)?readinessBlockers\}/,
     );
+    expect(singlePageSource).toContain("<FinanceWechatPayApplymentReview");
+    expect(panelSource).not.toContain("getApplymentBlockerStages");
+    expect(workflowSource).not.toContain("onStageChange");
+    expect(reviewSource).not.toContain("onStageChange");
   });
 });

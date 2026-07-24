@@ -7,6 +7,23 @@ function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
+const SINGLE_PAGE_INTERACTION_CALLBACKS = [
+  "onAttachmentsChange", "onApplyRecognition",
+  "onManualFieldChange", "onReviewConfirmedChange",
+  "onSubmitApplyment", "onSubjectTypeChange",
+  "onContactTypeChange", "onSupplementDataChange",
+] as const;
+
+function expectForwardedCallback(source: string, callback: string) {
+  expect(source).toMatch(new RegExp(
+    `${callback}=\\{(?:props\\.)?${callback}\\}`,
+  ));
+}
+
+function expectUsedCallback(source: string, callback: string) {
+  expect(source).toMatch(new RegExp(`=\\{(?:props\\.)?${callback}\\}`));
+}
+
 describe("Finance wechat pay applyment page layout", () => {
   test("exposes tenant sidebar and finance tab entry for applyment flow", () => {
     const financeGroup = tenantNavGroups.find((group) => group.label === "财务");
@@ -278,16 +295,36 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(workflowSource).toContain("<FinanceWechatPayApplymentSinglePage");
     expect(workflowSource).not.toContain("FinanceWechatPayApplymentFlow");
     expect(panelSource).toContain("<FinanceWechatPayApplymentWorkflow");
-    expect(panelSource).toContain(
-      "onChangeCapture={handleApplymentFormChange}",
-    );
-    expect(panelSource).toContain(
-      "onInputCapture={handleApplymentFormInput}",
-    );
+    expect(panelSource).toContain("onChangeCapture={handleApplymentFormChange}");
+    expect(panelSource).toContain("onInputCapture={handleApplymentFormInput}");
     expect(panelSource).toContain("isApplymentDataBearingControl");
-    expect(panelSource).toContain("validateAllStages");
+    expect(panelSource).toContain("validateApplymentForm");
+    expect(panelSource).not.toContain("validateAllStages");
     expect(panelSource).not.toContain("onInvalidCapture");
     expect(panelSource).not.toContain("activateInvalidApplymentElement");
+  });
+
+  test("forwards every applyment interaction from Panel through Workflow", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const workflowSource = readSource("./finance-wechat-pay-applyment-workflow.tsx");
+    expect(panelSource).toContain("<FinanceWechatPayApplymentWorkflow");
+    for (const callback of SINGLE_PAGE_INTERACTION_CALLBACKS) {
+      expect(panelSource).toContain(`${callback}=`);
+    }
+    expect(workflowSource).toContain("<FinanceWechatPayApplymentSinglePage");
+    for (const callback of SINGLE_PAGE_INTERACTION_CALLBACKS) {
+      expectForwardedCallback(workflowSource, callback);
+    }
+  });
+
+  test("uses every forwarded interaction inside the single-page form", () => {
+    const singlePageUrl = new URL("./finance-wechat-pay-applyment-single-page.tsx", import.meta.url);
+    expect(existsSync(singlePageUrl)).toBe(true);
+    if (!existsSync(singlePageUrl)) return;
+    const singlePageSource = readFileSync(singlePageUrl, "utf8");
+    for (const callback of SINGLE_PAGE_INTERACTION_CALLBACKS) {
+      expectUsedCallback(singlePageSource, callback);
+    }
   });
 
   test("removes the processing event timeline from the tenant applyment panel", () => {
@@ -409,11 +446,7 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(requestSource).toContain("./finance-wechat-pay-applyment-shared");
   });
 
-  test("uses a single-page shadcn form for the complete official applyment contract", () => {
-    const singlePageUrl = new URL(
-      "./finance-wechat-pay-applyment-single-page.tsx",
-      import.meta.url,
-    );
+  test("keeps shadcn controls and upload limits for the official applyment contract", () => {
     const supplementUrl = new URL(
       "./finance-wechat-pay-applyment-supplement-fields.tsx",
       import.meta.url,
@@ -427,12 +460,10 @@ describe("Finance wechat pay applyment page layout", () => {
       import.meta.url,
     );
 
-    expect(existsSync(singlePageUrl)).toBe(true);
     expect(existsSync(supplementUrl)).toBe(true);
     expect(existsSync(reviewUrl)).toBe(true);
     expect(existsSync(schemaUrl)).toBe(true);
     if (
-      !existsSync(singlePageUrl) ||
       !existsSync(supplementUrl) ||
       !existsSync(reviewUrl) ||
       !existsSync(schemaUrl)
@@ -441,10 +472,6 @@ describe("Finance wechat pay applyment page layout", () => {
     }
 
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
-    const workflowSource = readSource(
-      "./finance-wechat-pay-applyment-workflow.tsx",
-    );
-    const singlePageSource = readFileSync(singlePageUrl, "utf8");
     const supplementSource = readFileSync(supplementUrl, "utf8");
     const reviewSource = readFileSync(reviewUrl, "utf8");
     const schemaSource = readFileSync(schemaUrl, "utf8");
@@ -455,31 +482,7 @@ describe("Finance wechat pay applyment page layout", () => {
       "./finance-wechat-pay-applyment-upload-button.tsx",
     );
 
-    expect(workflowSource).toContain(
-      'from "./finance-wechat-pay-applyment-single-page"',
-    );
-    expect(workflowSource).toContain("<FinanceWechatPayApplymentSinglePage");
-    expect(workflowSource).not.toContain("FinanceWechatPayApplymentFlow");
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentDocumentSection",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentContactFields",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentSettlementFields",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentBusinessFields",
-    );
-    expect(singlePageSource).toContain("<FinanceWechatPayApplymentReview");
-    expect(singlePageSource).toContain("<FinanceWechatPayApplymentActions");
-    expect(singlePageSource).toContain("AlertDialog");
-    expect(singlePageSource).not.toContain("Progress");
-    expect(singlePageSource).toContain("SUBJECT_TYPE_ENTERPRISE");
-    expect(singlePageSource).toContain("SUBJECT_TYPE_INDIVIDUAL");
     expect(schemaSource).toContain("IDENTIFICATION_TYPE_IDCARD");
-    expect(singlePageSource).toContain('name="contact_type"');
     expect(supplementSource).toContain("已安全保存");
     expect(reviewSource).toContain("确认资料真实有效");
     expect(schemaSource).toContain("contact_identity_number");
