@@ -460,6 +460,19 @@ BEGIN
     END IF;
     RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'service_region', v_event.to_state, 'version', v_event.result_version);
   END IF;
+  PERFORM 1
+  FROM public.administrative_areas AS area
+  WHERE area.adcode = p_region_code
+    AND area.status = 'active'
+    AND area.level = p_region_level
+  FOR SHARE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'VALIDATION_ERROR',
+      'reason', '行政区划不存在、已停用或级别不匹配'
+    );
+  END IF;
   PERFORM 1 FROM public.suppliers AS supplier
   WHERE supplier.id = p_supplier_id FOR UPDATE;
   IF NOT FOUND THEN

@@ -237,6 +237,59 @@ describe("SupplierCatalogService write boundary", () => {
 });
 
 describe("SupplierCatalogService database conflict mapping", () => {
+  test("maps create idempotency database conflicts without hiding others", async () => {
+    let categoryCalls = 0;
+    const idempotencyConflict = {
+      code: "DB_ERROR",
+      details: {
+        code: "P0001",
+        message: "SUPPLIER_IDEMPOTENCY_CONFLICT",
+      },
+    };
+    const { service } = await createService({
+      createCategory: mock(async () => {
+        categoryCalls += 1;
+        if (categoryCalls === 1) return { id: CATEGORY_ID };
+        throw idempotencyConflict;
+      }),
+      createBrand: mock(async () => {
+        throw idempotencyConflict;
+      }),
+    });
+    const context = auth(["platform.catalog.manage"], null, true);
+    const createCategory = (name: string) => service.createCategory(
+      context,
+      {
+        parent_id: null,
+        code: "CAT-001",
+        name,
+        level: 1,
+        status: "active",
+        sort_order: 100,
+      },
+      "catalog-conflict-1",
+    );
+
+    await createCategory("主材");
+    await expect(createCategory("辅材")).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
+    });
+    await expect(service.createBrand(
+      context,
+      {
+        code: "BR-001",
+        name: "雨虹",
+        status: "active",
+        sort_order: 100,
+      },
+      "catalog-conflict-1",
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
+    });
+  });
+
   test("maps unique and hierarchy database violations to one stable domain error", async () => {
     const violations = [
       { code: "23505", message: "duplicate key" },

@@ -27,18 +27,19 @@ describe("supplier create command services", () => {
       version: 1,
     }));
     const { PlatformSuppliersService } = await import("./platform-suppliers");
+    const regions = {
+      list: mock(async () => [{
+        adcode: "411502",
+        name: "浉河区",
+        level: "district",
+        status: "active",
+      }]),
+    };
     const service = new PlatformSuppliersService({
       repository,
       accessPolicy: accessPolicy(),
       audit: { recordBestEffort: mock(async () => null) },
-      regions: {
-        list: mock(async () => [{
-          adcode: "411502",
-          name: "浉河区",
-          level: "district",
-          status: "active",
-        }]),
-      },
+      regions,
       idFactory: () => ids.shift() ?? FIRST_ID,
     } as never);
     const context = platformAuth("platform.supplier.manage");
@@ -131,6 +132,7 @@ describe("supplier create command services", () => {
         supplier_id: SUPPLIER_ID,
       })),
     );
+    expect(regions.list).not.toHaveBeenCalled();
   });
 
   test("builds three catalog command contexts and keeps precise unit text", async () => {

@@ -220,7 +220,6 @@ export class PlatformSuppliersService {
     idempotencyKey: string,
   ) {
     const actor = this.require(auth, "manage");
-    await this.assertAdministrativeRegion(input.region_code, input.region_level);
     return this.mapIdempotencyError(() =>
       this.repository.createServiceRegion({
         ...input, region_id: this.idFactory(),

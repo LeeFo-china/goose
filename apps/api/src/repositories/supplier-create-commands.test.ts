@@ -240,6 +240,87 @@ describe("supplier create command repositories", () => {
       p_idempotency_key: "catalog-create-1",
     });
   });
+
+  test("maps only create RPC idempotency conflicts to stable 409 errors", async () => {
+    let calls = 0;
+    const conflict = await createCatalogRepository(() => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          body: {
+            status: "created",
+            idempotent: false,
+            category: catalogRows().category,
+            version: 1,
+          },
+        };
+      }
+      return {
+        body: {
+          code: "P0001",
+          message: "SUPPLIER_IDEMPOTENCY_CONFLICT",
+        },
+        status: 400,
+      };
+    });
+    const unrelated = await createCatalogRepository(() => ({
+      body: {
+        code: "42P01",
+        message: "missing relation",
+      },
+      status: 500,
+    }));
+    const invalidRegion = await createPlatformRepository(() => ({
+      body: {
+        status: "validation_error",
+        error_code: "VALIDATION_ERROR",
+        reason: "行政区划不存在、已停用或级别不匹配",
+      },
+    }));
+    const command = catalogCategoryCommand();
+
+    await conflict.repository.createCategory(command);
+    await expect(conflict.repository.createCategory({
+      ...command,
+      name: "辅材",
+    }))
+      .rejects.toMatchObject({
+        statusCode: 409,
+        code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
+      });
+    await expect(conflict.repository.createBrand({
+      brand_id: RESOURCE_ID,
+      code: "BR-001",
+      name: "雨虹",
+      status: "active",
+      sort_order: 100,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: command.idempotency_key,
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
+    });
+    await expect(unrelated.repository.createCategory(command))
+      .rejects.toMatchObject({
+        statusCode: 500,
+        code: "DB_ERROR",
+      });
+    await expect(invalidRegion.repository.createServiceRegion({
+      region_id: RESOURCE_ID,
+      supplier_id: SUPPLIER_ID,
+      region_code: "411502",
+      region_level: "city",
+      status: "active",
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "invalid-region-1",
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+      message: "行政区划不存在、已停用或级别不匹配",
+    });
+  });
 });
 
 const platformRpcKeys = {
@@ -255,6 +336,21 @@ const catalogRpcKeys = {
   create_catalog_brand: "brand",
   create_catalog_unit: "unit",
 } as const;
+
+function catalogCategoryCommand() {
+  return {
+    category_id: RESOURCE_ID,
+    parent_id: null,
+    code: "CAT-001",
+    name: "主材",
+    level: 1,
+    status: "active" as const,
+    sort_order: 100,
+    actor_user_id: USER_ID,
+    actor_employee_id: EMPLOYEE_ID,
+    idempotency_key: "catalog-create-1",
+  };
+}
 
 function platformRows() {
   const audit = {

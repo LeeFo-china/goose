@@ -36,9 +36,11 @@ const envelopeSchema = z.object({
     "supplier_not_found",
     "state_conflict",
     "idempotency_conflict",
+    "validation_error",
   ]),
   idempotent: z.boolean().optional(),
   error_code: z.string().optional(),
+  reason: z.string().optional(),
   version: z.number().int().nonnegative().optional(),
 }).passthrough();
 
@@ -57,7 +59,16 @@ export async function executeCreateCommand<
     input.functionName,
     input.params,
   );
-  if (error) throw Errors.dbError(input.message, error);
+  if (error) {
+    if (isSupplierIdempotencyConflict(error)) {
+      throw Errors.business(
+        409,
+        "幂等键已用于其他供应商操作",
+        "SUPPLIER_IDEMPOTENCY_CONFLICT",
+      );
+    }
+    throw Errors.dbError(input.message, error);
+  }
 
   const envelope = envelopeSchema.safeParse(data);
   if (!envelope.success) {
@@ -86,13 +97,39 @@ export async function executeCreateCommand<
 function createCommandError(
   envelope: z.infer<typeof envelopeSchema>,
 ) {
-  const isMissing = envelope.status === "supplier_not_found";
-  const code = envelope.error_code ??
-    (isMissing ? "SUPPLIER_NOT_FOUND" : "SUPPLIER_STATE_CONFLICT");
+  if (envelope.status === "validation_error") {
+    return Errors.business(
+      400,
+      envelope.reason ?? "请求参数校验失败",
+      envelope.error_code ?? "VALIDATION_ERROR",
+      envelope,
+    );
+  }
+  if (envelope.status === "supplier_not_found") {
+    return Errors.business(
+      404,
+      "供应商不存在",
+      envelope.error_code ?? "SUPPLIER_NOT_FOUND",
+      envelope,
+    );
+  }
   return Errors.business(
-    isMissing ? 404 : 409,
-    isMissing ? "供应商不存在" : "创建数据与当前状态冲突",
-    code,
+    409,
+    envelope.reason ?? "创建数据与当前状态冲突",
+    envelope.error_code ?? "SUPPLIER_STATE_CONFLICT",
     envelope,
+  );
+}
+
+export function isSupplierIdempotencyConflict(error: unknown): boolean {
+  if (typeof error === "string") {
+    return error.includes("SUPPLIER_IDEMPOTENCY_CONFLICT");
+  }
+  if (Array.isArray(error)) {
+    return error.some((item) => isSupplierIdempotencyConflict(item));
+  }
+  if (typeof error !== "object" || error === null) return false;
+  return Object.values(error).some(
+    (value) => isSupplierIdempotencyConflict(value),
   );
 }

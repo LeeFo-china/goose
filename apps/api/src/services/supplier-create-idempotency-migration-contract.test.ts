@@ -209,4 +209,26 @@ describe("supplier create command migration contract", () => {
     expect(fn).toContain("p_conversion_factor::numeric(18, 6)");
     expect(fn).toContain("'conversion_factor', v_unit.conversion_factor::text");
   });
+
+  test("replays service regions before validating mutable administrative data", () => {
+    const fn = extractFunction("create_supplier_service_region");
+    const replay = fn.indexOf(
+      "'service_region', v_event.to_state",
+    );
+    const areaLookup = fn.indexOf(
+      "FROM public.administrative_areas AS area",
+    );
+    const insert = fn.indexOf(
+      "INSERT INTO public.supplier_service_regions",
+    );
+
+    expect(replay).toBeGreaterThan(-1);
+    expect(areaLookup).toBeGreaterThan(replay);
+    expect(insert).toBeGreaterThan(areaLookup);
+    expect(fn).toMatch(
+      /WHERE area\.adcode = p_region_code[\s\S]*area\.status = 'active'[\s\S]*area\.level = p_region_level[\s\S]*FOR SHARE/,
+    );
+    expect(fn).toContain("'status', 'validation_error'");
+    expect(fn).toContain("'error_code', 'VALIDATION_ERROR'");
+  });
 });

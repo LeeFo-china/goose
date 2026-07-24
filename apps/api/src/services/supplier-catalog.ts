@@ -3,6 +3,9 @@ import {
   supplierCatalogRepository,
   type SupplierCatalogRepositoryPort,
 } from "@/repositories/supplier-catalog";
+import {
+  isSupplierIdempotencyConflict,
+} from "@/repositories/supplier-create-command-rpc";
 import type {
   CatalogBrandCreateInput,
   CatalogBrandListQuery,
@@ -222,6 +225,13 @@ export class SupplierCatalogService {
     try {
       return await operation();
     } catch (error) {
+      if (isSupplierIdempotencyConflict(error)) {
+        throw Errors.business(
+          409,
+          "幂等键已用于其他供应商操作",
+          "SUPPLIER_IDEMPOTENCY_CONFLICT",
+        );
+      }
       if (!isCatalogConflict(error)) throw error;
       throw Errors.business(
         409,
