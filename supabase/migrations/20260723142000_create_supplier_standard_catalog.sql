@@ -1,7 +1,7 @@
--- Rollback: in a new migration, drop the six catalog triggers, then drop
+-- Rollback: in a new migration, drop the seven catalog triggers, then drop
 -- catalog_units, catalog_brands, and catalog_categories in that order, and
 -- finally drop validate_catalog_unit_base(), set_catalog_category_level(),
--- and lock_catalog_category_hierarchy().
+-- lock_catalog_unit_hierarchy(), and lock_catalog_category_hierarchy().
 -- This is destructive and removes the platform standard catalog, so export
 -- and reconcile all downstream catalog references before rollback.
 
@@ -136,6 +136,7 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   parent_level integer;
+  parent_status text;
 BEGIN
   IF TG_OP = 'UPDATE'
     AND NEW.parent_id IS DISTINCT FROM OLD.parent_id THEN
@@ -156,6 +157,18 @@ BEGIN
     ) THEN
       RAISE EXCEPTION '只能移动叶子目录分类';
     END IF;
+  END IF;
+
+  IF TG_OP = 'UPDATE'
+    AND OLD.status = 'active'
+    AND NEW.status = 'inactive'
+    AND EXISTS (
+      SELECT 1
+      FROM public.catalog_categories AS child
+      WHERE child.parent_id = OLD.id
+        AND child.status = 'active'
+    ) THEN
+    RAISE EXCEPTION '存在启用的子分类，当前目录分类不能停用';
   END IF;
 
   IF NEW.parent_id IS NULL THEN
@@ -196,10 +209,20 @@ BEGIN
   SELECT parent.level
   INTO parent_level
   FROM public.catalog_categories AS parent
-  WHERE parent.id = NEW.parent_id;
+  WHERE parent.id = NEW.parent_id
+  FOR UPDATE;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION '父目录分类不存在';
+  END IF;
+
+  SELECT parent.status
+  INTO parent_status
+  FROM public.catalog_categories AS parent
+  WHERE parent.id = NEW.parent_id;
+
+  IF NEW.status = 'active' AND parent_status <> 'active' THEN
+    RAISE EXCEPTION '启用的目录分类必须属于启用的父分类';
   END IF;
 
   NEW.level := parent_level + 1;
@@ -214,6 +237,22 @@ $$;
 REVOKE ALL ON FUNCTION public.set_catalog_category_level()
   FROM PUBLIC, anon, authenticated, service_role;
 
+CREATE FUNCTION public.lock_catalog_unit_hierarchy()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  -- Serialize base/derived mutations before row locks so a base unit cannot
+  -- become inactive while a derived unit starts referencing it.
+  PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142001::bigint);
+  RETURN NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.lock_catalog_unit_hierarchy()
+  FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE FUNCTION public.validate_catalog_unit_base()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -221,7 +260,21 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   parent_base_unit_id uuid;
+  parent_status text;
 BEGIN
+  IF TG_OP = 'UPDATE'
+    AND OLD.base_unit_id IS NULL
+    AND OLD.status = 'active'
+    AND NEW.status = 'inactive'
+    AND EXISTS (
+      SELECT 1
+      FROM public.catalog_units AS derived_unit
+      WHERE derived_unit.base_unit_id = OLD.id
+        AND derived_unit.id <> NEW.id
+    ) THEN
+    RAISE EXCEPTION '有派生单位引用的基准单位不能停用';
+  END IF;
+
   IF NEW.base_unit_id IS NULL THEN
     RETURN NEW;
   END IF;
@@ -231,6 +284,7 @@ BEGIN
   END IF;
 
   IF TG_OP = 'UPDATE'
+    AND NEW.base_unit_id IS DISTINCT FROM OLD.base_unit_id
     AND EXISTS (
       SELECT 1
       FROM public.catalog_units AS derived_unit
@@ -250,8 +304,17 @@ BEGIN
     RAISE EXCEPTION '基准单位不存在';
   END IF;
 
+  SELECT base_unit.status
+  INTO parent_status
+  FROM public.catalog_units AS base_unit
+  WHERE base_unit.id = NEW.base_unit_id;
+
   IF parent_base_unit_id IS NOT NULL THEN
     RAISE EXCEPTION '派生单位只能引用基准单位';
+  END IF;
+
+  IF parent_status <> 'active' THEN
+    RAISE EXCEPTION '派生单位只能引用启用的基准单位';
   END IF;
 
   RETURN NEW;
@@ -270,6 +333,11 @@ CREATE TRIGGER tr_catalog_categories_set_level
 BEFORE INSERT OR UPDATE ON public.catalog_categories
 FOR EACH ROW
 EXECUTE FUNCTION public.set_catalog_category_level();
+
+CREATE TRIGGER tr_catalog_units_lock_hierarchy
+BEFORE INSERT OR UPDATE ON public.catalog_units
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.lock_catalog_unit_hierarchy();
 
 CREATE TRIGGER tr_catalog_units_validate_base
 BEFORE INSERT OR UPDATE ON public.catalog_units
