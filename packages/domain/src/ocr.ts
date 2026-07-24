@@ -2,6 +2,7 @@ export const OCR_SCENE_VALUES = [
   'wechat_pay_applyment',
   'expense_request',
   'merchant_material',
+  'supplier_onboarding',
 ] as const;
 
 export type OcrScene = (typeof OCR_SCENE_VALUES)[number];

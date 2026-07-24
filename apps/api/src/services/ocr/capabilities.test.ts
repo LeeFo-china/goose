@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import * as capabilities from "./capabilities";
-
-const {
+import {
   getOcrCapability,
+  listPlatformOcrCapabilities,
   listPublicOcrCapabilities,
-} = capabilities;
+  listTenantOcrCapabilities,
+} from "./capabilities";
 
 describe("OCR capability catalog", () => {
   test("exposes only the four Phase 1 applyment capabilities", () => {
@@ -38,10 +38,6 @@ describe("OCR capability catalog", () => {
   });
 
   test("exposes supplier business license OCR only to platform onboarding", () => {
-    const listPlatformOcrCapabilities =
-      capabilities["listPlatformOcrCapabilities" as keyof typeof capabilities];
-    const listTenantOcrCapabilities =
-      capabilities["listTenantOcrCapabilities" as keyof typeof capabilities];
     const capability = getOcrCapability(
       "supplier_onboarding",
       "business_license",
@@ -60,14 +56,6 @@ describe("OCR capability catalog", () => {
         "legal_representative_name",
       ],
     });
-    expect(typeof listTenantOcrCapabilities).toBe("function");
-    expect(typeof listPlatformOcrCapabilities).toBe("function");
-    if (
-      typeof listTenantOcrCapabilities !== "function" ||
-      typeof listPlatformOcrCapabilities !== "function"
-    ) {
-      return;
-    }
     expect(listTenantOcrCapabilities()).not.toContainEqual(
       expect.objectContaining({ scene: "supplier_onboarding" }),
     );

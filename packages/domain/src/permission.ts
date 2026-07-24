@@ -101,6 +101,7 @@ export const PERMISSION_CODE_VALUES = [
   'platform.billing.recharge_product.manage',
   'platform.billing.recharge_refund.read',
   'platform.billing.recharge_refund.review',
+  'platform.ocr.recognize',
   'platform.ocr.recognition.read',
   'platform.ocr.tenant_policy.manage',
   'platform.tenant_onboarding.review',
@@ -406,6 +407,10 @@ export const PermissionCodeConfig: Record<
   'platform.billing.recharge_refund.review': {
     label: '审核积分充值退款申请',
     module: 'platform_billing',
+  },
+  'platform.ocr.recognize': {
+    label: '使用平台证照识别',
+    module: 'platform_ocr',
   },
   'platform.ocr.recognition.read': {
     label: '查看平台OCR记录',

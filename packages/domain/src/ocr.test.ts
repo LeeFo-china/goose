@@ -14,6 +14,7 @@ describe('OCR domain contracts', () => {
       'wechat_pay_applyment',
       'expense_request',
       'merchant_material',
+      'supplier_onboarding',
     ]);
     expect(OCR_DOCUMENT_TYPE_VALUES).toEqual([
       'business_license',
