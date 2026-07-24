@@ -6,6 +6,7 @@ import type {
   WechatPayApplymentBlockerCode,
 } from "@gooes/domain";
 import type { OcrRecognitionOwnershipRecord } from "@/repositories/ocr-recognitions";
+import type { OcrPlatformFileObjectRecord } from "@/repositories/platform-file-objects";
 import type {
   WechatPayApplymentEventInsert,
   WechatPayApplymentEventRecord,
@@ -151,6 +152,15 @@ export type WechatPayApplymentServiceDependencies = {
   statusService?: WechatPayApplymentStatusPort;
   preflightService?: WechatPayApplymentPreflightPort;
   tenantReadinessService?: WechatPayApplymentTenantReviewReadinessPort;
+  fileObjectRepository?: WechatPayApplymentFileObjectRepositoryPort;
+};
+
+export type WechatPayApplymentFileObjectRepositoryPort = {
+  findActiveByIds: (input: {
+    ids: string[];
+    tenantId: string;
+    limit: number;
+  }) => Promise<OcrPlatformFileObjectRecord[]>;
 };
 
 export type WechatPayApplymentOcrRecognitionRepositoryPort = {

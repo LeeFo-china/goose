@@ -180,13 +180,17 @@ describe("OcrService", () => {
     }
   });
 
-  test("returns idempotency replay without provider call", async () => {
-    const existing = buildRecord({ status: "succeeded", result_ciphertext: "encrypted-result" });
+  test("returns a same-key concurrent processing replay without provider call", async () => {
+    const existing = buildRecord({ status: "processing" });
     const { service, dependencies } = await createHarness({ idempotentRecord: existing });
 
     const result = await service.recognize(authContext, request);
 
-    expect(result).toMatchObject({ idempotent: true, cached: false });
+    expect(result).toMatchObject({
+      idempotent: true,
+      cached: false,
+      recognition: { status: "processing", fields: [] },
+    });
     expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 
@@ -207,13 +211,17 @@ describe("OcrService", () => {
     expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 
-  test("returns active dedupe result as cached", async () => {
-    const existing = buildRecord({ status: "succeeded", result_ciphertext: "encrypted-result" });
+  test("returns a different-key concurrent processing dedupe as cached", async () => {
+    const existing = buildRecord({ status: "processing" });
     const { service, dependencies } = await createHarness({ dedupeRecord: existing });
 
     const result = await service.recognize(authContext, request);
 
-    expect(result).toMatchObject({ idempotent: false, cached: true });
+    expect(result).toMatchObject({
+      idempotent: false,
+      cached: true,
+      recognition: { status: "processing", fields: [] },
+    });
     expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 
@@ -245,7 +253,10 @@ describe("OcrService", () => {
 
     const result = await service.recognize(authContext, request);
 
-    expect(result).toMatchObject({ cached: true });
+    expect(result).toMatchObject({
+      cached: true,
+      recognition: { status: "processing", fields: [] },
+    });
     expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 

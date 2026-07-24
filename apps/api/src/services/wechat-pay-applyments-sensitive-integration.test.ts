@@ -211,6 +211,12 @@ async function createService() {
     nowFactory: () => now,
     preflightService: { run: () => Promise.reject(new Error("formal preflight must not run for tenant detail")) },
     tenantReadinessService: { runForApplyment: async () => ({ ready: true, review_ready: true, blockers: [] }) },
+    fileObjectRepository: { findActiveByIds: async ({ ids }) =>
+      ids.map((id) => ({
+      id, tenant_id: tenantId, scene: "wechat_pay_applyment",
+      object_key: "tenants/tenant-1/id-front.jpg",
+      created_by_employee_id: employeeId,
+    } as never)) },
   });
 }
 const createInput = {
@@ -313,7 +319,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       expect.objectContaining({ change_source: "manual_save" }),
     );
   });
-
   test("stores sensitive fields incrementally", async () => {
     findById.mockImplementationOnce(async () => ({
       ...applyment,
@@ -328,6 +333,7 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       identity_name: "张三",
       attachments: [{
         category: "legal_representative_id_card_front",
+        file_object_id: "77777777-7777-4777-8777-777777777777",
         object_key: "tenants/tenant-1/id-front.jpg",
         ocr_recognition_id: recognitionId,
         ocr_review_status: "confirmed",
@@ -353,7 +359,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     expect(JSON.stringify(auditMetadata)).not.toContain(recognitionId);
     expect(insertEvent).not.toHaveBeenCalled();
   });
-
   test("does not create empty ciphertext for contact type only", async () => {
     findById.mockImplementationOnce(async () => ({
       ...applyment,
@@ -370,7 +375,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     expect(patch).not.toHaveProperty("sensitive_payload_ciphertext");
     expect(patch).not.toHaveProperty("has_sensitive_payload");
   });
-
   test("merges a partial sensitive replacement", async () => {
     const service = await createService();
     await service.updateDraft(authContext, applymentId, {
@@ -389,7 +393,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       rootSecret,
     })).toEqual({ ...sensitivePayload, contact_phone: "13900000000" });
   });
-
   test("does not initialize a legacy draft without a sensitive replacement", async () => {
     findById.mockImplementationOnce(async () => ({
       ...applyment,
@@ -417,7 +420,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       sensitive_payload_version: null,
     }));
     const service = await createService();
-
     await expect(service.updateDraft(authContext, applymentId, {
       ...draftFence,
       identity_name: "张三",
@@ -426,7 +428,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     });
     expect(updateApplyment).not.toHaveBeenCalled();
   });
-
   test("clears agent-only sensitive fields when switching to LEGAL", async () => {
     findById.mockImplementationOnce(async () => ({
       ...applyment,
@@ -448,7 +449,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       sensitive_payload_version: 1,
     }));
     const service = await createService();
-
     await service.updateDraft(authContext, applymentId, {
       ...draftFence,
       contact_type: "LEGAL",

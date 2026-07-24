@@ -49,6 +49,10 @@ const attachmentLookupMigrationPath = join(
   import.meta.dir,
   "../../../../supabase/migrations/20260724173000_index_wechat_pay_applyment_attachments.sql",
 );
+const attachmentBackfillMigrationPath = join(
+  import.meta.dir,
+  "../../../../supabase/migrations/20260724200000_backfill_wechat_pay_applyment_file_ids.sql",
+);
 
 describe("atomic tenant WeChat Pay applyment submit", () => {
   beforeEach(() => {
@@ -118,6 +122,19 @@ describe("atomic tenant WeChat Pay applyment submit", () => {
   test("indexes attachment ownership containment lookups", () => {
     const sql = readFileSync(attachmentLookupMigrationPath, "utf8");
     expect(sql).toContain("USING gin (attachments jsonb_path_ops)");
+  });
+
+  test("backfills only unique active tenant attachment matches", () => {
+    const sql = readFileSync(attachmentBackfillMigrationPath, "utf8");
+    expect(sql).toContain("match_count = 1");
+    expect(sql).toContain(
+      "(array_agg(file_object.id ORDER BY file_object.id))[1]",
+    );
+    expect(sql).not.toContain("min(file_object.id)");
+    expect(sql).toContain("file_object.scene = 'wechat_pay_applyment'");
+    expect(sql).toContain("file_object.created_by_employee_id");
+    expect(sql).toContain("applyment.created_by_employee_id");
+    expect(sql).toContain("jsonb_set");
   });
 
   test("locks, transitions and audits in one restricted transaction", () => {

@@ -234,6 +234,28 @@ class PlatformFileObjectRepository {
     return (data as OcrPlatformFileObjectRecord | null) ?? null;
   }
 
+  async findActiveByIds(input: {
+    ids: string[];
+    tenantId: string;
+    limit: number;
+  }): Promise<OcrPlatformFileObjectRecord[]> {
+    if (input.ids.length === 0) return [];
+    const limit = Math.min(input.limit, 20);
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("platform_file_objects")
+      .select(OCR_FILE_OBJECT_COLUMNS)
+      .in("id", input.ids.slice(0, limit))
+      .eq("tenant_id", input.tenantId)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .limit(limit);
+
+    if (error) {
+      throw Errors.dbError("批量查询进件附件文件对象失败", error);
+    }
+    return (data as unknown as OcrPlatformFileObjectRecord[] | null) ?? [];
+  }
+
   async findActiveByIdForPlatform(id: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("platform_file_objects")

@@ -100,6 +100,15 @@ async function createHarness(current: WechatPayApplymentRecord) {
       assertTenantContext: () => tenantId,
       hasPermission: () => true,
     },
+    fileObjectRepository: {
+      findActiveByIds: async () => [{
+        ...reviewedAttachment,
+        id: reviewedAttachment.file_object_id,
+        tenant_id: tenantId,
+        scene: "wechat_pay_applyment",
+        created_by_employee_id: employeeId,
+      }] as never,
+    },
   });
   return {
     service,

@@ -1,10 +1,10 @@
 import { Errors } from "@/errors/error-factory";
 import { randomUUID } from "node:crypto";
 import { ocrRecognitionRepository } from "@/repositories/ocr-recognitions";
+import { platformFileObjectRepository } from "@/repositories/platform-file-objects";
 import { platformPaymentConfigRepository } from "@/repositories/platform-payment-configs";
 import {
   wechatPayApplymentRepository,
-  type WechatPayApplymentEventInsert,
   type WechatPayApplymentRecord,
   type WechatPayApplymentUpdate,
 } from "@/repositories/wechat-pay-applyments";
@@ -22,6 +22,7 @@ import type {
 } from "@/schema/wechat-pay-applyments";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { assertTenantApplymentAttachmentsOwned } from "@/services/wechat-pay-applyment-attachment-ownership";
 import { buildDraftAuditDecision, buildDraftChangeAudit } from "@/services/wechat-pay-applyment-draft-audit";
 import {
   buildCreateSensitivePayload,
@@ -69,6 +70,8 @@ export class WechatPayApplymentService {
   private readonly platformActions: WechatPayApplymentPlatformActions;
   private readonly tenantReadinessService:
     NonNullable<WechatPayApplymentServiceDependencies["tenantReadinessService"]>;
+  private readonly fileObjectRepository:
+    NonNullable<WechatPayApplymentServiceDependencies["fileObjectRepository"]>;
 
   constructor(dependencies: WechatPayApplymentServiceDependencies = {}) {
     this.repository = dependencies.repository ?? wechatPayApplymentRepository;
@@ -84,6 +87,8 @@ export class WechatPayApplymentService {
       (() => process.env.APP_CONFIG_ENCRYPTION_KEY);
     this.ocrRecognitionRepository = dependencies.ocrRecognitionRepository ??
       ocrRecognitionRepository;
+    this.fileObjectRepository = dependencies.fileObjectRepository ??
+      platformFileObjectRepository;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date().toISOString());
     this.tenantReadinessService = dependencies.tenantReadinessService ??
       createWechatPayApplymentTenantReviewReadinessService({
@@ -144,6 +149,13 @@ export class WechatPayApplymentService {
         { applyment_id: current.id, status: current.status },
       );
     }
+    await assertTenantApplymentAttachmentsOwned({
+      attachments: input.attachments,
+      currentAttachments: [],
+      tenantId,
+      employeeId,
+      fileRepository: this.fileObjectRepository,
+    });
 
     const applymentId = this.applymentIdFactory();
     const now = this.nowFactory();
@@ -214,6 +226,13 @@ export class WechatPayApplymentService {
     if (revision <= currentRevision) {
       return this.toDetail(authContext, current);
     }
+    await assertTenantApplymentAttachmentsOwned({
+      attachments: input.attachments,
+      currentAttachments: current.attachments,
+      tenantId,
+      employeeId,
+      fileRepository: this.fileObjectRepository,
+    });
 
     const now = this.nowFactory();
     const sensitivePatch = await buildSensitivePayloadUpdate({
@@ -451,26 +470,6 @@ export class WechatPayApplymentService {
     }
   }
 
-  private async recordEvent(input: {
-    applyment: WechatPayApplymentRecord;
-    eventType: string;
-    fromStatus: string | null;
-    toStatus: string | null;
-    message: string | null;
-    operatorEmployeeId: string | null;
-    metadata?: Record<string, unknown>;
-  }) {
-    await this.repository.insertEvent({
-      tenant_id: input.applyment.tenant_id,
-      applyment_id: input.applyment.id,
-      event_type: input.eventType,
-      from_status: input.fromStatus,
-      to_status: input.toStatus,
-      message: input.message,
-      operator_employee_id: input.operatorEmployeeId,
-      metadata: (input.metadata ?? {}) as WechatPayApplymentEventInsert["metadata"],
-    });
-  }
 }
 
 function createApplicationNo() {
