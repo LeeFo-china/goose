@@ -14,6 +14,7 @@ import {
   CatalogUnitDialogButton,
 } from "@/components/supplier-catalog/supplier-catalog-dialogs";
 import { SupplierCatalogFilters } from "@/components/supplier-catalog/supplier-catalog-filters";
+import { SupplierCatalogLoadError } from "@/components/supplier-catalog/supplier-catalog-error";
 import {
   buildCatalogListPath,
   catalogViewHref,
@@ -31,6 +32,7 @@ import type {
   CatalogStatus,
   CatalogUnit,
   CatalogView,
+  CategoryReturnState,
 } from "@/components/supplier-catalog/supplier-catalog-types";
 import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
@@ -135,9 +137,12 @@ export default async function PlatformCatalogPage({
     : view === "brands"
       ? brands
       : units;
-  const baseUnits = units.list.filter(
-    (unit) => unit.base_unit_id === null && unit.status === "active",
-  );
+  const categoryReturnState: CategoryReturnState = {
+    page,
+    pageSize,
+    keyword,
+    status,
+  };
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -161,9 +166,8 @@ export default async function PlatformCatalogPage({
                 )
               : view === "brands"
                 ? <CatalogBrandDialogButton />
-                : <CatalogUnitDialogButton baseUnits={baseUnits} />
+                : <CatalogUnitDialogButton />
             : null}
-          error={error}
           tabs={
             <div className="overflow-x-auto">
               <TabsList className={platformTabsListClassName}>
@@ -187,13 +191,21 @@ export default async function PlatformCatalogPage({
           tableViewportTestId="supplier-catalog-table-viewport"
           unit={view === "categories" ? "个类目" : view === "brands" ? "个品牌" : "个单位"}
         >
-          <SupplierCatalogTable
-            view={view}
-            categories={categories.list}
-            brands={brands.list}
-            units={units.list}
-            categoryTrail={categoryTrail}
-          />
+          {error ? (
+            <SupplierCatalogLoadError
+              message={error}
+              canRetry={canManage}
+            />
+          ) : (
+            <SupplierCatalogTable
+              view={view}
+              categories={categories.list}
+              brands={brands.list}
+              units={units.list}
+              categoryTrail={categoryTrail}
+              categoryReturnState={categoryReturnState}
+            />
+          )}
         </PlatformListPageShell>
       </Tabs>
     </div>

@@ -177,7 +177,13 @@ describe("平台供应标准目录工作台", () => {
   });
 
   test("新建编辑对话框使用Field并提供冲突恢复", () => {
-    const dialogs = readSource("./supplier-catalog-dialogs.tsx");
+    const dialogs = [
+      readSource("./supplier-catalog-dialogs.tsx"),
+      readSource("./catalog-category-dialog.tsx"),
+      readSource("./catalog-brand-dialog.tsx"),
+      readSource("./catalog-unit-dialog.tsx"),
+      readSource("./base-unit-picker.tsx"),
+    ].join("\n");
     const actions = readSource("./supplier-catalog-actions.tsx");
     const rules = readSource("./supplier-catalog-rules.ts");
 

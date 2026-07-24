@@ -23,6 +23,7 @@ import {
   type CatalogCategory,
   type CatalogUnit,
   type CatalogView,
+  type CategoryReturnState,
   type CategoryTrailItem,
 } from "./supplier-catalog-types";
 
@@ -32,16 +33,22 @@ export function SupplierCatalogTable({
   brands,
   units,
   categoryTrail,
+  categoryReturnState,
 }: {
   view: CatalogView;
   categories: CatalogCategory[];
   brands: CatalogBrand[];
   units: CatalogUnit[];
   categoryTrail: CategoryTrailItem[];
+  categoryReturnState: CategoryReturnState;
 }) {
   if (view === "categories") {
     return (
-      <CategoryTable records={categories} categoryTrail={categoryTrail} />
+      <CategoryTable
+        records={categories}
+        categoryTrail={categoryTrail}
+        categoryReturnState={categoryReturnState}
+      />
     );
   }
   if (view === "brands") return <BrandTable records={brands} />;
@@ -51,9 +58,11 @@ export function SupplierCatalogTable({
 function CategoryTable({
   records,
   categoryTrail,
+  categoryReturnState,
 }: {
   records: CatalogCategory[];
   categoryTrail: CategoryTrailItem[];
+  categoryReturnState: CategoryReturnState;
 }) {
   const parentName = categoryTrail.at(-1)?.name ?? "根级";
   const columns: ColumnDef<CatalogCategory>[] = [
@@ -76,7 +85,11 @@ function CategoryTable({
               <Link
                 href={categoryTrailHref([
                   ...categoryTrail,
-                  { id: row.original.id, name: row.original.name },
+                  {
+                    id: row.original.id,
+                    name: row.original.name,
+                    returnState: categoryReturnState,
+                  },
                 ])}
                 aria-label={`查看${row.original.name}的下级类目`}
               >
@@ -198,10 +211,6 @@ function BrandTable({ records }: { records: CatalogBrand[] }) {
 }
 
 function UnitTable({ records }: { records: CatalogUnit[] }) {
-  const baseUnitMap = new Map(records.map((unit) => [unit.id, unit]));
-  const baseUnits = records.filter(
-    (unit) => unit.base_unit_id === null && unit.status === "active",
-  );
   const columns: ColumnDef<CatalogUnit>[] = [
     {
       accessorKey: "code",
@@ -229,10 +238,10 @@ function UnitTable({ records }: { records: CatalogUnit[] }) {
       header: "基准单位",
       cell: ({ row }) => {
         if (!row.original.base_unit_id) return "本身";
-        const baseUnit = baseUnitMap.get(row.original.base_unit_id);
+        const baseUnit = row.original.base_unit;
         return baseUnit
-          ? `${baseUnit.name}（${baseUnit.symbol}）`
-          : row.original.base_unit_id;
+          ? `${baseUnit.name}（${baseUnit.symbol}） · ${baseUnit.code}`
+          : "基准单位信息缺失";
       },
       meta: { cellClassName: "min-w-[180px]" },
     },
@@ -253,7 +262,6 @@ function UnitTable({ records }: { records: CatalogUnit[] }) {
         <div className="flex justify-end gap-1">
           <CatalogUnitDialogButton
             record={row.original}
-            baseUnits={baseUnits.filter((unit) => unit.id !== row.original.id)}
           />
           <SupplierCatalogStatusAction kind="unit" record={row.original} />
         </div>

@@ -1,7 +1,10 @@
 import type {
+  CatalogBaseUnit,
+  CatalogCreateIntent,
   CatalogRecordKind,
   CatalogStatus,
   CatalogView,
+  CategoryReturnState,
   CategoryTrailItem,
 } from "./supplier-catalog-types";
 
@@ -36,7 +39,9 @@ export function encodeCategoryTrail(trail: CategoryTrailItem[]) {
   return JSON.stringify(trail.slice(0, 6));
 }
 
-export function decodeCategoryTrail(value: string | undefined) {
+export function decodeCategoryTrail(
+  value: string | undefined,
+): CategoryTrailItem[] {
   if (!value) return [];
   try {
     const parsed: unknown = JSON.parse(value);
@@ -54,7 +59,14 @@ export function decodeCategoryTrail(value: string | undefined) {
         return [];
       }
       const name = item.name.trim().slice(0, 120);
-      return name ? [{ id: item.id, name }] : [];
+      const returnState = "returnState" in item
+        ? parseCategoryReturnState(item.returnState)
+        : undefined;
+      return name ? [{
+        id: item.id,
+        name,
+        ...(returnState ? { returnState } : {}),
+      }] : [];
     });
   } catch {
     return [];
@@ -81,7 +93,26 @@ export function categoryTrailHref(trail: CategoryTrailItem[]) {
 }
 
 export function parentCategoryHref(trail: CategoryTrailItem[]) {
-  return categoryTrailHref(trail.slice(0, -1));
+  const current = trail.at(-1);
+  const parentTrail = trail.slice(0, -1);
+  if (!current?.returnState) return categoryTrailHref(parentTrail);
+  const query = new URLSearchParams();
+  if (parentTrail.length) {
+    query.set("view", "categories");
+    query.set("categoryPath", encodeCategoryTrail(parentTrail));
+  }
+  if (current.returnState.page > 1) {
+    query.set("page", String(current.returnState.page));
+  }
+  query.set("pageSize", String(current.returnState.pageSize));
+  if (current.returnState.keyword) {
+    query.set("keyword", current.returnState.keyword);
+  }
+  if (current.returnState.status) {
+    query.set("status", current.returnState.status);
+  }
+  const value = query.toString();
+  return value ? `/platform/catalog?${value}` : "/platform/catalog";
 }
 
 export function buildCatalogStatusRequest(input: {
@@ -137,4 +168,96 @@ export function buildUnitRelationshipPayload(input: {
 
 export function newCatalogIdempotencyKey(kind: CatalogRecordKind) {
   return `catalog-${kind}:${crypto.randomUUID()}`;
+}
+
+export function mergePinnedBaseUnit(
+  candidates: CatalogBaseUnit[],
+  pinned: CatalogBaseUnit | null,
+) {
+  if (!pinned || candidates.some((item) => item.id === pinned.id)) {
+    return candidates;
+  }
+  return [pinned, ...candidates];
+}
+
+export function resolveCatalogCreateIntent(
+  current: CatalogCreateIntent | null,
+  payload: Record<string, unknown>,
+  keyFactory: () => string,
+): CatalogCreateIntent {
+  const fingerprint = stableFingerprint(payload);
+  if (current?.fingerprint === "") return { ...current, fingerprint };
+  return current?.fingerprint === fingerprint
+    ? current
+    : { key: keyFactory(), fingerprint };
+}
+
+export function initializeCatalogCreateIntent(
+  keyFactory: () => string,
+): CatalogCreateIntent {
+  return { key: keyFactory(), fingerprint: "" };
+}
+
+export function validateConversionFactor(value: string) {
+  const normalized = value.trim();
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) {
+    return "换算系数必须是不含指数的十进制数";
+  }
+  const [rawInteger = "", fraction = ""] = normalized.split(".");
+  const integer = rawInteger.replace(/^0+(?=\d)/, "");
+  if (integer.length > 12) return "换算系数整数部分不能超过 12 位";
+  if (fraction.length > 6) return "换算系数小数部分不能超过 6 位";
+  if (integer.length + fraction.length > 18) {
+    return "换算系数总精度不能超过 18 位";
+  }
+  if (!/[1-9]/.test(`${integer}${fraction}`)) {
+    return "换算系数必须大于 0";
+  }
+  return null;
+}
+
+function stableFingerprint(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableFingerprint(item)).join(",")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) =>
+        `${JSON.stringify(key)}:${stableFingerprint(item)}`
+      )
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function parseCategoryReturnState(
+  value: unknown,
+): CategoryReturnState | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const input = value as Record<string, unknown>;
+  if (
+    typeof input.page !== "number" ||
+    !Number.isSafeInteger(input.page) ||
+    input.page < 1 ||
+    typeof input.pageSize !== "number" ||
+    !Number.isSafeInteger(input.pageSize) ||
+    input.pageSize < 1 ||
+    input.pageSize > 100 ||
+    typeof input.keyword !== "string" ||
+    input.keyword.length > 80 ||
+    !(
+      input.status === "" ||
+      input.status === "active" ||
+      input.status === "inactive"
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    page: input.page,
+    pageSize: input.pageSize,
+    keyword: input.keyword,
+    status: input.status as CategoryReturnState["status"],
+  };
 }

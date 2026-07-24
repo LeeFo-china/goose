@@ -37,15 +37,37 @@ export type CatalogBrand = CatalogRecord & {
 export type CatalogUnit = CatalogRecord & {
   symbol: string;
   base_unit_id: string | null;
+  base_unit: CatalogBaseUnit | null;
   conversion_factor: string;
+};
+
+export type CatalogBaseUnit = {
+  id: string;
+  code: string;
+  name: string;
+  symbol: string;
+  status: CatalogStatus;
+};
+
+export type CategoryReturnState = {
+  page: number;
+  pageSize: number;
+  keyword: string;
+  status: CatalogStatus | "";
 };
 
 export type CategoryTrailItem = {
   id: string;
   name: string;
+  returnState?: CategoryReturnState;
 };
 
 export type CatalogRecordKind = "category" | "brand" | "unit";
+
+export type CatalogCreateIntent = {
+  key: string;
+  fingerprint: string;
+};
 
 export const catalogStatusMeta = {
   active: { label: "启用", variant: "success" as const },
