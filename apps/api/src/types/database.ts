@@ -218,6 +218,13 @@ export type Database = {
             foreignKeyName: "ai_call_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ai_call_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -450,7 +457,218 @@ export type Database = {
             foreignKeyName: "camera_access_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "camera_access_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catalog_brands: {
+        Row: {
+          code: string
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          legal_name: string | null
+          logo_file_id: string | null
+          name: string
+          sort_order: number
+          status: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          legal_name?: string | null
+          logo_file_id?: string | null
+          name: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          legal_name?: string | null
+          logo_file_id?: string | null
+          name?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_brands_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_brands_logo_file_id_fkey"
+            columns: ["logo_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_brands_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catalog_categories: {
+        Row: {
+          code: string
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          level: number
+          name: string
+          parent_id: string | null
+          sort_order: number
+          status: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          level: number
+          name: string
+          parent_id?: string | null
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          level?: number
+          name?: string
+          parent_id?: string | null
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_categories_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_categories_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catalog_units: {
+        Row: {
+          base_unit_id: string | null
+          code: string
+          conversion_factor: number
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          name: string
+          sort_order: number
+          status: string
+          symbol: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          base_unit_id?: string | null
+          code: string
+          conversion_factor?: number
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          name: string
+          sort_order?: number
+          status?: string
+          symbol: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          base_unit_id?: string | null
+          code?: string
+          conversion_factor?: number
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          status?: string
+          symbol?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_units_base_unit_id_fkey"
+            columns: ["base_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_units_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_units_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -1083,6 +1301,13 @@ export type Database = {
             foreignKeyName: "customer_service_ticket_actions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "customer_service_ticket_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1171,6 +1396,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_service_tickets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "customer_service_tickets_tenant_id_fkey"
@@ -1270,6 +1502,13 @@ export type Database = {
             foreignKeyName: "customer_sources_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "customer_sources_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1355,6 +1594,13 @@ export type Database = {
             foreignKeyName: "customers_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1404,6 +1650,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenant_departments"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "department_post_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "department_post_rules_tenant_id_fkey"
@@ -1474,10 +1727,473 @@ export type Database = {
             foreignKeyName: "departments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "departments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
+      }
+      douyin_authorization_event_deliveries: {
+        Row: {
+          authorizer_appid: string | null
+          claim_expires_at: string | null
+          claim_token: string | null
+          completed_at: string | null
+          component_appid: string
+          created_at: string
+          event_key: string
+          event_name: string
+          occurred_at: string
+          processing_state: string
+          updated_at: string
+        }
+        Insert: {
+          authorizer_appid?: string | null
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          completed_at?: string | null
+          component_appid: string
+          created_at?: string
+          event_key: string
+          event_name: string
+          occurred_at: string
+          processing_state?: string
+          updated_at?: string
+        }
+        Update: {
+          authorizer_appid?: string | null
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          completed_at?: string | null
+          component_appid?: string
+          created_at?: string
+          event_key?: string
+          event_name?: string
+          occurred_at?: string
+          processing_state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_authorization_event_deliveries_component_appid_fkey"
+            columns: ["component_appid"]
+            isOneToOne: false
+            referencedRelation: "douyin_third_party_components"
+            referencedColumns: ["component_appid"]
+          },
+        ]
+      }
+      douyin_authorization_event_subject_leases: {
+        Row: {
+          active_event_key: string | null
+          active_event_name: string | null
+          active_occurred_at: string | null
+          authorizer_appid: string
+          claim_expires_at: string | null
+          claim_token: string | null
+          component_appid: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          active_event_key?: string | null
+          active_event_name?: string | null
+          active_occurred_at?: string | null
+          authorizer_appid: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          component_appid: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          active_event_key?: string | null
+          active_event_name?: string | null
+          active_occurred_at?: string | null
+          authorizer_appid?: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          component_appid?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_authorization_event_subject_leases_component_appid_fkey"
+            columns: ["component_appid"]
+            isOneToOne: false
+            referencedRelation: "douyin_third_party_components"
+            referencedColumns: ["component_appid"]
+          },
+        ]
+      }
+      douyin_miniapp_installations: {
+        Row: {
+          access_token_ciphertext: string | null
+          access_token_expires_at: string | null
+          access_token_iv: string | null
+          access_token_key_version: string | null
+          access_token_tag: string | null
+          authorization_event_occurred_at: string | null
+          authorization_status: string
+          authorizer_appid: string
+          component_appid: string
+          created_at: string
+          deployment_key: string | null
+          id: string
+          installation_kind: string
+          last_audited_at: string | null
+          last_released_at: string | null
+          last_submitted_at: string | null
+          permission_snapshot: Json
+          refresh_token_ciphertext: string | null
+          refresh_token_expires_at: string | null
+          refresh_token_iv: string | null
+          refresh_token_key_version: string | null
+          refresh_token_tag: string | null
+          revoked_at: string | null
+          runtime_config: Json
+          template_id: string | null
+          template_release_id: string | null
+          template_version: string | null
+          tenant_id: string | null
+          token_refresh_claim_expires_at: string | null
+          token_refresh_claim_token: string | null
+          token_refresh_last_error: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token_ciphertext?: string | null
+          access_token_expires_at?: string | null
+          access_token_iv?: string | null
+          access_token_key_version?: string | null
+          access_token_tag?: string | null
+          authorization_event_occurred_at?: string | null
+          authorization_status?: string
+          authorizer_appid: string
+          component_appid: string
+          created_at?: string
+          deployment_key?: string | null
+          id?: string
+          installation_kind?: string
+          last_audited_at?: string | null
+          last_released_at?: string | null
+          last_submitted_at?: string | null
+          permission_snapshot?: Json
+          refresh_token_ciphertext?: string | null
+          refresh_token_expires_at?: string | null
+          refresh_token_iv?: string | null
+          refresh_token_key_version?: string | null
+          refresh_token_tag?: string | null
+          revoked_at?: string | null
+          runtime_config?: Json
+          template_id?: string | null
+          template_release_id?: string | null
+          template_version?: string | null
+          tenant_id?: string | null
+          token_refresh_claim_expires_at?: string | null
+          token_refresh_claim_token?: string | null
+          token_refresh_last_error?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token_ciphertext?: string | null
+          access_token_expires_at?: string | null
+          access_token_iv?: string | null
+          access_token_key_version?: string | null
+          access_token_tag?: string | null
+          authorization_event_occurred_at?: string | null
+          authorization_status?: string
+          authorizer_appid?: string
+          component_appid?: string
+          created_at?: string
+          deployment_key?: string | null
+          id?: string
+          installation_kind?: string
+          last_audited_at?: string | null
+          last_released_at?: string | null
+          last_submitted_at?: string | null
+          permission_snapshot?: Json
+          refresh_token_ciphertext?: string | null
+          refresh_token_expires_at?: string | null
+          refresh_token_iv?: string | null
+          refresh_token_key_version?: string | null
+          refresh_token_tag?: string | null
+          revoked_at?: string | null
+          runtime_config?: Json
+          template_id?: string | null
+          template_release_id?: string | null
+          template_version?: string | null
+          tenant_id?: string | null
+          token_refresh_claim_expires_at?: string | null
+          token_refresh_claim_token?: string | null
+          token_refresh_last_error?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_miniapp_installations_component_appid_fkey"
+            columns: ["component_appid"]
+            isOneToOne: false
+            referencedRelation: "douyin_third_party_components"
+            referencedColumns: ["component_appid"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_installations_template_release_owner_fkey"
+            columns: ["template_release_id", "id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_releases"
+            referencedColumns: ["id", "installation_id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_installations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_installations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_miniapp_lead_submissions: {
+        Row: {
+          already_submitted: boolean
+          created_at: string
+          douyin_miniapp_installation_id: string
+          id: string
+          idempotency_key: string
+          marketing_lead_id: string
+          message: string
+          request_digest: string
+          sms_verification_code_id: string
+          tenant_id: string
+          updated_existing: boolean
+        }
+        Insert: {
+          already_submitted: boolean
+          created_at?: string
+          douyin_miniapp_installation_id: string
+          id?: string
+          idempotency_key: string
+          marketing_lead_id: string
+          message: string
+          request_digest: string
+          sms_verification_code_id: string
+          tenant_id: string
+          updated_existing: boolean
+        }
+        Update: {
+          already_submitted?: boolean
+          created_at?: string
+          douyin_miniapp_installation_id?: string
+          id?: string
+          idempotency_key?: string
+          marketing_lead_id?: string
+          message?: string
+          request_digest?: string
+          sms_verification_code_id?: string
+          tenant_id?: string
+          updated_existing?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_lead_submissions_installation_id_fkey"
+            columns: ["douyin_miniapp_installation_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_lead_submissions_marketing_lead_id_fkey"
+            columns: ["marketing_lead_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_lead_submissions_sms_verification_code_id_fkey"
+            columns: ["sms_verification_code_id"]
+            isOneToOne: true
+            referencedRelation: "sms_verification_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_lead_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_lead_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_miniapp_releases: {
+        Row: {
+          audit_host_names: string[]
+          audit_note: string | null
+          audit_result: Json | null
+          audited_at: string | null
+          channel: string
+          created_at: string
+          description: string
+          douyin_log_id: string | null
+          ext_json: Json
+          id: string
+          installation_id: string
+          operation_claim_expires_at: string | null
+          operation_claim_token: string | null
+          operation_name: string | null
+          platform_operator_id: string
+          released_at: string | null
+          status: string
+          submitted_at: string | null
+          template_id: string
+          template_version: string
+          test_qr_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          audit_host_names?: string[]
+          audit_note?: string | null
+          audit_result?: Json | null
+          audited_at?: string | null
+          channel?: string
+          created_at?: string
+          description: string
+          douyin_log_id?: string | null
+          ext_json: Json
+          id?: string
+          installation_id: string
+          operation_claim_expires_at?: string | null
+          operation_claim_token?: string | null
+          operation_name?: string | null
+          platform_operator_id: string
+          released_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          template_id: string
+          template_version: string
+          test_qr_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          audit_host_names?: string[]
+          audit_note?: string | null
+          audit_result?: Json | null
+          audited_at?: string | null
+          channel?: string
+          created_at?: string
+          description?: string
+          douyin_log_id?: string | null
+          ext_json?: Json
+          id?: string
+          installation_id?: string
+          operation_claim_expires_at?: string | null
+          operation_claim_token?: string | null
+          operation_name?: string | null
+          platform_operator_id?: string
+          released_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          template_id?: string
+          template_version?: string
+          test_qr_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_miniapp_releases_installation_id_fkey"
+            columns: ["installation_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_releases_platform_operator_id_fkey"
+            columns: ["platform_operator_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_third_party_components: {
+        Row: {
+          access_token_ciphertext: string | null
+          access_token_expires_at: string | null
+          access_token_iv: string | null
+          access_token_key_version: string | null
+          access_token_tag: string | null
+          component_appid: string
+          component_ticket_ciphertext: string | null
+          component_ticket_iv: string | null
+          component_ticket_key_version: string | null
+          component_ticket_received_at: string | null
+          component_ticket_tag: string | null
+          created_at: string
+          status: string
+          token_refresh_claim_expires_at: string | null
+          token_refresh_claim_token: string | null
+          token_refresh_last_error: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token_ciphertext?: string | null
+          access_token_expires_at?: string | null
+          access_token_iv?: string | null
+          access_token_key_version?: string | null
+          access_token_tag?: string | null
+          component_appid: string
+          component_ticket_ciphertext?: string | null
+          component_ticket_iv?: string | null
+          component_ticket_key_version?: string | null
+          component_ticket_received_at?: string | null
+          component_ticket_tag?: string | null
+          created_at?: string
+          status?: string
+          token_refresh_claim_expires_at?: string | null
+          token_refresh_claim_token?: string | null
+          token_refresh_last_error?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token_ciphertext?: string | null
+          access_token_expires_at?: string | null
+          access_token_iv?: string | null
+          access_token_key_version?: string | null
+          access_token_tag?: string | null
+          component_appid?: string
+          component_ticket_ciphertext?: string | null
+          component_ticket_iv?: string | null
+          component_ticket_key_version?: string | null
+          component_ticket_received_at?: string | null
+          component_ticket_tag?: string | null
+          created_at?: string
+          status?: string
+          token_refresh_claim_expires_at?: string | null
+          token_refresh_claim_token?: string | null
+          token_refresh_last_error?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       employee_permission_overrides: {
         Row: {
@@ -1615,6 +2331,13 @@ export type Database = {
             foreignKeyName: "employee_personalization_rules_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "employee_personalization_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1722,6 +2445,13 @@ export type Database = {
             foreignKeyName: "employees_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "employees_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1775,6 +2505,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "expense_requests"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_request_approvals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "expense_request_approvals_tenant_id_fkey"
@@ -1835,6 +2572,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "expense_request_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "expense_request_categories_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1900,6 +2644,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "expense_requests"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_request_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "expense_request_items_tenant_id_fkey"
@@ -1973,6 +2724,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_request_settlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "expense_request_settlements_tenant_id_fkey"
@@ -2105,6 +2863,13 @@ export type Database = {
             foreignKeyName: "expense_requests_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "expense_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2158,6 +2923,13 @@ export type Database = {
             foreignKeyName: "external_referrers_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "external_referrers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2186,6 +2958,83 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      finance_closing_periods: {
+        Row: {
+          closed_at: string | null
+          closed_by_employee_id: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          period_month: string
+          reopen_reason: string | null
+          reopened_at: string | null
+          reopened_by_employee_id: string | null
+          snapshot_json: Json
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by_employee_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          period_month: string
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by_employee_id?: string | null
+          snapshot_json?: Json
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by_employee_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          period_month?: string
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by_employee_id?: string | null
+          snapshot_json?: Json
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_closing_periods_closed_by_employee_id_fkey"
+            columns: ["closed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_closing_periods_reopened_by_employee_id_fkey"
+            columns: ["reopened_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_closing_periods_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "finance_closing_periods_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       finance_cost_categories: {
         Row: {
@@ -2242,6 +3091,13 @@ export type Database = {
             foreignKeyName: "finance_cost_categories_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "finance_cost_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2268,9 +3124,16 @@ export type Database = {
           expense_settlement_id: string | null
           handled_by: string | null
           id: string
+          legacy_payment_ledger_marked_at: string | null
+          legacy_payment_ledger_marked_by: string | null
+          legacy_payment_ledger_reason: string | null
           metadata: Json
           occurred_at: string
           payment_id: string | null
+          payment_link_previous_payment_id: string | null
+          payment_link_reason: string | null
+          payment_linked_at: string | null
+          payment_linked_by: string | null
           project_id: string | null
           source_id: string
           source_type: string
@@ -2292,9 +3155,16 @@ export type Database = {
           expense_settlement_id?: string | null
           handled_by?: string | null
           id?: string
+          legacy_payment_ledger_marked_at?: string | null
+          legacy_payment_ledger_marked_by?: string | null
+          legacy_payment_ledger_reason?: string | null
           metadata?: Json
           occurred_at?: string
           payment_id?: string | null
+          payment_link_previous_payment_id?: string | null
+          payment_link_reason?: string | null
+          payment_linked_at?: string | null
+          payment_linked_by?: string | null
           project_id?: string | null
           source_id: string
           source_type: string
@@ -2316,9 +3186,16 @@ export type Database = {
           expense_settlement_id?: string | null
           handled_by?: string | null
           id?: string
+          legacy_payment_ledger_marked_at?: string | null
+          legacy_payment_ledger_marked_by?: string | null
+          legacy_payment_ledger_reason?: string | null
           metadata?: Json
           occurred_at?: string
           payment_id?: string | null
+          payment_link_previous_payment_id?: string | null
+          payment_link_reason?: string | null
+          payment_linked_at?: string | null
+          payment_linked_by?: string | null
           project_id?: string | null
           source_id?: string
           source_type?: string
@@ -2364,10 +3241,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "finance_ledger_entries_legacy_payment_ledger_marked_by_fkey"
+            columns: ["legacy_payment_ledger_marked_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "finance_ledger_entries_payment_id_fkey"
             columns: ["payment_id"]
             isOneToOne: false
             referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_payment_linked_by_fkey"
+            columns: ["payment_linked_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
           {
@@ -2381,6 +3272,13 @@ export type Database = {
             foreignKeyName: "finance_ledger_entries_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2389,6 +3287,151 @@ export type Database = {
             columns: ["workflow_task_id"]
             isOneToOne: false
             referencedRelation: "workflow_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_monthly_difference_resolutions: {
+        Row: {
+          created_at: string
+          handled_at: string
+          handled_by: string | null
+          id: string
+          month: string
+          note: string | null
+          project_id: string | null
+          source_id: string
+          source_type: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          handled_at?: string
+          handled_by?: string | null
+          id?: string
+          month: string
+          note?: string | null
+          project_id?: string | null
+          source_id: string
+          source_type: string
+          status: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          handled_at?: string
+          handled_by?: string | null
+          id?: string
+          month?: string
+          note?: string | null
+          project_id?: string | null
+          source_id?: string
+          source_type?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_monthly_difference_resolutions_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_monthly_difference_resolutions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_monthly_difference_resolutions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "finance_monthly_difference_resolutions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_reconciliation_exception_actions: {
+        Row: {
+          action: string
+          actor_employee_id: string | null
+          created_at: string
+          exception_code: string
+          exception_fingerprint: string
+          id: string
+          project_id: string | null
+          remark: string
+          subject_id: string | null
+          subject_type: string
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_employee_id?: string | null
+          created_at?: string
+          exception_code: string
+          exception_fingerprint: string
+          id?: string
+          project_id?: string | null
+          remark: string
+          subject_id?: string | null
+          subject_type: string
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_employee_id?: string | null
+          created_at?: string
+          exception_code?: string
+          exception_fingerprint?: string
+          id?: string
+          project_id?: string | null
+          remark?: string
+          subject_id?: string | null
+          subject_type?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_reconciliation_exception_actions_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_reconciliation_exception_actions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_reconciliation_exception_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "finance_reconciliation_exception_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -2442,6 +3485,13 @@ export type Database = {
             foreignKeyName: "marketing_assets_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "marketing_assets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2486,6 +3536,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_campaign_project_scopes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "marketing_campaign_project_scopes_tenant_id_fkey"
@@ -2660,6 +3717,13 @@ export type Database = {
             foreignKeyName: "marketing_campaigns_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "marketing_campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2677,12 +3741,15 @@ export type Database = {
           block_id: string | null
           created_at: string
           customer_id: string | null
+          douyin_miniapp_installation_id: string | null
           event_name: string
           id: string
           page_id: string | null
           page_version_id: string | null
           payload: Json
           request_ip: string | null
+          source: string
+          subject_hash: string | null
           tenant_id: string | null
           user_agent: string | null
           wx_openid: string | null
@@ -2691,12 +3758,15 @@ export type Database = {
           block_id?: string | null
           created_at?: string
           customer_id?: string | null
+          douyin_miniapp_installation_id?: string | null
           event_name: string
           id?: string
           page_id?: string | null
           page_version_id?: string | null
           payload?: Json
           request_ip?: string | null
+          source?: string
+          subject_hash?: string | null
           tenant_id?: string | null
           user_agent?: string | null
           wx_openid?: string | null
@@ -2705,12 +3775,15 @@ export type Database = {
           block_id?: string | null
           created_at?: string
           customer_id?: string | null
+          douyin_miniapp_installation_id?: string | null
           event_name?: string
           id?: string
           page_id?: string | null
           page_version_id?: string | null
           payload?: Json
           request_ip?: string | null
+          source?: string
+          subject_hash?: string | null
           tenant_id?: string | null
           user_agent?: string | null
           wx_openid?: string | null
@@ -2721,6 +3794,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_events_douyin_miniapp_installation_id_fkey"
+            columns: ["douyin_miniapp_installation_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
             referencedColumns: ["id"]
           },
           {
@@ -2741,6 +3821,13 @@ export type Database = {
             foreignKeyName: "marketing_events_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "marketing_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2752,6 +3839,7 @@ export type Database = {
           community: string | null
           created_at: string
           customer_id: string | null
+          douyin_miniapp_installation_id: string | null
           follow_remark: string | null
           followed_at: string | null
           followed_by: string | null
@@ -2773,6 +3861,7 @@ export type Database = {
           community?: string | null
           created_at?: string
           customer_id?: string | null
+          douyin_miniapp_installation_id?: string | null
           follow_remark?: string | null
           followed_at?: string | null
           followed_by?: string | null
@@ -2794,6 +3883,7 @@ export type Database = {
           community?: string | null
           created_at?: string
           customer_id?: string | null
+          douyin_miniapp_installation_id?: string | null
           follow_remark?: string | null
           followed_at?: string | null
           followed_by?: string | null
@@ -2819,6 +3909,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "marketing_leads_douyin_miniapp_installation_id_fkey"
+            columns: ["douyin_miniapp_installation_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "marketing_leads_followed_by_fkey"
             columns: ["followed_by"]
             isOneToOne: false
@@ -2838,6 +3935,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "marketing_page_versions"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_leads_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "marketing_leads_tenant_id_fkey"
@@ -2899,6 +4003,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "marketing_pages"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_page_versions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "marketing_page_versions_tenant_id_fkey"
@@ -2996,6 +4107,13 @@ export type Database = {
             foreignKeyName: "marketing_pages_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "marketing_pages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -3069,66 +4187,14 @@ export type Database = {
             foreignKeyName: "notifications_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
-        ]
-      }
-      ops_script_runs: {
-        Row: {
-          created_at: string
-          duration_ms: number | null
-          executed_by_employee_id: string | null
-          exit_code: number | null
-          finished_at: string | null
-          id: string
-          reason: string | null
-          script_key: string
-          script_label: string
-          started_at: string
-          status: string
-          stderr: string | null
-          stdout: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          duration_ms?: number | null
-          executed_by_employee_id?: string | null
-          exit_code?: number | null
-          finished_at?: string | null
-          id?: string
-          reason?: string | null
-          script_key: string
-          script_label: string
-          started_at?: string
-          status: string
-          stderr?: string | null
-          stdout?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          duration_ms?: number | null
-          executed_by_employee_id?: string | null
-          exit_code?: number | null
-          finished_at?: string | null
-          id?: string
-          reason?: string | null
-          script_key?: string
-          script_label?: string
-          started_at?: string
-          status?: string
-          stderr?: string | null
-          stdout?: string | null
-          updated_at?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "ops_script_runs_executed_by_employee_id_fkey"
-            columns: ["executed_by_employee_id"]
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: "employees"
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -3240,7 +4306,332 @@ export type Database = {
             foreignKeyName: "ocr_recognitions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ocr_recognitions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ocr_tenant_policies: {
+        Row: {
+          allowed_document_types: string[]
+          created_at: string
+          daily_limit: number | null
+          enabled: boolean
+          enabled_at: string | null
+          remark: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+        }
+        Insert: {
+          allowed_document_types?: string[]
+          created_at?: string
+          daily_limit?: number | null
+          enabled?: boolean
+          enabled_at?: string | null
+          remark?: string | null
+          tenant_id: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Update: {
+          allowed_document_types?: string[]
+          created_at?: string
+          daily_limit?: number | null
+          enabled?: boolean
+          enabled_at?: string | null
+          remark?: string | null
+          tenant_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_tenant_policies_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ocr_tenant_policies_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_tenant_policies_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ops_script_runs: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          executed_by_employee_id: string | null
+          exit_code: number | null
+          finished_at: string | null
+          id: string
+          reason: string | null
+          script_key: string
+          script_label: string
+          started_at: string
+          status: string
+          stderr: string | null
+          stdout: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          executed_by_employee_id?: string | null
+          exit_code?: number | null
+          finished_at?: string | null
+          id?: string
+          reason?: string | null
+          script_key: string
+          script_label: string
+          started_at?: string
+          status: string
+          stderr?: string | null
+          stdout?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          executed_by_employee_id?: string | null
+          exit_code?: number | null
+          finished_at?: string | null
+          id?: string
+          reason?: string | null
+          script_key?: string
+          script_label?: string
+          started_at?: string
+          status?: string
+          stderr?: string | null
+          stdout?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ops_script_runs_executed_by_employee_id_fkey"
+            columns: ["executed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_commission_ledger: {
+        Row: {
+          available_at: string | null
+          base_amount_fen: number
+          blocked_reason: string | null
+          commission_amount_fen: number
+          commission_rate_bps: number
+          created_at: string
+          failure_reason: string | null
+          id: string
+          partner_id: string
+          revenue_event_id: string
+          revenue_type: string
+          settlement_batch_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          available_at?: string | null
+          base_amount_fen: number
+          blocked_reason?: string | null
+          commission_amount_fen: number
+          commission_rate_bps: number
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          partner_id: string
+          revenue_event_id: string
+          revenue_type: string
+          settlement_batch_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          available_at?: string | null
+          base_amount_fen?: number
+          blocked_reason?: string | null
+          commission_amount_fen?: number
+          commission_rate_bps?: number
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          partner_id?: string
+          revenue_event_id?: string
+          revenue_type?: string
+          settlement_batch_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_commission_ledger_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_commission_ledger_revenue_event_id_fkey"
+            columns: ["revenue_event_id"]
+            isOneToOne: false
+            referencedRelation: "platform_revenue_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_commission_ledger_settlement_batch_fk"
+            columns: ["settlement_batch_id"]
+            isOneToOne: false
+            referencedRelation: "partner_settlement_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_settlement_batches: {
+        Row: {
+          batch_no: string
+          created_at: string
+          id: string
+          paid_at: string | null
+          paid_by_employee_id: string | null
+          partner_id: string
+          payment_proof_url: string | null
+          payment_reference: string | null
+          period_end: string
+          period_start: string
+          remark: string | null
+          reviewed_by_employee_id: string | null
+          settlement_method: string
+          status: string
+          total_amount_fen: number
+          updated_at: string
+        }
+        Insert: {
+          batch_no: string
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          paid_by_employee_id?: string | null
+          partner_id: string
+          payment_proof_url?: string | null
+          payment_reference?: string | null
+          period_end: string
+          period_start: string
+          remark?: string | null
+          reviewed_by_employee_id?: string | null
+          settlement_method?: string
+          status?: string
+          total_amount_fen?: number
+          updated_at?: string
+        }
+        Update: {
+          batch_no?: string
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          paid_by_employee_id?: string | null
+          partner_id?: string
+          payment_proof_url?: string | null
+          payment_reference?: string | null
+          period_end?: string
+          period_start?: string
+          remark?: string | null
+          reviewed_by_employee_id?: string | null
+          settlement_method?: string
+          status?: string
+          total_amount_fen?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_settlement_batches_paid_by_employee_id_fkey"
+            columns: ["paid_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_settlement_batches_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_settlement_batches_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_settlement_items: {
+        Row: {
+          amount_fen: number
+          batch_id: string
+          created_at: string
+          id: string
+          ledger_id: string
+          revenue_event_id: string
+        }
+        Insert: {
+          amount_fen: number
+          batch_id: string
+          created_at?: string
+          id?: string
+          ledger_id: string
+          revenue_event_id: string
+        }
+        Update: {
+          amount_fen?: number
+          batch_id?: string
+          created_at?: string
+          id?: string
+          ledger_id?: string
+          revenue_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_settlement_items_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "partner_settlement_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_settlement_items_ledger_id_fkey"
+            columns: ["ledger_id"]
+            isOneToOne: false
+            referencedRelation: "partner_commission_ledger"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_settlement_items_revenue_event_id_fkey"
+            columns: ["revenue_event_id"]
+            isOneToOne: false
+            referencedRelation: "platform_revenue_events"
             referencedColumns: ["id"]
           },
         ]
@@ -3365,6 +4756,161 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      phone_identity_login_candidates: {
+        Row: {
+          binding_state: string
+          created_at: string
+          customer_id: string | null
+          display_snapshot: Json
+          employee_id: string | null
+          id: string
+          partner_id: string | null
+          partner_member_id: string | null
+          session_id: string
+          target_mode: string
+          tenant_id: string | null
+        }
+        Insert: {
+          binding_state: string
+          created_at?: string
+          customer_id?: string | null
+          display_snapshot: Json
+          employee_id?: string | null
+          id: string
+          partner_id?: string | null
+          partner_member_id?: string | null
+          session_id: string
+          target_mode: string
+          tenant_id?: string | null
+        }
+        Update: {
+          binding_state?: string
+          created_at?: string
+          customer_id?: string | null
+          display_snapshot?: Json
+          employee_id?: string | null
+          id?: string
+          partner_id?: string | null
+          partner_member_id?: string | null
+          session_id?: string
+          target_mode?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_identity_login_candidates_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_identity_login_candidates_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_identity_login_candidates_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_identity_login_candidates_partner_member_id_fkey"
+            columns: ["partner_member_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_identity_login_candidates_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "phone_identity_login_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_identity_login_candidates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "phone_identity_login_candidates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      phone_identity_login_sessions: {
+        Row: {
+          auth_user_id: string
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          openid_hash: string
+          selected_candidate_id: string | null
+          selection_token_hash: string | null
+          share_context: Json
+          sms_verification_code_id: string
+          status: string
+          updated_at: string
+          verified_phone: string
+        }
+        Insert: {
+          auth_user_id: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          openid_hash: string
+          selected_candidate_id?: string | null
+          selection_token_hash?: string | null
+          share_context?: Json
+          sms_verification_code_id: string
+          status?: string
+          updated_at?: string
+          verified_phone: string
+        }
+        Update: {
+          auth_user_id?: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          openid_hash?: string
+          selected_candidate_id?: string | null
+          selection_token_hash?: string | null
+          share_context?: Json
+          sms_verification_code_id?: string
+          status?: string
+          updated_at?: string
+          verified_phone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_identity_login_sessions_selected_candidate_fkey"
+            columns: ["id", "selected_candidate_id"]
+            isOneToOne: false
+            referencedRelation: "phone_identity_login_candidates"
+            referencedColumns: ["session_id", "id"]
+          },
+          {
+            foreignKeyName: "phone_identity_login_sessions_sms_verification_code_id_fkey"
+            columns: ["sms_verification_code_id"]
+            isOneToOne: true
+            referencedRelation: "sms_verification_codes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       picture_asset_categories: {
         Row: {
@@ -3795,7 +5341,77 @@ export type Database = {
             foreignKeyName: "platform_audit_logs_target_tenant_id_fkey"
             columns: ["target_tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "platform_audit_logs_target_tenant_id_fkey"
+            columns: ["target_tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_credit_recharge_products: {
+        Row: {
+          amount_fen: number
+          bonus_credits: number
+          code: string
+          created_at: string
+          created_by_employee_id: string | null
+          credits: number
+          enabled: boolean
+          id: string
+          metadata: Json
+          sort_order: number
+          title: string
+          updated_at: string
+          updated_by_employee_id: string | null
+        }
+        Insert: {
+          amount_fen: number
+          bonus_credits?: number
+          code: string
+          created_at?: string
+          created_by_employee_id?: string | null
+          credits: number
+          enabled?: boolean
+          id?: string
+          metadata?: Json
+          sort_order?: number
+          title: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Update: {
+          amount_fen?: number
+          bonus_credits?: number
+          code?: string
+          created_at?: string
+          created_by_employee_id?: string | null
+          credits?: number
+          enabled?: boolean
+          id?: string
+          metadata?: Json
+          sort_order?: number
+          title?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_credit_recharge_products_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_credit_recharge_products_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -3817,8 +5433,8 @@ export type Database = {
           object_key: string
           original_name: string | null
           owner_id: string | null
-          owner_visitor_id: string | null
           owner_type: string
+          owner_visitor_id: string | null
           provider: string
           public_url: string | null
           region: string | null
@@ -3846,8 +5462,8 @@ export type Database = {
           object_key: string
           original_name?: string | null
           owner_id?: string | null
-          owner_visitor_id?: string | null
           owner_type: string
+          owner_visitor_id?: string | null
           provider?: string
           public_url?: string | null
           region?: string | null
@@ -3875,8 +5491,8 @@ export type Database = {
           object_key?: string
           original_name?: string | null
           owner_id?: string | null
-          owner_visitor_id?: string | null
           owner_type?: string
+          owner_visitor_id?: string | null
           provider?: string
           public_url?: string | null
           region?: string | null
@@ -3895,6 +5511,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_file_objects_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "platform_file_objects_tenant_id_fkey"
@@ -3960,6 +5583,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "platform_leads"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_lead_assign_logs_target_tenant_id_fkey"
+            columns: ["target_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "platform_lead_assign_logs_target_tenant_id_fkey"
@@ -4059,6 +5689,13 @@ export type Database = {
             foreignKeyName: "platform_leads_assigned_tenant_id_fkey"
             columns: ["assigned_tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "platform_leads_assigned_tenant_id_fkey"
+            columns: ["assigned_tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -4073,7 +5710,449 @@ export type Database = {
             foreignKeyName: "platform_leads_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "platform_leads_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_partner_applications: {
+        Row: {
+          applicant_name: string
+          application_no: string
+          business_description: string | null
+          contact_name: string
+          converted_partner_id: string | null
+          created_at: string
+          id: string
+          message: string | null
+          metadata: Json
+          phone: string
+          region_codes: string[]
+          region_name: string | null
+          resource_description: string | null
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          source_channel: string
+          source_url: string | null
+          status: string
+          subject_type: string
+          updated_at: string
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+        }
+        Insert: {
+          applicant_name: string
+          application_no: string
+          business_description?: string | null
+          contact_name: string
+          converted_partner_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          metadata?: Json
+          phone: string
+          region_codes?: string[]
+          region_name?: string | null
+          resource_description?: string | null
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          source_channel?: string
+          source_url?: string | null
+          status?: string
+          subject_type: string
+          updated_at?: string
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Update: {
+          applicant_name?: string
+          application_no?: string
+          business_description?: string | null
+          contact_name?: string
+          converted_partner_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          metadata?: Json
+          phone?: string
+          region_codes?: string[]
+          region_name?: string | null
+          resource_description?: string | null
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          source_channel?: string
+          source_url?: string | null
+          status?: string
+          subject_type?: string
+          updated_at?: string
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_partner_applications_converted_partner_id_fkey"
+            columns: ["converted_partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_partner_applications_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_partner_invite_codes: {
+        Row: {
+          approved_count: number
+          campaign_code: string | null
+          code: string
+          created_at: string
+          created_by_employee_id: string | null
+          expires_at: string | null
+          id: string
+          partner_id: string
+          region_code: string | null
+          scan_count: number
+          status: string
+          submitted_count: number
+          updated_at: string
+        }
+        Insert: {
+          approved_count?: number
+          campaign_code?: string | null
+          code: string
+          created_at?: string
+          created_by_employee_id?: string | null
+          expires_at?: string | null
+          id?: string
+          partner_id: string
+          region_code?: string | null
+          scan_count?: number
+          status?: string
+          submitted_count?: number
+          updated_at?: string
+        }
+        Update: {
+          approved_count?: number
+          campaign_code?: string | null
+          code?: string
+          created_at?: string
+          created_by_employee_id?: string | null
+          expires_at?: string | null
+          id?: string
+          partner_id?: string
+          region_code?: string | null
+          scan_count?: number
+          status?: string
+          submitted_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_partner_invite_codes_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_partner_invite_codes_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_partner_levels: {
+        Row: {
+          code: string
+          created_at: string
+          effective_at: string
+          expired_at: string | null
+          id: string
+          lead_service_fee_commission_bps: number
+          lead_service_fee_default_rate_bps: number
+          name: string
+          requirements: Json
+          settlement_cycle: string
+          settlement_method: string
+          sort_order: number
+          status: string
+          tenant_recharge_commission_bps: number
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          effective_at?: string
+          expired_at?: string | null
+          id?: string
+          lead_service_fee_commission_bps: number
+          lead_service_fee_default_rate_bps?: number
+          name: string
+          requirements?: Json
+          settlement_cycle?: string
+          settlement_method?: string
+          sort_order?: number
+          status?: string
+          tenant_recharge_commission_bps: number
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          effective_at?: string
+          expired_at?: string | null
+          id?: string
+          lead_service_fee_commission_bps?: number
+          lead_service_fee_default_rate_bps?: number
+          name?: string
+          requirements?: Json
+          settlement_cycle?: string
+          settlement_method?: string
+          sort_order?: number
+          status?: string
+          tenant_recharge_commission_bps?: number
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      platform_partner_member_rebind_requests: {
+        Row: {
+          applicant_name: string | null
+          created_at: string
+          id: string
+          member_id: string
+          new_auth_user_id: string
+          old_auth_user_id: string
+          partner_id: string
+          phone: string
+          reason: string | null
+          review_comment: string | null
+          reviewed_at: string | null
+          reviewer_employee_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          applicant_name?: string | null
+          created_at?: string
+          id?: string
+          member_id: string
+          new_auth_user_id: string
+          old_auth_user_id: string
+          partner_id: string
+          phone: string
+          reason?: string | null
+          review_comment?: string | null
+          reviewed_at?: string | null
+          reviewer_employee_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          applicant_name?: string | null
+          created_at?: string
+          id?: string
+          member_id?: string
+          new_auth_user_id?: string
+          old_auth_user_id?: string
+          partner_id?: string
+          phone?: string
+          reason?: string | null
+          review_comment?: string | null
+          reviewed_at?: string | null
+          reviewer_employee_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_partner_member_rebind_reques_reviewer_employee_id_fkey"
+            columns: ["reviewer_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_partner_member_rebind_requests_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_partner_member_rebind_requests_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_partner_members: {
+        Row: {
+          auth_user_id: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          id: string
+          name: string
+          partner_id: string
+          phone: string
+          remark: string | null
+          role: string
+          status: string
+          updated_at: string
+          updated_by_employee_id: string | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          name: string
+          partner_id: string
+          phone: string
+          remark?: string | null
+          role?: string
+          status?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          name?: string
+          partner_id?: string
+          phone?: string
+          remark?: string | null
+          role?: string
+          status?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_partner_members_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_partner_members_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_partner_members_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_partners: {
+        Row: {
+          contact_name: string
+          contract_status: string
+          created_at: string
+          created_by_employee_id: string | null
+          id: string
+          level_id: string
+          name: string
+          phone: string
+          region_codes: string[]
+          remark: string | null
+          settlement_account: Json
+          settlement_account_status: string
+          status: string
+          subject_type: string
+          updated_at: string
+          updated_by_employee_id: string | null
+        }
+        Insert: {
+          contact_name: string
+          contract_status?: string
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          level_id: string
+          name: string
+          phone: string
+          region_codes?: string[]
+          remark?: string | null
+          settlement_account?: Json
+          settlement_account_status?: string
+          status?: string
+          subject_type: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Update: {
+          contact_name?: string
+          contract_status?: string
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          level_id?: string
+          name?: string
+          phone?: string
+          region_codes?: string[]
+          remark?: string | null
+          settlement_account?: Json
+          settlement_account_status?: string
+          status?: string
+          subject_type?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_partners_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_partners_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_partners_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -4183,6 +6262,121 @@ export type Database = {
           },
         ]
       }
+      platform_revenue_events: {
+        Row: {
+          binding_id: string | null
+          commission_rate_bps: number
+          confirmed_at: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          gross_amount_fen: number
+          id: string
+          metadata: Json
+          paid_amount_fen: number
+          paid_at: string | null
+          partner_id: string | null
+          partner_level_id: string | null
+          refundable_until: string | null
+          revenue_amount_fen: number
+          revenue_type: string
+          service_fee_rate_bps: number | null
+          source_id: string
+          source_type: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          binding_id?: string | null
+          commission_rate_bps: number
+          confirmed_at?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          gross_amount_fen: number
+          id?: string
+          metadata?: Json
+          paid_amount_fen?: number
+          paid_at?: string | null
+          partner_id?: string | null
+          partner_level_id?: string | null
+          refundable_until?: string | null
+          revenue_amount_fen: number
+          revenue_type: string
+          service_fee_rate_bps?: number | null
+          source_id: string
+          source_type: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          binding_id?: string | null
+          commission_rate_bps?: number
+          confirmed_at?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          gross_amount_fen?: number
+          id?: string
+          metadata?: Json
+          paid_amount_fen?: number
+          paid_at?: string | null
+          partner_id?: string | null
+          partner_level_id?: string | null
+          refundable_until?: string | null
+          revenue_amount_fen?: number
+          revenue_type?: string
+          service_fee_rate_bps?: number | null
+          source_id?: string
+          source_type?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_revenue_events_binding_id_fkey"
+            columns: ["binding_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_partner_bindings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_revenue_events_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_revenue_events_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_revenue_events_partner_level_id_fkey"
+            columns: ["partner_level_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_revenue_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "platform_revenue_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           base_salary: number | null
@@ -4224,6 +6418,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "posts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "posts_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -4280,6 +6481,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "project_acceptances"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_acceptance_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "project_acceptance_actions_tenant_id_fkey"
@@ -4389,6 +6597,13 @@ export type Database = {
             foreignKeyName: "project_acceptance_items_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_acceptance_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -4492,6 +6707,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_acceptance_open_tickets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "project_acceptance_open_tickets_tenant_id_fkey"
@@ -4782,6 +7004,13 @@ export type Database = {
             foreignKeyName: "project_acceptances_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_acceptances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -4881,6 +7110,13 @@ export type Database = {
             foreignKeyName: "project_cameras_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_cameras_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -4953,6 +7189,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "project_cost_budgets_tenant_id_fkey"
@@ -5032,6 +7275,13 @@ export type Database = {
             foreignKeyName: "project_log_comments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_log_comments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -5090,6 +7340,13 @@ export type Database = {
             foreignKeyName: "project_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -5127,6 +7384,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "project_member_role_post_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "project_member_role_post_rules_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -5266,6 +7530,13 @@ export type Database = {
             foreignKeyName: "project_procedure_assignment_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignment_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -5388,6 +7659,13 @@ export type Database = {
             foreignKeyName: "project_procedure_assignments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_procedure_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -5418,6 +7696,9 @@ export type Database = {
           payment_id: string
           project_id: string
           receivable_plan_id: string
+          reverse_reason: string | null
+          reversed_at: string | null
+          reversed_by: string | null
           source_id: string | null
           source_type: string
           tenant_id: string
@@ -5433,6 +7714,9 @@ export type Database = {
           payment_id: string
           project_id: string
           receivable_plan_id: string
+          reverse_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
           source_id?: string | null
           source_type: string
           tenant_id: string
@@ -5448,6 +7732,9 @@ export type Database = {
           payment_id?: string
           project_id?: string
           receivable_plan_id?: string
+          reverse_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
           source_id?: string | null
           source_type?: string
           tenant_id?: string
@@ -5483,7 +7770,102 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "project_receivable_allocations_reversed_by_fkey"
+            columns: ["reversed_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "project_receivable_allocations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_receivable_allocations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_receivable_events: {
+        Row: {
+          after_snapshot: Json | null
+          before_snapshot: Json | null
+          created_at: string
+          created_by: string | null
+          event_type: string
+          id: string
+          next_follow_up_at: string | null
+          note: string | null
+          project_id: string
+          receivable_plan_id: string
+          tenant_id: string
+          title: string
+        }
+        Insert: {
+          after_snapshot?: Json | null
+          before_snapshot?: Json | null
+          created_at?: string
+          created_by?: string | null
+          event_type: string
+          id?: string
+          next_follow_up_at?: string | null
+          note?: string | null
+          project_id: string
+          receivable_plan_id: string
+          tenant_id: string
+          title: string
+        }
+        Update: {
+          after_snapshot?: Json | null
+          before_snapshot?: Json | null
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          next_follow_up_at?: string | null
+          note?: string | null
+          project_id?: string
+          receivable_plan_id?: string
+          tenant_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_receivable_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_events_receivable_plan_id_fkey"
+            columns: ["receivable_plan_id"]
+            isOneToOne: false
+            referencedRelation: "project_receivable_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_receivable_events_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -5494,11 +7876,18 @@ export type Database = {
       project_receivable_plans: {
         Row: {
           amount: number
+          canceled_at: string | null
+          canceled_by: string | null
+          canceled_reason: string | null
           created_at: string
           created_by: string | null
           due_date: string
           id: string
+          latest_follow_up_at: string | null
+          latest_follow_up_note: string | null
           metadata: Json
+          next_follow_up_at: string | null
+          owner_employee_id: string | null
           paid_amount: number
           payment_type: string
           project_id: string
@@ -5513,11 +7902,18 @@ export type Database = {
         }
         Insert: {
           amount: number
+          canceled_at?: string | null
+          canceled_by?: string | null
+          canceled_reason?: string | null
           created_at?: string
           created_by?: string | null
           due_date: string
           id?: string
+          latest_follow_up_at?: string | null
+          latest_follow_up_note?: string | null
           metadata?: Json
+          next_follow_up_at?: string | null
+          owner_employee_id?: string | null
           paid_amount?: number
           payment_type: string
           project_id: string
@@ -5532,11 +7928,18 @@ export type Database = {
         }
         Update: {
           amount?: number
+          canceled_at?: string | null
+          canceled_by?: string | null
+          canceled_reason?: string | null
           created_at?: string
           created_by?: string | null
           due_date?: string
           id?: string
+          latest_follow_up_at?: string | null
+          latest_follow_up_note?: string | null
           metadata?: Json
+          next_follow_up_at?: string | null
+          owner_employee_id?: string | null
           paid_amount?: number
           payment_type?: string
           project_id?: string
@@ -5551,8 +7954,22 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "project_receivable_plans_canceled_by_fkey"
+            columns: ["canceled_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "project_receivable_plans_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_plans_owner_employee_id_fkey"
+            columns: ["owner_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
@@ -5563,6 +7980,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_receivable_plans_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "project_receivable_plans_tenant_id_fkey"
@@ -5831,6 +8255,13 @@ export type Database = {
             foreignKeyName: "projects_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "projects_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -5904,6 +8335,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "properties_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "properties_tenant_id_fkey"
@@ -5989,8 +8427,181 @@ export type Database = {
             foreignKeyName: "roles_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_content_entries: {
+        Row: {
+          content_type: string
+          created_at: string
+          id: string
+          published_at: string | null
+          published_version_id: string | null
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          content_type: string
+          created_at?: string
+          id?: string
+          published_at?: string | null
+          published_version_id?: string | null
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          content_type?: string
+          created_at?: string
+          id?: string
+          published_at?: string | null
+          published_version_id?: string | null
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_content_published_version_fk"
+            columns: ["id", "published_version_id"]
+            isOneToOne: false
+            referencedRelation: "site_content_versions"
+            referencedColumns: ["entry_id", "id"]
+          },
+        ]
+      }
+      site_content_versions: {
+        Row: {
+          canonical_url: string | null
+          content_blocks: Json
+          cover_file_id: string | null
+          created_at: string
+          created_by: string | null
+          entry_id: string
+          id: string
+          metadata: Json
+          seo_description: string | null
+          seo_title: string | null
+          summary: string | null
+          title: string
+          version_no: number
+        }
+        Insert: {
+          canonical_url?: string | null
+          content_blocks?: Json
+          cover_file_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_id: string
+          id?: string
+          metadata?: Json
+          seo_description?: string | null
+          seo_title?: string | null
+          summary?: string | null
+          title: string
+          version_no: number
+        }
+        Update: {
+          canonical_url?: string | null
+          content_blocks?: Json
+          cover_file_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string
+          id?: string
+          metadata?: Json
+          seo_description?: string | null
+          seo_title?: string | null
+          summary?: string | null
+          title?: string
+          version_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_content_versions_cover_file_id_fkey"
+            columns: ["cover_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_content_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_content_versions_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "site_content_admin_list"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_content_versions_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "site_content_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_preview_tokens: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          created_by: string | null
+          entry_id: string
+          expires_at: string
+          id: string
+          token_hash: string
+          version_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_id: string
+          expires_at: string
+          id?: string
+          token_hash: string
+          version_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string
+          expires_at?: string
+          id?: string
+          token_hash?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_preview_tokens_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_preview_tokens_version_fk"
+            columns: ["entry_id", "version_id"]
+            isOneToOne: false
+            referencedRelation: "site_content_versions"
+            referencedColumns: ["entry_id", "id"]
           },
         ]
       }
@@ -6074,6 +8685,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenant_billing_events"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_send_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "sms_send_logs_tenant_id_fkey"
@@ -6209,6 +8827,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "social_video_scripts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "social_video_scripts_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -6358,7 +8983,681 @@ export type Database = {
             foreignKeyName: "social_video_transcriptions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "social_video_transcriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_addresses: {
+        Row: {
+          address_detail: string
+          address_type: string
+          city: string | null
+          created_at: string
+          created_by_employee_id: string
+          district: string | null
+          id: string
+          is_default: boolean
+          latitude: number | null
+          longitude: number | null
+          province: string | null
+          region_code: string
+          status: string
+          supplier_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          address_detail: string
+          address_type: string
+          city?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          district?: string | null
+          id?: string
+          is_default?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          province?: string | null
+          region_code: string
+          status?: string
+          supplier_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          address_detail?: string
+          address_type?: string
+          city?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          district?: string | null
+          id?: string
+          is_default?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          province?: string | null
+          region_code?: string
+          status?: string
+          supplier_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_addresses_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_addresses_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_addresses_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_addresses_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_command_events: {
+        Row: {
+          actor_employee_id: string
+          actor_user_id: string
+          command: string
+          created_at: string
+          from_state: Json
+          id: string
+          idempotency_key: string
+          reason: string | null
+          resource_id: string
+          resource_type: string
+          result_version: number
+          tenant_id: string | null
+          to_state: Json
+        }
+        Insert: {
+          actor_employee_id: string
+          actor_user_id: string
+          command: string
+          created_at?: string
+          from_state?: Json
+          id?: string
+          idempotency_key: string
+          reason?: string | null
+          resource_id: string
+          resource_type: string
+          result_version: number
+          tenant_id?: string | null
+          to_state?: Json
+        }
+        Update: {
+          actor_employee_id?: string
+          actor_user_id?: string
+          command?: string
+          created_at?: string
+          from_state?: Json
+          id?: string
+          idempotency_key?: string
+          reason?: string | null
+          resource_id?: string
+          resource_type?: string
+          result_version?: number
+          tenant_id?: string | null
+          to_state?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_command_events_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_contacts: {
+        Row: {
+          contact_type: string
+          created_at: string
+          created_by_employee_id: string
+          email: string | null
+          id: string
+          is_primary: boolean
+          is_public: boolean
+          name: string
+          phone: string | null
+          status: string
+          supplier_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          contact_type: string
+          created_at?: string
+          created_by_employee_id: string
+          email?: string | null
+          id?: string
+          is_primary?: boolean
+          is_public?: boolean
+          name: string
+          phone?: string | null
+          status?: string
+          supplier_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          contact_type?: string
+          created_at?: string
+          created_by_employee_id?: string
+          email?: string | null
+          id?: string
+          is_primary?: boolean
+          is_public?: boolean
+          name?: string
+          phone?: string | null
+          status?: string
+          supplier_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_contacts_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contacts_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contacts_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contacts_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_contracts: {
+        Row: {
+          contract_no: string
+          created_at: string
+          created_by_employee_id: string
+          document_file_id: string
+          id: string
+          invoice_required_before_payment: boolean
+          lifecycle_status: string
+          name: string
+          settlement_term_days: number
+          tenant_id: string
+          tenant_supplier_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          valid_from: string
+          valid_until: string
+          version: number
+        }
+        Insert: {
+          contract_no: string
+          created_at?: string
+          created_by_employee_id: string
+          document_file_id: string
+          id?: string
+          invoice_required_before_payment?: boolean
+          lifecycle_status?: string
+          name: string
+          settlement_term_days?: number
+          tenant_id: string
+          tenant_supplier_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          valid_from: string
+          valid_until: string
+          version?: number
+        }
+        Update: {
+          contract_no?: string
+          created_at?: string
+          created_by_employee_id?: string
+          document_file_id?: string
+          id?: string
+          invoice_required_before_payment?: boolean
+          lifecycle_status?: string
+          name?: string
+          settlement_term_days?: number
+          tenant_id?: string
+          tenant_supplier_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          valid_from?: string
+          valid_until?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_contracts_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contracts_document_file_id_fkey"
+            columns: ["document_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contracts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_contracts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contracts_tenant_supplier_id_fkey"
+            columns: ["tenant_supplier_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contracts_tenant_supplier_tenant_fkey"
+            columns: ["tenant_supplier_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_suppliers"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_contracts_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_qualification_types: {
+        Row: {
+          applicable_supplier_types: string[]
+          blocks_new_orders: boolean
+          code: string
+          created_at: string
+          id: string
+          is_required: boolean
+          name: string
+          sort_order: number
+          status: string
+          updated_at: string
+          version: number
+          warning_days: number
+        }
+        Insert: {
+          applicable_supplier_types?: string[]
+          blocks_new_orders?: boolean
+          code: string
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          name: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          version?: number
+          warning_days?: number
+        }
+        Update: {
+          applicable_supplier_types?: string[]
+          blocks_new_orders?: boolean
+          code?: string
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          name?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          version?: number
+          warning_days?: number
+        }
+        Relationships: []
+      }
+      supplier_qualifications: {
+        Row: {
+          certificate_no: string | null
+          created_at: string
+          created_by_employee_id: string
+          document_file_id: string
+          id: string
+          qualification_type_id: string
+          rejection_reason: string | null
+          supplier_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          valid_from: string | null
+          valid_until: string | null
+          verification_status: string
+          verified_at: string | null
+          verified_by_employee_id: string | null
+          version: number
+        }
+        Insert: {
+          certificate_no?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          document_file_id: string
+          id?: string
+          qualification_type_id: string
+          rejection_reason?: string | null
+          supplier_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          valid_from?: string | null
+          valid_until?: string | null
+          verification_status?: string
+          verified_at?: string | null
+          verified_by_employee_id?: string | null
+          version?: number
+        }
+        Update: {
+          certificate_no?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          document_file_id?: string
+          id?: string
+          qualification_type_id?: string
+          rejection_reason?: string | null
+          supplier_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          valid_from?: string | null
+          valid_until?: string | null
+          verification_status?: string
+          verified_at?: string | null
+          verified_by_employee_id?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_qualifications_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_qualifications_document_file_id_fkey"
+            columns: ["document_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_qualifications_qualification_type_id_fkey"
+            columns: ["qualification_type_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_qualification_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_qualifications_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_qualifications_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_qualifications_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_qualifications_verified_by_employee_id_fkey"
+            columns: ["verified_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_service_regions: {
+        Row: {
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          region_code: string
+          region_level: string
+          status: string
+          supplier_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          valid_from: string | null
+          valid_until: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          region_code: string
+          region_level: string
+          status?: string
+          supplier_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          valid_from?: string | null
+          valid_until?: string | null
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          region_code?: string
+          region_level?: string
+          status?: string
+          supplier_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          valid_from?: string | null
+          valid_until?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_service_regions_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_service_regions_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_service_regions_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_service_regions_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suppliers: {
+        Row: {
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_employee_id: string | null
+          code: string
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          legal_name: string
+          name: string
+          onboarding_status: string
+          operational_status: string
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          supplier_type: string
+          unified_social_credit_code: string | null
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          blacklist_reason?: string | null
+          blacklisted_at?: string | null
+          blacklisted_by_employee_id?: string | null
+          code: string
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          legal_name: string
+          name: string
+          onboarding_status?: string
+          operational_status?: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          supplier_type: string
+          unified_social_credit_code?: string | null
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          blacklist_reason?: string | null
+          blacklisted_at?: string | null
+          blacklisted_by_employee_id?: string | null
+          code?: string
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          legal_name?: string
+          name?: string
+          onboarding_status?: string
+          operational_status?: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          supplier_type?: string
+          unified_social_credit_code?: string | null
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suppliers_blacklisted_by_employee_id_fkey"
+            columns: ["blacklisted_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -6398,6 +9697,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_setting_change_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "system_setting_change_logs_tenant_id_fkey"
@@ -6455,6 +9761,13 @@ export type Database = {
           value_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "system_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "system_settings_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -6552,6 +9865,132 @@ export type Database = {
             foreignKeyName: "tenant_billing_events_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_billing_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_billing_plans: {
+        Row: {
+          code: string
+          created_at: string
+          enabled: boolean
+          id: string
+          metadata: Json
+          monthly_fee_credits: number
+          name: string
+          period: string
+          reminder_days_before_due: number
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          metadata?: Json
+          monthly_fee_credits: number
+          name: string
+          period?: string
+          reminder_days_before_due?: number
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          metadata?: Json
+          monthly_fee_credits?: number
+          name?: string
+          period?: string
+          reminder_days_before_due?: number
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      tenant_billing_subscriptions: {
+        Row: {
+          created_at: string
+          current_period_end: string
+          current_period_start: string
+          id: string
+          last_invoice_id: string | null
+          lock_reason: string | null
+          locked_at: string | null
+          metadata: Json
+          next_charge_at: string
+          plan_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_period_end: string
+          current_period_start: string
+          id?: string
+          last_invoice_id?: string | null
+          lock_reason?: string | null
+          locked_at?: string | null
+          metadata?: Json
+          next_charge_at: string
+          plan_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_period_end?: string
+          current_period_start?: string
+          id?: string
+          last_invoice_id?: string | null
+          lock_reason?: string | null
+          locked_at?: string | null
+          metadata?: Json
+          next_charge_at?: string
+          plan_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_billing_subscriptions_last_invoice_tenant_fkey"
+            columns: ["last_invoice_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_subscription_invoices"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_billing_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_billing_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_billing_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_billing_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -6607,6 +10046,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tenant_credit_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "tenant_credit_accounts_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -6690,6 +10136,13 @@ export type Database = {
             foreignKeyName: "tenant_credit_ledger_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_ledger_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -6700,15 +10153,26 @@ export type Database = {
           amount_fen: number
           bonus_credits: number
           channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          closed_at: string | null
           created_at: string
           created_by: string | null
           credits: number
           id: string
           idempotency_key: string | null
+          latest_notification_id: string | null
           metadata: Json
           order_no: string
+          out_trade_no: string | null
           package_code: string | null
+          paid_amount_fen: number
           paid_at: string | null
+          payment_config_id: string | null
+          payment_expires_at: string | null
+          prepay_id: string | null
           refund_amount_fen: number | null
           refund_requested_at: string | null
           refund_status: string | null
@@ -6716,21 +10180,33 @@ export type Database = {
           remark: string | null
           status: string
           tenant_id: string
+          transaction_id: string | null
           updated_at: string
         }
         Insert: {
           amount_fen: number
           bonus_credits?: number
           channel: string
+          close_attempt_count?: number
+          close_claim_expires_at?: string | null
+          close_claim_token?: string | null
+          close_last_error?: string | null
+          closed_at?: string | null
           created_at?: string
           created_by?: string | null
           credits: number
           id?: string
           idempotency_key?: string | null
+          latest_notification_id?: string | null
           metadata?: Json
           order_no: string
+          out_trade_no?: string | null
           package_code?: string | null
+          paid_amount_fen?: number
           paid_at?: string | null
+          payment_config_id?: string | null
+          payment_expires_at?: string | null
+          prepay_id?: string | null
           refund_amount_fen?: number | null
           refund_requested_at?: string | null
           refund_status?: string | null
@@ -6738,21 +10214,33 @@ export type Database = {
           remark?: string | null
           status: string
           tenant_id: string
+          transaction_id?: string | null
           updated_at?: string
         }
         Update: {
           amount_fen?: number
           bonus_credits?: number
           channel?: string
+          close_attempt_count?: number
+          close_claim_expires_at?: string | null
+          close_claim_token?: string | null
+          close_last_error?: string | null
+          closed_at?: string | null
           created_at?: string
           created_by?: string | null
           credits?: number
           id?: string
           idempotency_key?: string | null
+          latest_notification_id?: string | null
           metadata?: Json
           order_no?: string
+          out_trade_no?: string | null
           package_code?: string | null
+          paid_amount_fen?: number
           paid_at?: string | null
+          payment_config_id?: string | null
+          payment_expires_at?: string | null
+          prepay_id?: string | null
           refund_amount_fen?: number | null
           refund_requested_at?: string | null
           refund_status?: string | null
@@ -6760,9 +10248,24 @@ export type Database = {
           remark?: string | null
           status?: string
           tenant_id?: string
+          transaction_id?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tenant_credit_orders_payment_config_id_fkey"
+            columns: ["payment_config_id"]
+            isOneToOne: false
+            referencedRelation: "platform_payment_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
           {
             foreignKeyName: "tenant_credit_orders_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -6782,6 +10285,12 @@ export type Database = {
           order_id: string
           out_refund_no: string | null
           reason: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_last_checked_at: string | null
+          reconcile_last_error: string | null
+          reconcile_next_at: string | null
           refund_amount_fen: number | null
           refunded_at: string | null
           request_no: string
@@ -6805,6 +10314,12 @@ export type Database = {
           order_id: string
           out_refund_no?: string | null
           reason: string
+          reconcile_attempt_count?: number
+          reconcile_claim_expires_at?: string | null
+          reconcile_claim_token?: string | null
+          reconcile_last_checked_at?: string | null
+          reconcile_last_error?: string | null
+          reconcile_next_at?: string | null
           refund_amount_fen?: number | null
           refunded_at?: string | null
           request_no: string
@@ -6828,6 +10343,12 @@ export type Database = {
           order_id?: string
           out_refund_no?: string | null
           reason?: string
+          reconcile_attempt_count?: number
+          reconcile_claim_expires_at?: string | null
+          reconcile_claim_token?: string | null
+          reconcile_last_checked_at?: string | null
+          reconcile_last_error?: string | null
+          reconcile_next_at?: string | null
           refund_amount_fen?: number | null
           refunded_at?: string | null
           request_no?: string
@@ -6866,6 +10387,83 @@ export type Database = {
           },
           {
             foreignKeyName: "tenant_credit_refund_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_refund_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_credit_wechat_notifications: {
+        Row: {
+          created_at: string
+          credit_order_id: string | null
+          error_message: string | null
+          event_type: string
+          id: string
+          notify_id: string
+          processed: boolean
+          processed_at: string | null
+          raw_payload: Json
+          resource_type: string | null
+          signature_valid: boolean
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credit_order_id?: string | null
+          error_message?: string | null
+          event_type: string
+          id?: string
+          notify_id: string
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          resource_type?: string | null
+          signature_valid?: boolean
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credit_order_id?: string | null
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          notify_id?: string
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          resource_type?: string | null
+          signature_valid?: boolean
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_credit_wechat_notifications_credit_order_id_fkey"
+            columns: ["credit_order_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_credit_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_wechat_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_wechat_notifications_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -6924,6 +10522,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "department_templates"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_departments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "tenant_departments_tenant_id_fkey"
@@ -7040,6 +10645,13 @@ export type Database = {
             foreignKeyName: "tenant_devices_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_devices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -7048,6 +10660,327 @@ export type Database = {
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_onboarding_application_reviews: {
+        Row: {
+          actor_employee_id: string | null
+          actor_partner_member_id: string | null
+          actor_type: string
+          actor_visitor_id: string | null
+          after_partner_assist_status: string | null
+          after_status: string | null
+          application_id: string
+          before_partner_assist_status: string | null
+          before_status: string | null
+          created_at: string
+          decision: string
+          id: string
+          metadata: Json
+          remark: string | null
+          required_fields: string[]
+          review_stage: string
+        }
+        Insert: {
+          actor_employee_id?: string | null
+          actor_partner_member_id?: string | null
+          actor_type: string
+          actor_visitor_id?: string | null
+          after_partner_assist_status?: string | null
+          after_status?: string | null
+          application_id: string
+          before_partner_assist_status?: string | null
+          before_status?: string | null
+          created_at?: string
+          decision: string
+          id?: string
+          metadata?: Json
+          remark?: string | null
+          required_fields?: string[]
+          review_stage: string
+        }
+        Update: {
+          actor_employee_id?: string | null
+          actor_partner_member_id?: string | null
+          actor_type?: string
+          actor_visitor_id?: string | null
+          after_partner_assist_status?: string | null
+          after_status?: string | null
+          application_id?: string
+          before_partner_assist_status?: string | null
+          before_status?: string | null
+          created_at?: string
+          decision?: string
+          id?: string
+          metadata?: Json
+          remark?: string | null
+          required_fields?: string[]
+          review_stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_onboarding_application_revi_actor_partner_member_id_fkey"
+            columns: ["actor_partner_member_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_application_reviews_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_application_reviews_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_onboarding_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_onboarding_applications: {
+        Row: {
+          address: string
+          address_city: string
+          address_district: string | null
+          address_latitude: number | null
+          address_longitude: number | null
+          address_province: string | null
+          address_region_code: string
+          admin_name: string
+          admin_phone: string
+          application_no: string
+          attribution_source_type: string | null
+          business_license_file_id: string
+          candidate_match_reason: string | null
+          candidate_partner_id: string | null
+          candidate_snapshot: Json
+          company_name: string
+          consented_at: string
+          converted_tenant_id: string | null
+          created_at: string
+          final_partner_id: string | null
+          id: string
+          idempotency_key: string
+          invite_code_id: string | null
+          onboarding_terms_version: string
+          partner_assist_due_at: string | null
+          partner_assist_requested_at: string | null
+          partner_assist_status: string
+          privacy_policy_version: string
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          service_region_codes: string[]
+          source_channel: string
+          status: string
+          unified_social_credit_code: string
+          updated_at: string
+          version: number
+          visitor_context_id: string | null
+          visitor_id: string
+          withdrawn_at: string | null
+        }
+        Insert: {
+          address: string
+          address_city: string
+          address_district?: string | null
+          address_latitude?: number | null
+          address_longitude?: number | null
+          address_province?: string | null
+          address_region_code: string
+          admin_name: string
+          admin_phone: string
+          application_no: string
+          attribution_source_type?: string | null
+          business_license_file_id: string
+          candidate_match_reason?: string | null
+          candidate_partner_id?: string | null
+          candidate_snapshot?: Json
+          company_name: string
+          consented_at: string
+          converted_tenant_id?: string | null
+          created_at?: string
+          final_partner_id?: string | null
+          id?: string
+          idempotency_key: string
+          invite_code_id?: string | null
+          onboarding_terms_version: string
+          partner_assist_due_at?: string | null
+          partner_assist_requested_at?: string | null
+          partner_assist_status?: string
+          privacy_policy_version: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          service_region_codes: string[]
+          source_channel: string
+          status?: string
+          unified_social_credit_code: string
+          updated_at?: string
+          version?: number
+          visitor_context_id?: string | null
+          visitor_id: string
+          withdrawn_at?: string | null
+        }
+        Update: {
+          address?: string
+          address_city?: string
+          address_district?: string | null
+          address_latitude?: number | null
+          address_longitude?: number | null
+          address_province?: string | null
+          address_region_code?: string
+          admin_name?: string
+          admin_phone?: string
+          application_no?: string
+          attribution_source_type?: string | null
+          business_license_file_id?: string
+          candidate_match_reason?: string | null
+          candidate_partner_id?: string | null
+          candidate_snapshot?: Json
+          company_name?: string
+          consented_at?: string
+          converted_tenant_id?: string | null
+          created_at?: string
+          final_partner_id?: string | null
+          id?: string
+          idempotency_key?: string
+          invite_code_id?: string | null
+          onboarding_terms_version?: string
+          partner_assist_due_at?: string | null
+          partner_assist_requested_at?: string | null
+          partner_assist_status?: string
+          privacy_policy_version?: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          service_region_codes?: string[]
+          source_channel?: string
+          status?: string
+          unified_social_credit_code?: string
+          updated_at?: string
+          version?: number
+          visitor_context_id?: string | null
+          visitor_id?: string
+          withdrawn_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_onboarding_applications_business_license_file_id_fkey"
+            columns: ["business_license_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_candidate_partner_id_fkey"
+            columns: ["candidate_partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_converted_tenant_id_fkey"
+            columns: ["converted_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_converted_tenant_id_fkey"
+            columns: ["converted_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_final_partner_id_fkey"
+            columns: ["final_partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_invite_code_id_fkey"
+            columns: ["invite_code_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_invite_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_onboarding_applications_visitor_context_id_fkey"
+            columns: ["visitor_context_id"]
+            isOneToOne: false
+            referencedRelation: "user_location_contexts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_onboarding_notification_deliveries: {
+        Row: {
+          application_id: string
+          application_version: number
+          attempt_count: number
+          channel: string
+          claim_expires_at: string | null
+          claim_token: string | null
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          application_id: string
+          application_version: number
+          attempt_count?: number
+          channel?: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          last_error?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          application_id?: string
+          application_version?: number
+          attempt_count?: number
+          channel?: string
+          claim_expires_at?: string | null
+          claim_token?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          last_error?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_onboarding_notification_deliveries_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_onboarding_applications"
             referencedColumns: ["id"]
           },
         ]
@@ -7210,6 +11143,13 @@ export type Database = {
             foreignKeyName: "tenant_panorama_assets_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_panorama_assets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -7308,6 +11248,97 @@ export type Database = {
           },
           {
             foreignKeyName: "tenant_panorama_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_panorama_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_partner_bindings: {
+        Row: {
+          bound_at: string
+          change_reason: string | null
+          changed_by_employee_id: string | null
+          created_at: string
+          id: string
+          invite_code_id: string | null
+          partner_id: string
+          source_id: string | null
+          source_type: string
+          status: string
+          tenant_id: string
+          unbound_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          bound_at?: string
+          change_reason?: string | null
+          changed_by_employee_id?: string | null
+          created_at?: string
+          id?: string
+          invite_code_id?: string | null
+          partner_id: string
+          source_id?: string | null
+          source_type: string
+          status?: string
+          tenant_id: string
+          unbound_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bound_at?: string
+          change_reason?: string | null
+          changed_by_employee_id?: string | null
+          created_at?: string
+          id?: string
+          invite_code_id?: string | null
+          partner_id?: string
+          source_id?: string | null
+          source_type?: string
+          status?: string
+          tenant_id?: string
+          unbound_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_partner_bindings_changed_by_employee_id_fkey"
+            columns: ["changed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_partner_bindings_invite_code_id_fkey"
+            columns: ["invite_code_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partner_invite_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_partner_bindings_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "platform_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_partner_bindings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_partner_bindings_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -7443,390 +11474,18 @@ export type Database = {
             foreignKeyName: "tenant_payment_configs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_payment_configs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "tenant_payment_configs_updated_by_employee_id_fkey"
-            columns: ["updated_by_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tenant_wechat_pay_applyment_events: {
-        Row: {
-          applyment_id: string
-          created_at: string
-          event_type: string
-          from_status: string | null
-          id: string
-          message: string | null
-          metadata: Json
-          operator_employee_id: string | null
-          tenant_id: string
-          to_status: string | null
-        }
-        Insert: {
-          applyment_id: string
-          created_at?: string
-          event_type: string
-          from_status?: string | null
-          id?: string
-          message?: string | null
-          metadata?: Json
-          operator_employee_id?: string | null
-          tenant_id: string
-          to_status?: string | null
-        }
-        Update: {
-          applyment_id?: string
-          created_at?: string
-          event_type?: string
-          from_status?: string | null
-          id?: string
-          message?: string | null
-          metadata?: Json
-          operator_employee_id?: string | null
-          tenant_id?: string
-          to_status?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_wechat_pay_applyment_events_applyment_id_fkey"
-            columns: ["applyment_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_wechat_pay_applyments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_wechat_pay_applyment_events_operator_employee_id_fkey"
-            columns: ["operator_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_wechat_pay_applyment_events_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tenant_wechat_pay_applyment_media: {
-        Row: {
-          applyment_id: string
-          category: string
-          created_at: string
-          id: string
-          media_id: string
-          mime_type: string
-          object_key: string
-          request_id: string | null
-          sha256: string
-          size_bytes: number
-          tenant_id: string
-          updated_at: string
-          uploaded_at: string
-        }
-        Insert: {
-          applyment_id: string
-          category: string
-          created_at?: string
-          id?: string
-          media_id: string
-          mime_type: string
-          object_key: string
-          request_id?: string | null
-          sha256: string
-          size_bytes: number
-          tenant_id: string
-          updated_at?: string
-          uploaded_at?: string
-        }
-        Update: {
-          applyment_id?: string
-          category?: string
-          created_at?: string
-          id?: string
-          media_id?: string
-          mime_type?: string
-          object_key?: string
-          request_id?: string | null
-          sha256?: string
-          size_bytes?: number
-          tenant_id?: string
-          updated_at?: string
-          uploaded_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_wechat_pay_applyment_media_applyment_id_fkey"
-            columns: ["applyment_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_wechat_pay_applyments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_wechat_pay_applyment_media_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tenant_wechat_pay_applyments: {
-        Row: {
-          activated_at: string | null
-          appid_binding_message: string | null
-          appid_binding_state: string
-          application_no: string
-          applyment_business_code: string | null
-          applyment_id: string | null
-          applyment_state: string
-          applyment_state_message: string | null
-          approved_at: string | null
-          attachments: Json
-          audit_detail: Json
-          business_scene_description: string | null
-          contact_address: string | null
-          contact_identity_doc_type: string | null
-          contact_identity_period_begin: string | null
-          contact_identity_period_end: string | null
-          contact_type: string | null
-          created_at: string
-          created_by_employee_id: string | null
-          draft_epoch: number
-          draft_revision: number
-          has_sensitive_payload: boolean
-          id: string
-          identity_address_masked: string | null
-          identity_doc_type: string | null
-          identity_period_begin: string | null
-          identity_period_end: string | null
-          last_wechat_request_id: string | null
-          last_wechat_synced_at: string | null
-          legal_representative_name: string | null
-          license_address: string | null
-          license_code: string | null
-          license_name: string | null
-          license_period_begin: string | null
-          license_period_end: string | null
-          merchant_short_name: string | null
-          opened_at: string | null
-          payment_config_id: string | null
-          qualification_type: string | null
-          rejected_at: string | null
-          rejected_reason: string | null
-          remark: string | null
-          reviewed_by_employee_id: string | null
-          sensitive_payload_ciphertext: string | null
-          sensitive_payload_updated_at: string | null
-          sensitive_payload_version: number | null
-          service_phone: string | null
-          settlement_account_number_masked: string | null
-          settlement_account_name: string | null
-          settlement_account_summary: string | null
-          settlement_account_type: string | null
-          settlement_bank_branch_id: string | null
-          settlement_bank_full_name: string | null
-          settlement_bank_name: string | null
-          settlement_id: string | null
-          sign_url: string | null
-          status: string
-          sub_appid: string | null
-          sub_mchid: string | null
-          subject_type: string | null
-          submission_attempt_count: number
-          submission_claimed_at: string | null
-          submitted_at: string | null
-          super_admin_email: string | null
-          super_admin_name: string | null
-          super_admin_phone_masked: string | null
-          tenant_id: string
-          updated_at: string
-          updated_by_employee_id: string | null
-          wechat_applyment_state_raw: string | null
-        }
-        Insert: {
-          activated_at?: string | null
-          appid_binding_message?: string | null
-          appid_binding_state?: string
-          application_no: string
-          applyment_business_code?: string | null
-          applyment_id?: string | null
-          applyment_state?: string
-          applyment_state_message?: string | null
-          approved_at?: string | null
-          attachments?: Json
-          audit_detail?: Json
-          business_scene_description?: string | null
-          contact_address?: string | null
-          contact_identity_doc_type?: string | null
-          contact_identity_period_begin?: string | null
-          contact_identity_period_end?: string | null
-          contact_type?: string | null
-          created_at?: string
-          created_by_employee_id?: string | null
-          draft_epoch?: number
-          draft_revision?: number
-          has_sensitive_payload?: boolean
-          id?: string
-          identity_address_masked?: string | null
-          identity_doc_type?: string | null
-          identity_period_begin?: string | null
-          identity_period_end?: string | null
-          last_wechat_request_id?: string | null
-          last_wechat_synced_at?: string | null
-          legal_representative_name?: string | null
-          license_address?: string | null
-          license_code?: string | null
-          license_name?: string | null
-          license_period_begin?: string | null
-          license_period_end?: string | null
-          merchant_short_name?: string | null
-          opened_at?: string | null
-          payment_config_id?: string | null
-          qualification_type?: string | null
-          rejected_at?: string | null
-          rejected_reason?: string | null
-          remark?: string | null
-          reviewed_by_employee_id?: string | null
-          sensitive_payload_ciphertext?: string | null
-          sensitive_payload_updated_at?: string | null
-          sensitive_payload_version?: number | null
-          service_phone?: string | null
-          settlement_account_number_masked?: string | null
-          settlement_account_name?: string | null
-          settlement_account_summary?: string | null
-          settlement_account_type?: string | null
-          settlement_bank_branch_id?: string | null
-          settlement_bank_full_name?: string | null
-          settlement_bank_name?: string | null
-          settlement_id?: string | null
-          sign_url?: string | null
-          status?: string
-          sub_appid?: string | null
-          sub_mchid?: string | null
-          subject_type?: string | null
-          submission_attempt_count?: number
-          submission_claimed_at?: string | null
-          submitted_at?: string | null
-          super_admin_email?: string | null
-          super_admin_name?: string | null
-          super_admin_phone_masked?: string | null
-          tenant_id: string
-          updated_at?: string
-          updated_by_employee_id?: string | null
-          wechat_applyment_state_raw?: string | null
-        }
-        Update: {
-          activated_at?: string | null
-          appid_binding_message?: string | null
-          appid_binding_state?: string
-          application_no?: string
-          applyment_business_code?: string | null
-          applyment_id?: string | null
-          applyment_state?: string
-          applyment_state_message?: string | null
-          approved_at?: string | null
-          attachments?: Json
-          audit_detail?: Json
-          business_scene_description?: string | null
-          contact_address?: string | null
-          contact_identity_doc_type?: string | null
-          contact_identity_period_begin?: string | null
-          contact_identity_period_end?: string | null
-          contact_type?: string | null
-          created_at?: string
-          created_by_employee_id?: string | null
-          draft_epoch?: number
-          draft_revision?: number
-          has_sensitive_payload?: boolean
-          id?: string
-          identity_address_masked?: string | null
-          identity_doc_type?: string | null
-          identity_period_begin?: string | null
-          identity_period_end?: string | null
-          last_wechat_request_id?: string | null
-          last_wechat_synced_at?: string | null
-          legal_representative_name?: string | null
-          license_address?: string | null
-          license_code?: string | null
-          license_name?: string | null
-          license_period_begin?: string | null
-          license_period_end?: string | null
-          merchant_short_name?: string | null
-          opened_at?: string | null
-          payment_config_id?: string | null
-          qualification_type?: string | null
-          rejected_at?: string | null
-          rejected_reason?: string | null
-          remark?: string | null
-          reviewed_by_employee_id?: string | null
-          sensitive_payload_ciphertext?: string | null
-          sensitive_payload_updated_at?: string | null
-          sensitive_payload_version?: number | null
-          service_phone?: string | null
-          settlement_account_number_masked?: string | null
-          settlement_account_name?: string | null
-          settlement_account_summary?: string | null
-          settlement_account_type?: string | null
-          settlement_bank_branch_id?: string | null
-          settlement_bank_full_name?: string | null
-          settlement_bank_name?: string | null
-          settlement_id?: string | null
-          sign_url?: string | null
-          status?: string
-          sub_appid?: string | null
-          sub_mchid?: string | null
-          subject_type?: string | null
-          submission_attempt_count?: number
-          submission_claimed_at?: string | null
-          submitted_at?: string | null
-          super_admin_email?: string | null
-          super_admin_name?: string | null
-          super_admin_phone_masked?: string | null
-          tenant_id?: string
-          updated_at?: string
-          updated_by_employee_id?: string | null
-          wechat_applyment_state_raw?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_wechat_pay_applyments_created_by_employee_id_fkey"
-            columns: ["created_by_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_wechat_pay_applyments_payment_config_id_fkey"
-            columns: ["payment_config_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_payment_configs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_wechat_pay_applyments_reviewed_by_employee_id_fkey"
-            columns: ["reviewed_by_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_wechat_pay_applyments_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_wechat_pay_applyments_updated_by_employee_id_fkey"
             columns: ["updated_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
@@ -7897,6 +11556,13 @@ export type Database = {
             foreignKeyName: "tenant_pricing_rules_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_pricing_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -7953,318 +11619,14 @@ export type Database = {
             foreignKeyName: "tenant_service_areas_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tenant_onboarding_applications: {
-        Row: {
-          address: string
-          address_city: string
-          address_district: string | null
-          address_latitude: number | null
-          address_longitude: number | null
-          address_province: string | null
-          address_region_code: string
-          admin_name: string
-          admin_phone: string
-          application_no: string
-          attribution_source_type: string | null
-          business_license_file_id: string
-          candidate_match_reason: string | null
-          candidate_partner_id: string | null
-          candidate_snapshot: Json
-          consented_at: string
-          converted_tenant_id: string | null
-          created_at: string
-          final_partner_id: string | null
-          id: string
-          idempotency_key: string
-          invite_code_id: string | null
-          onboarding_terms_version: string
-          partner_assist_due_at: string | null
-          partner_assist_requested_at: string | null
-          partner_assist_status: string
-          privacy_policy_version: string
-          review_remark: string | null
-          reviewed_at: string | null
-          reviewed_by_employee_id: string | null
-          service_region_codes: string[]
-          source_channel: string
-          status: string
-          unified_social_credit_code: string
-          updated_at: string
-          version: number
-          visitor_context_id: string | null
-          visitor_id: string
-          withdrawn_at: string | null
-        }
-        Insert: {
-          address: string
-          address_city: string
-          address_district?: string | null
-          address_latitude?: number | null
-          address_longitude?: number | null
-          address_province?: string | null
-          address_region_code: string
-          admin_name: string
-          admin_phone: string
-          application_no: string
-          attribution_source_type?: string | null
-          business_license_file_id: string
-          candidate_match_reason?: string | null
-          candidate_partner_id?: string | null
-          candidate_snapshot?: Json
-          consented_at: string
-          converted_tenant_id?: string | null
-          created_at?: string
-          final_partner_id?: string | null
-          id?: string
-          idempotency_key: string
-          invite_code_id?: string | null
-          onboarding_terms_version: string
-          partner_assist_due_at?: string | null
-          partner_assist_requested_at?: string | null
-          partner_assist_status?: string
-          privacy_policy_version: string
-          review_remark?: string | null
-          reviewed_at?: string | null
-          reviewed_by_employee_id?: string | null
-          service_region_codes: string[]
-          source_channel: string
-          status?: string
-          unified_social_credit_code: string
-          updated_at?: string
-          version?: number
-          visitor_context_id?: string | null
-          visitor_id: string
-          withdrawn_at?: string | null
-        }
-        Update: {
-          address?: string
-          address_city?: string
-          address_district?: string | null
-          address_latitude?: number | null
-          address_longitude?: number | null
-          address_province?: string | null
-          address_region_code?: string
-          admin_name?: string
-          admin_phone?: string
-          application_no?: string
-          attribution_source_type?: string | null
-          business_license_file_id?: string
-          candidate_match_reason?: string | null
-          candidate_partner_id?: string | null
-          candidate_snapshot?: Json
-          consented_at?: string
-          converted_tenant_id?: string | null
-          created_at?: string
-          final_partner_id?: string | null
-          id?: string
-          idempotency_key?: string
-          invite_code_id?: string | null
-          onboarding_terms_version?: string
-          partner_assist_due_at?: string | null
-          partner_assist_requested_at?: string | null
-          partner_assist_status?: string
-          privacy_policy_version?: string
-          review_remark?: string | null
-          reviewed_at?: string | null
-          reviewed_by_employee_id?: string | null
-          service_region_codes?: string[]
-          source_channel?: string
-          status?: string
-          unified_social_credit_code?: string
-          updated_at?: string
-          version?: number
-          visitor_context_id?: string | null
-          visitor_id?: string
-          withdrawn_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_onboarding_applications_business_license_file_id_fkey"
-            columns: ["business_license_file_id"]
-            isOneToOne: false
-            referencedRelation: "platform_file_objects"
-            referencedColumns: ["id"]
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
-            foreignKeyName: "tenant_onboarding_applications_candidate_partner_id_fkey"
-            columns: ["candidate_partner_id"]
-            isOneToOne: false
-            referencedRelation: "platform_partners"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_onboarding_applications_converted_tenant_id_fkey"
-            columns: ["converted_tenant_id"]
+            foreignKeyName: "tenant_service_areas_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_onboarding_applications_final_partner_id_fkey"
-            columns: ["final_partner_id"]
-            isOneToOne: false
-            referencedRelation: "platform_partners"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_onboarding_applications_invite_code_id_fkey"
-            columns: ["invite_code_id"]
-            isOneToOne: false
-            referencedRelation: "platform_partner_invite_codes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_onboarding_applications_reviewed_by_employee_id_fkey"
-            columns: ["reviewed_by_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_onboarding_applications_visitor_context_id_fkey"
-            columns: ["visitor_context_id"]
-            isOneToOne: false
-            referencedRelation: "user_location_contexts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tenant_onboarding_application_reviews: {
-        Row: {
-          actor_employee_id: string | null
-          actor_partner_member_id: string | null
-          actor_type: string
-          actor_visitor_id: string | null
-          after_partner_assist_status: string | null
-          after_status: string | null
-          application_id: string
-          before_partner_assist_status: string | null
-          before_status: string | null
-          created_at: string
-          decision: string
-          id: string
-          metadata: Json
-          remark: string | null
-          required_fields: string[]
-          review_stage: string
-        }
-        Insert: {
-          actor_employee_id?: string | null
-          actor_partner_member_id?: string | null
-          actor_type: string
-          actor_visitor_id?: string | null
-          after_partner_assist_status?: string | null
-          after_status?: string | null
-          application_id: string
-          before_partner_assist_status?: string | null
-          before_status?: string | null
-          created_at?: string
-          decision: string
-          id?: string
-          metadata?: Json
-          remark?: string | null
-          required_fields?: string[]
-          review_stage: string
-        }
-        Update: {
-          actor_employee_id?: string | null
-          actor_partner_member_id?: string | null
-          actor_type?: string
-          actor_visitor_id?: string | null
-          after_partner_assist_status?: string | null
-          after_status?: string | null
-          application_id?: string
-          before_partner_assist_status?: string | null
-          before_status?: string | null
-          created_at?: string
-          decision?: string
-          id?: string
-          metadata?: Json
-          remark?: string | null
-          required_fields?: string[]
-          review_stage?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_onboarding_application_reviews_actor_employee_id_fkey"
-            columns: ["actor_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_onboarding_application_reviews_actor_partner_member_id_fkey"
-            columns: ["actor_partner_member_id"]
-            isOneToOne: false
-            referencedRelation: "platform_partner_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_onboarding_application_reviews_application_id_fkey"
-            columns: ["application_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_onboarding_applications"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tenant_onboarding_notification_deliveries: {
-        Row: {
-          application_id: string
-          application_version: number
-          attempt_count: number
-          channel: string
-          claim_expires_at: string | null
-          claim_token: string | null
-          created_at: string
-          event_type: string
-          id: string
-          last_error: string | null
-          sent_at: string | null
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          application_id: string
-          application_version: number
-          attempt_count?: number
-          channel?: string
-          claim_expires_at?: string | null
-          claim_token?: string | null
-          created_at?: string
-          event_type: string
-          id?: string
-          last_error?: string | null
-          sent_at?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          application_id?: string
-          application_version?: number
-          attempt_count?: number
-          channel?: string
-          claim_expires_at?: string | null
-          claim_token?: string | null
-          created_at?: string
-          event_type?: string
-          id?: string
-          last_error?: string | null
-          sent_at?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_onboarding_notification_deliveries_application_id_fkey"
-            columns: ["application_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_onboarding_applications"
             referencedColumns: ["id"]
           },
         ]
@@ -8354,6 +11716,13 @@ export type Database = {
             foreignKeyName: "tenant_service_provider_profiles_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_provider_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -8420,7 +11789,281 @@ export type Database = {
             foreignKeyName: "tenant_share_links_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_share_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_subscription_invoices: {
+        Row: {
+          amount_credits: number
+          created_at: string
+          due_at: string
+          failure_code: string | null
+          failure_message: string | null
+          id: string
+          ledger_id: string | null
+          metadata: Json
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          plan_id: string
+          reminded_at: string | null
+          reminder_due_at: string
+          status: string
+          subscription_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_credits: number
+          created_at?: string
+          due_at: string
+          failure_code?: string | null
+          failure_message?: string | null
+          id?: string
+          ledger_id?: string | null
+          metadata?: Json
+          paid_at?: string | null
+          period_end: string
+          period_start: string
+          plan_id: string
+          reminded_at?: string | null
+          reminder_due_at: string
+          status?: string
+          subscription_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_credits?: number
+          created_at?: string
+          due_at?: string
+          failure_code?: string | null
+          failure_message?: string | null
+          id?: string
+          ledger_id?: string | null
+          metadata?: Json
+          paid_at?: string | null
+          period_end?: string
+          period_start?: string
+          plan_id?: string
+          reminded_at?: string | null
+          reminder_due_at?: string
+          status?: string
+          subscription_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_subscription_invoices_ledger_id_fkey"
+            columns: ["ledger_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_credit_ledger"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_subscription_invoices_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_billing_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_subscription_invoices_subscription_tenant_fkey"
+            columns: ["subscription_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_billing_subscriptions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_subscription_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_subscription_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_supplier_settings: {
+        Row: {
+          created_at: string
+          enabled_at: string | null
+          enabled_by_employee_id: string | null
+          module_enabled: boolean
+          require_active_contract_for_new_order: boolean
+          tenant_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          enabled_at?: string | null
+          enabled_by_employee_id?: string | null
+          module_enabled?: boolean
+          require_active_contract_for_new_order?: boolean
+          tenant_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          enabled_at?: string | null
+          enabled_by_employee_id?: string | null
+          module_enabled?: boolean
+          require_active_contract_for_new_order?: boolean
+          tenant_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_supplier_settings_enabled_by_employee_id_fkey"
+            columns: ["enabled_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_supplier_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_supplier_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_suppliers: {
+        Row: {
+          created_at: string
+          created_by_employee_id: string
+          credit_limit_minor: number
+          default_currency: string
+          default_tax_inclusive: boolean
+          ended_at: string | null
+          id: string
+          invoice_required_before_payment: boolean
+          relationship_status: string
+          remark: string | null
+          settlement_term_days: number
+          started_at: string | null
+          supplier_id: string
+          tenant_id: string
+          tenant_owner_employee_id: string | null
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by_employee_id: string
+          credit_limit_minor?: number
+          default_currency?: string
+          default_tax_inclusive?: boolean
+          ended_at?: string | null
+          id?: string
+          invoice_required_before_payment?: boolean
+          relationship_status?: string
+          remark?: string | null
+          settlement_term_days?: number
+          started_at?: string | null
+          supplier_id: string
+          tenant_id: string
+          tenant_owner_employee_id?: string | null
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by_employee_id?: string
+          credit_limit_minor?: number
+          default_currency?: string
+          default_tax_inclusive?: boolean
+          ended_at?: string | null
+          id?: string
+          invoice_required_before_payment?: boolean
+          relationship_status?: string
+          remark?: string | null
+          settlement_term_days?: number
+          started_at?: string | null
+          supplier_id?: string
+          tenant_id?: string
+          tenant_owner_employee_id?: string | null
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_suppliers_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_suppliers_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_suppliers_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_suppliers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_suppliers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_suppliers_tenant_owner_employee_id_fkey"
+            columns: ["tenant_owner_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_suppliers_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -8473,6 +12116,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenant_templates"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_template_applications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "tenant_template_applications_tenant_id_fkey"
@@ -8594,7 +12244,414 @@ export type Database = {
             foreignKeyName: "tenant_usage_daily_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_usage_daily_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_wechat_pay_applyment_events: {
+        Row: {
+          applyment_id: string
+          created_at: string
+          event_type: string
+          from_status: string | null
+          id: string
+          message: string | null
+          metadata: Json
+          operator_employee_id: string | null
+          tenant_id: string
+          to_status: string | null
+        }
+        Insert: {
+          applyment_id: string
+          created_at?: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json
+          operator_employee_id?: string | null
+          tenant_id: string
+          to_status?: string | null
+        }
+        Update: {
+          applyment_id?: string
+          created_at?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json
+          operator_employee_id?: string | null
+          tenant_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_events_applyment_id_fkey"
+            columns: ["applyment_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_wechat_pay_applyments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_events_operator_employee_id_fkey"
+            columns: ["operator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_wechat_pay_applyment_media: {
+        Row: {
+          applyment_id: string
+          category: string
+          created_at: string
+          id: string
+          media_id: string
+          mime_type: string
+          object_key: string
+          request_id: string | null
+          sha256: string
+          size_bytes: number
+          tenant_id: string
+          updated_at: string
+          uploaded_at: string
+        }
+        Insert: {
+          applyment_id: string
+          category: string
+          created_at?: string
+          id?: string
+          media_id: string
+          mime_type: string
+          object_key: string
+          request_id?: string | null
+          sha256: string
+          size_bytes: number
+          tenant_id: string
+          updated_at?: string
+          uploaded_at?: string
+        }
+        Update: {
+          applyment_id?: string
+          category?: string
+          created_at?: string
+          id?: string
+          media_id?: string
+          mime_type?: string
+          object_key?: string
+          request_id?: string | null
+          sha256?: string
+          size_bytes?: number
+          tenant_id?: string
+          updated_at?: string
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_media_applyment_id_fkey"
+            columns: ["applyment_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_wechat_pay_applyments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_media_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyment_media_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_wechat_pay_applyments: {
+        Row: {
+          activated_at: string | null
+          appid_binding_message: string | null
+          appid_binding_state: string
+          application_no: string
+          applyment_business_code: string | null
+          applyment_id: string | null
+          applyment_state: string
+          applyment_state_message: string | null
+          approved_at: string | null
+          attachments: Json
+          audit_detail: Json
+          business_scene_description: string | null
+          contact_address: string | null
+          contact_identity_doc_type: string | null
+          contact_identity_period_begin: string | null
+          contact_identity_period_end: string | null
+          contact_type: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          draft_epoch: number
+          draft_revision: number
+          has_sensitive_payload: boolean
+          id: string
+          identity_address_masked: string | null
+          identity_doc_type: string | null
+          identity_period_begin: string | null
+          identity_period_end: string | null
+          last_wechat_request_id: string | null
+          last_wechat_synced_at: string | null
+          legal_representative_name: string | null
+          license_address: string | null
+          license_code: string | null
+          license_name: string | null
+          license_period_begin: string | null
+          license_period_end: string | null
+          merchant_short_name: string | null
+          opened_at: string | null
+          payment_config_id: string | null
+          qualification_type: string | null
+          rejected_at: string | null
+          rejected_reason: string | null
+          remark: string | null
+          reviewed_by_employee_id: string | null
+          sensitive_payload_ciphertext: string | null
+          sensitive_payload_updated_at: string | null
+          sensitive_payload_version: number | null
+          service_phone: string | null
+          settlement_account_name: string | null
+          settlement_account_number_masked: string | null
+          settlement_account_summary: string | null
+          settlement_account_type: string | null
+          settlement_bank_branch_id: string | null
+          settlement_bank_full_name: string | null
+          settlement_bank_name: string | null
+          settlement_id: string | null
+          sign_url: string | null
+          status: string
+          sub_appid: string | null
+          sub_mchid: string | null
+          subject_type: string | null
+          submission_attempt_count: number
+          submission_claimed_at: string | null
+          submitted_at: string | null
+          super_admin_email: string | null
+          super_admin_name: string | null
+          super_admin_phone_masked: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          wechat_applyment_state_raw: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          appid_binding_message?: string | null
+          appid_binding_state?: string
+          application_no: string
+          applyment_business_code?: string | null
+          applyment_id?: string | null
+          applyment_state?: string
+          applyment_state_message?: string | null
+          approved_at?: string | null
+          attachments?: Json
+          audit_detail?: Json
+          business_scene_description?: string | null
+          contact_address?: string | null
+          contact_identity_doc_type?: string | null
+          contact_identity_period_begin?: string | null
+          contact_identity_period_end?: string | null
+          contact_type?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          draft_epoch?: number
+          draft_revision?: number
+          has_sensitive_payload?: boolean
+          id?: string
+          identity_address_masked?: string | null
+          identity_doc_type?: string | null
+          identity_period_begin?: string | null
+          identity_period_end?: string | null
+          last_wechat_request_id?: string | null
+          last_wechat_synced_at?: string | null
+          legal_representative_name?: string | null
+          license_address?: string | null
+          license_code?: string | null
+          license_name?: string | null
+          license_period_begin?: string | null
+          license_period_end?: string | null
+          merchant_short_name?: string | null
+          opened_at?: string | null
+          payment_config_id?: string | null
+          qualification_type?: string | null
+          rejected_at?: string | null
+          rejected_reason?: string | null
+          remark?: string | null
+          reviewed_by_employee_id?: string | null
+          sensitive_payload_ciphertext?: string | null
+          sensitive_payload_updated_at?: string | null
+          sensitive_payload_version?: number | null
+          service_phone?: string | null
+          settlement_account_name?: string | null
+          settlement_account_number_masked?: string | null
+          settlement_account_summary?: string | null
+          settlement_account_type?: string | null
+          settlement_bank_branch_id?: string | null
+          settlement_bank_full_name?: string | null
+          settlement_bank_name?: string | null
+          settlement_id?: string | null
+          sign_url?: string | null
+          status?: string
+          sub_appid?: string | null
+          sub_mchid?: string | null
+          subject_type?: string | null
+          submission_attempt_count?: number
+          submission_claimed_at?: string | null
+          submitted_at?: string | null
+          super_admin_email?: string | null
+          super_admin_name?: string | null
+          super_admin_phone_masked?: string | null
+          tenant_id: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          wechat_applyment_state_raw?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          appid_binding_message?: string | null
+          appid_binding_state?: string
+          application_no?: string
+          applyment_business_code?: string | null
+          applyment_id?: string | null
+          applyment_state?: string
+          applyment_state_message?: string | null
+          approved_at?: string | null
+          attachments?: Json
+          audit_detail?: Json
+          business_scene_description?: string | null
+          contact_address?: string | null
+          contact_identity_doc_type?: string | null
+          contact_identity_period_begin?: string | null
+          contact_identity_period_end?: string | null
+          contact_type?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          draft_epoch?: number
+          draft_revision?: number
+          has_sensitive_payload?: boolean
+          id?: string
+          identity_address_masked?: string | null
+          identity_doc_type?: string | null
+          identity_period_begin?: string | null
+          identity_period_end?: string | null
+          last_wechat_request_id?: string | null
+          last_wechat_synced_at?: string | null
+          legal_representative_name?: string | null
+          license_address?: string | null
+          license_code?: string | null
+          license_name?: string | null
+          license_period_begin?: string | null
+          license_period_end?: string | null
+          merchant_short_name?: string | null
+          opened_at?: string | null
+          payment_config_id?: string | null
+          qualification_type?: string | null
+          rejected_at?: string | null
+          rejected_reason?: string | null
+          remark?: string | null
+          reviewed_by_employee_id?: string | null
+          sensitive_payload_ciphertext?: string | null
+          sensitive_payload_updated_at?: string | null
+          sensitive_payload_version?: number | null
+          service_phone?: string | null
+          settlement_account_name?: string | null
+          settlement_account_number_masked?: string | null
+          settlement_account_summary?: string | null
+          settlement_account_type?: string | null
+          settlement_bank_branch_id?: string | null
+          settlement_bank_full_name?: string | null
+          settlement_bank_name?: string | null
+          settlement_id?: string | null
+          sign_url?: string | null
+          status?: string
+          sub_appid?: string | null
+          sub_mchid?: string | null
+          subject_type?: string | null
+          submission_attempt_count?: number
+          submission_claimed_at?: string | null
+          submitted_at?: string | null
+          super_admin_email?: string | null
+          super_admin_name?: string | null
+          super_admin_phone_masked?: string | null
+          tenant_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          wechat_applyment_state_raw?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_payment_config_id_fkey"
+            columns: ["payment_config_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_payment_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wechat_pay_applyments_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -8749,6 +12806,13 @@ export type Database = {
             foreignKeyName: "user_business_memberships_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "user_business_memberships_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -8826,8 +12890,22 @@ export type Database = {
             foreignKeyName: "user_location_contexts_recommended_tenant_id_fkey"
             columns: ["recommended_tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "user_location_contexts_recommended_tenant_id_fkey"
+            columns: ["recommended_tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_location_contexts_selected_tenant_id_fkey"
+            columns: ["selected_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "user_location_contexts_selected_tenant_id_fkey"
@@ -8991,6 +13069,13 @@ export type Database = {
             foreignKeyName: "wechat_payment_notifications_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -9118,6 +13203,13 @@ export type Database = {
             foreignKeyName: "wechat_payment_orders_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "wechat_payment_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -9224,6 +13316,13 @@ export type Database = {
             foreignKeyName: "wechat_rebind_requests_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "wechat_rebind_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -9270,6 +13369,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "workflow_definitions"
             referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_definition_bindings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "workflow_definition_bindings_tenant_id_fkey"
@@ -9337,6 +13443,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_definitions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "workflow_definitions_tenant_id_fkey"
@@ -9412,6 +13525,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "workflow_nodes"
             referencedColumns: ["id", "definition_id"]
+          },
+          {
+            foreignKeyName: "workflow_edges_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "workflow_edges_tenant_id_fkey"
@@ -9504,6 +13624,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_instance_nodes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "workflow_instance_nodes_tenant_id_fkey"
@@ -9614,6 +13741,13 @@ export type Database = {
             foreignKeyName: "workflow_instances_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_instances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -9684,6 +13818,13 @@ export type Database = {
             foreignKeyName: "workflow_nodes_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_nodes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -9749,6 +13890,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "workflow_instances"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_subject_states_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
           },
           {
             foreignKeyName: "workflow_subject_states_tenant_id_fkey"
@@ -9856,6 +14004,13 @@ export type Database = {
             foreignKeyName: "workflow_tasks_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_tasks_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -9929,6 +14084,13 @@ export type Database = {
             foreignKeyName: "workflow_transition_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_transition_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -9993,6 +14155,13 @@ export type Database = {
             foreignKeyName: "workflow_versions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_versions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -10000,6 +14169,71 @@ export type Database = {
       }
     }
     Views: {
+      platform_ocr_tenant_policy_overview: {
+        Row: {
+          allowed_document_types: string[] | null
+          configured: boolean | null
+          created_at: string | null
+          daily_limit: number | null
+          enabled: boolean | null
+          enabled_at: string | null
+          remark: string | null
+          tenant_id: string | null
+          tenant_name: string | null
+          tenant_slug: string | null
+          tenant_status: string | null
+          updated_at: string | null
+          updated_by_employee_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_tenant_policies_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_supplier_directory: {
+        Row: {
+          code: string | null
+          created_at: string | null
+          id: string | null
+          legal_name: string | null
+          name: string | null
+          onboarding_status: string | null
+          operational_status: string | null
+          qualification_health: string | null
+          supplier_type: string | null
+          unified_social_credit_code: string | null
+          updated_at: string | null
+          version: number | null
+        }
+        Relationships: []
+      }
+      site_content_admin_list: {
+        Row: {
+          content_type: string | null
+          created_at: string | null
+          id: string | null
+          published_at: string | null
+          published_version_id: string | null
+          slug: string | null
+          status: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_content_published_version_fk"
+            columns: ["id", "published_version_id"]
+            isOneToOne: false
+            referencedRelation: "site_content_versions"
+            referencedColumns: ["entry_id", "id"]
+          },
+        ]
+      }
       tenant_credit_account_balances: {
         Row: {
           available_credits: number | null
@@ -10057,6 +14291,13 @@ export type Database = {
             foreignKeyName: "tenant_credit_accounts_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_credit_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -10073,43 +14314,16 @@ export type Database = {
         }
         Returns: string
       }
-      claim_tenant_wechat_pay_applyment_draft_session: {
+      approve_platform_partner_member_rebind_request: {
         Args: {
-          p_applyment_id: string
-          p_employee_id: string
-          p_tenant_id: string
+          p_comment?: string
+          p_request_id: string
+          p_reviewer_employee_id: string
         }
-        Returns: number
-      }
-      create_tenant_wechat_pay_applyment: {
-        Args: {
-          p_applyment: Json
-          p_audit_metadata: Json
-        }
-        Returns: string
-      }
-      submit_tenant_wechat_pay_applyment: {
-        Args: {
-          p_applyment_id: string
-          p_employee_id: string
-          p_expected_updated_at: string
-          p_idempotency_key: string
-          p_remark: string | null
-          p_tenant_id: string
-        }
-        Returns: string
-      }
-      update_tenant_wechat_pay_applyment_draft: {
-        Args: {
-          p_applyment_id: string
-          p_audit_metadata: Json | null
-          p_employee_id: string
-          p_epoch: number
-          p_patch: Json
-          p_revision: number
-          p_tenant_id: string
-        }
-        Returns: string
+        Returns: {
+          request_id: string
+          status: string
+        }[]
       }
       approve_tenant_onboarding_application: {
         Args: {
@@ -10123,6 +14337,25 @@ export type Database = {
         }
         Returns: Json
       }
+      archive_site_content: {
+        Args: { p_actor_id: string; p_entry_id: string }
+        Returns: {
+          content_type: string
+          created_at: string
+          id: string
+          published_at: string | null
+          published_version_id: string | null
+          slug: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "site_content_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       assign_platform_lead: {
         Args: {
           p_assigned_note?: string
@@ -10132,11 +14365,44 @@ export type Database = {
         }
         Returns: Json
       }
+      begin_phone_identity_selection: {
+        Args: {
+          p_auth_user_id: string
+          p_candidates: Json
+          p_now: string
+          p_openid_hash: string
+          p_selection_token_hash: string
+          p_session_id: string
+          p_share_context: Json
+        }
+        Returns: {
+          status: string
+        }[]
+      }
+      billing_apply_wechat_recharge_refund_callback_state: {
+        Args: {
+          p_checked_at: string
+          p_metadata: Json
+          p_out_refund_no: string
+          p_refund_request_id: string
+          p_status: string
+        }
+        Returns: boolean
+      }
+      billing_begin_wechat_recharge_refund: {
+        Args: {
+          p_now: string
+          p_out_refund_no: string
+          p_refund_request_id: string
+        }
+        Returns: Json
+      }
       billing_charge_credits: {
         Args: {
           p_change_credits: number
           p_correlation_id?: string
           p_event_type: string
+          p_operator_user_id?: string
           p_pricing_snapshot?: Json
           p_remark?: string
           p_source_id?: string
@@ -10145,7 +14411,204 @@ export type Database = {
         }
         Returns: Json
       }
+      billing_charge_subscription_invoice: {
+        Args: { p_invoice_id: string; p_operator_user_id?: string }
+        Returns: Json
+      }
+      billing_claim_expired_recharge_orders: {
+        Args: {
+          p_excluded_ids?: string[]
+          p_lease_seconds: number
+          p_limit: number
+        }
+        Returns: {
+          amount_fen: number
+          bonus_credits: number
+          channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          credits: number
+          id: string
+          idempotency_key: string | null
+          latest_notification_id: string | null
+          metadata: Json
+          order_no: string
+          out_trade_no: string | null
+          package_code: string | null
+          paid_amount_fen: number
+          paid_at: string | null
+          payment_config_id: string | null
+          payment_expires_at: string | null
+          prepay_id: string | null
+          refund_amount_fen: number | null
+          refund_requested_at: string | null
+          refund_status: string | null
+          refunded_at: string | null
+          remark: string | null
+          status: string
+          tenant_id: string
+          transaction_id: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_credit_orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      billing_claim_wechat_recharge_refunds: {
+        Args: {
+          p_claim_token: string
+          p_lease_seconds: number
+          p_limit: number
+          p_now: string
+        }
+        Returns: {
+          id: string
+          order_id: string
+          out_refund_no: string
+          reason: string
+          reconcile_attempt_count: number
+          refund_amount_fen: number
+          requested_amount_fen: number
+          tenant_id: string
+          wechat_refund_id: string
+        }[]
+      }
+      billing_close_wechat_recharge_refund: {
+        Args: {
+          p_checked_at: string
+          p_claim_token: string
+          p_metadata: Json
+          p_refund_request_id: string
+        }
+        Returns: boolean
+      }
+      billing_confirm_claimed_wechat_recharge_refund: {
+        Args: {
+          p_claim_token: string
+          p_metadata: Json
+          p_out_refund_no: string
+          p_refund_amount_fen: number
+          p_refund_request_id: string
+          p_refunded_at: string
+          p_wechat_refund_id: string
+        }
+        Returns: Json
+      }
+      billing_confirm_wechat_recharge: {
+        Args: {
+          p_metadata?: Json
+          p_notification_id: string
+          p_order_id: string
+          p_paid_amount_fen: number
+          p_paid_at: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      billing_confirm_wechat_recharge_and_recover: {
+        Args: {
+          p_metadata?: Json
+          p_notification_id: string
+          p_order_id: string
+          p_paid_amount_fen: number
+          p_paid_at: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      billing_confirm_wechat_recharge_core: {
+        Args: {
+          p_metadata?: Json
+          p_notification_id: string
+          p_order_id: string
+          p_paid_amount_fen: number
+          p_paid_at: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      billing_confirm_wechat_recharge_refund: {
+        Args: {
+          p_metadata?: Json
+          p_notification_id: string
+          p_out_refund_no: string
+          p_refund_amount_fen: number
+          p_refund_request_id: string
+          p_refunded_at: string
+          p_wechat_refund_id: string
+        }
+        Returns: Json
+      }
+      billing_create_pending_wechat_recharge_order: {
+        Args: {
+          p_amount_fen: number
+          p_bonus_credits: number
+          p_created_by: string
+          p_credits: number
+          p_expected_guard_version: number
+          p_idempotency_key: string
+          p_metadata?: Json
+          p_order_no: string
+          p_out_trade_no: string
+          p_package_code: string
+          p_payment_config_id: string
+          p_payment_expires_at: string
+          p_tenant_id: string
+        }
+        Returns: {
+          amount_fen: number
+          bonus_credits: number
+          channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          credits: number
+          id: string
+          idempotency_key: string | null
+          latest_notification_id: string | null
+          metadata: Json
+          order_no: string
+          out_trade_no: string | null
+          package_code: string | null
+          paid_amount_fen: number
+          paid_at: string | null
+          payment_config_id: string | null
+          payment_expires_at: string | null
+          prepay_id: string | null
+          refund_amount_fen: number | null
+          refund_requested_at: string | null
+          refund_status: string | null
+          refunded_at: string | null
+          remark: string | null
+          status: string
+          tenant_id: string
+          transaction_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_credit_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       billing_ensure_account: { Args: { p_tenant_id: string }; Returns: Json }
+      billing_ensure_subscription_invoices: {
+        Args: { p_limit?: number; p_now?: string }
+        Returns: Json
+      }
       billing_freeze_credits: {
         Args: {
           p_change_credits: number
@@ -10171,6 +14634,70 @@ export type Database = {
         }
         Returns: Json
       }
+      billing_recover_subscription_after_recharge: {
+        Args: { p_tenant_id: string }
+        Returns: Json
+      }
+      billing_renew_recharge_close_claim: {
+        Args: {
+          p_claim_token: string
+          p_lease_seconds: number
+          p_order_id: string
+        }
+        Returns: {
+          amount_fen: number
+          bonus_credits: number
+          channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          credits: number
+          id: string
+          idempotency_key: string | null
+          latest_notification_id: string | null
+          metadata: Json
+          order_no: string
+          out_trade_no: string | null
+          package_code: string | null
+          paid_amount_fen: number
+          paid_at: string | null
+          payment_config_id: string | null
+          payment_expires_at: string | null
+          prepay_id: string | null
+          refund_amount_fen: number | null
+          refund_requested_at: string | null
+          refund_status: string | null
+          refunded_at: string | null
+          remark: string | null
+          status: string
+          tenant_id: string
+          transaction_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_credit_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      billing_reschedule_wechat_recharge_refund: {
+        Args: {
+          p_checked_at: string
+          p_claim_token: string
+          p_last_error: string
+          p_metadata: Json
+          p_reconcile_next_at: string
+          p_refund_amount_fen: number
+          p_refund_request_id: string
+          p_wechat_refund_id: string
+        }
+        Returns: boolean
+      }
       billing_settle_event: {
         Args: {
           p_billing_event_id: string
@@ -10195,6 +14722,54 @@ export type Database = {
         Args: { p_auth_user_id: string; p_phone: string; p_share_token: string }
         Returns: Json
       }
+      bind_douyin_miniapp_installation: {
+        Args: {
+          p_authorizer_appid: string
+          p_deployment_key: string
+          p_runtime_config: Json
+          p_tenant_id: string
+        }
+        Returns: {
+          access_token_ciphertext: string | null
+          access_token_expires_at: string | null
+          access_token_iv: string | null
+          access_token_key_version: string | null
+          access_token_tag: string | null
+          authorization_event_occurred_at: string | null
+          authorization_status: string
+          authorizer_appid: string
+          component_appid: string
+          created_at: string
+          deployment_key: string | null
+          id: string
+          installation_kind: string
+          last_audited_at: string | null
+          last_released_at: string | null
+          last_submitted_at: string | null
+          permission_snapshot: Json
+          refresh_token_ciphertext: string | null
+          refresh_token_expires_at: string | null
+          refresh_token_iv: string | null
+          refresh_token_key_version: string | null
+          refresh_token_tag: string | null
+          revoked_at: string | null
+          runtime_config: Json
+          template_id: string | null
+          template_release_id: string | null
+          template_version: string | null
+          tenant_id: string | null
+          token_refresh_claim_expires_at: string | null
+          token_refresh_claim_token: string | null
+          token_refresh_last_error: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "douyin_miniapp_installations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       cancel_workflow_instance: {
         Args: {
           p_actor_employee_id: string
@@ -10206,114 +14781,59 @@ export type Database = {
         }
         Returns: Json
       }
-      claim_tenant_onboarding_notification: {
+      claim_douyin_authorization_event: {
         Args: {
-          p_application_id: string
-          p_delivery_id: string
-          p_lease_seconds: number
-          p_max_attempts: number
-          p_now: string
+          p_authorizer_appid: string
+          p_component_appid: string
+          p_event_key: string
+          p_event_name: string
+          p_occurred_at: string
         }
         Returns: {
-          application_id: string
-          application_version: number
-          attempt_count: number
-          channel: string
-          claim_expires_at: string | null
-          claim_token: string | null
-          created_at: string
-          event_type: string
-          id: string
-          last_error: string | null
-          sent_at: string | null
-          status: string
-          updated_at: string
+          claim_expires_at: string
+          claim_state: string
+          claim_token: string
         }[]
-        SetofOptions: {
-          from: "*"
-          to: "tenant_onboarding_notification_deliveries"
-          isOneToOne: false
-          isSetofReturn: true
-        }
       }
-      claim_wechat_pay_applyment_submission: {
-        Args: { p_applyment_id: string; p_employee_id: string }
-        Returns: {
-          activated_at: string | null
-          appid_binding_message: string | null
-          appid_binding_state: string
-          application_no: string
-          applyment_business_code: string | null
-          applyment_id: string | null
-          applyment_state: string
-          applyment_state_message: string | null
-          approved_at: string | null
-          attachments: Json
-          audit_detail: Json
-          business_scene_description: string | null
-          contact_address: string | null
-          contact_identity_doc_type: string | null
-          contact_identity_period_begin: string | null
-          contact_identity_period_end: string | null
-          contact_type: string | null
-          created_at: string
-          created_by_employee_id: string | null
-          has_sensitive_payload: boolean
-          id: string
-          identity_address_masked: string | null
-          identity_doc_type: string | null
-          identity_period_begin: string | null
-          identity_period_end: string | null
-          last_wechat_request_id: string | null
-          last_wechat_synced_at: string | null
-          legal_representative_name: string | null
-          license_address: string | null
-          license_code: string | null
-          license_name: string | null
-          license_period_begin: string | null
-          license_period_end: string | null
-          merchant_short_name: string | null
-          opened_at: string | null
-          payment_config_id: string | null
-          qualification_type: string | null
-          rejected_at: string | null
-          rejected_reason: string | null
-          remark: string | null
-          reviewed_by_employee_id: string | null
-          sensitive_payload_ciphertext: string | null
-          sensitive_payload_updated_at: string | null
-          sensitive_payload_version: number | null
-          service_phone: string | null
-          settlement_account_number_masked: string | null
-          settlement_account_name: string | null
-          settlement_account_summary: string | null
-          settlement_account_type: string | null
-          settlement_bank_branch_id: string | null
-          settlement_bank_full_name: string | null
-          settlement_bank_name: string | null
-          settlement_id: string | null
-          sign_url: string | null
-          status: string
-          sub_appid: string | null
-          sub_mchid: string | null
-          subject_type: string | null
-          submission_attempt_count: number
-          submission_claimed_at: string | null
-          submitted_at: string | null
-          super_admin_email: string | null
-          super_admin_name: string | null
-          super_admin_phone_masked: string | null
-          tenant_id: string
-          updated_at: string
-          updated_by_employee_id: string | null
-          wechat_applyment_state_raw: string | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "tenant_wechat_pay_applyments"
-          isOneToOne: false
-          isSetofReturn: true
+      claim_douyin_authorizer_token_force_refresh: {
+        Args: {
+          p_expected_access_token_ciphertext: string
+          p_installation_id: string
         }
+        Returns: {
+          claim_expires_at: string
+          claim_token: string
+        }[]
+      }
+      claim_douyin_authorizer_token_refresh: {
+        Args: { p_installation_id: string }
+        Returns: {
+          claim_expires_at: string
+          claim_token: string
+        }[]
+      }
+      claim_douyin_component_token_refresh: {
+        Args: { p_component_appid: string }
+        Returns: {
+          claim_expires_at: string
+          claim_token: string
+        }[]
+      }
+      claim_douyin_miniapp_release_operation: {
+        Args: {
+          p_claim_expires_at: string
+          p_claim_token: string
+          p_expected_statuses: string[]
+          p_operation_name: string
+          p_operator_id: string
+          p_release_id: string
+        }
+        Returns: {
+          claim_expires_at: string
+          claim_token: string
+          recovery_required: boolean
+          release_id: string
+        }[]
       }
       claim_next_social_video_transcription:
         | {
@@ -10414,10 +14934,563 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      claim_phone_identity_login_verification: {
+        Args: {
+          p_auth_user_id: string
+          p_code: string
+          p_expires_at: string
+          p_now: string
+          p_openid_hash: string
+          p_phone: string
+        }
+        Returns: {
+          session_id: string
+          status: string
+        }[]
+      }
+      claim_platform_partner_member_binding: {
+        Args: { p_auth_user_id: string; p_code: string; p_phone: string }
+        Returns: {
+          member_id: string
+          status: string
+        }[]
+      }
+      claim_tenant_onboarding_notification: {
+        Args: {
+          p_application_id: string
+          p_delivery_id: string
+          p_lease_seconds: number
+          p_max_attempts: number
+          p_now: string
+        }
+        Returns: {
+          application_id: string
+          application_version: number
+          attempt_count: number
+          channel: string
+          claim_expires_at: string | null
+          claim_token: string | null
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_onboarding_notification_deliveries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_tenant_wechat_pay_applyment_draft_session: {
+        Args: {
+          p_applyment_id: string
+          p_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: number
+      }
+      claim_wechat_pay_applyment_submission: {
+        Args: { p_applyment_id: string; p_employee_id: string }
+        Returns: {
+          activated_at: string | null
+          appid_binding_message: string | null
+          appid_binding_state: string
+          application_no: string
+          applyment_business_code: string | null
+          applyment_id: string | null
+          applyment_state: string
+          applyment_state_message: string | null
+          approved_at: string | null
+          attachments: Json
+          audit_detail: Json
+          business_scene_description: string | null
+          contact_address: string | null
+          contact_identity_doc_type: string | null
+          contact_identity_period_begin: string | null
+          contact_identity_period_end: string | null
+          contact_type: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          draft_epoch: number
+          draft_revision: number
+          has_sensitive_payload: boolean
+          id: string
+          identity_address_masked: string | null
+          identity_doc_type: string | null
+          identity_period_begin: string | null
+          identity_period_end: string | null
+          last_wechat_request_id: string | null
+          last_wechat_synced_at: string | null
+          legal_representative_name: string | null
+          license_address: string | null
+          license_code: string | null
+          license_name: string | null
+          license_period_begin: string | null
+          license_period_end: string | null
+          merchant_short_name: string | null
+          opened_at: string | null
+          payment_config_id: string | null
+          qualification_type: string | null
+          rejected_at: string | null
+          rejected_reason: string | null
+          remark: string | null
+          reviewed_by_employee_id: string | null
+          sensitive_payload_ciphertext: string | null
+          sensitive_payload_updated_at: string | null
+          sensitive_payload_version: number | null
+          service_phone: string | null
+          settlement_account_name: string | null
+          settlement_account_number_masked: string | null
+          settlement_account_summary: string | null
+          settlement_account_type: string | null
+          settlement_bank_branch_id: string | null
+          settlement_bank_full_name: string | null
+          settlement_bank_name: string | null
+          settlement_id: string | null
+          sign_url: string | null
+          status: string
+          sub_appid: string | null
+          sub_mchid: string | null
+          subject_type: string | null
+          submission_attempt_count: number
+          submission_claimed_at: string | null
+          submitted_at: string | null
+          super_admin_email: string | null
+          super_admin_name: string | null
+          super_admin_phone_masked: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          wechat_applyment_state_raw: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_wechat_pay_applyments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      complete_douyin_authorization_event: {
+        Args: {
+          p_access_token_ciphertext: string
+          p_access_token_expires_at: string
+          p_access_token_iv: string
+          p_access_token_key_version: string
+          p_access_token_tag: string
+          p_authorizer_appid: string
+          p_claim_token: string
+          p_component_appid: string
+          p_event_key: string
+          p_event_name: string
+          p_occurred_at: string
+          p_permissions: Json
+          p_refresh_token_ciphertext: string
+          p_refresh_token_expires_at: string
+          p_refresh_token_iv: string
+          p_refresh_token_key_version: string
+          p_refresh_token_tag: string
+        }
+        Returns: boolean
+      }
+      complete_douyin_authorizer_token_refresh: {
+        Args: {
+          p_access_token_ciphertext: string
+          p_access_token_expires_at: string
+          p_access_token_iv: string
+          p_access_token_key_version: string
+          p_access_token_tag: string
+          p_claim_token: string
+          p_installation_id: string
+          p_refresh_token_ciphertext: string
+          p_refresh_token_expires_at: string
+          p_refresh_token_iv: string
+          p_refresh_token_key_version: string
+          p_refresh_token_tag: string
+        }
+        Returns: boolean
+      }
+      complete_douyin_component_token_refresh: {
+        Args: {
+          p_access_token_ciphertext: string
+          p_access_token_expires_at: string
+          p_access_token_iv: string
+          p_access_token_key_version: string
+          p_access_token_tag: string
+          p_claim_token: string
+          p_component_appid: string
+        }
+        Returns: boolean
+      }
+      complete_douyin_revocation_event: {
+        Args: {
+          p_authorizer_appid: string
+          p_claim_token: string
+          p_component_appid: string
+          p_event_key: string
+          p_occurred_at: string
+        }
+        Returns: boolean
+      }
+      complete_douyin_ticket_event: {
+        Args: {
+          p_claim_token: string
+          p_component_appid: string
+          p_event_key: string
+          p_received_at: string
+          p_ticket_ciphertext: string
+          p_ticket_iv: string
+          p_ticket_key_version: string
+          p_ticket_tag: string
+        }
+        Returns: boolean
+      }
+      complete_douyin_unsupported_event: {
+        Args: { p_claim_token: string; p_event_key: string }
+        Returns: boolean
+      }
+      complete_workflow_instance_node: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_definition_id: string
+          p_instance_id: string
+          p_node_key: string
+          p_output: Json
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_catalog_brand: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_brand_id: string
+          p_code: string
+          p_idempotency_key: string
+          p_legal_name: string
+          p_logo_file_id: string
+          p_name: string
+          p_sort_order: number
+          p_status: string
+        }
+        Returns: Json
+      }
+      create_catalog_category: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_category_id: string
+          p_code: string
+          p_idempotency_key: string
+          p_level: number
+          p_name: string
+          p_parent_id: string
+          p_sort_order: number
+          p_status: string
+        }
+        Returns: Json
+      }
+      create_catalog_unit: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_base_unit_id: string
+          p_code: string
+          p_conversion_factor: string
+          p_idempotency_key: string
+          p_name: string
+          p_sort_order: number
+          p_status: string
+          p_symbol: string
+          p_unit_id: string
+        }
+        Returns: Json
+      }
+      create_douyin_template_development_installation: {
+        Args: {
+          p_authorizer_appid: string
+          p_component_appid: string
+          p_runtime_config: Json
+          p_tenant_id: string
+        }
+        Returns: {
+          access_token_ciphertext: string | null
+          access_token_expires_at: string | null
+          access_token_iv: string | null
+          access_token_key_version: string | null
+          access_token_tag: string | null
+          authorization_event_occurred_at: string | null
+          authorization_status: string
+          authorizer_appid: string
+          component_appid: string
+          created_at: string
+          deployment_key: string | null
+          id: string
+          installation_kind: string
+          last_audited_at: string | null
+          last_released_at: string | null
+          last_submitted_at: string | null
+          permission_snapshot: Json
+          refresh_token_ciphertext: string | null
+          refresh_token_expires_at: string | null
+          refresh_token_iv: string | null
+          refresh_token_key_version: string | null
+          refresh_token_tag: string | null
+          revoked_at: string | null
+          runtime_config: Json
+          template_id: string | null
+          template_release_id: string | null
+          template_version: string | null
+          tenant_id: string | null
+          token_refresh_claim_expires_at: string | null
+          token_refresh_claim_token: string | null
+          token_refresh_last_error: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "douyin_miniapp_installations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_platform_supplier: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_code: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_legal_name: string
+          p_name: string
+          p_supplier_id: string
+          p_supplier_type: string
+          p_unified_social_credit_code: string
+        }
+        Returns: Json
+      }
+      create_project_log_fast: {
+        Args: {
+          p_content: string
+          p_employee_id: string
+          p_images?: Json
+          p_node_name: string
+          p_project_id: string
+          p_project_log_scope?: string
+          p_stage_code: string
+          p_tenant_department_id?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_site_content_entry_with_version: {
+        Args: {
+          p_actor_id: string
+          p_canonical_url: string
+          p_content_blocks: Json
+          p_content_type: string
+          p_cover_file_id: string
+          p_metadata: Json
+          p_seo_description: string
+          p_seo_title: string
+          p_slug: string
+          p_summary: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      create_supplier_address: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_address_detail: string
+          p_address_id: string
+          p_address_type: string
+          p_city: string
+          p_district: string
+          p_idempotency_key: string
+          p_is_default: boolean
+          p_latitude: number
+          p_longitude: number
+          p_province: string
+          p_region_code: string
+          p_status: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
+      create_supplier_contact: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_contact_id: string
+          p_contact_type: string
+          p_email: string
+          p_idempotency_key: string
+          p_is_primary: boolean
+          p_is_public: boolean
+          p_name: string
+          p_phone: string
+          p_status: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
+      create_supplier_contract: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_contract_id: string
+          p_contract_no: string
+          p_document_file_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_invoice_required_before_payment: boolean
+          p_name: string
+          p_settlement_term_days: number
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+          p_valid_from: string
+          p_valid_until: string
+        }
+        Returns: Json
+      }
+      create_supplier_qualification: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_certificate_no: string
+          p_document_file_id: string
+          p_idempotency_key: string
+          p_qualification_id: string
+          p_qualification_type_id: string
+          p_supplier_id: string
+          p_valid_from: string
+          p_valid_until: string
+        }
+        Returns: Json
+      }
+      create_supplier_qualification_type: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_applicable_supplier_types: string[]
+          p_blocks_new_orders: boolean
+          p_code: string
+          p_idempotency_key: string
+          p_is_required: boolean
+          p_name: string
+          p_qualification_type_id: string
+          p_sort_order: number
+          p_status: string
+          p_warning_days: number
+        }
+        Returns: Json
+      }
+      create_supplier_service_region: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_region_code: string
+          p_region_id: string
+          p_region_level: string
+          p_status: string
+          p_supplier_id: string
+          p_valid_from: string
+          p_valid_until: string
+        }
+        Returns: Json
+      }
+      create_tenant_supplier: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_supplier_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
+      create_tenant_wechat_pay_applyment: {
+        Args: { p_applyment: Json; p_audit_metadata: Json }
+        Returns: string
+      }
+      enable_douyin_miniapp_installation: {
+        Args: { p_installation_id: string }
+        Returns: {
+          access_token_ciphertext: string | null
+          access_token_expires_at: string | null
+          access_token_iv: string | null
+          access_token_key_version: string | null
+          access_token_tag: string | null
+          authorization_event_occurred_at: string | null
+          authorization_status: string
+          authorizer_appid: string
+          component_appid: string
+          created_at: string
+          deployment_key: string | null
+          id: string
+          installation_kind: string
+          last_audited_at: string | null
+          last_released_at: string | null
+          last_submitted_at: string | null
+          permission_snapshot: Json
+          refresh_token_ciphertext: string | null
+          refresh_token_expires_at: string | null
+          refresh_token_iv: string | null
+          refresh_token_key_version: string | null
+          refresh_token_tag: string | null
+          revoked_at: string | null
+          runtime_config: Json
+          template_id: string | null
+          template_release_id: string | null
+          template_version: string | null
+          tenant_id: string | null
+          token_refresh_claim_expires_at: string | null
+          token_refresh_claim_token: string | null
+          token_refresh_last_error: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "douyin_miniapp_installations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       expire_tenant_onboarding_partner_assists: {
         Args: { p_cutoff: string; p_partner_id?: string }
         Returns: {
           application_id: string
+        }[]
+      }
+      fail_douyin_authorizer_token_refresh: {
+        Args: {
+          p_claim_token: string
+          p_installation_id: string
+          p_last_refresh_error_code: string
+        }
+        Returns: boolean
+      }
+      fail_douyin_component_token_refresh: {
+        Args: {
+          p_claim_token: string
+          p_component_appid: string
+          p_last_refresh_error_code: string
+        }
+        Returns: boolean
+      }
+      finalize_phone_identity_selection: {
+        Args: { p_candidate_id: string; p_now: string; p_session_id: string }
+        Returns: {
+          status: string
         }[]
       }
       finalize_tenant_onboarding_notification_failed: {
@@ -10478,41 +15551,6 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      complete_workflow_instance_node: {
-        Args: {
-          p_action: string
-          p_actor_employee_id: string
-          p_definition_id: string
-          p_instance_id: string
-          p_node_key: string
-          p_output: Json
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      create_project_log_fast: {
-        Args: {
-          p_content: string
-          p_employee_id: string
-          p_images?: Json
-          p_node_name: string
-          p_project_id: string
-          p_project_log_scope?: string
-          p_stage_code: string
-          p_tenant_department_id?: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      initialize_default_decoration_tenant: {
-        Args: {
-          p_admin_name: string
-          p_admin_phone: string
-          p_operator_employee_id?: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
       find_auth_user_by_email: {
         Args: { p_email: string }
         Returns: {
@@ -10555,6 +15593,10 @@ export type Database = {
           stage_code: string
         }[]
       }
+      get_douyin_authorization_event_state: {
+        Args: { p_event_key: string }
+        Returns: string
+      }
       get_employee_permission_context_fast: {
         Args: { p_employee_id: string }
         Returns: {
@@ -10572,6 +15614,59 @@ export type Database = {
         }
         Returns: Json
       }
+      get_or_create_and_claim_douyin_miniapp_release_upload: {
+        Args: {
+          p_channel: string
+          p_claim_expires_at: string
+          p_claim_token: string
+          p_description: string
+          p_ext_json: Json
+          p_installation_id: string
+          p_operator_id: string
+          p_template_id: string
+          p_template_version: string
+        }
+        Returns: {
+          audit_host_names: string[]
+          audit_note: string
+          audit_result: Json
+          audited_at: string
+          channel: string
+          created_at: string
+          description: string
+          douyin_log_id: string
+          ext_json: Json
+          id: string
+          installation_id: string
+          operation_claim_expires_at: string
+          operation_claim_token: string
+          operation_name: string
+          platform_operator_id: string
+          recovery_required: boolean
+          released_at: string
+          status: string
+          submitted_at: string
+          template_id: string
+          template_version: string
+          test_qr_url: string
+          updated_at: string
+        }[]
+      }
+      get_partner_dashboard_monthly_summary: {
+        Args: { p_end_at: string; p_partner_id: string; p_start_at: string }
+        Returns: {
+          available_commission_amount_fen: number
+          commission_amount_fen: number
+          paid_amount_fen: number
+          paid_settlement_amount_fen: number
+          revenue_amount_fen: number
+          revenue_event_count: number
+          settled_commission_amount_fen: number
+          settlement_batch_count: number
+          settlement_total_amount_fen: number
+          tenant_count: number
+        }[]
+      }
       get_project_log_calendar: {
         Args: { project_uuid: string; timezone_name?: string }
         Returns: {
@@ -10580,6 +15675,18 @@ export type Database = {
           node_name: string
           stage_code: string
         }[]
+      }
+      get_project_operational_risk_page: {
+        Args: {
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_risk_type?: string
+          p_severity?: string
+          p_tenant_id: string
+          p_timezone_name?: string
+        }
+        Returns: Json
       }
       get_project_receivable_summary: {
         Args: { p_project_id: string; p_tenant_id: string; p_today?: string }
@@ -10590,6 +15697,32 @@ export type Database = {
           paid_amount: number
           receivable_amount: number
           remaining_amount: number
+        }[]
+      }
+      get_tenant_supplier_order_eligibility: {
+        Args: {
+          p_checked_at: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
+      get_tenant_supplier_order_eligibility_set: {
+        Args: {
+          p_checked_at: string
+          p_tenant_id: string
+          p_tenant_supplier_id?: string
+        }
+        Returns: {
+          blocking_reasons: string[]
+          checked_at: string
+          contract_health: string
+          eligible: boolean
+          supplier_id: string
+          supplier_version: number
+          tenant_id: string
+          tenant_supplier_id: string
+          tenant_supplier_version: number
         }[]
       }
       get_visitor_picture_asset_navigation: {
@@ -10616,38 +15749,104 @@ export type Database = {
           version_id: string
         }[]
       }
-      list_tenant_service_provider_publications: {
-        Args: { p_keyword: string; p_status: string }
+      increment_platform_partner_invite_code_counts: {
+        Args: {
+          p_approved_count?: number
+          p_invite_code_id: string
+          p_scan_count?: number
+          p_submitted_count?: number
+        }
+        Returns: undefined
+      }
+      initialize_default_decoration_tenant: {
+        Args: {
+          p_admin_name: string
+          p_admin_phone: string
+          p_operator_employee_id?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      list_accessible_project_workflow_tasks: {
+        Args: {
+          p_employee_id?: string
+          p_limit?: number
+          p_permission_codes?: string[]
+          p_project_ids?: string[]
+          p_role_codes?: string[]
+          p_tenant_id: string
+        }
         Returns: {
-          address_city: string | null
-          address_district: string | null
-          area_count: number
-          public_name: string | null
-          public_phone: string | null
+          assignee_employee: Json
+          assignee_employee_id: string
+          assignee_permission_code: string
+          assignee_role_code: string
+          completed_at: string
+          completed_by: string
+          created_at: string
+          definition_id: string
+          due_at: string
+          id: string
+          instance: Json
+          instance_id: string
+          instance_node_id: string
+          node_id: string
+          node_key: string
+          node_type: string
           status: string
-          submitted_at: string | null
           tenant_id: string
-          tenant_name: string
+          title: string
+          total_count: number
           updated_at: string
-          version: number
+          version_id: string
         }[]
       }
-      list_visitor_local_service_providers: {
-        Args: { p_region_codes: string[] }
+      list_accessible_workflow_tasks: {
+        Args: {
+          p_employee_id?: string
+          p_instance_id?: string
+          p_page?: number
+          p_page_size?: number
+          p_permission_codes?: string[]
+          p_role_codes?: string[]
+          p_status?: string
+          p_subject_id?: string
+          p_subject_type?: string
+          p_tenant_id: string
+        }
         Returns: {
-          address: string | null
-          address_city: string | null
-          address_district: string | null
-          address_latitude: number | null
-          address_longitude: number | null
-          address_province: string | null
-          address_region_code: string | null
-          introduction: string | null
-          matched_region_code: string
-          public_name: string
-          public_phone: string
+          assignee_employee: Json
+          assignee_employee_id: string
+          assignee_permission_code: string
+          assignee_role_code: string
+          completed_at: string
+          completed_by: string
+          created_at: string
+          definition_id: string
+          due_at: string
+          id: string
+          instance: Json
+          instance_id: string
+          instance_node_id: string
+          node_id: string
+          node_key: string
+          node_type: string
+          status: string
           tenant_id: string
+          title: string
+          total_count: number
+          updated_at: string
+          version_id: string
         }[]
+      }
+      list_available_suppliers_for_tenant: {
+        Args: {
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       list_customer_home_projects: {
         Args: {
@@ -10742,6 +15941,68 @@ export type Database = {
           wechat_openid_masked: string
         }[]
       }
+      list_latest_finance_reconciliation_exception_actions: {
+        Args: { p_fingerprints: string[]; p_tenant_id: string }
+        Returns: {
+          action: string
+          actor_employee_id: string
+          actor_employee_name: string
+          created_at: string
+          exception_code: string
+          exception_fingerprint: string
+          id: string
+          project_id: string
+          remark: string
+          subject_id: string
+          subject_type: string
+          tenant_id: string
+        }[]
+      }
+      list_tenant_service_provider_publications: {
+        Args: { p_keyword: string; p_status: string }
+        Returns: {
+          address_city: string
+          address_district: string
+          area_count: number
+          public_name: string
+          public_phone: string
+          status: string
+          submitted_at: string
+          tenant_id: string
+          tenant_name: string
+          updated_at: string
+          version: number
+        }[]
+      }
+      list_tenant_suppliers_for_tenant: {
+        Args: {
+          p_checked_at?: string
+          p_eligible?: boolean
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_relationship_status?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      list_visitor_local_service_providers: {
+        Args: { p_region_codes: string[] }
+        Returns: {
+          address: string
+          address_city: string
+          address_district: string
+          address_latitude: number
+          address_longitude: number
+          address_province: string
+          address_region_code: string
+          introduction: string
+          matched_region_code: string
+          public_name: string
+          public_phone: string
+          tenant_id: string
+        }[]
+      }
       list_visitor_picture_assets: {
         Args: { p_category_id: string; p_page: number; p_page_size: number }
         Returns: {
@@ -10780,6 +16041,36 @@ export type Database = {
           user_id: string
         }[]
       }
+      lock_tenant_onboarding_employee_phones: {
+        Args: { p_phones: string[] }
+        Returns: undefined
+      }
+      mutate_platform_supplier: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason?: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
+      mutate_supplier_contract: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_contract_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason?: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       mutate_tenant_onboarding_platform_review: {
         Args: {
           p_action: string
@@ -10791,6 +16082,19 @@ export type Database = {
           p_remark: string
           p_required_fields: string[]
           p_reviewer_employee_id: string
+        }
+        Returns: Json
+      }
+      mutate_tenant_supplier: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason?: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
         }
         Returns: Json
       }
@@ -10809,6 +16113,29 @@ export type Database = {
           like_count: number
           liked: boolean
         }[]
+      }
+      prune_douyin_authorization_event_deliveries: {
+        Args: { p_before: string; p_limit?: number }
+        Returns: number
+      }
+      publish_site_content: {
+        Args: { p_actor_id: string; p_entry_id: string; p_version_id: string }
+        Returns: {
+          content_type: string
+          created_at: string
+          id: string
+          published_at: string | null
+          published_version_id: string | null
+          slug: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "site_content_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       publish_tenant_service_provider: {
         Args: {
@@ -10856,109 +16183,9 @@ export type Database = {
             }
             Returns: Json
           }
-      resolve_tenant_onboarding_region_paths: {
-        Args: { p_service_region_codes: string[] }
-        Returns: {
-          adcode: string
-          depth: number
-          level: string
-          name: string
-          service_code: string
-        }[]
-      }
-      return_tenant_service_provider_to_draft: {
-        Args: {
-          p_expected_version: number
-          p_review_remark: string
-          p_reviewer_employee_id: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      submit_tenant_onboarding_application: {
-        Args: {
-          p_application: Json
-          p_now: string
-          p_sms_code_id: string
-          p_sms_phone: string
-        }
-        Returns: {
-          application_id: string
-          created: boolean
-        }[]
-      }
-      submit_tenant_onboarding_partner_assist: {
-        Args: {
-          p_application_id: string
-          p_decision: string
-          p_expected_version: number
-          p_now: string
-          p_partner_id: string
-          p_partner_member_id: string
-          p_remark: string
-        }
-        Returns: Json
-      }
-      submit_tenant_service_provider_profile: {
-        Args: { p_expected_version: number; p_tenant_id: string }
-        Returns: Json
-      }
-      supplement_tenant_onboarding_application: {
-        Args: {
-          p_application_id: string
-          p_candidate_match_reason: string
-          p_candidate_partner_id: string
-          p_candidate_snapshot: Json
-          p_expected_version: number
-          p_now: string
-          p_partner_assist_due_at: string
-          p_partner_assist_requested_at: string
-          p_partner_assist_status: string
-          p_patch: Json
-          p_replace_candidate: boolean
-          p_visitor_id: string
-        }
-        Returns: {
-          application_id: string
-        }[]
-      }
-      suspend_tenant_service_provider: {
-        Args: {
-          p_expected_version: number
-          p_review_remark: string
-          p_reviewer_employee_id: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      update_tenant_service_provider_profile: {
-        Args: {
-          p_expected_version: number
-          p_patch: Json
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      upsert_tenant_service_provider_area: {
-        Args: {
-          p_area: Json
-          p_area_id: string
-          p_expected_profile_version: number
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      withdraw_tenant_onboarding_application: {
-        Args: {
-          p_application_id: string
-          p_expected_version: number
-          p_now: string
-          p_reason: string
-          p_visitor_id: string
-        }
-        Returns: {
-          application_id: string
-        }[]
+      purge_phone_identity_login_sessions: {
+        Args: { p_before: string; p_limit?: number }
+        Returns: number
       }
       rebuild_workflow_subject_runtime: {
         Args: {
@@ -10979,6 +16206,12 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: undefined
       }
+      release_phone_identity_selection: {
+        Args: { p_candidate_id: string; p_now: string; p_session_id: string }
+        Returns: {
+          status: string
+        }[]
+      }
       replace_workflow_draft_graph: {
         Args: {
           p_definition_id: string
@@ -10987,6 +16220,53 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      reserve_phone_identity_selection: {
+        Args: {
+          p_auth_user_id: string
+          p_candidate_id: string
+          p_now: string
+          p_openid_hash: string
+          p_selection_token_hash: string
+        }
+        Returns: {
+          customer_id: string
+          employee_id: string
+          partner_id: string
+          partner_member_id: string
+          session_id: string
+          status: string
+          target_mode: string
+          tenant_id: string
+          verified_phone: string
+        }[]
+      }
+      reserve_sms_verification_code: {
+        Args: {
+          p_code: string
+          p_expired_at: string
+          p_phone: string
+          p_request_device: string
+          p_request_ip: string
+          p_request_ip_limit: number
+          p_scene: string
+          p_since: string
+        }
+        Returns: {
+          limited_dimension: string
+          reservation_id: string
+          reserved: boolean
+        }[]
+      }
+      resolve_tenant_onboarding_region_paths: {
+        Args: { p_service_region_codes: string[] }
+        Returns: {
+          adcode: string
+          depth: number
+          level: string
+          name: string
+          service_code: string
+        }[]
       }
       resolve_wechat_login_state_by_openid: {
         Args: { p_openid: string }
@@ -11022,6 +16302,89 @@ export type Database = {
           user_id: string
         }[]
       }
+      return_tenant_service_provider_to_draft: {
+        Args: {
+          p_expected_version: number
+          p_review_remark: string
+          p_reviewer_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      review_supplier_qualification: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_qualification_id: string
+          p_reason?: string
+          p_supplier_id: string
+          p_verification_status: string
+        }
+        Returns: Json
+      }
+      rollback_site_content: {
+        Args: { p_actor_id: string; p_entry_id: string; p_version_id: string }
+        Returns: {
+          content_type: string
+          created_at: string
+          id: string
+          published_at: string | null
+          published_version_id: string | null
+          slug: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "site_content_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      save_project_cost_budgets: {
+        Args: {
+          p_employee_id: string
+          p_items: Json
+          p_project_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      search_finance_project_risk_ids: {
+        Args: {
+          p_budget_configured?: boolean
+          p_has_unallocated_expense?: boolean
+          p_keyword?: string
+          p_max_projected_budget_gross_margin?: number
+          p_min_budget_usage_ratio?: number
+          p_overdue?: boolean
+          p_page?: number
+          p_page_size?: number
+          p_risk_flag?: string
+          p_risk_level?: string
+          p_status?: string
+          p_tenant_id: string
+        }
+        Returns: {
+          project_id: string
+          total_count: number
+        }[]
+      }
+      set_tenant_supplier_module: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_module_enabled: boolean
+          p_reason?: string
+          p_require_active_contract_for_new_order: boolean
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       start_workflow_instance: {
         Args: {
           p_context: Json
@@ -11032,6 +16395,109 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      submit_douyin_miniapp_lead: {
+        Args: {
+          p_area: number
+          p_attribution: Json
+          p_budget: string
+          p_community: string
+          p_consented_at: string
+          p_demand: string
+          p_douyin_miniapp_installation_id: string
+          p_idempotency_key: string
+          p_name: string
+          p_phone: string
+          p_privacy_policy_version: string
+          p_request_digest: string
+          p_request_ip: string
+          p_sms_code: string
+          p_start_time: string
+          p_subject_hash: string
+          p_tenant_id: string
+          p_user_agent: string
+        }
+        Returns: {
+          already_submitted: boolean
+          lead_id: string
+          message: string
+          updated_existing: boolean
+        }[]
+      }
+      submit_tenant_onboarding_application: {
+        Args: {
+          p_application: Json
+          p_now: string
+          p_sms_code_id: string
+          p_sms_phone: string
+        }
+        Returns: {
+          application_id: string
+          created: boolean
+        }[]
+      }
+      submit_tenant_onboarding_partner_assist: {
+        Args: {
+          p_application_id: string
+          p_decision: string
+          p_expected_version: number
+          p_now: string
+          p_partner_id: string
+          p_partner_member_id: string
+          p_remark: string
+        }
+        Returns: Json
+      }
+      submit_tenant_service_provider_profile: {
+        Args: { p_expected_version: number; p_tenant_id: string }
+        Returns: Json
+      }
+      submit_tenant_wechat_pay_applyment: {
+        Args: {
+          p_applyment_id: string
+          p_employee_id: string
+          p_expected_updated_at: string
+          p_idempotency_key: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: string
+      }
+      supplement_tenant_onboarding_application: {
+        Args: {
+          p_application_id: string
+          p_candidate_match_reason: string
+          p_candidate_partner_id: string
+          p_candidate_snapshot: Json
+          p_expected_version: number
+          p_now: string
+          p_partner_assist_due_at: string
+          p_partner_assist_requested_at: string
+          p_partner_assist_status: string
+          p_patch: Json
+          p_replace_candidate: boolean
+          p_visitor_id: string
+        }
+        Returns: {
+          application_id: string
+        }[]
+      }
+      suspend_tenant_service_provider: {
+        Args: {
+          p_expected_version: number
+          p_review_remark: string
+          p_reviewer_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      sync_douyin_miniapp_release_metadata: {
+        Args: {
+          p_claim_token: string
+          p_installation_id: string
+          p_release_id: string
+        }
+        Returns: boolean
       }
       sync_user_oauth_identity: {
         Args: {
@@ -11052,6 +16518,43 @@ export type Database = {
           updated_at: string
           user_id: string
         }[]
+      }
+      unbind_platform_partner_member_binding: {
+        Args: {
+          p_auth_user_id: string
+          p_code: string
+          p_member_id: string
+          p_partner_id: string
+        }
+        Returns: {
+          member_id: string
+          status: string
+        }[]
+      }
+      update_tenant_service_provider_profile: {
+        Args: { p_expected_version: number; p_patch: Json; p_tenant_id: string }
+        Returns: Json
+      }
+      update_tenant_wechat_pay_applyment_draft: {
+        Args: {
+          p_applyment_id: string
+          p_audit_metadata: Json
+          p_employee_id: string
+          p_epoch: number
+          p_patch: Json
+          p_revision: number
+          p_tenant_id: string
+        }
+        Returns: string
+      }
+      upsert_tenant_service_provider_area: {
+        Args: {
+          p_area: Json
+          p_area_id: string
+          p_expected_profile_version: number
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       verify_wechat_customer_bootstrap: {
         Args: {
@@ -11094,19 +16597,19 @@ export type Database = {
       wechat_pay_create_pending_service_provider_order: {
         Args: {
           p_amount: number
-          p_created_by_employee_id: string | null
+          p_created_by_employee_id: string
           p_expected_platform_guard_version: number
           p_expected_tenant_config_updated_at: string
           p_metadata?: Json
           p_out_trade_no: string
-          p_payer_openid: string | null
-          p_payment_config_id: string | null
+          p_payer_openid: string
+          p_payment_config_id: string
           p_platform_payment_config_id: string
           p_project_id: string
-          p_receivable_plan_id: string | null
+          p_receivable_plan_id: string
           p_tenant_id: string
-          p_workflow_instance_id: string | null
-          p_workflow_task_id: string | null
+          p_workflow_instance_id: string
+          p_workflow_task_id: string
         }
         Returns: {
           amount: number
@@ -11135,6 +16638,24 @@ export type Database = {
           workflow_instance_id: string | null
           workflow_task_id: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "wechat_payment_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      withdraw_tenant_onboarding_application: {
+        Args: {
+          p_application_id: string
+          p_expected_version: number
+          p_now: string
+          p_reason: string
+          p_visitor_id: string
+        }
+        Returns: {
+          application_id: string
+        }[]
       }
       workflow_edge_condition_matches: {
         Args: { p_condition: Json; p_output: Json }
@@ -11158,12 +16679,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -11185,13 +16706,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -11210,13 +16730,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -11235,13 +16754,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -11254,11 +16772,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -11275,3 +16793,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
