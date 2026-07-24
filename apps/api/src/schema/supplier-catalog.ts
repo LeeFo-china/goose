@@ -64,10 +64,22 @@ export const CatalogCategoryListQuerySchema =
 export const CatalogBrandListQuerySchema = PaginationQuerySchema.extend(
   catalogListFields,
 ).strict();
+export const CatalogUnitKindSchema = z.enum(["base", "derived"], {
+  message: "无效的单位类型",
+});
 export const CatalogUnitListQuerySchema = PaginationQuerySchema.extend({
   ...catalogListFields,
   base_unit_id: uuid("无效的基准单位 ID").nullable().optional(),
-}).strict();
+  unit_kind: CatalogUnitKindSchema.optional(),
+}).strict().superRefine((input, context) => {
+  if (input.unit_kind !== undefined && input.base_unit_id !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["unit_kind"],
+      message: "单位类型与基准单位筛选不能同时使用",
+    });
+  }
+});
 
 export const CatalogCategoryParamSchema = z.object({
   id: uuid("无效的目录分类 ID"),

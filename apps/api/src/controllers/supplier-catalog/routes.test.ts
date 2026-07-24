@@ -59,6 +59,36 @@ describe("SupplierCatalogController routes", () => {
       Reflect.deleteProperty(controller, "getRequiredTenantContext");
     }
   });
+
+  test("passes a validated unit-kind query to the tenant service", async () => {
+    const { default: controller } = await import(".");
+    const { supplierCatalogService } = await import("@/services/supplier-catalog");
+    const auth = { tenantId: crypto.randomUUID() };
+    Object.defineProperty(controller, "getRequiredTenantContext", {
+      configurable: true,
+      value: mock(async () => auth),
+    });
+    const listTenantUnits = mock(async () => ({
+      list: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    }));
+    const original = supplierCatalogService.listTenantUnits;
+    Object.assign(supplierCatalogService, { listTenantUnits });
+
+    try {
+      await controller.listUnits({
+        query: { unit_kind: "base" },
+      } as unknown as FastifyRequest);
+      expect(listTenantUnits).toHaveBeenCalledWith(auth, {
+        page: 1,
+        pageSize: 20,
+        unit_kind: "base",
+      });
+    } finally {
+      Object.assign(supplierCatalogService, { listTenantUnits: original });
+      Reflect.deleteProperty(controller, "getRequiredTenantContext");
+    }
+  });
 });
 
 type RouteHandler = (

@@ -161,6 +161,20 @@ describe("supplier foundation list schemas", () => {
       expectValid(TenantSupplierListQuerySchema, { eligible }, false);
     }
   });
+
+  test("validates unit kind and rejects ambiguous base filters", () => {
+    expect(CatalogUnitListQuerySchema.parse({ unit_kind: "base" }).unit_kind)
+      .toBe("base");
+    expect(CatalogUnitListQuerySchema.parse({ unit_kind: "derived" }).unit_kind)
+      .toBe("derived");
+    expectValid(CatalogUnitListQuerySchema, { unit_kind: "other" }, false);
+    for (const base_unit_id of [null, uuid]) {
+      expectValid(CatalogUnitListQuerySchema, {
+        unit_kind: "base",
+        base_unit_id,
+      }, false);
+    }
+  });
 });
 
 describe("supplier foundation identity and strict updates", () => {

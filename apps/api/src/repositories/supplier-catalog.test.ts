@@ -116,7 +116,7 @@ describe("SupplierCatalogRepository paginated reads", () => {
 
   test("paginates brand and unit rows with explicit filters", async () => {
     const { repository, requests } = await createRepository((request) => ({
-      body: request.url.includes("catalog_brands") ? [brand] : [unit],
+      body: request.url.includes("catalog_brands") ? [brand] : [unitListItem],
       count: request.url.includes("catalog_brands") ? 21 : 35,
     }));
 
@@ -140,6 +140,7 @@ describe("SupplierCatalogRepository paginated reads", () => {
       totalPages: 4,
     });
     expect(units.list[0]?.conversion_factor).toBe(PRECISE_FACTOR);
+    expect(units.list[0]?.base_unit).toEqual(baseUnitProjection);
     const brandUrl = new URL(requests[0]!.url);
     expect(brandUrl.searchParams.get("status")).toBe("eq.active");
     expect(brandUrl.searchParams.get("offset")).toBe("20");
@@ -150,6 +151,47 @@ describe("SupplierCatalogRepository paginated reads", () => {
     expect(unitUrl.searchParams.get("limit")).toBe("10");
     expect(unitUrl.searchParams.get("select"))
       .toContain("conversion_factor::text");
+    expect(unitUrl.searchParams.get("select")).toContain(
+      "base_unit:catalog_units!catalog_units_base_unit_id_fkey" +
+        "(id,code,name,symbol,status)",
+    );
+  });
+
+  test("filters base and derived unit pages without losing exact counts", async () => {
+    const { repository, requests } = await createRepository((request) => ({
+      body: new URL(request.url).searchParams.get("base_unit_id") === "is.null"
+        ? [baseUnitListItem]
+        : [unitListItem],
+      count: 41,
+    }));
+
+    const base = await repository.listUnits({
+      unit_kind: "base",
+      page: 1,
+      pageSize: 20,
+    });
+    const derived = await repository.listUnits({
+      unit_kind: "derived",
+      page: 2,
+      pageSize: 20,
+    });
+
+    expect(base.list[0]?.base_unit).toBeNull();
+    expect(derived.list[0]?.base_unit?.name).toBe("件");
+    expect(base.pagination.total).toBe(41);
+    expect(derived.pagination).toEqual({
+      page: 2,
+      pageSize: 20,
+      total: 41,
+      totalPages: 3,
+    });
+    expect(new URL(requests[0]!.url).searchParams.get("base_unit_id"))
+      .toBe("is.null");
+    expect(new URL(requests[1]!.url).searchParams.get("base_unit_id"))
+      .toBe("not.is.null");
+    for (const request of requests) {
+      expect(request.headers.get("prefer")).toContain("count=exact");
+    }
   });
 });
 
@@ -303,7 +345,7 @@ describe("SupplierCatalogRepository writes", () => {
   test("rejects numeric conversion factors instead of returning false precision", async () => {
     const numeric = await createRepository(() => ({
       body: [{
-        ...unit,
+        ...unitListItem,
         conversion_factor: 999999999999.123456,
       }],
       count: 1,
@@ -351,4 +393,22 @@ const unit = {
   status: "active",
   sort_order: 100,
   ...audit,
+};
+const baseUnitProjection = {
+  id: BASE_UNIT_ID,
+  code: "UNIT-PC",
+  name: "件",
+  symbol: "件",
+  status: "active" as const,
+};
+const unitListItem = {
+  ...unit,
+  base_unit: baseUnitProjection,
+};
+const baseUnitListItem = {
+  ...unit,
+  id: BASE_UNIT_ID,
+  base_unit_id: null,
+  conversion_factor: "1.000000",
+  base_unit: null,
 };

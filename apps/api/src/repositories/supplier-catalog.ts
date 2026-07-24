@@ -27,6 +27,8 @@ const BRAND_SELECT =
   "id,code,name,legal_name,logo_file_id,status,sort_order,version,created_at,updated_at";
 const UNIT_SELECT =
   "id,code,name,symbol,base_unit_id,conversion_factor::text,status,sort_order,version,created_at,updated_at";
+const UNIT_LIST_SELECT =
+  `${UNIT_SELECT},base_unit:catalog_units!catalog_units_base_unit_id_fkey(id,code,name,symbol,status)`;
 
 const CatalogStatusSchema = z.enum(["active", "inactive"]);
 const catalogAudit = {
@@ -65,10 +67,21 @@ const CatalogUnitSchema = z.object({
   sort_order: z.number().int(),
   ...catalogAudit,
 }).strict();
+const CatalogUnitBaseSchema = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  name: z.string(),
+  symbol: z.string(),
+  status: CatalogStatusSchema,
+}).strict();
+const CatalogUnitListSchema = CatalogUnitSchema.extend({
+  base_unit: CatalogUnitBaseSchema.nullable(),
+}).strict();
 
 export type CatalogCategory = z.infer<typeof CatalogCategorySchema>;
 export type CatalogBrand = z.infer<typeof CatalogBrandSchema>;
-export type CatalogUnit = z.infer<typeof CatalogUnitSchema>;
+export type CatalogUnit = z.infer<typeof CatalogUnitListSchema>;
+export type CatalogUnitRecord = z.infer<typeof CatalogUnitSchema>;
 export type CatalogPage<T> = {
   list: T[];
   pagination: {
@@ -83,7 +96,7 @@ export type CatalogCategoryCreateResult =
 export type CatalogBrandCreateResult =
   CreateCommandResult<"brand", CatalogBrand>;
 export type CatalogUnitCreateResult =
-  CreateCommandResult<"unit", CatalogUnit>;
+  CreateCommandResult<"unit", CatalogUnitRecord>;
 
 export interface SupplierCatalogRepositoryPort {
   listCategories(
@@ -96,7 +109,7 @@ export interface SupplierCatalogRepositoryPort {
   createBrand(input: CatalogBrandCreateCommand): Promise<CatalogBrandCreateResult>;
   updateBrand(input: CatalogBrandUpdateRecord): Promise<CatalogBrand>;
   createUnit(input: CatalogUnitCreateCommand): Promise<CatalogUnitCreateResult>;
-  updateUnit(input: CatalogUnitUpdateRecord): Promise<CatalogUnit>;
+  updateUnit(input: CatalogUnitUpdateRecord): Promise<CatalogUnitRecord>;
 }
 
 type CatalogClient = ReturnType<typeof SupabaseDB.getAdminClient>;
@@ -161,12 +174,16 @@ export class SupplierCatalogRepository
     const pagination = normalizePage(input);
     const { start, end } = pageRange(pagination);
     let request = this.client.from("catalog_units")
-      .select(UNIT_SELECT, { count: "exact" });
+      .select(UNIT_LIST_SELECT, { count: "exact" });
     if (input.status) request = request.eq("status", input.status);
     if (input.base_unit_id === null) {
       request = request.is("base_unit_id", null);
     } else if (input.base_unit_id) {
       request = request.eq("base_unit_id", input.base_unit_id);
+    } else if (input.unit_kind === "base") {
+      request = request.is("base_unit_id", null);
+    } else if (input.unit_kind === "derived") {
+      request = request.not("base_unit_id", "is", null);
     }
     request = applyKeyword(request, input.keyword);
     const { data, error, count } = await request
@@ -175,7 +192,7 @@ export class SupplierCatalogRepository
       .range(start, end);
     if (error) throw Errors.dbError("查询标准单位失败", error);
     return toPage(
-      parseRows(CatalogUnitSchema, data, "查询标准单位失败"),
+      parseRows(CatalogUnitListSchema, data, "查询标准单位失败"),
       pagination,
       count,
     );
