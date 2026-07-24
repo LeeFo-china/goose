@@ -13,6 +13,16 @@ const listPlatformRecognitions = mock(async () => ({
   list: [],
   pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
 }));
+const listPlatformCapabilities = mock(async () => [{
+  scene: "supplier_onboarding",
+  document_type: "business_license",
+}]);
+const recognizePlatform = mock(async () => ({
+  recognition: { id: "platform-recognition-1" },
+}));
+const getPlatformRecognitionResult = mock(async () => ({
+  id: "platform-recognition-1",
+}));
 const testPlatformConfig = mock(async () => ({
   ok: true,
   warning_codes: [],
@@ -35,6 +45,11 @@ mock.module("@/services/ocr", () => ({
     getTenantRecognition,
     listPlatformRecognitions,
     testPlatformConfig,
+  },
+  platformOcrService: {
+    listCapabilities: listPlatformCapabilities,
+    recognize: recognizePlatform,
+    getRecognitionResult: getPlatformRecognitionResult,
   },
   ocrTenantPolicyService: {
     listPlatform: listPlatformTenantPolicies,
@@ -89,6 +104,9 @@ describe("OcrController", () => {
       recognize,
       getTenantRecognition,
       listPlatformRecognitions,
+      listPlatformCapabilities,
+      recognizePlatform,
+      getPlatformRecognitionResult,
       testPlatformConfig,
       listPlatformTenantPolicies,
       updatePlatformTenantPolicy,
@@ -109,6 +127,9 @@ describe("OcrController", () => {
       { method: "POST", path: "/ocr/recognitions" },
       { method: "GET", path: "/ocr/recognitions/:id" },
       { method: "GET", path: "/platform/ocr/recognitions" },
+      { method: "GET", path: "/platform/ocr/capabilities" },
+      { method: "POST", path: "/platform/ocr/recognitions" },
+      { method: "GET", path: "/platform/ocr/recognitions/:id/result" },
       { method: "GET", path: "/platform/ocr/tenant-policies" },
       { method: "PUT", path: "/platform/ocr/tenant-policies/:tenantId" },
       { method: "POST", path: "/platform/ocr/config-test" },
@@ -175,6 +196,38 @@ describe("OcrController", () => {
       query: { page: "1", pageSize: "20" },
     } as never, {} as never)).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(listPlatformRecognitions).not.toHaveBeenCalled();
+  });
+
+  test("passes platform supplier OCR recognition input to the platform service", async () => {
+    const controller = await getController(platformAuth);
+    const body = {
+      scene: "supplier_onboarding",
+      document_type: "business_license",
+      file_object_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      idempotency_key: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    };
+
+    await controller.createPlatformRecognition({ body } as never, {} as never);
+
+    expect(recognizePlatform).toHaveBeenCalledWith(platformAuth, body);
+  });
+
+  test("lists platform supplier OCR capabilities and reads owner result", async () => {
+    const controller = await getController(platformAuth);
+    const id = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+
+    await controller.listPlatformCapabilities({
+      query: { scene: "supplier_onboarding" },
+    } as never, {} as never);
+    await controller.getPlatformRecognitionResult({
+      params: { id },
+    } as never, {} as never);
+
+    expect(listPlatformCapabilities).toHaveBeenCalledWith(
+      platformAuth,
+      "supplier_onboarding",
+    );
+    expect(getPlatformRecognitionResult).toHaveBeenCalledWith(platformAuth, id);
   });
 
   test("lists platform tenant policies with parsed server pagination", async () => {

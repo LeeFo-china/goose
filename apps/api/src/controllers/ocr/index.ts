@@ -3,6 +3,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateOcrRecognitionSchema,
+  CreatePlatformOcrRecognitionSchema,
   OcrCapabilitiesQuerySchema,
   OcrRecognitionParamsSchema,
   PlatformOcrConfigTestSchema,
@@ -11,7 +12,7 @@ import {
   PlatformOcrTenantPolicyParamsSchema,
   UpdatePlatformOcrTenantPolicySchema,
 } from "@/schema/ocr";
-import { ocrService, ocrTenantPolicyService } from "@/services/ocr";
+import { ocrService, ocrTenantPolicyService, platformOcrService } from "@/services/ocr";
 import { Get, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -71,6 +72,40 @@ class OcrController extends TenantBaseController {
         tenantId: parsed.data.tenant_id,
       },
     ));
+  }
+
+  @Get("/platform/ocr/capabilities")
+  async listPlatformCapabilities(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformContext(request);
+    const parsed = OcrCapabilitiesQuerySchema.safeParse(request.query ?? {});
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+
+    // Server-owned auxiliary catalog is guaranteed to contain at most 50 entries.
+    return ResponseHandler.success(
+      await platformOcrService.listCapabilities(authContext, parsed.data.scene),
+    );
+  }
+
+  @Post("/platform/ocr/recognitions")
+  async createPlatformRecognition(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformContext(request);
+    const parsed = CreatePlatformOcrRecognitionSchema.safeParse(request.body ?? {});
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+
+    return ResponseHandler.success(
+      await platformOcrService.recognize(authContext, parsed.data),
+    );
+  }
+
+  @Get("/platform/ocr/recognitions/:id/result")
+  async getPlatformRecognitionResult(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformContext(request);
+    const parsed = OcrRecognitionParamsSchema.safeParse(request.params);
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+
+    return ResponseHandler.success(
+      await platformOcrService.getRecognitionResult(authContext, parsed.data.id),
+    );
   }
 
   @Get("/platform/ocr/tenant-policies")

@@ -89,6 +89,9 @@ export type SupplierBusinessLicensePreviewFileRecord = Pick<
   | "scene"
   | "provider"
   | "object_key"
+  | "mime_type"
+  | "size_bytes"
+  | "checksum"
   | "visibility"
   | "status"
   | "deleted_at"
@@ -121,6 +124,9 @@ const SUPPLIER_LICENSE_PREVIEW_COLUMNS = [
   "scene",
   "provider",
   "object_key",
+  "mime_type",
+  "size_bytes",
+  "checksum",
   "visibility",
   "status",
   "deleted_at",

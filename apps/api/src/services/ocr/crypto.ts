@@ -42,6 +42,9 @@ const OcrNormalizedResultSchema = z.object({
 export type OcrResultCryptoContext = {
   tenantId: string;
   recognitionId: string;
+} | {
+  scopeType: 'platform';
+  recognitionId: string;
 };
 
 export type OcrNormalizedResult = {
@@ -145,9 +148,13 @@ function deriveKey(rootSecret: string | null | undefined): Buffer {
 }
 
 function buildAad(context: OcrResultCryptoContext): Buffer {
-  if (!context.tenantId.trim() || !context.recognitionId.trim()) {
+  if (!context.recognitionId.trim()) {
     throw invalidResultError();
   }
+  if ('scopeType' in context) {
+    return Buffer.from(`ocr:platform:${context.recognitionId}:v1`, 'utf8');
+  }
+  if (!context.tenantId.trim()) throw invalidResultError();
   return Buffer.from(
     `ocr:${context.tenantId}:${context.recognitionId}:v1`,
     'utf8',

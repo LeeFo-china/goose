@@ -11,6 +11,9 @@ type SupplierLicensePreviewFixture = {
   scene: string;
   provider: string;
   object_key: string;
+  mime_type: string;
+  size_bytes: number;
+  checksum: string | null;
   visibility: string;
   status: string;
   deleted_at: string | null;
@@ -25,6 +28,9 @@ const supplierLicenseFile: SupplierLicensePreviewFixture = {
   scene: "supplier_business_license",
   provider: "tencent_cos",
   object_key: "private/supplier-business-license/employees/hash/file.jpg",
+  mime_type: "image/jpeg",
+  size_bytes: 100,
+  checksum: "checksum-1",
   visibility: "private",
   status: "active",
   deleted_at: null,
@@ -48,6 +54,7 @@ mock.module("@/repositories/platform-file-objects", () => ({
 }));
 mock.module("@/services/files/file-url-resolver", () => ({
   resolveSignedStoredFileUrl,
+  resolveOcrStoredFileUrl: mock(async () => signedUrl),
 }));
 mock.module("@/services/authorization", () => ({
   authorizationService: { getRequiredAuthContext },

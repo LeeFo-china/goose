@@ -226,7 +226,7 @@ test("findSupplierBusinessLicensePreviewById uses a bounded minimum projection",
     .resolves.toMatchObject({ id: "file-1" });
 
   expect(trace.selects).toEqual([
-    "id,tenant_id,owner_type,owner_id,scene,provider,object_key,visibility,status,deleted_at,created_by_employee_id",
+    "id,tenant_id,owner_type,owner_id,scene,provider,object_key,mime_type,size_bytes,checksum,visibility,status,deleted_at,created_by_employee_id",
   ]);
   expect(trace.equals).toEqual(expect.arrayContaining([
     ["id", "file-1"],

@@ -40,6 +40,40 @@ describe('OCR result crypto', () => {
     expect(decryptOcrResult({ context, ciphertext, rootSecret })).toEqual(result);
   });
 
+  test('keeps tenant ciphertext readable with the legacy AAD contract', () => {
+    const ciphertext = encryptOcrResult({ context, result, rootSecret });
+
+    expect(decryptOcrResult({ context, ciphertext, rootSecret })).toEqual(result);
+    expect(() => decryptOcrResult({
+      context: { scopeType: 'platform', recognitionId: context.recognitionId },
+      ciphertext,
+      rootSecret,
+    })).toThrow(expect.objectContaining({ code: 'OCR_RESULT_INVALID' }));
+  });
+
+  test('separates platform result AAD from tenant result AAD', () => {
+    const platformContext = {
+      scopeType: 'platform' as const,
+      recognitionId: 'recognition-1',
+    };
+    const ciphertext = encryptOcrResult({
+      context: platformContext,
+      result,
+      rootSecret,
+    });
+
+    expect(decryptOcrResult({
+      context: platformContext,
+      ciphertext,
+      rootSecret,
+    })).toEqual(result);
+    expect(() => decryptOcrResult({
+      context,
+      ciphertext,
+      rootSecret,
+    })).toThrow(expect.objectContaining({ code: 'OCR_RESULT_INVALID' }));
+  });
+
   test('does not include identity number or address plaintext', () => {
     const ciphertext = encryptOcrResult({ context, result, rootSecret });
 

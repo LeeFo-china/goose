@@ -29,6 +29,13 @@ export const CreateOcrRecognitionSchema = z.object({
   }
 });
 
+export const CreatePlatformOcrRecognitionSchema = z.object({
+  scene: z.enum(OCR_SCENE_VALUES),
+  document_type: z.enum(OCR_DOCUMENT_TYPE_VALUES),
+  file_object_id: z.uuid("文件 ID 格式无效"),
+  idempotency_key: z.uuid("幂等键格式无效"),
+}).strict();
+
 export const OcrRecognitionParamsSchema = z.object({
   id: z.uuid("识别记录 ID 格式无效"),
 });
@@ -84,3 +91,5 @@ export const PlatformOcrConfigTestSchema = z.object({
 }).strict();
 
 export type CreateOcrRecognitionInput = z.infer<typeof CreateOcrRecognitionSchema>;
+export type CreatePlatformOcrRecognitionInput =
+  z.infer<typeof CreatePlatformOcrRecognitionSchema>;
