@@ -1,12 +1,14 @@
 # 微信支付开通申请单页重构 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将租户 Admin 微信支付开通申请重构为一个连续页面，让证照上传、OCR 回填、人工核对、补充资料和提交在同一上下文内完成。
 
 **Architecture:** 保留现有上传、OCR、附件 checkpoint、自动保存和提交协调器，只重组 React 展示边界。新的单页工作流按资料组直接渲染附件和 OCR 字段，补充字段按联系、结算、经营拆分，底部提交区继续使用后端 readiness 和现有 flush 语义。
 
 **Tech Stack:** Next.js 15、React 19、TypeScript、Tailwind CSS 3、shadcn/Radix、lucide-react、Bun test、Playwright。
+
+**Status:** 已完成。实施结果和验收证据见对应设计文档的“实施验收记录”。
 
 ---
 
@@ -58,7 +60,7 @@
 **Files:**
 - Modify: `apps/admin/components/finance/finance-wechat-pay-applyment-page-layout.test.ts`
 
-- [ ] **Step 1: 将四阶段结构测试改为单页结构测试**
+- [x] **Step 1: 将四阶段结构测试改为单页结构测试**
 
 新增以下核心断言：
 
@@ -87,7 +89,7 @@ expect(documentSectionSource).toContain(
 );
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -98,7 +100,7 @@ pnpm --dir apps/admin exec bun test \
 
 Expected: FAIL，因为单页组件尚不存在，旧流程仍包含 Progress 和阶段导航。
 
-- [ ] **Step 3: 提交测试基线**
+- [x] **Step 3: 提交测试基线**
 
 ```bash
 git add apps/admin/components/finance/finance-wechat-pay-applyment-page-layout.test.ts
@@ -116,7 +118,7 @@ git commit -m "test(payment): 定义进件单页结构契约"
 - Modify: `apps/admin/components/finance/finance-wechat-pay-applyment-recognized-fields.tsx`
 - Test: `apps/admin/components/finance/finance-wechat-pay-applyment-page-layout.test.ts`
 
-- [ ] **Step 1: 导出附件槽输入模型**
+- [x] **Step 1: 导出附件槽输入模型**
 
 在附件组件中导出：
 
@@ -130,7 +132,7 @@ export type ApplymentAttachmentSlotDefinition = {
 
 将当前私有 `AttachmentSlot` 改为可复用导出组件，并让完整附件列表继续复用它，避免复制上传逻辑。
 
-- [ ] **Step 2: 导出指定类别的 OCR 核对内容**
+- [x] **Step 2: 导出指定类别的 OCR 核对内容**
 
 增加组件接口：
 
@@ -158,7 +160,7 @@ export type ApplymentInlineOcrReviewProps = {
 
 该组件直接渲染当前类别的 warning、识别字段和冲突选择，不再包含类别 `Select`。
 
-- [ ] **Step 3: 创建资料组组件**
+- [x] **Step 3: 创建资料组组件**
 
 资料组组件接受标题、说明和一个或两个附件类别：
 
@@ -185,7 +187,7 @@ type DocumentSectionProps = {
 
 识别字段放在附件行之后，并以 `Separator` 与上传区分隔。
 
-- [ ] **Step 4: 运行结构测试**
+- [x] **Step 4: 运行结构测试**
 
 Run:
 
@@ -196,7 +198,7 @@ pnpm --dir apps/admin exec bun test \
 
 Expected: 资料组相关断言通过，完整单页测试仍因尚未接线而失败。
 
-- [ ] **Step 5: 提交资料组**
+- [x] **Step 5: 提交资料组**
 
 ```bash
 git add \
@@ -216,7 +218,7 @@ git commit -m "refactor(payment): 内联进件证照识别核对"
 - Modify: `apps/admin/components/finance/finance-wechat-pay-applyment-review.tsx`
 - Test: `apps/admin/components/finance/finance-wechat-pay-applyment-page-layout.test.ts`
 
-- [ ] **Step 1: 拆分字段分组**
+- [x] **Step 1: 拆分字段分组**
 
 导出三个组件：
 
@@ -228,7 +230,7 @@ export function FinanceWechatPayApplymentBusinessFields(...)
 
 保持所有字段 `name`、默认值、敏感占位符和 `onDataChange` 行为不变。
 
-- [ ] **Step 2: 缩减提交确认组件**
+- [x] **Step 2: 缩减提交确认组件**
 
 保留 `submission_readiness.blockers`、必传附件计数和真实性确认，删除四组重复摘要及“返回修改”按钮。
 
@@ -249,7 +251,7 @@ export function FinanceWechatPayApplymentBusinessFields(...)
 
 若 blocker 暂无可靠目标 ID，则只显示说明，不猜测字段归属。
 
-- [ ] **Step 3: 运行测试**
+- [x] **Step 3: 运行测试**
 
 Run:
 
@@ -260,7 +262,7 @@ pnpm --dir apps/admin exec bun test \
 
 Expected: 字段分组和精简提交区断言通过。
 
-- [ ] **Step 4: 提交字段分组**
+- [x] **Step 4: 提交字段分组**
 
 ```bash
 git add \
@@ -284,7 +286,7 @@ git commit -m "refactor(payment): 收敛进件补充和提交区"
 - Delete: `apps/admin/components/finance/finance-wechat-pay-applyment-events.tsx`
 - Test: `apps/admin/components/finance/finance-wechat-pay-applyment-page-layout.test.ts`
 
-- [ ] **Step 1: 创建单页编排**
+- [x] **Step 1: 创建单页编排**
 
 单页组件按以下顺序渲染：
 
@@ -305,7 +307,7 @@ git commit -m "refactor(payment): 收敛进件补充和提交区"
 营业执照只对应营业执照类别；身份证资料组传入正反面两个类别；结算区先显示结算账户证明，
 再显示结算字段。
 
-- [ ] **Step 2: 将完整表单校验改为单页定位**
+- [x] **Step 2: 将完整表单校验改为单页定位**
 
 保留 `findFirstInvalidApplymentControl`，新增：
 
@@ -325,7 +327,7 @@ export function validateApplymentForm(
 
 定位逻辑只负责滚动和聚焦，不再切换阶段。
 
-- [ ] **Step 3: 精简 Panel 状态**
+- [x] **Step 3: 精简 Panel 状态**
 
 删除：
 
@@ -354,12 +356,12 @@ validate: () => {
 <FinanceWechatPayApplymentEvents events={data.events} />
 ```
 
-- [ ] **Step 4: 删除阶段专用组件并清理引用**
+- [x] **Step 4: 删除阶段专用组件并清理引用**
 
 确认 `rg` 无引用后删除 flow、stage navigation 和 events 文件。保留 flow model 中仍被资料状态
 使用的类型和纯函数，不为删除文件顺带重写资料状态机。
 
-- [ ] **Step 5: 运行单页结构测试和 Admin 检查**
+- [x] **Step 5: 运行单页结构测试和 Admin 检查**
 
 Run:
 
@@ -371,7 +373,7 @@ pnpm --dir apps/admin check
 
 Expected: 测试 PASS，file-size 和 TypeScript 检查 PASS。
 
-- [ ] **Step 6: 提交单页接线**
+- [x] **Step 6: 提交单页接线**
 
 ```bash
 git add apps/admin/components/finance
@@ -387,7 +389,7 @@ git commit -m "refactor(payment): 重构租户进件为单页表单"
 - Modify when needed: `apps/admin/e2e/wechat-pay-applyment*.spec.ts`
 - Update: `docs/superpowers/specs/2026-07-24-wechat-pay-applyment-single-page-design.md`
 
-- [ ] **Step 1: 运行相关单元测试**
+- [x] **Step 1: 运行相关单元测试**
 
 Run:
 
@@ -399,7 +401,7 @@ pnpm --dir apps/admin exec bun test \
 
 Expected: PASS。
 
-- [ ] **Step 2: 运行 Admin 静态检查**
+- [x] **Step 2: 运行 Admin 静态检查**
 
 Run:
 
@@ -409,7 +411,7 @@ pnpm --dir apps/admin check
 
 Expected: PASS。
 
-- [ ] **Step 3: 启动本地 Admin 并执行浏览器 smoke**
+- [x] **Step 3: 启动本地 Admin 并执行浏览器 smoke**
 
 在 API 可用的前提下打开：
 
@@ -425,7 +427,7 @@ http://localhost:3010/finance/wechat-pay/applyment
 - 上传、预览、替换、OCR 状态、手动修改、保存和提交阻断均可操作。
 - 控制台无 hydration、React key 和网络异常。
 
-- [ ] **Step 4: 更新规格状态**
+- [x] **Step 4: 更新规格状态**
 
 将设计规格状态改为：
 
@@ -433,7 +435,7 @@ http://localhost:3010/finance/wechat-pay/applyment
 > 状态：已实现并验收
 ```
 
-- [ ] **Step 5: 最终提交**
+- [x] **Step 5: 最终提交**
 
 ```bash
 git add \
@@ -441,4 +443,3 @@ git add \
   docs/superpowers/specs/2026-07-24-wechat-pay-applyment-single-page-design.md
 git commit -m "test(payment): 验收进件单页重构"
 ```
-
