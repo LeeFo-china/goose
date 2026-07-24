@@ -1,15 +1,16 @@
-import { describe, expect, test } from "bun:test";
-import { createElement, type ComponentType } from "react";
+import { describe, expect, mock, test } from "bun:test";
+import {
+  Children,
+  createElement,
+  type ComponentProps,
+  type ComponentType,
+} from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   getOcrComparisonValues,
   getStoredFieldSources,
 } from "./finance-wechat-pay-applyment-recognized-fields";
-import {
-  FinanceWechatPayApplymentDocumentSection,
-  LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG,
-} from "./finance-wechat-pay-applyment-document-section";
 import type {
   ApplymentAttachmentController,
 } from "./finance-wechat-pay-applyment-attachment-controller";
@@ -54,6 +55,32 @@ const SINGLE_PAGE_FIELD_NAMES = [
 
 const SINGLE_PAGE_MODULE_PATH: string =
   "./finance-wechat-pay-applyment-single-page";
+const manualEntryActions: Array<() => void> = [];
+
+mock.module("@/components/ui/button", () => ({
+  Button({
+    children,
+    onClick,
+    variant: _variant,
+    size: _size,
+    asChild: _asChild,
+    ...props
+  }: ComponentProps<"button"> & {
+    variant?: string;
+    size?: string;
+    asChild?: boolean;
+  }) {
+    const label = Children.toArray(children)
+      .filter((child): child is string => typeof child === "string")
+      .join("");
+    if (label.includes("手动填写") && onClick) {
+      manualEntryActions.push(() =>
+        onClick({} as Parameters<NonNullable<typeof onClick>>[0])
+      );
+    }
+    return createElement("button", props, children);
+  },
+}));
 
 function registeredNames(markup: string) {
   return Array.from(
@@ -135,73 +162,83 @@ async function renderSinglePage(options: SinglePageOptions = {}) {
 }
 
 describe("wechat pay applyment OCR form registration", () => {
-  test("renders one manual entry action for a failed document section", () => {
-    const category = "legal_representative_id_card_front";
-    const attachment: WechatPayApplymentAttachment = {
-      category,
-      file_object_id: "file-front",
-      object_key: "legal-front",
-      file_name: "legal-front.jpg",
-      content_type: "image/jpeg",
-      size: 1024,
-      ocr_review_status: "failed",
-    };
-    const materialStates: ApplymentMaterialStateMap = {
-      [category]: {
-        status: "failed",
-        attachmentObjectKey: attachment.object_key,
-        recognitionId: "recognition-front",
-        fields: [],
-        warnings: [],
-        error: "证照识别失败",
-      },
-    };
-    const attachmentController = {
-      attachments: [attachment],
-      editable: true,
-      materialStates,
-      attachmentSaveErrors: {},
-      supportedOcrDocumentTypes: new Set(["id_card_front"]),
-      onRetrySave: () => undefined,
-      onRetryRecognition: () => undefined,
-      busy: false,
-      uploadingCategory: null,
-      error: "",
-      errorCategory: null,
-      openAttachmentPicker: () => undefined,
-      uploadAttachment: () => undefined,
-      removeAttachment: () => undefined,
-      useManualEntry: () => undefined,
-    } satisfies ApplymentAttachmentController;
-    const markup = renderToStaticMarkup(
-      createElement(FinanceWechatPayApplymentDocumentSection, {
-        ...LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG,
-        attachmentController,
-        ocrController: {
-          attachments: [attachment],
-          materialStates,
-          contactType: "LEGAL",
-          subjectType: "SUBJECT_TYPE_ENTERPRISE",
-          values: {},
-          comparisonValues: {},
-          fieldSources: {},
-          onManualChange: () => undefined,
-          onApply: () => undefined,
-          onUseManualEntry: () => undefined,
+  for (const status of ["failed", "review_required"] as const) {
+    test(`routes the single ${status} manual entry action through the OCR controller`, async () => {
+      const {
+        FinanceWechatPayApplymentDocumentSection,
+        LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG,
+      } = await import("./finance-wechat-pay-applyment-document-section");
+      const category = "legal_representative_id_card_front";
+      const attachment: WechatPayApplymentAttachment = {
+        category,
+        file_object_id: "file-front",
+        object_key: "legal-front",
+        file_name: "legal-front.jpg",
+        content_type: "image/jpeg",
+        size: 1024,
+        ocr_review_status: status,
+      };
+      const materialStates: ApplymentMaterialStateMap = {
+        [category]: {
+          status,
+          attachmentObjectKey: attachment.object_key,
+          recognitionId: "recognition-front",
+          fields: [],
+          warnings: [],
+          error: status === "failed" ? "证照识别失败" : null,
         },
-      }),
-    );
-    const labelledBy = Array.from(
-      markup.matchAll(/aria-labelledby="([^"]+)"/g),
-      (match) => match[1],
-    );
+      };
+      const onUseManualEntry = mock(() => undefined);
+      const attachmentController = {
+        attachments: [attachment],
+        editable: true,
+        materialStates,
+        attachmentSaveErrors: {},
+        supportedOcrDocumentTypes: new Set(["id_card_front"]),
+        onRetrySave: () => undefined,
+        onRetryRecognition: () => undefined,
+        busy: false,
+        uploadingCategory: null,
+        error: "",
+        errorCategory: null,
+        openAttachmentPicker: () => undefined,
+        uploadAttachment: () => undefined,
+        removeAttachment: () => undefined,
+      } satisfies ApplymentAttachmentController;
+      manualEntryActions.length = 0;
+      const markup = renderToStaticMarkup(
+        createElement(FinanceWechatPayApplymentDocumentSection, {
+          ...LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG,
+          attachmentController,
+          ocrController: {
+            attachments: [attachment],
+            materialStates,
+            contactType: "LEGAL",
+            subjectType: "SUBJECT_TYPE_ENTERPRISE",
+            values: {},
+            comparisonValues: {},
+            fieldSources: {},
+            onManualChange: () => undefined,
+            onApply: () => undefined,
+            onUseManualEntry,
+          },
+        }),
+      );
+      const labelledBy = Array.from(
+        markup.matchAll(/aria-labelledby="([^"]+)"/g),
+        (match) => match[1],
+      );
 
-    expect(markup.match(/手动填写/g)).toHaveLength(1);
-    expect(markup).not.toContain("改为手动填写");
-    expect(labelledBy).toHaveLength(2);
-    expect(new Set(labelledBy).size).toBe(2);
-    for (const id of labelledBy) expect(markup).toContain(`id="${id}"`);
-  });
+      expect(markup.match(/改为手动填写/g)).toHaveLength(1);
+      expect(manualEntryActions).toHaveLength(1);
+      manualEntryActions[0]?.();
+      expect(onUseManualEntry).toHaveBeenCalledTimes(1);
+      expect(onUseManualEntry).toHaveBeenCalledWith(category);
+      expect(labelledBy).toHaveLength(2);
+      expect(new Set(labelledBy).size).toBe(2);
+      for (const id of labelledBy) expect(markup).toContain(`id="${id}"`);
+    });
+  }
 
   test("registers every SUPER control once through the real single page", async () => {
     const names = registeredNames(await renderSinglePage({

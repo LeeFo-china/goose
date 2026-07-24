@@ -71,7 +71,6 @@ export type ApplymentInlineOcrReviewProps = {
   fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
   disabled?: boolean;
   showPreview?: boolean;
-  showManualEntryAction?: boolean;
   onManualChange: (key: string, value: string) => void;
   onApply: (
     category: WechatPayApplymentAttachmentCategory,
@@ -84,7 +83,7 @@ export type ApplymentInlineOcrReviewProps = {
 
 export type ApplymentOcrController = Omit<
   ApplymentInlineOcrReviewProps,
-  "category" | "showPreview" | "showManualEntryAction"
+  "category" | "showPreview"
 >;
 
 export function FinanceWechatPayApplymentOcrReview({
@@ -209,7 +208,6 @@ export function FinanceWechatPayApplymentInlineOcrReview({
   fieldSources,
   disabled,
   showPreview = true,
-  showManualEntryAction = true,
   onManualChange,
   onApply,
   onUseManualEntry,
@@ -258,7 +256,7 @@ export function FinanceWechatPayApplymentInlineOcrReview({
         disabled={disabled || status === "recognizing"}
         onApply={(selectedRows) => onApply(category, selectedRows)}
       />
-      {showManualEntryAction && attachment && status !== "manual" ? (
+      {attachment && status !== "manual" ? (
         <div>
           <Button
             type="button"

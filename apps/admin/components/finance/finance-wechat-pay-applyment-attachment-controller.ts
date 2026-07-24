@@ -13,7 +13,6 @@ import type {
 import {
   type ApplymentMaterialStateMap,
   replaceApplymentAttachment,
-  updateAttachmentOcrReviewMetadata,
 } from "./finance-wechat-pay-applyment-flow-model";
 import {
   createApplymentAttachmentMutationIntent,
@@ -75,7 +74,6 @@ export type ApplymentAttachmentController = {
     event: ChangeEvent<HTMLInputElement>,
   ) => void;
   removeAttachment: (attachment: WechatPayApplymentAttachment) => void;
-  useManualEntry: (attachment: WechatPayApplymentAttachment) => void;
 };
 
 export function useWechatPayApplymentAttachmentController({
@@ -165,31 +163,6 @@ export function useWechatPayApplymentAttachmentController({
     }
   }
 
-  async function useManualEntry(attachment: WechatPayApplymentAttachment) {
-    setError("");
-    setErrorCategory(attachment.category ?? null);
-    try {
-      const nextAttachments = updateAttachmentOcrReviewMetadata(
-        attachments,
-        attachment.object_key,
-        {
-          ocr_recognition_id: attachment.ocr_recognition_id ?? null,
-          ocr_review_status: "manual",
-        },
-      );
-      await onChange(nextAttachments, {
-        intent: createApplymentAttachmentMutationIntent(
-          attachments,
-          nextAttachments,
-        ),
-      });
-    } catch (changeError) {
-      setError(changeError instanceof Error
-        ? changeError.message
-        : "切换手动填写失败");
-    }
-  }
-
   function openAttachmentPicker(inputId: string) {
     const input = document.getElementById(inputId);
     if (input instanceof HTMLInputElement) input.click();
@@ -210,6 +183,5 @@ export function useWechatPayApplymentAttachmentController({
     openAttachmentPicker,
     uploadAttachment,
     removeAttachment,
-    useManualEntry,
   };
 }

@@ -196,6 +196,8 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(controllerReturn).not.toContain("onUploaded,");
     expect(controllerReturn).not.toContain("onChange,");
     expect(controllerReturn).not.toContain("disabled,");
+    expect(controllerSource).not.toContain("useManualEntry");
+    expect(attachmentSource).not.toContain("useManualEntry");
     expect(ocrRequestSource).toContain("fetchApplymentOcrRecognition");
     expect(ocrRequestSource).toContain("/ocr/recognitions/${encodeURIComponent(id)}");
   });
@@ -231,9 +233,10 @@ describe("Finance wechat pay applyment page layout", () => {
       "FinanceWechatPayApplymentInlineOcrReview",
     );
     expect(documentSectionSource).toContain("showPreview={false}");
-    expect(documentSectionSource).toContain("showManualEntryAction={false}");
+    expect(documentSectionSource).not.toContain("showManualEntryAction");
     expect(reviewSource).toContain("FinanceWechatPayApplymentInlineOcrReview");
     expect(reviewSource).toContain("showPreview = true");
+    expect(reviewSource).not.toContain("showManualEntryAction");
     expect(reviewSource).toContain("OcrFieldReviewRows");
     expect(reviewSource).toContain("改为手动填写");
     expect(reviewSource).toContain("onUseManualEntry");

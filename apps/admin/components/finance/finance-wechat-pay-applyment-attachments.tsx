@@ -1,6 +1,6 @@
 "use client";
 
-import { FileImage, FilePenLine, RefreshCw } from "lucide-react";
+import { FileImage, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -237,7 +237,6 @@ export function WechatPayApplymentAttachmentSlot({
     removeAttachment,
     onRetrySave,
     onRetryRecognition,
-    useManualEntry,
   } = controller;
   const attachment = attachments.find((item) => item.category === category);
   const materialState = materialStates[category];
@@ -319,18 +318,6 @@ export function WechatPayApplymentAttachmentSlot({
             >
               <RefreshCw data-icon="inline-start" />
               {needsPersistRetry ? "重试保存" : "重试识别"}
-            </Button>
-          ) : null}
-          {attachment && currentState?.status === "failed" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={() => useManualEntry(attachment)}
-            >
-              <FilePenLine data-icon="inline-start" />
-              手动填写
             </Button>
           ) : null}
         </div>
