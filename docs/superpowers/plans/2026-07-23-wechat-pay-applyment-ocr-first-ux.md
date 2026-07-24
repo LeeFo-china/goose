@@ -2807,7 +2807,8 @@ supabase migration list
 supabase db push --dry-run
 ```
 
-确认只包含以下七项后再执行：
+确认本功能只包含以下八项后再执行；如果远端存在并行开发已应用的 migration，必须先同步
+其原始文件并验证内容一致，禁止直接 repair：
 
 - `20260723130000_allow_partial_wechat_pay_applyment_drafts.sql`
 - `20260723133000_add_atomic_wechat_pay_applyment_submit.sql`
@@ -2816,10 +2817,12 @@ supabase db push --dry-run
 - `20260724150000_atomic_wechat_pay_applyment_draft_audit.sql`
 - `20260724170000_atomic_wechat_pay_applyment_create.sql`
 - `20260724173000_index_wechat_pay_applyment_attachments.sql`
+- `20260724200000_backfill_wechat_pay_applyment_file_ids.sql`
 
-后五项分别收口乱序草稿 revision、跨页面 epoch fencing、需要审计的草稿更新与事件
+后六项分别收口乱序草稿 revision、跨页面 epoch fencing、需要审计的草稿更新与事件
 同事务写入、首次草稿与 `created` 事件原子创建，以及附件对象级授权查询索引；它们
-属于 Task 7 与合并前安全审查后追加的发布门禁修正。
+还包括对历史附件的可信文件 ID 回填。它们属于 Task 7 与合并前安全审查后追加的发布
+门禁修正。
 
 ```bash
 supabase db push

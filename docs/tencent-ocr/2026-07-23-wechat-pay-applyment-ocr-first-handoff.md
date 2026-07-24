@@ -10,7 +10,7 @@
 - OCR 只提供录入建议。识别结果不会静默覆盖人工值，也不会自动提交进件、平台审核或真实微信支付申请。
 - 真实环境 OCR capability 在验收时关闭，因此真实 API/Admin smoke 只验证手工填写降级；未读取、复制、截图或记录任何 OCR 值，也未调用腾讯云 OCR。
 - OCR 成功、重试、恢复、字段冲突、readiness 定位和幂等路径由 mock backend 专用 E2E 覆盖。
-- 未执行平台审核、`submit-to-wechat` 或真实微信进件；七项 migration 已应用并确认
+- 未执行平台审核、`submit-to-wechat` 或真实微信进件；八项本功能 migration 已应用并确认
   Local/Remote 对齐，未执行 `migration repair`。
 
 ## 2. 客户端与 API 契约
@@ -38,6 +38,11 @@ GET  /ocr/recognitions/:id
 
 - `direct-complete` 返回的 `file_id` 是 OCR 请求的 `file_object_id`，客户端不得从 object key 猜测文件 ID。
 - 创建识别时使用 `scene=wechat_pay_applyment`、受支持的 `document_type`、`file_object_id` 和 UUID 幂等键；草稿已存在时才传 `subject_type/subject_id`。
+- 创建或更新草稿时，后端会批量校验附件文件处于 active、租户和场景一致、object key
+  精确匹配，并要求当前员工是上传人或该文件已可靠绑定到当前申请；客户端提交的附件 ID
+  和 object key 不作为归属事实。
+- 创建识别返回 `pending/processing` 时，Admin 会轮询识别详情直到
+  `succeeded/failed` 终态；处理中结果不能用空字段进入“待核对”状态。
 - capability 返回空列表是关闭状态，不是异常。客户端必须保留附件和手工录入路径。
 - 私有附件预览使用短时地址，不记录永久公开 URL。
 
@@ -61,7 +66,7 @@ POST /finance/wechat-pay/applyments/:id/submit
 
 ## 3. Migration 与真实数据库
 
-已应用并只读复核以下七个版本：
+已应用并只读复核以下八个本功能版本：
 
 ```text
 20260723130000
@@ -71,12 +76,22 @@ POST /finance/wechat-pay/applyments/:id/submit
 20260724150000
 20260724170000
 20260724173000
+20260724200000
 ```
 
-`supabase migration list` 的 Local/Remote 共 `358` 条、差异 `0`，未执行 repair。
-后五项 migration 分别用于草稿 revision、跨页面 epoch fencing、需要审计的草稿更新与
+并行开发已先应用
+`20260724190000_fix_douyin_authorization_event_upsert_alias.sql`；本分支同步了完全相同的
+原始文件后再应用 `20260724200000`，避免 migration 历史漂移。`supabase migration list`
+的 Local/Remote 共 `360` 条、差异 `0`，未执行 repair。
+后六项本功能 migration 分别用于草稿 revision、跨页面 epoch fencing、需要审计的草稿更新与
 事件原子写入、首次草稿与 `created` 事件原子创建，以及附件归属 JSONB containment
-查询的 GIN 索引。
+查询的 GIN 索引和历史附件可信文件 ID 回填。
+
+历史附件回填只接受“同租户、同场景、active、同 object key、同申请创建人且唯一命中”
+的文件。只读复核结果为附件 `4` 个、可信绑定 `3` 个、无法匹配并保持惰性 `1` 个、
+错误绑定 `0` 个；无法匹配的旧附件没有预览能力。首次 apply 因 PostgreSQL 不支持
+`min(uuid)` 在事务内失败并完整回滚，改为有序 `array_agg(uuid)[1]` 且增加 migration
+契约测试后成功应用。
 
 本机执行 Supabase 类型生成时因 Docker daemon 不可用而无法连接 shadow database；
 `apps/api/src/types/database.ts` 已按远端已应用的
@@ -132,16 +147,17 @@ POST /finance/wechat-pay/applyments/:id/submit
 
 ```text
 /tmp/wechat-pay-applyment-task9-test-all-main.log
-/tmp/wechat-pay-applyment-task9-test-all-branch-final.log
+/tmp/wechat-pay-applyment-task9-test-all-branch-review-fix.log
 /tmp/wechat-pay-applyment-task9-api-mock-pollution-green-final.log
 ```
 
 ### 专项与构建
 
-- API 专项：`210 pass / 0 fail`，`637` assertions，`32` files；新增上传、私有 URL 与
-  OCR 安全回归组合 `41 pass / 0 fail`。
-- Admin 专项：`227 pass / 0 fail`，`958` assertions，`30` files。
-- Domain 专项：`3 pass / 0 fail`；domain build 成功。
+- API 全部 OCR/微信支付专项：`629 pass / 0 fail`，`1771` assertions，`79` files；
+  附件归属、草稿敏感数据、migration 与 OCR 并发终态组合 `52 pass / 0 fail`。
+- Admin 全部 OCR/微信支付进件专项：`245 pass / 0 fail`，`1028` assertions，
+  `32` files。
+- Domain 全量：`35 pass / 0 fail`，`175` assertions，`7` files；domain build 成功。
 - `pnpm run api:check`：TypeScript、Bun build、文件大小检查通过。
 - `pnpm --dir apps/admin check`：文件大小、Next type generation、TypeScript 通过。
 - `pnpm --dir apps/admin build`：Next.js production build 通过，`65` 个静态页面生成成功。
