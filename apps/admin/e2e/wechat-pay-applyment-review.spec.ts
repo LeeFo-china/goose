@@ -10,10 +10,6 @@ async function loginAsTenantAdmin(page: Page) {
   expect(response.ok()).toBe(true);
 }
 
-function stageButton(page: Page, label: string) {
-  return page.getByRole("button", { name: new RegExp(`\\d+\\.\\s*${label}`) });
-}
-
 type MockSaveEvents = {
   started: Array<Record<string, unknown>>;
   committed: Array<Record<string, unknown>>;
@@ -31,75 +27,51 @@ test.beforeEach(async ({ request }) => {
   expect(response.ok()).toBe(true);
 });
 
-test("复核使用实时值、修改后失效，并只定位首个隐藏无效控件", async ({
+test("单页修改后提交确认失效，并阻止无效资料提交", async ({
   page,
+  request,
 }) => {
   await loginAsTenantAdmin(page);
   await page.goto("/finance/wechat-pay/applyment", {
     waitUntil: "networkidle",
   });
 
-  await expect(stageButton(page, "确认提交")).toHaveAttribute(
-    "aria-current",
-    "step",
-  );
-
-  await stageButton(page, "核对识别").click();
-  const categorySelect = page.getByRole("combobox", {
-    name: "选择核对资料",
-  });
-  await categorySelect.click();
-  await page.getByRole("option", { name: "结算账户证明" }).click();
-  await expect(categorySelect).toContainText("结算账户证明");
-
-  await stageButton(page, "确认提交").click();
-  const subjectReview = page.getByRole("heading", {
-    name: "主体和营业执照",
-  }).locator("../..");
-  await subjectReview.getByRole("button", { name: "返回修改" }).click();
-  await expect(categorySelect).toContainText("营业执照照片");
-
-  await stageButton(page, "补充信息").click();
   const merchantShortName = page.getByLabel("商户简称");
   await merchantShortName.fill("实时复核简称");
-  await stageButton(page, "确认提交").click();
-  const settlementReview = page.getByRole("heading", {
-    name: "经营及结算",
-  }).locator("../..");
-  await expect(settlementReview).toContainText("实时复核简称");
+  await expect(merchantShortName).toHaveValue("实时复核简称");
 
   await page.getByRole("checkbox", { name: "确认资料真实有效" }).click();
   const submitButton = page.getByRole("button", { name: "提交平台审核" });
   await expect(submitButton).toBeEnabled();
 
-  await stageButton(page, "补充信息").click();
   await merchantShortName.fill("确认后再次修改");
-  await stageButton(page, "确认提交").click();
-  await expect(settlementReview).toContainText("确认后再次修改");
+  await expect(merchantShortName).toHaveValue("确认后再次修改");
   await expect(submitButton).toBeDisabled();
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1)?.merchant_short_name;
+  }).toBe("确认后再次修改");
 
+  const delayResponse = await request.post(
+    `${MOCK_BACKEND_URL}/__test/delay-next-save`,
+    { data: { milliseconds: 10_000 } },
+  );
+  expect(delayResponse.ok()).toBe(true);
+
+  const licenseName = page.getByLabel("营业执照主体名称");
+  await licenseName.fill("");
+  await page.getByLabel("身份证有效期开始").fill("");
   await page.getByRole("checkbox", { name: "确认资料真实有效" }).click();
-  await page.evaluate(() => {
-    const first = document.querySelector<HTMLInputElement>(
-      '[name="license_name"]',
-    );
-    const later = document.querySelector<HTMLInputElement>(
-      '[name="identity_period_begin"]',
-    );
-    if (!first || !later) throw new Error("test controls not found");
-    first.value = "";
-    later.value = "";
-  });
+  await expect(submitButton).toBeEnabled();
+  expect(await page.locator("form :invalid").evaluateAll((controls) =>
+    controls.map((control) => control.getAttribute("name"))
+  )).toEqual(["license_name", "identity_period_begin"]);
 
   await submitButton.click();
   await page.getByRole("button", { name: "确认提交", exact: true }).click();
 
-  await expect(stageButton(page, "核对识别")).toHaveAttribute(
-    "aria-current",
-    "step",
-  );
-  await expect(categorySelect).toContainText("营业执照照片");
-  await expect(page.getByLabel("营业执照主体名称")).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(submitButton).toBeEnabled();
 });
 
 test("自动保存隔离陈旧响应并在离开页面时发送最新值", async ({
@@ -111,15 +83,15 @@ test("自动保存隔离陈旧响应并在离开页面时发送最新值", async
     waitUntil: "networkidle",
   });
 
-  await stageButton(page, "补充信息").click();
   const merchantShortName = page.getByLabel("商户简称");
   await merchantShortName.fill("状态采集值");
   await expect(
     page.getByRole("status").filter({ hasText: "保存中" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("status").filter({ hasText: "已自动保存" }),
-  ).toBeVisible();
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.at(-1)?.merchant_short_name;
+  }).toBe("状态采集值");
 
   const delayResponse = await request.post(
     `${MOCK_BACKEND_URL}/__test/delay-next-save`,
@@ -127,7 +99,6 @@ test("自动保存隔离陈旧响应并在离开页面时发送最新值", async
   );
   expect(delayResponse.ok()).toBe(true);
 
-  await stageButton(page, "上传资料").click();
   const subjectType = page.getByRole("combobox", { name: "主体类型" });
   const staleRequest = page.waitForRequest((pendingRequest) =>
     pendingRequest.method() === "PUT" &&
@@ -145,7 +116,6 @@ test("自动保存隔离陈旧响应并在离开页面时发送最新值", async
   await page.getByRole("option", { name: "个体工商户" }).click();
   await staleRequest;
 
-  await stageButton(page, "补充信息").click();
   const accountType = page.getByRole("combobox", { name: "结算账户类型" });
   await accountType.click();
   await page.getByRole("option", { name: "经营者个人银行卡" }).click();
@@ -153,9 +123,6 @@ test("自动保存隔离陈旧响应并在离开页面时发送最新值", async
   await expect(accountType).toContainText("经营者个人银行卡");
 
   await merchantShortName.fill("陈旧响应后的最新值");
-  await expect(
-    page.getByRole("status").filter({ hasText: "已自动保存" }),
-  ).toBeVisible();
   await expect.poll(async () => {
     const events = await getMockSaveEvents(request);
     return events.committed.at(-1);
@@ -181,10 +148,8 @@ test("在途保存离页后仍提交到服务端", async ({ page, request }) => 
   await page.goto("/finance/wechat-pay/applyment", {
     waitUntil: "networkidle",
   });
-  await stageButton(page, "补充信息").click();
-  await expect(
-    page.getByRole("status").filter({ hasText: "已自动保存" }),
-  ).toBeVisible();
+  const merchantShortName = page.getByLabel("商户简称");
+  await expect(merchantShortName).toBeVisible();
 
   const delayResponse = await request.post(
     `${MOCK_BACKEND_URL}/__test/delay-next-save`,
@@ -192,7 +157,7 @@ test("在途保存离页后仍提交到服务端", async ({ page, request }) => 
   );
   expect(delayResponse.ok()).toBe(true);
 
-  await page.getByLabel("商户简称").fill("在途离页提交值");
+  await merchantShortName.fill("在途离页提交值");
   await expect.poll(async () => {
     const events = await getMockSaveEvents(request);
     return events.started.at(-1)?.merchant_short_name;
@@ -284,12 +249,10 @@ test("旧页面高 revision 晚到不能覆盖新页面 epoch", async ({
   await page.goto("/finance/wechat-pay/applyment", {
     waitUntil: "networkidle",
   });
-  await stageButton(page, "补充信息").click();
   const newPage = await page.context().newPage();
   await newPage.goto("/finance/wechat-pay/applyment", {
     waitUntil: "networkidle",
   });
-  await stageButton(newPage, "补充信息").click();
 
   await page.route("**/finance/wechat-pay/applyments/*", async (route) => {
     const pending = route.request();
@@ -326,9 +289,15 @@ test("旧页面高 revision 晚到不能覆盖新页面 epoch", async ({
   });
 
   await newPage.getByLabel("商户简称").fill("新页面 epoch 值");
-  await expect(
-    newPage.getByRole("status").filter({ hasText: "已自动保存" }),
-  ).toBeVisible();
+  await expect.poll(async () => {
+    const events = await getMockSaveEvents(request);
+    return events.committed.find((event) =>
+      event.merchant_short_name === "新页面 epoch 值"
+    );
+  }).toMatchObject({
+    merchant_short_name: "新页面 epoch 值",
+    outcome: "applied",
+  });
 
   await expect.poll(async () => {
     const events = await getMockSaveEvents(request);
@@ -348,7 +317,6 @@ test("旧页面高 revision 晚到不能覆盖新页面 epoch", async ({
   ).toHaveCount(0);
   await expect(page.getByLabel("商户简称")).toHaveValue("旧页面高 revision");
 
-  await stageButton(page, "确认提交").click();
   await page.getByRole("checkbox", { name: "确认资料真实有效" }).click();
   await expect(
     page.getByRole("button", { name: "提交平台审核" }),
@@ -378,7 +346,6 @@ test("BFCache pagehide 恢复后仍可继续自动保存", async ({ page, reques
   await page.goto("/finance/wechat-pay/applyment", {
     waitUntil: "networkidle",
   });
-  await stageButton(page, "补充信息").click();
   const merchantShortName = page.getByLabel("商户简称");
 
   await merchantShortName.fill("BFCache 前最新值");
@@ -414,9 +381,6 @@ test("BFCache pagehide 恢复后仍可继续自动保存", async ({ page, reques
     );
   });
   await merchantShortName.fill("BFCache 二次恢复值");
-  await expect(
-    page.getByRole("status").filter({ hasText: "已自动保存" }),
-  ).toBeVisible();
   await expect.poll(async () => {
     const events = await getMockSaveEvents(request);
     return events.committed.at(-1)?.merchant_short_name;
