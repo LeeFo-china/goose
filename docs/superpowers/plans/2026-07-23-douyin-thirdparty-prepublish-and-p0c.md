@@ -268,7 +268,7 @@ Expected: 新记录的版本为 `0.1.0`，模板 ID 为 1–19 位正整数，�
 - Modify after success: `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md`
 - Modify after success: `docs/operations/evidence/2026-07-23-douyin-tenant-binding-p0-readiness.md`
 
-- [ ] **Step 1：只读识别普通测试小程序**
+- [x] **Step 1：只读识别普通测试小程序**
 
 在服务商平台进入：
 
@@ -283,6 +283,12 @@ Expected: 新记录的版本为 `0.1.0`，模板 ID 为 1–19 位正整数，�
 Expected: 至少有一个普通小程序 AppID，且尾号不为 `1b01`。记录应用名称、AppID 尾号和当前授权状态。
 
 停止条件：列表为空，或列表中只有 `1b01`。此时不得创建新小程序；向用户报告“缺少普通测试 Authorizer”，由用户确定是否新建及其名称、主体和类目。
+
+执行记录（2026-07-24 10:01 +0800）：用户从 Component `cd67` 控制台确认
+“授权测试小程序列表”为空。开发库和 gooes 工作区的独立只读发现也只存在
+Template `1b01`，普通 merchant/Authorizer 为 0。已命中本步骤停止条件；
+继续前必须由用户确定新建普通小程序的名称、主体和类目，并由主体负责人本人接受
+平台协议和提交创建申请。
 
 - [ ] **Step 2：核对开发配置**
 
