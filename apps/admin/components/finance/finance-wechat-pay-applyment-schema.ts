@@ -1,4 +1,7 @@
-import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";
+import type {
+  WechatPayApplymentAttachment,
+  WechatPayApplymentRecord,
+} from "./finance-wechat-pay-applyment-shared";
 
 const REQUIRED_TEXT_FIELDS = [
   "subject_type",
@@ -53,6 +56,19 @@ const CONTACT_ATTACHMENT_CATEGORIES = new Set([
   "contact_id_card_back",
 ]);
 
+export function buildWechatPayApplymentDraftFallbackValues(
+  persisted: Partial<WechatPayApplymentRecord> | null,
+  latestLocal: Record<string, unknown> | null,
+): {
+  fallbackValues: Record<string, unknown>;
+  localFallbackValues: Record<string, unknown>;
+} {
+  return {
+    fallbackValues: { ...(persisted ?? {}) },
+    localFallbackValues: { ...(latestLocal ?? {}) },
+  };
+}
+
 export function buildWechatPayApplymentPartialDraftPayload(
   form: FormData,
   options: {
@@ -60,24 +76,41 @@ export function buildWechatPayApplymentPartialDraftPayload(
     contactType?: string;
     subjectType?: string;
     overrides?: Record<string, unknown>;
+    fallbackValues?: Record<string, unknown> | null;
+    localFallbackValues?: Record<string, unknown> | null;
   },
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
   const overrides = options.overrides ?? {};
   for (const field of [...REQUIRED_TEXT_FIELDS, ...OPTIONAL_TEXT_FIELDS]) {
-    payload[field] = nullableText(form, field);
+    payload[field] = nullableTextWithFallback(
+      form,
+      field,
+      draftFallbackValue(options, field),
+    );
   }
   for (const field of CONTACT_IDENTITY_PERIOD_FIELDS) {
-    payload[field] = nullableText(form, field);
+    payload[field] = nullableTextWithFallback(
+      form,
+      field,
+      draftFallbackValue(options, field),
+    );
   }
   for (const field of SENSITIVE_REPLACEMENT_FIELDS) {
-    setNonBlankText(payload, form, field, normalizeIdentityNumber);
+    setNonBlankText(
+      payload,
+      form,
+      field,
+      options.localFallbackValues?.[field],
+      normalizeIdentityNumber,
+    );
   }
   for (const [field, value] of Object.entries(overrides)) {
     if (field !== "attachments") payload[field] = value;
   }
 
-  const formSubjectType = text(form, "subject_type");
+  const formSubjectType = text(form, "subject_type") ||
+    normalizedFallback(draftFallbackValue(options, "subject_type"));
   const subjectTypeOverride = nonBlankOverride(overrides.subject_type);
   const subjectType = subjectTypeOverride ||
     options.subjectType ||
@@ -94,6 +127,7 @@ export function buildWechatPayApplymentPartialDraftPayload(
   const contactType = options.contactType ||
     nonBlankOverride(overrides.contact_type) ||
     text(form, "contact_type") ||
+    normalizedFallback(draftFallbackValue(options, "contact_type")) ||
     DEFAULT_CONTACT_TYPE;
   payload.contact_type = contactType;
   if (contactType === "SUPER" && hasContactIdentityValue(payload)) {
@@ -187,6 +221,35 @@ function nullableText(form: FormData, key: string) {
   return text(form, key) || null;
 }
 
+function nullableTextWithFallback(
+  form: FormData,
+  key: string,
+  fallback: unknown,
+) {
+  return form.has(key) ? nullableText(form, key) : normalizedFallback(fallback) ||
+    null;
+}
+
+function draftFallbackValue(
+  options: {
+    fallbackValues?: Record<string, unknown> | null;
+    localFallbackValues?: Record<string, unknown> | null;
+  },
+  key: string,
+) {
+  if (
+    options.localFallbackValues &&
+    Object.prototype.hasOwnProperty.call(options.localFallbackValues, key)
+  ) {
+    return options.localFallbackValues[key];
+  }
+  return options.fallbackValues?.[key];
+}
+
+function normalizedFallback(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function nonBlankOverride(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -210,9 +273,12 @@ function setNonBlankText(
   payload: Record<string, unknown>,
   form: FormData,
   field: string,
+  localFallback: unknown,
   normalize: (field: string, value: string) => string = (_, value) => value,
 ) {
-  const value = text(form, field);
+  const value = form.has(field)
+    ? text(form, field)
+    : normalizedFallback(localFallback);
   if (value) payload[field] = normalize(field, value);
 }
 

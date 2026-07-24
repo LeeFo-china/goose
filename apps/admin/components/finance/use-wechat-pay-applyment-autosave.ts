@@ -22,6 +22,9 @@ import {
 import {
   createApplymentAutosavePageLifecycle,
 } from "./finance-wechat-pay-applyment-lifecycle";
+import {
+  buildWechatPayApplymentDraftFallbackValues,
+} from "./finance-wechat-pay-applyment-schema";
 import type {
   WechatPayApplymentDetailData,
   WechatPayApplymentRecord,
@@ -231,6 +234,13 @@ export function useWechatPayApplymentAutosave(input: {
     return ensureAutosaveRuntime().coordinator.flush();
   }
 
+  function getDraftFallbackValues(): Record<string, unknown> {
+    return buildWechatPayApplymentDraftFallbackValues(
+      currentApplymentRef.current,
+      ensureAutosaveRuntime().coordinator.lastPayload,
+    );
+  }
+
   function retryLastSave(): Promise<void> {
     const payload = lastFailedPayloadRef.current;
     if (!payload) return Promise.resolve();
@@ -250,6 +260,7 @@ export function useWechatPayApplymentAutosave(input: {
     scheduleDraftSave,
     enqueueMaterialCheckpoint,
     flushDraftSaves,
+    getDraftFallbackValues,
     retryLastSave,
   };
 }

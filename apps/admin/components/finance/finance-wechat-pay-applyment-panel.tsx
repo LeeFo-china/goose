@@ -175,6 +175,7 @@ export function FinanceWechatPayApplymentPanel({
         contactType: nextContactType,
         subjectType,
         overrides,
+        ...autosave.getDraftFallbackValues(),
       },
     );
     return payload;
@@ -237,7 +238,6 @@ export function FinanceWechatPayApplymentPanel({
     invalidateReview();
     await materials.onChange(nextAttachments, options);
   }
-
   function applyRecognitionRows(
     category: WechatPayApplymentAttachmentCategory,
     rows: readonly OcrFieldReviewRow[],

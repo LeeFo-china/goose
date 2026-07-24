@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";
 import {
+  buildWechatPayApplymentDraftFallbackValues,
   buildWechatPayApplymentPartialDraftPayload,
   buildWechatPayApplymentPayload,
 } from "./finance-wechat-pay-applyment-schema";
@@ -19,6 +20,57 @@ function formData(values: Record<string, string>) {
 }
 
 describe("buildWechatPayApplymentPayload", () => {
+  test("prefers the latest local draft over the persisted server snapshot", () => {
+    const fallbacks = buildWechatPayApplymentDraftFallbackValues(
+      {
+        license_name: "服务端旧值",
+        settlement_id: "716",
+      },
+      {
+        license_name: "尚未落库的人工值",
+      },
+    );
+
+    expect(fallbacks.fallbackValues).toMatchObject({
+      license_name: "服务端旧值",
+      settlement_id: "716",
+    });
+    expect(fallbacks.localFallbackValues).toMatchObject({
+      license_name: "尚未落库的人工值",
+    });
+  });
+
+  test("keeps an unmounted sensitive value only from the latest local draft", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(
+      new FormData(),
+      {
+        attachments: [],
+        fallbackValues: {
+          super_admin_phone_masked: "138****0000",
+        },
+        localFallbackValues: {
+          super_admin_phone: "13800000000",
+        },
+      },
+    );
+
+    expect(payload.super_admin_phone).toBe("13800000000");
+    expect(payload).not.toHaveProperty("super_admin_phone_masked");
+  });
+
+  test("does not restore a local sensitive value when its mounted control is blank", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      super_admin_phone: "",
+    }), {
+      attachments: [],
+      localFallbackValues: {
+        super_admin_phone: "13800000000",
+      },
+    });
+
+    expect(payload).not.toHaveProperty("super_admin_phone");
+  });
+
   test("builds a shell draft without blank strings", () => {
     const payload = buildWechatPayApplymentPartialDraftPayload(
       new FormData(),
@@ -59,6 +111,43 @@ describe("buildWechatPayApplymentPayload", () => {
     expect(payload).not.toHaveProperty("identity_number");
     expect(payload).not.toHaveProperty("settlement_account_number");
     expect(Object.values(payload)).not.toContain("");
+  });
+
+  test("preserves server values for controls outside the active stage", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(
+      new FormData(),
+      {
+        attachments: [],
+        fallbackValues: {
+          subject_type: "SUBJECT_TYPE_ENTERPRISE",
+          contact_type: "LEGAL",
+          license_name: "人工保留主体",
+          settlement_id: "716",
+          qualification_type: "零售批发/生活娱乐/网上商城/其他",
+        },
+      },
+    );
+
+    expect(payload).toMatchObject({
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      contact_type: "LEGAL",
+      license_name: "人工保留主体",
+      settlement_id: "716",
+      qualification_type: "零售批发/生活娱乐/网上商城/其他",
+    });
+  });
+
+  test("keeps an explicit blank from the active control as null", () => {
+    const payload = buildWechatPayApplymentPartialDraftPayload(formData({
+      license_name: "",
+    }), {
+      attachments: [],
+      fallbackValues: {
+        license_name: "不应保留的旧值",
+      },
+    });
+
+    expect(payload.license_name).toBeNull();
   });
 
   test("clears stale settlement rules when the subject changes", () => {
