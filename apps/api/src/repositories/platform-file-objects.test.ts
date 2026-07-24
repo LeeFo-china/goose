@@ -8,6 +8,7 @@ type QueryTrace = {
   equals: Array<[string, unknown]>;
   nullChecks: Array<[string, unknown]>;
   selects: string[];
+  limits?: unknown[];
 };
 
 async function loadRepositoryWithExisting(
@@ -19,9 +20,13 @@ async function loadRepositoryWithExisting(
   let maybeSingleCalls = 0;
   let statusFilterMatches = true;
   const builder: Record<string, unknown> = {};
-  for (const method of ["from", "insert", "order", "limit"]) {
+  for (const method of ["from", "insert", "order"]) {
     builder[method] = mock(() => builder);
   }
+  builder.limit = mock((limit: unknown) => {
+    trace?.limits?.push(limit);
+    return builder;
+  });
   builder.select = mock((columns: string) => {
     trace?.selects.push(columns);
     return builder;
@@ -201,4 +206,32 @@ test("findActiveById scopes the minimum OCR projection to one tenant", async () 
     ["status", "active"],
   ]));
   expect(trace.nullChecks).toContainEqual(["deleted_at", null]);
+});
+
+test("findSupplierBusinessLicensePreviewById uses a bounded minimum projection", async () => {
+  const trace: QueryTrace = {
+    equals: [],
+    nullChecks: [],
+    selects: [],
+    limits: [],
+  };
+  const repository = await loadRepositoryWithExisting(
+    matchingExisting,
+    trace,
+    false,
+    true,
+  );
+
+  await expect(repository.findSupplierBusinessLicensePreviewById("file-1"))
+    .resolves.toMatchObject({ id: "file-1" });
+
+  expect(trace.selects).toEqual([
+    "id,tenant_id,owner_type,owner_id,scene,provider,object_key,visibility,status,deleted_at,created_by_employee_id",
+  ]);
+  expect(trace.equals).toEqual(expect.arrayContaining([
+    ["id", "file-1"],
+    ["status", "active"],
+  ]));
+  expect(trace.nullChecks).toContainEqual(["deleted_at", null]);
+  expect(trace.limits).toEqual([1]);
 });

@@ -80,6 +80,21 @@ export type OcrPlatformFileObjectRecord = Pick<
   | "created_by_employee_id"
 >;
 
+export type SupplierBusinessLicensePreviewFileRecord = Pick<
+  PlatformFileObjectRecord,
+  | "id"
+  | "tenant_id"
+  | "owner_type"
+  | "owner_id"
+  | "scene"
+  | "provider"
+  | "object_key"
+  | "visibility"
+  | "status"
+  | "deleted_at"
+  | "created_by_employee_id"
+>;
+
 const OCR_FILE_OBJECT_COLUMNS = [
   "id",
   "tenant_id",
@@ -93,6 +108,19 @@ const OCR_FILE_OBJECT_COLUMNS = [
   "mime_type",
   "size_bytes",
   "checksum",
+  "visibility",
+  "status",
+  "deleted_at",
+  "created_by_employee_id",
+].join(",");
+const SUPPLIER_LICENSE_PREVIEW_COLUMNS = [
+  "id",
+  "tenant_id",
+  "owner_type",
+  "owner_id",
+  "scene",
+  "provider",
+  "object_key",
   "visibility",
   "status",
   "deleted_at",
@@ -269,6 +297,22 @@ class PlatformFileObjectRepository {
       throw Errors.dbError("查询文件对象失败", error);
     }
     return (data as OcrPlatformFileObjectRecord | null) ?? null;
+  }
+
+  async findSupplierBusinessLicensePreviewById(id: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("platform_file_objects")
+      .select(SUPPLIER_LICENSE_PREVIEW_COLUMNS)
+      .eq("id", id)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询供应商营业执照文件失败", error);
+    }
+    return (data as SupplierBusinessLicensePreviewFileRecord | null) ?? null;
   }
 
   private async findPrivateVisitorConflict(input: {
