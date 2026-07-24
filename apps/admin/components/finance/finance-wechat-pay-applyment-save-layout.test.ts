@@ -5,6 +5,21 @@ function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
+function expectComponentProp(
+  source: string,
+  component: string,
+  prop: string,
+  value: string,
+) {
+  const tags = source.match(
+    new RegExp(`<${component}\\b[\\s\\S]*?\\/>`, "g"),
+  ) ?? [];
+  expect(
+    tags.some((tag) => tag.includes(`${prop}={${value}}`)),
+    `${component}.${prop} 应精确接收 ${value}`,
+  ).toBe(true);
+}
+
 describe("Finance wechat pay applyment save layout", () => {
   test("wires create update submit and attachment upload contracts", () => {
     const requestSource = readSource("./finance-wechat-pay-applyment-requests.ts");
@@ -30,58 +45,94 @@ describe("Finance wechat pay applyment save layout", () => {
     expect(fieldSource).toContain("SelectGroup");
   });
 
-  test("registers the complete draft form through the single-page document and field groups", () => {
+  test("forwards exact handlers from Panel through Workflow into SinglePage", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const workflowSource = readSource(
+      "./finance-wechat-pay-applyment-workflow.tsx",
+    );
+    const panelHandlers = [
+      ["onSubjectTypeChange", "handleSubjectTypeChange"],
+      ["onContactTypeChange", "changeContactType"],
+      ["onAttachmentsChange", "handleAttachmentsChange"],
+      ["onApplyRecognition", "applyRecognitionRows"],
+      ["onManualFieldChange", "handleManualFieldChange"],
+      ["onSupplementDataChange", "handleSupplementDataChange"],
+      ["onReviewConfirmedChange", "setReviewConfirmed"],
+      ["onSubmitApplyment", "submitApplyment"],
+    ] as const;
+
+    for (const [prop, handler] of panelHandlers) {
+      expectComponentProp(
+        panelSource,
+        "FinanceWechatPayApplymentWorkflow",
+        prop,
+        handler,
+      );
+    }
+    for (const [prop] of panelHandlers) {
+      expectComponentProp(
+        workflowSource,
+        "FinanceWechatPayApplymentSinglePage",
+        prop,
+        prop,
+      );
+    }
+  });
+
+  test("forwards SinglePage callbacks to their owning child components", () => {
     const singlePageUrl = new URL(
       "./finance-wechat-pay-applyment-single-page.tsx",
       import.meta.url,
     );
-    const documentSectionUrl = new URL(
-      "./finance-wechat-pay-applyment-document-section.tsx",
-      import.meta.url,
-    );
-
     expect(existsSync(singlePageUrl)).toBe(true);
-    expect(existsSync(documentSectionUrl)).toBe(true);
-    if (!existsSync(singlePageUrl) || !existsSync(documentSectionUrl)) return;
-
+    if (!existsSync(singlePageUrl)) return;
     const singlePageSource = readFileSync(singlePageUrl, "utf8");
-    const documentSectionSource = readFileSync(documentSectionUrl, "utf8");
-    const workflowSource = readSource(
-      "./finance-wechat-pay-applyment-workflow.tsx",
-    );
+    const childBindings = [
+      ["FinanceWechatPayApplymentDocumentSection", "onSubjectTypeChange"],
+      ["FinanceWechatPayApplymentDocumentSection", "onAttachmentsChange"],
+      ["FinanceWechatPayApplymentDocumentSection", "onApplyRecognition"],
+      ["FinanceWechatPayApplymentDocumentSection", "onManualFieldChange"],
+      ["FinanceWechatPayApplymentContactFields", "onContactTypeChange"],
+      [
+        "FinanceWechatPayApplymentSettlementFields",
+        "onDataChange",
+        "onSupplementDataChange",
+      ],
+      [
+        "FinanceWechatPayApplymentBusinessFields",
+        "onDataChange",
+        "onSupplementDataChange",
+      ],
+      [
+        "FinanceWechatPayApplymentReview",
+        "onConfirmedChange",
+        "onReviewConfirmedChange",
+      ],
+      ["FinanceWechatPayApplymentActions", "onSubmitApplyment"],
+    ] as const;
+
+    for (const [component, prop, handler = prop] of childBindings) {
+      expectComponentProp(singlePageSource, component, prop, handler);
+    }
+  });
+
+  test("keeps the complete draft payload aligned with the form fields", () => {
     const supplementSource = readSource(
       "./finance-wechat-pay-applyment-supplement-fields.tsx",
     );
     const schemaSource = readSource("./finance-wechat-pay-applyment-schema.ts");
-    const formContractSource =
-      `${singlePageSource}\n${documentSectionSource}\n${supplementSource}\n${schemaSource}`;
+    const formContractSource = `${supplementSource}\n${schemaSource}`;
 
-    expect(workflowSource).toContain(
-      'from "./finance-wechat-pay-applyment-single-page"',
-    );
-    expect(workflowSource).toContain("<FinanceWechatPayApplymentSinglePage");
-    expect(workflowSource).not.toContain("FinanceWechatPayApplymentFlow");
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentDocumentSection",
-    );
-    expect(documentSectionSource).toContain(
-      "<FinanceWechatPayApplymentInlineOcrReview",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentContactFields",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentSettlementFields",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentBusinessFields",
-    );
-    expect(formContractSource).toContain("merchant_short_name");
-    expect(formContractSource).toContain("super_admin_phone");
-    expect(formContractSource).toContain("settlement_account_type");
-    expect(formContractSource).toContain("settlement_account_number");
-    expect(formContractSource).toContain("settlement_bank_full_name");
-    expect(formContractSource).toContain("settlement_bank_branch_id");
+    for (const field of [
+      "merchant_short_name",
+      "super_admin_phone",
+      "settlement_account_type",
+      "settlement_account_number",
+      "settlement_bank_full_name",
+      "settlement_bank_branch_id",
+    ]) {
+      expect(formContractSource).toContain(field);
+    }
     expect(supplementSource).toContain("settlement_account_type: value");
     expect(supplementSource).toContain("onDataChange(overrides)");
     expect(supplementSource).toContain('requirement="required"');

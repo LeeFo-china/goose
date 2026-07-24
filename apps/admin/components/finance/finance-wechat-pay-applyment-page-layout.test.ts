@@ -7,23 +7,6 @@ function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-const SINGLE_PAGE_INTERACTION_CALLBACKS = [
-  "onAttachmentsChange", "onApplyRecognition",
-  "onManualFieldChange", "onReviewConfirmedChange",
-  "onSubmitApplyment", "onSubjectTypeChange",
-  "onContactTypeChange", "onSupplementDataChange",
-] as const;
-
-function expectForwardedCallback(source: string, callback: string) {
-  expect(source).toMatch(new RegExp(
-    `${callback}=\\{(?:props\\.)?${callback}\\}`,
-  ));
-}
-
-function expectUsedCallback(source: string, callback: string) {
-  expect(source).toMatch(new RegExp(`=\\{(?:props\\.)?${callback}\\}`));
-}
-
 describe("Finance wechat pay applyment page layout", () => {
   test("exposes tenant sidebar and finance tab entry for applyment flow", () => {
     const financeGroup = tenantNavGroups.find((group) => group.label === "财务");
@@ -252,9 +235,6 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(existsSync(singlePageUrl)).toBe(true);
     if (!existsSync(singlePageUrl)) return;
     const singlePageSource = readFileSync(singlePageUrl, "utf8");
-    const documentSectionSource = readSource(
-      "./finance-wechat-pay-applyment-document-section.tsx",
-    );
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const workflowSource = readSource(
       "./finance-wechat-pay-applyment-workflow.tsx",
@@ -269,26 +249,6 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(singlePageSource).not.toContain("上一步");
     expect(singlePageSource).not.toContain("下一步");
     expect(singlePageSource).not.toContain("@/components/ui/tabs");
-    expect(singlePageSource).toContain(
-      'from "./finance-wechat-pay-applyment-document-section"',
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentDocumentSection",
-    );
-    expect(documentSectionSource).toContain(
-      "<FinanceWechatPayApplymentInlineOcrReview",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentContactFields",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentSettlementFields",
-    );
-    expect(singlePageSource).toContain(
-      "<FinanceWechatPayApplymentBusinessFields",
-    );
-    expect(singlePageSource).toContain("<FinanceWechatPayApplymentReview");
-    expect(singlePageSource).toContain("<FinanceWechatPayApplymentActions");
     expect(workflowSource).toContain(
       'from "./finance-wechat-pay-applyment-single-page"',
     );
@@ -302,29 +262,6 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(panelSource).not.toContain("validateAllStages");
     expect(panelSource).not.toContain("onInvalidCapture");
     expect(panelSource).not.toContain("activateInvalidApplymentElement");
-  });
-
-  test("forwards every applyment interaction from Panel through Workflow", () => {
-    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
-    const workflowSource = readSource("./finance-wechat-pay-applyment-workflow.tsx");
-    expect(panelSource).toContain("<FinanceWechatPayApplymentWorkflow");
-    for (const callback of SINGLE_PAGE_INTERACTION_CALLBACKS) {
-      expect(panelSource).toContain(`${callback}=`);
-    }
-    expect(workflowSource).toContain("<FinanceWechatPayApplymentSinglePage");
-    for (const callback of SINGLE_PAGE_INTERACTION_CALLBACKS) {
-      expectForwardedCallback(workflowSource, callback);
-    }
-  });
-
-  test("uses every forwarded interaction inside the single-page form", () => {
-    const singlePageUrl = new URL("./finance-wechat-pay-applyment-single-page.tsx", import.meta.url);
-    expect(existsSync(singlePageUrl)).toBe(true);
-    if (!existsSync(singlePageUrl)) return;
-    const singlePageSource = readFileSync(singlePageUrl, "utf8");
-    for (const callback of SINGLE_PAGE_INTERACTION_CALLBACKS) {
-      expectUsedCallback(singlePageSource, callback);
-    }
   });
 
   test("removes the processing event timeline from the tenant applyment panel", () => {

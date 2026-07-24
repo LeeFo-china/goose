@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { createElement, type ComponentType } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
+import type { WechatPayApplymentReadinessItem } from "./finance-wechat-pay-applyment-readiness";
 
 function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
@@ -182,16 +187,57 @@ describe("presentApplymentBlockers", () => {
 });
 
 describe("FinanceWechatPayApplymentReview readiness", () => {
-  test("renders blocker labels inline without stage navigation props", () => {
+  test("renders two blocker labels without stage navigation props", () => {
+    const Review = FinanceWechatPayApplymentReview as unknown as ComponentType<
+      {
+        review: {
+          subject: string;
+          contact: string;
+          settlement: string;
+          attachments: string;
+        };
+        attachments: [];
+        contactType: string;
+        confirmed: boolean;
+        disabled: boolean;
+        readinessBlockers: readonly WechatPayApplymentReadinessItem[];
+        onConfirmedChange: (checked: boolean) => void;
+      }
+    >;
+    const readinessBlockers = [
+      {
+        key: "materials:缺少营业执照",
+        label: "缺少营业执照",
+        targetStage: "materials",
+      },
+      {
+        key: "supplement:请填写商户简称",
+        label: "请填写商户简称",
+        targetStage: "supplement",
+      },
+    ] as const satisfies readonly WechatPayApplymentReadinessItem[];
+    const markup = renderToStaticMarkup(createElement(Review, {
+      review: {
+        subject: "测试主体",
+        contact: "测试联系人",
+        settlement: "测试结算账户",
+        attachments: "测试附件",
+      },
+      attachments: [],
+      contactType: "LEGAL",
+      confirmed: false,
+      disabled: false,
+      readinessBlockers,
+      onConfirmedChange: () => undefined,
+    }));
+
+    expect(markup).toContain("缺少营业执照");
+    expect(markup).toContain("请填写商户简称");
+    expect(markup.match(/data-readiness-blocker=/g)).toHaveLength(2);
+
     const reviewSource = readSource(
       "./finance-wechat-pay-applyment-review.tsx",
     );
-
-    expect(reviewSource).toContain("readinessBlockers");
-    expect(reviewSource).toContain("readinessBlockers.map");
-    expect(reviewSource).toContain("blocker.label");
-    expect(reviewSource).toContain("data-readiness-blocker");
-    expect(reviewSource).toContain("@/components/ui/alert");
     expect(reviewSource).not.toContain("onStageChange");
     expect(reviewSource).not.toContain("onNavigate");
     expect(reviewSource).not.toContain("getWechatPayApplymentReviewTargets");
