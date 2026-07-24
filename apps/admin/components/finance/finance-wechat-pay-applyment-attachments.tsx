@@ -39,7 +39,6 @@ import {
 import {
   ApplymentAttachmentUploadButton,
 } from "./finance-wechat-pay-applyment-upload-button";
-
 const APPLYMENT_ATTACHMENT_UPLOAD_SCENE = "wechat_pay_applyment";
 const MAX_APPLYMENT_ATTACHMENT_SIZE = 2 * 1024 * 1024;
 const MAX_BUSINESS_SCENE_MATERIALS = 5;
@@ -47,12 +46,13 @@ const APPLYMENT_ATTACHMENT_ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
 ]);
-
-const BASE_ATTACHMENT_SLOTS: Array<{
+export type ApplymentAttachmentSlotDefinition = {
   category: WechatPayApplymentAttachmentCategory;
   required: boolean;
   description: string;
-}> = [
+};
+
+const BASE_ATTACHMENT_SLOTS: readonly ApplymentAttachmentSlotDefinition[] = [
   { category: "license_copy", required: true, description: "营业执照清晰照片或扫描件。" },
   { category: "legal_representative_id_card_front", required: true, description: "法人身份证人像面。" },
   { category: "legal_representative_id_card_back", required: true, description: "法人身份证国徽面。" },
@@ -76,25 +76,11 @@ const MATERIAL_STATUS_META: Record<
   manual: { label: "手动填写", variant: "secondary" },
   failed: { label: "识别失败", variant: "danger" },
 };
-
 export type AttachmentUploadedInput = {
   attachment: WechatPayApplymentAttachment;
   nextAttachments: WechatPayApplymentAttachment[];
 };
-
-export function WechatPayApplymentAttachmentsField({
-  attachments,
-  contactType,
-  editable,
-  disabled,
-  materialStates,
-  attachmentSaveErrors,
-  supportedOcrDocumentTypes,
-  onUploaded,
-  onRetrySave,
-  onRetryRecognition,
-  onChange,
-}: {
+export type ApplymentAttachmentControllerInput = {
   attachments: WechatPayApplymentAttachment[];
   contactType: string;
   editable: boolean;
@@ -113,16 +99,49 @@ export function WechatPayApplymentAttachmentsField({
     nextAttachments: WechatPayApplymentAttachment[],
     options?: ApplymentAttachmentChangeOptions,
   ) => void | Promise<void>;
-}) {
-  const [uploadingCategory, setUploadingCategory] = useState<string | null>(null);
+};
+export type ApplymentAttachmentController = Omit<
+  ApplymentAttachmentControllerInput,
+  "contactType"
+> & {
+  busy: boolean;
+  uploadingCategory: WechatPayApplymentAttachmentCategory | null;
+  error: string;
+  errorCategory: string | null;
+  openAttachmentPicker: (inputId: string) => void;
+  uploadAttachment: (
+    category: WechatPayApplymentAttachmentCategory,
+    event: ChangeEvent<HTMLInputElement>,
+  ) => void;
+  removeAttachment: (
+    attachment: WechatPayApplymentAttachment,
+  ) => void;
+  useManualEntry: (
+    attachment: WechatPayApplymentAttachment,
+  ) => void;
+};
+export type WechatPayApplymentAttachmentSlotProps =
+  ApplymentAttachmentSlotDefinition & {
+    controller: ApplymentAttachmentController;
+  };
+export function useWechatPayApplymentAttachmentController({
+  attachments,
+  editable,
+  disabled,
+  materialStates,
+  attachmentSaveErrors,
+  supportedOcrDocumentTypes,
+  onUploaded,
+  onRetrySave,
+  onRetryRecognition,
+  onChange,
+}: Omit<ApplymentAttachmentControllerInput, "contactType">):
+  ApplymentAttachmentController {
+  const [uploadingCategory, setUploadingCategory] =
+    useState<WechatPayApplymentAttachmentCategory | null>(null);
   const [error, setError] = useState("");
+  const [errorCategory, setErrorCategory] = useState<string | null>(null);
   const busy = disabled || Boolean(uploadingCategory);
-  const slots = contactType === "SUPER"
-    ? [...BASE_ATTACHMENT_SLOTS, ...CONTACT_ATTACHMENT_SLOTS]
-    : BASE_ATTACHMENT_SLOTS;
-  const businessMaterials = attachments.filter(
-    (item) => item.category === "business_scene_material",
-  );
 
   async function uploadAttachment(
     category: WechatPayApplymentAttachmentCategory,
@@ -133,6 +152,7 @@ export function WechatPayApplymentAttachmentsField({
     if (!file) return;
 
     setError("");
+    setErrorCategory(category);
     setUploadingCategory(category);
     try {
       validateUploadFile(file, {
@@ -174,6 +194,7 @@ export function WechatPayApplymentAttachmentsField({
 
   async function removeAttachment(attachment: WechatPayApplymentAttachment) {
     setError("");
+    setErrorCategory(attachment.category ?? null);
     try {
       const nextAttachments = attachments.filter(
         (item) => item.object_key !== attachment.object_key,
@@ -193,6 +214,7 @@ export function WechatPayApplymentAttachmentsField({
 
   async function useManualEntry(attachment: WechatPayApplymentAttachment) {
     setError("");
+    setErrorCategory(attachment.category ?? null);
     try {
       const nextAttachments = updateAttachmentOcrReviewMetadata(
         attachments,
@@ -220,6 +242,52 @@ export function WechatPayApplymentAttachmentsField({
     if (input instanceof HTMLInputElement) input.click();
   }
 
+  return {
+    attachments,
+    editable,
+    disabled,
+    materialStates,
+    attachmentSaveErrors,
+    supportedOcrDocumentTypes,
+    onUploaded,
+    onRetrySave,
+    onRetryRecognition,
+    onChange,
+    busy: Boolean(busy),
+    uploadingCategory,
+    error,
+    errorCategory,
+    openAttachmentPicker,
+    uploadAttachment,
+    removeAttachment,
+    useManualEntry,
+  };
+}
+
+export function WechatPayApplymentAttachmentsField(
+  input: ApplymentAttachmentControllerInput,
+) {
+  const { contactType } = input;
+  const controller = useWechatPayApplymentAttachmentController(input);
+  const {
+    attachments,
+    editable,
+    busy,
+    uploadingCategory,
+    error,
+    attachmentSaveErrors,
+    uploadAttachment,
+    removeAttachment,
+    openAttachmentPicker,
+    onRetrySave,
+  } = controller;
+  const slots = contactType === "SUPER"
+    ? [...BASE_ATTACHMENT_SLOTS, ...CONTACT_ATTACHMENT_SLOTS]
+    : BASE_ATTACHMENT_SLOTS;
+  const businessMaterials = attachments.filter(
+    (item) => item.category === "business_scene_material",
+  );
+
   return (
     <section className="rounded-md border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -236,37 +304,11 @@ export function WechatPayApplymentAttachmentsField({
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {slots.map((slot) => {
-          const attachment = attachments.find(
-            (item) => item.category === slot.category,
-          );
-          const materialState = materialStates[slot.category];
-          const documentType = WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[
-            slot.category
-          ];
           return (
-            <AttachmentSlot
+            <WechatPayApplymentAttachmentSlot
               key={slot.category}
-              category={slot.category}
-              required={slot.required}
-              description={slot.description}
-              attachment={attachment}
-              materialState={materialState}
-              saveError={attachment
-                ? attachmentSaveErrors[attachment.object_key]
-                : undefined}
-              editable={editable}
-              busy={Boolean(busy)}
-              uploading={uploadingCategory === slot.category}
-              ocrSupported={Boolean(
-                documentType &&
-                supportedOcrDocumentTypes.has(documentType),
-              )}
-              onOpen={openAttachmentPicker}
-              onUpload={uploadAttachment}
-              onRemove={removeAttachment}
-              onRetrySave={onRetrySave}
-              onRetryRecognition={onRetryRecognition}
-              onManualEntry={useManualEntry}
+              {...slot}
+              controller={controller}
             />
           );
         })}
@@ -334,44 +376,36 @@ export function WechatPayApplymentAttachmentsField({
   );
 }
 
-function AttachmentSlot({
+export function WechatPayApplymentAttachmentSlot({
   category,
   required,
   description,
-  attachment,
-  materialState,
-  saveError,
-  editable,
-  busy,
-  uploading,
-  ocrSupported,
-  onOpen,
-  onUpload,
-  onRemove,
-  onRetrySave,
-  onRetryRecognition,
-  onManualEntry,
-}: {
-  category: WechatPayApplymentAttachmentCategory;
-  required: boolean;
-  description: string;
-  attachment?: WechatPayApplymentAttachment;
-  materialState?: ApplymentMaterialState;
-  saveError?: string;
-  editable: boolean;
-  busy: boolean;
-  uploading: boolean;
-  ocrSupported: boolean;
-  onOpen: (inputId: string) => void;
-  onUpload: (
-    category: WechatPayApplymentAttachmentCategory,
-    event: ChangeEvent<HTMLInputElement>,
-  ) => void;
-  onRemove: (attachment: WechatPayApplymentAttachment) => void;
-  onRetrySave: (attachment: WechatPayApplymentAttachment) => void;
-  onRetryRecognition: (attachment: WechatPayApplymentAttachment) => void;
-  onManualEntry: (attachment: WechatPayApplymentAttachment) => void;
-}) {
+  controller,
+}: WechatPayApplymentAttachmentSlotProps) {
+  const {
+    attachments,
+    materialStates,
+    attachmentSaveErrors,
+    supportedOcrDocumentTypes,
+    editable,
+    busy,
+    uploadingCategory,
+    openAttachmentPicker,
+    uploadAttachment,
+    removeAttachment,
+    onRetrySave,
+    onRetryRecognition,
+    useManualEntry,
+  } = controller;
+  const attachment = attachments.find((item) => item.category === category);
+  const materialState = materialStates[category];
+  const saveError = attachment
+    ? attachmentSaveErrors[attachment.object_key]
+    : undefined;
+  const documentType = WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[category];
+  const ocrSupported = Boolean(
+    documentType && supportedOcrDocumentTypes.has(documentType),
+  );
   const inputId = `wechat-pay-applyment-attachment-${category}`;
   const currentState = materialState?.attachmentObjectKey ===
       attachment?.object_key
@@ -402,7 +436,7 @@ function AttachmentSlot({
           attachment={attachment}
           editable={editable}
           busy={busy}
-          onRemove={onRemove}
+          onRemove={removeAttachment}
         />
       ) : (
         <div className="flex aspect-[4/3] items-center justify-center rounded-md border border-dashed bg-muted/30 text-muted-foreground">
@@ -426,10 +460,10 @@ function AttachmentSlot({
             category={category}
             inputId={inputId}
             disabled={busy}
-            uploading={uploading}
+            uploading={uploadingCategory === category}
             label={attachment ? "替换附件" : "上传附件"}
-            onOpen={onOpen}
-            onUpload={onUpload}
+            onOpen={openAttachmentPicker}
+            onUpload={uploadAttachment}
           />
           {attachment &&
               (needsPersistRetry ||
@@ -451,7 +485,7 @@ function AttachmentSlot({
               variant="ghost"
               size="sm"
               disabled={busy}
-              onClick={() => onManualEntry(attachment)}
+              onClick={() => useManualEntry(attachment)}
             >
               <FilePenLine data-icon="inline-start" />
               手动填写

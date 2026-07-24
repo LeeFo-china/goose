@@ -60,6 +60,31 @@ const STATUS_META: Record<
   failed: { label: "识别失败", variant: "danger" },
 };
 
+export type ApplymentInlineOcrReviewProps = {
+  category: WechatPayApplymentAttachmentCategory;
+  attachments: readonly WechatPayApplymentAttachment[];
+  materialStates: ApplymentMaterialStateMap;
+  contactType: string;
+  subjectType: string;
+  values: Readonly<Record<string, string>>;
+  comparisonValues: Readonly<Record<string, string>>;
+  fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
+  disabled?: boolean;
+  onManualChange: (key: string, value: string) => void;
+  onApply: (
+    category: WechatPayApplymentAttachmentCategory,
+    rows: readonly OcrFieldReviewRow[],
+  ) => void | Promise<void>;
+  onUseManualEntry: (
+    category: WechatPayApplymentAttachmentCategory,
+  ) => void | Promise<void>;
+};
+
+export type ApplymentOcrController = Omit<
+  ApplymentInlineOcrReviewProps,
+  "category"
+>;
+
 export function FinanceWechatPayApplymentOcrReview({
   attachments,
   materialStates,
@@ -121,44 +146,15 @@ export function FinanceWechatPayApplymentOcrReview({
     selectedCategory,
   ]);
 
-  const selectedAttachment = getCurrentApplymentAttachment(
-    attachments,
-    selectedCategory,
-  );
-  const selectedState = materialStates[selectedCategory];
-  const currentState = selectedState?.attachmentObjectKey ===
-      selectedAttachment?.object_key
-    ? selectedState
-    : undefined;
-  const fields = useMemo(
-    () => mapApplymentOcrFields(
-      selectedCategory,
-      currentState?.fields ?? [],
-      contactType,
-    ),
-    [contactType, currentState?.fields, selectedCategory],
-  );
-  const rows = useMemo(
-    () => buildOcrFieldReviewRows(fields, comparisonValues),
-    [comparisonValues, fields],
-  );
-  const status = currentState
-    ? currentState.status
-    : selectedAttachment
-    ? "uploaded"
-    : "missing";
-  const statusMeta = STATUS_META[status];
-
   return (
     <section className="flex min-w-0 flex-col gap-4 rounded-md border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
         <div>
           <h2 className="text-sm font-semibold">证照识别核对</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             对照原件确认识别建议，有差异的字段不会自动覆盖。
           </p>
         </div>
-        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
       </div>
 
       <Select
@@ -182,17 +178,82 @@ export function FinanceWechatPayApplymentOcrReview({
         </SelectContent>
       </Select>
 
+      <FinanceWechatPayApplymentInlineOcrReview
+        category={selectedCategory}
+        attachments={attachments}
+        materialStates={materialStates}
+        contactType={contactType}
+        subjectType={subjectType}
+        values={values}
+        comparisonValues={comparisonValues}
+        fieldSources={fieldSources}
+        disabled={disabled}
+        onManualChange={onManualChange}
+        onApply={onApply}
+        onUseManualEntry={onUseManualEntry}
+      />
+    </section>
+  );
+}
+
+export function FinanceWechatPayApplymentInlineOcrReview({
+  category,
+  attachments,
+  materialStates,
+  contactType,
+  subjectType,
+  values,
+  comparisonValues,
+  fieldSources,
+  disabled,
+  onManualChange,
+  onApply,
+  onUseManualEntry,
+}: ApplymentInlineOcrReviewProps) {
+  const attachment = getCurrentApplymentAttachment(attachments, category);
+  const selectedState = materialStates[category];
+  const currentState = selectedState?.attachmentObjectKey ===
+      attachment?.object_key
+    ? selectedState
+    : undefined;
+  const fields = useMemo(
+    () => mapApplymentOcrFields(
+      category,
+      currentState?.fields ?? [],
+      contactType,
+    ),
+    [category, contactType, currentState?.fields],
+  );
+  const rows = useMemo(
+    () => buildOcrFieldReviewRows(fields, comparisonValues),
+    [comparisonValues, fields],
+  );
+  const status = currentState
+    ? currentState.status
+    : attachment
+    ? "uploaded"
+    : "missing";
+  const statusMeta = STATUS_META[status];
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">
+          {getWechatPayApplymentAttachmentCategoryLabel(category)}
+        </h3>
+        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+      </div>
       <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
         <section className="min-w-0 lg:border-r lg:pr-4">
           <FinanceWechatPayApplymentOcrReviewPreview
-            attachment={selectedAttachment}
+            attachment={attachment}
             statusLabel={statusMeta.label}
           />
         </section>
         <section className="flex min-w-0 flex-col gap-4">
           <RecognitionWarnings warnings={currentState?.warnings ?? []} />
           <FinanceWechatPayApplymentRecognizedFields
-            selectedCategory={selectedCategory}
+            category={category}
             contactType={contactType}
             subjectType={subjectType}
             values={values}
@@ -204,18 +265,15 @@ export function FinanceWechatPayApplymentOcrReview({
             rows={rows}
             applyLabel="应用所选字段并确认"
             disabled={disabled || status === "recognizing"}
-            onApply={(selectedRows) => onApply(
-              selectedCategory,
-              selectedRows,
-            )}
+            onApply={(selectedRows) => onApply(category, selectedRows)}
           />
-          {selectedAttachment && status !== "manual" ? (
+          {attachment && status !== "manual" ? (
             <div>
               <Button
                 type="button"
                 variant="outline"
                 disabled={disabled}
-                onClick={() => onUseManualEntry(selectedCategory)}
+                onClick={() => onUseManualEntry(category)}
               >
                 <PencilLine data-icon="inline-start" />
                 改为手动填写
@@ -224,7 +282,7 @@ export function FinanceWechatPayApplymentOcrReview({
           ) : null}
         </section>
       </div>
-    </section>
+    </div>
   );
 }
 
