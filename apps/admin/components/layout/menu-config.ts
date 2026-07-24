@@ -151,6 +151,17 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     ],
   },
   {
+    label: "采购供应",
+    items: [
+      {
+        href: "/suppliers",
+        label: "合作供应商",
+        icon: PackageSearch,
+        permission: "supplier.view",
+      },
+    ],
+  },
+  {
     label: "财务",
     items: [
       {

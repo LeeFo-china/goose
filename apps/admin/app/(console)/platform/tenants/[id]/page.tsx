@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, Building2, ClipboardList, ShieldCheck, UserRoundCog } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { ServiceProviderPublicProfileCard } from "@/components/platform-tenants/service-provider-public-profile-card";
+import { TenantSupplierSettingsCard } from "@/components/platform-tenants/tenant-supplier-settings-card";
 import { TenantServiceAreaPanel } from "@/components/platform-tenants/tenant-service-area-panel";
+import type { TenantSupplierSettings } from "@/components/suppliers/supplier-types";
 import {
   getPlatformTenantStatusMeta,
   type PlatformTenantRecord,
@@ -84,6 +86,33 @@ async function getPlatformTenant(id: string) {
     return {
       data: null,
       error: error instanceof Error ? error.message : "平台租户详情加载失败",
+    };
+  }
+}
+
+async function getTenantSupplierSettings(tenantId: string) {
+  const token = await getAdminToken();
+  if (!token) {
+    return { data: null, error: "缺少登录凭证" };
+  }
+
+  try {
+    const response = await fetch(
+      buildBackendUrl(`/platform/tenant-supplier-settings/${tenantId}`),
+      {
+        headers: { authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+    const payload = await parseBackendJson<TenantSupplierSettings | null>(
+      response,
+    );
+    return { data: payload.data ?? null, error: null };
+  } catch (error) {
+    if (getErrorStatus(error) === 404) return { data: null, error: null };
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : "供应商模块配置加载失败",
     };
   }
 }
@@ -235,25 +264,36 @@ export default async function PlatformTenantDetailPage({
 
   const { id } = await params;
   const hasPlatformAccess = session.roles.includes("platform_admin");
+  const canViewSupplierSettings = session.permissions.some(
+    ({ code }) => code === "platform.supplier.view",
+  );
   const [
     { data: tenant, error },
     { data: serviceAreas, error: serviceAreaError },
     { data: serviceProviderProfile, error: serviceProviderProfileError },
+    { data: supplierSettings, error: supplierSettingsError },
   ] =
     hasPlatformAccess
       ? await Promise.all([
         getPlatformTenant(id),
         getTenantServiceAreas(id),
         getPlatformServiceProviderProfile(id),
+        canViewSupplierSettings
+          ? getTenantSupplierSettings(id)
+          : Promise.resolve({ data: null, error: null }),
       ])
       : [
           { data: null, error: "当前账号不是平台超管，无法访问租户详情" },
           { data: [], error: null },
           { data: null, error: null },
+          { data: null, error: null },
         ];
   const statusMeta = tenant ? getPlatformTenantStatusMeta(tenant.status) : null;
   const canReviewApplications = session.permissions.some(
     ({ code }) => code === "platform.tenant_onboarding.review",
+  );
+  const canManageSupplierSettings = session.permissions.some(
+    ({ code }) => code === "platform.supplier.manage",
   );
   const initialization = tenant?.initialization ?? null;
   const adminEmployee = initialization?.admin_employee ?? tenant?.admin_employees?.[0] ?? null;
@@ -367,6 +407,15 @@ export default async function PlatformTenantDetailPage({
             profile={serviceProviderProfile}
             error={serviceProviderProfileError}
           />
+
+          {canViewSupplierSettings ? (
+            <TenantSupplierSettingsCard
+              tenantId={tenant.id}
+              initialSettings={supplierSettings}
+              initialError={supplierSettingsError}
+              canManage={canManageSupplierSettings}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>
