@@ -14,7 +14,10 @@ export async function findWechatPayApplymentAttachmentOwner(input: {
   let request = SupabaseDB.getAdminClient()
     .from("tenant_wechat_pay_applyments")
     .select("id, tenant_id, status")
-    .contains("attachments", [{ file_object_id: input.fileObjectId }]);
+    .contains(
+      "attachments",
+      JSON.stringify([{ file_object_id: input.fileObjectId }]),
+    );
   if (input.tenantId) request = request.eq("tenant_id", input.tenantId);
   const { data, error } = await request.limit(1).maybeSingle();
   if (error) {
