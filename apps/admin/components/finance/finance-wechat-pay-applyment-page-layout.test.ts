@@ -217,7 +217,9 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(documentSectionSource).toContain(
       "FinanceWechatPayApplymentInlineOcrReview",
     );
+    expect(documentSectionSource).toContain("showPreview={false}");
     expect(reviewSource).toContain("FinanceWechatPayApplymentInlineOcrReview");
+    expect(reviewSource).toContain("showPreview = true");
     expect(reviewSource).toContain("OcrFieldReviewRows");
     expect(reviewSource).toContain("改为手动填写");
     expect(reviewSource).toContain("onUseManualEntry");

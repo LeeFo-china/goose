@@ -102,6 +102,7 @@ export function FinanceWechatPayApplymentDocumentSection({
             key={category}
             category={category}
             {...ocrController}
+            showPreview={false}
           />
         ))}
       </div>

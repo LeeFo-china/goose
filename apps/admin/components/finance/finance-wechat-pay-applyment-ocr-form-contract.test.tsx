@@ -39,6 +39,9 @@ const SINGLE_PAGE_FIELD_NAMES = [
   ...SUPPLEMENT_FIELD_NAMES,
 ] as const;
 
+const SINGLE_PAGE_MODULE_PATH: string =
+  "./finance-wechat-pay-applyment-single-page";
+
 function registeredNames(markup: string) {
   return Array.from(
     markup.matchAll(/\sname="([^"]+)"/g),
@@ -110,9 +113,7 @@ function buildSinglePageProps(options: SinglePageOptions) {
 }
 
 async function renderSinglePage(options: SinglePageOptions = {}) {
-  const singlePageModule = await import(
-    "./finance-wechat-pay-applyment-single-page"
-  );
+  const singlePageModule = await import(SINGLE_PAGE_MODULE_PATH);
   const SinglePage = singlePageModule.FinanceWechatPayApplymentSinglePage as
     unknown as ComponentType<Record<string, unknown>>;
   return renderToStaticMarkup(

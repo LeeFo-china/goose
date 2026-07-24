@@ -70,6 +70,7 @@ export type ApplymentInlineOcrReviewProps = {
   comparisonValues: Readonly<Record<string, string>>;
   fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
   disabled?: boolean;
+  showPreview?: boolean;
   onManualChange: (key: string, value: string) => void;
   onApply: (
     category: WechatPayApplymentAttachmentCategory,
@@ -82,7 +83,7 @@ export type ApplymentInlineOcrReviewProps = {
 
 export type ApplymentOcrController = Omit<
   ApplymentInlineOcrReviewProps,
-  "category"
+  "category" | "showPreview"
 >;
 
 export function FinanceWechatPayApplymentOcrReview({
@@ -206,6 +207,7 @@ export function FinanceWechatPayApplymentInlineOcrReview({
   comparisonValues,
   fieldSources,
   disabled,
+  showPreview = true,
   onManualChange,
   onApply,
   onUseManualEntry,
@@ -234,6 +236,39 @@ export function FinanceWechatPayApplymentInlineOcrReview({
     ? "uploaded"
     : "missing";
   const statusMeta = STATUS_META[status];
+  const reviewContent = (
+    <section className="flex min-w-0 flex-col gap-4">
+      <RecognitionWarnings warnings={currentState?.warnings ?? []} />
+      <FinanceWechatPayApplymentRecognizedFields
+        category={category}
+        contactType={contactType}
+        subjectType={subjectType}
+        values={values}
+        fieldSources={fieldSources}
+        disabled={disabled}
+        onManualChange={onManualChange}
+      />
+      <OcrFieldReviewRows
+        rows={rows}
+        applyLabel="应用所选字段并确认"
+        disabled={disabled || status === "recognizing"}
+        onApply={(selectedRows) => onApply(category, selectedRows)}
+      />
+      {attachment && status !== "manual" ? (
+        <div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            onClick={() => onUseManualEntry(category)}
+          >
+            <PencilLine data-icon="inline-start" />
+            改为手动填写
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  );
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -243,45 +278,17 @@ export function FinanceWechatPayApplymentInlineOcrReview({
         </h3>
         <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
       </div>
-      <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
-        <section className="min-w-0 lg:border-r lg:pr-4">
-          <FinanceWechatPayApplymentOcrReviewPreview
-            attachment={attachment}
-            statusLabel={statusMeta.label}
-          />
-        </section>
-        <section className="flex min-w-0 flex-col gap-4">
-          <RecognitionWarnings warnings={currentState?.warnings ?? []} />
-          <FinanceWechatPayApplymentRecognizedFields
-            category={category}
-            contactType={contactType}
-            subjectType={subjectType}
-            values={values}
-            fieldSources={fieldSources}
-            disabled={disabled}
-            onManualChange={onManualChange}
-          />
-          <OcrFieldReviewRows
-            rows={rows}
-            applyLabel="应用所选字段并确认"
-            disabled={disabled || status === "recognizing"}
-            onApply={(selectedRows) => onApply(category, selectedRows)}
-          />
-          {attachment && status !== "manual" ? (
-            <div>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={disabled}
-                onClick={() => onUseManualEntry(category)}
-              >
-                <PencilLine data-icon="inline-start" />
-                改为手动填写
-              </Button>
-            </div>
-          ) : null}
-        </section>
-      </div>
+      {showPreview ? (
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
+          <section className="min-w-0 lg:border-r lg:pr-4">
+            <FinanceWechatPayApplymentOcrReviewPreview
+              attachment={attachment}
+              statusLabel={statusMeta.label}
+            />
+          </section>
+          {reviewContent}
+        </div>
+      ) : reviewContent}
     </div>
   );
 }
