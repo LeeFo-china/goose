@@ -90,6 +90,10 @@ import TenantServiceProviderController from "@/controllers/tenant-service-provid
 import TenantLocationController from "@/controllers/tenant-location";
 import VisitorLocalServiceProvidersController from "@/controllers/visitor-local-service-providers";
 import OcrController from "@/controllers/ocr";
+import PlatformSuppliersController from "@/controllers/platform-suppliers";
+import TenantSuppliersController from "@/controllers/tenant-suppliers";
+import PlatformSupplierCatalogController from "@/controllers/platform-supplier-catalog";
+import SupplierCatalogController from "@/controllers/supplier-catalog";
 
 const fullCrudRoutes = {
   list: true,
@@ -178,6 +182,10 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TenantLocationController.registerExtraRoutes(app);
   VisitorLocalServiceProvidersController.registerExtraRoutes(app);
   OcrController.registerExtraRoutes(app);
+  PlatformSuppliersController.registerExtraRoutes(app);
+  TenantSuppliersController.registerExtraRoutes(app);
+  PlatformSupplierCatalogController.registerExtraRoutes(app);
+  SupplierCatalogController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);

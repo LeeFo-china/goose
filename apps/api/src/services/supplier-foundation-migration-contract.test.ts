@@ -104,9 +104,11 @@ function findQualificationTypeNameUniqueness(sql: string) {
     });
   return [...tableViolations, ...indexViolations];
 }
-const commandFunctions = ["create_platform_supplier", "mutate_platform_supplier", "review_supplier_qualification", "set_tenant_supplier_module", "create_tenant_supplier", "mutate_tenant_supplier", "create_supplier_contract", "mutate_supplier_contract", "get_tenant_supplier_order_eligibility", "list_tenant_suppliers_for_tenant", "list_available_suppliers_for_tenant"] as const;
-const allFoundationFunctions = [...commandFunctions.slice(0, 8), "get_tenant_supplier_order_eligibility_set", ...commandFunctions.slice(8)] as const;
-const requestFields = { create_platform_supplier: ["supplier_id", "code", "name", "legal_name", "unified_social_credit_code", "supplier_type", "expected_version", "actor_employee_id"], mutate_platform_supplier: ["supplier_id", "action", "expected_version", "reason", "actor_employee_id"], review_supplier_qualification: ["supplier_id", "qualification_id", "verification_status", "expected_version", "reason", "actor_employee_id"], set_tenant_supplier_module: ["tenant_id", "module_enabled", "require_active_contract_for_new_order", "expected_version", "actor_employee_id"], create_tenant_supplier: ["tenant_supplier_id", "tenant_id", "supplier_id", "expected_version", "actor_employee_id"], mutate_tenant_supplier: ["tenant_id", "tenant_supplier_id", "action", "expected_version", "reason", "actor_employee_id"], create_supplier_contract: ["contract_id", "tenant_id", "tenant_supplier_id", "contract_no", "name", "valid_from", "valid_until", "settlement_term_days", "invoice_required_before_payment", "document_file_id", "expected_version", "actor_employee_id"], mutate_supplier_contract: ["tenant_id", "tenant_supplier_id", "contract_id", "action", "expected_version", "reason", "actor_employee_id"] } as const;
+const atomicStateCommands = ["create_platform_supplier", "mutate_platform_supplier", "review_supplier_qualification", "set_tenant_supplier_module", "create_tenant_supplier", "mutate_tenant_supplier", "create_supplier_contract", "mutate_supplier_contract"] as const;
+const createCommands = ["create_supplier_qualification_type", "create_supplier_qualification", "create_supplier_service_region", "create_supplier_address", "create_supplier_contact", "create_catalog_category", "create_catalog_brand", "create_catalog_unit"] as const;
+const commandFunctions = ["create_platform_supplier", ...createCommands, ...atomicStateCommands.slice(1), "get_tenant_supplier_order_eligibility", "list_tenant_suppliers_for_tenant", "list_available_suppliers_for_tenant"] as const;
+const allFoundationFunctions = [...commandFunctions.slice(0, 16), "get_tenant_supplier_order_eligibility_set", ...commandFunctions.slice(16)] as const;
+const requestFields = { create_platform_supplier: ["code", "name", "legal_name", "unified_social_credit_code", "supplier_type", "expected_version", "actor_employee_id"], mutate_platform_supplier: ["supplier_id", "action", "expected_version", "reason", "actor_employee_id"], review_supplier_qualification: ["supplier_id", "qualification_id", "verification_status", "expected_version", "reason", "actor_employee_id"], set_tenant_supplier_module: ["tenant_id", "module_enabled", "require_active_contract_for_new_order", "expected_version", "actor_employee_id"], create_tenant_supplier: ["tenant_id", "supplier_id", "expected_version", "actor_employee_id"], mutate_tenant_supplier: ["tenant_id", "tenant_supplier_id", "action", "expected_version", "reason", "actor_employee_id"], create_supplier_contract: ["tenant_id", "tenant_supplier_id", "contract_no", "name", "valid_from", "valid_until", "settlement_term_days", "invoice_required_before_payment", "document_file_id", "expected_version", "actor_employee_id"], mutate_supplier_contract: ["tenant_id", "tenant_supplier_id", "contract_id", "action", "expected_version", "reason", "actor_employee_id"] } as const;
 function extractFunction(sql: string, name: string) { return sql.match(new RegExp(`CREATE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`))?.[0] ?? ""; }
 describe("supplier foundation migration contract", () => {
   test("creates the six supplier master-data tables and required indexes", () => {
@@ -380,7 +382,7 @@ describe("supplier foundation migration contract", () => {
     const sql = migrationSql.foundationCommands;
     expect(extractColumnNames(sql, "supplier_command_events")).toEqual(["id", "tenant_id", "resource_type", "resource_id", "command", "from_state", "to_state", "reason", "actor_user_id", "actor_employee_id", "idempotency_key", "result_version", "created_at"]);
     expectSqlContracts(extractCreateTableStatement(sql, "supplier_command_events"), [
-      /resource_type IN \('supplier', 'supplier_qualification', 'tenant_supplier', 'supplier_contract'\)/,
+      /resource_type IN \([\s\S]*'supplier'[\s\S]*'supplier_qualification'[\s\S]*'tenant_supplier'[\s\S]*'supplier_contract'[\s\S]*\)/,
       /idempotency_key text NOT NULL CHECK \(\s*btrim\(idempotency_key\) <> '' AND char_length\(idempotency_key\) <= 120\s*\)/,
       /UNIQUE \(actor_user_id, idempotency_key\)/,
     ]);
@@ -430,7 +432,7 @@ describe("supplier foundation migration contract", () => {
   });
   test("locks idempotent lifecycle state machines and aggregate writes", () => {
     const sql = migrationSql.foundationCommands;
-    for (const name of commandFunctions.slice(0, 8)) {
+    for (const name of atomicStateCommands) {
       const functionSql = extractFunction(sql, name);
       for (const contract of ["p_expected_version", "p_actor_user_id", "p_actor_employee_id", "p_idempotency_key", "pg_advisory_xact_lock", "public.supplier_command_events", "SUPPLIER_IDEMPOTENCY_CONFLICT", "FOR UPDATE", "INSERT INTO public.supplier_command_events"]) expect(functionSql).toContain(contract);
       expect(functionSql.indexOf("pg_advisory_xact_lock")).toBeLessThan(functionSql.indexOf("FROM public.supplier_command_events"));

@@ -1,15 +1,28 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
+import {
+  EMPLOYEE_ID,
+  QUALIFICATION_ID,
+  SUPPLIER_ID,
+  TENANT_ID,
+  TYPE_ID,
+  USER_ID,
+  address,
+  contact,
+  createRequest,
+  emptyPage,
+  mutationSupplier,
+  pageOf,
+  qualification,
+  qualificationType,
+  serviceRegion,
+  settings,
+  settingsRequest,
+  supplier,
+} from "./platform-suppliers.fixtures";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-const SUPPLIER_ID = "00000000-0000-4000-8000-000000000101";
-const QUALIFICATION_ID = "00000000-0000-4000-8000-000000000201";
-const TYPE_ID = "00000000-0000-4000-8000-000000000202";
-const TENANT_ID = "00000000-0000-4000-8000-000000000301";
-const USER_ID = "00000000-0000-4000-8000-000000000401";
-const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000402";
-const NOW = "2026-07-24T00:00:00.000Z";
 async function createService(deps: ReturnType<typeof dependencies>) {
   const { PlatformSuppliersService } = await import("./platform-suppliers");
   return new PlatformSuppliersService(deps as never);
@@ -36,7 +49,10 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     listQualificationTypes: mock(async ({ page, pageSize }): Promise<unknown> =>
       emptyPage(page, pageSize)),
     findQualificationTypeById: mock(async () => qualificationType),
-    createQualificationType: mock(async (input) => ({ ...qualificationType, ...input })),
+    createQualificationType: mock(async (input) => ({
+      status: "created", idempotent: false,
+      qualification_type: { ...qualificationType, ...input }, version: 1,
+    })),
     updateQualificationType: mock(async (input) => ({ ...qualificationType, ...input })),
     createSupplier: mock(async (): Promise<unknown> => ({
       status: "created" as const,
@@ -60,7 +76,10 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     listQualifications: mock(async ({ page, pageSize }) =>
       pageOf([qualification], page, pageSize)),
     findQualificationByIdForSupplier: mock(async (): Promise<unknown> => qualification),
-    createQualification: mock(async (input) => ({ ...qualification, ...input })),
+    createQualification: mock(async (input) => ({
+      status: "created", idempotent: false,
+      qualification: { ...qualification, ...input }, version: 1,
+    })),
     updateQualification: mock(async (input) => ({ ...qualification, ...input })),
     reviewQualification: mock(async (input): Promise<unknown> => ({
       status: "updated" as const,
@@ -76,12 +95,24 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     listServiceRegions: mock(async ({ page, pageSize }): Promise<unknown> =>
       emptyPage(page, pageSize)),
     findServiceRegionByIdForSupplier: mock(async (): Promise<unknown> => serviceRegion),
+    createServiceRegion: mock(async (input) => ({
+      status: "created", idempotent: false,
+      service_region: { ...serviceRegion, ...input }, version: 1,
+    })),
     upsertServiceRegion: mock(async (input) => ({ ...serviceRegion, ...input })),
     listAddresses: mock(async ({ page, pageSize }) => emptyPage(page, pageSize)),
     findAddressByIdForSupplier: mock(async (): Promise<unknown> => address),
+    createAddress: mock(async (input) => ({
+      status: "created", idempotent: false,
+      address: { ...address, ...input }, version: 1,
+    })),
     upsertAddress: mock(async (input) => input),
     listContacts: mock(async ({ page, pageSize }) => emptyPage(page, pageSize)),
     findContactByIdForSupplier: mock(async (): Promise<unknown> => contact),
+    createContact: mock(async (input) => ({
+      status: "created", idempotent: false,
+      contact: { ...contact, ...input }, version: 1,
+    })),
     upsertContact: mock(async (input) => input),
     listEvents: mock(async ({ page, pageSize }) => emptyPage(page, pageSize)),
     getTenantSupplierSettings: mock(async () => settings),
@@ -222,7 +253,7 @@ describe("PlatformSuppliersService domain boundaries", () => {
       code: "unsafe", name: "不安全资质", ...rules,
       applicable_supplier_types: [...rules.applicable_supplier_types],
       status: "active", sort_order: 100,
-    })).rejects.toMatchObject({ statusCode: 400 });
+    }, "invalid-create")).rejects.toMatchObject({ statusCode: 400 });
     expect(deps.repository.createQualificationType).not.toHaveBeenCalled();
   });
   test("uses targeted lookups for qualification type and region beyond page 100", async () => {
@@ -284,39 +315,54 @@ describe("PlatformSuppliersService domain boundaries", () => {
     expect(deps.repository.upsertContact).not.toHaveBeenCalled();
   });
 
-  test("returns stable 404 before creating any child for a missing supplier", async () => {
+  test("delegates missing parent handling to atomic create commands", async () => {
     const deps = dependencies();
-    deps.repository.findSupplierById.mockImplementation(async () => null);
+    const missing = Object.assign(new Error("missing"), {
+      statusCode: 404,
+      code: "SUPPLIER_NOT_FOUND",
+    });
+    deps.repository.createQualification.mockImplementation(async () => {
+      throw missing;
+    });
+    deps.repository.createServiceRegion.mockImplementation(async () => {
+      throw missing;
+    });
+    deps.repository.createAddress.mockImplementation(async () => {
+      throw missing;
+    });
+    deps.repository.createContact.mockImplementation(async () => {
+      throw missing;
+    });
     const service = await createService(deps);
     const context = auth(["platform.supplier.manage"]);
     const creates = [
       () => service.createQualification(context, {
         supplier_id: SUPPLIER_ID, qualification_type_id: TYPE_ID,
         document_file_id: QUALIFICATION_ID,
-      }),
-      () => service.upsertServiceRegion(context, {
+      }, "qualification-create"),
+      () => service.createServiceRegion(context, {
         supplier_id: SUPPLIER_ID, region_code: "411502",
         region_level: "district", status: "active",
-      }),
-      () => service.upsertAddress(context, {
+      }, "region-create"),
+      () => service.createAddress(context, {
         supplier_id: SUPPLIER_ID, address_type: "registered",
         region_code: "411502", address_detail: "测试路 1 号",
         is_default: true, status: "active",
-      }),
-      () => service.upsertContact(context, {
+      }, "address-create"),
+      () => service.createContact(context, {
         supplier_id: SUPPLIER_ID, contact_type: "primary", name: "张三",
         is_public: true, is_primary: true, status: "active",
-      }),
+      }, "contact-create"),
     ];
     for (const create of creates) {
       await expect(create()).rejects.toMatchObject({
         statusCode: 404, code: "SUPPLIER_NOT_FOUND",
       });
     }
-    expect(deps.repository.createQualification).not.toHaveBeenCalled();
-    expect(deps.repository.upsertServiceRegion).not.toHaveBeenCalled();
-    expect(deps.repository.upsertAddress).not.toHaveBeenCalled();
-    expect(deps.repository.upsertContact).not.toHaveBeenCalled();
+    expect(deps.repository.createQualification).toHaveBeenCalledTimes(1);
+    expect(deps.repository.createServiceRegion).toHaveBeenCalledTimes(1);
+    expect(deps.repository.createAddress).toHaveBeenCalledTimes(1);
+    expect(deps.repository.createContact).toHaveBeenCalledTimes(1);
   });
 
   test("rejects missing administrative regions and level mismatch separately", async () => {
@@ -411,88 +457,3 @@ describe("PlatformSuppliersService domain boundaries", () => {
     }
   });
 });
-function emptyPage(page: number, pageSize: number) { return {
-  list: [], pagination: { page, pageSize, total: 0, totalPages: 0 } }; }
-function pageOf<T>(list: T[], page: number, pageSize: number) { return {
-  list, pagination: { page, pageSize, total: list.length, totalPages: 1 } }; }
-function mutationSupplier(action: string) { return {
-  ...supplier, onboarding_status: action === "approve"
-    ? "approved" as const : supplier.onboarding_status,
-  operational_status: action === "blacklist"
-    ? "blacklisted" as const : supplier.operational_status, version: 3 }; }
-const supplier = {
-  id: SUPPLIER_ID,
-  code: "SUP-001",
-  name: "晴天建材",
-  legal_name: "晴天建材有限公司",
-  unified_social_credit_code: null,
-  supplier_type: "manufacturer" as const,
-  onboarding_status: "pending_review" as const,
-  operational_status: "active" as const,
-  review_remark: null,
-  reviewed_by_employee_id: null,
-  reviewed_at: null,
-  blacklisted_by_employee_id: null,
-  blacklisted_at: null,
-  blacklist_reason: null,
-  version: 2,
-  created_by_employee_id: EMPLOYEE_ID,
-  updated_by_employee_id: EMPLOYEE_ID,
-  created_at: NOW,
-  updated_at: NOW,
-};
-const qualificationType = {
-  id: TYPE_ID,
-  code: "business_license",
-  name: "营业执照",
-  applicable_supplier_types: ["manufacturer"] as const,
-  warning_days: 30,
-  is_required: true,
-  blocks_new_orders: true,
-  status: "active" as const,
-  sort_order: 10,
-  version: 1,
-  created_at: NOW,
-  updated_at: NOW,
-};
-const qualification = {
-  id: QUALIFICATION_ID,
-  supplier_id: SUPPLIER_ID,
-  qualification_type_id: TYPE_ID,
-  verification_status: "pending" as const,
-  valid_from: "2026-01-01",
-  valid_until: "2099-12-31",
-  version: 1,
-};
-const serviceRegion = {
-  id: "00000000-0000-4000-8000-000000000501",
-  supplier_id: SUPPLIER_ID,
-  region_code: "411502",
-  region_level: "district" as const,
-  status: "active" as const,
-  version: 1,
-};
-const address = {
-  id: QUALIFICATION_ID, supplier_id: SUPPLIER_ID, status: "active" as const,
-};
-const contact = {
-  id: QUALIFICATION_ID, supplier_id: SUPPLIER_ID, name: "张三",
-};
-const settings = {
-  tenant_id: TENANT_ID,
-  module_enabled: false,
-  require_active_contract_for_new_order: false,
-  enabled_by_employee_id: null,
-  enabled_at: null,
-  version: 1,
-  created_at: NOW,
-  updated_at: NOW,
-};
-const createRequest = {
-  supplierId: SUPPLIER_ID, input: { code: "SUP-001", name: "晴天建材",
-    legal_name: "晴天建材有限公司", supplier_type: "manufacturer" as const },
-  idempotencyKey: "replay-1" };
-const settingsRequest = {
-  tenantId: TENANT_ID, module_enabled: true,
-  require_active_contract_for_new_order: false, expected_version: 1,
-  idempotencyKey: "replay-1" };

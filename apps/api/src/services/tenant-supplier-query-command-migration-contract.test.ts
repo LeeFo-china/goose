@@ -92,7 +92,6 @@ describe("atomic supplier contract creation", () => {
   test("uses complete fingerprint and atomically replays the command ledger", () => {
     const sql = extractFunction("create_supplier_contract");
     const fingerprintFields = [
-      "contract_id",
       "tenant_id",
       "tenant_supplier_id",
       "contract_no",
@@ -109,6 +108,8 @@ describe("atomic supplier contract creation", () => {
     for (const field of fingerprintFields) {
       expect(sql).toContain(`'${field}', p_${field}`);
     }
+    expect(sql).not.toContain("'contract_id', p_contract_id");
+    expect(sql).not.toContain("v_event.resource_id <> p_contract_id");
     expectContracts(sql, [
       /pg_advisory_xact_lock[\s\S]*FROM public\.supplier_command_events[\s\S]*FOR UPDATE/,
       /v_event\.from_state -> '_request' IS DISTINCT FROM v_request[\s\S]*SUPPLIER_IDEMPOTENCY_CONFLICT/,

@@ -43,15 +43,18 @@ type AccessPolicyPort = Pick<
 export type SupplierCatalogServiceDependencies = {
   repository?: SupplierCatalogRepositoryPort;
   accessPolicy?: AccessPolicyPort;
+  idFactory?: () => string;
 };
 
 export class SupplierCatalogService {
   private readonly repository: SupplierCatalogRepositoryPort;
   private readonly accessPolicy: AccessPolicyPort;
+  private readonly idFactory: () => string;
 
   constructor(dependencies: SupplierCatalogServiceDependencies = {}) {
     this.repository = dependencies.repository ?? supplierCatalogRepository;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
+    this.idFactory = dependencies.idFactory ?? (() => crypto.randomUUID());
   }
 
   listPlatformCategories(
@@ -105,13 +108,14 @@ export class SupplierCatalogService {
   createCategory(
     authContext: AuthContext,
     input: CatalogCategoryCreateInput,
+    idempotencyKey: string,
   ) {
-    const employeeId = this.requirePlatformActor(authContext);
+    const actor = this.requirePlatformActor(authContext);
     return this.mapCatalogConflict(() =>
       this.repository.createCategory({
         ...input,
-        created_by_employee_id: employeeId,
-        updated_by_employee_id: employeeId,
+        category_id: this.idFactory(),
+        ...createContext(actor, idempotencyKey),
       })
     );
   }
@@ -121,23 +125,27 @@ export class SupplierCatalogService {
     categoryId: string,
     input: CatalogCategoryUpdateInput,
   ) {
-    const employeeId = this.requirePlatformActor(authContext);
+    const actor = this.requirePlatformActor(authContext);
     return this.mapCatalogConflict(() =>
       this.repository.updateCategory({
         ...input,
         category_id: categoryId,
-        updated_by_employee_id: employeeId,
+        updated_by_employee_id: actor.employeeId,
       })
     );
   }
 
-  createBrand(authContext: AuthContext, input: CatalogBrandCreateInput) {
-    const employeeId = this.requirePlatformActor(authContext);
+  createBrand(
+    authContext: AuthContext,
+    input: CatalogBrandCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requirePlatformActor(authContext);
     return this.mapCatalogConflict(() =>
       this.repository.createBrand({
         ...input,
-        created_by_employee_id: employeeId,
-        updated_by_employee_id: employeeId,
+        brand_id: this.idFactory(),
+        ...createContext(actor, idempotencyKey),
       })
     );
   }
@@ -147,23 +155,27 @@ export class SupplierCatalogService {
     brandId: string,
     input: CatalogBrandUpdateInput,
   ) {
-    const employeeId = this.requirePlatformActor(authContext);
+    const actor = this.requirePlatformActor(authContext);
     return this.mapCatalogConflict(() =>
       this.repository.updateBrand({
         ...input,
         brand_id: brandId,
-        updated_by_employee_id: employeeId,
+        updated_by_employee_id: actor.employeeId,
       })
     );
   }
 
-  createUnit(authContext: AuthContext, input: CatalogUnitCreateInput) {
-    const employeeId = this.requirePlatformActor(authContext);
+  createUnit(
+    authContext: AuthContext,
+    input: CatalogUnitCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requirePlatformActor(authContext);
     return this.mapCatalogConflict(() =>
       this.repository.createUnit({
         ...input,
-        created_by_employee_id: employeeId,
-        updated_by_employee_id: employeeId,
+        unit_id: this.idFactory(),
+        ...createContext(actor, idempotencyKey),
       })
     );
   }
@@ -173,12 +185,12 @@ export class SupplierCatalogService {
     unitId: string,
     input: CatalogUnitUpdateInput,
   ) {
-    const employeeId = this.requirePlatformActor(authContext);
+    const actor = this.requirePlatformActor(authContext);
     return this.mapCatalogConflict(() =>
       this.repository.updateUnit({
         ...input,
         unit_id: unitId,
-        updated_by_employee_id: employeeId,
+        updated_by_employee_id: actor.employeeId,
       })
     );
   }
@@ -188,10 +200,15 @@ export class SupplierCatalogService {
     this.accessPolicy.assertPermission(authContext, PLATFORM_PERMISSION);
   }
 
-  private requirePlatformActor(authContext: AuthContext): string {
+  private requirePlatformActor(authContext: AuthContext) {
     this.requirePlatform(authContext);
-    if (!authContext.employeeId) throw Errors.forbidden();
-    return authContext.employeeId;
+    if (!authContext.employeeId || !authContext.authUserId) {
+      throw Errors.forbidden();
+    }
+    return {
+      employeeId: authContext.employeeId,
+      authUserId: authContext.authUserId,
+    };
   }
 
   private requireTenant(authContext: AuthContext): void {
@@ -220,6 +237,17 @@ function activeOnly<T extends { status?: "active" | "inactive" }>(
 ): Omit<T, "status"> & { status: "active" } {
   const { status: _status, ...query } = input;
   return { ...query, status: "active" };
+}
+
+function createContext(
+  actor: { authUserId: string; employeeId: string },
+  idempotencyKey: string,
+) {
+  return {
+    actor_user_id: actor.authUserId,
+    actor_employee_id: actor.employeeId,
+    idempotency_key: idempotencyKey,
+  };
 }
 
 function isCatalogConflict(error: unknown): boolean {

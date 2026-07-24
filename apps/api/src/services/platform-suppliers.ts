@@ -14,9 +14,32 @@ import type {
   SupplierQualificationTypeUpdateRecord, SupplierQualificationUpdateRecord,
   SupplierServiceRegionWrite,
 } from "@/schema/platform-suppliers";
+import type {
+  SupplierAddressCreateCommand,
+  SupplierContactCreateCommand,
+  SupplierQualificationCreateCommand,
+  SupplierServiceRegionCreateCommand,
+} from "@/schema/supplier-create-commands";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import {
+  assertQualificationTypeRules,
+  createContext,
+  isIdempotencyDatabaseError,
+  permissionForAction,
+  qualificationState,
+  requireMutation,
+  requireMutationQualification,
+  requireMutationSupplier,
+  requirePreviousQualification,
+  requirePreviousSupplier,
+  settingsState,
+  supplierActionLabel,
+  supplierAuditAction,
+  supplierNotFound,
+  supplierState,
+} from "./platform-supplier-service-utils";
 const PERMISSION = {
   view: "platform.supplier.view",
   manage: "platform.supplier.manage",
@@ -31,15 +54,12 @@ export type PlatformSuppliersServiceDependencies = {
   accessPolicy?: AccessPolicyPort;
   audit?: AuditPort;
   regions?: RegionsPort;
+  idFactory?: () => string;
 };
 export type SupplierLifecycleAction = "submit" | "approve" | "reject" |
   "suspend" | "resume" | "blacklist";
 type LifecycleInput = { expected_version: number; reason?: string };
 type ServiceWrite<T> = T extends unknown ? Omit<T, "created_by_employee_id" | "updated_by_employee_id"> : never;
-type MutationConflict = Extract<SupplierMutationResult, {
-  status: "supplier_not_found" | "state_conflict" |
-    "version_conflict" | "idempotency_conflict";
-}>;
 type CreateSupplierRequest = { supplierId: string; input: PlatformSupplierCreateInput;
   idempotencyKey: string };
 type SettingsRequest = {
@@ -52,11 +72,13 @@ export class PlatformSuppliersService {
   private readonly accessPolicy: AccessPolicyPort;
   private readonly audit: AuditPort;
   private readonly regions: RegionsPort;
+  private readonly idFactory: () => string;
   constructor(dependencies: PlatformSuppliersServiceDependencies = {}) {
     this.repository = dependencies.repository ?? platformSuppliersRepository;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.audit = dependencies.audit ?? platformAuditLogService;
     this.regions = dependencies.regions ?? administrativeAreaRepository;
+    this.idFactory = dependencies.idFactory ?? (() => crypto.randomUUID());
   }
   listSuppliers(auth: AuthContext, query: PlatformSupplierListQuery) {
     this.require(auth, "view"); return this.repository.listSuppliers(query);
@@ -69,10 +91,15 @@ export class PlatformSuppliersService {
   }
   async createQualificationType(
     auth: AuthContext, input: SupplierQualificationTypeCreateRecord,
+    idempotencyKey: string,
   ) {
-    this.require(auth, "manage");
+    const actor = this.require(auth, "manage");
     assertQualificationTypeRules(input);
-    return this.repository.createQualificationType(input);
+    return this.mapIdempotencyError(() =>
+      this.repository.createQualificationType({
+        ...input, qualification_type_id: this.idFactory(),
+        ...createContext(actor, idempotencyKey),
+      }));
   }
   async updateQualificationType(
     auth: AuthContext, input: SupplierQualificationTypeUpdateRecord,
@@ -131,13 +158,14 @@ export class PlatformSuppliersService {
   }
   async createQualification(
     auth: AuthContext, input: ServiceWrite<SupplierQualificationCreateRecord>,
+    idempotencyKey: string,
   ) {
     const actor = this.require(auth, "manage");
-    await this.requireSupplier(input.supplier_id);
-    return this.repository.createQualification({
-      ...input, created_by_employee_id: actor.employeeId,
-      updated_by_employee_id: actor.employeeId,
-    });
+    return this.mapIdempotencyError(() =>
+      this.repository.createQualification({
+        ...input, qualification_id: this.idFactory(),
+        ...createContext(actor, idempotencyKey),
+      }));
   }
   async updateQualification(
     auth: AuthContext, input: ServiceWrite<SupplierQualificationUpdateRecord>,
@@ -185,53 +213,86 @@ export class PlatformSuppliersService {
   listServiceRegions(auth: AuthContext, input: SupplierChildPageQuery) {
     this.require(auth, "view"); return this.repository.listServiceRegions(input);
   }
+  async createServiceRegion(
+    auth: AuthContext,
+    input: Omit<SupplierServiceRegionCreateCommand,
+      "region_id" | "actor_user_id" | "actor_employee_id" | "idempotency_key">,
+    idempotencyKey: string,
+  ) {
+    const actor = this.require(auth, "manage");
+    await this.assertAdministrativeRegion(input.region_code, input.region_level);
+    return this.mapIdempotencyError(() =>
+      this.repository.createServiceRegion({
+        ...input, region_id: this.idFactory(),
+        ...createContext(actor, idempotencyKey),
+      }));
+  }
   async upsertServiceRegion(auth: AuthContext, input: ServiceWrite<SupplierServiceRegionWrite>) {
     const actor = this.require(auth, "manage");
     let current = null;
-    if ("region_id" in input) {
-      current = await this.requireOwnedServiceRegion(input.supplier_id, input.region_id);
-    } else {
-      await this.requireSupplier(input.supplier_id);
+    if (!("region_id" in input)) {
+      throw Errors.badRequest("创建供应商服务区域必须使用幂等接口");
     }
+    current = await this.requireOwnedServiceRegion(input.supplier_id, input.region_id);
     const regionCode = input.region_code ?? current?.region_code;
     const regionLevel = input.region_level ?? current?.region_level;
     if (!regionCode || !regionLevel) {
       throw Errors.badRequest("服务区域行政区划信息不完整");
     }
     await this.assertAdministrativeRegion(regionCode, regionLevel);
-    if ("region_id" in input) return this.repository.upsertServiceRegion({
+    return this.repository.upsertServiceRegion({
       ...input, region_code: regionCode, region_level: regionLevel,
       updated_by_employee_id: actor.employeeId });
-    return this.repository.upsertServiceRegion({ ...input,
-      created_by_employee_id: actor.employeeId, updated_by_employee_id: actor.employeeId });
   }
   listAddresses(auth: AuthContext, input: SupplierChildPageQuery) {
     this.require(auth, "view"); return this.repository.listAddresses(input);
   }
+  createAddress(
+    auth: AuthContext,
+    input: Omit<SupplierAddressCreateCommand,
+      "address_id" | "actor_user_id" | "actor_employee_id" | "idempotency_key">,
+    idempotencyKey: string,
+  ) {
+    const actor = this.require(auth, "manage");
+    return this.mapIdempotencyError(() =>
+      this.repository.createAddress({
+        ...input, address_id: this.idFactory(),
+        ...createContext(actor, idempotencyKey),
+      }));
+  }
   async upsertAddress(auth: AuthContext, input: ServiceWrite<SupplierAddressWrite>) {
     const actor = this.require(auth, "manage");
-    if ("address_id" in input) {
-      await this.requireOwnedAddress(input.supplier_id, input.address_id);
-      return this.repository.upsertAddress({ ...input,
-        updated_by_employee_id: actor.employeeId });
+    if (!("address_id" in input)) {
+      throw Errors.badRequest("创建供应商地址必须使用幂等接口");
     }
-    await this.requireSupplier(input.supplier_id);
+    await this.requireOwnedAddress(input.supplier_id, input.address_id);
     return this.repository.upsertAddress({ ...input,
-      created_by_employee_id: actor.employeeId, updated_by_employee_id: actor.employeeId });
+      updated_by_employee_id: actor.employeeId });
   }
   listContacts(auth: AuthContext, input: SupplierChildPageQuery) {
     this.require(auth, "view"); return this.repository.listContacts(input);
   }
+  createContact(
+    auth: AuthContext,
+    input: Omit<SupplierContactCreateCommand,
+      "contact_id" | "actor_user_id" | "actor_employee_id" | "idempotency_key">,
+    idempotencyKey: string,
+  ) {
+    const actor = this.require(auth, "manage");
+    return this.mapIdempotencyError(() =>
+      this.repository.createContact({
+        ...input, contact_id: this.idFactory(),
+        ...createContext(actor, idempotencyKey),
+      }));
+  }
   async upsertContact(auth: AuthContext, input: ServiceWrite<SupplierContactWrite>) {
     const actor = this.require(auth, "manage");
-    if ("contact_id" in input) {
-      await this.requireOwnedContact(input.supplier_id, input.contact_id);
-      return this.repository.upsertContact({ ...input,
-        updated_by_employee_id: actor.employeeId });
+    if (!("contact_id" in input)) {
+      throw Errors.badRequest("创建供应商联系人必须使用幂等接口");
     }
-    await this.requireSupplier(input.supplier_id);
+    await this.requireOwnedContact(input.supplier_id, input.contact_id);
     return this.repository.upsertContact({ ...input,
-      created_by_employee_id: actor.employeeId, updated_by_employee_id: actor.employeeId });
+      updated_by_employee_id: actor.employeeId });
   }
   listEvents(auth: AuthContext, input: SupplierEventPageQuery) {
     this.require(auth, "view"); return this.repository.listEvents(input);
@@ -364,109 +425,5 @@ export class PlatformSuppliersService {
       );
     }
   }
-}
-function permissionForAction(action: SupplierLifecycleAction) {
-  if (action === "approve" || action === "reject") return "review" as const;
-  if (action === "blacklist") return "blacklist" as const;
-  return "manage" as const;
-}
-function requireMutation(result: SupplierMutationResult) {
-  if (!isMutationConflict(result)) return result;
-  const code = result.error_code ?? {
-    supplier_not_found: "SUPPLIER_NOT_FOUND", state_conflict: "SUPPLIER_STATE_CONFLICT",
-    version_conflict: "SUPPLIER_VERSION_CONFLICT",
-    idempotency_conflict: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-  }[result.status];
-  throw Errors.business(
-    result.status === "supplier_not_found" ? 404 : 409,
-    result.status === "supplier_not_found"
-      ? "平台供应商不存在"
-      : "供应商状态、版本或幂等键已变化，请刷新后重试",
-    code, result,
-  );
-}
-function isMutationConflict(result: SupplierMutationResult): result is MutationConflict {
-  return result.status !== "created" && result.status !== "updated";
-}
-function requireMutationSupplier(result: SupplierMutationResult) {
-  if (result.status !== "created" && result.status !== "updated") {
-    throw Errors.dbError("供应商命令返回状态无效", result);
-  }
-  if (!result.supplier) throw Errors.dbError("供应商命令未返回主体", result);
-  return result.supplier;
-}
-function requireMutationQualification(result: SupplierMutationResult) {
-  if (result.status !== "updated" || !result.qualification) {
-    throw Errors.dbError("供应商资质命令未返回资质", result);
-  }
-  return result.qualification;
-}
-function requirePreviousSupplier(result: SupplierMutationResult) {
-  if ((result.status === "created" || result.status === "updated") &&
-    result.previous_supplier) return result.previous_supplier;
-  throw Errors.dbError("供应商命令未返回原状态", result);
-}
-function requirePreviousQualification(result: SupplierMutationResult) {
-  if ((result.status === "created" || result.status === "updated") &&
-    result.previous_qualification) return result.previous_qualification;
-  throw Errors.dbError("供应商资质命令未返回原状态", result);
-}
-function supplierNotFound(message = "平台供应商不存在") {
-  return Errors.business(404, message, "SUPPLIER_NOT_FOUND");
-}
-function assertQualificationTypeRules(input: {
-  applicable_supplier_types: readonly string[]; warning_days: number;
-  is_required: boolean; blocks_new_orders: boolean;
-}) {
-  if (new Set(input.applicable_supplier_types).size !==
-    input.applicable_supplier_types.length) {
-    throw Errors.badRequest("适用供应商类型不能重复");
-  }
-  if (!Number.isInteger(input.warning_days) ||
-    input.warning_days < 0 || input.warning_days > 3650) {
-    throw Errors.badRequest("资质预警天数必须介于 0 到 3650");
-  }
-  if (input.blocks_new_orders && !input.is_required) {
-    throw Errors.badRequest("仅必需资质可以阻断新订单");
-  }
-}
-function supplierState(input: PlatformSupplierDetail) {
-  return { onboarding_status: input.onboarding_status,
-    operational_status: input.operational_status, version: input.version };
-}
-function qualificationState(input: SupplierQualification) {
-  return { verification_status: input.verification_status, version: input.version };
-}
-function settingsState(input: {
-  module_enabled: boolean; require_active_contract_for_new_order: boolean; version: number;
-}) {
-  return { module_enabled: input.module_enabled,
-    require_active_contract_for_new_order:
-      input.require_active_contract_for_new_order, version: input.version };
-}
-function supplierAuditAction(action: SupplierLifecycleAction) {
-  return `platform_supplier_${action}` as
-    | "platform_supplier_submit" | "platform_supplier_approve"
-    | "platform_supplier_reject" | "platform_supplier_suspend"
-    | "platform_supplier_resume" | "platform_supplier_blacklist";
-}
-function supplierActionLabel(action: SupplierLifecycleAction) {
-  return {
-    submit: "提交审核", approve: "审核通过", reject: "驳回",
-    suspend: "暂停", resume: "恢复", blacklist: "拉黑",
-  }[action];
-}
-function isIdempotencyDatabaseError(error: unknown) {
-  if (!isRecord(error) || error.code !== "DB_ERROR") return false;
-  return containsText(error.details, "SUPPLIER_IDEMPOTENCY_CONFLICT");
-}
-function containsText(value: unknown, expected: string): boolean {
-  if (typeof value === "string") return value.includes(expected);
-  if (Array.isArray(value)) return value.some((item) => containsText(item, expected));
-  if (!isRecord(value)) return false;
-  return Object.values(value).some((item) => containsText(item, expected));
-}
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 export const platformSuppliersService = new PlatformSuppliersService();

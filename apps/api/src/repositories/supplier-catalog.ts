@@ -2,17 +2,24 @@ import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
 import type {
-  CatalogBrandCreateRecord,
   CatalogBrandListQuery,
   CatalogBrandUpdateRecord,
-  CatalogCategoryCreateRecord,
   CatalogCategoryListQuery,
   CatalogCategoryUpdateRecord,
-  CatalogUnitCreateRecord,
   CatalogUnitListQuery,
   CatalogUnitUpdateRecord,
 } from "@/schema/supplier-catalog";
+import type {
+  CatalogBrandCreateCommand,
+  CatalogCategoryCreateCommand,
+  CatalogUnitCreateCommand,
+} from "@/schema/supplier-create-commands";
 import { SupabaseDB } from "@/utils/supabase";
+import {
+  executeCreateCommand,
+  rpcCommandContext as commandContext,
+  type CreateCommandResult,
+} from "./supplier-create-command-rpc";
 
 const CATEGORY_SELECT =
   "id,parent_id,code,name,level,status,sort_order,version,created_at,updated_at";
@@ -71,6 +78,12 @@ export type CatalogPage<T> = {
     totalPages: number;
   };
 };
+export type CatalogCategoryCreateResult =
+  CreateCommandResult<"category", CatalogCategory>;
+export type CatalogBrandCreateResult =
+  CreateCommandResult<"brand", CatalogBrand>;
+export type CatalogUnitCreateResult =
+  CreateCommandResult<"unit", CatalogUnit>;
 
 export interface SupplierCatalogRepositoryPort {
   listCategories(
@@ -78,11 +91,11 @@ export interface SupplierCatalogRepositoryPort {
   ): Promise<CatalogPage<CatalogCategory>>;
   listBrands(query: CatalogBrandListQuery): Promise<CatalogPage<CatalogBrand>>;
   listUnits(query: CatalogUnitListQuery): Promise<CatalogPage<CatalogUnit>>;
-  createCategory(input: CatalogCategoryCreateRecord): Promise<CatalogCategory>;
+  createCategory(input: CatalogCategoryCreateCommand): Promise<CatalogCategoryCreateResult>;
   updateCategory(input: CatalogCategoryUpdateRecord): Promise<CatalogCategory>;
-  createBrand(input: CatalogBrandCreateRecord): Promise<CatalogBrand>;
+  createBrand(input: CatalogBrandCreateCommand): Promise<CatalogBrandCreateResult>;
   updateBrand(input: CatalogBrandUpdateRecord): Promise<CatalogBrand>;
-  createUnit(input: CatalogUnitCreateRecord): Promise<CatalogUnit>;
+  createUnit(input: CatalogUnitCreateCommand): Promise<CatalogUnitCreateResult>;
   updateUnit(input: CatalogUnitUpdateRecord): Promise<CatalogUnit>;
 }
 
@@ -168,14 +181,22 @@ export class SupplierCatalogRepository
     );
   }
 
-  createCategory(input: CatalogCategoryCreateRecord) {
-    return this.createRow(
-      "catalog_categories",
-      CATEGORY_SELECT,
-      input,
-      CatalogCategorySchema,
-      "新增标准目录分类失败",
-    );
+  createCategory(input: CatalogCategoryCreateCommand) {
+    return executeCreateCommand({
+      client: this.client, functionName: "create_catalog_category",
+      resourceKey: "category", resourceSchema: CatalogCategorySchema,
+      message: "新增标准目录分类失败",
+      params: {
+        p_category_id: input.category_id,
+        p_parent_id: input.parent_id,
+        p_code: input.code,
+        p_name: input.name,
+        p_level: input.level,
+        p_status: input.status,
+        p_sort_order: input.sort_order,
+        ...commandContext(input),
+      },
+    });
   }
 
   updateCategory(input: CatalogCategoryUpdateRecord) {
@@ -191,14 +212,22 @@ export class SupplierCatalogRepository
     );
   }
 
-  createBrand(input: CatalogBrandCreateRecord) {
-    return this.createRow(
-      "catalog_brands",
-      BRAND_SELECT,
-      input,
-      CatalogBrandSchema,
-      "新增标准品牌失败",
-    );
+  createBrand(input: CatalogBrandCreateCommand) {
+    return executeCreateCommand({
+      client: this.client, functionName: "create_catalog_brand",
+      resourceKey: "brand", resourceSchema: CatalogBrandSchema,
+      message: "新增标准品牌失败",
+      params: {
+        p_brand_id: input.brand_id,
+        p_code: input.code,
+        p_name: input.name,
+        p_legal_name: input.legal_name ?? null,
+        p_logo_file_id: input.logo_file_id ?? null,
+        p_status: input.status,
+        p_sort_order: input.sort_order,
+        ...commandContext(input),
+      },
+    });
   }
 
   updateBrand(input: CatalogBrandUpdateRecord) {
@@ -214,14 +243,23 @@ export class SupplierCatalogRepository
     );
   }
 
-  createUnit(input: CatalogUnitCreateRecord) {
-    return this.createRow(
-      "catalog_units",
-      UNIT_SELECT,
-      input,
-      CatalogUnitSchema,
-      "新增标准单位失败",
-    );
+  createUnit(input: CatalogUnitCreateCommand) {
+    return executeCreateCommand({
+      client: this.client, functionName: "create_catalog_unit",
+      resourceKey: "unit", resourceSchema: CatalogUnitSchema,
+      message: "新增标准单位失败",
+      params: {
+        p_unit_id: input.unit_id,
+        p_code: input.code,
+        p_name: input.name,
+        p_symbol: input.symbol,
+        p_base_unit_id: input.base_unit_id,
+        p_conversion_factor: input.conversion_factor,
+        p_status: input.status,
+        p_sort_order: input.sort_order,
+        ...commandContext(input),
+      },
+    });
   }
 
   updateUnit(input: CatalogUnitUpdateRecord) {
@@ -235,21 +273,6 @@ export class SupplierCatalogRepository
       CatalogUnitSchema,
       "更新标准单位失败",
     );
-  }
-
-  private async createRow<T>(
-    table: string,
-    select: string,
-    input: object,
-    schema: z.ZodType<T>,
-    message: string,
-  ): Promise<T> {
-    const { data, error } = await this.client.from(table)
-      .insert(compact(input))
-      .select(select)
-      .maybeSingle();
-    if (error) throw Errors.dbError(message, error);
-    return parseRow(schema, data, message);
   }
 
   private async updateRow<T>(

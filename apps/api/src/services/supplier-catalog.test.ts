@@ -144,13 +144,13 @@ describe("SupplierCatalogService write boundary", () => {
       level: 1,
       status: "active",
       sort_order: 100,
-    });
+    }, "category-create");
     await service.createBrand(context, {
       code: "BR-001",
       name: "雨虹",
       status: "active",
       sort_order: 100,
-    });
+    }, "brand-create");
     await service.createUnit(context, {
       code: "UNIT-BOX",
       name: "箱",
@@ -159,7 +159,7 @@ describe("SupplierCatalogService write boundary", () => {
       conversion_factor: "1",
       status: "active",
       sort_order: 100,
-    });
+    }, "unit-create");
 
     for (const method of [
       dependencies.repository.createCategory,
@@ -167,8 +167,8 @@ describe("SupplierCatalogService write boundary", () => {
       dependencies.repository.createUnit,
     ]) {
       expect(method).toHaveBeenCalledWith(expect.objectContaining({
-        created_by_employee_id: EMPLOYEE_ID,
-        updated_by_employee_id: EMPLOYEE_ID,
+        actor_user_id: USER_ID,
+        actor_employee_id: EMPLOYEE_ID,
       }));
     }
   });
@@ -216,6 +216,7 @@ describe("SupplierCatalogService write boundary", () => {
       missingPermission.service.createBrand(
         auth([], null, true),
         { code: "BR-001", name: "雨虹", status: "active", sort_order: 100 },
+        "brand-create",
       )
     )).rejects.toMatchObject({ code: "FORBIDDEN" });
 
@@ -224,6 +225,7 @@ describe("SupplierCatalogService write boundary", () => {
       missingEmployee.service.createBrand(
         { ...auth(["platform.catalog.manage"], null, true), employeeId: null },
         { code: "BR-001", name: "雨虹", status: "active", sort_order: 100 },
+        "brand-create",
       )
     )).rejects.toMatchObject({ code: "FORBIDDEN" });
 
@@ -263,7 +265,7 @@ describe("SupplierCatalogService database conflict mapping", () => {
           level: 1,
           status: "active",
           sort_order: 100,
-        },
+        }, "category-create",
       )).rejects.toMatchObject({
         statusCode: 409,
         code: "SUPPLIER_CATALOG_CONFLICT",
@@ -285,6 +287,7 @@ describe("SupplierCatalogService database conflict mapping", () => {
     await expect(service.createBrand(
       auth(["platform.catalog.manage"], null, true),
       { code: "BR-001", name: "雨虹", status: "active", sort_order: 100 },
+      "brand-create",
     )).rejects.toBe(original);
   });
 });

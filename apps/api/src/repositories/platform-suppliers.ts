@@ -1,9 +1,6 @@
 import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import {
-  SupplierOnboardingStatusSchema, SupplierOperationalStatusSchema,
-  SupplierQualificationVerificationStatusSchema,
-  SupplierRecordStatusSchema, SupplierTypeSchema,
   type PlatformSupplierCreateCommand, type PlatformSupplierLifecycleCommand,
   type PlatformSupplierListQuery, type PlatformSupplierUpdateCommand,
   type PlatformTenantSupplierSettingsCommand,
@@ -14,7 +11,53 @@ import {
   type SupplierQualificationTypeUpdateRecord, type SupplierQualificationUpdateRecord,
   type SupplierServiceRegionWrite,
 } from "@/schema/platform-suppliers";
+import type {
+  SupplierAddressCreateCommand,
+  SupplierContactCreateCommand,
+  SupplierQualificationCreateCommand,
+  SupplierQualificationTypeCreateCommand,
+  SupplierServiceRegionCreateCommand,
+} from "@/schema/supplier-create-commands";
 import { SupabaseDB } from "@/utils/supabase";
+import {
+  AddressSchema,
+  ContactSchema,
+  EventSchema,
+  QualificationSchema,
+  QualificationTypeSchema,
+  RegionSchema,
+  SettingsSchema,
+  SupplierDetailSchema,
+  SupplierListRowSchema,
+  type PlatformSupplierDetail,
+  type PlatformSupplierListItem,
+  type SupplierAddress,
+  type SupplierContact,
+  type SupplierEvent,
+  type SupplierQualification,
+  type SupplierQualificationType,
+  type SupplierServiceRegion,
+  type TenantSupplierSettings,
+} from "./platform-supplier-records";
+import {
+  executeCreateCommand,
+  rpcCommandContext as commandContext,
+} from "./supplier-create-command-rpc";
+import type {
+  AddressCreateResult,
+  ContactCreateResult,
+  QualificationCreateResult,
+  QualificationTypeCreateResult,
+  ServiceRegionCreateResult,
+} from "./platform-supplier-create-results";
+import {
+  compactRecord as compact,
+  normalizePage,
+  pageRange as range,
+  parseRecord as parse,
+  sanitizeKeyword,
+  toPage,
+} from "./supplier-repository-utils";
 const CORE_SELECT = "id,code,name,legal_name,unified_social_credit_code,supplier_type,onboarding_status,operational_status,version,created_at,updated_at";
 const LIST_SELECT = `${CORE_SELECT},qualification_health`;
 const DETAIL_SELECT = `${CORE_SELECT},review_remark,reviewed_by_employee_id,reviewed_at,blacklisted_by_employee_id,blacklisted_at,blacklist_reason,created_by_employee_id,updated_by_employee_id`;
@@ -25,85 +68,6 @@ const ADDRESS_SELECT = "id,supplier_id,address_type,province,city,district,regio
 const CONTACT_SELECT = "id,supplier_id,contact_type,name,phone,email,is_public,is_primary,status,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
 const EVENT_SELECT = "id,tenant_id,resource_type,resource_id,command,from_state,to_state,reason,actor_user_id,actor_employee_id,idempotency_key,result_version,created_at";
 const SETTINGS_SELECT = "tenant_id,module_enabled,require_active_contract_for_new_order,enabled_by_employee_id,enabled_at,version,created_at,updated_at";
-const nullableString = z.string().nullable();
-const timestamp = z.string();
-const auditFields = {
-  version: z.number().int().positive(), created_at: timestamp, updated_at: timestamp,
-};
-const childAuditFields = {
-  supplier_id: z.uuid(), created_by_employee_id: z.uuid(),
-  updated_by_employee_id: z.uuid(), ...auditFields,
-};
-const SupplierCoreSchema = z.object({
-  id: z.uuid(), code: z.string(), name: z.string(), legal_name: z.string(),
-  unified_social_credit_code: nullableString,
-  supplier_type: SupplierTypeSchema,
-  onboarding_status: SupplierOnboardingStatusSchema,
-  operational_status: SupplierOperationalStatusSchema, ...auditFields,
-}).strict();
-const QualificationHealthSchema = z.enum([
-  "valid", "expiring", "expired", "missing",
-]);
-const SupplierListRowSchema = SupplierCoreSchema.extend({
-  qualification_health: QualificationHealthSchema,
-});
-const SupplierDetailSchema = SupplierCoreSchema.extend({
-  review_remark: nullableString, reviewed_by_employee_id: z.uuid().nullable(),
-  reviewed_at: nullableString, blacklisted_by_employee_id: z.uuid().nullable(),
-  blacklisted_at: nullableString, blacklist_reason: nullableString,
-  created_by_employee_id: z.uuid(), updated_by_employee_id: z.uuid(),
-}).strict();
-const QualificationTypeSchema = z.object({
-  id: z.uuid(), code: z.string(), name: z.string(),
-  applicable_supplier_types: z.array(SupplierTypeSchema),
-  warning_days: z.number().int().nonnegative(), is_required: z.boolean(),
-  blocks_new_orders: z.boolean(), status: SupplierRecordStatusSchema,
-  sort_order: z.number().int(), ...auditFields,
-}).strict();
-const QualificationSchema = z.object({
-  id: z.uuid(), qualification_type_id: z.uuid(), document_file_id: z.uuid(),
-  certificate_no: nullableString, valid_from: nullableString, valid_until: nullableString,
-  verification_status: SupplierQualificationVerificationStatusSchema,
-  verified_by_employee_id: z.uuid().nullable(), verified_at: nullableString,
-  rejection_reason: nullableString, ...childAuditFields,
-}).strict();
-const RegionSchema = z.object({
-  id: z.uuid(), region_code: z.string(),
-  region_level: z.enum(["province", "city", "district"]),
-  status: SupplierRecordStatusSchema, valid_from: nullableString,
-  valid_until: nullableString, ...childAuditFields,
-}).strict();
-const nullableNumber = z.union([z.number(), z.string()])
-  .nullable().transform((value) => value === null ? null : Number(value));
-const AddressSchema = z.object({
-  id: z.uuid(),
-  address_type: z.enum(["registered", "shipping", "return", "other"]),
-  province: nullableString, city: nullableString, district: nullableString,
-  region_code: z.string(), address_detail: z.string(),
-  longitude: nullableNumber, latitude: nullableNumber,
-  is_default: z.boolean(), status: SupplierRecordStatusSchema, ...childAuditFields,
-}).strict();
-const ContactSchema = z.object({
-  id: z.uuid(),
-  contact_type: z.enum(["primary", "sales", "finance", "logistics", "after_sales"]),
-  name: z.string(), phone: nullableString, email: nullableString,
-  is_public: z.boolean(), is_primary: z.boolean(),
-  status: SupplierRecordStatusSchema, ...childAuditFields,
-}).strict();
-const EventSchema = z.object({
-  id: z.uuid(), tenant_id: z.uuid().nullable(), resource_type: z.string(),
-  resource_id: z.uuid(), command: z.string(),
-  from_state: z.record(z.string(), z.unknown()),
-  to_state: z.record(z.string(), z.unknown()), reason: nullableString,
-  actor_user_id: z.uuid(), actor_employee_id: z.uuid(),
-  idempotency_key: z.string(), result_version: z.number().int().positive(),
-  created_at: timestamp,
-}).strict();
-const SettingsSchema = z.object({
-  tenant_id: z.uuid(), module_enabled: z.boolean(),
-  require_active_contract_for_new_order: z.boolean(),
-  enabled_by_employee_id: z.uuid().nullable(), enabled_at: nullableString, ...auditFields,
-}).strict();
 const mutationStatus = z.object({
   status: z.enum([
     "created", "updated", "supplier_not_found", "state_conflict",
@@ -112,11 +76,17 @@ const mutationStatus = z.object({
   error_code: z.string().optional(), reason: z.string().optional(),
   version: z.number().int().nonnegative().optional(),
 }).passthrough();
-export type PlatformSupplierListItem = z.infer<typeof SupplierListRowSchema>;
-export type PlatformSupplierDetail = z.infer<typeof SupplierDetailSchema>; export type SupplierQualificationType = z.infer<typeof QualificationTypeSchema>;
-export type SupplierQualification = z.infer<typeof QualificationSchema>; export type SupplierServiceRegion = z.infer<typeof RegionSchema>;
-export type SupplierAddress = z.infer<typeof AddressSchema>; export type SupplierContact = z.infer<typeof ContactSchema>;
-export type SupplierEvent = z.infer<typeof EventSchema>; export type TenantSupplierSettings = z.infer<typeof SettingsSchema>;
+export type {
+  PlatformSupplierDetail,
+  PlatformSupplierListItem,
+  SupplierAddress,
+  SupplierContact,
+  SupplierEvent,
+  SupplierQualification,
+  SupplierQualificationType,
+  SupplierServiceRegion,
+  TenantSupplierSettings,
+} from "./platform-supplier-records";
 export type TenantSupplierSettingsMutation = {
   status: "updated"; idempotent: boolean; setting: TenantSupplierSettings;
   previous_setting: TenantSupplierSettings | null; version: number;
@@ -136,16 +106,16 @@ export interface PlatformSuppliersRepositoryPort {
   listSuppliers(query: PlatformSupplierListQuery): Promise<PlatformSupplierPage>; findSupplierById(id: string): Promise<PlatformSupplierDetail | null>;
   listQualificationTypes(query: SupplierQualificationTypeListQuery): Promise<SupplierQualificationTypePage>;
   findQualificationTypeById(id: string): Promise<SupplierQualificationType | null>;
-  createQualificationType(input: SupplierQualificationTypeCreateRecord): Promise<SupplierQualificationType>; updateQualificationType(input: SupplierQualificationTypeUpdateRecord): Promise<SupplierQualificationType>;
+  createQualificationType(input: SupplierQualificationTypeCreateCommand): Promise<QualificationTypeCreateResult>; updateQualificationType(input: SupplierQualificationTypeUpdateRecord): Promise<SupplierQualificationType>;
   createSupplier(input: PlatformSupplierCreateCommand): Promise<SupplierMutationResult>; updateSupplier(input: PlatformSupplierUpdateCommand): Promise<SupplierMutationResult>;
   mutateSupplier(input: PlatformSupplierLifecycleCommand): Promise<SupplierMutationResult>;
-  listQualifications(input: SupplierChildPageQuery): Promise<SupplierQualificationPage>; createQualification(input: SupplierQualificationCreateRecord): Promise<SupplierQualification>;
+  listQualifications(input: SupplierChildPageQuery): Promise<SupplierQualificationPage>; createQualification(input: SupplierQualificationCreateCommand): Promise<QualificationCreateResult>;
   findQualificationByIdForSupplier(supplierId: string, id: string): Promise<SupplierQualification | null>;
   updateQualification(input: SupplierQualificationUpdateRecord): Promise<SupplierQualification>;
   reviewQualification(input: SupplierQualificationReviewCommand): Promise<SupplierMutationResult>;
-  listServiceRegions(input: SupplierChildPageQuery): Promise<SupplierServiceRegionPage>; findServiceRegionByIdForSupplier(supplierId: string, id: string): Promise<SupplierServiceRegion | null>; upsertServiceRegion(input: SupplierServiceRegionWrite): Promise<SupplierServiceRegion>;
-  listAddresses(input: SupplierChildPageQuery): Promise<SupplierAddressPage>; findAddressByIdForSupplier(supplierId: string, id: string): Promise<SupplierAddress | null>; upsertAddress(input: SupplierAddressWrite): Promise<SupplierAddress>;
-  listContacts(input: SupplierChildPageQuery): Promise<SupplierContactPage>; findContactByIdForSupplier(supplierId: string, id: string): Promise<SupplierContact | null>; upsertContact(input: SupplierContactWrite): Promise<SupplierContact>;
+  listServiceRegions(input: SupplierChildPageQuery): Promise<SupplierServiceRegionPage>; findServiceRegionByIdForSupplier(supplierId: string, id: string): Promise<SupplierServiceRegion | null>; createServiceRegion(input: SupplierServiceRegionCreateCommand): Promise<ServiceRegionCreateResult>; upsertServiceRegion(input: SupplierServiceRegionWrite): Promise<SupplierServiceRegion>;
+  listAddresses(input: SupplierChildPageQuery): Promise<SupplierAddressPage>; findAddressByIdForSupplier(supplierId: string, id: string): Promise<SupplierAddress | null>; createAddress(input: SupplierAddressCreateCommand): Promise<AddressCreateResult>; upsertAddress(input: SupplierAddressWrite): Promise<SupplierAddress>;
+  listContacts(input: SupplierChildPageQuery): Promise<SupplierContactPage>; findContactByIdForSupplier(supplierId: string, id: string): Promise<SupplierContact | null>; createContact(input: SupplierContactCreateCommand): Promise<ContactCreateResult>; upsertContact(input: SupplierContactWrite): Promise<SupplierContact>;
   listEvents(input: SupplierEventPageQuery): Promise<SupplierEventPage>;
   getTenantSupplierSettings(tenantId: string): Promise<TenantSupplierSettings | null>; setTenantSupplierSettings(input: PlatformTenantSupplierSettingsCommand): Promise<TenantSupplierSettingsMutation>;
 }
@@ -220,9 +190,20 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     return data === null ? null : parse(QualificationTypeSchema, data,
       "查询供应商资质类型失败");
   }
-  createQualificationType(input: SupplierQualificationTypeCreateRecord) {
-    return this.createRow("supplier_qualification_types", TYPE_SELECT, input,
-      QualificationTypeSchema, "新增供应商资质类型失败");
+  createQualificationType(input: SupplierQualificationTypeCreateCommand) {
+    return executeCreateCommand({
+      client: this.client, functionName: "create_supplier_qualification_type",
+      resourceKey: "qualification_type", resourceSchema: QualificationTypeSchema,
+      message: "新增供应商资质类型失败",
+      params: {
+        p_qualification_type_id: input.qualification_type_id,
+        p_code: input.code, p_name: input.name,
+        p_applicable_supplier_types: input.applicable_supplier_types,
+        p_warning_days: input.warning_days, p_is_required: input.is_required,
+        p_blocks_new_orders: input.blocks_new_orders, p_status: input.status,
+        p_sort_order: input.sort_order, ...commandContext(input),
+      },
+    });
   }
   updateQualificationType(input: SupplierQualificationTypeUpdateRecord) {
     const { qualification_type_id, expected_version, ...patch } = input;
@@ -275,9 +256,21 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     return this.findChild("supplier_qualifications", QUALIFICATION_SELECT,
       QualificationSchema, supplierId, id, "查询供应商资质失败");
   }
-  createQualification(input: SupplierQualificationCreateRecord) {
-    return this.createRow("supplier_qualifications", QUALIFICATION_SELECT, input,
-      QualificationSchema, "新增供应商资质失败");
+  createQualification(input: SupplierQualificationCreateCommand) {
+    return executeCreateCommand({
+      client: this.client, functionName: "create_supplier_qualification",
+      resourceKey: "qualification", resourceSchema: QualificationSchema,
+      message: "新增供应商资质失败",
+      params: {
+        p_qualification_id: input.qualification_id,
+        p_supplier_id: input.supplier_id,
+        p_qualification_type_id: input.qualification_type_id,
+        p_document_file_id: input.document_file_id,
+        p_certificate_no: input.certificate_no ?? null,
+        p_valid_from: input.valid_from ?? null,
+        p_valid_until: input.valid_until ?? null, ...commandContext(input),
+      },
+    });
   }
   updateQualification(input: SupplierQualificationUpdateRecord) {
     const { qualification_id, supplier_id, expected_version, ...patch } = input;
@@ -302,10 +295,22 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     return this.findChild("supplier_service_regions", REGION_SELECT,
       RegionSchema, supplierId, id, "查询供应商服务区域失败");
   }
+  createServiceRegion(input: SupplierServiceRegionCreateCommand) {
+    return executeCreateCommand({
+      client: this.client, functionName: "create_supplier_service_region",
+      resourceKey: "service_region", resourceSchema: RegionSchema,
+      message: "新增供应商服务区域失败",
+      params: {
+        p_region_id: input.region_id, p_supplier_id: input.supplier_id,
+        p_region_code: input.region_code, p_region_level: input.region_level,
+        p_status: input.status, p_valid_from: input.valid_from ?? null,
+        p_valid_until: input.valid_until ?? null, ...commandContext(input),
+      },
+    });
+  }
   upsertServiceRegion(input: SupplierServiceRegionWrite) {
     if (!("region_id" in input)) {
-      return this.createRow("supplier_service_regions", REGION_SELECT, input,
-        RegionSchema, "新增供应商服务区域失败");
+      throw Errors.badRequest("创建供应商服务区域必须使用幂等命令");
     }
     const { region_id, supplier_id, expected_version, ...patch } = input;
     return this.updateRow("supplier_service_regions", REGION_SELECT, region_id,
@@ -320,10 +325,25 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     return this.findChild("supplier_addresses", ADDRESS_SELECT,
       AddressSchema, supplierId, id, "查询供应商地址失败");
   }
+  createAddress(input: SupplierAddressCreateCommand) {
+    return executeCreateCommand({
+      client: this.client, functionName: "create_supplier_address",
+      resourceKey: "address", resourceSchema: AddressSchema,
+      message: "新增供应商地址失败",
+      params: {
+        p_address_id: input.address_id, p_supplier_id: input.supplier_id,
+        p_address_type: input.address_type, p_province: input.province ?? null,
+        p_city: input.city ?? null, p_district: input.district ?? null,
+        p_region_code: input.region_code, p_address_detail: input.address_detail,
+        p_longitude: input.longitude ?? null, p_latitude: input.latitude ?? null,
+        p_is_default: input.is_default, p_status: input.status,
+        ...commandContext(input),
+      },
+    });
+  }
   upsertAddress(input: SupplierAddressWrite) {
     if (!("address_id" in input)) {
-      return this.createRow("supplier_addresses", ADDRESS_SELECT, input,
-        AddressSchema, "新增供应商地址失败");
+      throw Errors.badRequest("创建供应商地址必须使用幂等命令");
     }
     const { address_id, supplier_id, expected_version, ...patch } = input;
     return this.updateRow("supplier_addresses", ADDRESS_SELECT, address_id,
@@ -338,10 +358,23 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     return this.findChild("supplier_contacts", CONTACT_SELECT,
       ContactSchema, supplierId, id, "查询供应商联系人失败");
   }
+  createContact(input: SupplierContactCreateCommand) {
+    return executeCreateCommand({
+      client: this.client, functionName: "create_supplier_contact",
+      resourceKey: "contact", resourceSchema: ContactSchema,
+      message: "新增供应商联系人失败",
+      params: {
+        p_contact_id: input.contact_id, p_supplier_id: input.supplier_id,
+        p_contact_type: input.contact_type, p_name: input.name,
+        p_phone: input.phone ?? null, p_email: input.email ?? null,
+        p_is_public: input.is_public, p_is_primary: input.is_primary,
+        p_status: input.status, ...commandContext(input),
+      },
+    });
+  }
   upsertContact(input: SupplierContactWrite) {
     if (!("contact_id" in input)) {
-      return this.createRow("supplier_contacts", CONTACT_SELECT, input,
-        ContactSchema, "新增供应商联系人失败");
+      throw Errors.badRequest("创建供应商联系人必须使用幂等命令");
     }
     const { contact_id, supplier_id, expected_version, ...patch } = input;
     return this.updateRow("supplier_contacts", CONTACT_SELECT, contact_id,
@@ -401,14 +434,6 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     if (error) throw Errors.dbError(message, error);
     return toPage(parse(z.array(schema), data ?? [], message), pagination, count);
   }
-  private async createRow<T>(
-    table: string, select: string, input: object, schema: z.ZodType<T>, message: string,
-  ): Promise<T> {
-    const { data, error } = await this.client.from(table)
-      .insert(compact(input)).select(select).maybeSingle();
-    if (error) throw Errors.dbError(message, error);
-    return parse(schema, data, message);
-  }
   private async findChild<T>(table: string, select: string, schema: z.ZodType<T>,
     supplierId: string, id: string, message: string): Promise<T | null> {
     const { data, error } = await this.client.from(table).select(select)
@@ -457,36 +482,6 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     if (error) throw Errors.dbError(message, error);
     return data;
   }
-}
-function parse<T>(schema: z.ZodType<T>, data: unknown, message: string): T {
-  const result = schema.safeParse(data);
-  if (result.success) return result.data;
-  throw Errors.dbError(message, result.error.issues);
-}
-function normalizePage(input: { page: number; pageSize: number }) {
-  return {
-    page: Number.isInteger(input.page) && input.page > 0 ? input.page : 1,
-    pageSize: Number.isInteger(input.pageSize) && input.pageSize > 0
-      ? Math.min(100, input.pageSize) : 20 };
-}
-function range(input: { page: number; pageSize: number }) {
-  const start = (input.page - 1) * input.pageSize;
-  return { start, end: start + input.pageSize - 1 };
-}
-function toPage<T>(
-  list: T[], input: { page: number; pageSize: number }, count: number | null,
-): Page<T> {
-  const total = count ?? 0;
-  return { list, pagination: { ...input, total,
-    totalPages: total === 0 ? 0 : Math.ceil(total / input.pageSize) } };
-}
-function sanitizeKeyword(keyword?: string) {
-  return keyword?.replace(/[^\p{L}\p{N}\s-]+/gu, " ")
-    .replace(/\s+/gu, " ").trim() || "";
-}
-function compact(input: object): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(input)
-    .filter(([, value]) => value !== undefined));
 }
 function mutationError(input: z.infer<typeof mutationStatus>) {
   const code = input.error_code ?? (input.status === "supplier_not_found"

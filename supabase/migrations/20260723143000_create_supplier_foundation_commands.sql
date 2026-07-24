@@ -1,6 +1,6 @@
 -- Rollback: in a new migration, first DROP VIEW IF EXISTS public.platform_supplier_directory
 -- and DROP INDEX IF EXISTS
--- public.suppliers_available_directory_idx, then revoke and drop the eleven
+-- public.suppliers_available_directory_idx, then revoke and drop the nineteen
 -- supplier command functions plus the internal set-based eligibility helper,
 -- including create_supplier_contract and list_tenant_suppliers_for_tenant.
 -- Preserve/export supplier_command_events before
@@ -12,7 +12,19 @@ CREATE TABLE public.supplier_command_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NULL REFERENCES public.tenants(id) ON DELETE RESTRICT,
   resource_type text NOT NULL CHECK (
-    resource_type IN ('supplier', 'supplier_qualification', 'tenant_supplier', 'supplier_contract')
+    resource_type IN (
+      'supplier',
+      'supplier_qualification_type',
+      'supplier_qualification',
+      'supplier_service_region',
+      'supplier_address',
+      'supplier_contact',
+      'catalog_category',
+      'catalog_brand',
+      'catalog_unit',
+      'tenant_supplier',
+      'supplier_contract'
+    )
   ),
   resource_id uuid NOT NULL,
   command text NOT NULL,
@@ -167,7 +179,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_VERSION_CONFLICT';
   END IF;
   v_request := jsonb_build_object(
-    'supplier_id', p_supplier_id, 'code', p_code, 'name', p_name,
+    'code', p_code, 'name', p_name,
     'legal_name', p_legal_name,
     'unified_social_credit_code', p_unified_social_credit_code,
     'supplier_type', p_supplier_type, 'expected_version', p_expected_version,
@@ -184,7 +196,7 @@ BEGIN
   FOR UPDATE;
   IF FOUND THEN
     IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
-      OR v_event.resource_type <> 'supplier' OR v_event.resource_id <> p_supplier_id
+      OR v_event.resource_type <> 'supplier'
       OR v_event.command <> 'create_platform_supplier'
     THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
@@ -225,6 +237,666 @@ BEGIN
     to_jsonb(v_supplier), p_actor_user_id, p_actor_employee_id, p_idempotency_key, v_supplier.version
   );
   RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'supplier', to_jsonb(v_supplier), 'version', v_supplier.version);
+END;
+$$;
+
+CREATE FUNCTION public.create_supplier_qualification_type(
+  p_qualification_type_id uuid,
+  p_code text,
+  p_name text,
+  p_applicable_supplier_types text[],
+  p_warning_days integer,
+  p_is_required boolean,
+  p_blocks_new_orders boolean,
+  p_status text,
+  p_sort_order integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_type public.supplier_qualification_types%ROWTYPE;
+  v_request jsonb;
+BEGIN
+  IF p_qualification_type_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = '' OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  v_request := jsonb_build_object(
+    'code', p_code, 'name', p_name,
+    'applicable_supplier_types', p_applicable_supplier_types,
+    'warning_days', p_warning_days, 'is_required', p_is_required,
+    'blocks_new_orders', p_blocks_new_orders, 'status', p_status,
+    'sort_order', p_sort_order, 'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key, 0)
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'supplier_qualification_type'
+      OR v_event.command <> 'create_supplier_qualification_type'
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'qualification_type', v_event.to_state, 'version', v_event.result_version);
+  END IF;
+  BEGIN
+    INSERT INTO public.supplier_qualification_types (
+      id, code, name, applicable_supplier_types, warning_days, is_required,
+      blocks_new_orders, status, sort_order, version
+    ) VALUES (
+      p_qualification_type_id, p_code, p_name, p_applicable_supplier_types,
+      p_warning_days, p_is_required, p_blocks_new_orders, p_status,
+      p_sort_order, 1
+    ) RETURNING * INTO v_type;
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_STATE_CONFLICT');
+  END;
+  INSERT INTO public.supplier_command_events (
+    resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  ) VALUES (
+    'supplier_qualification_type', v_type.id,
+    'create_supplier_qualification_type',
+    jsonb_build_object('_request', v_request), to_jsonb(v_type),
+    p_actor_user_id, p_actor_employee_id, p_idempotency_key, v_type.version
+  );
+  RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'qualification_type', to_jsonb(v_type), 'version', v_type.version);
+END;
+$$;
+
+CREATE FUNCTION public.create_supplier_qualification(
+  p_qualification_id uuid,
+  p_supplier_id uuid,
+  p_qualification_type_id uuid,
+  p_document_file_id uuid,
+  p_certificate_no text,
+  p_valid_from date,
+  p_valid_until date,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_qualification public.supplier_qualifications%ROWTYPE;
+  v_request jsonb;
+BEGIN
+  IF p_qualification_id IS NULL OR p_supplier_id IS NULL
+    OR p_actor_user_id IS NULL OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  v_request := jsonb_build_object(
+    'supplier_id', p_supplier_id,
+    'qualification_type_id', p_qualification_type_id,
+    'document_file_id', p_document_file_id,
+    'certificate_no', p_certificate_no, 'valid_from', p_valid_from,
+    'valid_until', p_valid_until, 'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key, 0)
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'supplier_qualification'
+      OR v_event.command <> 'create_supplier_qualification'
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'qualification', v_event.to_state, 'version', v_event.result_version);
+  END IF;
+  PERFORM 1 FROM public.suppliers AS supplier
+  WHERE supplier.id = p_supplier_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'supplier_not_found', 'error_code', 'SUPPLIER_NOT_FOUND');
+  END IF;
+  PERFORM 1 FROM public.supplier_qualification_types AS qualification_type
+  WHERE qualification_type.id = p_qualification_type_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_STATE_CONFLICT');
+  END IF;
+  BEGIN
+    INSERT INTO public.supplier_qualifications (
+      id, supplier_id, qualification_type_id, document_file_id,
+      certificate_no, valid_from, valid_until, verification_status, version,
+      created_by_employee_id, updated_by_employee_id
+    ) VALUES (
+      p_qualification_id, p_supplier_id, p_qualification_type_id,
+      p_document_file_id, p_certificate_no, p_valid_from, p_valid_until,
+      'pending', 1, p_actor_employee_id, p_actor_employee_id
+    ) RETURNING * INTO v_qualification;
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_STATE_CONFLICT');
+  END;
+  INSERT INTO public.supplier_command_events (
+    resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  ) VALUES (
+    'supplier_qualification', v_qualification.id,
+    'create_supplier_qualification',
+    jsonb_build_object('_request', v_request), to_jsonb(v_qualification),
+    p_actor_user_id, p_actor_employee_id, p_idempotency_key,
+    v_qualification.version
+  );
+  RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'qualification', to_jsonb(v_qualification), 'version', v_qualification.version);
+END;
+$$;
+
+CREATE FUNCTION public.create_supplier_service_region(
+  p_region_id uuid,
+  p_supplier_id uuid,
+  p_region_code text,
+  p_region_level text,
+  p_status text,
+  p_valid_from date,
+  p_valid_until date,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_region public.supplier_service_regions%ROWTYPE;
+  v_request jsonb;
+BEGIN
+  IF p_region_id IS NULL OR p_supplier_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = '' OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  v_request := jsonb_build_object(
+    'supplier_id', p_supplier_id, 'region_code', p_region_code,
+    'region_level', p_region_level, 'status', p_status,
+    'valid_from', p_valid_from, 'valid_until', p_valid_until,
+    'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key, 0)
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'supplier_service_region'
+      OR v_event.command <> 'create_supplier_service_region'
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'service_region', v_event.to_state, 'version', v_event.result_version);
+  END IF;
+  PERFORM 1 FROM public.suppliers AS supplier
+  WHERE supplier.id = p_supplier_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'supplier_not_found', 'error_code', 'SUPPLIER_NOT_FOUND');
+  END IF;
+  BEGIN
+    INSERT INTO public.supplier_service_regions (
+      id, supplier_id, region_code, region_level, status,
+      valid_from, valid_until, version,
+      created_by_employee_id, updated_by_employee_id
+    ) VALUES (
+      p_region_id, p_supplier_id, p_region_code, p_region_level, p_status,
+      p_valid_from, p_valid_until, 1, p_actor_employee_id, p_actor_employee_id
+    ) RETURNING * INTO v_region;
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_STATE_CONFLICT');
+  END;
+  INSERT INTO public.supplier_command_events (
+    resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  ) VALUES (
+    'supplier_service_region', v_region.id,
+    'create_supplier_service_region',
+    jsonb_build_object('_request', v_request), to_jsonb(v_region),
+    p_actor_user_id, p_actor_employee_id, p_idempotency_key, v_region.version
+  );
+  RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'service_region', to_jsonb(v_region), 'version', v_region.version);
+END;
+$$;
+
+CREATE FUNCTION public.create_supplier_address(
+  p_address_id uuid,
+  p_supplier_id uuid,
+  p_address_type text,
+  p_province text,
+  p_city text,
+  p_district text,
+  p_region_code text,
+  p_address_detail text,
+  p_longitude numeric,
+  p_latitude numeric,
+  p_is_default boolean,
+  p_status text,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_address public.supplier_addresses%ROWTYPE;
+  v_request jsonb;
+BEGIN
+  IF p_address_id IS NULL OR p_supplier_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = '' OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  v_request := jsonb_build_object(
+    'supplier_id', p_supplier_id, 'address_type', p_address_type,
+    'province', p_province, 'city', p_city, 'district', p_district,
+    'region_code', p_region_code, 'address_detail', p_address_detail,
+    'longitude', p_longitude, 'latitude', p_latitude,
+    'is_default', p_is_default, 'status', p_status,
+    'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key, 0)
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'supplier_address'
+      OR v_event.command <> 'create_supplier_address'
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'address', v_event.to_state, 'version', v_event.result_version);
+  END IF;
+  PERFORM 1 FROM public.suppliers AS supplier
+  WHERE supplier.id = p_supplier_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'supplier_not_found', 'error_code', 'SUPPLIER_NOT_FOUND');
+  END IF;
+  BEGIN
+    INSERT INTO public.supplier_addresses (
+      id, supplier_id, address_type, province, city, district, region_code,
+      address_detail, longitude, latitude, is_default, status, version,
+      created_by_employee_id, updated_by_employee_id
+    ) VALUES (
+      p_address_id, p_supplier_id, p_address_type, p_province, p_city,
+      p_district, p_region_code, p_address_detail, p_longitude, p_latitude,
+      p_is_default, p_status, 1, p_actor_employee_id, p_actor_employee_id
+    ) RETURNING * INTO v_address;
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_STATE_CONFLICT');
+  END;
+  INSERT INTO public.supplier_command_events (
+    resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  ) VALUES (
+    'supplier_address', v_address.id, 'create_supplier_address',
+    jsonb_build_object('_request', v_request), to_jsonb(v_address),
+    p_actor_user_id, p_actor_employee_id, p_idempotency_key, v_address.version
+  );
+  RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'address', to_jsonb(v_address), 'version', v_address.version);
+END;
+$$;
+
+CREATE FUNCTION public.create_supplier_contact(
+  p_contact_id uuid,
+  p_supplier_id uuid,
+  p_contact_type text,
+  p_name text,
+  p_phone text,
+  p_email text,
+  p_is_public boolean,
+  p_is_primary boolean,
+  p_status text,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_contact public.supplier_contacts%ROWTYPE;
+  v_request jsonb;
+BEGIN
+  IF p_contact_id IS NULL OR p_supplier_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = '' OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  v_request := jsonb_build_object(
+    'supplier_id', p_supplier_id, 'contact_type', p_contact_type,
+    'name', p_name, 'phone', p_phone, 'email', p_email,
+    'is_public', p_is_public, 'is_primary', p_is_primary,
+    'status', p_status, 'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key, 0)
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'supplier_contact'
+      OR v_event.command <> 'create_supplier_contact'
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'contact', v_event.to_state, 'version', v_event.result_version);
+  END IF;
+  PERFORM 1 FROM public.suppliers AS supplier
+  WHERE supplier.id = p_supplier_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'supplier_not_found', 'error_code', 'SUPPLIER_NOT_FOUND');
+  END IF;
+  BEGIN
+    INSERT INTO public.supplier_contacts (
+      id, supplier_id, contact_type, name, phone, email, is_public,
+      is_primary, status, version, created_by_employee_id,
+      updated_by_employee_id
+    ) VALUES (
+      p_contact_id, p_supplier_id, p_contact_type, p_name, p_phone, p_email,
+      p_is_public, p_is_primary, p_status, 1,
+      p_actor_employee_id, p_actor_employee_id
+    ) RETURNING * INTO v_contact;
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_STATE_CONFLICT');
+  END;
+  INSERT INTO public.supplier_command_events (
+    resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  ) VALUES (
+    'supplier_contact', v_contact.id, 'create_supplier_contact',
+    jsonb_build_object('_request', v_request), to_jsonb(v_contact),
+    p_actor_user_id, p_actor_employee_id, p_idempotency_key, v_contact.version
+  );
+  RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'contact', to_jsonb(v_contact), 'version', v_contact.version);
+END;
+$$;
+
+CREATE FUNCTION public.create_catalog_category(
+  p_category_id uuid,
+  p_parent_id uuid,
+  p_code text,
+  p_name text,
+  p_level integer,
+  p_status text,
+  p_sort_order integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_category public.catalog_categories%ROWTYPE;
+  v_request jsonb;
+BEGIN
+  IF p_category_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = '' OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  v_request := jsonb_build_object(
+    'parent_id', p_parent_id, 'code', p_code, 'name', p_name,
+    'level', p_level, 'status', p_status, 'sort_order', p_sort_order,
+    'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key, 0)
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'catalog_category'
+      OR v_event.command <> 'create_catalog_category'
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'category', v_event.to_state, 'version', v_event.result_version);
+  END IF;
+  IF p_parent_id IS NOT NULL THEN
+    PERFORM 1 FROM public.catalog_categories AS parent
+    WHERE parent.id = p_parent_id FOR UPDATE;
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_CATALOG_CONFLICT');
+    END IF;
+  END IF;
+  BEGIN
+    INSERT INTO public.catalog_categories (
+      id, parent_id, code, name, level, status, sort_order, version,
+      created_by_employee_id, updated_by_employee_id
+    ) VALUES (
+      p_category_id, p_parent_id, p_code, p_name, p_level, p_status,
+      p_sort_order, 1, p_actor_employee_id, p_actor_employee_id
+    ) RETURNING * INTO v_category;
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_CATALOG_CONFLICT');
+  END;
+  INSERT INTO public.supplier_command_events (
+    resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  ) VALUES (
+    'catalog_category', v_category.id, 'create_catalog_category',
+    jsonb_build_object('_request', v_request), to_jsonb(v_category),
+    p_actor_user_id, p_actor_employee_id, p_idempotency_key, v_category.version
+  );
+  RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'category', to_jsonb(v_category), 'version', v_category.version);
+END;
+$$;
+
+CREATE FUNCTION public.create_catalog_brand(
+  p_brand_id uuid,
+  p_code text,
+  p_name text,
+  p_legal_name text,
+  p_logo_file_id uuid,
+  p_status text,
+  p_sort_order integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_brand public.catalog_brands%ROWTYPE;
+  v_request jsonb;
+BEGIN
+  IF p_brand_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = '' OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  v_request := jsonb_build_object(
+    'code', p_code, 'name', p_name, 'legal_name', p_legal_name,
+    'logo_file_id', p_logo_file_id, 'status', p_status,
+    'sort_order', p_sort_order, 'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key, 0)
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'catalog_brand'
+      OR v_event.command <> 'create_catalog_brand'
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'brand', v_event.to_state, 'version', v_event.result_version);
+  END IF;
+  BEGIN
+    INSERT INTO public.catalog_brands (
+      id, code, name, legal_name, logo_file_id, status, sort_order, version,
+      created_by_employee_id, updated_by_employee_id
+    ) VALUES (
+      p_brand_id, p_code, p_name, p_legal_name, p_logo_file_id, p_status,
+      p_sort_order, 1, p_actor_employee_id, p_actor_employee_id
+    ) RETURNING * INTO v_brand;
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_CATALOG_CONFLICT');
+  END;
+  INSERT INTO public.supplier_command_events (
+    resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  ) VALUES (
+    'catalog_brand', v_brand.id, 'create_catalog_brand',
+    jsonb_build_object('_request', v_request), to_jsonb(v_brand),
+    p_actor_user_id, p_actor_employee_id, p_idempotency_key, v_brand.version
+  );
+  RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'brand', to_jsonb(v_brand), 'version', v_brand.version);
+END;
+$$;
+
+CREATE FUNCTION public.create_catalog_unit(
+  p_unit_id uuid,
+  p_code text,
+  p_name text,
+  p_symbol text,
+  p_base_unit_id uuid,
+  p_conversion_factor text,
+  p_status text,
+  p_sort_order integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_unit public.catalog_units%ROWTYPE;
+  v_request jsonb;
+  v_snapshot jsonb;
+BEGIN
+  IF p_unit_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = '' OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  v_request := jsonb_build_object(
+    'code', p_code, 'name', p_name, 'symbol', p_symbol,
+    'base_unit_id', p_base_unit_id, 'conversion_factor', p_conversion_factor,
+    'status', p_status, 'sort_order', p_sort_order,
+    'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key, 0)
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'catalog_unit'
+      OR v_event.command <> 'create_catalog_unit'
+    THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object('status', 'created', 'idempotent', true, 'unit', v_event.to_state, 'version', v_event.result_version);
+  END IF;
+  IF p_base_unit_id IS NOT NULL THEN
+    PERFORM 1 FROM public.catalog_units AS base_unit
+    WHERE base_unit.id = p_base_unit_id FOR UPDATE;
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_CATALOG_CONFLICT');
+    END IF;
+  END IF;
+  BEGIN
+    INSERT INTO public.catalog_units (
+      id, code, name, symbol, base_unit_id, conversion_factor, status,
+      sort_order, version, created_by_employee_id, updated_by_employee_id
+    ) VALUES (
+      p_unit_id, p_code, p_name, p_symbol, p_base_unit_id,
+      p_conversion_factor::numeric(18, 6), p_status, p_sort_order, 1,
+      p_actor_employee_id, p_actor_employee_id
+    ) RETURNING * INTO v_unit;
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_CATALOG_CONFLICT');
+  END;
+  v_snapshot := to_jsonb(v_unit) ||
+    jsonb_build_object('conversion_factor', v_unit.conversion_factor::text);
+  INSERT INTO public.supplier_command_events (
+    resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  ) VALUES (
+    'catalog_unit', v_unit.id, 'create_catalog_unit',
+    jsonb_build_object('_request', v_request), v_snapshot,
+    p_actor_user_id, p_actor_employee_id, p_idempotency_key, v_unit.version
+  );
+  RETURN jsonb_build_object('status', 'created', 'idempotent', false, 'unit', v_snapshot, 'version', v_unit.version);
 END;
 $$;
 
@@ -619,7 +1291,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'SUPPLIER_VERSION_CONFLICT';
   END IF;
   v_request := jsonb_build_object(
-    'tenant_supplier_id', p_tenant_supplier_id, 'tenant_id', p_tenant_id,
+    'tenant_id', p_tenant_id,
     'supplier_id', p_supplier_id, 'expected_version', p_expected_version,
     'actor_employee_id', p_actor_employee_id
   );
@@ -633,7 +1305,7 @@ BEGIN
   IF FOUND THEN
     IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
       OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
-      OR v_event.resource_type <> 'tenant_supplier' OR v_event.resource_id <> p_tenant_supplier_id
+      OR v_event.resource_type <> 'tenant_supplier'
       OR v_event.command <> 'create_tenant_supplier'
     THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
@@ -883,7 +1555,6 @@ BEGIN
   END IF;
 
   v_request := jsonb_build_object(
-    'contract_id', p_contract_id,
     'tenant_id', p_tenant_id,
     'tenant_supplier_id', p_tenant_supplier_id,
     'contract_no', p_contract_no,
@@ -912,7 +1583,6 @@ BEGIN
     IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
       OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
       OR v_event.resource_type <> 'supplier_contract'
-      OR v_event.resource_id <> p_contract_id
       OR v_event.command <> 'create_supplier_contract'
     THEN
       RAISE EXCEPTION USING
@@ -1533,6 +2203,22 @@ $$;
 
 REVOKE ALL ON FUNCTION public.create_platform_supplier(uuid, text, text, text, text, text, integer, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.create_platform_supplier(uuid, text, text, text, text, text, integer, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_supplier_qualification_type(uuid, text, text, text[], integer, boolean, boolean, text, integer, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_supplier_qualification_type(uuid, text, text, text[], integer, boolean, boolean, text, integer, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_supplier_qualification(uuid, uuid, uuid, uuid, text, date, date, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_supplier_qualification(uuid, uuid, uuid, uuid, text, date, date, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_supplier_service_region(uuid, uuid, text, text, text, date, date, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_supplier_service_region(uuid, uuid, text, text, text, date, date, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_supplier_address(uuid, uuid, text, text, text, text, text, text, numeric, numeric, boolean, text, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_supplier_address(uuid, uuid, text, text, text, text, text, text, numeric, numeric, boolean, text, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_supplier_contact(uuid, uuid, text, text, text, text, boolean, boolean, text, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_supplier_contact(uuid, uuid, text, text, text, text, boolean, boolean, text, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_catalog_category(uuid, uuid, text, text, integer, text, integer, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_catalog_category(uuid, uuid, text, text, integer, text, integer, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_catalog_brand(uuid, text, text, text, uuid, text, integer, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_catalog_brand(uuid, text, text, text, uuid, text, integer, uuid, uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.create_catalog_unit(uuid, text, text, text, uuid, text, text, integer, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_catalog_unit(uuid, text, text, text, uuid, text, text, integer, uuid, uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.mutate_platform_supplier(uuid, text, integer, uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.mutate_platform_supplier(uuid, text, integer, uuid, uuid, text, text) TO service_role;
 REVOKE ALL ON FUNCTION public.review_supplier_qualification(uuid, uuid, text, integer, uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;

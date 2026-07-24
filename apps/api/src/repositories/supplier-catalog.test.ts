@@ -11,6 +11,7 @@ const BRAND_ID = "00000000-0000-4000-8000-000000000201";
 const UNIT_ID = "00000000-0000-4000-8000-000000000301";
 const BASE_UNIT_ID = "00000000-0000-4000-8000-000000000302";
 const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000401";
+const USER_ID = "00000000-0000-4000-8000-000000000402";
 const NOW = "2026-07-24T00:00:00.000Z";
 const PRECISE_FACTOR = "999999999999.123456";
 
@@ -153,34 +154,49 @@ describe("SupplierCatalogRepository paginated reads", () => {
 });
 
 describe("SupplierCatalogRepository writes", () => {
-  test("creates each catalog resource with explicit returned columns", async () => {
-    const { repository, requests } = await createRepository((request) => ({
-      body: request.url.includes("catalog_categories")
-        ? category
-        : request.url.includes("catalog_brands")
-        ? brand
-        : unit,
-    }));
+  test("creates each catalog resource through an atomic command RPC", async () => {
+    const { repository, requests } = await createRepository((request) => {
+      const name = new URL(request.url).pathname.split("/").at(-1);
+      const resource = name === "create_catalog_category"
+        ? { category }
+        : name === "create_catalog_brand"
+        ? { brand }
+        : { unit };
+      return {
+        body: {
+          status: "created",
+          idempotent: false,
+          ...resource,
+          version: 1,
+        },
+      };
+    });
+    const context = {
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "catalog-create",
+    };
 
     await repository.createCategory({
+      category_id: CATEGORY_ID,
       parent_id: null,
       code: "CAT-001",
       name: "主材",
       level: 1,
       status: "active",
       sort_order: 100,
-      created_by_employee_id: EMPLOYEE_ID,
-      updated_by_employee_id: EMPLOYEE_ID,
+      ...context,
     });
     await repository.createBrand({
+      brand_id: BRAND_ID,
       code: "BR-001",
       name: "雨虹",
       status: "active",
       sort_order: 100,
-      created_by_employee_id: EMPLOYEE_ID,
-      updated_by_employee_id: EMPLOYEE_ID,
+      ...context,
     });
     await repository.createUnit({
+      unit_id: UNIT_ID,
       code: "UNIT-BOX",
       name: "箱",
       symbol: "箱",
@@ -188,21 +204,23 @@ describe("SupplierCatalogRepository writes", () => {
       conversion_factor: "12",
       status: "active",
       sort_order: 100,
-      created_by_employee_id: EMPLOYEE_ID,
-      updated_by_employee_id: EMPLOYEE_ID,
+      ...context,
     });
 
     expect(requests).toHaveLength(3);
     for (const request of requests) {
       expect(request.method).toBe("POST");
-      expect(new URL(request.url).searchParams.get("select")).not.toContain("*");
       expect(await request.clone().json()).toMatchObject({
-        created_by_employee_id: EMPLOYEE_ID,
-        updated_by_employee_id: EMPLOYEE_ID,
+        p_actor_user_id: USER_ID,
+        p_actor_employee_id: EMPLOYEE_ID,
+        p_idempotency_key: "catalog-create",
       });
     }
-    expect(new URL(requests[2]!.url).searchParams.get("select"))
-      .toContain("conversion_factor::text");
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      "/rest/v1/rpc/create_catalog_category",
+      "/rest/v1/rpc/create_catalog_brand",
+      "/rest/v1/rpc/create_catalog_unit",
+    ]);
   });
 
   test("updates each resource with id and optimistic version guards", async () => {
@@ -268,12 +286,14 @@ describe("SupplierCatalogRepository writes", () => {
       status: 409,
     }));
     await expect(failed.repository.createBrand({
+      brand_id: BRAND_ID,
       code: "BR-001",
       name: "重复品牌",
       status: "active",
       sort_order: 100,
-      created_by_employee_id: EMPLOYEE_ID,
-      updated_by_employee_id: EMPLOYEE_ID,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "brand-create",
     })).rejects.toMatchObject({
       code: "DB_ERROR",
       details: expect.objectContaining({ code: "23505" }),
