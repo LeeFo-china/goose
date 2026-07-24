@@ -10,6 +10,7 @@ import {
 } from "@/components/platform/platform-tabs";
 import { PlatformSupplierFilters } from "@/components/platform-suppliers/platform-supplier-filters";
 import { PlatformSupplierFormButton } from "@/components/platform-suppliers/platform-supplier-form";
+import { PlatformSupplierOnboardingFormButton } from "@/components/platform-suppliers/platform-supplier-onboarding-form";
 import { PlatformSupplierTable } from "@/components/platform-suppliers/platform-supplier-table";
 import { normalizeSupplierPage } from "@/components/platform-suppliers/platform-supplier-rules";
 import {
@@ -226,7 +227,7 @@ export default async function PlatformSuppliersPage({
           action={
             canManage
               ? view === "suppliers"
-                ? <PlatformSupplierFormButton />
+                ? <PlatformSupplierOnboardingFormButton />
                 : <SupplierQualificationTypeFormButton />
               : null
           }

@@ -98,6 +98,26 @@ describe("平台供应商工作台", () => {
     expect(source).not.toMatch(/<select[\s>]/i);
   });
 
+  test("新增供应商使用营业执照 OCR 回填和主要联系人准入表单", () => {
+    const page = readSource(
+      "../../app/(console)/platform/suppliers/page.tsx",
+    );
+    const form = readSource("./platform-supplier-onboarding-form.tsx");
+    const api = readSource("./platform-supplier-onboarding-api.ts");
+
+    expect(page).toContain("PlatformSupplierOnboardingFormButton");
+    expect(form).toContain('scene: "supplier_business_license"');
+    expect(form).toContain("/platform/suppliers/onboarding");
+    expect(form).toContain("主要联系人");
+    expect(form).toContain("联系人姓名");
+    expect(form).toContain("联系方式");
+    expect(form).toContain("mapBusinessLicenseOcrFields");
+    expect(form).toContain('"Idempotency-Key"');
+    expect(api).toContain("/platform/ocr/recognitions");
+    expect(api).toContain('scene: "supplier_onboarding"');
+    expect(api).toContain("/platform/suppliers/identity-check");
+  });
+
   test("资质类型使用分页表格和乐观版本编辑", () => {
     const source = readSource("./supplier-qualification-type-table.tsx");
 
