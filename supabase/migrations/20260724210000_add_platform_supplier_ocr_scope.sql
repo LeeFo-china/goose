@@ -109,7 +109,7 @@ INSERT INTO public.system_settings (
   is_secret,
   status
 )
-VALUES (
+SELECT
   'TENCENT_OCR_PLATFORM_DAILY_LIMIT',
   'ocr',
   '平台OCR日额度',
@@ -118,15 +118,24 @@ VALUES (
   '100',
   false,
   'active'
-)
-ON CONFLICT (key) DO UPDATE SET
-  group_code = EXCLUDED.group_code,
-  name = EXCLUDED.name,
-  description = EXCLUDED.description,
-  value_type = EXCLUDED.value_type,
-  is_secret = EXCLUDED.is_secret,
-  status = EXCLUDED.status,
-  updated_at = now();
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.system_settings existing
+  WHERE existing.tenant_id IS NULL
+    AND existing.key = 'TENCENT_OCR_PLATFORM_DAILY_LIMIT'
+);
+
+UPDATE public.system_settings
+SET
+  group_code = 'ocr',
+  name = '平台OCR日额度',
+  description = '平台级供应商准入等证照识别每日调用上限。',
+  value_type = 'number',
+  is_secret = false,
+  status = 'active',
+  updated_at = now()
+WHERE tenant_id IS NULL
+  AND key = 'TENCENT_OCR_PLATFORM_DAILY_LIMIT';
 
 ALTER TABLE public.suppliers
 ADD COLUMN legal_representative_name text NULL,

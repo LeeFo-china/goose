@@ -57,6 +57,8 @@ describe("supplier OCR onboarding migration contract", () => {
     expect(sql).toContain("roles.code = 'platform_admin'");
     expect(sql).toContain("TENCENT_OCR_PLATFORM_DAILY_LIMIT");
     expect(sql).toContain("'100'");
+    expect(sql).toContain("existing.tenant_id IS NULL");
+    expect(sql).not.toContain("ON CONFLICT (key)");
   });
 
   test("adds nullable supplier legal representative and registered address text", () => {
