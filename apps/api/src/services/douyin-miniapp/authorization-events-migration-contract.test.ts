@@ -5,6 +5,10 @@ const migration = new URL(
   "../../../../../supabase/migrations/20260719190232_create_douyin_authorization_event_ledger.sql",
   import.meta.url,
 );
+const authorizationUpsertAliasFixMigration = new URL(
+  "../../../../../supabase/migrations/20260724190000_fix_douyin_authorization_event_upsert_alias.sql",
+  import.meta.url,
+);
 
 function sql(): string {
   return existsSync(migration)
@@ -323,6 +327,32 @@ describe("douyin authorization event ledger migration", () => {
     ]) {
       expect(source).toContain(`${column} = NULL`);
     }
+  });
+
+  test("declares the installation alias used by authorization upsert conflict handling", () => {
+    const source = existsSync(authorizationUpsertAliasFixMigration)
+      ? readFileSync(authorizationUpsertAliasFixMigration, "utf8")
+        .replace(/--.*$/gm, "")
+        .replace(/\s+/g, " ")
+        .trim()
+      : "";
+    const body = functionBody(source, "complete_douyin_authorization_event");
+    const insert = body.indexOf(
+      "INSERT INTO public.douyin_miniapp_installations AS installation(",
+    );
+    const conflict = body.indexOf(
+      "ON CONFLICT (authorizer_appid) DO UPDATE SET",
+      insert,
+    );
+    const existingRowReference = body.indexOf(
+      "WHEN p_event_name = 'UPDATE_AUTHORIZED' THEN installation.tenant_id",
+      conflict,
+    );
+
+    expect(existsSync(authorizationUpsertAliasFixMigration)).toBe(true);
+    expect(insert).toBeGreaterThan(-1);
+    expect(conflict).toBeGreaterThan(insert);
+    expect(existingRowReference).toBeGreaterThan(conflict);
   });
 
   test("keeps a revoke tombstone authoritative over an older or same-time authorization", () => {
