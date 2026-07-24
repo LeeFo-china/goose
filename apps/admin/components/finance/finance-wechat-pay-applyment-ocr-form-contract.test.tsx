@@ -1,7 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { FinanceWechatPayApplymentFlow } from "./finance-wechat-pay-applyment-flow";
 import {
   FinanceWechatPayApplymentRecognizedFields,
   getOcrComparisonValues,
@@ -34,24 +34,36 @@ const SUPER_OCR_FIELD_NAMES = [
   "settlement_bank_name",
 ] as const;
 
-const FLOW_FIELD_NAMES = [
+const SINGLE_PAGE_FIELD_NAMES = [
   "subject_type",
   "contact_type",
   ...SUPER_OCR_FIELD_NAMES,
   ...SUPPLEMENT_FIELD_NAMES,
 ] as const;
 
-function registeredNames(markup: string) {
-  return Array.from(markup.matchAll(/\sname="([^"]+)"/g), (match) => match[1]);
+function readSource(path: string) {
+  return readFileSync(new URL(path, import.meta.url), "utf8");
+}
+
+function registeredNames(source: string) {
+  return Array.from(
+    source.matchAll(/\sname="([^"]+)"/g),
+    (match) => match[1],
+  );
 }
 
 function count(values: readonly string[], target: string) {
   return values.filter((value) => value === target).length;
 }
 
+function countJsxTag(source: string, component: string) {
+  return source.match(new RegExp(`<${component}\\b`, "g"))?.length ?? 0;
+}
+
 function renderRecognizedFields(
   contactType: "LEGAL" | "SUPER",
   subjectType = "SUBJECT_TYPE_ENTERPRISE",
+  disabled = false,
 ) {
   return (
     <FinanceWechatPayApplymentRecognizedFields
@@ -60,43 +72,90 @@ function renderRecognizedFields(
       subjectType={subjectType}
       values={{}}
       fieldSources={{}}
+      disabled={disabled}
       onManualChange={() => undefined}
     />
   );
 }
 
-function renderFlow(contactType: "LEGAL" | "SUPER") {
+function renderSinglePageFieldGroups(
+  contactType: "LEGAL" | "SUPER",
+  subjectType = "SUBJECT_TYPE_ENTERPRISE",
+  disabled = false,
+) {
   return renderToStaticMarkup(
-    <FinanceWechatPayApplymentFlow
-      activeStage="materials"
-      reachableStage="submit"
-      subjectType="SUBJECT_TYPE_ENTERPRISE"
-      contactType={contactType}
-      disabled={false}
-      navigationDisabled={false}
-      materialsContent={null}
-      recognitionContent={renderRecognizedFields(contactType)}
-      supplementContent={(
-        <FinanceWechatPayApplymentSupplementFields
-          applyment={null}
-          subjectType="SUBJECT_TYPE_ENTERPRISE"
-          contactType={contactType}
-          disabled={false}
-          navigationDisabled={false}
-          onReturnToMaterials={() => undefined}
-          onDataChange={() => undefined}
-        />
-      )}
-      submitContent={null}
-      onStageChange={() => undefined}
-      onNextStage={() => undefined}
-      onSubjectTypeChange={() => undefined}
-      onContactTypeChange={() => undefined}
-    />,
+    <>
+      {renderRecognizedFields(contactType, subjectType, disabled)}
+      <FinanceWechatPayApplymentSupplementFields
+        applyment={null}
+        subjectType={subjectType}
+        contactType={contactType}
+        disabled={disabled}
+        navigationDisabled={false}
+        onReturnToMaterials={() => undefined}
+        onDataChange={() => undefined}
+      />
+    </>,
   );
 }
 
 describe("wechat pay applyment OCR form registration", () => {
+  test("composes the future single page from one owner for every field group", () => {
+    const singlePageUrl = new URL(
+      "./finance-wechat-pay-applyment-single-page.tsx",
+      import.meta.url,
+    );
+    const documentSectionUrl = new URL(
+      "./finance-wechat-pay-applyment-document-section.tsx",
+      import.meta.url,
+    );
+
+    expect(existsSync(singlePageUrl)).toBe(true);
+    expect(existsSync(documentSectionUrl)).toBe(true);
+    if (!existsSync(singlePageUrl) || !existsSync(documentSectionUrl)) return;
+
+    const singlePageSource = readFileSync(singlePageUrl, "utf8");
+    const documentSectionSource = readFileSync(documentSectionUrl, "utf8");
+    const recognizedFieldsSource = readSource(
+      "./finance-wechat-pay-applyment-recognized-fields.tsx",
+    );
+    const supplementSource = readSource(
+      "./finance-wechat-pay-applyment-supplement-fields.tsx",
+    );
+    const names = registeredNames(
+      `${singlePageSource}\n${recognizedFieldsSource}\n${supplementSource}`,
+    );
+
+    expect(singlePageSource).not.toContain("FinanceWechatPayApplymentFlow");
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentDocumentSection",
+    );
+    expect(documentSectionSource).toContain(
+      "<FinanceWechatPayApplymentInlineOcrReview",
+    );
+    expect(
+      countJsxTag(
+        singlePageSource,
+        "FinanceWechatPayApplymentContactFields",
+      ),
+    ).toBe(1);
+    expect(
+      countJsxTag(
+        singlePageSource,
+        "FinanceWechatPayApplymentSettlementFields",
+      ),
+    ).toBe(1);
+    expect(
+      countJsxTag(
+        singlePageSource,
+        "FinanceWechatPayApplymentBusinessFields",
+      ),
+    ).toBe(1);
+    for (const name of SINGLE_PAGE_FIELD_NAMES) {
+      expect(count(names, name)).toBe(1);
+    }
+  });
+
   test("keeps identity address optional for an individual subject", () => {
     const markup = renderToStaticMarkup(
       renderRecognizedFields("LEGAL", "SUBJECT_TYPE_INDIVIDUAL"),
@@ -107,6 +166,24 @@ describe("wechat pay applyment OCR form registration", () => {
 
     expect(control).toBeDefined();
     expect(control).not.toContain("required");
+  });
+
+  test("keeps legal identity fields required for an enterprise subject", () => {
+    const markup = renderSinglePageFieldGroups("LEGAL");
+
+    for (const name of [
+      "license_name",
+      "identity_name",
+      "identity_number",
+      "merchant_short_name",
+      "super_admin_phone",
+      "settlement_account_number",
+    ]) {
+      const control = markup.match(
+        new RegExp(`<(?:input|textarea)[^>]*name="${name}"[^>]*>`),
+      )?.[0];
+      expect(control).toContain("required");
+    }
   });
 
   test("keeps bank account required unless its own masked value exists", () => {
@@ -130,22 +207,19 @@ describe("wechat pay applyment OCR form registration", () => {
       .toHaveProperty("settlement_account_number", "已安全保存");
   });
 
-  test("keeps every stage mounted and registers each SUPER control once", () => {
-    const markup = renderFlow("SUPER");
-    const names = registeredNames(markup);
+  test("registers each SUPER OCR and supplement control once", () => {
+    const names = registeredNames(renderSinglePageFieldGroups("SUPER"));
 
-    for (const name of FLOW_FIELD_NAMES) {
+    for (const name of [
+      ...SUPER_OCR_FIELD_NAMES,
+      ...SUPPLEMENT_FIELD_NAMES,
+    ]) {
       expect(count(names, name)).toBe(1);
     }
-    expect(markup.match(/data-applyment-stage=/g)).toHaveLength(4);
-    expect(markup.match(/data-ocr-category=/g)).toHaveLength(6);
-    expect(markup).toContain('data-applyment-stage="recognition" hidden=""');
-    expect(markup).toContain('data-applyment-stage="supplement" hidden=""');
-    expect(markup).toContain('data-applyment-stage="submit" hidden=""');
   });
 
   test("registers required OCR and supplement controls natively", () => {
-    const markup = renderFlow("SUPER");
+    const markup = renderSinglePageFieldGroups("SUPER");
 
     for (const name of [
       "license_name",
@@ -161,68 +235,29 @@ describe("wechat pay applyment OCR form registration", () => {
       "contact_address",
     ]) {
       const control = markup.match(
-        new RegExp(
-          `<(?:input|textarea)[^>]*name="${name}"[^>]*>`,
-        ),
+        new RegExp(`<(?:input|textarea)[^>]*name="${name}"[^>]*>`),
       )?.[0];
       expect(control).toContain("required");
     }
   });
 
-  test("keeps completed stage navigation enabled for a read-only form", () => {
-    const markup = renderToStaticMarkup(
-      <FinanceWechatPayApplymentFlow
-        activeStage="submit"
-        reachableStage="submit"
-        subjectType="SUBJECT_TYPE_ENTERPRISE"
-        contactType="LEGAL"
-        disabled
-        navigationDisabled={false}
-        materialsContent={null}
-        recognitionContent={null}
-        supplementContent={null}
-        submitContent={null}
-        onStageChange={() => undefined}
-        onNextStage={() => undefined}
-        onSubjectTypeChange={() => undefined}
-        onContactTypeChange={() => undefined}
-      />,
-    );
-    const stageButton = Array.from(
-      markup.matchAll(/<button([^>]*)>(.*?)<\/button>/g),
-    ).find((match) => match[2].includes("上传资料"));
+  test("keeps registered fields visible when the single-page form is read-only", () => {
+    const markup = renderSinglePageFieldGroups("SUPER", undefined, true);
 
-    expect(stageButton).toBeDefined();
-    expect(stageButton?.[1]).not.toContain(" disabled=");
-  });
-
-  test("disables stages beyond the current reachable guard cap", () => {
-    const markup = renderToStaticMarkup(
-      <FinanceWechatPayApplymentFlow
-        activeStage="materials"
-        reachableStage="materials"
-        subjectType="SUBJECT_TYPE_ENTERPRISE"
-        contactType="LEGAL"
-        disabled={false}
-        navigationDisabled={false}
-        materialsContent={null}
-        recognitionContent={null}
-        supplementContent={null}
-        submitContent={null}
-        onStageChange={() => undefined}
-        onNextStage={() => undefined}
-        onSubjectTypeChange={() => undefined}
-        onContactTypeChange={() => undefined}
-      />,
-    );
-    const stageButtons = Array.from(
-      markup.matchAll(/<button([^>]*)>(.*?)<\/button>/g),
-    );
-    const attributesFor = (label: string) =>
-      stageButtons.find((match) => match[2].includes(label))?.[1];
-
-    expect(attributesFor("上传资料")).not.toContain(" disabled=");
-    expect(attributesFor("核对识别")).toContain("disabled");
-    expect(attributesFor("确认提交")).toContain("disabled");
+    for (const name of [
+      "license_name",
+      "identity_name",
+      "contact_identity_number",
+      "merchant_short_name",
+      "super_admin_phone",
+      "settlement_account_number",
+      "business_scene_description",
+    ]) {
+      const control = markup.match(
+        new RegExp(`<(?:input|textarea)[^>]*name="${name}"[^>]*>`),
+      )?.[0];
+      expect(control).toBeDefined();
+      expect(control).toContain("disabled");
+    }
   });
 });

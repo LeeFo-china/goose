@@ -187,10 +187,11 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(ocrRequestSource).toContain("/ocr/recognitions/${encodeURIComponent(id)}");
   });
 
-  test("reviews OCR results in an inline responsive workspace", () => {
+  test("reviews OCR results inline within each document section", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
-    const workflowSource = readSource(
-      "./finance-wechat-pay-applyment-workflow.tsx",
+    const documentSectionUrl = new URL(
+      "./finance-wechat-pay-applyment-document-section.tsx",
+      import.meta.url,
     );
     const reviewUrl = new URL(
       "./finance-wechat-pay-applyment-ocr-review.tsx",
@@ -200,23 +201,27 @@ describe("Finance wechat pay applyment page layout", () => {
       "./finance-wechat-pay-applyment-recognized-fields.tsx",
       import.meta.url,
     );
-
+    expect(existsSync(documentSectionUrl)).toBe(true);
     expect(existsSync(reviewUrl)).toBe(true);
     expect(existsSync(recognizedFieldsUrl)).toBe(true);
-    expect(workflowSource).toContain("FinanceWechatPayApplymentOcrReview");
     expect(panelSource).not.toContain("OcrFieldReviewDialog");
     expect(panelSource).not.toContain("setOcrDialogOpen");
-    if (!existsSync(reviewUrl) || !existsSync(recognizedFieldsUrl)) return;
-
+    if (
+      !existsSync(documentSectionUrl) ||
+      !existsSync(reviewUrl) ||
+      !existsSync(recognizedFieldsUrl)
+    ) return;
+    const documentSectionSource = readFileSync(documentSectionUrl, "utf8");
     const reviewSource = readFileSync(reviewUrl, "utf8");
     const recognizedFieldsSource = readFileSync(recognizedFieldsUrl, "utf8");
-    expect(reviewSource).toContain(
-      "lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]",
+    expect(documentSectionSource).toContain(
+      "FinanceWechatPayApplymentInlineOcrReview",
     );
+    expect(reviewSource).toContain("FinanceWechatPayApplymentInlineOcrReview");
     expect(reviewSource).toContain("OcrFieldReviewRows");
     expect(reviewSource).toContain("改为手动填写");
     expect(reviewSource).toContain("onUseManualEntry");
-    expect(recognizedFieldsSource).toContain(
+    expect(recognizedFieldsSource).not.toContain(
       "hidden={selectedCategory !== category}",
     );
     expect(recognizedFieldsSource).toContain("onManualChange");
@@ -227,16 +232,16 @@ describe("Finance wechat pay applyment page layout", () => {
       "./finance-wechat-pay-applyment-single-page.tsx",
       import.meta.url,
     );
-
     expect(existsSync(singlePageUrl)).toBe(true);
     if (!existsSync(singlePageUrl)) return;
-
     const singlePageSource = readFileSync(singlePageUrl, "utf8");
+    const documentSectionSource = readSource(
+      "./finance-wechat-pay-applyment-document-section.tsx",
+    );
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const workflowSource = readSource(
       "./finance-wechat-pay-applyment-workflow.tsx",
     );
-
     expect(singlePageSource).toContain("营业执照");
     expect(singlePageSource).toContain("法人身份证");
     expect(singlePageSource).toContain("联系信息");
@@ -247,7 +252,32 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(singlePageSource).not.toContain("上一步");
     expect(singlePageSource).not.toContain("下一步");
     expect(singlePageSource).not.toContain("@/components/ui/tabs");
-    expect(workflowSource).toContain("FinanceWechatPayApplymentSinglePage");
+    expect(singlePageSource).toContain(
+      'from "./finance-wechat-pay-applyment-document-section"',
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentDocumentSection",
+    );
+    expect(documentSectionSource).toContain(
+      "<FinanceWechatPayApplymentInlineOcrReview",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentContactFields",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentSettlementFields",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentBusinessFields",
+    );
+    expect(singlePageSource).toContain("<FinanceWechatPayApplymentReview");
+    expect(singlePageSource).toContain("<FinanceWechatPayApplymentActions");
+    expect(workflowSource).toContain(
+      'from "./finance-wechat-pay-applyment-single-page"',
+    );
+    expect(workflowSource).toContain("<FinanceWechatPayApplymentSinglePage");
+    expect(workflowSource).not.toContain("FinanceWechatPayApplymentFlow");
+    expect(panelSource).toContain("<FinanceWechatPayApplymentWorkflow");
     expect(panelSource).toContain(
       "onChangeCapture={handleApplymentFormChange}",
     );
@@ -262,7 +292,6 @@ describe("Finance wechat pay applyment page layout", () => {
 
   test("removes the processing event timeline from the tenant applyment panel", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
-
     expect(panelSource).not.toContain("FinanceWechatPayApplymentEvents");
   });
 
@@ -271,12 +300,16 @@ describe("Finance wechat pay applyment page layout", () => {
       "./finance-wechat-pay-applyment-document-section.tsx",
       import.meta.url,
     );
-
     expect(existsSync(documentSectionUrl)).toBe(true);
     if (!existsSync(documentSectionUrl)) return;
-
     const documentSectionSource = readFileSync(documentSectionUrl, "utf8");
     expect(documentSectionSource).toContain("md:grid-cols-2");
+    expect(documentSectionSource).toContain(
+      "WechatPayApplymentAttachmentSlot",
+    );
+    expect(documentSectionSource).toContain(
+      "FinanceWechatPayApplymentInlineOcrReview",
+    );
     expect(documentSectionSource).toContain(
       "legal_representative_id_card_front",
     );
@@ -422,8 +455,25 @@ describe("Finance wechat pay applyment page layout", () => {
       "./finance-wechat-pay-applyment-upload-button.tsx",
     );
 
-    expect(workflowSource).toContain("FinanceWechatPayApplymentSinglePage");
-    expect(workflowSource).toContain("FinanceWechatPayApplymentReview");
+    expect(workflowSource).toContain(
+      'from "./finance-wechat-pay-applyment-single-page"',
+    );
+    expect(workflowSource).toContain("<FinanceWechatPayApplymentSinglePage");
+    expect(workflowSource).not.toContain("FinanceWechatPayApplymentFlow");
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentDocumentSection",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentContactFields",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentSettlementFields",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentBusinessFields",
+    );
+    expect(singlePageSource).toContain("<FinanceWechatPayApplymentReview");
+    expect(singlePageSource).toContain("<FinanceWechatPayApplymentActions");
     expect(singlePageSource).toContain("AlertDialog");
     expect(singlePageSource).not.toContain("Progress");
     expect(singlePageSource).toContain("SUBJECT_TYPE_ENTERPRISE");

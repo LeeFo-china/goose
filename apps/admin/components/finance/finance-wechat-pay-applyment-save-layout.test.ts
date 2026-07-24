@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 function readSource(path: string) {
@@ -6,24 +6,14 @@ function readSource(path: string) {
 }
 
 describe("Finance wechat pay applyment save layout", () => {
-  test("wires create update submit and the complete draft form contract", () => {
+  test("wires create update submit and attachment upload contracts", () => {
     const requestSource = readSource("./finance-wechat-pay-applyment-requests.ts");
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const materialsStageSource = readSource(
       "./finance-wechat-pay-applyment-materials-stage.tsx",
     );
     const fieldSource = readSource("./finance-wechat-pay-applyment-form-fields.tsx");
-    const flowSource = readSource("./finance-wechat-pay-applyment-flow.tsx");
-    const workflowSource = readSource(
-      "./finance-wechat-pay-applyment-workflow.tsx",
-    );
-    const supplementSource = readSource(
-      "./finance-wechat-pay-applyment-supplement-fields.tsx",
-    );
-    const schemaSource = readSource("./finance-wechat-pay-applyment-schema.ts");
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
-    const formContractSource =
-      `${panelSource}\n${workflowSource}\n${flowSource}\n${supplementSource}\n${schemaSource}`;
 
     expect(requestSource).toContain("/finance/wechat-pay/applyment/current");
     expect(panelSource).toContain("/finance/wechat-pay/applyments");
@@ -36,6 +26,56 @@ describe("Finance wechat pay applyment save layout", () => {
     expect(attachmentSource).toContain("license_copy");
     expect(attachmentSource).toContain("legal_representative_id_card_front");
     expect(`${panelSource}\n${materialsStageSource}`).toContain("attachments");
+    expect(fieldSource).toContain("@/components/ui/select");
+    expect(fieldSource).toContain("SelectGroup");
+  });
+
+  test("registers the complete draft form through the single-page document and field groups", () => {
+    const singlePageUrl = new URL(
+      "./finance-wechat-pay-applyment-single-page.tsx",
+      import.meta.url,
+    );
+    const documentSectionUrl = new URL(
+      "./finance-wechat-pay-applyment-document-section.tsx",
+      import.meta.url,
+    );
+
+    expect(existsSync(singlePageUrl)).toBe(true);
+    expect(existsSync(documentSectionUrl)).toBe(true);
+    if (!existsSync(singlePageUrl) || !existsSync(documentSectionUrl)) return;
+
+    const singlePageSource = readFileSync(singlePageUrl, "utf8");
+    const documentSectionSource = readFileSync(documentSectionUrl, "utf8");
+    const workflowSource = readSource(
+      "./finance-wechat-pay-applyment-workflow.tsx",
+    );
+    const supplementSource = readSource(
+      "./finance-wechat-pay-applyment-supplement-fields.tsx",
+    );
+    const schemaSource = readSource("./finance-wechat-pay-applyment-schema.ts");
+    const formContractSource =
+      `${singlePageSource}\n${documentSectionSource}\n${supplementSource}\n${schemaSource}`;
+
+    expect(workflowSource).toContain(
+      'from "./finance-wechat-pay-applyment-single-page"',
+    );
+    expect(workflowSource).toContain("<FinanceWechatPayApplymentSinglePage");
+    expect(workflowSource).not.toContain("FinanceWechatPayApplymentFlow");
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentDocumentSection",
+    );
+    expect(documentSectionSource).toContain(
+      "<FinanceWechatPayApplymentInlineOcrReview",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentContactFields",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentSettlementFields",
+    );
+    expect(singlePageSource).toContain(
+      "<FinanceWechatPayApplymentBusinessFields",
+    );
     expect(formContractSource).toContain("merchant_short_name");
     expect(formContractSource).toContain("super_admin_phone");
     expect(formContractSource).toContain("settlement_account_type");
@@ -44,14 +84,36 @@ describe("Finance wechat pay applyment save layout", () => {
     expect(formContractSource).toContain("settlement_bank_branch_id");
     expect(supplementSource).toContain("settlement_account_type: value");
     expect(supplementSource).toContain("onDataChange(overrides)");
-    expect(fieldSource).toContain("@/components/ui/select");
-    expect(fieldSource).toContain("SelectGroup");
     expect(supplementSource).toContain('requirement="required"');
     expect(supplementSource).toContain('requirement="optional"');
     expect(formContractSource).not.toContain(
       "settlement_account_summary: requiredText",
     );
     expect(formContractSource).not.toContain("api_v3_key");
+  });
+
+  test("keeps sensitive fields and OCR-backed attachment categories in the draft contract", () => {
+    const schemaSource = readSource("./finance-wechat-pay-applyment-schema.ts");
+    const attachmentSource = readSource(
+      "./finance-wechat-pay-applyment-attachments.tsx",
+    );
+    const recognizedFieldsSource = readSource(
+      "./finance-wechat-pay-applyment-recognized-fields.tsx",
+    );
+    const sensitiveContract =
+      `${schemaSource}\n${attachmentSource}\n${recognizedFieldsSource}`;
+
+    expect(sensitiveContract).toContain("identity_number");
+    expect(sensitiveContract).toContain("contact_identity_number");
+    expect(sensitiveContract).toContain("settlement_account_number");
+    expect(schemaSource).toContain("delete payload.contact_identity_number");
+    expect(attachmentSource).toContain("license_copy");
+    expect(attachmentSource).toContain(
+      "legal_representative_id_card_front",
+    );
+    expect(attachmentSource).toContain(
+      "legal_representative_id_card_back",
+    );
   });
 
   test("flushes the current draft before submit", () => {

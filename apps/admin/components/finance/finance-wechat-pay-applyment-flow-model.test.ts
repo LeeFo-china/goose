@@ -1,19 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  APPLYMENT_STAGE_KEYS,
   buildInitialMaterialState,
   buildInitialMaterialStates,
   canLeaveMaterialsStage,
   canLeaveRecognitionStage,
-  getApplymentProgress,
   getRequiredApplymentAttachments,
   updateAttachmentOcrReviewMetadata,
   type ApplymentAttachmentOcrReviewMetadata,
   type ApplymentMaterialState,
   type ApplymentMaterialStateMap,
 } from "./finance-wechat-pay-applyment-flow-model";
-import { getInitialApplymentStage } from "./finance-wechat-pay-applyment-stage-reachability";
 import type {
   WechatPayApplymentAttachment,
   WechatPayApplymentAttachmentCategory,
@@ -54,18 +51,6 @@ const legalAttachments = [
 ] as const;
 
 describe("wechat pay applyment flow model", () => {
-  test("uses the canonical OCR-first stage order and stage progress", () => {
-    expect(APPLYMENT_STAGE_KEYS).toEqual([
-      "materials",
-      "recognition",
-      "supplement",
-      "submit",
-    ]);
-    expect(getApplymentProgress("materials")).toBe(25);
-    expect(getApplymentProgress("recognition")).toBe(50);
-    expect(getApplymentProgress("submit")).toBe(100);
-  });
-
   test("adds contact ID cards only for a SUPER contact", () => {
     expect(getRequiredApplymentAttachments("LEGAL")).toEqual([
       "license_copy",
@@ -377,69 +362,6 @@ describe("wechat pay applyment flow model", () => {
     })).toEqual({ allowed: true, reason: null });
   });
 
-  test("resumes a new draft at materials and failed OCR at recognition", () => {
-    expect(getInitialApplymentStage({
-      contactType: "LEGAL",
-      attachments: [],
-      materialStates: {},
-      blockerStages: ["supplement"],
-    })).toBe("materials");
-
-    const failedAttachments = [
-      attachment("license_copy", "failed"),
-      attachment("legal_representative_id_card_front", "confirmed"),
-      attachment("legal_representative_id_card_back", "manual"),
-    ];
-    expect(getInitialApplymentStage({
-      contactType: "LEGAL",
-      attachments: failedAttachments,
-      materialStates: buildInitialMaterialStates(failedAttachments),
-      blockerStages: ["supplement"],
-    })).toBe("recognition");
-  });
-
-  test("resumes at the earliest canonical blocker after OCR is closed", () => {
-    const materialStates = buildInitialMaterialStates(legalAttachments);
-    expect(getInitialApplymentStage({
-      contactType: "LEGAL",
-      attachments: legalAttachments,
-      materialStates,
-      blockerStages: ["supplement"],
-    })).toBe("supplement");
-    expect(getInitialApplymentStage({
-      contactType: "LEGAL",
-      attachments: legalAttachments,
-      materialStates,
-      blockerStages: ["recognition", "supplement"],
-    })).toBe("recognition");
-    expect(getInitialApplymentStage({
-      contactType: "LEGAL",
-      attachments: legalAttachments,
-      materialStates,
-      blockerStages: ["supplement", "materials"],
-    })).toBe("materials");
-    expect(getInitialApplymentStage({
-      contactType: "LEGAL",
-      attachments: legalAttachments,
-      materialStates,
-      blockerStages: ["submit"],
-    })).toBe("submit");
-  });
-
-  test("prioritizes a materials blocker over unresolved recognition", () => {
-    const unresolvedAttachments = [
-      attachment("license_copy", "review_required"),
-      attachment("legal_representative_id_card_front", "confirmed"),
-      attachment("legal_representative_id_card_back", "manual"),
-    ];
-    expect(getInitialApplymentStage({
-      contactType: "LEGAL",
-      attachments: unresolvedAttachments,
-      materialStates: buildInitialMaterialStates(unresolvedAttachments),
-      blockerStages: ["materials"],
-    })).toBe("materials");
-  });
-
   test("does not mutate attachments while building or guarding state", () => {
     const attachments = legalAttachments.map((item) => ({ ...item }));
     const before = structuredClone(attachments);
@@ -451,12 +373,6 @@ describe("wechat pay applyment flow model", () => {
       materialStates: states,
     });
     canLeaveRecognitionStage({ attachments, materialStates: states });
-    getInitialApplymentStage({
-      contactType: "LEGAL",
-      attachments,
-      materialStates: states,
-      blockerStages: ["supplement"],
-    });
 
     expect(attachments).toEqual(before);
   });
