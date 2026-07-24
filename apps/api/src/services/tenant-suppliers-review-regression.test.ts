@@ -90,6 +90,46 @@ describe("tenant supplier mutation envelopes", () => {
   });
 });
 
+describe("tenant supplier list contract health", () => {
+  test("accepts only the four contract health values", async () => {
+    const valid = await repositoryFor({
+      items: [{
+        ...relationship,
+        supplier,
+        eligibility,
+        contract_health: "valid",
+      }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    });
+    await expect(valid.repository.listRelationships({
+      tenant_id: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    })).resolves.toMatchObject({
+      list: [{ contract_health: "valid" }],
+    });
+
+    const invalid = await repositoryFor({
+      items: [{
+        ...relationship,
+        supplier,
+        eligibility,
+        contract_health: "warning",
+      }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    });
+    await expect(invalid.repository.listRelationships({
+      tenant_id: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
+  });
+});
+
 describe("tenant supplier service review boundaries", () => {
   test("purchase assertion preserves module_disabled in the full eligibility reasons", async () => {
     const dependencies = serviceDependencies();

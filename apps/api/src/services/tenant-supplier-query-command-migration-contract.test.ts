@@ -183,6 +183,27 @@ describe("tenant supplier review hardening contracts", () => {
     );
   });
 
+  test("computes contract health once with stable truth and precedence", () => {
+    const setFunction = extractFunction("get_tenant_supplier_order_eligibility_set");
+    const list = extractFunction("list_tenant_suppliers_for_tenant");
+
+    expectContracts(setFunction, [
+      /RETURNS TABLE\s*\([\s\S]*contract_health text/,
+      /contract_status AS MATERIALIZED\s*\([\s\S]*bool_or\([\s\S]*contract\.lifecycle_status = 'active'[\s\S]*contract\.valid_from <= p_checked_at::date[\s\S]*contract\.valid_until > p_checked_at::date \+ 30[\s\S]*\) AS has_valid_contract/,
+      /bool_or\([\s\S]*contract\.lifecycle_status = 'active'[\s\S]*contract\.valid_from <= p_checked_at::date[\s\S]*contract\.valid_until >= p_checked_at::date[\s\S]*contract\.valid_until <= p_checked_at::date \+ 30[\s\S]*\) AS has_expiring_contract/,
+      /bool_or\([\s\S]*contract\.lifecycle_status = 'active'[\s\S]*contract\.valid_until < p_checked_at::date[\s\S]*\) AS has_expired_contract/,
+      /CASE[\s\S]*has_valid_contract[\s\S]*THEN 'valid'[\s\S]*has_expiring_contract[\s\S]*THEN 'expiring'[\s\S]*has_expired_contract[\s\S]*THEN 'expired'[\s\S]*ELSE 'missing'[\s\S]*END AS contract_health/,
+    ]);
+    expect((setFunction.match(/public\.supplier_contracts/g) ?? []))
+      .toHaveLength(1);
+    expectContracts(list, [
+      /'contract_health', eligibility\.contract_health/,
+      /JOIN eligibility[\s\S]*p_eligible IS NULL[\s\S]*eligibility\.eligible = p_eligible/,
+      /SELECT count\(\*\)[\s\S]*FROM eligible_relationships/,
+    ]);
+    expect(list).not.toMatch(/supplier_contracts|LATERAL/);
+  });
+
   test("validates tenant owner employees under a share lock", () => {
     expectContracts(relationshipMigration, [
       /CREATE FUNCTION public\.validate_tenant_supplier_owner_employee\(\)[\s\S]*RETURNS trigger[\s\S]*SET search_path = pg_catalog, public/,

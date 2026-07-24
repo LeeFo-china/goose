@@ -56,7 +56,7 @@ describe("TenantSuppliersRepository queries", () => {
   test("uses one tenant-scoped RPC for exact eligibility-filtered pagination", async () => {
     const { repository, requests } = await createRepository(() => ({
       body: {
-        items: [{ ...relationship, eligibility }],
+        items: [{ ...relationship, eligibility, contract_health: "valid" }],
         total: 37,
         page: 2,
         page_size: 100,
@@ -79,6 +79,7 @@ describe("TenantSuppliersRepository queries", () => {
       totalPages: 1,
     });
     expect(result.list[0]?.eligibility?.eligible).toBe(true);
+    expect(result.list[0]?.contract_health).toBe("valid");
     expect(requests).toHaveLength(1);
     const request = requests[0]!;
     expect(request.url).toContain(

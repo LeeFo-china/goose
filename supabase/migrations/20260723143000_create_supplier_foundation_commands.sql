@@ -1803,7 +1803,8 @@ RETURNS TABLE (
   tenant_supplier_version integer,
   checked_at timestamptz,
   eligible boolean,
-  blocking_reasons text[]
+  blocking_reasons text[],
+  contract_health text
 )
 LANGUAGE sql
 STABLE
@@ -1890,7 +1891,22 @@ AS $$
         contract.lifecycle_status = 'active'
         AND contract.valid_from <= p_checked_at::date
         AND contract.valid_until >= p_checked_at::date
-      ), false) AS has_active_contract
+      ), false) AS has_active_contract,
+      COALESCE(bool_or(
+        contract.lifecycle_status = 'active'
+        AND contract.valid_from <= p_checked_at::date
+        AND contract.valid_until > p_checked_at::date + 30
+      ), false) AS has_valid_contract,
+      COALESCE(bool_or(
+        contract.lifecycle_status = 'active'
+        AND contract.valid_from <= p_checked_at::date
+        AND contract.valid_until >= p_checked_at::date
+        AND contract.valid_until <= p_checked_at::date + 30
+      ), false) AS has_expiring_contract,
+      COALESCE(bool_or(
+        contract.lifecycle_status = 'active'
+        AND contract.valid_until < p_checked_at::date
+      ), false) AS has_expired_contract
     FROM relationships AS relationship
     LEFT JOIN public.supplier_contracts AS contract
       ON contract.tenant_id = relationship.tenant_id
@@ -1905,6 +1921,15 @@ AS $$
       relationship.supplier_version,
       relationship.tenant_supplier_version,
       p_checked_at AS checked_at,
+      CASE
+        WHEN COALESCE(contract_status.has_valid_contract, false)
+          THEN 'valid'
+        WHEN COALESCE(contract_status.has_expiring_contract, false)
+          THEN 'expiring'
+        WHEN COALESCE(contract_status.has_expired_contract, false)
+          THEN 'expired'
+        ELSE 'missing'
+      END AS contract_health,
       ARRAY_REMOVE(ARRAY[
         CASE
           WHEN NOT COALESCE(setting.module_enabled, false)
@@ -1961,7 +1986,8 @@ AS $$
     evaluated.tenant_supplier_version,
     evaluated.checked_at,
     cardinality(evaluated.blocking_reasons) = 0 AS eligible,
-    evaluated.blocking_reasons
+    evaluated.blocking_reasons,
+    evaluated.contract_health
   FROM evaluated;
 $$;
 
@@ -2073,6 +2099,7 @@ BEGIN
             'operational_status', supplier.operational_status,
             'version', supplier.version
           ),
+          'contract_health', eligibility.contract_health,
           'eligibility',
           jsonb_build_object(
             'eligible', eligibility.eligible,

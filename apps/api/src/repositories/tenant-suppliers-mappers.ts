@@ -90,6 +90,15 @@ export const RelationshipSchema = z.object({
   supplier: SupplierSchema,
   eligibility: EligibilitySchema.optional(),
 }).strict();
+export const SUPPLIER_CONTRACT_HEALTH_VALUES = [
+  "valid",
+  "expiring",
+  "expired",
+  "missing",
+] as const;
+export const RelationshipListItemSchema = RelationshipSchema.extend({
+  contract_health: z.enum(SUPPLIER_CONTRACT_HEALTH_VALUES),
+}).strict();
 export const SettingsSchema = z.object({
   tenant_id: z.uuid(),
   module_enabled: z.boolean(),
@@ -140,7 +149,7 @@ export const DirectoryEnvelopeSchema = z.object({
   page_size: z.number().int().positive().max(100),
 }).strict();
 export const RelationshipPageEnvelopeSchema = z.object({
-  items: z.array(RelationshipSchema),
+  items: z.array(RelationshipListItemSchema),
   total: z.number().int().nonnegative(),
   page: z.number().int().positive(),
   page_size: z.number().int().positive().max(100),
@@ -160,6 +169,9 @@ export const MutationEnvelopeSchema = z.object({
 
 export type TenantSupplierSettings = z.infer<typeof SettingsSchema>;
 export type TenantSupplierDetail = z.infer<typeof RelationshipSchema>;
+export type TenantSupplierListItem = z.infer<
+  typeof RelationshipListItemSchema
+>;
 export type SupplierDirectoryItem = z.infer<typeof SupplierSchema>;
 export type SupplierContract = z.infer<typeof ContractSchema>;
 export type SupplierEvent = z.infer<typeof EventSchema>;
@@ -175,7 +187,7 @@ export type Page<T> = {
     totalPages: number;
   };
 };
-export type TenantSupplierPage = Page<TenantSupplierDetail>;
+export type TenantSupplierPage = Page<TenantSupplierListItem>;
 export type SupplierDirectoryPage = Page<SupplierDirectoryItem>;
 export type SupplierContractPage = Page<SupplierContract>;
 export type SupplierEventPage = Page<SupplierEvent>;
