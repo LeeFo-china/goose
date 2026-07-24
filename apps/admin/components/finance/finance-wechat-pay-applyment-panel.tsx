@@ -3,7 +3,6 @@
 import {
   type FormEvent,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useTransition,
@@ -24,11 +23,6 @@ import { buildInitialMaterialStates } from "./finance-wechat-pay-applyment-flow-
 import { isApplymentDataBearingControl } from "./finance-wechat-pay-applyment-form-change";
 import type { ApplymentAttachmentChangeOptions } from "./finance-wechat-pay-applyment-manual-entry";
 import { useWechatPayApplymentOcrReview } from "./finance-wechat-pay-applyment-ocr-review";
-import {
-  buildWechatPayApplymentStoredReview,
-  buildWechatPayApplymentSubmissionData,
-  type WechatPayApplymentReviewTarget,
-} from "./finance-wechat-pay-applyment-review-model";
 import type { ApplymentSaveGenerationContext } from "./finance-wechat-pay-applyment-save-generation";
 import { FinanceWechatPayApplymentPanelStatus } from "./finance-wechat-pay-applyment-save-status";
 import {
@@ -75,13 +69,6 @@ export function FinanceWechatPayApplymentPanel({
     sourceApplyment?.contact_type || "LEGAL",
   );
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
-  const [reviewRevision, setReviewRevision] = useState(0);
-  const [reviewSnapshot, setReviewSnapshot] = useState(() =>
-    buildWechatPayApplymentStoredReview(
-      sourceApplyment,
-      sourceApplyment?.attachments || [],
-    )
-  );
   const initialAttachments = sourceApplyment?.attachments || [];
   const initialStage = getInitialApplymentStage({
     contactType,
@@ -122,20 +109,6 @@ export function FinanceWechatPayApplymentPanel({
     onError: setError,
   });
 
-  useLayoutEffect(() => {
-    const form = formRef.current;
-    if (form) {
-      setReviewSnapshot(buildCurrentSubmission(form, attachments).review);
-    }
-  }, [
-    applyment?.id,
-    attachments,
-    contactType,
-    ocrReview.currentValues,
-    reviewRevision,
-    subjectType,
-  ]);
-
   useEffect(() => {
     setSubjectType(
       sourceApplyment?.subject_type || "SUBJECT_TYPE_ENTERPRISE",
@@ -143,19 +116,6 @@ export function FinanceWechatPayApplymentPanel({
     setContactType(sourceApplyment?.contact_type || "LEGAL");
     setReviewConfirmed(false);
   }, [resetKey, sourceApplyment]);
-
-  function buildCurrentSubmission(
-    form: HTMLFormElement,
-    attachmentsOverride = attachmentsRef.current,
-  ) {
-    return buildWechatPayApplymentSubmissionData(new FormData(form), {
-      applyment: currentApplymentRef.current,
-      hasSensitivePayload: Boolean(
-        currentApplymentRef.current?.has_sensitive_payload,
-      ),
-      attachments: attachmentsOverride,
-    });
-  }
 
   function buildCurrentDraftPayload(
     overrides: ApplymentDraftSavePayload = {},
@@ -266,7 +226,6 @@ export function FinanceWechatPayApplymentPanel({
 
   function invalidateReview() {
     setReviewConfirmed(false);
-    setReviewRevision((revision) => revision + 1);
   }
 
   function handleApplymentFormChange(event: FormEvent<HTMLFormElement>) {
@@ -290,11 +249,6 @@ export function FinanceWechatPayApplymentPanel({
 
   function handleNextStage() {
     if (navigation.handleNextStage()) scheduleDraftSave();
-  }
-
-  function handleReviewNavigation(target: WechatPayApplymentReviewTarget) {
-    if (target.ocrCategory) setOcrReviewCategory(target.ocrCategory);
-    handleStageChange(target.stage);
   }
 
   function handleSupplementDataChange(
@@ -389,7 +343,6 @@ export function FinanceWechatPayApplymentPanel({
           contactType={contactType}
           ocrReviewCategory={ocrReviewCategory}
           reviewConfirmed={reviewConfirmed}
-          reviewSnapshot={reviewSnapshot}
           submissionReadiness={autosave.currentDetail.submission_readiness}
           pending={pending}
           editable={editable}
@@ -417,7 +370,6 @@ export function FinanceWechatPayApplymentPanel({
           onOcrCategoryChange={setOcrReviewCategory}
           onSupplementDataChange={handleSupplementDataChange}
           onReviewConfirmedChange={setReviewConfirmed}
-          onReviewNavigation={handleReviewNavigation}
           onSubmitApplyment={submitApplyment}
         />
       </form>

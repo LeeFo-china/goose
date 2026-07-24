@@ -24,6 +24,9 @@ describe("wechat pay applyment single-page contracts", () => {
     const workflowSource = readSource(
       "./finance-wechat-pay-applyment-workflow.tsx",
     );
+    const panelSource = readSource(
+      "./finance-wechat-pay-applyment-panel.tsx",
+    );
     const reviewSource = readSource(
       "./finance-wechat-pay-applyment-review.tsx",
     );
@@ -76,6 +79,24 @@ describe("wechat pay applyment single-page contracts", () => {
     ]) {
       expect(workflowReview).not.toContain(`${deprecatedProp}=`);
     }
+    for (const deprecatedName of [
+      "reviewSnapshot",
+      "onReviewNavigation",
+    ]) {
+      expect(workflowSource).not.toContain(deprecatedName);
+      expect(panelSource).not.toContain(deprecatedName);
+    }
+    for (const deprecatedPanelName of [
+      "reviewRevision",
+      "handleReviewNavigation",
+      "buildCurrentSubmission",
+      "buildWechatPayApplymentStoredReview",
+      "buildWechatPayApplymentSubmissionData",
+    ]) {
+      expect(panelSource).not.toContain(deprecatedPanelName);
+    }
+    expect(panelSource).toContain("function buildCurrentDraftPayload");
+    expect(panelSource).toContain("buildPayload: () => buildCurrentDraftPayload()");
   });
 
   test("uses one linked settlement rule select", () => {

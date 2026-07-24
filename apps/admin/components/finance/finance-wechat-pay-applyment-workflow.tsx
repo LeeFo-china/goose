@@ -11,10 +11,6 @@ import { FinanceWechatPayApplymentMaterialsStage } from "./finance-wechat-pay-ap
 import { FinanceWechatPayApplymentOcrReview } from "./finance-wechat-pay-applyment-ocr-review";
 import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
 import { presentApplymentBlockers } from "./finance-wechat-pay-applyment-readiness";
-import type {
-  WechatPayApplymentReviewSnapshot,
-  WechatPayApplymentReviewTarget,
-} from "./finance-wechat-pay-applyment-review-model";
 import {
   formatWechatPayApplymentTime,
   type WechatPayApplymentAttachmentCategory,
@@ -67,7 +63,6 @@ export function FinanceWechatPayApplymentWorkflow({
   contactType: string;
   ocrReviewCategory: WechatPayApplymentAttachmentCategory;
   reviewConfirmed: boolean;
-  reviewSnapshot: WechatPayApplymentReviewSnapshot;
   submissionReadiness?: WechatPayApplymentSubmissionReadiness | null;
   pending: boolean;
   editable: boolean;
@@ -91,7 +86,6 @@ export function FinanceWechatPayApplymentWorkflow({
   ) => void;
   onSupplementDataChange: (overrides: Record<string, string>) => void;
   onReviewConfirmedChange: (confirmed: boolean) => void;
-  onReviewNavigation: (target: WechatPayApplymentReviewTarget) => void;
   onSubmitApplyment: () => void;
 }) {
   const disabled = pending || materials.pending || !editable;
