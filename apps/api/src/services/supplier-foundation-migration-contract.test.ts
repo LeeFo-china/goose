@@ -10,7 +10,6 @@ const migrationPaths = {
 function readMigration(migrationPath: URL) {
   return existsSync(migrationPath) ? readFileSync(migrationPath, "utf8") : "";
 }
-
 const migrationSql = {
   masterData: readMigration(migrationPaths.masterData),
   tenantSupplierRelationships: readMigration(migrationPaths.tenantSupplierRelationships),
@@ -18,7 +17,6 @@ const migrationSql = {
   foundationCommands: readMigration(migrationPaths.foundationCommands),
   foundationPermissions: readMigration(migrationPaths.foundationPermissions),
 } as const;
-
 function extractCreateTableStatement(sql: string, table: string) {
   const statementStart = sql.search(new RegExp(`CREATE TABLE public\\.${table}\\s*\\(`, "i"));
   if (statementStart < 0) return "";
@@ -28,10 +26,7 @@ function extractCreateTableStatement(sql: string, table: string) {
   for (let index = bodyStart; index < sql.length; index += 1) {
     const character = sql[index];
     if (character === "'") {
-      if (isInsideString && sql[index + 1] === "'") {
-        index += 1;
-        continue;
-      }
+      if (isInsideString && sql[index + 1] === "'") { index += 1; continue; }
       isInsideString = !isInsideString;
       continue;
     }
@@ -43,7 +38,6 @@ function extractCreateTableStatement(sql: string, table: string) {
   }
   return "";
 }
-
 function splitTopLevelSqlClauses(tableStatement: string) {
   const bodyStart = tableStatement.indexOf("(");
   const bodyEnd = tableStatement.lastIndexOf(")");
@@ -56,10 +50,7 @@ function splitTopLevelSqlClauses(tableStatement: string) {
   for (let index = 0; index < body.length; index += 1) {
     const character = body[index];
     if (character === "'") {
-      if (isInsideString && body[index + 1] === "'") {
-        index += 1;
-        continue;
-      }
+      if (isInsideString && body[index + 1] === "'") { index += 1; continue; }
       isInsideString = !isInsideString;
       continue;
     }
@@ -73,17 +64,14 @@ function splitTopLevelSqlClauses(tableStatement: string) {
   clauses.push(body.slice(clauseStart).trim());
   return clauses.filter(Boolean);
 }
-
 function extractColumnNames(sql: string, table: string) {
   return splitTopLevelSqlClauses(extractCreateTableStatement(sql, table))
     .map((clause) => /^([a-z][a-z0-9_]*)\s/i.exec(clause)?.[1] ?? "")
     .filter((name) => name && !["CONSTRAINT", "UNIQUE"].includes(name.toUpperCase()));
 }
-
 function expectSqlContracts(sql: string, contracts: readonly RegExp[]) {
   for (const contract of contracts) expect(sql).toMatch(contract);
 }
-
 function expectPrivateTables(sql: string, tables: readonly string[], revokeServiceRole = false) {
   for (const table of tables) {
     for (const clause of ["ENABLE ROW LEVEL SECURITY", "FORCE ROW LEVEL SECURITY"]) {
@@ -99,11 +87,9 @@ function expectPrivateTables(sql: string, tables: readonly string[], revokeServi
   expect(sql).not.toMatch(/^\s*GRANT\b[^;]*\bTO (?:PUBLIC|anon|authenticated)\s*;/im);
   expect(sql).not.toMatch(/^\s*CREATE POLICY\b/im);
 }
-
 function expectTransactionalMigration(sql: string) {
   expectSqlContracts(sql, [/^-- Rollback:/, /\bBEGIN;[\s\S]*\bCOMMIT;\s*$/]);
 }
-
 function findQualificationTypeNameUniqueness(sql: string) {
   const tableStatement = extractCreateTableStatement(sql, "supplier_qualification_types");
   const tableViolations = splitTopLevelSqlClauses(tableStatement)
@@ -118,7 +104,6 @@ function findQualificationTypeNameUniqueness(sql: string) {
     });
   return [...tableViolations, ...indexViolations];
 }
-
 const commandFunctions = ["create_platform_supplier", "mutate_platform_supplier", "review_supplier_qualification", "set_tenant_supplier_module", "create_tenant_supplier", "mutate_tenant_supplier", "mutate_supplier_contract", "get_tenant_supplier_order_eligibility", "list_available_suppliers_for_tenant"] as const;
 const requestFields = { create_platform_supplier: ["supplier_id", "code", "name", "legal_name", "unified_social_credit_code", "supplier_type", "expected_version", "actor_employee_id"], mutate_platform_supplier: ["supplier_id", "action", "expected_version", "reason", "actor_employee_id"], review_supplier_qualification: ["supplier_id", "qualification_id", "verification_status", "expected_version", "reason", "actor_employee_id"], set_tenant_supplier_module: ["tenant_id", "module_enabled", "require_active_contract_for_new_order", "expected_version", "actor_employee_id"], create_tenant_supplier: ["tenant_supplier_id", "tenant_id", "supplier_id", "expected_version", "actor_employee_id"], mutate_tenant_supplier: ["tenant_id", "tenant_supplier_id", "action", "expected_version", "reason", "actor_employee_id"], mutate_supplier_contract: ["tenant_id", "contract_id", "action", "expected_version", "reason", "actor_employee_id"] } as const;
 function extractFunction(sql: string, name: string) { return sql.match(new RegExp(`CREATE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`))?.[0] ?? ""; }
@@ -171,9 +156,7 @@ describe("supplier foundation migration contract", () => {
       "CREATE UNIQUE INDEX supplier_qualification_types_name_key ON public.supplier_qualification_types(name);",
       "CREATE UNIQUE INDEX IF NOT EXISTS supplier_qualification_types_name_upper_key ON public.supplier_qualification_types USING btree (upper(btrim(name)));",
     ] as const;
-    for (const illegalVariant of illegalVariants) {
-      expect(findQualificationTypeNameUniqueness(illegalVariant)).not.toEqual([]);
-    }
+    for (const illegalVariant of illegalVariants) expect(findQualificationTypeNameUniqueness(illegalVariant)).not.toEqual([]);
   });
   test("locks validity, duplicate identity, and coordinate boundaries", () => {
     const sql = migrationSql.masterData;
@@ -189,74 +172,37 @@ describe("supplier foundation migration contract", () => {
     const sql = migrationSql.masterData;
     for (const contract of [
       "supplier_type IN ('manufacturer', 'brand_agent', 'distributor', 'retailer', 'other')",
-      "onboarding_status IN ('draft', 'pending_review', 'approved', 'rejected')",
-      "operational_status IN ('active', 'suspended', 'blacklisted')",
-      "verification_status IN ('pending', 'verified', 'rejected')",
-      "region_level IN ('province', 'city', 'district')",
-      "supplier_qualification_types_status_check",
-      "supplier_service_regions_status_check",
-      "supplier_addresses_status_check",
-      "supplier_contacts_status_check",
-      "address_type IN ('registered', 'shipping', 'return', 'other')",
-      "contact_type IN ('primary', 'sales', 'finance', 'logistics', 'after_sales')",
+      "onboarding_status IN ('draft', 'pending_review', 'approved', 'rejected')", "operational_status IN ('active', 'suspended', 'blacklisted')",
+      "verification_status IN ('pending', 'verified', 'rejected')", "region_level IN ('province', 'city', 'district')",
+      "supplier_qualification_types_status_check", "supplier_service_regions_status_check",
+      "supplier_addresses_status_check", "supplier_contacts_status_check",
+      "address_type IN ('registered', 'shipping', 'return', 'other')", "contact_type IN ('primary', 'sales', 'finance', 'logistics', 'after_sales')",
       "document_file_id uuid NOT NULL REFERENCES public.platform_file_objects(id) ON DELETE RESTRICT",
     ]) expect(sql).toContain(contract);
   });
   test("forces service-role-only access", () => {
     const sql = migrationSql.masterData;
-    const tables = [
-      "supplier_qualification_types",
-      "suppliers",
-      "supplier_qualifications",
-      "supplier_service_regions",
-      "supplier_addresses",
-      "supplier_contacts",
-    ] as const;
-
+    const tables = ["supplier_qualification_types", "suppliers", "supplier_qualifications", "supplier_service_regions", "supplier_addresses", "supplier_contacts"] as const;
     expectPrivateTables(sql, tables);
     expectTransactionalMigration(sql);
   });
   test("seeds exactly one stable business-license payload", () => {
     const sql = migrationSql.masterData;
-    const seedSql =
-      sql.match(
-        /INSERT INTO public\.supplier_qualification_types \([\s\S]*?sort_order = EXCLUDED\.sort_order;/,
-      )?.[0] ?? "";
-    const valuesClause =
-      seedSql.match(/\bVALUES\s+([\s\S]*?)\s+ON CONFLICT/)?.[1]?.trim() ?? "";
-
+    const seedSql = sql.match(/INSERT INTO public\.supplier_qualification_types \([\s\S]*?sort_order = EXCLUDED\.sort_order;/)?.[0] ?? "";
+    const valuesClause = seedSql.match(/\bVALUES\s+([\s\S]*?)\s+ON CONFLICT/)?.[1]?.trim() ?? "";
     expect([...sql.matchAll(/^INSERT INTO /gm)]).toHaveLength(1);
-    expect(
-      [...sql.matchAll(
-        /^INSERT INTO public\.supplier_qualification_types\b/gm,
-      )],
-    ).toHaveLength(1);
+    expect([...sql.matchAll(/^INSERT INTO public\.supplier_qualification_types\b/gm)]).toHaveLength(1);
     expect(seedSql).not.toBe("");
     expect(valuesClause).toMatch(
       /^\(\s*'business_license',\s*'营业执照',\s*ARRAY\[\s*'manufacturer',\s*'brand_agent',\s*'distributor',\s*'retailer',\s*'other'\s*\]::text\[\],\s*30,\s*true,\s*true,\s*10\s*\)$/,
     );
     expect(seedSql).toContain("ON CONFLICT (code) DO UPDATE SET");
-    for (const field of [
-      "name",
-      "applicable_supplier_types",
-      "warning_days",
-      "is_required",
-      "blocks_new_orders",
-      "sort_order",
-    ]) {
-      expect(seedSql).toContain(`${field} = EXCLUDED.${field}`);
-    }
+    for (const field of ["name", "applicable_supplier_types", "warning_days", "is_required", "blocks_new_orders", "sort_order"]) expect(seedSql).toContain(`${field} = EXCLUDED.${field}`);
   });
   test("locks tenant-supplier relationship table definitions", () => {
     const relationshipSql = migrationSql.tenantSupplierRelationships;
-    const createdTables = [
-      ...relationshipSql.matchAll(/^CREATE TABLE public\.([a-z0-9_]+) \(/gm),
-    ].map((match) => match[1]);
-    expect(createdTables).toEqual([
-      "tenant_supplier_settings",
-      "tenant_suppliers",
-      "supplier_contracts",
-    ]);
+    const createdTables = [...relationshipSql.matchAll(/^CREATE TABLE public\.([a-z0-9_]+) \(/gm)].map((match) => match[1]);
+    expect(createdTables).toEqual(["tenant_supplier_settings", "tenant_suppliers", "supplier_contracts"]);
     const tableContracts = {
       tenant_supplier_settings: [
         /tenant_id uuid PRIMARY KEY\s+REFERENCES public\.tenants\(id\) ON DELETE CASCADE/,
@@ -451,6 +397,36 @@ describe("supplier foundation migration contract", () => {
     expect(sql).not.toMatch(/GRANT EXECUTE ON FUNCTION[\s\S]*?\bTO (?:PUBLIC|anon|authenticated);/);
     expectTransactionalMigration(sql);
   });
+  test("exposes an exact-count supplier directory with database-side qualification health", () => {
+    const sql = migrationSql.foundationCommands;
+    const view = sql.match(/CREATE VIEW public\.platform_supplier_directory[\s\S]*?;\s*$/m)?.[0] ?? "";
+    expectSqlContracts(view, [
+      /WITH \(security_invoker = true\)\s+AS/,
+      /WITH required_types AS \(/,
+      /supplier\.id[\s\S]*supplier\.updated_at[\s\S]*qualification_health/,
+      /qualification_type\.status = 'active'\s+AND qualification_type\.is_required/,
+      /cardinality\(qualification_type\.applicable_supplier_types\) = 0[\s\S]*supplier\.supplier_type = ANY \(qualification_type\.applicable_supplier_types\)/,
+      /required_type_documents AS \([\s\S]*GROUP BY required_type\.supplier_id,\s*required_type\.qualification_type_id,\s*required_type\.warning_days/,
+      /verification_status = 'verified'[\s\S]*valid_from <= CURRENT_DATE[\s\S]*valid_until >= CURRENT_DATE[\s\S]*AS has_current_verified/,
+      /verification_status = 'verified'[\s\S]*valid_until IS NULL[\s\S]*valid_until > CURRENT_DATE \+ required_type\.warning_days[\s\S]*AS has_long_valid_verified/,
+      /bool_and\([\s\S]*valid_until IS NOT NULL[\s\S]*valid_until < CURRENT_DATE[\s\S]*FILTER \(WHERE qualification\.verification_status = 'verified'\)[\s\S]*AS all_verified_expired/,
+      /has_long_valid_verified, false\)\s+THEN 'valid'[\s\S]*has_current_verified, false\)\s+THEN 'expiring'[\s\S]*has_verified, false\)[\s\S]*all_verified_expired, false\)\s+THEN 'expired'[\s\S]*ELSE 'missing'/,
+      /COUNT\(required_type_health\.qualification_type_id\) = 0 THEN 'valid'[\s\S]*qualification_health = 'missing'\) THEN 'missing'[\s\S]*qualification_health = 'expired'\) THEN 'expired'[\s\S]*qualification_health = 'expiring'\) THEN 'expiring'[\s\S]*ELSE 'valid'/,
+    ]);
+    expect(view).not.toMatch(/LEFT JOIN LATERAL|'unchecked'|has_pending|has_expiring_verified|has_not_expired_verified|verification_status = 'pending'/);
+    expect(sql).toContain("REVOKE ALL ON TABLE public.platform_supplier_directory FROM PUBLIC, anon, authenticated;");
+    expect(sql).toContain("GRANT SELECT ON TABLE public.platform_supplier_directory TO service_role;");
+    expect(sql).toMatch(/^-- Rollback:[\s\S]*DROP VIEW IF EXISTS public\.platform_supplier_directory/);
+  });
+  test("gates submit atomically before supplier update and event insertion", () => {
+    const mutation = extractFunction(migrationSql.foundationCommands, "mutate_platform_supplier");
+    expectSqlContracts(mutation, [
+      /IF p_action = 'submit' AND v_supplier\.onboarding_status IN \('draft', 'rejected'\) THEN\s+IF EXISTS \([\s\S]*qualification_type\.status = 'active'[\s\S]*qualification_type\.is_required[\s\S]*supplier_type = ANY \(qualification_type\.applicable_supplier_types\)[\s\S]*NOT EXISTS \([\s\S]*verification_status = 'verified'[\s\S]*valid_from <= CURRENT_DATE[\s\S]*valid_until >= CURRENT_DATE[\s\S]*RETURN jsonb_build_object\('status', 'state_conflict', 'error_code', 'SUPPLIER_STATE_CONFLICT', 'reason', 'required_qualification_missing'\);[\s\S]*v_next_onboarding := 'pending_review';/,
+    ]);
+    expect(mutation.indexOf("FOR UPDATE")).toBeLessThan(mutation.indexOf("IF p_action = 'submit'"));
+    expect(mutation.indexOf("IF p_action = 'submit'")).toBeLessThan(mutation.indexOf("UPDATE public.suppliers"));
+    expect(mutation.indexOf("IF p_action = 'submit'")).toBeLessThan(mutation.indexOf("INSERT INTO public.supplier_command_events"));
+  });
   test("locks idempotent lifecycle state machines and aggregate writes", () => {
     const sql = migrationSql.foundationCommands;
     for (const name of commandFunctions.slice(0, 7)) {
@@ -464,6 +440,9 @@ describe("supplier foundation migration contract", () => {
     expectSqlContracts(extractFunction(sql, "create_platform_supplier"), [/EXCEPTION\s+WHEN unique_violation THEN[\s\S]*'status', 'state_conflict'[\s\S]*'SUPPLIER_STATE_CONFLICT'/]);
     expectSqlContracts(extractFunction(sql, "review_supplier_qualification"), [/SELECT qualification\.supplier_id\s+INTO v_qualification_supplier_id[\s\S]*SELECT supplier\.\* INTO v_supplier[\s\S]*WHERE supplier\.id = v_qualification_supplier_id\s+FOR UPDATE;[\s\S]*SELECT qualification\.\* INTO v_qualification[\s\S]*FOR UPDATE;/, /v_qualification\.supplier_id IS DISTINCT FROM p_supplier_id/]);
     expectSqlContracts(extractFunction(sql, "mutate_platform_supplier"), [/SELECT supplier\.\* INTO v_supplier[\s\S]*WHERE supplier\.id = p_supplier_id\s+FOR UPDATE;[\s\S]*p_action = 'approve'[\s\S]*FROM public\.supplier_qualification_types AS qualification_type/]);
+    for (const [name, previous] of [["mutate_platform_supplier", "previous_supplier"], ["review_supplier_qualification", "previous_qualification"], ["set_tenant_supplier_module", "previous_setting"]] as const) {
+      expectSqlContracts(extractFunction(sql, name), [new RegExp(`'idempotent', true,[\\s\\S]*'${previous}', v_event\\.from_state - '_request'`), new RegExp(`'idempotent', false,[\\s\\S]*'${previous}', v_before`)]);
+    }
     expectSqlContracts(sql, [
       /p_action = 'submit'[\s\S]*onboarding_status IN \('draft', 'rejected'\)[\s\S]*'pending_review'/,
       /p_action = 'approve'[\s\S]*onboarding_status = 'pending_review'[\s\S]*'approved'/,

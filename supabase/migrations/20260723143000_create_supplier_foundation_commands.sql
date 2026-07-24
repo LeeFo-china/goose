@@ -1,4 +1,5 @@
--- Rollback: in a new migration, first DROP INDEX IF EXISTS
+-- Rollback: in a new migration, first DROP VIEW IF EXISTS public.platform_supplier_directory
+-- and DROP INDEX IF EXISTS
 -- public.suppliers_available_directory_idx, then revoke and drop the nine
 -- supplier command functions. Preserve/export supplier_command_events before
 -- dropping the ledger because it is the lifecycle audit source of truth.
@@ -34,6 +35,105 @@ REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.supplier_command_events FROM PUB
 
 CREATE INDEX suppliers_available_directory_idx
 ON public.suppliers(onboarding_status, operational_status, name, id);
+
+CREATE VIEW public.platform_supplier_directory
+WITH (security_invoker = true)
+AS
+WITH required_types AS (
+  SELECT
+    supplier.id AS supplier_id,
+    qualification_type.id AS qualification_type_id,
+    qualification_type.warning_days
+  FROM public.suppliers AS supplier
+  JOIN public.supplier_qualification_types AS qualification_type
+    ON qualification_type.status = 'active'
+    AND qualification_type.is_required
+    AND (
+      cardinality(qualification_type.applicable_supplier_types) = 0
+      OR supplier.supplier_type = ANY (qualification_type.applicable_supplier_types)
+    )
+),
+required_type_documents AS (
+  SELECT
+    required_type.supplier_id,
+    required_type.qualification_type_id,
+    bool_or(
+      qualification.verification_status = 'verified'
+      AND (qualification.valid_from IS NULL OR qualification.valid_from <= CURRENT_DATE)
+      AND (qualification.valid_until IS NULL OR qualification.valid_until >= CURRENT_DATE)
+    ) AS has_current_verified,
+    bool_or(
+      qualification.verification_status = 'verified'
+      AND (qualification.valid_from IS NULL OR qualification.valid_from <= CURRENT_DATE)
+      AND (qualification.valid_until IS NULL OR qualification.valid_until >= CURRENT_DATE)
+      AND (
+        qualification.valid_until IS NULL
+        OR qualification.valid_until > CURRENT_DATE + required_type.warning_days
+      )
+    ) AS has_long_valid_verified,
+    bool_or(
+      qualification.verification_status = 'verified'
+    ) AS has_verified,
+    bool_and(
+      qualification.valid_until IS NOT NULL
+      AND qualification.valid_until < CURRENT_DATE
+    ) FILTER (WHERE qualification.verification_status = 'verified')
+      AS all_verified_expired
+  FROM required_types AS required_type
+  LEFT JOIN public.supplier_qualifications AS qualification
+    ON qualification.supplier_id = required_type.supplier_id
+    AND qualification.qualification_type_id = required_type.qualification_type_id
+  GROUP BY required_type.supplier_id,
+    required_type.qualification_type_id,
+    required_type.warning_days
+),
+required_type_health AS (
+  SELECT
+    required_type_document.supplier_id,
+    required_type_document.qualification_type_id,
+    CASE
+      WHEN COALESCE(required_type_document.has_long_valid_verified, false)
+        THEN 'valid'
+      WHEN COALESCE(required_type_document.has_current_verified, false)
+        THEN 'expiring'
+      WHEN COALESCE(required_type_document.has_verified, false)
+        AND COALESCE(required_type_document.all_verified_expired, false)
+        THEN 'expired'
+      ELSE 'missing'
+    END AS qualification_health
+  FROM required_type_documents AS required_type_document
+),
+supplier_health AS (
+  SELECT
+    supplier.id AS supplier_id,
+    CASE
+      WHEN COUNT(required_type_health.qualification_type_id) = 0 THEN 'valid'
+      WHEN bool_or(required_type_health.qualification_health = 'missing') THEN 'missing'
+      WHEN bool_or(required_type_health.qualification_health = 'expired') THEN 'expired'
+      WHEN bool_or(required_type_health.qualification_health = 'expiring') THEN 'expiring'
+      ELSE 'valid'
+    END AS qualification_health
+  FROM public.suppliers AS supplier
+  LEFT JOIN required_type_health
+    ON required_type_health.supplier_id = supplier.id
+  GROUP BY supplier.id
+)
+SELECT
+  supplier.id,
+  supplier.code,
+  supplier.name,
+  supplier.legal_name,
+  supplier.unified_social_credit_code,
+  supplier.supplier_type,
+  supplier.onboarding_status,
+  supplier.operational_status,
+  supplier.version,
+  supplier.created_at,
+  supplier.updated_at,
+  supplier_health.qualification_health
+FROM public.suppliers AS supplier
+JOIN supplier_health
+  ON supplier_health.supplier_id = supplier.id;
 
 CREATE FUNCTION public.create_platform_supplier(
   p_supplier_id uuid,
@@ -178,7 +278,7 @@ BEGIN
     THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
     END IF;
-    RETURN jsonb_build_object('status', 'updated', 'idempotent', true, 'supplier', v_event.to_state, 'version', v_event.result_version);
+    RETURN jsonb_build_object('status', 'updated', 'idempotent', true, 'supplier', v_event.to_state, 'previous_supplier', v_event.from_state - '_request', 'version', v_event.result_version);
   END IF;
 
   SELECT supplier.* INTO v_supplier
@@ -195,6 +295,27 @@ BEGIN
   v_next_onboarding := v_supplier.onboarding_status;
   v_next_operational := v_supplier.operational_status;
   IF p_action = 'submit' AND v_supplier.onboarding_status IN ('draft', 'rejected') THEN
+    IF EXISTS (
+      SELECT 1
+      FROM public.supplier_qualification_types AS qualification_type
+      WHERE qualification_type.status = 'active'
+        AND qualification_type.is_required
+        AND (
+          cardinality(qualification_type.applicable_supplier_types) = 0
+          OR v_supplier.supplier_type = ANY (qualification_type.applicable_supplier_types)
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.supplier_qualifications AS qualification
+          WHERE qualification.supplier_id = v_supplier.id
+            AND qualification.qualification_type_id = qualification_type.id
+            AND qualification.verification_status = 'verified'
+            AND (qualification.valid_from IS NULL OR qualification.valid_from <= CURRENT_DATE)
+            AND (qualification.valid_until IS NULL OR qualification.valid_until >= CURRENT_DATE)
+        )
+    ) THEN
+      RETURN jsonb_build_object('status', 'state_conflict', 'error_code', 'SUPPLIER_STATE_CONFLICT', 'reason', 'required_qualification_missing');
+    END IF;
     v_next_onboarding := 'pending_review';
   ELSIF p_action = 'approve' AND v_supplier.onboarding_status = 'pending_review' THEN
     IF EXISTS (
@@ -256,7 +377,7 @@ BEGIN
     to_jsonb(v_supplier), p_reason, p_actor_user_id,
     p_actor_employee_id, p_idempotency_key, v_supplier.version
   );
-  RETURN jsonb_build_object('status', 'updated', 'idempotent', false, 'supplier', to_jsonb(v_supplier), 'version', v_supplier.version);
+  RETURN jsonb_build_object('status', 'updated', 'idempotent', false, 'supplier', to_jsonb(v_supplier), 'previous_supplier', v_before, 'version', v_supplier.version);
 END;
 $$;
 
@@ -314,7 +435,7 @@ BEGIN
     THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
     END IF;
-    RETURN jsonb_build_object('status', 'updated', 'idempotent', true, 'qualification', v_event.to_state, 'version', v_event.result_version);
+    RETURN jsonb_build_object('status', 'updated', 'idempotent', true, 'qualification', v_event.to_state, 'previous_qualification', v_event.from_state - '_request', 'version', v_event.result_version);
   END IF;
   SELECT qualification.supplier_id
   INTO v_qualification_supplier_id
@@ -361,7 +482,7 @@ BEGIN
     to_jsonb(v_qualification), p_reason, p_actor_user_id,
     p_actor_employee_id, p_idempotency_key, v_qualification.version
   );
-  RETURN jsonb_build_object('status', 'updated', 'idempotent', false, 'qualification', to_jsonb(v_qualification), 'version', v_qualification.version);
+  RETURN jsonb_build_object('status', 'updated', 'idempotent', false, 'qualification', to_jsonb(v_qualification), 'previous_qualification', v_before, 'version', v_qualification.version);
 END;
 $$;
 
@@ -414,7 +535,7 @@ BEGIN
     THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
     END IF;
-    RETURN jsonb_build_object('status', 'updated', 'idempotent', true, 'setting', v_event.to_state, 'version', v_event.result_version);
+    RETURN jsonb_build_object('status', 'updated', 'idempotent', true, 'setting', v_event.to_state, 'previous_setting', v_event.from_state - '_request', 'version', v_event.result_version);
   END IF;
   PERFORM 1 FROM public.tenants AS tenant WHERE tenant.id = p_tenant_id FOR UPDATE;
   IF NOT FOUND THEN
@@ -462,7 +583,7 @@ BEGIN
     to_jsonb(v_setting), p_actor_user_id, p_actor_employee_id,
     p_idempotency_key, v_setting.version
   );
-  RETURN jsonb_build_object('status', 'updated', 'idempotent', false, 'setting', to_jsonb(v_setting), 'version', v_setting.version);
+  RETURN jsonb_build_object('status', 'updated', 'idempotent', false, 'setting', to_jsonb(v_setting), 'previous_setting', v_before, 'version', v_setting.version);
 END;
 $$;
 
@@ -965,5 +1086,7 @@ REVOKE ALL ON FUNCTION public.get_tenant_supplier_order_eligibility(uuid, uuid, 
 GRANT EXECUTE ON FUNCTION public.get_tenant_supplier_order_eligibility(uuid, uuid, timestamptz) TO service_role;
 REVOKE ALL ON FUNCTION public.list_available_suppliers_for_tenant(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.list_available_suppliers_for_tenant(uuid, text, integer, integer) TO service_role;
+REVOKE ALL ON TABLE public.platform_supplier_directory FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.platform_supplier_directory TO service_role;
 
 COMMIT;
