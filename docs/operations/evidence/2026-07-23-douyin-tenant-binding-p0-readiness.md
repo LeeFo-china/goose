@@ -355,3 +355,49 @@ AppID 尾号。若当前列表为空，须由主体账号确认已有普通小�
 
 查询只返回 AppID 尾号、状态、时间和是否绑定；没有返回完整 AppID、Ticket、
 access token、凭证密文或用户身份，也没有数据库写入。
+
+### 9.8 首次授权持久化失败与根因修复
+
+2026-07-24，用户通过“开发 → 开发配置 → 授权链接 → 小程序代开发 → 获取”
+对“好店装修服务”尾号 `d301` 完成首次授权确认。开发 API 安全聚合证明：
+
+- authorization 回调请求 2 次，HTTP 200 为 2，4xx/5xx 为 0；
+- 签名错误为 0，AES/Component 解密错误为 0；
+- 首次完成错误为 `DOUYIN_AUTHORIZATION_EVENT_REPOSITORY_ERROR`；
+- 后续同事件处理为 `DOUYIN_AUTHORIZATION_EVENT_BUSY`。
+
+开发库严格只读查询进一步证明：尾号 `d301` 的 `AUTHORIZED` delivery 停留在
+`processing`，租约于北京时间 10:38 过期；merchant 安装仍为 0。代码数据流显示
+失败位于 `complete_douyin_authorization_event` 原子完成 RPC，而不是验签、解密、
+换票或安装查询。
+
+根因是原 migration 的授权安装 UPSERT 引用了 `installation.tenant_id`、
+`installation.deployment_key`、`installation.runtime_config` 和
+`installation.authorization_event_occurred_at`，但 INSERT 目标没有声明
+`installation` 别名。开发库函数源码布尔检查确认四处引用均存在；无写入
+`EXPLAIN` 返回：
+
+```text
+missing FROM-clause entry for table "installation" (SQLSTATE 42P01)
+```
+
+修复通过 migration
+`20260724190000_fix_douyin_authorization_event_upsert_alias.sql` 为目标表声明
+`AS installation`，没有手工修改函数、事件租约或安装数据。相关结果：
+
+| 验证项 | 结果 |
+| --- | --- |
+| 修复提交 | `d2496b0342c3c80ccb3888aeaf95166063b4948e`，已普通推送功能分支 |
+| 聚焦迁移测试 | 14/14，176 expect |
+| API 静态门禁 | typecheck、build、文件大小检查通过 |
+| `db push --dry-run` | 只列出 `20260724190000` |
+| 开发库应用 | 成功 |
+| migration history | `mismatch=0` |
+| 函数实现 | 实际函数已声明目标别名 |
+| 函数权限 | `service_role=true`，`anon=false`，`authenticated=false` |
+| 自动重送等待 | 连续 3 次只读检查 merchant 仍为 0 |
+
+由于首次回调已经向平台返回 HTTP 200，平台未自动重送。下一步必须由用户重新打开
+同一“小程序代开发”授权链接，再次确认尾号 `d301`；新的授权生命周期事件应由已
+修复 RPC 原子创建 `merchant / authorized_unbound` 安装。禁止手工补库、清理租约、
+执行 repair 或复用旧授权码。

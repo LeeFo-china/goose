@@ -343,7 +343,7 @@ merchant 为 0。该结果证明列表添加尚未被误判为授权；下一步
 
 Expected: 两个 URL 逐字符一致，Token/AES 只确认“已设置”，不显示、不复制、不轮换。
 
-- [ ] **Step 3：固定本轮测试授权模式**
+- [x] **Step 3：固定本轮测试授权模式**
 
 本轮全网发布前测试使用服务商控制台提供的官方授权入口，不传
 `redirect_uri`。官方“直接获取授权链接”接口将 `redirect_uri` 标记为可选，
@@ -363,6 +363,10 @@ Expected: 两个 URL 逐字符一致，Token/AES 只确认“已设置”，不�
 “代开发流程指引 → 授权测试小程序”卡片仅用于完善授权相关开发配置、添加测试
 小程序和查看授权链路 OpenAPI 文档；它本身没有“获取授权链接”按钮。不得选择
 同一区域的“小程序代创建+代开发”，因为普通测试小程序“好店装修服务”已经创建。
+
+执行记录（2026-07-24）：官方流程截图确认上述精确入口后，用户从“小程序代开发”
+链接选择“好店装修服务”尾号 `d301` 完成了首次授权确认。没有使用
+`redirect_uri`，也没有选择“小程序代创建+代开发”或 Template `1b01`。
 
 Expected: 当前授权域名只读记录但不作为测试授权阻断项，不修改授权域名，不使用
 临时页面或第三方域名。固定开发授权完成页
@@ -398,6 +402,37 @@ Expected: 当前仍可能显示“未发布”；此时属于预发布阶段正�
 权限。
 
 Expected: 页面完成授权；授权事件回调返回 `success`。不得选择 Template `1b01`。
+
+首次执行记录（2026-07-24 10:36 +0800）：平台 `AUTHORIZED` 请求已到达，验签、
+AES 解密、Component 校验和 provider 换票均通过；API 两次回调均返回 HTTP 200，
+但 merchant 安装仍为 0。安全日志显示首次完成阶段为
+`DOUYIN_AUTHORIZATION_EVENT_REPOSITORY_ERROR`，后续同事件重送为
+`DOUYIN_AUTHORIZATION_EVENT_BUSY`。
+
+根因验证：
+
+1. 开发库事件账本存在尾号 `d301` 的 `AUTHORIZED / processing`，租约已过期；
+2. 错误栈位于 `DouyinAuthorizationEventsRepository.complete()`；
+3. 开发库实际 `complete_douyin_authorization_event` 函数的 `ON CONFLICT`
+   分支引用 `installation.*`，但 INSERT 目标未声明该别名；
+4. PostgreSQL 无写入 `EXPLAIN` 精确返回
+   `missing FROM-clause entry for table "installation" (SQLSTATE 42P01)`。
+
+修复记录：
+
+- TDD：新增迁移契约测试，先因修复 migration 缺失而失败，修复后 14/14 通过；
+- migration：
+  `20260724190000_fix_douyin_authorization_event_upsert_alias.sql`；
+- 提交并推送：`d2496b0342c3c80ccb3888aeaf95166063b4948e`；
+- 开发库 `db push --dry-run` 只命中该 migration，随后已成功应用；
+- 应用后 migration history `mismatch=0`；
+- 实际函数已声明 `AS installation`，仅 `service_role` 可执行；
+- API typecheck、build 和文件大小检查通过；
+- 平台没有自动重送，连续三次只读检查 merchant 仍为 0。
+
+恢复动作：重新打开同一“小程序代开发”授权链接，再对尾号 `d301` 确认一次。
+不得手工清理事件租约、补安装记录或执行 migration repair。新事件完成原子写入后，
+本步骤才升级为 PASS。
 
 - [ ] **Step 2：用平台分页接口定位唯一安装**
 
