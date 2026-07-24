@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import {
+import * as capabilities from "./capabilities";
+
+const {
   getOcrCapability,
   listPublicOcrCapabilities,
-} from "./capabilities";
+} = capabilities;
 
 describe("OCR capability catalog", () => {
   test("exposes only the four Phase 1 applyment capabilities", () => {
@@ -33,6 +35,48 @@ describe("OCR capability catalog", () => {
       concurrencyLimit: 8,
       attachment_categories: ["license_copy"],
     });
+  });
+
+  test("exposes supplier business license OCR only to platform onboarding", () => {
+    const listPlatformOcrCapabilities =
+      capabilities["listPlatformOcrCapabilities" as keyof typeof capabilities];
+    const listTenantOcrCapabilities =
+      capabilities["listTenantOcrCapabilities" as keyof typeof capabilities];
+    const capability = getOcrCapability(
+      "supplier_onboarding",
+      "business_license",
+    );
+
+    expect(capability).toMatchObject({
+      providerAction: "BizLicenseOCR",
+      supported_mime_types: ["image/jpeg", "image/png"],
+      max_size_bytes: 5 * 1024 * 1024,
+      output_fields: [
+        "license_name",
+        "license_code",
+        "license_address",
+        "license_period_begin",
+        "license_period_end",
+        "legal_representative_name",
+      ],
+    });
+    expect(typeof listTenantOcrCapabilities).toBe("function");
+    expect(typeof listPlatformOcrCapabilities).toBe("function");
+    if (
+      typeof listTenantOcrCapabilities !== "function" ||
+      typeof listPlatformOcrCapabilities !== "function"
+    ) {
+      return;
+    }
+    expect(listTenantOcrCapabilities()).not.toContainEqual(
+      expect.objectContaining({ scene: "supplier_onboarding" }),
+    );
+    expect(listPlatformOcrCapabilities("supplier_onboarding")).toEqual([
+      expect.objectContaining({
+        scene: "supplier_onboarding",
+        document_type: "business_license",
+      }),
+    ]);
   });
 
   test("returns no capability for Phase 1 unsupported combinations", () => {

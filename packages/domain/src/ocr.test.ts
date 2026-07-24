@@ -35,6 +35,10 @@ describe('OCR domain contracts', () => {
     ]);
   });
 
+  test('exposes supplier onboarding as a platform OCR scene', () => {
+    expect(OCR_SCENE_VALUES).toContain('supplier_onboarding');
+  });
+
   test('marks identity, address, and settlement account fields sensitive', () => {
     expect(OCR_SENSITIVE_FIELD_KEYS).toEqual(
       expect.arrayContaining([
