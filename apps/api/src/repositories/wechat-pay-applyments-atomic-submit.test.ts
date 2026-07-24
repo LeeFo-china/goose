@@ -41,12 +41,83 @@ const migrationPath = join(
   import.meta.dir,
   "../../../../supabase/migrations/20260723133000_add_atomic_wechat_pay_applyment_submit.sql",
 );
+const atomicCreateMigrationPath = join(
+  import.meta.dir,
+  "../../../../supabase/migrations/20260724170000_atomic_wechat_pay_applyment_create.sql",
+);
+const attachmentLookupMigrationPath = join(
+  import.meta.dir,
+  "../../../../supabase/migrations/20260724173000_index_wechat_pay_applyment_attachments.sql",
+);
 
 describe("atomic tenant WeChat Pay applyment submit", () => {
   beforeEach(() => {
     rpc.mockClear();
     maybeSingle.mockClear();
     rpc.mockImplementation(async () => ({ data: "submitted", error: null }));
+  });
+
+  test("serializes one active draft and audits its creation atomically", () => {
+    const sql = readFileSync(atomicCreateMigrationPath, "utf8");
+    expect(sql).toContain(
+      "CREATE UNIQUE INDEX tenant_wechat_pay_applyments_one_active_per_tenant_idx",
+    );
+    expect(sql).toContain(
+      "CREATE OR REPLACE FUNCTION public.create_tenant_wechat_pay_applyment",
+    );
+    expect(sql).toContain("pg_advisory_xact_lock");
+    expect(sql).toMatch(
+      /INSERT INTO public\.tenant_wechat_pay_applyments[\s\S]+INSERT INTO public\.tenant_wechat_pay_applyment_events/,
+    );
+    expect(sql).toContain("auth.role() <> 'service_role'");
+    expect(sql).toContain("REVOKE ALL ON FUNCTION");
+  });
+
+  test("creates and hydrates a draft through only the atomic RPC", async () => {
+    rpc.mockImplementationOnce(async () => ({
+      data: applymentId,
+      error: null,
+    }));
+    const { WechatPayApplymentRepository } = await import(
+      "./wechat-pay-applyments"
+    );
+    const repository = new WechatPayApplymentRepository();
+
+    await repository.createApplyment({
+      id: applymentId,
+      tenant_id: tenantId,
+      application_no: "WPA202607240001",
+      status: "draft",
+      applyment_state: "draft",
+      appid_binding_state: "not_bound",
+      merchant_short_name: null,
+      attachments: [],
+      created_by_employee_id: employeeId,
+      updated_by_employee_id: employeeId,
+    }, {
+      change_source: "manual_save",
+      changed_fields: ["attachments"],
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "create_tenant_wechat_pay_applyment",
+      {
+        p_applyment: expect.objectContaining({
+          id: applymentId,
+          tenant_id: tenantId,
+        }),
+        p_audit_metadata: {
+          change_source: "manual_save",
+          changed_fields: ["attachments"],
+        },
+      },
+    );
+    expect(maybeSingle).toHaveBeenCalledTimes(1);
+  });
+
+  test("indexes attachment ownership containment lookups", () => {
+    const sql = readFileSync(attachmentLookupMigrationPath, "utf8");
+    expect(sql).toContain("USING gin (attachments jsonb_path_ops)");
   });
 
   test("locks, transitions and audits in one restricted transaction", () => {

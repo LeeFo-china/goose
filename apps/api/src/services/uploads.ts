@@ -1,5 +1,6 @@
 import { uploadRepository } from "@/repositories/uploads";
 import { platformFileObjectRepository } from "@/repositories/platform-file-objects";
+import { findWechatPayApplymentAttachmentOwner } from "@/repositories/wechat-pay-applyment-attachment-repository";
 import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
@@ -50,6 +51,22 @@ class UploadService {
       !file ||
       file.scene !== "wechat_pay_applyment" ||
       file.provider !== "tencent_cos"
+    ) {
+      throw Errors.forbidden();
+    }
+    const owner = await findWechatPayApplymentAttachmentOwner({
+      fileObjectId: input.fileObjectId,
+      tenantId: tenantId ?? undefined,
+    });
+    if (owner) {
+      if (owner.tenant_id !== file.tenant_id) throw Errors.forbidden();
+    } else if (
+      input.authContext.isPlatformAdmin ||
+      file.created_by_employee_id !== input.authContext.employeeId ||
+      !accessPolicyService.hasPermission(
+        input.authContext,
+        TENANT_SUBMIT_PERMISSION,
+      )
     ) {
       throw Errors.forbidden();
     }

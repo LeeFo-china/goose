@@ -10081,6 +10081,13 @@ export type Database = {
         }
         Returns: number
       }
+      create_tenant_wechat_pay_applyment: {
+        Args: {
+          p_applyment: Json
+          p_audit_metadata: Json
+        }
+        Returns: string
+      }
       submit_tenant_wechat_pay_applyment: {
         Args: {
           p_applyment_id: string

@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { createTenantWechatPayApplymentAtomically } from "@/repositories/wechat-pay-applyment-create-repository";
 import {
   throwApplymentActivationError,
   throwApplymentClaimError,
@@ -11,6 +12,7 @@ import {
   updateTenantApplymentDraftAtomically,
 } from "@/repositories/wechat-pay-applyment-draft-repository";
 import type { Inserts, Tables, Updates } from "@/types/db";
+import type { Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
 type WechatPayApplymentTableRow = Tables<"tenant_wechat_pay_applyments">;
@@ -270,18 +272,13 @@ export class WechatPayApplymentRepository {
 
   async createApplyment(
     input: WechatPayApplymentInsert,
+    auditMetadata: Json = {},
   ): Promise<WechatPayApplymentRecord> {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("tenant_wechat_pay_applyments")
-      .insert(input)
-      .select(APPLYMENT_SELECT)
-      .single();
-
-    if (error) {
-      throw Errors.dbError("创建微信支付开通申请失败", error);
-    }
-
-    return data as unknown as WechatPayApplymentRecord;
+    return createTenantWechatPayApplymentAtomically({
+      applyment: input,
+      auditMetadata,
+      findById: (target) => this.findById(target),
+    });
   }
 
   async updateApplyment(input: {

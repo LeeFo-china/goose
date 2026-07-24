@@ -20,6 +20,9 @@ async function installSpies() {
   const { platformFileObjectRepository } = await import(
     "@/repositories/platform-file-objects"
   );
+  const attachmentRepository = await import(
+    "@/repositories/wechat-pay-applyment-attachment-repository"
+  );
   const { accessPolicyService } = await import("@/services/access-policy");
   const fileUrlResolver = await import("@/services/files/file-url-resolver");
   const findActiveById = spyOn(
@@ -31,6 +34,7 @@ async function installSpies() {
     scene: "wechat_pay_applyment",
     provider: "tencent_cos",
     object_key: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
+    created_by_employee_id: "employee-1",
   }) as never);
   const findActiveByIdForPlatform = spyOn(
     platformFileObjectRepository,
@@ -42,8 +46,17 @@ async function installSpies() {
       scene: "wechat_pay_applyment",
       provider: "tencent_cos",
       object_key: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
+      created_by_employee_id: "employee-1",
     }) as never,
   );
+  const findAttachmentOwnerByFileObjectId = spyOn(
+    attachmentRepository,
+    "findWechatPayApplymentAttachmentOwner",
+  ).mockImplementation(async () => ({
+    id: "applyment-1",
+    tenant_id: "tenant-1",
+    status: "draft",
+  }) as never);
   const resolveSignedStoredFileUrl = spyOn(
     fileUrlResolver,
     "resolveSignedStoredFileUrl",
@@ -68,6 +81,7 @@ async function installSpies() {
     assertTenantContext,
     findActiveById,
     findActiveByIdForPlatform,
+    findAttachmentOwnerByFileObjectId,
     hasPermission,
     resolveSignedStoredFileUrl,
   };
@@ -83,18 +97,20 @@ afterAll(() => {
   spies.assertTenantContext.mockRestore();
   spies.findActiveById.mockRestore();
   spies.findActiveByIdForPlatform.mockRestore();
+  spies.findAttachmentOwnerByFileObjectId.mockRestore();
   spies.hasPermission.mockRestore();
   spies.resolveSignedStoredFileUrl.mockRestore();
 });
 
 function authContext(input: {
+  employeeId?: string | null;
   platform?: boolean;
   tenantId?: string | null;
   permissions?: AuthContext["permissions"];
 } = {}): AuthContext {
   return {
     authUserId: "auth-1",
-    employeeId: input.platform ? null : "employee-1",
+    employeeId: input.platform ? null : input.employeeId ?? "employee-1",
     tenantId: input.platform ? null : input.tenantId ?? "tenant-1",
     tenantName: null,
     tenantSlug: null,
@@ -119,6 +135,7 @@ describe("UploadService wechat pay applyment previews", () => {
   beforeEach(() => {
     spies.findActiveById.mockClear();
     spies.findActiveByIdForPlatform.mockClear();
+    spies.findAttachmentOwnerByFileObjectId.mockClear();
     spies.resolveSignedStoredFileUrl.mockClear();
     spies.hasPermission.mockClear();
     spies.assertTenantContext.mockClear();
@@ -188,6 +205,63 @@ describe("UploadService wechat pay applyment previews", () => {
       id: FILE_ID,
       tenantId: "tenant-1",
     });
+  });
+
+  test("rejects an unbound file for a platform reviewer", async () => {
+    spies.findAttachmentOwnerByFileObjectId.mockImplementationOnce(
+      async () => null,
+    );
+    const { uploadService } = await import("./uploads");
+
+    await expect(uploadService.resolveWechatPayApplymentPreviewUrl({
+      authContext: authContext({
+        platform: true,
+        permissions: [{
+          code: "platform.wechat_pay.applyment.read",
+          scope: "all",
+        }],
+      }),
+      fileObjectId: FILE_ID,
+    })).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("lets only the uploader with submit permission preview an unbound file", async () => {
+    spies.findAttachmentOwnerByFileObjectId.mockImplementationOnce(
+      async () => null,
+    );
+    const { uploadService } = await import("./uploads");
+
+    await uploadService.resolveWechatPayApplymentPreviewUrl({
+      authContext: authContext({
+        permissions: [{ code: "wechat_pay.applyment.submit", scope: "all" }],
+      }),
+      fileObjectId: FILE_ID,
+    });
+
+    spies.findAttachmentOwnerByFileObjectId.mockImplementationOnce(
+      async () => null,
+    );
+    await expect(uploadService.resolveWechatPayApplymentPreviewUrl({
+      authContext: authContext({
+        employeeId: "employee-2",
+        permissions: [{ code: "wechat_pay.applyment.submit", scope: "all" }],
+      }),
+      fileObjectId: FILE_ID,
+    })).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("rejects an unbound file for a tenant read-only user", async () => {
+    spies.findAttachmentOwnerByFileObjectId.mockImplementationOnce(
+      async () => null,
+    );
+    const { uploadService } = await import("./uploads");
+
+    await expect(uploadService.resolveWechatPayApplymentPreviewUrl({
+      authContext: authContext({
+        permissions: [{ code: "wechat_pay.applyment.read", scope: "all" }],
+      }),
+      fileObjectId: FILE_ID,
+    })).rejects.toMatchObject({ statusCode: 403 });
   });
 
   test("rejects a tenant without read or submit permission", async () => {

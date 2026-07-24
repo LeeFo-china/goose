@@ -49,6 +49,7 @@ import type {
   WechatPayConfigRepositoryPort,
   WechatPayApplymentServiceDependencies,
 } from "@/services/wechat-pay-applyments-types";
+import type { Json } from "@/types/database";
 import {
   canEditTenantWechatPayApplyment,
   TENANT_READ_PERMISSION,
@@ -165,29 +166,23 @@ export class WechatPayApplymentService {
         sensitive_payload_version: null,
         sensitive_payload_updated_at: null,
       };
-    const created = await this.repository.createApplyment({
-      ...buildTenantApplymentSafePatch(input),
-      ...sensitivePatch,
-      draft_revision: input.draft_revision ?? 1,
-      id: applymentId,
-      tenant_id: tenantId,
-      application_no: this.applicationNoFactory(),
-      merchant_short_name: input.merchant_short_name ?? null,
-      status: "draft",
-      applyment_state: "draft",
-      appid_binding_state: "not_bound",
-      created_by_employee_id: employeeId,
-      updated_by_employee_id: employeeId,
-    });
-    await this.recordEvent({
-      applyment: created,
-      eventType: "created",
-      fromStatus: null,
-      toStatus: "draft",
-      message: "租户创建微信支付开通申请草稿",
-      operatorEmployeeId: employeeId,
-      metadata: buildDraftChangeAudit(input),
-    });
+    const created = await this.repository.createApplyment(
+      {
+        ...buildTenantApplymentSafePatch(input),
+        ...sensitivePatch,
+        draft_revision: input.draft_revision ?? 1,
+        id: applymentId,
+        tenant_id: tenantId,
+        application_no: this.applicationNoFactory(),
+        merchant_short_name: input.merchant_short_name ?? null,
+        status: "draft",
+        applyment_state: "draft",
+        appid_binding_state: "not_bound",
+        created_by_employee_id: employeeId,
+        updated_by_employee_id: employeeId,
+      },
+      buildDraftChangeAudit(input) as Json,
+    );
 
     return this.toDetail(authContext, created);
   }

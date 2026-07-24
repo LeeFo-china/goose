@@ -37,7 +37,10 @@ export type WechatPayApplymentRepositoryPort = {
     id: string;
     tenantId?: string;
   }) => Promise<WechatPayApplymentSensitiveRecord | null>;
-  createApplyment: (input: WechatPayApplymentInsert) => Promise<WechatPayApplymentRecord>;
+  createApplyment: (
+    input: WechatPayApplymentInsert,
+    auditMetadata?: Json,
+  ) => Promise<WechatPayApplymentRecord>;
   updateApplyment: (input: {
     id: string;
     tenantId?: string;

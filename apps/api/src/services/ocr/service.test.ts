@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { buildOcrDedupeKey } from "./request-guards";
 import {
   authContext,
   buildRecord,
@@ -11,6 +12,34 @@ import {
 } from "./service.test-fixtures";
 
 describe("OcrService", () => {
+  test("isolates dedupe keys by scene and applyment ownership", () => {
+    const base = {
+      tenantId: "tenant-1",
+      fileIdentity: "checksum-1",
+      documentType: "business_license" as const,
+      providerAction: "BizLicenseOCR",
+      scene: "wechat_pay_applyment" as const,
+    };
+
+    const unbound = buildOcrDedupeKey({
+      ...base,
+      subjectType: null,
+      subjectId: null,
+    });
+    const applymentA = buildOcrDedupeKey({
+      ...base,
+      subjectType: "wechat_pay_applyment",
+      subjectId: "11111111-1111-4111-8111-111111111111",
+    });
+    const applymentB = buildOcrDedupeKey({
+      ...base,
+      subjectType: "wechat_pay_applyment",
+      subjectId: "22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(new Set([unbound, applymentA, applymentB]).size).toBe(3);
+  });
+
   test("hides capabilities while OCR is disabled", async () => {
     const { service } = await createHarness({ ocrEnabled: false });
 

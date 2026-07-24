@@ -9,6 +9,7 @@ import type {
 } from "@/repositories/wechat-pay-applyments";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { AuthContext } from "@/services/authorization";
+import type { Json } from "@/types/database";
 import {
   decryptApplymentSensitivePayload,
   encryptApplymentSensitivePayload,
@@ -131,7 +132,10 @@ const findSensitivePayloadById = mock(
   sensitive_payload_version: 1,
   }),
 );
-const createApplyment = mock(async (input: WechatPayApplymentInsert) => ({
+const createApplyment = mock(async (
+  input: WechatPayApplymentInsert,
+  _auditMetadata?: Json,
+) => ({
   ...applyment,
   ...input,
 }) as unknown as WechatPayApplymentRecord);
@@ -151,7 +155,6 @@ const insertEvent = mock(
   async (_input: WechatPayApplymentEventInsert) => event,
 );
 const findEvents = mock(async () => [event]);
-
 const authContext: AuthContext = {
   authUserId: "auth-1",
   employeeId,
@@ -174,7 +177,6 @@ const authContext: AuthContext = {
   permissions: [{ code: "wechat_pay.applyment.submit", scope: "all" }],
 };
 const draftFence = { draft_epoch: 1, draft_revision: 1 } as const;
-
 async function createService() {
   const { WechatPayApplymentService } = await import("./wechat-pay-applyments");
   return new WechatPayApplymentService({
@@ -271,21 +273,22 @@ describe("WechatPayApplymentService sensitive persistence", () => {
     }));
     expect(JSON.stringify(insert)).not.toContain("13800000000");
     expect(JSON.stringify(insert)).not.toContain("6212345678901234");
-    const createdEvent = insertEvent.mock.calls[0]?.[0];
-    expect(createdEvent?.metadata).toEqual({
+    const createdAudit = createApplyment.mock.calls[0]?.[1];
+    expect(createdAudit).toEqual({
       changed_fields: Object.keys(createInput).sort(),
       change_source: "manual_save",
       has_sensitive_replacement: true,
     });
-    expect(JSON.stringify(createdEvent?.metadata)).not.toContain(
+    expect(JSON.stringify(createdAudit)).not.toContain(
       createInput.identity_number,
     );
-    expect(JSON.stringify(createdEvent?.metadata)).not.toContain(
+    expect(JSON.stringify(createdAudit)).not.toContain(
       createInput.super_admin_phone,
     );
-    expect(JSON.stringify(createdEvent?.metadata)).not.toContain(
+    expect(JSON.stringify(createdAudit)).not.toContain(
       createInput.settlement_account_number,
     );
+    expect(insertEvent).not.toHaveBeenCalled();
     expect(decryptApplymentSensitivePayload({
       context: { tenantId, applymentId, version: 1 },
       ciphertext: insert?.sensitive_payload_ciphertext ?? "",
@@ -299,14 +302,16 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       contact_type: "LEGAL",
       attachments: [],
     });
-
-    expect(createApplyment).toHaveBeenCalledWith(expect.objectContaining({
-      merchant_short_name: null,
-      has_sensitive_payload: false,
-      sensitive_payload_ciphertext: null,
-      sensitive_payload_version: null,
-      sensitive_payload_updated_at: null,
-    }));
+    expect(createApplyment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchant_short_name: null,
+        has_sensitive_payload: false,
+        sensitive_payload_ciphertext: null,
+        sensitive_payload_version: null,
+        sensitive_payload_updated_at: null,
+      }),
+      expect.objectContaining({ change_source: "manual_save" }),
+    );
   });
 
   test("stores sensitive fields incrementally", async () => {
@@ -329,7 +334,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       }],
       draft_update_source: "autosave",
     });
-
     const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
     expect(patch?.has_sensitive_payload).toBe(true);
     expect(patch?.sensitive_payload_version).toBe(1);
@@ -362,7 +366,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       ...draftFence,
       contact_type: "LEGAL",
     });
-
     const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
     expect(patch).not.toHaveProperty("sensitive_payload_ciphertext");
     expect(patch).not.toHaveProperty("has_sensitive_payload");
@@ -374,7 +377,6 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       ...draftFence,
       super_admin_phone: "13900000000",
     });
-
     const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
     expect(findSensitivePayloadById).toHaveBeenCalledWith({
       id: applymentId,
@@ -396,13 +398,11 @@ describe("WechatPayApplymentService sensitive persistence", () => {
       sensitive_payload_version: null,
     }));
     const service = await createService();
-
     await service.updateDraft(authContext, applymentId, {
       ...draftFence,
       remark: "自动保存的内部备注",
       draft_update_source: "autosave",
     });
-
     const patch = updateApplyment.mock.calls[0]?.[0]?.patch;
     expect(patch).not.toHaveProperty("sensitive_payload_ciphertext");
     expect(patch).not.toHaveProperty("has_sensitive_payload");
