@@ -21,4 +21,5 @@ export * from './supplier';
 export * from './tenant';
 export * from './location';
 export * from './workflow';
+export * from './wechat-pay-applyment-readiness';
 export * from './wechat-pay-settlement-rule';

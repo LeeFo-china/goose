@@ -1,14 +1,30 @@
 "use client";
 
-import { CheckCircle2, CircleAlert, ShieldCheck } from "lucide-react";
+import { ChevronRight, CircleAlert, PencilLine } from "lucide-react";
+
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Separator } from "@/components/ui/separator";
+
+import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
 import type {
-  WechatPayApplymentAttachment,
-  WechatPayApplymentRecord,
+  WechatPayApplymentReadinessItem,
+} from "./finance-wechat-pay-applyment-readiness";
+import {
+  type WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
+import {
+  getWechatPayApplymentReviewTargets,
+  type WechatPayApplymentReviewSnapshot,
+  type WechatPayApplymentReviewTarget,
+} from "./finance-wechat-pay-applyment-review-model";
 
 const BASE_REQUIRED_ATTACHMENTS = [
   "license_copy",
@@ -16,23 +32,42 @@ const BASE_REQUIRED_ATTACHMENTS = [
   "legal_representative_id_card_back",
 ];
 
+const REVIEW_SECTIONS = [
+  { key: "subject", label: "主体和营业执照" },
+  { key: "contact", label: "法人和超级管理员" },
+  { key: "settlement", label: "经营及结算" },
+  { key: "attachments", label: "申请附件" },
+] as const;
+
 export function FinanceWechatPayApplymentReview({
-  applyment,
+  review,
   attachments,
   contactType,
   confirmed,
   disabled,
+  navigationDisabled,
+  readinessBlockers,
   onConfirmedChange,
+  onNavigate,
+  onStageChange,
 }: {
-  applyment: WechatPayApplymentRecord | null;
+  review: WechatPayApplymentReviewSnapshot;
   attachments: WechatPayApplymentAttachment[];
   contactType: string;
   confirmed: boolean;
   disabled: boolean;
+  navigationDisabled: boolean;
+  readinessBlockers: readonly WechatPayApplymentReadinessItem[];
   onConfirmedChange: (checked: boolean) => void;
+  onNavigate: (target: WechatPayApplymentReviewTarget) => void;
+  onStageChange: (stage: ApplymentStageKey) => void;
 }) {
   const requiredCategories = contactType === "SUPER"
-    ? [...BASE_REQUIRED_ATTACHMENTS, "contact_id_card_front", "contact_id_card_back"]
+    ? [
+        ...BASE_REQUIRED_ATTACHMENTS,
+        "contact_id_card_front",
+        "contact_id_card_back",
+      ]
     : BASE_REQUIRED_ATTACHMENTS;
   const uploadedCategories = new Set(
     attachments.map((attachment) => attachment.category).filter(Boolean),
@@ -41,9 +76,10 @@ export function FinanceWechatPayApplymentReview({
     uploadedCategories.has(category)
   ).length;
   const attachmentsReady = readyAttachmentCount === requiredCategories.length;
+  const targets = getWechatPayApplymentReviewTargets(contactType);
 
   return (
-    <section className="flex flex-col gap-4 rounded-md border p-4">
+    <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">提交复核</h2>
@@ -58,27 +94,58 @@ export function FinanceWechatPayApplymentReview({
 
       <Separator />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ReviewItem
-          ready={Boolean(applyment?.has_sensitive_payload)}
-          label="敏感资料"
-          value={applyment?.has_sensitive_payload ? "已加密保存" : "保存后生成加密载荷"}
-        />
-        <ReviewItem
-          ready={attachmentsReady}
-          label="必传附件"
-          value={attachmentsReady ? "已齐全" : "仍有附件未上传"}
-        />
-        <ReviewItem
-          ready={contactType === "LEGAL" || uploadedCategories.has("contact_id_card_front")}
-          label="超级管理员"
-          value={contactType === "LEGAL" ? "法人本人" : "经办人"}
-        />
-        <ReviewItem
-          ready={Boolean(applyment?.settlement_account_number_masked)}
-          label="结算账户"
-          value={applyment?.settlement_account_number_masked || "保存后显示掩码"}
-        />
+      {readinessBlockers.length > 0
+        ? (
+          <Alert className="border-warning/50 bg-warning/5">
+            <CircleAlert />
+            <AlertTitle>
+              还有 {readinessBlockers.length} 项需要处理
+            </AlertTitle>
+            <AlertDescription className="grid gap-1">
+              {readinessBlockers.map((blocker) => (
+                <Button
+                  key={blocker.key}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto w-full justify-between whitespace-normal px-2 py-2 text-left font-normal"
+                  disabled={navigationDisabled}
+                  data-readiness-blocker=""
+                  onClick={() => onStageChange(blocker.targetStage)}
+                >
+                  <span className="min-w-0 break-words">{blocker.label}</span>
+                  <ChevronRight aria-hidden="true" />
+                </Button>
+              ))}
+            </AlertDescription>
+          </Alert>
+        )
+        : null}
+
+      <div className="divide-y rounded-md border">
+        {REVIEW_SECTIONS.map((section) => (
+          <section
+            key={section.key}
+            className="flex flex-wrap items-start justify-between gap-3 p-3"
+          >
+            <div className="min-w-0">
+              <h3 className="text-sm font-medium">{section.label}</h3>
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {review[section.key]}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={navigationDisabled}
+              onClick={() => onNavigate(targets[section.key])}
+            >
+              <PencilLine data-icon="inline-start" />
+              返回修改
+            </Button>
+          </section>
+        ))}
       </div>
 
       <Field data-disabled={disabled || undefined}>
@@ -103,31 +170,5 @@ export function FinanceWechatPayApplymentReview({
         </div>
       </Field>
     </section>
-  );
-}
-
-function ReviewItem({
-  ready,
-  label,
-  value,
-}: {
-  ready: boolean;
-  label: string;
-  value: string;
-}) {
-  const Icon = ready ? CheckCircle2 : CircleAlert;
-  return (
-    <div className="flex min-w-0 gap-3 rounded-md border p-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-        <Icon aria-hidden="true" className="size-4" />
-      </span>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          {label}
-          {label === "敏感资料" ? <ShieldCheck aria-hidden="true" className="size-4" /> : null}
-        </div>
-        <p className="mt-1 break-words text-xs text-muted-foreground">{value}</p>
-      </div>
-    </div>
   );
 }

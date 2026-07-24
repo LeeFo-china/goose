@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { buildOcrDedupeKey } from "./request-guards";
 import {
   authContext,
   buildRecord,
@@ -11,6 +12,34 @@ import {
 } from "./service.test-fixtures";
 
 describe("OcrService", () => {
+  test("isolates dedupe keys by scene and applyment ownership", () => {
+    const base = {
+      tenantId: "tenant-1",
+      fileIdentity: "checksum-1",
+      documentType: "business_license" as const,
+      providerAction: "BizLicenseOCR",
+      scene: "wechat_pay_applyment" as const,
+    };
+
+    const unbound = buildOcrDedupeKey({
+      ...base,
+      subjectType: null,
+      subjectId: null,
+    });
+    const applymentA = buildOcrDedupeKey({
+      ...base,
+      subjectType: "wechat_pay_applyment",
+      subjectId: "11111111-1111-4111-8111-111111111111",
+    });
+    const applymentB = buildOcrDedupeKey({
+      ...base,
+      subjectType: "wechat_pay_applyment",
+      subjectId: "22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(new Set([unbound, applymentA, applymentB]).size).toBe(3);
+  });
+
   test("hides capabilities while OCR is disabled", async () => {
     const { service } = await createHarness({ ocrEnabled: false });
 
@@ -151,13 +180,17 @@ describe("OcrService", () => {
     }
   });
 
-  test("returns idempotency replay without provider call", async () => {
-    const existing = buildRecord({ status: "succeeded", result_ciphertext: "encrypted-result" });
+  test("returns a same-key concurrent processing replay without provider call", async () => {
+    const existing = buildRecord({ status: "processing" });
     const { service, dependencies } = await createHarness({ idempotentRecord: existing });
 
     const result = await service.recognize(authContext, request);
 
-    expect(result).toMatchObject({ idempotent: true, cached: false });
+    expect(result).toMatchObject({
+      idempotent: true,
+      cached: false,
+      recognition: { status: "processing", fields: [] },
+    });
     expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 
@@ -178,13 +211,17 @@ describe("OcrService", () => {
     expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 
-  test("returns active dedupe result as cached", async () => {
-    const existing = buildRecord({ status: "succeeded", result_ciphertext: "encrypted-result" });
+  test("returns a different-key concurrent processing dedupe as cached", async () => {
+    const existing = buildRecord({ status: "processing" });
     const { service, dependencies } = await createHarness({ dedupeRecord: existing });
 
     const result = await service.recognize(authContext, request);
 
-    expect(result).toMatchObject({ idempotent: false, cached: true });
+    expect(result).toMatchObject({
+      idempotent: false,
+      cached: true,
+      recognition: { status: "processing", fields: [] },
+    });
     expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 
@@ -216,7 +253,10 @@ describe("OcrService", () => {
 
     const result = await service.recognize(authContext, request);
 
-    expect(result).toMatchObject({ cached: true });
+    expect(result).toMatchObject({
+      cached: true,
+      recognition: { status: "processing", fields: [] },
+    });
     expect(dependencies.gateway.recognize).not.toHaveBeenCalled();
   });
 

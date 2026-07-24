@@ -39,41 +39,11 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(pageSource).toContain("/finance/wechat-pay");
   });
 
-  test("tenant applyment panel posts create update and submit actions", () => {
-    const requestSource = readSource("./finance-wechat-pay-applyment-requests.ts");
-    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
-    const fieldSource = readSource("./finance-wechat-pay-applyment-form-fields.tsx");
-    const stepsSource = readSource("./finance-wechat-pay-applyment-steps.tsx");
-    const schemaSource = readSource("./finance-wechat-pay-applyment-schema.ts");
-    const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
-    const formContractSource = `${panelSource}\n${stepsSource}\n${schemaSource}`;
-
-    expect(requestSource).toContain("/finance/wechat-pay/applyment/current");
-    expect(panelSource).toContain("/finance/wechat-pay/applyments");
-    expect(panelSource).toContain("/submit");
-    expect(panelSource).toContain("WechatPayApplymentAttachmentsField");
-    expect(attachmentSource).toContain("uploadDirectToCos");
-    expect(attachmentSource).toContain("wechat_pay_applyment");
-    expect(attachmentSource).toContain("license_copy");
-    expect(attachmentSource).toContain("legal_representative_id_card_front");
-    expect(panelSource).toContain("attachments");
-    expect(formContractSource).toContain("merchant_short_name");
-    expect(formContractSource).toContain("super_admin_phone");
-    expect(formContractSource).toContain("settlement_account_type");
-    expect(formContractSource).toContain("settlement_account_number");
-    expect(formContractSource).toContain("settlement_bank_full_name");
-    expect(formContractSource).toContain("settlement_bank_branch_id");
-    expect(fieldSource).toContain("@/components/ui/select");
-    expect(fieldSource).toContain("SelectGroup");
-    expect(stepsSource).toContain('requirement="required"');
-    expect(stepsSource).toContain('requirement="optional"');
-    expect(formContractSource).not.toContain("settlement_account_summary: requiredText");
-    expect(formContractSource).not.toContain("api_v3_key");
-  });
-
   test("tenant applyment form marks required optional and attachment requirements", () => {
     const fieldSource = readSource("./finance-wechat-pay-applyment-form-fields.tsx");
-    const stepsSource = readSource("./finance-wechat-pay-applyment-steps.tsx");
+    const supplementSource = readSource(
+      "./finance-wechat-pay-applyment-supplement-fields.tsx",
+    );
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
 
     expect(fieldSource).toContain("RequirementBadge");
@@ -81,24 +51,26 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(fieldSource).toContain("选填");
     expect(fieldSource).toContain("required={required}");
     expect(fieldSource).toContain("aria-required");
-    expect(stepsSource).toContain("用于微信支付开户联系");
-    expect(stepsSource).toContain("保存后只记录掩码");
-    expect(stepsSource).toContain("填写银行基础名称");
+    expect(supplementSource).toContain("用于微信支付开户联系");
+    expect(supplementSource).toContain('name="super_admin_phone"');
+    expect(supplementSource).toContain('name="service_phone"');
     expect(attachmentSource).toContain("必传");
     expect(attachmentSource).toContain("选传");
   });
 
   test("uses one linked settlement rule select instead of technical text inputs", () => {
-    const stepsSource = readSource("./finance-wechat-pay-applyment-steps.tsx");
+    const supplementSource = readSource(
+      "./finance-wechat-pay-applyment-supplement-fields.tsx",
+    );
     const ruleFieldUrl = new URL(
       "./finance-wechat-pay-settlement-rule-field.tsx",
       import.meta.url,
     );
 
     expect(existsSync(ruleFieldUrl)).toBe(true);
-    expect(stepsSource).toContain("FinanceWechatPaySettlementRuleField");
-    expect(stepsSource).not.toContain('<TextField label="结算规则 ID"');
-    expect(stepsSource).not.toContain('<TextField label="所属行业"');
+    expect(supplementSource).toContain("FinanceWechatPaySettlementRuleField");
+    expect(supplementSource).not.toContain('<TextField label="结算规则 ID"');
+    expect(supplementSource).not.toContain('<TextField label="所属行业"');
     if (!existsSync(ruleFieldUrl)) return;
 
     const ruleFieldSource = readFileSync(ruleFieldUrl, "utf8");
@@ -109,24 +81,317 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(ruleFieldSource).toContain("经营行业与结算规则");
     expect(ruleFieldSource).toContain("rateLabel");
     expect(ruleFieldSource).toContain("settlementCycleLabel");
-  });
-
-  test("tenant applyment submit persists current form and attachments before submit", () => {
-    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
-
-    expect(panelSource).toContain("formRef");
-    expect(panelSource).toContain("saveApplymentDraft(payload)");
-    expect(panelSource).toContain("const savedDetail = await saveApplymentDraft(payload)");
-    expect(panelSource).toContain("targetApplyment.id");
+    expect(ruleFieldSource).toContain("qualificationType");
   });
 
   test("tenant applyment attachment uploader uses shadcn button for the visible upload action", () => {
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
+    const uploadButtonSource = readSource(
+      "./finance-wechat-pay-applyment-upload-button.tsx",
+    );
+    const uploadContract = `${attachmentSource}\n${uploadButtonSource}`;
 
-    expect(attachmentSource).toContain("<Button");
+    expect(attachmentSource).toContain("ApplymentAttachmentUploadButton");
+    expect(uploadButtonSource).toContain("<Button");
     expect(attachmentSource).toContain("openAttachmentPicker");
-    expect(attachmentSource).not.toContain("inline-flex h-9 cursor-pointer");
-    expect(attachmentSource).not.toContain("<label");
+    expect(uploadButtonSource).toContain("tabIndex={-1}");
+    expect(uploadButtonSource).toContain('aria-hidden="true"');
+    expect(uploadContract).not.toContain("inline-flex h-9 cursor-pointer");
+    expect(uploadContract).not.toContain("<label");
+  });
+
+  test("wires the materials-first upload preview auto OCR and recovery contract", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const sharedSource = readSource("./finance-wechat-pay-applyment-shared.ts");
+    const attachmentSource = readSource(
+      "./finance-wechat-pay-applyment-attachments.tsx",
+    );
+    const previewSource = readSource(
+      "./finance-wechat-pay-applyment-attachment-preview.tsx",
+    );
+    const materialsHookSource = readSource(
+      "./use-wechat-pay-applyment-materials.ts",
+    );
+    const materialsStageSource = readSource(
+      "./finance-wechat-pay-applyment-materials-stage.tsx",
+    );
+    const materialRecoverySource = readSource(
+      "./finance-wechat-pay-applyment-material-recovery.ts",
+    );
+    const materialLifecycleSource = readSource(
+      "./finance-wechat-pay-applyment-lifecycle.ts",
+    );
+    const recognitionSource = readSource(
+      "./finance-wechat-pay-applyment-recognition.ts",
+    );
+    const manualEntrySource = readSource(
+      "./finance-wechat-pay-applyment-manual-entry.ts",
+    );
+    const retrySource = readSource(
+      "./finance-wechat-pay-applyment-material-retry.ts",
+    );
+    const ocrRequestSource = readSource("../ocr/ocr-requests.ts");
+    const autosaveHookSource = readSource(
+      "./use-wechat-pay-applyment-autosave.ts",
+    );
+    const autosaveQueueSource = readSource(
+      "./finance-wechat-pay-applyment-autosave.ts",
+    );
+
+    expect(panelSource).toContain("useWechatPayApplymentMaterials");
+    expect(sharedSource).toContain("can_edit: boolean");
+    expect(panelSource).toContain("const editable = autosave.canEdit");
+    expect(panelSource).not.toContain("const editable = !applyment");
+    expect(materialsHookSource).toContain("buildInitialMaterialStates");
+    expect(materialsHookSource).toContain("attachmentsRef");
+    expect(materialsHookSource).toContain("restoreApplymentMaterialStates");
+    expect(materialsHookSource).toContain("setupMountedRefLifecycle");
+    expect(materialLifecycleSource).toContain("mountedRef.current = true");
+    expect(materialRecoverySource).toContain(
+      "fetchApplymentOcrRecognition",
+    );
+    expect(materialsHookSource).toContain('draftUpdateSource: "attachment_change"');
+    expect(recognitionSource).toContain('draftUpdateSource: "ocr_review"');
+    expect(manualEntrySource).toContain('draftUpdateSource: "manual_entry"');
+    expect(materialsStageSource).toContain("@/components/ui/checkbox");
+    expect(materialsStageSource).toContain(
+      "同意使用已上传证照进行信息识别和申请资料回填",
+    );
+    expect(materialsStageSource).toContain("证照识别暂不可用");
+    expect(attachmentSource).toContain("onUploaded");
+    expect(attachmentSource).toContain("onRetryRecognition");
+    expect(attachmentSource).toContain("onRetrySave");
+    expect(attachmentSource).toContain("attachmentSaveErrors");
+    expect(attachmentSource).toContain("AttachmentCheckpointStatus");
+    expect(attachmentSource).toContain("materialStates");
+    expect(attachmentSource).toContain("AttachmentPreviewCard");
+    expect(previewSource).toContain("AttachmentPreviewDialog");
+    expect(previewSource).toContain("aspect-[4/3]");
+    expect(previewSource).toContain("object-contain");
+    expect(previewSource).not.toContain("attachment.object_key");
+    expect(materialsHookSource).toContain(
+      "rebaseUploadedApplymentAttachment",
+    );
+    expect(materialsHookSource).not.toContain("uploaded.nextAttachments");
+    expect(retrySource).toContain("getMaterialRetryAction");
+    expect(materialsHookSource).toContain("checkpointApplymentAttachment");
+    expect(materialsHookSource).toContain("recognizeApplymentAttachment");
+    expect(materialsHookSource).toContain("createMaterialOperationGeneration");
+    expect(materialsHookSource).toContain("generationRef.current.advance()");
+    expect(`${autosaveHookSource}\n${autosaveQueueSource}`).toContain(
+      "context.isCurrent",
+    );
+    expect(attachmentSource).not.toContain("识别并回填");
+    expect(attachmentSource).not.toContain("onRecognize");
+    expect(ocrRequestSource).toContain("fetchApplymentOcrRecognition");
+    expect(ocrRequestSource).toContain("/ocr/recognitions/${encodeURIComponent(id)}");
+  });
+
+  test("reviews OCR results in an inline responsive workspace", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const workflowSource = readSource(
+      "./finance-wechat-pay-applyment-workflow.tsx",
+    );
+    const reviewUrl = new URL(
+      "./finance-wechat-pay-applyment-ocr-review.tsx",
+      import.meta.url,
+    );
+    const recognizedFieldsUrl = new URL(
+      "./finance-wechat-pay-applyment-recognized-fields.tsx",
+      import.meta.url,
+    );
+
+    expect(existsSync(reviewUrl)).toBe(true);
+    expect(existsSync(recognizedFieldsUrl)).toBe(true);
+    expect(workflowSource).toContain("FinanceWechatPayApplymentOcrReview");
+    expect(panelSource).not.toContain("OcrFieldReviewDialog");
+    expect(panelSource).not.toContain("setOcrDialogOpen");
+    if (!existsSync(reviewUrl) || !existsSync(recognizedFieldsUrl)) return;
+
+    const reviewSource = readFileSync(reviewUrl, "utf8");
+    const recognizedFieldsSource = readFileSync(recognizedFieldsUrl, "utf8");
+    expect(reviewSource).toContain(
+      "lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]",
+    );
+    expect(reviewSource).toContain("OcrFieldReviewRows");
+    expect(reviewSource).toContain("改为手动填写");
+    expect(reviewSource).toContain("onUseManualEntry");
+    expect(recognizedFieldsSource).toContain(
+      "hidden={selectedCategory !== category}",
+    );
+    expect(recognizedFieldsSource).toContain("onManualChange");
+  });
+
+  test("renders sequential OCR-first stages without Radix Tabs", () => {
+    const flowUrl = new URL(
+      "./finance-wechat-pay-applyment-flow.tsx",
+      import.meta.url,
+    );
+
+    expect(existsSync(flowUrl)).toBe(true);
+    if (!existsSync(flowUrl)) return;
+
+    const flowSource = readFileSync(flowUrl, "utf8");
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const workflowSource = readSource(
+      "./finance-wechat-pay-applyment-workflow.tsx",
+    );
+    const navigationSource = readSource(
+      "./use-wechat-pay-applyment-stage-navigation.ts",
+    );
+
+    expect(flowSource).toContain("上传资料");
+    expect(flowSource).toContain("核对识别");
+    expect(flowSource).toContain("补充信息");
+    expect(flowSource).toContain("确认提交");
+    expect(flowSource).toContain("<ol");
+    expect(flowSource).toContain("<Button");
+    expect(flowSource).toContain("<Progress");
+    expect(flowSource).toContain("data-applyment-stage");
+    expect(flowSource).toContain("hidden={props.stage !== props.activeStage}");
+    expect(flowSource).not.toContain("@/components/ui/tabs");
+    expect(workflowSource).toContain("FinanceWechatPayApplymentFlow");
+    expect(navigationSource).toContain("canLeaveMaterialsStage");
+    expect(navigationSource).toContain("canLeaveRecognitionStage");
+    expect(panelSource).toContain("getInitialApplymentStage");
+    expect(navigationSource).toContain("getReachableStage");
+    expect(navigationSource).toContain("isApplymentStageReachable");
+    expect(panelSource).toContain("onStageChange={handleStageChange}");
+    expect(panelSource).toContain(
+      "onChangeCapture={handleApplymentFormChange}",
+    );
+    expect(panelSource).toContain(
+      "onInputCapture={handleApplymentFormInput}",
+    );
+    expect(panelSource).toContain("isApplymentDataBearingControl");
+    expect(navigationSource).toContain("validateStage");
+    expect(panelSource).toContain("validateAllStages");
+    expect(panelSource).not.toContain("onInvalidCapture");
+    expect(panelSource).not.toContain("activateInvalidApplymentElement");
+    expect(flowSource).toContain("props.reachableStage");
+    expect(flowSource).toContain("isApplymentStageReachable");
+  });
+
+  test("keeps stage ownership and final review return targets explicit", () => {
+    const flowSource = readSource("./finance-wechat-pay-applyment-flow.tsx");
+    const supplementSource = readSource(
+      "./finance-wechat-pay-applyment-supplement-fields.tsx",
+    );
+    const reviewSource = readSource(
+      "./finance-wechat-pay-applyment-review.tsx",
+    );
+    const reviewModelSource = readSource(
+      "./finance-wechat-pay-applyment-review-model.ts",
+    );
+    const panelSource = readSource(
+      "./finance-wechat-pay-applyment-panel.tsx",
+    );
+    const oldStepsUrl = new URL(
+      "./finance-wechat-pay-applyment-steps.tsx",
+      import.meta.url,
+    );
+
+    expect(flowSource).toContain('name="subject_type"');
+    expect(flowSource).toContain('name="contact_type"');
+    expect(supplementSource).toContain("SUPPLEMENT_FIELD_NAMES");
+    expect(supplementSource).toContain("返回上传资料修改");
+    expect(supplementSource).not.toContain('name="subject_type"');
+    expect(supplementSource).not.toContain('name="contact_type"');
+    expect(reviewSource).toContain("主体和营业执照");
+    expect(reviewSource).toContain("法人和超级管理员");
+    expect(reviewSource).toContain("经营及结算");
+    expect(reviewSource).toContain("申请附件");
+    expect(reviewModelSource).toContain(
+      'stage: "recognition", ocrCategory: "license_copy"',
+    );
+    expect(reviewModelSource).toContain(
+      '"legal_representative_id_card_front"',
+    );
+    expect(reviewModelSource).toContain('"contact_id_card_front"');
+    expect(reviewModelSource).toContain('stage: "supplement"');
+    expect(reviewModelSource).toContain('stage: "materials"');
+    expect(reviewSource).toContain("onNavigate(targets[section.key])");
+    expect(panelSource).toContain("handleReviewNavigation");
+    expect(existsSync(oldStepsUrl)).toBe(false);
+  });
+
+  test("persists selected OCR values and confirmed metadata atomically", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const reviewSource = readSource(
+      "./finance-wechat-pay-applyment-ocr-review.tsx",
+    );
+    const reviewHookSource = readSource(
+      "./finance-wechat-pay-applyment-ocr-review-hook.ts",
+    );
+    const workflowSource = readSource(
+      "./finance-wechat-pay-applyment-workflow.tsx",
+    );
+    const persistenceContract =
+      `${panelSource}\n${workflowSource}\n${reviewSource}\n${reviewHookSource}`;
+
+    expect(persistenceContract).toContain("applyRecognitionRows");
+    expect(persistenceContract).toContain("row.selected");
+    expect(persistenceContract).toContain("ocr_review_status: \"confirmed\"");
+    expect(persistenceContract).toContain("relatedMutation");
+    expect(panelSource).toContain('"ocr_confirm"');
+    expect(panelSource).toContain('"manual_entry"');
+  });
+
+  test("does not report a global save success for partial material checkpoints", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const workflowSource = readSource(
+      "./finance-wechat-pay-applyment-workflow.tsx",
+    );
+    const checkpointStart = panelSource.indexOf(
+      "async function persistMaterialAttachments",
+    );
+    const checkpointEnd = panelSource.indexOf(
+      "function changeContactType",
+      checkpointStart,
+    );
+    const checkpointSource = panelSource.slice(checkpointStart, checkpointEnd);
+
+    expect(checkpointStart).toBeGreaterThan(-1);
+    expect(checkpointEnd).toBeGreaterThan(checkpointStart);
+    expect(checkpointSource).not.toContain("router.refresh()");
+    expect(checkpointSource).toContain("enqueueMaterialCheckpoint");
+    expect(panelSource).toContain("currentApplymentRef");
+  });
+
+  test("forwards explicit attachment mutation intents through the real panel wiring", () => {
+    const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
+    const attachmentSource = readSource(
+      "./finance-wechat-pay-applyment-attachments.tsx",
+    );
+    const materialsStageSource = readSource(
+      "./finance-wechat-pay-applyment-materials-stage.tsx",
+    );
+    const handlerStart = panelSource.indexOf(
+      "async function handleAttachmentsChange",
+    );
+    const handlerEnd = panelSource.indexOf(
+      "\n  function changeContactType",
+      handlerStart,
+    );
+    const handlerSource = panelSource.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    expect(handlerSource).toContain(
+      "options?: ApplymentAttachmentChangeOptions",
+    );
+    expect(handlerSource).toContain(
+      "materials.onChange(nextAttachments, options)",
+    );
+    expect(panelSource).toContain(
+      "onAttachmentsChange={handleAttachmentsChange}",
+    );
+    expect(materialsStageSource).toContain(
+      "onChange={onAttachmentsChange}",
+    );
+    expect(attachmentSource).toContain(
+      "intent: createApplymentAttachmentMutationIntent(",
+    );
   });
 
   test("keeps tenant applyment client panel away from server-only request module", () => {
@@ -141,9 +406,13 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(requestSource).toContain("./finance-wechat-pay-applyment-shared");
   });
 
-  test("uses a four-step shadcn form for the complete official applyment contract", () => {
-    const stepsUrl = new URL(
-      "./finance-wechat-pay-applyment-steps.tsx",
+  test("uses a four-stage shadcn form for the complete official applyment contract", () => {
+    const flowUrl = new URL(
+      "./finance-wechat-pay-applyment-flow.tsx",
+      import.meta.url,
+    );
+    const supplementUrl = new URL(
+      "./finance-wechat-pay-applyment-supplement-fields.tsx",
       import.meta.url,
     );
     const reviewUrl = new URL(
@@ -155,36 +424,49 @@ describe("Finance wechat pay applyment page layout", () => {
       import.meta.url,
     );
 
-    expect(existsSync(stepsUrl)).toBe(true);
+    expect(existsSync(flowUrl)).toBe(true);
+    expect(existsSync(supplementUrl)).toBe(true);
     expect(existsSync(reviewUrl)).toBe(true);
     expect(existsSync(schemaUrl)).toBe(true);
-    if (!existsSync(stepsUrl) || !existsSync(reviewUrl) || !existsSync(schemaUrl)) {
+    if (
+      !existsSync(flowUrl) ||
+      !existsSync(supplementUrl) ||
+      !existsSync(reviewUrl) ||
+      !existsSync(schemaUrl)
+    ) {
       return;
     }
 
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
-    const stepsSource = readFileSync(stepsUrl, "utf8");
+    const workflowSource = readSource(
+      "./finance-wechat-pay-applyment-workflow.tsx",
+    );
+    const flowSource = readFileSync(flowUrl, "utf8");
+    const supplementSource = readFileSync(supplementUrl, "utf8");
     const reviewSource = readFileSync(reviewUrl, "utf8");
     const schemaSource = readFileSync(schemaUrl, "utf8");
     const attachmentSource = readSource(
       "./finance-wechat-pay-applyment-attachments.tsx",
     );
+    const uploadButtonSource = readSource(
+      "./finance-wechat-pay-applyment-upload-button.tsx",
+    );
 
-    expect(panelSource).toContain("FinanceWechatPayApplymentSteps");
-    expect(panelSource).toContain("FinanceWechatPayApplymentReview");
-    expect(panelSource).toContain("AlertDialog");
-    expect(panelSource).toContain("Progress");
-    expect(stepsSource).toContain("SUBJECT_TYPE_ENTERPRISE");
-    expect(stepsSource).toContain("SUBJECT_TYPE_INDIVIDUAL");
+    expect(workflowSource).toContain("FinanceWechatPayApplymentFlow");
+    expect(workflowSource).toContain("FinanceWechatPayApplymentReview");
+    expect(flowSource).toContain("AlertDialog");
+    expect(flowSource).toContain("Progress");
+    expect(flowSource).toContain("SUBJECT_TYPE_ENTERPRISE");
+    expect(flowSource).toContain("SUBJECT_TYPE_INDIVIDUAL");
     expect(schemaSource).toContain("IDENTIFICATION_TYPE_IDCARD");
-    expect(stepsSource).toContain('contactType === "SUPER"');
-    expect(stepsSource).toContain("已安全保存");
+    expect(flowSource).toContain('name="contact_type"');
+    expect(supplementSource).toContain("已安全保存");
     expect(reviewSource).toContain("确认资料真实有效");
     expect(schemaSource).toContain("contact_identity_number");
     expect(schemaSource).toContain("settlement_account_number");
     expect(schemaSource).toContain("delete payload.contact_identity_number");
     expect(attachmentSource).not.toContain("image/bmp");
-    expect(attachmentSource).toContain("image/jpeg,image/png");
+    expect(uploadButtonSource).toContain("image/jpeg,image/png");
     expect(attachmentSource).toContain("2 * 1024 * 1024");
     expect(attachmentSource).toContain("contact_id_card_front");
     expect(attachmentSource).toContain("contact_id_card_back");

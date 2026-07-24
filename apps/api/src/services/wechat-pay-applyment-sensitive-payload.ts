@@ -15,22 +15,35 @@ const AUTH_TAG_LENGTH = 16;
 const KEY_SALT = Buffer.from("gooes:wechat-pay-applyment:v1", "utf8");
 const KEY_PURPOSE = Buffer.from("sensitive-payload", "utf8");
 
-const ApplymentSensitivePayloadSchema = z.object({
-  identity_name: z.string().trim().min(1),
-  identity_number: z.string().trim().min(1),
+const ApplymentSensitiveDraftPayloadSchema = z.object({
+  identity_name: z.string().trim().min(1).nullable().optional(),
+  identity_number: z.string().trim().min(1).nullable().optional(),
   identity_address: z.string().trim().min(1).nullable().optional(),
-  contact_name: z.string().trim().min(1),
-  contact_phone: z.string().trim().min(1),
-  contact_email: z.string().trim().email(),
+  contact_name: z.string().trim().min(1).nullable().optional(),
+  contact_phone: z.string().trim().min(1).nullable().optional(),
+  contact_email: z.string().trim().email().nullable().optional(),
   contact_identity_number: z.string().trim().min(1).nullable().optional(),
   contact_identity_address: z.string().trim().min(1).nullable().optional(),
-  bank_account_name: z.string().trim().min(1),
-  bank_account_number: z.string().trim().min(1),
+  bank_account_name: z.string().trim().min(1).nullable().optional(),
+  bank_account_number: z.string().trim().min(1).nullable().optional(),
 }).strict();
 
-export type ApplymentSensitivePayload = z.infer<
-  typeof ApplymentSensitivePayloadSchema
+export type ApplymentSensitiveDraftPayload = z.infer<
+  typeof ApplymentSensitiveDraftPayloadSchema
 >;
+
+export type ApplymentSensitivePayload = {
+  identity_name: string;
+  identity_number: string;
+  identity_address?: string | null;
+  contact_name: string;
+  contact_phone: string;
+  contact_email: string;
+  contact_identity_number?: string | null;
+  contact_identity_address?: string | null;
+  bank_account_name: string;
+  bank_account_number: string;
+};
 
 export type ApplymentSensitivePayloadContext = {
   tenantId: string;
@@ -40,7 +53,7 @@ export type ApplymentSensitivePayloadContext = {
 
 export function encryptApplymentSensitivePayload(input: {
   context: ApplymentSensitivePayloadContext;
-  payload: ApplymentSensitivePayload;
+  payload: ApplymentSensitiveDraftPayload;
   rootSecret: string | null | undefined;
 }): string {
   const payload = parsePayload(input.payload);
@@ -69,7 +82,7 @@ export function decryptApplymentSensitivePayload(input: {
   context: ApplymentSensitivePayloadContext;
   ciphertext: string;
   rootSecret: string | null | undefined;
-}): ApplymentSensitivePayload {
+}): ApplymentSensitiveDraftPayload {
   const parts = input.ciphertext.split(":");
   const [namespace, version, ivText, authTagText, encryptedText] = parts;
   if (
@@ -126,6 +139,49 @@ export function decryptApplymentSensitivePayload(input: {
   }
 }
 
+export function getMissingApplymentSensitiveFields(
+  payload: ApplymentSensitiveDraftPayload,
+  contactType: string | null,
+): string[] {
+  const required = [
+    "identity_name",
+    "identity_number",
+    "contact_name",
+    "contact_phone",
+    "contact_email",
+    "bank_account_name",
+    "bank_account_number",
+  ] as const;
+  const missing: string[] = required.filter(
+    (key) => !String(payload[key] ?? "").trim(),
+  );
+  if (contactType === "SUPER") {
+    for (const key of [
+      "contact_identity_number",
+      "contact_identity_address",
+    ] as const) {
+      if (!String(payload[key] ?? "").trim()) missing.push(key);
+    }
+  }
+  return missing;
+}
+
+export function requireCompleteApplymentSensitivePayload(
+  payload: ApplymentSensitiveDraftPayload,
+  contactType: string | null,
+): ApplymentSensitivePayload {
+  const missing = getMissingApplymentSensitiveFields(payload, contactType);
+  if (missing.length > 0) {
+    throw Errors.business(
+      400,
+      "微信支付进件敏感资料不完整",
+      "WECHAT_PAY_APPLYMENT_SENSITIVE_FIELDS_MISSING",
+      { missing },
+    );
+  }
+  return payload as ApplymentSensitivePayload;
+}
+
 function deriveKey(rootSecret: string | null | undefined): Buffer {
   if (!rootSecret?.trim()) {
     throw Errors.business(
@@ -164,8 +220,8 @@ function buildAad(context: ApplymentSensitivePayloadContext): Buffer {
   );
 }
 
-function parsePayload(value: unknown): ApplymentSensitivePayload {
-  const parsed = ApplymentSensitivePayloadSchema.safeParse(value);
+function parsePayload(value: unknown): ApplymentSensitiveDraftPayload {
+  const parsed = ApplymentSensitiveDraftPayloadSchema.safeParse(value);
   if (!parsed.success) {
     throw Errors.business(
       500,

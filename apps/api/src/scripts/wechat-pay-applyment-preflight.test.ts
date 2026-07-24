@@ -35,6 +35,9 @@ type TestAttachment = {
   file_name: string;
   content_type: string;
   size: number;
+  file_object_id?: string;
+  ocr_recognition_id?: string;
+  ocr_review_status?: string;
 };
 
 function attachment(
@@ -48,6 +51,7 @@ function attachment(
     file_name: `${category}.jpg`,
     content_type: "image/jpeg",
     size: 1024,
+    ocr_review_status: "manual",
     ...overrides,
   };
 }
@@ -153,6 +157,25 @@ async function loadSubject() {
 }
 
 describe("wechat pay applyment preflight", () => {
+  test("builds a preflight port that reuses an already loaded applyment", async () => {
+    const findById = mock(async () => applyment());
+    const findSensitivePayloadById = mock(async () => sensitiveRecord());
+    const { createWechatPayApplymentPreflightService } = await loadSubject();
+    const preflight = createWechatPayApplymentPreflightService({
+      repository: { findById, findSensitivePayloadById },
+      loadRuntimeProfile: async () => ({ ready: true }),
+      encryptionRootSecretFactory: () => rootSecret,
+      nowFactory: () => now,
+    });
+
+    expect(await preflight.runForApplyment?.(applyment())).toEqual({
+      ready: true,
+      blockers: [],
+    });
+    expect(findById).not.toHaveBeenCalled();
+    expect(findSensitivePayloadById).toHaveBeenCalledTimes(1);
+  });
+
   test("reports ready without external media or WeChat writes", async () => {
     const findById = mock(async () => applyment());
     const findSensitivePayloadById = mock(async () => sensitiveRecord());
@@ -170,6 +193,42 @@ describe("wechat pay applyment preflight", () => {
     expect(findById).toHaveBeenCalledTimes(1);
     expect(findSensitivePayloadById).toHaveBeenCalledTimes(1);
     expect(loadRuntimeProfile).toHaveBeenCalledTimes(1);
+  });
+
+  test("reports each missing field from a partial sensitive draft", async () => {
+    const partialCiphertext = encryptApplymentSensitivePayload({
+      context: { tenantId, applymentId, version: 1 },
+      payload: { identity_name: "张三" },
+      rootSecret,
+    });
+    const { runWechatPayApplymentPreflight } = await loadSubject();
+
+    const report = await runWechatPayApplymentPreflight(applymentId, {
+      repository: {
+        findById: async () => applyment(),
+        findSensitivePayloadById: async () => sensitiveRecord({
+          sensitive_payload_ciphertext: partialCiphertext,
+        }),
+      },
+      loadRuntimeProfile: async () => ({ ready: true }),
+      encryptionRootSecretFactory: () => rootSecret,
+      nowFactory: () => now,
+    });
+
+    expect(report).toEqual({
+      ready: false,
+      blockers: [
+        "identity_number",
+        "contact_name",
+        "contact_phone",
+        "contact_email",
+        "bank_account_name",
+        "bank_account_number",
+      ].map((field) => ({
+        code: "APPLYMENT_REQUIRED_FIELD_MISSING",
+        field: `sensitive.${field}`,
+      })),
+    });
   });
 
   test("blocks a settlement rule that does not match the subject and industry", async () => {
@@ -193,6 +252,42 @@ describe("wechat pay applyment preflight", () => {
         code: "APPLYMENT_SETTLEMENT_RULE_INVALID",
         field: "settlement_id",
       }],
+    });
+  });
+
+  test("blocks enterprise personal accounts and unreviewed OCR attachments", async () => {
+    const { runWechatPayApplymentPreflight } = await loadSubject();
+    const report = await runWechatPayApplymentPreflight(applymentId, {
+      repository: {
+        findById: async () => applyment({
+          settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+          attachments: [
+            attachment("license_copy", {
+              ocr_review_status: "review_required",
+            }),
+            attachment("legal_representative_id_card_front"),
+            attachment("legal_representative_id_card_back"),
+          ],
+        }),
+        findSensitivePayloadById: async () => sensitiveRecord(),
+      },
+      loadRuntimeProfile: async () => ({ ready: true }),
+      encryptionRootSecretFactory: () => rootSecret,
+      nowFactory: () => now,
+    });
+
+    expect(report).toEqual({
+      ready: false,
+      blockers: expect.arrayContaining([
+        {
+          code: "APPLYMENT_ENTERPRISE_ACCOUNT_TYPE_INVALID",
+          field: "settlement_account_type",
+        },
+        {
+          code: "APPLYMENT_ATTACHMENT_OCR_REVIEW_REQUIRED",
+          category: "license_copy",
+        },
+      ]),
     });
   });
 

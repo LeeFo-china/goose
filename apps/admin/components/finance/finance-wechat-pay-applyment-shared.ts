@@ -1,3 +1,8 @@
+import type {
+  OcrDocumentType,
+  WechatPayApplymentBlockerCode,
+} from "@gooes/domain";
+
 export const WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORIES = [
   "license_copy",
   "legal_representative_id_card_front",
@@ -42,6 +47,13 @@ export const WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES: Partial<Record<
   settlement_account_proof: "bank_card",
 };
 
+export type WechatPayApplymentAttachmentOcrReviewStatus =
+  | "uploaded"
+  | "review_required"
+  | "confirmed"
+  | "manual"
+  | "failed";
+
 export type WechatPayApplymentAttachment = {
   category?: WechatPayApplymentAttachmentCategory | string | null;
   file_object_id?: string | null;
@@ -49,6 +61,8 @@ export type WechatPayApplymentAttachment = {
   file_name?: string | null;
   content_type?: string | null;
   size?: number | null;
+  ocr_recognition_id?: string | null;
+  ocr_review_status?: WechatPayApplymentAttachmentOcrReviewStatus | null;
 };
 
 export type WechatPayApplymentRecord = {
@@ -57,7 +71,7 @@ export type WechatPayApplymentRecord = {
   application_no: string;
   status: string;
   subject_type: string | null;
-  merchant_short_name: string;
+  merchant_short_name: string | null;
   license_name: string | null;
   license_code: string | null;
   license_address: string | null;
@@ -118,6 +132,8 @@ export type WechatPayApplymentRecord = {
   rejected_reason: string | null;
   created_at: string;
   updated_at: string;
+  draft_epoch: number;
+  draft_revision: number;
   tenant?: {
     id: string;
     name: string | null;
@@ -143,7 +159,7 @@ export type WechatPayApplymentAvailableAction = {
 };
 
 export type WechatPayApplymentPreflightBlocker = {
-  code: string;
+  code: WechatPayApplymentBlockerCode;
   field?: string;
   category?: string;
 };
@@ -157,6 +173,7 @@ export type WechatPayApplymentSubmissionReadiness = {
 export type WechatPayApplymentDetailData = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEvent[];
+  can_edit: boolean;
   can_submit: boolean;
   available_actions: WechatPayApplymentAvailableAction[];
   submission_readiness?: WechatPayApplymentSubmissionReadiness | null;
@@ -170,6 +187,7 @@ export function emptyWechatPayApplyment(): WechatPayApplymentDetailResult {
   return {
     applyment: null,
     events: [],
+    can_edit: false,
     can_submit: false,
     available_actions: [],
     submission_readiness: null,
@@ -217,11 +235,32 @@ export function formatWechatPayApplymentAttachmentSize(size?: number | null) {
   return `${(size / 1024 / 1024).toFixed(1)}MB`;
 }
 
-export function buildWechatPayApplymentAttachmentPreviewUrl(objectKey: string) {
-  if (!objectKey) return "";
-  if (/^https?:\/\//i.test(objectKey) || objectKey.startsWith("blob:")) {
-    return objectKey;
-  }
-  return `/api/backend/uploads/public-url?path=${encodeURIComponent(objectKey)}`;
+export function buildWechatPayApplymentAttachmentPreviewUrl(
+  attachment: Pick<
+    WechatPayApplymentAttachment,
+    "file_object_id" | "object_key"
+  >,
+) {
+  const fileObjectId = attachment.file_object_id?.trim();
+  if (!fileObjectId) return "";
+  return `/api/backend/uploads/files/${encodeURIComponent(fileObjectId)}/preview`;
 }
-import type { OcrDocumentType } from "@gooes/domain";
+
+export function getWechatPayApplymentAttachmentDisplayName(
+  attachment: Pick<
+    WechatPayApplymentAttachment,
+    "category" | "file_name" | "object_key"
+  >,
+) {
+  const fileName = attachment.file_name?.trim();
+  if (
+    fileName &&
+    fileName !== attachment.object_key &&
+    !/^(?:https?:|blob:|data:)/i.test(fileName)
+  ) {
+    return fileName;
+  }
+  return WECHAT_PAY_APPLYMENT_ATTACHMENT_CATEGORY_LABELS[
+    attachment.category as WechatPayApplymentAttachmentCategory
+  ] || "已上传资料";
+}

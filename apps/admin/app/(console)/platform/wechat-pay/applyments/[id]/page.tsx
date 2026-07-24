@@ -12,6 +12,7 @@ import {
   formatWechatPayApplymentAttachmentSize,
   formatWechatPayApplymentTime,
   getWechatPayApplymentAttachmentCategoryLabel,
+  getWechatPayApplymentAttachmentDisplayName,
   getWechatPayApplymentStatusMeta,
   type WechatPayApplymentAttachment,
   type WechatPayApplymentRecord,
@@ -57,6 +58,10 @@ export default async function PlatformWechatPayApplymentDetailPage({
   const applyment = data.applyment;
   const statusMeta = getWechatPayApplymentStatusMeta(applyment?.status);
   const settlementRule = resolveSettlementRule(applyment);
+  const merchantDisplayName =
+    applyment?.merchant_short_name?.trim() ||
+    applyment?.tenant?.name?.trim() ||
+    "未填写商户简称";
 
   return (
     <div className="flex min-h-0 flex-col gap-5 overflow-visible lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden">
@@ -92,7 +97,7 @@ export default async function PlatformWechatPayApplymentDetailPage({
               <Card className="shadow-none">
                 <CardHeader>
                   <div className="flex flex-wrap items-center gap-2">
-                    <CardTitle>{applyment.merchant_short_name}</CardTitle>
+                    <CardTitle>{merchantDisplayName}</CardTitle>
                     <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
                     <Badge variant="outline">{applyment.application_no}</Badge>
                   </div>
@@ -322,7 +327,7 @@ function WechatPayApplymentAttachmentList({
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {attachments.map((attachment) => {
-        const previewUrl = buildWechatPayApplymentAttachmentPreviewUrl(attachment.object_key);
+        const previewUrl = buildWechatPayApplymentAttachmentPreviewUrl(attachment);
         return (
           <div key={`${attachment.category || "attachment"}:${attachment.object_key}`} className="rounded-md border p-3">
             <div className="flex min-w-0 gap-3">
@@ -334,7 +339,7 @@ function WechatPayApplymentAttachmentList({
                   {getWechatPayApplymentAttachmentCategoryLabel(attachment.category)}
                 </div>
                 <div className="mt-1 truncate text-xs text-muted-foreground">
-                  {attachment.file_name || attachment.object_key}
+                  {getWechatPayApplymentAttachmentDisplayName(attachment)}
                 </div>
                 {attachment.size ? (
                   <div className="mt-1 text-xs text-muted-foreground">
@@ -343,12 +348,14 @@ function WechatPayApplymentAttachmentList({
                 ) : null}
               </div>
             </div>
-            <Button asChild variant="outline" size="sm" className="mt-3">
-              <a href={previewUrl} target="_blank" rel="noreferrer">
-                <ExternalLink data-icon="inline-start" />
-                查看附件
-              </a>
-            </Button>
+            {previewUrl ? (
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <a href={previewUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink data-icon="inline-start" />
+                  查看附件
+                </a>
+              </Button>
+            ) : null}
           </div>
         );
       })}

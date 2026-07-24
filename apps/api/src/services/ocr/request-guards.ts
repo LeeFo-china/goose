@@ -85,12 +85,18 @@ export function buildOcrDedupeKey(input: {
   fileIdentity: string;
   documentType: OcrDocumentType;
   providerAction: string;
+  scene: OcrScene;
+  subjectType?: string | null;
+  subjectId?: string | null;
 }) {
   return createHash("sha256").update([
     input.tenantId,
+    input.scene,
     input.fileIdentity,
     input.documentType,
     input.providerAction,
+    input.subjectType ?? "",
+    input.subjectId ?? "",
   ].join(":"), "utf8").digest("hex");
 }
 

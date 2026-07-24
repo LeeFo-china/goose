@@ -37,8 +37,8 @@ const source = {
   settlement_bank_name: "中国银行",
   settlement_bank_full_name: "中国银行股份有限公司固始支行",
   settlement_bank_branch_id: "104515080123",
-  settlement_id: "719",
-  qualification_type: "生活服务/家装服务",
+  settlement_id: "716",
+  qualification_type: "零售批发/生活娱乐/网上商城/其他",
 };
 
 const sensitive = {
@@ -107,8 +107,8 @@ describe("buildWechatPayApplymentSubmitRequest", () => {
         },
       },
       settlement_info: {
-        settlement_id: "719",
-        qualification_type: "生活服务/家装服务",
+        settlement_id: "716",
+        qualification_type: "零售批发/生活娱乐/网上商城/其他",
       },
       bank_account_info: {
         bank_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
@@ -203,6 +203,27 @@ describe("buildWechatPayApplymentSubmitRequest", () => {
       code: "WECHAT_PAY_APPLYMENT_REQUEST_SOURCE_INVALID",
       details: {
         missing: expect.arrayContaining(["media.contact_id_card_front"]),
+      },
+    }));
+  });
+
+  test("rejects enterprise personal accounts at the request boundary", () => {
+    expect(() => buildWechatPayApplymentSubmitRequest({
+      businessCode: "1561816121_WPA202607010004",
+      serviceProviderAppId: "wxbac3b1e168fd968a",
+      publicKeyPem: keys.publicKey,
+      source: {
+        ...source,
+        settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+      },
+      sensitive,
+      media,
+    })).toThrowError(expect.objectContaining({
+      code: "WECHAT_PAY_APPLYMENT_REQUEST_SOURCE_INVALID",
+      details: {
+        missing: expect.arrayContaining([
+          "source.settlement_account_type",
+        ]),
       },
     }));
   });

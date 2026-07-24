@@ -8,8 +8,24 @@ import {
   TENANT_ONBOARDING_LICENSE_MIME_TYPES,
   verifyPrivateUploadIntent,
 } from "./private-upload-intent";
+import {
+  createApplymentUploadIntent,
+  verifyApplymentUploadIntent,
+} from "./applyment-upload-intent";
+import {
+  getWechatPayApplymentUploadPolicy,
+} from "./direct-upload-scene-policy";
 
 const PRIVATE_LICENSE_SCENE = "tenant_onboarding_license";
+const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
+
+type PrivateHeadPolicy = {
+  maxSizeBytes: number;
+  mimeTypes: ReadonlySet<string>;
+  sizeError: string;
+  typeError: string;
+  checksumError: string;
+};
 
 export async function createDirectUpload(this: any, input: DirectUploadInput) {
   const provider = await this.getStorageProvider();
@@ -29,13 +45,23 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
   const visitorId = input.visitorId?.trim() || null;
   const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE
     && input.visibility === "private";
+  const applymentPolicy = input.visibility === "private"
+    ? getWechatPayApplymentUploadPolicy(input.scene)
+    : null;
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
   }
+  if (applymentPolicy) assertApplymentUploadDeclaration(input, applymentPolicy);
   const expiresAtSeconds = Math.floor(Date.now() / 1000) + config.signedUrlTtl;
   // COS only enforces this overwrite guard when bucket versioning is disabled.
   // Task 13 must verify the target bucket setting before release.
-  const signedHeaders = isPrivateLicense
+  const signedHeaders = applymentPolicy
+    ? {
+      "Content-Length": input.sizeBytes,
+      "Content-Type": input.mimetype,
+      "x-cos-forbid-overwrite": true,
+    }
+    : isPrivateLicense
     ? {
       "Content-Length": input.sizeBytes,
       "x-cos-forbid-overwrite": true,
@@ -53,7 +79,17 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     Protocol: "https:",
     ...(signedHeaders ? { Headers: signedHeaders } : {}),
   });
-  const uploadIntent = isPrivateLicense && visitorId
+  const uploadIntent = applymentPolicy
+    ? createApplymentUploadIntent({
+      secretKey: config.secretKey,
+      scene: input.scene,
+      tenantId: input.tenantId!,
+      objectKey,
+      mimeType: input.mimetype,
+      sizeBytes: input.sizeBytes,
+      expiresAtSeconds,
+    })
+    : isPrivateLicense && visitorId
     ? createPrivateUploadIntent({
       secretKey: config.secretKey,
       objectKey,
@@ -74,7 +110,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     method: "PUT" as const,
     headers: {
       "content-type": input.mimetype,
-      ...(isPrivateLicense
+      ...(isPrivateLicense || applymentPolicy
         ? {
           "content-length": String(input.sizeBytes),
           "x-cos-forbid-overwrite": true,
@@ -88,10 +124,10 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
 }
 
 export async function completeDirectUpload(this: any, input: CompleteDirectUploadInput) {
-  const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE;
+  const isPrivateObject = input.visibility === "private";
   return this.registerExistingCosObject({
     ...input,
-    verifyHead: isPrivateLicense || this.shouldVerifyDirectUploadHead(),
+    verifyHead: isPrivateObject || this.shouldVerifyDirectUploadHead(),
     failIfMissing: true,
     metadata: {
       direct_upload: true,
@@ -104,8 +140,12 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
   const cos = this.getCosClient(config);
   this.setCosAccessCache(config);
   const visitorId = input.visitorId?.trim() || null;
+  const isPrivateObject = input.visibility === "private";
   const isPrivateLicense = input.scene === PRIVATE_LICENSE_SCENE
-    && input.visibility === "private";
+    && isPrivateObject;
+  const isPrivateApplyment = input.scene === PRIVATE_APPLYMENT_SCENE
+    && isPrivateObject;
+  const privateHeadPolicy = getPrivateHeadPolicy(input);
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
   }
@@ -116,12 +156,19 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
       secretKey: config.secretKey,
     });
   }
+  if (isPrivateApplyment) {
+    assertPrivateApplymentIntent({
+      input,
+      secretKey: config.secretKey,
+    });
+  }
 
   let headObject: {
     headers?: Record<string, string | number | undefined>;
     ETag?: string | null;
   } | null = null;
-  const verifyHeadObject = isPrivateLicense || Boolean(input.verifyHead);
+  const verifyHeadObject = Boolean(privateHeadPolicy) ||
+    Boolean(input.verifyHead);
   if (verifyHeadObject) {
     try {
       headObject = await cos.headObject({
@@ -143,7 +190,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     }
   }
 
-  const publicUrl = isPrivateLicense
+  const publicUrl = isPrivateObject
     ? null
     : this.buildCosPublicUrl({
       publicBaseUrl: config.publicBaseUrl,
@@ -151,14 +198,19 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
       region: config.region,
       objectKey: input.objectKey,
     });
-  const accessUrl = isPrivateLicense
+  const accessUrl = isPrivateObject
     ? null
     : resolveStoredFileUrl(input.objectKey) || publicUrl;
 
   const headers = (headObject?.headers || {}) as Record<string, string | number | undefined>;
   const fallbackSize = input.sizeBytes ?? 0;
-  const privateMetadata = isPrivateLicense
-    ? requirePrivateLicenseHeadMetadata({ input, headObject, headers })
+  const privateMetadata = privateHeadPolicy
+    ? requirePrivateHeadMetadata({
+      input,
+      headObject,
+      headers,
+      policy: privateHeadPolicy,
+    })
     : null;
   const contentLength = privateMetadata?.contentLength
     ?? Number(getHeader(headers, "content-length") ?? fallbackSize);
@@ -195,7 +247,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     created_by_employee_id: input.employeeId ?? null,
   });
 
-  if (isPrivateLicense) {
+  if (isPrivateObject) {
     return { file_id: fileObject.id, status: fileObject.status };
   }
 
@@ -240,13 +292,80 @@ function assertPrivateLicenseIntent(input: {
   if (!verified) throw privateUploadError("私有上传凭证无效或已过期");
 }
 
-function requirePrivateLicenseHeadMetadata(input: {
+function getPrivateHeadPolicy(
+  input: RegisterExistingCosObjectInput,
+): PrivateHeadPolicy | null {
+  if (input.visibility !== "private") return null;
+  if (input.scene === PRIVATE_LICENSE_SCENE) {
+    return {
+      maxSizeBytes: TENANT_ONBOARDING_LICENSE_MAX_SIZE_BYTES,
+      mimeTypes: TENANT_ONBOARDING_LICENSE_MIME_TYPES,
+      sizeError: "营业执照文件大小校验失败",
+      typeError: "营业执照文件类型校验失败",
+      checksumError: "营业执照文件校验值不一致",
+    };
+  }
+  if (input.scene === PRIVATE_APPLYMENT_SCENE) {
+    const policy = getWechatPayApplymentUploadPolicy(input.scene)!;
+    return {
+      maxSizeBytes: policy.maxSizeBytes,
+      mimeTypes: policy.mimeTypes,
+      sizeError: policy.sizeError,
+      typeError: policy.typeError,
+      checksumError: policy.checksumError,
+    };
+  }
+  return null;
+}
+
+function assertApplymentUploadDeclaration(
+  input: Pick<DirectUploadInput, "tenantId" | "mimetype" | "sizeBytes">,
+  policy: NonNullable<ReturnType<typeof getWechatPayApplymentUploadPolicy>>,
+) {
+  const mimeType = normalizePrivateUploadMimeType(input.mimetype);
+  if (
+    !input.tenantId ||
+    !Number.isInteger(input.sizeBytes) ||
+    input.sizeBytes <= 0 ||
+    input.sizeBytes > policy.maxSizeBytes
+  ) throw privateUploadError(policy.sizeError);
+  if (!policy.mimeTypes.has(mimeType)) {
+    throw privateUploadError(policy.typeError);
+  }
+}
+
+function assertPrivateApplymentIntent(input: {
+  input: RegisterExistingCosObjectInput;
+  secretKey: string;
+}) {
+  const policy = getWechatPayApplymentUploadPolicy(input.input.scene)!;
+  assertApplymentUploadDeclaration({
+    tenantId: input.input.tenantId,
+    mimetype: input.input.mimetype ?? "",
+    sizeBytes: input.input.sizeBytes ?? 0,
+  }, policy);
+  if (!verifyApplymentUploadIntent({
+    token: input.input.uploadIntent?.trim() || "",
+    secretKey: input.secretKey,
+    scene: input.input.scene,
+    tenantId: input.input.tenantId!,
+    objectKey: input.input.objectKey,
+    mimeType: input.input.mimetype ?? "",
+    sizeBytes: input.input.sizeBytes ?? 0,
+    nowSeconds: Math.floor(Date.now() / 1000),
+  })) {
+    throw privateUploadError("进件附件上传凭证无效或已过期");
+  }
+}
+
+function requirePrivateHeadMetadata(input: {
   input: RegisterExistingCosObjectInput;
   headObject: {
     headers?: Record<string, string | number | undefined>;
     ETag?: string | null;
   } | null;
   headers: Record<string, string | number | undefined>;
+  policy: PrivateHeadPolicy;
 }) {
   const contentLength = parseContentLength(getHeader(input.headers, "content-length"));
   const contentType = normalizePrivateUploadMimeType(
@@ -256,19 +375,19 @@ function requirePrivateLicenseHeadMetadata(input: {
   const declaredSize = input.input.sizeBytes ?? 0;
   if (
     contentLength === null || contentLength <= 0 ||
-    contentLength > TENANT_ONBOARDING_LICENSE_MAX_SIZE_BYTES ||
+    contentLength > input.policy.maxSizeBytes ||
     contentLength !== declaredSize
-  ) throw privateUploadError("营业执照文件大小校验失败");
+  ) throw privateUploadError(input.policy.sizeError);
   if (
-    !TENANT_ONBOARDING_LICENSE_MIME_TYPES.has(contentType) ||
+    !input.policy.mimeTypes.has(contentType) ||
     contentType !== declaredContentType
-  ) throw privateUploadError("营业执照文件类型校验失败");
+  ) throw privateUploadError(input.policy.typeError);
 
   const headEtag = normalizeEtag(input.headObject?.ETag)
     ?? normalizeEtag(String(getHeader(input.headers, "etag") ?? ""));
   const clientEtag = normalizeEtag(input.input.etag);
   if (!headEtag || (clientEtag && clientEtag !== headEtag)) {
-    throw privateUploadError("营业执照文件校验值不一致");
+    throw privateUploadError(input.policy.checksumError);
   }
   return { contentLength, contentType, etag: headEtag };
 }

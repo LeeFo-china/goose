@@ -16,6 +16,8 @@
 
 - `supabase/migrations/20260723130000_allow_partial_wechat_pay_applyment_drafts.sql`
   - 允许草稿阶段的商户简称为空，同时保留非空值校验。
+- `supabase/migrations/20260723133000_add_atomic_wechat_pay_applyment_submit.sql`
+  - 原子完成租户提交状态转换与 submitted 审计事件，支持同申请 ID 幂等重试。
 - `apps/admin/components/finance/finance-wechat-pay-applyment-flow-model.ts`
   - 定义四阶段、资料处理状态、附件状态恢复、必传资料和阶段推进纯函数。
 - `apps/admin/components/finance/finance-wechat-pay-applyment-flow-model.test.ts`
@@ -138,19 +140,15 @@ Expected: FAIL，`merchant_short_name` 不能赋值为 `null`。
 ALTER TABLE public.tenant_wechat_pay_applyments
   ALTER COLUMN merchant_short_name DROP NOT NULL;
 
-ALTER TABLE public.tenant_wechat_pay_applyments
-  DROP CONSTRAINT IF EXISTS tenant_wechat_pay_applyments_merchant_short_name_not_blank;
-
-ALTER TABLE public.tenant_wechat_pay_applyments
-  ADD CONSTRAINT tenant_wechat_pay_applyments_merchant_short_name_not_blank
-  CHECK (
-    merchant_short_name IS NULL OR
-    btrim(merchant_short_name) <> ''
-  );
-
 COMMENT ON COLUMN public.tenant_wechat_pay_applyments.merchant_short_name
 IS '商户简称；草稿阶段可为空，正式提交前由 readiness 强制要求';
 ```
+
+复用既有
+`tenant_wechat_pay_applyments_merchant_short_name_not_blank` 约束：
+`merchant_short_name` 为 `NULL` 时，`btrim(merchant_short_name) <> ''`
+结果为 `UNKNOWN`，因此允许 `NULL`；空白字符串的结果仍为 `FALSE`，
+继续被拒绝。不要删除并重建该约束，避免全表重验和额外 DDL 锁。
 
 回滚 SQL 记录在 migration 注释中：
 
@@ -161,6 +159,9 @@ WHERE merchant_short_name IS NULL;
 
 ALTER TABLE public.tenant_wechat_pay_applyments
   ALTER COLUMN merchant_short_name SET NOT NULL;
+
+COMMENT ON COLUMN public.tenant_wechat_pay_applyments.merchant_short_name
+IS NULL;
 ```
 
 - [ ] **Step 4: 在本地数据库应用并重新生成类型**
@@ -221,8 +222,13 @@ git commit -m "feat(payment): 支持不完整进件草稿"
 - Modify: `apps/api/src/services/wechat-pay-applyment-sensitive-payload.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyment-sensitive-payload.test.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyment-draft.ts`
+- Create: `apps/api/src/services/wechat-pay-applyment-content-validation.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyments.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyments-types.ts`
+- Modify: `apps/api/src/repositories/wechat-pay-applyments.ts`
+- Modify: `apps/api/src/repositories/ocr-recognitions.ts`
+- Modify: `apps/api/src/types/database.ts`
+- Create: `supabase/migrations/20260723133000_add_atomic_wechat_pay_applyment_submit.sql`
 - Modify: `apps/api/src/services/wechat-pay-applyment-submission.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyment-submission.test.ts`
 - Modify: `apps/api/src/services/wechat-pay-applyments-sensitive-integration.test.ts`
@@ -725,41 +731,27 @@ if (input.settlement_account_number === null) {
 
 - [ ] **Step 8: 记录不含敏感值的字段变更审计**
 
-`createDraft` 和 `updateDraft` 的 event metadata 只记录字段名，不记录字段值：
+`createDraft` 和 `updateDraft` 的 event metadata 只记录字段名，不记录字段值。
+敏感输入字段必须由密文合并使用的同一 source-to-payload 映射派生，禁止再维护独立的
+审计字段集合：
 
 ```ts
-function buildDraftChangeAudit(input: Record<string, unknown>) {
-  const sensitiveFields = new Set([
-    "identity_name",
-    "identity_number",
-    "identity_address",
-    "super_admin_phone",
-    "contact_identity_number",
-    "contact_identity_address",
-    "settlement_account_number",
-  ]);
-  const changedFields = Object.keys(input)
-    .filter((field) => field !== "draft_update_source")
-    .sort();
-  return {
-    changed_fields: changedFields,
-    change_source: input.draft_update_source ?? "manual_save",
-    has_sensitive_replacement: changedFields.some((field) =>
-      sensitiveFields.has(field)
-    ),
-  };
-}
+const sensitiveReplacementFields = getSensitiveReplacementFields(input);
 ```
 
 在 service test 断言 metadata 包含字段名，但序列化结果不包含完整身份证号、手机号或
 银行账号。OCR recognition 自身继续记录 recognition ID、操作者、租户和文件对象，
 applyment event 不复制 OCR 原始结果。
 
-`updateDraft` 对 `draft_update_source === "autosave"` 只更新草稿和
-`updated_by_employee_id/updated_at`，不插入 applyment event，避免每次键入都污染处理
-时间线；`manual_save`、`attachment_change`、`ocr_review`、`ocr_confirm` 和
-`manual_entry` 继续写审计事件。增加测试断言 autosave 不调用 `insertEvent`，而
-`ocr_confirm` 事件只包含 change source、字段名和状态元数据。
+`updateDraft` 必须先比较 current 安全投影与 patch，并对 attachments 做按对象字段的
+结构化比较。服务端先构造完整 patch，`status`、`applyment_state`、`rejected_at`、
+`rejected_reason` 等状态重置也必须参与差异和审计；draft 无任何实际变化时直接返回当前
+detail，不执行 repository update。仅 `remark`、`business_scene_description` 这类不影响主体、联系人、
+证照或结算的低风险叙述字段允许 autosave 抑制事件；其余实际变化和全部敏感替换始终
+审计，不能信任客户端 `draft_update_source` 关闭事件。附件来源只从实际变化的附件
+派生：非 confirmed 转 confirmed 为 `ocr_confirm`，转 manual 为 `manual_entry`，
+文件或其他状态变化为 `attachment_change`。metadata 仍只包含排序后的字段名、
+派生来源和非敏感状态。
 
 - [ ] **Step 9: 把完整性校验放到 preflight**
 
@@ -819,10 +811,16 @@ if (!editable && current.submitted_at) {
 this.assertEditable(current);
 ```
 
-首次提交事件 metadata 记录 `{ idempotency_key: input.idempotency_key }`，不得记录
-表单字段值。`wechat-pay-applyments.test.ts` 增加“首次响应丢失后使用同一 key 重试，
-直接返回已提交申请且不重复 update/insert event”的测试。这里的提交只改变平台审核状态，
-不调用微信进件；正式微信进件继续使用既有独立幂等机制。
+租户提交前必须解密敏感草稿并完成完整性、结算组合、企业对公账户和附件 OCR
+核对/归属校验。首次提交通过
+`submit_tenant_wechat_pay_applyment` RPC 在同一事务内完成状态转换和事件写入；
+RPC 对申请行加锁并用 `expected_updated_at` 防止内容校验后的并发草稿覆盖，事件 metadata 只记录
+`{ idempotency_key: input.idempotency_key }`。已提交或进入后续状态且
+`submitted_at` 非空时，同 key 重试返回幂等结果，不重复事件；editable 状态仍可重新提交。
+`wechat-pay-applyments.test.ts` 和 repository migration contract test 只覆盖 service
+编排和 SQL 静态契约，不能作为真实数据库并发证明。migration 应用后的双连接并发与
+事务回滚验证列入 Task 9 发布门禁。这里的提交只改变平台审核状态，不调用微信进件；
+正式微信进件继续使用既有独立幂等机制。
 
 - [ ] **Step 11: 运行 API 定向测试**
 
@@ -849,6 +847,13 @@ git commit -m "refactor(payment): 拆分进件草稿与提交校验"
 **Files:**
 - Create: `apps/admin/components/finance/finance-wechat-pay-applyment-flow-model.ts`
 - Create: `apps/admin/components/finance/finance-wechat-pay-applyment-flow-model.test.ts`
+
+附件数组按 category 建立 last-write-wins 的当前 OCR 附件投影，初始化、资料阶段
+和识别阶段必须复用同一投影。只有 `attachmentObjectKey` 与当前附件
+`object_key` 一致的 state 才有效；删除附件、`SUPER -> LEGAL` 移除经办人附件、
+替换附件或重复 category 时，旧 state 不得继续阻塞或放行。阶段恢复按 canonical
+顺序逐级合并 local guard 与 backend blocker，不得先跑完全部 local guard 再统一
+查 blocker。
 
 - [ ] **Step 1: 写 flow model 失败测试**
 
@@ -990,8 +995,34 @@ describe("wechat pay applyment flow model", () => {
       blockerStages: ["supplement"],
     })).toBe("supplement");
   });
+
+  test("prioritizes a materials blocker over unresolved recognition", () => {
+    const unresolvedAttachments = [{
+      category: "license_copy",
+      object_key: "tenant/license.jpg",
+      ocr_review_status: "review_required" as const,
+    }, {
+      category: "legal_representative_id_card_front",
+      object_key: "tenant/id-front.jpg",
+      ocr_review_status: "confirmed" as const,
+    }, {
+      category: "legal_representative_id_card_back",
+      object_key: "tenant/id-back.jpg",
+      ocr_review_status: "confirmed" as const,
+    }];
+    expect(getInitialApplymentStage({
+      contactType: "LEGAL",
+      attachments: unresolvedAttachments,
+      materialStates: buildInitialMaterialStates(unresolvedAttachments),
+      blockerStages: ["materials"],
+    })).toBe("materials");
+  });
 });
 ```
+
+测试还必须覆盖孤立 state、附件替换前后 object key、重复 category 的
+last-write-wins 行为，以及 readonly state/map 和 metadata 两个必填 key 的
+TypeScript 编译契约。
 
 - [ ] **Step 2: 运行测试确认失败**
 
@@ -1013,6 +1044,7 @@ import type {
 import type {
   WechatPayApplymentAttachment,
   WechatPayApplymentAttachmentCategory,
+  WechatPayApplymentAttachmentOcrReviewStatus,
 } from "./finance-wechat-pay-applyment-shared";
 import {
   WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES,
@@ -1038,23 +1070,57 @@ export type ApplymentMaterialStatus =
   | "failed";
 
 export type ApplymentMaterialState = {
-  status: ApplymentMaterialStatus;
-  attachmentObjectKey: string | null;
-  recognitionId: string | null;
-  fields: readonly OcrFieldSuggestion[];
-  warnings: readonly OcrWarning[];
-  error: string | null;
+  readonly status: ApplymentMaterialStatus;
+  readonly attachmentObjectKey: string | null;
+  readonly recognitionId: string | null;
+  readonly fields: readonly OcrFieldSuggestion[];
+  readonly warnings: readonly OcrWarning[];
+  readonly error: string | null;
 };
 
-export type ApplymentMaterialStateMap = Partial<
-  Record<WechatPayApplymentAttachmentCategory, ApplymentMaterialState>
+export type ApplymentMaterialStateMap = Readonly<
+  Partial<
+    Record<WechatPayApplymentAttachmentCategory, ApplymentMaterialState>
+  >
 >;
+
+export type ApplymentAttachmentOcrReviewMetadata = {
+  readonly ocr_recognition_id: string | null;
+  readonly ocr_review_status:
+    | WechatPayApplymentAttachmentOcrReviewStatus
+    | null;
+};
 
 const BASE_REQUIRED = [
   "license_copy",
   "legal_representative_id_card_front",
   "legal_representative_id_card_back",
 ] as const;
+
+const OCR_SUPPORTED_CATEGORIES: ReadonlySet<unknown> = new Set(
+  Object.keys(WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES),
+);
+
+function isOcrSupportedCategory(
+  category: WechatPayApplymentAttachment["category"],
+): category is WechatPayApplymentAttachmentCategory {
+  return typeof category === "string" &&
+    OCR_SUPPORTED_CATEGORIES.has(category);
+}
+
+function buildCurrentOcrAttachments(
+  attachments: readonly WechatPayApplymentAttachment[],
+) {
+  const current = new Map<
+    WechatPayApplymentAttachmentCategory,
+    WechatPayApplymentAttachment
+  >();
+  for (const attachment of attachments) {
+    if (!isOcrSupportedCategory(attachment.category)) continue;
+    current.set(attachment.category, attachment);
+  }
+  return current;
+}
 
 function restoreMaterialStatus(
   status: WechatPayApplymentAttachment["ocr_review_status"],
@@ -1086,17 +1152,11 @@ export function buildInitialMaterialState(
 export function buildInitialMaterialStates(
   attachments: readonly WechatPayApplymentAttachment[],
 ): ApplymentMaterialStateMap {
-  const states: ApplymentMaterialStateMap = {};
-  for (const attachment of attachments) {
-    const category = attachment.category;
-    if (
-      typeof category !== "string" ||
-      !(category in WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES)
-    ) {
-      continue;
-    }
-    const typedCategory = category as WechatPayApplymentAttachmentCategory;
-    states[typedCategory] = buildInitialMaterialState(attachment);
+  const states: Partial<
+    Record<WechatPayApplymentAttachmentCategory, ApplymentMaterialState>
+  > = {};
+  for (const [category, attachment] of buildCurrentOcrAttachments(attachments)) {
+    states[category] = buildInitialMaterialState(attachment);
   }
   return states;
 }
@@ -1104,10 +1164,7 @@ export function buildInitialMaterialStates(
 export function updateAttachmentOcrReviewMetadata(
   attachments: readonly WechatPayApplymentAttachment[],
   objectKey: string,
-  metadata: Pick<
-    WechatPayApplymentAttachment,
-    "ocr_recognition_id" | "ocr_review_status"
-  >,
+  metadata: ApplymentAttachmentOcrReviewMetadata,
 ): WechatPayApplymentAttachment[] {
   return attachments.map((attachment) =>
     attachment.object_key === objectKey
@@ -1135,14 +1192,17 @@ export function canLeaveMaterialsStage(input: {
   attachments: readonly WechatPayApplymentAttachment[];
   materialStates: ApplymentMaterialStateMap;
 }) {
-  const categories = new Set(input.attachments.map((item) => item.category));
+  const currentAttachments = buildCurrentOcrAttachments(input.attachments);
   const missing = getRequiredApplymentAttachments(input.contactType)
-    .some((category) => !categories.has(category));
+    .some((category) => !currentAttachments.has(category));
   if (missing) {
     return { allowed: false, reason: "请先上传全部必传资料" } as const;
   }
-  const busy = Object.values(input.materialStates)
-    .some((item) => item?.status === "recognizing");
+  const busy = Array.from(currentAttachments).some(([category, attachment]) => {
+    const state = input.materialStates[category];
+    return state?.attachmentObjectKey === attachment.object_key &&
+      state.status === "recognizing";
+  });
   return busy
     ? { allowed: false, reason: "证照正在识别，请稍候" } as const
     : { allowed: true, reason: null } as const;
@@ -1152,15 +1212,12 @@ export function canLeaveRecognitionStage(input: {
   attachments: readonly WechatPayApplymentAttachment[];
   materialStates: ApplymentMaterialStateMap;
 }) {
-  const unresolved = input.attachments.some((attachment) => {
-    const category = attachment.category as
-      | WechatPayApplymentAttachmentCategory
-      | undefined;
-    if (!category || !WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[category]) {
-      return false;
-    }
-    const status = input.materialStates[category]?.status;
-    return status !== "confirmed" && status !== "manual";
+  const unresolved = Array.from(
+    buildCurrentOcrAttachments(input.attachments),
+  ).some(([category, attachment]) => {
+    const state = input.materialStates[category];
+    if (state?.attachmentObjectKey !== attachment.object_key) return true;
+    return state.status !== "confirmed" && state.status !== "manual";
   });
   return unresolved
     ? {
@@ -1176,11 +1233,20 @@ export function getInitialApplymentStage(input: {
   materialStates: ApplymentMaterialStateMap;
   blockerStages: readonly ApplymentStageKey[];
 }): ApplymentStageKey {
-  if (!canLeaveMaterialsStage(input).allowed) return "materials";
-  if (!canLeaveRecognitionStage(input).allowed) return "recognition";
-  return APPLYMENT_STAGE_KEYS.find((stage) =>
-    stage !== "submit" && input.blockerStages.includes(stage)
-  ) ?? "submit";
+  const blockerStages = new Set(input.blockerStages);
+  if (
+    !canLeaveMaterialsStage(input).allowed ||
+    blockerStages.has("materials")
+  ) {
+    return "materials";
+  }
+  if (
+    !canLeaveRecognitionStage(input).allowed ||
+    blockerStages.has("recognition")
+  ) {
+    return "recognition";
+  }
+  return blockerStages.has("supplement") ? "supplement" : "submit";
 }
 ```
 
@@ -1210,6 +1276,81 @@ git commit -m "feat(admin): 建立进件OCR流程模型"
 - Modify: `apps/admin/components/finance/finance-wechat-pay-applyment-page-layout.test.ts`
 - Modify: `apps/admin/components/finance/finance-wechat-pay-applyment-panel.tsx`
 - Modify: `apps/admin/components/ocr/ocr-requests.ts`
+
+**异步与安全约束：**
+
+- 上传完成后，父级必须以 `attachmentsRef.current` 为权威，按 category/object key
+  将新附件 rebase 到最新列表；子组件回传的 `nextAttachments` 只用于兼容契约，不能覆盖
+  上传等待期间已经写入的其他附件 OCR metadata。
+- OCR create 成功即进入 `review_required` 并保留 recognition id、fields、warnings；
+  随后的草稿保存失败只记录“识别结果保存失败”，重试时仅保存当前结果，不再次创建 OCR。
+  只有 create 请求或恢复 GET 失败才进入 `failed`。
+- 私有预览只根据 `file_object_id` 构造同源鉴权代理 URL，由后端校验租户、权限和附件场景后
+  临时签名；不得直通外部 URL，也不得用 `object_key`、签名 URL 作为可见文件名 fallback。
+  `wechat_pay_applyment` direct upload 必须登记为 private file object、强制 HEAD 确认，且
+  storage response 不生成或返回永久 public URL。
+- 私有预览权限与进件详情保持一致：平台身份必须有
+  `platform.wechat_pay.applyment.read`，租户身份必须有
+  `wechat_pay.applyment.read` 或 `wechat_pay.applyment.submit`，并继续校验租户归属、
+  文件场景和 provider。权限判断位于 service/access-policy 边界。
+- materials hook 的 mounted ref effect 在每次 setup 时显式恢复为 `true`，cleanup 置为
+  `false`，保证 React Strict Mode 的 setup→cleanup→setup 重放后仍可提交状态更新。
+- 选择手动填写时，同 object key 的 material state 必须立即切换为 `manual`，保留附件、
+  recognition id、fields 与 warnings，并清除 OCR error；若 `manual_entry` 草稿保存失败，
+  本地 manual 意图不回退为 failed，显示保存错误且重试仅再次持久化。
+- 进件详情显式返回 `can_edit`：只有租户拥有 `wechat_pay.applyment.submit` 且申请处于
+  draft/rejected/wechat_editing 时为 true。Admin 上传、OCR 授权、保存、重试和提交写控件
+  必须以该服务端 capability 为准；进件 direct upload init/complete 在 upload service
+  层对该 scene 强制 submit 权限，不能让只读账号产生 file object。
+  尚无 applyment 记录时按“可创建新 draft”处理，但仍必须拥有 submit 权限；此时
+  `can_edit` 可为 true，`can_submit` 必须为 false。
+- 上传附件 checkpoint 失败时保留未持久化 object key，并将对应 tile 标记为
+  “附件保存失败”；“重试保存”只提交当前 attachments。保存成功后才清 key/error，并在
+  已授权且 capability 支持时最多启动一次 OCR。经营场景等非 OCR 附件使用相同错误与
+  persistence-only 重试路径，但保存成功后不得触发 OCR。替换或删除附件同步清理旧 key/error。
+- capability 不可用触发的 automatic manual 与显式 manual 共用持久化失败语义：
+  本地保持 manual，失败显示“手动填写状态保存失败”，重试只保存且不触发 OCR。
+- 私有预览 302 必须返回 `Cache-Control: private, no-store, max-age=0`、
+  `Pragma: no-cache`、`Referrer-Policy: no-referrer`；Admin proxy 对 redirect 只转发
+  Location 和这三个安全响应头。缩略图使用 lazy loading，加载失败显示稳定失败状态，
+  Dialog 提供重试和关闭。
+- materials 异步任务捕获 reset generation；reset/unmount 后旧恢复、capability、checkpoint
+  或 recognition 结果不得写回，也不得在新草稿上启动 persist/OCR。识别和持久化编排拆到
+  单一职责 coordinator，materials hook 保持低于 500 行；save callback 的 applymentRef
+  更新及 save/recognition/manual/checkpoint reject 的错误报告也必须在同一个 generation
+  guard 内，旧草稿请求完成或失败后不得提交状态、checkpoint error 或全局错误副作用。
+- checkpoint 等待附件保存期间允许用户撤销 OCR 授权；保存完成后必须从 ref 实时读取
+  consent，并再次核对 generation 与当前 category/object key，满足全部条件后才能启动 OCR，
+  不得使用保存开始时捕获的布尔快照。
+- `wechat_pay_applyment` 私有上传 complete 必须从对象存储 HEAD 取得权威 size/MIME：
+  size 必须大于 0 且不超过场景上限，MIME 必须为允许图片，并与 init 声明完全一致；
+  HEAD 缺失时不得回退客户端声明。复用 onboarding 私有上传的服务层验证模式。
+- `wechat_pay_applyment` init/complete 必须使用实时 AuthContext 的 tenant/employee，并在
+  JWT 同时携带旧 claim 时校验两者完全一致；不一致直接拒绝，但不得改变其他 upload scene
+  的既有身份解析语义。两端共用 storage service 导出的单一 scene policy（2MB、JPEG/PNG），
+  init 签入 Content-Length、Content-Type 和禁止覆盖头，并用短时 intent 绑定 scene、
+  tenant、object key、size 与 MIME；complete 先验证 intent，再以 HEAD 权威复核。
+- retry/retrySave 加入队列时不能固化旧 state/action；真正执行前按 object key 重取当前附件、
+  material state、checkpoint error 和 retry action。相同 object key 的 in-flight 操作共享
+  一个 Promise，连续双击最多创建一次 OCR，已经进入 review_required 的附件不得再次 OCR。
+- 删除附件以及 SUPER→LEGAL 自动移除经办人证件采用 optimistic update 时，checkpoint
+  保存失败必须回滚至操作前的附件和联系人类型，并显示可见错误，不允许本地静默消失。
+- 隐藏 file input 由可见 shadcn Button 触发时必须设置 `tabIndex={-1}` 和
+  `aria-hidden="true"`，避免成为无标签焦点；上传按钮、重试 coordinator、联系人切换
+  helper 和请求文件校验按职责拆分，使 materials hook、附件组件和 controller 明显低于
+  500 行。
+- 浏览器直传失败改走同源 proxy 时，proxy 会重新 init 新对象；成功响应必须返回完整的
+  第二次 init 和 private complete 结果，client 的 DirectUploadResult.init 必须原样采用该
+  init，包括 object key、upload URL、headers 和 intent，禁止将第二个 object key 拼接到
+  第一次 init。proxy 的 init/COS/complete 网络异常统一返回脱敏 JSON 502，COS 非 2xx
+  正文不得回传前端。
+- 删除附件或联系人切换触发自动删除前，必须同时快照 attachments、material states、
+  unpersisted object keys 和 checkpoint errors；保存失败恢复完整快照，使原附件继续显示
+  “仅重试保存”，且恢复本身不得绕过 checkpoint 启动 OCR。
+- 附件删除和 SUPER→LEGAL 自动删除使用 object-key mutation intent；执行时在同一材料
+  operation queue 内基于最新 attachments 重算目标列表，再依次捕获快照、乐观更新、持久化
+  和失败回滚。联系人类型 override 与附件列表同次保存，重叠 mutation 不得造成服务端与
+  本地列表分叉。
 
 - [ ] **Step 1: 写资料工作区结构失败测试**
 
@@ -2666,8 +2807,22 @@ supabase migration list
 supabase db push --dry-run
 ```
 
-确认只包含 `20260723130000_allow_partial_wechat_pay_applyment_drafts.sql`
-后再执行：
+确认本功能只包含以下八项后再执行；如果远端存在并行开发已应用的 migration，必须先同步
+其原始文件并验证内容一致，禁止直接 repair：
+
+- `20260723130000_allow_partial_wechat_pay_applyment_drafts.sql`
+- `20260723133000_add_atomic_wechat_pay_applyment_submit.sql`
+- `20260724110000_add_wechat_pay_applyment_draft_revision.sql`
+- `20260724130000_add_wechat_pay_applyment_draft_epoch.sql`
+- `20260724150000_atomic_wechat_pay_applyment_draft_audit.sql`
+- `20260724170000_atomic_wechat_pay_applyment_create.sql`
+- `20260724173000_index_wechat_pay_applyment_attachments.sql`
+- `20260724200000_backfill_wechat_pay_applyment_file_ids.sql`
+
+后六项分别收口乱序草稿 revision、跨页面 epoch fencing、需要审计的草稿更新与事件
+同事务写入、首次草稿与 `created` 事件原子创建，以及附件对象级授权查询索引；它们
+还包括对历史附件的可信文件 ID 回填。它们属于 Task 7 与合并前安全审查后追加的发布
+门禁修正。
 
 ```bash
 supabase db push
@@ -2676,7 +2831,21 @@ supabase migration list
 
 Expected: Local/Remote 对齐。不得直接在远端执行 ALTER TABLE。
 
-- [ ] **Step 4: 启动隔离服务做浏览器 smoke**
+- [ ] **Step 4: 用真实数据库验证原子提交并发与回滚**
+
+仅在上述 migration 已应用到受控测试数据库后执行，必须使用两个独立数据库连接同时
+调用 `submit_tenant_wechat_pay_applyment`，不能用 repository mock 代替。验证：
+
+1. 两个相同幂等 key 的并发调用只发生一次 `draft/rejected/wechat_editing -> submitted`
+   状态转换。
+2. `tenant_wechat_pay_applyment_events` 只产生一条 `submitted` 事件。
+3. 在受控事务中令事件插入失败时，RPC 整体失败且 applyment 状态、`submitted_at` 均回滚。
+4. 清理测试数据后再次核对 applyment 和 event 计数，保存连接级执行日志作为发布证据。
+
+当前 Docker 不可用时只保留此门禁，不运行远端 migration，也不得以现有 mock 并发测试
+宣称真实数据库验证通过。
+
+- [ ] **Step 5: 启动隔离服务做浏览器 smoke**
 
 在实施 worktree 使用不同端口，不影响 main 工作区服务：
 
@@ -2701,7 +2870,7 @@ GOOES_API_BASE_URL=http://127.0.0.1:3100 NEXT_PUBLIC_GOOES_API_BASE_URL=http://1
 
 真实 OCR smoke 仅使用经授权的非生产测试资料；证件图片不得复制到仓库、截图或日志。
 
-- [ ] **Step 5: 输出对接文档**
+- [ ] **Step 6: 输出对接文档**
 
 文档必须记录：
 
@@ -2719,7 +2888,7 @@ GOOES_API_BASE_URL=http://127.0.0.1:3100 NEXT_PUBLIC_GOOES_API_BASE_URL=http://1
 > 状态：已实现，待发布验证
 ```
 
-- [ ] **Step 6: 最终检查**
+- [ ] **Step 7: 最终检查**
 
 Run:
 
@@ -2730,7 +2899,7 @@ git status --short
 
 确认没有密钥、token、身份证号码、银行卡号、签名 URL 或证照文件进入 diff。
 
-- [ ] **Step 7: 提交**
+- [ ] **Step 8: 提交**
 
 ```bash
 git add docs/tencent-ocr/2026-07-23-wechat-pay-applyment-ocr-first-handoff.md docs/superpowers/specs/2026-07-23-wechat-pay-applyment-ocr-first-ux-design.md

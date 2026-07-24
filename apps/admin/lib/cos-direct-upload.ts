@@ -10,6 +10,7 @@ export type DirectUploadInitResult = {
   upload_url: string;
   method?: "PUT";
   headers?: Record<string, string>;
+  upload_intent?: string;
 };
 
 export type DirectUploadCompleteResult = {
@@ -29,6 +30,11 @@ export type DirectUploadResult = {
   publicUrl?: string;
   init: DirectUploadInitResult;
   completed: DirectUploadCompleteResult;
+};
+
+type DirectUploadProxyResult = {
+  init?: DirectUploadInitResult;
+  completed?: DirectUploadCompleteResult;
 };
 
 export function buildUploadPreviewUrl(value: string) {
@@ -96,20 +102,18 @@ export async function uploadDirectToCos(
   } catch (error) {
     if (!isBrowserDirectUploadNetworkError(error)) throw error;
 
-    const completed = await uploadDirectToCosProxy<DirectUploadCompleteResult>(
+    const proxyResult = await uploadDirectToCosProxy<DirectUploadProxyResult>(
       file,
       commonPayload,
       input.completeFallbackMessage || "登记文件直传结果失败",
     );
-    return buildDirectUploadResult(completed, init, input.missingStorageMessage);
+    return buildProxyDirectUploadResult(
+      proxyResult,
+      input.missingStorageMessage,
+    );
   }
   if (!uploadResponse.ok) {
-    const detail = await uploadResponse.text().catch(() => "");
-    throw new Error(
-      `${input.uploadErrorLabel || "上传文件"}到 COS 失败(${uploadResponse.status})${
-        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
-      }`,
-    );
+    throw new Error("上传文件到存储服务失败，请稍后重试");
   }
 
   const completed = await requestBackendJson<DirectUploadCompleteResult>(
@@ -120,12 +124,30 @@ export async function uploadDirectToCos(
         ...commonPayload,
         object_key: init.object_key,
         etag: uploadResponse.headers.get("etag") || undefined,
+        upload_intent: init.upload_intent,
       }),
       fallbackMessage: input.completeFallbackMessage || "登记文件直传结果失败",
     },
   );
 
   return buildDirectUploadResult(completed, init, input.missingStorageMessage);
+}
+
+function buildProxyDirectUploadResult(
+  proxyResult: DirectUploadProxyResult,
+  missingStorageMessage?: string,
+) {
+  const { init, completed } = proxyResult;
+  if (
+    !init?.object_key ||
+    !init.upload_url ||
+    !completed?.object_key ||
+    !completed.storage_path ||
+    completed.object_key !== init.object_key
+  ) {
+    throw new Error(missingStorageMessage || "文件上传成功但未返回地址");
+  }
+  return buildDirectUploadResult(completed, init, missingStorageMessage);
 }
 
 function buildDirectUploadResult(

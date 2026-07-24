@@ -228,6 +228,9 @@ export class OcrService {
       fileIdentity: file.checksum || file.object_key,
       documentType: input.document_type,
       providerAction: capability.providerAction,
+      scene: input.scene,
+      subjectType: input.subject_type,
+      subjectId: input.subject_id,
     });
     await this.repository.expireStaleByDedupeKey({
       tenantId,

@@ -1,18 +1,29 @@
 import { Errors } from "@/errors/error-factory";
+import { createTenantWechatPayApplymentAtomically } from "@/repositories/wechat-pay-applyment-create-repository";
 import {
   throwApplymentActivationError,
   throwApplymentClaimError,
+  throwTenantApplymentSubmitError,
 } from "@/repositories/wechat-pay-applyment-rpc-errors";
+import {
+  claimTenantApplymentDraftSession,
+  type WechatPayApplymentDraftUpdateInput,
+  type WechatPayApplymentDraftUpdateResult,
+  updateTenantApplymentDraftAtomically,
+} from "@/repositories/wechat-pay-applyment-draft-repository";
 import type { Inserts, Tables, Updates } from "@/types/db";
+import type { Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
-
 type WechatPayApplymentTableRow = Tables<"tenant_wechat_pay_applyments">;
 type WechatPayApplymentMediaTableRow =
   Tables<"tenant_wechat_pay_applyment_media">;
-
 export type WechatPayApplymentRecord =
-  Omit<WechatPayApplymentTableRow, "sensitive_payload_ciphertext"> & {
+  Omit<
+    WechatPayApplymentTableRow,
+    "merchant_short_name" | "sensitive_payload_ciphertext"
+  > & {
+    merchant_short_name: string | null;
     tenant?: {
       id: string;
       name: string | null;
@@ -41,7 +52,6 @@ export type WechatPayApplymentMediaRecord = Pick<
 >;
 export type WechatPayApplymentMediaInsert =
   Inserts<"tenant_wechat_pay_applyment_media">;
-
 export type WechatPayApplymentListResult = {
   list: WechatPayApplymentRecord[];
   pagination: {
@@ -51,7 +61,7 @@ export type WechatPayApplymentListResult = {
     totalPages: number;
   };
 };
-
+export type { WechatPayApplymentDraftUpdateResult };
 const APPLYMENT_SAFE_COLUMNS = [
   "id",
   "tenant_id",
@@ -120,13 +130,13 @@ const APPLYMENT_SAFE_COLUMNS = [
   "reviewed_by_employee_id",
   "created_at",
   "updated_at",
+  "draft_epoch",
+  "draft_revision",
 ].join(", ");
-
 const APPLYMENT_SELECT = [
   APPLYMENT_SAFE_COLUMNS,
   "tenant:tenants!tenant_wechat_pay_applyments_tenant_id_fkey(id, name, slug)",
 ].join(", ");
-
 const APPLYMENT_MEDIA_SELECT = [
   "id",
   "applyment_id",
@@ -135,11 +145,9 @@ const APPLYMENT_MEDIA_SELECT = [
   "media_id",
   "request_id",
 ].join(", ");
-
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-class WechatPayApplymentRepository {
+export class WechatPayApplymentRepository {
   async claimSubmission(input: {
     applymentId: string;
     employeeId: string;
@@ -151,12 +159,10 @@ class WechatPayApplymentRepository {
         p_employee_id: input.employeeId,
       },
     );
-
     if (error) throwApplymentClaimError(error);
     if (!data?.[0]) {
       throw Errors.dbError("认领微信支付正式进件任务失败");
     }
-
     const claimed = await this.findById({ id: input.applymentId });
     if (!claimed) {
       throw Errors.business(
@@ -167,7 +173,6 @@ class WechatPayApplymentRepository {
     }
     return claimed;
   }
-
   async findLatestByTenant(
     tenantId: string,
   ): Promise<WechatPayApplymentRecord | null> {
@@ -178,14 +183,11 @@ class WechatPayApplymentRepository {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-
     if (error) {
       throw Errors.dbError("查询微信支付开通申请失败", error);
     }
-
     return (data as unknown as WechatPayApplymentRecord | null) ?? null;
   }
-
   async findById(input: {
     id: string;
     tenantId?: string;
@@ -198,13 +200,10 @@ class WechatPayApplymentRepository {
     if (input.tenantId) {
       request = request.eq("tenant_id", input.tenantId);
     }
-
     const { data, error } = await request.maybeSingle();
-
     if (error) {
       throw Errors.dbError("查询微信支付开通申请详情失败", error);
     }
-
     return (data as unknown as WechatPayApplymentRecord | null) ?? null;
   }
 
@@ -273,18 +272,13 @@ class WechatPayApplymentRepository {
 
   async createApplyment(
     input: WechatPayApplymentInsert,
+    auditMetadata: Json = {},
   ): Promise<WechatPayApplymentRecord> {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("tenant_wechat_pay_applyments")
-      .insert(input)
-      .select(APPLYMENT_SELECT)
-      .single();
-
-    if (error) {
-      throw Errors.dbError("创建微信支付开通申请失败", error);
-    }
-
-    return data as unknown as WechatPayApplymentRecord;
+    return createTenantWechatPayApplymentAtomically({
+      applyment: input,
+      auditMetadata,
+      findById: (target) => this.findById(target),
+    });
   }
 
   async updateApplyment(input: {
@@ -329,6 +323,60 @@ class WechatPayApplymentRepository {
     }
 
     return data as unknown as WechatPayApplymentRecord;
+  }
+
+  async updateTenantDraftAtomically(
+    input: WechatPayApplymentDraftUpdateInput,
+  ): Promise<WechatPayApplymentDraftUpdateResult> {
+    return updateTenantApplymentDraftAtomically({
+      ...input,
+      findById: (target) => this.findById(target),
+    });
+  }
+
+  async claimTenantDraftSession(input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+  }): Promise<WechatPayApplymentRecord> {
+    return claimTenantApplymentDraftSession({
+      ...input,
+      findById: (target) => this.findById(target),
+    });
+  }
+
+  async submitTenantApplymentAtomically(input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+    idempotencyKey: string;
+    expectedUpdatedAt: string;
+    remark: string | null;
+  }): Promise<WechatPayApplymentRecord> {
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "submit_tenant_wechat_pay_applyment",
+      {
+        p_applyment_id: input.applymentId,
+        p_tenant_id: input.tenantId,
+        p_employee_id: input.employeeId,
+        p_idempotency_key: input.idempotencyKey,
+        p_expected_updated_at: input.expectedUpdatedAt,
+        p_remark: input.remark,
+      },
+    );
+
+    if (error) throwTenantApplymentSubmitError(error);
+    if (data !== "submitted" && data !== "idempotent") {
+      throw Errors.dbError("提交微信支付开通申请失败");
+    }
+    const submitted = await this.findById({
+      id: input.applymentId,
+      tenantId: input.tenantId,
+    });
+    if (!submitted) {
+      throw Errors.dbError("提交后查询微信支付开通申请失败");
+    }
+    return submitted;
   }
 
   async activateConfigAtomically(input: {

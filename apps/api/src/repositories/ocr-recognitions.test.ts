@@ -114,6 +114,31 @@ describe('OcrRecognitionRepository', () => {
     ]));
   });
 
+  test('bounds ownership lookups to the applyment attachment limit', async () => {
+    const { repository, traces } = await createRepository([{
+      data: [{ id: 'recognition-1', tenant_id: 'tenant-1' }],
+      error: null,
+    }]);
+
+    await repository.findByIdsForTenant({
+      tenantId: 'tenant-1',
+      ids: ['recognition-1', 'recognition-2'],
+      limit: 100,
+    });
+
+    expect(traces[0]?.calls).toEqual(expect.arrayContaining([
+      { method: 'eq', args: ['tenant_id', 'tenant-1'] },
+      {
+        method: 'in',
+        args: ['id', ['recognition-1', 'recognition-2']],
+      },
+      { method: 'limit', args: [20] },
+    ]));
+    const select = traces[0]?.calls.find((call) => call.method === 'select');
+    expect(select?.args[0]).toContain('scene');
+    expect(select?.args[0]).toContain('document_type');
+  });
+
   test('uses exact server pagination and excludes ciphertext from platform list', async () => {
     const { repository, traces } = await createRepository([{
       data: [{ id: 'recognition-1' }],

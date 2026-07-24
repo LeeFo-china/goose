@@ -8,9 +8,11 @@ const MAX_PROXY_UPLOAD_SIZE = 5 * 1024 * 1024;
 
 type DirectUploadInitResult = {
   object_key: string;
+  storage_path?: string;
   upload_url: string;
   method?: "PUT";
   headers?: Record<string, string>;
+  upload_intent?: string;
 };
 
 function jsonError(message: string, status: number, code: string) {
@@ -71,29 +73,40 @@ export async function POST(request: Request) {
     return jsonError("上传参数不正确", 400, "UPLOAD_PROXY_PAYLOAD_INVALID");
   }
 
-  const { response: initResponse, payload: initPayload } =
-    await requestUploadBackend<DirectUploadInitResult>(
+  let initResult: Awaited<ReturnType<
+    typeof requestUploadBackend<DirectUploadInitResult>
+  >>;
+  try {
+    initResult = await requestUploadBackend<DirectUploadInitResult>(
       "/uploads/cos/direct-init",
       token,
       payload,
     );
+  } catch {
+    return uploadProxyNetworkError();
+  }
+  const { response: initResponse, payload: initPayload } = initResult;
   if (!initResponse.ok || initPayload.success === false || !initPayload.data?.upload_url) {
     return NextResponse.json(initPayload, { status: initResponse.status });
   }
 
-  const uploadResponse = await fetch(initPayload.data.upload_url, {
-    method: initPayload.data.method || "PUT",
-    headers: initPayload.data.headers || {
-      "content-type": String(payload.mimetype || file.type || "application/octet-stream"),
-    },
-    body: await file.arrayBuffer(),
-  });
+  let uploadResponse: Response;
+  try {
+    uploadResponse = await fetch(initPayload.data.upload_url, {
+      method: initPayload.data.method || "PUT",
+      headers: initPayload.data.headers || {
+        "content-type": String(
+          payload.mimetype || file.type || "application/octet-stream",
+        ),
+      },
+      body: await file.arrayBuffer(),
+    });
+  } catch {
+    return uploadProxyNetworkError();
+  }
   if (!uploadResponse.ok) {
-    const detail = await uploadResponse.text().catch(() => "");
     return jsonError(
-      `上传文件到 COS 失败(${uploadResponse.status})${
-        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
-      }`,
+      "上传文件到存储服务失败，请稍后重试",
       502,
       "UPLOAD_PROXY_COS_FAILED",
     );
@@ -103,15 +116,50 @@ export async function POST(request: Request) {
     ...payload,
     object_key: initPayload.data.object_key,
     etag: uploadResponse.headers.get("etag") || undefined,
+    upload_intent: initPayload.data.upload_intent,
   };
-  const { response: completeResponse, payload: completePayload } =
-    await requestUploadBackend(
+  let completeResult: Awaited<ReturnType<
+    typeof requestUploadBackend<Record<string, unknown>>
+  >>;
+  try {
+    completeResult = await requestUploadBackend<Record<string, unknown>>(
       "/uploads/cos/direct-complete",
       token,
       completeBody,
     );
+  } catch {
+    return uploadProxyNetworkError();
+  }
+  const { response: completeResponse, payload: completePayload } =
+    completeResult;
 
+  if (
+    completeResponse.ok &&
+    completePayload.success !== false &&
+    completePayload.data
+  ) {
+    return NextResponse.json({
+      ...completePayload,
+      data: {
+        init: initPayload.data,
+        completed: {
+          ...completePayload.data,
+          object_key: initPayload.data.object_key,
+          storage_path: initPayload.data.storage_path ??
+            initPayload.data.object_key,
+        },
+      },
+    }, { status: completeResponse.status });
+  }
   return NextResponse.json(completePayload, { status: completeResponse.status });
+}
+
+function uploadProxyNetworkError() {
+  return jsonError(
+    "上传服务暂不可用，请稍后重试",
+    502,
+    "UPLOAD_PROXY_NETWORK_FAILED",
+  );
 }
 
 function parseUploadPayload(value: string): Record<string, unknown> | null {

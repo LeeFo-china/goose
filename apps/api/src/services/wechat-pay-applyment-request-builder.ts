@@ -1,3 +1,5 @@
+import { findWechatPaySettlementRule } from "@gooes/domain";
+
 import { Errors } from "@/errors/error-factory";
 import { encryptWechatPaySensitiveField } from "@/services/wechat-pay-applyment-crypto";
 import type { ApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
@@ -270,6 +272,21 @@ function assertRequestSource(
     !input.sensitive.identity_address?.trim()
   ) {
     missing.push("sensitive.identity_address");
+  }
+  if (
+    input.source.subject_type === "SUBJECT_TYPE_ENTERPRISE" &&
+    input.source.settlement_account_type !== "BANK_ACCOUNT_TYPE_CORPORATE"
+  ) {
+    missing.push("source.settlement_account_type");
+  }
+  if (
+    !findWechatPaySettlementRule(
+      input.source.subject_type,
+      input.source.settlement_id,
+      input.source.qualification_type,
+    )
+  ) {
+    missing.push("source.settlement_id");
   }
   if (input.source.contact_type === "SUPER") {
     for (const [field, value] of [

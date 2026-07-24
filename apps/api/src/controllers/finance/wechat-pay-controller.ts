@@ -118,6 +118,25 @@ class FinanceWechatPayController extends TenantBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Post("/finance/wechat-pay/applyments/:id/draft-session")
+  async claimWechatPayApplymentDraftSession(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
+      request.params,
+    );
+    if (!paramsResult.success) {
+      throw Errors.fromZod(paramsResult.error);
+    }
+    const data = await wechatPayApplymentService.claimDraftSession(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Post("/finance/wechat-pay/applyments/:id/submit")
   async submitWechatPayApplyment(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);

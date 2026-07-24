@@ -1,17 +1,61 @@
 import { Errors } from "@/errors/error-factory";
 import type {
   WechatPayApplymentRecord,
+  WechatPayApplymentSensitiveRecord,
   WechatPayApplymentUpdate,
 } from "@/repositories/wechat-pay-applyments";
 import type {
   CreateWechatPayApplymentInput,
   UpdateWechatPayApplymentInput,
 } from "@/schema/wechat-pay-applyments";
-import type { ApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
+import {
+  decryptApplymentSensitivePayload,
+  encryptApplymentSensitivePayload,
+  type ApplymentSensitiveDraftPayload,
+} from "@/services/wechat-pay-applyment-sensitive-payload";
 
 type TenantApplymentInput =
   | CreateWechatPayApplymentInput
   | UpdateWechatPayApplymentInput;
+
+export function throwDraftSessionStale(
+  applymentId: string,
+  currentEpoch: number,
+  receivedEpoch: number,
+): never {
+  throw Errors.business(
+    409,
+    "其他页面已接管当前草稿，请刷新页面后继续",
+    "WECHAT_PAY_APPLYMENT_DRAFT_SESSION_STALE",
+    {
+      applyment_id: applymentId,
+      current_epoch: currentEpoch,
+      received_epoch: receivedEpoch,
+    },
+  );
+}
+
+const SENSITIVE_DRAFT_FIELD_MAPPINGS = [
+  { source: "identity_name", target: "identity_name" },
+  { source: "identity_number", target: "identity_number" },
+  { source: "identity_address", target: "identity_address" },
+  { source: "super_admin_name", target: "contact_name" },
+  { source: "super_admin_phone", target: "contact_phone" },
+  { source: "super_admin_email", target: "contact_email" },
+  {
+    source: "contact_identity_number",
+    target: "contact_identity_number",
+  },
+  {
+    source: "contact_identity_address",
+    target: "contact_identity_address",
+  },
+  { source: "settlement_account_name", target: "bank_account_name" },
+  { source: "settlement_account_number", target: "bank_account_number" },
+] as const satisfies readonly {
+  source: keyof UpdateWechatPayApplymentInput;
+  target: keyof ApplymentSensitiveDraftPayload;
+}[];
 
 export function buildTenantApplymentSafePatch(
   input: TenantApplymentInput,
@@ -32,7 +76,9 @@ export function buildTenantApplymentSafePatch(
   assignIfDefined(patch, "identity_doc_type", input.identity_doc_type);
   assignIfDefined(patch, "identity_period_begin", input.identity_period_begin);
   assignIfDefined(patch, "identity_period_end", input.identity_period_end);
-  if (input.identity_address !== undefined) {
+  if (input.identity_address === null) {
+    patch.identity_address_masked = null;
+  } else if (typeof input.identity_address === "string") {
     patch.identity_address_masked = maskAddress(input.identity_address);
   }
   assignIfDefined(patch, "contact_type", input.contact_type);
@@ -80,11 +126,14 @@ export function buildTenantApplymentSafePatch(
     "settlement_bank_branch_id",
     input.settlement_bank_branch_id,
   );
-  if (input.settlement_account_number !== undefined) {
-    const accountNumber = input.settlement_account_number.trim();
+  if (input.settlement_account_number === null) {
+    patch.settlement_account_number_masked = null;
+    patch.settlement_account_summary = null;
+  } else if (typeof input.settlement_account_number === "string") {
+    const accountNumber = input.settlement_account_number;
     patch.settlement_account_number_masked = maskBankAccountNumber(accountNumber);
     patch.settlement_account_summary = buildSettlementAccountSummary(
-      input.settlement_bank_name,
+      input.settlement_bank_name ?? null,
       accountNumber,
     );
   } else {
@@ -104,7 +153,9 @@ export function buildTenantApplymentSafePatch(
   assignIfDefined(patch, "contact_address", input.contact_address);
   assignIfDefined(patch, "attachments", input.attachments);
   assignIfDefined(patch, "remark", input.remark);
-  if (input.super_admin_phone !== undefined) {
+  if (input.super_admin_phone === null) {
+    patch.super_admin_phone_masked = null;
+  } else if (typeof input.super_admin_phone === "string") {
     patch.super_admin_phone_masked = maskPhone(input.super_admin_phone);
   }
   return patch;
@@ -112,7 +163,7 @@ export function buildTenantApplymentSafePatch(
 
 export function buildCreateSensitivePayload(
   input: CreateWechatPayApplymentInput,
-): ApplymentSensitivePayload {
+): ApplymentSensitiveDraftPayload {
   return {
     identity_name: input.identity_name,
     identity_number: input.identity_number,
@@ -131,90 +182,118 @@ export function buildCreateSensitivePayload(
   };
 }
 
+export function hasSensitiveDraftValues(
+  payload: ApplymentSensitiveDraftPayload,
+): boolean {
+  return Object.values(payload).some((value) =>
+    value !== null && value !== undefined && String(value).trim() !== ""
+  );
+}
+
+export async function buildSensitivePayloadUpdate(input: {
+  current: WechatPayApplymentRecord;
+  input: UpdateWechatPayApplymentInput;
+  tenantId: string;
+  loadSensitivePayload: () => Promise<
+    WechatPayApplymentSensitiveRecord | null
+  >;
+  rootSecret: string | null | undefined;
+  now: string;
+}): Promise<WechatPayApplymentUpdate> {
+  const hasReplacement = hasSensitiveReplacement(input.input);
+  const shouldClearAgentFields = input.current.has_sensitive_payload &&
+    input.input.contact_type === "LEGAL";
+  if (!hasReplacement && !shouldClearAgentFields) return {};
+
+  let currentPayload: ApplymentSensitiveDraftPayload = {};
+  let version = 1;
+  if (input.current.has_sensitive_payload) {
+    const stored = await input.loadSensitivePayload();
+    if (
+      !stored?.has_sensitive_payload ||
+      !stored.sensitive_payload_ciphertext ||
+      !stored.sensitive_payload_version ||
+      (
+        input.current.sensitive_payload_version !== null &&
+        stored.sensitive_payload_version !==
+          input.current.sensitive_payload_version
+      )
+    ) {
+      throw Errors.business(
+        500,
+        "微信支付进件敏感资料存储状态异常",
+        "WECHAT_PAY_APPLYMENT_SENSITIVE_PAYLOAD_CORRUPTED",
+      );
+    }
+    version = stored.sensitive_payload_version;
+    currentPayload = decryptApplymentSensitivePayload({
+      context: {
+        tenantId: input.tenantId,
+        applymentId: input.current.id,
+        version,
+      },
+      ciphertext: stored.sensitive_payload_ciphertext,
+      rootSecret: input.rootSecret,
+    });
+  }
+  const nextPayload = mergeSensitivePayload({
+    current: currentPayload,
+    patch: input.input,
+    contactType: input.input.contact_type ?? input.current.contact_type,
+  });
+  if (
+    !input.current.has_sensitive_payload &&
+    !hasSensitiveDraftValues(nextPayload)
+  ) return {};
+  return {
+    has_sensitive_payload: true,
+    sensitive_payload_ciphertext: encryptApplymentSensitivePayload({
+      context: {
+        tenantId: input.tenantId,
+        applymentId: input.current.id,
+        version,
+      },
+      payload: nextPayload,
+      rootSecret: input.rootSecret,
+    }),
+    sensitive_payload_version: version,
+    sensitive_payload_updated_at: input.now,
+  };
+}
+
 export function mergeSensitivePayload(input: {
-  current: Partial<ApplymentSensitivePayload>;
+  current: ApplymentSensitiveDraftPayload;
   patch: UpdateWechatPayApplymentInput;
   contactType: string | null;
-}): ApplymentSensitivePayload {
-  const next: Partial<ApplymentSensitivePayload> = { ...input.current };
-  assignSensitive(next, "identity_name", input.patch.identity_name);
-  assignSensitive(next, "identity_number", input.patch.identity_number);
-  assignSensitive(next, "identity_address", input.patch.identity_address);
-  assignSensitive(next, "contact_name", input.patch.super_admin_name);
-  assignSensitive(next, "contact_phone", input.patch.super_admin_phone);
-  assignSensitive(next, "contact_email", input.patch.super_admin_email);
-  assignSensitive(
-    next,
-    "contact_identity_number",
-    input.patch.contact_identity_number,
-  );
-  assignSensitive(
-    next,
-    "contact_identity_address",
-    input.patch.contact_identity_address,
-  );
-  assignSensitive(
-    next,
-    "bank_account_name",
-    input.patch.settlement_account_name,
-  );
-  assignSensitive(
-    next,
-    "bank_account_number",
-    input.patch.settlement_account_number,
-  );
-  if (input.contactType === "LEGAL") {
+}): ApplymentSensitiveDraftPayload {
+  const next: ApplymentSensitiveDraftPayload = { ...input.current };
+  for (const { source, target } of SENSITIVE_DRAFT_FIELD_MAPPINGS) {
+    assignSensitive(next, target, input.patch[source]);
+  }
+  if (
+    input.contactType === "LEGAL" &&
+    (
+      next.contact_identity_number !== undefined ||
+      next.contact_identity_address !== undefined
+    )
+  ) {
     next.contact_identity_number = null;
     next.contact_identity_address = null;
   }
-
-  const required = [
-    "identity_name",
-    "identity_number",
-    "contact_name",
-    "contact_phone",
-    "contact_email",
-    "bank_account_name",
-    "bank_account_number",
-  ] as const;
-  const missing: string[] = required.filter(
-    (key) => !String(next[key] ?? "").trim(),
-  );
-  if (input.contactType === "SUPER") {
-    for (const key of [
-      "contact_identity_number",
-      "contact_identity_address",
-    ] as const) {
-      if (!String(next[key] ?? "").trim()) missing.push(key);
-    }
-  }
-  if (missing.length > 0) {
-    throw Errors.business(
-      400,
-      "微信支付进件敏感资料不完整",
-      "WECHAT_PAY_APPLYMENT_SENSITIVE_FIELDS_MISSING",
-      { missing },
-    );
-  }
-  return next as ApplymentSensitivePayload;
+  return next;
 }
 
 export function hasSensitiveReplacement(
   input: UpdateWechatPayApplymentInput,
 ): boolean {
-  return [
-    input.identity_name,
-    input.identity_number,
-    input.identity_address,
-    input.super_admin_name,
-    input.super_admin_phone,
-    input.super_admin_email,
-    input.contact_identity_number,
-    input.contact_identity_address,
-    input.settlement_account_name,
-    input.settlement_account_number,
-    input.contact_type,
-  ].some((value) => value !== undefined);
+  return getSensitiveReplacementFields(input).length > 0;
+}
+
+export function getSensitiveReplacementFields(input: object): string[] {
+  const inputRecord = input as Record<string, unknown>;
+  return SENSITIVE_DRAFT_FIELD_MAPPINGS
+    .filter(({ source }) => inputRecord[source] !== undefined)
+    .map(({ source }) => source);
 }
 
 export function sanitizeApplymentRecord(
@@ -235,10 +314,10 @@ function assignIfDefined<K extends keyof WechatPayApplymentUpdate>(
   if (value !== undefined) target[key] = value;
 }
 
-function assignSensitive<K extends keyof ApplymentSensitivePayload>(
-  target: Partial<ApplymentSensitivePayload>,
+function assignSensitive<K extends keyof ApplymentSensitiveDraftPayload>(
+  target: ApplymentSensitiveDraftPayload,
   key: K,
-  value: ApplymentSensitivePayload[K] | undefined,
+  value: ApplymentSensitiveDraftPayload[K] | undefined,
 ) {
   if (value !== undefined) target[key] = value;
 }

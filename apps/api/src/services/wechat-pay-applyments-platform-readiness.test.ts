@@ -23,6 +23,8 @@ const submittedApplyment: WechatPayApplymentRecord = {
   tenant_id: tenantId,
   application_no: "WPA202607010001",
   status: "submitted",
+  draft_epoch: 1,
+  draft_revision: 0,
   subject_type: "SUBJECT_TYPE_ENTERPRISE",
   merchant_short_name: "晴天装饰",
   license_name: "固始晴天装饰工程有限公司",
@@ -108,6 +110,7 @@ const updateApplyment = mock(async () => currentApplyment);
 const submitOfficialApplyment = mock(async () => ({
   applyment: currentApplyment,
   events: [],
+  can_edit: false,
   can_submit: false,
   available_actions: [],
 }));
@@ -124,6 +127,9 @@ const repository: WechatPayApplymentRepositoryPort = {
   findSensitivePayloadById: async () => null,
   createApplyment: async () => unreachable(),
   updateApplyment,
+  updateTenantDraftAtomically: async () => unreachable(),
+  claimTenantDraftSession: async () => unreachable(),
+  submitTenantApplymentAtomically: async () => unreachable(),
   activateConfigAtomically: async () => unreachable(),
   insertEvent: async () => eventRecord,
   findEvents: async () => [],

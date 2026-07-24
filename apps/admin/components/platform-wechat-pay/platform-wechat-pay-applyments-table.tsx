@@ -19,9 +19,13 @@ const columns: ColumnDef<WechatPayApplymentRecord>[] = [
     header: "申请",
     cell: ({ row }) => {
       const applyment = row.original;
+      const merchantDisplayName =
+        applyment.merchant_short_name?.trim() ||
+        applyment.tenant?.name?.trim() ||
+        "未填写商户简称";
       return (
         <div className="min-w-0">
-          <div className="truncate font-medium">{applyment.merchant_short_name}</div>
+          <div className="truncate font-medium">{merchantDisplayName}</div>
           <div className="truncate text-xs text-muted-foreground">
             {applyment.application_no}
           </div>

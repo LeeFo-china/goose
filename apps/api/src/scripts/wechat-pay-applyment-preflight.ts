@@ -5,6 +5,7 @@ import {
 } from "@/services/wechat-pay-applyment-preflight";
 
 export {
+  createWechatPayApplymentPreflightService,
   runWechatPayApplymentPreflight,
   type WechatPayApplymentPreflightBlocker,
   type WechatPayApplymentPreflightReport,

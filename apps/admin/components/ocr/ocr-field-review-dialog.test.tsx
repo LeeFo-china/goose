@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import type { OcrFieldSuggestion } from "@gooes/domain";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildOcrFieldReviewRows,
   formatOcrReviewValue,
+  getUnreviewedOcrConflictKeys,
+  groupOcrFieldReviewRows,
   mapApplymentOcrFields,
+  OcrFieldReviewRows,
 } from "./ocr-field-review-dialog";
 
 function field(key: string, value: string): OcrFieldSuggestion {
@@ -41,12 +45,86 @@ describe("OCR field review dialog", () => {
     ]);
   });
 
+  test("never selects a manual conflict for silent replacement", () => {
+    const rows = buildOcrFieldReviewRows([
+      field("license_name", "新识别名称"),
+    ], {
+      license_name: "人工修正名称",
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        selected: false,
+        state: "conflict",
+      }),
+    ]);
+  });
+
+  test("detects a form edit made after the review rows were built", () => {
+    const rows = buildOcrFieldReviewRows([
+      field("license_name", "新识别名称"),
+    ], {
+      license_name: "",
+    });
+
+    expect(getUnreviewedOcrConflictKeys(rows, {
+      license_name: "刚刚人工修改的名称",
+    })).toEqual(["license_name"]);
+
+    const reviewedRows = buildOcrFieldReviewRows([
+      field("license_name", "新识别名称"),
+    ], {
+      license_name: "刚刚人工修改的名称",
+    });
+    expect(getUnreviewedOcrConflictKeys(
+      [{ ...reviewedRows[0], selected: true }],
+      { license_name: "刚刚人工修改的名称" },
+    )).toEqual([]);
+  });
+
+  test("keeps conflicts and missing fields visible while folding normal rows", () => {
+    const rows = buildOcrFieldReviewRows([
+      { ...field("license_name", "识别名称"), label: "冲突字段" },
+      { ...field("license_code", "91410000"), label: "缺失字段" },
+      { ...field("license_address", "河南省信阳市"), label: "正常字段" },
+    ], {
+      license_name: "人工名称",
+      license_code: "",
+      license_address: "河南省信阳市",
+    });
+    const groups = groupOcrFieldReviewRows(rows);
+
+    expect(groups.persistent.map((row) => row.field.key)).toEqual([
+      "license_name",
+      "license_code",
+    ]);
+    expect(groups.collapsible.map((row) => row.field.key)).toEqual([
+      "license_address",
+    ]);
+
+    const markup = renderToStaticMarkup(
+      <OcrFieldReviewRows rows={rows} onApply={() => undefined} />,
+    );
+    expect(markup).toContain("冲突字段");
+    expect(markup).toContain("缺失字段");
+    expect(markup).toContain("其他识别建议（1）");
+  });
+
+  test("renders the shadcn empty state when recognition has no suggestions", () => {
+    const markup = renderToStaticMarkup(
+      <OcrFieldReviewRows rows={[]} onApply={() => undefined} />,
+    );
+
+    expect(markup).toContain('data-slot="empty"');
+    expect(markup).toContain("暂无可应用的识别建议");
+  });
+
   test("maps contact identity suggestions to contact applyment fields", () => {
     expect(mapApplymentOcrFields("contact_id_card_front", [
       field("identity_name", "李四"),
       field("identity_number", "41000019900101001x"),
       field("identity_address", "河南省信阳市"),
-    ])).toEqual([
+    ], "SUPER")).toEqual([
       expect.objectContaining({ key: "super_admin_name", value: "李四" }),
       expect.objectContaining({
         key: "contact_identity_number",
@@ -56,6 +134,17 @@ describe("OCR field review dialog", () => {
         key: "contact_identity_address",
         value: "河南省信阳市",
       }),
+    ]);
+  });
+
+  test("copies legal identity name to the legal super administrator", () => {
+    expect(mapApplymentOcrFields(
+      "legal_representative_id_card_front",
+      [field("identity_name", "张三")],
+      "LEGAL",
+    )).toEqual([
+      expect.objectContaining({ key: "identity_name", value: "张三" }),
+      expect.objectContaining({ key: "super_admin_name", value: "张三" }),
     ]);
   });
 

@@ -7600,6 +7600,8 @@ export type Database = {
           contact_type: string | null
           created_at: string
           created_by_employee_id: string | null
+          draft_epoch: number
+          draft_revision: number
           has_sensitive_payload: boolean
           id: string
           identity_address_masked: string | null
@@ -7614,7 +7616,7 @@ export type Database = {
           license_name: string | null
           license_period_begin: string | null
           license_period_end: string | null
-          merchant_short_name: string
+          merchant_short_name: string | null
           opened_at: string | null
           payment_config_id: string | null
           qualification_type: string | null
@@ -7670,6 +7672,8 @@ export type Database = {
           contact_type?: string | null
           created_at?: string
           created_by_employee_id?: string | null
+          draft_epoch?: number
+          draft_revision?: number
           has_sensitive_payload?: boolean
           id?: string
           identity_address_masked?: string | null
@@ -7684,7 +7688,7 @@ export type Database = {
           license_name?: string | null
           license_period_begin?: string | null
           license_period_end?: string | null
-          merchant_short_name: string
+          merchant_short_name?: string | null
           opened_at?: string | null
           payment_config_id?: string | null
           qualification_type?: string | null
@@ -7740,6 +7744,8 @@ export type Database = {
           contact_type?: string | null
           created_at?: string
           created_by_employee_id?: string | null
+          draft_epoch?: number
+          draft_revision?: number
           has_sensitive_payload?: boolean
           id?: string
           identity_address_masked?: string | null
@@ -7754,7 +7760,7 @@ export type Database = {
           license_name?: string | null
           license_period_begin?: string | null
           license_period_end?: string | null
-          merchant_short_name?: string
+          merchant_short_name?: string | null
           opened_at?: string | null
           payment_config_id?: string | null
           qualification_type?: string | null
@@ -10067,6 +10073,44 @@ export type Database = {
         }
         Returns: string
       }
+      claim_tenant_wechat_pay_applyment_draft_session: {
+        Args: {
+          p_applyment_id: string
+          p_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: number
+      }
+      create_tenant_wechat_pay_applyment: {
+        Args: {
+          p_applyment: Json
+          p_audit_metadata: Json
+        }
+        Returns: string
+      }
+      submit_tenant_wechat_pay_applyment: {
+        Args: {
+          p_applyment_id: string
+          p_employee_id: string
+          p_expected_updated_at: string
+          p_idempotency_key: string
+          p_remark: string | null
+          p_tenant_id: string
+        }
+        Returns: string
+      }
+      update_tenant_wechat_pay_applyment_draft: {
+        Args: {
+          p_applyment_id: string
+          p_audit_metadata: Json | null
+          p_employee_id: string
+          p_epoch: number
+          p_patch: Json
+          p_revision: number
+          p_tenant_id: string
+        }
+        Returns: string
+      }
       approve_tenant_onboarding_application: {
         Args: {
           p_application_id: string
@@ -10228,7 +10272,7 @@ export type Database = {
           license_name: string | null
           license_period_begin: string | null
           license_period_end: string | null
-          merchant_short_name: string
+          merchant_short_name: string | null
           opened_at: string | null
           payment_config_id: string | null
           qualification_type: string | null

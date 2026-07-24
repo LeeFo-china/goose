@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
-
 import { Errors } from "@/errors/error-factory";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type {
@@ -22,11 +21,9 @@ import type {
   WechatPayApplymentRepositoryPort,
   WechatPayConfigRepositoryPort,
 } from "@/services/wechat-pay-applyments-types";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const employeeId = "22222222-2222-4222-8222-222222222222";
 const applymentId = "33333333-3333-4333-8333-333333333333";
@@ -37,13 +34,11 @@ const wechatApplymentId = "2000002124775691";
 const subMchid = "1900000109";
 const rootSecret = "mock-e2e-root-secret";
 const baseTime = Date.parse("2026-07-21T10:00:00.000Z");
-
 const keys = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
   publicKeyEncoding: { format: "pem", type: "spki" },
 });
-
 const sensitivePayload = {
   identity_name: "张三",
   identity_number: "41000019900101001X",
@@ -56,17 +51,17 @@ const sensitivePayload = {
   bank_account_name: "固始晴天装饰工程有限公司",
   bank_account_number: "6212345678901234",
 };
-
 const attachmentCategories = ["license_copy",
   "legal_representative_id_card_front", "legal_representative_id_card_back",
   "business_scene_material"] as const;
-
 function createApplyment(): WechatPayApplymentRecord {
   return {
     id: applymentId,
     tenant_id: tenantId,
     application_no: "WPA202607210001",
     status: "approved",
+    draft_epoch: 1,
+    draft_revision: 0,
     subject_type: "SUBJECT_TYPE_ENTERPRISE",
     merchant_short_name: "晴天装饰",
     license_name: "固始晴天装饰工程有限公司",
@@ -94,8 +89,8 @@ function createApplyment(): WechatPayApplymentRecord {
     settlement_bank_branch_id: "104515080123",
     settlement_account_number_masked: "62**********1234",
     settlement_account_summary: "中国银行 尾号 1234",
-    settlement_id: "719",
-    qualification_type: "生活服务/家装服务",
+    settlement_id: "716",
+    qualification_type: "零售批发/生活娱乐/网上商城/其他",
     business_scene_description: "装修项目收款",
     contact_address: "河南省信阳市固始县",
     attachments: attachmentCategories.map((category) => ({
@@ -103,6 +98,7 @@ function createApplyment(): WechatPayApplymentRecord {
       object_key:
         `tenants/${tenantId}/wechat-pay-applyment/${applymentId}/${category}.jpg`,
       file_name: `${category}.jpg`,
+      ocr_review_status: "manual",
       content_type: "image/jpeg",
       size: 1024,
     })),
@@ -139,7 +135,6 @@ function createApplyment(): WechatPayApplymentRecord {
     updated_at: "2026-07-21T09:00:00.000Z",
   } as WechatPayApplymentRecord;
 }
-
 function platformProfile(): PlatformPaymentConfigRecord {
   return {
     id: platformConfigId,
@@ -167,7 +162,6 @@ function platformProfile(): PlatformPaymentConfigRecord {
     updated_at: "2026-07-21T09:00:00.000Z",
   } as PlatformPaymentConfigRecord;
 }
-
 function platformAuth(): AuthContext {
   return {
     authUserId: "auth-platform",
@@ -269,6 +263,12 @@ describe("official WeChat Pay applyment mock E2E", () => {
         } as WechatPayApplymentRecord;
         return current;
       },
+      updateTenantDraftAtomically: async () => ({
+        outcome: "applied",
+        applyment: current,
+      }),
+      claimTenantDraftSession: async () => current,
+      submitTenantApplymentAtomically: async () => current,
       activateConfigAtomically: async (input) => {
         if (input.expectedUpdatedAt !== current.updated_at) {
           throw Errors.business(409, "mock CAS revision mismatch", "MOCK_CAS_FAILED");

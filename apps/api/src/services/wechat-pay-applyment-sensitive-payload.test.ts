@@ -25,6 +25,69 @@ const context = {
 };
 
 describe("WeChat Pay applyment sensitive payload", () => {
+  test("encrypts and decrypts a partial draft payload", () => {
+    const partialPayload = {
+      identity_name: "张三",
+      identity_number: "41000019900101001X",
+    };
+    const ciphertext = encryptApplymentSensitivePayload({
+      context,
+      payload: partialPayload,
+      rootSecret: "test-root-secret",
+    });
+
+    expect(decryptApplymentSensitivePayload({
+      context,
+      ciphertext,
+      rootSecret: "test-root-secret",
+    })).toEqual(partialPayload);
+  });
+
+  test("reports missing complete payload fields by contact type", async () => {
+    const sensitivePayloadModule = await import(
+      "./wechat-pay-applyment-sensitive-payload"
+    );
+    const getMissingApplymentSensitiveFields = Reflect.get(
+      sensitivePayloadModule,
+      "getMissingApplymentSensitiveFields",
+    );
+    const requireCompleteApplymentSensitivePayload = Reflect.get(
+      sensitivePayloadModule,
+      "requireCompleteApplymentSensitivePayload",
+    );
+    expect(typeof getMissingApplymentSensitiveFields).toBe("function");
+    expect(typeof requireCompleteApplymentSensitivePayload).toBe("function");
+    if (
+      typeof getMissingApplymentSensitiveFields !== "function" ||
+      typeof requireCompleteApplymentSensitivePayload !== "function"
+    ) return;
+
+    expect(getMissingApplymentSensitiveFields({
+      identity_name: "张三",
+    }, "SUPER")).toEqual([
+      "identity_number",
+      "contact_name",
+      "contact_phone",
+      "contact_email",
+      "bank_account_name",
+      "bank_account_number",
+      "contact_identity_number",
+      "contact_identity_address",
+    ]);
+    expect(() =>
+      requireCompleteApplymentSensitivePayload({
+        identity_name: "张三",
+      }, "LEGAL")
+    ).toThrow(expect.objectContaining({
+      code: "WECHAT_PAY_APPLYMENT_SENSITIVE_FIELDS_MISSING",
+      details: {
+        missing: expect.arrayContaining(["identity_number", "contact_phone"]),
+      },
+    }));
+    expect(requireCompleteApplymentSensitivePayload(payload, "LEGAL"))
+      .toEqual(payload);
+  });
+
   test("round trips a purpose-bound encrypted payload", () => {
     const ciphertext = encryptApplymentSensitivePayload({
       context,

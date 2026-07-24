@@ -3,8 +3,14 @@ import type {
   PlatformPaymentProfileCode,
 } from "@/repositories/platform-payment-configs";
 import type {
+  WechatPayApplymentBlockerCode,
+} from "@gooes/domain";
+import type { OcrRecognitionOwnershipRecord } from "@/repositories/ocr-recognitions";
+import type { OcrPlatformFileObjectRecord } from "@/repositories/platform-file-objects";
+import type {
   WechatPayApplymentEventInsert,
   WechatPayApplymentEventRecord,
+  WechatPayApplymentDraftUpdateResult,
   WechatPayApplymentInsert,
   WechatPayApplymentListResult,
   WechatPayApplymentMediaInsert,
@@ -20,6 +26,7 @@ import type {
 } from "@/repositories/wechat-pay-configs";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
 import type { AuthContext } from "@/services/authorization";
+import type { Json } from "@/types/database";
 
 export type WechatPayApplymentRepositoryPort = {
   findLatestByTenant: (tenantId: string) => Promise<WechatPayApplymentRecord | null>;
@@ -31,13 +38,38 @@ export type WechatPayApplymentRepositoryPort = {
     id: string;
     tenantId?: string;
   }) => Promise<WechatPayApplymentSensitiveRecord | null>;
-  createApplyment: (input: WechatPayApplymentInsert) => Promise<WechatPayApplymentRecord>;
+  createApplyment: (
+    input: WechatPayApplymentInsert,
+    auditMetadata?: Json,
+  ) => Promise<WechatPayApplymentRecord>;
   updateApplyment: (input: {
     id: string;
     tenantId?: string;
     expectedStatus?: string;
     expectedUpdatedAt?: string;
     patch: WechatPayApplymentUpdate;
+  }) => Promise<WechatPayApplymentRecord>;
+  updateTenantDraftAtomically: (input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+    epoch: number;
+    revision: number;
+    patch: WechatPayApplymentUpdate;
+    auditMetadata: Json | null;
+  }) => Promise<WechatPayApplymentDraftUpdateResult>;
+  claimTenantDraftSession: (input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+  }) => Promise<WechatPayApplymentRecord>;
+  submitTenantApplymentAtomically: (input: {
+    applymentId: string;
+    tenantId: string;
+    employeeId: string;
+    idempotencyKey: string;
+    expectedUpdatedAt: string;
+    remark: string | null;
   }) => Promise<WechatPayApplymentRecord>;
   activateConfigAtomically: (input: {
     applymentId: string;
@@ -114,14 +146,33 @@ export type WechatPayApplymentServiceDependencies = {
   applicationNoFactory?: () => string;
   applymentIdFactory?: () => string;
   encryptionRootSecretFactory?: () => string | null | undefined;
+  ocrRecognitionRepository?: WechatPayApplymentOcrRecognitionRepositoryPort;
   nowFactory?: () => string;
   submissionService?: WechatPayApplymentSubmissionPort;
   statusService?: WechatPayApplymentStatusPort;
   preflightService?: WechatPayApplymentPreflightPort;
+  tenantReadinessService?: WechatPayApplymentTenantReviewReadinessPort;
+  fileObjectRepository?: WechatPayApplymentFileObjectRepositoryPort;
+};
+
+export type WechatPayApplymentFileObjectRepositoryPort = {
+  findActiveByIds: (input: {
+    ids: string[];
+    tenantId: string;
+    limit: number;
+  }) => Promise<OcrPlatformFileObjectRecord[]>;
+};
+
+export type WechatPayApplymentOcrRecognitionRepositoryPort = {
+  findByIdsForTenant: (input: {
+    ids: string[];
+    tenantId: string;
+    limit: number;
+  }) => Promise<OcrRecognitionOwnershipRecord[]>;
 };
 
 export type WechatPayApplymentPreflightBlocker = {
-  code: string;
+  code: WechatPayApplymentBlockerCode;
   field?: string;
   category?: string;
 };
@@ -138,6 +189,15 @@ export type WechatPayApplymentSubmissionReadiness =
 
 export type WechatPayApplymentPreflightPort = {
   run: (applymentId: string) => Promise<WechatPayApplymentPreflightReport>;
+  runForApplyment?: (
+    applyment: WechatPayApplymentRecord,
+  ) => Promise<WechatPayApplymentPreflightReport>;
+};
+
+export type WechatPayApplymentTenantReviewReadinessPort = {
+  runForApplyment: (
+    applyment: WechatPayApplymentRecord,
+  ) => Promise<WechatPayApplymentSubmissionReadiness>;
 };
 
 export type WechatPayApplymentAvailableAction = {
@@ -149,6 +209,7 @@ export type WechatPayApplymentAvailableAction = {
 export type ApplymentDetailResult = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEventRecord[];
+  can_edit: boolean;
   can_submit: boolean;
   available_actions: WechatPayApplymentAvailableAction[];
   submission_readiness?: WechatPayApplymentSubmissionReadiness;
@@ -170,6 +231,20 @@ export type WechatPayApplymentStatusPort = {
 
 export const TENANT_READ_PERMISSION = "wechat_pay.applyment.read";
 export const TENANT_SUBMIT_PERMISSION = "wechat_pay.applyment.submit";
+const TENANT_EDITABLE_APPLYMENT_STATUSES = new Set([
+  "draft",
+  "rejected",
+  "wechat_editing",
+]);
+
+export function canEditTenantWechatPayApplyment(
+  status: string | null | undefined,
+  hasSubmitPermission: boolean,
+) {
+  return hasSubmitPermission &&
+    (!status || TENANT_EDITABLE_APPLYMENT_STATUSES.has(status));
+}
+
 export const PLATFORM_READ_PERMISSION = "platform.wechat_pay.applyment.read";
 export const PLATFORM_REVIEW_PERMISSION =
   "platform.wechat_pay.applyment.review";

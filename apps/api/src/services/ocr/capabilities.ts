@@ -101,6 +101,15 @@ export function getOcrCapability(
   ) ?? null;
 }
 
+export function getWechatPayApplymentOcrDocumentType(
+  attachmentCategory: string,
+): OcrDocumentType | null {
+  return CAPABILITIES.find((item) =>
+    item.scene === "wechat_pay_applyment" &&
+    item.attachment_categories.includes(attachmentCategory)
+  )?.document_type ?? null;
+}
+
 export function listOcrCapabilityDefinitions(scene?: OcrScene) {
   return scene ? CAPABILITIES.filter((item) => item.scene === scene) : [...CAPABILITIES];
 }

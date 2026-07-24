@@ -5,6 +5,7 @@ import {
   createPrivateUploadIntent,
   verifyPrivateUploadIntent,
 } from "./private-upload-intent";
+import { createApplymentUploadIntent } from "./applyment-upload-intent";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -16,6 +17,7 @@ const VISITOR_HASH = createHash("sha256").update(VISITOR_ID).digest("hex");
 const OBJECT_KEY = `private/tenant-onboarding-license/visitors/${VISITOR_HASH}/`
   + "2026/07/14/license.jpg";
 const MAX_SIZE = 5 * 1024 * 1024;
+const APPLYMENT_MAX_SIZE = 2 * 1024 * 1024;
 
 const createOrFindByObjectKey = mock(async (input: Record<string, unknown>) => ({
   id: "file-1",
@@ -72,6 +74,33 @@ function privateInput(overrides: Record<string, unknown> = {}) {
       visitorId: String(input.visitorId),
       mimeType: String(input.mimetype),
       sizeBytes: Number(input.sizeBytes),
+    });
+  }
+  return input;
+}
+
+function privateApplymentInput(overrides: Record<string, unknown> = {}) {
+  const input: Record<string, unknown> = {
+    scene: "wechat_pay_applyment",
+    objectKey: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
+    filename: "license.jpg",
+    mimetype: "image/jpeg",
+    sizeBytes: 100,
+    visibility: "private",
+    tenantId: "tenant-1",
+    employeeId: "employee-1",
+    verifyHead: true,
+    ...overrides,
+  };
+  if (!("uploadIntent" in overrides)) {
+    input.uploadIntent = createApplymentUploadIntent({
+      secretKey: SECRET_KEY,
+      scene: String(input.scene),
+      tenantId: String(input.tenantId),
+      objectKey: String(input.objectKey),
+      mimeType: String(input.mimetype),
+      sizeBytes: Number(input.sizeBytes),
+      expiresAtSeconds: Math.floor(Date.now() / 1000) + 600,
     });
   }
   return input;
@@ -198,9 +227,146 @@ describe("private direct upload init", () => {
     expect(response.headers).toEqual({ "content-type": "image/jpeg" });
     expect(response).not.toHaveProperty("upload_intent");
   });
+
+  test("binds applyment uploads to signed size type overwrite guard and intent", async () => {
+    const { createDirectUpload } = await import("./direct-upload");
+    const getObjectUrl = mock(() => "https://cos.example.com/signed-put");
+    const objectKey = String(privateApplymentInput().objectKey);
+    const response = await createDirectUpload.call({
+      getStorageProvider: async () => "tencent_cos",
+      getCosConfig: async () => ({
+        secretKey: SECRET_KEY,
+        bucket: "bucket",
+        region: "ap-guangzhou",
+        signedUrlTtl: 600,
+        uploadUseAccelerate: false,
+      }),
+      buildCosObjectKey: () => objectKey,
+      getCosClient: () => ({ getObjectUrl }),
+      setCosAccessCache: () => undefined,
+    }, {
+      filename: "license.jpg",
+      mimetype: "image/jpeg",
+      sizeBytes: 100,
+      scene: "wechat_pay_applyment",
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      visibility: "private",
+    });
+
+    expect(getObjectUrl).toHaveBeenCalledWith(expect.objectContaining({
+      Headers: {
+        "Content-Length": 100,
+        "Content-Type": "image/jpeg",
+        "x-cos-forbid-overwrite": true,
+      },
+    }));
+    expect(response.headers).toEqual({
+      "content-type": "image/jpeg",
+      "content-length": "100",
+      "x-cos-forbid-overwrite": true,
+    });
+    expect(response.upload_intent).toBeString();
+  });
+
+  test.each([
+    ["oversize", "image/jpeg", APPLYMENT_MAX_SIZE + 1],
+    ["unsupported MIME", "image/webp", 100],
+  ])("rejects applyment init outside storage policy: %s", async (
+    _name,
+    mimetype,
+    sizeBytes,
+  ) => {
+    const { createDirectUpload } = await import("./direct-upload");
+    const getObjectUrl = mock(() => "https://cos.example.com/signed-put");
+    await expect(createDirectUpload.call({
+      getStorageProvider: async () => "tencent_cos",
+      getCosConfig: async () => ({
+        secretKey: SECRET_KEY,
+        bucket: "bucket",
+        region: "ap-guangzhou",
+        signedUrlTtl: 600,
+        uploadUseAccelerate: false,
+      }),
+      buildCosObjectKey: () => privateApplymentInput().objectKey,
+      getCosClient: () => ({ getObjectUrl }),
+      setCosAccessCache: () => undefined,
+    }, {
+      mimetype,
+      sizeBytes,
+      scene: "wechat_pay_applyment",
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      visibility: "private",
+    })).rejects.toMatchObject({ statusCode: 400 });
+    expect(getObjectUrl).not.toHaveBeenCalled();
+  });
 });
 
 describe("private direct upload completion", () => {
+  test("keeps authenticated applyment files private without permanent URLs", async () => {
+    const { registerExistingCosObject } = await import("./direct-upload");
+    const { context, headObject } = storageContext();
+    const response = await registerExistingCosObject.call(
+      context,
+      privateApplymentInput() as never,
+    );
+
+    expect(headObject).toHaveBeenCalledTimes(1);
+    expect(createOrFindByObjectKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner_type: "wechat_pay_applyment",
+        visibility: "private",
+        public_url: null,
+      }),
+    );
+    expect(response).toEqual({ file_id: "file-1", status: "active" });
+    expect(response).not.toHaveProperty("url");
+    expect(response).not.toHaveProperty("public_url");
+  });
+
+  test.each([
+    ["missing length", { "content-type": "image/jpeg" }],
+    ["zero length", { "content-length": "0", "content-type": "image/jpeg" }],
+    [
+      "oversize",
+      {
+        "content-length": String(APPLYMENT_MAX_SIZE + 1),
+        "content-type": "image/jpeg",
+      },
+    ],
+    ["size mismatch", { "content-length": "101", "content-type": "image/jpeg" }],
+    ["non-image", { "content-length": "100", "content-type": "application/pdf" }],
+    ["MIME mismatch", { "content-length": "100", "content-type": "image/png" }],
+  ])("rejects invalid applyment HEAD metadata: %s", async (_name, headers) => {
+    await expectPrivateUploadRejected(
+      privateApplymentInput(),
+      { headers, ETag: '"head-etag"' },
+    );
+  });
+
+  test("uses an applyment-specific error for an ETag mismatch", async () => {
+    const { registerExistingCosObject } = await import("./direct-upload");
+    const { context } = storageContext();
+    await expect(registerExistingCosObject.call(
+      context,
+      privateApplymentInput({ etag: '"client-etag"' }) as never,
+    )).rejects.toMatchObject({
+      message: "进件附件文件校验值不一致",
+    });
+    expect(createOrFindByObjectKey).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["missing", null],
+    ["tampered", "v1.invalid.invalid"],
+  ])("rejects %s applyment upload intent before file creation", async (
+    _name,
+    uploadIntent,
+  ) => {
+    await expectPrivateUploadRejected(privateApplymentInput({ uploadIntent }));
+  });
+
   test("forces HEAD even when the environment toggle is false", async () => {
     const { completeDirectUpload } = await import("./direct-upload");
     const registerExistingCosObject = mock(async () => ({ file_id: "file-1" }));

@@ -2,6 +2,7 @@ import type {
   WechatPayApplymentPreflightPort,
   WechatPayApplymentSubmissionReadiness,
 } from "@/services/wechat-pay-applyments-types";
+import type { WechatPayApplymentRecord } from "@/repositories/wechat-pay-applyments";
 
 const NON_REVIEW_BLOCKER_CODES = new Set([
   "APPLYMENT_STATUS_NOT_SUBMITTABLE",
@@ -22,10 +23,14 @@ export function shouldLoadWechatPayApplymentSubmissionReadiness(
 
 export async function loadWechatPayApplymentSubmissionReadiness(
   preflightService: WechatPayApplymentPreflightPort,
-  applymentId: string,
+  applyment: string | WechatPayApplymentRecord,
 ): Promise<WechatPayApplymentSubmissionReadiness> {
   try {
-    const report = await preflightService.run(applymentId);
+    const report = typeof applyment === "string"
+      ? await preflightService.run(applyment)
+      : preflightService.runForApplyment
+      ? await preflightService.runForApplyment(applyment)
+      : await preflightService.run(applyment.id);
     return {
       ...report,
       review_ready: !report.blockers.some(isApplicationReviewBlocker),

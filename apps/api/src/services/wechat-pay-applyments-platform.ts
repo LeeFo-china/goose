@@ -339,6 +339,7 @@ export class WechatPayApplymentPlatformActions {
         tenantId: applyment.tenant_id,
         applymentId: applyment.id,
       }),
+      can_edit: false,
       can_submit: false,
       available_actions: availableActions,
       ...(submissionReadiness
@@ -461,7 +462,6 @@ export class WechatPayApplymentPlatformActions {
     });
   }
 }
-
 function resolveMainStatus(
   currentStatus: string,
   input: RepairWechatPayApplymentStateInput,

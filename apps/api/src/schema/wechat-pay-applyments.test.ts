@@ -95,89 +95,161 @@ describe("wechat pay applyment schemas", () => {
     expect(result.success).toBe(false);
   });
 
-  test("requires official identity contact and settlement fields on create", () => {
-    const requiredFields = [
-      "subject_type",
-      "identity_name",
-      "identity_number",
-      "identity_period_begin",
-      "identity_period_end",
-      "contact_type",
-      "super_admin_email",
-      "service_phone",
-      "settlement_id",
-      "qualification_type",
-    ] as const;
-
-    for (const field of requiredFields) {
-      const input = { ...baseApplymentInput } as Record<string, unknown>;
-      delete input[field];
-      expect(CreateWechatPayApplymentSchema.safeParse(input).success).toBe(false);
-    }
+  test("accepts an incomplete draft but validates fields that are present", () => {
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      contact_type: "LEGAL",
+      attachments: [],
+      draft_update_source: "autosave",
+      draft_revision: 1,
+    }).success).toBe(true);
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      identity_number: "bad-id",
+    }).success).toBe(false);
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      merchant_short_name: null,
+    }).success).toBe(true);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      merchant_short_name: null,
+      draft_update_source: "autosave",
+      draft_epoch: 2,
+      draft_revision: 2,
+    }).success).toBe(true);
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      draft_update_source: "autosave",
+      draft_revision: 1,
+    }).success).toBe(false);
   });
 
-  test("requires agent identity fields and attachments for SUPER contact", () => {
-    const superContactInput = {
-      ...baseApplymentInput,
-      contact_type: "SUPER",
-      contact_identity_doc_type: "IDENTIFICATION_TYPE_IDCARD",
-      contact_identity_number: "41000019920202002X",
-      contact_identity_address: "河南省信阳市固始县经办人路2号",
-      contact_identity_period_begin: "2021-01-01",
-      contact_identity_period_end: "2041-01-01",
-      attachments: [
-        ...baseApplymentInput.attachments,
-        {
-          category: "contact_id_card_front",
-          object_key: "tenants/tenant-1/wechat-pay-applyment/contact-front.jpg",
-        },
-        {
-          category: "contact_id_card_back",
-          object_key: "tenants/tenant-1/wechat-pay-applyment/contact-back.jpg",
-        },
-      ],
+  test("requires a positive revision for revision-aware draft saves", () => {
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "最新草稿",
+      draft_update_source: "autosave",
+    }).success).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "最新草稿",
+      draft_update_source: "autosave",
+      draft_revision: 0,
+    }).success).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "最新草稿",
+      draft_update_source: "manual_save",
+      draft_epoch: 3,
+      draft_revision: 7,
+    }).success).toBe(true);
+  });
+
+  test("fails closed for update clients without an epoch and revision", () => {
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "旧版人工更新",
+    }).success).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      remark: "只有版本、没有会话 fencing",
+      draft_update_source: "autosave",
+      draft_revision: 99,
+    }).success).toBe(false);
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      remark: "新草稿由数据库签发初始 epoch",
+      draft_update_source: "autosave",
+      draft_revision: 1,
+    }).success).toBe(true);
+    expect(CreateWechatPayApplymentSchema.safeParse({
+      remark: "创建时不接受客户端伪造 epoch",
+      draft_update_source: "autosave",
+      draft_epoch: 99,
+      draft_revision: 1,
+    }).success).toBe(false);
+  });
+
+  test("accepts attachment-only and atomic OCR confirmation checkpoints", () => {
+    const confirmedAttachment = {
+      category: "license_copy",
+      object_key: "tenant/license.jpg",
+      file_object_id: "22222222-2222-4222-8222-222222222222",
+      ocr_recognition_id: "11111111-1111-4111-8111-111111111111",
+      ocr_review_status: "confirmed",
     };
 
-    expect(CreateWechatPayApplymentSchema.safeParse(superContactInput).success)
-      .toBe(true);
-    expect(
-      CreateWechatPayApplymentSchema.safeParse({
-        ...superContactInput,
-        contact_identity_number: undefined,
-      }).success,
-    ).toBe(false);
-    expect(
-      CreateWechatPayApplymentSchema.safeParse({
-        ...superContactInput,
-        attachments: baseApplymentInput.attachments,
-      }).success,
-    ).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      attachments: [{
+        category: "license_copy",
+        object_key: "tenant/license.jpg",
+      }],
+      draft_update_source: "attachment_change",
+      draft_epoch: 4,
+      draft_revision: 2,
+    }).success).toBe(true);
+    const confirmation = UpdateWechatPayApplymentSchema.safeParse({
+      license_name: "识别后的主体名称",
+      attachments: [confirmedAttachment],
+      draft_update_source: "ocr_confirm",
+      draft_epoch: 4,
+      draft_revision: 3,
+    });
+    expect(confirmation.success).toBe(true);
+    if (!confirmation.success) return;
+    expect(confirmation.data).toMatchObject({
+      license_name: "识别后的主体名称",
+      attachments: [confirmedAttachment],
+    });
   });
 
-  test("requires enterprise identity address and corporate bank account", () => {
-    expect(
-      CreateWechatPayApplymentSchema.safeParse({
-        ...baseApplymentInput,
-        identity_address: undefined,
-      }).success,
-    ).toBe(false);
-    expect(
-      CreateWechatPayApplymentSchema.safeParse({
-        ...baseApplymentInput,
-        settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
-      }).success,
-    ).toBe(false);
+  test("allows only safe OCR review metadata on attachments", () => {
+    const attachment = {
+      category: "license_copy",
+      file_object_id: "22222222-2222-4222-8222-222222222222",
+      object_key: "tenant/license.jpg",
+      ocr_recognition_id: "11111111-1111-4111-8111-111111111111",
+      ocr_review_status: "confirmed",
+    };
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      attachments: [attachment],
+      draft_epoch: 2,
+      draft_revision: 4,
+    }).success).toBe(true);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      attachments: [{
+        ...attachment,
+        ocr_recognition_id: "not-a-uuid",
+      }],
+    }).success).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      attachments: [{
+        ...attachment,
+        ocr_review_status: "unknown",
+      }],
+    }).success).toBe(false);
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      attachments: [{
+        ...attachment,
+        ocr_fields: { identity_number: "41000019900101001X" },
+      }],
+    }).success).toBe(false);
+  });
 
-    expect(
-      CreateWechatPayApplymentSchema.safeParse({
-        ...baseApplymentInput,
-        subject_type: "SUBJECT_TYPE_INDIVIDUAL",
-        identity_address: undefined,
-        settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
-        settlement_id: "719",
-        qualification_type: "零售批发/生活娱乐/其他",
-      }).success,
-    ).toBe(true);
+  test("requires recognition identity for OCR-backed review states", () => {
+    const attachment = {
+      category: "license_copy",
+      file_object_id: "22222222-2222-4222-8222-222222222222",
+      object_key: "tenant/license.jpg",
+    };
+    for (const ocrReviewStatus of ["confirmed", "review_required"] as const) {
+      expect(UpdateWechatPayApplymentSchema.safeParse({
+        attachments: [{
+          ...attachment,
+          ocr_review_status: ocrReviewStatus,
+        }],
+      }).success).toBe(false);
+    }
+    expect(UpdateWechatPayApplymentSchema.safeParse({
+      attachments: [{
+        category: "license_copy",
+        object_key: "tenant/license.jpg",
+        ocr_review_status: "manual",
+      }],
+      draft_epoch: 2,
+      draft_revision: 5,
+    }).success).toBe(true);
   });
 
   test("rejects a settlement rule that does not belong to the subject", () => {
@@ -213,16 +285,40 @@ describe("wechat pay applyment schemas", () => {
     );
   });
 
-  test("requires linked settlement fields together during draft update", () => {
+  test("validates only the settlement rule combinations present in a draft", () => {
     expect(
-      UpdateWechatPayApplymentSchema.safeParse({ settlement_id: "716" })
+      UpdateWechatPayApplymentSchema.safeParse({
+        settlement_id: "716",
+        draft_epoch: 2,
+        draft_revision: 6,
+      })
         .success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       UpdateWechatPayApplymentSchema.safeParse({
         subject_type: "SUBJECT_TYPE_ENTERPRISE",
         settlement_id: "716",
         qualification_type: "零售批发/生活娱乐/网上商城/其他",
+        draft_epoch: 2,
+        draft_revision: 7,
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateWechatPayApplymentSchema.safeParse({
+        subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+        settlement_id: null,
+        qualification_type: null,
+        draft_epoch: 2,
+        draft_revision: 8,
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateWechatPayApplymentSchema.safeParse({
+        subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+        settlement_id: "719",
+        qualification_type: "零售批发/生活娱乐/其他",
+        draft_epoch: 2,
+        draft_revision: 9,
       }).success,
     ).toBe(true);
   });
@@ -239,6 +335,7 @@ describe("wechat pay applyment schemas", () => {
 
   test("parses submit and platform list queries", () => {
     const submitResult = SubmitWechatPayApplymentSchema.safeParse({
+      idempotency_key: "11111111-1111-4111-8111-111111111111",
       remark: "资料已确认",
     });
     const listResult = PlatformWechatPayApplymentListQuerySchema.safeParse({
@@ -254,6 +351,17 @@ describe("wechat pay applyment schemas", () => {
     if (!listResult.success) return;
     expect(listResult.data.page).toBe(2);
     expect(listResult.data.pageSize).toBe(50);
+  });
+
+  test("requires a valid tenant submit idempotency key", () => {
+    expect(SubmitWechatPayApplymentSchema.safeParse({}).success).toBe(false);
+    expect(SubmitWechatPayApplymentSchema.safeParse({
+      idempotency_key: "not-a-uuid",
+    }).success).toBe(false);
+    expect(SubmitWechatPayApplymentSchema.safeParse({
+      idempotency_key: "11111111-1111-4111-8111-111111111111",
+      remark: null,
+    }).success).toBe(true);
   });
 
   test("validates platform review and empty activation payload", () => {
