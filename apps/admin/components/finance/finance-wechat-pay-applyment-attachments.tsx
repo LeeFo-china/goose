@@ -1,24 +1,26 @@
 "use client";
 
-import { type ChangeEvent, useState } from "react";
 import { FileImage, FilePenLine, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  uploadDirectToCos,
-  validateUploadFile,
-} from "@/lib/cos-direct-upload";
-import {
-  type AttachmentCheckpointErrorMap,
-} from "./finance-wechat-pay-applyment-checkpoint";
+  type ApplymentAttachmentController,
+  type ApplymentAttachmentControllerInput,
+  useWechatPayApplymentAttachmentController,
+} from "./finance-wechat-pay-applyment-attachment-controller";
+export {
+  useWechatPayApplymentAttachmentController,
+} from "./finance-wechat-pay-applyment-attachment-controller";
+export type {
+  ApplymentAttachmentController,
+  ApplymentAttachmentControllerInput,
+  AttachmentUploadedInput,
+} from "./finance-wechat-pay-applyment-attachment-controller";
 import {
   type ApplymentMaterialState,
-  type ApplymentMaterialStateMap,
   getMaterialRetryAction,
-  replaceApplymentAttachment,
-  updateAttachmentOcrReviewMetadata,
 } from "./finance-wechat-pay-applyment-flow-model";
 import {
   getWechatPayApplymentAttachmentCategoryLabel,
@@ -33,19 +35,11 @@ import {
   AttachmentCheckpointStatus,
 } from "./finance-wechat-pay-applyment-attachment-checkpoint-status";
 import {
-  createApplymentAttachmentMutationIntent,
-  type ApplymentAttachmentChangeOptions,
-} from "./finance-wechat-pay-applyment-manual-entry";
-import {
   ApplymentAttachmentUploadButton,
 } from "./finance-wechat-pay-applyment-upload-button";
-const APPLYMENT_ATTACHMENT_UPLOAD_SCENE = "wechat_pay_applyment";
-const MAX_APPLYMENT_ATTACHMENT_SIZE = 2 * 1024 * 1024;
+
 const MAX_BUSINESS_SCENE_MATERIALS = 5;
-const APPLYMENT_ATTACHMENT_ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-]);
+
 export type ApplymentAttachmentSlotDefinition = {
   category: WechatPayApplymentAttachmentCategory;
   required: boolean;
@@ -53,20 +47,47 @@ export type ApplymentAttachmentSlotDefinition = {
 };
 
 const BASE_ATTACHMENT_SLOTS: readonly ApplymentAttachmentSlotDefinition[] = [
-  { category: "license_copy", required: true, description: "营业执照清晰照片或扫描件。" },
-  { category: "legal_representative_id_card_front", required: true, description: "法人身份证人像面。" },
-  { category: "legal_representative_id_card_back", required: true, description: "法人身份证国徽面。" },
-  { category: "settlement_account_proof", required: false, description: "开户许可证、银行卡或银行账户证明。" },
+  {
+    category: "license_copy",
+    required: true,
+    description: "营业执照清晰照片或扫描件。",
+  },
+  {
+    category: "legal_representative_id_card_front",
+    required: true,
+    description: "法人身份证人像面。",
+  },
+  {
+    category: "legal_representative_id_card_back",
+    required: true,
+    description: "法人身份证国徽面。",
+  },
+  {
+    category: "settlement_account_proof",
+    required: false,
+    description: "开户许可证、银行卡或银行账户证明。",
+  },
 ];
 
 const CONTACT_ATTACHMENT_SLOTS = [
-  { category: "contact_id_card_front" as const, required: true, description: "经办人身份证人像面。" },
-  { category: "contact_id_card_back" as const, required: true, description: "经办人身份证国徽面。" },
+  {
+    category: "contact_id_card_front" as const,
+    required: true,
+    description: "经办人身份证人像面。",
+  },
+  {
+    category: "contact_id_card_back" as const,
+    required: true,
+    description: "经办人身份证国徽面。",
+  },
 ];
 
 const MATERIAL_STATUS_META: Record<
   ApplymentMaterialState["status"],
-  { label: string; variant: "outline" | "secondary" | "warning" | "danger" | "success" }
+  {
+    label: string;
+    variant: "outline" | "secondary" | "warning" | "danger" | "success";
+  }
 > = {
   missing: { label: "未上传", variant: "outline" },
   uploaded: { label: "已上传", variant: "secondary" },
@@ -76,199 +97,22 @@ const MATERIAL_STATUS_META: Record<
   manual: { label: "手动填写", variant: "secondary" },
   failed: { label: "识别失败", variant: "danger" },
 };
-export type AttachmentUploadedInput = {
-  attachment: WechatPayApplymentAttachment;
-  nextAttachments: WechatPayApplymentAttachment[];
-};
-export type ApplymentAttachmentControllerInput = {
-  attachments: WechatPayApplymentAttachment[];
-  contactType: string;
-  editable: boolean;
-  disabled?: boolean;
-  materialStates: ApplymentMaterialStateMap;
-  attachmentSaveErrors: AttachmentCheckpointErrorMap;
-  supportedOcrDocumentTypes: ReadonlySet<string>;
-  onUploaded: (input: AttachmentUploadedInput) => void | Promise<void>;
-  onRetrySave: (
-    attachment: WechatPayApplymentAttachment,
-  ) => void | Promise<void>;
-  onRetryRecognition: (
-    attachment: WechatPayApplymentAttachment,
-  ) => void | Promise<void>;
-  onChange: (
-    nextAttachments: WechatPayApplymentAttachment[],
-    options?: ApplymentAttachmentChangeOptions,
-  ) => void | Promise<void>;
-};
-export type ApplymentAttachmentController = Omit<
-  ApplymentAttachmentControllerInput,
-  "contactType"
-> & {
-  busy: boolean;
-  uploadingCategory: WechatPayApplymentAttachmentCategory | null;
-  error: string;
-  errorCategory: string | null;
-  openAttachmentPicker: (inputId: string) => void;
-  uploadAttachment: (
-    category: WechatPayApplymentAttachmentCategory,
-    event: ChangeEvent<HTMLInputElement>,
-  ) => void;
-  removeAttachment: (
-    attachment: WechatPayApplymentAttachment,
-  ) => void;
-  useManualEntry: (
-    attachment: WechatPayApplymentAttachment,
-  ) => void;
-};
+
 export type WechatPayApplymentAttachmentSlotProps =
   ApplymentAttachmentSlotDefinition & {
     controller: ApplymentAttachmentController;
   };
-export function useWechatPayApplymentAttachmentController({
-  attachments,
-  editable,
-  disabled,
-  materialStates,
-  attachmentSaveErrors,
-  supportedOcrDocumentTypes,
-  onUploaded,
-  onRetrySave,
-  onRetryRecognition,
-  onChange,
-}: Omit<ApplymentAttachmentControllerInput, "contactType">):
-  ApplymentAttachmentController {
-  const [uploadingCategory, setUploadingCategory] =
-    useState<WechatPayApplymentAttachmentCategory | null>(null);
-  const [error, setError] = useState("");
-  const [errorCategory, setErrorCategory] = useState<string | null>(null);
-  const busy = disabled || Boolean(uploadingCategory);
 
-  async function uploadAttachment(
-    category: WechatPayApplymentAttachmentCategory,
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    setError("");
-    setErrorCategory(category);
-    setUploadingCategory(category);
-    try {
-      validateUploadFile(file, {
-        allowedTypes: APPLYMENT_ATTACHMENT_ALLOWED_TYPES,
-        maxSizeBytes: MAX_APPLYMENT_ATTACHMENT_SIZE,
-        typeMessage: "仅支持 JPEG、PNG 图片",
-        sizeMessage: "单个申请附件不能超过 2MB",
-      });
-      const uploaded = await uploadDirectToCos(file, {
-        scene: APPLYMENT_ATTACHMENT_UPLOAD_SCENE,
-        uploadErrorLabel: getWechatPayApplymentAttachmentCategoryLabel(category),
-      });
-      if (!uploaded.fileId) {
-        throw new Error("附件上传成功但未返回文件 ID，请重新上传");
-      }
-      const attachment: WechatPayApplymentAttachment = {
-        category,
-        file_object_id: uploaded.fileId,
-        object_key: uploaded.storagePath,
-        file_name: file.name,
-        content_type: file.type || null,
-        size: file.size,
-        ocr_recognition_id: null,
-        ocr_review_status: "uploaded",
-      };
-      const nextAttachments = replaceApplymentAttachment(
-        attachments,
-        attachment,
-      );
-      await onUploaded({ attachment, nextAttachments });
-    } catch (uploadError) {
-      setError(uploadError instanceof Error
-        ? uploadError.message
-        : "上传申请附件失败");
-    } finally {
-      setUploadingCategory(null);
-    }
-  }
-
-  async function removeAttachment(attachment: WechatPayApplymentAttachment) {
-    setError("");
-    setErrorCategory(attachment.category ?? null);
-    try {
-      const nextAttachments = attachments.filter(
-        (item) => item.object_key !== attachment.object_key,
-      );
-      await onChange(nextAttachments, {
-        intent: createApplymentAttachmentMutationIntent(
-          attachments,
-          nextAttachments,
-        ),
-      });
-    } catch (changeError) {
-      setError(changeError instanceof Error
-        ? changeError.message
-        : "移除申请附件失败");
-    }
-  }
-
-  async function useManualEntry(attachment: WechatPayApplymentAttachment) {
-    setError("");
-    setErrorCategory(attachment.category ?? null);
-    try {
-      const nextAttachments = updateAttachmentOcrReviewMetadata(
-        attachments,
-        attachment.object_key,
-        {
-          ocr_recognition_id: attachment.ocr_recognition_id ?? null,
-          ocr_review_status: "manual",
-        },
-      );
-      await onChange(nextAttachments, {
-        intent: createApplymentAttachmentMutationIntent(
-          attachments,
-          nextAttachments,
-        ),
-      });
-    } catch (changeError) {
-      setError(changeError instanceof Error
-        ? changeError.message
-        : "切换手动填写失败");
-    }
-  }
-
-  function openAttachmentPicker(inputId: string) {
-    const input = document.getElementById(inputId);
-    if (input instanceof HTMLInputElement) input.click();
-  }
-
-  return {
-    attachments,
-    editable,
-    disabled,
-    materialStates,
-    attachmentSaveErrors,
-    supportedOcrDocumentTypes,
-    onUploaded,
-    onRetrySave,
-    onRetryRecognition,
-    onChange,
-    busy: Boolean(busy),
-    uploadingCategory,
-    error,
-    errorCategory,
-    openAttachmentPicker,
-    uploadAttachment,
-    removeAttachment,
-    useManualEntry,
+type WechatPayApplymentAttachmentsFieldProps =
+  ApplymentAttachmentControllerInput & {
+    contactType: string;
   };
-}
 
 export function WechatPayApplymentAttachmentsField(
-  input: ApplymentAttachmentControllerInput,
+  input: WechatPayApplymentAttachmentsFieldProps,
 ) {
-  const { contactType } = input;
-  const controller = useWechatPayApplymentAttachmentController(input);
+  const { contactType, ...controllerInput } = input;
+  const controller = useWechatPayApplymentAttachmentController(controllerInput);
   const {
     attachments,
     editable,
@@ -303,15 +147,13 @@ export function WechatPayApplymentAttachmentsField(
       {error ? <div className="mt-3"><StatusAlert>{error}</StatusAlert></div> : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {slots.map((slot) => {
-          return (
-            <WechatPayApplymentAttachmentSlot
-              key={slot.category}
-              {...slot}
-              controller={controller}
-            />
-          );
-        })}
+        {slots.map((slot) => (
+          <WechatPayApplymentAttachmentSlot
+            key={slot.category}
+            {...slot}
+            controller={controller}
+          />
+        ))}
       </div>
 
       <div className="mt-4 rounded-md border p-3">

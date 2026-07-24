@@ -207,6 +207,7 @@ export function FinanceWechatPayApplymentRecognizedFields({
   values,
   fieldSources,
   disabled,
+  labelledBy,
   onManualChange,
 }: {
   category: WechatPayApplymentAttachmentCategory;
@@ -215,6 +216,7 @@ export function FinanceWechatPayApplymentRecognizedFields({
   values: Readonly<Record<string, string>>;
   fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
   disabled?: boolean;
+  labelledBy: string;
   onManualChange: (key: string, value: string) => void;
 }) {
   if (!isApplymentOcrReviewCategory(category)) return null;
@@ -222,7 +224,7 @@ export function FinanceWechatPayApplymentRecognizedFields({
   return (
     <section
       className="min-w-0"
-      aria-label="识别字段核对"
+      aria-labelledby={labelledBy}
       data-ocr-category={category}
     >
       <FieldGroup className="grid gap-4 md:grid-cols-2">

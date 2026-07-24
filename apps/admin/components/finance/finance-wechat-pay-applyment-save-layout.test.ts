@@ -29,6 +29,9 @@ describe("Finance wechat pay applyment save layout", () => {
     );
     const fieldSource = readSource("./finance-wechat-pay-applyment-form-fields.tsx");
     const attachmentSource = readSource("./finance-wechat-pay-applyment-attachments.tsx");
+    const controllerSource = readSource(
+      "./finance-wechat-pay-applyment-attachment-controller.ts",
+    );
 
     expect(requestSource).toContain("/finance/wechat-pay/applyment/current");
     expect(panelSource).toContain("/finance/wechat-pay/applyments");
@@ -36,8 +39,9 @@ describe("Finance wechat pay applyment save layout", () => {
     expect(materialsStageSource).toContain(
       "WechatPayApplymentAttachmentsField",
     );
-    expect(attachmentSource).toContain("uploadDirectToCos");
-    expect(attachmentSource).toContain("wechat_pay_applyment");
+    expect(controllerSource).toContain("uploadDirectToCos");
+    expect(controllerSource).toContain("wechat_pay_applyment");
+    expect(attachmentSource).not.toContain("uploadDirectToCos");
     expect(attachmentSource).toContain("license_copy");
     expect(attachmentSource).toContain("legal_representative_id_card_front");
     expect(`${panelSource}\n${materialsStageSource}`).toContain("attachments");

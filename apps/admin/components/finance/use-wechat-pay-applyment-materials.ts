@@ -35,7 +35,9 @@ import {
   processApplymentUploadedMaterials,
   recognizeApplymentAttachment,
 } from "./finance-wechat-pay-applyment-recognition";
-import type { AttachmentUploadedInput } from "./finance-wechat-pay-applyment-attachments";
+import type {
+  AttachmentUploadedInput,
+} from "./finance-wechat-pay-applyment-attachment-controller";
 import type { UseWechatPayApplymentMaterialsInput } from "./finance-wechat-pay-applyment-materials-contract";
 import { reportGenerationGuardedError } from "./finance-wechat-pay-applyment-save-generation";
 import type { WechatPayApplymentAttachment } from "./finance-wechat-pay-applyment-shared";

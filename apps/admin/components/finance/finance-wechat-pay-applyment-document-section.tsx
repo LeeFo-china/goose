@@ -5,6 +5,8 @@ import { Separator } from "@/components/ui/separator";
 
 import {
   type ApplymentAttachmentController,
+} from "./finance-wechat-pay-applyment-attachment-controller";
+import {
   type ApplymentAttachmentSlotDefinition,
   WechatPayApplymentAttachmentSlot,
 } from "./finance-wechat-pay-applyment-attachments";
@@ -103,6 +105,7 @@ export function FinanceWechatPayApplymentDocumentSection({
             category={category}
             {...ocrController}
             showPreview={false}
+            showManualEntryAction={false}
           />
         ))}
       </div>

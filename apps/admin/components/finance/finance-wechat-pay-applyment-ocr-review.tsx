@@ -71,6 +71,7 @@ export type ApplymentInlineOcrReviewProps = {
   fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
   disabled?: boolean;
   showPreview?: boolean;
+  showManualEntryAction?: boolean;
   onManualChange: (key: string, value: string) => void;
   onApply: (
     category: WechatPayApplymentAttachmentCategory,
@@ -83,7 +84,7 @@ export type ApplymentInlineOcrReviewProps = {
 
 export type ApplymentOcrController = Omit<
   ApplymentInlineOcrReviewProps,
-  "category" | "showPreview"
+  "category" | "showPreview" | "showManualEntryAction"
 >;
 
 export function FinanceWechatPayApplymentOcrReview({
@@ -208,6 +209,7 @@ export function FinanceWechatPayApplymentInlineOcrReview({
   fieldSources,
   disabled,
   showPreview = true,
+  showManualEntryAction = true,
   onManualChange,
   onApply,
   onUseManualEntry,
@@ -236,6 +238,7 @@ export function FinanceWechatPayApplymentInlineOcrReview({
     ? "uploaded"
     : "missing";
   const statusMeta = STATUS_META[status];
+  const titleId = `wechat-pay-applyment-ocr-review-${category}-title`;
   const reviewContent = (
     <section className="flex min-w-0 flex-col gap-4">
       <RecognitionWarnings warnings={currentState?.warnings ?? []} />
@@ -246,6 +249,7 @@ export function FinanceWechatPayApplymentInlineOcrReview({
         values={values}
         fieldSources={fieldSources}
         disabled={disabled}
+        labelledBy={titleId}
         onManualChange={onManualChange}
       />
       <OcrFieldReviewRows
@@ -254,7 +258,7 @@ export function FinanceWechatPayApplymentInlineOcrReview({
         disabled={disabled || status === "recognizing"}
         onApply={(selectedRows) => onApply(category, selectedRows)}
       />
-      {attachment && status !== "manual" ? (
+      {showManualEntryAction && attachment && status !== "manual" ? (
         <div>
           <Button
             type="button"
@@ -273,7 +277,7 @@ export function FinanceWechatPayApplymentInlineOcrReview({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">
+        <h3 id={titleId} className="text-sm font-medium">
           {getWechatPayApplymentAttachmentCategoryLabel(category)}
         </h3>
         <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
