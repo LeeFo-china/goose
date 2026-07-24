@@ -401,3 +401,85 @@ missing FROM-clause entry for table "installation" (SQLSTATE 42P01)
 同一“小程序代开发”授权链接，再次确认尾号 `d301`；新的授权生命周期事件应由已
 修复 RPC 原子创建 `merchant / authorized_unbound` 安装。禁止手工补库、清理租约、
 执行 repair 或复用旧授权码。
+
+### 9.9 d301 重新授权与稳定租户绑定
+
+2026-07-24 11:17 +0800，用户对尾号 `d301` 再次完成官方“小程序代开发”授权。
+只读后置验证证明：
+
+| 核查项 | 结果 |
+|---|---|
+| merchant 安装数 | 精确 1 |
+| 安装 UUID | `82061c96-29ac-4426-baff-5efc1061fbc8` |
+| Authorizer 尾号 | `d301` |
+| 初始授权状态 | `authorized_unbound` |
+| access/refresh 凭证信封 | ciphertext、IV、tag、key version 和未来有效期全部通过 |
+| 授权权限 | ID `1–8`，包含开发管理 |
+
+绑定前，原计划用展示名称 `5H 验收租户 A` 作为精确门禁。该门禁在写入前安全停止，
+随后只读数据库证明安装仍未绑定、deployment key 仍为空。原因不是绑定接口故障，
+而是用户已在后台把同一租户名称改为 `5H 验收租户 AAA`。稳定身份保持不变：
+
+```text
+tenant_id = 51111111-1111-4111-8111-111111111111
+slug      = phase5h_verify_a
+```
+
+改用固定 UUID/slug 并通过现有平台 API 回读当前名称后，只调用一次 bind。响应和
+单安装 GET 均证明 d301 已为 `merchant / active`，绑定到上述租户；运行配置复用
+Template `1b01` 的当前配置。安全 API 响应不含 deployment key，独立只读投影只
+确认其存在，不读取原值。没有直接数据库写入、手工补安装、重放授权码、migration
+或 repair。
+
+### 9.10 模板提交、失败消歧与 test-qr
+
+模板提交前通过官方只读接口完成四项核对：
+
+1. d301 的官方版本列表可正常读取，证明 Authorizer access token 与应用关系有效；
+2. d301 当时的 current、audit、latest、gray 四个版本槽均为空；
+3. Component `cd67` 的官方模板列表精确只有一条 `77538 / 0.1.0`；
+4. migration history 为 Local `359` / Remote `359`、mismatch `0`，最新均为
+   `20260724190000`。
+
+首次使用原计划长版本
+`0.1.0-dev.20260724032738` 调用提交代码 V2，开发 API 返回
+`502 / DOUYIN_OPEN_PLATFORM_API_ERROR`，安全 log ID 为
+`20260724112740E085FFC1F3BA5E1FB118`。本地 release 原子落为 `failed`，无
+operation claim、无 test-qr；随后官方版本列表仍为空，排除平台半成功状态。没有
+盲目重放同一请求。
+
+在模板 ID、权限、Token、ext config、描述和通道都不变时，只把 `user_version`
+改为短三段 `0.1.1`，受控重试一次即成功。该单变量 A/B 证明长预发布版本字符串是
+本次平台拒绝的触发输入；后续商户交付统一使用短三段 SemVer。成功 release：
+
+```text
+release_id       2329c8c1-6eb2-4f15-9d7f-04dcf66047e7
+template_id      77538
+template_version 0.1.1
+status           testing
+authorizer_tail  d301
+```
+
+同一 release 的 test-qr 已成功生成。官方版本列表随后显示
+`latest.version=0.1.1`，current/audit/gray 仍为空；开发库只读状态为 testing 1、
+failed 1、audit submitted 0、audited 0、released 0。当前容器从绑定窗口开始的
+安全路由计数为：
+
+```text
+bind_200       1
+upload_502     1
+upload_200     1
+test_qr_200    1
+submit_audit   0
+sync_status    0
+publish        0
+```
+
+二维码只临时保存在本机 `/tmp` 的 `0600` 文件中并展示给凭据持有人，未提交到 Git，
+未记录完整二维码 URL 或 provider 原始响应。最新 Ticket 于北京时间 11:30 到达，
+Component 继续为 `active`、缓存 access token 仍在未来有效；开发 API 容器保持
+revision `d6f6756baf55acefd64e796db49bc3c1e106fc20`、`running/healthy`。
+
+当前检查点为手机扫码验证 d301 测试版。未取得用户对公司名、案例、工地、域名和
+Template/Authorizer 身份五项确认前，不进入第三方应用全网发布，不调用商户
+`submit-audit`、`sync-status` 或 `publish`。

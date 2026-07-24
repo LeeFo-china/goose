@@ -434,7 +434,12 @@ AES 解密、Component 校验和 provider 换票均通过；API 两次回调均�
 不得手工清理事件租约、补安装记录或执行 migration repair。新事件完成原子写入后，
 本步骤才升级为 PASS。
 
-- [ ] **Step 2：用平台分页接口定位唯一安装**
+恢复结果（2026-07-24 11:17 +0800）：用户重新授权后，可信新事件已原子生成唯一
+`merchant / authorized_unbound` 安装
+`82061c96-29ac-4426-baff-5efc1061fbc8`，Authorizer 尾号为 `d301`，
+访问凭证与刷新凭证信封完整。没有清理旧事件租约、手工补库或执行 repair。
+
+- [x] **Step 2：用平台分页接口定位唯一安装**
 
 使用已存在的短生命周期开发平台管理员会话，将 JWT 仅置于当前 shell 变量 `ADMIN_TOKEN`，执行：
 
@@ -460,7 +465,10 @@ unset INSTALLATIONS_RESPONSE
 
 Expected: 唯一安装为 Task 4 记录的 AppID 尾号。若为 0 或大于 1，停止并按尾号人工消歧，不绑定。
 
-- [ ] **Step 3：只读验证凭证信封**
+Actual: 平台分页接口只命中上述一个 `authorized_unbound` merchant，UUID 与
+Authorizer 尾号均匹配；没有用 Template `1b01` 代替测试商户。
+
+- [x] **Step 3：只读验证凭证信封**
 
 通过只读数据库查询工具，以安装 UUID 为绑定参数，只返回布尔值：
 
@@ -483,9 +491,16 @@ where id = :merchant_installation_id;
 
 Expected: 恰好一行，八个信封/有效期布尔值全部为 `true`。不得选择密文或 token 原值。
 
-- [ ] **Step 4：绑定 `5H 验收租户 A`**
+Actual: 安装恰好一行，访问凭证与刷新凭证的 ciphertext、IV、tag、key version
+以及两个未来有效期门禁全部通过；未选择或输出任何凭证原值。
 
-先通过现有平台 API 只读取得该租户 UUID 和当前模板开发安装的 `runtime_config`，确认名称精确为 `5H 验收租户 A`。然后执行：
+- [x] **Step 4：绑定稳定测试租户 `phase5h_verify_a`**
+
+先通过现有平台 API 只读取得稳定租户 UUID/slug、当前名称和当前模板开发安装的
+`runtime_config`。该租户最初名称为 `5H 验收租户 A`；用户已在后台把当前名称改为
+`5H 验收租户 AAA`，因此绑定门禁以固定 UUID
+`51111111-1111-4111-8111-111111111111` 和 slug `phase5h_verify_a`
+识别同一租户，不再把可变展示名称当作主键。然后执行：
 
 ```bash
 MERCHANT_BIND_RESPONSE="$(curl -fsS \
@@ -508,13 +523,23 @@ unset MERCHANT_BIND_RESPONSE
 
 Expected: 安装状态为 `active`，租户 UUID 一致，安全响应不泄露 deployment key。
 
-- [ ] **Step 5：记录并清理会话**
+Actual（2026-07-24 11:23 +0800）：首次绑定脚本在写入前被旧的精确名称断言安全
+拦截；只读数据库消歧证明安装仍为 `authorized_unbound`、未生成 deployment key。
+确认固定 UUID/slug 对应当前名称 `5H 验收租户 AAA` 后，只调用一次 bind。响应和
+随后单安装 GET 均证明状态为 `active`、租户 UUID/当前名称一致，安全响应不含
+deployment key；运行配置复用 Template `1b01` 的当前配置。
+
+- [x] **Step 5：记录并清理会话**
 
 记录 Authorizer 尾号、安装 UUID、租户 UUID、授权和绑定时间、安全状态；随后：
 
 ```bash
 unset ADMIN_TOKEN MAIN_TENANT_ID RUNTIME_CONFIG
 ```
+
+Actual: Authorizer 尾号、安装 UUID、固定租户 UUID、当前名称、授权状态和运行配置
+来源已记录；短生命周期管理员 JWT、手机号、登录响应和运行配置 shell 变量均随
+受控进程退出清理，未落盘。
 
 ## Task 6：用模板库代码为测试小程序提交代码
 
@@ -526,18 +551,31 @@ unset ADMIN_TOKEN MAIN_TENANT_ID RUNTIME_CONFIG
 - Read: `apps/api/src/schema/platform-douyin-miniapps.ts`
 - Modify after success: `docs/operations/evidence/2026-07-20-douyin-dev-e2e.md`
 
-- [ ] **Step 1：准备唯一交付版本**
+- [x] **Step 1：准备唯一交付版本**
 
 Run:
 
 ```bash
-TEMPLATE_VERSION="0.1.0-dev.$(date -u +%Y%m%d%H%M%S)"
-[[ "$TEMPLATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]{14}$ ]]
+TEMPLATE_VERSION="0.1.1"
+[[ "$TEMPLATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 ```
 
-Expected: 得到严格 SemVer，且不复用已有商户交付版本。
+Expected: 使用短三段 SemVer，且不复用已有商户交付版本。
 
-- [ ] **Step 2：调用单安装 upload**
+执行记录：最初按原计划生成
+`0.1.0-dev.20260724032738`，抖音提交代码 V2 明确返回 API 失败，开发 release
+安全落为 `failed` 且官方版本列表仍为空。只读核对同时证明：
+
+- d301 已授予权限 ID `1–8`，包含开发管理；
+- d301 的官方版本列表可正常读取，access token 与应用关系有效；
+- Component `cd67` 的官方模板列表只有一条 `77538 / 0.1.0`，模板归属正确；
+- 失败记录无 claim、无 test-qr、平台没有半成功版本。
+
+在模板、权限、Token、ext config 和描述均不变时，仅把版本号改为短三段
+`0.1.1` 后提交成功。因此后续商户交付版本使用短三段 SemVer，不再使用带长时间戳
+的预发布段。
+
+- [x] **Step 2：调用单安装 upload**
 
 使用 Task 3 的数字 `TEMPLATE_ID`、Task 5 的 `MERCHANT_INSTALLATION_ID` 和新的短生命周期 `ADMIN_TOKEN`：
 
@@ -563,7 +601,12 @@ unset UPLOAD_RESPONSE
 
 Expected: 精确一条 release 进入 `uploaded`。平台已经通过 OpenAPI 为测试小程序提交代码。
 
-- [ ] **Step 3：生成测试二维码**
+Actual（2026-07-24 11:36 +0800）：受控修正只重试一次，模板 `77538`、版本
+`0.1.1` 成功提交到 d301，release UUID 为
+`2329c8c1-6eb2-4f15-9d7f-04dcf66047e7`。此前失败记录保留为诊断证据，不执行
+手工数据库清理。
+
+- [x] **Step 3：生成测试二维码**
 
 Run:
 
@@ -582,6 +625,22 @@ unset QR_RESPONSE
 ```
 
 Expected: release 进入 `testing` 并返回测试二维码。不得调用商户 `submit-audit` 或 `publish`。
+
+Actual: 同一 release 已进入 `testing`，test-qr 为有效 JPEG 并临时保存到本机
+`/tmp/gooes-douyin-d301-0.1.1-test-qr.png`（文件实际 MIME 为 `image/jpeg`、
+权限 `0600`）。没有调用商户 `submit-audit`、`sync-status` 或 `publish`。
+
+只读收口（2026-07-24 11:41 +0800）：
+
+- 官方版本列表显示 `latest.version=0.1.1`，current/audit/gray 仍为空；
+- 开发库为 testing 1、failed 1，审核提交、审核完成、发布计数均为 0；
+- 当前容器日志精确计数为 bind 200 一次、upload 502 一次、upload 200 一次、
+  test-qr 200 一次，submit-audit/sync-status/publish 均为 0；
+- Component `cd67` 继续 active，Ticket 于 11:30 +0800 更新；
+- migration Local/Remote `359/359`、mismatch `0`、最新均为
+  `20260724190000`；
+- 开发 API 容器仍为 revision
+  `d6f6756baf55acefd64e796db49bc3c1e106fc20`，`running/healthy`。
 
 - [ ] **Step 4：手机验证测试 Authorizer**
 
