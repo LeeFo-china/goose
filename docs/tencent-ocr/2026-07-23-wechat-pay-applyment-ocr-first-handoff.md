@@ -10,7 +10,7 @@
 - OCR 只提供录入建议。识别结果不会静默覆盖人工值，也不会自动提交进件、平台审核或真实微信支付申请。
 - 真实环境 OCR capability 在验收时关闭，因此真实 API/Admin smoke 只验证手工填写降级；未读取、复制、截图或记录任何 OCR 值，也未调用腾讯云 OCR。
 - OCR 成功、重试、恢复、字段冲突、readiness 定位和幂等路径由 mock backend 专用 E2E 覆盖。
-- 未执行平台审核、`submit-to-wechat` 或真实微信进件；五项 migration 已应用并确认
+- 未执行平台审核、`submit-to-wechat` 或真实微信进件；七项 migration 已应用并确认
   Local/Remote 对齐，未执行 `migration repair`。
 
 ## 2. 客户端与 API 契约
@@ -54,13 +54,14 @@ POST /finance/wechat-pay/applyments/:id/submit
 
 - `draft-session` 由数据库签发递增 epoch，并把该 epoch 的 revision 从 `0` 重新开始。
 - 草稿更新只接受当前 epoch 且严格递增的 revision。RPC 的稳定字面返回值为 `stale_epoch`、`same_or_older_revision` 和 `applied`。
-- 草稿更新与 `updated` 事件同事务；提交状态转换与 `submitted` 事件同事务。
+- 需要审计的草稿更新与 `updated` 事件同事务；低风险自动保存允许不写事件。首次草稿
+  与 `created` 事件、提交状态转换与 `submitted` 事件也分别在同一事务完成。
 - 提交以申请 ID 作为稳定幂等键。已提交重试返回幂等结果，不重复写 `submitted` 事件。
 - `submission_readiness` 是是否可提交及阻塞项定位的唯一后端事实来源，前端不复制一套必填规则。
 
 ## 3. Migration 与真实数据库
 
-已应用并只读复核以下五个版本：
+已应用并只读复核以下七个版本：
 
 ```text
 20260723130000
@@ -68,11 +69,19 @@ POST /finance/wechat-pay/applyments/:id/submit
 20260724110000
 20260724130000
 20260724150000
+20260724170000
+20260724173000
 ```
 
-`supabase migration list` 的 Local/Remote 共 `356` 条、差异 `0`，未执行 repair。
-后三项 migration 分别用于草稿 revision、跨页面 epoch fencing，以及草稿更新与审计
-事件原子写入。
+`supabase migration list` 的 Local/Remote 共 `358` 条、差异 `0`，未执行 repair。
+后五项 migration 分别用于草稿 revision、跨页面 epoch fencing、需要审计的草稿更新与
+事件原子写入、首次草稿与 `created` 事件原子创建，以及附件归属 JSONB containment
+查询的 GIN 索引。
+
+本机执行 Supabase 类型生成时因 Docker daemon 不可用而无法连接 shadow database；
+`apps/api/src/types/database.ts` 已按远端已应用的
+`create_tenant_wechat_pay_applyment` RPC 契约同步函数类型，并由 API TypeScript
+检查覆盖。恢复 Docker 后应重新生成数据库类型并确认无差异。
 
 使用两个独立 `Bun.SQL` 连接完整重跑事务验证，脱敏结果保存在：
 
@@ -90,6 +99,10 @@ POST /finance/wechat-pay/applyments/:id/submit
 - 同 epoch 的相同或更旧 revision 返回 `same_or_older_revision`。
 - 对事件表加排他锁后，另一连接以 `300ms` statement timeout 分别验证草稿更新和提交。事件插入失败均返回 SQLSTATE `57014`，申请状态、`submitted_at`、revision 和事件写入全部回滚。
 - `finally` 清理后测试申请 `0` 条、测试事件 `0` 条。
+- 两个并发首次创建请求返回 `200/400`，仅一条申请和一条 `created` 事件落库，另一条
+  返回稳定 `WECHAT_PAY_APPLYMENT_EXISTS`；清理后申请剩余 `0` 条。
+- 附件归属查询在强制禁用顺序扫描的 `EXPLAIN ANALYZE` 中命中
+  `tenant_wechat_pay_applyments_attachments_gin_idx`，节点为 `Bitmap Index Scan`。
 
 验证脚本只在 `/tmp`，未纳入仓库。纯文本 RPC 使用 `jsonb_build_object` 包装，JSON 参数通过 `::text::jsonb` 传入，`timestamptz` 通过文本往返保留微秒。结果不包含连接串、密钥、租户、人员、申请或附件标识。
 
@@ -125,7 +138,8 @@ POST /finance/wechat-pay/applyments/:id/submit
 
 ### 专项与构建
 
-- API 专项：`207 pass / 0 fail`，`627` assertions，`32` files。
+- API 专项：`210 pass / 0 fail`，`637` assertions，`32` files；新增上传、私有 URL 与
+  OCR 安全回归组合 `41 pass / 0 fail`。
 - Admin 专项：`227 pass / 0 fail`，`958` assertions，`30` files。
 - Domain 专项：`3 pass / 0 fail`；domain build 成功。
 - `pnpm run api:check`：TypeScript、Bun build、文件大小检查通过。
