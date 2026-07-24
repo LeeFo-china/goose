@@ -58,6 +58,23 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(attachmentSource).toContain("选传");
   });
 
+  test("splits supplement fields into single-page business groups", () => {
+    const supplementSource = readSource(
+      "./finance-wechat-pay-applyment-supplement-fields.tsx",
+    );
+
+    for (const component of [
+      "FinanceWechatPayApplymentContactFields",
+      "FinanceWechatPayApplymentSettlementFields",
+      "FinanceWechatPayApplymentBusinessFields",
+    ]) {
+      expect(supplementSource).toContain(`export function ${component}`);
+      expect(supplementSource).toContain(`<${component}`);
+    }
+    expect(supplementSource).not.toContain("返回上传资料修改");
+    expect(supplementSource).not.toContain("Undo2");
+  });
+
   test("uses one linked settlement rule select instead of technical text inputs", () => {
     const supplementSource = readSource(
       "./finance-wechat-pay-applyment-supplement-fields.tsx",
