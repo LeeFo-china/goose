@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import {
   getMockAttachmentReadinessBlockers,
   initialApplyment,
+  mockOcrRecognitions,
   mockTenantId,
 } from "./wechat-pay-applyment-mock-fixture.mjs";
 
@@ -40,7 +41,13 @@ let startedSaves = [];
 let committedSaves = [];
 let nextSaveDelayMs = 0;
 let injectedReadinessBlockers = [];
-
+let uploadSequence = 0;
+let recognitionSequence = 0;
+let failNextRecognition = false;
+let uploadedFiles = new Map();
+let recognitions = new Map(
+  mockOcrRecognitions.map((recognition) => [recognition.id, recognition]),
+);
 const capabilities = [
   ["business_license", ["license_copy"]],
   [
@@ -69,7 +76,6 @@ function sendJson(response, statusCode, data) {
   });
   response.end(JSON.stringify(data));
 }
-
 function readBody(request) {
   return new Promise((resolve) => {
     const chunks = [];
@@ -80,7 +86,10 @@ function readBody(request) {
 
 function applymentDetail() {
   const blockers = deduplicateBlockers([
-    ...getMockAttachmentReadinessBlockers(applyment),
+    ...getMockAttachmentReadinessBlockers(
+      applyment,
+      Array.from(recognitions.values()),
+    ),
     ...injectedReadinessBlockers,
   ]);
   const ready = blockers.length === 0;
@@ -118,6 +127,22 @@ const server = createServer(async (request, response) => {
     committedSaves = [];
     nextSaveDelayMs = 0;
     injectedReadinessBlockers = [];
+    uploadSequence = 0;
+    recognitionSequence = 0;
+    failNextRecognition = false;
+    uploadedFiles = new Map();
+    recognitions = new Map(
+      mockOcrRecognitions.map((recognition) => [recognition.id, recognition]),
+    );
+    sendJson(response, 200, { success: true });
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    url.pathname === "/__test/fail-next-recognition"
+  ) {
+    await readBody(request);
+    failNextRecognition = true;
     sendJson(response, 200, { success: true });
     return;
   }
@@ -242,6 +267,179 @@ const server = createServer(async (request, response) => {
     url.pathname === "/ocr/capabilities"
   ) {
     sendJson(response, 200, { success: true, data: capabilities });
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    url.pathname === "/uploads/cos/direct-init"
+  ) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    if (payload.scene !== "wechat_pay_applyment") {
+      sendJson(response, 400, {
+        success: false,
+        message: "Mock upload scene mismatch",
+      });
+      return;
+    }
+    uploadSequence += 1;
+    const suffix = String(uploadSequence).padStart(12, "0");
+    const fileId = `40000000-0000-4000-8000-${suffix}`;
+    const objectKey =
+      `tenants/${mockTenantId}/wechat-pay-applyment/${fileId}.png`;
+    uploadedFiles.set(objectKey, {
+      fileId,
+      sequence: uploadSequence,
+      contentType: payload.mimetype || "image/png",
+      size: Number(payload.size_bytes) || 68,
+      uploadIntent: `mock-upload-intent-${uploadSequence}`,
+      putCompleted: false,
+      directCompleteCompleted: false,
+    });
+    sendJson(response, 200, {
+      success: true,
+      data: {
+        object_key: objectKey,
+        storage_path: objectKey,
+        upload_url: `/api/backend/__test/cos-upload/${uploadSequence}`,
+        method: "PUT",
+        headers: {
+          "content-type": payload.mimetype || "image/png",
+        },
+        upload_intent: `mock-upload-intent-${uploadSequence}`,
+      },
+    });
+    return;
+  }
+  if (
+    request.method === "PUT" &&
+    /^\/__test\/cos-upload\/\d+$/.test(url.pathname)
+  ) {
+    await readBody(request);
+    const sequence = Number(url.pathname.split("/").at(-1));
+    const uploaded = Array.from(uploadedFiles.values()).find(
+      (candidate) => candidate.sequence === sequence,
+    );
+    if (!uploaded) {
+      sendJson(response, 404, {
+        success: false,
+        message: "Mock upload intent not found",
+      });
+      return;
+    }
+    uploaded.putCompleted = true;
+    response.writeHead(200, { etag: `"mock-etag-${sequence}"` });
+    response.end();
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    url.pathname === "/uploads/cos/direct-complete"
+  ) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    const uploaded = uploadedFiles.get(payload.object_key);
+    if (
+      !uploaded ||
+      payload.scene !== "wechat_pay_applyment" ||
+      payload.upload_intent !== uploaded.uploadIntent ||
+      !uploaded.putCompleted
+    ) {
+      sendJson(response, 409, {
+        success: false,
+        message: "Mock upload sequence incomplete",
+      });
+      return;
+    }
+    uploaded.directCompleteCompleted = true;
+    sendJson(response, 200, {
+      success: true,
+      data: {
+        file_id: uploaded.fileId,
+        object_key: payload.object_key,
+        storage_path: payload.object_key,
+      },
+    });
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    url.pathname === "/ocr/recognitions"
+  ) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    recognitionSequence += 1;
+    const uploaded = Array.from(uploadedFiles.values()).find(
+      (candidate) => candidate.fileId === payload.file_object_id,
+    );
+    if (
+      payload.scene !== "wechat_pay_applyment" ||
+      !uploaded?.directCompleteCompleted ||
+      typeof payload.idempotency_key !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        .test(payload.idempotency_key)
+    ) {
+      sendJson(response, 400, {
+        success: false,
+        message: "Mock OCR request contract mismatch",
+      });
+      return;
+    }
+    if (failNextRecognition) {
+      failNextRecognition = false;
+      sendJson(response, 502, {
+        success: false,
+        code: "OCR_PROVIDER_UNAVAILABLE",
+        message: "证照识别失败",
+      });
+      return;
+    }
+    const suffix = String(recognitionSequence).padStart(12, "0");
+    const recognition = {
+      id: `50000000-0000-4000-8000-${suffix}`,
+      tenant_id: mockTenantId,
+      status: "succeeded",
+      scene: "wechat_pay_applyment",
+      document_type: payload.document_type,
+      file_object_id: payload.file_object_id,
+      subject_type: payload.subject_type ?? null,
+      subject_id: payload.subject_id ?? null,
+      provider_request_id: `mock-provider-${recognitionSequence}`,
+      expires_at: "2026-07-24T23:59:59+08:00",
+      fields: [{
+        key: "license_name",
+        label: "营业执照主体名称",
+        value: `OCR 识别主体 ${recognitionSequence}`,
+        normalized: true,
+        sensitive: false,
+        confidence: 0.99,
+      }],
+      warnings: [],
+    };
+    recognitions.set(recognition.id, recognition);
+    sendJson(response, 200, {
+      success: true,
+      data: {
+        recognition,
+        idempotent: false,
+        cached: false,
+      },
+    });
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    /^\/ocr\/recognitions\/[^/]+$/.test(url.pathname)
+  ) {
+    const recognitionId = decodeURIComponent(
+      url.pathname.slice("/ocr/recognitions/".length),
+    );
+    const recognition = recognitions.get(recognitionId);
+    if (!recognition) {
+      sendJson(response, 404, {
+        success: false,
+        message: "Mock OCR recognition not found",
+      });
+      return;
+    }
+    sendJson(response, 200, { success: true, data: recognition });
     return;
   }
   if (

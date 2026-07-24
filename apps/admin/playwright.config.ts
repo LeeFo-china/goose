@@ -9,6 +9,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3011";
 export default defineConfig({
   testDir: "./e2e",
   testIgnore: [
+    "**/wechat-pay-applyment-materials.spec.ts",
     "**/wechat-pay-applyment-readiness.spec.ts",
     "**/wechat-pay-applyment-review.spec.ts",
   ],
