@@ -48,6 +48,12 @@ describe("wechat pay applyment single-page contracts", () => {
       ),
     );
     expect(businessFieldsSource).not.toContain("onDataChange");
+    const commonFieldsPropsSource = supplementSource.slice(
+      supplementSource.indexOf("type CommonFieldsProps"),
+      supplementSource.indexOf("type DataChangeProps"),
+    );
+    expect(commonFieldsPropsSource).not.toContain("onContactTypeChange");
+    expect(commonFieldsPropsSource).not.toContain("onDataChange");
     for (const deprecatedProp of [
       "contactType",
       "navigationDisabled",

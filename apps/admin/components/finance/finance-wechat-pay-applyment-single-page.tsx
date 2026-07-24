@@ -251,10 +251,6 @@ export function FinanceWechatPayApplymentSinglePage({
         id={APPLYMENT_TARGET_IDS.licenseMaterials}
         attachmentController={attachmentController}
         ocrController={ocrController}
-        onSubjectTypeChange={onSubjectTypeChange}
-        onAttachmentsChange={onAttachmentsChange}
-        onApplyRecognition={onApplyRecognition}
-        onManualFieldChange={onManualFieldChange}
       />
 
       <Separator />
@@ -289,7 +285,6 @@ export function FinanceWechatPayApplymentSinglePage({
         <FinanceWechatPayApplymentContactFields
           applyment={applyment}
           disabled={disabled}
-          onContactTypeChange={onContactTypeChange}
         />
       </section>
 
@@ -334,7 +329,6 @@ export function FinanceWechatPayApplymentSinglePage({
         <FinanceWechatPayApplymentBusinessFields
           applyment={applyment}
           disabled={disabled}
-          onDataChange={onSupplementDataChange}
         />
         <section
           id={APPLYMENT_TARGET_IDS.businessMaterials}

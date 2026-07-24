@@ -34,8 +34,6 @@ const SETTLEMENT_ACCOUNT_TYPE_OPTIONS = [
 type CommonFieldsProps = {
   applyment: WechatPayApplymentRecord | null;
   disabled: boolean;
-  onContactTypeChange?: (value: string) => void;
-  onDataChange?: (overrides: Record<string, string>) => void;
 };
 
 type DataChangeProps = {

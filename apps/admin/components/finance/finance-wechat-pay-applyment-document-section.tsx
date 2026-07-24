@@ -5,7 +5,6 @@ import { Separator } from "@/components/ui/separator";
 
 import {
   type ApplymentAttachmentController,
-  type ApplymentAttachmentControllerInput,
 } from "./finance-wechat-pay-applyment-attachment-controller";
 import {
   type ApplymentAttachmentSlotDefinition,
@@ -34,10 +33,6 @@ export type FinanceWechatPayApplymentDocumentSectionProps =
     id?: ApplymentTargetId;
     attachmentController: ApplymentAttachmentController;
     ocrController: ApplymentOcrController;
-    onSubjectTypeChange?: (value: string) => void;
-    onAttachmentsChange?: ApplymentAttachmentControllerInput["onChange"];
-    onApplyRecognition?: ApplymentOcrController["onApply"];
-    onManualFieldChange?: ApplymentOcrController["onManualChange"];
   };
 
 export const LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG = {

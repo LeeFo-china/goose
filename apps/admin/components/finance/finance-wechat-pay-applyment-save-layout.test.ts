@@ -20,6 +20,20 @@ function expectComponentProp(
   ).toBe(true);
 }
 
+function getComponentInvocations(source: string, component: string) {
+  return source.match(
+    new RegExp(`<${component}\\b[\\s\\S]*?\\/>`, "g"),
+  ) ?? [];
+}
+
+function getObjectDeclaration(source: string, declaration: string) {
+  const start = source.indexOf(declaration);
+  const end = source.indexOf("\n  };", start);
+  expect(start, `${declaration} 应存在`).toBeGreaterThanOrEqual(0);
+  expect(end, `${declaration} 应完整结束`).toBeGreaterThan(start);
+  return source.slice(start, end + 5);
+}
+
 describe("Finance wechat pay applyment save layout", () => {
   test("wires create update submit and attachment upload contracts", () => {
     const requestSource = readSource("./finance-wechat-pay-applyment-requests.ts");
@@ -83,41 +97,97 @@ describe("Finance wechat pay applyment save layout", () => {
     }
   });
 
-  test("forwards SinglePage callbacks to their owning child components", () => {
+  test("connects SinglePage callbacks through runtime consumers", () => {
     const singlePageUrl = new URL(
       "./finance-wechat-pay-applyment-single-page.tsx",
       import.meta.url,
     );
+    const documentSectionSource = readSource(
+      "./finance-wechat-pay-applyment-document-section.tsx",
+    );
     expect(existsSync(singlePageUrl)).toBe(true);
     if (!existsSync(singlePageUrl)) return;
     const singlePageSource = readFileSync(singlePageUrl, "utf8");
-    const childBindings = [
-      ["FinanceWechatPayApplymentDocumentSection", "onSubjectTypeChange"],
-      ["FinanceWechatPayApplymentDocumentSection", "onAttachmentsChange"],
-      ["FinanceWechatPayApplymentDocumentSection", "onApplyRecognition"],
-      ["FinanceWechatPayApplymentDocumentSection", "onManualFieldChange"],
-      ["FinanceWechatPayApplymentContactFields", "onContactTypeChange"],
-      [
-        "FinanceWechatPayApplymentSettlementFields",
-        "onDataChange",
-        "onSupplementDataChange",
-      ],
-      [
-        "FinanceWechatPayApplymentBusinessFields",
-        "onDataChange",
-        "onSupplementDataChange",
-      ],
-      [
-        "FinanceWechatPayApplymentReview",
-        "onConfirmedChange",
-        "onReviewConfirmedChange",
-      ],
-      ["FinanceWechatPayApplymentActions", "onSubmitApplyment"],
-    ] as const;
 
-    for (const [component, prop, handler = prop] of childBindings) {
-      expectComponentProp(singlePageSource, component, prop, handler);
+    const attachmentController = getObjectDeclaration(
+      singlePageSource,
+      "const attachmentController = useWechatPayApplymentAttachmentController({",
+    );
+    expect(attachmentController).toContain(
+      "onChange: onAttachmentsChange",
+    );
+
+    const ocrController = getObjectDeclaration(
+      singlePageSource,
+      "const ocrController = {",
+    );
+    expect(ocrController).toContain("onApply: onApplyRecognition");
+    expect(ocrController).toContain(
+      "onManualChange: onManualFieldChange",
+    );
+
+    const documentSections = getComponentInvocations(
+      singlePageSource,
+      "FinanceWechatPayApplymentDocumentSection",
+    );
+    expect(documentSections.length).toBeGreaterThan(0);
+    for (const invocation of documentSections) {
+      expect(invocation).toContain("attachmentController={attachmentController}");
+      expect(invocation).toContain("ocrController={ocrController}");
+      for (const pseudoProp of [
+        "onSubjectTypeChange",
+        "onAttachmentsChange",
+        "onApplyRecognition",
+        "onManualFieldChange",
+      ]) {
+        expect(invocation).not.toContain(`${pseudoProp}=`);
+      }
     }
+    expect(documentSectionSource).toContain("{...ocrController}");
+
+    const selectFields = getComponentInvocations(singlePageSource, "SelectField");
+    expect(
+      selectFields.find((invocation) =>
+        invocation.includes('name="subject_type"')
+      ),
+    ).toContain("onValueChange={onSubjectTypeChange}");
+    expect(
+      selectFields.find((invocation) =>
+        invocation.includes('name="contact_type"')
+      ),
+    ).toContain("onValueChange={onContactTypeChange}");
+
+    expectComponentProp(
+      singlePageSource,
+      "FinanceWechatPayApplymentSettlementFields",
+      "onDataChange",
+      "onSupplementDataChange",
+    );
+    expectComponentProp(
+      singlePageSource,
+      "FinanceWechatPayApplymentReview",
+      "onConfirmedChange",
+      "onReviewConfirmedChange",
+    );
+    expectComponentProp(
+      singlePageSource,
+      "FinanceWechatPayApplymentActions",
+      "onSubmitApplyment",
+      "onSubmitApplyment",
+    );
+
+    const contactFields = getComponentInvocations(
+      singlePageSource,
+      "FinanceWechatPayApplymentContactFields",
+    );
+    const businessFields = getComponentInvocations(
+      singlePageSource,
+      "FinanceWechatPayApplymentBusinessFields",
+    );
+    expect(contactFields).toHaveLength(1);
+    expect(contactFields[0]).not.toContain("onContactTypeChange=");
+    expect(businessFields).toHaveLength(1);
+    expect(businessFields[0]).not.toContain("onDataChange=");
   });
 
   test("keeps the complete draft payload aligned with the form fields", () => {
