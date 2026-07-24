@@ -84,6 +84,9 @@ describe("Finance wechat pay applyment page layout", () => {
     const attachmentSource = readSource(
       "./finance-wechat-pay-applyment-attachments.tsx",
     );
+    const singlePageSource = readSource(
+      "./finance-wechat-pay-applyment-single-page.tsx",
+    );
     const controllerSource = readSource(
       "./finance-wechat-pay-applyment-attachment-controller.ts",
     );
@@ -92,9 +95,6 @@ describe("Finance wechat pay applyment page layout", () => {
     );
     const materialsHookSource = readSource(
       "./use-wechat-pay-applyment-materials.ts",
-    );
-    const materialsStageSource = readSource(
-      "./finance-wechat-pay-applyment-materials-stage.tsx",
     );
     const materialRecoverySource = readSource(
       "./finance-wechat-pay-applyment-material-recovery.ts",
@@ -134,11 +134,11 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(materialsHookSource).toContain('draftUpdateSource: "attachment_change"');
     expect(recognitionSource).toContain('draftUpdateSource: "ocr_review"');
     expect(manualEntrySource).toContain('draftUpdateSource: "manual_entry"');
-    expect(materialsStageSource).toContain("@/components/ui/checkbox");
-    expect(materialsStageSource).toContain(
+    expect(singlePageSource).toContain("@/components/ui/checkbox");
+    expect(singlePageSource).toContain(
       "同意使用已上传证照进行信息识别和申请资料回填",
     );
-    expect(materialsStageSource).toContain("证照识别暂不可用");
+    expect(singlePageSource).toContain("证照识别暂不可用");
     expect(controllerSource).toContain("onUploaded");
     expect(controllerSource).toContain("onRetryRecognition");
     expect(controllerSource).toContain("onRetrySave");
@@ -333,11 +333,11 @@ describe("Finance wechat pay applyment page layout", () => {
     const attachmentSource = readSource(
       "./finance-wechat-pay-applyment-attachments.tsx",
     );
+    const singlePageSource = readSource(
+      "./finance-wechat-pay-applyment-single-page.tsx",
+    );
     const controllerSource = readSource(
       "./finance-wechat-pay-applyment-attachment-controller.ts",
-    );
-    const materialsStageSource = readSource(
-      "./finance-wechat-pay-applyment-materials-stage.tsx",
     );
     const handlerStart = panelSource.indexOf(
       "async function handleAttachmentsChange",
@@ -359,8 +359,8 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(panelSource).toContain(
       "onAttachmentsChange={handleAttachmentsChange}",
     );
-    expect(materialsStageSource).toContain(
-      "onChange={onAttachmentsChange}",
+    expect(singlePageSource).toContain(
+      "onChange: onAttachmentsChange",
     );
     expect(controllerSource).toContain(
       "intent: createApplymentAttachmentMutationIntent(",
@@ -408,6 +408,9 @@ describe("Finance wechat pay applyment page layout", () => {
     const supplementSource = readFileSync(supplementUrl, "utf8");
     const reviewSource = readFileSync(reviewUrl, "utf8");
     const schemaSource = readFileSync(schemaUrl, "utf8");
+    const singlePageSource = readSource(
+      "./finance-wechat-pay-applyment-single-page.tsx",
+    );
     const attachmentSource = readSource(
       "./finance-wechat-pay-applyment-attachments.tsx",
     );
@@ -427,8 +430,8 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(controllerSource).not.toContain("image/bmp");
     expect(uploadButtonSource).toContain("image/jpeg,image/png");
     expect(controllerSource).toContain("2 * 1024 * 1024");
-    expect(attachmentSource).toContain("contact_id_card_front");
-    expect(attachmentSource).toContain("contact_id_card_back");
+    expect(singlePageSource).toContain("contact_id_card_front");
+    expect(singlePageSource).toContain("contact_id_card_back");
     expect(attachmentSource).toContain("MAX_BUSINESS_SCENE_MATERIALS = 5");
     expect(controllerSource).not.toContain("image/webp");
     expect(panelSource).not.toMatch(/<select\b/);

@@ -31,6 +31,7 @@ export type ApplymentDocumentSectionDefinition = {
 export type FinanceWechatPayApplymentDocumentSectionProps =
   ApplymentDocumentSectionDefinition & {
     id?: ApplymentTargetId;
+    headingLevel?: "h2" | "h3";
     attachmentController: ApplymentAttachmentController;
     ocrController: ApplymentOcrController;
   };
@@ -58,6 +59,7 @@ export const LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG = {
 
 export function FinanceWechatPayApplymentDocumentSection({
   id,
+  headingLevel = "h2",
   title,
   description,
   slots,
@@ -65,6 +67,8 @@ export function FinanceWechatPayApplymentDocumentSection({
   attachmentController,
   ocrController,
 }: FinanceWechatPayApplymentDocumentSectionProps) {
+  const Heading = headingLevel;
+  const headingId = id ? `${id}-heading` : undefined;
   const hasSectionError = Boolean(
     attachmentController.error &&
     attachmentController.errorCategory &&
@@ -77,9 +81,16 @@ export function FinanceWechatPayApplymentDocumentSection({
     : "grid gap-3";
 
   return (
-    <section id={id} tabIndex={-1} className="flex min-w-0 flex-col gap-4">
+    <section
+      id={id}
+      tabIndex={-1}
+      aria-labelledby={headingId}
+      className="flex min-w-0 flex-col gap-4"
+    >
       <header>
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <Heading id={headingId} className="text-sm font-semibold">
+          {title}
+        </Heading>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </header>
 

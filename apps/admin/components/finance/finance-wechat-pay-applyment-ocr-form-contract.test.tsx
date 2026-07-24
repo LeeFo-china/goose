@@ -18,6 +18,9 @@ import {
   FinanceWechatPayApplymentSinglePage,
   type FinanceWechatPayApplymentSinglePageProps,
 } from "./finance-wechat-pay-applyment-single-page";
+import {
+  buildWechatPayApplymentSubjectTypeOverrides,
+} from "./finance-wechat-pay-applyment-subject-type";
 import type {
   ApplymentAttachmentController,
 } from "./finance-wechat-pay-applyment-attachment-controller";
@@ -29,6 +32,7 @@ import type {
   WechatPayApplymentRecord,
 } from "./finance-wechat-pay-applyment-shared";
 import {
+  FinanceWechatPayApplymentSettlementFields,
   SUPPLEMENT_FIELD_NAMES,
 } from "./finance-wechat-pay-applyment-supplement-fields";
 
@@ -163,6 +167,42 @@ function renderSinglePage(options: SinglePageOptions = {}) {
 }
 
 describe("wechat pay applyment OCR form registration", () => {
+  for (
+    const [previousSubjectType, nextSubjectType] of [
+      ["SUBJECT_TYPE_ENTERPRISE", "SUBJECT_TYPE_INDIVIDUAL"],
+      ["SUBJECT_TYPE_INDIVIDUAL", "SUBJECT_TYPE_ENTERPRISE"],
+    ] as const
+  ) {
+    test(`keeps ${previousSubjectType} -> ${nextSubjectType} UI defaults aligned with autosave overrides`, () => {
+      const previousDefaults = buildWechatPayApplymentSubjectTypeOverrides(
+        previousSubjectType,
+      );
+      const nextDefaults = buildWechatPayApplymentSubjectTypeOverrides(
+        nextSubjectType,
+      );
+      const markup = renderToStaticMarkup(
+        createElement(FinanceWechatPayApplymentSettlementFields, {
+          applyment: {
+            subject_type: previousSubjectType,
+            settlement_account_type:
+              previousDefaults.settlement_account_type,
+            settlement_id: previousDefaults.settlement_id,
+            qualification_type: previousDefaults.qualification_type,
+          } as WechatPayApplymentRecord,
+          subjectType: nextSubjectType,
+          disabled: false,
+          onDataChange: () => undefined,
+        }),
+      );
+
+      for (const [name, value] of Object.entries(nextDefaults)) {
+        if (name === "subject_type") continue;
+        expect(markup).toContain(`name="${name}"`);
+        expect(markup).toContain(`value="${value}"`);
+      }
+    });
+  }
+
   for (const status of ["failed", "review_required"] as const) {
     test(`routes the single ${status} manual entry action through the OCR controller`, () => {
       const category = "legal_representative_id_card_front";
@@ -244,6 +284,22 @@ describe("wechat pay applyment OCR form registration", () => {
 
     for (const name of SINGLE_PAGE_FIELD_NAMES) {
       expect(count(names, name)).toBe(1);
+    }
+  });
+
+  test("renders nested material targets as labelled level-three sections", () => {
+    const markup = renderSinglePage();
+
+    for (const targetId of ["settlement-materials", "business-materials"]) {
+      const section = markup.match(
+        new RegExp(
+          `<section[^>]*id="${targetId}"[^>]*aria-labelledby="${targetId}-heading"[^>]*>`,
+        ),
+      )?.[0];
+      expect(section).toContain('tabindex="-1"');
+      expect(markup).toContain(
+        `<h3 id="${targetId}-heading"`,
+      );
     }
   });
 

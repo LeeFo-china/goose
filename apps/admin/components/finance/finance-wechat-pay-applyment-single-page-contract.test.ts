@@ -16,6 +16,12 @@ function getComponentInvocation(source: string, componentName: string) {
   )?.[0] ?? "";
 }
 
+function getComponentInvocations(source: string, componentName: string) {
+  return source.match(
+    new RegExp(`<${componentName}\\b[\\s\\S]*?\\/>`, "g"),
+  ) ?? [];
+}
+
 describe("wechat pay applyment single-page contracts", () => {
   test("splits supplement fields with exact active props", () => {
     const supplementSource = readSource(
@@ -96,8 +102,6 @@ describe("wechat pay applyment single-page contracts", () => {
       "reviewRevision",
       "handleReviewNavigation",
       "buildCurrentSubmission",
-      "buildWechatPayApplymentStoredReview",
-      "buildWechatPayApplymentSubmissionData",
     ]) {
       expect(panelSource).not.toContain(deprecatedPanelName);
     }
@@ -171,7 +175,7 @@ describe("wechat pay applyment single-page contracts", () => {
     ]);
   });
 
-  test("shares target constants with focusable document and future sections", () => {
+  test("shares target constants with accessible nested material sections", () => {
     expect(APPLYMENT_TARGET_IDS).toMatchObject({
       settlementMaterials: "settlement-materials",
       businessMaterials: "business-materials",
@@ -180,8 +184,12 @@ describe("wechat pay applyment single-page contracts", () => {
     const documentSectionSource = readSource(
       "./finance-wechat-pay-applyment-document-section.tsx",
     );
+    const attachmentSource = readSource(
+      "./finance-wechat-pay-applyment-attachments.tsx",
+    );
     expect(documentSectionSource).toContain("id?: ApplymentTargetId");
     expect(documentSectionSource).toContain("tabIndex={-1}");
+    expect(documentSectionSource).toContain('headingLevel?: "h2" | "h3"');
 
     const singlePageUrl = new URL(
       "./finance-wechat-pay-applyment-single-page.tsx",
@@ -190,18 +198,25 @@ describe("wechat pay applyment single-page contracts", () => {
     expect(existsSync(singlePageUrl)).toBe(true);
     if (!existsSync(singlePageUrl)) return;
     const singlePageSource = readFileSync(singlePageUrl, "utf8");
-    for (const targetKey of [
-      "settlementMaterials",
-      "businessMaterials",
-    ]) {
-      const sectionTags = singlePageSource.match(/<section\b[^>]*>/g) ?? [];
-      expect(
-        sectionTags.some((tag) =>
-          tag.includes(`APPLYMENT_TARGET_IDS.${targetKey}`) &&
-          tag.includes("tabIndex={-1}")
-        ),
-      ).toBe(true);
-    }
+    const settlementMaterials = getComponentInvocations(
+      singlePageSource,
+      "FinanceWechatPayApplymentDocumentSection",
+    ).find((invocation) =>
+      invocation.includes("SETTLEMENT_DOCUMENT_SECTION_CONFIG")
+    ) ?? "";
+    const businessMaterials = getComponentInvocation(
+      singlePageSource,
+      "WechatPayApplymentBusinessMaterials",
+    );
+    expect(settlementMaterials).toContain(
+      "id={APPLYMENT_TARGET_IDS.settlementMaterials}",
+    );
+    expect(settlementMaterials).toContain('headingLevel="h3"');
+    expect(businessMaterials).toContain(
+      "id={APPLYMENT_TARGET_IDS.businessMaterials}",
+    );
+    expect(attachmentSource).toContain("aria-labelledby={headingId}");
+    expect(attachmentSource).toContain("<h3");
   });
 
   test("keeps the page layout contract below the focused-test size limit", () => {

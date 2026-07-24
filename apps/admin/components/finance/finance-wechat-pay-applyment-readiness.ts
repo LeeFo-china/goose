@@ -2,7 +2,6 @@ import {
   isWechatPayApplymentKnownBlockerCode,
   type WechatPayApplymentKnownBlockerCode,
 } from "@gooes/domain";
-import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
 import {
   getWechatPayApplymentAttachmentCategoryLabel,
   type WechatPayApplymentAttachmentCategory,
@@ -50,9 +49,15 @@ export const APPLYMENT_TARGET_IDS = {
 export type ApplymentTargetId =
   (typeof APPLYMENT_TARGET_IDS)[keyof typeof APPLYMENT_TARGET_IDS];
 
+export type ApplymentReadinessGroup =
+  | "materials"
+  | "recognition"
+  | "supplement"
+  | "submit";
+
 export type WechatPayApplymentPresentedBlocker = {
   readonly label: string;
-  readonly targetStage: ApplymentStageKey;
+  readonly targetStage: ApplymentReadinessGroup;
   readonly targetId?: ApplymentTargetId;
 };
 

@@ -33,6 +33,9 @@ import {
   type WechatPayApplymentDetailData,
   type WechatPayApplymentDetailResult,
 } from "./finance-wechat-pay-applyment-shared";
+import {
+  buildWechatPayApplymentSubjectTypeOverrides,
+} from "./finance-wechat-pay-applyment-subject-type";
 import { validateApplymentForm } from "./finance-wechat-pay-applyment-validation";
 import { FinanceWechatPayApplymentWorkflow } from "./finance-wechat-pay-applyment-workflow";
 import { useWechatPayApplymentAutosave } from "./use-wechat-pay-applyment-autosave";
@@ -219,9 +222,10 @@ export function FinanceWechatPayApplymentPanel({
   }
 
   function handleSubjectTypeChange(value: string) {
+    const overrides = buildWechatPayApplymentSubjectTypeOverrides(value);
     setSubjectType(value);
     invalidateReview();
-    scheduleDraftSave({ subject_type: value });
+    scheduleDraftSave(overrides);
   }
 
   function handleManualFieldChange(key: string, value: string) {

@@ -3,9 +3,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildInitialMaterialState,
   buildInitialMaterialStates,
-  canLeaveMaterialsStage,
-  canLeaveRecognitionStage,
-  getRequiredApplymentAttachments,
   updateAttachmentOcrReviewMetadata,
   type ApplymentAttachmentOcrReviewMetadata,
   type ApplymentMaterialState,
@@ -32,11 +29,10 @@ function attachment(
 function materialState(
   category: WechatPayApplymentAttachmentCategory,
   status: ApplymentMaterialState["status"],
-  objectKey = `tenant/${category}.jpg`,
 ): ApplymentMaterialState {
   return {
     status,
-    attachmentObjectKey: objectKey,
+    attachmentObjectKey: `tenant/${category}.jpg`,
     recognitionId: status === "uploaded" ? null : RECOGNITION_ID,
     fields: [],
     warnings: [],
@@ -44,28 +40,7 @@ function materialState(
   };
 }
 
-const legalAttachments = [
-  attachment("license_copy", "confirmed"),
-  attachment("legal_representative_id_card_front", "manual"),
-  attachment("legal_representative_id_card_back", "confirmed"),
-] as const;
-
 describe("wechat pay applyment flow model", () => {
-  test("adds contact ID cards only for a SUPER contact", () => {
-    expect(getRequiredApplymentAttachments("LEGAL")).toEqual([
-      "license_copy",
-      "legal_representative_id_card_front",
-      "legal_representative_id_card_back",
-    ]);
-    expect(getRequiredApplymentAttachments("SUPER")).toEqual([
-      "license_copy",
-      "legal_representative_id_card_front",
-      "legal_representative_id_card_back",
-      "contact_id_card_front",
-      "contact_id_card_back",
-    ]);
-  });
-
   test("restores persisted confirmed metadata with empty transient OCR data", () => {
     expect(buildInitialMaterialState({
       category: "license_copy",
@@ -182,198 +157,5 @@ describe("wechat pay applyment flow model", () => {
         ocr_recognition_id: null,
       });
     }
-  });
-
-  test("blocks materials when a required LEGAL or SUPER attachment is missing", () => {
-    expect(canLeaveMaterialsStage({
-      contactType: "LEGAL",
-      attachments: [],
-      materialStates: {},
-    })).toEqual({
-      allowed: false,
-      reason: "请先上传全部必传资料",
-    });
-    expect(canLeaveMaterialsStage({
-      contactType: "SUPER",
-      attachments: legalAttachments,
-      materialStates: buildInitialMaterialStates(legalAttachments),
-    })).toEqual({
-      allowed: false,
-      reason: "请先上传全部必传资料",
-    });
-  });
-
-  test("blocks materials while any material is recognizing", () => {
-    const settlementProof = attachment("settlement_account_proof");
-    expect(canLeaveMaterialsStage({
-      contactType: "LEGAL",
-      attachments: [...legalAttachments, settlementProof],
-      materialStates: {
-        ...buildInitialMaterialStates(legalAttachments),
-        settlement_account_proof: materialState(
-          "settlement_account_proof",
-          "recognizing",
-        ),
-      },
-    })).toEqual({
-      allowed: false,
-      reason: "证照正在识别，请稍候",
-    });
-  });
-
-  test("ignores recognizing states orphaned by deletion or contact type change", () => {
-    expect(canLeaveMaterialsStage({
-      contactType: "LEGAL",
-      attachments: legalAttachments,
-      materialStates: {
-        ...buildInitialMaterialStates(legalAttachments),
-        settlement_account_proof: materialState(
-          "settlement_account_proof",
-          "recognizing",
-        ),
-        contact_id_card_front: materialState(
-          "contact_id_card_front",
-          "recognizing",
-        ),
-      },
-    })).toEqual({
-      allowed: true,
-      reason: null,
-    });
-  });
-
-  test("blocks recognition while an uploaded OCR-capable material needs review", () => {
-    const attachments = [
-      attachment("license_copy", "review_required"),
-    ];
-
-    expect(canLeaveRecognitionStage({
-      attachments,
-      materialStates: buildInitialMaterialStates(attachments),
-    })).toEqual({
-      allowed: false,
-      reason: "请先核对全部证照识别结果或选择手动填写",
-    });
-  });
-
-  test("allows recognition when all uploaded OCR materials are manual or confirmed", () => {
-    expect(canLeaveRecognitionStage({
-      attachments: [
-        ...legalAttachments,
-        attachment("business_scene_material"),
-      ],
-      materialStates: buildInitialMaterialStates(legalAttachments),
-    })).toEqual({
-      allowed: true,
-      reason: null,
-    });
-  });
-
-  test("also blocks an optional settlement proof that still needs review", () => {
-    const attachments = [
-      ...legalAttachments,
-      attachment("settlement_account_proof", "review_required"),
-    ];
-
-    expect(canLeaveRecognitionStage({
-      attachments,
-      materialStates: buildInitialMaterialStates(attachments),
-    })).toEqual({
-      allowed: false,
-      reason: "请先核对全部证照识别结果或选择手动填写",
-    });
-  });
-
-  test("matches state to the last replacement object key", () => {
-    const oldLicense = {
-      ...attachment("license_copy"),
-      object_key: "tenant/old-license.jpg",
-    };
-    const newLicense = {
-      ...attachment("license_copy"),
-      object_key: "tenant/new-license.jpg",
-    };
-    const attachments = [
-      oldLicense,
-      attachment("legal_representative_id_card_front"),
-      attachment("legal_representative_id_card_back"),
-      newLicense,
-    ];
-    const baseStates: ApplymentMaterialStateMap = {
-      legal_representative_id_card_front: materialState(
-        "legal_representative_id_card_front",
-        "confirmed",
-      ),
-      legal_representative_id_card_back: materialState(
-        "legal_representative_id_card_back",
-        "manual",
-      ),
-    };
-
-    const oldRecognizingStates = {
-      ...baseStates,
-      license_copy: materialState(
-        "license_copy",
-        "recognizing",
-        oldLicense.object_key,
-      ),
-    };
-    expect(canLeaveMaterialsStage({
-      contactType: "LEGAL",
-      attachments,
-      materialStates: oldRecognizingStates,
-    })).toEqual({ allowed: true, reason: null });
-    expect(canLeaveRecognitionStage({
-      attachments,
-      materialStates: {
-        ...baseStates,
-        license_copy: materialState(
-          "license_copy",
-          "confirmed",
-          oldLicense.object_key,
-        ),
-      },
-    }).allowed).toBe(false);
-
-    const currentConfirmedStates = {
-      ...baseStates,
-      license_copy: materialState(
-        "license_copy",
-        "confirmed",
-        newLicense.object_key,
-      ),
-    };
-    expect(canLeaveRecognitionStage({
-      attachments,
-      materialStates: currentConfirmedStates,
-    })).toEqual({ allowed: true, reason: null });
-  });
-
-  test("ignores confirmed states whose OCR attachment was removed", () => {
-    expect(canLeaveRecognitionStage({
-      attachments: legalAttachments,
-      materialStates: {
-        ...buildInitialMaterialStates(legalAttachments),
-        contact_id_card_front: materialState(
-          "contact_id_card_front",
-          "confirmed",
-        ),
-      },
-    })).toEqual({ allowed: true, reason: null });
-  });
-
-  test("does not mutate attachments while building or guarding state", () => {
-    const attachments = legalAttachments.map((item) => ({ ...item }));
-    const before = structuredClone(attachments);
-    const states = buildInitialMaterialStates(attachments);
-
-    canLeaveMaterialsStage({
-      contactType: "LEGAL",
-      attachments,
-      materialStates: states,
-    });
-    canLeaveRecognitionStage({ attachments, materialStates: states });
-
-    expect(attachments).toEqual(before);
   });
 });

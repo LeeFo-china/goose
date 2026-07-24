@@ -298,16 +298,13 @@ export function FinanceWechatPayApplymentSinglePage({
           title="结算账户"
           description="先核对结算证明，再补充账户和结算规则。"
         />
-        <section
+        <FinanceWechatPayApplymentDocumentSection
+          {...SETTLEMENT_DOCUMENT_SECTION_CONFIG}
           id={APPLYMENT_TARGET_IDS.settlementMaterials}
-          tabIndex={-1}
-        >
-          <FinanceWechatPayApplymentDocumentSection
-            {...SETTLEMENT_DOCUMENT_SECTION_CONFIG}
-            attachmentController={attachmentController}
-            ocrController={ocrController}
-          />
-        </section>
+          headingLevel="h3"
+          attachmentController={attachmentController}
+          ocrController={ocrController}
+        />
         <FinanceWechatPayApplymentSettlementFields
           applyment={applyment}
           subjectType={subjectType}
@@ -330,14 +327,10 @@ export function FinanceWechatPayApplymentSinglePage({
           applyment={applyment}
           disabled={disabled}
         />
-        <section
+        <WechatPayApplymentBusinessMaterials
           id={APPLYMENT_TARGET_IDS.businessMaterials}
-          tabIndex={-1}
-        >
-          <WechatPayApplymentBusinessMaterials
-            controller={attachmentController}
-          />
-        </section>
+          controller={attachmentController}
+        />
       </section>
 
       <Separator />

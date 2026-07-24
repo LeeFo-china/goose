@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { WECHAT_PAY_APPLYMENT_KNOWN_BLOCKER_CODES } from "@gooes/domain";
-import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
 import type { WechatPayApplymentPreflightBlocker } from "./finance-wechat-pay-applyment-shared";
-import { presentApplymentBlocker } from "./finance-wechat-pay-applyment-readiness";
+import {
+  type ApplymentReadinessGroup,
+  presentApplymentBlocker,
+} from "./finance-wechat-pay-applyment-readiness";
 
 type Case = readonly [
   WechatPayApplymentPreflightBlocker,
   string,
-  ApplymentStageKey,
+  ApplymentReadinessGroup,
 ];
 
 const category = "legal_representative_id_card_back";

@@ -7,16 +7,9 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   type ApplymentAttachmentController,
-  type ApplymentAttachmentControllerInput,
-  useWechatPayApplymentAttachmentController,
 } from "./finance-wechat-pay-applyment-attachment-controller";
 export {
   useWechatPayApplymentAttachmentController,
-} from "./finance-wechat-pay-applyment-attachment-controller";
-export type {
-  ApplymentAttachmentController,
-  ApplymentAttachmentControllerInput,
-  AttachmentUploadedInput,
 } from "./finance-wechat-pay-applyment-attachment-controller";
 import {
   type ApplymentMaterialState,
@@ -46,42 +39,6 @@ export type ApplymentAttachmentSlotDefinition = {
   description: string;
 };
 
-const BASE_ATTACHMENT_SLOTS: readonly ApplymentAttachmentSlotDefinition[] = [
-  {
-    category: "license_copy",
-    required: true,
-    description: "营业执照清晰照片或扫描件。",
-  },
-  {
-    category: "legal_representative_id_card_front",
-    required: true,
-    description: "法人身份证人像面。",
-  },
-  {
-    category: "legal_representative_id_card_back",
-    required: true,
-    description: "法人身份证国徽面。",
-  },
-  {
-    category: "settlement_account_proof",
-    required: false,
-    description: "开户许可证、银行卡或银行账户证明。",
-  },
-];
-
-const CONTACT_ATTACHMENT_SLOTS = [
-  {
-    category: "contact_id_card_front" as const,
-    required: true,
-    description: "经办人身份证人像面。",
-  },
-  {
-    category: "contact_id_card_back" as const,
-    required: true,
-    description: "经办人身份证国徽面。",
-  },
-];
-
 const MATERIAL_STATUS_META: Record<
   ApplymentMaterialState["status"],
   {
@@ -103,56 +60,14 @@ export type WechatPayApplymentAttachmentSlotProps =
     controller: ApplymentAttachmentController;
   };
 
-type WechatPayApplymentAttachmentsFieldProps =
-  ApplymentAttachmentControllerInput & {
-    contactType: string;
-  };
-
-export function WechatPayApplymentAttachmentsField(
-  input: WechatPayApplymentAttachmentsFieldProps,
-) {
-  const { contactType, ...controllerInput } = input;
-  const controller = useWechatPayApplymentAttachmentController(controllerInput);
-  const slots = contactType === "SUPER"
-    ? [...BASE_ATTACHMENT_SLOTS, ...CONTACT_ATTACHMENT_SLOTS]
-    : BASE_ATTACHMENT_SLOTS;
-
-  return (
-    <section className="rounded-md border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">申请附件</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            单张不超过 2MB，仅支持 JPEG、PNG。
-          </p>
-        </div>
-        <Badge variant="outline">私有存储</Badge>
-      </div>
-
-      {controller.error
-        ? <div className="mt-3"><StatusAlert>{controller.error}</StatusAlert></div>
-        : null}
-
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {slots.map((slot) => (
-          <WechatPayApplymentAttachmentSlot
-            key={slot.category}
-            {...slot}
-            controller={controller}
-          />
-        ))}
-      </div>
-
-      <WechatPayApplymentBusinessMaterials controller={controller} />
-    </section>
-  );
-}
-
 export function WechatPayApplymentBusinessMaterials({
   controller,
+  id,
 }: {
   controller: ApplymentAttachmentController;
+  id?: string;
 }) {
+  const headingId = id ? `${id}-heading` : undefined;
   const businessMaterials = controller.attachments.filter(
     (item) => item.category === "business_scene_material",
   );
@@ -160,10 +75,18 @@ export function WechatPayApplymentBusinessMaterials({
     ? controller.error
     : "";
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <section
+      id={id}
+      tabIndex={id ? -1 : undefined}
+      aria-labelledby={headingId}
+      className="flex min-w-0 flex-col gap-3"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-sm font-medium">
+          <h3
+            id={headingId}
+            className="flex items-center gap-2 text-sm font-medium"
+          >
             经营场景材料
             <Badge variant="outline">选传</Badge>
           </h3>
@@ -221,7 +144,7 @@ export function WechatPayApplymentBusinessMaterials({
           />
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
 

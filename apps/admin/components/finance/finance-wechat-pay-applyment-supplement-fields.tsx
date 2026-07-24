@@ -8,6 +8,9 @@ import {
   TextField,
 } from "./finance-wechat-pay-applyment-form-fields";
 import type { WechatPayApplymentRecord } from "./finance-wechat-pay-applyment-shared";
+import {
+  buildWechatPayApplymentSubjectTypeOverrides,
+} from "./finance-wechat-pay-applyment-subject-type";
 import { FinanceWechatPaySettlementRuleField } from "./finance-wechat-pay-settlement-rule-field";
 
 export const SUPPLEMENT_FIELD_NAMES = [
@@ -111,9 +114,14 @@ export function FinanceWechatPayApplymentSettlementFields({
   disabled,
   onDataChange,
 }: SettlementFieldsProps) {
-  const accountType = subjectType === "SUBJECT_TYPE_ENTERPRISE"
-    ? "BANK_ACCOUNT_TYPE_CORPORATE"
-    : applyment?.settlement_account_type || "BANK_ACCOUNT_TYPE_PERSONAL";
+  const subjectDefaults = buildWechatPayApplymentSubjectTypeOverrides(
+    subjectType,
+  );
+  const accountType =
+    applyment?.subject_type === subjectDefaults.subject_type &&
+      applyment.settlement_account_type
+      ? applyment.settlement_account_type
+      : subjectDefaults.settlement_account_type;
 
   return (
     <FieldGroup className="grid gap-4 md:grid-cols-2">

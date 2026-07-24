@@ -10,15 +10,6 @@ import {
   type WechatPayApplymentAttachmentOcrReviewStatus,
 } from "./finance-wechat-pay-applyment-shared";
 
-export const APPLYMENT_STAGE_KEYS = [
-  "materials",
-  "recognition",
-  "supplement",
-  "submit",
-] as const;
-
-export type ApplymentStageKey = (typeof APPLYMENT_STAGE_KEYS)[number];
-
 export type ApplymentMaterialStatus =
   | "missing"
   | "uploaded"
@@ -49,21 +40,6 @@ export type ApplymentAttachmentOcrReviewMetadata = {
     | WechatPayApplymentAttachmentOcrReviewStatus
     | null;
 };
-
-export type ApplymentStageGuardResult =
-  | { allowed: true; reason: null }
-  | { allowed: false; reason: string };
-
-const BASE_REQUIRED_ATTACHMENTS = [
-  "license_copy",
-  "legal_representative_id_card_front",
-  "legal_representative_id_card_back",
-] as const satisfies readonly WechatPayApplymentAttachmentCategory[];
-
-const CONTACT_REQUIRED_ATTACHMENTS = [
-  "contact_id_card_front",
-  "contact_id_card_back",
-] as const satisfies readonly WechatPayApplymentAttachmentCategory[];
 
 const OCR_SUPPORTED_CATEGORIES: ReadonlySet<unknown> = new Set(
   Object.keys(WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES),
@@ -388,73 +364,4 @@ export function getPendingRecognitionAttachments(input: {
       state.status === "uploaded",
     );
   });
-}
-
-export function getApplymentProgress(stage: ApplymentStageKey): number {
-  return (
-    ((APPLYMENT_STAGE_KEYS.indexOf(stage) + 1) /
-      APPLYMENT_STAGE_KEYS.length) *
-    100
-  );
-}
-
-export function getRequiredApplymentAttachments(
-  contactType: string,
-): readonly WechatPayApplymentAttachmentCategory[] {
-  return contactType === "SUPER"
-    ? [...BASE_REQUIRED_ATTACHMENTS, ...CONTACT_REQUIRED_ATTACHMENTS]
-    : [...BASE_REQUIRED_ATTACHMENTS];
-}
-
-export function canLeaveMaterialsStage(input: {
-  contactType: string;
-  attachments: readonly WechatPayApplymentAttachment[];
-  materialStates: ApplymentMaterialStateMap;
-}): ApplymentStageGuardResult {
-  const currentAttachments = buildCurrentOcrAttachments(input.attachments);
-  const isMissingRequired = getRequiredApplymentAttachments(input.contactType)
-    .some((category) => !currentAttachments.has(category));
-  if (isMissingRequired) {
-    return {
-      allowed: false,
-      reason: "请先上传全部必传资料",
-    };
-  }
-
-  const isRecognizing = Array.from(currentAttachments).some(
-    ([category, attachment]) => {
-      const state = input.materialStates[category];
-      return state?.attachmentObjectKey === attachment.object_key &&
-        state.status === "recognizing";
-    },
-  );
-  if (isRecognizing) {
-    return {
-      allowed: false,
-      reason: "证照正在识别，请稍候",
-    };
-  }
-
-  return { allowed: true, reason: null };
-}
-
-export function canLeaveRecognitionStage(input: {
-  attachments: readonly WechatPayApplymentAttachment[];
-  materialStates: ApplymentMaterialStateMap;
-}): ApplymentStageGuardResult {
-  const hasUnresolvedMaterial = Array.from(
-    buildCurrentOcrAttachments(input.attachments),
-  ).some(([category, attachment]) => {
-    const state = input.materialStates[category];
-    if (state?.attachmentObjectKey !== attachment.object_key) return true;
-    return state.status !== "confirmed" && state.status !== "manual";
-  });
-  if (hasUnresolvedMaterial) {
-    return {
-      allowed: false,
-      reason: "请先核对全部证照识别结果或选择手动填写",
-    };
-  }
-
-  return { allowed: true, reason: null };
 }
