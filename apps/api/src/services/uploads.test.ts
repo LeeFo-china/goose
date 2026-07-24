@@ -4,7 +4,6 @@ import {
   beforeEach,
   describe,
   expect,
-  mock,
   spyOn,
   test,
 } from "bun:test";
@@ -81,7 +80,11 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  mock.restore();
+  spies.assertTenantContext.mockRestore();
+  spies.findActiveById.mockRestore();
+  spies.findActiveByIdForPlatform.mockRestore();
+  spies.hasPermission.mockRestore();
+  spies.resolveSignedStoredFileUrl.mockRestore();
 });
 
 function authContext(input: {
