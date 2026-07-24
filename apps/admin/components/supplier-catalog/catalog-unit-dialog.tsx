@@ -9,7 +9,7 @@ import {
   CatalogConflictAlert,
   CatalogDialogTrigger,
 } from "./catalog-dialog-shared";
-import { buildCatalogMutationRequest } from "./supplier-catalog-api";
+import { buildCatalogMutationRequest } from "./supplier-catalog-requests";
 import {
   buildUnitRelationshipPayload,
   initializeCatalogCreateIntent,

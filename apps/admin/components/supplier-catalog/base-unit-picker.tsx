@@ -24,6 +24,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { loadBaseUnitPage } from "./supplier-catalog-api";
+import { handleBaseUnitSearchKeyDown } from "./supplier-catalog-requests";
 import { mergePinnedBaseUnit } from "./supplier-catalog-rules";
 import type {
   CatalogBaseUnit,
@@ -86,6 +87,11 @@ export function BaseUnitPicker({
   );
   const totalPages = Math.max(1, result.pagination.totalPages || 1);
 
+  function handleSearch() {
+    setKeyword(searchText.trim().slice(0, 80));
+    setPage(1);
+  }
+
   return (
     <div className="flex flex-col gap-2">
       {pinned && value === pinned.id ? (
@@ -93,26 +99,21 @@ export function BaseUnitPicker({
           当前关联：{pinned.name}（{pinned.symbol}） · {pinned.code}
         </p>
       ) : null}
-      <form
-        className="flex gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setKeyword(searchText.trim().slice(0, 80));
-          setPage(1);
-        }}
-      >
+      <div className="flex gap-2">
         <Input
           aria-label="搜索基准单位"
           value={searchText}
           maxLength={80}
           placeholder="搜索基准单位编码或名称"
           onChange={(event) => setSearchText(event.target.value)}
+          onKeyDown={(event) =>
+            handleBaseUnitSearchKeyDown(event, handleSearch)}
         />
-        <Button type="submit" variant="outline">
+        <Button type="button" variant="outline" onClick={handleSearch}>
           <Search data-icon="inline-start" />
           搜索
         </Button>
-      </form>
+      </div>
 
       {error ? (
         <Alert variant="destructive">

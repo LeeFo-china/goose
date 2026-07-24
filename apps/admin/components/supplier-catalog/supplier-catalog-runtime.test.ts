@@ -3,26 +3,64 @@ import { describe, expect, test } from "bun:test";
 const BASE_ID = "11111111-1111-4111-8111-111111111111";
 
 async function loadModules() {
-  const [api, rules] = await Promise.all([
-    import("./supplier-catalog-api").catch(() => null),
+  const [requests, rules] = await Promise.all([
+    import("./supplier-catalog-requests").catch(() => null),
     import("./supplier-catalog-rules").catch(() => null),
   ]);
-  return { api, rules };
+  return { requests, rules };
 }
 
 describe("供应标准目录运行时行为", () => {
-  test("基准单位候选使用独立的分页搜索接口", async () => {
-    const { api } = await loadModules();
-    expect(api).not.toBeNull();
-    if (!api) return;
+  test("基准单位搜索只更新独立候选查询且拦截Enter冒泡", async () => {
+    const { requests } = await loadModules();
+    expect(requests).not.toBeNull();
+    if (!requests) return;
 
-    expect(api.buildBaseUnitListPath({
+    expect(requests.buildBaseUnitListPath({
       page: 2,
       pageSize: 20,
       keyword: "包装 箱",
     })).toBe(
       "/platform/catalog/units?status=active&unit_kind=base&page=2&pageSize=20&keyword=%E5%8C%85%E8%A3%85+%E7%AE%B1",
     );
+
+    let prevented = 0;
+    let stopped = 0;
+    let searches = 0;
+    requests.handleBaseUnitSearchKeyDown({
+      key: "Enter",
+      preventDefault: () => {
+        prevented += 1;
+      },
+      stopPropagation: () => {
+        stopped += 1;
+      },
+    }, () => {
+      searches += 1;
+    });
+
+    expect({ prevented, stopped, searches }).toEqual({
+      prevented: 1,
+      stopped: 1,
+      searches: 1,
+    });
+
+    requests.handleBaseUnitSearchKeyDown({
+      key: "a",
+      preventDefault: () => {
+        prevented += 1;
+      },
+      stopPropagation: () => {
+        stopped += 1;
+      },
+    }, () => {
+      searches += 1;
+    });
+    expect({ prevented, stopped, searches }).toEqual({
+      prevented: 1,
+      stopped: 1,
+      searches: 1,
+    });
   });
 
   test("候选页缺少当前关联时固定回显后端投影", async () => {
@@ -88,10 +126,10 @@ describe("供应标准目录运行时行为", () => {
   });
 
   test("三类POST请求携带固定意图键和原始payload", async () => {
-    const { api, rules } = await loadModules();
-    expect(api).not.toBeNull();
+    const { requests, rules } = await loadModules();
+    expect(requests).not.toBeNull();
     expect(rules).not.toBeNull();
-    if (!api || !rules) return;
+    if (!requests || !rules) return;
 
     const payload = { code: "UNIT-M", name: "米" };
     const intent = rules.resolveCatalogCreateIntent(
@@ -105,7 +143,7 @@ describe("供应标准目录运行时行为", () => {
       ["brand", "brands"],
       ["unit", "units"],
     ] as const) {
-      expect(api.buildCatalogMutationRequest({
+      expect(requests.buildCatalogMutationRequest({
         kind,
         payload,
         intent,
@@ -121,9 +159,9 @@ describe("供应标准目录运行时行为", () => {
   });
 
   test("基准单位加载失败后可用同一查询重试", async () => {
-    const { api } = await loadModules();
-    expect(api).not.toBeNull();
-    if (!api) return;
+    const { requests } = await loadModules();
+    expect(requests).not.toBeNull();
+    if (!requests) return;
 
     let attempts = 0;
     const request = async (path: string) => {
@@ -141,12 +179,12 @@ describe("供应标准目录运行时行为", () => {
       };
     };
 
-    await expect(api.loadBaseUnitPage({
+    await expect(requests.loadBaseUnitPageWith({
       page: 1,
       pageSize: 20,
       keyword: "",
     }, request)).rejects.toThrow("暂时不可用");
-    await expect(api.loadBaseUnitPage({
+    await expect(requests.loadBaseUnitPageWith({
       page: 1,
       pageSize: 20,
       keyword: "",

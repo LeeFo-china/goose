@@ -197,5 +197,11 @@ describe("平台供应标准目录工作台", () => {
     expect(actions).toContain("刷新最新数据");
     expect(actions).toContain("重试本次操作");
     expect(actions).not.toContain('method: "DELETE"');
+
+    const baseUnitPicker = readSource("./base-unit-picker.tsx");
+    expect(baseUnitPicker).not.toContain("<form");
+    expect(baseUnitPicker).toContain('type="button"');
+    expect(baseUnitPicker).toContain("handleBaseUnitSearchKeyDown");
+    expect(baseUnitPicker).toContain("onClick={handleSearch}");
   });
 });
