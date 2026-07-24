@@ -26,6 +26,7 @@ type AdminClient = ReturnType<typeof SupabaseDB.getAdminClient>;
 
 const OCR_RECOGNITION_COLUMNS = [
   "id",
+  "scope_type",
   "tenant_id",
   "actor_employee_id",
   "scene",
@@ -56,6 +57,7 @@ const OCR_RECOGNITION_COLUMNS = [
 
 const OCR_PLATFORM_LIST_COLUMNS = [
   "id",
+  "scope_type",
   "tenant_id",
   "actor_employee_id",
   "scene",
@@ -136,6 +138,7 @@ export class OcrRecognitionRepository {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .insert({
+        scope_type: "tenant",
         tenant_id: input.tenantId,
         actor_employee_id: input.actorEmployeeId ?? null,
         scene: input.scene,
@@ -166,6 +169,7 @@ export class OcrRecognitionRepository {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .select(OCR_RECOGNITION_COLUMNS)
+      .eq("scope_type", "tenant")
       .eq("tenant_id", tenantId)
       .eq("idempotency_key", idempotencyKey)
       .maybeSingle();
@@ -178,6 +182,7 @@ export class OcrRecognitionRepository {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .select(OCR_RECOGNITION_COLUMNS)
+      .eq("scope_type", "tenant")
       .eq("tenant_id", tenantId)
       .eq("dedupe_key", dedupeKey)
       .in("status", ["processing", "succeeded"])
@@ -195,6 +200,7 @@ export class OcrRecognitionRepository {
     const { error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .update({ status: "expired", result_ciphertext: null })
+      .eq("scope_type", "tenant")
       .eq("tenant_id", input.tenantId)
       .eq("dedupe_key", input.dedupeKey)
       .in("status", ["processing", "succeeded"])
@@ -221,6 +227,7 @@ export class OcrRecognitionRepository {
         processed_at: input.processedAt,
       })
       .eq("id", input.id)
+      .eq("scope_type", "tenant")
       .eq("tenant_id", input.tenantId)
       .eq("status", "processing")
       .select(OCR_RECOGNITION_COLUMNS)
@@ -244,6 +251,7 @@ export class OcrRecognitionRepository {
         processed_at: input.processedAt,
       })
       .eq("id", input.id)
+      .eq("scope_type", "tenant")
       .eq("tenant_id", input.tenantId)
       .eq("status", "processing")
       .select(OCR_RECOGNITION_COLUMNS)
@@ -257,6 +265,7 @@ export class OcrRecognitionRepository {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .select(OCR_RECOGNITION_COLUMNS)
+      .eq("scope_type", "tenant")
       .eq("id", id)
       .eq("tenant_id", tenantId)
       .maybeSingle();
@@ -276,8 +285,9 @@ export class OcrRecognitionRepository {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .select(
-        "id,tenant_id,scene,document_type,file_object_id,subject_type,subject_id,status",
+        "id,scope_type,tenant_id,scene,document_type,file_object_id,subject_type,subject_id,status",
       )
+      .eq("scope_type", "tenant")
       .eq("tenant_id", input.tenantId)
       .in("id", ids)
       .limit(limit);
@@ -290,6 +300,7 @@ export class OcrRecognitionRepository {
     const { count, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .select("id", { count: "exact", head: true })
+      .eq("scope_type", "tenant")
       .eq("tenant_id", tenantId)
       .gte("created_at", since);
 

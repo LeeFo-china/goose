@@ -64,6 +64,7 @@ const normalized = { ...normalizedResult, providerRequestId: "provider-request-1
 export function buildRecord(overrides: Record<string, unknown> = {}) {
   return {
     id: "recognition-1",
+    scope_type: "tenant",
     tenant_id: "tenant-1",
     actor_employee_id: "employee-1",
     scene: "wechat_pay_applyment",

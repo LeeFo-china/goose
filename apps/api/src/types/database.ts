@@ -4222,10 +4222,11 @@ export type Database = {
           result_ciphertext: string | null
           result_summary: Json
           scene: string
+          scope_type: string
           status: string
           subject_id: string | null
           subject_type: string | null
-          tenant_id: string
+          tenant_id: string | null
           updated_at: string
           warnings: Json
         }
@@ -4251,10 +4252,11 @@ export type Database = {
           result_ciphertext?: string | null
           result_summary?: Json
           scene: string
+          scope_type?: string
           status?: string
           subject_id?: string | null
           subject_type?: string | null
-          tenant_id: string
+          tenant_id?: string | null
           updated_at?: string
           warnings?: Json
         }
@@ -4280,10 +4282,11 @@ export type Database = {
           result_ciphertext?: string | null
           result_summary?: Json
           scene?: string
+          scope_type?: string
           status?: string
           subject_id?: string | null
           subject_type?: string | null
-          tenant_id?: string
+          tenant_id?: string | null
           updated_at?: string
           warnings?: Json
         }
@@ -9577,9 +9580,11 @@ export type Database = {
           created_by_employee_id: string
           id: string
           legal_name: string
+          legal_representative_name: string | null
           name: string
           onboarding_status: string
           operational_status: string
+          registered_address_text: string | null
           review_remark: string | null
           reviewed_at: string | null
           reviewed_by_employee_id: string | null
@@ -9598,9 +9603,11 @@ export type Database = {
           created_by_employee_id: string
           id?: string
           legal_name: string
+          legal_representative_name?: string | null
           name: string
           onboarding_status?: string
           operational_status?: string
+          registered_address_text?: string | null
           review_remark?: string | null
           reviewed_at?: string | null
           reviewed_by_employee_id?: string | null
@@ -9619,9 +9626,11 @@ export type Database = {
           created_by_employee_id?: string
           id?: string
           legal_name?: string
+          legal_representative_name?: string | null
           name?: string
           onboarding_status?: string
           operational_status?: string
+          registered_address_text?: string | null
           review_remark?: string | null
           reviewed_at?: string | null
           reviewed_by_employee_id?: string | null
@@ -15356,6 +15365,29 @@ export type Database = {
           p_tenant_supplier_id: string
           p_valid_from: string
           p_valid_until: string
+        }
+        Returns: Json
+      }
+      create_supplier_onboarding: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_legal_name: string
+          p_legal_representative_name: string
+          p_license_file_id: string
+          p_license_valid_from: string
+          p_license_valid_until: string
+          p_name: string
+          p_ocr_recognition_id: string
+          p_primary_contact_email: string
+          p_primary_contact_name: string
+          p_primary_contact_phone: string
+          p_registered_address_text: string
+          p_supplier_id: string
+          p_supplier_type: string
+          p_unified_social_credit_code: string
         }
         Returns: Json
       }

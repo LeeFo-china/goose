@@ -464,6 +464,9 @@ export class OcrService {
   }
 
   private toTenantRecognition(record: OcrRecognitionRecord) {
+    if (record.scope_type !== "tenant" || !record.tenant_id) {
+      throw Errors.business(500, "OCR识别记录租户信息无效", ErrorCodes.OCR_RESULT_INVALID);
+    }
     if (record.status === "expired" || new Date(record.expires_at) <= this.nowFactory()) {
       throw Errors.business(410, "OCR识别结果已过期", ErrorCodes.OCR_RECOGNITION_EXPIRED);
     }
