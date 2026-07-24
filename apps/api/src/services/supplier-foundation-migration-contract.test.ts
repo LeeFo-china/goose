@@ -104,8 +104,9 @@ function findQualificationTypeNameUniqueness(sql: string) {
     });
   return [...tableViolations, ...indexViolations];
 }
-const commandFunctions = ["create_platform_supplier", "mutate_platform_supplier", "review_supplier_qualification", "set_tenant_supplier_module", "create_tenant_supplier", "mutate_tenant_supplier", "mutate_supplier_contract", "get_tenant_supplier_order_eligibility", "list_available_suppliers_for_tenant"] as const;
-const requestFields = { create_platform_supplier: ["supplier_id", "code", "name", "legal_name", "unified_social_credit_code", "supplier_type", "expected_version", "actor_employee_id"], mutate_platform_supplier: ["supplier_id", "action", "expected_version", "reason", "actor_employee_id"], review_supplier_qualification: ["supplier_id", "qualification_id", "verification_status", "expected_version", "reason", "actor_employee_id"], set_tenant_supplier_module: ["tenant_id", "module_enabled", "require_active_contract_for_new_order", "expected_version", "actor_employee_id"], create_tenant_supplier: ["tenant_supplier_id", "tenant_id", "supplier_id", "expected_version", "actor_employee_id"], mutate_tenant_supplier: ["tenant_id", "tenant_supplier_id", "action", "expected_version", "reason", "actor_employee_id"], mutate_supplier_contract: ["tenant_id", "contract_id", "action", "expected_version", "reason", "actor_employee_id"] } as const;
+const commandFunctions = ["create_platform_supplier", "mutate_platform_supplier", "review_supplier_qualification", "set_tenant_supplier_module", "create_tenant_supplier", "mutate_tenant_supplier", "create_supplier_contract", "mutate_supplier_contract", "get_tenant_supplier_order_eligibility", "list_tenant_suppliers_for_tenant", "list_available_suppliers_for_tenant"] as const;
+const allFoundationFunctions = [...commandFunctions.slice(0, 8), "get_tenant_supplier_order_eligibility_set", ...commandFunctions.slice(8)] as const;
+const requestFields = { create_platform_supplier: ["supplier_id", "code", "name", "legal_name", "unified_social_credit_code", "supplier_type", "expected_version", "actor_employee_id"], mutate_platform_supplier: ["supplier_id", "action", "expected_version", "reason", "actor_employee_id"], review_supplier_qualification: ["supplier_id", "qualification_id", "verification_status", "expected_version", "reason", "actor_employee_id"], set_tenant_supplier_module: ["tenant_id", "module_enabled", "require_active_contract_for_new_order", "expected_version", "actor_employee_id"], create_tenant_supplier: ["tenant_supplier_id", "tenant_id", "supplier_id", "expected_version", "actor_employee_id"], mutate_tenant_supplier: ["tenant_id", "tenant_supplier_id", "action", "expected_version", "reason", "actor_employee_id"], create_supplier_contract: ["contract_id", "tenant_id", "tenant_supplier_id", "contract_no", "name", "valid_from", "valid_until", "settlement_term_days", "invoice_required_before_payment", "document_file_id", "expected_version", "actor_employee_id"], mutate_supplier_contract: ["tenant_id", "tenant_supplier_id", "contract_id", "action", "expected_version", "reason", "actor_employee_id"] } as const;
 function extractFunction(sql: string, name: string) { return sql.match(new RegExp(`CREATE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`))?.[0] ?? ""; }
 describe("supplier foundation migration contract", () => {
   test("creates the six supplier master-data tables and required indexes", () => {
@@ -387,7 +388,7 @@ describe("supplier foundation migration contract", () => {
     expect(sql).toContain("REVOKE ALL ON TABLE public.supplier_command_events FROM PUBLIC, anon, authenticated, service_role;");
     expect(sql).toContain("GRANT SELECT, INSERT ON TABLE public.supplier_command_events TO service_role;");
     expect(sql).toContain("REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.supplier_command_events FROM PUBLIC, anon, authenticated, service_role;");
-    expect([...sql.matchAll(/^CREATE FUNCTION public\.([a-z0-9_]+)\(/gm)].map((match) => match[1])).toEqual([...commandFunctions]);
+    expect([...sql.matchAll(/^CREATE FUNCTION public\.([a-z0-9_]+)\(/gm)].map((match) => match[1])).toEqual([...allFoundationFunctions]);
     for (const name of commandFunctions) {
       const functionSql = extractFunction(sql, name);
       expectSqlContracts(functionSql, [/SECURITY DEFINER/, /SET search_path = pg_catalog, public/]);
@@ -429,7 +430,7 @@ describe("supplier foundation migration contract", () => {
   });
   test("locks idempotent lifecycle state machines and aggregate writes", () => {
     const sql = migrationSql.foundationCommands;
-    for (const name of commandFunctions.slice(0, 7)) {
+    for (const name of commandFunctions.slice(0, 8)) {
       const functionSql = extractFunction(sql, name);
       for (const contract of ["p_expected_version", "p_actor_user_id", "p_actor_employee_id", "p_idempotency_key", "pg_advisory_xact_lock", "public.supplier_command_events", "SUPPLIER_IDEMPOTENCY_CONFLICT", "FOR UPDATE", "INSERT INTO public.supplier_command_events"]) expect(functionSql).toContain(contract);
       expect(functionSql.indexOf("pg_advisory_xact_lock")).toBeLessThan(functionSql.indexOf("FROM public.supplier_command_events"));
@@ -458,11 +459,13 @@ describe("supplier foundation migration contract", () => {
     expect(sql).not.toContain("'unblacklist'");
   });
   test("locks complete eligibility and bounded available-supplier directory", () => {
+    const eligibilitySet = extractFunction(migrationSql.foundationCommands, "get_tenant_supplier_order_eligibility_set");
     const eligibility = extractFunction(migrationSql.foundationCommands, "get_tenant_supplier_order_eligibility");
     const directory = extractFunction(migrationSql.foundationCommands, "list_available_suppliers_for_tenant");
-    for (const reason of ["module_disabled", "supplier_not_approved", "supplier_suspended", "supplier_blacklisted", "relationship_not_active", "required_qualification_missing", "required_qualification_expired", "active_contract_required"]) expect(eligibility).toContain(`'${reason}'`);
-    expectSqlContracts(eligibility, [/p_checked_at timestamptz/, /IF p_checked_at IS NULL THEN[\s\S]*SUPPLIER_ORDER_NOT_ELIGIBLE/, /v_has_verified boolean[\s\S]*v_current_valid boolean[\s\S]*v_all_verified_expired boolean/, /IF v_current_valid THEN[\s\S]*ELSIF v_has_verified AND v_all_verified_expired THEN[\s\S]*'required_qualification_expired'[\s\S]*ELSE[\s\S]*'required_qualification_missing'/, /qualification_type\.status = 'active'[\s\S]*qualification_type\.blocks_new_orders[\s\S]*supplier\.supplier_type = ANY \(qualification_type\.applicable_supplier_types\)/, /verification_status = 'verified'[\s\S]*valid_from <= p_checked_at::date[\s\S]*valid_until >= p_checked_at::date/, /require_active_contract_for_new_order[\s\S]*lifecycle_status = 'active'[\s\S]*valid_from <= p_checked_at::date[\s\S]*valid_until >= p_checked_at::date/, /jsonb_build_object\([\s\S]*'eligible'[\s\S]*'blocking_reasons'[\s\S]*'checked_at'/]);
-    expectSqlContracts(directory, [/p_page integer DEFAULT 1/, /p_page_size integer DEFAULT 20/, /LEAST\(GREATEST\(p_page_size, 1\), 100\)/, /onboarding_status = 'approved'[\s\S]*operational_status = 'active'/, /relationship_status IN \('blacklisted', 'terminated'\)/, /ORDER BY supplier\.name ASC, supplier\.id ASC/, /LIMIT v_page_size[\s\S]*OFFSET \(v_page - 1\) \* v_page_size/]);
+    for (const reason of ["module_disabled", "supplier_not_approved", "supplier_suspended", "supplier_blacklisted", "relationship_not_active", "required_qualification_missing", "required_qualification_expired", "active_contract_required"]) expect(eligibilitySet).toContain(`'${reason}'`);
+    expectSqlContracts(eligibility, [/p_checked_at timestamptz/, /IF p_checked_at IS NULL THEN[\s\S]*SUPPLIER_ORDER_NOT_ELIGIBLE/, /get_tenant_supplier_order_eligibility_set\(/, /jsonb_build_object\([\s\S]*'eligible'[\s\S]*'blocking_reasons'[\s\S]*'checked_at'/]);
+    expectSqlContracts(eligibilitySet, [/qualification_status AS MATERIALIZED/, /qualification_type\.status = 'active'[\s\S]*qualification_type\.blocks_new_orders[\s\S]*relationship\.supplier_type =\s*ANY \(qualification_type\.applicable_supplier_types\)/, /verification_status = 'verified'[\s\S]*valid_from <= p_checked_at::date[\s\S]*valid_until >= p_checked_at::date/, /contract_status AS MATERIALIZED[\s\S]*lifecycle_status = 'active'[\s\S]*valid_from <= p_checked_at::date[\s\S]*valid_until >= p_checked_at::date/, /ARRAY_REMOVE\([\s\S]*'module_disabled'[\s\S]*'active_contract_required'/]);
+    expectSqlContracts(directory, [/p_page integer DEFAULT 1/, /p_page_size integer DEFAULT 20/, /LEAST\(GREATEST\(COALESCE\(p_page_size, 20\), 1\), 100\)/, /onboarding_status = 'approved'[\s\S]*operational_status = 'active'/, /relationship_status IN \('blacklisted', 'terminated'\)/, /ORDER BY (?:supplier\.)?name ASC, (?:supplier\.)?id ASC/, /LIMIT v_page_size[\s\S]*OFFSET \(v_page - 1\) \* v_page_size/]);
     expect(migrationSql.foundationCommands).toMatch(/CREATE INDEX suppliers_available_directory_idx\s+ON public\.suppliers\(onboarding_status, operational_status, name, id\);/);
   });
   test("seeds supplier permissions only to their intended global or tenant admin roles", () => {

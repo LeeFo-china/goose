@@ -1,4 +1,6 @@
--- Rollback: in a new migration, drop the four triggers and
+-- Rollback: in a new migration, drop the six triggers and
+-- validate_tenant_supplier_owner_employee(),
+-- validate_supplier_contract_document(), and
 -- set_supplier_contract_tenant_id(), then drop supplier_contracts,
 -- tenant_suppliers, and tenant_supplier_settings in that order. This is
 -- destructive and removes tenant cooperation settings and contract records,
@@ -142,6 +144,41 @@ ON public.supplier_contracts(
   valid_until DESC
 );
 
+CREATE FUNCTION public.validate_tenant_supplier_owner_employee()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF NEW.tenant_owner_employee_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  PERFORM employee.id
+  FROM public.employees AS employee
+  WHERE employee.id = NEW.tenant_owner_employee_id
+    AND employee.tenant_id = NEW.tenant_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'TENANT_SUPPLIER_STATE_CONFLICT';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.validate_tenant_supplier_owner_employee()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER tr_tenant_suppliers_validate_owner_employee
+BEFORE INSERT OR UPDATE OF tenant_owner_employee_id, tenant_id
+ON public.tenant_suppliers
+FOR EACH ROW
+EXECUTE FUNCTION public.validate_tenant_supplier_owner_employee();
+
 CREATE FUNCTION public.set_supplier_contract_tenant_id()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -176,6 +213,42 @@ CREATE TRIGGER tr_supplier_contracts_set_tenant_id
 BEFORE INSERT OR UPDATE ON public.supplier_contracts
 FOR EACH ROW
 EXECUTE FUNCTION public.set_supplier_contract_tenant_id();
+
+CREATE FUNCTION public.validate_supplier_contract_document()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  PERFORM file.id
+  FROM public.platform_file_objects AS file
+  WHERE file.id = NEW.document_file_id
+    AND file.tenant_id = NEW.tenant_id
+    AND file.owner_type = 'tenant'
+    AND file.owner_id = NEW.tenant_id
+    AND file.scene = 'supplier_contract_document'
+    AND file.status = 'active'
+    AND file.deleted_at IS NULL
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'TENANT_SUPPLIER_STATE_CONFLICT';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.validate_supplier_contract_document()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER tr_supplier_contracts_validate_document
+BEFORE INSERT OR UPDATE OF document_file_id, tenant_id
+ON public.supplier_contracts
+FOR EACH ROW
+EXECUTE FUNCTION public.validate_supplier_contract_document();
 
 CREATE TRIGGER tr_tenant_supplier_settings_updated_at
 BEFORE UPDATE ON public.tenant_supplier_settings
