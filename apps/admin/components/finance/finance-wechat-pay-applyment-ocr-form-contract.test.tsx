@@ -3,14 +3,21 @@ import {
   Children,
   createElement,
   type ComponentProps,
-  type ComponentType,
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  FinanceWechatPayApplymentDocumentSection,
+  LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG,
+} from "./finance-wechat-pay-applyment-document-section";
+import {
   getOcrComparisonValues,
   getStoredFieldSources,
 } from "./finance-wechat-pay-applyment-recognized-fields";
+import {
+  FinanceWechatPayApplymentSinglePage,
+  type FinanceWechatPayApplymentSinglePageProps,
+} from "./finance-wechat-pay-applyment-single-page";
 import type {
   ApplymentAttachmentController,
 } from "./finance-wechat-pay-applyment-attachment-controller";
@@ -53,8 +60,6 @@ const SINGLE_PAGE_FIELD_NAMES = [
   ...SUPPLEMENT_FIELD_NAMES,
 ] as const;
 
-const SINGLE_PAGE_MODULE_PATH: string =
-  "./finance-wechat-pay-applyment-single-page";
 const manualEntryActions: Array<() => void> = [];
 
 mock.module("@/components/ui/button", () => ({
@@ -100,7 +105,9 @@ type SinglePageOptions = {
   disabled?: boolean;
 };
 
-function buildSinglePageProps(options: SinglePageOptions) {
+function buildSinglePageProps(
+  options: SinglePageOptions,
+): FinanceWechatPayApplymentSinglePageProps {
   const applyment = options.applyment ?? null;
   const contactType = options.contactType ?? "LEGAL";
   const subjectType = options.subjectType ?? "SUBJECT_TYPE_ENTERPRISE";
@@ -111,12 +118,6 @@ function buildSinglePageProps(options: SinglePageOptions) {
     subjectType,
     contactType,
     reviewConfirmed: false,
-    reviewSnapshot: {
-      subject: "主体",
-      contact: "联系人",
-      settlement: "结算账户",
-      attachments: "申请附件",
-    },
     readinessBlockers: [],
     pending: false,
     editable: !disabled,
@@ -126,24 +127,24 @@ function buildSinglePageProps(options: SinglePageOptions) {
       attachments: [],
       materialStates: {},
       attachmentSaveErrors: {},
-      supportedOcrDocumentTypes: [],
+      supportedOcrDocumentTypes: new Set<string>(),
       recognitionConsent: true,
       capabilitiesUnavailable: false,
       pending: false,
       setRecognitionConsent: () => undefined,
-      onUploaded: () => undefined,
-      onRetrySave: () => undefined,
-      onRetryRecognition: () => undefined,
+      onUploaded: async () => undefined,
+      onRetrySave: async () => undefined,
+      onRetryRecognition: async () => undefined,
     },
     ocrReview: {
       currentValues: values,
       comparisonValues: getOcrComparisonValues(applyment, values),
       fieldSources: getStoredFieldSources(applyment, values),
-      useManualEntry: () => undefined,
+      useManualEntry: async () => undefined,
     },
     onSubjectTypeChange: () => undefined,
     onContactTypeChange: () => undefined,
-    onAttachmentsChange: () => undefined,
+    onAttachmentsChange: async () => undefined,
     onApplyRecognition: () => undefined,
     onManualFieldChange: () => undefined,
     onSupplementDataChange: () => undefined,
@@ -152,22 +153,18 @@ function buildSinglePageProps(options: SinglePageOptions) {
   };
 }
 
-async function renderSinglePage(options: SinglePageOptions = {}) {
-  const singlePageModule = await import(SINGLE_PAGE_MODULE_PATH);
-  const SinglePage = singlePageModule.FinanceWechatPayApplymentSinglePage as
-    unknown as ComponentType<Record<string, unknown>>;
+function renderSinglePage(options: SinglePageOptions = {}) {
   return renderToStaticMarkup(
-    createElement(SinglePage, buildSinglePageProps(options)),
+    createElement(
+      FinanceWechatPayApplymentSinglePage,
+      buildSinglePageProps(options),
+    ),
   );
 }
 
 describe("wechat pay applyment OCR form registration", () => {
   for (const status of ["failed", "review_required"] as const) {
-    test(`routes the single ${status} manual entry action through the OCR controller`, async () => {
-      const {
-        FinanceWechatPayApplymentDocumentSection,
-        LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG,
-      } = await import("./finance-wechat-pay-applyment-document-section");
+    test(`routes the single ${status} manual entry action through the OCR controller`, () => {
       const category = "legal_representative_id_card_front";
       const attachment: WechatPayApplymentAttachment = {
         category,
@@ -240,8 +237,8 @@ describe("wechat pay applyment OCR form registration", () => {
     });
   }
 
-  test("registers every SUPER control once through the real single page", async () => {
-    const names = registeredNames(await renderSinglePage({
+  test("registers every SUPER control once through the real single page", () => {
+    const names = registeredNames(renderSinglePage({
       contactType: "SUPER",
     }));
 
@@ -250,8 +247,8 @@ describe("wechat pay applyment OCR form registration", () => {
     }
   });
 
-  test("keeps identity address optional for an individual subject", async () => {
-    const markup = await renderSinglePage({
+  test("keeps identity address optional for an individual subject", () => {
+    const markup = renderSinglePage({
       contactType: "LEGAL",
       subjectType: "SUBJECT_TYPE_INDIVIDUAL",
     });
@@ -265,8 +262,8 @@ describe("wechat pay applyment OCR form registration", () => {
 
   test(
     "keeps legal identity fields required for an enterprise subject",
-    async () => {
-      const markup = await renderSinglePage({ contactType: "LEGAL" });
+    () => {
+      const markup = renderSinglePage({ contactType: "LEGAL" });
 
       for (const name of [
         "license_name",
@@ -286,7 +283,7 @@ describe("wechat pay applyment OCR form registration", () => {
 
   test(
     "keeps bank account required unless its own masked value exists",
-    async () => {
+    () => {
       const identityOnly = {
         has_sensitive_payload: true,
         settlement_account_number_masked: null,
@@ -295,10 +292,10 @@ describe("wechat pay applyment OCR form registration", () => {
         ...identityOnly,
         settlement_account_number_masked: "6222••••8888",
       };
-      const requiredMarkup = await renderSinglePage({
+      const requiredMarkup = renderSinglePage({
         applyment: identityOnly,
       });
-      const storedMarkup = await renderSinglePage({
+      const storedMarkup = renderSinglePage({
         applyment: withBankAccount,
       });
       const requiredControl = requiredMarkup.match(
@@ -323,8 +320,8 @@ describe("wechat pay applyment OCR form registration", () => {
     },
   );
 
-  test("registers required OCR and supplement controls natively", async () => {
-    const markup = await renderSinglePage({ contactType: "SUPER" });
+  test("registers required OCR and supplement controls natively", () => {
+    const markup = renderSinglePage({ contactType: "SUPER" });
 
     for (const name of [
       "license_name",
@@ -348,8 +345,8 @@ describe("wechat pay applyment OCR form registration", () => {
 
   test(
     "keeps registered fields visible when the single-page form is read-only",
-    async () => {
-      const markup = await renderSinglePage({
+    () => {
+      const markup = renderSinglePage({
         contactType: "SUPER",
         disabled: true,
       });

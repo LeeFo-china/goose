@@ -113,24 +113,9 @@ export function WechatPayApplymentAttachmentsField(
 ) {
   const { contactType, ...controllerInput } = input;
   const controller = useWechatPayApplymentAttachmentController(controllerInput);
-  const {
-    attachments,
-    editable,
-    busy,
-    uploadingCategory,
-    error,
-    attachmentSaveErrors,
-    uploadAttachment,
-    removeAttachment,
-    openAttachmentPicker,
-    onRetrySave,
-  } = controller;
   const slots = contactType === "SUPER"
     ? [...BASE_ATTACHMENT_SLOTS, ...CONTACT_ATTACHMENT_SLOTS]
     : BASE_ATTACHMENT_SLOTS;
-  const businessMaterials = attachments.filter(
-    (item) => item.category === "business_scene_material",
-  );
 
   return (
     <section className="rounded-md border p-4">
@@ -144,7 +129,9 @@ export function WechatPayApplymentAttachmentsField(
         <Badge variant="outline">私有存储</Badge>
       </div>
 
-      {error ? <div className="mt-3"><StatusAlert>{error}</StatusAlert></div> : null}
+      {controller.error
+        ? <div className="mt-3"><StatusAlert>{controller.error}</StatusAlert></div>
+        : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {slots.map((slot) => (
@@ -156,65 +143,85 @@ export function WechatPayApplymentAttachmentsField(
         ))}
       </div>
 
-      <div className="mt-4 rounded-md border p-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-medium">
-              经营场景材料
-              <Badge variant="outline">选传</Badge>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              门店、经营场景或小程序服务截图，最多 {MAX_BUSINESS_SCENE_MATERIALS} 张。
-            </p>
-          </div>
-          <Badge variant="secondary">
-            {businessMaterials.length}/{MAX_BUSINESS_SCENE_MATERIALS}
-          </Badge>
-        </div>
-
-        {businessMaterials.length > 0 ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {businessMaterials.map((attachment) => (
-              <div key={attachment.object_key} className="min-w-0">
-                <AttachmentPreviewCard
-                  attachment={attachment}
-                  editable={editable}
-                  busy={Boolean(busy)}
-                  onRemove={removeAttachment}
-                />
-                <AttachmentCheckpointStatus
-                  error={attachmentSaveErrors[attachment.object_key]}
-                  editable={editable}
-                  busy={Boolean(busy)}
-                  onRetry={() => onRetrySave(attachment)}
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-3 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-            暂未上传经营场景材料
-          </div>
-        )}
-
-        {editable ? (
-          <div className="mt-3">
-            <ApplymentAttachmentUploadButton
-              category="business_scene_material"
-              inputId="wechat-pay-applyment-attachment-business-scene"
-              disabled={Boolean(
-                busy ||
-                businessMaterials.length >= MAX_BUSINESS_SCENE_MATERIALS
-              )}
-              uploading={uploadingCategory === "business_scene_material"}
-              label="添加场景图片"
-              onOpen={openAttachmentPicker}
-              onUpload={uploadAttachment}
-            />
-          </div>
-        ) : null}
-      </div>
+      <WechatPayApplymentBusinessMaterials controller={controller} />
     </section>
+  );
+}
+
+export function WechatPayApplymentBusinessMaterials({
+  controller,
+}: {
+  controller: ApplymentAttachmentController;
+}) {
+  const businessMaterials = controller.attachments.filter(
+    (item) => item.category === "business_scene_material",
+  );
+  const error = controller.errorCategory === "business_scene_material"
+    ? controller.error
+    : "";
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-medium">
+            经营场景材料
+            <Badge variant="outline">选传</Badge>
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            门店、经营场景或小程序服务截图，最多 {MAX_BUSINESS_SCENE_MATERIALS} 张。
+          </p>
+        </div>
+        <Badge variant="secondary">
+          {businessMaterials.length}/{MAX_BUSINESS_SCENE_MATERIALS}
+        </Badge>
+      </div>
+
+      {error ? <StatusAlert>{error}</StatusAlert> : null}
+
+      {businessMaterials.length > 0 ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {businessMaterials.map((attachment) => (
+            <div key={attachment.object_key} className="min-w-0">
+              <AttachmentPreviewCard
+                attachment={attachment}
+                editable={controller.editable}
+                busy={controller.busy}
+                onRemove={controller.removeAttachment}
+              />
+              <AttachmentCheckpointStatus
+                error={controller.attachmentSaveErrors[attachment.object_key]}
+                editable={controller.editable}
+                busy={controller.busy}
+                onRetry={() => controller.onRetrySave(attachment)}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          暂未上传经营场景材料
+        </div>
+      )}
+
+      {controller.editable ? (
+        <div>
+          <ApplymentAttachmentUploadButton
+            category="business_scene_material"
+            inputId="wechat-pay-applyment-attachment-business-scene"
+            disabled={Boolean(
+              controller.busy ||
+              businessMaterials.length >= MAX_BUSINESS_SCENE_MATERIALS
+            )}
+            uploading={
+              controller.uploadingCategory === "business_scene_material"
+            }
+            label="添加场景图片"
+            onOpen={controller.openAttachmentPicker}
+            onUpload={controller.uploadAttachment}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -1,42 +1,25 @@
 "use client";
 
-import type { OcrFieldReviewRow } from "@/components/ocr/ocr-field-review-dialog";
-
-import {
-  FinanceWechatPayApplymentActions,
-  FinanceWechatPayApplymentFlow,
-} from "./finance-wechat-pay-applyment-flow";
-import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
-import { FinanceWechatPayApplymentMaterialsStage } from "./finance-wechat-pay-applyment-materials-stage";
-import { FinanceWechatPayApplymentOcrReview } from "./finance-wechat-pay-applyment-ocr-review";
-import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
 import { presentApplymentBlockers } from "./finance-wechat-pay-applyment-readiness";
-import {
-  formatWechatPayApplymentTime,
-  type WechatPayApplymentAttachmentCategory,
-  type WechatPayApplymentRecord,
-  type WechatPayApplymentSubmissionReadiness,
+import type {
+  WechatPayApplymentSubmissionReadiness,
 } from "./finance-wechat-pay-applyment-shared";
-import { FinanceWechatPayApplymentSupplementFields } from "./finance-wechat-pay-applyment-supplement-fields";
-import type { useWechatPayApplymentMaterials } from "./use-wechat-pay-applyment-materials";
-import type { useWechatPayApplymentOcrReview } from "./finance-wechat-pay-applyment-ocr-review-hook";
-import type { useWechatPayApplymentStageNavigation } from "./use-wechat-pay-applyment-stage-navigation";
+import {
+  FinanceWechatPayApplymentSinglePage,
+  type FinanceWechatPayApplymentSinglePageProps,
+} from "./finance-wechat-pay-applyment-single-page";
 
-type MaterialsController = ReturnType<
-  typeof useWechatPayApplymentMaterials
->;
-type NavigationController = ReturnType<
-  typeof useWechatPayApplymentStageNavigation
->;
-type OcrReviewController = ReturnType<
-  typeof useWechatPayApplymentOcrReview
->;
+type WorkflowProps = Omit<
+  FinanceWechatPayApplymentSinglePageProps,
+  "readinessBlockers"
+> & {
+  submissionReadiness?: WechatPayApplymentSubmissionReadiness | null;
+};
 
 export function FinanceWechatPayApplymentWorkflow({
   applyment,
   subjectType,
   contactType,
-  ocrReviewCategory,
   reviewConfirmed,
   submissionReadiness,
   pending,
@@ -44,125 +27,40 @@ export function FinanceWechatPayApplymentWorkflow({
   canSubmit,
   saving,
   materials,
-  navigation,
   ocrReview,
-  onStageChange,
-  onNextStage,
   onSubjectTypeChange,
   onContactTypeChange,
   onAttachmentsChange,
   onApplyRecognition,
   onManualFieldChange,
-  onOcrCategoryChange,
   onSupplementDataChange,
   onReviewConfirmedChange,
   onSubmitApplyment,
-}: {
-  applyment: WechatPayApplymentRecord | null;
-  subjectType: string;
-  contactType: string;
-  ocrReviewCategory: WechatPayApplymentAttachmentCategory;
-  reviewConfirmed: boolean;
-  submissionReadiness?: WechatPayApplymentSubmissionReadiness | null;
-  pending: boolean;
-  editable: boolean;
-  canSubmit: boolean;
-  saving: boolean;
-  materials: MaterialsController;
-  navigation: NavigationController;
-  ocrReview: OcrReviewController;
-  onStageChange: (stage: ApplymentStageKey) => void;
-  onNextStage: () => void;
-  onSubjectTypeChange: (value: string) => void;
-  onContactTypeChange: (value: string) => void;
-  onAttachmentsChange: MaterialsController["onChange"];
-  onApplyRecognition: (
-    category: WechatPayApplymentAttachmentCategory,
-    rows: readonly OcrFieldReviewRow[],
-  ) => void | Promise<void>;
-  onManualFieldChange: (key: string, value: string) => void;
-  onOcrCategoryChange: (
-    category: WechatPayApplymentAttachmentCategory,
-  ) => void;
-  onSupplementDataChange: (overrides: Record<string, string>) => void;
-  onReviewConfirmedChange: (confirmed: boolean) => void;
-  onSubmitApplyment: () => void;
-}) {
-  const disabled = pending || materials.pending || !editable;
-  const navigationDisabled = pending || materials.pending;
+}: WorkflowProps) {
   const readinessBlockers = presentApplymentBlockers(
     submissionReadiness?.blockers ?? [],
   );
   return (
-    <>
-      <FinanceWechatPayApplymentFlow
-        activeStage={navigation.activeStage}
-        reachableStage={navigation.reachableStage}
-        subjectType={subjectType}
-        contactType={contactType}
-        disabled={disabled}
-        navigationDisabled={navigationDisabled}
-        onStageChange={onStageChange}
-        onNextStage={onNextStage}
-        onSubjectTypeChange={onSubjectTypeChange}
-        onContactTypeChange={onContactTypeChange}
-        materialsContent={(
-          <FinanceWechatPayApplymentMaterialsStage
-            contactType={contactType}
-            editable={editable}
-            actionPending={pending}
-            materials={materials}
-            onAttachmentsChange={onAttachmentsChange}
-          />
-        )}
-        recognitionContent={(
-          <FinanceWechatPayApplymentOcrReview
-            attachments={materials.attachments}
-            materialStates={materials.materialStates}
-            selectedCategory={ocrReviewCategory}
-            contactType={contactType}
-            subjectType={subjectType}
-            values={ocrReview.currentValues}
-            comparisonValues={ocrReview.comparisonValues}
-            fieldSources={ocrReview.fieldSources}
-            disabled={disabled}
-            onManualChange={onManualFieldChange}
-            onSelectedCategoryChange={onOcrCategoryChange}
-            onApply={onApplyRecognition}
-            onUseManualEntry={ocrReview.useManualEntry}
-          />
-        )}
-        supplementContent={(
-          <FinanceWechatPayApplymentSupplementFields
-            applyment={applyment}
-            subjectType={subjectType}
-            disabled={disabled}
-            onDataChange={onSupplementDataChange}
-          />
-        )}
-        submitContent={(
-          <FinanceWechatPayApplymentReview
-            attachments={materials.attachments}
-            contactType={contactType}
-            confirmed={reviewConfirmed}
-            disabled={disabled}
-            readinessBlockers={readinessBlockers}
-            onConfirmedChange={onReviewConfirmedChange}
-          />
-        )}
-      />
-      <FinanceWechatPayApplymentActions
-        activeStage={navigation.activeStage}
-        updatedAtLabel={formatWechatPayApplymentTime(applyment?.updated_at)}
-        pending={pending}
-        saving={saving}
-        materialsPending={materials.pending}
-        hasApplyment={Boolean(applyment)}
-        editable={editable}
-        canSubmit={canSubmit}
-        reviewConfirmed={reviewConfirmed}
-        onSubmitApplyment={onSubmitApplyment}
-      />
-    </>
+    <FinanceWechatPayApplymentSinglePage
+      applyment={applyment}
+      subjectType={subjectType}
+      contactType={contactType}
+      reviewConfirmed={reviewConfirmed}
+      readinessBlockers={readinessBlockers}
+      pending={pending}
+      editable={editable}
+      canSubmit={canSubmit}
+      saving={saving}
+      materials={materials}
+      ocrReview={ocrReview}
+      onSubjectTypeChange={onSubjectTypeChange}
+      onContactTypeChange={onContactTypeChange}
+      onAttachmentsChange={onAttachmentsChange}
+      onApplyRecognition={onApplyRecognition}
+      onManualFieldChange={onManualFieldChange}
+      onSupplementDataChange={onSupplementDataChange}
+      onReviewConfirmedChange={onReviewConfirmedChange}
+      onSubmitApplyment={onSubmitApplyment}
+    />
   );
 }
