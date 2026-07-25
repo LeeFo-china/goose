@@ -7,6 +7,11 @@ node_modules
 
 # local Codex workspace files
 .codex/skills/backend/SKILL.md
+
+# Codex skill generated/synced caches
+.codex/skills/wechatpay-payment-integration/assets/
+.codex/skills/wechatpay-payment-integration/scripts/.wechatpay-docs-sync-state.json
+
 .superpowers/
 .worktrees/
 .impeccable/
