@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
+import { AppError } from "@/errors/app-error";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type {
   WechatPayApplymentEventRecord,
@@ -127,6 +128,16 @@ const loadSecretBundle = mock(async () => ({
 const queryByBusinessCode = mock(
   async (): Promise<WechatPayApplymentQueryResult> => queryResult(),
 );
+
+function wechatQueryNotFoundError() {
+  return new AppError(502, "微信支付拒绝了进件请求", "WECHAT_PAY_APPLYMENT_REQUEST_REJECTED", {
+    operation: "query",
+    status: 400,
+    requestId: "not-found-request-id",
+    wechatCode: "PARAM_ERROR",
+    wechatMessage: "未能找到申请单",
+  });
+}
 
 function platformAuth(
   ...permissions: string[]
@@ -443,5 +454,46 @@ describe("WechatPayApplymentStatusService", () => {
     await service.syncWechatStatus(platformAuth(), applymentId);
 
     expect(insertEvent).not.toHaveBeenCalled();
+  });
+
+  test("restores a local applying record to approved when WeChat has no applyment", async () => {
+    findById.mockImplementationOnce(async () => applyment({ status: "applying", applyment_id: null }));
+    queryByBusinessCode.mockImplementationOnce(async () => {
+      throw wechatQueryNotFoundError();
+    });
+    const service = await createService();
+
+    await service.syncWechatStatus(
+      platformAuth("platform.wechat_pay.applyment.sync", "platform.wechat_pay.applyment.submit"),
+      applymentId,
+    );
+
+    expect(updateApplyment).toHaveBeenCalledWith({
+      id: applymentId,
+      expectedStatus: "applying",
+      expectedUpdatedAt: now,
+      patch: expect.objectContaining({
+        status: "approved",
+        submission_claimed_at: null,
+        last_wechat_request_id: "not-found-request-id",
+        last_wechat_synced_at: now,
+        updated_by_employee_id: employeeId,
+      }),
+    });
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      tenant_id: tenantId,
+      applyment_id: applymentId,
+      event_type: "wechat_applyment_missing_recovered",
+      from_status: "applying",
+      to_status: "approved",
+      message: "微信侧未找到申请单，已恢复为可重新提交",
+      operator_employee_id: employeeId,
+      metadata: expect.objectContaining({
+        business_code: businessCode,
+        request_id: "not-found-request-id",
+        wechat_code: "PARAM_ERROR",
+        wechat_message: "未能找到申请单",
+      }),
+    }));
   });
 });

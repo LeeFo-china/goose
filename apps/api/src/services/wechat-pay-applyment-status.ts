@@ -21,6 +21,10 @@ import {
   loadApplymentRuntimeProfile,
   type ApplymentSecretBundleServicePort,
 } from "@/services/wechat-pay-applyment-submission-support";
+import {
+  isRecoverableMissingOfficialApplyment,
+  recoverMissingOfficialApplyment,
+} from "@/services/wechat-pay-applyment-missing-recovery";
 import type {
   AccessPolicyPort,
   ApplymentDetailResult,
@@ -298,10 +302,23 @@ export class WechatPayApplymentStatusService
       repository: this.platformPaymentConfigRepository,
       secretBundleService: this.secretBundleService,
     });
-    const result = await this.gateway.queryByBusinessCode({
-      profile: runtime.gatewayProfile,
-      businessCode: current.applyment_business_code,
-    });
+    let result: WechatPayApplymentQueryResult;
+    try {
+      result = await this.gateway.queryByBusinessCode({
+        profile: runtime.gatewayProfile,
+        businessCode: current.applyment_business_code,
+      });
+    } catch (error) {
+      if (!isRecoverableMissingOfficialApplyment(current, error)) throw error;
+      const updated = await recoverMissingOfficialApplyment({
+          current,
+          employeeId,
+          error,
+          now: this.nowFactory(),
+          repository: this.repository,
+      });
+      return this.toDetail(authContext, updated);
+    }
     const now = this.nowFactory();
     const patch = buildWechatApplymentOfficialStatePatch({
       current,
