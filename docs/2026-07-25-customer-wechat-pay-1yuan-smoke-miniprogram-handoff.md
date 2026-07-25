@@ -26,7 +26,7 @@
 - 当前员工必须有权处理对应收款 workflow task。
 - 它会进入真实项目应收、财务台账和 workflow 闭环，不是独立的客户测试入口。
 
-所以客户页面 1 元测试建议补一个客户态 smoke 接口。小程序端只消费该接口返回的
+所以客户页面 1 元测试使用独立客户态 smoke 接口。小程序端只消费该接口返回的
 `payment_request`，不要在前端拼微信支付参数、签名、商户号或 AppID。
 
 ## 官方依据
@@ -110,7 +110,7 @@ Content-Type: application/json
 
 该返回结构可以复用到客户态 smoke 接口。
 
-## 建议新增的客户态 smoke API 契约
+## 已实现的客户态 smoke API 契约
 
 ### 1. 创建 1 元测试订单
 
@@ -124,9 +124,7 @@ Content-Type: application/json
 
 ```json
 {
-  "payer_openid": "用户在当前小程序 AppID 下的 openid",
-  "idempotency_key": "uuid-v4",
-  "source": "customer_project_detail"
+  "payer_openid": "用户在当前小程序 AppID 下的 openid"
 }
 ```
 
@@ -135,8 +133,7 @@ Content-Type: application/json
 | 字段 | 要求 | 说明 |
 | --- | --- | --- |
 | `payer_openid` | 必填 | 从当前客户登录态解析；缺失时小程序可 silent login 刷新登录态 |
-| `idempotency_key` | 必填 | 防止按钮重复点击创建多个订单 |
-| `source` | 必填 | 建议枚举：`customer_home` / `customer_project_detail` |
+| `idempotency_key` | 可选 | UUID；需要前端防重复点击时可传，不传也可正常创建订单 |
 
 后端处理要求：
 
@@ -153,13 +150,13 @@ Content-Type: application/json
   - `tenant_id`
   - `customer_id`
   - `payer_openid`
-  - `idempotency_key`
 - 重复提交同一个 `idempotency_key` 时返回同一笔 pending 订单。
 
 响应体：
 
 ```json
 {
+  "idempotent": false,
   "order": {
     "id": "smoke-order-id",
     "order_no": "SMOKE202607250001",
@@ -533,9 +530,8 @@ requestPayment 的 success/cancel/fail 只用于交互提示，最终支付结�
 
 ## 当前缺口
 
-本次文档只完成对接说明。gooes 当前还没有
-`/customer/wechat-pay/smoke-test-orders` 客户态 smoke 路由。要实际让小程序跑通，
-后端需要先补该接口，或明确改用员工/财务侧 workflow 收款 smoke。
+gooes 后端已实现并挂载
+`/customer/wechat-pay/smoke-test-orders` 客户态 smoke 路由，开发库已应用
+`20260725194000_customer_wechat_pay_smoke_orders.sql` migration。
 
-如果目标是“客户页面真实 1 元测试”，推荐补客户态 smoke 接口；不要把客户小程序页面临时接到
-`/finance/wechat-pay/orders`。
+小程序侧继续按本文接口调用，不要把客户小程序页面接到 `/finance/wechat-pay/orders`。

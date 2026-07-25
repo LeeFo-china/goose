@@ -5,6 +5,9 @@ import {
   billingRechargeRepository,
   type TenantCreditWechatNotificationRecord,
 } from "@/repositories/billing-recharge";
+import {
+  customerWechatPaySmokeRepository,
+} from "@/repositories/customer-wechat-pay-smoke";
 import { paymentRepository, type PaymentRecord } from "@/repositories/payments";
 import {
   wechatPayOrderRepository,
@@ -22,6 +25,10 @@ import {
 } from "@/services/wechat-pay-callback-context-matcher";
 import { BillingRechargePaymentConfirmation } from "@/services/billing-recharge-payment-confirmation";
 import { handleCreditRechargeRefundCallback } from "@/services/wechat-pay-callback-refunds";
+import {
+  handleCustomerWechatPaySmokeCallback,
+  type CustomerWechatPaySmokeCallbackRepositoryPort,
+} from "@/services/wechat-pay-callback-smoke";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
 
 type OrderRepositoryPort = Pick<
@@ -48,7 +55,6 @@ type CreditRechargeRepositoryPort = Pick<
   | "confirmWechatRechargeRefund"
   | "applyWechatRechargeRefundCallbackState"
 >;
-
 type RechargePaymentConfirmationPort = Pick<
   BillingRechargePaymentConfirmation,
   "confirm"
@@ -59,6 +65,7 @@ type WechatPayCallbackServiceDependencies =
   contextMatcher?: Pick<WechatPayCallbackContextMatcher, "match">;
   orderRepository?: OrderRepositoryPort;
   creditRechargeRepository?: CreditRechargeRepositoryPort;
+  customerSmokeRepository?: CustomerWechatPaySmokeCallbackRepositoryPort;
   rechargePaymentConfirmation?: RechargePaymentConfirmationPort;
   paymentRepository?: PaymentRepositoryPort;
   workflowTaskRepository?: WorkflowTaskRepositoryPort;
@@ -72,6 +79,8 @@ export class WechatPayCallbackService {
   private readonly contextMatcher: Pick<WechatPayCallbackContextMatcher, "match">;
   private readonly orderRepository: OrderRepositoryPort;
   private readonly creditRechargeRepository: CreditRechargeRepositoryPort;
+  private readonly customerSmokeRepository:
+    CustomerWechatPaySmokeCallbackRepositoryPort;
   private readonly rechargePaymentConfirmation: RechargePaymentConfirmationPort;
   private readonly paymentRepository: PaymentRepositoryPort;
   private readonly workflowTaskRepository: WorkflowTaskRepositoryPort;
@@ -84,6 +93,8 @@ export class WechatPayCallbackService {
       wechatPayOrderRepository;
     this.creditRechargeRepository = dependencies.creditRechargeRepository ??
       billingRechargeRepository;
+    this.customerSmokeRepository = dependencies.customerSmokeRepository ??
+      customerWechatPaySmokeRepository;
     this.rechargePaymentConfirmation = dependencies.rechargePaymentConfirmation ??
       new BillingRechargePaymentConfirmation({
         repository: this.creditRechargeRepository,
@@ -115,6 +126,14 @@ export class WechatPayCallbackService {
     }
     if (matched.kind === "credit_recharge") {
       return this.handleCreditRechargeCallback({ matched, notifyId, payload });
+    }
+    if (matched.kind === "customer_wechat_pay_smoke") {
+      return handleCustomerWechatPaySmokeCallback({
+        matched,
+        notifyId,
+        payload,
+        repository: this.customerSmokeRepository,
+      });
     }
 
     return this.handleProjectPaymentCallback({ matched, notifyId, payload });

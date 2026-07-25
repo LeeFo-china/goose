@@ -5,6 +5,10 @@ import {
   type TenantCreditOrderRecord,
 } from "@/repositories/billing-recharge";
 import {
+  customerWechatPaySmokeRepository,
+  type CustomerWechatPaySmokeOrderRecord,
+} from "@/repositories/customer-wechat-pay-smoke";
+import {
   platformPaymentConfigRepository,
   type PlatformPaymentConfigRecord,
 } from "@/repositories/platform-payment-configs";
@@ -44,6 +48,10 @@ type PlatformConfigRepositoryPort = Pick<
 >;
 type SecretBundleServicePort = Pick<typeof wechatPaySecretBundleService, "load">;
 type ProjectOrderRepositoryPort = Pick<typeof wechatPayOrderRepository, "findByOutTradeNo">;
+type CustomerSmokeRepositoryPort = Pick<
+  typeof customerWechatPaySmokeRepository,
+  "findByOutTradeNo"
+>;
 type CreditRechargeRepositoryPort = Pick<
   typeof billingRechargeRepository,
   "findWechatOrderByOutTradeNo" | "findWechatRefundRequestByOutRefundNo"
@@ -60,6 +68,7 @@ export type WechatPayCallbackContextMatcherDependencies = {
   secretBundleService?: SecretBundleServicePort;
   crypto?: WechatPayCallbackCrypto;
   orderRepository?: ProjectOrderRepositoryPort;
+  customerSmokeRepository?: CustomerSmokeRepositoryPort;
   creditRechargeRepository?: CreditRechargeRepositoryPort;
 };
 
@@ -79,6 +88,14 @@ export type CreditRechargeCallbackContext = {
   order: TenantCreditOrderRecord;
 };
 
+export type CustomerWechatPaySmokeCallbackContext = {
+  kind: "customer_wechat_pay_smoke";
+  config: WechatPayConfigRecord;
+  payload: Record<string, unknown>;
+  resource: Record<string, unknown>;
+  order: CustomerWechatPaySmokeOrderRecord;
+};
+
 export type CreditRechargeRefundCallbackContext = {
   kind: "credit_recharge_refund";
   config: PlatformPaymentConfigRecord;
@@ -90,6 +107,7 @@ export type CreditRechargeRefundCallbackContext = {
 
 export type MatchedCallbackContext =
   | ProjectPaymentCallbackContext
+  | CustomerWechatPaySmokeCallbackContext
   | CreditRechargeCallbackContext
   | CreditRechargeRefundCallbackContext;
 
@@ -99,6 +117,7 @@ export class WechatPayCallbackContextMatcher {
   private readonly secretBundleService: SecretBundleServicePort;
   private readonly crypto: WechatPayCallbackCrypto;
   private readonly orderRepository: ProjectOrderRepositoryPort;
+  private readonly customerSmokeRepository: CustomerSmokeRepositoryPort;
   private readonly creditRechargeRepository: CreditRechargeRepositoryPort;
 
   constructor(dependencies: WechatPayCallbackContextMatcherDependencies = {}) {
@@ -114,6 +133,8 @@ export class WechatPayCallbackContextMatcher {
     };
     this.orderRepository = dependencies.orderRepository ??
       wechatPayOrderRepository;
+    this.customerSmokeRepository = dependencies.customerSmokeRepository ??
+      customerWechatPaySmokeRepository;
     this.creditRechargeRepository = dependencies.creditRechargeRepository ??
       billingRechargeRepository;
   }
@@ -155,6 +176,16 @@ export class WechatPayCallbackContextMatcher {
     });
     if (projectMatch) return projectMatch;
 
+    const smokeMatch = await this.matchCustomerWechatPaySmoke({
+      ...input,
+      timestamp,
+      nonce,
+      signature,
+      callbackSerial,
+      resource,
+    });
+    if (smokeMatch) return smokeMatch;
+
     const rechargeMatch = await this.matchCreditRecharge({
       ...input,
       timestamp,
@@ -191,6 +222,32 @@ export class WechatPayCallbackContextMatcher {
           resource: decrypted,
           order,
         } satisfies ProjectPaymentCallbackContext;
+      }
+    }
+    return null;
+  }
+
+  private async matchCustomerWechatPaySmoke(input: MatchInput) {
+    const configs = await this.configRepository.listCallbackCandidateConfigs();
+    for (const config of configs) {
+      const decrypted = await this.verifyAndDecrypt({ ...input, config });
+      if (!decrypted) continue;
+      const outTradeNo = this.requireString(
+        decrypted,
+        "out_trade_no",
+        "微信支付回调缺少商户订单号",
+      );
+      const order = await this.customerSmokeRepository.findByOutTradeNo(
+        outTradeNo,
+      );
+      if (order?.payment_config_id === config.id) {
+        return {
+          kind: "customer_wechat_pay_smoke",
+          config,
+          payload: input.payload,
+          resource: decrypted,
+          order,
+        } satisfies CustomerWechatPaySmokeCallbackContext;
       }
     }
     return null;

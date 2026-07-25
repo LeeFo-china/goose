@@ -20,12 +20,14 @@ import {
   CustomerBootstrapQuerySchema,
 } from "./shared";
 import customerTicketsAcceptancesController from "./tickets-acceptances-controller";
+import customerWechatPaySmokeController from "./wechat-pay-smoke-controller";
 
 class CustomerSelfServiceController extends CustomerSelfServiceProjectBaseController {
   public override registerExtraRoutes = (fastify: FastifyInstance) => {
     customerProjectsController.registerExtraRoutes(fastify);
     customerProjectDetailBootstrapController.registerExtraRoutes(fastify);
     customerTicketsAcceptancesController.registerExtraRoutes(fastify);
+    customerWechatPaySmokeController.registerExtraRoutes(fastify);
     registerRoutes(fastify, this);
   };
 
