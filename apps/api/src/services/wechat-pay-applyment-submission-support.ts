@@ -264,7 +264,9 @@ export function isWechatApplymentNotFound(error: unknown) {
   return error.code === "WECHAT_PAY_APPLYMENT_REQUEST_REJECTED" &&
     details.operation === "query" &&
     details.status === 400 &&
-    details.wechatCode === "APPLYMENT_NOT_EXIST";
+    (details.wechatCode === "APPLYMENT_NOT_EXIST" ||
+      details.wechatCode === "PARAM_ERROR" &&
+        isWechatApplymentNotFoundMessage(details.wechatMessage));
 }
 
 export function canResubmitWechatApplyment(
@@ -343,6 +345,13 @@ function safeToken(value: unknown) {
   return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value)
     ? value
     : null;
+}
+
+function isWechatApplymentNotFoundMessage(value: unknown) {
+  if (typeof value !== "string") return false;
+  const message = value.trim();
+  return message.includes("未能找到申请单") ||
+    message.includes("申请单不存在");
 }
 
 function hasSafeWechatMessage(value: unknown): value is string {
