@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { getOfficialApplymentProgress } from "./platform-wechat-pay-applyment-progress";
 import { shouldAutoSyncWechatApplyment } from "./platform-wechat-pay-applyment-sync";
 
@@ -75,5 +76,17 @@ describe("platform wechat pay official applyment contract", () => {
     expect(shouldAutoSyncWechatApplyment("reviewing", false)).toBe(false);
     expect(shouldAutoSyncWechatApplyment("opened", true)).toBe(false);
     expect(shouldAutoSyncWechatApplyment("active", true)).toBe(false);
+  });
+
+  test("keeps the platform sign link as tenant signing assistance", () => {
+    const source = readFileSync(
+      new URL("./platform-wechat-pay-applyment-actions.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("租户签约协助");
+    expect(source).toContain("主签约入口在租户侧");
+    expect(source).toContain("查看签约链接");
+    expect(source).not.toContain("打开签约链接");
   });
 });

@@ -6,6 +6,7 @@ import {
 import { sanitizeApplymentRecord } from "@/services/wechat-pay-applyment-draft";
 import type {
   ApplymentDetailResult,
+  WechatPayApplymentAvailableAction,
   WechatPayApplymentRepositoryPort,
   WechatPayApplymentTenantReviewReadinessPort,
 } from "@/services/wechat-pay-applyments-types";
@@ -28,6 +29,13 @@ const EMPTY_SETTLEMENT_RULES: WechatPaySettlementRuleListResult = {
   list: [],
   pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
 };
+
+const TENANT_SIGN_URL_RAW_STATES = new Set([
+  "APPLYMENT_STATE_AUDITING",
+  "APPLYMENT_STATE_REJECTED",
+  "APPLYMENT_STATE_TO_BE_CONFIRMED",
+  "APPLYMENT_STATE_TO_BE_SIGNED",
+]);
 
 export async function buildTenantApplymentDetail(
   input: TenantApplymentDetailInput,
@@ -59,10 +67,30 @@ export async function buildTenantApplymentDetail(
     events,
     can_edit: input.canEdit,
     can_submit: input.canEdit && submissionReadiness.review_ready,
-    available_actions: [],
+    available_actions: getTenantWechatPayApplymentAvailableActions(applyment),
     submission_readiness: submissionReadiness,
     settlement_rules: settlementRules,
   };
+}
+
+function getTenantWechatPayApplymentAvailableActions(
+  applyment: WechatPayApplymentRecord,
+): WechatPayApplymentAvailableAction[] {
+  if (!canOpenTenantSignUrl(applyment)) return [];
+  return [{
+    key: "open_sign_url",
+    label: "打开签约链接",
+    url: applyment.sign_url ?? undefined,
+  }];
+}
+
+function canOpenTenantSignUrl(applyment: WechatPayApplymentRecord) {
+  return hasText(applyment.sign_url) &&
+    TENANT_SIGN_URL_RAW_STATES.has(applyment.wechat_applyment_state_raw ?? "");
+}
+
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 async function hydrateTenantSensitiveReviewFields(

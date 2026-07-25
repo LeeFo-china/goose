@@ -54,6 +54,31 @@ function buildRepository(
   };
 }
 
+function tenantSigningApplyment(
+  overrides: Partial<WechatPayApplymentRecord> = {},
+): WechatPayApplymentRecord {
+  return {
+    ...applyment,
+    status: "signing",
+    applyment_state: "signing",
+    wechat_applyment_state_raw: "APPLYMENT_STATE_TO_BE_SIGNED",
+    sign_url: "https://pay.weixin.qq.com/public/apply4ec_sign/s",
+    has_sensitive_payload: false,
+    sensitive_payload_version: null,
+    ...overrides,
+  } as WechatPayApplymentRecord;
+}
+
+function readyTenantReadinessService() {
+  return {
+    runForApplyment: mock(async () => ({
+      ready: true,
+      review_ready: true,
+      blockers: [],
+    })),
+  };
+}
+
 describe("buildTenantApplymentDetail", () => {
   test("uses only tenant review readiness for the loaded applyment", async () => {
     const runForApplyment = mock(async () => ({
@@ -170,5 +195,37 @@ describe("buildTenantApplymentDetail", () => {
     expect(findSensitivePayloadById).not.toHaveBeenCalled();
     expect(result.applyment).not.toHaveProperty("identity_number");
     expect(result.applyment).not.toHaveProperty("settlement_account_number");
+  });
+
+  test("exposes the WeChat sign link as a tenant action", async () => {
+    const signUrl = "https://pay.weixin.qq.com/public/apply4ec_sign/s";
+    const result = await buildTenantApplymentDetail({
+      applyment: tenantSigningApplyment({ sign_url: signUrl }),
+      canEdit: false,
+      repository: buildRepository(mock(async () => null)),
+      encryptionRootSecret: null,
+      tenantReadinessService: readyTenantReadinessService(),
+    });
+
+    expect(result.can_edit).toBe(false);
+    expect(result.available_actions).toContainEqual({
+      key: "open_sign_url",
+      label: "打开签约链接",
+      url: signUrl,
+    });
+  });
+
+  test("does not expose an empty or stale tenant sign link", async () => {
+    const result = await buildTenantApplymentDetail({
+      applyment: tenantSigningApplyment({
+        wechat_applyment_state_raw: "APPLYMENT_STATE_FINISHED",
+      }),
+      canEdit: false,
+      repository: buildRepository(mock(async () => null)),
+      encryptionRootSecret: null,
+      tenantReadinessService: readyTenantReadinessService(),
+    });
+
+    expect(result.available_actions).toEqual([]);
   });
 });

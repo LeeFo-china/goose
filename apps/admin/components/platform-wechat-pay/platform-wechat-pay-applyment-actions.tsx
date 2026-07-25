@@ -144,7 +144,7 @@ export function PlatformWechatPayApplymentActions({
       setSuccess("签约链接已复制");
     } catch {
       setSuccess("");
-      setError("签约链接复制失败，请打开后从浏览器地址栏复制");
+      setError("签约链接复制失败，请查看后从浏览器地址栏复制");
     }
   }
 
@@ -232,6 +232,14 @@ export function PlatformWechatPayApplymentActions({
 
       {hasAction("sync_wechat_status") || signAction ? (
         <section className="flex flex-col gap-3 border-t pt-5">
+          {signAction?.url ? (
+            <div>
+              <h2 className="text-sm font-semibold">租户签约协助</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                主签约入口在租户侧；平台仅用于复制链接或协助租户确认签约进度。
+              </p>
+            </div>
+          ) : null}
           <PlatformWechatPayApplymentSync
             applymentId={applyment.id}
             status={applyment.status}
@@ -245,7 +253,7 @@ export function PlatformWechatPayApplymentActions({
                 <Button asChild variant="outline" className="min-w-0 flex-1">
                   <a href={signAction.url} target="_blank" rel="noreferrer">
                     <ExternalLink data-icon="inline-start" />
-                    打开签约链接
+                    查看签约链接
                   </a>
                 </Button>
                 <Tooltip>

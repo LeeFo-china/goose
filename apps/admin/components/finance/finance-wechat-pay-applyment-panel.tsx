@@ -27,6 +27,7 @@ import {
   buildWechatPayApplymentManualFieldOverride,
   buildWechatPayApplymentPartialDraftPayload,
 } from "./finance-wechat-pay-applyment-schema";
+import { FinanceWechatPayApplymentSignPrompt } from "./finance-wechat-pay-applyment-sign-prompt";
 import {
   type WechatPayApplymentAttachment,
   type WechatPayApplymentAttachmentCategory,
@@ -92,6 +93,8 @@ export function FinanceWechatPayApplymentPanel({
     onReviewInvalidated: invalidateReview,
     onError: setError,
   });
+  const availableActions = autosave.currentDetail.available_actions ??
+    data.available_actions ?? [];
 
   useEffect(() => {
     setSubjectType(
@@ -352,6 +355,10 @@ export function FinanceWechatPayApplymentPanel({
         onRetry={() => {
           void autosave.retryLastSave().catch(() => undefined);
         }}
+      />
+      <FinanceWechatPayApplymentSignPrompt
+        applyment={applyment}
+        availableActions={availableActions}
       />
       <FinanceWechatPayApplymentWorkflow
         applyment={applyment}
