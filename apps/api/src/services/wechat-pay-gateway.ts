@@ -365,12 +365,17 @@ export class WechatPayGateway {
         nowSeconds: this.nowSecondsFactory(),
       });
       if (!response.ok) {
+        const upstreamCode = stringField(verified.payload, "code");
+        const upstreamMessage = stringField(verified.payload, "message");
         throw Errors.business(502, input.failureMessage, input.failureCode, {
           status: response.status,
-          code: stringField(verified.payload, "code"),
-          message: stringField(verified.payload, "message"),
+          code: upstreamCode,
+          message: upstreamMessage,
           detail: verified.payload.detail ?? null,
           request_id: requestId,
+          upstream_code: upstreamCode,
+          upstream_message: upstreamMessage,
+          upstream_request_id: requestId,
         });
       }
       return verified;

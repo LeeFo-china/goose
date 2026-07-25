@@ -211,6 +211,9 @@ describe("WechatPayGateway", () => {
           issue: "appid mchid binding mismatch",
         },
         request_id: "wechat-error-request-id",
+        upstream_code: "APPID_MCHID_NOT_MATCH",
+        upstream_message: "appid和mch_id不匹配，请检查后再试",
+        upstream_request_id: "wechat-error-request-id",
         requestId: "wechat-error-request-id",
       }),
     });
