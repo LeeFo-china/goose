@@ -181,8 +181,12 @@ describe("WechatPayGateway", () => {
   test("maps upstream failure to stable business error", async () => {
     const fetchImpl = mock(async () =>
       createWechatPayResponse({
-        code: "PARAM_ERROR",
-        message: "appid and mchid not match",
+        code: "APPID_MCHID_NOT_MATCH",
+        message: "appid和mch_id不匹配，请检查后再试",
+        detail: {
+          field: "sp_appid",
+          issue: "appid mchid binding mismatch",
+        },
       }, { status: 400, requestId: "wechat-error-request-id" })
     ) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
@@ -199,6 +203,14 @@ describe("WechatPayGateway", () => {
       code: "WECHAT_PAY_PREPAY_FAILED",
       details: expect.objectContaining({
         operation: "jsapi_prepay",
+        status: 400,
+        code: "APPID_MCHID_NOT_MATCH",
+        message: "appid和mch_id不匹配，请检查后再试",
+        detail: {
+          field: "sp_appid",
+          issue: "appid mchid binding mismatch",
+        },
+        request_id: "wechat-error-request-id",
         requestId: "wechat-error-request-id",
       }),
     });

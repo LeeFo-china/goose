@@ -369,6 +369,8 @@ export class WechatPayGateway {
           status: response.status,
           code: stringField(verified.payload, "code"),
           message: stringField(verified.payload, "message"),
+          detail: verified.payload.detail ?? null,
+          request_id: requestId,
         });
       }
       return verified;
